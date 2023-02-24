@@ -1,0 +1,108 @@
+/*
+* Copyright 2023 Man Group Operations Ltd.
+* NO WARRANTY, EXPRESSED OR IMPLIED
+*/
+
+#include <arcticdb/pipeline/pipeline_context.hpp>
+#include <arcticdb/entity/protobufs.hpp>
+#include <arcticdb/stream/protobuf_mappings.hpp>
+#include <arcticdb/column_store/memory_segment.hpp>
+#include <arcticdb/pipeline/read_pipeline.hpp>
+
+namespace arcticdb::pipelines {
+
+PipelineContext::PipelineContext(SegmentInMemory& frame, const AtomKey& key) :
+    desc_(frame.descriptor()){
+    SliceAndKey sk{FrameSlice{frame}, key};
+    slice_and_keys_.emplace_back(std::move(sk));
+    util::BitSet bitset(1);
+    bitset.flip();
+    fetch_index_ = std::move(bitset);
+    ensure_vectors();
+
+    generate_filtered_field_descriptors(*this, {});
+    string_pools_[0] = frame.string_pool_ptr();
+    auto map = std::make_shared<ColumnMap>(frame.descriptor().field_count());
+    map->set_from_descriptor(frame.descriptor());
+
+    auto descriptor = std::make_shared<StreamDescriptor>(frame.descriptor());
+    segment_descriptors_[0] = (std::move(descriptor));
+}
+
+void PipelineContext::set_selected_columns(const std::vector<std::string>& columns) {
+    util::check(static_cast<bool>(desc_), "Descriptor not set in set_selected_columns");
+    selected_columns_ = requested_column_bitset_including_index(desc_->proto(), columns);
+}
+
+bool PipelineContextRow::selected_columns(size_t n) const {
+    return !parent_->selected_columns_ || parent_->selected_columns_.value()[n];
+}
+
+const std::optional<util::BitSet>& PipelineContextRow::get_selected_columns() const {
+    return parent_->selected_columns_;
+}
+
+const StringPool &PipelineContextRow::string_pool() const {
+    return *parent_->string_pools_[index_];
+}
+
+StringPool &PipelineContextRow::string_pool() {
+    return *parent_->string_pools_[index_];
+}
+
+void PipelineContextRow::allocate_string_pool() {
+    parent_->string_pools_[index_] = std::make_shared<StringPool>();
+}
+
+
+void PipelineContextRow::set_string_pool(const std::shared_ptr<StringPool>& pool) {
+    parent_->string_pools_[index_] = pool;
+}
+
+const SliceAndKey &PipelineContextRow::slice_and_key() const {
+    return parent_->slice_and_keys_[index_];
+}
+
+SliceAndKey &PipelineContextRow::slice_and_key()  {
+    return parent_->slice_and_keys_[index_];
+}
+
+bool PipelineContextRow::fetch_index() {
+    return parent_->fetch_index_[index_];
+}
+
+size_t PipelineContextRow::index() const {
+    return index_;
+}
+
+bool PipelineContextRow::has_string_pool() const {
+    return static_cast<bool>(parent_->string_pools_[index_]);
+}
+const StreamDescriptor& PipelineContextRow::descriptor() const {
+    util::check(index_ < parent_->segment_descriptors_.size(), "Descriptor out of bounds for index {}", index_);
+    util::check(static_cast<bool>(parent_->segment_descriptors_[index_]), "Null descriptor at index {}", index_);
+    return *parent_->segment_descriptors_[index_];
+}
+
+void PipelineContextRow::set_descriptor(std::shared_ptr<StreamDescriptor>&& desc) {
+    parent_->segment_descriptors_[index_] = std::move(desc);
+}
+
+void PipelineContextRow::set_descriptor(const std::shared_ptr<StreamDescriptor>& desc) {
+    parent_->segment_descriptors_[index_] = desc;
+}
+
+void PipelineContextRow::set_compacted(bool val) {
+    parent_->compacted_[index_] = val;
+}
+
+bool PipelineContextRow::compacted() const {
+    return parent_->compacted_[index_];
+}
+
+void PipelineContextRow::set_descriptor(arcticdb::proto::descriptors::StreamDescriptor&& proto_desc) {
+    auto desc = std::make_shared<StreamDescriptor>(std::move(proto_desc));
+    set_descriptor(std::move(desc));
+}
+
+} //namespace arcticdb::pipelines

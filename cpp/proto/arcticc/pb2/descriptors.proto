@@ -1,0 +1,302 @@
+syntax = "proto3";
+
+package arcticc.pb2.descriptors_pb2;
+
+option cc_enable_arenas = true;
+
+message TypeDescriptor {
+    enum ValueType {
+        UNKNOWN_VALUE_TYPE = 0;
+
+        UINT = 1;
+        INT = 2;
+        FLOAT = 3;
+
+        BOOL = 4;
+        MICROS_UTC = 5;
+        
+        SYMBOL = 6; // categorical string of low cardinality suitable for dictionary encoding
+        ASCII_STRING = 7; // fixed size string when dim > 1, inputs of type uint8_t, no encoding
+        UTF8_STRING = 8; // fixed size string when dim > 1, inputs of type uint8_t, utf8 encoding
+        BYTES = 9; // implies fixed size bytes array when dim > 1, opaque
+
+        PICKLE = 10; // BYTES + pickle specific encoding
+        DYNAMIC_STRING = 11; // offset reference to deduplicated string pool
+        DYNAMIC_UTF8 = 12;
+    }
+
+    enum SizeBits {
+        UNKNOWN_SIZE_BITS = 0;
+        S8 = 1;
+        S16 = 2;
+        S32 = 3;
+        S64 = 4;
+    }
+
+    ValueType value_type = 1;
+    SizeBits size_bits = 2; // useful to specify 8/16/32/64 for [u]int, and float{32,64}. Defaults to 0 for unused
+    /* Dimension of a single tick stored
+      0: scalar
+      1: array of values
+      2: matrix
+      ...
+      This maps numpy ndarray concept
+    */
+    uint32 dimension = 3;
+}
+
+message IndexDescriptor {
+    enum Type {
+        UNKNOWN = 0;
+        ROWCOUNT = 82; // 'R'
+        STRING = 83; // 'S'
+        TIMESTAMP = 84; //  'T'
+
+    }
+    uint32 field_count = 1;
+    Type kind = 2;
+}
+
+message StreamDescriptor {
+    /* Channel can output a single type of data possibly containing multiple fields */
+    oneof id
+    {
+        uint64 num_id = 1;
+        string str_id = 2;
+    }
+
+    IndexDescriptor index = 3;
+
+    message FieldDescriptor {
+        TypeDescriptor type_desc = 1;
+        string name = 2;
+    }
+    repeated FieldDescriptor fields = 4;
+    uint64 type_hash = 5;
+    string timezone = 6;  // unused but reserved in case first class support is needed
+    bool sorted = 7;
+    uint64 in_bytes = 8;
+    uint64 out_bytes = 9;
+}
+
+message MsgPackSerialization {
+    enum ExtType {
+        UNSUPPORTED  = 0;
+        PD_TIMESTAMP = 32;
+        PY_DATETIME  = 33;
+        PY_TIMEDELTA = 34;
+        PY_PICKLE_2  = 102;
+        PY_PICKLE_3  = 103;
+        // types introducing ahl.core dependency,
+        // these will need to be registered through an external end point
+        //AHL_DATERANGE = 35;
+        //AHL_DATETIMEDELTA = 36;
+        //AHL_TIMESERIESMASK = 37; // list of AHL_DATERANGE
+    }
+}
+
+message NormalizationMetadata {
+    /**
+    This type represents all the additional info required to reconstruct
+    the object that has been written.
+    The modelling reflects the extra info necessary to cater for the input specific data.
+
+    For now focused on pandas, but support for any other type without
+    a 1:1 mapping to the first class StreamDescriptor model
+    should be handled through normalization and appropriate metadata
+    additions here.
+   */
+
+    message PandasIndex {
+        string name = 1; // RangeIndex are not represented as a field, hence no name is associated
+        string tz = 2;
+        bool fake_name = 3;
+        bool is_not_range_index = 4;
+        int64 start = 5; // Used for RangeIndex
+        int64 step = 6; // Used for RangeIndex
+    }
+
+    message PandasMultiIndex {
+        uint32 version = 1;
+        map<uint32,string> timezone = 2; // timezone by index field
+        uint32 field_count = 3;
+        string name = 4; // RangeIndex are not represented as a field, hence no name is associated
+        string tz = 5;
+        repeated uint32 fake_field_pos = 6;
+    }
+
+    message PandasMultiColumn {
+        // mapping the structure of the multi column.
+        // unlike the multi index where the data can be stored inside the block
+
+        message Labels {
+            repeated uint64 val = 1;
+        }
+
+        repeated string levels = 1;
+        repeated Labels labels = 2;
+        map<uint32,string> timezone = 3;
+    }
+
+    message Pandas {
+        /**
+        This represents the common metadata for pandas types
+        which are shared between series and dataframes.
+        */
+
+        // Pandas series support arbitrary objects but restricting to a string seems reasonable
+        string name = 1;
+
+        oneof index_type {
+            PandasIndex index = 2;
+            PandasMultiIndex multi_index = 3;
+        }
+
+       // only here to have one field to set if nothing else is necessary
+        bool mark = 4;
+        message Categories {
+            repeated string category = 1;
+        }
+        // This shouldn't be used much
+        message IntCategories {
+            repeated uint64 category = 1;
+        }
+        map<string, Categories> categories = 5;
+        map<string, IntCategories> int_categories = 6;
+
+        message ColumnName {
+            bool is_none = 1;
+            bool is_empty = 2;
+            string original_name = 3;
+            bool is_int = 4;
+        }
+
+        map<string, ColumnName> col_names = 7;
+        PandasIndex columns = 8;
+    }
+
+    message PandasDataFrame {
+        Pandas common = 1;
+        PandasMultiColumn multi_columns = 2;
+        bool has_synthetic_columns = 3;
+    }
+
+    message NormalisedTimeSeries {
+        bool mark = 1;
+        Pandas common = 2;
+        PandasMultiColumn multi_columns = 3;
+        bool has_synthetic_columns = 4;
+    }
+
+    message MsgPackFrame {
+        uint32 version = 1; // To set at least one field
+        uint64 size_bytes = 2;
+    }
+
+    message CustomNormalizerMeta {
+        string class_name = 1;
+        bytes meta = 2;
+        bool py_datetime_marker = 3;
+        bool daterange_has_datetime_marker = 4;
+    }
+
+    message NdArray {
+        repeated uint64 shape = 1;
+    }
+
+    oneof input_type {
+        PandasDataFrame df = 1;
+        PandasDataFrame series = 2;
+        NormalisedTimeSeries ts = 3;
+        MsgPackFrame msg_pack_frame = 4;
+        NdArray np = 5;
+    }
+
+    CustomNormalizerMeta custom = 64;
+}
+
+message ColumnGroups {
+    // exclusive boundary of the group, ie for 2 elements:
+    // [0,group_ends[0][, [group_ends[0], group_ends[1][
+    repeated uint32 group_ends = 1; //not used
+    uint32 num_buckets = 2; // not used
+    bool enabled = 3;
+}
+
+message UserDefinedMetadata {
+    enum SerializationType {
+        MSG_PACK = 0; // defaults to msg pack
+    }
+
+    SerializationType type = 1;
+    uint32 version = 2; // in case logic needs to be versioned
+
+    oneof storage_type {
+        bytes inline_payload = 3; // capped to fixed size in code
+        // Key meta_data_key = 4; // pointer to metadata storage
+    }
+}
+
+enum KeyType
+{
+    STREAM_GROUP = 0;
+    GENERATION = 1;
+    TABLE_DATA = 2;
+    TABLE_INDEX = 3;
+    VERSION = 4;
+    VERSION_JOURNAL = 5;
+    METRICS = 6;
+    SNAPSHOT = 7;
+    SYMBOL_LIST = 8;
+    VERSION_REF = 9;
+    STORAGE_INFO = 10;
+    APPEND_REF = 11;
+    MULTI_KEY = 12;
+    LOCK = 13;
+    SNAPSHOT_REF = 14;
+    TOMBSTONE = 15;
+    APPEND_DATA = 16;
+    LOG = 17;
+    PARTITION = 18;
+    UNDEFINED = 19;
+}
+
+message AtomKey
+{
+    oneof id {
+        string string_id = 1;
+        int64 numeric_id = 2;
+    }
+
+    uint64 version_id = 3;
+    uint64 creation_ts = 4;
+    uint64 content_hash = 5;
+
+    oneof index_start {
+        string string_start = 6;
+        int64 numeric_start = 7;
+    }
+
+    oneof index_end {
+        string string_end = 8;
+        int64 numeric_end = 9;
+     }
+
+    KeyType key_type = 10;
+}
+
+message TimeSeriesDescriptor
+{
+    uint64 total_rows = 1;
+    StreamDescriptor stream_descriptor = 2;
+    NormalizationMetadata normalization = 3;
+    ColumnGroups column_groups = 4;
+    UserDefinedMetadata user_meta = 5;
+    AtomKey next_key = 6;
+    UserDefinedMetadata multi_key_meta = 7;
+}
+
+message SymbolListDescriptor
+{
+    bool enabled = 1;
+}

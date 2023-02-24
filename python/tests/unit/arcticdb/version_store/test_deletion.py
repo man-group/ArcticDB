@@ -1,0 +1,172 @@
+"""
+Copyright 2023 Man Group Operations Ltd.
+NO WARRANTY, EXPRESSED OR IMPLIED.
+"""
+from __future__ import print_function
+
+import sys
+
+import numpy as np
+import pandas as pd
+import pytest
+import time
+from pandas.testing import assert_frame_equal
+from arcticdb_ext.exceptions import ArcticNativeCxxException
+from arcticdb.version_store._normalization import NPDDataFrame
+
+# configure_test_logger("DEBUG")
+
+
+def eprint(*args, **kwargs):
+    print(*args, file=sys.stderr, **kwargs)
+
+
+@pytest.mark.parametrize("pos", [0, 1])
+def test_delete_version_with_update(version_store_factory, pos, sym):
+    lmdb_version_store = version_store_factory()
+
+    symbol = sym
+
+    idx = pd.date_range("1970-01-01", periods=100, freq="D")
+    df = pd.DataFrame({"a": range(len(idx))}, index=idx)
+    original_df = df.copy(deep=True)
+    lmdb_version_store.write(symbol, df)
+
+    idx2 = pd.date_range("1970-01-12", periods=10, freq="D")
+    df2 = pd.DataFrame({"a": range(1000, 1000 + len(idx2))}, index=idx2)
+    lmdb_version_store.update(symbol, df2)
+
+    assert_frame_equal(lmdb_version_store.read(symbol, 0).data.astype("int"), original_df)
+
+    df.update(df2)
+
+    vit = lmdb_version_store.read(symbol)
+    assert_frame_equal(vit.data.astype("float"), df)
+    assert_frame_equal(lmdb_version_store.read(symbol, 1).data.astype("float"), df)
+
+    lmdb_version_store.delete_version(symbol, pos)
+    assert len(lmdb_version_store.list_versions()) == 1
+
+    if pos == 0:
+        assert_frame_equal(lmdb_version_store.read(symbol).data.astype("float"), df)
+        assert_frame_equal(lmdb_version_store.read(symbol, 1).data.astype("float"), df)
+    else:
+        assert_frame_equal(lmdb_version_store.read(symbol).data.astype("int"), original_df)
+        assert_frame_equal(lmdb_version_store.read(symbol, 0).data.astype("int"), original_df)
+
+
+@pytest.mark.skip(reason="Flaky test, needs investigation.")
+def test_delete_by_timestamp(lmdb_version_store, sym):
+    symbol = sym
+    time_initial = pd.Timestamp.utcnow()
+    time.sleep(0.1)
+
+    lmdb_version_store.write(symbol, 1)  # v0
+    time_after_v0 = pd.Timestamp.utcnow()
+    time.sleep(0.1)
+
+    lmdb_version_store.write(symbol, 2)  # v1
+    time_after_v1 = pd.Timestamp.utcnow()
+    time.sleep(0.1)
+
+    lmdb_version_store.write(symbol, 3)  # v2
+    time_after_v2 = pd.Timestamp.utcnow()
+    time.sleep(0.1)
+
+    lmdb_version_store.write(symbol, 4)  # v3
+    time_after_v3 = pd.Timestamp.utcnow()
+    time.sleep(0.1)
+
+    lmdb_version_store.write(symbol, 5)  # v4
+    time_after_v4 = pd.Timestamp.utcnow()
+
+    lmdb_version_store._prune_previous_versions(
+        symbol, keep_mins=(pd.Timestamp.utcnow() - time_initial).microseconds / 60.0 / 1000000
+    )
+    assert len(lmdb_version_store.list_versions(symbol)) == 5
+
+    lmdb_version_store._prune_previous_versions(
+        symbol, keep_mins=(pd.Timestamp.utcnow() - time_after_v0).microseconds / 60.0 / 1000000
+    )
+    assert len(lmdb_version_store.list_versions(symbol)) == 4
+
+    lmdb_version_store._prune_previous_versions(
+        symbol, keep_mins=(pd.Timestamp.utcnow() - time_after_v3).microseconds / 60.0 / 1000000, keep_version=2
+    )
+    assert len(lmdb_version_store.list_versions(symbol)) == 2
+
+    lmdb_version_store._prune_previous_versions(
+        symbol, keep_mins=(pd.Timestamp.utcnow() - time_after_v4).microseconds / 60.0 / 1000000
+    )
+    assert len(lmdb_version_store.list_versions(symbol)) == 1
+
+
+@pytest.mark.skip
+def test_clear_lmdb(lmdb_version_store, sym):
+    symbol = sym
+    lmdb_version_store.version_store.clear()
+    df1 = pd.DataFrame({"x": np.arange(10, dtype=np.int64)})
+    lmdb_version_store.write(symbol, df1)
+    df2 = pd.DataFrame({"y": np.arange(10, dtype=np.int32)})
+    lmdb_version_store.write(symbol, df2)
+    df3 = pd.DataFrame({"z": np.arange(10, dtype=np.uint64)})
+    lmdb_version_store.version_store.clear()
+    df2 = pd.DataFrame({"y": np.arange(10, dtype=np.int32)})
+    lmdb_version_store.write(symbol, df2)
+    df3 = pd.DataFrame({"z": np.arange(10, dtype=np.uint64)})
+    lmdb_version_store.write(symbol, df3)
+    assert len(lmdb_version_store.list_versions(symbol)) == 2
+    lmdb_version_store.version_store.clear()
+    assert len(lmdb_version_store.list_symbols()) == 0
+
+
+def test_tombstone_of_non_existing_version(lmdb_version_store_tombstone, sym):
+    def write_specific_version(data, version):
+        proto_cfg = lib._lib_cfg.lib_desc.version.write_options
+        dynamic_strings = lib.resolve_defaults("dynamic_strings", proto_cfg, False)
+        pickle_on_failure = lib.resolve_defaults("pickle_on_failure", proto_cfg, False)
+        udm, item, norm_meta = lib._try_normalize(sym, data, None, pickle_on_failure, dynamic_strings, None)
+        if isinstance(item, NPDDataFrame):
+            lib.version_store.write_dataframe_specific_version(sym, item, norm_meta, udm, version)
+
+    lib = lmdb_version_store_tombstone
+    assert lib._lib_cfg.lib_desc.version.write_options.prune_previous_version is False
+    assert lib._lib_cfg.lib_desc.version.write_options.use_tombstones is True
+    assert lib._lib_cfg.lib_desc.version.write_options.delayed_deletes is False
+
+    write_specific_version(0, 0)
+    write_specific_version(1, 1)
+    write_specific_version(3, 3)
+    write_specific_version(5, 5)
+
+    # cant tombstone beyond latest
+    with pytest.raises(Exception):
+        lib.delete_version(sym, 6)
+
+    with pytest.raises(Exception):
+        lib.delete_version(sym, 10)
+
+    lib.delete_version(sym, 2)
+    lib.delete_version(sym, 1)
+    lib.delete_version(sym, 4)
+    lib.delete_version(sym, 5)
+
+    assert lib.has_symbol(sym, 0) is True
+    assert lib.has_symbol(sym, 1) is False
+    assert lib.has_symbol(sym, 2) is False
+    assert lib.has_symbol(sym, 3) is True
+    assert lib.has_symbol(sym, 4) is False
+    assert lib.has_symbol(sym, 5) is False
+
+    with pytest.raises(Exception):
+        lib.delete_version(sym, 6)
+
+
+def test_delete_date_range_pickled_symbol(lmdb_version_store):
+    symbol = "test_delete_date_range_pickled_symbol"
+    idx = pd.date_range("2000-01-01", periods=4)
+    df = pd.DataFrame({"a": [[1, 2], [3, 4], [5, 6], [7, 8]]}, index=idx)
+    lmdb_version_store.write(symbol, df, pickle_on_failure=True)
+    assert lmdb_version_store.is_symbol_pickled(symbol)
+    with pytest.raises(ArcticNativeCxxException) as e_info:
+        lmdb_version_store.delete(symbol, (idx[1], idx[2]))

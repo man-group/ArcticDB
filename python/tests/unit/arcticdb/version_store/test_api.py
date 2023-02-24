@@ -1,0 +1,70 @@
+"""
+Copyright 2023 Man Group Operations Ltd.
+NO WARRANTY, EXPRESSED OR IMPLIED.
+"""
+import time
+
+from pandas import Timestamp
+import pytest
+
+from arcticdb_ext.storage import NoDataFoundException
+
+
+def test_read_descriptor(lmdb_version_store, one_col_df):
+    symbol = "test_read_descriptor"
+    lmdb_version_store.write(symbol, one_col_df())
+    column_names = lmdb_version_store.column_names(symbol)
+    expected = ["x"]
+    assert column_names == expected
+
+
+def test_column_names_by_version(lmdb_version_store, one_col_df, two_col_df):
+    symbol = "test_column_names_by_version"
+
+    # Write a DF with a single column
+    one_col_version = lmdb_version_store.write(symbol, one_col_df()).version
+
+    # Write a DF with two columns
+    lmdb_version_store.write(symbol, two_col_df())
+
+    # Assert querying with the version of the first write only returns a single column
+    assert lmdb_version_store.column_names(symbol, as_of=one_col_version) == ["x"]
+
+
+def test_column_names_by_snapshot(lmdb_version_store, one_col_df, two_col_df):
+    symbol = "test_column_names_by_snapshot"
+
+    # Write a DF with a single column and snapshot
+    lmdb_version_store.write(symbol, one_col_df())
+    lmdb_version_store.snapshot("one_col_snap")
+
+    # Write a DF with two columns
+    lmdb_version_store.write(symbol, two_col_df())
+    lmdb_version_store.snapshot("two_col_snap")
+
+    # Assert querying with the snapshot after the first write only returns a single column
+    assert lmdb_version_store.column_names(symbol, as_of="one_col_snap") == ["x"]
+
+
+def test_column_names_by_timestamp(lmdb_version_store, one_col_df, two_col_df):
+    symbol = "test_column_names_by_timestamp"
+
+    # Write a DF with a single column
+    lmdb_version_store.write(symbol, one_col_df())
+    after_one_col_write = Timestamp.now(tz="UTC")
+
+    # Ensure the timestamps differ
+    time.sleep(0.1)
+
+    lmdb_version_store.write(symbol, two_col_df())
+    after_two_col_write = Timestamp.now(tz="UTC")
+
+    # Assert querying with a time before the first write raises an exception
+    with pytest.raises(NoDataFoundException):
+        lmdb_version_store.column_names(symbol, as_of=Timestamp("1970-01-01", tz="UTC"))
+
+    # Assert query with the timestamp after the one col write returns only a single column
+    assert lmdb_version_store.column_names(symbol, as_of=after_one_col_write) == ["x"]
+
+    # Assert query with the timestamp after the two col write returns two columns
+    assert lmdb_version_store.column_names(symbol, as_of=after_two_col_write) == ["x", "y"]

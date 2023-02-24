@@ -1,0 +1,222 @@
+"""
+Copyright 2023 Man Group Operations Ltd.
+NO WARRANTY, EXPRESSED OR IMPLIED.
+"""
+import datetime
+import random
+import pandas as pd
+from pandas.testing import assert_frame_equal
+
+from arcticdb.util.test import (
+    dataframe_for_date,
+    random_strings_of_length,
+    random_floats,
+    random_integers,
+    random_strings_of_length_with_nan,
+)
+
+
+def test_append_stress(lmdb_version_store):
+    num_rows_per_day = 1000
+    num_days = 10
+    identifier_length = 8
+    dt = datetime.datetime(2019, 4, 8, 0, 0, 0)
+    identifiers = random_strings_of_length(num_rows_per_day, identifier_length, True)
+
+    symbol = "test_append_stress"
+    df = dataframe_for_date(dt, identifiers)
+    lmdb_version_store.write(symbol, df)
+
+    for i in range(num_days):
+        dt = dt + datetime.timedelta(days=1)
+        new_df = dataframe_for_date(dt, identifiers)
+        lmdb_version_store.append(symbol, new_df)
+        df = df.append(new_df)
+        vit = lmdb_version_store.read(symbol)
+        assert_frame_equal(vit.data, df)
+
+
+def test_write_parallel_stress(lmdb_version_store):
+    num_rows_per_day = 1000
+    num_days = 100
+    identifier_length = 8
+    dt = datetime.datetime(2019, 4, 8, 0, 0, 0)
+    identifiers = random_strings_of_length(num_rows_per_day, identifier_length, True)
+
+    symbol = "test_write_parallel_stress"
+    df = dataframe_for_date(dt, identifiers)
+    dataframes = [df]
+
+    for _ in range(num_days):
+        dt = dt + datetime.timedelta(days=1)
+        new_df = dataframe_for_date(dt, identifiers)
+        dataframes.append(new_df)
+        df = df.append(new_df)
+
+    random.shuffle(dataframes)
+    for d in dataframes:
+        lmdb_version_store.write(symbol, d, parallel=True)
+
+    lmdb_version_store.version_store.compact_incomplete(symbol, False, False)
+    vit = lmdb_version_store.read(symbol)
+    assert_frame_equal(vit.data, df)
+
+
+def test_write_parallel_stress_schema_change(lmdb_version_store):
+    num_rows_per_day = 1000
+    num_days = 100
+    num_columns = 8
+    column_length = 8
+    dt = datetime.datetime(2019, 4, 8, 0, 0, 0)
+    columns = random_strings_of_length(num_columns, column_length, True)
+    symbol = "test_write_parallel_stress_schema_change"
+    dataframes = []
+    df = pd.DataFrame()
+
+    for _ in range(num_days):
+        cols = random.sample(columns, 4)
+        index = pd.Index([dt + datetime.timedelta(seconds=s) for s in range(num_rows_per_day)])
+        vals = {c: random_floats(num_rows_per_day) for c in cols}
+        new_df = pd.DataFrame(data=vals, index=index)
+
+        dataframes.append(new_df)
+        df = df.append(new_df)
+        dt = dt + datetime.timedelta(days=1)
+
+    random.shuffle(dataframes)
+    for d in dataframes:
+        lmdb_version_store.write(symbol, d, parallel=True)
+
+    lmdb_version_store.version_store.compact_incomplete(symbol, False, False)
+    vit = lmdb_version_store.read(symbol)
+    df.sort_index(axis=1, inplace=True)
+    result = vit.data
+    result.sort_index(axis=1, inplace=True)
+    assert_frame_equal(vit.data, df)
+
+
+def test_write_parallel_stress_schema_change_strings(lmdb_version_store):
+    num_rows_per_day = 1000
+    num_days = 100
+    num_columns = 8
+    column_length = 8
+    dt = datetime.datetime(2019, 4, 8, 0, 0, 0)
+    string_length = 6
+    columns = random_strings_of_length(num_columns, column_length, True)
+    symbol = "test_write_parallel_stress_schema_change_strings"
+    dataframes = []
+    df = pd.DataFrame()
+
+    for _ in range(num_days):
+        cols = random.sample(columns, 4)
+        index = pd.Index([dt + datetime.timedelta(seconds=s) for s in range(num_rows_per_day)])
+        vals = {c: random_strings_of_length(num_rows_per_day, string_length, False) for c in cols}
+        new_df = pd.DataFrame(data=vals, index=index)
+
+        dataframes.append(new_df)
+        df = df.append(new_df)
+        dt = dt + datetime.timedelta(days=1)
+
+    random.shuffle(dataframes)
+    for d in dataframes:
+        lmdb_version_store.write(symbol, d, parallel=True)
+
+    lmdb_version_store.version_store.compact_incomplete(symbol, False, False)
+    vit = lmdb_version_store.read(symbol)
+    df.sort_index(axis=1, inplace=True)
+    result = vit.data
+    result.sort_index(axis=1, inplace=True)
+    assert_frame_equal(vit.data, df)
+
+
+def test_write_parallel_stress_schema_change_strings_with_nan(lmdb_version_store):
+    num_rows_per_day = 1000
+    num_days = 100
+    num_columns = 8
+    column_length = 8
+    dt = datetime.datetime(2019, 4, 8, 0, 0, 0)
+    string_length = 6
+    columns = random_strings_of_length(num_columns, column_length, True)
+    symbol = "test_write_parallel_stress_schema_change_strings"
+    dataframes = []
+    df = pd.DataFrame()
+
+    for _ in range(num_days):
+        cols = random.sample(columns, 4)
+        index = pd.Index([dt + datetime.timedelta(seconds=s) for s in range(num_rows_per_day)])
+        vals = {c: random_strings_of_length_with_nan(num_rows_per_day, string_length) for c in cols}
+        new_df = pd.DataFrame(data=vals, index=index)
+
+        dataframes.append(new_df)
+        df = df.append(new_df)
+        dt = dt + datetime.timedelta(days=1)
+
+    random.shuffle(dataframes)
+    for d in dataframes:
+        lmdb_version_store.write(symbol, d, parallel=True)
+
+    lmdb_version_store.version_store.compact_incomplete(symbol, False, False)
+    vit = lmdb_version_store.read(symbol)
+    df.sort_index(axis=1, inplace=True)
+    result = vit.data
+    result.sort_index(axis=1, inplace=True)
+    assert_frame_equal(vit.data, df)
+
+
+def test_change_to_dynamic_strings(lmdb_version_store):
+    num_rows_per_day = 1000
+    num_days = 100
+    num_columns = 5
+    column_length = 8
+    dt = datetime.datetime(2019, 4, 8, 0, 0, 0)
+    string_length = 6
+    columns = random_strings_of_length(num_columns, column_length, True)
+    symbol = "test_change_to_dynamic_strings"
+    df = pd.DataFrame()
+
+    for i in range(num_days):
+        index = pd.Index([dt + datetime.timedelta(seconds=s) for s in range(num_rows_per_day)])
+        vals = {c: random_strings_of_length(num_rows_per_day, string_length, False) for c in columns}
+        new_df = pd.DataFrame(data=vals, index=index)
+        if i < num_days / 2:
+            lmdb_version_store.append(symbol, new_df, dynamic_strings=False, write_if_missing=True)
+        else:
+            lmdb_version_store.append(symbol, new_df, dynamic_strings=True)
+        df = df.append(new_df)
+        dt = dt + datetime.timedelta(days=1)
+
+    vit = lmdb_version_store.read(symbol)
+    assert_frame_equal(vit.data, df)
+
+
+def test_write_parallel_stress_many_chunks(lmdb_version_store):
+    num_rows_per_day = 10
+    num_days = 10
+    num_columns = 8
+    column_length = 4
+    dt = datetime.datetime(2019, 4, 8, 0, 0, 0)
+    columns = random_strings_of_length(num_columns, column_length, True)
+    symbol = "test_write_parallel_stress_schema_change"
+    dataframes = []
+    df = pd.DataFrame()
+
+    for _ in range(num_days):
+        cols = random.sample(columns, 4)
+        index = pd.Index([dt + datetime.timedelta(seconds=s) for s in range(num_rows_per_day)])
+        vals = {c: random_floats(num_rows_per_day) for c in cols}
+        new_df = pd.DataFrame(data=vals, index=index)
+
+        dataframes.append(new_df)
+        df = df.append(new_df)
+        dt = dt + datetime.timedelta(days=1)
+
+    random.shuffle(dataframes)
+    for d in dataframes:
+        lmdb_version_store.write(symbol, d, parallel=True)
+
+    lmdb_version_store.version_store.compact_incomplete(symbol, False, False)
+    vit = lmdb_version_store.read(symbol)
+    df.sort_index(axis=1, inplace=True)
+    result = vit.data
+    result.sort_index(axis=1, inplace=True)
+    assert_frame_equal(vit.data, df)

@@ -1,0 +1,73 @@
+name: coverage
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+  push:
+    branches:
+    - cpp_master
+    tags:
+    - '*'
+
+jobs:
+  codecov:
+    timeout-minutes: 30
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v1
+    - name: Install build dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install g++-10 cmake lcov -y
+        ./ci/set_gcc_10.sh
+
+    - name: Cache boost
+      id: cache-boost
+      uses: actions/cache@v1
+      with:
+        path: ~/boost-prefix/
+        key: ${{ runner.os }}-boost-64-1-76-0-2021-08-09
+
+    - name: Build boost
+      if: steps.cache-boost.outputs.cache-hit != 'true'
+      run: ./.github/depends/boost.sh -b 64 -t gcc -p $HOME/boost-prefix
+
+    - name: Cache zlib
+      id: cache-zlib
+      uses: actions/cache@v1
+      with:
+        path: ~/zlib-prefix/
+        key: ${{ runner.os }}-zlib-64-1-2-11-2021-08-09
+
+    - name: Build zlib
+      if: steps.cache-zlib.outputs.cache-hit != 'true'
+      run: ./.github/depends/zlib.sh -b 64 -p $HOME/zlib-prefix
+
+    - name: Compile tests
+      run: |
+        mkdir build
+        cmake \
+            -D MSGPACK_CXX20=ON \
+            -D MSGPACK_32BIT=OFF \
+            -D MSGPACK_CHAR_SIGN=signed \
+            -D MSGPACK_USE_X3_PARSE=ON \
+            -D MSGPACK_BUILD_EXAMPLES=ON \
+            -D MSGPACK_BUILD_TESTS=ON \
+            -D CMAKE_BUILD_TYPE=Debug \
+            -D MSGPACK_GEN_COVERAGE=ON \
+            -D CMAKE_PREFIX_PATH="$HOME/zlib-prefix/64;$HOME/boost-prefix/64" \
+            -B build \
+            -S . || exit 1
+        cmake --build build --target all || exit 1
+        ctest --test-dir build || exit 1
+
+    - name: Upload coverage to Codecov
+      working-directory: build
+      run: |
+        # Create lcov report
+        lcov --capture --directory . --output-file coverage.info
+        lcov --remove coverage.info '/usr/*' --output-file coverage.info # filter system-files
+        lcov --list coverage.info # debug info
+        # Uploading report to CodeCov
+        bash <(curl -s https://codecov.io/bash) -f coverage.info || echo "Codecov did not collect coverage reports"

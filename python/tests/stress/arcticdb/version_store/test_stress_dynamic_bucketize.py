@@ -1,0 +1,36 @@
+"""
+Copyright 2023 Man Group Operations Ltd.
+NO WARRANTY, EXPRESSED OR IMPLIED.
+"""
+import pytest
+import pandas as pd
+import random
+from pandas.testing import assert_frame_equal
+
+
+@pytest.mark.parametrize(
+    ["colnum", "rownum", "initial_col_width", "max_col_width", "total_rows"],
+    [(10, 5, 20, 500, 20), (10, 5, 450, 500, 20), (10, 5, 200, 1000, 20), (128, 100000, 30000, 40000, 4)],
+)
+def test_dynamic_bucketize_append_variable_width(
+    get_wide_df, sym, version_store_factory, colnum, rownum, initial_col_width, max_col_width, total_rows
+):
+    symbol = sym
+    lmdb_version_store = version_store_factory(
+        col_per_group=colnum, row_per_segment=rownum, dynamic_schema=True, bucketize_dynamic=True, dynamic_strings=True
+    )
+    count = 0
+    df1 = get_wide_df(count, initial_col_width, max_col_width)
+    count += 1
+    lmdb_version_store.write(symbol, df1)
+    vit = lmdb_version_store.read(symbol)
+    assert_frame_equal(vit.data, df1)
+    while count < total_rows:
+        df2 = get_wide_df(count, random.randrange(max_col_width) + 1, max_col_width)
+        df1 = pd.concat([df1, df2])
+        lmdb_version_store.append(symbol, df2)
+        count += 1
+    res = lmdb_version_store.read(symbol).data
+    df1 = df1.reindex(sorted(list(df1.columns)), axis=1)
+    res = res.reindex(sorted(list(res.columns)), axis=1)
+    assert_frame_equal(res, df1)

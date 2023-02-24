@@ -1,0 +1,4 @@
+# need to ignore binaries otherwise jenkins pipeline goes mental
+# by noticing a non clean environment
+test_unit_arcticdb
+arcticdb_rapidcheck_tests

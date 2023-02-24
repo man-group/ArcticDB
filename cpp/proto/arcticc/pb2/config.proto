@@ -1,0 +1,9 @@
+syntax = "proto3";
+
+package arcticc.pb2.config_pb2;
+
+message RuntimeConfig {
+    map<string, string> string_values = 1;
+    map<string, int64> int_values = 2;
+    map<string, double> double_values = 3;
+}

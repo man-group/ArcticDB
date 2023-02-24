@@ -1,0 +1,82 @@
+syntax = "proto3";
+
+package arcticc.pb2.utils_pb2;
+
+
+message RemoteryConfig {
+
+    // Which port to listen for incoming connections on
+    // defaults to 17815
+    uint32 port = 1;
+
+    // When this server exits it can leave the port open in TIME_WAIT state for
+    // a while. This forces subsequent server bind attempts to fail when
+    // restarting. If you find restarts fail repeatedly with bind attempts, set
+    // this to true to forcibly reuse the open port.
+    bool do_not_reuse_open_port = 2;
+
+    // Only allow connections on localhost?
+    // For dev builds you may want to access your game from other devices but if
+    // you distribute a game to your players with Remotery active, probably best
+    // to limit connections to localhost.
+    bool limit_connections_to_localhost = 3;
+
+    // How long to sleep between server updates, hopefully trying to give
+    // a little CPU back to other threads.
+    uint32 ms_sleep_btw_server_updates = 4;
+
+    // Size of the internal message queues Remotery uses
+    // Will be rounded to page granularity of 64k
+    uint32 message_queue_size_in_bytes = 5;
+
+    // If the user continuously pushes to the message queue, the server network
+    // code won't get a chance to update unless there's an upper-limit on how
+    // many messages can be consumed per loop.
+    uint32 max_nb_messages_per_update = 6;
+
+}
+
+message PrometheusConfig {
+    // instance
+    string instance = 1;
+
+    // Host URL for the Prometheus Push Gateway
+    string host = 2;
+
+    // Port of the Push Gateway
+    string port = 3;
+
+    // Job name to be associated with the metrics pushed
+    string job_name = 4;
+
+    // Prometheus env - used for alerting purposes
+    string prometheus_env = 5;
+
+    // prometheus model. no settings found ie NO_INIT constructs an empty PrometheusInstance
+    enum PrometheusModel {
+        NO_INIT = 0;
+        PUSH = 1;
+        WEB = 2;
+    }
+    PrometheusModel prometheus_model = 6;
+
+}
+
+message LogstashConfig {
+    // event_type (main value on which logs are sharded)
+    string event_type = 1;
+
+    // Host URL of the Logstash server
+    string host = 2;
+
+    // Port of the Logstash server
+    string port = 3;
+
+    // Needed when host needs ip resolution
+    bool allow_name_lookup = 4;
+}
+
+message FileLogger {
+    // file path
+    string file_path = 1;
+}

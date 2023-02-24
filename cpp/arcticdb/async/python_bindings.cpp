@@ -1,0 +1,28 @@
+/*
+* Copyright 2023 Man Group Operations Ltd.
+* NO WARRANTY, EXPRESSED OR IMPLIED
+*/
+
+#include <arcticdb/python/python_utils.hpp>
+#include <arcticdb/async/python_bindings.hpp>
+#include <arcticdb/async/task_scheduler.hpp>
+
+namespace py = pybind11;
+
+namespace arcticdb::async {
+
+void register_bindings(py::module &m) {
+    auto async = m.def_submodule("cpp_async", "Asynchronous processing");
+
+    py::class_<TaskScheduler, std::shared_ptr<TaskScheduler>>(async, "TaskScheduler")
+        .def(py::init<>([](py::kwargs &conf) {
+            auto thread_count = conf.attr("get")("thread_count", 1).cast<std::size_t>();
+            return std::make_shared<TaskScheduler>(thread_count);
+        }), "Number of threads used to execute tasks");
+
+    async.def("print_scheduler_stats", &print_scheduler_stats);
+}
+
+} // namespace arcticdb::async
+
+

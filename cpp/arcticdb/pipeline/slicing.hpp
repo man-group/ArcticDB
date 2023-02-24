@@ -1,0 +1,106 @@
+/*
+* Copyright 2023 Man Group Operations Ltd.
+* NO WARRANTY, EXPRESSED OR IMPLIED
+*/
+
+#pragma once
+
+#include <arcticdb/stream/index.hpp>
+#include <arcticdb/entity/types.hpp>
+#include <arcticdb/pipeline/frame_slice.hpp>
+#include <arcticdb/stream/stream_sink.hpp>
+#include <arcticdb/entity/protobufs.hpp>
+#include <arcticdb/storage/store.hpp>
+#include <arcticdb/pipeline/pipeline_common.hpp>
+#include <arcticdb/pipeline/index_segment_reader.hpp>
+#include <arcticdb/pipeline/input_tensor_frame.hpp>
+#include <arcticdb/pipeline/write_options.hpp>
+
+#include <folly/futures/Future.h>
+
+#include <optional>
+#include <vector>
+#include <cstddef>
+
+namespace arcticdb::pipelines {
+
+class FixedSlicer {
+public:
+    explicit FixedSlicer(std::size_t col_per_slice = 127, std::size_t row_per_slice = 100'000) :
+            col_per_slice_(col_per_slice), row_per_slice_(row_per_slice) { }
+
+    std::vector<FrameSlice> operator() (const InputTensorFrame &frame) const;
+
+    auto row_per_slice() const { return row_per_slice_; }
+
+private:
+    size_t col_per_slice_;
+    size_t row_per_slice_;
+};
+
+class HashedSlicer {
+public:
+    explicit HashedSlicer(std::size_t num_buckets, std::size_t row_per_slice) :
+        num_buckets_(num_buckets), row_per_slice_(row_per_slice) { }
+
+    std::vector<FrameSlice> operator() (const InputTensorFrame &frame) const;
+
+    size_t num_buckets() const { return num_buckets_; }
+
+    auto row_per_slice() const { return row_per_slice_; }
+
+private:
+    size_t num_buckets_;
+    size_t row_per_slice_;
+};
+
+class NoSlicing {
+};
+
+using SlicingPolicy = std::variant<NoSlicing, FixedSlicer, HashedSlicer>;
+
+SlicingPolicy get_slicing_policy(
+    const WriteOptions& options,
+    const arcticdb::pipelines::InputTensorFrame& frame);
+
+std::vector<FrameSlice> slice(InputTensorFrame &frame, const SlicingPolicy& slicer);
+
+std::vector<folly::Future<SliceAndKey>> write_slices(
+    const InputTensorFrame &frame,
+    const std::vector<FrameSlice> &slices,
+    const SlicingPolicy& slicing,
+    folly::Function<stream::StreamSink::PartialKey(const FrameSlice &)>&& partial_key_gen,
+    const std::shared_ptr<stream::StreamSink>& sink,
+    const std::shared_ptr<DeDupMap>& de_dup_map);
+
+
+inline auto slice_begin_pos(const FrameSlice& slice, const InputTensorFrame& frame) {
+    return slice.row_range.first - frame.offset;
+}
+
+inline auto slice_end_pos(const FrameSlice& slice, const InputTensorFrame& frame) {
+    return (slice.row_range.second-1) - frame.offset;
+}
+
+inline auto get_partial_key_gen( const InputTensorFrame& frame, const IndexPartialKey& key)
+{
+    using PartialKey = stream::StreamSink::PartialKey;
+
+    return [&](const FrameSlice& s) {
+        if (frame.has_index()) {
+            util::check(static_cast<bool>(frame.index_tensor), "Got null index tensor in get_partial_key_gen");
+            auto& idx = frame.index_tensor.value();
+            auto* start = idx.ptr_cast<timestamp>(slice_begin_pos(s, frame));
+            auto* end = idx.ptr_cast<timestamp>(slice_end_pos(s, frame));
+            return PartialKey{
+                    KeyType::TABLE_DATA, key.version_id, key.id, *start, *end+1ul};
+        }
+        else {
+            return PartialKey{
+                    KeyType::TABLE_DATA, key.version_id, key.id, s.row_range.first, s.row_range.second};
+        }
+    };
+}
+
+} //arcticdb::pipelines
+
