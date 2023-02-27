@@ -47,6 +47,11 @@ proto_files = ProtobufFiles(sources=["cpp/proto/arcticc/pb2/*.proto"])
 def compile_protos():
     print("\nProtoc compilation")
     proto_files.compile()
+    if not os.path.exists("python/arcticc"):
+        raise RuntimeError("Unable to locate Protobuf module during compilation.")
+    else:
+        open("python/arcticc/__init__.py", "a").close()
+        open("python/arcticc/pb2/__init__.py", "a").close()
 
 
 class CompileProto(Command):
@@ -74,6 +79,9 @@ class DevelopAndCompileProto(develop):
     def run(self):
         develop.run(self)
         compile_protos()  # compile after updating the deps
+        if not os.path.islink("python/arcticdb_ext.so") and os.path.exists("python"):
+            print("Creating symlink for compiled arcticdb module in python...")
+            os.symlink("../arcticdb_ext.so", "python/arcticdb_ext.so")
 
 
 class CMakeExtension(Extension):
@@ -112,7 +120,6 @@ class CMakeBuild(build_ext):
         }
         process_args = [
             "cmake",
-            "-DTEST=OFF",
             "-DCMAKE_DEPENDS_USE_COMPILER=FALSE",
             "-G",
             "CodeBlocks - Unix Makefiles",
