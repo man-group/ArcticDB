@@ -10,8 +10,7 @@
 
 ---
 
-**ArcticDB** is a high-performance DataFrame database built for the modern Python Data Science ecosystem. ArcticDB provides an embedded database solution 
-that is:
+**ArcticDB** is an embedded, high-performance DataFrame database built for the modern Python Data Science ecosystem. ArcticDB is:
 
 * **Fast**: Capable of processing billions of rows in seconds
 * **Flexible**: Designed to handle complex real-world datasets
@@ -20,6 +19,8 @@ that is:
 ---
 
 ## This Repository is Under Development!
+
+As part of our Open Sourcing initiative, we are actively migrating our code and build tooling to this repository. As a result, this repository (and this readme) is under active development.
 
 ### Outstanding Tasks
 
@@ -56,7 +57,7 @@ These dependencies are:
 * wangle v2022.10.31.00
 * librdkafka v.1.5.2
 
-These dependencies will be installed automatically as part of the built tooling for this repo. 
+We are in the process of adding automated tooling to this repository that will handle dependency installation thus enabling building the code in this repository outside of Man Group.
 
 #### Documentation
 
