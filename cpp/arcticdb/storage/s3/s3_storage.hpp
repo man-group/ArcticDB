@@ -19,6 +19,9 @@
 #include <arcticdb/util/composite.hpp>
 #include <arcticdb/util/configs_map.hpp>
 #include <cstdlib>
+#include <sstream>
+#include <string>
+#include <vector>
 
 namespace arcticdb::storage::s3 {
 
@@ -116,67 +119,137 @@ inline arcticdb::proto::storage::VariantStorage pack_config(
     return output;
 }
 
-inline std::vector<std::pair<std::string, Aws::Http::Scheme>> get_proxy_env_config(){
-    return {
-        std::make_pair("http_proxy", Aws::Http::Scheme::HTTP),
-        std::make_pair("https_proxy", Aws::Http::Scheme::HTTPS),
-        std::make_pair("HTTP_PROXY", Aws::Http::Scheme::HTTP),
-        std::make_pair("HTTPS_PROXY", Aws::Http::Scheme::HTTPS),
-    };
+inline std::optional<Aws::Client::ClientConfiguration> parse_proxy_env_var(Aws::Http::Scheme endpoint_scheme,
+                                                                           const char* opt_env_var) {
+    if(opt_env_var == nullptr) {
+        return std::nullopt;
+    }
+    auto env_var = std::string_view(opt_env_var);
+    // env_var format: [http[s]://][username[:password]@]hostname[:port]
+    Aws::Client::ClientConfiguration client_configuration;
+    if (env_var.find("https://") == 0) {
+        client_configuration.proxyScheme = Aws::Http::Scheme::HTTPS;
+        env_var = env_var.substr(8);
+    } else if (env_var.find("http://") == 0) {
+        env_var = env_var.substr(7);
+    }
+    // env_var format: [username[:password]@]hostname[:port]
+    auto creds_end_index = env_var.rfind('@');
+    if (creds_end_index != std::string::npos){
+        auto auth = env_var.substr(0, creds_end_index);
+
+        auto user_pass_divider_idx = auth.find(':');
+        if (user_pass_divider_idx != std::string::npos) {
+            client_configuration.proxyUserName = auth.substr(0, user_pass_divider_idx);
+            client_configuration.proxyPassword = auth.substr(user_pass_divider_idx + 1);
+        } else {
+            client_configuration.proxyUserName = auth;
+        }
+        env_var = env_var.substr(creds_end_index + 1);
+    }
+    // env_var format: hostname[:port]
+    auto port_start_idx = env_var.rfind(':');
+    unsigned long port;
+    if (port_start_idx == std::string::npos){
+        port = endpoint_scheme == Aws::Http::Scheme::HTTPS ? 443 : 80;
+    } else {
+        try {
+            port = std::stoul(std::string(env_var.substr(port_start_idx + 1, env_var.length())));
+        } catch (const std::logic_error& e) {
+            log::storage().warn("Failed to parse port in '{}': {}", env_var, e.what());
+            return std::nullopt;
+        }
+        if (port > std::numeric_limits<uint16_t>::max()) {
+            log::storage().warn("Failed to parse '{}': port {} > {}", env_var, port, std::numeric_limits<uint16_t>::max());
+            return std::nullopt;
+        }
+        env_var = env_var.substr(0, port_start_idx);
+    }
+    client_configuration.proxyPort = port;
+    // env_var format: hostname
+    client_configuration.proxyHost = env_var;
+    log::storage().info("S3 proxy set from env var '{}'", env_var);
+    return client_configuration;
 }
 
-/* This function is incomplete (AN-264/AN-18)
- * In the event of an authenticating proxy URL of the form 'http://user:password@euro-webproxy.drama.man.com:8080'
- * an stoi exception is thrown when trying to extract the port.
- * In addition, to work in mkd.core tests, the NO_PROXY env variable must also be respected, which is */
-//inline void set_proxy(Aws::Client::ClientConfiguration& clientConfig) {
-//    for (const auto& env_var : get_proxy_env_config()) {
-//        char* _val = std::getenv(env_var.first.c_str());
-//        if(_val != nullptr) {
-//            auto val = std::string(_val);
-//            auto endpoint_start_idx = val.find("://");
-//            endpoint_start_idx = endpoint_start_idx == std::string::npos ? 0 : endpoint_start_idx + 3;
-//
-//            auto port_start_idx = val .find(':', endpoint_start_idx + 1);
-//            int port;
-//            if (port_start_idx == std::string::npos){
-//                port = env_var.second == Aws::Http::Scheme::HTTPS ? 443 : 80;
-//            } else {
-//                port = std::stoi(val.substr(port_start_idx + 1, val.length()));
-//            }
-//
-//            auto endpoint_end_idx = port_start_idx == std::string::npos ? val.length() : port_start_idx;
-//            auto endpoint = val.substr(endpoint_start_idx, endpoint_end_idx - endpoint_start_idx);
-//
-//            clientConfig.proxyHost = endpoint;
-//            clientConfig.proxyPort = port;
-//            clientConfig.proxyScheme = env_var.second;
-//
-//            break;
-//        }
-//    }
-//}
+inline std::optional<Aws::Utils::Array<Aws::String>> parse_no_proxy_env_var(const char* opt_env_var) {
+    if (opt_env_var == nullptr) {
+        return std::nullopt;
+    }
+    auto env_var = std::stringstream(opt_env_var);
+    std::string host;
+    std::vector<std::string> hosts;
+    while(std::getline(env_var, host, ','))
+    {
+        hosts.push_back(host);
+    }
+    Aws::Utils::Array<Aws::String> non_proxy_hosts{hosts.size()};
+    for (const auto& tmp: folly::enumerate(hosts)) {
+        non_proxy_hosts[tmp.index] = *tmp;
+    }
+    return non_proxy_hosts;
+}
+
+/* Use the environment variables http_proxy, https_proxy, no_proxy, and upper-case versions thereof, to configure the
+ * proxy. Lower-case environment variables take precedence over upper-case in keeping with curl etc:
+ * https://about.gitlab.com/blog/2021/01/27/we-need-to-talk-no-proxy/
+ * Protocol, username, password, and port are all optional, and will default to http, empty, empty and 80/443
+ * (for http and https) respectively. Maximal and minimal example valid environment variables:
+ * http://username:password@my-proxy.com:8080
+ * my-proxy.com => http://my-proxy.com:80 (no authentication)
+ * no_proxy and it's uppercase equivalent should be a comma-separated list of hosts not to apply other proxy settings to
+ * e.g. no_proxy="host-1.com,host-2.com"
+ * */
+inline Aws::Client::ClientConfiguration get_proxy_config(Aws::Http::Scheme endpoint_scheme) {
+    // The ordering in the vectors matter, lowercase should be checked in preference of upper case.
+    const std::unordered_map<Aws::Http::Scheme, std::vector<std::string>> scheme_env_var_names {
+        {Aws::Http::Scheme::HTTP, {"http_proxy", "HTTP_PROXY"}},
+        {Aws::Http::Scheme::HTTPS, {"https_proxy", "HTTPS_PROXY"}}
+    };
+    std::optional<Aws::Client::ClientConfiguration> client_configuration;
+    for (const auto& env_var_name : scheme_env_var_names.at(endpoint_scheme)) {
+        char* opt_env_var = std::getenv(env_var_name.c_str());
+        client_configuration = parse_proxy_env_var(endpoint_scheme, opt_env_var);
+        if (client_configuration.has_value()) {
+            break;
+        }
+    }
+    if (client_configuration.has_value()) {
+        for (const auto& env_var_name: {"no_proxy", "NO_PROXY"}) {
+            char* opt_env_var = std::getenv(env_var_name);
+            auto non_proxy_hosts = parse_no_proxy_env_var(opt_env_var);
+            if (non_proxy_hosts.has_value()) {
+                client_configuration->nonProxyHosts = non_proxy_hosts.value();
+                log::storage().info("S3 proxy exclusion list set from env var '{}'", opt_env_var);
+                break;
+            }
+        }
+        return client_configuration.value();
+    } else {
+        return Aws::Client::ClientConfiguration();
+    }
+}
 
 template<typename ConfigType>
 auto get_s3_config(const ConfigType& conf) {
-    Aws::Client::ClientConfiguration clientConfig;
-    clientConfig.scheme = conf.https() ? Aws::Http::Scheme::HTTPS : Aws::Http::Scheme::HTTP;
+    auto endpoint_scheme = conf.https() ? Aws::Http::Scheme::HTTPS : Aws::Http::Scheme::HTTP;
+    Aws::Client::ClientConfiguration client_configuration = get_proxy_config(endpoint_scheme);
+    client_configuration.scheme = endpoint_scheme;
 
     if (!conf.region().empty())
-        clientConfig.region = conf.region();
+        client_configuration.region = conf.region();
 
-//    set_proxy(clientConfig);
 
     auto endpoint = conf.endpoint();
     util::check_arg(!endpoint.empty(), "S3 Endpoint must be specified");
-    clientConfig.endpointOverride = endpoint;
-    clientConfig.verifySSL = false;
-    clientConfig.maxConnections = conf.max_connections() == 0 ?
+    client_configuration.endpointOverride = endpoint;
+    client_configuration.verifySSL = false;
+    client_configuration.maxConnections = conf.max_connections() == 0 ?
             ConfigsMap::instance()->get_int("VersionStore.NumIOThreads", 16) :
             conf.max_connections();
-    clientConfig.connectTimeoutMs = conf.connect_timeout() == 0 ? 30000 : conf.connect_timeout();
-    clientConfig.requestTimeoutMs = conf.request_timeout() == 0 ? 200000 : conf.request_timeout();
-    return clientConfig;
+    client_configuration.connectTimeoutMs = conf.connect_timeout() == 0 ? 30000 : conf.connect_timeout();
+    client_configuration.requestTimeoutMs = conf.request_timeout() == 0 ? 200000 : conf.request_timeout();
+    return client_configuration;
 }
 
 template<typename ConfigType>

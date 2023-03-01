@@ -6,7 +6,97 @@
 #include <gtest/gtest.h>
 
 #include <arcticdb/storage/test/test_s3_storage_common.hpp>
+#include <aws/core/Aws.h>
 #include <arcticdb/util/composite.hpp>
+
+class ProxyEnvVarSetHttpProxyForHttpsEndpointFixture : public ::testing::Test {
+protected:
+    ProxyEnvVarSetHttpProxyForHttpsEndpointFixture()
+    {
+        as3::S3ApiInstance::instance();
+        setenv("HTTPS_PROXY", "http://http-proxy.com", false);
+    }
+
+    ~ProxyEnvVarSetHttpProxyForHttpsEndpointFixture()
+    {
+        unsetenv("HTTPS_PROXY");
+    }
+private:
+};
+
+class ProxyEnvVarUpperCaseFixture : public ::testing::Test {
+protected:
+    ProxyEnvVarUpperCaseFixture()
+    {
+        as3::S3ApiInstance::instance();
+        setenv("HTTP_PROXY", "http://http-proxy-2.com:2222", false);
+        setenv("HTTPS_PROXY", "https://https-proxy-2.com:2222", false);
+    }
+
+    ~ProxyEnvVarUpperCaseFixture()
+    {
+        unsetenv("HTTP_PROXY");
+        unsetenv("HTTPS_PROXY");
+    }
+private:
+};
+
+class ProxyEnvVarLowerCasePrecedenceFixture : public ::testing::Test {
+protected:
+    ProxyEnvVarLowerCasePrecedenceFixture()
+    {
+        as3::S3ApiInstance::instance();
+        setenv("http_proxy", "http://http-proxy-1.com:2222", false);
+        setenv("HTTP_PROXY", "http://http-proxy-2.com:2222", false);
+        setenv("https_proxy", "https://https-proxy-1.com:2222", false);
+        setenv("HTTPS_PROXY", "https://https-proxy-2.com:2222", false);
+    }
+
+    ~ProxyEnvVarLowerCasePrecedenceFixture()
+    {
+        unsetenv("http_proxy");
+        unsetenv("HTTP_PROXY");
+        unsetenv("https_proxy");
+        unsetenv("HTTPS_PROXY");
+    }
+private:
+};
+
+class NoProxyEnvVarUpperCaseFixture : public ::testing::Test {
+protected:
+    NoProxyEnvVarUpperCaseFixture()
+    {
+        as3::S3ApiInstance::instance();
+        setenv("HTTP_PROXY", "http://http-proxy-2.com:2222", false);
+        setenv("NO_PROXY", "http://test-1.endpoint.com", false);
+    }
+
+    ~NoProxyEnvVarUpperCaseFixture()
+    {
+        unsetenv("HTTP_PROXY");
+        unsetenv("NO_PROXY");
+    }
+private:
+};
+
+class NoProxyEnvVarLowerCasePrecedenceFixture : public ::testing::Test {
+protected:
+    NoProxyEnvVarLowerCasePrecedenceFixture()
+    {
+        as3::S3ApiInstance::instance();
+        setenv("http_proxy", "http://http-proxy-2.com:2222", false);
+        setenv("no_proxy", "http://test-1.endpoint.com,http://test-2.endpoint.com", false);
+        setenv("NO_PROXY", "http://test-3.endpoint.com", false);
+    }
+
+    ~NoProxyEnvVarLowerCasePrecedenceFixture()
+    {
+        unsetenv("http_proxy");
+        unsetenv("no_proxy");
+        unsetenv("NO_PROXY");
+    }
+private:
+};
 
 TEST(TestS3Storage, basic) {
     auto[cfg, lib_path] = test_s3_path_and_config();
@@ -235,4 +325,113 @@ TEST(TestS3Storage, remove_ignores_missing) {
     ae::RefKey k{"should_not_exist", ae::KeyType::VERSION_REF};
     arcticdb::storage::s3::detail::do_remove_impl(arcticdb::Composite<ae::VariantKey>(k),
                                                  root_folder, bucket_name, client, as::s3::detail::FlatBucketizer{});
+}
+
+TEST(TestS3Storage, proxy_env_var_parsing) {
+    using namespace arcticdb::storage::s3;
+    using namespace Aws::Http;
+    struct ProxyConfig {
+        Scheme endpoint_scheme_;
+        Scheme proxy_scheme_;
+        std::string host_;
+        uint16_t port_;
+        std::string username_;
+        std::string password_;
+        bool operator==(const Aws::Client::ClientConfiguration& client_config) const {
+            return
+            proxy_scheme_ == client_config.proxyScheme &&
+            host_ == client_config.proxyHost &&
+            port_ == client_config.proxyPort &&
+            username_ == client_config.proxyUserName &&
+            password_ == client_config.proxyPassword;
+        };
+    };
+    std::unordered_map<std::string, ProxyConfig> passing_test_cases {
+        {"http-proxy.com:2222", {Scheme::HTTP, Scheme::HTTP, "http-proxy.com", 2222, "", ""}},
+        {"https://https-proxy.com", {Scheme::HTTPS, Scheme::HTTPS, "https-proxy.com", 443, "", ""}},
+        // Test setting http proxy for https endpoint
+        {"http://http-proxy.com", {Scheme::HTTPS, Scheme::HTTP, "http-proxy.com", 443, "", ""}},
+        {"http://username@proxy.com", {Scheme::HTTP, Scheme::HTTP, "proxy.com", 80, "username", ""}},
+        {"http://username:pass@proxy.com:2222", {Scheme::HTTP, Scheme::HTTP, "proxy.com", 2222, "username", "pass"}},
+        {"http://username:p@ss@proxy.com:2222", {Scheme::HTTP, Scheme::HTTP, "proxy.com", 2222, "username", "p@ss"}}
+    };
+    for (const auto& [env_var, expected_proxy_config]: passing_test_cases) {
+        auto client_config = parse_proxy_env_var(expected_proxy_config.endpoint_scheme_, env_var.c_str());
+        ASSERT_TRUE(client_config.has_value());
+        ASSERT_TRUE(expected_proxy_config == client_config);
+    }
+
+    std::unordered_map<std::string, ProxyConfig> failing_test_cases {
+        {"http-proxy.com:not-a-valid-port", {Scheme::HTTP, Scheme::HTTP, "", 0, "", ""}},
+        {"https://username:pass@proxy.com:99999", {Scheme::HTTPS, Scheme::HTTP, "", 0, "", ""}}
+    };
+    for (const auto& [env_var, expected_proxy_config]: failing_test_cases) {
+        auto client_config = parse_proxy_env_var(expected_proxy_config.endpoint_scheme_, env_var.c_str());
+        ASSERT_FALSE(client_config.has_value());
+    }
+}
+
+TEST_F(ProxyEnvVarSetHttpProxyForHttpsEndpointFixture, test_config_resolution_proxy) {
+    as3::S3Storage::Config s3_config;
+    s3_config.set_endpoint("https://test.endpoint.com");
+    s3_config.set_https(true);
+    auto ret_cfg = arcticdb::storage::s3::get_s3_config(s3_config);
+    ASSERT_EQ(ret_cfg.proxyHost, "http-proxy.com");
+    ASSERT_EQ(ret_cfg.proxyPort, 443);
+    ASSERT_EQ(ret_cfg.proxyScheme, Aws::Http::Scheme::HTTP);
+}
+
+TEST_F(ProxyEnvVarUpperCaseFixture, test_config_resolution_proxy) {
+    as3::S3Storage::Config s3_config_http;
+    s3_config_http.set_endpoint("http://test.endpoint.com");
+    auto ret_cfg = arcticdb::storage::s3::get_s3_config(s3_config_http);
+    ASSERT_EQ(ret_cfg.proxyHost, "http-proxy-2.com");
+    ASSERT_EQ(ret_cfg.proxyPort, 2222);
+    ASSERT_EQ(ret_cfg.proxyScheme, Aws::Http::Scheme::HTTP);
+
+    as3::S3Storage::Config s3_config_https;
+    s3_config_https.set_endpoint("https://test.endpoint.com");
+    s3_config_https.set_https(true);
+    ret_cfg = arcticdb::storage::s3::get_s3_config(s3_config_https);
+    ASSERT_EQ(ret_cfg.proxyHost, "https-proxy-2.com");
+    ASSERT_EQ(ret_cfg.proxyPort, 2222);
+    ASSERT_EQ(ret_cfg.proxyScheme, Aws::Http::Scheme::HTTPS);
+}
+
+TEST_F(ProxyEnvVarLowerCasePrecedenceFixture, test_config_resolution_proxy) {
+    as3::S3Storage::Config s3_config_http;
+    s3_config_http.set_endpoint("http://test.endpoint.com");
+    auto ret_cfg = arcticdb::storage::s3::get_s3_config(s3_config_http);
+    ASSERT_EQ(ret_cfg.proxyHost, "http-proxy-1.com");
+    ASSERT_EQ(ret_cfg.proxyPort, 2222);
+    ASSERT_EQ(ret_cfg.proxyScheme, Aws::Http::Scheme::HTTP);
+
+    as3::S3Storage::Config s3_config_https;
+    s3_config_https.set_endpoint("https://test.endpoint.com");
+    s3_config_https.set_https(true);
+    ret_cfg = arcticdb::storage::s3::get_s3_config(s3_config_https);
+    ASSERT_EQ(ret_cfg.proxyHost, "https-proxy-1.com");
+    ASSERT_EQ(ret_cfg.proxyPort, 2222);
+    ASSERT_EQ(ret_cfg.proxyScheme, Aws::Http::Scheme::HTTPS);
+}
+
+TEST_F(NoProxyEnvVarUpperCaseFixture, test_config_resolution_proxy) {
+    as3::S3Storage::Config s3_config;
+    s3_config.set_endpoint("http://test.endpoint.com");
+    auto ret_cfg = arcticdb::storage::s3::get_s3_config(s3_config);
+
+    Aws::Utils::Array<Aws::String> expected_non_proxy_hosts{1};
+    expected_non_proxy_hosts[0] = "http://test-1.endpoint.com";
+    ASSERT_EQ(ret_cfg.nonProxyHosts, expected_non_proxy_hosts);
+}
+
+TEST_F(NoProxyEnvVarLowerCasePrecedenceFixture, test_config_resolution_proxy) {
+    as3::S3Storage::Config s3_config;
+    s3_config.set_endpoint("http://test.endpoint.com");
+    auto ret_cfg = arcticdb::storage::s3::get_s3_config(s3_config);
+
+    Aws::Utils::Array<Aws::String> expected_non_proxy_hosts{2};
+    expected_non_proxy_hosts[0] = "http://test-1.endpoint.com";
+    expected_non_proxy_hosts[1] = "http://test-2.endpoint.com";
+    ASSERT_EQ(ret_cfg.nonProxyHosts, expected_non_proxy_hosts);
 }
