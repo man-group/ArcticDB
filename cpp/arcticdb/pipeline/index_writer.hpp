@@ -86,7 +86,7 @@ public:
             }
         };
 
-        agg_.start_row(0ul)([&](auto &rb) {
+        agg_.start_row()([&](auto &rb) {
             std::visit([&rb](auto &&val) { rb.set_scalar(int(Fields::start_index), val); }, key.start_index());
             add_to_row(rb);
         });

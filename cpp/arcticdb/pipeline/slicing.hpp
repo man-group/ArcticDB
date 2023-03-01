@@ -93,11 +93,13 @@ inline auto get_partial_key_gen( const InputTensorFrame& frame, const IndexParti
             auto* start = idx.ptr_cast<timestamp>(slice_begin_pos(s, frame));
             auto* end = idx.ptr_cast<timestamp>(slice_end_pos(s, frame));
             return PartialKey{
-                    KeyType::TABLE_DATA, key.version_id, key.id, *start, *end+1ul};
+                    KeyType::TABLE_DATA, key.version_id, key.id, *start, *end + timestamp(1)};
         }
         else {
             return PartialKey{
-                    KeyType::TABLE_DATA, key.version_id, key.id, s.row_range.first, s.row_range.second};
+                    KeyType::TABLE_DATA, key.version_id, key.id,
+                    entity::safe_convert_to_numeric_index(s.row_range.first, "Rows"),
+                    entity::safe_convert_to_numeric_index(s.row_range.second, "Rows")};
         }
     };
 }

@@ -104,15 +104,15 @@ struct AlternativeFormat {
 };
 
 TEST(Key, Formatting) {
+
     AtomKey k{
-        999,
-        123UL,
-        123000000UL,
+        StreamId{999},
+        VersionId(123),
+        timestamp(123000000LL),
         0x789456321UL,
-        122000000UL,
-        122000999UL,
-        KeyType::TABLE_DATA
-    };
+        NumericIndex(122000000UL),
+        NumericIndex(122000999UL),
+        KeyType::TABLE_DATA};
 
     AtomKey k2 = k;
 

@@ -5,7 +5,6 @@
 
 #pragma once
 
-#include <gtest/gtest-message.h>
 #include <fmt/ostream.h>
 #include <arcticdb/entity/variant_key.hpp>
 
