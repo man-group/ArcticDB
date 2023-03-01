@@ -48,6 +48,13 @@ using shape_t = ssize_t;
 using stride_t = ssize_t;
 using position_t = ssize_t;
 
+/** The VariantId holds int64 (NumericId) but is also used to store sizes up to uint64, so needs safe conversion */
+inline NumericId safe_convert_to_numeric_id(uint64_t input, const char* input_name) {
+    util::check(input <= static_cast<uint64_t>(std::numeric_limits<NumericId>::max()),
+        "{} greater than 2^63 is not supported.", input_name);
+    return static_cast<NumericId>(input);
+}
+
 namespace py = pybind11;
 
 
@@ -178,7 +185,7 @@ constexpr DataType data_type_from_raw_type() {
     }
     if constexpr(std::is_signed_v<T>) {
         return combine_data_type(ValueType::INT, get_size_bits(sizeof(T)));
-    } 
+    }
     return combine_data_type(ValueType::UINT, get_size_bits(sizeof(T)));
 }
 
@@ -628,13 +635,16 @@ struct StreamDescriptor {
 
     void set_id(const StreamId& id) {
         util::variant_match(id,
-            [that=this] (const StringId& str) { that->data_->set_str_id(str); },
-            [that=this] (const NumericId& n) { that->data_->set_num_id(n); });
+            [this] (const StringId& str) { data_->set_str_id(str); },
+            [this] (const NumericId& n) {
+                util::check(n >= 0, "Negative NumericId is not supported");
+                data_->set_num_id(n);
+            });
     }
 
     static StreamId id_from_proto(Proto proto) {
         if(proto.id_case() == arcticdb::proto::descriptors::StreamDescriptor::kNumId)
-            return proto.num_id();
+            return safe_convert_to_numeric_id(proto.num_id(), "Numeric StreamId");
         else
             return proto.str_id();
     }

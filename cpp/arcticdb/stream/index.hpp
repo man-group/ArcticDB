@@ -269,7 +269,7 @@ class RowCountIndex : public BaseIndex<RowCountIndex> {
     }
 
     template<class RowCellSetter>
-    void set(RowCellSetter, const IndexValue &) {
+    void set(RowCellSetter, const IndexValue & = {timestamp(0)}) {
         // No index value
     }
 

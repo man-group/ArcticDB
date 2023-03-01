@@ -188,7 +188,7 @@ static const StreamId compaction_id {CompactionId};
                 if (data_type == DataType::UINT64) {
                     row.visit_scalar_type(0, uint64_t{}, [&](auto val) {
                         ARCTICDB_DEBUG(log::version(), "Reading numeric symbol {}", val.value());
-                        symbols.insert(StreamId{val.value()});
+                        symbols.insert(StreamId{safe_convert_to_numeric_id(val.value(), "Numeric symbol")});
                     });
                 } else if (data_type == DataType::ASCII_DYNAMIC64) {
                     row.visit_string(0, [&](const auto &val) {

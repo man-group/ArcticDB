@@ -22,6 +22,14 @@ using NumericIndex = timestamp;
 using StringIndex = std::string;
 using IndexValue = std::variant<NumericIndex, StringIndex>;
 
+/** The IndexValue variant holds NumericIndex=timestamp=int64_t but is also used to store sizes up to uint64, so needs
+    safe conversion. See also safe_convert_to_numeric_id. */
+inline NumericIndex safe_convert_to_numeric_index(uint64_t input, const char* input_name) {
+    util::check(input <= static_cast<uint64_t>(std::numeric_limits<NumericIndex>::max()),
+        "{} greater than 2^63 is not supported.", input_name);
+    return static_cast<NumericIndex>(input);
+}
+
 inline std::string tokenized_index(const IndexValue& val) {
     return util::variant_match(val,
                                [] (const NumericIndex& num) {
