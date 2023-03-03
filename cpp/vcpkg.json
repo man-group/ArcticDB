@@ -1,0 +1,66 @@
+{
+  "name": "arcticdb",
+  "version": "1.1.0",
+  "dependencies": [
+    "fmt",
+    "spdlog",
+    {
+      "name": "pcre",
+      "platform": "!linux",
+      "$platform reason": "Distro-maintained one often have security fixes"
+    },
+    {
+      "name": "protobuf",
+      "default-features": false,
+      "features": [ "zlib" ]
+    },
+    {
+      "name": "folly",
+      "default-features": false,
+      "features": [ "lz4" ]
+    },
+    "wangle",
+    "zstd",
+    {
+      "name": "libsodium",
+      "platform": "!linux"
+    },
+    {
+      "name": "prometheus-cpp",
+      "default-features": false,
+      "features": [ "push", "pull" ]
+    },
+    "mongo-cxx-driver",
+    {
+      "name": "aws-sdk-cpp",
+      "default-features": false,
+      "features": [ "s3" ]
+    },
+    "boost-dynamic-bitset",
+    "boost-interprocess",
+    "boost-callable-traits",
+    "boost-circular-buffer",
+    "boost-optional",
+    "bitmagic",
+    {
+      "name": "libiconv",
+      "platform": "!linux"
+    },
+    "openssl",
+    "double-conversion",
+    "libevent",
+    "gtest",
+    "rapidcheck"
+  ],
+  "overrides": [
+    {
+      "name": "openssl",
+      "version-string": "1.1.1l"
+    }
+  ],
+  "vcpkg-configuration": {
+    "overlay-ports": ["third_party/vcpkg_overlays"]
+  },
+  "$note on builtin-baseline": "Remember to regenerate third_party/vcpkg_overlays",
+  "builtin-baseline": "e82778a710538de07955dea6eb785132c3804d63"
+}
