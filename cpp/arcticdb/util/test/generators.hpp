@@ -216,7 +216,7 @@ inline NativeTensor tensor_from_column(const Column &column) {
             get_type_size(data_type),
             column.ptr()
         };
-        return std::move(tensor);
+        return tensor;
     });
 }
 
