@@ -776,12 +776,12 @@ public:
 
     void set_metadata(google::protobuf::Any &&meta) {
         util::check_arg(!metadata_, "Cannot override previously set metadata");
-        if (meta.ByteSize())
+        if (meta.ByteSizeLong())
             metadata_ = std::make_unique<google::protobuf::Any>(std::move(meta));
     }
 
     void override_metadata(google::protobuf::Any &&meta) {
-        if (meta.ByteSize())
+        if (meta.ByteSizeLong())
             metadata_ = std::make_unique<google::protobuf::Any>(std::move(meta));
     }
 
