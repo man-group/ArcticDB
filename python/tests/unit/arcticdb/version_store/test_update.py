@@ -56,6 +56,27 @@ def test_update(arcticdb_test_lmdb_config, lib_name):
     assert_frame_equal(vit.data.astype("float"), df)
 
 
+def test_update_long_strides(lmdb_version_store):
+    lib = lmdb_version_store
+    symbol = "test_update_long_strides"
+
+    write_df = pd.DataFrame({"A": 7 * [1]}, index=pd.date_range("2023-02-01", periods=7))
+    assert write_df.index.values.strides[0] == 8
+    lib.write(symbol, write_df)
+
+    update_df = write_df[write_df.index.isin([pd.Timestamp(2023, 2, 1), pd.Timestamp(2023, 2, 6)])].copy()
+    update_df["A"] = 999
+    assert update_df.index.values.strides[0] == 40
+
+    lib.update(symbol, update_df)
+
+    expected = pd.DataFrame(
+        {"A": [999, 999, 1]}, index=[pd.Timestamp(2023, 2, 1), pd.Timestamp(2023, 2, 6), pd.Timestamp(2023, 2, 7)]
+    )
+    received = lib.read(symbol).data
+    pd.testing.assert_frame_equal(expected, received)
+
+
 def gen_params():
     p = [
         list(range(2, 4)),
