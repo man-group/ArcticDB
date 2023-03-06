@@ -125,7 +125,7 @@ std::optional<VersionedItem> LocalVersionedEngine::get_specific_version(
     auto key = ::arcticdb::get_specific_version(store(), version_map(), stream_id, version_id, opt_true(version_query.skip_compat_),
                                                    opt_true(version_query.iterate_on_failure_));
     if (!key) {
-        ARCTICDB_DEBUG(log::version(), "Version {} for symbol {} is missing, checking snapshots:", version_id, stream_id);
+        log::version().warn("Version {} for symbol {} is missing, checking snapshots (this can be slow)", version_id, stream_id);
         auto index_keys = get_index_keys_in_snapshots(store(), stream_id);
         auto index_key = std::find_if(index_keys.begin(), index_keys.end(), [version_id](const AtomKey& k) {
             return k.version_id() == version_id;
