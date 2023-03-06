@@ -10,7 +10,7 @@
 
 ---
 
-**ArcticDB** is an embedded, high-performance DataFrame database built for the modern Python Data Science ecosystem. ArcticDB is:
+**ArcticDB** is a cloud-native, timeseries-optimised columnar database designed from the ground up for DataFrames.ArcticDB is the successor to [Arctic 1.0](https://github.com/man-group/arctic). This next generation version was launched in February 2023 and offers the same intuitive Python-centric API whilst utilizing a custom C++ storage engine and modern S3 compatible object storage to provide a timeseries database that is:
 
 * **Fast**: Capable of processing billions of rows in seconds
 * **Flexible**: Designed to handle complex real-world datasets
