@@ -33,6 +33,8 @@ from arcticdb import _msgpack_compat
 from arcticdb.log import version
 from arcticdb.version_store._common import _column_name_to_strings, TimeFrame
 
+PICKLE_PROTOCOL = 4
+
 try:  # 0.21+ Compatibility
     from pandas._libs.tslib import Timestamp
     from pandas._libs.tslibs.timezones import get_timezone
@@ -989,9 +991,7 @@ class Pickler(object):
 
     @staticmethod
     def write(obj):
-        # Protocol level 2 is the highest number supported by Python 2.7
-        # We *should* be able to write Py3 with protocol 2 and read in Py2.7
-        return pickle.dumps(obj, protocol=2)
+        return pickle.dumps(obj, protocol=PICKLE_PROTOCOL)
 
 
 class TimeFrameNormalizer(Normalizer):
