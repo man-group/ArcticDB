@@ -4,69 +4,136 @@
 
 ---
 
+**ArcticDB** is a high performance, serverless Dataframe database for the modern cloud. Launched in February 2003, it is the successor to [Arctic 1.0](https://github.com/man-group/arctic). ArcticDB offers the same intuitive Python-centric API, with a C++ data-processing and compression engine that is compatible with  object stores such as Amazon S3.
+
+---
+
 <p align="center">
-<img src="https://github.com/man-group/ArcticDB/raw/master/static/flowDiagram.png" width="100%">
+<img src="https://github.com/man-group/ArcticDB/raw/master/static/ArcticDBTerminal.gif" width="100%">
 </p>
 
 ---
 
-**ArcticDB** is a cloud-native, timeseries-optimised columnar database designed from the ground up for DataFrames.ArcticDB is the successor to [Arctic 1.0](https://github.com/man-group/arctic). This next generation version was launched in February 2023 and offers the same intuitive Python-centric API whilst utilizing a custom C++ storage engine and modern S3 compatible object storage to provide a timeseries database that is:
+ArcticDB allows you to:
 
-* **Fast**: Capable of processing billions of rows in seconds
-* **Flexible**: Designed to handle complex real-world datasets
-* **Familiar**: Built for the modern Python Data Science ecosystem - Pandas In/Pandas Out!
+ * Work with familiar data types and integrate effortlessly with the Python datascience ecosystem - Pandas in, Pandas out
+ * Efficiently index and query time-series data
+ * Store tiled dataframes, for fast selection of rows and columns
+ * Travel back in time to see previous versions of a table, and work with customizable snapshots of the database
+ * Append and update data without being constrained by the existing schema
+ * Handle sparse values and missing columns
+ * Filter, aggregate and create new columns on-the-fly with a Pandas-like syntax
+ * Use parallel and batch operations to take advantage of C++ multithreading 
+
+ArcticDB handles data that is big in both dimensions, so a 20-year history of more than 400,000 unique securities can be stored in a single table. Each table is maintained as a separate entity with no shared data, so it scales horizontally across tables with no bottlenecks, up to the capacity of your network and storage. 
+
+ArcticDB is designed from the outset to be resilient; there is no single point of failure, and persistent data structures in the storage mean that once a version of a table has been written, it can never be corrupted by subsequent updates. Pulling compressed data directly from the storage to the client means that there is no server to overload, so your data is always available when you need it.
+
+## Quickstart
+
+Install the ArcticDB C++ module:
+
+```bash
+$ pip install arcticdb
+```
+
+Import ArcticDB:
+
+```Python
+>>> from arcticdb import Arctic
+```
+
+Create an instance on your S3 storage (with or without explicit credentials):
+
+```Python
+>>> ac = Arctic('s3://MY_ENDPOINT:MY_BUCKET')  # Leave AWS to derive credential information
+>>> ac = Arctic('s3://MY_ENDPOINT:MY_BUCKET?region=YOUR_REGION&access=ABCD&secret=DCBA') # Manually specify creds
+```
+
+Or create an instance on your local disk:
+
+```Python
+>>> ac = Arctic("lmdb:///<path>)  
+```
+
+Create your first library and list the libraries in the instance:
+
+```Python
+>>> ac.create_library('travel_data')
+>>> ac.list_libraries()
+```
+
+Create a test dataframe:
+```Python
+>>> NUM_COLUMNS=10
+>>> NUM_ROWS=100_000
+>>> df = pd.DataFrame(np.random.randint(0,100,size=(NUM_ROWS, NUM_COLUMNS)), columns=[f"COL_{i}" for i in range(NUM_COLUMNS)], index=pd.date_range('2000', periods=NUM_ROWS, freq='h'))
+```
+
+Get the library, write some data to it, and read it back:
+
+```Python
+>>> lib = ac['travel_data']
+>>> lib.write("my_data", df)
+>>> data = lib.read("my_data")
+```
+
+To find out more about working with data, visit our [docs](https://github.com/man-group/ArcticDB/blob/docs/README.md)
+
+For more information, please contact us at [arcticdb@man.com](mailto:ArcticDB@man.com).
 
 ---
 
-## This Repository is Under Development!
+## Build From Source
 
-As part of our Open Sourcing initiative, we are actively migrating our code and build tooling to this repository. As a result, this repository (and this readme) is under active development.
+Instructions for building from source coming soon. 
 
-### Outstanding Tasks
-
-#### Automated build tooling
-
-The code in this repository is currently being built in-house at Man Group. 
-The build process is run within a Docker container, backed by a Man-Specific Docker image that contains a number of third party dependencies that are 
-required for the ArcticDB code to build. 
-
-These dependencies are:
-
-* zlib v1.2.13
-* jemalloc v5.1.0
-* LZ4 v1.8.3
-* ZSTD v1.4.5
-* OpenSSL v1.1.1
-* Libcurl v7.62.0
-* ProtoBuf-cpp v3.6.1
-* xxHash v0.6.5
-* libpcre v8.45
-* Cyrus Sasl v2.1.28
-* libsodium v1.0.17
-* libevent v2.1.12
-* googletest v1.12.1
-* double-conversion v3.1.4
-* glog v0.3.5
-* fmtlib v8.1.1
-* folly v2022.10.31.00
-* mongo-c-driver v1.12.0
-* mongo-cxx-driver v3.3.1
-* aws-sdk-cpp v1.9.212
-* BitMagic v7.2.0
-* fizz v2022.10.31.00
-* wangle v2022.10.31.00
-* librdkafka v.1.5.2
-
-We are in the process of adding automated tooling to this repository that will handle dependency installation thus enabling building the code in this repository outside of Man Group.
-
-#### Documentation
+## Documentation
 
 The documentation for ArcticDB is contained elsewhere and is in the process of being ported to this repository.
 
-#### License & Contributor Agreement
+## License
 
-This repository is currently missing the full license and CA text.
+ArcticDB is released under a [Business Source License 1.1 (BSL)](https://github.com/man-group/ArcticDB/blob/2dd7263fc917a3c41082a11d8d6a0f38ae5bcb42/LICENSE)
 
-#### Finalise the README
+BSL features are free to use and the source code is available, but users may not use ArcticDB for production use or for a Database Service, without agreement with Man Group Operations Limited. 
 
-This README is currently unfinished! 
+Use of ArcticDB in production or for a Database Service requires a paid for license from Man Group Operations Limited and is licensed under the ArcticDB Software License Agreement. For more information please contact [arcticdb@man.com](mailto:ArcticDB@man.com). 
+
+The BSL is not certified as an open-source license, but most of the [Open Source Initiative (OSI)](https://opensource.org/) criteria are met.
+
+For each BSL release all associated alpha, beta, major, and minor (point) releases will become Apache Lisensed, version 2.0 on the same day two years after the major release date. For the license conversion dates, see the table below.
+
+| ArcticDB Version | License | Converts to Apache 2.0 |
+| ------------- | ------------- | ------------- |
+| 1.0 | Business Source License 1.1 | Mar 15, 2025 |
+
+## Code of Conduct
+
+*	[Code of Conduct](https://github.com/man-group/ArcticDB/blob/cfd91e42762dccd2b622119a31babefd6c1e51f9/CODE_OF_CONDUCT.md)
+
+This project has adopted a Code of Conduct. If you have any concerns about the Code, or behaviour that you have experienced in the project, please contact us at [arcticdb@man.com](mailto:ArcticDB@man.com). 
+
+## Contributing
+
+We welcome your contributions to help us improve and extend this project!
+
+Below you will find some basic steps required to be able to contribute to the project. If you have any questions about this process or any other aspect of contributing to our project, feel free to send an email to [arcticdb@man.com](mailto:ArcticDB@man.com) and we'll get your questions answered as quickly as we can.
+
+We are also always looking for feedback from our dedicated community! If you have used ArcticDB please let us know, we would love to hear about your experience!
+
+### Contribution Licensing
+
+Since this project is distributed under the terms of the [BSL license](https://github.com/man-group/ArcticDB/blob/d16658c65bf88666699c5479d5499a3fb1c643f6/LICENSE), contributions that you make are licensed under the same terms. For us to be able to accept your contributions, we will need explicit confirmation from you that you are able and willing to provide them under these terms, and the mechanism we use to do this is the ArcticDB Individual Contributor License Agreement (CLA) ADD LINK.
+
+**Individuals** - To participate under these terms, please include the following line as the last line of the commit message for each commit in your contribution. You must use your real name (no pseudonyms, and no anonymous contributions). 
+
+Signed-Off-By: Random J. Developer <random@developer.example.org>. By including this sign-off-line you agree to the terms of the Contributor License Agreement.
+
+**Corporations** - For corporations who wish to make contributions to ArcticDB, please contact arcticdb@man.com and we will arrange for the CLA to be sent to the signing authority within your corporation.
+
+## Community
+
+Do you have any questions or issues? Chat to us and other users through our dedicated Slack Workspace - sign up for Slack access on [our website.](https://arcticdb.io).
+
+Alternatively email us at arcticdb@man.com or come chat to us on [Twitter](https://www.twitter.com/arcticdb)!
