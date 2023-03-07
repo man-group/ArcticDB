@@ -1,11 +1,11 @@
 <p align="center">
-<img src="https://github.com/man-group/ArcticDB/raw/readme/static/ArcticDBCropped.png" width="40%">
+<img src="https://github.com/man-group/ArcticDB/raw/master/static/ArcticDBCropped.png" width="40%">
 </p>
 
 ---
 
 <p align="center">
-<img src="https://github.com/man-group/ArcticDB/raw/readme/static/flowDiagram.png" width="100%">
+<img src="https://github.com/man-group/ArcticDB/raw/master/static/flowDiagram.png" width="100%">
 </p>
 
 ---
