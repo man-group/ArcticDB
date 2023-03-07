@@ -1,0 +1,37 @@
+site_name: ArcticDB
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true 
+  - attr_list
+  - md_in_html
+
+theme:
+  name: material
+  logo: images/FullWithBorder.png
+  favicon: images/FullWithBorder.png
+  palette:
+    scheme: arcticdb
+  features:
+    - navigation.expand
+extra_css:
+  - stylesheets/extra.css
+
+
+pages:
+- Getting Started: 'index.md'
+- Overview:
+    - History of ArcticDB: 'history.md'
+    - Frequently Asked Questions: 'faq.md'
+- Tutorials:
+    - Fundamentals: 'tutorials/fundamentals'
+    - Parallel Writes: 'tutorials/parallel_writes.md'
+    - Snapshots: 'tutorials/snapshots.md'
+    - Metadata: 'tutorials/metadata.md'
+- Technical Information: 
+    - Architecture: 'technical/architecture.md'
+    - On-Disk Storage: 'technical/on_disk_storage.md'
+- Python Reference Docs: './api/index.html'
