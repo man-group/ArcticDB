@@ -12,8 +12,8 @@ except ImportError:
 from arcticdb_ext.storage import NoDataFoundException
 
 from arcticdb.arctic import Arctic
+from arcticdb.options import LibraryOptions
 from arcticdb import QueryBuilder
-from arcticdb.version_store.library import StagedDataFinalizeMethod
 import re
 import time
 import pytest
@@ -29,6 +29,7 @@ try:
         ArcticUnsupportedDataTypeException,
         ReadRequest,
         ArcticInvalidApiUsageException,
+        StagedDataFinalizeMethod,
     )
 except ImportError:
     # arcticdb squashes the packages
@@ -38,10 +39,11 @@ except ImportError:
         ArcticUnsupportedDataTypeException,
         ReadRequest,
         ArcticInvalidApiUsageException,
+        StagedDataFinalizeMethod,
     )
 
 
-def test_library_management(moto_s3_uri_incl_bucket):
+def test_library_creation_deletion(moto_s3_uri_incl_bucket):
     ac = Arctic(moto_s3_uri_incl_bucket)
     assert ac.list_libraries() == []
 
@@ -53,22 +55,32 @@ def test_library_management(moto_s3_uri_incl_bucket):
     assert ac["pytest_test_lib"].name == "pytest_test_lib"
 
     ac.delete_library("pytest_test_lib")
+    # Want this to be silent.
+    ac.delete_library("library_that_does_not_exist")
 
     assert not ac.list_libraries()
     with pytest.raises(Exception):  # TODO: Nicely wrap?
         _lib = ac["pytest_test_lib"]
 
 
-def test_non_existent_library(moto_s3_uri_incl_bucket):
-    """Want this to be silent."""
+def test_library_options(moto_s3_uri_incl_bucket):
     ac = Arctic(moto_s3_uri_incl_bucket)
-    ac.delete_library("library_that_does_not_exist")
+    assert ac.list_libraries() == []
+    ac.create_library("pytest_default_options")
+    lib = ac["pytest_default_options"]
+    write_options = lib._nvs._lib_cfg.lib_desc.version.write_options
+    assert write_options.dynamic_schema == LibraryOptions().dynamic_schema
+    assert write_options.de_duplication == LibraryOptions().dedup
 
-
-def test_non_existent_symbol(arctic_library):
-    lib = arctic_library
-    """Want this to be silent."""
-    lib.delete("symbol_that_does_not_exist")
+    for dynamic_schema in [True, False]:
+        for dedup in [True, False]:
+                library_options = LibraryOptions(dynamic_schema=dynamic_schema, dedup=dedup)
+                ac.create_library("pytest_explicit_options", library_options)
+                lib = ac["pytest_explicit_options"]
+                write_options = lib._nvs._lib_cfg.lib_desc.version.write_options
+                assert write_options.dynamic_schema == dynamic_schema
+                assert write_options.de_duplication == dedup
+                ac.delete_library("pytest_explicit_options")
 
 
 def test_separation_between_libraries(moto_s3_uri_incl_bucket):
@@ -972,6 +984,19 @@ def test_tail(arctic_library):
     pd.testing.assert_frame_equal(
         third_version.data, pd.DataFrame({"column": [9]}, index=pd.date_range(start="1/1/2018", end="1/1/2018"))
     )
+
+
+@pytest.mark.parametrize("dedup", [True, False])
+def test_dedup(moto_s3_uri_incl_bucket, dedup):
+    ac = Arctic(moto_s3_uri_incl_bucket)
+    assert ac.list_libraries() == []
+    ac.create_library("pytest_test_library", LibraryOptions(dedup=dedup))
+    lib = ac["pytest_test_library"]
+    symbol = "test_dedup"
+    lib.write_pickle(symbol, 1)
+    lib.write_pickle(symbol, 1, prune_previous_versions=False)
+    data_key_version = lib._nvs.read_index(symbol)["version_id"][0]
+    assert data_key_version == 0 if dedup else 1
 
 
 if __name__ == "__main__":
