@@ -36,7 +36,7 @@ def set_library_options(lib_desc: "LibraryConfig", options: LibraryOptions):
     write_options.delayed_deletes = False
 
     write_options.dynamic_schema = options.dynamic_schema
-    write_options.de_duplication = True
+    write_options.de_duplication = options.dedup
 
 
 @dataclass
