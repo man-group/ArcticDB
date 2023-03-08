@@ -3,8 +3,7 @@
 * NO WARRANTY, EXPRESSED OR IMPLIED
 */
 
- #include <third_party/semimap/semimap.h>
-#include <folly/Singleton.h>
+#include <third_party/semimap/semimap.h>
 #include <arcticdb/entity/key.hpp>
 
 namespace arcticdb::entity {
@@ -33,16 +32,15 @@ struct KeyData {
     const char* description_;
 };
 
-using key_map_type = semi::map<int, KeyData>;
-std::unique_ptr<key_map_type> key_map{};
+const KeyData& get_key_data(KeyType key_type) {
+    struct KeyMapTag{};
+    using KeyMap = semi::static_map<int, KeyData, KeyMapTag>;
 
-#define KEY_ID(x) ([]() constexpr { return static_cast<int>(x); })
-#define NUMERIC_KEY(kt, name, c) key_map->get(KEY_ID(kt)) = { #name, c, VariantType::NUMERIC_TYPE, KeyClass::ATOM_KEY, #kt };
-#define STRING_KEY(kt, name, c) key_map->get(KEY_ID(kt)) = { #name, c, VariantType::STRING_TYPE, KeyClass::ATOM_KEY, #kt};
-#define STRING_REF(kt, name, c) key_map->get(KEY_ID(kt)) = { #name, c, VariantType::STRING_TYPE, KeyClass::REF_KEY,  #kt };
+#define KEY_ID(x) []() constexpr { return static_cast<int>(x); }
+#define NUMERIC_KEY(kt, name, c) KeyMap::get(KEY_ID(kt)) = { #name, c, VariantType::NUMERIC_TYPE, KeyClass::ATOM_KEY, #kt };
+#define STRING_KEY(kt, name, c) KeyMap::get(KEY_ID(kt)) = { #name, c, VariantType::STRING_TYPE, KeyClass::ATOM_KEY, #kt};
+#define STRING_REF(kt, name, c) KeyMap::get(KEY_ID(kt)) = { #name, c, VariantType::STRING_TYPE, KeyClass::REF_KEY,  #kt };
 
-void init_key_map() {
-    key_map = std::make_unique<key_map_type>();
     NUMERIC_KEY(KeyType::STREAM_GROUP, sg, 'g')
     NUMERIC_KEY(KeyType::GENERATION, gen, 'G')
     STRING_KEY(KeyType::TABLE_DATA, tdata, 'd')
@@ -68,13 +66,8 @@ void init_key_map() {
     STRING_REF(KeyType::BACKUP_SNAPSHOT_REF, bref, 'B')
     STRING_KEY(KeyType::TOMBSTONE_ALL, tall, 'q')
     STRING_REF(KeyType::LIBRARY_CONFIG, cref, 'C')
-}
 
-std::once_flag init_map_flag;
-
-const KeyData& get_key_data(KeyType key_type) {
-    std::call_once(init_map_flag, [] () { init_key_map(); });
-    const auto& data =  key_map->get(int(key_type));
+    const auto& data =  KeyMap::get(int(key_type));
     util::check(data.short_name_ != 'u', "Could not get data for key_type {}", static_cast<int>(key_type));
     return data;
 }
@@ -85,10 +78,6 @@ const char* key_type_long_name(KeyType key_type) {
 
 char key_type_short_name(KeyType key_type) {
     return get_key_data(key_type).short_name_;
-}
-
-const char* get_key_description(KeyType key_type) {
-    return get_key_data(key_type).description_;
 }
 
 VariantType variant_type_from_key_type(KeyType key_type) {
