@@ -41,14 +41,14 @@ TEST(VersionMap, Basic) {
     ASSERT_EQ(store->num_ref_keys(), 1);
 
     RefKey ref_key{id,  KeyType::VERSION_REF};
-    auto ref_fut = store->read(ref_key);
+    auto ref_fut = store->read(ref_key, storage::ReadKeyOpts{});
     auto [key, seg] = std::move(ref_fut).get();
 
     ASSERT_EQ(seg.row_count(), 2);
     auto key_row_1 = read_key_row(seg, 0);
     ASSERT_EQ(key_row_1, key1);
     auto key_row_2 = read_key_row(seg, 1);
-    auto version_fut = store->read(key_row_2);
+    auto version_fut = store->read(key_row_2, storage::ReadKeyOpts{});
     auto [ver_key, ver_seg] = std::move(version_fut).get();
     ASSERT_EQ(ver_seg.row_count(), 1);
     auto ver_key_row_1 = read_key_row(ver_seg, 0);
@@ -384,7 +384,7 @@ TEST(VersionMap, IterateOnFailure) {
     version_map->write_version(store, key3);
 
     RefKey ref_key{id, KeyType::VERSION_REF};
-    store->remove_key_sync(ref_key);
+    store->remove_key_sync(ref_key, storage::RemoveOpts{});
 
     std::vector<AtomKey> expected{ key3, key2, key1};
     auto result = get_all_versions(store, version_map, id, false, true);
@@ -446,7 +446,7 @@ TEST(VersionMap, FixRefKey) {
 
     ASSERT_FALSE(version_map->check_ref_key(store, id));
 
-    store->remove_key_sync(RefKey{id, KeyType::VERSION_REF});
+    store->remove_key_sync(RefKey{id, KeyType::VERSION_REF}, storage::RemoveOpts{});
     ASSERT_FALSE(version_map->check_ref_key(store, id));
 
     version_map->fix_ref_key(store, id);
@@ -475,9 +475,11 @@ TEST(VersionMap, RewriteVersionKeys) {
     version_map->write_version(store, key3);
 
     // the above write_version wont write index keys - only version keys
-    store->update(key1, SegmentInMemory(), true);
-    store->update(key2, SegmentInMemory(), true);
-    store->update(key3, SegmentInMemory(), true);
+    storage::UpdateOpts update_opts;
+    update_opts.upsert_ = true;
+    store->update(key1, SegmentInMemory(), update_opts);
+    store->update(key2, SegmentInMemory(), update_opts);
+    store->update(key3, SegmentInMemory(), update_opts);
     ASSERT_TRUE(version_map->check_ref_key(store, id));
 
     // This will just write tombstone key

@@ -11,7 +11,7 @@
 #include <folly/gen/Base.h>
 #include <arcticdb/storage/mongo/mongo_client.hpp>
 #include <arcticdb/entity/performance_tracing.hpp>
-#include <arcticdb/storage/op_contexts.hpp>
+#include <arcticdb/storage/storage_options.hpp>
 #include <arcticdb/storage/storage.hpp>
 
 namespace arcticdb::storage::mongo {
@@ -34,23 +34,22 @@ inline void MongoStorage::do_write(Composite<KeySegmentPair>&& kvs) {
     });
 }
 
-inline void MongoStorage::do_update(Composite<KeySegmentPair>&& kvs) {
+inline void MongoStorage::do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts opts) {
     namespace fg = folly::gen;
     auto fmt_db = [](auto &&kv) { return kv.key_type(); };
 
     ARCTICDB_SAMPLE(MongoStorageWrite, 0)
 
-    op_ctx::OpContext<op_ctx::UpdateOpts> opts = op_ctx::OpContext<op_ctx::UpdateOpts>::get();
     (fg::from(kvs.as_range()) | fg::move | fg::groupBy(fmt_db)).foreach([&](auto &&group) {
         for (auto &kv : group.values()) {
             auto collection = collection_name(kv.key_type());
-            client_->update_segment(db_, collection, std::move(kv), opts->upsert_);
+            client_->update_segment(db_, collection, std::move(kv), opts.upsert_);
         }
     });
 }
 
 template<class Visitor>
-void MongoStorage::do_read(Composite<VariantKey>&& ks, Visitor &&visitor) {
+void MongoStorage::do_read(Composite<VariantKey>&& ks, Visitor &&visitor, ReadKeyOpts) {
     namespace fg = folly::gen;
     auto fmt_db = [](auto &&k) { return variant_key_type(k); };
     ARCTICDB_SAMPLE(MongoStorageRead, 0)
@@ -79,7 +78,7 @@ bool MongoStorage::do_fast_delete() {
     return true;
 }
 
-inline void MongoStorage::do_remove(Composite<VariantKey>&& ks) {
+inline void MongoStorage::do_remove(Composite<VariantKey>&& ks, RemoveOpts) {
     namespace fg = folly::gen;
     auto fmt_db = [](auto &&k) { return variant_key_type(k); };
     ARCTICDB_SAMPLE(MongoStorageRemove, 0)

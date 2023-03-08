@@ -83,13 +83,13 @@ class StreamReader {
     using DataSegmentIteratorType = SegmentIterator<KeysFromSegIteratorType, DATA_PREFETCH_WINDOW>;
     using RowsIteratorType = RowsFromSegIterator<DataSegmentIteratorType, RowType>;
 
-    StreamReader(KeySupplierType &&gen, std::shared_ptr<StreamSource> store, const IndexRange &index_range = unspecified_range()) :
+    StreamReader(KeySupplierType &&gen, std::shared_ptr<StreamSource> store, const storage::ReadKeyOpts opts = storage::ReadKeyOpts{},  const IndexRange &index_range = unspecified_range()) :
         key_gen_(std::move(gen)),
         index_range_(index_range),
         store_(store),
+        opts_(opts),
         read_timeout_(util::timeout::get_default()) {
         ARCTICDB_DEBUG(log::inmem(), "Creating stream reader");
-        auto thing = key_gen_();
     }
 
     IdxSegmentIteratorType iterator_indexes() {
@@ -116,9 +116,9 @@ class StreamReader {
     auto generate_rows() {
         return std::move(
             folly::gen::from(key_gen_())
-                | generate_segments_from_keys(*store_, read_timeout_, IDX_PREFETCH_WINDOW)
+                | generate_segments_from_keys(*store_, read_timeout_, IDX_PREFETCH_WINDOW, opts_)
                 | generate_keys_from_segments(*store_, entity::KeyType::TABLE_DATA, entity::KeyType::TABLE_INDEX)
-                | generate_segments_from_keys(*store_, read_timeout_, DATA_PREFETCH_WINDOW)
+                | generate_segments_from_keys(*store_, read_timeout_, DATA_PREFETCH_WINDOW, opts_)
                 | generate_rows_from_data_segments()
         );
     }
@@ -126,7 +126,7 @@ class StreamReader {
     auto generate_data_keys() {
         return std::move(
                 folly::gen::from(key_gen_())
-                    | generate_segments_from_keys(*store_, read_timeout_, IDX_PREFETCH_WINDOW)
+                    | generate_segments_from_keys(*store_, read_timeout_, IDX_PREFETCH_WINDOW, opts_)
                     | generate_keys_from_segments(*store_, entity::KeyType::TABLE_DATA, entity::KeyType::TABLE_INDEX)
         );
     }
@@ -155,6 +155,7 @@ class StreamReader {
     KeySupplierType key_gen_;
     IndexRange index_range_;
     std::shared_ptr<StreamSource> store_;
+    storage::ReadKeyOpts opts_;
     folly::Duration read_timeout_;
 };
 

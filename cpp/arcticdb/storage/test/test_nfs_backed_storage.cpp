@@ -75,7 +75,7 @@ TEST(TestNfsBackedStorage, basic) {
     update_kv.segment().set_buffer(std::make_shared<ac::Buffer>());
 
     std::vector<as::KeySegmentPair> kb{std::move(update_kv)};
-    store.do_update(arcticdb::Composite<as::KeySegmentPair>{std::move(kb)});
+    store.do_update(arcticdb::Composite<as::KeySegmentPair>{std::move(kb)}, as::UpdateOpts{});
     std::vector<arcticdb::entity::VariantKey> b{k};
     as::KeySegmentPair update_res;
 

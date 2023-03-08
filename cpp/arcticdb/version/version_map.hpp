@@ -354,7 +354,7 @@ public:
         folly::Future<VariantKey> journal_key_fut = folly::Future<VariantKey>::makeEmpty();
 
         IndexAggregator<RowCountIndex> version_agg(stream_id, [&journal_key_fut, &store, &version_key](auto &&segment) {
-            journal_key_fut = store->update(version_key, std::forward<SegmentInMemory>(segment), false).wait();
+            journal_key_fut = store->update(version_key, std::forward<SegmentInMemory>(segment)).wait();
         });
 
         for (auto &key : index_keys) {

@@ -48,10 +48,10 @@ TEST(TestLmdbStorage, Example) {
         res.atom_key() = std::get<AtomKey>(k);
         res.segment() = std::move(seg);
         res.segment().force_own_buffer(); // necessary since the non-owning buffer won't survive the visit
-    });
+    }, storage::ReadKeyOpts{});
     ASSERT_EQ(res.segment().header().start_ts(), 1234);
 
-    res = storage.read(k);
+    res = storage.read(k, as::ReadKeyOpts{});
     ASSERT_EQ(res.segment().header().start_ts(), 1234);
 
     bool executed = false;
@@ -66,17 +66,17 @@ TEST(TestLmdbStorage, Example) {
     update_kv.segment().header().set_start_ts(4321);
     update_kv.segment().set_buffer(std::make_shared<Buffer>());
 
-    storage.update(std::move(update_kv));
+    storage.update(std::move(update_kv), as::UpdateOpts{});
 
     as::KeySegmentPair update_res;
     storage.read(k, [&](auto &&k, auto &&seg) {
         update_res.atom_key() = std::get<AtomKey>(k);
         update_res.segment() = std::move(seg);
         update_res.segment().force_own_buffer(); // necessary since the non-owning buffer won't survive the visit
-    });
+    }, as::ReadKeyOpts{});
     ASSERT_EQ(update_res.segment().header().start_ts(), 4321);
 
-    update_res = storage.read(k);
+    update_res = storage.read(k, as::ReadKeyOpts{});
     ASSERT_EQ(update_res.segment().header().start_ts(), 4321);
 
     executed = false;
@@ -136,7 +136,7 @@ TEST(TestLmdbStorage, Strings) {
         res.atom_key() = std::get<AtomKey>(k);
         res.segment() = std::move(seg);
         res.segment().force_own_buffer(); // necessary since the non-owning buffer won't survive the visit
-    });
+    }, as::ReadKeyOpts{});
     ASSERT_EQ(res.segment().header().start_ts(), 1234);
 
     SegmentInMemory res_mem = decode(std::move(res.segment()));

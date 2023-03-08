@@ -79,9 +79,9 @@ namespace arcticdb {
         folly::Future<VariantKey>
         update(const VariantKey& key,
                 SegmentInMemory &&segment,
-                bool upsert
+                storage::UpdateOpts opts
         ) override {
-            if (!upsert) {
+            if (!opts.upsert_) {
                 util::check_rte(key_exists(key).get(), "update called with upsert=false but key does not exist");
             }
             if (std::holds_alternative<AtomKey>(key)) {
@@ -158,7 +158,7 @@ namespace arcticdb {
             return folly::makeFuture(key_exists_sync(key));
         }
 
-        std::pair<VariantKey, SegmentInMemory> read_sync(const VariantKey& key) override {
+        std::pair<VariantKey, SegmentInMemory> read_sync(const VariantKey& key, storage::ReadKeyOpts) override {
             std::lock_guard lock{mutex_};
             return util::variant_match(key,
                                        [&] (const RefKey& ref_key) {
@@ -182,17 +182,13 @@ namespace arcticdb {
                                        });
         }
 
-        folly::Future<storage::KeySegmentPair> read_compressed(const entity::VariantKey&) override {
+        folly::Future<storage::KeySegmentPair> read_compressed(const entity::VariantKey&, storage::ReadKeyOpts) override {
             throw std::runtime_error("Not implemented");
         }
 
-        storage::KeySegmentPair read_compressed_sync(const entity::VariantKey&) override {
-            throw std::runtime_error("Not implemented");
-        }
-
-        folly::Future<std::pair<VariantKey, SegmentInMemory>> read(const VariantKey& key) override {
+        folly::Future<std::pair<VariantKey, SegmentInMemory>> read(const VariantKey& key, storage::ReadKeyOpts opts) override {
             // Anything read_sync() throws should be returned inside the Future, so:
-            return folly::makeFutureWith([&](){ return read_sync((key)); });
+            return folly::makeFutureWith([&](){ return read_sync(key, opts); });
         }
 
         folly::Future<folly::Unit> write_compressed(storage::KeySegmentPair&&) override {
@@ -203,21 +199,20 @@ namespace arcticdb {
             util::raise_rte("Not implemented");
         }
 
-        RemoveKeyResultType remove_key_sync(const entity::VariantKey &key) override {
-            auto flags = op_ctx::OpContext<op_ctx::RemoveOpts>::get();
+        RemoveKeyResultType remove_key_sync(const entity::VariantKey &key, RemoveOpts opts) override {
             std::lock_guard lock{mutex_};
             size_t removed = util::variant_match(key,
                 [&](const AtomKey &ak) { return seg_by_atom_key_.erase(ak); },
                 [&](const RefKey &rk) { return seg_by_ref_key_.erase(rk); });
             ARCTICDB_DEBUG(log::storage(), "Mock store removed {} {}", removed, key);
-            if (removed == 0 && !flags.ignores_missing_key) {
+            if (removed == 0 && !opts.ignores_missing_key_) {
                 throw storage::KeyNotFoundException(Composite(VariantKey(key)));
             }
             return {};
         }
 
-        folly::Future<RemoveKeyResultType> remove_key(const VariantKey &key) override {
-            return folly::makeFuture(remove_key_sync(key));
+        folly::Future<RemoveKeyResultType> remove_key(const VariantKey &key, storage::RemoveOpts opts) override {
+            return folly::makeFuture(remove_key_sync(key, opts));
         }
 
         timestamp current_timestamp() override {
@@ -292,10 +287,10 @@ namespace arcticdb {
         }
 
         std::vector<RemoveKeyResultType>
-        remove_keys(const std::vector<entity::VariantKey> &keys) override {
+        remove_keys(const std::vector<entity::VariantKey> &keys, storage::RemoveOpts opts) override {
             std::vector<RemoveKeyResultType> output;
             for (const auto &key: keys) {
-                output.emplace_back(remove_key_sync(key));
+                output.emplace_back(remove_key_sync(key, opts));
             }
 
             return output;
@@ -328,7 +323,7 @@ namespace arcticdb {
 
         folly::Future<std::pair<VariantKey, std::optional<google::protobuf::Any>>>
 
-        read_metadata(const entity::VariantKey &key) override {
+        read_metadata(const entity::VariantKey &key, storage::ReadKeyOpts) override {
             return util::variant_match(key,
                                        [&](const AtomKey &ak) {
                                            auto it = seg_by_atom_key_.find(ak);
@@ -350,7 +345,7 @@ namespace arcticdb {
 
         folly::Future<std::tuple<VariantKey, std::optional<google::protobuf::Any>, StreamDescriptor::Proto>>
         read_metadata_and_descriptor(
-            const entity::VariantKey& key) override {
+            const entity::VariantKey& key, storage::ReadKeyOpts) override {
             return util::variant_match(key,
                                        [&](const AtomKey &ak) {
                 auto it = seg_by_atom_key_.find(ak);

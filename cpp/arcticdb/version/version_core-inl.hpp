@@ -33,7 +33,7 @@ void merge_frames_for_keys_impl(
             std::shared_ptr <StreamSource> store,
             const IndexRange &index_range,
             StreamId id) :
-            stream_reader_(std::move(key_supplier), std::move(store), index_range),
+            stream_reader_(std::move(key_supplier), std::move(store), storage::ReadKeyOpts{}, index_range),
             iterator_(stream_reader_.iterator_rows()),
             row_(iterator_.next()),
             id_(std::move(id)){

@@ -27,12 +27,12 @@ namespace arcticdb::storage::memory {
     protected:
         void do_write(Composite<KeySegmentPair>&& kvs);
 
-        void do_update(Composite<KeySegmentPair>&& kvs);
+        void do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts opts);
 
         template<class Visitor>
-        void do_read(Composite<VariantKey>&& ks, Visitor &&visitor);
+        void do_read(Composite<VariantKey>&& ks, Visitor &&visitor, ReadKeyOpts opts);
 
-        void do_remove(Composite<VariantKey>&& ks);
+        void do_remove(Composite<VariantKey>&& ks, RemoveOpts opts);
 
         bool do_key_exists(const VariantKey& key);
 

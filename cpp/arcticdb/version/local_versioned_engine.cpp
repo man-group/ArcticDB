@@ -7,7 +7,7 @@
 #include <arcticdb/codec/default_codecs.hpp>
 #include <arcticdb/version/version_core.hpp>
 #include <arcticdb/storage/storage.hpp>
-#include <arcticdb/storage/op_contexts.hpp>
+#include <arcticdb/storage/storage_options.hpp>
 #include <arcticdb/util/optional_defaults.hpp>
 #include <arcticdb/version/snapshot.hpp>
 #include <arcticdb/stream/stream_sink.hpp>
@@ -20,8 +20,6 @@
 #include <arcticdb/util/container_filter_wrapper.hpp>
 
 namespace arcticdb::version_store {
-
-using namespace storage::op_ctx;
 
 LocalVersionedEngine::LocalVersionedEngine(
         const std::shared_ptr<storage::Library>& library) :
@@ -263,7 +261,7 @@ std::shared_ptr<DeDupMap> LocalVersionedEngine::get_de_dup_map(
         auto maybe_undeleted_prev = get_latest_undeleted_version(store(), version_map(), stream_id, true, false);
         if (maybe_undeleted_prev) {
             // maybe_undeleted_prev is index key
-            auto data_keys = get_data_keys(store(), {maybe_undeleted_prev.value()});
+            auto data_keys = get_data_keys(store(), {maybe_undeleted_prev.value()}, storage::ReadKeyOpts{});
             for (const auto& data_key: data_keys) {
                 de_dup_map->insert_key(data_key);
             }
@@ -273,7 +271,7 @@ std::shared_ptr<DeDupMap> LocalVersionedEngine::get_de_dup_map(
             auto max_iter = std::max_element(std::begin(snap_versions), std::end(snap_versions),
                                              [](const auto &k1, const auto &k2){return k1.version_id() < k2.version_id();});
             if (max_iter != snap_versions.end()) {
-                auto data_keys = get_data_keys(store(), {*max_iter});
+                auto data_keys = get_data_keys(store(), {*max_iter}, storage::ReadKeyOpts{});
                 for (const auto& data_key: data_keys) {
                     de_dup_map->insert_key(data_key);
                 }
@@ -629,23 +627,23 @@ void LocalVersionedEngine::delete_trees_responsibly(
         not_to_delete.erase(key);
     }
 
-    OpContext<ReadKeyOpts> read_opts;
-    read_opts->ignores_missing_key = true;
-    auto data_keys_to_be_deleted = get_data_keys_set(store(), *keys_to_delete);
+    ReadKeyOpts read_opts;
+    read_opts.ignores_missing_key_ = true;
+    auto data_keys_to_be_deleted = get_data_keys_set(store(), *keys_to_delete, read_opts);
     log::version().debug("Candidate: {} total of data keys", data_keys_to_be_deleted.size());
 
-    read_opts->dont_warn_about_missing_key = true;
-    auto data_keys_not_to_be_deleted = get_data_keys_set(store(), *not_to_delete);
+    read_opts.dont_warn_about_missing_key = true;
+    auto data_keys_not_to_be_deleted = get_data_keys_set(store(), *not_to_delete, read_opts);
     not_to_delete.clear();
     log::version().debug("Forbidden: {} total of data keys", data_keys_not_to_be_deleted.size());
 
-    OpContext<RemoveOpts> remove_opts;
-    remove_opts->ignores_missing_key = true;
+    RemoveOpts remove_opts;
+    remove_opts.ignores_missing_key_ = true;
 
     std::vector<entity::VariantKey> vks;
     if (!dry_run) {
         std::copy(keys_to_delete->begin(), keys_to_delete->end(), std::back_inserter(vks));
-        store()->remove_keys(vks);
+        store()->remove_keys(vks, remove_opts);
     }
 
     vks.clear();
@@ -655,7 +653,7 @@ void LocalVersionedEngine::delete_trees_responsibly(
                  [&](const auto& k) {return !data_keys_not_to_be_deleted.count(k);});
     log::version().debug("Index keys deleted. Proceeding with {} number of data keys", vks.size());
     if (!dry_run) {
-        store()->remove_keys(vks);
+        store()->remove_keys(vks, remove_opts);
     }
 }
 

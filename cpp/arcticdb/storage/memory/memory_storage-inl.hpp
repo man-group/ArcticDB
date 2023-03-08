@@ -10,7 +10,7 @@
 
 #include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/entity/performance_tracing.hpp>
-#include <arcticdb/storage/op_contexts.hpp>
+#include <arcticdb/storage/storage_options.hpp>
 
 namespace arcticdb::storage::memory {
 
@@ -41,13 +41,11 @@ namespace arcticdb::storage::memory {
         });
     }
 
-    inline void MemoryStorage::do_update(Composite<KeySegmentPair>&& kvs) {
+    inline void MemoryStorage::do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts opts) {
         ARCTICDB_SAMPLE(MemoryStorageUpdate, 0)
         std::lock_guard lock{*mutex_};
 
         auto fmt_db = [](auto &&k) { return variant_key_type(k.variant_key()); };
-
-        op_ctx::OpContext<op_ctx::UpdateOpts> opts = op_ctx::OpContext<op_ctx::UpdateOpts>::get();
 
         (fg::from(kvs.as_range()) | fg::move | fg::groupBy(fmt_db)).foreach([&](auto &&group) {
             auto& key_vec = data_[group.key()];
@@ -55,7 +53,7 @@ namespace arcticdb::storage::memory {
             for (auto &kv : group.values()) {
                 auto it = key_vec.find(kv.variant_key());
 
-                util::check_rte(opts->upsert_ || it != key_vec.end(), "update called with upsert=false but key does not exist");
+                util::check_rte(opts.upsert_ || it != key_vec.end(), "update called with upsert=false but key does not exist");
 
                 if(it != key_vec.end()) {
                     key_vec.erase(it);
@@ -66,7 +64,7 @@ namespace arcticdb::storage::memory {
     }
 
     template<class Visitor>
-    void MemoryStorage::do_read(Composite<VariantKey>&& ks, Visitor &&visitor) {
+    void MemoryStorage::do_read(Composite<VariantKey>&& ks, Visitor &&visitor, ReadKeyOpts) {
         ARCTICDB_SAMPLE(MemoryStorageRead, 0)
         std::lock_guard lock{*mutex_};
         auto fmt_db = [](auto &&k) { return variant_key_type(k); };
@@ -95,14 +93,11 @@ inline bool MemoryStorage::do_key_exists(const VariantKey& key) {
         return it != key_vec.end();
     }
 
-    inline void MemoryStorage::do_remove(Composite<VariantKey>&& ks)
+    inline void MemoryStorage::do_remove(Composite<VariantKey>&& ks, RemoveOpts opts)
     {
-        using namespace arcticdb::storage::op_ctx;
-
         ARCTICDB_SAMPLE(MemoryStorageRemove, 0)
         std::lock_guard lock{*mutex_};
         auto fmt_db = [](auto &&k) { return variant_key_type(k); };
-        auto flags = OpContext<RemoveOpts>::get();
 
         (fg::from(ks.as_range()) | fg::move | fg::groupBy(fmt_db)).foreach([&](auto &&group) {
             auto& key_vec = data_[group.key()];
@@ -113,7 +108,7 @@ inline bool MemoryStorage::do_key_exists(const VariantKey& key) {
                 if(it != key_vec.end()) {
                     ARCTICDB_DEBUG(log::storage(), "Read key {}: {}, with {} bytes of data", variant_key_type(k), variant_key_view(k));
                     key_vec.erase(it);
-                } else if (!flags.ignores_missing_key) {
+                } else if (!opts.ignores_missing_key_) {
                     util::raise_rte("Failed to find segment for key {}",variant_key_view(k));
                 }
             }

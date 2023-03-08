@@ -37,9 +37,9 @@ class Storages {
         primary().write(std::move(kvs));
     }
 
-    void update(Composite<KeySegmentPair>&& kvs) {
+    void update(Composite<KeySegmentPair>&& kvs, storage::UpdateOpts opts) {
         ARCTICDB_SAMPLE(StorageUpdate, 0)
-        primary().update(std::move(kvs));
+        primary().update(std::move(kvs), opts);
     }
 
     bool supports_prefix_matching() {
@@ -55,21 +55,21 @@ class Storages {
     }
 
     template<class Visitor>
-    auto read(Composite<VariantKey>&& ks, Visitor &&v, bool primary_only=true) {
+    auto read(Composite<VariantKey>&& ks, Visitor &&v, ReadKeyOpts opts, bool primary_only=true) {
         ARCTICDB_RUNTIME_SAMPLE(StorageRead, 0)
         if(primary_only)
-            return primary().read(std::move(ks), std::forward<Visitor>(v));
+            return primary().read(std::move(ks), std::forward<Visitor>(v), opts);
 
         if(auto rg = ks.as_range(); !std::all_of(std::begin(rg), std::end(rg), [] (const auto& vk) {
             return variant_key_type(vk) == KeyType::TABLE_DATA;
         })) {
-            return primary().read(std::move(ks), std::forward<Visitor>(v));
+            return primary().read(std::move(ks), std::forward<Visitor>(v), opts);
         }
 
         for(const auto& storage : variant_storages_) {
             auto visitor = std::forward<Visitor>(v);
             try {
-                return storage->read(std::move(ks), Visitor{visitor});
+                return storage->read(std::move(ks), Visitor{visitor}, opts);
             } catch (storage::KeyNotFoundException& ex) {
                 ARCTICDB_DEBUG(log::version(), "Keys not found in storage, continuing to next storage");
                 ks = std::move(ex.keys());
@@ -97,8 +97,8 @@ class Storages {
         primary().storage_specific(std::forward<Visitor>(visitor));
     }
 
-    void remove(Composite<VariantKey>&& ks) {
-        primary().remove(std::move(ks));
+    void remove(Composite<VariantKey>&& ks, storage::RemoveOpts opts) {
+        primary().remove(std::move(ks), opts);
     }
 
     [[nodiscard]] OpenMode open_mode() const { return mode_; }
@@ -112,9 +112,9 @@ class Storages {
             auto key = std::forward<VariantKey>(vk);
             if (to_atom(key).creation_ts() < horizon) {
                 try {
-                    auto key_seg = source.read(VariantKey{key});
+                    auto key_seg = source.read(VariantKey{key}, ReadKeyOpts{});
                     target.write(std::move(key_seg));
-                    source.remove(std::move(key));
+                    source.remove(std::move(key), storage::RemoveOpts{});
                 } catch (const std::exception& ex) {
                     log::storage().warn("Failed to move key to next storage: {}", ex.what());
                 }

@@ -7,7 +7,7 @@
 
 #include <arcticdb/entity/atom_key.hpp>
 #include <arcticdb/storage/library.hpp>
-#include <arcticdb/storage/op_contexts.hpp>
+#include <arcticdb/storage/storage_options.hpp>
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/util/hash.hpp>
 #include <arcticdb/stream/stream_utils.hpp>
@@ -23,8 +23,6 @@
 #include <type_traits>
 
 namespace arcticdb::async {
-
-using namespace storage::op_ctx;
 
 using KeyType = entity::KeyType;
 using AtomKey = entity::AtomKey;
@@ -173,22 +171,19 @@ struct WriteSegmentTask : BaseTask {
 
 struct UpdateSegmentTask : BaseTask {
     std::shared_ptr<storage::Library> lib_;
-    OpContext<UpdateOpts> opts_ = OpContext<UpdateOpts>::get();
-    bool upsert_;
+    storage::UpdateOpts opts_;
 
-    explicit UpdateSegmentTask(std::shared_ptr<storage::Library> lib, bool upsert) :
+    explicit UpdateSegmentTask(std::shared_ptr<storage::Library> lib, storage::UpdateOpts opts) :
         lib_(std::move(lib)),
-        upsert_(upsert) {
+        opts_(opts) {
     }
 
     ARCTICDB_MOVE_ONLY_DEFAULT(UpdateSegmentTask)
 
     VariantKey operator()(storage::KeySegmentPair &&key_seg) const {
         ARCTICDB_SAMPLE(UpdateSegmentTask, 0)
-        OpContext<UpdateOpts> per_worker_override(opts_);
-        per_worker_override->upsert_ = upsert_;
         auto k = key_seg.variant_key();
-        lib_->update(Composite<storage::KeySegmentPair>(std::move(key_seg)));
+        lib_->update(Composite<storage::KeySegmentPair>(std::move(key_seg)), opts_);
         return k;
     }
 };
@@ -196,10 +191,12 @@ struct UpdateSegmentTask : BaseTask {
 struct ReadCompressedTask : BaseTask {
     entity::VariantKey key_;
     std::shared_ptr<storage::Library> lib_;
-    OpContext<ReadKeyOpts> opts_ = OpContext<ReadKeyOpts>::get();
+    storage::ReadKeyOpts opts_;
 
-    ReadCompressedTask(entity::VariantKey key, std::shared_ptr<storage::Library> lib)
-        : key_(std::move(key)), lib_(std::move(lib)) {
+    ReadCompressedTask(entity::VariantKey key, std::shared_ptr<storage::Library> lib, storage::ReadKeyOpts opts)
+        : key_(std::move(key)),
+        lib_(std::move(lib)),
+        opts_(opts) {
         ARCTICDB_DEBUG(log::storage(), "Creating read compressed task for key {}: {}",
                              variant_key_type(key_),
                              variant_key_view(key_));
@@ -208,8 +205,7 @@ struct ReadCompressedTask : BaseTask {
     ARCTICDB_MOVE_ONLY_DEFAULT(ReadCompressedTask)
 
     storage::KeySegmentPair read() {
-        OpContext<ReadKeyOpts> per_worker_override(opts_);
-        return std::visit([that=this](const auto &key) { return that->lib_->read(key); }, key_);
+        return std::visit([that=this](const auto &key) { return that->lib_->read(key, that->opts_); }, key_);
     }
 
     storage::KeySegmentPair operator()() {
@@ -538,17 +534,19 @@ struct WriteCompressedBatchTask : BaseTask {
 struct RemoveTask : BaseTask {
     VariantKey key_;
     std::shared_ptr<storage::Library> lib_;
-    RemoveOpts flags_ = OpContext<RemoveOpts>::get();
+    storage::RemoveOpts opts_;
 
-    RemoveTask(const VariantKey &key_, std::shared_ptr<storage::Library> lib_) : key_(key_), lib_(std::move(lib_)) {
+    RemoveTask(const VariantKey &key_, std::shared_ptr<storage::Library> lib_, storage::RemoveOpts opts) :
+            key_(key_),
+            lib_(std::move(lib_)),
+            opts_(opts){
         ARCTICDB_DEBUG(log::storage(), "Creating remove task for key {}: {}", variant_key_type(key_), variant_key_view(key_));
     }
 
     ARCTICDB_MOVE_ONLY_DEFAULT(RemoveTask)
 
     stream::StreamSink::RemoveKeyResultType operator()() {
-        OpContext<RemoveOpts> per_worker_override(flags_);
-        lib_->remove(Composite<VariantKey>(std::move(key_)));
+        lib_->remove(Composite<VariantKey>(std::move(key_)), opts_);
         return {};
     }
 };
@@ -556,21 +554,22 @@ struct RemoveTask : BaseTask {
 struct RemoveBatchTask : BaseTask {
     std::vector<VariantKey> keys_;
     std::shared_ptr<storage::Library> lib_;
-    RemoveOpts flags_ = OpContext<RemoveOpts>::get();
+    storage::RemoveOpts opts_;
 
     RemoveBatchTask(
         std::vector<VariantKey> key_,
-        std::shared_ptr<storage::Library> lib_) :
+        std::shared_ptr<storage::Library> lib_,
+        storage::RemoveOpts opts) :
         keys_(std::move(key_)),
-        lib_(std::move(lib_)) {
+        lib_(std::move(lib_)),
+        opts_(opts){
         ARCTICDB_DEBUG(log::storage(), "Creating remove task for {} keys", keys_.size());
     }
 
     ARCTICDB_MOVE_ONLY_DEFAULT(RemoveBatchTask)
 
     std::vector<stream::StreamSink::RemoveKeyResultType> operator()() {
-        OpContext<RemoveOpts> per_worker_override(flags_);
-        lib_->remove(Composite<VariantKey>(std::move(keys_)));
+        lib_->remove(Composite<VariantKey>(std::move(keys_)), opts_);
         return {};
     }
 };

@@ -12,7 +12,7 @@
 #include <arcticdb/log/log.hpp>
 #include <arcticdb/stream/schema.hpp>
 #include <arcticdb/util/regex_filter.hpp>
-#include <arcticdb/storage/op_contexts.hpp>
+#include <arcticdb/storage/storage_options.hpp>
 #include <arcticdb/util/constructors.hpp>
 #include <arcticdb/pipeline/index_fields.hpp>
 #include <arcticdb/pipeline/index_utils.hpp>
@@ -27,8 +27,6 @@
 #include <optional>
 
 namespace arcticdb::stream {
-
-using namespace arcticdb::storage::op_ctx;
 
 template<class IndexType>
 StreamDescriptor idx_stream_desc(StreamId stream_id, IndexType index) {
@@ -201,7 +199,7 @@ inline auto generate_segments_from_keys(
     arcticdb::stream::StreamSource &read_store,
     folly::Duration timeout,
     std::size_t prefetch_window,
-    const ReadKeyOpts opts = OpContext<ReadKeyOpts>::get()) {
+    const storage::ReadKeyOpts opts) {
     using namespace folly::gen;
     return
         map([&read_store](auto &&key) {
@@ -214,7 +212,7 @@ inline auto generate_segments_from_keys(
                 try {
                     return std::make_optional(std::forward<decltype(fut_key_seg)>(fut_key_seg).get(timeout));
                 } catch(storage::KeyNotFoundException& e) {
-                    if (opts.ignores_missing_key) {
+                    if (opts.ignores_missing_key_) {
                         return std::optional<ReadKeyOutput>();
                     }
                     throw storage::KeyNotFoundException(std::move(e.keys()));
