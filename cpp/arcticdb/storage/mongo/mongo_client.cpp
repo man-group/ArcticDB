@@ -330,7 +330,7 @@ storage::KeySegmentPair MongoClientImpl::read_segment(const std::string &databas
         }
     }
     catch(const std::exception& ex) {
-        ARCTICDB_DEBUG(log::storage(), fmt::format("Segment read error: {}", ex.what()));
+        log::storage().info("Segment read error: {}", ex.what());
         throw storage::KeyNotFoundException{Composite<VariantKey>{VariantKey{key}}};
     }
 }
