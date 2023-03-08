@@ -77,29 +77,29 @@ class Library {
         ARCTICDB_TRACE(log::storage(), "{} kv written, {} bytes", kv_count, total_size);
     }
 
-    void update(Composite<KeySegmentPair>&& kvs) {
+    void update(Composite<KeySegmentPair>&& kvs, storage::UpdateOpts opts) {
         ARCTICDB_SAMPLE(LibraryUpdate, 0)
         if (open_mode() < OpenMode::WRITE)
             throw PermissionException(library_path_, open_mode(), "update");
 
         size_t total_size ARCTICDB_UNUSED = kvs.fold([] (size_t s, const KeySegmentPair& seg) { return s + seg.segment().total_segment_size(); }, size_t(0));
         auto kv_count ARCTICDB_UNUSED = kvs.size();
-        storages_->update(std::move(kvs));
+        storages_->update(std::move(kvs), opts);
         ARCTICDB_TRACE(log::storage(), "{} kv updated, {} bytes", kv_count, total_size);
     }
 
     template<class Visitor>
-    void read(Composite<VariantKey>&& ks, Visitor &&visitor) {
+    void read(Composite<VariantKey>&& ks, Visitor &&visitor, ReadKeyOpts opts) {
         ARCTICDB_SAMPLE(LibraryRead, 0)
-        storages_->read(std::move(ks), std::forward<Visitor>(visitor), !storage_fallthrough_);
+        storages_->read(std::move(ks), std::forward<Visitor>(visitor), opts, !storage_fallthrough_);
     }
 
-    void remove(Composite<VariantKey>&& ks) {
+    void remove(Composite<VariantKey>&& ks, storage::RemoveOpts opts) {
         if (open_mode() < arcticdb::storage::OpenMode::DELETE)
             throw PermissionException(library_path_, open_mode(), "delete");
 
         ARCTICDB_SAMPLE(LibraryRemove, 0)
-        storages_->remove(std::move(ks));
+        storages_->remove(std::move(ks), opts);
     }
 
     bool fast_delete() {
@@ -110,12 +110,12 @@ class Library {
         return storages_->key_exists(key);
     }
 
-    KeySegmentPair read(VariantKey key) {
+    KeySegmentPair read(VariantKey key, ReadKeyOpts opts = ReadKeyOpts{}) {
         KeySegmentPair res{VariantKey{key}};
         util::check(!std::holds_alternative<StringId>(variant_key_id(key)) || !std::get<StringId>(variant_key_id(key)).empty(), "Unexpected empty id");
         read(Composite<VariantKey>(std::move(key)), [&res](auto &&, auto &&value) {
             res.segment() = std::move(value);
-        });
+            }, opts);
         return res;
     }
 

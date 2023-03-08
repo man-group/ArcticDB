@@ -87,7 +87,7 @@ TEST(IndexFilter, Static) {
     }
     auto key_fut = writer.commit();
     auto key = std::move(key_fut).get();
-    auto seg = mock_store->read(key).get();
+    auto seg = mock_store->read(key, storage::ReadKeyOpts{}).get();
     pipelines::index::IndexSegmentReader isr{std::move(seg.second)};
     auto pipeline_context = std::make_shared<PipelineContext>(StreamDescriptor{isr.tsd().stream_descriptor()});
 
@@ -123,7 +123,7 @@ TEST(IndexFilter, Dynamic) {
     }
     auto key_fut = writer.commit();
     auto key = std::move(key_fut).get();
-    auto seg = mock_store->read(key).get();
+    auto seg = mock_store->read(key, storage::ReadKeyOpts{}).get();
     pipelines::index::IndexSegmentReader isr{std::move(seg.second)};
     auto pipeline_context = std::make_shared<PipelineContext>(StreamDescriptor(isr.tsd().stream_descriptor()));
 
@@ -159,7 +159,7 @@ TEST(IndexFilter, StaticMulticolumn) {
     }
     auto key_fut = writer.commit();
     auto key = std::move(key_fut).get();
-    auto seg = mock_store->read(key).get();
+    auto seg = mock_store->read(key, storage::ReadKeyOpts{}).get();
     pipelines::index::IndexSegmentReader isr{std::move(seg.second)};
     auto pipeline_context = std::make_shared<PipelineContext>(StreamDescriptor(isr.tsd().stream_descriptor()));
 
@@ -199,7 +199,7 @@ TEST(IndexFilter, MultiColumnSelectAll) {
     }
     auto key_fut = writer.commit();
     auto key = std::move(key_fut).get();
-    auto seg = mock_store->read(key).get();
+    auto seg = mock_store->read(key, storage::ReadKeyOpts{}).get();
     pipelines::index::IndexSegmentReader isr{std::move(seg.second)};
     auto pipeline_context = std::make_shared<PipelineContext>(StreamDescriptor{isr.tsd().stream_descriptor()});
 
@@ -234,7 +234,7 @@ TEST(IndexFilter, StaticMulticolumnFilterColumns) {
     }
     auto key_fut = writer.commit();
     auto key = std::move(key_fut).get();
-    auto seg = mock_store->read(key).get();
+    auto seg = mock_store->read(key, storage::ReadKeyOpts{}).get();
     pipelines::index::IndexSegmentReader isr{std::move(seg.second)};
     auto pipeline_context = std::make_shared<PipelineContext>(StreamDescriptor{isr.tsd().stream_descriptor()});
 

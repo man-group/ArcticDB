@@ -24,24 +24,25 @@ struct StreamSource {
 
     virtual ~StreamSource() = default;
 
-    virtual folly::Future<ReadKeyOutput> read(const entity::VariantKey &key) = 0;
+    virtual folly::Future<ReadKeyOutput> read(
+        const entity::VariantKey &key,
+        storage::ReadKeyOpts opts = storage::ReadKeyOpts{}) = 0;
 
-    virtual ReadKeyOutput read_sync(const entity::VariantKey &key) = 0;
+    virtual ReadKeyOutput read_sync(
+        const entity::VariantKey &key,
+        storage::ReadKeyOpts opts = storage::ReadKeyOpts{}) = 0;
 
-    virtual folly::Future<storage::KeySegmentPair> read_compressed(const entity::VariantKey &key) = 0;
+    virtual folly::Future<storage::KeySegmentPair> read_compressed(
+        const entity::VariantKey &key,
+        storage::ReadKeyOpts opts = storage::ReadKeyOpts{}) = 0;
 
-    virtual storage::KeySegmentPair read_compressed_sync(const entity::VariantKey &key) = 0;
+    virtual void iterate_type(
+        KeyType type,
+        std::function<void(entity::VariantKey &&)> func,
+        const std::string &prefix = std::string{}) = 0;
 
-    virtual void iterate_type(KeyType type,
-                              std::function<void(entity::VariantKey &&)> func,
-                              const std::string &prefix = std::string{}) = 0;
-
-    /**
-     * The Future only points to the argument, so must be resolved before the argument is disposed of.
-     */
     [[nodiscard]] virtual folly::Future<bool> key_exists(const entity::VariantKey &key) = 0;
     virtual bool key_exists_sync(const entity::VariantKey &key) = 0;
-
     virtual bool supports_prefix_matching() = 0;
     virtual bool fast_delete() = 0;
 
@@ -57,8 +58,6 @@ struct StreamSource {
 
     /**
      * See storage_utils for the wrapper filter_keys_on_existence(vector).
-     *
-     * The Future only points to the argument, so must be resolved before the argument is disposed of/modified!
      */
     [[nodiscard]] virtual std::vector<folly::Future<bool>> batch_key_exists(
             const std::vector<entity::VariantKey> &keys) = 0;
@@ -76,10 +75,12 @@ struct StreamSource {
         const BatchReadArgs &args) = 0;
 
     virtual folly::Future<std::pair<VariantKey, std::optional<google::protobuf::Any>>> read_metadata(
-        const entity::VariantKey &key) = 0;
+        const entity::VariantKey &key,
+        storage::ReadKeyOpts opts = storage::ReadKeyOpts{}) = 0;
 
     virtual folly::Future<std::tuple<VariantKey, std::optional<google::protobuf::Any>, StreamDescriptor::Proto>> read_metadata_and_descriptor(
-        const entity::VariantKey& key
+        const entity::VariantKey& key,
+        storage::ReadKeyOpts opts = storage::ReadKeyOpts{}
         ) = 0;
 };
 

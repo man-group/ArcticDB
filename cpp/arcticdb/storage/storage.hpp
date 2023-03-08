@@ -14,6 +14,7 @@
 #include <arcticdb/storage/library_path.hpp>
 #include <arcticdb/storage/open_mode.hpp>
 #include <arcticdb/storage/failure_simulation.hpp>
+#include <arcticdb/storage/storage_options.hpp>
 #include <arcticdb/util/type_traits.hpp>
 #include <arcticdb/storage/key_segment_pair.hpp>
 #include <arcticdb/util/composite.hpp>
@@ -104,41 +105,41 @@ public:
         return write(Composite<KeySegmentPair>{std::move(kv)});
     }
 
-    void update(Composite<KeySegmentPair> &&kvs) {
+    void update(Composite<KeySegmentPair> &&kvs, UpdateOpts opts) {
         ARCTICDB_SAMPLE(VariantStorageUpdate, 0)
-        return derived().do_update(std::move(kvs));
+        return derived().do_update(std::move(kvs), opts);
     }
 
-    void update(KeySegmentPair &&kv) {
-        return update(Composite<KeySegmentPair>{std::move(kv)});
-    }
-
-    template<class Visitor>
-    void read(Composite<VariantKey> &&ks, Visitor &&visitor) {
-        return derived().do_read(std::move(ks), std::forward<Visitor>(visitor));
+    void update(KeySegmentPair &&kv, UpdateOpts opts) {
+        return update(Composite<KeySegmentPair>{std::move(kv)}, opts);
     }
 
     template<class Visitor>
-    void read(VariantKey&& key, Visitor &&visitor) {
-        return read(Composite<VariantKey>{std::move(key)}, std::forward<Visitor>(visitor));
+    void read(Composite<VariantKey> &&ks, Visitor &&visitor, storage::ReadKeyOpts opts) {
+        return derived().do_read(std::move(ks), std::forward<Visitor>(visitor), opts);
+    }
+
+    template<class Visitor>
+    void read(VariantKey&& key, Visitor &&visitor, storage::ReadKeyOpts opts) {
+        read(Composite<VariantKey>{std::move(key)}, std::forward<Visitor>(visitor), opts);
     }
 
     template<class KeyType>
-    KeySegmentPair read(KeyType&& key) {
+    KeySegmentPair read(KeyType&& key, storage::ReadKeyOpts opts) {
         KeySegmentPair key_seg;
          read(std::forward<KeyType>(key), [&key_seg](auto && vk, auto &&value) {
              key_seg.variant_key() = std::forward<VariantKey>(vk);
              key_seg.segment() = std::forward<Segment>(value);
-        });
+             }, opts);
          return key_seg;
     }
 
-    void remove(Composite<VariantKey> &&ks) {
-        derived().do_remove(std::move(ks));
+    void remove(Composite<VariantKey> &&ks, storage::RemoveOpts opts) {
+        derived().do_remove(std::move(ks), opts);
     }
 
-    void remove(VariantKey&& key) {
-        return remove(Composite<VariantKey>{std::move(key)});
+    void remove(VariantKey&& key, storage::RemoveOpts opts) {
+        return remove(Composite<VariantKey>{std::move(key)}, opts);
     }
 
     bool supports_prefix_matching() {

@@ -61,22 +61,22 @@ class VariantStorage final : public Storage<VariantStorage<VariantStorageType>> 
         });
     }
 
-    void do_update(Composite<KeySegmentPair>&& kvs) {
+    void do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts opts) {
         return delegate([&](auto &&impl) {
-            return impl.update(std::move(kvs));
+            return impl.update(std::move(kvs), opts);
         });
     }
 
     template<class Visitor>
-    void do_read(Composite<VariantKey>&& ks, Visitor &&visitor) {
+    void do_read(Composite<VariantKey>&& ks, Visitor &&visitor, ReadKeyOpts opts) {
         return delegate([&](auto &&impl) {
-            return impl.read(std::move(ks), std::move(visitor));
+            return impl.read(std::move(ks), std::move(visitor), opts);
         });
     }
 
-    void do_remove(Composite<VariantKey> ks) {
+    void do_remove(Composite<VariantKey> ks, RemoveOpts opts) {
          delegate([&](auto &&impl) {
-             impl.remove(std::move(ks));
+             impl.remove(std::move(ks), opts);
         });
     }
 

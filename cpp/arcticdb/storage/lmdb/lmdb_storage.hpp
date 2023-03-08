@@ -34,12 +34,12 @@ class LmdbStorage final : public Storage<LmdbStorage> {
   protected:
     void do_write(Composite<KeySegmentPair>&& kvs);
 
-    void do_update(Composite<KeySegmentPair>&& kvs);
+    void do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts opts);
 
     template<class Visitor>
-    void do_read(Composite<VariantKey>&& ks, Visitor &&visitor);
+    void do_read(Composite<VariantKey>&& ks, Visitor &&visitor, storage::ReadKeyOpts opts);
 
-    void do_remove(Composite<VariantKey>&& ks);
+    void do_remove(Composite<VariantKey>&& ks, RemoveOpts opts);
 
     bool do_supports_prefix_matching() {
         return false;
@@ -57,7 +57,7 @@ class LmdbStorage final : public Storage<LmdbStorage> {
 private:
     // _internal methods assume the write mutex is already held
     void do_write_internal(Composite<KeySegmentPair>&& kvs, ::lmdb::txn& txn);
-    std::vector<VariantKey> do_remove_internal(Composite<VariantKey>&& ks, ::lmdb::txn& txn);
+    std::vector<VariantKey> do_remove_internal(Composite<VariantKey>&& ks, ::lmdb::txn& txn, RemoveOpts opts);
 
     std::unique_ptr<std::mutex> write_mutex_;
     std::unique_ptr<::lmdb::env> env_;

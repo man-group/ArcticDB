@@ -15,7 +15,7 @@
 #include <google/protobuf/io/zero_copy_stream_impl_lite.h>
 #include <folly/gen/Base.h>
 #include <arcticdb/storage/s3/s3_utils.hpp>
-#include <arcticdb/storage/op_contexts.hpp>
+#include <arcticdb/storage/storage_options.hpp>
 #include <arcticdb/entity/serialized_key.hpp>
 #include <arcticdb/util/exponential_backoff.hpp>
 #include <arcticdb/util/configs_map.hpp>
@@ -238,14 +238,15 @@ void do_read_impl(Composite<VariantKey> && ks,
                   const std::string& root_folder,
                   const std::string& bucket_name,
                   S3ClientType& s3_client,
-                  KeyBucketizer&& bucketizer) {
+                  KeyBucketizer&& bucketizer,
+                  ReadKeyOpts opts) {
     ARCTICDB_SAMPLE(S3StorageRead, 0)
     auto fmt_db = [](auto&& k) { return variant_key_type(k); };
     std::vector<VariantKey> failed_reads;
 
     (fg::from(ks.as_range()) | fg::move | fg::groupBy(fmt_db)).foreach(
         [&s3_client, &bucket_name, &fmt_db, &root_folder, b=std::move(bucketizer), &visitor, &failed_reads,
-         opts = op_ctx::OpContext<op_ctx::ReadKeyOpts>::get()] (auto&& group) {
+         opts=opts] (auto&& group) {
 
         for (auto& k : group.values()) {
             auto get_object_outcome = get_object(
@@ -311,7 +312,7 @@ void do_remove_impl(Composite<VariantKey>&& ks,
                      ARCTICDB_RUNTIME_DEBUG(log::storage(), "Deleted object with key '{}'", variant_key_view(*k));
                 } else {
                     // AN-256: Per AWS S3 documentation, deleting non-exist objects is not an error, so not handling
-                    // RemoveOpts.ignores_missing_key
+                    // RemoveOpts.ignores_missing_key_
                     for(const auto& bad_key : delete_object_outcome.GetResult().GetErrors()) {
                         auto bad_key_name = bad_key.GetKey().substr(key_type_folder.size(), std::string::npos);
                         failed_deletes.push_back(
@@ -437,16 +438,16 @@ inline void S3Storage::do_write(Composite<KeySegmentPair>&& kvs) {
     detail::do_write_impl(std::move(kvs), root_folder_, bucket_name_, s3_client_, detail::FlatBucketizer{});
 }
 
-inline void S3Storage::do_update(Composite<KeySegmentPair>&& kvs) {
+inline void S3Storage::do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts) {
     detail::do_update_impl(std::move(kvs), root_folder_, bucket_name_, s3_client_, detail::FlatBucketizer{});
 }
 
 template<class Visitor>
-void S3Storage::do_read(Composite<VariantKey>&& ks, Visitor&& visitor) {
-    detail::do_read_impl(std::move(ks), std::move(visitor), root_folder_, bucket_name_, s3_client_, detail::FlatBucketizer{});
+void S3Storage::do_read(Composite<VariantKey>&& ks, Visitor&& visitor, ReadKeyOpts opts) {
+    detail::do_read_impl(std::move(ks), std::move(visitor), root_folder_, bucket_name_, s3_client_, detail::FlatBucketizer{}, opts);
 }
 
-inline void S3Storage::do_remove(Composite<VariantKey>&& ks) {
+inline void S3Storage::do_remove(Composite<VariantKey>&& ks, RemoveOpts) {
     detail::do_remove_impl(std::move(ks), root_folder_, bucket_name_, s3_client_, detail::FlatBucketizer{});
 }
 

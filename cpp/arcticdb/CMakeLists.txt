@@ -179,7 +179,7 @@ set(arcticdb_srcs
         storage/mongo/mongo_client.hpp
         storage/mongo/mongo_instance.hpp
         storage/mongo/mongo_storage.hpp
-        storage/op_contexts.hpp
+        storage/storage_options.hpp
         storage/s3/nfs_backed_storage.hpp
         storage/s3/nfs_backed_storage-inl.hpp
         storage/s3/s3_client_accessor.hpp
@@ -310,7 +310,6 @@ set(arcticdb_srcs
         storage/mongo/mongo_client.cpp
         storage/mongo/mongo_instance.cpp
         storage/mongo/mongo_storage.cpp
-        storage/op_contexts.cpp
         storage/s3/nfs_backed_storage.cpp
         storage/s3/s3_api.cpp
         storage/s3/s3_storage.cpp

@@ -61,25 +61,32 @@ inline void delete_all(const std::shared_ptr<Store>& store, bool continue_on_err
     });
 }
 
-template<typename KeyContainer,
-        typename = std::enable_if<std::is_base_of_v<AtomKey, typename KeyContainer::value_type>>>
-inline std::vector<AtomKey> get_data_keys(const std::shared_ptr<stream::StreamSource>& store, const KeyContainer& keys) {
+template<typename KeyContainer, typename = std::enable_if<std::is_base_of_v<AtomKey, typename KeyContainer::value_type>>>
+inline std::vector<AtomKey> get_data_keys(
+    const std::shared_ptr<stream::StreamSource>& store,
+    const KeyContainer& keys,
+    storage::ReadKeyOpts opts) {
     using KeySupplier = folly::Function<KeyContainer()>;
     using StreamReader = arcticdb::stream::StreamReader<AtomKey, KeySupplier, SegmentInMemory::Row>;
     auto gen = [&keys]() { return keys; };
-    StreamReader stream_reader(std::move(gen), store);
+    StreamReader stream_reader(std::move(gen), store, opts);
     return stream_reader.generate_data_keys() | folly::gen::as<std::vector>();
 }
 
-inline std::vector<AtomKey> get_data_keys(const std::shared_ptr<stream::StreamSource>& store, const AtomKey& key) {
+inline std::vector<AtomKey> get_data_keys(
+    const std::shared_ptr<stream::StreamSource>& store,
+    const AtomKey& key,
+    storage::ReadKeyOpts opts) {
     const std::vector<AtomKey> keys{key};
-    return get_data_keys(store, keys);
+    return get_data_keys(store, keys, opts);
 }
 
-template<typename KeyContainer,
-        typename = std::enable_if<std::is_base_of_v<AtomKey, typename KeyContainer::value_type>>>
-inline std::unordered_set<AtomKey> get_data_keys_set(const std::shared_ptr<stream::StreamSource>& store, const KeyContainer& keys) {
-    auto vec = get_data_keys(store, keys);
+template<typename KeyContainer, typename = std::enable_if<std::is_base_of_v<AtomKey, typename KeyContainer::value_type>>>
+inline std::unordered_set<AtomKey> get_data_keys_set(
+    const std::shared_ptr<stream::StreamSource>& store,
+    const KeyContainer& keys,
+    storage::ReadKeyOpts opts) {
+    auto vec = get_data_keys(store, keys, opts);
     return {vec.begin(), vec.end()};
 }
 

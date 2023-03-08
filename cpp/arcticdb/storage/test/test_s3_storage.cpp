@@ -124,7 +124,7 @@ TEST(TestS3Storage, basic) {
             root_folder,
             bucket_name,
             client,
-            as::s3::detail::FlatBucketizer{});
+            as::s3::detail::FlatBucketizer{}, as::ReadKeyOpts{});
 
     ASSERT_EQ(res.segment().header().start_ts(), 1234);
 
@@ -162,7 +162,7 @@ TEST(TestS3Storage, basic) {
             root_folder,
             bucket_name,
             client,
-            as::s3::detail::FlatBucketizer{});
+            as::s3::detail::FlatBucketizer{}, as::ReadKeyOpts{});
 
     ASSERT_EQ(update_res.segment().header().start_ts(), 4321);
 
@@ -201,7 +201,7 @@ TEST(TestS3Storage, refkey) {
             root_folder,
             bucket_name,
             client,
-            as::s3::detail::FlatBucketizer{});
+            as::s3::detail::FlatBucketizer{}, as::ReadKeyOpts{});
 
     ASSERT_EQ(res.segment().header().start_ts(), 1234);
 }
@@ -250,7 +250,7 @@ void stress_test_s3_storage() {
                         root_folder,
                         bucket_name,
                         client,
-                        as::s3::detail::FlatBucketizer{});
+                        as::s3::detail::FlatBucketizer{}, as::ReadKeyOpts{});
             }
             else {
                 bool res = arcticdb::storage::s3::detail::do_key_exists_impl(

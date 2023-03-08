@@ -216,8 +216,7 @@ inline bool check_test_frame(const TestDataFrame &data_frame,
                              std::vector<std::string> &errors) {
     StreamReader<arcticdb::entity::AtomKey, folly::Function<std::vector<arcticdb::entity::AtomKey>()>, arcticdb::SegmentInMemory::Row> stream_reader{
         [&]() { return std::vector<arcticdb::entity::AtomKey>{key}; },
-        store,
-        unspecified_range()
+        store
     };
 
     return check_read_frame(data_frame, stream_reader, errors);

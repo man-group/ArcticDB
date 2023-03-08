@@ -9,6 +9,7 @@
 #include <arcticdb/entity/index_range.hpp>
 #include <arcticdb/entity/variant_key.hpp>
 #include <arcticdb/storage/storage.hpp>
+#include <arcticdb/storage/storage_options.hpp>
 #include <arcticdb/version/de_dup_map.hpp>
 
 #include <folly/futures/Future.h>
@@ -61,7 +62,7 @@ struct StreamSink {
     [[nodiscard]] virtual folly::Future<entity::VariantKey> update(
         const VariantKey &key,
         SegmentInMemory &&segment,
-        bool upsert) = 0;
+        storage::UpdateOpts = storage::UpdateOpts{}) = 0;
 
     struct PartialKey {
         KeyType key_type;
@@ -110,13 +111,13 @@ struct StreamSink {
         std::vector<storage::KeySegmentPair> kvs) = 0;
 
     [[nodiscard]] virtual folly::Future<RemoveKeyResultType> remove_key(
-        const entity::VariantKey &key) = 0;
+        const entity::VariantKey &key, storage::RemoveOpts opts = storage::RemoveOpts{}) = 0;
 
     virtual RemoveKeyResultType remove_key_sync(
-        const entity::VariantKey &key) = 0;
+        const entity::VariantKey &key, storage::RemoveOpts opts = storage::RemoveOpts{}) = 0;
 
     virtual std::vector<RemoveKeyResultType> remove_keys(
-        const std::vector<entity::VariantKey> &keys) = 0;
+        const std::vector<entity::VariantKey> &keys, storage::RemoveOpts opts = storage::RemoveOpts{}) = 0;
 
     virtual timestamp current_timestamp() = 0;
 };
