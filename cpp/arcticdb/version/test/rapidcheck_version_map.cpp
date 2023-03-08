@@ -193,7 +193,7 @@ struct DeleteRefKey : rc::state::Command<Model, MapStorePair> {
     void run(const Model& s0, MapStorePair &sut) const override {
         RefKey ref_key{symbol_, KeyType::VERSION_REF};
         try {
-            sut.store_->remove_key_sync(ref_key);
+            sut.store_->remove_key_sync(ref_key, storage::RemoveOpts{});
         } catch (const std::invalid_argument& ) {
             // Don't care
         }
