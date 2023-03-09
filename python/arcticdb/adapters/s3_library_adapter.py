@@ -37,6 +37,8 @@ def set_library_options(lib_desc: "LibraryConfig", options: LibraryOptions):
 
     write_options.dynamic_schema = options.dynamic_schema
     write_options.de_duplication = options.dedup
+    write_options.segment_row_size = options.rows_per_segment
+    write_options.column_group_size = options.columns_per_segment
 
 
 @dataclass

@@ -2,6 +2,7 @@
 Copyright 2023 Man Group Operations Ltd.
 NO WARRANTY, EXPRESSED OR IMPLIED.
 """
+
 from arcticdb_ext.exceptions import ArcticNativeCxxException
 
 try:
@@ -14,6 +15,7 @@ from arcticdb_ext.storage import NoDataFoundException
 from arcticdb.arctic import Arctic
 from arcticdb.options import LibraryOptions
 from arcticdb import QueryBuilder
+import math
 import re
 import time
 import pytest
@@ -69,18 +71,21 @@ def test_library_options(moto_s3_uri_incl_bucket):
     ac.create_library("pytest_default_options")
     lib = ac["pytest_default_options"]
     write_options = lib._nvs._lib_cfg.lib_desc.version.write_options
-    assert write_options.dynamic_schema == LibraryOptions().dynamic_schema
-    assert write_options.de_duplication == LibraryOptions().dedup
+    assert not write_options.dynamic_schema
+    assert not write_options.de_duplication
+    assert write_options.segment_row_size == 100_000
+    assert write_options.column_group_size == 127
 
-    for dynamic_schema in [True, False]:
-        for dedup in [True, False]:
-                library_options = LibraryOptions(dynamic_schema=dynamic_schema, dedup=dedup)
-                ac.create_library("pytest_explicit_options", library_options)
-                lib = ac["pytest_explicit_options"]
-                write_options = lib._nvs._lib_cfg.lib_desc.version.write_options
-                assert write_options.dynamic_schema == dynamic_schema
-                assert write_options.de_duplication == dedup
-                ac.delete_library("pytest_explicit_options")
+    ac.create_library(
+        "pytest_explicit_options",
+        LibraryOptions(dynamic_schema=True, dedup=True, rows_per_segment=20, columns_per_segment=3),
+    )
+    lib = ac["pytest_explicit_options"]
+    write_options = lib._nvs._lib_cfg.lib_desc.version.write_options
+    assert write_options.dynamic_schema
+    assert write_options.de_duplication
+    assert write_options.segment_row_size == 20
+    assert write_options.column_group_size == 3
 
 
 def test_separation_between_libraries(moto_s3_uri_incl_bucket):
@@ -997,6 +1002,24 @@ def test_dedup(moto_s3_uri_incl_bucket, dedup):
     lib.write_pickle(symbol, 1, prune_previous_versions=False)
     data_key_version = lib._nvs.read_index(symbol)["version_id"][0]
     assert data_key_version == 0 if dedup else 1
+
+
+def test_segment_slicing(moto_s3_uri_incl_bucket):
+    ac = Arctic(moto_s3_uri_incl_bucket)
+    assert ac.list_libraries() == []
+    rows_per_segment = 5
+    columns_per_segment = 2
+    ac.create_library("pytest_test_library", LibraryOptions(rows_per_segment=rows_per_segment, columns_per_segment=columns_per_segment))
+    lib = ac["pytest_test_library"]
+    symbol = "test_segment_slicing"
+    rows = 12
+    columns = 3
+    data = {}
+    for col in range(columns):
+        data[f"col{col}"] = np.arange(100*col, (100*col) + rows)
+    lib.write(symbol, pd.DataFrame(data))
+    num_data_segments = len(lib._nvs.read_index(symbol))
+    assert num_data_segments == math.ceil(rows / rows_per_segment) * math.ceil(columns / columns_per_segment)
 
 
 if __name__ == "__main__":
