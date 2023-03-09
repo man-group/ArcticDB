@@ -2,7 +2,7 @@
 Copyright 2023 Man Group Operations Ltd.
 NO WARRANTY, EXPRESSED OR IMPLIED.
 """
-from hypothesis import assume, given, settings, unlimited, reproduce_failure
+from hypothesis import assume, given, settings
 from hypothesis.extra.pandas import column, data_frames, range_indexes
 import numpy as np
 from pandas.testing import assert_frame_equal
@@ -11,9 +11,8 @@ import pandas as pd
 from arcticdb.version_store.processing import QueryBuilder
 from arcticdb.util.test import make_dynamic, regularize_dataframe
 from arcticdb.util.hypothesis import (
-    integral_type_strategies,
+    use_of_function_scoped_fixtures_in_hypothesis_checked,
     numeric_type_strategies,
-    non_zero_numeric_type_strategies,
     string_strategy,
 )
 
@@ -45,6 +44,7 @@ def test_project_dynamic(lmdb_version_store_dynamic_schema):
     assert_frame_equal(expected, received)
 
 
+@use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
     df=data_frames(
@@ -81,7 +81,7 @@ def test_project_add_col_col_dynamic(lmdb_version_store_dynamic_schema, df):
 
     lib.delete(symbol)
 
-
+@use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
     df=data_frames(
@@ -117,7 +117,7 @@ def test_project_multiply_col_val(lmdb_version_store_dynamic_schema, df):
 
     lib.delete(symbol)
 
-
+@use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
     df=data_frames(

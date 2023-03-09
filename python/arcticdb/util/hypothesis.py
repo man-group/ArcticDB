@@ -5,9 +5,41 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
-from hypothesis.extra.numpy import unsigned_integer_dtypes, integer_dtypes, floating_dtypes, from_dtype
 from math import inf
-import hypothesis.strategies as st
+
+from hypothesis import settings, HealthCheck, strategies as st
+from hypothesis.extra.numpy import unsigned_integer_dtypes, integer_dtypes, floating_dtypes, from_dtype
+
+_function_scoped_fixture = getattr(HealthCheck, "function_scoped_fixture", None)
+
+
+def use_of_function_scoped_fixtures_in_hypothesis_checked(fun):
+    """
+    A decorator to declare that the use of function-scoped fixtures in said scope is correct,
+    i.e. the state in the fixture from previous hypothesis tries will not affect future tries.
+
+    See https://hypothesis.readthedocs.io/en/latest/healthchecks.html#hypothesis.HealthCheck.function_scoped_fixture
+
+    Examples
+    ========
+    ```
+    @use_of_function_scoped_fixtures_in_hypothesis_checked
+    @given(...)
+    def test_something(function_scope_fixture):
+        ...
+    ```
+    """
+
+    if not _function_scoped_fixture:
+        return fun
+
+    existing = getattr(fun, "_hypothesis_internal_use_settings", None)
+    assert existing or getattr(fun, "is_hypothesis_test", False), "Must be used before @given/@settings"
+
+    combined = {_function_scoped_fixture, *(existing or settings.default).suppress_health_check}
+    new_settings = settings(parent=existing, suppress_health_check=combined)
+    setattr(fun, "_hypothesis_internal_use_settings", new_settings)
+    return fun
 
 
 def non_infinite(x):

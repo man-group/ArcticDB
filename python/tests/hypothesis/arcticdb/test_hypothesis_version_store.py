@@ -3,7 +3,7 @@ Copyright 2023 Man Group Operations Ltd.
 NO WARRANTY, EXPRESSED OR IMPLIED.
 """
 from collections import defaultdict
-from typing import Dict, List, Set, Any, Optional
+from typing import Dict, List, Set, Any, Optional, Tuple
 from pandas import DataFrame
 from pandas.testing import assert_frame_equal
 from enum import Enum, IntFlag
@@ -11,7 +11,7 @@ from itertools import zip_longest
 import attr
 import os
 
-from hypothesis import strategies as st, assume, stateful, settings
+from hypothesis import strategies as st, assume, stateful, settings, HealthCheck
 from hypothesis.stateful import RuleBasedStateMachine, Bundle, rule, invariant, run_state_machine_as_test
 
 from arcticdb.version_store import NativeVersionStore
@@ -102,7 +102,7 @@ class VersionStoreComparison(RuleBasedStateMachine):
             if value.state == State.NORMAL:
                 value.state = State.TOMBSTONED  # Delayed deletes
 
-    def _get_latest_undeleted_version(self, sym) -> (Optional[int], Optional[Version]):
+    def _get_latest_undeleted_version(self, sym) -> Tuple[Optional[int], Optional[Version]]:
         vers = self._versions[sym]
         for ver_num in reversed(range(len(vers))):
             ver = vers[ver_num]
@@ -313,8 +313,9 @@ def test_stateful(lmdb_version_store_delayed_deletes):
     VersionStoreComparison._lib = lmdb_version_store_delayed_deletes
     run_state_machine_as_test(
         VersionStoreComparison,
-        settings(  # Note: timeout is a legacy parameter
-            max_examples=int(os.getenv("HYPOTHESIS_EXAMPLES", 20)), deadline=None, stateful_step_count=100, timeout=0
+        settings=settings(  # Note: timeout is a legacy parameter
+            max_examples=int(os.getenv("HYPOTHESIS_EXAMPLES", 100)), deadline=None, stateful_step_count=100,
+            suppress_health_check=[HealthCheck.filter_too_much]
         ),
     )
 

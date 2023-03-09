@@ -12,13 +12,16 @@ from pandas.core.base import SpecificationError
 
 from arcticdb.version_store.processing import QueryBuilder
 from arcticdb_ext.exceptions import ArcticNativeCxxException
+from arcticdb.util.hypothesis import (
+    use_of_function_scoped_fixtures_in_hypothesis_checked,
+    non_zero_numeric_type_strategies,
+    string_strategy,
+)
 
 from hypothesis import assume, given, settings
 from hypothesis.extra.pandas import column, data_frames, range_indexes
 import pytest
 from arcticdb.util.test import make_dynamic
-
-from arcticdb.util.hypothesis import non_zero_numeric_type_strategies, string_strategy
 
 
 def assert_equal_value(data, expected):
@@ -28,6 +31,7 @@ def assert_equal_value(data, expected):
     assert_frame_equal(expected, received.astype("float"))
 
 
+@use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
     df=data_frames(
@@ -59,6 +63,7 @@ def test_hypothesis_mean_agg_dynamic(lmdb_version_store_dynamic_schema, df):
         pass
 
 
+@use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
     df=data_frames(
@@ -90,6 +95,7 @@ def test_hypothesis_sum_agg_dynamic(lmdb_version_store_dynamic_schema, df):
         pass
 
 
+@use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
     df=data_frames(

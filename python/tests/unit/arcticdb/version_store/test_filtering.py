@@ -6,7 +6,7 @@ import copy
 import pickle
 import math
 from datetime import datetime
-from hypothesis import assume, given, settings, unlimited
+from hypothesis import assume, given, settings
 from hypothesis.extra.pandas import column, data_frames, range_indexes
 from hypothesis.extra.pytz import timezones as timezone_st
 import hypothesis.strategies as st
@@ -25,6 +25,7 @@ from arcticdb.exceptions import ArcticNativeException
 from arcticdb.version_store.processing import QueryBuilder
 from arcticdb_ext.exceptions import ArcticNativeCxxException
 from arcticdb.util.hypothesis import (
+    use_of_function_scoped_fixtures_in_hypothesis_checked,
     integral_type_strategies,
     numeric_type_strategies,
     non_zero_numeric_type_strategies,
@@ -286,6 +287,7 @@ def test_filter_bool_column_comparison(lmdb_version_store):
             generic_filter_test(lmdb_version_store, "test_filter_bool_column_comparison", df, q, pandas_query)
 
 
+@use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
     df=data_frames([column("a", elements=numeric_type_strategies())], index=range_indexes()),
@@ -299,6 +301,7 @@ def test_filter_less_than_col_val(lmdb_version_store, df, val):
     generic_filter_test(lmdb_version_store, "test_filter_less_than_col_val", df, q, pandas_query)
 
 
+@use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
     df=data_frames([column("a", elements=numeric_type_strategies())], index=range_indexes()),
@@ -312,6 +315,7 @@ def test_filter_less_than_val_col(lmdb_version_store, df, val):
     generic_filter_test(lmdb_version_store, "test_filter_less_than_val_col", df, q, pandas_query)
 
 
+@use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
     df=data_frames(
@@ -327,6 +331,7 @@ def test_filter_less_than_col_col(lmdb_version_store, df):
     generic_filter_test(lmdb_version_store, "test_filter_less_than_col_col", df, q, pandas_query)
 
 
+@use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
     df=data_frames([column("a", elements=numeric_type_strategies())], index=range_indexes()),
@@ -340,6 +345,7 @@ def test_filter_less_than_equals_col_val(lmdb_version_store, df, val):
     generic_filter_test(lmdb_version_store, "test_filter_less_than_equals_col_val", df, q, pandas_query)
 
 
+@use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
     df=data_frames([column("a", elements=numeric_type_strategies())], index=range_indexes()),
@@ -353,6 +359,7 @@ def test_filter_less_than_equals_val_col(lmdb_version_store, df, val):
     generic_filter_test(lmdb_version_store, "test_filter_less_than_equals_val_col", df, q, pandas_query)
 
 
+@use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
     df=data_frames(
@@ -368,6 +375,7 @@ def test_filter_less_than_equals_col_col(lmdb_version_store, df):
     generic_filter_test(lmdb_version_store, "test_filter_less_than_equals_col_col", df, q, pandas_query)
 
 
+@use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
     df=data_frames([column("a", elements=numeric_type_strategies())], index=range_indexes()),
@@ -381,6 +389,7 @@ def test_filter_greater_than_col_val(lmdb_version_store, df, val):
     generic_filter_test(lmdb_version_store, "test_filter_greater_than_col_val", df, q, pandas_query)
 
 
+@use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
     df=data_frames([column("a", elements=numeric_type_strategies())], index=range_indexes()),
@@ -394,6 +403,7 @@ def test_filter_greater_than_val_col(lmdb_version_store, df, val):
     generic_filter_test(lmdb_version_store, "test_filter_greater_than_val_col", df, q, pandas_query)
 
 
+@use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
     df=data_frames(
@@ -409,6 +419,7 @@ def test_filter_greater_than_col_col(lmdb_version_store, df):
     generic_filter_test(lmdb_version_store, "test_filter_greater_than_col_col", df, q, pandas_query)
 
 
+@use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
     df=data_frames([column("a", elements=numeric_type_strategies())], index=range_indexes()),
@@ -422,6 +433,7 @@ def test_filter_greater_than_equals_col_val(lmdb_version_store, df, val):
     generic_filter_test(lmdb_version_store, "test_filter_greater_than_equals_col_val", df, q, pandas_query)
 
 
+@use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
     df=data_frames([column("a", elements=numeric_type_strategies())], index=range_indexes()),
@@ -435,6 +447,7 @@ def test_filter_greater_than_equals_val_col(lmdb_version_store, df, val):
     generic_filter_test(lmdb_version_store, "test_filter_greater_than_equals_val_col", df, q, pandas_query)
 
 
+@use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
     df=data_frames(
@@ -450,6 +463,7 @@ def test_filter_greater_than_equals_col_col(lmdb_version_store, df):
     generic_filter_test(lmdb_version_store, "test_filter_greater_than_equals_col_col", df, q, pandas_query)
 
 
+@use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
     df=data_frames([column("a", elements=integral_type_strategies())], index=range_indexes()),
@@ -463,6 +477,7 @@ def test_filter_equals_col_val(lmdb_version_store, df, val):
     generic_filter_test(lmdb_version_store, "test_filter_equals_col_val", df, q, pandas_query)
 
 
+@use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
     df=data_frames([column("a", elements=integral_type_strategies())], index=range_indexes()),
@@ -476,6 +491,7 @@ def test_filter_equals_val_col(lmdb_version_store, df, val):
     generic_filter_test(lmdb_version_store, "test_filter_equals_val_col", df, q, pandas_query)
 
 
+@use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
     df=data_frames(
@@ -491,6 +507,7 @@ def test_filter_equals_col_col(lmdb_version_store, df):
     generic_filter_test(lmdb_version_store, "test_filter_equals_col_col", df, q, pandas_query)
 
 
+@use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
     df=data_frames([column("a", elements=integral_type_strategies())], index=range_indexes()),
@@ -504,6 +521,7 @@ def test_filter_not_equals_col_val(lmdb_version_store, df, val):
     generic_filter_test(lmdb_version_store, "test_filter_not_equals_col_val", df, q, pandas_query)
 
 
+@use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
     df=data_frames([column("a", elements=integral_type_strategies())], index=range_indexes()),
@@ -517,6 +535,7 @@ def test_filter_not_equals_val_col(lmdb_version_store, df, val):
     generic_filter_test(lmdb_version_store, "test_filter_not_equals_val_col", df, q, pandas_query)
 
 
+@use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
     df=data_frames(
@@ -622,13 +641,15 @@ def test_filter_datetime_timezone_aware(lmdb_version_store):
         assert True
 
 
+@use_of_function_scoped_fixtures_in_hypothesis_checked
 # Restrict datetime range to a couple of years, as this should be sufficient to catch most weird corner cases
 @settings(deadline=None)
 @given(
     df_dt=st.datetimes(min_value=datetime(2020, 1, 1), max_value=datetime(2022, 1, 1), timezones=timezone_st()),
     comparison_dt=st.datetimes(min_value=datetime(2020, 1, 1), max_value=datetime(2022, 1, 1), timezones=timezone_st()),
 )
-def test_filter_datetime_timezone_aware_hypothesis(lmdb_version_store, df_dt, comparison_dt):
+def test_filter_datetime_timezone_aware_hypothesis(version_store_factory, df_dt, comparison_dt):
+    lmdb_version_store = version_store_factory(name="_unique_")
     symbol = "test_filter_datetime_timezone_aware_hypothesis"
     df = pd.DataFrame({"a": [df_dt]})
     for ts in [comparison_dt, pd.Timestamp(comparison_dt)]:
@@ -650,6 +671,7 @@ def test_filter_datetime_timezone_aware_hypothesis(lmdb_version_store, df_dt, co
         assert True
 
 
+@use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(df=data_frames([column("a", elements=string_strategy)], index=range_indexes()), val=numeric_type_strategies())
 def test_filter_compare_string_number_col_val(lmdb_version_store, df, val):
@@ -666,6 +688,7 @@ def test_filter_compare_string_number_col_val(lmdb_version_store, df, val):
         _ = lmdb_version_store.read(symbol, query_builder=q)
 
 
+@use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(df=data_frames([column("a", elements=numeric_type_strategies())], index=range_indexes()), val=string_strategy)
 def test_filter_compare_string_number_val_col(lmdb_version_store, df, val):
@@ -682,6 +705,7 @@ def test_filter_compare_string_number_val_col(lmdb_version_store, df, val):
         _ = lmdb_version_store.read(symbol, query_builder=q)
 
 
+@use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
     df=data_frames(
@@ -702,6 +726,7 @@ def test_filter_compare_string_number_col_col(lmdb_version_store, df):
         _ = lmdb_version_store.read(symbol, query_builder=q)
 
 
+@use_of_function_scoped_fixtures_in_hypothesis_checked
 # Note min_size=1 for the sets in the following two tests, as an empty set does not have an associated type
 @settings(deadline=None)
 @given(
@@ -718,6 +743,7 @@ def test_filter_isin_string_number(lmdb_version_store, df, vals):
         _ = lmdb_version_store.read(symbol, query_builder=q)
 
 
+@use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
     df=data_frames([column("a", elements=integral_type_strategies())], index=range_indexes()),
@@ -748,6 +774,7 @@ def test_filter_isin_clashing_sets(lmdb_version_store):
     generic_filter_test(lmdb_version_store, "test_filter_isin_clashing_sets", df, q, pandas_query)
 
 
+@use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
     df=data_frames([column("a", elements=integral_type_strategies())], index=range_indexes()),
@@ -761,6 +788,7 @@ def test_filter_numeric_isin(lmdb_version_store, df, vals):
     generic_filter_test(lmdb_version_store, "test_filter_numeric_isin", df, q, pandas_query)
 
 
+@use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(df=data_frames([column("a", elements=integral_type_strategies())], index=range_indexes()))
 def test_filter_numeric_isin_empty_set(lmdb_version_store, df):
@@ -772,6 +800,7 @@ def test_filter_numeric_isin_empty_set(lmdb_version_store, df):
     generic_filter_test(lmdb_version_store, "test_filter_numeric_isin_empty_set", df, q, pandas_query)
 
 
+@use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
     df=data_frames([column("a", elements=integral_type_strategies())], index=range_indexes()),
@@ -785,6 +814,7 @@ def test_filter_numeric_isnotin(lmdb_version_store, df, vals):
     generic_filter_test(lmdb_version_store, "test_filter_numeric_isnotin", df, q, pandas_query)
 
 
+@use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(df=data_frames([column("a", elements=integral_type_strategies())], index=range_indexes()))
 def test_filter_numeric_isnotin_empty_set(lmdb_version_store, df):
@@ -796,6 +826,7 @@ def test_filter_numeric_isnotin_empty_set(lmdb_version_store, df):
     generic_filter_test(lmdb_version_store, "test_filter_numeric_isnotin_empty_set", df, q, pandas_query)
 
 
+@use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
     df=data_frames([column("a", elements=string_strategy)], index=range_indexes()),
@@ -821,6 +852,7 @@ def test_filter_fixed_width_string_isin_truncation(lmdb_version_store):
     )
 
 
+@use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(df=data_frames([column("a", elements=string_strategy)], index=range_indexes()))
 def test_filter_string_isin_empty_set(lmdb_version_store, df):
@@ -832,6 +864,7 @@ def test_filter_string_isin_empty_set(lmdb_version_store, df):
     generic_filter_test_strings(lmdb_version_store, "test_filter_string_isin_empty_set", df, q, pandas_query)
 
 
+@use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
     df=data_frames([column("a", elements=string_strategy)], index=range_indexes()),
@@ -845,6 +878,7 @@ def test_filter_string_isnotin(lmdb_version_store, df, vals):
     generic_filter_test_strings(lmdb_version_store, "test_filter_string_isnotin", df, q, pandas_query)
 
 
+@use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(df=data_frames([column("a", elements=string_strategy)], index=range_indexes()))
 def test_filter_string_isnotin_empty_set(lmdb_version_store, df):
@@ -897,6 +931,7 @@ def test_filter_stringpool_shrinking_block_alignment(lmdb_version_store):
     )
 
 
+@use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
     df=data_frames(
@@ -912,6 +947,7 @@ def test_filter_and(lmdb_version_store, df):
     generic_filter_test(lmdb_version_store, "test_filter_and", df, q, pandas_query)
 
 
+@use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
     df=data_frames(
@@ -927,6 +963,7 @@ def test_filter_or(lmdb_version_store, df):
     generic_filter_test(lmdb_version_store, "test_filter_or", df, q, pandas_query)
 
 
+@use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
     df=data_frames(
@@ -943,6 +980,7 @@ def test_filter_xor(lmdb_version_store, df):
     generic_filter_test(lmdb_version_store, "test_filter_xor", df, q, pandas_query)
 
 
+@use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
     df=data_frames([column("a", elements=numeric_type_strategies())], index=range_indexes()),
@@ -956,6 +994,7 @@ def test_filter_add_col_val(lmdb_version_store, df, val):
     generic_filter_test(lmdb_version_store, "test_filter_add_col_val", df, q, pandas_query)
 
 
+@use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
     df=data_frames([column("a", elements=numeric_type_strategies())], index=range_indexes()),
@@ -969,6 +1008,7 @@ def test_filter_add_val_col(lmdb_version_store, df, val):
     generic_filter_test(lmdb_version_store, "test_filter_add_val_col", df, q, pandas_query)
 
 
+@use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
     df=data_frames(
@@ -984,6 +1024,7 @@ def test_filter_add_col_col(lmdb_version_store, df):
     generic_filter_test(lmdb_version_store, "test_filter_add_col_col", df, q, pandas_query)
 
 
+@use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
     df=data_frames([column("a", elements=numeric_type_strategies())], index=range_indexes()),
@@ -997,6 +1038,7 @@ def test_filter_sub_col_val(lmdb_version_store, df, val):
     generic_filter_test(lmdb_version_store, "test_filter_sub_col_val", df, q, pandas_query)
 
 
+@use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
     df=data_frames([column("a", elements=numeric_type_strategies())], index=range_indexes()),
@@ -1010,6 +1052,7 @@ def test_filter_sub_val_col(lmdb_version_store, df, val):
     generic_filter_test(lmdb_version_store, "test_filter_sub_val_col", df, q, pandas_query)
 
 
+@use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
     df=data_frames(
@@ -1025,6 +1068,7 @@ def test_filter_sub_col_col(lmdb_version_store, df):
     generic_filter_test(lmdb_version_store, "test_filter_sub_col_col", df, q, pandas_query)
 
 
+@use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
     df=data_frames([column("a", elements=numeric_type_strategies())], index=range_indexes()),
@@ -1038,6 +1082,7 @@ def test_filter_times_col_val(lmdb_version_store, df, val):
     generic_filter_test(lmdb_version_store, "test_filter_times_col_val", df, q, pandas_query)
 
 
+@use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
     df=data_frames([column("a", elements=numeric_type_strategies())], index=range_indexes()),
@@ -1051,6 +1096,7 @@ def test_filter_times_val_col(lmdb_version_store, df, val):
     generic_filter_test(lmdb_version_store, "test_filter_times_val_col", df, q, pandas_query)
 
 
+@use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
     df=data_frames(
@@ -1066,6 +1112,7 @@ def test_filter_times_col_col(lmdb_version_store, df):
     generic_filter_test(lmdb_version_store, "test_filter_times_col_col", df, q, pandas_query)
 
 
+@use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
     df=data_frames([column("a", elements=numeric_type_strategies())], index=range_indexes()),
@@ -1079,6 +1126,7 @@ def test_filter_divide_col_val(lmdb_version_store, df, val):
     generic_filter_test(lmdb_version_store, "test_filter_divide_col_val", df, q, pandas_query)
 
 
+@use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
     df=data_frames([column("a", elements=non_zero_numeric_type_strategies())], index=range_indexes()),
@@ -1092,6 +1140,7 @@ def test_filter_divide_val_col(lmdb_version_store, df, val):
     generic_filter_test(lmdb_version_store, "test_filter_divide_val_col", df, q, pandas_query)
 
 
+@use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
     df=data_frames(
@@ -1107,6 +1156,7 @@ def test_filter_divide_col_col(lmdb_version_store, df):
     generic_filter_test(lmdb_version_store, "test_filter_divide_col_col", df, q, pandas_query)
 
 
+@use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(df=data_frames([column("a", elements=string_strategy)], index=range_indexes()), val=numeric_type_strategies())
 def test_filter_arithmetic_string_number_col_val(lmdb_version_store, df, val):
@@ -1123,6 +1173,7 @@ def test_filter_arithmetic_string_number_col_val(lmdb_version_store, df, val):
         _ = lmdb_version_store.read(symbol, query_builder=q)
 
 
+@use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(df=data_frames([column("a", elements=numeric_type_strategies())], index=range_indexes()), val=string_strategy)
 def test_filter_arithmetic_string_number_val_col(lmdb_version_store, df, val):
@@ -1139,6 +1190,7 @@ def test_filter_arithmetic_string_number_val_col(lmdb_version_store, df, val):
         _ = lmdb_version_store.read(symbol, query_builder=q)
 
 
+@use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
     df=data_frames(
@@ -1159,6 +1211,7 @@ def test_filter_arithmetic_string_number_col_col(lmdb_version_store, df):
         _ = lmdb_version_store.read(symbol, query_builder=q)
 
 
+@use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(df=data_frames([column("a", elements=string_strategy)], index=range_indexes()), val=string_strategy)
 def test_filter_arithmetic_string_string_col_val(lmdb_version_store, df, val):
@@ -1175,6 +1228,7 @@ def test_filter_arithmetic_string_string_col_val(lmdb_version_store, df, val):
         _ = lmdb_version_store.read(symbol, query_builder=q)
 
 
+@use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(df=data_frames([column("a", elements=string_strategy)], index=range_indexes()), val=string_strategy)
 def test_filter_arithmetic_string_string_val_col(lmdb_version_store, df, val):
@@ -1191,6 +1245,7 @@ def test_filter_arithmetic_string_string_val_col(lmdb_version_store, df, val):
         _ = lmdb_version_store.read(symbol, query_builder=q)
 
 
+@use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
     df=data_frames(
@@ -1211,6 +1266,7 @@ def test_filter_arithmetic_string_string_col_col(lmdb_version_store, df):
         _ = lmdb_version_store.read(symbol, query_builder=q)
 
 
+@use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
     df=data_frames([column("a", elements=numeric_type_strategies())], index=range_indexes()),
@@ -1224,6 +1280,7 @@ def test_filter_abs(lmdb_version_store, df, val):
     generic_filter_test(lmdb_version_store, "test_filter_abs", df, q, pandas_query)
 
 
+@use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(df=data_frames([column("a", elements=string_strategy)], index=range_indexes()), val=string_strategy)
 def test_filter_abs_string(lmdb_version_store, df, val):
@@ -1236,6 +1293,7 @@ def test_filter_abs_string(lmdb_version_store, df, val):
         _ = lmdb_version_store.read(symbol, query_builder=q)
 
 
+@use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
     df=data_frames([column("a", elements=numeric_type_strategies())], index=range_indexes()),
@@ -1249,6 +1307,7 @@ def test_filter_neg(lmdb_version_store, df, val):
     generic_filter_test(lmdb_version_store, "test_filter_neg", df, q, pandas_query)
 
 
+@use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(df=data_frames([column("a", elements=string_strategy)], index=range_indexes()), val=string_strategy)
 def test_filter_neg_string(lmdb_version_store, df, val):
@@ -1343,6 +1402,7 @@ def test_filter_explicit_type_promotion(lmdb_version_store):
     assert np.array_equal(lmdb_version_store.read(symbol, query_builder=q).data, df.loc[[1]])
 
 
+@use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
     df=data_frames(
@@ -1364,6 +1424,7 @@ def test_filter_more_columns_than_fit_in_one_segment(lmdb_version_store_tiny_seg
     )
 
 
+@use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
     df=data_frames(
@@ -1442,6 +1503,7 @@ def test_filter_on_multi_index(lmdb_version_store):
     generic_filter_test(lmdb_version_store, "test_filter_on_multi_index", df, q, pandas_query)
 
 
+@use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
     df=data_frames([column("a", elements=numeric_type_strategies())], index=range_indexes()),
@@ -1492,6 +1554,7 @@ def test_filter_string_single_quote(lmdb_version_store):
     assert np.array_equal(expected, received)
 
 
+@use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(df=data_frames([column("a", elements=string_strategy)], index=range_indexes()), val=string_strategy)
 def test_filter_string_equals_col_val(lmdb_version_store, df, val):
@@ -1502,6 +1565,7 @@ def test_filter_string_equals_col_val(lmdb_version_store, df, val):
     generic_filter_test_strings(lmdb_version_store, "test_filter_string_equals_col_val", df, q, pandas_query)
 
 
+@use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(df=data_frames([column("a", elements=string_strategy)], index=range_indexes()), val=string_strategy)
 def test_filter_string_equals_val_col(lmdb_version_store, df, val):
@@ -1512,6 +1576,7 @@ def test_filter_string_equals_val_col(lmdb_version_store, df, val):
     generic_filter_test_strings(lmdb_version_store, "test_filter_string_equals_val_col", df, q, pandas_query)
 
 
+@use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
     df=data_frames(
@@ -1526,6 +1591,7 @@ def test_filter_string_equals_col_col(lmdb_version_store, df):
     generic_filter_test_strings(lmdb_version_store, "test_filter_string_equals_col_col", df, q, pandas_query)
 
 
+@use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(df=data_frames([column("a", elements=string_strategy)], index=range_indexes()), val=string_strategy)
 def test_filter_string_not_equals_col_val(lmdb_version_store, df, val):
@@ -1536,6 +1602,7 @@ def test_filter_string_not_equals_col_val(lmdb_version_store, df, val):
     generic_filter_test_strings(lmdb_version_store, "test_filter_string_not_equals_col_val", df, q, pandas_query)
 
 
+@use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(df=data_frames([column("a", elements=string_strategy)], index=range_indexes()), val=string_strategy)
 def test_filter_string_not_equals_val_col(lmdb_version_store, df, val):
@@ -1546,7 +1613,8 @@ def test_filter_string_not_equals_val_col(lmdb_version_store, df, val):
     generic_filter_test_strings(lmdb_version_store, "test_filter_string_not_equals_val_col", df, q, pandas_query)
 
 
-@settings(deadline=None, timeout=unlimited)
+@use_of_function_scoped_fixtures_in_hypothesis_checked
+@settings(deadline=None)
 @given(
     df=data_frames(
         [column("a", elements=string_strategy), column("b", elements=string_strategy)], index=range_indexes()
