@@ -11,6 +11,11 @@ import os.path as osp
 from abc import abstractmethod, ABCMeta
 
 import yaml
+try:
+    from yaml import CLoader as Loader
+except ImportError:
+    from yaml import Loader
+
 from arcticc.pb2.logger_pb2 import LoggersConfig, LoggerConfig
 from arcticc.pb2.config_pb2 import RuntimeConfig
 from arcticc.pb2.storage_pb2 import EnvironmentConfigsMap, EnvironmentConfig, LibraryConfig, LibraryDescriptor
@@ -98,7 +103,7 @@ class ProtoConfConverter(object):
 class YamlProtoConverter(ProtoConfConverter):
     def loads(self, buf):
         cfg = self._out_type()
-        JsonToMessage(json.dumps(yaml.load(buf)), cfg, ignore_unknown_fields=True)
+        JsonToMessage(json.dumps(yaml.load(buf, Loader=Loader)), cfg, ignore_unknown_fields=True)
         return cfg
 
     def dumps(self, cfg):

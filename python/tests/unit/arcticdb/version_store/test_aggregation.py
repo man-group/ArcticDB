@@ -9,14 +9,18 @@ from pandas.testing import assert_frame_equal
 
 from arcticdb.version_store.processing import QueryBuilder
 from arcticdb_ext.exceptions import ArcticNativeCxxException
+from arcticdb.util.hypothesis import (
+    use_of_function_scoped_fixtures_in_hypothesis_checked,
+    non_zero_numeric_type_strategies,
+    string_strategy,
+)
 
 from hypothesis import assume, given, settings
 from hypothesis.extra.pandas import column, data_frames, range_indexes
 import pytest
 
-from arcticdb.util.hypothesis import non_zero_numeric_type_strategies, string_strategy
 
-
+@use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
     df=data_frames(
@@ -42,6 +46,7 @@ def test_hypothesis_mean_agg(lmdb_version_store, df):
     assert_frame_equal(expected, vit.data)
 
 
+@use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
     df=data_frames(
@@ -67,6 +72,7 @@ def test_hypothesis_sum_agg(lmdb_version_store, df):
     assert_frame_equal(expected, vit.data)
 
 
+@use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
     df=data_frames(

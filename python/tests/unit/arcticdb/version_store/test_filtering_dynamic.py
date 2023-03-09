@@ -2,7 +2,7 @@
 Copyright 2023 Man Group Operations Ltd.
 NO WARRANTY, EXPRESSED OR IMPLIED.
 """
-from hypothesis import assume, given, settings, unlimited
+from hypothesis import assume, given, settings
 from hypothesis.extra.pandas import column, data_frames, range_indexes
 import hypothesis.strategies as st
 import numpy as np
@@ -12,7 +12,12 @@ import pandas as pd
 
 from arcticdb.version_store.processing import QueryBuilder
 from arcticdb.util.test import test_wide_dataframe, make_dynamic, regularize_dataframe
-from arcticdb.util.hypothesis import integral_type_strategies, numeric_type_strategies, string_strategy
+from arcticdb.util.hypothesis import (
+    use_of_function_scoped_fixtures_in_hypothesis_checked,
+    integral_type_strategies,
+    numeric_type_strategies,
+    string_strategy,
+)
 
 
 def generic_dynamic_filter_test(version_store, symbol, df, arctic_query, pandas_query, dynamic_strings=True):
@@ -39,6 +44,7 @@ def generic_dynamic_filter_test(version_store, symbol, df, arctic_query, pandas_
     assert True
 
 
+@use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
     df=data_frames(
@@ -59,6 +65,7 @@ def test_filter_less_than_col_col(lmdb_version_store_dynamic_schema, df):
     generic_dynamic_filter_test(lmdb_version_store_dynamic_schema, "test_filter_less_than_col_col", df, q, pandas_query)
 
 
+@use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
     df=data_frames(
@@ -82,6 +89,7 @@ def test_filter_less_than_equals_col_val(lmdb_version_store_dynamic_schema, df, 
     )
 
 
+@use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
     df=data_frames(
@@ -105,6 +113,7 @@ def test_filter_less_than_equals_val_col(lmdb_version_store_dynamic_schema, df, 
     )
 
 
+@use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
     df=data_frames(
@@ -127,6 +136,7 @@ def test_filter_less_than_equals_col_col(lmdb_version_store_dynamic_schema, df):
     )
 
 
+@use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
     df=data_frames(
@@ -150,6 +160,7 @@ def test_filter_greater_than_col_val(lmdb_version_store_dynamic_schema, df, val)
     )
 
 
+@use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
     df=data_frames(
@@ -166,6 +177,7 @@ def test_filter_numeric_isin(lmdb_version_store_dynamic_schema, df, vals):
     generic_dynamic_filter_test(lmdb_version_store_dynamic_schema, "test_filter_numeric_isin", df, q, pandas_query)
 
 
+@use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
     df=data_frames(
@@ -182,6 +194,7 @@ def test_filter_numeric_isnotin(lmdb_version_store_dynamic_schema, df, vals):
     generic_dynamic_filter_test(lmdb_version_store_dynamic_schema, "test_filter_numeric_isnotin", df, q, pandas_query)
 
 
+@use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
     df=data_frames(
@@ -197,6 +210,7 @@ def test_filter_string_isin(lmdb_version_store_dynamic_schema, df, vals):
     generic_dynamic_filter_test(lmdb_version_store_dynamic_schema, "test_filter_string_isin", df, q, pandas_query)
 
 
+@use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
     df=data_frames(
@@ -214,6 +228,7 @@ def test_filter_string_isin_empty_set(lmdb_version_store_dynamic_schema, df):
     )
 
 
+@use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
     df=data_frames(

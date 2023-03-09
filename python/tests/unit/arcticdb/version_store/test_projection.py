@@ -2,14 +2,18 @@
 Copyright 2023 Man Group Operations Ltd.
 NO WARRANTY, EXPRESSED OR IMPLIED.
 """
-from hypothesis import assume, given, settings, unlimited
+from hypothesis import assume, given, settings
 from hypothesis.extra.pandas import column, data_frames, range_indexes
 import numpy as np
 from pandas.testing import assert_frame_equal
 import pandas as pd
 
 from arcticdb.version_store.processing import QueryBuilder
-from arcticdb.util.hypothesis import numeric_type_strategies, string_strategy
+from arcticdb.util.hypothesis import (
+    use_of_function_scoped_fixtures_in_hypothesis_checked,
+    numeric_type_strategies,
+    string_strategy,
+)
 
 
 def test_project(s3_version_store):
@@ -32,6 +36,7 @@ def test_project(s3_version_store):
     assert_frame_equal(df, vit.data)
 
 
+@use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
     df=data_frames(
@@ -59,6 +64,7 @@ def test_project_add_col_col(lmdb_version_store, df):
     assert_frame_equal(df, vit.data)
 
 
+@use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
     df=data_frames(
@@ -86,6 +92,7 @@ def test_project_multiply_col_val(lmdb_version_store, df):
     assert_frame_equal(df, vit.data)
 
 
+@use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
     df=data_frames(
