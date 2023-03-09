@@ -13,6 +13,12 @@ class LibraryOptions:
 
     dynamic_schema: bool
         See `__init__` for details.
+    dedup: bool
+        See `__init__` for details.
+    rows_per_segment: int
+        See `__init__` for details.
+    columns_per_segment: int
+        See `__init__` for details.
     """
 
     def __init__(
@@ -20,6 +26,8 @@ class LibraryOptions:
             *,
             dynamic_schema: bool = False,
             dedup: bool = False,
+            rows_per_segment = 100_000,
+            columns_per_segment = 127,
     ):
         """
         Parameters
@@ -65,9 +73,43 @@ class LibraryOptions:
             Note that these conditions will also be checked with write_pickle and write_batch_pickle. However, pickled
             objects are always written as a single data segment, and so dedup will only occur if the written object is
             identical to the previous version.
+
+        rows_per_segment: int, default 100_000
+            Together with columns_per_segment, controls how data being written, appended, or updated is sliced into
+            separate data segment objects before being written to storage.
+
+            By splitting data across multiple objects in storage, calls to read and read_batch that include the
+            date_range and/or columns parameters can reduce the amount of data read from storage by only reading those
+            data segments that contain data requested by the reader.
+
+            For example, if writing a dataframe with 250,000 rows and 200 columns, by default, this will be sliced into
+            6 data segments:
+            1 - rows 1-100,000 and columns 1-127
+            2 - rows 100,001-200,000 and columns 1-127
+            3 - rows 200,001-250,000 and columns 1-127
+            4 - rows 1-100,000 and columns 128-200
+            5 - rows 100,001-200,000 and columns 128-200
+            6 - rows 200,001-250,000 and columns 128-200
+
+            Data segments that cover the same range of rows are said to belong to the same row-slice (e.g. segments 2
+            and 5 in the example above). Data segments that cover the same range of columns are said to belong to the
+            same column-slice (e.g. segments 2 and 3 in the example above).
+
+            Note that this slicing is only applied to the new data being written, existing data segments from previous
+            versions that can remain the same will not be modified. For example, if a 50,000 row dataframe with a single
+            column is written, and then another dataframe also with 50,000 rows and one column is appended to it, there
+            will still be two data segments each with 50,000 rows.
+
+            Note that for libraries with dynamic_schema enabled, columns_per_segment does not apply, and there is always
+            a single column-slice. However, rows_per_segment is used, and there will be multiple row-slices.
+
+        columns_per_segment: int, default 127
+            See rows_per_segment
         """
         self.dynamic_schema = dynamic_schema
         self.dedup = dedup
+        self.rows_per_segment = rows_per_segment
+        self.columns_per_segment = columns_per_segment
 
     def __repr__(self):
-        return f"LibraryOptions(dynamic_schema={self.dynamic_schema}, dedup={self.dedup})"
+        return f"LibraryOptions(dynamic_schema={self.dynamic_schema}, dedup={self.dedup}, rows_per_segment={self.rows_per_segment}, columns_per_segment={self.columns_per_segment})"
