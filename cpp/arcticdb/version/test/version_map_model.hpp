@@ -59,7 +59,7 @@ struct MapStorePair {
     }
 
     std::shared_ptr<VersionMap> map_ = std::make_shared<VersionMap>();
-    std::shared_ptr<InMemoryStore> store_;
+    std::shared_ptr<Store> store_;
 };
 
 struct VersionMapModel {
