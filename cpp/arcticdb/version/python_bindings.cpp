@@ -519,8 +519,8 @@ void register_bindings(py::module &m) {
         .def("_clear_symbol_list_keys",
              &PythonVersionStore::_clear_symbol_list_keys,
              "Delete all ref keys of type SYMBOL_LIST.")
-        .def("_refresh_symbol_list",
-             &PythonVersionStore::_refresh_symbol_list,
+        .def("reload_symbol_list",
+             &PythonVersionStore::reload_symbol_list,
              "Regenerate symbol list for library.")
 
         .def("write_partitioned_dataframe",

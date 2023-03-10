@@ -166,15 +166,11 @@ std::vector<VersionedItem> PythonVersionStore::batch_append(
 }
 
 void PythonVersionStore::_clear_symbol_list_keys() {
-
-    log::version().info("Symbol list enabled for library: {}.", cfg().symbol_list());
     symbol_list().clear(store());
 }
 
-void PythonVersionStore::_refresh_symbol_list() {
-
-    log::version().info("Symbol list enabled for library: {}.", cfg().symbol_list());
-    symbol_list().load(store(), false);
+void PythonVersionStore::reload_symbol_list() {
+    symbol_list().reload(store());
 }
 
 // To be sorted on timestamp

@@ -86,6 +86,11 @@ class SymbolList {
         delete_all_keys_of_type(KeyType::SYMBOL_LIST, store, true);
     }
 
+    void reload(const std::shared_ptr<Store>& store) {
+        clear(store);
+        load(store, false);
+    }
+
 private:
     // Making each function return the collection instead of using a shared field removes the possibility of the field
     // being left blank by mistake
