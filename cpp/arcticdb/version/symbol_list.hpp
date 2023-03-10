@@ -126,7 +126,7 @@ private:
 
     [[nodiscard]] KeyVector get_all_symbol_list_keys(const std::shared_ptr<StreamSource>& store) const;
 
-    [[nodiscard]] folly::Future<std::vector<Store::RemoveKeyResultType>> delete_keys(
+    void delete_keys(
             std::shared_ptr<Store> store, const KeyVector& lists);
 
     std::optional<KeyVector::difference_type> last_compaction(const KeyVector& keys);

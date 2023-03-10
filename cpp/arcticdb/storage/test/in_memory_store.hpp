@@ -288,7 +288,7 @@ namespace arcticdb {
             return output;
         }
 
-        std::vector<RemoveKeyResultType>
+        folly::Future<std::vector<RemoveKeyResultType>>
         remove_keys(const std::vector<entity::VariantKey> &keys, storage::RemoveOpts opts) override {
             std::vector<RemoveKeyResultType> output;
             for (const auto &key: keys) {

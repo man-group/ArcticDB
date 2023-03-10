@@ -295,7 +295,9 @@ void do_remove_impl(Composite<VariantKey>&& ks,
     object_request.WithBucket(bucket_name.c_str());
     Aws::S3::Model::Delete del_objects;
     std::vector<VariantKey> failed_deletes;
-    static const size_t delete_object_limit = ConfigsMap::instance()->get_int("S3Storage.DeleteBatchSize", 1000);
+    static const size_t delete_object_limit =
+        std::min(DELETE_OBJECTS_LIMIT,
+                 static_cast<size_t>(ConfigsMap::instance()->get_int("S3Storage.DeleteBatchSize", 1000)));
 
     (fg::from(ks.as_range()) | fg::move | fg::groupBy(fmt_db)).foreach(
         [&s3_client, &root_folder, &del_objects, &object_request, b=std::move(bucketizer), &failed_deletes] (auto&& group) {

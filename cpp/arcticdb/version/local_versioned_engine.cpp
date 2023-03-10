@@ -645,7 +645,7 @@ void LocalVersionedEngine::delete_trees_responsibly(
     std::vector<entity::VariantKey> vks;
     if (!dry_run) {
         std::copy(keys_to_delete->begin(), keys_to_delete->end(), std::back_inserter(vks));
-        store()->remove_keys(vks, remove_opts);
+        store()->remove_keys(vks, remove_opts).get();
     }
 
     vks.clear();
@@ -655,7 +655,7 @@ void LocalVersionedEngine::delete_trees_responsibly(
                  [&](const auto& k) {return !data_keys_not_to_be_deleted.count(k);});
     log::version().debug("Index keys deleted. Proceeding with {} number of data keys", vks.size());
     if (!dry_run) {
-        store()->remove_keys(vks, remove_opts);
+        store()->remove_keys(vks, remove_opts).get();
     }
 }
 

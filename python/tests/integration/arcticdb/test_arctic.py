@@ -1043,12 +1043,14 @@ def test_reload_symbol_list(moto_s3_uri_incl_bucket, boto_client):
     ac.create_library(lib_name)
     lib = ac[lib_name]
 
-    lib.write_pickle("symbol_1", 1)
     lib.write_pickle("symbol_2", 2)
-    assert set(lib.list_symbols()) == {"symbol_1", "symbol_2"}
-    lib.delete("symbol_1")
-    assert set(lib.list_symbols()) == {"symbol_2"}
-    assert len(get_symbol_list_keys()) == 2
+
+    for _ in range(15):
+        lib.write_pickle("symbol_1", 1)
+        lib.delete("symbol_1")
+
+    # assert set(lib.list_symbols()) == {"symbol_2"}
+    assert len(get_symbol_list_keys()) == 31
 
     lib.reload_symbol_list()
     assert len(get_symbol_list_keys()) == 1

@@ -25,13 +25,13 @@ inline void delete_keys_of_type_if(const std::shared_ptr<Store>& store, Predicat
                 keys.emplace_back(std::move(key));
 
             if(keys.size() == delete_object_limit) {
-                store->remove_keys(keys);
+                store->remove_keys(keys).get();
                 keys.clear();
             }
         }, prefix);
 
         if(!keys.empty())
-            store->remove_keys(keys);
+            store->remove_keys(keys).get();
     }
     catch(const std::exception& ex) {
         if(continue_on_error)

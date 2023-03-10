@@ -19,8 +19,6 @@
 
 namespace arcticdb::async {
 
-static const size_t BULK_DELETE_THRESHOLD = 10000;
-
 template<class ClockType = util::SysClock>
 class AsyncStore : public Store {
 public:
@@ -225,28 +223,10 @@ public:
         return RemoveTask{key, library_, opts}();
     }
 
-    std::vector<RemoveKeyResultType> remove_keys(const std::vector<entity::VariantKey> &keys, storage::RemoveOpts opts) override {
-        if (keys.size() >= BULK_DELETE_THRESHOLD) {
-            std::vector<folly::Future<std::vector<RemoveKeyResultType>>> fut_vec;
-            ssize_t start = 0;
-            ssize_t batch = storage::s3::detail::DELETE_OBJECTS_LIMIT;
-            for (; start < static_cast<ssize_t>(keys.size()); start += batch) {
-                size_t end = start + batch > static_cast<ssize_t>(keys.size()) ? keys.size() : start + batch;
-                auto vks = std::vector<entity::VariantKey>(keys.begin() + start, keys.begin() + end);
-                fut_vec.emplace_back(async::submit_io_task(RemoveBatchTask{std::move(vks), library_, opts}));
-            }
-            auto collect_vec = folly::collect(fut_vec).get();
-            std::vector<RemoveKeyResultType> result;
-            for (const auto &vks: collect_vec) {
-                result.insert(std::end(result), std::begin(vks), std::end(vks));
-            }
-            return result;
-        } else {
-            std::vector<folly::Future<RemoveKeyResultType>> futures;
-            for (const auto &key: keys)
-                futures.emplace_back(async::submit_io_task(RemoveTask{key, library_, opts}));
-            return folly::collect(futures).get();
-        }
+    folly::Future<std::vector<RemoveKeyResultType>> remove_keys(const std::vector<entity::VariantKey> &keys, storage::RemoveOpts opts) override {
+        return keys.size() == 0 ?
+            std::vector<RemoveKeyResultType>() :
+            async::submit_io_task(RemoveBatchTask{keys, library_, opts});
     }
 
     void copy_to_results(

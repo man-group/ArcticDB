@@ -912,7 +912,7 @@ VersionedItem sort_merge_impl(
         pipeline_context->incompletes_after(),
         norm_meta);
 
-    store->remove_keys(delete_keys);
+    store->remove_keys(delete_keys).get();
     return vit;
 }
 
@@ -1020,7 +1020,7 @@ VersionedItem compact_incomplete_impl(
         user_meta
         );
 
-    store->remove_keys(delete_keys);
+    store->remove_keys(delete_keys).get();
     return vit;
 }
 
