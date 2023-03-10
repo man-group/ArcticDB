@@ -34,7 +34,7 @@ namespace arcticdb {
                 vars.emplace_back(log.extract_key());
             }
         });
-        store->remove_keys(vars);
+        store->remove_keys(vars).get();
     }
 
     std::vector<OpLog> get_op_logs(std::shared_ptr<Store> store) {

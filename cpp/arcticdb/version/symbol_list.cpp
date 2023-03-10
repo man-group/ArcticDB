@@ -25,7 +25,7 @@ static const StreamId compaction_id {CompactionId};
                     SYMBOL_LIST_RUNTIME_LOG("Got lock");
                     OnExit on_exit([&, store = store]() { lock.unlock(store); });
                     write_symbols(store, symbols, compaction_id, creation_ts).get();
-                    delete_keys(store, all_keys).get();
+                    delete_keys(store, all_keys);
                 } else {
                     SYMBOL_LIST_RUNTIME_LOG("Not writing symbols as another write is in progress");
                 }
@@ -64,7 +64,7 @@ static const StreamId compaction_id {CompactionId};
                 write_symbols(store, symbols, compaction_id, symbol_keys.rbegin()->creation_ts()).get();
 
 
-                delete_keys(store, all_symbols).get();
+                delete_keys(store, all_symbols);
                 return symbols;
             } else {
                 SYMBOL_LIST_RUNTIME_LOG("Didn't get lock, not compacting");
@@ -214,14 +214,13 @@ static const StreamId compaction_id {CompactionId};
         return output;
     }
 
-    folly::Future<std::vector<Store::RemoveKeyResultType>> SymbolList::delete_keys(
+    void SymbolList::delete_keys(
             std::shared_ptr<Store> store, const KeyVector& lists) {
         std::vector<VariantKey> vars;
         vars.reserve(lists.size());
         for(const auto& atom_key: lists)
             vars.emplace_back(VariantKey{atom_key});
-
-        return store->remove_keys(vars);
+        store->remove_keys(vars).get();
     }
 
     std::optional<SymbolList::KeyVector::difference_type> SymbolList::last_compaction(const KeyVector& keys) {

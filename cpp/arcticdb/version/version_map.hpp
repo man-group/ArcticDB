@@ -390,7 +390,7 @@ public:
                      [](const auto& k){return is_index_or_tombstone(k);});
 
         update_version_key(store, *parent, index_keys_compacted, stream_id);
-        store->remove_keys(version_keys_compacted);
+        store->remove_keys(version_keys_compacted).get();
 
         new_entry->keys_.erase(std::remove_if(parent + 1,
                 std::end(new_entry->keys_),

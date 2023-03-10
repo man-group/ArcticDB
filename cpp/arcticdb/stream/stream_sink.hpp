@@ -116,7 +116,7 @@ struct StreamSink {
     virtual RemoveKeyResultType remove_key_sync(
         const entity::VariantKey &key, storage::RemoveOpts opts = storage::RemoveOpts{}) = 0;
 
-    virtual std::vector<RemoveKeyResultType> remove_keys(
+    [[nodiscard]] virtual folly::Future<std::vector<RemoveKeyResultType>> remove_keys(
         const std::vector<entity::VariantKey> &keys, storage::RemoveOpts opts = storage::RemoveOpts{}) = 0;
 
     virtual timestamp current_timestamp() = 0;
