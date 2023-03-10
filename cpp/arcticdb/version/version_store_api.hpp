@@ -273,7 +273,7 @@ class PythonVersionStore : public LocalVersionedEngine {
     void force_delete_symbol(const StreamId& stream_id);
 
     void _clear_symbol_list_keys();
-    void _refresh_symbol_list();
+    void reload_symbol_list();
     void _compact_version_map(const StreamId& id);
     void compact_library(size_t batch_size);
 

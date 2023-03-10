@@ -1022,6 +1022,38 @@ def test_segment_slicing(moto_s3_uri_incl_bucket):
     assert num_data_segments == math.ceil(rows / rows_per_segment) * math.ceil(columns / columns_per_segment)
 
 
+def test_reload_symbol_list(moto_s3_uri_incl_bucket, boto_client):
+    def get_symbol_list_keys():
+        keys = [d["Key"] for d in boto_client.list_objects(Bucket=test_bucket)["Contents"] if d["Key"].startswith(lib_name)]
+        symbol_list_keys = []
+        for key in keys:
+            path_components = key.split("/")
+            if path_components[1] == "sl":
+                symbol_list_keys.append(path_components[2])
+        return symbol_list_keys
+
+    test_bucket = sorted(boto_client.list_buckets()["Buckets"], key=lambda bucket_meta: bucket_meta["CreationDate"])[
+        -1
+    ]["Name"]
+    ac = Arctic(moto_s3_uri_incl_bucket)
+    assert ac.list_libraries() == []
+
+    lib_name = "pytest_test_lib"
+
+    ac.create_library(lib_name)
+    lib = ac[lib_name]
+
+    lib.write_pickle("symbol_1", 1)
+    lib.write_pickle("symbol_2", 2)
+    assert set(lib.list_symbols()) == {"symbol_1", "symbol_2"}
+    lib.delete("symbol_1")
+    assert set(lib.list_symbols()) == {"symbol_2"}
+    assert len(get_symbol_list_keys()) == 2
+
+    lib.reload_symbol_list()
+    assert len(get_symbol_list_keys()) == 1
+
+
 if __name__ == "__main__":
     # Cheap and dirty test harness to make testing in various different Python installs easier
     uri = (

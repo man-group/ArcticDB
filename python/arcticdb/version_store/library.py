@@ -1251,6 +1251,12 @@ class Library:
             date_range=info["date_range"],
         )
 
+    def reload_symbol_list(self):
+        """
+        Forces the symbol list cache to be reloaded
+        """
+        self._nvs.version_store.reload_symbol_list()
+
     @property
     def name(self):
         """The name of this library."""
