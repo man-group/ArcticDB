@@ -1,0 +1,53 @@
+name: Docker Image for CIBuildWheel
+on:
+  workflow_dispatch:
+    inputs:
+      cibuildwheel_ver: {required: true, type: string, description: cibuildwheel full version string without the "v" prefix}
+      force_update:     {required: false, type: boolean, description: Overwrite any existing image, default: false}
+  workflow_call:
+    inputs:
+      cibuildwheel_ver: {required: true, type: string}
+      force_update:     {required: true, type: boolean}
+    outputs:
+      tag:
+        value: ${{jobs.work.outputs.tag}}
+      found_existing:
+        value: ${{jobs.work.outputs.found_existing}}
+
+run-name: v${{inputs.cibuildwheel_ver}}${{inputs.force_update && ' (Force)' || ''}}
+env:
+  output_tag: "ghcr.io/${{github.repository_owner}}/cibuildwheel_manylinux:${{inputs.cibuildwheel_ver}}"
+jobs:
+  work:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Check for existing image
+      id: find_existing
+      if: ${{! inputs.force_update}}
+      shell: bash
+      run: |
+        docker login ghcr.io -u token -p "${{secrets.GITHUB_TOKEN}}"
+        docker manifest inspect ${{env.output_tag}}
+      continue-on-error: true
+      # If  inputs.force_update, step.outcome == skipped
+      # if !inputs.force_update, step.outcome == success / failure
+      # So the remaining steps only need to be done if this step.outcome != success
+
+    - name: Checkout
+      if: steps.find_existing.outcome != 'success'
+      uses: actions/checkout@v3.3.0
+
+    - name: Build
+      if: steps.find_existing.outcome != 'success'
+      run: build_tooling/build_many_linux_image.sh
+      env:
+        cibuildwheel_ver: ${{inputs.cibuildwheel_ver}}
+
+    - name: Push
+      if: steps.find_existing.outcome != 'success'
+      run: |
+        docker login ghcr.io -u token -p "${{secrets.GITHUB_TOKEN}}"
+        docker push ${{env.output_tag}}
+    outputs:
+      tag: ${{env.output_tag}}
+      found_existing: ${{steps.find_existing.outcome}}
