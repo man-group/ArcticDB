@@ -2,3 +2,22 @@
 requires = ["setuptools", "wheel", "grpcio-tools"]
 build-backend = "setuptools.build_meta"
 
+[tool.cibuildwheel]
+before-build = "rm -rf {package}/cpp/out" # Only affects what CIBW copied into docker
+environment-pass = "ARCTIC_CMAKE_PRESET VCPKG_BINARY_SOURCES nuget_user nuget_token CMAKE_BUILD_PARALLEL_LEVEL"
+build-frontend = "build"
+test-extras = "Testing"
+
+[tool.cibuildwheel.linux]
+# See also build_many_linux_image.sh
+before-all = """
+[[ -e /etc/arcticdb_deps_installed ]] || { yum update -y && yum install -y zip \
+    openssl-devel cyrus-sasl-devel devtoolset-10-libatomic-devel libcurl-devel ; }
+cp {project}/build_tooling/avoid_oom.sh /usr/local/bin/
+{project}/build_tooling/vcpkg_caching.sh
+"""
+build = "cp*-manylinux_x86_64"
+manylinux-x86_64-image = "local_manylinux"
+
+[tool.cibuildwheel.windows]
+build = "cp*-win_amd64"
