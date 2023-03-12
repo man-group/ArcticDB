@@ -44,7 +44,7 @@ ADD sccache /usr/local/bin/
 RUN yum update -y && \
     yum install -y zip openssl-devel cyrus-sasl-devel devtoolset-10-libatomic-devel libcurl-devel && \
     rpm -Uvh --nodeps \$(repoquery --location mono-{core,web,devel,data,wcf,winfx}) && \
-    yum clean all
+    yum clean all && touch /etc/arcticdb_deps_installed
 " > Dockerfile
 
 docker build -t $output_tag .

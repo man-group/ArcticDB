@@ -1,4 +1,4 @@
-name: build-arcticdb-action
+name: Build and Test
 on:
   push:
     branches: ["**"]
@@ -12,32 +12,41 @@ on:
         options: [debug, release]
 run-name: Building ${{github.ref}} on ${{github.event_name}} by ${{github.actor}} [${{inputs.cmake_preset_type}}]
 jobs:
-  # GitHub Actions don't allow YAML node references; instead, they use the clunky "reusable workflows" files.
-  # In this case, it more convenient to have the configuration "matrix" for the build steps to be in the reusable one
-  # and this "caller" workflow passes parameters to control what is actually done.
+  # GitHub Actions don't allow YAML node references or other intra-file code reuse; instead, they use the clunky
+  # "reusable workflows" files or "composite actions" which requires a separate repository.
+  # Our build jobs share many steps and config, so instead of creating many workflow files and passing a millon params,
+  # they're mostly in one "steps" file and we control which steps are enabled by passing a "job_type".
+
+  cibw_container:
+    uses: ./.github/workflows/cibw_docker_image.yml
+    with:
+      cibuildwheel_ver: "2.12.0"
+      force_update: false
 
   leader-compile:
     # First do the C++ core compilation using one Python version to seed the compilation caches (and fail quicker)
+    needs: [cibw_container]
     uses: ./.github/workflows/build_steps.yml
     with:
       job_type: leader-compile
-      python: '["3.6"]'
       cmake_preset_type: ${{inputs.cmake_preset_type || (github.ref == 'refs/heads/master' && 'release' || 'debug') }}
+      cibw_image_tag: ${{needs.cibw_container.outputs.tag}}
 
   leader-cpp-test:
     # Compile and run the C++ tests separately concurrently with the following job
-    needs: [leader-compile]
+    needs: [leader-compile, cibw_container]
     uses: ./.github/workflows/build_steps.yml
     with:
       job_type: cpp-tests
-      python: '["3.6"]'
       cmake_preset_type: ${{inputs.cmake_preset_type || (github.ref == 'refs/heads/master' && 'release' || 'debug') }}
+      cibw_image_tag: ${{needs.cibw_container.outputs.tag}}
 
   follower:
-    # Then use the cached compilation artifacts to build other python versions concurrently
-    needs: [leader-compile]
+    # Then use the cached compilation artifacts to build other python versions concurrently in cibuildwheels
+    needs: [leader-compile, cibw_container]
     uses: ./.github/workflows/build_steps.yml
     with:
       job_type: follower
-      python: '["3.6", "3.7", "3.8", "3.9", "3.10"]'
       cmake_preset_type: ${{inputs.cmake_preset_type || (github.ref == 'refs/heads/master' && 'release' || 'debug') }}
+      cibuildwheel_ver: "2.12.0"  # Must match the cibw_container job above
+      cibw_image_tag: ${{needs.cibw_container.outputs.tag}}
