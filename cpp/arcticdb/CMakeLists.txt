@@ -31,8 +31,6 @@ find_package(wangle REQUIRED)
 find_package(zstd CONFIG REQUIRED)
 set(Zstd_LIBRARY $<IF:$<TARGET_EXISTS:zstd::libzstd_shared>,zstd::libzstd_shared,zstd::libzstd_static>)
 
-# For now, all targets including _core needs Python to compile
-find_package(Python3 COMPONENTS Development REQUIRED)
 
 if (WIN32)
     find_package(Iconv)
@@ -537,6 +535,8 @@ install(TARGETS arcticdb_ext
 
 ## Unit Tests ##
 if(${TEST})
+    find_package(Python3 COMPONENTS Interpreter Development.Embed REQUIRED)
+
     set(unit_test_srcs
             async/test/test_async.cpp
             codec/test/test_codec.cpp
@@ -599,8 +599,13 @@ if(${TEST})
             version/test/version_map_model.hpp
             )
 
+    set(EXECUTABLE_PERMS OWNER_WRITE OWNER_READ OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE) # 755
+
     add_executable(test_unit_arcticdb ${unit_test_srcs})
-    install(TARGETS test_unit_arcticdb RUNTIME DESTINATION ${CMAKE_INSTALL_PREFIX} COMPONENT Tests)
+    install(TARGETS test_unit_arcticdb RUNTIME
+                DESTINATION ${CMAKE_INSTALL_PREFIX}
+                PERMISSIONS ${EXECUTABLE_PERMS}
+                COMPONENT Tests)
 
     if (WIN32)
         target_link_libraries(test_unit_arcticdb
@@ -661,7 +666,10 @@ if(${TEST})
             version/test/rapidcheck_version_map.cpp)
 
     add_executable(arcticdb_rapidcheck_tests ${rapidcheck_srcs})
-    install(TARGETS arcticdb_rapidcheck_tests RUNTIME DESTINATION ${CMAKE_INSTALL_PREFIX} COMPONENT Tests)
+    install(TARGETS arcticdb_rapidcheck_tests RUNTIME
+                DESTINATION ${CMAKE_INSTALL_PREFIX}
+                PERMISSIONS ${EXECUTABLE_PERMS}
+                COMPONENT Tests)
 
     if(WIN32)
         target_link_libraries(arcticdb_rapidcheck_tests PUBLIC

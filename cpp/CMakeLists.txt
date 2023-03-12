@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.12) # FindPython
+cmake_minimum_required(VERSION 3.18) # FindPython Development.Module
 
 set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/CMake" ${CMAKE_MODULE_PATH})
 cmake_policy(SET CMP0048 NEW)
@@ -38,6 +38,9 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
+# Must be called before Pybind to override its outdated finding mechanism
+cmake_policy(SET CMP0094 NEW)
+find_package(Python3 COMPONENTS Interpreter Development.Module REQUIRED)
 
 add_subdirectory(third_party)
 add_subdirectory(proto)

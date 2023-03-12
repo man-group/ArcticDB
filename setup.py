@@ -82,7 +82,8 @@ class CMakeBuild(build_ext):
                 file=sys.stderr,
             )
             subprocess.check_call(["cmake", "-P", "cpp/CMake/CheckSupportsPreset.cmake"])
-            subprocess.check_call(["cmake", "--preset", preset, "-S", "cpp"])
+            subprocess.check_call(["cmake", "-DTEST=NO", "--preset", preset], cwd="cpp")
+            subprocess.check_call(["cmake", "--build", "--preset", preset], cwd="cpp")
             candidates = glob.glob(search)
 
         assert len(candidates) == 1, f"Specify {env_var} or use a single build directory. {search}={candidates}"

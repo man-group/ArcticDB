@@ -3,8 +3,9 @@ on:
   workflow_call:
     inputs:
       job_type:          {required: true, type: string, description: Usually caller job's name}
-      python:            {required: true, type: string, description: Python version array as a JSON string}
       cmake_preset_type: {required: true, type: string, description: See the synonyms param in parent workflow}
+      cibuildwheel_ver:  {required: false, type: string}
+      cibw_image_tag:    {required: true, type: string, description: As build by cibw_docker_image.yml workflow}
 
 jobs:
   compile:
@@ -12,118 +13,98 @@ jobs:
       fail-fast: false
       matrix:
         os: [linux]
-          # 20.04 has its GCC 10.3 back-ported to 18.04, so can share compiled libs with codespaces
-        python: ${{fromJSON(inputs.python)}}
+        python: ${{fromJSON(inputs.job_type == 'follower' && '["36", "37", "38", "39", "310", "311"]' || '["3.6"]')}}
+        # Follower uses CIBuildWheel format. Leader uses SemVer format.
         include:
           - os: linux
-            distro: ubuntu-20.04
+            distro: ubuntu-latest
             cmake_preset_prefix: linux
-            compiler_env: CC=gcc-10\nCXX=g++-10
+            cibw_format: "cp{0}-manylinux_x86_64"
           # Windows is not included ATM because the build would run out of disk space ¯\_(ツ)_/¯
           #- os: windows
           #  distro: windows-latest
           #  cmake_preset_prefix: windows-cl
 
-    name: ${{matrix.os}}-py${{matrix.python}}
+    name: ${{matrix.os}}-${{matrix.python}}
     runs-on: ${{matrix.distro}}
+    container: ${{ (matrix.os == 'linux' && inputs.job_type != 'follower') && inputs.cibw_image_tag || null}}
     env:
-      SCCACHE_GHA_VERSION: ${{vars.SCCACHE_GHA_VERSION || 1}} # Setting the env var enables the caching
+      SCCACHE_GHA_VERSION: ${{vars.SCCACHE_GHA_VERSION || 1}} # Setting this env var enables the caching
       CMAKE_C_COMPILER_LAUNCHER: sccache
       CMAKE_CXX_COMPILER_LAUNCHER: sccache
+      CMAKE_BUILD_PARALLEL_LEVEL: 2
       ARCTIC_CMAKE_PRESET: ${{matrix.cmake_preset_prefix}}-${{inputs.cmake_preset_type}}
+      VCPKG_BINARY_SOURCES: 'clear;nuget,github,readwrite'
+      nuget_user: ${{vars.vcpkg_nuget_user || github.repository_owner}}
+      nuget_token: ${{vars.vcpkg_nuget_token || secrets.GITHUB_TOKEN}}
+      CIBW_ENVIRONMENT_PASS_LINUX: SCCACHE_GHA_VERSION ACTIONS_CACHE_URL ACTIONS_RUNTIME_TOKEN
+        CMAKE_C_COMPILER_LAUNCHER CMAKE_CXX_COMPILER_LAUNCHER CMAKE_BUILD_PARALLEL_LEVEL
+        ARCTIC_CMAKE_PRESET VCPKG_BINARY_SOURCES nuget_user nuget_token test_output
+      CIBW_BUILD: ${{format(matrix.cibw_format, matrix.python)}}
     steps:
       - name: Checkout
         uses: actions/checkout@v3.3.0
         with:
           submodules: recursive # Just in case a dep has its own third-party deps
 
-      - name: Setup script
-        shell: bash
-        run: |
-          set -e
-          echo -e "${{matrix.compiler_env}}" >> $GITHUB_ENV
-          cd cpp/vcpkg ; git fetch --unshallow file://$VCPKG_INSTALLATION_ROOT; cd -
+      - name: Deep checkout vcpkg
+        run: cd cpp/vcpkg ; git fetch --unshallow origin master
 
-          which apt && sudo apt-get update && sudo apt-get install -y --no-install-recommends \
-            libpcre3-dev libsasl2-dev libsodium-dev libkrb5-dev ${{inputs.job_type == 'cpp-tests' && 'libcurl4-openssl-dev' || ''}}
-
-      - name: Get Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: ${{matrix.python}}
-          cache: 'pip'
-          cache-dependency-path: |
-            **/setup.cfg
-            **/requirements*.txt
-        # FUTURE: arcticdb_core and pybind needs Python to compile, but we should make it possible to do so without.
-        # Eventually, only the Python build step should reference the python version.
-
-      - name: Configure vcpkg
-        uses: lukka/run-vcpkg@v10
-        with:
-          vcpkgJsonGlob: "cpp/vcpkg.json"
-          vcpkgDirectory: ${{github.workspace}}/cpp/vcpkg
-          # We use cmake to run vcpkg install as the action author suggests
-
-      - name: Individual vcpkg caching
-        shell: bash
-        run: |
-          nuget="`which mono` `cpp/vcpkg/vcpkg fetch nuget | tail -n 1`"
-          url="https://nuget.pkg.github.com/$nuget_user/index.json"
-          $nuget sources add -source $url -storepasswordincleartext -name github -username $nuget_user -password "${{secrets.GITHUB_TOKEN}}"
-          $nuget setapikey "${{secrets.GITHUB_TOKEN}}" -source $url
-        env:
-          nuget_user: ${{vars.vcpkg_nuget_user || github.repository_owner}}
-
-      - name: Get sccache
+      - name: Configure sccache
         uses: Xuanwo/sccache-action@c94e27bef21ab3fb4a5152c8a878c53262b4abb0 # FUTURE: use mozilla/ once it's merged
         with:
           version: "v0.4.0-pre.8"
 
+      # ========================= Leader steps =========================
+      - name: Prepare C++ compilation env
+        if: inputs.job_type != 'follower'
+        shell: bash
+        run: |
+          . build_tooling/vcpkg_caching.sh
+          yum update -y && yum install -y python3-devel
+        # The Python shipped with manylinux is missing the shared library necessary to build the tests
+
       - name: CMake compile
+        if: inputs.job_type != 'follower'
         uses: lukka/run-cmake@v10
         with:
           cmakeListsTxtPath: ${{github.workspace}}/cpp/CMakeLists.txt
           configurePreset: ${{env.ARCTIC_CMAKE_PRESET}}
+          configurePresetAdditionalArgs: "['-DPython3_ROOT_DIR=/usr/lib64', '-DPython3_EXECUTABLE=/usr/bin/python3']"
           buildPreset: ${{env.ARCTIC_CMAKE_PRESET}}
-        env:
-          CMAKE_BUILD_PARALLEL_LEVEL: 2
-          VCPKG_BINARY_SOURCES: 'clear;nuget,github,readwrite'
-
-      - name: Python build
-        run: python -m pip install -U pip && python -m pip install -e .
 
       - name: Compile C++ tests
         if: inputs.job_type == 'cpp-tests'
         run: cd cpp; cmake --build --preset $ARCTIC_CMAKE_PRESET --target install
 
-      - name: c++ Rapidcheck
+      - name: C++ Rapidcheck
         if: inputs.job_type == 'cpp-tests'
-        run: |
-          chmod +x cpp/out/install/*test*
-          cpp/out/install/arcticdb_rapidcheck_tests
+        run: cpp/out/install/arcticdb_rapidcheck_tests
 
       - name: C++ unit tests
         if: inputs.job_type == 'cpp-tests'
         run: "cpp/out/install/test_unit_arcticdb --gtest_filter=-TestNfsBackedStorage.*:TestS3Storage.*"
 
-      - name: Python tests
+      # ========================= Follower (CIBW) steps =========================
+      - name: Python build
         if: inputs.job_type == 'follower'
-        shell: bash
         run: |
-          set -e
-          python -m pip install -e .[Testing]
-          python -m pip install pytest-split
-          cp .github/workflows/pytest-durations.json cpp/out/
-          function worker() {
-            python -m pytest -v --show-capture=no --log-file=cpp/out/pytest-logger.$1.log \
-              --splits 2 --group $1 --durations-path=cpp/out/pytest-durations.json --store-durations \
-              python/tests \
-              | sed -r "s#^python/tests/([^/]+).*/([^/]+\.py)|^python/tests/|^#$1: \1 \2#" &
-          }
-          worker 1
-          worker 2
+          docker login ghcr.io -u token -p "${{secrets.GITHUB_TOKEN}}"
+          pipx run cibuildwheel==${{inputs.cibuildwheel_ver}} --output-dir /tmp/wheel/
+        env:
+          CIBW_MANYLINUX_X86_64_IMAGE: ${{inputs.cibw_image_tag}}
+          CIBW_TEST_COMMAND: "mkdir $test_output && python -m pytest --show-capture=no
+            --log-file=$test_output/pytest-logger.log {project}/python/tests"
+          test_output: /host/${{github.workspace}}/cpp/out
 
+      - name: Upload wheel
+        if: inputs.job_type == 'follower'
+        uses: actions/upload-artifact@v3
+        with:
+          name: wheel-${{env.CIBW_BUILD}}
+          path: /tmp/wheel/*.whl
+
+      # ========================= Common =========================
       - name: Upload build metadata
         uses: actions/upload-artifact@v3
         if: always()

@@ -43,13 +43,17 @@
         "CMAKE_BUILD_TYPE": "Release"
       }
     },
+
     {
       "name": "linux-debug",
       "displayName": "Linux x64 Debug",
       "inherits": "common",
       "generator": "Unix Makefiles",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug"
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_MAKE_PROGRAM": "make",
+        "CMAKE_C_COMPILER": "gcc",
+        "CMAKE_CXX_COMPILER": "g++"
       },
       "condition": {
         "type": "equals",
@@ -66,25 +70,9 @@
     }
   ],
   "buildPresets": [
-    {
-      "name": "windows-cl-debug",
-      "configurePreset": "windows-cl-debug",
-      "targets": "arcticdb_ext"
-    },
-    {
-      "name": "windows-cl-release",
-      "configurePreset": "windows-cl-release",
-      "targets": "arcticdb_ext"
-    },
-    {
-      "name": "linux-debug",
-      "configurePreset": "linux-debug",
-      "targets": "arcticdb_ext"
-    },
-    {
-      "name": "linux-release",
-      "configurePreset": "linux-release",
-      "targets": "arcticdb_ext"
-    }
+    {"name": "windows-cl-debug",   "configurePreset": "windows-cl-debug",   "targets": "arcticdb_ext" },
+    {"name": "windows-cl-release", "configurePreset": "windows-cl-release", "targets": "arcticdb_ext" },
+    {"name": "linux-debug",        "configurePreset": "linux-debug",        "targets": "arcticdb_ext" },
+    {"name": "linux-release",      "configurePreset": "linux-release",      "targets": "arcticdb_ext" }
   ]
 }
