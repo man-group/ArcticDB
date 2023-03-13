@@ -4,7 +4,7 @@
 
 ---
 
-**ArcticDB** is a high performance, serverless Dataframe database for the modern cloud. Launched in February 2023, it is the successor to [Arctic 1.0](https://github.com/man-group/arctic). ArcticDB offers the same intuitive Python-centric API, with a C++ data-processing and compression engine that is compatible with  object stores such as Amazon S3.
+**ArcticDB** is a high performance, serverless Dataframe database built for the Python Data Science ecosystem. Launched in February 2023, it is the successor to [Arctic](https://github.com/man-group/arctic). ArcticDB offers an intuitive Python-centric API, with a fast C++ data-processing and compression engine that is compatible with object stores such as AWS S3, making it suitable for public cloud and on-premesis deployments. 
 
 ---
 
@@ -16,22 +16,22 @@
 
 ArcticDB allows you to:
 
- * Work with familiar data types and integrate effortlessly with the Python datascience ecosystem - Pandas in, Pandas out
+ * Use standard data types and integrate effortlessly with the Python datascience ecosystem - Pandas in, Pandas out
  * Efficiently index and query time-series data
  * Store tiled dataframes, for fast selection of rows and columns
- * Travel back in time to see previous versions of a table, and work with customizable snapshots of the database
+ * Travel back in time to see previous versions of your data and create customizable snapshots of the database
  * Append and update data without being constrained by the existing schema
  * Handle sparse values and missing columns
  * Filter, aggregate and create new columns on-the-fly with a Pandas-like syntax
- * Use parallel and batch operations to take advantage of C++ multithreading 
+ * Accelerate analytics though concurrency in the C++ data-processing engine
 
-ArcticDB handles data that is big in both dimensions, so a 20-year history of more than 400,000 unique securities can be stored in a single table. Each table is maintained as a separate entity with no shared data, so it scales horizontally across tables with no bottlenecks, up to the capacity of your network and storage. 
+ArcticDB handles data that is big in both row count and column count, so a 20-year history of more than 400,000 unique securities can be stored in a single *symbol*. Each *symbol* is maintained as a separate entity with no shared data which means ArcticDB can scale horizontally across *symbols", maximising the peformance potential of your compute, storage and network.
 
-ArcticDB is designed from the outset to be resilient; there is no single point of failure, and persistent data structures in the storage mean that once a version of a table has been written, it can never be corrupted by subsequent updates. Pulling compressed data directly from the storage to the client means that there is no server to overload, so your data is always available when you need it.
+ArcticDB is designed from the outset to be resilient; there is no single point of failure, and persistent data structures in the storage mean that once a version of a *symbol* has been written, it can never be corrupted by subsequent updates. Pulling compressed data directly from  storage to the client means that there is no server to overload, so your data is always available when you need it.
 
 ## Quickstart
 
-Install the ArcticDB C++ module:
+Install ArcticDB:
 
 ```bash
 $ pip install arcticdb
@@ -79,8 +79,6 @@ Get the library, write some data to it, and read it back:
 ```
 
 To find out more about working with data, visit our [docs](https://github.com/man-group/ArcticDB/blob/docs/README.md)
-
-For more information, please contact us at [arcticdb@man.com](mailto:ArcticDB@man.com).
 
 ---
 
