@@ -11,38 +11,37 @@ include(CTest)
 include(GoogleTest)
 include(GenerateExportHeader)
 
-find_package(Threads REQUIRED)
-find_package(Zstd REQUIRED)
-find_package(LZ4 REQUIRED)
+find_package(aws-cpp-sdk-s3 CONFIG REQUIRED)
+find_package(Boost REQUIRED)
+find_package(double-conversion REQUIRED)
 find_package(fmt REQUIRED)
 find_package(Folly REQUIRED)
+find_package(Fizz REQUIRED)
 find_package(GLog REQUIRED)
 find_package(Gflags REQUIRED)
-find_package(Boost REQUIRED)
+find_package(Libevent CONFIG REQUIRED)
+find_package(LZ4 REQUIRED)
+find_package(mongocxx REQUIRED)
+find_library(Pcre_LIBRARY NAMES pcre PATHS /usr/local/lib/libpcre.a REQUIRED)
 find_package(prometheus-cpp CONFIG REQUIRED)
+find_package(protobuf REQUIRED)
+find_library(Sodium_LIBRARY NAMES sodium libsodium REQUIRED)
+find_package(Threads REQUIRED)
+find_package(wangle REQUIRED)
+find_package(zstd CONFIG REQUIRED)
+set(Zstd_LIBRARY $<IF:$<TARGET_EXISTS:zstd::libzstd_shared>,zstd::libzstd_shared,zstd::libzstd_static>)
+
+# For now, all targets including _core needs Python to compile
+find_package(Python3 COMPONENTS Development REQUIRED)
 
 if (WIN32)
-    find_package(Fizz REQUIRED)
-    find_package(protobuf REQUIRED)
-    find_package(wangle REQUIRED)
-    find_package(Zstd REQUIRED)
-    find_package(double-conversion REQUIRED)
     find_package(Iconv)
-    find_package(mongocxx REQUIRED)
-    find_package(bsoncxx REQUIRED)
-    find_package(aws-cpp-sdk-s3 CONFIG REQUIRED)
-    find_package(RdKafka REQUIRED)
     find_package(unofficial-sodium REQUIRED)
-    find_package(unofficial-pcre REQUIRED)
 else ()
-    find_package(libmongocxx-static REQUIRED)
-    find_package(libbsoncxx-static REQUIRED)
-    set(CMAKE_FIND_DEBUG_MODE TRUE)
-    find_package(AWSSDK REQUIRED COMPONENTS s3)
-    set(CMAKE_FIND_DEBUG_MODE FALSE)
+    find_library(Sasl2_LIBRARY NAMES sasl2 libsasl2 PATHS /usr/local/lib/libsasl2.a REQUIRED)
 endif ()
 
-set(BITMAGIC_INCLUDE_DIRS /usr/local/include)
+find_path(BITMAGIC_INCLUDE_DIRS "bitmagic/bm.h")
 
 link_directories(
         /usr/local/lib64
@@ -179,7 +178,6 @@ set(arcticdb_srcs
         storage/mongo/mongo_client.hpp
         storage/mongo/mongo_instance.hpp
         storage/mongo/mongo_storage.hpp
-        storage/storage_options.hpp
         storage/s3/nfs_backed_storage.hpp
         storage/s3/nfs_backed_storage-inl.hpp
         storage/s3/s3_client_accessor.hpp
@@ -188,6 +186,7 @@ set(arcticdb_srcs
         storage/s3/s3_storage_tool-inl.hpp
         storage/s3/s3_utils.hpp
         storage/storage_factory.hpp
+        storage/storage_options.hpp
         storage/storage.hpp
         storage/store.hpp
         storage/variant_storage.hpp
@@ -352,81 +351,52 @@ if (NOT WIN32)
     endif()
 endif()
 
+
+set (arcticdb_core_libraries
+        pybind11::module
+        arcticdb_proto
+        prometheus-cpp::push
+        prometheus-cpp::pull
+        msgpackc-cxx
+        ${standard_libraries}
+        fmt::fmt
+        protobuf::libprotobuf-lite
+        protobuf::libprotobuf
+        xxhash_static
+        lz4::lz4
+        ${Zstd_LIBRARY}
+        lmdb
+        spdlog::spdlog
+        wangle::wangle
+        fizz::fizz
+        Folly::folly
+        glog::glog
+        gflags
+        double-conversion::double-conversion
+        remotery_static
+        libevent::core
+        ${Pcre_LIBRARY}
+        ${Sodium_LIBRARY}
+        mongo::mongocxx_static
+        mongo::bsoncxx_static
+        aws-cpp-sdk-core
+        aws-cpp-sdk-s3
+        )
+
 if (WIN32)
-    set (arcticdb_core_libraries
-            pybind11::module
-            arcticdb_proto
-            prometheus-cpp::push
-            prometheus-cpp::pull
-            msgpackc-cxx
-            RdKafka::rdkafka++
-            RdKafka::rdkafka
-            ${standard_libraries}
-            fmt::fmt
-            protobuf::libprotobuf-lite
-            protobuf::libprotobuf
-            xxhash_static
-            lz4::lz4
-            lmdb
-            spdlog::spdlog
-            wangle::wangle
-            fizz::fizz
-            Folly::folly
-            glog::glog
-            gflags
-            double-conversion::double-conversion
-            remotery_static
-            libevent::core
-            unofficial::pcre::pcre
-            unofficial-sodium::sodium
-            mongo::mongocxx_static
-            mongo::bsoncxx_static
-            aws-cpp-sdk-core
-            aws-cpp-sdk-s3
+    list (APPEND arcticdb_core_libraries
             Iconv::Iconv
-            Threads::Threads # comes last for weakreference resolution pthread_atexit in folly
+            Python3::Python
             )
-    if (NOT BUILD_PYTHON_VERSION)
-        find_package(Python3 COMPONENTS Development REQUIRED)
-        set(BUILD_PYTHON_VERSION 3.10)
-        list (APPEND arcticdb_core_libraries Python3::Python)
-    endif ()
 else ()
-    set (arcticdb_core_libraries
-            pybind11::module
-            arcticdb_proto
-            prometheus-cpp::push
-            prometheus-cpp::pull
-            msgpackc-cxx
-            rdkafka++
-            rdkafka
-            ${standard_libraries}
+    list (APPEND arcticdb_core_libraries
             stdc++fs
             dl
-            fmt::fmt
-            protobuf-lite
-            protobuf
-            xxhash_static
-            zstd
-            lz4
-            lmdb
-            spdlog
-            wangle
-            fizz
-            folly
-            glog
-            gflags
-            double-conversion
-            remotery_static
-            boost_context
-            event_core
-            libsodium.a
-            /usr/lib64/libiberty.a
-            /usr/local/lib/libsasl2.a
-            /usr/local/lib/libpcre.a
-            Threads::Threads # comes last for weakreference resolution pthread_atexit in folly
+            ${Sasl2_LIBRARY}
             )
 endif ()
+
+list (APPEND arcticdb_core_libraries Threads::Threads) # comes last for weakreference resolution pthread_atexit in folly
 
 if (SSL_LINK)
     message("Linking against SSL")
@@ -515,7 +485,14 @@ if (NOT WIN32)
 endif ()
 
 ## arcticdb_ext python module
-add_library(arcticdb_ext MODULE python/python_module.cpp python/arctic_version.cpp python/arctic_version.hpp python/reader.hpp python/python_module.hpp python/adapt_read_dataframe.hpp)
+pybind11_add_module(arcticdb_ext MODULE
+        python/python_module.cpp
+        python/arctic_version.cpp
+        python/arctic_version.hpp
+        python/reader.hpp
+        python/python_module.hpp
+        python/adapt_read_dataframe.hpp
+        )
 
 set (additional_link_flags "")
 if (STRIP_BUILDS)
@@ -554,8 +531,12 @@ set_target_properties(arcticdb_ext PROPERTIES
         PREFIX "${PYTHON_MODULE_PREFIX}"
         )
 
+install(TARGETS arcticdb_ext
+        LIBRARY DESTINATION ${CMAKE_INSTALL_PREFIX} COMPONENT Python_Lib
+        RUNTIME DESTINATION ${CMAKE_INSTALL_PREFIX} COMPONENT Python_Lib)
+
 ## Unit Tests ##
-if(TEST)
+if(${TEST})
     set(unit_test_srcs
             async/test/test_async.cpp
             codec/test/test_codec.cpp
@@ -619,6 +600,7 @@ if(TEST)
             )
 
     add_executable(test_unit_arcticdb ${unit_test_srcs})
+    install(TARGETS test_unit_arcticdb RUNTIME DESTINATION ${CMAKE_INSTALL_PREFIX} COMPONENT Tests)
 
     if (WIN32)
         target_link_libraries(test_unit_arcticdb
@@ -627,19 +609,29 @@ if(TEST)
                 GTest::gtest
                 GTest::gmock
                 )
+
+        # Fix gtest/folly unistd conflict until one of them fixes it. There's another copy for rapidtest
+        target_compile_options(test_unit_arcticdb PRIVATE /FI "util/test/gtest.hpp")
     else()
+        set(COMMON_PUBLIC_TEST_LIBRARIES
+                arcticdb_core_static
+                atomic
+                GTest::gtest
+                GTest::gmock
+                Python3::Python
+                curl
+                krb5support
+                k5crypto
+                )
+
+        find_library(Gcov_LIBRARY gcov)
+        if (NOT(${Gcov_LIBRARY} EQUAL "Gcov_LIBRARY-NOTFOUND"))
+            list(APPEND common_public_test_libraries ${Gcov_LIBRARY})
+        endif()
+
         target_link_libraries(test_unit_arcticdb
             PUBLIC
-            #tsan
-            arcticdb_core_static
-            atomic
-            gtest
-            gmock
-            gcov
-            ${PYTHON_LIBRARY_SO}
-            curl
-            krb5support
-            k5crypto
+            ${COMMON_PUBLIC_TEST_LIBRARIES}
             PRIVATE
             ${LIBMONGOCXX_STATIC_LIBRARIES_NO_SASL}
             ${LIBBSONCXX_STATIC_LIBRARIES}
@@ -669,6 +661,7 @@ if(TEST)
             version/test/rapidcheck_version_map.cpp)
 
     add_executable(arcticdb_rapidcheck_tests ${rapidcheck_srcs})
+    install(TARGETS arcticdb_rapidcheck_tests RUNTIME DESTINATION ${CMAKE_INSTALL_PREFIX} COMPONENT Tests)
 
     if(WIN32)
         target_link_libraries(arcticdb_rapidcheck_tests PUBLIC
@@ -682,21 +675,14 @@ if(TEST)
                 ${LIBBSONCXX_STATIC_LIBRARIES}
                 ${AWSSDK_LINK_LIBRARIES}
                 )
+
+        target_compile_options(arcticdb_rapidcheck_tests PRIVATE /FI "util/test/gtest.hpp")
     else()
-        target_link_libraries(arcticdb_rapidcheck_tests PUBLIC
-            #tsan
-            arcticdb_core_static
-            atomic
-            gtest
-            gmock
-            gcov
+        target_link_libraries(arcticdb_rapidcheck_tests
+            PUBLIC
+            ${COMMON_PUBLIC_TEST_LIBRARIES}
             rapidcheck
             rapidcheck_gtest
-            ${PYTHON_LIBRARY_SO}
-            curl
-            krb5support
-            krb5
-            k5crypto
             PRIVATE
             ${LIBMONGOCXX_STATIC_LIBRARIES_NO_SASL}
             ${LIBBSONCXX_STATIC_LIBRARIES}
@@ -709,27 +695,4 @@ if(TEST)
     )
 
     gtest_discover_tests(arcticdb_rapidcheck_tests)
-
-    if (NOT WIN32)
-        install(TARGETS test_unit_arcticdb
-            LIBRARY DESTINATION /opt/arcticdb/cpp/tests/
-            RUNTIME DESTINATION /opt/arcticdb/cpp/tests/)
-
-        install(TARGETS arcticdb_rapidcheck_tests
-            LIBRARY DESTINATION /opt/arcticdb/cpp/tests/
-            RUNTIME DESTINATION /opt/arcticdb/cpp/tests/)
-    endif()
-endif()
-
-if (NOT WIN32)
-    install(FILES
-        $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>/arcticdb_core_export.h
-        DESTINATION /opt/arcticdb/build/public/)
-
-    install(TARGETS arcticdb_core
-            LIBRARY DESTINATION /opt/arcticdb/build/lib/lib.linux-x86_64)
-
-    install(TARGETS arcticdb_ext
-            LIBRARY DESTINATION /opt/arcticdb/build/lib.linux-x86_64-${BUILD_PYTHON_VERSION}
-            RUNTIME DESTINATION /opt/arcticdb/build/lib.linux-x86_64-${BUILD_PYTHON_VERSION})
 endif()

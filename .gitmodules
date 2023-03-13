@@ -16,3 +16,6 @@
 [submodule "cpp/third_party/rapidcheck"]
 	path = cpp/third_party/rapidcheck
 	url = https://github.com/emil-e/rapidcheck.git
+[submodule "cpp/vcpkg"]
+	path = cpp/vcpkg
+	url = https://github.com/microsoft/vcpkg.git

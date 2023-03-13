@@ -38,22 +38,6 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
-# BUILD_PYTHON_VERSION is set by the Python build hooks regardless of whether building an internal egg or an external
-# wheel. If invoking CMake directly however (which would normally be the case in an IDE) BUILD_PYTHON_VERSION will not
-# be set. In this case. we'll set BUILD_PYTHON_VERSION as well as 4 other required build variables to sane default
-# values.
-if(NOT BUILD_PYTHON_VERSION AND NOT WIN32)
-    message("Resetting Python include locations...")
-    # /default-medusa-venv is symlinked to /default-pegasus-venv
-    set(ENV_BASE_DIR "/default-medusa-venv")
-
-    set(BUILD_PYTHON_VERSION 3.6)
-
-    set(PYTHON_LIBRARIES "${ENV_BASE_DIR}/lib")
-    set(PYTHON_EXECUTABLE "${ENV_BASE_DIR}/bin/python")
-    set(PYTHON_INCLUDE_DIRS "${ENV_BASE_DIR}/include/python${BUILD_PYTHON_VERSION}m")
-    set(PYTHON_LIBRARY_SO "${ENV_BASE_DIR}/lib/libpython${BUILD_PYTHON_VERSION}m.so")
-endif()
 
 add_subdirectory(third_party)
 add_subdirectory(proto)

@@ -1,0 +1,90 @@
+{
+  "version": 3,
+  "configurePresets": [
+    {
+      "name": "common",
+      "hidden": true,
+      "description": "OS-agnostic config",
+      "toolchainFile": "vcpkg/scripts/buildsystems/vcpkg.cmake",
+      "binaryDir": "${sourceDir}/out/${presetName}-build",
+      "installDir": "${sourceDir}/out/install"
+    },
+    {
+      "name": "windows-cl-debug",
+      "displayName": "Windows x64 Debug Cl",
+      "description": "Target Windows with the Visual Studio development environment.",
+      "inherits": "common",
+      "generator": "Ninja",
+      "architecture": {
+        "value": "x64",
+        "strategy": "external"
+      },
+      "toolset": {
+        "value": "host=x64",
+        "strategy": "external"
+      },
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_C_COMPILER": "cl",
+        "CMAKE_CXX_COMPILER": "cl",
+        "VCPKG_TARGET_TRIPLET": "x64-windows-static-md"
+      },
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      }
+    },
+    {
+      "name": "windows-cl-release",
+      "displayName": "Windows x64 Release Cl",
+      "inherits": "windows-cl-debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    {
+      "name": "linux-debug",
+      "displayName": "Linux x64 Debug",
+      "inherits": "common",
+      "generator": "Unix Makefiles",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      },
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Linux"
+      }
+    },
+    {
+      "name": "linux-release",
+      "inherits": "linux-debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "windows-cl-debug",
+      "configurePreset": "windows-cl-debug",
+      "targets": "arcticdb_ext"
+    },
+    {
+      "name": "windows-cl-release",
+      "configurePreset": "windows-cl-release",
+      "targets": "arcticdb_ext"
+    },
+    {
+      "name": "linux-debug",
+      "configurePreset": "linux-debug",
+      "targets": "arcticdb_ext"
+    },
+    {
+      "name": "linux-release",
+      "configurePreset": "linux-release",
+      "targets": "arcticdb_ext"
+    }
+  ]
+}

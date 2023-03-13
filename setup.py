@@ -1,9 +1,10 @@
 import os
-import os.path as osp
 import subprocess
 import sys
-from distutils.core import Command
-from setuptools import setup
+import glob
+import platform
+import shutil
+from setuptools import setup, Command
 from setuptools import Extension, find_packages
 from setuptools.command.build_ext import build_ext
 from setuptools.command.build_py import build_py
@@ -11,77 +12,44 @@ from setuptools.command.develop import develop
 from wheel.bdist_wheel import bdist_wheel
 
 
-class ProtobufFiles(object):
-    def __init__(
-        self,
-        include_dir="cpp/proto",  # -I
-        python_out_dir="python",  # --python_out
-        grpc_out_dir=None,  # --grpc_python_out
-        sources=[],  # arguments of proto
-    ):
-        self.include_dir = include_dir
-        self.sources = sources
-        self.python_out_dir = python_out_dir
-        self.grpc_out_dir = grpc_out_dir
-
-    def compile(self):
-        # import deferred here to avoid blocking installation of dependencies
-        cmd = ["-mgrpc_tools.protoc"]
-
-        cmd.append("-I{}".format(self.include_dir))
-
-        cmd.append("--python_out={}".format(self.python_out_dir))
-        if self.grpc_out_dir:
-            cmd.append("--grpc_python_out={}".format(self.grpc_out_dir))
-
-        cmd.extend(self.sources)
-
-        cmd_shell = "{} {}".format(sys.executable, " ".join(cmd))
-        print('Running "{}"'.format(cmd_shell))
-        subprocess.check_output(cmd_shell, shell=True)
-
-
-proto_files = ProtobufFiles(sources=["cpp/proto/arcticc/pb2/*.proto"])
-
-
-def compile_protos():
-    print("\nProtoc compilation")
-    proto_files.compile()
-    if not os.path.exists("python/arcticc"):
-        raise RuntimeError("Unable to locate Protobuf module during compilation.")
-    else:
-        open("python/arcticc/__init__.py", "a").close()
-        open("python/arcticc/pb2/__init__.py", "a").close()
-
-
 class CompileProto(Command):
     description = '"protoc" generate code _pb2.py from .proto files'
-
-    user_options = []
+    user_options = [("grpc_out_dir", None, "See the docs of grpc_tools.protoc")]
 
     def initialize_options(self):
-        pass
+        self.grpc_out_dir = None
 
     def finalize_options(self):
         pass
 
     def run(self):
-        compile_protos()
+        print("\nProtoc compilation")
+        cmd = [sys.executable, "-mgrpc_tools.protoc", "-Icpp/proto", "--python_out=python"]
+
+        if self.grpc_out_dir:
+            cmd.append(f"--grpc_python_out={self.grpc_out_dir}")
+
+        cmd.extend(glob.glob("cpp/proto/arcticc/pb2/*.proto"))
+
+        print(f"Running {cmd}")
+        subprocess.check_output(cmd)
+        if not os.path.exists("python/arcticc"):
+            raise RuntimeError("Unable to locate Protobuf module during compilation.")
+        else:
+            open("python/arcticc/__init__.py", "a").close()
+            open("python/arcticc/pb2/__init__.py", "a").close()
 
 
 class CompileProtoAndBuild(build_py):
     def run(self):
-        compile_protos()
+        self.run_command("protoc")
         build_py.run(self)
 
 
 class DevelopAndCompileProto(develop):
     def run(self):
         develop.run(self)
-        compile_protos()  # compile after updating the deps
-        if not os.path.islink("python/arcticdb_ext.so") and os.path.exists("python"):
-            print("Creating symlink for compiled arcticdb module in python...")
-            os.symlink("../arcticdb_ext.so", "python/arcticdb_ext.so")
+        self.run_command("protoc")  # compile after updating the deps
 
 
 class CMakeExtension(Extension):
@@ -96,45 +64,33 @@ class CMakeBuild(build_ext):
             self.build_extension(ext)
 
     def build_extension(self, ext):
-        self.compile(self.build_temp)
+        dest = self.get_ext_fullpath(ext.name)
+        print(f"Destination: {dest}")
 
-        so_file = f"{ext.name}.so"
-        try:
-            os.remove(so_file)
-        except:
-            pass
+        env_var = "ARCTIC_CMAKE_PRESET" # From CMakePresets.json
+        preset = os.getenv(env_var, "*")
+        if preset == "skip":
+            return
+        search = f"cpp/out/{preset}-build"
+        candidates = glob.glob(search)
+        if not candidates:
+            if preset == "*":
+                suffix = "-debug" if self.debug else "-release"
+                preset = ("windows-cl" if platform.system() == "Windows" else platform.system().lower()) + suffix
+            print(
+                f"Did not find build directory with '{search}'. Will configure and build using cmake preset {preset}",
+                file=sys.stderr,
+            )
+            subprocess.check_call(["cmake", "-P", "cpp/CMake/CheckSupportsPreset.cmake"])
+            subprocess.check_call(["cmake", "--preset", preset, "-S", "cpp"])
+            candidates = glob.glob(search)
 
-        if not osp.exists(so_file):
-            extension_file = osp.join(os.path.dirname(self.get_ext_fullpath(ext.name)), so_file)
+        assert len(candidates) == 1, f"Specify {env_var} or use a single build directory. {search}={candidates}"
+        subprocess.check_call(["cmake", "--install", candidates[0], "--component", "Python_Lib"])
 
-            print(f"Creating symlink from '{so_file}' to '{extension_file}'")
-            os.symlink(extension_file, so_file)
-
-    def compile(self, build_dir):
-        env = {
-            "TERM": "linux",  # to get colors
-            "PATH": "/opt/gcc/8.2.0/bin:/opt/cmake/bin:/usr/bin:/usr/local/bin:/bin:/sbin:/usr/sbin:/usr/local/sbin",
-            "CXX": "/opt/gcc/8.2.0/bin/g++",
-            "CC": "/opt/gcc/8.2.0/bin/gcc",
-            "CMAKE_ROOT": "/opt/cmake/share/cmake-3.12",
-        }
-        process_args = [
-            "cmake",
-            "-DCMAKE_DEPENDS_USE_COMPILER=FALSE",
-            "-G",
-            "CodeBlocks - Unix Makefiles",
-            "/opt/arcticdb/cpp"
-        ]
-
-        if not osp.exists(build_dir):
-            os.makedirs(build_dir, mode=0o750)
-        cwd = os.getcwd()
-        try:
-            os.chdir(build_dir)
-            subprocess.check_call(process_args, env=env)
-            subprocess.check_call(["make", "-j", "{:d}".format(os.cpu_count()), "install"], env=env)
-        finally:
-            os.chdir(cwd)
+        source = "cpp/out/install/" + os.path.basename(dest)
+        print(f"Moving {source} -> {dest}")
+        shutil.move(source, dest)
 
 
 if __name__ == "__main__":
