@@ -377,7 +377,7 @@ VersionedItem LocalVersionedEngine::update_internal(
             version_map()->write_version(store(), versioned_item.key_);
             return versioned_item;
         } else {
-            util::raise_rte("Cannot append to non-existent stream {}", stream_id);
+            util::raise_rte("Cannot update non-existent stream {}", stream_id);
         }
     }
 }
