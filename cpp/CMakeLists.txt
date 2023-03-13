@@ -20,7 +20,6 @@ else()
     set(CMAKE_CXX_FLAGS "-Wall -Wextra")
     set(CMAKE_CXX_FLAGS_DEBUG "-ggdb")
     set(CMAKE_CXX_FLAGS_RELEASE "-O3")
-    set(STATIC_SYS_LIBS  -static-libgcc -static-libstdc++)
 endif()
 
 IF(DEFINED ENV{CMAKE_BUILD_TYPE})
@@ -38,13 +37,24 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
+
+if (${CMAKE_TOOLCHAIN_FILE} MATCHES "vcpkg.cmake$")
+    message(STATUS "CMAKE_TOOLCHAIN_FILE is set to vcpkg, so will use find_package to find the libraries it build")
+    set(ARCTICDB_USING_VCPKG ON)
+endif()
+
+# Must be called before Pybind to override its outdated finding mechanism
+if (ARCTICDB_USING_VCPKG)
+    cmake_minimum_required(VERSION 3.18) # For finding Development.Module below
+    find_package(Python3 COMPONENTS Interpreter Development.Module REQUIRED)
+    set(ARCTICDB_PYTHON_MODULE Python3::Module)
+
+elseif(NOT BUILD_PYTHON_VERSION)
 # BUILD_PYTHON_VERSION is set by the Python build hooks regardless of whether building an internal egg or an external
 # wheel. If invoking CMake directly however (which would normally be the case in an IDE) BUILD_PYTHON_VERSION will not
 # be set. In this case. we'll set BUILD_PYTHON_VERSION as well as 4 other required build variables to sane default
 # values.
-if(NOT BUILD_PYTHON_VERSION AND NOT WIN32)
     message("Resetting Python include locations...")
-    # /default-medusa-venv is symlinked to /default-pegasus-venv
     set(ENV_BASE_DIR "/default-medusa-venv")
 
     set(BUILD_PYTHON_VERSION 3.6)
@@ -53,6 +63,7 @@ if(NOT BUILD_PYTHON_VERSION AND NOT WIN32)
     set(PYTHON_EXECUTABLE "${ENV_BASE_DIR}/bin/python")
     set(PYTHON_INCLUDE_DIRS "${ENV_BASE_DIR}/include/python${BUILD_PYTHON_VERSION}m")
     set(PYTHON_LIBRARY_SO "${ENV_BASE_DIR}/lib/libpython${BUILD_PYTHON_VERSION}m.so")
+    set(ARCTICDB_PYTHON_MODULE ${PYTHON_LIBRARY_SO})
 endif()
 
 add_subdirectory(third_party)

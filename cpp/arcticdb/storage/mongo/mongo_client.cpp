@@ -27,11 +27,11 @@ namespace arcticdb::storage::mongo {
 namespace detail {
 
 template<typename ElementType>
-std::string get_string_element(ElementType element) {
+std::string get_string_element(const ElementType& element) {
 #if (MONGOCXX_VERSION_MAJOR * 1000 + MONGOCXX_VERSION_MINOR) >= 3007
     return std::string(element.get_string());
 #else
-    return element.get_utf8().value;
+    return element.get_utf8().value.data();
 #endif
 }
 
