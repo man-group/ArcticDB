@@ -26,12 +26,17 @@ pages:
 - Overview:
     - History of ArcticDB: 'history.md'
     - Frequently Asked Questions: 'faq.md'
+    - Licensing FAQs: 'licensing.md'
 - Tutorials:
     - Fundamentals: 'tutorials/fundamentals'
     - Parallel Writes: 'tutorials/parallel_writes.md'
     - Snapshots: 'tutorials/snapshots.md'
     - Metadata: 'tutorials/metadata.md'
+- Library Configuration: 'lib_config.md'
+- Runtime Configuration: 'runtime_config.md'
+- Error Messages: 'error_messages.md'
 - Technical Information: 
     - Architecture: 'technical/architecture.md'
     - On-Disk Storage: 'technical/on_disk_storage.md'
+    - Arctic Migration: 'technical/migration.md'
 - Python Reference Docs: './api/index.html'
