@@ -22,6 +22,7 @@ import pytest
 import pandas as pd
 from datetime import datetime, date
 import numpy as np
+from arcticdb.util.test import assert_frame_equal, assert_series_equal
 
 
 try:
@@ -169,15 +170,15 @@ def test_basic_write_read_update_and_append(arctic_library):
     assert re.match(r"S3\(endpoint=localhost:\d+, bucket=test_bucket_\d+\)", written_vi.host)
 
     assert lib.list_symbols() == ["my_symbol"]
-    pd.testing.assert_frame_equal(lib.read("my_symbol").data, df)
-    pd.testing.assert_frame_equal(lib.read("my_symbol", columns=["col1"]).data, df[["col1"]])
+    assert_frame_equal(lib.read("my_symbol").data, df)
+    assert_frame_equal(lib.read("my_symbol", columns=["col1"]).data, df[["col1"]])
 
-    pd.testing.assert_frame_equal(lib.head("my_symbol", n=1).data, df.head(n=1))
-    pd.testing.assert_frame_equal(lib.tail("my_symbol", n=1).data, df.tail(n=1).reset_index(drop=True))
+    assert_frame_equal(lib.head("my_symbol", n=1).data, df.head(n=1))
+    assert_frame_equal(lib.tail("my_symbol", n=1).data, df.tail(n=1).reset_index(drop=True))
 
     lib.append("my_symbol", pd.DataFrame({"col1": [4, 5, 6], "col2": [7, 8, 9]}))
     assert lib["my_symbol"].version == 1
-    pd.testing.assert_frame_equal(
+    assert_frame_equal(
         lib.read("my_symbol").data, pd.DataFrame({"col1": [1, 2, 3, 4, 5, 6], "col2": [4, 5, 6, 7, 8, 9]})
     )
 
@@ -191,7 +192,7 @@ def test_basic_write_read_update_and_append(arctic_library):
     lib.update("timeseries", df)
     assert lib["timeseries"].version == 1
     df.index.freq = None
-    pd.testing.assert_frame_equal(lib.read("timeseries").data, df)
+    assert_frame_equal(lib.read("timeseries").data, df)
 
     lib.write("meta", df, metadata={"hello": "world"})
     assert lib["meta"].version == 0
@@ -230,8 +231,8 @@ def test_parallel_writes_and_appends(arctic_library):
 
     comp_df = pd.DataFrame({"col1": [1, 2, 3, 4, 5, 6], "col2": [4, 5, 6, 7, 8, 9]})
     comp_df.index = pd.date_range("2018-01-01", periods=6, freq="H")
-    pd.testing.assert_frame_equal(lib.read("my_symbol").data, comp_df)
-    pd.testing.assert_frame_equal(lib.read("my_other_symbol").data, comp_df)
+    assert_frame_equal(lib.read("my_symbol").data, comp_df)
+    assert_frame_equal(lib.read("my_other_symbol").data, comp_df)
 
     df = pd.DataFrame({"col1": [7, 8, 9], "col2": [10, 11, 12]})
     df.index = pd.date_range("2018-01-01 06:00:00", periods=3, freq="H")
@@ -241,7 +242,7 @@ def test_parallel_writes_and_appends(arctic_library):
 
     comp_df = pd.DataFrame({"col1": [1, 2, 3, 4, 5, 6, 7, 8, 9], "col2": [4, 5, 6, 7, 8, 9, 10, 11, 12]})
     comp_df.index = pd.date_range("2018-01-01", periods=9, freq="H")
-    pd.testing.assert_frame_equal(lib.read("my_symbol").data, comp_df)
+    assert_frame_equal(lib.read("my_symbol").data, comp_df)
 
 
 def test_snapshots_and_deletes(arctic_library):
@@ -254,7 +255,7 @@ def test_snapshots_and_deletes(arctic_library):
 
     assert lib.list_snapshots() == {"test1": None}
 
-    pd.testing.assert_frame_equal(lib.read("my_symbol", as_of="test1").data, df)
+    assert_frame_equal(lib.read("my_symbol", as_of="test1").data, df)
 
     lib.delete("my_symbol")
     lib.snapshot("snap_after_delete")
@@ -362,7 +363,7 @@ def test_delete_date_range(arctic_library):
     lib.delete_data_in_range("symbol", date_range=(datetime(2018, 1, 1), datetime(2018, 1, 2)))
 
     # then
-    pd.testing.assert_frame_equal(
+    assert_frame_equal(
         lib["symbol"].data, pd.DataFrame({"column": [7, 8]}, index=pd.date_range(start="1/3/2018", end="1/4/2018"))
     )
     assert lib["symbol"].version == 1
@@ -456,7 +457,7 @@ def test_write_non_native_frame_with_pickle_mode(arctic_library):
     df = pd.DataFrame({"col1": [A("id_1")]})
     lib.write_pickle("test_1", df)
     loaded: pd.DataFrame = lib["test_1"].data
-    pd.testing.assert_frame_equal(loaded, df[["col1"]])
+    assert_frame_equal(loaded, df[["col1"]])
 
 
 def test_write_non_native_frame_without_pickle_mode(arctic_library):
@@ -475,9 +476,9 @@ def test_write_batch(arctic_library):
 
     batch = lib.write_batch([WritePayload("symbol_1", df_1), WritePayload("symbol_2", df_2, metadata="great_metadata")])
 
-    pd.testing.assert_frame_equal(lib.read("symbol_1", columns=["col1"]).data, df_1[["col1"]])
-    pd.testing.assert_frame_equal(lib.read("symbol_2", columns=["col1"]).data, df_2[["col1"]])
-    pd.testing.assert_frame_equal(lib.read("symbol_2", columns=["anothercol"]).data, df_2[["anothercol"]])
+    assert_frame_equal(lib.read("symbol_1", columns=["col1"]).data, df_1[["col1"]])
+    assert_frame_equal(lib.read("symbol_2", columns=["col1"]).data, df_2[["col1"]])
+    assert_frame_equal(lib.read("symbol_2", columns=["anothercol"]).data, df_2[["anothercol"]])
 
     symbol_2_loaded = lib.read("symbol_2")
     assert symbol_2_loaded.metadata == "great_metadata"
@@ -524,9 +525,9 @@ def test_write_with_unpacking(arctic_library):
     lib.write(*payload_1)
     lib.write(*payload_2)
 
-    pd.testing.assert_frame_equal(lib.read("symbol_1", columns=["col1"]).data, df_1[["col1"]])
-    pd.testing.assert_frame_equal(lib.read("symbol_2", columns=["col1"]).data, df_2[["col1"]])
-    pd.testing.assert_frame_equal(lib.read("symbol_2", columns=["anothercol"]).data, df_2[["anothercol"]])
+    assert_frame_equal(lib.read("symbol_1", columns=["col1"]).data, df_1[["col1"]])
+    assert_frame_equal(lib.read("symbol_2", columns=["col1"]).data, df_2[["col1"]])
+    assert_frame_equal(lib.read("symbol_2", columns=["anothercol"]).data, df_2[["anothercol"]])
 
     symbol_2_loaded = lib.read("symbol_2")
     assert symbol_2_loaded.metadata == "great_metadata"
@@ -564,13 +565,13 @@ def test_append_documented_example(arctic_library):
     lib.append("symbol", to_append_df, prune_previous_versions=False)
 
     expected = pd.DataFrame({"column": [1, 2, 3, 4, 5, 6]}, index=pd.date_range(start="1/1/2018", end="1/6/2018"))
-    pd.testing.assert_frame_equal(lib["symbol"].data, expected)
+    assert_frame_equal(lib["symbol"].data, expected)
     # Check that old versions were not pruned
     symbols = lib.list_versions("symbol")
     assert len(symbols) == 2
     assert ("symbol", 0) in symbols
     assert ("symbol", 1) in symbols
-    pd.testing.assert_frame_equal(lib.read("symbol", as_of=0).data, df)
+    assert_frame_equal(lib.read("symbol", as_of=0).data, df)
 
 
 def test_append_prune_previous_versions(arctic_library):
@@ -581,7 +582,7 @@ def test_append_prune_previous_versions(arctic_library):
     lib.append("symbol", to_append_df, prune_previous_versions=True)
 
     expected = pd.DataFrame({"column": [1, 2, 3, 4, 5, 6]}, index=pd.date_range(start="1/1/2018", end="1/6/2018"))
-    pd.testing.assert_frame_equal(lib["symbol"].data, expected)
+    assert_frame_equal(lib["symbol"].data, expected)
     # Check that old versions were pruned
     symbols = lib.list_versions("symbol")
     assert len(symbols) == 1
@@ -603,13 +604,13 @@ def test_update_documented_example(arctic_library):
     # Then
     result = lib.read("symbol").data
     expected = pd.DataFrame({"column": [400, 40, 4]}, index=pd.to_datetime(["1/1/2018", "1/3/2018", "1/4/2018"]))
-    pd.testing.assert_frame_equal(result, expected)
+    assert_frame_equal(result, expected)
     # Check that old versions were not pruned
     symbols = lib.list_versions("symbol")
     assert len(symbols) == 2
     assert ("symbol", 0) in symbols
     assert ("symbol", 1) in symbols
-    pd.testing.assert_frame_equal(lib.read("symbol", as_of=0).data, df)
+    assert_frame_equal(lib.read("symbol", as_of=0).data, df)
 
 
 def test_update_prune_previous_versions(arctic_library):
@@ -624,7 +625,7 @@ def test_update_prune_previous_versions(arctic_library):
 
     result = lib.read("symbol").data
     expected = pd.DataFrame({"column": [400, 40, 4]}, index=pd.to_datetime(["1/1/2018", "1/3/2018", "1/4/2018"]))
-    pd.testing.assert_frame_equal(result, expected)
+    assert_frame_equal(result, expected)
     symbols = lib.list_versions("symbol")
     assert len(symbols) == 1
     assert ("symbol", 1) in symbols
@@ -640,7 +641,7 @@ def test_update_with_daterange(arctic_library):
     lib.update("symbol", update_df, date_range=(datetime(2010, 1, 1), datetime(2020, 1, 1)))
 
     result = lib["symbol"].data
-    pd.testing.assert_frame_equal(result, update_df)
+    assert_frame_equal(result, update_df)
 
 
 def test_update_with_daterange_no_width(arctic_library):
@@ -653,7 +654,7 @@ def test_update_with_daterange_no_width(arctic_library):
     lib.update("symbol", update_df, date_range=(datetime(2018, 1, 2), datetime(2018, 1, 2)))
 
     result = lib["symbol"].data
-    pd.testing.assert_frame_equal(
+    assert_frame_equal(
         result, pd.DataFrame({"column": [1, 400, 3, 4]}, index=pd.date_range(start="1/1/2018", end="1/4/2018"))
     )
 
@@ -703,7 +704,7 @@ def test_update_with_daterange_multi_index(arctic_library):
             )
         )
     )
-    pd.testing.assert_frame_equal(result, pd.DataFrame({"column": [1, 100, 200, 300, 6]}, index=expected_index))
+    assert_frame_equal(result, pd.DataFrame({"column": [1, 100, 200, 300, 6]}, index=expected_index))
 
 
 def test_update_with_daterange_multi_index_no_width(arctic_library):
@@ -736,7 +737,7 @@ def test_update_with_daterange_multi_index_no_width(arctic_library):
 
     # Then
     result = lib["symbol"].data
-    pd.testing.assert_frame_equal(result, pd.DataFrame({"column": [1, 100, 200, 4, 5]}, index=index))
+    assert_frame_equal(result, pd.DataFrame({"column": [1, 100, 200, 4, 5]}, index=index))
 
 
 def test_update_with_daterange_restrictive(arctic_library):
@@ -754,7 +755,7 @@ def test_update_with_daterange_restrictive(arctic_library):
         {"column": np.concatenate((np.arange(0, 9), np.arange(39, 50), np.arange(20, 30)))},
         index=pd.date_range(start="1/1/2022", periods=30),
     )
-    pd.testing.assert_frame_equal(expected, result)
+    assert_frame_equal(expected, result)
 
 
 def test_update_with_upsert(arctic_library):
@@ -782,8 +783,8 @@ def test_read_batch_mixed_request_supported(arctic_library):
     # Then
     assert [vi.symbol for vi in batch] == ["s1", "s2", "s3", "s1"]
     assert batch[0].data.empty
-    pd.testing.assert_frame_equal(s2_frame, batch[1].data)
-    pd.testing.assert_frame_equal(s3_frame, batch[2].data)
+    assert_frame_equal(s2_frame, batch[1].data)
+    assert_frame_equal(s3_frame, batch[2].data)
     assert batch[3].data.empty
 
 
@@ -799,7 +800,7 @@ def test_read_with_read_request_form(arctic_library):
     result = lib.read(*ReadRequest("s", as_of=0, columns=["A"], query_builder=q))
 
     # Then
-    pd.testing.assert_frame_equal(result.data, pd.DataFrame({"A": [1, 2]}))
+    assert_frame_equal(result.data, pd.DataFrame({"A": [1, 2]}))
 
 
 def test_read_batch_with_columns(arctic_library):
@@ -812,7 +813,7 @@ def test_read_batch_with_columns(arctic_library):
     batch = lib.read_batch([ReadRequest("s", columns=["B", "C"])])
 
     # Then
-    pd.testing.assert_frame_equal(pd.DataFrame({"B": [4, 5, 6], "C": [7, 8, 9]}), batch[0].data)
+    assert_frame_equal(pd.DataFrame({"B": [4, 5, 6], "C": [7, 8, 9]}), batch[0].data)
 
 
 def test_read_batch_overall_query_builder(arctic_library):
@@ -826,8 +827,8 @@ def test_read_batch_overall_query_builder(arctic_library):
     # When
     batch = lib.read_batch(["s1", "s2"], query_builder=q)
     # Then
-    pd.testing.assert_frame_equal(batch[0].data, pd.DataFrame({"a": [3]}))
-    pd.testing.assert_frame_equal(batch[1].data, pd.DataFrame({"a": [4]}))
+    assert_frame_equal(batch[0].data, pd.DataFrame({"a": [3]}))
+    assert_frame_equal(batch[1].data, pd.DataFrame({"a": [4]}))
 
 
 def test_read_batch_per_symbol_query_builder(arctic_library):
@@ -843,8 +844,8 @@ def test_read_batch_per_symbol_query_builder(arctic_library):
     # When
     batch = lib.read_batch([ReadRequest("s1", query_builder=q_1), ReadRequest("s2", query_builder=q_2)])
     # Then
-    pd.testing.assert_frame_equal(batch[0].data, pd.DataFrame({"a": [3]}))
-    pd.testing.assert_frame_equal(batch[1].data, pd.DataFrame({"a": [4, 6]}))
+    assert_frame_equal(batch[0].data, pd.DataFrame({"a": [3]}))
+    assert_frame_equal(batch[1].data, pd.DataFrame({"a": [4, 6]}))
 
 
 def test_read_batch_as_of(arctic_library):
@@ -875,10 +876,10 @@ def test_read_batch_date_ranges(arctic_library):
         ]
     )
 
-    pd.testing.assert_frame_equal(
+    assert_frame_equal(
         batch[0].data, pd.DataFrame({"column": [1, 2]}, index=pd.date_range(start="1/1/2018", end="1/2/2018"))
     )
-    pd.testing.assert_frame_equal(
+    assert_frame_equal(
         batch[1].data, pd.DataFrame({"column": [1, 2, 3]}, index=pd.date_range(start="1/1/2018", end="1/3/2018"))
     )
 
@@ -895,10 +896,10 @@ def test_read_batch_date_ranges_dates_not_times(arctic_library):
         ]
     )
 
-    pd.testing.assert_frame_equal(
+    assert_frame_equal(
         batch[0].data, pd.DataFrame({"column": [1, 2]}, index=pd.date_range(start="1/1/2018", end="1/2/2018"))
     )
-    pd.testing.assert_frame_equal(
+    assert_frame_equal(
         batch[1].data, pd.DataFrame({"column": [1, 2, 3]}, index=pd.date_range(start="1/1/2018", end="1/3/2018"))
     )
 
@@ -978,15 +979,15 @@ def test_tail(arctic_library):
 
     # then
     assert first_version.version == 0
-    pd.testing.assert_frame_equal(
+    assert_frame_equal(
         first_version.data, pd.DataFrame({"column": [3, 4]}, index=pd.date_range(start="1/3/2018", end="1/4/2018"))
     )
     assert second_version.version == 1
-    pd.testing.assert_frame_equal(
+    assert_frame_equal(
         second_version.data, pd.DataFrame({"column": [7, 8]}, index=pd.date_range(start="1/3/2018", end="1/4/2018"))
     )
     assert third_version.version == 2
-    pd.testing.assert_frame_equal(
+    assert_frame_equal(
         third_version.data, pd.DataFrame({"column": [9]}, index=pd.date_range(start="1/1/2018", end="1/1/2018"))
     )
 
@@ -1009,14 +1010,17 @@ def test_segment_slicing(moto_s3_uri_incl_bucket):
     assert ac.list_libraries() == []
     rows_per_segment = 5
     columns_per_segment = 2
-    ac.create_library("pytest_test_library", LibraryOptions(rows_per_segment=rows_per_segment, columns_per_segment=columns_per_segment))
+    ac.create_library(
+        "pytest_test_library",
+        LibraryOptions(rows_per_segment=rows_per_segment, columns_per_segment=columns_per_segment),
+    )
     lib = ac["pytest_test_library"]
     symbol = "test_segment_slicing"
     rows = 12
     columns = 3
     data = {}
     for col in range(columns):
-        data[f"col{col}"] = np.arange(100*col, (100*col) + rows)
+        data[f"col{col}"] = np.arange(100 * col, (100 * col) + rows)
     lib.write(symbol, pd.DataFrame(data))
     num_data_segments = len(lib._nvs.read_index(symbol))
     assert num_data_segments == math.ceil(rows / rows_per_segment) * math.ceil(columns / columns_per_segment)
@@ -1024,7 +1028,9 @@ def test_segment_slicing(moto_s3_uri_incl_bucket):
 
 def test_reload_symbol_list(moto_s3_uri_incl_bucket, boto_client):
     def get_symbol_list_keys():
-        keys = [d["Key"] for d in boto_client.list_objects(Bucket=test_bucket)["Contents"] if d["Key"].startswith(lib_name)]
+        keys = [
+            d["Key"] for d in boto_client.list_objects(Bucket=test_bucket)["Contents"] if d["Key"].startswith(lib_name)
+        ]
         symbol_list_keys = []
         for key in keys:
             path_components = key.split("/")

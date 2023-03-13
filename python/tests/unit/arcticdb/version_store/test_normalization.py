@@ -10,7 +10,7 @@ import pandas as pd
 import pytest
 import pytz
 from numpy.testing import assert_equal, assert_array_equal
-from pandas.testing import assert_frame_equal, assert_series_equal
+from arcticdb.util.test import assert_frame_equal, assert_series_equal
 
 from arcticdb.exceptions import ArcticNativeNotYetImplemented
 from arcticdb.version_store._custom_normalizers import (
