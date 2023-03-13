@@ -1,0 +1,376 @@
+ArcticDB
+Copyright 2023 Man Group Operations Ltd.
+
+This product includes software from the JEMalloc project (BSD, 2-Clause).
+* Copyright (C) 2002-present Jason Evans <jasone@canonware.com>.
+All rights reserved.
+* Copyright (C) 2007-2012 Mozilla Foundation.  All rights reserved.
+* Copyright (C) 2009-present Facebook, Inc.  All rights reserved.
+
+This product includes software from the LZ4 project (BSD, 2-Clause).
+https://github.com/lz4/lz4/blob/dev/lib/LICENSE
+
+This product includes software from the ZSTD project (BSD).
+https://github.com/facebook/zstd/blob/dev/LICENSE
+
+This product includes software from the OpenSSL (Apache 2).
+https://github.com/openssl/openssl/blob/master/LICENSE.txt
+
+This product includes software from the LibCurl project
+* Copyright (c) 1996 - 2022, Daniel Stenberg, <daniel@haxx.se>
+https://github.com/curl/curl/blob/master/COPYING
+
+This product includes software from the ProtoBuf project (BSD, 3-Clause).
+* Copyright 2008 Google Inc.  All rights reserved.
+https://github.com/protocolbuffers/protobuf/blob/main/LICENSE
+
+This product includes software from the xxhash project (BSD, 2-Clause).
+* Copyright (c) 2012-2021 Yann Collet. All rights reserved.
+https://github.com/Cyan4973/xxHash/blob/dev/LICENSE
+
+This product includes software from the Google double-conversion project (BSD, 3-Clause).
+* Copyright 2006-2011, the V8 project authors. All rights reserved.
+https://github.com/google/double-conversion/blob/master/LICENSE
+
+This product includes software from the LibEvent project (BSD, 3-Clause).
+* Copyright (c) 2000-2007 Niels Provos <provos@citi.umich.edu>
+* Copyright (c) 2007-2012 Niels Provos and Nick Mathewson
+https://github.com/libevent/libevent/blob/master/LICENSE
+
+This product includes software from the glog project (BSD, 3-Clause).
+* Copyright (c) 208, Google Inc.
+https://github.com/google/glog/blob/master/COPYING
+
+This product includes software from the gflags project (BSD, 3-Clause).
+* Copyright (c) 2006, Google Inc.
+https://github.com/gflags/gflags/blob/master/COPYING.txt
+
+This product includes software from the Folly project (Apache 2).
+https://github.com/facebook/folly/blob/main/LICENSE
+
+This project includes software from the Mongo C project (Apache 2).
+https://github.com/mongodb/mongo-c-driver/blob/master/COPYING
+
+This project includes software from the Mongo C++ project (Apache 2).
+https://github.com/mongodb/mongo-cxx-driver/blob/master/LICENSE
+
+This project includes software from the C++ S3 SDK project (Apache 2).
+https://github.com/aws/aws-sdk-cpp/blob/main/LICENSE
+
+This project includes software from the Prometheus project (MIT).
+* Copyright (c) 2016-2019 Jupp Mueller
+* Copyright (c) 2017-2019 Gregor Jasny
+https://github.com/jupp0r/prometheus-cpp/blob/master/LICENSE
+
+This project includes software from the BitMagic project (Apache 2).
+* Copyright(c) 2002-2019 Anatoliy Kuznetsov(anatoliy_kuznetsov at yahoo.com)
+https://github.com/tlk00/BitMagic/blob/master/LICENSE
+
+This project includes software from the Wangle project (Apache 2).
+https://github.com/facebook/wangle/blob/main/LICENSE
+
+This project includes software from the librdkafka project (BSD, 2-Clause).
+* Copyright (c) 2012-2020, Magnus Edenhill. All rights reserved.
+https://github.com/edenhill/librdkafka/blob/master/LICENSE
+
+This project includes software from the msgpack project (Boost).
+https://github.com/msgpack/msgpack-c/blob/master/LICENSE_1_0.txt
+
+This project includes software from the Boost project (Boost).
+https://github.com/boostorg/boost/blob/master/LICENSE_1_0.txt
+
+This project includes software from the Arrow project (Apache 2).
+https://github.com/apache/arrow/blob/master/LICENSE.txt
+
+This project includes software from the lmdb project (OpenLDAP).
+* Copyright 1999-2003 The OpenLDAP Foundation, Redwood City, California, USA. All rights reserved.
+https://github.com/LMDB/lmdb/blob/mdb.master/libraries/liblmdb/LICENSE
+
+This project includes software from the PyBind11 project (BSD, 3-Clause).
+* Copyright (c) 2016 Wenzel Jakob <wenzel.jakob@epfl.ch>, All rights reserved.
+https://github.com/pybind/pybind11/blob/master/LICENSE
+
+This project includes software from the remotery project (Apache 2).
+https://github.com/Celtoys/Remotery/blob/main/LICENSE
+
+This product includes software from the semimap project (MIT).
+* Copyright (c) 2018 Fabian Renn-Giles
+https://github.com/hogliux/semimap/blob/master/LICENSE.md
+
+This product includes software from the spdlog project (MIT).
+* Copyright (c) 2016 Gabi Melman.
+
+This product includes software from emilib
+  * https://github.com/emilk/emilib
+  
+This product includes software from robin_hood hashmap and hashset (MIT)
+  * Copyright (c) 2018-2021 Martin Ankerl
+  * https://github.com/martinus/robin-hood-hashing
+
+---------------------------------------------------------------------------------------------------------------
+
+This product includes code from Apache Arrow, which includes the following in its NOTICE file:
+
+Apache Arrow
+Copyright 2016-2019 The Apache Software Foundation
+
+This product includes software developed at
+The Apache Software Foundation (http://www.apache.org/).
+
+This product includes software from the SFrame project (BSD, 3-clause).
+* Copyright (C) 2015 Dato, Inc.
+* Copyright (c) 2009 Carnegie Mellon University.
+
+This product includes software from the Feather project (Apache 2.0)
+https://github.com/wesm/feather
+
+This product includes software from the DyND project (BSD 2-clause)
+https://github.com/libdynd
+
+This product includes software from the LLVM project
+ * distributed under the University of Illinois Open Source
+
+This product includes software from the google-lint project
+ * Copyright (c) 2009 Google Inc. All rights reserved.
+
+This product includes software from the mman-win32 project
+ * Copyright https://code.google.com/p/mman-win32/
+ * Licensed under the MIT License;
+
+This product includes software from the LevelDB project
+ * Copyright (c) 2011 The LevelDB Authors. All rights reserved.
+ * Use of this source code is governed by a BSD-style license that can be
+ * Moved from Kudu http://github.com/cloudera/kudu
+
+This product includes software from the CMake project
+ * Copyright 2001-2009 Kitware, Inc.
+ * Copyright 2012-2014 Continuum Analytics, Inc.
+ * All rights reserved.
+
+This product includes software from https://github.com/matthew-brett/multibuild (BSD 2-clause)
+ * Copyright (c) 2013-2016, Matt Terry and Matthew Brett; all rights reserved.
+
+This product includes software from the Ibis project (Apache 2.0)
+ * Copyright (c) 2015 Cloudera, Inc.
+ * https://github.com/cloudera/ibis
+
+This product includes software from Dremio (Apache 2.0)
+  * Copyright (C) 2017-2018 Dremio Corporation
+  * https://github.com/dremio/dremio-oss
+
+This product includes software from Google Guava (Apache 2.0)
+  * Copyright (C) 2007 The Guava Authors
+  * https://github.com/google/guava
+
+This product include software from CMake (BSD 3-Clause)
+  * CMake - Cross Platform Makefile Generator
+  * Copyright 2000-2019 Kitware, Inc. and Contributors
+
+The web site includes files generated by Jekyll.
+
+--------------------------------------------------------------------------------
+
+This product includes code from Apache Kudu, which includes the following in
+its NOTICE file:
+
+  Apache Kudu
+  Copyright 2016 The Apache Software Foundation
+
+  This product includes software developed at
+  The Apache Software Foundation (http://www.apache.org/).
+
+  Portions of this software were developed at
+  Cloudera, Inc (http://www.cloudera.com/).
+
+--------------------------------------------------------------------------------
+
+This product includes code from Apache ORC, which includes the following in
+its NOTICE file:
+
+  Apache ORC
+  Copyright 2013-2019 The Apache Software Foundation
+
+  This product includes software developed by The Apache Software
+  Foundation (http://www.apache.org/).
+
+  This product includes software developed by Hewlett-Packard:
+  (c) Copyright [2014-2015] Hewlett-Packard Development Company, L.P
+
+
+---------------------------------------------------------------------------------------------------------------
+
+This product includes code from the AWS SDK for C++, which includes the following in
+its NOTICE file:
+
+AWS SDK for C++
+Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+
+This product includes software developed by
+Amazon Technologies, Inc (http://www.amazon.com/).
+
+**********************
+THIRD PARTY COMPONENTS
+**********************
+This software includes third party software subject to the following copyrights:
+- XML parsing and utility functions from TinyXml2 - Lee Thomason.
+- JSON parsing and utility functions from JsonCpp - Copyright (c) 2007-2010 Baptiste Lepilleur.
+- OpenSSL build files for cmake used for Android Builds - Copyright (C) 2007-2012 LuaDist and Copyright (C) 2013 Brian Sidebotham
+- Android tool chain cmake build files - Copyright (c) 2010-2011, Ethan Rublee and Copyright (c) 2011-2014, Andrey Kamaev
+
+The licenses for these third party components are included in LICENSE.txt
+
+---------------------------------------------------------------------------------------------------------------
+
+
+MIT License
+
+  Permission is hereby granted, free  of charge, to any person obtaining
+  a  copy  of this  software  and  associated  documentation files  (the
+  "Software"), to  deal in  the Software without  restriction, including
+  without limitation  the rights to  use, copy, modify,  merge, publish,
+  distribute,  sublicense, and/or sell  copies of  the Software,  and to
+  permit persons to whom the Software  is furnished to do so, subject to
+  the following conditions:
+
+  The  above  copyright  notice  and  this permission  notice  shall  be
+  included in all copies or substantial portions of the Software.
+
+  THE  SOFTWARE IS  PROVIDED  "AS  IS", WITHOUT  WARRANTY  OF ANY  KIND,
+  EXPRESS OR  IMPLIED, INCLUDING  BUT NOT LIMITED  TO THE  WARRANTIES OF
+  MERCHANTABILITY,    FITNESS    FOR    A   PARTICULAR    PURPOSE    AND
+  NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+  LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+  OF CONTRACT, TORT OR OTHERWISE,  ARISING FROM, OUT OF OR IN CONNECTION
+  WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+  
+---------------------------------------------------------------------------------------------------------------
+  
+  The OpenLDAP Public License
+  Version 2.8, 17 August 2003
+
+Redistribution and use of this software and associated documentation
+("Software"), with or without modification, are permitted provided
+that the following conditions are met:
+
+1. Redistributions in source form must retain copyright statements
+   and notices,
+
+2. Redistributions in binary form must reproduce applicable copyright
+   statements and notices, this list of conditions, and the following
+   disclaimer in the documentation and/or other materials provided
+   with the distribution, and
+
+3. Redistributions must contain a verbatim copy of this document.
+
+The OpenLDAP Foundation may revise this license from time to time.
+Each revision is distinguished by a version number.  You may use
+this Software under terms of this license revision or under the
+terms of any subsequent revision of the license.
+
+THIS SOFTWARE IS PROVIDED BY THE OPENLDAP FOUNDATION AND ITS
+CONTRIBUTORS ``AS IS'' AND ANY EXPRESSED OR IMPLIED WARRANTIES,
+INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY
+AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.  IN NO EVENT
+SHALL THE OPENLDAP FOUNDATION, ITS CONTRIBUTORS, OR THE AUTHOR(S)
+OR OWNER(S) OF THE SOFTWARE BE LIABLE FOR ANY DIRECT, INDIRECT,
+INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
+ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+POSSIBILITY OF SUCH DAMAGE.
+
+The names of the authors and copyright holders must not be used in
+advertising or otherwise to promote the sale, use or other dealing
+in this Software without specific, written prior permission.  Title
+to copyright in this Software shall at all times remain with copyright
+holders.
+
+OpenLDAP is a registered trademark of the OpenLDAP Foundation.
+
+Copyright 1999-2003 The OpenLDAP Foundation, Redwood City,
+California, USA.  All Rights Reserved.  Permission to copy and
+distribute verbatim copies of this document is granted.
+
+---------------------------------------------------------------------------------------------------------------
+
+The 2-clause BSD license
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+
+1. Redistributions of source code must retain the above copyright notice, this list of
+conditions and the following disclaimer.
+
+2. Neither the name of Hamcrest nor the names of its contributors may be used to endorse
+or promote products derived from this software without specific prior written
+permission.
+
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY
+EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT
+SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED
+TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR
+BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY
+WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH
+DAMAGE.
+
+
+---------------------------------------------------------------------------------------------------------------
+
+The 3-clause BSD license
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+
+1. Redistributions of source code must retain the above copyright notice, this list of
+conditions and the following disclaimer.
+
+2. Redistributions in binary form must reproduce the above copyright
+notice, this list of conditions and the following disclaimer in the
+documentation and/or other materials provided with the distribution.
+
+3. Neither the name of Hamcrest nor the names of its contributors may be used to endorse
+or promote products derived from this software without specific prior written
+permission.
+
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY
+EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT
+SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED
+TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR
+BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY
+WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH
+DAMAGE.
+
+---------------------------------------------------------------------------------------------------------------
+
+COPYRIGHT AND PERMISSION NOTICE
+
+Copyright (c) 1996 - 2022, Daniel Stenberg, <daniel@haxx.se>, and many
+contributors, see the THANKS file.
+
+All rights reserved.
+
+Permission to use, copy, modify, and distribute this software for any purpose
+with or without fee is hereby granted, provided that the above copyright
+notice and this permission notice appear in all copies.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT OF THIRD PARTY RIGHTS. IN
+NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE
+OR OTHER DEALINGS IN THE SOFTWARE.
+
+Except as contained in this notice, the name of a copyright holder shall not
+be used in advertising or otherwise to promote the sale, use or other dealings
+in this Software without prior written authorization of the copyright holder.
