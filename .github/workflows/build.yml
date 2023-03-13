@@ -1,0 +1,43 @@
+name: build-arcticdb-action
+on:
+  push:
+    branches: ["**"]
+    tags: [v**]
+  workflow_dispatch:
+    inputs:
+      cmake_preset_type:
+        description: Override the preset suffix for CMAKE only. Does not affect artifact upload.
+        required: false
+        type: choice
+        options: [debug, release]
+run-name: Building ${{github.ref}} on ${{github.event_name}} by ${{github.actor}} [${{inputs.cmake_preset_type}}]
+jobs:
+  # GitHub Actions don't allow YAML node references; instead, they use the clunky "reusable workflows" files.
+  # In this case, it more convenient to have the configuration "matrix" for the build steps to be in the reusable one
+  # and this "caller" workflow passes parameters to control what is actually done.
+
+  leader-compile:
+    # First do the C++ core compilation using one Python version to seed the compilation caches (and fail quicker)
+    uses: ./.github/workflows/build_steps.yml
+    with:
+      job_type: leader-compile
+      python: '["3.6"]'
+      cmake_preset_type: ${{inputs.cmake_preset_type || (github.ref == 'refs/heads/master' && 'release' || 'debug') }}
+
+  leader-cpp-test:
+    # Compile and run the C++ tests separately concurrently with the following job
+    needs: [leader-compile]
+    uses: ./.github/workflows/build_steps.yml
+    with:
+      job_type: cpp-tests
+      python: '["3.6"]'
+      cmake_preset_type: ${{inputs.cmake_preset_type || (github.ref == 'refs/heads/master' && 'release' || 'debug') }}
+
+  follower:
+    # Then use the cached compilation artifacts to build other python versions concurrently
+    needs: [leader-compile]
+    uses: ./.github/workflows/build_steps.yml
+    with:
+      job_type: follower
+      python: '["3.6", "3.7", "3.8", "3.9", "3.10"]'
+      cmake_preset_type: ${{inputs.cmake_preset_type || (github.ref == 'refs/heads/master' && 'release' || 'debug') }}
