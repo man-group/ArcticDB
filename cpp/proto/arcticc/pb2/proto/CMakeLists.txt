@@ -1,14 +1,6 @@
 INCLUDE(FindProtobuf)
 FIND_PACKAGE(Protobuf REQUIRED)
 
-if (NOT WIN32)
-    find_program (SED_TOOL NAMES sed)
-    if (NOT SED_TOOL)
-        message (FATAL_ERROR "Unable to find sed")
-    endif (NOT SED_TOOL)
-    message(${SED_TOOL})
-endif ()
-
 SET(PROTO_IN_FILES
 		utils.proto
         descriptors.proto
@@ -25,24 +17,15 @@ SET(PROTO_IN_FILES
 
 # Slightly alter the original proto files to cope with grpc incompat with py3+
 foreach(filename ${PROTO_IN_FILES})
+    FILE(READ "../${filename}" infile)
+    STRING(REPLACE "import \"arcticc/pb2/" "import \"" infile_mod "${infile}")
+    FILE(WRITE "${CMAKE_CURRENT_BINARY_DIR}/${filename}" "${infile_mod}")
     list (APPEND PROTO_ALTERED_FILES "${CMAKE_CURRENT_BINARY_DIR}/${filename}")
-    list (APPEND PROTO_ABS_FILE  "${PROJECT_SOURCE_DIR}/proto/arcticc/pb2/${filename}")
 endforeach(filename)
 
-if (NOT WIN32)
-# This runs alter_proto.sh systematically, but it only alters the underlying
-# files when their content changes by manually keeping track of input hash.
-    add_custom_command(OUTPUT ${PROTO_ALTERED_FILES}
-            COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/alter_proto.sh ARGS ${PROTO_ABS_FILE}
-            DEPENDS ${PROTO_ABS_FILE}
-            )
-else ()
-    foreach(filename ${PROTO_IN_FILES})
-        FILE(READ "${PROJECT_SOURCE_DIR}/proto/arcticc/pb2/${filename}" infile)
-        STRING(REPLACE "import \"arcticc/" "import \"" infile_mod "${infile}")
-        FILE(WRITE "${CMAKE_CURRENT_BINARY_DIR}/${filename}" "${infile_mod}")
-    endforeach(filename)
-endif ()
+add_custom_command(OUTPUT ${PROTO_ALTERED_FILES}
+        COMMAND echo
+        SOURCES ${PROTO_IN_FILES})
 
 # Generate c++ files from altered proto
 INCLUDE_DIRECTORIES(${PROTOBUF_INCLUDE_DIR})
