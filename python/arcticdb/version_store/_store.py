@@ -684,7 +684,7 @@ class NativeVersionStore:
         metadata: `Any`, default=None
             Optional metadata to persist along with the new symbol version. Note that the metadata is
             not combined in any way with the metadata stored in the previous version.
-        date_range: None, or an `arctic.date.DateRange`
+        date_range: None, or one of the types in DateRangeInput
             If a range is specified, it will clear/delete the data within the
             range and overwrite it with the data in `data`. This allows the user
             to update with data that might only be a subset of the

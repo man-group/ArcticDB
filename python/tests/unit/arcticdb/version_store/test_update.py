@@ -10,11 +10,11 @@ from pandas.testing import assert_frame_equal
 import pandas.util.testing as tm
 import pytest
 from itertools import product
-from arctic.date import DateRange
 import datetime
 import random
 from arcticdb.util.test import random_strings_of_length, random_floats
 from arcticdb_ext.exceptions import ArcticNativeCxxException
+from tests.util.date import DateRange
 
 
 def test_update_single_dates(lmdb_version_store_dynamic_schema):
