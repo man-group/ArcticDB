@@ -1,6 +1,9 @@
 """
-Copyright 2023 Man Group Operations Ltd.
-NO WARRANTY, EXPRESSED OR IMPLIED.
+Copyright 2023 Man Group Operations Limited
+
+Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
+
+As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 from arcticdb.config import Defaults
 import pandas as pd
@@ -13,7 +16,7 @@ from itertools import product
 import datetime
 import random
 from arcticdb.util.test import random_strings_of_length, random_floats
-from arcticdb_ext.exceptions import ArcticNativeCxxException
+from arcticdb_ext.exceptions import InternalException
 from tests.util.date import DateRange
 
 
@@ -464,5 +467,5 @@ def test_update_pickled_data(lmdb_version_store):
     lmdb_version_store.write(symbol, df, pickle_on_failure=True)
     assert lmdb_version_store.is_symbol_pickled(symbol)
     df2 = pd.DataFrame({"a": [1000]}, index=idx[1:2])
-    with pytest.raises(ArcticNativeCxxException) as e_info:
+    with pytest.raises(InternalException) as e_info:
         lmdb_version_store.update(symbol, df2)

@@ -963,7 +963,7 @@ class Library:
 
         Raises
         ------
-        ArcticNativeCxxException
+        InternalException
             If a snapshot already exists with ``snapshot_name``. You must explicitly delete the pre-existing snapshot.
         """
         self._nvs.snapshot(snap_name=snapshot_name, metadata=metadata, skip_symbols=skip_symbols, versions=versions)

@@ -22,6 +22,7 @@
 #include <arcticdb/async/task_scheduler.hpp>
 #include <arcticdb/util/global_lifetimes.hpp>
 #include <arcticdb/util/configs_map.hpp>
+#include <arcticdb/util/error_code.hpp>
 
 #include <pybind11/pybind11.h>
 #include <folly/system/ThreadName.h>
@@ -193,6 +194,46 @@ void register_exception(py::module && m) {
     });
 }
 
+void register_exceptions(py::module&) {
+    std::set_terminate([]{
+        auto eptr = std::current_exception();
+        try {
+            std::rethrow_exception(eptr);
+        } catch (const std::exception &e) {
+            arcticdb::log::root().error("Terminate called in thread {}: {}\n Aborting",
+                                        folly::getCurrentThreadName().value_or("Unknown"), e.what());
+            std::abort();
+        }
+    });
+}
+
+void register_error_code_ecosystem(py::module& m) {
+    using namespace arcticdb;
+
+    auto cat_enum = py::enum_<ErrorCategory>(m, "ErrorCategory");
+    for (const auto& [member, name]: get_error_category_names()) {
+        cat_enum.value(name, member);
+    }
+
+    auto code_enum = py::enum_<ErrorCode>(m, "ErrorCode");
+    py::dict enum_value_to_prefix{};
+    for (auto code : get_error_codes()) {
+        auto data = get_error_code_data(code);
+        code_enum.value(data.name_.data(), code, data.as_string_.data());
+        enum_value_to_prefix[py::int_((int) code)] = data.as_string_;
+    }
+
+    setattr(m, "enum_value_to_prefix", enum_value_to_prefix);
+    m.def("get_error_category", &get_error_category);
+
+    py::register_exception<SchemaException>(m, "SchemaException");
+    py::register_exception<InternalException>(m, "InternalException");
+    py::register_exception<MissingDataException>(m, "MissingDataException");
+    py::register_exception<NormalizationException>(m, "NormalizationException");
+    py::register_exception<StorageException>(m, "StorageException");
+}
+
+
 void reinit_scheduler() {
     ARCTICDB_DEBUG(arcticdb::log::version(), "Post-fork, reinitializing the task scheduler");
     arcticdb::async::TaskScheduler::reattach_instance();
@@ -233,7 +274,9 @@ PYBIND11_MODULE(arcticdb_ext, m) {
     pthread_atfork(nullptr, nullptr, &reinit_scheduler);
 #endif
     // Set up the global exception handlers first, so module-specific exception handler can override it:
-    register_exception(m.def_submodule("exceptions"));
+    auto exceptions = m.def_submodule("exceptions");
+    register_exceptions(exceptions);
+    register_error_code_ecosystem(exceptions);
 
     arcticdb::async::register_bindings(m);
     arcticdb::storage::apy::register_bindings(m);

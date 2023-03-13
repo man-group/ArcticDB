@@ -448,10 +448,10 @@ std::pair<VersionedItem, arcticdb::proto::descriptors::TimeSeriesDescriptor> Loc
     const StreamId& stream_id,
     const VersionQuery& version_query
     ) {
-    ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: restore_version");
+    ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: res    tore_version");
     auto version_to_restore = get_version_to_read(stream_id, version_query);
-    util::check<NoSuchVersionException>(static_cast<bool>(version_to_restore),
-            "Unable to restore {}@{}: version not found", stream_id, version_query);
+    version::check<ErrorCode::E_NO_SUCH_VERSION>(static_cast<bool>(version_to_restore),
+                                                 "Unable to restore {}@{}: version not found", stream_id, version_query);
     auto maybe_prev = ::arcticdb::get_latest_version(store(), version_map(), stream_id, true, false);
     ARCTICDB_DEBUG(log::version(), "restore for stream_id: {} , version_id = {}", stream_id, version_to_restore->key_.version_id());
     return AsyncRestoreVersionTask{store(), version_map(), stream_id, version_to_restore->key_, maybe_prev}().get();

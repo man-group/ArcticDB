@@ -11,6 +11,7 @@ import os.path as osp
 from abc import abstractmethod, ABCMeta
 
 import yaml
+
 try:
     from yaml import CLoader as Loader
 except ImportError:

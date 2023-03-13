@@ -55,7 +55,7 @@ std::size_t represented_size(const arcticdb::proto::encoding::SegmentHeader& sh,
     std::size_t total = 0;
 
     for(const auto& field : sh.stream_descriptor().fields()) {
-        total += total_rows * get_type_size(data_type_from_proto(field.type_desc()));
+        total += total_rows * get_type_size(entity::data_type_from_proto(field.type_desc()));
     }
 
     return total;

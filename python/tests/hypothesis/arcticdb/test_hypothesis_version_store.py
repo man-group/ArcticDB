@@ -1,6 +1,9 @@
 """
-Copyright 2023 Man Group Operations Ltd.
-NO WARRANTY, EXPRESSED OR IMPLIED.
+Copyright 2023 Man Group Operations Limited
+
+Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
+
+As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 from collections import defaultdict
 from typing import Dict, List, Set, Any, Optional, Tuple
@@ -314,8 +317,10 @@ def test_stateful(lmdb_version_store_delayed_deletes):
     run_state_machine_as_test(
         VersionStoreComparison,
         settings=settings(  # Note: timeout is a legacy parameter
-            max_examples=int(os.getenv("HYPOTHESIS_EXAMPLES", 100)), deadline=None, stateful_step_count=100,
-            suppress_health_check=[HealthCheck.filter_too_much]
+            max_examples=int(os.getenv("HYPOTHESIS_EXAMPLES", 100)),
+            deadline=None,
+            stateful_step_count=100,
+            suppress_health_check=[HealthCheck.filter_too_much],
         ),
     )
 

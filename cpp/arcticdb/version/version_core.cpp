@@ -28,6 +28,7 @@
 #include <arcticdb/pipeline/index_utils.hpp>
 #include <arcticdb/util/composite.hpp>
 #include <arcticdb/pipeline/column_mapping.hpp>
+#include <arcticdb/version/schema_checks.hpp>
 
 namespace arcticdb::version_store {
 
@@ -116,21 +117,6 @@ IndexDescriptor::Proto check_index_match(const arcticdb::stream::Index& index, c
 
     return desc;
 }
-
-bool check_descriptor_match(const StreamDescriptor::Proto& left, const StreamDescriptor::Proto& right) {
-    if(left.fields_size() != right.fields_size())
-        return false;
-
-    for(auto i = 0; i < int(left.fields_size()); ++i) {
-        if(left.fields(i).name() != right.fields(i).name())
-            return false;
-
-        if(!trivially_compatible_types(left.fields(i).type_desc(), right.fields(i).type_desc()))
-            return false;
-    }
-    return true;
-}
-
 }
 
 folly::Future<AtomKey> async_append_impl(
@@ -148,13 +134,7 @@ folly::Future<AtomKey> async_append_impl(
     util::check_rte(!index_segment_reader.is_pickled(), "Cannot append to pickled data");
 
     frame.set_offset(static_cast<ssize_t>(row_offset));
-    if(!options.dynamic_schema
-        && !check_descriptor_match(frame.desc.proto(), index_segment_reader.tsd().stream_descriptor())) {
-        throw StreamDescriptorMismatch("The columns (names and types) in the append() argument are not identical to "
-                                       "that of the existing version",
-                                    StreamDescriptor{index_segment_reader.tsd().stream_descriptor()},
-                                    frame.desc);
-    }
+    fix_descriptor_mismatch_or_throw(APPEND, options.dynamic_schema, index_segment_reader, frame);
 
     frame.set_bucketize_dynamic(bucketize_dynamic);
     auto slicing_arg = get_slicing_policy(options, frame);
@@ -306,13 +286,7 @@ VersionedItem update_impl(
     auto index_desc = check_index_match(frame.index, index_segment_reader.tsd().stream_descriptor().index());
     util::check(index_desc.kind() == IndexDescriptor::TIMESTAMP, "Update will not work as expected with a non-timeseries index");
 
-    if(!dynamic_schema
-       && !check_descriptor_match(frame.desc.proto(), index_segment_reader.tsd().stream_descriptor())) {
-        throw StreamDescriptorMismatch("The columns (names and types) in the update() argument are not identical to "
-                                       "that of the existing version",
-                StreamDescriptor{index_segment_reader.tsd().stream_descriptor()},
-                frame.desc);
-    }
+    fix_descriptor_mismatch_or_throw(UPDATE, dynamic_schema, index_segment_reader, frame);
 
     std::vector<FilterQuery<index::IndexSegmentReader>> queries =
         build_update_query_filters<index::IndexSegmentReader>(query.row_filter, frame.index, frame.index_range, dynamic_schema, index_segment_reader.bucketize_dynamic());

@@ -244,6 +244,17 @@ struct SegmentToInputFrameAdapter {
 
         input_frame_.set_index_range();
     }
+
+
+    void synthesize_norm_meta() {
+        // Copied from read_incompletes_to_pipeline()
+        if (segment_.metadata()) {
+            auto segment_tsd = timeseries_descriptor_from_segment(segment_);
+            input_frame_.norm_meta.CopyFrom(segment_tsd.normalization());
+        }
+        ensure_norm_meta(input_frame_.norm_meta, input_frame_.desc.id(), false);
+    }
+
 };
 
 template<typename AggregatorType>

@@ -886,7 +886,7 @@ private:
     }
 
     void regenerate_offsets() const {
-        if (LIKELY(is_scalar() || !offsets_.empty()))
+        if (ARCTICDB_LIKELY(is_scalar() || !offsets_.empty()))
             return;
 
         position_t pos = 0;

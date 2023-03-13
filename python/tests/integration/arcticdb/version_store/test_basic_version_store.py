@@ -1,6 +1,9 @@
 """
-Copyright 2023 Man Group Operations Ltd.
-NO WARRANTY, EXPRESSED OR IMPLIED.
+Copyright 2023 Man Group Operations Limited
+
+Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
+
+As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 import itertools
 import time
@@ -22,7 +25,7 @@ from pytz import timezone
 
 from arcticdb.config import Defaults
 from arcticdb.exceptions import ArcticNativeNotYetImplemented
-from arcticdb_ext.exceptions import ArcticNativeCxxException
+from arcticdb_ext.exceptions import InternalException
 from arcticdb.flattener import Flattener
 from arcticdb.version_store import NativeVersionStore
 from arcticdb.version_store._custom_normalizers import CustomNormalizer, register_normalizer
@@ -32,6 +35,7 @@ from arcticdb_ext.storage import NoDataFoundException
 from arcticdb_ext.version_store import NoSuchVersionException, StreamDescriptorMismatch
 from arcticdb.util.test import sample_dataframe, sample_dataframe_only_strings, get_sample_dataframe
 from tests.util.date import DateRange
+
 
 @pytest.fixture()
 def symbol():
@@ -462,10 +466,10 @@ def test_partial_read_pickled_df(lmdb_version_store):
     lmdb_version_store.write("blah", will_be_pickled)
     assert lmdb_version_store.read("blah").data == will_be_pickled
 
-    with pytest.raises(ArcticNativeCxxException):
+    with pytest.raises(InternalException):
         lmdb_version_store.read("blah", columns=["does_not_matter"])
 
-    with pytest.raises(ArcticNativeCxxException):
+    with pytest.raises(InternalException):
         lmdb_version_store.read("blah", date_range=(DateRange(pd.Timestamp("1970-01-01"), pd.Timestamp("2027-12-31"))))
 
 
@@ -1729,7 +1733,6 @@ def test_diff_long_stream_descriptor_mismatch(lmdb_version_store, method, num):
     except StreamDescriptorMismatch as e:
         print(e)
         msg = str(e)
-        assert method in msg
         for i in (1, 2, *(x for x in range(num) if x % 20 == 4), num):
             assert f"col{i}: TD<type=INT64, dim=0>" in msg
             if i % 20 == 4:

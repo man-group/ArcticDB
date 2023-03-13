@@ -22,6 +22,7 @@
 #include <arcticdb/pipeline/value_set.hpp>
 #include <arcticdb/python/adapt_read_dataframe.hpp>
 #include <arcticdb/version/snapshot.hpp>
+#include <arcticdb/version/schema_checks.hpp>
 
 namespace arcticdb::version_store {
 

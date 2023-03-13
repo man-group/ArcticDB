@@ -1,10 +1,13 @@
 """
-Copyright 2023 Man Group Operations Ltd.
-NO WARRANTY, EXPRESSED OR IMPLIED.
+Copyright 2023 Man Group Operations Limited
+
+Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
+
+As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 import pytest
 import numpy as np
-from arcticdb_ext.exceptions import ArcticNativeCxxException
+from arcticdb_ext.exceptions import InternalException
 
 
 def test_basic_snapshot_flow(lmdb_version_store):
@@ -28,7 +31,7 @@ def test_re_snapshot_with_same_name(lmdb_version_store):
 
     assert lmdb_version_store.read("a", as_of="snap_1").data == original_data
 
-    with pytest.raises(ArcticNativeCxxException):
+    with pytest.raises(InternalException):
         lmdb_version_store.snapshot("snap_1")
 
 

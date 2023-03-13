@@ -158,15 +158,6 @@ write_frame(
     ARCTICDB_SUBSAMPLE_DEFAULT(WriteIndex)
     return index::write_index(std::move(frame), std::move(fut_slice_keys), key, store);
 }
-namespace {
-void handle_numpy_append_shape(const InputTensorFrame& frame, const arcticdb::proto::descriptors::NormalizationMetadata& previous_norm_meta) {
-    if(frame.norm_meta.has_np()) {
-        util::check(previous_norm_meta.has_np(), "Can't append non-numpy type to numpy array");
-        const auto new_shape = frame.norm_meta.np().shape(0) + previous_norm_meta.np().shape(0);
-        frame.norm_meta.mutable_np()->set_shape(0, new_shape);
-    }
-}
-}
 
 folly::Future<entity::AtomKey> append_frame(
         const IndexPartialKey& key,
@@ -208,7 +199,6 @@ folly::Future<entity::AtomKey> append_frame(
     auto slices_to_write = std::move(existing_slices);
     slices_to_write.insert(std::end(slices_to_write), std::begin(slice_and_keys_to_append), std::end(slice_and_keys_to_append));
     std::sort(std::begin(slices_to_write), std::end(slices_to_write));
-    handle_numpy_append_shape(frame, index_segment_reader.tsd().normalization());
 
     if(dynamic_schema) {
         auto merged_descriptor =

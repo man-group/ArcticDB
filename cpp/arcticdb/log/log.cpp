@@ -6,6 +6,7 @@
  */
 
 #include <arcticdb/log/log.hpp>
+#include <arcticdb/util/preprocess.hpp>
 
 #include <arcticdb/util/pb_util.hpp>
 #include <spdlog/sinks/stdout_sinks.h>
@@ -76,7 +77,7 @@ Loggers::Loggers() : config_mutex_(), sink_by_id_(),
 }
 
 spdlog::logger &Loggers::logger_ref(std::unique_ptr<spdlog::logger>  &src) {
-    if (LIKELY(bool(src))) return *src;
+    if (ARCTICDB_LIKELY(bool(src))) return *src;
     return *unconfigured_;
 }
 

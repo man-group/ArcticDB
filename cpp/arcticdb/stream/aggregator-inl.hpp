@@ -32,7 +32,7 @@ inline void Aggregator<Index, Schema, SegmentingPolicy, DensityPolicy>::commit_i
 
 template<class Index, class Schema, class SegmentingPolicy, class DensityPolicy>
 inline void Aggregator<Index, Schema, SegmentingPolicy, DensityPolicy>::commit() {
-    if (LIKELY(segment_.row_count() > 0 || segment_.metadata())) { // LIKELY
+    if (ARCTICDB_LIKELY(segment_.row_count() > 0 || segment_.metadata())) { // LIKELY
 //        segment_.end_sparse_columns();
         commit_impl();
     }

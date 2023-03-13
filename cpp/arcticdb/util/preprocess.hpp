@@ -19,9 +19,15 @@
 #define ARCTICDB_VISIBILITY_HIDDEN __attribute__ ((visibility("hidden")))
 #define ARCTICDB_VISIBILITY_DEFAULT  __attribute__ ((visibility ("default")))
 
+#define ARCTICDB_LIKELY(condition) __builtin_expect(condition, 1)
+#define ARCTICDB_UNLIKELY(condition) __builtin_expect(condition, 0)
+
 #else
 #define ARCTICDB_UNUSED
 #define ARCTICDB_UNREACHABLE
 #define ARCTICDB_VISIBILITY_HIDDEN
 #define ARCTICDB_VISIBILITY_DEFAULT
+
+#define ARCTICDB_LIKELY
+#define ARCTICDB_UNLIKELY
 #endif

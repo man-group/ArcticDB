@@ -44,7 +44,7 @@ class FlatIndexingPolicy {
     }
 
     void commit() {
-        if (LIKELY(!segment_.empty())) {
+        if (ARCTICDB_LIKELY(!segment_.empty())) {
             callback_(std::move(segment_));
             segment_ = SegmentInMemory(schema_.default_descriptor());
         }

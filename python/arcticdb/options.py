@@ -25,12 +25,7 @@ class LibraryOptions:
     """
 
     def __init__(
-            self,
-            *,
-            dynamic_schema: bool = False,
-            dedup: bool = False,
-            rows_per_segment = 100_000,
-            columns_per_segment = 127,
+        self, *, dynamic_schema: bool = False, dedup: bool = False, rows_per_segment=100_000, columns_per_segment=127
     ):
         """
         Parameters
