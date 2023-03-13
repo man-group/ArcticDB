@@ -27,16 +27,11 @@ from arcticdb.flattener import Flattener
 from arcticdb.version_store import NativeVersionStore
 from arcticdb.version_store._custom_normalizers import CustomNormalizer, register_normalizer
 from arcticdb.version_store._store import UNSUPPORTED_S3_CHARS, MAX_SYMBOL_SIZE, VersionedItem
-from arcticdb.version_store.helper import ArcticMemoryConfig
-from arcticdb.version_store.helper import get_lib_cfg
+from arcticdb.version_store.helper import ArcticMemoryConfig, get_lib_cfg
 from arcticdb_ext.storage import NoDataFoundException
-from arcticdb.util.test import sample_dataframe, sample_dataframe_only_strings
-from arcticdb_ext import set_config_int
-from arcticdb.util.test import get_sample_dataframe
-from arctic.date import DateRange
 from arcticdb_ext.version_store import NoSuchVersionException, StreamDescriptorMismatch
-from tests.conftest import three_col_df
-
+from arcticdb.util.test import sample_dataframe, sample_dataframe_only_strings, get_sample_dataframe
+from tests.util.date import DateRange
 
 @pytest.fixture()
 def symbol():

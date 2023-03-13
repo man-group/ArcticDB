@@ -4,7 +4,10 @@ NO WARRANTY, EXPRESSED OR IMPLIED.
 """
 import pandas as pd
 from arcticdb.version_store import _store as store
-from arctic.date import DateRange
+try:
+    from arctic.date import DateRange
+except ModuleNotFoundError:
+    from tests.util.date import DateRange # Verbatim local copy
 
 
 def range_eq(result, start, end):
