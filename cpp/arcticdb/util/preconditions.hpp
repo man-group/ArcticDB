@@ -3,89 +3,104 @@
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
  * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
- */
+*/
 
 #pragma once
 
-#include <folly/Likely.h>
-#include <fmt/format.h>
-#include <fmt/ranges.h>
 #include <arcticdb/log/log.hpp>
-#include <signal.h>
-
-#include <exception>
-#include <cstdint>
-#include <type_traits>
+#include <arcticdb/util/error_code.hpp>
 #include <arcticdb/util/preprocess.hpp>
 
-namespace arcticdb::util {
+namespace arcticdb {
 
-template<typename...Args>
-void check_range(size_t idx, size_t first_incl, size_t last_excl, const char *msg) {
-    if (UNLIKELY(!(first_incl <= idx && idx < last_excl)))
-        throw std::out_of_range(fmt::format(
-            "{} expected first <= idx< last, actual first={}, idx={}, actual={}",
-            msg, first_incl, idx, last_excl));
+namespace util::detail {
+
+template<ErrorCode code, ErrorCategory error_category>
+struct Raise {
+    static_assert(get_error_category(code) == error_category);
+
+    template<typename...Args>
+    [[noreturn]] void operator()(fmt::format_string<Args...> format, Args&&...args) const {
+        std::string combo_format = fmt::format("{} {}", error_code_data<code>.name_, format);
+        std::string msg = fmt::format(combo_format, std::forward<Args>(args)...);
+        log::root().error(msg);
+        throw_error<code>(msg);
+    }
+};
+
+template<ErrorCode code, ErrorCategory error_category>
+struct Check {
+    static constexpr Raise<code, error_category> raise{};
+
+    template<typename...Args>
+    void operator()(bool cond, fmt::format_string<Args...> format, Args&&...args) const {
+        if (ARCTICDB_UNLIKELY(!cond)) {
+            raise(format, std::forward<Args>(args)...);
+        }
+    }
+};
+} // namespace util::detail
+
+namespace normalization {
+template<ErrorCode code>
+constexpr auto check = util::detail::Check<code, ErrorCategory::NORMALIZATION>{};
+
+template<ErrorCode code>
+constexpr auto raise = check<code>.raise;
 }
+
+namespace version {
+
+template<ErrorCode code>
+constexpr auto check = util::detail::Check<code, ErrorCategory::MISSING_DATA>{};
+
+template<ErrorCode code>
+constexpr auto raise = check<code>.raise;
+}
+
+// TODO Change legacy codes to internal::
+namespace util {
+
+    constexpr auto check = util::detail::Check<ErrorCode::E_ASSERTION_FAILURE, ErrorCategory::INTERNAL>{};
+
+    constexpr auto check_range_impl =  util::detail::Check<ErrorCode::E_INVALID_RANGE, ErrorCategory::INTERNAL>{};
 
 template<typename...Args>
 void check_range(size_t idx, size_t size, const char *msg) {
-    if (UNLIKELY(idx >= size))
-        throw std::out_of_range(fmt::format("{} expected  0 <= idx < size, actual idx={}, size={}",
-                                            msg, idx, size));
+    check_range_impl(idx < size, "{} expected  0 <= idx < size, actual idx={}, size={}", msg, idx, size);
 }
 
-template<class Exception=std::invalid_argument, typename...Args>
-void check(bool cond, fmt::format_string<Args...> format, Args &&...args) {
-    if (UNLIKELY(!cond)) {
-        std::string err = fmt::vformat(format, fmt::make_format_args(std::forward<Args>(args)...));
-        log::root().error("ASSERTION FAILURE: {}", err);
-        throw Exception(err);
-    }
-}
+constexpr auto check_arg =  util::detail::Check<ErrorCode::E_INVALID_ARGUMENT, ErrorCategory::INTERNAL>{};
 
-template<typename...Args>
-void check_arg(bool cond, const char *format, const Args &...args) {
-    check<std::invalid_argument>(cond, format, args...);
-}
+// TODO Replace occurrences with specific error code
+constexpr auto check_rte = util::detail::Check<ErrorCode::E_RUNTIME_ERROR, ErrorCategory::INTERNAL>{};
 
-template<typename...Args>
-void debug_check(bool cond ARCTICDB_UNUSED, const char *format ARCTICDB_UNUSED, const Args &...args ARCTICDB_UNUSED) {
-#ifdef DEBUG_BUILD
-    if (UNLIKELY(!cond)) {
-        std::string err = fmt::vformat(format,  fmt::make_format_args(args...));
-        log::root().error("ASSERTION FAILURE: {}", err);
-        throw std::invalid_argument(err);
-    }
-#endif
-}
-
-template<typename...Args>
-void check_rte(bool cond, const char *format, const Args &...args) {
-    check<std::runtime_error>(cond, format, args...);
-}
+// TODO Replace occurrences with specific error code
+constexpr auto raise_rte = check.raise;
 
 template<typename...Args>
 void warn(bool cond, const char *format, const Args &...args) {
-    if (UNLIKELY(!cond)) {
+    if (ARCTICDB_UNLIKELY(!cond)) {
         std::string err = fmt::vformat(format,  fmt::make_format_args(args...));
         log::root().warn("ASSERTION WARNING: {}", err);
     }
 }
 
-[[ noreturn ]] inline void raise_rte(const char *err){
-    ARCTICDB_DEBUG(log::root(), "Explicity throw: {}", err);
-    throw std::runtime_error(err);
-}
+struct WarnOnce {
+    bool warned_ = false;
 
-template<class ...Args>
-[[ noreturn ]] void raise_rte(const char *format, const Args &...args){
-    std::string err = fmt::vformat(format,  fmt::make_format_args(args...));
-    ARCTICDB_DEBUG(log::root(), "Explicity throw: {}", err);
-    throw std::runtime_error(err);
-}
+    template<typename...Args>
+    void check(bool cond, const char *format, const Args &...args) {
+        if (!warned_) {
+            warn(cond, format, std::forward<const Args&>(args)...);
+            warned_ = true;
+        }
+    }
+};
 
-} // arcticdb::util
+} // namespace util
+
+} // namespace arcticdb
 
 // useful to enable deferred formatting using lambda
 namespace fmt {

@@ -64,5 +64,11 @@ inline std::string format(const google::protobuf::Message &msg) {
     return dest;
 }
 
+inline std::string newlines_to_spaces(const ::google::protobuf::Message& msg) {
+    auto out = msg.DebugString();
+    std::replace(std::begin(out), std::end(out), '\n', ' ');
+    return out;
+}
+
 } // namespace arctic::util
 

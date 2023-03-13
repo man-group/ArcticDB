@@ -1,13 +1,17 @@
 """
-Copyright 2023 Man Group Operations Ltd.
-NO WARRANTY, EXPRESSED OR IMPLIED.
+Copyright 2023 Man Group Operations Limited
+
+Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
+
+As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 import pandas as pd
 from arcticdb.version_store import _store as store
+
 try:
     from arctic.date import DateRange
 except ModuleNotFoundError:
-    from tests.util.date import DateRange # Verbatim local copy
+    from tests.util.date import DateRange  # Verbatim local copy
 
 
 def range_eq(result, start, end):

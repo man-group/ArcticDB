@@ -298,6 +298,7 @@ set(arcticdb_srcs
         pipeline/string_pool_utils.cpp
         pipeline/value_set.cpp
         pipeline/write_frame.cpp
+        python/normalization_checks.cpp
         processing/processing_segment.cpp
         processing/aggregation.cpp
         processing/clause.cpp
@@ -320,6 +321,7 @@ set(arcticdb_srcs
         util/allocator.cpp
         util/buffer_pool.cpp
         util/configs_map.cpp
+        util/error_code.cpp
         util/global_lifetimes.cpp
         util/offset_string.cpp
         util/offset_string.cpp
@@ -332,7 +334,8 @@ set(arcticdb_srcs
         version/version_core.cpp
         version/version_store_api.cpp
         version/version_utils.cpp
-        storage/storage_utils.hpp entity/protobufs.hpp)
+        version/symbol_list.cpp
+        version/schema_checks.hpp)
 
 add_library(arcticdb_core_object OBJECT ${arcticdb_srcs})
 

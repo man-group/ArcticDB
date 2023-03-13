@@ -1,6 +1,9 @@
 """
-Copyright 2023 Man Group Operations Ltd.
-NO WARRANTY, EXPRESSED OR IMPLIED.
+Copyright 2023 Man Group Operations Limited
+
+Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
+
+As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 from inspect import signature
 
@@ -8,7 +11,7 @@ import numpy as np
 from pandas import DataFrame
 import pytest
 
-from arcticdb_ext.exceptions import ArcticNativeCxxException
+from arcticdb_ext.exceptions import InternalException
 from arcticdb_ext.version_store import TailRange as _TailRange
 
 
@@ -115,5 +118,5 @@ def test_tail_pickled_symbol(lmdb_version_store):
     symbol = "test_tail_pickled_symbol"
     lmdb_version_store.write(symbol, np.arange(100).tolist())
     assert lmdb_version_store.is_symbol_pickled(symbol)
-    with pytest.raises(ArcticNativeCxxException):
+    with pytest.raises(InternalException):
         _ = lmdb_version_store.tail(symbol)

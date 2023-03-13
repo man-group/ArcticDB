@@ -182,8 +182,8 @@ def _diff_long_stream_descriptor_mismatch(nvs):  # Diffing strings is easier don
     except StreamDescriptorMismatch as sdm:
         nvs.last_mismatch_msg = sdm.args[0]
         preamble, existing, new_val = sdm.args[0].split("\n")
-        existing = _STREAM_DESCRIPTOR_SPLIT.split(existing[existing.find("=") + 2 :])
-        new_val = _STREAM_DESCRIPTOR_SPLIT.split(new_val[new_val.find("=") + 2 :])
+        existing = _STREAM_DESCRIPTOR_SPLIT.split(existing[existing.find("=") + 1 :])
+        new_val = _STREAM_DESCRIPTOR_SPLIT.split(new_val[new_val.find("=") + 1 :])
         diff = difflib.unified_diff(existing, new_val, n=0)
         new_msg_lines = (
             preamble,

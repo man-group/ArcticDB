@@ -1,6 +1,9 @@
 """
-Copyright 2023 Man Group Operations Ltd.
-NO WARRANTY, EXPRESSED OR IMPLIED.
+Copyright 2023 Man Group Operations Limited
+
+Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
+
+As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 from hypothesis import assume, given, settings
 from hypothesis.extra.pandas import column, data_frames, range_indexes
@@ -81,6 +84,7 @@ def test_project_add_col_col_dynamic(lmdb_version_store_dynamic_schema, df):
 
     lib.delete(symbol)
 
+
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
@@ -116,6 +120,7 @@ def test_project_multiply_col_val(lmdb_version_store_dynamic_schema, df):
         pass
 
     lib.delete(symbol)
+
 
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)

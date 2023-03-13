@@ -1,6 +1,9 @@
 """
-Copyright 2023 Man Group Operations Ltd.
-NO WARRANTY, EXPRESSED OR IMPLIED.
+Copyright 2023 Man Group Operations Limited
+
+Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
+
+As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 import numpy as np
 import pandas as pd
@@ -8,7 +11,7 @@ from pandas import DataFrame
 from pandas.testing import assert_frame_equal
 
 from arcticdb.version_store.processing import QueryBuilder
-from arcticdb_ext.exceptions import ArcticNativeCxxException
+from arcticdb_ext.exceptions import InternalException
 from arcticdb.util.hypothesis import (
     use_of_function_scoped_fixtures_in_hypothesis_checked,
     non_zero_numeric_type_strategies,
@@ -219,7 +222,7 @@ def test_group_pickled_symbol(lmdb_version_store):
     assert lmdb_version_store.is_symbol_pickled(symbol)
     q = QueryBuilder()
     q = q.groupby("grouping_column").agg({"to_mean": "mean"})
-    with pytest.raises(ArcticNativeCxxException):
+    with pytest.raises(InternalException):
         _ = lmdb_version_store.read(symbol, query_builder=q)
 
 
@@ -229,7 +232,7 @@ def test_group_column_not_present(lmdb_version_store):
     q = q.groupby("grouping_column").agg({"to_mean": "mean"})
     symbol = "test_group_column_not_present"
     lmdb_version_store.write(symbol, df)
-    with pytest.raises(ArcticNativeCxxException) as e_info:
+    with pytest.raises(InternalException) as e_info:
         _ = lmdb_version_store.read(symbol, query_builder=q)
 
 

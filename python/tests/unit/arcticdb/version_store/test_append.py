@@ -1,41 +1,19 @@
-"""
-Copyright 2023 Man Group Operations Ltd.
-NO WARRANTY, EXPRESSED OR IMPLIED.
-"""
+import pytest
+import random
 import pandas as pd
 import numpy as np
-from pandas.testing import assert_frame_equal
+from tests.util.assertions import assert_frame_equal
 from itertools import chain, product, combinations
 import pytest
+import sys
+from numpy.testing import assert_array_equal
+
 from arcticdb.version_store._common import TimeFrame
 from arcticdb.version_store import NativeVersionStore
-import random
-from datetime import datetime
 from arcticdb.util.test import random_integers
-from numpy.testing import assert_array_equal
-from arcticdb_ext.exceptions import ArcticNativeCxxException
-
-
-# TODO: for quick stress testing
-def _test_append_simple_stress(lmdb_version_store):
-    symbol = "test_append_stress"
-    df1 = pd.DataFrame({"x": np.arange(1, 10, dtype=np.int64)})
-    lmdb_version_store.write(symbol, df1)
-    vit = lmdb_version_store.read(symbol)
-    assert_frame_equal(vit.data, df1)
-
-    t0 = datetime.now()
-
-    for idx in range(3000):
-        if idx % 1000 == 0:
-            t = datetime.now()
-            print("idx:", idx, ", time:", str(t - t0))
-        df2 = pd.DataFrame({"x": np.arange(11, 20, dtype=np.int64)})
-        lmdb_version_store.append(symbol, df2)
-
-    t1 = datetime.now()
-    vit = lmdb_version_store.read(symbol)
-    print("time for read:", datetime.now() - t1)
+from arcticdb.util.hypothesis import InputFactories
+from arcticdb_ext.exceptions import InternalException, NormalizationException
+from arcticdb_ext.version_store import StreamDescriptorMismatch
 
 
 def test_append_simple(lmdb_version_store):
@@ -119,6 +97,10 @@ def gen_params_append_single():
 
 
 @pytest.mark.parametrize("colnum,periods,rownum,cols,tsbounds,append_point", gen_params_append())
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="SKIP_WIN Parameter dimensionality uses too much disk on Windows as LMDB file allocated up front",
+)
 def test_append_partial_read(version_store_factory, colnum, periods, rownum, cols, tsbounds, append_point):
     tz = "America/New_York"
     version_store = version_store_factory(col_per_group=colnum, row_per_segment=rownum)
@@ -142,6 +124,10 @@ def test_append_partial_read(version_store_factory, colnum, periods, rownum, col
 
 
 @pytest.mark.parametrize("colnum,periods,rownum,cols,tsbounds,append_point", gen_params_append())
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="SKIP_WIN Parameter dimensionality uses too much disk on Windows as LMDB file allocated up front",
+)
 def test_incomplete_append_partial_read(version_store_factory, colnum, periods, rownum, cols, tsbounds, append_point):
     tz = "America/New_York"
     version_store = version_store_factory(col_per_group=colnum, row_per_segment=rownum)
@@ -166,8 +152,13 @@ def test_incomplete_append_partial_read(version_store_factory, colnum, periods, 
 
 def test_append_snapshot_delete(lmdb_version_store):
     symbol = "test_append_snapshot_delete"
-    idx1 = np.arange(0, 1000000)
-    d1 = {"x": np.arange(1000000, 2000000, dtype=np.int64)}
+    if sys.platform == "win32":
+        # Keep it smaller on Windows due to restricted LMDB size
+        row_count = 1000
+    else:
+        row_count = 1000000
+    idx1 = np.arange(0, row_count)
+    d1 = {"x": np.arange(row_count, 2 * row_count, dtype=np.int64)}
     df1 = pd.DataFrame(data=d1, index=idx1)
     lmdb_version_store.write(symbol, df1)
     vit = lmdb_version_store.read(symbol)
@@ -175,8 +166,8 @@ def test_append_snapshot_delete(lmdb_version_store):
 
     lmdb_version_store.snapshot("my_snap")
 
-    idx2 = np.arange(1000000, 2000000)
-    d2 = {"x": np.arange(2000000, 3000000, dtype=np.int64)}
+    idx2 = np.arange(row_count, 2 * row_count)
+    d2 = {"x": np.arange(2 * row_count, 3 * row_count, dtype=np.int64)}
     df2 = pd.DataFrame(data=d2, index=idx2)
     lmdb_version_store.append(symbol, df2)
     vit = lmdb_version_store.read(symbol)
@@ -253,6 +244,7 @@ def test_upsert_with_delete(lmdb_version_store):
     first = list_df[len(list_df) - 3]
     second = list_df[len(list_df) - 2]
     third = list_df[len(list_df) - 1]
+    print(type(first))
     expected = pd.concat([first, second, third])
     vit = lmdb_version_store.read(symbol)
     assert_frame_equal(vit.data, expected)
@@ -272,5 +264,30 @@ def test_append_pickled_symbol(lmdb_version_store):
     symbol = "test_append_pickled_symbol"
     lmdb_version_store.write(symbol, np.arange(100).tolist())
     assert lmdb_version_store.is_symbol_pickled(symbol)
-    with pytest.raises(ArcticNativeCxxException):
+    with pytest.raises(InternalException):
         _ = lmdb_version_store.append(symbol, np.arange(100).tolist())
+
+
+# test_hypothesis_version_store.py covers the appends that are allowed.
+# Only need to check the forbidden ones have useful error messages:
+@pytest.mark.parametrize(
+    "initial, append, match",
+    [
+        # (InputFactories.DF_RC_NON_RANGE, InputFactories.DF_DTI, "TODO(AN-722)"),
+        (InputFactories.DF_RC, InputFactories.ND_ARRAY_1D, "(Pandas|ndarray)"),
+        (InputFactories.DF_RC, InputFactories.DF_MULTI_RC, "index type incompatible"),
+        (InputFactories.DF_RC, InputFactories.DF_RC_NON_RANGE, "range.*index which is incompatible"),
+        (InputFactories.DF_RC, InputFactories.DF_RC_STEP, "different.*step"),
+    ],
+)
+@pytest.mark.parametrize("swap", ["swap", ""])
+def test_(initial: InputFactories, append: InputFactories, match, swap, lmdb_version_store: NativeVersionStore):
+    lib = lmdb_version_store
+    if swap:
+        initial, append = append, initial
+    init_data, next_start = initial.make(1, 3)
+    lib.write("s", init_data)
+
+    to_append, _ = append.make(abs(next_start), 1)
+    with pytest.raises(NormalizationException):
+        lib.append("s", to_append, match=match)

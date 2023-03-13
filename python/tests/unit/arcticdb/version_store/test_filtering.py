@@ -1,6 +1,9 @@
 """
-Copyright 2023 Man Group Operations Ltd.
-NO WARRANTY, EXPRESSED OR IMPLIED.
+Copyright 2023 Man Group Operations Limited
+
+Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
+
+As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 import copy
 import pickle
@@ -23,7 +26,7 @@ import string
 
 from arcticdb.exceptions import ArcticNativeException
 from arcticdb.version_store.processing import QueryBuilder
-from arcticdb_ext.exceptions import ArcticNativeCxxException
+from arcticdb_ext.exceptions import InternalException
 from arcticdb.util.hypothesis import (
     use_of_function_scoped_fixtures_in_hypothesis_checked,
     integral_type_strategies,
@@ -101,7 +104,7 @@ def test_filter_column_not_present_static(lmdb_version_store):
     q = q[q["b"] < 5]
     symbol = "test_filter_column_not_present_static"
     lmdb_version_store.write(symbol, df)
-    with pytest.raises(ArcticNativeCxxException) as e_info:
+    with pytest.raises(InternalException) as e_info:
         _ = lmdb_version_store.read(symbol, query_builder=q)
 
 
@@ -157,7 +160,7 @@ def test_filter_categorical(request, lib_type):
     q = q[q.a == "hi"]
     symbol = "test_filter_categorical"
     lib.write(symbol, df)
-    with pytest.raises(ArcticNativeCxxException) as e_info:
+    with pytest.raises(InternalException) as e_info:
         _ = lib.read(symbol, query_builder=q)
 
 
@@ -169,7 +172,7 @@ def test_filter_pickled_symbol(request, lib_type):
     assert lib.is_symbol_pickled(symbol)
     q = QueryBuilder()
     q = q[q.a == 0]
-    with pytest.raises(ArcticNativeCxxException):
+    with pytest.raises(InternalException):
         _ = lib.read(symbol, query_builder=q)
 
 
@@ -181,7 +184,7 @@ def test_filter_date_range_pickled_symbol(request, lib_type):
     df = pd.DataFrame({"a": [[1, 2], [3, 4], [5, 6], [7, 8]]}, index=idx)
     lib.write(symbol, df, pickle_on_failure=True)
     assert lib.is_symbol_pickled(symbol)
-    with pytest.raises(ArcticNativeCxxException) as e_info:
+    with pytest.raises(InternalException) as e_info:
         lib.read(symbol, date_range=(idx[1], idx[2]))
 
 
@@ -189,7 +192,7 @@ def test_filter_date_range_row_indexed(lmdb_version_store_tiny_segment):
     symbol = "test_filter_date_range_row_indexed"
     df = pd.DataFrame({"a": np.arange(3)}, index=np.arange(3))
     lmdb_version_store_tiny_segment.write(symbol, df)
-    with pytest.raises(ArcticNativeCxxException) as e_info:
+    with pytest.raises(InternalException) as e_info:
         lmdb_version_store_tiny_segment.read(
             symbol, date_range=(pd.Timestamp("2000-01-01"), pd.Timestamp("2000-01-02"))
         )
@@ -212,32 +215,32 @@ def test_filter_bool_nonbool_comparison(lmdb_version_store):
     # bool column to string column
     q = QueryBuilder()
     q = q[q["bool"] == q["string"]]
-    with pytest.raises(ArcticNativeCxxException) as e_info:
+    with pytest.raises(InternalException) as e_info:
         lib.read(symbol, query_builder=q)
     # bool column to numeric column
     q = QueryBuilder()
     q = q[q["bool"] == q["numeric"]]
-    with pytest.raises(ArcticNativeCxxException) as e_info:
+    with pytest.raises(InternalException) as e_info:
         lib.read(symbol, query_builder=q)
     # bool column to string value
     q = QueryBuilder()
     q = q[q["bool"] == "test"]
-    with pytest.raises(ArcticNativeCxxException) as e_info:
+    with pytest.raises(InternalException) as e_info:
         lib.read(symbol, query_builder=q)
     # bool column to numeric value
     q = QueryBuilder()
     q = q[q["bool"] == 0]
-    with pytest.raises(ArcticNativeCxxException) as e_info:
+    with pytest.raises(InternalException) as e_info:
         lib.read(symbol, query_builder=q)
     # string column to bool value
     q = QueryBuilder()
     q = q[q["string"] == True]
-    with pytest.raises(ArcticNativeCxxException) as e_info:
+    with pytest.raises(InternalException) as e_info:
         lib.read(symbol, query_builder=q)
     # numeric column to bool value
     q = QueryBuilder()
     q = q[q["numeric"] == True]
-    with pytest.raises(ArcticNativeCxxException) as e_info:
+    with pytest.raises(InternalException) as e_info:
         lib.read(symbol, query_builder=q)
 
 
@@ -680,11 +683,11 @@ def test_filter_compare_string_number_col_val(lmdb_version_store, df, val):
     q = q[q["a"] < val]
     symbol = "test_filter_compare_string_number_col_val"
     lmdb_version_store.write(symbol, df)
-    with pytest.raises(ArcticNativeCxxException) as e_info:
+    with pytest.raises(InternalException) as e_info:
         _ = lmdb_version_store.read(symbol, query_builder=q)
     q = QueryBuilder()
     q = q[val < q["a"]]
-    with pytest.raises(ArcticNativeCxxException) as e_info:
+    with pytest.raises(InternalException) as e_info:
         _ = lmdb_version_store.read(symbol, query_builder=q)
 
 
@@ -697,11 +700,11 @@ def test_filter_compare_string_number_val_col(lmdb_version_store, df, val):
     q = q[val < q["a"]]
     symbol = "test_filter_compare_string_number_val_col"
     lmdb_version_store.write(symbol, df)
-    with pytest.raises(ArcticNativeCxxException) as e_info:
+    with pytest.raises(InternalException) as e_info:
         _ = lmdb_version_store.read(symbol, query_builder=q)
     q = QueryBuilder()
     q = q[q["a"] < val]
-    with pytest.raises(ArcticNativeCxxException) as e_info:
+    with pytest.raises(InternalException) as e_info:
         _ = lmdb_version_store.read(symbol, query_builder=q)
 
 
@@ -718,11 +721,11 @@ def test_filter_compare_string_number_col_col(lmdb_version_store, df):
     q = q[q["a"] < q["b"]]
     symbol = "test_filter_compare_string_number_col_col"
     lmdb_version_store.write(symbol, df)
-    with pytest.raises(ArcticNativeCxxException) as e_info:
+    with pytest.raises(InternalException) as e_info:
         _ = lmdb_version_store.read(symbol, query_builder=q)
     q = QueryBuilder()
     q = q[q["b"] < q["a"]]
-    with pytest.raises(ArcticNativeCxxException) as e_info:
+    with pytest.raises(InternalException) as e_info:
         _ = lmdb_version_store.read(symbol, query_builder=q)
 
 
@@ -739,7 +742,7 @@ def test_filter_isin_string_number(lmdb_version_store, df, vals):
     q = q[q["a"].isin(vals)]
     symbol = "test_filter_isin_string_number"
     lmdb_version_store.write(symbol, df, dynamic_strings=True)
-    with pytest.raises(ArcticNativeCxxException) as e_info:
+    with pytest.raises(InternalException) as e_info:
         _ = lmdb_version_store.read(symbol, query_builder=q)
 
 
@@ -755,7 +758,7 @@ def test_filter_isin_number_string(lmdb_version_store, df, vals):
     q = q[q["a"].isin(vals)]
     symbol = "test_filter_isin_number_string"
     lmdb_version_store.write(symbol, df)
-    with pytest.raises(ArcticNativeCxxException) as e_info:
+    with pytest.raises(InternalException) as e_info:
         _ = lmdb_version_store.read(symbol, query_builder=q)
 
 
@@ -1165,11 +1168,11 @@ def test_filter_arithmetic_string_number_col_val(lmdb_version_store, df, val):
     q = q[(q["a"] + val) < 10]
     symbol = "test_filter_arithmetic_string_number_col_val"
     lmdb_version_store.write(symbol, df, dynamic_strings=True)
-    with pytest.raises(ArcticNativeCxxException) as e_info:
+    with pytest.raises(InternalException) as e_info:
         _ = lmdb_version_store.read(symbol, query_builder=q)
     q = QueryBuilder()
     q = q[(val + q["a"]) < 10]
-    with pytest.raises(ArcticNativeCxxException) as e_info:
+    with pytest.raises(InternalException) as e_info:
         _ = lmdb_version_store.read(symbol, query_builder=q)
 
 
@@ -1182,11 +1185,11 @@ def test_filter_arithmetic_string_number_val_col(lmdb_version_store, df, val):
     q = q[(q["a"] + val) < 10]
     symbol = "test_filter_arithmetic_string_number_val_col"
     lmdb_version_store.write(symbol, df)
-    with pytest.raises(ArcticNativeCxxException) as e_info:
+    with pytest.raises(InternalException) as e_info:
         _ = lmdb_version_store.read(symbol, query_builder=q)
     q = QueryBuilder()
     q = q[(val + q["a"]) < 10]
-    with pytest.raises(ArcticNativeCxxException) as e_info:
+    with pytest.raises(InternalException) as e_info:
         _ = lmdb_version_store.read(symbol, query_builder=q)
 
 
@@ -1203,11 +1206,11 @@ def test_filter_arithmetic_string_number_col_col(lmdb_version_store, df):
     q = q[(q["a"] + q["b"]) < 10]
     symbol = "test_filter_arithmetic_string_number_val_col"
     lmdb_version_store.write(symbol, df, dynamic_strings=True)
-    with pytest.raises(ArcticNativeCxxException) as e_info:
+    with pytest.raises(InternalException) as e_info:
         _ = lmdb_version_store.read(symbol, query_builder=q)
     q = QueryBuilder()
     q = q[(q["b"] + q["a"]) < 10]
-    with pytest.raises(ArcticNativeCxxException) as e_info:
+    with pytest.raises(InternalException) as e_info:
         _ = lmdb_version_store.read(symbol, query_builder=q)
 
 
@@ -1220,11 +1223,11 @@ def test_filter_arithmetic_string_string_col_val(lmdb_version_store, df, val):
     q = q[(q["a"] + val) < 10]
     symbol = "test_filter_arithmetic_string_string_col_val"
     lmdb_version_store.write(symbol, df, dynamic_strings=True)
-    with pytest.raises(ArcticNativeCxxException) as e_info:
+    with pytest.raises(InternalException) as e_info:
         _ = lmdb_version_store.read(symbol, query_builder=q)
     q = QueryBuilder()
     q = q[(val + q["a"]) < 10]
-    with pytest.raises(ArcticNativeCxxException) as e_info:
+    with pytest.raises(InternalException) as e_info:
         _ = lmdb_version_store.read(symbol, query_builder=q)
 
 
@@ -1237,11 +1240,11 @@ def test_filter_arithmetic_string_string_val_col(lmdb_version_store, df, val):
     q = q[(q["a"] + val) < 10]
     symbol = "test_filter_arithmetic_string_string_val_col"
     lmdb_version_store.write(symbol, df, dynamic_strings=True)
-    with pytest.raises(ArcticNativeCxxException) as e_info:
+    with pytest.raises(InternalException) as e_info:
         _ = lmdb_version_store.read(symbol, query_builder=q)
     q = QueryBuilder()
     q = q[(val + q["a"]) < 10]
-    with pytest.raises(ArcticNativeCxxException) as e_info:
+    with pytest.raises(InternalException) as e_info:
         _ = lmdb_version_store.read(symbol, query_builder=q)
 
 
@@ -1258,11 +1261,11 @@ def test_filter_arithmetic_string_string_col_col(lmdb_version_store, df):
     q = q[(q["a"] + q["b"]) < 10]
     symbol = "test_filter_arithmetic_string_string_col_col"
     lmdb_version_store.write(symbol, df, dynamic_strings=True)
-    with pytest.raises(ArcticNativeCxxException) as e_info:
+    with pytest.raises(InternalException) as e_info:
         _ = lmdb_version_store.read(symbol, query_builder=q)
     q = QueryBuilder()
     q = q[(q["b"] + q["a"]) < 10]
-    with pytest.raises(ArcticNativeCxxException) as e_info:
+    with pytest.raises(InternalException) as e_info:
         _ = lmdb_version_store.read(symbol, query_builder=q)
 
 
@@ -1289,7 +1292,7 @@ def test_filter_abs_string(lmdb_version_store, df, val):
     q = q[abs(q["a"]) < val]
     symbol = "test_filter_abs_string"
     lmdb_version_store.write(symbol, df, dynamic_strings=True)
-    with pytest.raises(ArcticNativeCxxException) as e_info:
+    with pytest.raises(InternalException) as e_info:
         _ = lmdb_version_store.read(symbol, query_builder=q)
 
 
@@ -1316,7 +1319,7 @@ def test_filter_neg_string(lmdb_version_store, df, val):
     q = q[-q["a"] < val]
     symbol = "test_filter_neg_string"
     lmdb_version_store.write(symbol, df, dynamic_strings=True)
-    with pytest.raises(ArcticNativeCxxException) as e_info:
+    with pytest.raises(InternalException) as e_info:
         _ = lmdb_version_store.read(symbol, query_builder=q)
 
 
@@ -1633,7 +1636,7 @@ def test_filter_string_less_than(lmdb_version_store):
     q = QueryBuilder()
     q = q[q["a"] < "row2"]
     pandas_query = "a < 'row2'"
-    with pytest.raises(ArcticNativeCxxException) as e_info:
+    with pytest.raises(InternalException) as e_info:
         generic_filter_test(lmdb_version_store, "test_filter_string_less_than", df, q, pandas_query)
 
 
@@ -1642,7 +1645,7 @@ def test_filter_string_less_than_equal(lmdb_version_store):
     q = QueryBuilder()
     q = q[q["a"] <= "row2"]
     pandas_query = "a <= 'row2'"
-    with pytest.raises(ArcticNativeCxxException) as e_info:
+    with pytest.raises(InternalException) as e_info:
         generic_filter_test(lmdb_version_store, "test_filter_string_less_than_equal", df, q, pandas_query)
 
 
@@ -1651,7 +1654,7 @@ def test_filter_string_greater_than(lmdb_version_store):
     q = QueryBuilder()
     q = q[q["a"] > "row2"]
     pandas_query = "a > 'row2'"
-    with pytest.raises(ArcticNativeCxxException) as e_info:
+    with pytest.raises(InternalException) as e_info:
         generic_filter_test(lmdb_version_store, "test_filter_string_greater_than", df, q, pandas_query)
 
 
@@ -1660,7 +1663,7 @@ def test_filter_string_greater_than_equal(lmdb_version_store):
     q = QueryBuilder()
     q = q[q["a"] >= "row2"]
     pandas_query = "a >= 'row2'"
-    with pytest.raises(ArcticNativeCxxException) as e_info:
+    with pytest.raises(InternalException) as e_info:
         generic_filter_test(lmdb_version_store, "test_filter_string_greater_than_equal", df, q, pandas_query)
 
 

@@ -157,7 +157,7 @@ struct Buffer : public BaseBuffer<Buffer, true> {
                                           bytes_offset + required_bytes
             );
             ARCTICDB_TRACE(log::memory(), err);
-            throw std::invalid_argument(err);
+            throw ArcticBaseException<ErrorCategory::INTERNAL>(err);
         }
 
         return reinterpret_cast<T*>(ptr_ + bytes_offset);

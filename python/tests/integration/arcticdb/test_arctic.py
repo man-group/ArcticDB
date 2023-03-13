@@ -1,9 +1,12 @@
 """
-Copyright 2023 Man Group Operations Ltd.
-NO WARRANTY, EXPRESSED OR IMPLIED.
+Copyright 2023 Man Group Operations Limited
+
+Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
+
+As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 
-from arcticdb_ext.exceptions import ArcticNativeCxxException
+from arcticdb_ext.exceptions import InternalException
 
 try:
     from arcticdb.version_store import VersionedItem as PythonVersionedItem
@@ -345,12 +348,12 @@ def test_delete_version_that_does_not_exist(arctic_library):
     lib = arctic_library
 
     # symbol does not exist
-    with pytest.raises(ArcticNativeCxxException):
+    with pytest.raises(InternalException):
         lib.delete("symbol", versions=0)
 
     # version does not exist
     lib.write("symbol", pd.DataFrame())
-    with pytest.raises(ArcticNativeCxxException):
+    with pytest.raises(InternalException):
         lib.delete("symbol", versions=1)
 
 

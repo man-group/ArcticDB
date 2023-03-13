@@ -1,6 +1,9 @@
 """
-Copyright 2023 Man Group Operations Ltd.
-NO WARRANTY, EXPRESSED OR IMPLIED.
+Copyright 2023 Man Group Operations Limited
+
+Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
+
+As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 from __future__ import print_function
 
@@ -11,7 +14,7 @@ import pandas as pd
 import pytest
 import time
 from pandas.testing import assert_frame_equal
-from arcticdb_ext.exceptions import ArcticNativeCxxException
+from arcticdb_ext.exceptions import InternalException
 from arcticdb.version_store._normalization import NPDDataFrame
 
 # configure_test_logger("DEBUG")
@@ -168,5 +171,5 @@ def test_delete_date_range_pickled_symbol(lmdb_version_store):
     df = pd.DataFrame({"a": [[1, 2], [3, 4], [5, 6], [7, 8]]}, index=idx)
     lmdb_version_store.write(symbol, df, pickle_on_failure=True)
     assert lmdb_version_store.is_symbol_pickled(symbol)
-    with pytest.raises(ArcticNativeCxxException) as e_info:
+    with pytest.raises(InternalException) as e_info:
         lmdb_version_store.delete(symbol, (idx[1], idx[2]))

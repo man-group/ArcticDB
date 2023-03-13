@@ -28,18 +28,6 @@ namespace arcticdb::version_store {
 using namespace arcticdb::entity;
 using namespace arcticdb::pipelines;
 
-struct NoSuchVersionException : public std::runtime_error {
-    explicit NoSuchVersionException(const char* msg): std::runtime_error(msg) {};
-    explicit NoSuchVersionException(const std::string& msg): std::runtime_error(msg) {};
-};
-
-struct StreamDescriptorMismatch : public std::runtime_error {
-    StreamDescriptorMismatch(const char* preamble, const StreamDescriptor& existing, const StreamDescriptor& new_val) :
-            std::runtime_error(fmt::format("{}\nexisting={}\n new_val={}", preamble,
-                    fmt::join(existing.fields(), ", "), fmt::join(new_val.fields(), ", "))) {}
-};
-
-
 VersionedItem write_dataframe_impl(
     const std::shared_ptr<Store>& store,
     VersionId version_id,
