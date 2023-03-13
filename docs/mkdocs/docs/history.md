@@ -32,5 +32,4 @@ offering a bi-temporal view of data history with no performance penalty.
 ArcticDB's versatility and ease-of-use have made it the database of choice
 for all front-office timeseries analysis at Man Group.
 
-Please note that unlike Arctic, ArcticDB is not open source. For more information on how ArcticDB is licensed, 
-please see the [licensing section within the FAQ](../faq#licensing).
+For more information on how ArcticDB is licensed, please see the [licensing FAQ](../external/licensing).
