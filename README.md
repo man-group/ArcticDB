@@ -4,7 +4,7 @@
 
 ---
 
-**ArcticDB** is a high performance, serverless Dataframe database for the modern cloud. Launched in February 2003, it is the successor to [Arctic 1.0](https://github.com/man-group/arctic). ArcticDB offers the same intuitive Python-centric API, with a C++ data-processing and compression engine that is compatible with  object stores such as Amazon S3.
+**ArcticDB** is a high performance, serverless Dataframe database for the modern cloud. Launched in February 2023, it is the successor to [Arctic 1.0](https://github.com/man-group/arctic). ArcticDB offers the same intuitive Python-centric API, with a C++ data-processing and compression engine that is compatible with  object stores such as Amazon S3.
 
 ---
 
