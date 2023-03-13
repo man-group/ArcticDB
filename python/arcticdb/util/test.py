@@ -7,7 +7,6 @@ from contextlib import contextmanager
 from typing import Mapping, Any, Optional, Iterable
 import numpy as np
 import pandas as pd
-from pandas.testing import assert_frame_equal
 import pandas.util.testing as tm
 import pytest
 import string
@@ -25,6 +24,27 @@ from arcticc.pb2.storage_pb2 import LibraryDescriptor, VersionStoreConfig
 from arcticdb.version_store.helper import ArcticcFileConfig
 from arcticdb.config import _DEFAULT_ENVS_PATH
 from arcticdb_ext import set_config_int, get_config_int, unset_config_int
+from functools import wraps
+
+
+PANDAS_VERSION = tuple([int(i) for i in pd.__version__.split(".")])
+CHECK_FREQ_VERSION = (1, 1, 0)
+
+
+def maybe_not_check_freq(f):
+    """Ignore frequency when pandas is newer as starts to check frequency which it did not previously do."""
+
+    @wraps(f)
+    def wrapper(*args, **kwargs):
+        if PANDAS_VERSION >= CHECK_FREQ_VERSION and "check_freq" not in kwargs:
+            kwargs["check_freq"] = False
+        return f(*args, **kwargs)
+
+    return wrapper
+
+
+assert_frame_equal = maybe_not_check_freq(pd.testing.assert_frame_equal)
+assert_series_equal = maybe_not_check_freq(pd.testing.assert_series_equal)
 
 
 def configure_console_logger(level="INFO"):

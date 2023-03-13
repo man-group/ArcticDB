@@ -29,5 +29,3 @@ def test_many_version_store(tmpdir):
         version_store.write(symbol, df2)
         vit = version_store.read(symbol)
         assert_frame_equal(vit.data, df2)
-
-
