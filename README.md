@@ -25,7 +25,7 @@ ArcticDB allows you to:
  * Filter, aggregate and create new columns on-the-fly with a Pandas-like syntax
  * Accelerate analytics though concurrency in the C++ data-processing engine
 
-ArcticDB handles data that is big in both row count and column count, so a 20-year history of more than 400,000 unique securities can be stored in a single *symbol*. Each *symbol* is maintained as a separate entity with no shared data which means ArcticDB can scale horizontally across *symbols", maximising the peformance potential of your compute, storage and network.
+ArcticDB handles data that is big in both row count and column count, so a 20-year history of more than 400,000 unique securities can be stored in a single *symbol*. Each *symbol* is maintained as a separate entity with no shared data which means ArcticDB can scale horizontally across *symbols*, maximising the peformance potential of your compute, storage and network.
 
 ArcticDB is designed from the outset to be resilient; there is no single point of failure, and persistent data structures in the storage mean that once a version of a *symbol* has been written, it can never be corrupted by subsequent updates. Pulling compressed data directly from  storage to the client means that there is no server to overload, so your data is always available when you need it.
 
