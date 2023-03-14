@@ -95,7 +95,7 @@ in environment variables.
 
 ##### Using a specific path within a bucket
 
-You may want to restrict access for the Arctic library to a specific path within the bucket. To do this, you can use the `path_prefix` parameter:
+You may want to restrict access for the ArcticDB library to a specific path within the bucket. To do this, you can use the `path_prefix` parameter:
 
 ```python
 >>> ac = Arctic('s3s://s3.eu-west-2.amazonaws.com:arcticdb-test-bucket?path_prefix=test/&aws_auth=true')
@@ -178,7 +178,7 @@ Read it back:
 
 ##### Slicing and Filtering
 
-Arctic enables you to slice by _row_ and by _column_. 
+ArcticDB enables you to slice by _row_ and by _column_. 
 
 !!! info "ArcticDB indexing"
 
