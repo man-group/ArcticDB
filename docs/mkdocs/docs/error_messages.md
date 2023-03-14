@@ -57,7 +57,7 @@ Note that for legacy reasons, the terms `symbol`, `stream`, and `stream ID` are 
 
 ### Pickling errors
 
-These errors relate to data being pickled, which limits the operations available. Internally, pickled symbols are stored as a single object in the [data layer](/technical/on_disk_storage/#data-layer), with any index or column information maintained only in this serialised object. This is in contrast to non-pickled data, where this information is also available in the [index layer](/technical/on_disk_storage/#data-layer).
+These errors relate to data being pickled, which limits the operations available. Internally, pickled symbols are stored as a single object in the [data layer](/technical/on_disk_storage/#data-layer), with any index or column information maintained only in this serialised object. This is in contrast to non-pickled data, where this information is also available in the [index layer](/technical/on_disk_storage/#index-layer).
 
 All of these errors are of type `ArcticNativeCxxException`.
 
