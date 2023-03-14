@@ -5,17 +5,16 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
-from __future__ import print_function
-
 import sys
-
 import numpy as np
 import pandas as pd
 import pytest
 import time
-from pandas.testing import assert_frame_equal
+
+from arcticdb.util.test import assert_frame_equal
 from arcticdb_ext.exceptions import InternalException
 from arcticdb.version_store._normalization import NPDDataFrame
+
 
 # configure_test_logger("DEBUG")
 

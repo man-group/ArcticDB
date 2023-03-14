@@ -6,6 +6,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 from arcticdb.util.test import (
+    assert_frame_equal,
     sample_dataframe,
     test_wide_dataframe,
     test_int_col_dataframe,
@@ -13,7 +14,6 @@ from arcticdb.util.test import (
     random_integers,
 )
 
-from pandas.testing import assert_frame_equal
 import pandas as pd
 import random
 import numpy as np

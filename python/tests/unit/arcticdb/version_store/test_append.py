@@ -1,8 +1,6 @@
-import pytest
 import random
 import pandas as pd
 import numpy as np
-from tests.util.assertions import assert_frame_equal
 from itertools import chain, product, combinations
 import pytest
 import sys
@@ -10,10 +8,9 @@ from numpy.testing import assert_array_equal
 
 from arcticdb.version_store._common import TimeFrame
 from arcticdb.version_store import NativeVersionStore
-from arcticdb.util.test import random_integers
+from arcticdb.util.test import random_integers, assert_frame_equal
 from arcticdb.util.hypothesis import InputFactories
 from arcticdb_ext.exceptions import InternalException, NormalizationException
-from arcticdb_ext.version_store import StreamDescriptorMismatch
 
 
 def test_append_simple(lmdb_version_store):

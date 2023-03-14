@@ -8,7 +8,8 @@ As of the Change Date specified in that file, in accordance with the Business So
 import pytest
 import pandas as pd
 import random
-from pandas.testing import assert_frame_equal
+
+from arcticdb.util.test import assert_frame_equal
 
 
 @pytest.mark.parametrize(

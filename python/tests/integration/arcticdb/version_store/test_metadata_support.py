@@ -6,15 +6,14 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 import time
-
-from arcticdb.version_store import NativeVersionStore, VersionedItem
-
 import numpy as np
 from pandas import DataFrame, Timestamp
-from pandas.testing import assert_frame_equal
 import pytest
+
+from arcticdb.version_store import NativeVersionStore, VersionedItem
 from arcticdb.exceptions import ArcticNativeNotYetImplemented
 from arcticdb_ext.storage import NoDataFoundException
+from arcticdb.util.test import assert_frame_equal
 
 
 # In the following lines, the naming convention is

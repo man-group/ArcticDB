@@ -8,6 +8,8 @@ As of the Change Date specified in that file, in accordance with the Business So
 import numpy as np
 from numpy.testing import assert_equal
 import platform
+import pandas as pd
+
 from arcticdb_ext.types import (
     TypeDescriptor,
     StreamDescriptor,
@@ -17,10 +19,8 @@ from arcticdb_ext.types import (
     IndexDescriptor,
     IndexKind,
 )
-import pandas as pd
 from arcticdb_ext.stream import FixedTickRowBuilder, SegmentHolder, FixedTimestampAggregator, TickReader
-
-from pandas.testing import assert_frame_equal
+from arcticdb.util.test import assert_frame_equal
 
 
 def test_vl_string_simple():

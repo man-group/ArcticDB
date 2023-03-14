@@ -8,7 +8,6 @@ As of the Change Date specified in that file, in accordance with the Business So
 from collections import defaultdict
 from typing import Dict, List, Set, Any, Optional, Tuple
 from pandas import DataFrame
-from pandas.testing import assert_frame_equal
 from enum import Enum, IntFlag
 from itertools import zip_longest
 import attr
@@ -18,6 +17,8 @@ from hypothesis import strategies as st, assume, stateful, settings, HealthCheck
 from hypothesis.stateful import RuleBasedStateMachine, Bundle, rule, invariant, run_state_machine_as_test
 
 from arcticdb.version_store import NativeVersionStore
+from arcticdb.util.test import assert_frame_equal
+
 
 # Patches future hypothesis features
 consumes = getattr(stateful, "consumes", lambda x: x)  # consumes() first introduced in hypothesis 3.85

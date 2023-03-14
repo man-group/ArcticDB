@@ -9,9 +9,15 @@ import numpy as np
 import pandas as pd
 import random
 import datetime
-from pandas.testing import assert_frame_equal
-from arcticdb.util.test import random_strings_of_length, random_integers, random_floats, random_dates
 import pytest
+
+from arcticdb.util.test import (
+    assert_frame_equal,
+    random_strings_of_length,
+    random_integers,
+    random_floats,
+    random_dates,
+)
 
 
 def test_parallel_write(lmdb_version_store):

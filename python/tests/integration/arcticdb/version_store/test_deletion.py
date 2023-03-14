@@ -5,20 +5,17 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
-from __future__ import print_function
-
 import sys
-
 import numpy as np
 import pandas as pd
 import pytest
+import random
+from itertools import chain, product
+
 from arcticdb.config import Defaults
 from arcticdb.version_store.helper import ArcticMemoryConfig
 from arcticdb_ext.storage import NoDataFoundException
-from pandas.testing import assert_frame_equal
-import random
-from itertools import chain, product
-from arcticdb.util.test import config_context, random_string
+from arcticdb.util.test import config_context, random_string, assert_frame_equal
 from typing import TYPE_CHECKING
 
 

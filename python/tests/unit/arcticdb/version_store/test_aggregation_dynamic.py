@@ -6,25 +6,25 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 import uuid
-
+from hypothesis import assume, given, settings
+from hypothesis.extra.pandas import column, data_frames, range_indexes
+import pytest
 import numpy as np
 import pandas as pd
 from pandas import DataFrame
-from pandas.testing import assert_frame_equal
-from pandas.core.base import SpecificationError
+try:
+    from pandas.errors import SpecificationError
+except:
+    from pandas.core.base import SpecificationError
 
 from arcticdb.version_store.processing import QueryBuilder
 from arcticdb_ext.exceptions import InternalException
+from arcticdb.util.test import make_dynamic, assert_frame_equal
 from arcticdb.util.hypothesis import (
     use_of_function_scoped_fixtures_in_hypothesis_checked,
     non_zero_numeric_type_strategies,
     string_strategy,
 )
-
-from hypothesis import assume, given, settings
-from hypothesis.extra.pandas import column, data_frames, range_indexes
-import pytest
-from arcticdb.util.test import make_dynamic
 
 
 def assert_equal_value(data, expected):

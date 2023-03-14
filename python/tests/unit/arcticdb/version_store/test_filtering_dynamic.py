@@ -9,12 +9,16 @@ from hypothesis import assume, given, settings
 from hypothesis.extra.pandas import column, data_frames, range_indexes
 import hypothesis.strategies as st
 import numpy as np
-from pandas import DataFrame
-from pandas.testing import assert_frame_equal
 import pandas as pd
 
+try:
+    from pandas.errors import UndefinedVariableError
+except ImportError:
+    from pandas.core.computation.ops import UndefinedVariableError
+
+
 from arcticdb.version_store.processing import QueryBuilder
-from arcticdb.util.test import test_wide_dataframe, make_dynamic, regularize_dataframe
+from arcticdb.util.test import test_wide_dataframe, make_dynamic, regularize_dataframe, assert_frame_equal
 from arcticdb.util.hypothesis import (
     use_of_function_scoped_fixtures_in_hypothesis_checked,
     integral_type_strategies,
@@ -40,7 +44,7 @@ def generic_dynamic_filter_test(version_store, symbol, df, arctic_query, pandas_
                 print("Expected\n{}".format(expected))
                 print("Received\n{}".format(received))
                 assert False
-    except pd.core.computation.ops.UndefinedVariableError:
+    except UndefinedVariableError:
         # Might have edited out the query columns entirely
         pass
 
@@ -266,7 +270,7 @@ def test_numeric_filter_dynamic_schema(lmdb_version_store_tiny_segment_dynamic):
 
 
 def test_filter_column_not_present_dynamic(lmdb_version_store_dynamic_schema):
-    df = DataFrame({"a": np.arange(2)}, index=np.arange(2))
+    df = pd.DataFrame({"a": np.arange(2)}, index=np.arange(2))
     q = QueryBuilder()
     q = q[q["b"] < 5]
     symbol = "test_filter_column_not_present_static"
