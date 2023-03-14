@@ -99,38 +99,42 @@ class StreamReader {
         auto idx_key_rg = folly::range(idx_key_container.begin(), idx_key_container.end());
         auto key_it = KeyRangeIteratorType(index_range_, idx_key_rg);
         auto idx_seg_it = IdxSegmentIteratorType(index_range_, std::move(key_it), store_);
-        return idx_seg_it;
+        return std::move(idx_seg_it);
     }
 
     DataSegmentIteratorType iterator_segments() {
         auto idx_seg_it = iterator_indexes();
         auto keys_from_seg = KeysFromSegIteratorType{index_range_, std::move(idx_seg_it)};
         auto res = DataSegmentIteratorType(index_range_, std::move(keys_from_seg), store_);
-        return res;
+        return std::move(res);
     }
 
     RowsIteratorType iterator_rows() {
         auto data_seg_it = iterator_segments();
         auto res = RowsIteratorType(index_range_, std::move(data_seg_it));
-        return res;
+        return std::move(res);
     }
 
     auto generate_rows() {
-        return folly::gen::from(key_gen_())
-            | generate_segments_from_keys(*store_, read_timeout_, IDX_PREFETCH_WINDOW, opts_)
-            | generate_keys_from_segments(*store_, entity::KeyType::TABLE_DATA, entity::KeyType::TABLE_INDEX)
-            | generate_segments_from_keys(*store_, read_timeout_, DATA_PREFETCH_WINDOW, opts_)
-            | generate_rows_from_data_segments();
+        return std::move(
+            folly::gen::from(key_gen_())
+                | generate_segments_from_keys(*store_, read_timeout_, IDX_PREFETCH_WINDOW, opts_)
+                | generate_keys_from_segments(*store_, entity::KeyType::TABLE_DATA, entity::KeyType::TABLE_INDEX)
+                | generate_segments_from_keys(*store_, read_timeout_, DATA_PREFETCH_WINDOW, opts_)
+                | generate_rows_from_data_segments()
+        );
     }
 
     auto generate_data_keys() {
-        return folly::gen::from(key_gen_())
-            | generate_segments_from_keys(*store_, read_timeout_, IDX_PREFETCH_WINDOW, opts_)
-            | generate_keys_from_segments(*store_, entity::KeyType::TABLE_DATA, entity::KeyType::TABLE_INDEX);
+        return std::move(
+                folly::gen::from(key_gen_())
+                    | generate_segments_from_keys(*store_, read_timeout_, IDX_PREFETCH_WINDOW, opts_)
+                    | generate_keys_from_segments(*store_, entity::KeyType::TABLE_DATA, entity::KeyType::TABLE_INDEX)
+        );
     }
 
     auto &&generate_rows_from_data_segments() {
-        return folly::gen::map([](auto &&key_seg) {
+        return std::move(folly::gen::map([](auto &&key_seg) {
             return folly::gen::detail::GeneratorBuilder<RowRef>() + [&](auto &&yield) {
                 auto[key, seg] = std::move(key_seg);
                 for (std::size_t i = 0; i < seg.row_count(); ++i) {
@@ -138,7 +142,7 @@ class StreamReader {
                 }
             };
         })
-        | folly::gen::concat;
+        | folly::gen::concat);
     }
 
     template<class Visitor>
