@@ -10,7 +10,6 @@ from contextlib import contextmanager
 from typing import Mapping, Any, Optional, Iterable
 import numpy as np
 import pandas as pd
-import pandas.util.testing as tm
 import pytest
 import string
 import random
@@ -86,12 +85,16 @@ def get_test_logger_config(level: str = "INFO", outputs: Optional[Iterable[str]]
     return log_cfgs
 
 
+def random_string(length: int):
+    return "".join(random.choice(string.ascii_uppercase + string.digits) for _ in range(length))
+
+
 def get_sample_dataframe(size=1000, seed=0):
     np.random.seed(seed)
     df = pd.DataFrame(
         {
             "uint8": random_integers(size, np.uint8),
-            "strings": [tm.rands(10) for _ in range(size)],
+            "strings": [random_string(10) for _ in range(size)],
             "uint16": random_integers(size, np.uint16),
             "uint32": random_integers(size, np.uint32),
             "uint64": random_integers(size, np.uint64),
@@ -109,7 +112,7 @@ def get_sample_dataframe(size=1000, seed=0):
 
 def get_sample_dataframe_only_strings(size=1000, seed=0, num_cols=1):
     np.random.seed(seed)
-    df = pd.DataFrame({"strings" + str(idx): [tm.rands(10) for _ in range(size)] for idx in range(num_cols)})
+    df = pd.DataFrame({"strings" + str(idx): [random_string(10) for _ in range(size)] for idx in range(num_cols)})
     return df
 
 
@@ -245,7 +248,7 @@ def test_wide_dataframe(size=10000, seed=0):
     return pd.DataFrame(
         {
             "uint8": random_integers(size, np.uint8),
-            "strings": [tm.rands(100) for _ in range(size)],
+            "strings": [random_string(100) for _ in range(size)],
             "uint16": random_integers(size, np.uint16),
             "uint32": random_integers(size, np.uint32),
             "uint64": random_integers(size, np.uint64),
@@ -262,14 +265,18 @@ def test_wide_dataframe(size=10000, seed=0):
 
 def test_pickle():
     return np.random.choice(
-        [list(random_integers(10000, np.uint32)), str(tm.rands(100)), {"a": list(random_integers(100000, np.int32))}]
+        [
+            list(random_integers(10000, np.uint32)),
+            str(random_string(100)),
+            {"a": list(random_integers(100000, np.int32))},
+        ]
     )
 
 
 def random_strings_of_length(num, length, unique):
     out = []
     for i in range(num):
-        out.append("".join(random.choice(string.ascii_uppercase + string.digits) for _ in range(length)))
+        out.append(random_string(length))
 
     if unique:
         return list(set(out))

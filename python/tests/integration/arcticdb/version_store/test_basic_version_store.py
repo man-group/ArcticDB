@@ -20,7 +20,7 @@ from arcticc.pb2.descriptors_pb2 import NormalizationMetadata
 from collections import namedtuple
 from datetime import datetime, timedelta
 from numpy.testing import assert_array_equal
-from pandas.util.testing import assert_frame_equal, assert_series_equal
+from pandas.testing import assert_frame_equal, assert_series_equal
 from pytz import timezone
 
 from arcticdb.config import Defaults
