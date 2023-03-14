@@ -9,7 +9,8 @@ from setuptools.command.build_ext import build_ext
 from setuptools.command.build_py import build_py
 from setuptools.command.develop import develop
 from wheel.bdist_wheel import bdist_wheel
-
+from pathlib import Path
+from pkg_resources import packaging
 
 class ProtobufFiles(object):
     def __init__(
@@ -118,9 +119,27 @@ class CMakeBuild(build_ext):
             "CC": "/opt/gcc/8.2.0/bin/gcc",
             "CMAKE_ROOT": "/opt/cmake/share/cmake-3.12",
         }
+        if "MB_PYTHON_PLATFORM_NAME" in os.environ:
+            python_root_dir = "/default-pegasus-venv" if args.version != "medusa" else "/opt/man/releases/python-medusa/36-1"
+        else:
+            python_root_dir = Path(os.path.dirname(sys.executable)).parent
+
+        python_version = "{}.{}".format(sys.version_info[:2][0], sys.version_info[:2][1])
+        lib_path = osp.join(python_root_dir, "lib")
+        # The include path in python3.8 is different - does not have "m" in the end (lol)
+        include_path = osp.join(python_root_dir, "include")
+        python_lib_path = osp.join(lib_path, "libpython{}{}.so".format(python_version, "" if packaging.version.parse(python_version) >= packaging.version.parse("3.8") else "m"))
+
         process_args = [
             "cmake",
             "-DCMAKE_DEPENDS_USE_COMPILER=FALSE",
+            "-DPYBIND11_FINDPYTHON=ON",
+            "-DENV_BASE_DIR={}".format(python_root_dir),
+            "-DPython_ROOT_DIR={}".format(python_root_dir),
+            "-DPYTHON_LIBRARIES={}".format(lib_path),
+            "-DPYTHON_INCLUDE_DIRS={}".format(include_path),
+            "-DBUILD_PYTHON_VERSION={}".format(python_version),
+            "-DPYTHON_LIBRARY_SO={}".format(python_lib_path),
             "-G",
             "CodeBlocks - Unix Makefiles",
             "/opt/arcticdb/cpp"
