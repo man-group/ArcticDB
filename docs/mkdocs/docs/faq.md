@@ -61,32 +61,13 @@ Bindings are currently only available for Python.
 
 Please see our [getting started guide](../)!
 
-## Licensing
-
-###*How is ArcticDB licensed?*
-
-ArcticDB can be installed straight from PyPi:
-
-```
-pip install arcticdb
-```
-
-Once installed, ArcticDB has two modes; *licensed* and *unlicensed*. Without a license, ArcticDB is only valid for 
-non-production use and the software will only function up to the trial end-date. This date is stated in the description 
-of the package visible on *PyPi*.
-
-For a 3-month trial license that permits production use, please acquire a **FREE** license from [https://www.arcticdb.com](https://www.arcticdb.com). Once installed, ArcticDB is 
-licensed for production use.
-
-For perpetual production use for yourself and your team, please contact us as described on [https://www.arcticdb.com](https://www.arcticdb.com).
-
 ## Technical
 
 ### *Does ArcticDB use SQL?*
 
 No. ArcticDB enables data access and modifications with a Python API that speaks in terms of Pandas DataFrames. See the reference documentation for more details.
 
-### *Does ArcticDB deduplicate data?*
+### *Does ArcticDB de-duplicate data?*
 
 Yes.
 
@@ -142,7 +123,7 @@ You can also change the type of numerical columns - for example, integers will b
 
 ### *How does ArcticDB segment data?*
 
-See [On Disk Storage Format](../technical/on_disk_storage) for more details. 
+See [On Disk Storage Format](../technical/on_disk_storage) and the [documentation](/api/arcticdb/arcticdb.LibraryOptions) for the `rows_per_segment` and `columns_per_segment` library configuration options for more details. 
 
 ### *How does ArcticDB handle streaming data?*
 
@@ -162,33 +143,24 @@ To reiterate, ArcticDB supports concurrent writers to multiple symbols, even wit
 
 ### *Does ArcticDB cache any data locally?*
 
-Yes. ArcticDB library instances maintain a short-lived cache containing what it believes is the latest version for every encountered symbol. 
-This cache is invalidated after 5 seconds by default - this invalidation period can be modified via the following snippet:
-
-```
-from arcticcxx import set_config_int
-set_config_int("VersionMap.ReloadInterval", <new cache invalidation period>)  # set to 0 to disable caching entirely
-```
-
-As a result of this caching, it is theoretically possible for two independent library instances to disagree as to what the latest version of a symbol is 
-for a short period of time.
-
-This caching is designed to reduce load on storage - if this is not a concern it can be safely disabled as described above.
-
-Other than this, there is no client-side caching in ArcticDB.
+Yes, please see the [Runtime Configuration](/runtime_config#versionmapreloadinterval) page for details.
 
 ### *How can I enable detailed logging?*
 
-You can set the following environment variables to enable logging:
+Please see the [Runtime Configuration](/runtime_config#logging-configuration) page for details.
 
-```
-ARCTICDB_timings_loglevel=debug
-ARCTICDB_version_loglevel=debug
-ARCTICDB_storage_loglevel=debug
-```
+### *How can I tune the performance of ArcticDB?*
 
-The following will enable S3 logging, which will output all S3 logs to a file in the present working directory:
+Please see the [Runtime Configuration](/runtime_config#versionstorenumcputhreads-and-versionstorenumiothreads) page for details.
 
-```
-ARCTICDB_AWS_LogLevel_int=6
-```
+### Does ArcticDB support categorical data?
+
+ArcticDB currently offers extremely limited support for categorical data. Series and DataFrames with categorical columns can be provided to the `write` and `write_batch` methods, and will then behave as expected on `read`. However, `append` and `update` are not yet supported with categorical data, and will raise an exception if attempted. The `QueryBuilder` is also not supported with categorical data, and will either raise an exception, or give incorrect results, depending on the exact operations requested.
+
+### How does ArcticDB handle `NaN`?
+
+The handling of `NaN` in ArcticDB depends on the type of the column under consideration:
+
+* For string columns, `NaN`, as well as Python `None`, are fully supported.
+* For floating-point numeric columns, `NaN` is also fully supported.
+* For integer numeric columns `NaN` is not supported. A column that otherwise contains only integers will be treated as a floating point column if a `NaN` is encountered by ArcticDB, at which point [the usual rules](/api/arcticdb/arcticdb.LibraryOptions) around type promotion for libraries configured with or without dynamic schema all apply as usual.
