@@ -23,7 +23,6 @@ cmake_policy(POP)
 find_package(Boost REQUIRED)
 find_package(fmt REQUIRED)
 find_package(Folly REQUIRED)
-find_package(GLog REQUIRED)
 find_package(Gflags REQUIRED)
 find_package(LZ4 REQUIRED)
 find_package(libmongocxx-static REQUIRED)
@@ -34,32 +33,23 @@ find_package(Threads REQUIRED)
 # Libraries compiled by vcpkg and also baked into our internal image:
 if (ARCTICDB_USING_VCPKG)
     find_package(double-conversion REQUIRED)
-    set(Double_conversion_LIBRARY double-conversion::double-conversion)
-
-    find_package(Fizz REQUIRED)
-    set(Fizz_LIBRARY fizz::fizz)
-
     find_package(Libevent CONFIG REQUIRED)
-    set(Event_core_LIBRARY libevent::core)
 
     find_package(protobuf REQUIRED)
     set(Protobuf_lite_LIBRARY protobuf::libprotobuf-lite)
     set(Protobuf_LIBRARY protobuf::libprotobuf)
 
-    find_package(wangle REQUIRED)
-    set(Wangle_LIBRARY wangle::wangle)
-
     find_package(zstd CONFIG REQUIRED)  # "CONFIG" bypass our cpp/CMake/FindZstd.cmake module
     set(Zstd_LIBRARY $<IF:$<TARGET_EXISTS:zstd::libzstd_shared>,zstd::libzstd_shared,zstd::libzstd_static>)
 
 else()
-    find_library(Double_conversion_LIBRARY NAMES double-conversion REQUIRED)
-    find_library(Event_core_LIBRARY NAMES event_core libevent_core REQUIRED)
-    find_library(Fizz_LIBRARY NAMES fizz REQUIRED)
     find_library(Protobuf_lite_LIBRARY NAMES libprotobuf-lite protobuf-lite REQUIRED)
     find_library(Protobuf_LIBRARY NAMES libprotobuf protobuf REQUIRED)
-    find_library(Wangle_LIBRARY NAMES wangle REQUIRED)
     find_package(Zstd MODULE REQUIRED) # Uses our FindZstd module, which sets Zstd_LIBRARY
+
+    get_target_property(NEW_FOLLY_DEPS Folly::folly_deps INTERFACE_LINK_LIBRARIES)
+    list(TRANSFORM NEW_FOLLY_DEPS REPLACE "/usr/local/lib/libsodium\\.so" "libsodium.a")
+    set_target_properties(Folly::folly_deps PROPERTIES INTERFACE_LINK_LIBRARIES "${NEW_FOLLY_DEPS}")
 endif()
 
 # Libraries baked into the internal and external Linux images are found by searching various paths
@@ -67,11 +57,8 @@ endif()
 find_library(Pcre_LIBRARY NAMES pcre PATHS /usr/local/lib/libpcre.a REQUIRED)
 if (WIN32)
     find_package(Iconv)
-    find_package(unofficial-sodium CONFIG REQUIRED)
-    set(Sodium_LIBRARY unofficial-sodium::sodium)
 else ()
     find_library(Sasl2_LIBRARY NAMES sasl2 libsasl2 PATHS /usr/local/lib/libsasl2.a REQUIRED)
-    set(Sodium_LIBRARY libsodium.a) # Make the linker find it. Otherwise a libsodium.so creeps into the link path
 endif ()
 
 find_path(BITMAGIC_INCLUDE_DIRS "bitmagic/bm.h")
@@ -403,16 +390,9 @@ set (arcticdb_core_libraries
         ${Zstd_LIBRARY}
         lmdb
         spdlog::spdlog
-        ${Wangle_LIBRARY}
-        ${Fizz_LIBRARY}
-        Folly::folly
-        glog::glog
-        gflags
-        ${Double_conversion_LIBRARY}
+        Folly::folly # Transitively includes: double-conversion, gflags, glog, libevent, libssl, libcrypto, libiberty, libsodium
         remotery_static
-        ${Event_core_LIBRARY}
         ${Pcre_LIBRARY}
-        ${Sodium_LIBRARY}
         ${ARCTICDB_PYTHON_MODULE}
         )
 
