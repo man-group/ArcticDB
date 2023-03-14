@@ -33,6 +33,9 @@ struct TypedBlockData {
         TypedColumnBlockIterator(ValueType* ptr)
             :  ptr_(ptr) { }
 
+        // GCC 10 wants a non-compiler-generated c'tor because the other copy c'tor is explicit
+        TypedColumnBlockIterator(const TypedColumnBlockIterator& other) : ptr_(other.ptr_) {}
+
         template <class OtherValue>
         explicit TypedColumnBlockIterator(const TypedColumnBlockIterator<OtherValue>& other)
             : ptr_(other.ptr_){}

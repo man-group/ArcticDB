@@ -339,7 +339,7 @@ set(arcticdb_srcs
 
 add_library(arcticdb_core_object OBJECT ${arcticdb_srcs})
 
-if (NOT WIN32) 
+if (NOT WIN32)
     if (STATIC_LINK_STD_LIB)
         message("Statically linking standard libraries")
         set(standard_libraries
@@ -471,7 +471,7 @@ target_link_libraries(arcticdb_core PRIVATE
         ${LIBMONGOCXX_STATIC_LIBRARIES_NO_SASL}
         ${LIBBSONCXX_STATIC_LIBRARIES}
         ${AWSSDK_LINK_LIBRARIES}
-        ${PYTHON_LIBRARY_SO}
+        Python3::Module
         )
 
 GENERATE_EXPORT_HEADER(arcticdb_core)
