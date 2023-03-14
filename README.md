@@ -124,7 +124,7 @@ We are also always looking for feedback from our dedicated community! If you hav
 
 ### Contribution Licensing
 
-Since this project is distributed under the terms of the [BSL license](https://github.com/man-group/ArcticDB/blob/f357ac2ea8bf5a1c425fd7376dba78734fccf4b7/BSL%20License), contributions that you make are licensed under the same terms. For us to be able to accept your contributions, we will need explicit confirmation from you that you are able and willing to provide them under these terms, and the mechanism we use to do this is the [ArcticDB Individual Contributor License Agreement](https://github.com/man-group/ArcticDB/blob/94a6eaaa7b9ba011266b5dfc28e122bec03fb451/Individual%20Contributor%20License%20Agreement.md). 
+Since this project is distributed under the terms of the [BSL license](https://github.com/man-group/ArcticDB/blob/c11ed9a257661e18a80e39482d35a0c260514d94/LICENSE.txt), contributions that you make are licensed under the same terms. For us to be able to accept your contributions, we will need explicit confirmation from you that you are able and willing to provide them under these terms, and the mechanism we use to do this is the [ArcticDB Individual Contributor License Agreement](https://github.com/man-group/ArcticDB/blob/94a6eaaa7b9ba011266b5dfc28e122bec03fb451/Individual%20Contributor%20License%20Agreement.md). 
 
 **Individuals** - To participate under these terms, please include the following line as the last line of the commit message for each commit in your contribution. You must use your real name (no pseudonyms, and no anonymous contributions). 
 
@@ -134,6 +134,6 @@ Signed-Off By: Random J. Developer <random@developer.example.org>. By including 
 
 ## Community
 
-Do you have any questions or issues? Chat to us and other users through our dedicated Slack Workspace - sign up for Slack access on [our website.](https://arcticdb.io).
+Do you have any questions or issues? Chat to us and other users through our dedicated Slack Workspace - sign up for Slack access on [our website](https://arcticdb.io).
 
 Alternatively email us at arcticdb@man.com or come chat to us on [Twitter](https://www.twitter.com/arcticdb)!
