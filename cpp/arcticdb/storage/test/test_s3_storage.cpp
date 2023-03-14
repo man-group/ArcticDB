@@ -11,40 +11,22 @@
 #include <aws/core/Aws.h>
 #include <arcticdb/util/composite.hpp>
 
-struct EnvFunctionShim : ::testing::Test {
-    std::unordered_set<const char*> env_vars_to_unset{};
-
-    void setenv(const char* envname, const char* envval, bool) {
-        env_vars_to_unset.insert(envname);
-#if (WIN32)
-        _putenv_s(envname, envval);
-#else
-        ::setenv(envname, envval, false);
-#endif
-    }
-
-    virtual ~EnvFunctionShim() {
-        for (const char* envname : env_vars_to_unset) {
-#if (WIN32)
-            _putenv_s(envname, "");
-#else
-            ::unsetenv(envname);
-#endif
-        }
-    }
-};
-
-
-class ProxyEnvVarSetHttpProxyForHttpsEndpointFixture : public EnvFunctionShim {
+class ProxyEnvVarSetHttpProxyForHttpsEndpointFixture : public ::testing::Test {
 protected:
     ProxyEnvVarSetHttpProxyForHttpsEndpointFixture()
     {
         as3::S3ApiInstance::instance();
         setenv("HTTPS_PROXY", "http://http-proxy.com", false);
     }
+
+    ~ProxyEnvVarSetHttpProxyForHttpsEndpointFixture()
+    {
+        unsetenv("HTTPS_PROXY");
+    }
+private:
 };
 
-class ProxyEnvVarUpperCaseFixture : public EnvFunctionShim {
+class ProxyEnvVarUpperCaseFixture : public ::testing::Test {
 protected:
     ProxyEnvVarUpperCaseFixture()
     {
@@ -52,9 +34,16 @@ protected:
         setenv("HTTP_PROXY", "http://http-proxy-2.com:2222", false);
         setenv("HTTPS_PROXY", "https://https-proxy-2.com:2222", false);
     }
+
+    ~ProxyEnvVarUpperCaseFixture()
+    {
+        unsetenv("HTTP_PROXY");
+        unsetenv("HTTPS_PROXY");
+    }
+private:
 };
 
-class ProxyEnvVarLowerCasePrecedenceFixture : public EnvFunctionShim {
+class ProxyEnvVarLowerCasePrecedenceFixture : public ::testing::Test {
 protected:
     ProxyEnvVarLowerCasePrecedenceFixture()
     {
@@ -64,9 +53,18 @@ protected:
         setenv("https_proxy", "https://https-proxy-1.com:2222", false);
         setenv("HTTPS_PROXY", "https://https-proxy-2.com:2222", false);
     }
+
+    ~ProxyEnvVarLowerCasePrecedenceFixture()
+    {
+        unsetenv("http_proxy");
+        unsetenv("HTTP_PROXY");
+        unsetenv("https_proxy");
+        unsetenv("HTTPS_PROXY");
+    }
+private:
 };
 
-class NoProxyEnvVarUpperCaseFixture : public EnvFunctionShim {
+class NoProxyEnvVarUpperCaseFixture : public ::testing::Test {
 protected:
     NoProxyEnvVarUpperCaseFixture()
     {
@@ -74,9 +72,16 @@ protected:
         setenv("HTTP_PROXY", "http://http-proxy-2.com:2222", false);
         setenv("NO_PROXY", "http://test-1.endpoint.com", false);
     }
+
+    ~NoProxyEnvVarUpperCaseFixture()
+    {
+        unsetenv("HTTP_PROXY");
+        unsetenv("NO_PROXY");
+    }
+private:
 };
 
-class NoProxyEnvVarLowerCasePrecedenceFixture : public EnvFunctionShim {
+class NoProxyEnvVarLowerCasePrecedenceFixture : public ::testing::Test {
 protected:
     NoProxyEnvVarLowerCasePrecedenceFixture()
     {
@@ -85,6 +90,14 @@ protected:
         setenv("no_proxy", "http://test-1.endpoint.com,http://test-2.endpoint.com", false);
         setenv("NO_PROXY", "http://test-3.endpoint.com", false);
     }
+
+    ~NoProxyEnvVarLowerCasePrecedenceFixture()
+    {
+        unsetenv("http_proxy");
+        unsetenv("no_proxy");
+        unsetenv("NO_PROXY");
+    }
+private:
 };
 
 TEST(TestS3Storage, basic) {

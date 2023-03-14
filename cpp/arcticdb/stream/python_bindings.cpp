@@ -147,7 +147,7 @@ void register_stream_bindings(py::module &m) {
         .def("start_row", &Agg::start_row < timestamp > , py::return_value_policy::reference);
 
     py::class_<FixedTickRowBuilder>(m, "FixedTickRowBuilder")
-        .def("start_row", [](FixedTickRowBuilder &b, entity::timestamp timestamp) {
+        .def("start_row", [](FixedTickRowBuilder &b, std::uint64_t timestamp) {
             b.start_row(timestamp);
         })
         .def("end_row", &FixedTickRowBuilder::end_row)
