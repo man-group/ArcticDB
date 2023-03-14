@@ -57,7 +57,7 @@ Note that for legacy reasons, the terms `symbol`, `stream`, and `stream ID` are 
 
 ### Pickling errors
 
-These errors relate to data being pickled, which limits the operations available. Internally, pickled symbols are stored as opaque, serialised binary blobs in the [data layer](/technical/on_disk_storage/#data-layer). No index or column information is maintained in this serialised object which is in contrast to non-pickled data, where this information is stored in the [index layer](/technical/on_disk_storage/#data-layer).
+These errors relate to data being pickled, which limits the operations available. Internally, pickled symbols are stored as opaque, serialised binary blobs in the [data layer](/technical/on_disk_storage/#data-layer). No index or column information is maintained in this serialised object which is in contrast to non-pickled data, where this information is stored in the [index layer](/technical/on_disk_storage/#index-layer).
 
 Furthermore, it is not possible to partially read/update/append the data using the ArcticDB API or use the QueryBuilder with pickled symbols. 
 
