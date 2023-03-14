@@ -94,7 +94,7 @@ The documentation for ArcticDB is contained elsewhere and is in the process of b
 
 ## License
 
-ArcticDB is released under a [Business Source License 1.1 (BSL)](https://github.com/man-group/ArcticDB/blob/2dd7263fc917a3c41082a11d8d6a0f38ae5bcb42/LICENSE)
+ArcticDB is released under a [Business Source License 1.1 (BSL)](https://github.com/man-group/ArcticDB/blob/b0188a330b9eb99944164ea4a6282212b177a1f2/LICENSE.txt)
 
 BSL features are free to use and the source code is available, but users may not use ArcticDB for production use or for a Database Service, without agreement with Man Group Operations Limited. 
 
