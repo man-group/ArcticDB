@@ -35,7 +35,7 @@ The reference layer primarily stores keys of type _Version Reference_, as [docum
 
 ### Version Layer
 
-The version layer contains a linked list of immutable atom keys/values. Each element of the linked list contains two pointers in the data segment; One pointer points to the next entry in the linked list and one pointer points to an index key, providing a route through to the index layer of the storage structure. As a result, traversing the version layer linked list for a symbol allows you to travel backwards through time to retrieve data as it were at a previous version/point in time. The version layer also contains information about which versions have been deleted, and which are still "live".
+The version layer contains a linked list of immutable atom keys/values. Each element of the linked list contains two pointers in the data segment; one points to the next entry in the linked list, and the other points to an index key, providing a route through to the index layer of the storage structure. As a result, traversing the version layer linked list for a symbol allows you to travel backwards through time to retrieve data as it were at a previous version/point in time. The version layer also contains information about which versions have been deleted, and which are still "live".
 
 This means that for symbols with a lot of versions, this linked list can get quite long, and so reading old versions (using the `as_of` argument) can become slower as lots of tiny object reads are required in order to find the relevant index key. A method will soon be added to the `Library` [API](/api/library) allowing users to "compact" this linked list into a few larger objects.
 
@@ -43,7 +43,7 @@ The version layer primarily stores keys of type _Version_, as [documented below]
 
 ### Index Layer
 
-The index layer is an immutable layer that provides a B-Tree index over the data layer. Much like the reference and version layer, this utilises [data segments](#data-segment) containing data pointers. Each pointer is simply a key that that contains a data segment. 
+The index layer is an immutable layer that provides a B-Tree index over the data layer. Much like the reference and version layer, this utilises data segments containing data pointers. Each pointer is simply a key that that contains a data segment. 
 
 For more information on the data stored in this layer, see the [Structural Overview diagram](#structural-overview).
 
@@ -73,7 +73,7 @@ Note that where this documentation refers to a _Key Type_ key (for example a _ve
 | Table Data            | Atom           | tdata     | Maintains the data for a table                                        |
 | Symbol List           | Atom           | sl        | Caches symbol addition/removals                                       |
 
-Note that **Atom** keys are immutable. **Reference** keys are not immuteable and therefore the associated value can be updated. 
+Note that **Atom** keys are immutable. **Reference** keys are not immutable and therefore the associated value can be updated. 
 
 !!! Version Ref
 
