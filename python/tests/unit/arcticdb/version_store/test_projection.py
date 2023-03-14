@@ -5,10 +5,10 @@ NO WARRANTY, EXPRESSED OR IMPLIED.
 from hypothesis import assume, given, settings
 from hypothesis.extra.pandas import column, data_frames, range_indexes
 import numpy as np
-from pandas.testing import assert_frame_equal
 import pandas as pd
 
 from arcticdb.version_store.processing import QueryBuilder
+from arcticdb.util.test import assert_frame_equal
 from arcticdb.util.hypothesis import (
     use_of_function_scoped_fixtures_in_hypothesis_checked,
     numeric_type_strategies,

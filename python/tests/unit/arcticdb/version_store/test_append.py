@@ -4,15 +4,15 @@ NO WARRANTY, EXPRESSED OR IMPLIED.
 """
 import pandas as pd
 import numpy as np
-from pandas.testing import assert_frame_equal
-from itertools import chain, product, combinations
 import pytest
-from arcticdb.version_store._common import TimeFrame
-from arcticdb.version_store import NativeVersionStore
 import random
 from datetime import datetime
-from arcticdb.util.test import random_integers
+from itertools import chain, product, combinations
 from numpy.testing import assert_array_equal
+
+from arcticdb.version_store import NativeVersionStore
+from arcticdb.version_store._common import TimeFrame
+from arcticdb.util.test import random_integers, assert_frame_equal
 from arcticdb_ext.exceptions import ArcticNativeCxxException
 
 

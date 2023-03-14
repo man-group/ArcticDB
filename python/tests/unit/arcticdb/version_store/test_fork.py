@@ -5,10 +5,10 @@ NO WARRANTY, EXPRESSED OR IMPLIED.
 import time
 from multiprocessing import Pool
 from pickle import loads, dumps
-
 import numpy as np
 import pandas as pd
-from pandas.testing import assert_frame_equal
+
+from arcticdb.util.test import assert_frame_equal
 
 
 def df(symbol):

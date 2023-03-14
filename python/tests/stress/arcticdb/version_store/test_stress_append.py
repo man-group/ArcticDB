@@ -5,13 +5,12 @@ NO WARRANTY, EXPRESSED OR IMPLIED.
 import datetime
 import random
 import pandas as pd
-from pandas.testing import assert_frame_equal
 
 from arcticdb.util.test import (
+    assert_frame_equal,
     dataframe_for_date,
     random_strings_of_length,
     random_floats,
-    random_integers,
     random_strings_of_length_with_nan,
 )
 

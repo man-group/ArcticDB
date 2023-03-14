@@ -5,7 +5,8 @@ NO WARRANTY, EXPRESSED OR IMPLIED.
 import pytest
 import pandas as pd
 import random
-from pandas.testing import assert_frame_equal
+
+from arcticdb.util.test import assert_frame_equal
 
 
 @pytest.mark.parametrize(

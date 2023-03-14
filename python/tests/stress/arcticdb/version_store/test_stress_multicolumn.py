@@ -4,11 +4,11 @@ NO WARRANTY, EXPRESSED OR IMPLIED.
 """
 import random
 import string
-
 import pandas as pd
 from pandas.tseries.offsets import MonthBegin
-from pandas.testing import assert_frame_equal
 import pytest
+
+from arcticdb.util.test import assert_frame_equal
 
 
 def id_generator(size=75, chars=string.ascii_uppercase + string.digits):

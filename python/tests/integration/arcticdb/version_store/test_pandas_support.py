@@ -2,16 +2,15 @@
 Copyright 2023 Man Group Operations Ltd.
 NO WARRANTY, EXPRESSED OR IMPLIED.
 """
-from datetime import datetime as dt
-
 import numpy as np
 import pandas as pd
 import pytest
+from datetime import datetime as dt
 from numpy.random import RandomState
 from pandas import DataFrame, DatetimeIndex
-from pandas.testing import assert_frame_equal
 
 from arcticdb.version_store import NativeVersionStore
+from arcticdb.util.test import assert_frame_equal
 
 
 # In the following lines, the naming convention is

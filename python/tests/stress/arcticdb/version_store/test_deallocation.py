@@ -2,11 +2,13 @@
 Copyright 2023 Man Group Operations Ltd.
 NO WARRANTY, EXPRESSED OR IMPLIED.
 """
-from arcticdb.version_store.helper import create_test_lmdb_cfg, Defaults, ArcticMemoryConfig
 import pandas as pd
 import numpy as np
-from pandas.testing import assert_frame_equal
 from numpy.random import RandomState
+
+from arcticdb.version_store.helper import create_test_lmdb_cfg, Defaults, ArcticMemoryConfig
+from arcticdb.util.test import assert_frame_equal
+
 
 _rnd = RandomState(0x42)
 

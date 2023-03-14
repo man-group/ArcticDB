@@ -2,17 +2,16 @@
 Copyright 2023 Man Group Operations Ltd.
 NO WARRANTY, EXPRESSED OR IMPLIED.
 """
-from __future__ import print_function
-
 import sys
-
 import numpy as np
 import pandas as pd
 import pytest
 import time
-from pandas.testing import assert_frame_equal
+
 from arcticdb_ext.exceptions import ArcticNativeCxxException
 from arcticdb.version_store._normalization import NPDDataFrame
+from arcticdb.util.test import assert_frame_equal
+
 
 # configure_test_logger("DEBUG")
 
