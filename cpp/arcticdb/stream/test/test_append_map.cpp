@@ -11,7 +11,7 @@
 #include <arcticdb/stream/append_map.hpp>
 #include <arcticdb/async/task_scheduler.hpp>
 #include <arcticdb/storage/test/in_memory_store.hpp>
-#include <arcticdb/pipeline/read_frame.hpp>
+#include <pipeline/read_frame.hpp>
 
 TEST(Append, Simple) {
     using namespace arcticdb;

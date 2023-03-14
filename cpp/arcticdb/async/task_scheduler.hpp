@@ -7,8 +7,8 @@
 
 #pragma once
 
-#include <arcticdb/entity/atom_key.hpp>
-#include <arcticdb/entity/types.hpp>
+#include <entity/atom_key.hpp>
+#include <entity/types.hpp>
 #include <arcticdb/util/hash.hpp>
 #include <arcticdb/util/exponential_backoff.hpp>
 #include <arcticdb/util/configs_map.hpp>
@@ -19,6 +19,7 @@
 #include <folly/executors/FutureExecutor.h>
 #include <folly/executors/CPUThreadPoolExecutor.h>
 #include <folly/executors/IOThreadPoolExecutor.h>
+#include <entity/performance_tracing.hpp>
 
 #include <thread>
 #include <algorithm>
