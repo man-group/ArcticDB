@@ -2,7 +2,7 @@
 
 Thank you for your interest in contributing to ArcticDB, a project operated by Man Group Operations Limited ("We" or "Us"). 
 
-**EDIT - This contributor agreement ("Agreement") documents the rights granted by contributors to Us. To make this document effective, please sign it and send it to Us by mail, email, fax, or electronic submission, following the instructions at [INSERT LINK TO CONTRIBUTION GUIDELINES]. This is a legally binding document which becomes effective on the Effective Date, so please read it carefully before agreeing to it. The Agreement may cover more than one software project managed by Us.**
+This contributor agreement ("Agreement") documents the rights granted by contributors to Us. To make this document effective, please make your Contribution in accordance with Clause 7. You can also view our [contribution guidelines](https://github.com/man-group/ArcticDB#contributing). This is a legally binding document which becomes effective on the Effective Date, so please read it carefully before agreeing to it. The Agreement may cover more than one software project managed by Us. 
 
 ### 1. Definitions 
 
@@ -16,7 +16,7 @@ Thank you for your interest in contributing to ArcticDB, a project operated by M
 
 "Submit" means any form of electronic, verbal, or written communication sent to Us or our representatives, including but not limited to electronic mailing lists, source code control systems, and issue tracking systems that are managed by, or on behalf of, Us for the purpose of discussing and improving the Material, but excluding communication that is conspicuously marked or otherwise designated in writing by You as "Not a Contribution." 
 
-"Submission Date" means the date on which You Submit a Contribution to Us. 
+"Submission Date" means the date on which You Submit a Contribution to Us in accordance with Clause 7. 
 
 "Effective Date" means the date You execute this Agreement or the date You first Submit a Contribution to Us, whichever is earlier. 
 
@@ -34,7 +34,7 @@ For patent claims including, without limitation, method, process, and apparatus 
 
 2.3 Outbound License 
 
-Based on the grant of rights in Sections 2.1 and 2.2, if We include Your Contribution in a Material, We may license the Contribution under any license, including copyleft, permissive, commercial, or proprietary licenses. As a condition on the exercise of this right, We agree to also license the Contribution under the terms of 1) the Business Source License 1.1 (“BSL”) including the specifications of the “Change License”, the “Change Date” and the “Additional Use Grant” available in the [BSL file](https://github.com/man-group/ArcticDB/blob/2dd7263fc917a3c41082a11d8d6a0f38ae5bcb42/LICENSE), if the Submission Date is before the “Change Date” specified in the BSL or 2) the Apache 2.0, if the Submission Date is after the “Change Date” specified in the BSL.   
+Based on the grant of rights in Sections 2.1 and 2.2, if We include Your Contribution in a Material, We may license the Contribution under any license, including copyleft, permissive, commercial, or proprietary licenses. As a condition on the exercise of this right, We agree to also license the Contribution under the terms of 1) the Business Source License 1.1 (“BSL”) including the specifications of the “Change License”, the “Change Date” and the “Additional Use Grant” available in the [BSL file](https://github.com/man-group/ArcticDB/blob/bbd28ffac1453a87d1f568c1f436d8ad7bfe59ac/LICENSE.txt), if the Submission Date is before the “Change Date” specified in the BSL or 2) the Apache 2.0, if the Submission Date is after the “Change Date” specified in the BSL.   
 
 2.4 Moral Rights
 
@@ -79,6 +79,11 @@ TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, IN NO EVENT WILL YOU BE LIABL
 6.4 The failure of either party to require performance by the other party of any provision of this Agreement in one situation shall not affect the right of a party to require such performance at any time in the future. A waiver of performance under a provision in one situation shall not be considered a waiver of the performance of the provision in the future or a waiver of the provision in its entirety. 
 
 6.5 If any provision of this Agreement is found void and unenforceable, such provision will be replaced to the extent possible with a provision that comes closest to the meaning of the original provision and which is enforceable.  The terms and conditions set forth in this Agreement shall apply notwithstanding any failure of essential purpose of this Agreement or any limited remedy to the maximum extent possible under law. 
- 
+
+### 7. Acceptance
+
+To make this document effective, you are required to include the following line as the last line of the commit message for each commit in your contribution. You must use your real name (no pseudonyms, and no anonymous contributions). 
+
+“Signed-Off By Random J. Developer random@developer.example.org. By including this sign-off line I agree to the terms of the Contributor License Agreement” 
 
 Based on Harmony Individual Contributor License Agreement (HA-CLA-I) Copyright 2023 Project Harmony and Man Group Operations Limited. All Rights Reserved. 
