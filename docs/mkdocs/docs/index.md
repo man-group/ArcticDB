@@ -61,13 +61,13 @@ There are two methods to configure S3 access. If you happen to know the access a
 Otherwise, you can delegate authentication to the AWS SDK (obeys standard [AWS configuration options](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-files.html)):
 
 ```
->>> ac = Arctic('s3://ENDPOINT:BUCKET')
+>>> ac = Arctic('s3://ENDPOINT:BUCKET?aws_auth=true')
 ```
 
 Same as above, but using HTTPS:
 
 ```
->>> ac = Arctic('s3s://ENDPOINT:BUCKET')
+>>> ac = Arctic('s3s://ENDPOINT:BUCKET?aws_auth=true')
 ```
 
 !!! s3 vs s3s
@@ -79,7 +79,7 @@ Same as above, but using HTTPS:
 Connect to local storage (not AWS - HTTP endpoint of s3.local) with a pre-defined access and storage key:
 
 ```python
->>> ac = Arctic('s3://s3.local:arcticdb-test-bucket?access=PIFUSUZJHFPVEGGFMYGOEIDHOBPROLMVKGBFDEDAOD&secret=61J837V7Rrrh7k1rj/j46hI12GL763k9936472F6JF')
+>>> ac = Arctic('s3://s3.local:arcticdb-test-bucket?access=EFGH&secret=HGFE')
 ```
 
 ##### Connecting to AWS
@@ -125,11 +125,8 @@ A library can then be retrieved:
     ArcticDB enforces a strict schema that is defined on first write. This schema defines the name, order, index type and type of each column in the DataFrame. 
 
     If you wish to add, remove or change the type of columns via `update` or `append` options, please see the documentation for the `dynamic_schema` 
-    option within the `library_options` parameter of the `create_library` method. Note that whether to use fixed or dynamic schemas must set at 
+    option within the `library_options` parameter of the `create_library` method. Note that whether to use fixed or dynamic schemas must be set at 
     library creation time.
-
-[comment]: <> (EVERYTHING THAT FOLLOWS IS COPIED TO INDEX-INTERNAL.MD)
-[comment]: <> (ANY CHANGES IN EITHER FILE SHOULD BE REPLICATED)
 
 ##### Reading And Writing Data(Frames)!
 
@@ -142,7 +139,7 @@ Let's first look at writing a DataFrame to storage:
 >>> from datetime import datetime
 >>> cols = ['COL_%d' % i for i in range(50)]
 >>> df = pd.DataFrame(np.random.randint(0, 50, size=(25, 50)), columns=cols)
->>> df.index = pd.date_range(datetime(2000, 1, 1,5), periods=25, freq="H")
+>>> df.index = pd.date_range(datetime(2000, 1, 1, 5), periods=25, freq="H")
 >>> df.head(2)
                      COL_0  COL_1  COL_2  COL_3  COL_4  COL_5  COL_6  COL_7  ...
 2000-01-01 05:00:00     35     46      4      0     17     35     33     25  ...
@@ -165,9 +162,9 @@ VersionedItem(symbol=test_frame,library=data,data=n/a,version=0,metadata=None,ho
     * `DatetimeIndex`
     * `MultiIndex` composed of above supported types
     
-    Currently, ArcticDB only supports `append()`-ing to a `RangeIndex` with a continuing `RangeIndex` (i.e. the appending `RangeIndex.start` == `RangeIndex.stop` of the existing data and they have the same `RangeIndex.step`). If a non-contiuing one is pass to `append()`, ArcticDB does _not_ convert it `Int64Index` like Pandas and will produce an error.
+    Currently, ArcticDB only supports `append()`-ing to a `RangeIndex` with a continuing `RangeIndex` (i.e. the appending `RangeIndex.start` == `RangeIndex.stop` of the existing data and they have the same `RangeIndex.step`). If a DataFrame with a non-continuing `RangeIndex` is passed to `append()`, ArcticDB does _not_ convert it `Int64Index` like Pandas and will produce an error.
     
-    Also note, the "row" concept in `read(row_range)/head()/tail()` refers to the physical row, not the value in the `pandas.Index`.
+    Also note, the "row" concept in `head()/tail()` refers to the physical row, not the value in the `pandas.Index`.
 
 Read it back:
 
@@ -186,7 +183,7 @@ Arctic enables you to slice by _row_ and by _column_.
 !!! info "ArcticDB indexing"
 
     ArcticDB will construct a full index for _ordered numerical and timeseries (e.g. DatetimeIndex) Pandas indexes_. This will enable
-    optimised slicing across index entries. If the index is unsorted or not numeric (for example CategoricalIndex) then whilst your data can be stored,
+    optimised slicing across index entries. If the index is unsorted or not numeric, then whilst your data can be stored,
     row-slicing will be slower.
 
 ###### Row-slicing
@@ -226,7 +223,7 @@ ArcticDB uses a Pandas-_like_ syntax to describe how to filter data. For more de
 ```Python
 >>> _range = (df.index[5], df.index[8])
 >>> _cols = ['COL_30', 'COL_31']
->>> from arcticc import QueryBuilder
+>>> from arcticdb import QueryBuilder
 >>> q = QueryBuilder()
 >>> q = q[(q["COL_30"] > 30) & (q["COL_31"] < 50)]
 >>> lib.read('test_frame', date_range=_range, columns=_cols, query_builder=q).data
@@ -249,7 +246,7 @@ remove _2000-01-01 06:00:00_ and insert a duplicate entry for _2000-01-01 07:00:
 # Recreate the DataFrame with new (and different!) random data, and filter to only the first and third row
 >>> random_data = np.random.randint(0, 50, size=(25, 50))
 >>> df = pd.DataFrame(random_data, columns=['COL_%d' % i for i in range(50)])
->>> df.index = pd.date_range(datetime(2000, 1, 1,5), periods=25, freq="H")
+>>> df.index = pd.date_range(datetime(2000, 1, 1, 5), periods=25, freq="H")
 # Filter!
 >>> df = df.iloc[[0,2]] 
 >>> df 
@@ -274,7 +271,7 @@ Now let's look at the first 2 rows in the symbol:
 Let's append data to the end of the timeseries:
 
 ```Python
->>> random_data = np.random.randint(0, 50, size=(25, 50))
+>>> random_data = np.random.randint(0, 50, size=(5, 50))
 >>> df_append = pd.DataFrame(random_data, columns=['COL_%d' % i for i in range(50)])
 >>> df_append.index = pd.date_range(datetime(2000, 1, 2, 5), periods=5, freq="H")
 >>> df_append
@@ -312,7 +309,7 @@ You might have noticed that _read_ calls do not return the data directly - but i
 (_write_, _append_ and _update_) increment the version counter. ArcticDB versions all modifications, which means you can retrieve earlier versions of data (ArcticDB is a bitemporal database!):
 
 ```Python
->>> lib.tail('test_frame', as_of=0).data
+>>> lib.tail('test_frame', 7, as_of=0).data
                      COL_0  COL_1  COL_2  COL_3  COL_4  COL_5  COL_6  COL_7  ...
 2000-01-01 23:00:00     26     38     12     30     25     29     47     27  ...
 2000-01-02 00:00:00     12     14     42     11     44     32     19     11  ...
@@ -327,6 +324,6 @@ Note the timestamps - we've read the data prior to the _append_ operation. Pleas
 
 !!! note "Versioning & Prune Previous"
 
-    By default, `write` operations will remove the previous versions to save on space. 
+    By default, `write`, `append`, and `update` operations will remove the previous versions to save on space. 
 
     Use the `prune_previous` argument to control this behaviour. 

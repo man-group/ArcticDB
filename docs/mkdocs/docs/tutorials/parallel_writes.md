@@ -43,7 +43,7 @@ library = ac[library]
 ret = dist_data.map(_load)
 ret.collect()
 
-library.finalize_staged_data()
+library.finalize_staged_data(symbol)
 
 data = library.read(symbol)
 ```

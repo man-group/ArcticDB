@@ -16,7 +16,7 @@ This also means that ArcticDB does not require any server infrastructure to func
 
 ArcticDB is optimised for numerical datasets spanning millions of rows and columns,
 enabling you to store and retrieve massive datasets within a Pythonic,
-dataframe-like API that researchers, data scientists and software engineers will
+DataFrame-like API that researchers, data scientists and software engineers will
 find immediately familiar.
 
 ###*How does ArcticDB differ from the version of Arctic on GitHub?*
@@ -71,7 +71,9 @@ No. ArcticDB enables data access and modifications with a Python API that speaks
 
 Yes.
 
-On each `write`, ArcticDB will check the previous version of the symbol that you are writing (and _only_ this version - other symbols will not be scanned!) and skip the write of identical [segments](../technical/on_disk_storage_format). Please keep in mind however that this is most effective when version `n` is equal to version `n-1` plus additional data at the end - and only at the end! If there is additional data inserted into the in the middle, then all segments occuring after that modification will almost certainly differ. ArcticDB segments data at fixed intervals and data is only de-duplicated if the hashes of the data segments are identical - as a result, a one row offset will prevent effective de-duplication. 
+On each `write`, ArcticDB will check the previous version of the symbol that you are writing (and _only_ this version - other symbols will not be scanned!) and skip the write of identical [segments](../technical/on_disk_storage). Please keep in mind however that this is most effective when version `n` is equal to version `n-1` plus additional data at the end - and only at the end! If there is additional data inserted into the in the middle, then all segments occuring after that modification will almost certainly differ. ArcticDB segments data at fixed intervals and data is only de-duplicated if the hashes of the data segments are identical - as a result, a one row offset will prevent effective de-duplication.
+
+Note that this is a library configuration option that is off by default, see `help(LibraryOptions)` for details of how to enable it.
 
 ### *How does ArcticDB enable advanced analytics?*
 
@@ -102,18 +104,7 @@ Pickled data cannot be index or column-sliced, and neither `update` nor `append`
 
 ### *How does indexing work in ArcticDB?*
 
-ArcticDB stores a single-level index over the underlying data. For more information how this is structured, see [On-Disk Storage](./technical/on_disk_storage.md).
-
-If given a Pandas DataFrame, the index data is taken from the DataFrame with ArcticDB supporting the following index types:
-
-* `DatetimeIndex`
-* `pandas.Index` containing `int64` or `float64` (or the corresponding dedicated types `Int64Index`, `UInt64Index` and `Float64Index`)
-* `RangeIndex` with the restrictions noted below
-* `MultiIndex` composed of above supported types
-
-Currently, ArcticDB only supports `append()`-ing to a `RangeIndex` with a continuing `RangeIndex` (i.e. the appending `RangeIndex.start` == `RangeIndex.stop` of the existing data and they have the same `RangeIndex.step`). If a non-contiuing one is pass to `append()`, ArcticDB does _not_ convert it `Int64Index` like Pandas and will produce an error.
-
-Also note, the "row" concept in `read(row_range)/head()/tail()` refers to the physical row, not the value in the `pandas.Index`.
+See the [Getting Started](../#reading-and-writing-dataframes) page for details of supported index types.
 
 ### *Can I `append` with additional columns / What is Dynamic Schema?*
 
@@ -127,11 +118,11 @@ See [On Disk Storage Format](../technical/on_disk_storage) and the [documentatio
 
 ### *How does ArcticDB handle streaming data?*
 
-ArcticDB has full support for streaming data workflows - including high throughput tick data pipelines. Please contact us at `arctic AT man.com` for more information.
+ArcticDB has full support for streaming data workflows - including high throughput tick data pipelines. Please contact us at arcticdb@man.com for more information.
 
 ### *How does ArcticDB handle concurrent writers?*
 
-Without a centralising server, ArcticDB does not support transactions. Instead, ArcticDB supports concurrent writers across symbols - **but not to a single symbol** (unless "staging the writes"). It is up to the writer to ensure that clients do not concurrently modify a single symbol.
+Without a centralised server, ArcticDB does not support transactions. Instead, ArcticDB supports concurrent writers across symbols - **but not to a single symbol** (unless "staging the writes"). It is up to the writer to ensure that clients do not concurrently modify a single symbol.
 
 In the case of concurrent writers to a single symbol, the behaviour will be *last-writer-wins*. Data is not lost per se, but only the version of the *last-writer* will be accessible through the version chain.
 
