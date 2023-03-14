@@ -10,12 +10,11 @@ import pandas as pd
 import numpy as np
 from arcticdb.version_store.helper import ArcticMemoryConfig
 from pandas.testing import assert_frame_equal
-import pandas.util.testing as tm
 import pytest
 from itertools import product
 import datetime
 import random
-from arcticdb.util.test import random_strings_of_length, random_floats
+from arcticdb.util.test import random_strings_of_length, random_string, random_floats
 from arcticdb_ext.exceptions import InternalException
 from tests.util.date import DateRange
 
@@ -266,7 +265,7 @@ def test_update_repeatedly_with_strings(
     symbol = "update_no_daterange"
 
     idx = pd.date_range("1970-01-01", periods=100, freq="D")
-    df = pd.DataFrame({"a": [tm.rands(10) for _ in range(len(idx))]}, index=idx)
+    df = pd.DataFrame({"a": [random_string(10) for _ in range(len(idx))]}, index=idx)
     lmdb_version_store.write(symbol, df)
     update_end = update_start + start_dist
 
@@ -279,7 +278,7 @@ def test_update_repeatedly_with_strings(
             continue
 
         idx2 = pd.date_range(update_date, periods=periods, freq="D")
-        df2 = pd.DataFrame({"a": [tm.rands(10) for _ in range(len(idx2))]}, index=idx2)
+        df2 = pd.DataFrame({"a": [random_string(10) for _ in range(len(idx2))]}, index=idx2)
         lmdb_version_store.update(symbol, df2)
 
         vit = lmdb_version_store.read(symbol)
