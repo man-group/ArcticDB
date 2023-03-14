@@ -49,10 +49,7 @@ Other than this, there is no client-side caching in ArcticDB.
 
 ### SymbolList.MaxDelta
 
-The [symbol list cache](/technical/on_disk_storage#symbol-list-caching) is compacted when:
-
-* a user with write permissions calls `list_symbols()`
-* there are more than `SymbolList.MaxDelta` objects on disk in the symbol list cache
+The [symbol list cache](/technical/on_disk_storage#symbol-list-caching) is compacted when there are more than `SymbolList.MaxDelta` objects on disk in the symbol list cache.
 
 The default is 500.
 
