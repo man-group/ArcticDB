@@ -4,7 +4,56 @@ This page details the exceptions and associated error messages users are most li
 
 Note that for legacy reasons, the terms `symbol`, `stream`, and `stream ID` are used interchangeably.
 
-## Error Codes
+## Errors with numeric error codes
+
+!!! note
+
+    Please note that we are in the process of adding error codes to all user-facing errors. As a rsult, this section will expand as error codes are added to existing errors.
+
+### Internal Errors
+
+| Error Code | Cause                                       | Resolution                                                                                                                                                            |
+|------------|---------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| 1000       | An invalid date range has been passed in.   | ArcticDB ranges must be positive and in increasing order. ENsure the requested range is positive and sorted.                                                          |
+| 1001       | Invalid Argument                            | An invalid argument has been passed in. This error is an internal error and not expected to be exposed to the user - please create an issue on the GitHub repository. |
+| 1002       | In internal ArcticDB assertion has failed.  | This error is an internal error and not expected to be exposed to the user - please create an issue on the GitHub repository.                                         |
+| 1003       | ArcticDB has encountered an internal error. | This error is an internal error and not expected to be exposed to the user - please create an issue on the GitHub repository.                                         |
+
+
+### Normalization Errors
+
+| Error Code | Cause                                                                             | Resolution                                                                                                                                                      |
+|------------|-----------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| 2000       | Attempting to update or append an existing type with an incompatible object typpe | NumPy arrays or Pandas DataFrames can only be mutated by a matching type. Read the latest version of the symbol and update/append with the corresponding type.  |
+| 2001       | Input type cannot be converted to an ArcticDB type.                               | Please ensure all input types match supported [ArcticDB types](https://github.com/man-group/ArcticDB/blob/master/python/arcticdb/version_store/library.py#L25). |
+| 2003       | A write of an incompatible index type has been attempted.                         | ArcticDB only supports defined Pandas index types. Please see the documentation for more information on what types are supported.                               |
+| 2004       | A NumPy append is attempting to change the shape of the previous version.         | When storing NumPy arrays, append operations must have the same shape as the previous version.                                                                  |
+
+### Missing Data Errors
+
+| Error Code | Cause                                             | Resolution                                                                                                            |
+|------------|---------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------|
+| 3000       | A missing version has been requested of a symbol. | Please request a valid version - see the documentation for the `list_versions` method to enumerate existing versions. |
+
+### Schema Error
+
+| Error Code | Cause                                                      | Resolution                                                                                                                                                                                                                                                                             |
+|------------|------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| 4000       | The number, type, or name of the columns has been changed. | Ensure that the type and order of the columns has not changed when appending or updating the previous version. This restriction only applies when `Dynamic Schema` is disabled - if you require the columns sets to change, please enable the `Dynamic Schema` option on your library. |
+
+
+### Storage Errors
+
+| Error Code | Cause                                                                  | Resolution                                                                                                                                          |
+|------------|------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------|
+| 5000       | A missing key has been requested.                                      | ArcticDB has requested a key that does not exist in storage. Please ensure that you have requested a `symbol`, `snapshot` or `version` that exists. |
+| 5001       | ArcticDB is attempting to write to an already-existing key in storage. | This error is unexpected - please ensure that no other tools are writing data the same storage location that may conflict with ArcticDB.            |
+
+## Errors without numeric error codes
+
+!!! note
+
+    Please note that we are in the process of adding error codes to all user-facing errors. 
 
 ### Pickling errors
 
@@ -16,12 +65,6 @@ All of these errors are of type `ArcticNativeCxxException`.
 |:--------------|:-------|:-----------|
 | Cannot append to pickled data <br><br> Cannot update pickled data | A symbol has been created with the `write_pickle` method, and now `append`/`update` has been called on this symbol. | Pickled data cannot be appended to or updated, due to the lack of indexing or column information in the index layer as explained above. If appending is required, the symbol must be created with `write`, and must therefore only contain normalizeable data types. |
 | Cannot delete date range of pickled data <br><br> Cannot use head/tail/row_range with pickled data, use plain read instead <br><br> Cannot filter pickled data <br> <br> The data for this symbol is pickled and does not support date_range, row_range, or column queries | A symbol has been created with the `write_pickle` method, and now `delete_data_in_range`/`head`/`tail`/`read` with a `QueryBuilder argument` has been called on this symbol. | For reading operations, unpickling is inherently a Python-layer process. Therefore any operation that would cut down the amount of data returned to a user compared to a call to `read` with no optional parameters cannot be performed in the C++ layer, and would be no faster than calling `read` and then filtering the result down in Python. |
-
-## Errors without numeric error codes
-
-!!! note
-
-    Please note that we are in the process of adding error codes to all user-facing errors. 
 
 ### Snapshot errors
 
