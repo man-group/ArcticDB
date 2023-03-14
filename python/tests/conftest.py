@@ -3,14 +3,10 @@ Copyright 2023 Man Group Operations Ltd.
 NO WARRANTY, EXPRESSED OR IMPLIED.
 """
 import multiprocessing
-from arcticdb.version_store._custom_normalizers import register_normalizer, clear_registered_normalizers
-from arcticdb.arctic import Arctic
 import boto3
-from pytest_server_fixtures.base import get_ephemeral_port
 import werkzeug
 from moto.server import DomainDispatcherApplication, create_backend_app
 import signal
-import string
 import time
 import os
 import pytest
@@ -21,19 +17,17 @@ from datetime import datetime
 from typing import Optional
 from functools import partial
 
-
-from pytest_server_fixtures import CONFIG
 from pytest_server_fixtures.base import get_ephemeral_port
 from arcticc.pb2.storage_pb2 import EnvironmentConfigsMap
 from arcticc.pb2.lmdb_storage_pb2 import Config as LmdbConfig
 
+from arcticdb.arctic import Arctic
 from arcticdb.version_store.helper import (
     get_storage_for_lib_name,
     get_lib_cfg,
     create_test_lmdb_cfg,
     create_test_s3_cfg,
 )
-
 from arcticdb.config import Defaults
 from arcticdb.util.test import configure_test_logger, apply_lib_cfg
 from arcticdb.version_store.helper import ArcticMemoryConfig

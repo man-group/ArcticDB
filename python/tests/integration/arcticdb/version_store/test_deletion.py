@@ -13,10 +13,9 @@ from arcticdb.config import Defaults
 from arcticdb.version_store.helper import ArcticMemoryConfig
 from arcticdb_ext.storage import NoDataFoundException
 from pandas.testing import assert_frame_equal
-import pandas.util.testing as tm
 import random
 from itertools import chain, product
-from arcticdb.util.test import config_context
+from arcticdb.util.test import config_context, random_string
 from typing import TYPE_CHECKING
 
 
@@ -473,7 +472,7 @@ def test_delete_date_range_with_strings(arcticdb_test_lmdb_config, index_start, 
     symbol = "delete_daterange"
     periods = 100
     idx = pd.date_range("1970-01-01", periods=periods, freq="D")
-    df = pd.DataFrame({"a": [tm.rands(10) for _ in range(len(idx))]}, index=idx)
+    df = pd.DataFrame({"a": [random_string(10) for _ in range(len(idx))]}, index=idx)
     lmdb_version_store.write(symbol, df)
 
     start = random.randrange(index_start, periods - 2)
@@ -502,7 +501,7 @@ def test_delete_date_range_remove_everything(arcticdb_test_lmdb_config, map_time
         symbol = "delete_daterange"
         periods = 100
         idx = pd.date_range("1970-01-01", periods=periods, freq="D")
-        df = pd.DataFrame({"a": [tm.rands(10) for _ in range(len(idx))]}, index=idx)
+        df = pd.DataFrame({"a": [random_string(10) for _ in range(len(idx))]}, index=idx)
         lmdb_version_store.write(symbol, df)
 
         start = 0

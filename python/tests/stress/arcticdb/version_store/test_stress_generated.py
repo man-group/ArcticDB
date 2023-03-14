@@ -5,7 +5,7 @@ NO WARRANTY, EXPRESSED OR IMPLIED.
 import numpy as np
 import pandas as pd
 import time
-from pandas.util.testing import assert_frame_equal
+from pandas.testing import assert_frame_equal
 from numpy.random import RandomState
 import pytest
 

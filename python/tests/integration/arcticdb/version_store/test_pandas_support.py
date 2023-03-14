@@ -9,7 +9,7 @@ import pandas as pd
 import pytest
 from numpy.random import RandomState
 from pandas import DataFrame, DatetimeIndex
-from pandas.util.testing import assert_frame_equal
+from pandas.testing import assert_frame_equal
 
 from arcticdb.version_store import NativeVersionStore
 
