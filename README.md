@@ -110,7 +110,7 @@ For each BSL release all associated alpha, beta, major, and minor (point) releas
 
 ## Code of Conduct
 
-*	[Code of Conduct](https://github.com/man-group/ArcticDB/blob/cfd91e42762dccd2b622119a31babefd6c1e51f9/CODE_OF_CONDUCT.md)
+[Code of Conduct](https://github.com/man-group/ArcticDB/blob/f3b93101eed5f0249e310781bed8ba49dddbc338/CODE_OF_CONDUCT.md)
 
 This project has adopted a Code of Conduct. If you have any concerns about the Code, or behaviour that you have experienced in the project, please contact us at [arcticdb@man.com](mailto:ArcticDB@man.com). 
 
