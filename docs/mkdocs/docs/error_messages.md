@@ -57,7 +57,9 @@ Note that for legacy reasons, the terms `symbol`, `stream`, and `stream ID` are 
 
 ### Pickling errors
 
-These errors relate to data being pickled, which limits the operations available. Internally, pickled symbols are stored as a single object in the [data layer](/technical/on_disk_storage/#data-layer), with any index or column information maintained only in this serialised object. This is in contrast to non-pickled data, where this information is also available in the [index layer](/technical/on_disk_storage/#index-layer).
+These errors relate to data being pickled, which limits the operations available. Internally, pickled symbols are stored as opaque, serialised binary blobs in the [data layer](/technical/on_disk_storage/#data-layer). No index or column information is maintained in this serialised object which is in contrast to non-pickled data, where this information is stored in the [index layer](/technical/on_disk_storage/#data-layer).
+
+Furthermore, it is not possible to partially read/update/append the data using the ArcticDB API or use the QueryBuilder with pickled symbols. 
 
 All of these errors are of type `ArcticNativeCxxException`.
 
@@ -76,7 +78,7 @@ All of these errors are of type `ArcticNativeCxxException` unless specified othe
 |:--------------|:-------|:-----------|
 | Snapshot with name <name\> already exists | The `snapshot` method was called, but a snapshot with the specified name already exists. | The old snapshot must first be deleted with `delete_snapshot`. |
 | Cannot snapshot version(s) that have been deleted... | A `versions` dictionary was provided to the `snapshot` method, but one of the symbol-version pairs specified does not exist. | The `list_versions` method can be used to see which versions of which symbols are in which snapshots. |
-| Only one of skip_symbols and versions can be set | The `snapshot` method was called with both the `skip_symbols` and `versions` optional arguments set. | It does not make sense to specify both of these optional arguments, just `versions` should be used on its own in this case. |
+| Only one of skip_symbols and versions can be set | The `snapshot` method was called with both the `skip_symbols` and `versions` optional arguments set. | Just specify `versions` on its own in this case. |
 | `NoDataFoundException` | `delete_snapshot` called, but no snapshot with this name exists. <br><br> A string was provided to the `as_of` argument of a read operation, but no snapshot with this name exists. | The `list_snapshots` method can be used to list all of the snapshots in a library. <br><br> The `list_versions` method can be used to see which versions of which symbols are in which snapshots. |
 
 ### Require live version errors
