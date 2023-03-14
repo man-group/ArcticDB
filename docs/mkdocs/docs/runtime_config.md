@@ -50,6 +50,7 @@ Other than this, there is no client-side caching in ArcticDB.
 ### SymbolList.MaxDelta
 
 The [symbol list cache](/technical/on_disk_storage#symbol-list-caching) is compacted when:
+
 * a user with write permissions calls `list_symbols()`
 * there are more than `SymbolList.MaxDelta` objects on disk in the symbol list cache
 
@@ -84,6 +85,7 @@ ArcticDB has multiple log streams, and the verbosity of each can be configured i
 The available log levels in decreasing order of verbosity are are `TRACE`, `DEBUG`, `INFO`, `WARN`, `ERROR`, `CRITICAL`, `OFF`. By default, all streams are set to the `INFO` level.
 
 There are two ways to configure log levels. The first is via environment variables e.g. `ARCTICDB_version_loglevel=DEBUG`. All of the streams can be configured together via `ARCTICDB_all_loglevel=DEBUG`. The second is in code by calling `set_log_level` from the `arcticdb.config` module. This takes two optional arguments:
+
 * `default_level` - the default level for all streams. Should be a string such as `"DEBUG"`
 * `specific_log_levels` - a dictionary from stream names to log levels used to override the default such as `{"version": "DEBUG""}`.
 

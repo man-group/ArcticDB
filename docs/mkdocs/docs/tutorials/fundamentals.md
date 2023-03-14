@@ -21,7 +21,7 @@ Connect to your storage:
 # Connect using defined keys
 ac = Arctic('s3s://s3.eu-west-2.amazonaws.com:arctic-test-aws?access=<access key>&secret=<secret key>')
 # Leave AWS SDK to work out auth details 
-ac = Arctic('s3s://s3.eu-west-2.amazonaws.com:arctic-test-aws)
+ac = Arctic('s3s://s3.eu-west-2.amazonaws.com:arctic-test-aws?aws_auth=true)
 ```
 
 For more information on how the AWS SDK configures authentication without utilising defined keys, please see the [AWS documentation](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-files.html).
@@ -47,7 +47,7 @@ ArcticDB's API is built around four main primitives that each operate over a sin
 
 1. *write*: Creates a new version consisting solely of the item passed in.
 2. *append*: Creates a new version consisting of the item appended to the previously-written data.
-3. *update*: Creates a new version consisting the previous data patches with the provided item.
+3. *update*: Creates a new version consisting the previous data patched with the provided item.
 4. *read*: Retrieves the given version (if no version is provided the latest version is used).
 
 These primitives aren't exhaustive, but cover most use cases. We'll show the usage of these primitives.
@@ -88,7 +88,7 @@ Note that you get back a `VersionedItem` - it allows us to retrieve the version 
 0
 ```
 
-As this is the first write the this symbol, the version is `0`. To retrieve the data:
+As this is the first write to this symbol, the version is `0`. To retrieve the data:
 
 ```python
 >>> data.data

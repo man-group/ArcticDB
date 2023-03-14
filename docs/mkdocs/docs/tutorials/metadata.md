@@ -1,6 +1,6 @@
 # Metadata
 
-ArcticDB enables you to store arbitrary binary-blobs along side symbols and versions. The data is pickled when using the Python API. Note that there is a 4GB limit to the size of a single blob. 
+ArcticDB enables you to store arbitrary binary-blobs alongside symbols and versions. The data is pickled when using the Python API. Note that there is a 4GB limit to the size of a single blob. 
 
 The below example shows a basic example of writing and reading metadata (in this case a pickled Python dictionary):
 
@@ -52,31 +52,23 @@ for i, name in enumerate(file_names):
     date = datetime.datetime.strptime(name[5:][:-4], '%Y-%m-%d')
 
     if i == 0:
-        lib.write("data", data, metadata={"vendor_date": date})
+        lib.write("symbol", data, metadata={"vendor_date": date})
     else:
-        lib.append("data", data, metadata={"vendor_date": date})
+        lib.append("symbol", data, metadata={"vendor_date": date})
 ```
 
 We'll now use this to read the data along the vendor-provided timeline - that is, we'll retrieve the data as if we had written each file on the day it was generated. We'll read all metadata entries for all versions of the symbol and select the date that is most recent with respect to a given date (in this case 2004-01-02):
 
 ```python
-# This example assumes the below variables (host, bucket, access, secret) are validly set
-ac = Arctic(f"s3://{HOST}:{BUCKET}?access={ACCESS}&secret={SECRET})
-library = "my_library"
-
-if library not in ac.list_libraries():
-    ac.create_library(library)
-
-library = ac[library]
-
+# Continuing from the previous code snippet
 metadata = [
-    (v["version"], lib.read_metadata("data", as_of=v["version"]).metadata.get("vendor_date"))
-    for v in lib.list_versions("data")
+    (v["version"], lib.read_metadata("symbol", as_of=v["version"]).metadata.get("vendor_date"))
+    for v in lib.list_versions("symbol")
 ]
 sorted_metadata = sorted(metadata, key=lambda x: x[1])
 
 version_to_read_index = bisect_right([x[1] for x in sorted_metadata], datetime.datetime(2004, 1, 2))
-lib.read("data", as_of=sorted_metadata[version_to_read_index - 1][0])
+lib.read("symbol", as_of=sorted_metadata[version_to_read_index - 1][0])
 ```
 
 Note that if the data is written across multiple symbols, then ArcticDB Snapshots can be used to achieve the same result. 

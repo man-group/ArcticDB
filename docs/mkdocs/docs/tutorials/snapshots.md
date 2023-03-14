@@ -8,11 +8,12 @@ In practise this is useful to tie derived data with the source data.
 # This example assumes the below variables (host, bucket, access, secret) are validly set
 ac = Arctic(f"s3://{HOST}:{BUCKET}?access={ACCESS}&secret={SECRET})
 
+library= "my_library"
+
 if library not in ac.list_libraries():
     ac.create_library(library)
 
 library = ac[library]
-library = "my_library"
 
 # Assumes there are CSV files containing pricing data and factor data. Each time we've written ALL new factor files
 # to their symbol, we'll take a snapshot across all symbols.

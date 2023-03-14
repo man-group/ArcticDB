@@ -14,8 +14,8 @@ release has underpinned the research and trading environments at Man Group.
 
 ### ... to ArcticDB!
 
-In 2018, Man Group embarked on a ground-up rewrite of Arctic in order to improve upon some of the 
-foundational limitations of Arctic. We called this version ArcticDB, and it differentiates itself 
+In 2018, Man Group embarked on a ground-up rewrite in order to improve upon some of the 
+foundational limitations of Arctic. We called this version ArcticDB, and is differentiated
 from Arctic in three main ways:
 
 1. ArcticDB does not depend on Mongo. Instead, ArcticDB is designed to work with consumer grade
@@ -32,4 +32,4 @@ offering a bi-temporal view of data history with no performance penalty.
 ArcticDB's versatility and ease-of-use have made it the database of choice
 for all front-office timeseries analysis at Man Group.
 
-For more information on how ArcticDB is licensed, please see the [licensing FAQ](../external/licensing).
+For more information on how ArcticDB is licensed, please see the [licensing FAQ](../licensing).
