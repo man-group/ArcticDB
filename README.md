@@ -128,7 +128,7 @@ Since this project is distributed under the terms of the [BSL license](https://g
 
 **Individuals** - To participate under these terms, please include the following line as the last line of the commit message for each commit in your contribution. You must use your real name (no pseudonyms, and no anonymous contributions). 
 
-Signed-Off-By: Random J. Developer <random@developer.example.org>. By including this sign-off-line you agree to the terms of the Contributor License Agreement.
+Signed-Off By: Random J. Developer <random@developer.example.org>. By including this sign-off line I agree to the terms of the Contributor License Agreement.
 
 **Corporations** - For corporations who wish to make contributions to ArcticDB, please contact arcticdb@man.com and we will arrange for the CLA to be sent to the signing authority within your corporation.
 
