@@ -175,7 +175,7 @@ size_t product(const google::protobuf::RepeatedField<size_t> &shape) {
 template<class NormalizationMetadata>
 bool check_ndarray_append(const NormalizationMetadata &old_norm, NormalizationMetadata &new_norm) {
     if (old_norm.has_np() || new_norm.has_np()) {
-        normalization::check<ErrorCode::E_INCOMPATIBLE_DENORMALIZER>(old_norm.has_np() && new_norm.has_np(),
+        normalization::check<ErrorCode::E_INCOMPATIBLE_OBJECTS>(old_norm.has_np() && new_norm.has_np(),
                         "Currently, can only append numpy.ndarray to each other.");
 
         const auto &old_shape = old_norm.np().shape();
@@ -203,8 +203,8 @@ void fix_normalization_or_throw(
             return;
     } else {
         // ndarray normalizes to a ROWCOUNT frame and we don't support update on those
-        normalization::check<ErrorCode::E_INCOMPATIBLE_DENORMALIZER>(!old_norm.has_np() && !new_norm.has_np(),
-                        "Bug: current normalization scheme don't allow update of ndarray");
+        normalization::check<ErrorCode::E_UPDATE_NOT_SUPPORTED>(!old_norm.has_np() && !new_norm.has_np(),
+                        "current normalization scheme doesn't allow update of ndarray");
     }
 }
 

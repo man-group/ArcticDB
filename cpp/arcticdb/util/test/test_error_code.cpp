@@ -13,9 +13,9 @@
 using ErrorCode = arcticdb::ErrorCode;
 
 TEST(ErrorCode, DoesThrow) {
-    ASSERT_THROW(arcticdb::normalization::raise<ErrorCode::E_INCOMPATIBLE_DENORMALIZER>("msg {}", 1),
+    ASSERT_THROW(arcticdb::normalization::raise<ErrorCode::E_INCOMPATIBLE_OBJECTS>("msg {}", 1),
             arcticdb::NormalizationException);
-    ASSERT_THROW(arcticdb::normalization::check<ErrorCode::E_INCOMPATIBLE_DENORMALIZER>(false, "msg {}", 2),
+    ASSERT_THROW(arcticdb::normalization::check<ErrorCode::E_INCOMPATIBLE_OBJECTS>(false, "msg {}", 2),
             arcticdb::NormalizationException);
 }
 
