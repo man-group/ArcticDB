@@ -16,7 +16,7 @@
 
 ArcticDB allows you to:
 
- * Use standard data types and integrate effortlessly with the Python datascience ecosystem - Pandas in, Pandas out
+ * Use standard data types and integrate effortlessly with the Python data science ecosystem - Pandas in, Pandas out
  * Efficiently index and query time-series data
  * Store tiled dataframes, for fast selection of rows and columns
  * Travel back in time to see previous versions of your data and create customizable snapshots of the database
