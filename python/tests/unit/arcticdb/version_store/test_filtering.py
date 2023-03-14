@@ -16,17 +16,16 @@ import hypothesis.strategies as st
 from math import inf
 import numpy as np
 from pandas import DataFrame
-from pandas.testing import assert_frame_equal
 import pandas as pd
 import pytest
 from pytz import timezone
-
 import random
 import string
 
 from arcticdb.exceptions import ArcticNativeException
 from arcticdb.version_store.processing import QueryBuilder
 from arcticdb_ext.exceptions import InternalException
+from arcticdb.util.test import assert_frame_equal
 from arcticdb.util.hypothesis import (
     use_of_function_scoped_fixtures_in_hypothesis_checked,
     integral_type_strategies,
