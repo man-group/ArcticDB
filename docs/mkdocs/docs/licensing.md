@@ -1,6 +1,6 @@
 # Licensing & Commercial FAQs
 
-ArcticDB is licensed under the [Business Source License (BSL)](https://mariadb.com/bsl-faq-mariadb/), reverting to an Apache 2.0 License after a two-year term. 
+ArcticDB is licensed under the [Business Source License 1.1 (BSL)](https://github.com/man-group/ArcticDB/blob/master/LICENSE.txt), reverting to an Apache 2.0 License after a two-year term. 
 
 ## Is ArcticDB free to use?
 
