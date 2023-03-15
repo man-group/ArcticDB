@@ -1,0 +1,18 @@
+[submodule "cpp/third_party/pybind11"]
+	path = cpp/third_party/pybind11
+	url = https://github.com/pybind/pybind11.git
+[submodule "cpp/third_party/lmdb"]
+	path = cpp/third_party/lmdb
+	url = https://github.com/LMDB/lmdb.git
+[submodule "cpp/third_party/lmdbxx"]
+	path = cpp/third_party/lmdbxx
+	url = https://github.com/bendiken/lmdbxx.git
+[submodule "cpp/third_party/spdlog"]
+	path = cpp/third_party/spdlog
+	url = https://github.com/gabime/spdlog.git
+[submodule "cpp/third_party/recycle"]
+	path = cpp/third_party/recycle
+	url = https://github.com/steinwurf/recycle.git
+[submodule "cpp/third_party/rapidcheck"]
+	path = cpp/third_party/rapidcheck
+	url = https://github.com/emil-e/rapidcheck.git

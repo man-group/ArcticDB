@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+package arcticc.pb2.lmdb_storage_pb2;
+
+message Config {
+    enum Flags {
+        DEFAULT = 0;
+    }
+
+    string path = 1; // The directaaory in which the database files reside. This directory must already exist and be writable.
+    uint32 flags = 2; // MDB default is also 0
+    uint64 map_size = 3;
+    uint32 max_dbs = 4;
+    uint32 max_readers = 5;
+
+    bool recreate_if_exists = 100; // defaults to false, useful for unit test or dev mode
+}
+
+

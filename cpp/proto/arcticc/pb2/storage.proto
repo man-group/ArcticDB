@@ -1,0 +1,182 @@
+syntax = "proto3";
+
+package arcticc.pb2.storage_pb2;
+
+import "google/protobuf/any.proto";
+import "arcticc/pb2/utils.proto";
+
+message EnvironmentConfigsMap {
+    map<string, EnvironmentConfig> env_by_id = 1;
+}
+
+// TODO Add Task scheduler configuration
+
+message EnvironmentConfig {
+    map<string, VariantStorage> storage_by_id = 1;
+    map<string, LibraryDescriptor> lib_by_path = 2;
+}
+
+message VariantStorage {
+    google.protobuf.Any config = 2;
+    string storage = 3;
+}
+
+message LibraryPath {
+    repeated string parts = 1;
+}
+
+message EventLoggerConfig {
+    oneof config {
+        arcticc.pb2.utils_pb2.LogstashConfig logstash_config = 50;
+        arcticc.pb2.utils_pb2.FileLogger file_logger = 51;
+    }
+}
+
+message VersionStoreConfig {
+    /*
+    Contains the configuration and customisation points specific
+    to a version store that might be influenced through configuration
+    */
+
+    message WriteOptions {
+        /* Customisation points for write behavior   */
+        uint32 column_group_size = 1; // default 127
+        uint64 segment_row_size = 2;  // default 10^5
+
+        bool prune_previous_version = 7;
+        bool de_duplication = 8;
+        bool dynamic_strings = 9;
+        bool recursive_normalizers = 10;
+        bool pickle_on_failure = 11;
+        bool use_tombstones = 12;
+        bool delayed_deletes = 13;
+        bool allow_sparse = 50;
+        bool consistency_check = 51;
+        bool dynamic_schema = 52;
+        bool incomplete = 53;
+        bool set_tz = 54;
+        bool ignore_sort_order = 55;
+        bool fast_tombstone_all = 56;
+        bool bucketize_dynamic = 57;
+        uint32 max_num_buckets = 58;
+
+        message SyncDisabled {
+            bool enabled = 1;
+        }
+
+        message SyncPassive {
+            bool enabled = 1;
+        }
+
+        message SyncActive {
+           bool enabled = 1;
+       }
+
+       oneof sync_mode {
+            SyncDisabled sync_disabled = 14;
+            SyncPassive sync_passive = 15;
+            SyncActive sync_active = 16;
+       }
+       bool snapshot_dedup = 17;
+       bool compact_incomplete_dedup_rows = 18;
+    }
+
+    WriteOptions write_options = 1;
+
+    message MsgPack {
+        uint64 max_blob_size = 1;
+        bool strict_mode = 2;
+    }
+
+    // On normalization failure on first class citizen types, allow usage of normalization
+    // failure handler. This should be avoided and will result in poor performance.
+    bool use_norm_failure_handler_known_types = 3;
+    bool fail_on_missing_custom_normalizer = 4;
+    bool symbol_list = 5;
+
+    oneof norm_failure_handler {
+        MsgPack msg_pack = 32;
+    }
+
+    message StorageFailureSimulator {
+        double write_failure_prob = 40;
+        double read_failure_prob = 41;
+    }
+
+    StorageFailureSimulator failure_sim = 6;
+    bool deleted = 7;
+
+    arcticc.pb2.utils_pb2.PrometheusConfig prometheus_config = 8;
+
+    EventLoggerConfig event_logger_config = 9;
+    bool storage_fallthrough = 10;
+}
+
+message ReadPermissions {
+    bool enabled = 1;
+}
+
+message WritePermissions {
+    bool enabled = 1;
+}
+
+message Permissions {
+    string permissions = 1;
+    string library = 2;
+
+    oneof level {
+        ReadPermissions read = 3;
+        WritePermissions write = 4;
+    }
+}
+
+message NoCredentialsStore {
+    bool enabled = 1;
+}
+
+message VaultCredentialsStore {
+    string business_unit = 1;
+}
+
+message MongoCredentialsStore {
+    string database = 1;
+}
+
+message CredentialsStore {
+    oneof store_type {
+        NoCredentialsStore nostore = 1;
+        VaultCredentialsStore vault = 2;
+        MongoCredentialsStore mongo = 3;
+   }
+}
+
+message LibraryDescriptor {
+    string name = 1;
+    string description = 2;
+    repeated string storage_ids = 3;
+
+    oneof store_type {
+        VersionStoreConfig version = 4;
+    }
+
+    // In case of a library existing in both Python and Native Arctic, this flag decides which one to prefer.
+    // We should default to the Python Arctic for now.
+    bool prefer_native_library_on_name_collision = 6;
+
+    CredentialsStore credentials_store = 7;
+    string library = 8;
+    // These are also referred to as "low priority replication targets" in the code, as they can now represent other
+    // use cases than backups. Changing protobuf field names is extremely painful, so this will remain as is for now.
+    repeated string backup_storage_ids = 9;
+    string migration_target = 10;
+}
+
+message LibraryConfig {
+    /*
+    Portable library configuration which is sufficient to recreate a library
+    */
+    LibraryDescriptor lib_desc = 1;
+    map<string, VariantStorage> storage_by_id = 2;
+}
+
+
