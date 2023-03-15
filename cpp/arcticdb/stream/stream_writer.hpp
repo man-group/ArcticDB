@@ -74,7 +74,7 @@ folly::Future<VariantKey> collect_and_commit(
     idx_agg.set_metadata(std::move(metadata));
     idx_agg.commit();
     util::check(index_key.valid(), "Empty key returned while committing index");
-    return std::move(index_key);
+    return index_key;
 }
 
 template<class Index, class Schema, class SegmentingPolicy = RowCountSegmentPolicy>
