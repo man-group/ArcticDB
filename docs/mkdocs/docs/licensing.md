@@ -18,7 +18,7 @@ Once a version of ArcticDB has converted to the Apache 2.0 license, it may be us
 
 ## Production usage of a BSL-licensed version
 
-To use ArcticDB for production use, please [contact us](http://arcticdb.com) to purchase an ArcticDB Pro license. 
+To use ArcticDB for production use, please [contact us](http://arcticdb.io) to purchase an ArcticDB Pro license. 
 
 ## Can I contribute to ArcticDB?
 
