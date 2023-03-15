@@ -8,15 +8,15 @@ Note that for legacy reasons, the terms `symbol`, `stream`, and `stream ID` are 
 
 !!! note
 
-    Please note that we are in the process of adding error codes to all user-facing errors. As a rsult, this section will expand as error codes are added to existing errors.
+    Please note that we are in the process of adding error codes to all user-facing errors. As a result, this section will expand as error codes are added to existing errors.
 
 ### Internal Errors
 
 | Error Code | Cause                                       | Resolution                                                                                                                                                            |
 |------------|---------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| 1000       | An invalid date range has been passed in.   | ArcticDB ranges must be positive and in increasing order. ENsure the requested range is positive and sorted.                                                          |
+| 1000       | An invalid date range has been passed in.   | ArcticDB date ranges must be in increasing order. Ensure the requested range is sorted.                                                          |
 | 1001       | Invalid Argument                            | An invalid argument has been passed in. This error is an internal error and not expected to be exposed to the user - please create an issue on the GitHub repository. |
-| 1002       | In internal ArcticDB assertion has failed.  | This error is an internal error and not expected to be exposed to the user - please create an issue on the GitHub repository.                                         |
+| 1002       | An internal ArcticDB assertion has failed.  | This error is an internal error and not expected to be exposed to the user - please create an issue on the GitHub repository.                                         |
 | 1003       | ArcticDB has encountered an internal error. | This error is an internal error and not expected to be exposed to the user - please create an issue on the GitHub repository.                                         |
 
 
@@ -24,7 +24,7 @@ Note that for legacy reasons, the terms `symbol`, `stream`, and `stream ID` are 
 
 | Error Code | Cause                                                                             | Resolution                                                                                                                                                      |
 |------------|-----------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| 2000       | Attempting to update or append an existing type with an incompatible object typpe | NumPy arrays or Pandas DataFrames can only be mutated by a matching type. Read the latest version of the symbol and update/append with the corresponding type.  |
+| 2000       | Attempting to update or append an existing type with an incompatible object type | NumPy arrays or Pandas DataFrames can only be mutated by a matching type. Read the latest version of the symbol and update/append with the corresponding type.  |
 | 2001       | Input type cannot be converted to an ArcticDB type.                               | Please ensure all input types match supported [ArcticDB types](https://github.com/man-group/ArcticDB/blob/master/python/arcticdb/version_store/library.py#L25). |
 | 2003       | A write of an incompatible index type has been attempted.                         | ArcticDB only supports defined Pandas index types. Please see the documentation for more information on what types are supported.                               |
 | 2004       | A NumPy append is attempting to change the shape of the previous version.         | When storing NumPy arrays, append operations must have the same shape as the previous version.                                                                  |
@@ -51,10 +51,6 @@ Note that for legacy reasons, the terms `symbol`, `stream`, and `stream ID` are 
 
 ## Errors without numeric error codes
 
-!!! note
-
-    Please note that we are in the process of adding error codes to all user-facing errors. 
-
 ### Pickling errors
 
 These errors relate to data being pickled, which limits the operations available. Internally, pickled symbols are stored as opaque, serialised binary blobs in the [data layer](/technical/on_disk_storage/#data-layer). No index or column information is maintained in this serialised object which is in contrast to non-pickled data, where this information is stored in the [index layer](/technical/on_disk_storage/#index-layer).
@@ -79,7 +75,6 @@ All of these errors are of type `ArcticNativeCxxException` unless specified othe
 | Snapshot with name <name\> already exists | The `snapshot` method was called, but a snapshot with the specified name already exists. | The old snapshot must first be deleted with `delete_snapshot`. |
 | Cannot snapshot version(s) that have been deleted... | A `versions` dictionary was provided to the `snapshot` method, but one of the symbol-version pairs specified does not exist. | The `list_versions` method can be used to see which versions of which symbols are in which snapshots. |
 | Only one of skip_symbols and versions can be set | The `snapshot` method was called with both the `skip_symbols` and `versions` optional arguments set. | Just specify `versions` on its own in this case. |
-| `NoDataFoundException` | `delete_snapshot` called, but no snapshot with this name exists. <br><br> A string was provided to the `as_of` argument of a read operation, but no snapshot with this name exists. | The `list_snapshots` method can be used to list all of the snapshots in a library. <br><br> The `list_versions` method can be used to see which versions of which symbols are in which snapshots. |
 
 ### Require live version errors
 
