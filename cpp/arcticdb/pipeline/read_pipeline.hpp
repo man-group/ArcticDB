@@ -48,7 +48,7 @@ std::optional<CombinedQuery<ContainerType>> combine_filter_functions(std::vector
         for(++filter; filter!=filters.end(); ++filter) {
             bitset = (*filter)(container, std::move(bitset));
         }
-        return std::move(bitset);
+        return bitset;
     };
 }
 

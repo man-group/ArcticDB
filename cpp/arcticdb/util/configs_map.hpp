@@ -76,7 +76,7 @@ public:
      static ConfigsMap from_proto(const RuntimeConfig& config) {
         ConfigsMap output{};
         output.read_proto(config);
-        return std::move(output);
+        return output;
     }
 
 private:
