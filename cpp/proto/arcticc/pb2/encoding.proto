@@ -1,0 +1,108 @@
+syntax = "proto3";
+
+package arcticc.pb2.encoding_pb2;
+
+import "arcticc/pb2/descriptors.proto";
+option cc_enable_arenas = true;
+
+message SegmentHeader {
+    /*
+    Storage block that describes the encoding for multiple fields for a certain period of time.
+    */
+
+    uint64 start_ts = 1; // min(timestamps)
+    uint64 end_ts = 2; // max(timestamps)
+    arcticc.pb2.descriptors_pb2.StreamDescriptor stream_descriptor = 3;
+    repeated EncodedField fields = 5; // encoding description of the various fields
+
+    enum HashType {
+        ROWCOUNT = 0;
+        XX_HASH = 1;
+    }
+    HashType hashing_algo = 6; // defaults to none
+    EncodedField metadata_field = 7;  // optional metadata encoding
+    EncodedField string_pool_field = 8; // string pool
+    bool compacted = 9; // is the segment the result of a compaction
+}
+
+message EncodedField {
+    /* Captures the variant field encoding */
+    oneof encoding {
+        NDArrayEncodedField ndarray = 2;
+        DictionaryEncodedField dictionary = 3;
+    }
+}
+
+message VariantCodec {
+    message Zstd {
+        /* See https://github.com/facebook/zstd */
+        int32 level = 1; // from -20 to 20
+        bool is_streaming = 2;
+    }
+    message TurboPfor {
+        enum SubCodecs {
+            UNKNOWN = 0;
+
+            P4 = 16;
+            P4_DELTA = 17;
+            P4_DELTA_RLE = 18;
+            P4_ZZ = 20;
+
+            FP_DELTA = 32; // fpp
+            FP_DELTA2_ZZ = 33;  // fpzz
+            FP_GORILLA_RLE = 34; // fpg
+            FP_ZZ = 36; // bvz
+            FP_ZZ_DELTA = 40; // bvz
+        }
+        SubCodecs sub_codec = 1;
+    }
+    message Lz4 {
+        int32 acceleration = 1;
+    }
+    message Passthrough {
+        bool mark = 1;
+    }
+
+    oneof codec {
+        Zstd zstd = 16;
+        TurboPfor tp4 = 17;
+        Lz4 lz4 = 18;
+        Passthrough passthrough = 19;
+    }
+}
+
+message Block {
+    uint32 in_bytes = 1; // number of bytes before any codec is applied
+    uint32 out_bytes = 2; // number of bytes outputted by the last codec
+    uint64 hash = 3; // Hash value used to verify data integrity
+
+    uint32 encoder_version = 4;
+    VariantCodec codec = 5;
+}
+
+message NDArrayEncodedField {
+    uint32 items_count = 1;
+    repeated Block shapes = 2;
+    repeated Block values = 3;
+    uint32 sparse_map_bytes = 4;
+}
+
+message DictionaryEncodedField {
+    /*
+    The use case is to encode and array of type T where T is an object with size >> 4 bytes into
+    2 arrays, one containing unique values of T, and a second with the position of the unique values.
+    If T has a low cardinality, this yields a good space reduction.
+
+    l contains the unique T values, and labels contains the index of T.
+
+    values.item_count == len(unique(array_T))
+    positions.item_count == array_T.shape[0]
+
+    This can be used to represent single field of a pandas multindex.
+    */
+    NDArrayEncodedField values = 1; // aka level in pandas multi index
+    NDArrayEncodedField positions = 2; // aka label in pandas multi index
+}
+
+
+

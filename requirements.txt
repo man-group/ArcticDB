@@ -1,0 +1,32 @@
+numpy
+pandas
+typing ; python_version < '3.8'
+dataclasses ; python_version < '3.8'
+attrs
+enum-compat
+grpcio-tools
+xxhash
+six
+msgpack
+psutil
+pyyaml
+pymongo
+decorator
+prometheus_client
+ipykernel
+cython
+pytest
+pytest-cpp
+pytest-timeout
+future
+flask
+pytest-server-fixtures
+six
+mock
+arctic
+boto3
+kafka-python
+kazoo
+hypothesis
+moto
+wheel

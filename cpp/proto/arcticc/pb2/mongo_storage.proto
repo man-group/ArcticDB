@@ -1,0 +1,12 @@
+syntax = "proto3";
+
+package arcticc.pb2.mongo_storage_pb2;
+
+message Config {
+    enum Flags {
+        DEFAULT = 0;
+    }
+
+    string uri = 1; //The path to the mongo server
+    uint32 flags = 2; // default is 0
+}

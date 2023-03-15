@@ -1,0 +1,65 @@
+syntax = "proto3";
+
+package arcticc.pb2.logger_pb2;
+
+message LoggersConfig {
+    map<string, SinkConfig> sink_by_id = 1;
+    map<string, LoggerConfig> logger_by_id = 2;
+    AsyncConfig async = 5;
+    uint32 flush_interval_seconds = 3; // defaults to 1 sec
+}
+
+message AsyncConfig {
+    uint32 queue_size = 1; // defaults 8192
+    uint32 thread_pool_size = 2; // defaults to 1
+}
+
+message LoggerConfig {
+    enum Level {
+        UNKNOWN = 0; // defaults to INFO
+        TRACE = 1;
+        DEBUG = 2;
+        INFO = 3;
+        WARN = 4;
+        ERROR = 5;
+        CRITICAL = 6;
+        OFF = 7;
+    }
+
+    /**
+      See https://github.com/gabime/spdlog/wiki/3.-Custom-formatting for available pattern format flag
+      */
+    string pattern = 1;
+    Level level = 2;
+    repeated string sink_ids = 3;
+}
+
+message SinkConfig {
+    message Console {
+        bool has_color = 1; // defaults to false
+        bool std_err = 2; // defaults to false
+    }
+
+    message BasicFile {
+        string path = 1;
+    }
+
+    message RotatingFile {
+        string path = 1;
+        uint64 max_size_bytes = 2; // defaults to 64MiB
+        uint64 max_file_count = 3; // defaults to 8
+    }
+
+    message DailyFile {
+        string path = 1;
+        uint32 utc_rotation_hour = 2; // defaults to 0
+        uint32 utc_rotation_minute = 3; // defaults to 0
+    }
+
+    oneof sink {
+        Console console = 1;
+        BasicFile file = 2;
+        RotatingFile rot_file = 3;
+        DailyFile daily_file = 4;
+    }
+}
