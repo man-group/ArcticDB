@@ -32,7 +32,6 @@ jobs:
       SCCACHE_GHA_VERSION: ${{vars.SCCACHE_GHA_VERSION || 1}} # Setting this env var enables the caching
       CMAKE_C_COMPILER_LAUNCHER: sccache
       CMAKE_CXX_COMPILER_LAUNCHER: sccache
-      CMAKE_BUILD_PARALLEL_LEVEL: 2
       ARCTIC_CMAKE_PRESET: ${{matrix.cmake_preset_prefix}}-${{inputs.cmake_preset_type}}
       VCPKG_BINARY_SOURCES: 'clear;nuget,github,readwrite'
       nuget_user: ${{vars.vcpkg_nuget_user || github.repository_owner}}
