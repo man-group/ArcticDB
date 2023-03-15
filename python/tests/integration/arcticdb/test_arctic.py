@@ -1064,23 +1064,3 @@ def test_reload_symbol_list(moto_s3_uri_incl_bucket, boto_client):
     lib.reload_symbol_list()
     assert len(get_symbol_list_keys()) == 1
 
-
-if __name__ == "__main__":
-    # Cheap and dirty test harness to make testing in various different Python installs easier
-    uri = (
-        "s3://s3.gdc.res.m:arctic-native-tests?access="
-        "PSFBSAZRHGPOEGGMMPGCEGDHOLPCOHMLKPBKDBDIOH&secret=23A013A1Fabc7e2fb/f48eF20BB093d7259150BOPA"
-    )
-
-    ac = Arctic(uri)
-    if "pytest_test_lib" in ac.list_libraries():
-        ac.delete_library("pytest_test_lib")
-
-        time.sleep(5)
-
-    test_basic_write_read_update_and_append(uri)
-
-    ac.delete_library("pytest_test_lib")
-    time.sleep(5)
-
-    test_snapshots_and_deletes(uri)

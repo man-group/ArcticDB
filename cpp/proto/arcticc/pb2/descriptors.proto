@@ -87,11 +87,6 @@ message MsgPackSerialization {
         PY_TIMEDELTA = 34;
         PY_PICKLE_2  = 102;
         PY_PICKLE_3  = 103;
-        // types introducing ahl.core dependency,
-        // these will need to be registered through an external end point
-        //AHL_DATERANGE = 35;
-        //AHL_DATETIMEDELTA = 36;
-        //AHL_TIMESERIESMASK = 37; // list of AHL_DATERANGE
     }
 }
 
