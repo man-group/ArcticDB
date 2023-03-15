@@ -1,17 +1,10 @@
-cmake_minimum_required(VERSION 2.8.12)
+cmake_minimum_required(VERSION 3.12) # FindPython
 
 set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/CMake" ${CMAKE_MODULE_PATH})
 cmake_policy(SET CMP0048 NEW)
 project(arcticdb VERSION 0.0.1)
 
 enable_testing()
-
-message(ENV_BASE_DIR="${ENV_BASE_DIR}")
-message(Python_ROOT_DIR="${Python_ROOT_DIR}")
-message(PYTHON_LIBRARIES="${PYTHON_LIBRARIES}")
-message(PYTHON_INCLUDE_DIRS="${PYTHON_INCLUDE_DIRS}")
-message(BUILD_PYTHON_VERSION="${BUILD_PYTHON_VERSION}")
-message(PYTHON_LIBRARY_SO="${PYTHON_LIBRARY_SO}")
 
 if(WIN32)
     add_compile_definitions(NOGDI)
@@ -27,7 +20,6 @@ else()
     set(CMAKE_CXX_FLAGS "-Wall -Wextra")
     set(CMAKE_CXX_FLAGS_DEBUG "-ggdb")
     set(CMAKE_CXX_FLAGS_RELEASE "-O3")
-    set(STATIC_SYS_LIBS  -static-libgcc -static-libstdc++)
 endif()
 
 IF(DEFINED ENV{CMAKE_BUILD_TYPE})
@@ -40,23 +32,54 @@ if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release)
 endif()
 
+if(${CMAKE_TOOLCHAIN_FILE} MATCHES "vcpkg.cmake$")
+    message(STATUS "CMAKE_TOOLCHAIN_FILE is set to vcpkg, so will use find_package to find the libraries it build")
+    set(ARCTICDB_USING_VCPKG ON)
+endif()
+
+if(${CMAKE_VERSION} VERSION_LESS 3.15)
+    message(WARNING "Your cmake version is older than 3.15, which doesn't support the more granular FindPython \
+Development.Module component. We will fallback to not requiring it, but the object may fail to link.")
+    set(ARCTICDB_FIND_PYTHON_DEV_MODE ""                 CACHE STRING "FindPython Development arguments")
+else()
+    set(ARCTICDB_FIND_PYTHON_DEV_MODE Development.Module CACHE STRING "FindPython Development arguments")
+endif()
+
+foreach(var_name PYTHON_EXECUTABLE PYTHON_LIBRARIES PYTHON_LIBRARY PYTHON_INCLUDE_DIRS)
+    if(DEFINED ${var_name})
+        message("${var_name} is set (to ${${var_name}}), which can influence FindPython and Pybind.")
+    endif()
+endforeach ()
+
+set(Python_USE_STATIC_LIBS OFF)
+# Must be called before Pybind (third_party) to override its outdated finding mechanism
+find_package(Python 3 COMPONENTS Interpreter ${ARCTICDB_FIND_PYTHON_DEV_MODE} REQUIRED)
+
+if(${Python_Development.Module_FOUND})
+    set(PYTHON_LIBRARY_SO Python::Module CACHE STRING "Python::Module link target name for override")
+elseif(${Python_Development_FOUND})
+    set(PYTHON_LIBRARY_SO Python::Python CACHE STRING "Python::Module link target name for override")
+elseif(NOT ${PYTHON_INCLUDE_DIRS} OR NOT EXISTS ${PYTHON_INCLUDE_DIRS})
+    # Only possible due to CMake < 3.15
+    message(WARNING "Did not find Python::Module or Develop and no valid (override) path is supplied. Will ask python:")
+    execute_process (COMMAND "${Python_EXECUTABLE}" -c "import sysconfig; print(sysconfig.get_path('include'))"
+            OUTPUT_VARIABLE PYTHON_INCLUDE_DIRS
+            OUTPUT_STRIP_TRAILING_WHITESPACE)
+    get_filename_component(PYTHON_INCLUDE_DIRS_EXTRA ${Python_EXECUTABLE} DIRECTORY) # pyconfig.h is sometimes here
+    list(APPEND PYTHON_INCLUDE_DIRS ${PYTHON_INCLUDE_DIRS_EXTRA})
+    message(${PYTHON_INCLUDE_DIRS})
+endif()
+
+if(${BUILD_PYTHON_VERSION} AND NOT ${BUILD_PYTHON_VERSION} VERSION_EQUAL "${Python_VERSION_MAJOR}.${Python_VERSION_MINOR}")
+    message(FATAL_ERROR "You specified BUILD_PYTHON_VERSION=${BUILD_PYTHON_VERSION}, but FindPython found ${Python_VERSION}. \
+Use the official Python_ROOT_DIR and Python_EXECUTABLE hints to properly specify alternative versions, or run cmake \
+from within a virtualenv.")
+endif()
+
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
-
-if(NOT BUILD_PYTHON_VERSION AND NOT WIN32)
-    message("Resetting Python include locations...")
-    # /default-medusa-venv is symlinked to /default-pegasus-venv
-    set(ENV_BASE_DIR "/default-medusa-venv")
-
-    set(BUILD_PYTHON_VERSION 3.6)
-
-    set(PYTHON_LIBRARIES "${ENV_BASE_DIR}/lib")
-    set(PYTHON_EXECUTABLE "${ENV_BASE_DIR}/bin/python")
-    set(PYTHON_INCLUDE_DIRS "${ENV_BASE_DIR}/include/python${BUILD_PYTHON_VERSION}m")
-    set(PYTHON_LIBRARY_SO "${ENV_BASE_DIR}/lib/libpython${BUILD_PYTHON_VERSION}m.so")
-endif()
 
 add_subdirectory(third_party)
 add_subdirectory(proto)

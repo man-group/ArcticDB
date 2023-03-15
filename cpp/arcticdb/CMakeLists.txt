@@ -3,7 +3,6 @@ option(SSL_LINK "Link against SSL libraries." ON)
 option(STRIP_BUILDS "Strip built targets of all symbols" OFF)
 option(HIDE_LINKED_SYMBOLS "Passed `exclude-libs` through to linker, ensuring linked library symbols are not exported. Shrinks binary size." ON)
 option(STATIC_LINK_STD_LIB "Statically link the C++ standard libraries" ON)
-option(EXTERNAL_RELEASE "Set any compiler options needed for external releases" OFF)
 
 find_package(GTest REQUIRED)
 
@@ -11,38 +10,58 @@ include(CTest)
 include(GoogleTest)
 include(GenerateExportHeader)
 
-find_package(Threads REQUIRED)
-find_package(Zstd REQUIRED)
-find_package(LZ4 REQUIRED)
+set(CMAKE_VERBOSE_MAKEFILE on)
+
+# System and third-party libraries with built-in find_package Config
+cmake_policy(PUSH)
+    if (EXISTS "/usr/local/lib64/aws-c-cal/cmake/modules/FindLibCrypto.cmake") # Workaround old AWS SDK bug
+        cmake_policy(SET CMP0045 OLD)
+    endif()
+    find_package(AWSSDK REQUIRED COMPONENTS s3)
+cmake_policy(POP)
+
+find_package(Boost REQUIRED)
 find_package(fmt REQUIRED)
 find_package(Folly REQUIRED)
-find_package(GLog REQUIRED)
 find_package(Gflags REQUIRED)
-find_package(Boost REQUIRED)
+find_package(LZ4 REQUIRED)
+find_package(libmongocxx-static REQUIRED)
+find_package(libbsoncxx-static REQUIRED)
 find_package(prometheus-cpp CONFIG REQUIRED)
+find_package(Threads REQUIRED)
 
-if (WIN32)
-    find_package(Fizz REQUIRED)
-    find_package(protobuf REQUIRED)
-    find_package(wangle REQUIRED)
-    find_package(Zstd REQUIRED)
+# Libraries compiled by vcpkg and also baked into our internal image:
+if (ARCTICDB_USING_VCPKG)
     find_package(double-conversion REQUIRED)
+    find_package(Libevent CONFIG REQUIRED)
+
+    find_package(protobuf REQUIRED)
+    set(Protobuf_lite_LIBRARY protobuf::libprotobuf-lite)
+    set(Protobuf_LIBRARY protobuf::libprotobuf)
+
+    find_package(zstd CONFIG REQUIRED)  # "CONFIG" bypass our cpp/CMake/FindZstd.cmake module
+    set(Zstd_LIBRARY $<IF:$<TARGET_EXISTS:zstd::libzstd_shared>,zstd::libzstd_shared,zstd::libzstd_static>)
+
+else()
+    find_library(Protobuf_lite_LIBRARY NAMES libprotobuf-lite protobuf-lite REQUIRED)
+    find_library(Protobuf_LIBRARY NAMES libprotobuf protobuf REQUIRED)
+    find_package(Zstd MODULE REQUIRED) # Uses our FindZstd module, which sets Zstd_LIBRARY
+
+    get_target_property(NEW_FOLLY_DEPS Folly::folly_deps INTERFACE_LINK_LIBRARIES)
+    list(TRANSFORM NEW_FOLLY_DEPS REPLACE "/usr/local/lib/libsodium\\.so" "libsodium.a")
+    set_target_properties(Folly::folly_deps PROPERTIES INTERFACE_LINK_LIBRARIES "${NEW_FOLLY_DEPS}")
+endif()
+
+# Libraries baked into the internal and external Linux images are found by searching various paths
+# On Windows, vcpkg will provide a "Config" which takes precedence
+find_library(Pcre_LIBRARY NAMES pcre PATHS /usr/local/lib/libpcre.a REQUIRED)
+if (WIN32)
     find_package(Iconv)
-    find_package(mongocxx REQUIRED)
-    find_package(bsoncxx REQUIRED)
-    find_package(aws-cpp-sdk-s3 CONFIG REQUIRED)
-    find_package(RdKafka REQUIRED)
-    find_package(unofficial-sodium REQUIRED)
-    find_package(unofficial-pcre REQUIRED)
 else ()
-    find_package(libmongocxx-static REQUIRED)
-    find_package(libbsoncxx-static REQUIRED)
-    set(CMAKE_FIND_DEBUG_MODE TRUE)
-    find_package(AWSSDK REQUIRED COMPONENTS s3)
-    set(CMAKE_FIND_DEBUG_MODE FALSE)
+    find_library(Sasl2_LIBRARY NAMES sasl2 libsasl2 PATHS /usr/local/lib/libsasl2.a REQUIRED)
 endif ()
 
-set(BITMAGIC_INCLUDE_DIRS /usr/local/include)
+find_path(BITMAGIC_INCLUDE_DIRS "bitmagic/bm.h")
 
 link_directories(
         /usr/local/lib64
@@ -339,7 +358,7 @@ set(arcticdb_srcs
 
 add_library(arcticdb_core_object OBJECT ${arcticdb_srcs})
 
-if (NOT WIN32) 
+if (NOT WIN32)
     if (STATIC_LINK_STD_LIB)
         message("Statically linking standard libraries")
         set(standard_libraries
@@ -355,81 +374,41 @@ if (NOT WIN32)
     endif()
 endif()
 
+
+set (arcticdb_core_libraries
+        pybind11::module
+        arcticdb_proto
+        prometheus-cpp::push
+        prometheus-cpp::pull
+        msgpackc-cxx
+        ${standard_libraries}
+        fmt::fmt
+        ${Protobuf_lite_LIBRARY}
+        ${Protobuf_LIBRARY}
+        xxhash_static
+        ${LZ4_LIBRARY}
+        ${Zstd_LIBRARY}
+        lmdb
+        spdlog::spdlog
+        Folly::folly # Transitively includes: double-conversion, gflags, glog, libevent, libssl, libcrypto, libiberty, libsodium
+        remotery_static
+        ${Pcre_LIBRARY}
+        ${PYTHON_LIBRARY_SO}
+        )
+
 if (WIN32)
-    set (arcticdb_core_libraries
-            pybind11::module
-            arcticdb_proto
-            prometheus-cpp::push
-            prometheus-cpp::pull
-            msgpackc-cxx
-            RdKafka::rdkafka++
-            RdKafka::rdkafka
-            ${standard_libraries}
-            fmt::fmt
-            protobuf::libprotobuf-lite
-            protobuf::libprotobuf
-            xxhash_static
-            lz4::lz4
-            lmdb
-            spdlog::spdlog
-            wangle::wangle
-            fizz::fizz
-            Folly::folly
-            glog::glog
-            gflags
-            double-conversion::double-conversion
-            remotery_static
-            libevent::core
-            unofficial::pcre::pcre
-            unofficial-sodium::sodium
-            mongo::mongocxx_static
-            mongo::bsoncxx_static
-            aws-cpp-sdk-core
-            aws-cpp-sdk-s3
+    list (APPEND arcticdb_core_libraries
             Iconv::Iconv
-            Threads::Threads # comes last for weakreference resolution pthread_atexit in folly
             )
-    if (NOT BUILD_PYTHON_VERSION)
-        find_package(Python3 COMPONENTS Development REQUIRED)
-        set(BUILD_PYTHON_VERSION 3.10)
-        list (APPEND arcticdb_core_libraries Python3::Python)
-    endif ()
 else ()
-    set (arcticdb_core_libraries
-            pybind11::module
-            arcticdb_proto
-            prometheus-cpp::push
-            prometheus-cpp::pull
-            msgpackc-cxx
-            rdkafka++
-            rdkafka
-            ${standard_libraries}
+    list (APPEND arcticdb_core_libraries
             stdc++fs
             dl
-            fmt::fmt
-            protobuf-lite
-            protobuf
-            xxhash_static
-            zstd
-            lz4
-            lmdb
-            spdlog
-            wangle
-            fizz
-            folly
-            glog
-            gflags
-            double-conversion
-            remotery_static
-            boost_context
-            event_core
-            libsodium.a
-            /usr/lib64/libiberty.a
-            /usr/local/lib/libsasl2.a
-            /usr/local/lib/libpcre.a
-            Threads::Threads # comes last for weakreference resolution pthread_atexit in folly
+            ${Sasl2_LIBRARY}
             )
 endif ()
+
+list (APPEND arcticdb_core_libraries Threads::Threads) # comes last for weakreference resolution pthread_atexit in folly
 
 if (SSL_LINK)
     message("Linking against SSL")
@@ -471,7 +450,6 @@ target_link_libraries(arcticdb_core PRIVATE
         ${LIBMONGOCXX_STATIC_LIBRARIES_NO_SASL}
         ${LIBBSONCXX_STATIC_LIBRARIES}
         ${AWSSDK_LINK_LIBRARIES}
-        ${PYTHON_LIBRARY_SO}
         )
 
 GENERATE_EXPORT_HEADER(arcticdb_core)
@@ -524,9 +502,6 @@ set (additional_link_flags "")
 if (STRIP_BUILDS)
     set_target_properties(arcticdb_ext PROPERTIES LINK_FLAGS_RELEASE -s)
 endif()
-if (EXTERNAL_RELEASE)
-    add_definitions(-DARCTICDB_LICENSED)
-endif()
 
 if (HIDE_LINKED_SYMBOLS)
     list(APPEND additional_link_flags
@@ -550,7 +525,7 @@ target_include_directories(arcticdb_ext
         ${BITMAGIC_INCLUDE_DIRS}
         ${PYTHON_INCLUDE_DIRS}
         ${PYTHON_NUMPY_INCLUDE_DIR}
-        ${AWSSDK_LINK_LIBRARIES}
+        ${AWSSDK_INCLUDE_DIRS}
         )
 
 set_target_properties(arcticdb_ext PROPERTIES
@@ -558,7 +533,10 @@ set_target_properties(arcticdb_ext PROPERTIES
         )
 
 ## Unit Tests ##
-if(TEST)
+if(${TEST})
+    unset(Python_USE_STATIC_LIBS)
+    find_package(Python 3 COMPONENTS Interpreter Development REQUIRED)
+
     set(unit_test_srcs
             async/test/test_async.cpp
             codec/test/test_codec.cpp
@@ -628,6 +606,9 @@ if(TEST)
                 GTest::gtest
                 GTest::gmock
                 )
+
+        # Fix gtest/folly unistd conflict until one of them fixes it. There's another copy for rapidtest
+        target_compile_options(test_unit_arcticdb PRIVATE /FI "util/test/gtest.hpp")
     else()
         target_link_libraries(test_unit_arcticdb
             PUBLIC
@@ -637,7 +618,7 @@ if(TEST)
             gtest
             gmock
             gcov
-            ${PYTHON_LIBRARY_SO}
+            Python::Python
             curl
             krb5support
             k5crypto
@@ -683,6 +664,8 @@ if(TEST)
                 ${LIBBSONCXX_STATIC_LIBRARIES}
                 ${AWSSDK_LINK_LIBRARIES}
                 )
+
+        target_compile_options(arcticdb_rapidcheck_tests PRIVATE /FI "util/test/gtest.hpp")
     else()
         target_link_libraries(arcticdb_rapidcheck_tests PUBLIC
             #tsan
@@ -693,7 +676,7 @@ if(TEST)
             gcov
             rapidcheck
             rapidcheck_gtest
-            ${PYTHON_LIBRARY_SO}
+            Python::Python
             curl
             krb5support
             krb5
