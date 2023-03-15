@@ -45,6 +45,19 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
+if(NOT BUILD_PYTHON_VERSION AND NOT WIN32)
+    message("Resetting Python include locations...")
+    # /default-medusa-venv is symlinked to /default-pegasus-venv
+    set(ENV_BASE_DIR "/default-medusa-venv")
+
+    set(BUILD_PYTHON_VERSION 3.6)
+
+    set(PYTHON_LIBRARIES "${ENV_BASE_DIR}/lib")
+    set(PYTHON_EXECUTABLE "${ENV_BASE_DIR}/bin/python")
+    set(PYTHON_INCLUDE_DIRS "${ENV_BASE_DIR}/include/python${BUILD_PYTHON_VERSION}m")
+    set(PYTHON_LIBRARY_SO "${ENV_BASE_DIR}/lib/libpython${BUILD_PYTHON_VERSION}m.so")
+endif()
+
 add_subdirectory(third_party)
 add_subdirectory(proto)
 

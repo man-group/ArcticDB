@@ -584,9 +584,7 @@ if(TEST)
             storage/test/test_lmdb_storage.cpp
             storage/test/test_memory_storage.cpp
             storage/test/test_mongo_storage.cpp
-            storage/test/test_nfs_backed_storage.cpp
             storage/test/test_s3_storage.cpp
-            storage/test/test_s3_storage_common.hpp
             storage/test/test_storage_factory.cpp
             stream/test/stream_test_common.cpp
             stream/test/stream_test_common.cpp

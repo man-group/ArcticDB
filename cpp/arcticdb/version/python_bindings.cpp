@@ -14,7 +14,6 @@
 #include <arcticdb/python/python_utils.hpp>
 #include <arcticdb/pipeline/query.hpp>
 #include <folly/Singleton.h>
-#include <arcticdb/storage/test/test_s3_storage_common.hpp>
 #include <arcticdb/storage/mongo/mongo_instance.hpp>
 #include <arcticdb/processing/operation_types.hpp>
 #include <arcticdb/processing/expression_node.hpp>
