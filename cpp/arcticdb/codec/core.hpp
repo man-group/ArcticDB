@@ -8,10 +8,10 @@
 #pragma once
 
 #include <arcticdb/entity/protobufs.hpp>
+#include <arcticdb/entity/types.hpp>
 
 #include <arcticdb/util/buffer.hpp>
 #include <arcticdb/util/hash.hpp>
-#include <entity/types.hpp>
 #include <arcticdb/log/log.hpp>
 
 #include <type_traits>

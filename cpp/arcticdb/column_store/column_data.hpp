@@ -33,6 +33,9 @@ struct TypedBlockData {
         TypedColumnBlockIterator(ValueType* ptr)
             :  ptr_(ptr) { }
 
+        TypedColumnBlockIterator(const TypedColumnBlockIterator& other)
+            : ptr_(other.ptr_) {}
+
         template <class OtherValue>
         explicit TypedColumnBlockIterator(const TypedColumnBlockIterator<OtherValue>& other)
             : ptr_(other.ptr_){}

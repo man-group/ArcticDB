@@ -19,17 +19,27 @@
 #include <arcticdb/util/key_utils.hpp>
 #include <arcticdb/util/exponential_backoff.hpp>
 #include <mongocxx/model/replace_one.hpp>
+#include <mongocxx/config/version.hpp>
 #include <arcticdb/util/composite.hpp>
 
 namespace arcticdb::storage::mongo {
 
 namespace detail {
 
+template<typename ElementType>
+std::string get_string_element(const ElementType& element) {
+#if (MONGOCXX_VERSION_MAJOR * 1000 + MONGOCXX_VERSION_MINOR) >= 3007
+    return std::string(element.get_string());
+#else
+    return element.get_utf8().value.data();
+#endif
+}
+
 template<typename DocType>
 StreamId stream_id_from_document(DocType& doc, KeyType key_type) {
     StreamId stream_id;
-    if(is_string_key_type(key_type))
-        stream_id = StringId(doc["stream_id"].get_utf8().value);
+    if (is_string_key_type(key_type))
+        stream_id = get_string_element(doc["stream_id"]);
     else
         stream_id = NumericId(doc["stream_id"].get_int64().value);
 
@@ -44,8 +54,8 @@ AtomKey atom_key_from_document(DocType &doc, KeyType key_type) {
         start_index = doc["start_time"].get_int64().value;
         end_index = doc["end_time"].get_int64().value;
     } else {
-        start_index = std::string(doc["start_key"].get_utf8().value);
-        end_index = std::string(doc["end_key"].get_utf8().value);
+        start_index = get_string_element(doc["start_key"]);
+        end_index = get_string_element(doc["end_key"]);
     }
 
     auto stream_id = stream_id_from_document(doc, key_type);
