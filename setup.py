@@ -1,88 +1,61 @@
 import os
-import os.path as osp
 import subprocess
 import sys
-from distutils.core import Command
-from setuptools import setup
+import glob
+import platform
+import shutil
+from pathlib import Path
+from setuptools import setup, Command
 from setuptools import Extension, find_packages
 from setuptools.command.build_ext import build_ext
 from setuptools.command.build_py import build_py
 from setuptools.command.develop import develop
 from wheel.bdist_wheel import bdist_wheel
-from pathlib import Path
-from pkg_resources import packaging
-
-class ProtobufFiles(object):
-    def __init__(
-        self,
-        include_dir="cpp/proto",  # -I
-        python_out_dir="python",  # --python_out
-        grpc_out_dir=None,  # --grpc_python_out
-        sources=[],  # arguments of proto
-    ):
-        self.include_dir = include_dir
-        self.sources = sources
-        self.python_out_dir = python_out_dir
-        self.grpc_out_dir = grpc_out_dir
-
-    def compile(self):
-        # import deferred here to avoid blocking installation of dependencies
-        cmd = ["-mgrpc_tools.protoc"]
-
-        cmd.append("-I{}".format(self.include_dir))
-
-        cmd.append("--python_out={}".format(self.python_out_dir))
-        if self.grpc_out_dir:
-            cmd.append("--grpc_python_out={}".format(self.grpc_out_dir))
-
-        cmd.extend(self.sources)
-
-        cmd_shell = "{} {}".format(sys.executable, " ".join(cmd))
-        print('Running "{}"'.format(cmd_shell))
-        subprocess.check_output(cmd_shell, shell=True)
-
-
-proto_files = ProtobufFiles(sources=["cpp/proto/arcticc/pb2/*.proto"])
-
-
-def compile_protos():
-    print("\nProtoc compilation")
-    proto_files.compile()
-    if not os.path.exists("python/arcticc"):
-        raise RuntimeError("Unable to locate Protobuf module during compilation.")
-    else:
-        open("python/arcticc/__init__.py", "a").close()
-        open("python/arcticc/pb2/__init__.py", "a").close()
 
 
 class CompileProto(Command):
     description = '"protoc" generate code _pb2.py from .proto files'
-
-    user_options = []
+    user_options = [
+        ("python-out=", "p", "Output the arcticc.pb2 package to this directory. Defaults to 'python/'"),
+        ("grpc-out-dir=", "r", "See the docs of grpc_tools.protoc"),
+    ]
 
     def initialize_options(self):
-        pass
+        self.grpc_out_dir = None
+        self.python_out = None
 
     def finalize_options(self):
-        pass
+        self.set_undefined_options("build", ("build_lib", "python_out"))  # Default to the output of the build command
 
     def run(self):
-        compile_protos()
+        print(f"\nProtoc compilation (into '{self.python_out}')")
+        os.makedirs(self.python_out, exist_ok=True)
+        cmd = [sys.executable, "-mgrpc_tools.protoc", "-Icpp/proto", "--python_out=" + self.python_out]
+
+        if self.grpc_out_dir:
+            cmd.append(f"--grpc_python_out={self.grpc_out_dir}")
+
+        cmd.extend(glob.glob("cpp/proto/arcticc/pb2/*.proto"))
+
+        print(f"Running {cmd}")
+        subprocess.check_output(cmd)
+        if not os.path.exists(self.python_out + "/arcticc"):
+            raise RuntimeError("Unable to locate Protobuf module during compilation.")
+        else:
+            open(self.python_out + "/arcticc/__init__.py", "a").close()
+            open(self.python_out + "/arcticc/pb2/__init__.py", "a").close()
 
 
 class CompileProtoAndBuild(build_py):
     def run(self):
-        compile_protos()
+        self.run_command("protoc")
         build_py.run(self)
 
 
 class DevelopAndCompileProto(develop):
     def run(self):
         develop.run(self)
-        compile_protos()  # compile after updating the deps
-        if not os.path.islink("python/arcticdb_ext.so") and os.path.exists("python"):
-            print("Creating symlink for compiled arcticdb module in python...")
-            os.symlink("../arcticdb_ext.so", "python/arcticdb_ext.so")
+        self.run_command("protoc")  # compile after updating the deps
 
 
 class CMakeExtension(Extension):
@@ -97,63 +70,79 @@ class CMakeBuild(build_ext):
             self.build_extension(ext)
 
     def build_extension(self, ext):
-        self.compile(self.build_temp)
+        dest = os.path.abspath(self.get_ext_fullpath(ext.name))
+        print(f"Destination: {dest}")
+        install_args = [f"-DCMAKE_INSTALL_PREFIX={os.path.dirname(dest)}"]
 
-        so_file = f"{ext.name}.so"
-        try:
-            os.remove(so_file)
-        except:
-            pass
+        cmake = shutil.which("cmake")  # Windows safe
+        if not cmake and platform.system() != "Windows":
+            print("Did not find cmake on the path. Will try to resolve from shell", file=sys.stderr)
+            cmake = subprocess.check_output(["bash", "-lc", "which cmake | tail -n 1"], universal_newlines=True).strip()
 
-        if not osp.exists(so_file):
-            extension_file = osp.join(os.path.dirname(self.get_ext_fullpath(ext.name)), so_file)
+        env_var = "ARCTIC_CMAKE_PRESET"  # From CMakePresets.json
+        preset = os.getenv(env_var, "*")
+        if preset == "skip":
+            return
+        search = f"cpp/out/{preset}-build"
+        candidates = glob.glob(search)
+        if not candidates:
+            common_args = [
+                "-DTEST=NO",
+                f"-DBUILD_PYTHON_VERSION={sys.version_info[0]}.{sys.version_info[1]}",
+                *install_args,
+            ]
+            cmake_check = subprocess.run([cmake, "-P", "cpp/CMake/CheckSupportsPreset.cmake"])
+            if cmake_check.returncode == 0:
+                self._configure_cmake_using_preset(cmake, common_args, preset, search)
+            else:
+                self._configure_for_legacy_image(common_args, "cpp/out/legacy-build")
+            candidates = glob.glob(search)
 
-            print(f"Creating symlink from '{so_file}' to '{extension_file}'")
-            os.symlink(extension_file, so_file)
+        assert len(candidates) == 1, f"Specify {env_var} or use a single build directory. {search}={candidates}"
+        subprocess.check_call([cmake, "--build", candidates[0], "--target", ext.name])
+        subprocess.check_call(
+            [cmake, *install_args, "-DCOMPONENT=Python_Lib", "-P", candidates[0] + "/cmake_install.cmake"]
+        )
 
-    def compile(self, build_dir):
+        assert os.path.exists(dest), f"No output at {dest}, but we didn't get a bad return code from CMake?"
+
+    def _configure_cmake_using_preset(self, cmake, common_args, preset, search):
+        if preset == "*":
+            suffix = "-debug" if self.debug else "-release"
+            preset = ("windows-cl" if platform.system() == "Windows" else platform.system().lower()) + suffix
+        print(
+            f"Did not find build directory with '{search}'. Will configure and build using cmake preset {preset}",
+            file=sys.stderr,
+        )
+        subprocess.check_call([cmake, *common_args, "--preset", preset], cwd="cpp")
+
+    def _configure_for_legacy_image(self, common_args, build_dir):
+        print("Legacy cmake configuration")
         env = {
             "TERM": "linux",  # to get colors
             "PATH": "/opt/gcc/8.2.0/bin:/opt/cmake/bin:/usr/bin:/usr/local/bin:/bin:/sbin:/usr/sbin:/usr/local/sbin",
             "CXX": "/opt/gcc/8.2.0/bin/g++",
             "CC": "/opt/gcc/8.2.0/bin/gcc",
-            "CMAKE_ROOT": "/opt/cmake/share/cmake-3.12",
         }
         if "MB_PYTHON_PLATFORM_NAME" in os.environ:
-            python_root_dir = "/default-pegasus-venv" if args.version != "medusa" else "/opt/man/releases/python-medusa/36-1"
+            python_root_dir = "/default-pegasus-venv"
         else:
             python_root_dir = Path(os.path.dirname(sys.executable)).parent
 
-        python_version = "{}.{}".format(sys.version_info[:2][0], sys.version_info[:2][1])
-        lib_path = osp.join(python_root_dir, "lib")
-        # The include path in python3.8 is different - does not have "m" in the end (lol)
-        include_path = osp.join(python_root_dir, "include")
-        python_lib_path = osp.join(lib_path, "libpython{}{}.so".format(python_version, "" if packaging.version.parse(python_version) >= packaging.version.parse("3.8") else "m"))
+        # If the cmake don't support presets, it also won't support FindPython Development.Module
 
         process_args = [
             "cmake",
-            "-DCMAKE_DEPENDS_USE_COMPILER=FALSE",
-            "-DPYBIND11_FINDPYTHON=ON",
-            "-DENV_BASE_DIR={}".format(python_root_dir),
-            "-DPython_ROOT_DIR={}".format(python_root_dir),
-            "-DPYTHON_LIBRARIES={}".format(lib_path),
-            "-DPYTHON_INCLUDE_DIRS={}".format(include_path),
-            "-DBUILD_PYTHON_VERSION={}".format(python_version),
-            "-DPYTHON_LIBRARY_SO={}".format(python_lib_path),
+            f"-DPython_ROOT_DIR={python_root_dir}",
+            *common_args,
             "-G",
             "CodeBlocks - Unix Makefiles",
-            "/opt/arcticdb/cpp"
+            os.path.join(os.getcwd(), "cpp"),
         ]
 
-        if not osp.exists(build_dir):
+        if not os.path.exists(build_dir):
             os.makedirs(build_dir, mode=0o750)
-        cwd = os.getcwd()
-        try:
-            os.chdir(build_dir)
-            subprocess.check_call(process_args, env=env)
-            subprocess.check_call(["make", "-j", "{:d}".format(os.cpu_count()), "install"], env=env)
-        finally:
-            os.chdir(cwd)
+        subprocess.check_call(process_args, env=env, cwd=build_dir)  # No shell=True here because cmake is in env.PATH
 
 
 if __name__ == "__main__":

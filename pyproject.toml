@@ -3,7 +3,7 @@ requires = ["setuptools", "wheel", "grpcio-tools"]
 build-backend = "setuptools.build_meta"
 
 [tool.cibuildwheel]
-before-build = "rm -rf {package}/cpp/out" # Only affects what CIBW copied into docker
+before-build = "rm -rf {package}/cpp/out ; export" # Only deletes what CIBW copied into docker
 environment-pass = "ARCTIC_CMAKE_PRESET VCPKG_BINARY_SOURCES nuget_user nuget_token CMAKE_BUILD_PARALLEL_LEVEL"
 build-frontend = "build"
 test-extras = "Testing"
