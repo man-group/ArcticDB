@@ -4,32 +4,38 @@
 
 ---
 
-**ArcticDB** is a high performance, serverless DataFrame database built for the Python Data Science ecosystem. Launched in February 2023, it is the successor to [Arctic](https://github.com/man-group/arctic). ArcticDB offers an intuitive Python-centric API, with a fast C++ data-processing and compression engine that is compatible with object stores such as AWS S3, making it suitable for public cloud and on-premise deployments.
+<p align="center">
+<img src="static/ArcticDBTerminal.gif" width="100%">
+</p>
 
 ---
-
 <p align="center">
-<img src="https://github.com/man-group/ArcticDB/raw/master/static/ArcticDBTerminal.gif" width="100%">
+:earth_americas: <a href="http://arcticdb.io">ArcticDB Website</a> | :ledger: <a href="https://medium.com/arcticdb">ArcticDB Blog</a> | :mega: <a href="https://www.man.com/man-group-brings-powerful-dataframe-database-product-arcticdb-to-market-with-bloomberg">Press Release</a> | :mega: <a href="https://www.bloomberg.com/company/press/man-group-brings-powerful-dataframe-database-product-arcticdb-to-market-with-bloomberg/">Press Release</a> | :busts_in_silhouette: <a href="#community">Community</a>
 </p>
 
 ---
 
+**ArcticDB** is a high performance, serverless **DataFrame database** built for the Python Data Science ecosystem. Launched in February 2023, it is the successor to [Arctic](https://github.com/man-group/arctic). 
+
+ArcticDB offers an intuitive Python-centric API enabling you to read and write Pandas DataFrames to S3 or LMDB utilising a fast C++ data-processing and compression engine.
+
 ArcticDB allows you to:
 
- * Use standard data types and integrate effortlessly with the Python data science ecosystem - Pandas in, Pandas out
- * Efficiently index and query time-series data
- * Store tiled dataframes, for fast selection of rows and columns
- * Travel back in time to see previous versions of your data and create customizable snapshots of the database
- * Append and update data without being constrained by the existing schema
- * Handle sparse values and missing columns
- * Filter, aggregate and create new columns on-the-fly with a Pandas-like syntax
- * Accelerate analytics though concurrency in the C++ data-processing engine
+ * **Pandas in, Pandas out**: Read and write Pandas DataFrames, NumPy arrays and native types to S3 and LMDB without leaving Python.
+ * **Built for time-series data**: Efficiently index and query time-series data across _billions_ of rows
+ * **Time travel**: Travel back in time to see previous versions of your data and create customizable snapshots of the database
+ * **Schemaless Database**: Append, update and modify data without being constrained by the existing schema
+ * **Optimised for streaming data**: Built in support for efficient sparse data storage
+ * **Powerful processing**: Filter, aggregate and create new columns on-the-fly with a Pandas-like syntax
+ * **C++ efficiency**: Accelerate analytics though concurrency in the C++ data-processing engine
 
 ArcticDB handles data that is big in both row count and column count, so a 20-year history of more than 400,000 unique securities can be stored in a single *symbol*. Each *symbol* is maintained as a separate entity with no shared data which means ArcticDB can scale horizontally across *symbols*, maximising the peformance potential of your compute, storage and network.
 
 ArcticDB is designed from the outset to be resilient; there is no single point of failure, and persistent data structures in the storage mean that once a version of a *symbol* has been written, it can never be corrupted by subsequent updates. Pulling compressed data directly from  storage to the client means that there is no server to overload, so your data is always available when you need it.
 
 ## Quickstart
+
+> :warning: **Pre-built binaries only available for Linux**: Windows and MacOS binaries are coming soon!
 
 Install ArcticDB:
 
@@ -120,7 +126,7 @@ Below you will find some basic steps required to be able to contribute to the pr
 
 We are also always looking for feedback from our dedicated community! If you have used ArcticDB please let us know, we would love to hear about your experience!
 
-### Contribution Licensing
+### Contribution Licensing 
 
 Since this project is distributed under the terms of the [BSL license](https://github.com/man-group/ArcticDB/blob/master/LICENSE.txt), contributions that you make are licensed under the same terms. For us to be able to accept your contributions, we will need explicit confirmation from you that you are able and willing to provide them under these terms, and the mechanism we use to do this is the [ArcticDB Individual Contributor License Agreement](https://github.com/man-group/ArcticDB/blob/master/LICENSE.txt). 
 
@@ -130,8 +136,11 @@ Signed-Off By: Random J. Developer <random@developer.example.org>. By including 
 
 **Corporations** - For corporations who wish to make contributions to ArcticDB, please contact arcticdb@man.com and we will arrange for the CLA to be sent to the signing authority within your corporation.
 
-## Community
+## Community 
+
+We would love to hear how your ArcticDB journey evolves, email us at [arcticdb@man.com](mailto:ArcticDB@man.com) or come chat to us on [Twitter](https://www.twitter.com/arcticdb)!
+
+Interested in learning more about ArcticDB? Head over to our [blog](https://medium.com/arcticdb)!
 
 Do you have any questions or issues? Chat to us and other users through our dedicated Slack Workspace - sign up for Slack access on [our website](https://arcticdb.io).
 
-Alternatively email us at arcticdb@man.com or come chat to us on [Twitter](https://www.twitter.com/arcticdb)!
