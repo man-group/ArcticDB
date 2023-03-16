@@ -50,8 +50,8 @@ class AtomKeyImpl {
     const auto& gen_id() const { return version_id_; }
     const auto& creation_ts() const { return creation_ts_; }
     TimestampRange time_range() const { return {start_time(), end_time()}; }
-    timestamp start_time() const { if (std::holds_alternative<timestamp>(index_start_)) return std::get<timestamp>(index_start_); else return 0L; }
-    timestamp end_time() const { if (std::holds_alternative<timestamp>(index_end_)) return std::get<timestamp>(index_end_); else return 0L; }
+    timestamp start_time() const { if (std::holds_alternative<timestamp>(index_start_)) return std::get<timestamp>(index_start_); else return 0LL; }
+    timestamp end_time() const { if (std::holds_alternative<timestamp>(index_end_)) return std::get<timestamp>(index_end_); else return 0LL; }
     const auto& content_hash() const { return content_hash_; }
     const auto& type() const { return key_type_; }
     auto& type() { return key_type_; }

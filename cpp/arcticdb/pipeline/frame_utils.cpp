@@ -201,7 +201,7 @@ size_t get_slice_rowcounts(std::vector<pipelines::SliceAndKey> & slice_and_keys)
 
 std::pair<size_t, size_t> offset_and_row_count(const std::shared_ptr<pipelines::PipelineContext>& context) {
     // count rows
-    std::size_t row_count = 0ul;
+    std::size_t row_count = 0ULL;
     for(auto s = 0u; s < context->slice_and_keys_.size(); ++s) {
         if (context->fetch_index_[s]) {
             row_count += context->slice_and_keys_[s].slice_.row_range.diff();
@@ -211,7 +211,7 @@ std::pair<size_t, size_t> offset_and_row_count(const std::shared_ptr<pipelines::
         }
     }
 
-    std::size_t offset = row_count ? context->slice_and_keys_[0].slice_.row_range.first : 0ul;
+    std::size_t offset = row_count ? context->slice_and_keys_[0].slice_.row_range.first : 0ULL;
     ARCTICDB_DEBUG(log::version(), "Got offset {} and row_count {}", offset, row_count);
     return std::make_pair(offset, row_count);
 }

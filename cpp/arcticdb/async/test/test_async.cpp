@@ -89,7 +89,7 @@ TEST(Async, DeDupTest) {
     auto keys = store.batch_write(std::move(key_segments), de_dup_map, ast::StreamSink::BatchWriteArgs()).get();
 
     //The first key will be de-duped, second key will be fresh because indexes dont match
-    ASSERT_EQ(2ul, keys.size());
+    ASSERT_EQ(2ULL, keys.size());
     ASSERT_EQ(k, to_atom(keys[0]));
     ASSERT_NE(k, to_atom(keys[1]));
     ASSERT_NE(999, to_atom(keys[1]).creation_ts());

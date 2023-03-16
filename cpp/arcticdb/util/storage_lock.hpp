@@ -60,7 +60,7 @@ struct StorageLockTimeout : public std::runtime_error {
     using std::runtime_error::runtime_error;
 };
 
-inline unsigned long get_thread_id() {
+inline uint64_t get_thread_id() {
 #ifdef _WIN32
     return pthread_self()->threadID;
 #else

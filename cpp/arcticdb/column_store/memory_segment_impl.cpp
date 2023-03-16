@@ -68,10 +68,6 @@ position_t SegmentInMemoryImpl::add_column(const FieldDescriptor::Proto &field, 
     return columns_.size() - 1;
 }
 
-//position_t SegmentInMemoryImpl::add_column(const FieldDescriptor::Proto &field, const std::shared_ptr<Column>& column) {
-//    return add_column(field.proto(), column);
-//}
-
 void SegmentInMemoryImpl::change_schema(StreamDescriptor descriptor) {
     //util::check(vector_is_unique(descriptor.fields()), "Non-unique fields in descriptor: {}", descriptor.fields());
     init_column_map();

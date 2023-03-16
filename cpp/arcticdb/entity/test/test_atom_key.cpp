@@ -111,9 +111,9 @@ TEST(Key, Formatting) {
         StreamId{999},
         VersionId(123),
         timestamp(123000000LL),
-        0x789456321UL,
-        NumericIndex(122000000UL),
-        NumericIndex(122000999UL),
+        0x789456321ULL,
+        NumericIndex(122000000ULL),
+        NumericIndex(122000999ULL),
         KeyType::TABLE_DATA};
 
     AtomKey k2 = k;

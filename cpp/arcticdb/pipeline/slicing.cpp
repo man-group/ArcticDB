@@ -62,7 +62,7 @@ std::vector<FrameSlice> FixedSlicer::operator()(const arcticdb::pipelines::Input
     auto index = frame.desc.index();
 
     std::vector<FrameSlice> slices;
-    slices.reserve(field_count / col_per_slice_ + std::size_t((field_count % col_per_slice_) == 0ul));
+    slices.reserve(field_count / col_per_slice_ + std::size_t((field_count % col_per_slice_) == 0ULL));
 
     const auto [first_row, last_row] = get_first_and_last_row(frame);
 

@@ -144,7 +144,7 @@ inline bool is_column_selected(size_t start_col, size_t end_col, const util::Bit
         auto col = sc.get_first();
         return col < end_col;
     } else {
-        auto col = sc.get_next(start_col - 1ul);
+        auto col = sc.get_next(start_col - 1ULL);
         return col != 0 && col < end_col;
     }
 }

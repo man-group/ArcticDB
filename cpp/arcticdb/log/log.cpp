@@ -205,7 +205,7 @@ bool Loggers::configure(const arcticdb::proto::logger::LoggersConfig &conf, bool
             case SinkConf::kRotFile:
                 sink_by_id_.emplace(sink_id, std::make_shared<spdlog::sinks::rotating_file_sink_mt>(
                     make_parent_dir(sink_conf.rot_file().path(), "./arcticdb.rot.log"),
-                    util::as_opt(sink_conf.rot_file().max_size_bytes()).value_or(64UL * (1UL << 20)),
+                    util::as_opt(sink_conf.rot_file().max_size_bytes()).value_or(64ULL* (1ULL<< 20)),
                     util::as_opt(sink_conf.rot_file().max_file_count()).value_or(8)
                 ));
                 break;

@@ -309,7 +309,7 @@ void decode(const Segment& segment,
         util::check(fields_size == hdr.fields_size(), "Mismatch between descriptor and header field size: {} != {}", fields_size, hdr.fields_size());
         const auto start_row = res.row_count();
 
-        const auto seg_row_count = fields_size ? ssize_t(hdr.fields(0).ndarray().items_count()) : 0L;
+        const auto seg_row_count = fields_size ? ssize_t(hdr.fields(0).ndarray().items_count()) : 0LL;
         res.init_column_map();
 
         for (std::size_t i = 0; i < static_cast<size_t>(fields_size); ++i) {

@@ -299,7 +299,7 @@ std::vector<SliceAndKey> flatten_and_fix_rows(const std::vector<std::vector<Slic
     for(auto group : groups) {
         if(group.empty()) continue;
         auto group_start = group.begin()->slice_.row_range.first;
-        auto group_end = std::accumulate(std::begin(group), std::end(group), 0UL, [](size_t a, const SliceAndKey& sk) { return std::max(a, sk.slice_.row_range.second); });
+        auto group_end = std::accumulate(std::begin(group), std::end(group), 0ULL, [](size_t a, const SliceAndKey& sk) { return std::max(a, sk.slice_.row_range.second); });
         std::transform(std::begin(group), std::end(group), std::back_inserter(output), [&] (auto& sk) {
             auto range_start = global_count + (sk.slice_.row_range.first - group_start);
             auto new_range = RowRange{range_start, range_start + (sk.slice_.row_range.diff())};

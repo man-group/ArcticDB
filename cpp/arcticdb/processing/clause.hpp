@@ -95,7 +95,7 @@ struct RowNumberLimitClause {
         auto procs = std::move(p);
         procs.broadcast([&store, this](ProcessingSegment &proc) {
             auto row_range = proc.data()[0].slice_.row_range;
-            if (row_range.start() == 0UL && row_range.end() > n) {
+            if (row_range.start() == 0ULL && row_range.end() > n) {
                 util::BitSet bv(static_cast<util::BitSet::size_type>(row_range.diff()));
                 bv.set_range(0, bv_size(n));
                 proc.apply_filter(bv, store);

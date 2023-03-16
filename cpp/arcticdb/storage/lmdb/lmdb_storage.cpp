@@ -29,7 +29,7 @@ LmdbStorage::LmdbStorage(const LibraryPath &library_path, OpenMode mode, const C
     write_mutex_(new std::mutex{}),
     env_(std::make_unique<::lmdb::env>(::lmdb::env::create(conf.flags()))){
     fs::path root_path = conf.path().c_str();
-    auto lib_path_str = library_path.to_delim_path('/');
+    auto lib_path_str = library_path.to_delim_path(fs::path::preferred_separator);
 
     auto lib_dir = root_path / lib_path_str;
     if (!fs::exists(lib_dir)) {
@@ -54,7 +54,7 @@ LmdbStorage::LmdbStorage(const LibraryPath &library_path, OpenMode mode, const C
     // Windows needs a sensible size as it allocates disk for the whole file even before any writes. Linux just gets an arbitrarily large size
     // that it probably won't ever reach.
 #ifdef _WIN32
-    constexpr uint64_t default_map_size = 1ULL << 30; /* 1 GiB */
+    constexpr uint64_t default_map_size = 1ULL << 23; /* 8 MiB */
 #else
     constexpr uint64_t default_map_size = 100ULL * (4ULL << 30); /* 400 GiB */
 #endif

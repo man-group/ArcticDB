@@ -47,7 +47,7 @@ struct InputTensorFrame {
         bucketize_dynamic = bucketize;
     }
 
-    bool has_index() const { return desc.index().field_count() != 0ul; }
+    bool has_index() const { return desc.index().field_count() != 0ULL; }
 
     void set_index_range() {
             // Fill index range

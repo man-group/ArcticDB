@@ -64,33 +64,33 @@ TEST(HashComm, Commutative) {
             commutative_hash_combine(g2, g1)
     );
 
-    std::cout<<commutative_hash_combine(9726480045861996436ul, std::string("10442909"))<<std::endl;
-    std::cout<<commutative_hash_combine(17243764687685379754ul, std::string("[N/A]"))<<std::endl;
-    std::cout<<commutative_hash_combine(9457389251931416297ul, std::string("98956PAF9"))<<std::endl;
-    std::cout<<commutative_hash_combine(2648263869243483102ul, std::string("1"))<<std::endl;
-    std::cout<<commutative_hash_combine(10692736793407104629ul, std::string("US98956PAF99"))<<std::endl;
-    std::cout<<commutative_hash_combine(7633205480517386763ul, std::string("4"))<<std::endl;
-    std::cout<<commutative_hash_combine(8481507868260942362ul, std::string("CORP"))<<std::endl;
-    std::cout<<commutative_hash_combine(4419353893253087336ul, std::string("USD_HGD"))<<std::endl;
-    std::cout<<commutative_hash_combine(10212419605264796417ul, std::string("20210824"))<<std::endl;
+    std::cout<<commutative_hash_combine(9726480045861996436ULL, std::string("10442909"))<<std::endl;
+    std::cout<<commutative_hash_combine(17243764687685379754ULL, std::string("[N/A]"))<<std::endl;
+    std::cout<<commutative_hash_combine(9457389251931416297ULL, std::string("98956PAF9"))<<std::endl;
+    std::cout<<commutative_hash_combine(2648263869243483102ULL, std::string("1"))<<std::endl;
+    std::cout<<commutative_hash_combine(10692736793407104629ULL, std::string("US98956PAF99"))<<std::endl;
+    std::cout<<commutative_hash_combine(7633205480517386763ULL, std::string("4"))<<std::endl;
+    std::cout<<commutative_hash_combine(8481507868260942362ULL, std::string("CORP"))<<std::endl;
+    std::cout<<commutative_hash_combine(4419353893253087336ULL, std::string("USD_HGD"))<<std::endl;
+    std::cout<<commutative_hash_combine(10212419605264796417ULL, std::string("20210824"))<<std::endl;
 
-    std::cout<<commutative_hash_combine(9726480045861996436ul, std::string("10442909"), std::string("[N/A]")) <<std::endl;
+    std::cout<<commutative_hash_combine(9726480045861996436ULL, std::string("10442909"), std::string("[N/A]")) <<std::endl;
 
-    auto h1 = commutative_hash_combine_generic(9726480045861996436ul, folly::Hash{}, std::string("10442909"), std::string("[N/A]"));
-    auto h2 = commutative_hash_combine_generic(9726480045861996436ul, folly::Hash{}, std::string("10442909"));
+    auto h1 = commutative_hash_combine_generic(9726480045861996436ULL, folly::Hash{}, std::string("10442909"), std::string("[N/A]"));
+    auto h2 = commutative_hash_combine_generic(9726480045861996436ULL, folly::Hash{}, std::string("10442909"));
     auto h3 = commutative_hash_combine_generic(h2, folly::Hash{}, std::string("[N/A]"));
     
-    auto h4 = commutative_hash_combine_generic(9726480045861996436ul, folly::Hash{}, std::string("[N/A]"));
+    auto h4 = commutative_hash_combine_generic(9726480045861996436ULL, folly::Hash{}, std::string("[N/A]"));
     auto h5 = commutative_hash_combine_generic(h4, folly::Hash{}, std::string("10442909"));
 
     EXPECT_EQ(h1, h3);
     EXPECT_EQ(h1, h5);
 
-    auto j1 = commutative_hash_combine(9726480045861996436ul, std::string("10442909"), std::string("[N/A]"));
-    auto j2 = commutative_hash_combine(9726480045861996436ul, std::string("10442909"));
+    auto j1 = commutative_hash_combine(9726480045861996436ULL, std::string("10442909"), std::string("[N/A]"));
+    auto j2 = commutative_hash_combine(9726480045861996436ULL, std::string("10442909"));
     auto j3 = commutative_hash_combine(j2, std::string("[N/A]"));
 
-    auto j4 = commutative_hash_combine(9726480045861996436ul, std::string("[N/A]"));
+    auto j4 = commutative_hash_combine(9726480045861996436ULL, std::string("[N/A]"));
     auto j5 = commutative_hash_combine(j4, std::string("10442909"));
 
     EXPECT_NE(j1, j3);

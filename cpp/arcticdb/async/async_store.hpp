@@ -376,12 +376,12 @@ public:
     folly::Future<std::vector<VariantKey>> batch_write(std::vector<std::pair<PartialKey, SegmentInMemory>> &&key_segments,
                 const std::shared_ptr<DeDupMap>& de_dup_map,
                 const BatchWriteArgs &args) override {
-        std::size_t write_count = args.lib_write_count == 0 ? 16ul : args.lib_write_count;
+        std::size_t write_count = args.lib_write_count == 0 ? 16ULL : args.lib_write_count;
 
         std::shared_ptr<std::vector<VariantKey>> res = std::make_shared<std::vector<VariantKey>>(key_segments.size());
 
-        auto count = 0ul;
-        for (std::size_t start = 0ul, nxt; start < key_segments.size(); start = nxt) {
+        auto count = 0ULL;
+        for (std::size_t start = 0ULL, nxt; start < key_segments.size(); start = nxt) {
             nxt = std::min(start + write_count, key_segments.size());
             auto range = folly::Range(key_segments.begin() + start, key_segments.begin() + nxt);
             auto key_segs = std::make_shared<std::vector<storage::KeySegmentPair>>();
