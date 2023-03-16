@@ -1,0 +1,58 @@
+#pragma once
+
+#include <column_store/chunked_buffer.hpp>
+#include <util/cursored_buffer.hpp>
+#include <util/buffer.hpp>
+#include <column_store/column_data.hpp>
+#include <codec/encoded_field.hpp>
+
+namespace arcticdb {
+
+class EncodedFieldCollection {
+    Buffer buffer_;
+    std::vector<size_t> offsets_;
+
+public:
+        EncodedFieldCollection(Buffer&& buffer) :
+        buffer_(std::move(buffer)){
+        regenerate_offsets();
+    }
+
+    EncodedFieldCollection() = default;
+
+    ARCTICDB_MOVE_ONLY_DEFAULT(EncodedFieldCollection)
+
+    [[nodiscard]] bool empty() const {
+        return buffer_.empty();
+    }
+
+    [[nodiscard]] size_t get_offset(size_t pos) const {
+        util::check(pos < offsets_.size(), "Offset {} exceeds offsets size {}", pos, offsets_.size());
+        return offsets_[pos];
+    }
+
+    [[nodiscard]] const EncodedField& at(size_t pos) const {
+        return *(buffer_.ptr_cast<EncodedField>(get_offset(pos), sizeof(EncodedField))); //TODO take into account blocks
+    }
+
+    [[nodiscard]] EncodedField& at(size_t pos) {
+        return *(buffer_.ptr_cast<EncodedField>(get_offset(pos), sizeof(EncodedField)));
+    }
+
+    [[nodiscard]] size_t size() const {
+        return offsets_.size();
+    }
+
+    void regenerate_offsets() {
+        if(!offsets_.empty())
+            return;
+
+        auto field_pos = 0u;
+        while (field_pos < buffer_.bytes()) {
+            offsets_.push_back(field_pos);
+            field_pos += encoded_field_bytes(*reinterpret_cast<const EncodedField*>(buffer_.data() + field_pos));
+        }
+    }
+};
+
+} //namespace arcticc

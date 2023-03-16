@@ -53,6 +53,7 @@ except ImportError:
     def check_is_utc_if_newer_pandas(*args, **kwargs):
         return False  # the UTC specific issue is not present in old Pandas so no need to go down special case
 
+
 log = version
 
 from msgpack import packb, unpackb, pack, ExtType
@@ -108,6 +109,7 @@ if PY3:
         # TODO remove this once arctic keeps the string type under the hood
         # and does not transform string into bytes
         return isinstance(v, string_types) or isinstance(v, binary_type)
+
 
 else:
 

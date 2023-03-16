@@ -19,7 +19,7 @@ static inline uint32_t murmur_32_scramble(uint32_t k) {
 
 // This is here so that we have deterministic hashing for keys.
 // If you change anything including the seed, you will break things.
-inline uint32_t murmur3_32(const std::string& str) {
+inline uint32_t murmur3_32(std::string_view str) {
     constexpr uint32_t seed = 0xbeef;
     uint32_t hash = seed;
     uint32_t k;
@@ -48,10 +48,12 @@ inline uint32_t murmur3_32(const std::string& str) {
     return hash;
 }
 
-inline size_t bucketize(const std::string& name, std::optional<size_t> num_buckets) {
+
+inline size_t bucketize(std::string_view name, std::optional<size_t> num_buckets) {
     auto hash = murmur3_32(name);
     if (!num_buckets.has_value())
         return hash;
     return hash % num_buckets.value();
 }
+
 }

@@ -7,13 +7,16 @@
 
 #pragma once
 
-#include <memory>
 #include <arcticdb/column_store/string_pool.hpp>
-#include <boost/iterator_adaptors.hpp>
+
 #include <arcticdb/pipeline/frame_slice.hpp>
 #include <arcticdb/util/bitset.hpp>
 #include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/pipeline/index_segment_reader.hpp>
+
+#include <boost/iterator_adaptors.hpp>
+
+#include <memory>
 
 namespace arcticdb::pipelines {
 
@@ -21,7 +24,7 @@ struct PipelineContext;
 
 struct PipelineContextRow {
     std::shared_ptr<PipelineContext> parent_;
-    size_t index_;
+    size_t index_ = 0;
 
     PipelineContextRow(const std::shared_ptr<PipelineContext>& parent, size_t index) :
         parent_(parent),
@@ -29,23 +32,23 @@ struct PipelineContextRow {
 
     PipelineContextRow() = default;
 
-    const StringPool& string_pool() const;
+    [[nodiscard]] const StringPool& string_pool() const;
     StringPool& string_pool();
     void set_string_pool(const std::shared_ptr<StringPool>& pool);
     void allocate_string_pool();
-    const SliceAndKey& slice_and_key() const;
+    [[nodiscard]] const SliceAndKey& slice_and_key() const;
     SliceAndKey& slice_and_key();
+    [[nodiscard]] const std::optional<util::BitSet>& get_selected_columns() const;
     bool selected_columns(size_t n) const;
-    const std::optional<util::BitSet>& get_selected_columns() const;
     bool fetch_index();
-    const StreamDescriptor& descriptor() const;
-    void set_descriptor(arcticdb::proto::descriptors::StreamDescriptor&& proto_desc);
+    [[nodiscard]] const StreamDescriptor& descriptor() const;
+    void set_descriptor(StreamDescriptor&& desc);
     void set_descriptor(std::shared_ptr<StreamDescriptor>&& desc);
     void set_descriptor(const std::shared_ptr<StreamDescriptor>& desc);
     void set_compacted(bool val);
-    bool compacted() const;
-    bool has_string_pool() const;
-    size_t index() const;
+    [[nodiscard]] bool compacted() const;
+    [[nodiscard]] bool has_string_pool() const;
+    [[nodiscard]] size_t index() const;
 };
 
 /*
@@ -106,7 +109,7 @@ struct PipelineContext : public std::enable_shared_from_this<PipelineContext> {
     std::optional<StreamDescriptor> orig_desc_;
     // Usually same as what's in desc_. For joins this can be mutated.
     StreamId stream_id_;
-    VersionId version_id_;
+    VersionId version_id_ = 0;
     // Used to keep track of the total number of rows when compacting incomplete segments and
     // in sort merge
     size_t total_rows_ = 0;
@@ -116,7 +119,7 @@ struct PipelineContext : public std::enable_shared_from_this<PipelineContext> {
     util::BitSet fetch_index_;
     std::vector<std::shared_ptr<StringPool>> string_pools_;
     std::optional<util::BitSet> selected_columns_;
-    std::shared_ptr<std::vector<FieldDescriptor::Proto>> filter_columns_;
+    std::shared_ptr<FieldCollection> filter_columns_;
     std::vector<std::shared_ptr<StreamDescriptor>> segment_descriptors_;
     std::optional<std::unordered_set<std::string_view>> filter_columns_set_;
     std::optional<SegmentInMemory> multi_key_;

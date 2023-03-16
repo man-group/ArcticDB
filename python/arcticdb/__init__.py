@@ -10,4 +10,3 @@ from arcticdb.options import LibraryOptions
 from arcticdb.tools import set_config_from_env_vars
 
 set_config_from_env_vars(_os.environ)
-

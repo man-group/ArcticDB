@@ -178,15 +178,13 @@ inline void generate_filtered_field_descriptors(PipelineContext& context, const 
     if (!columns.empty()) {
         std::unordered_set<std::string_view> column_set{std::begin(columns), std::end(columns)};
         
-        context.filter_columns_ = std::make_shared<std::vector<FieldDescriptor::Proto>>();
-        context.filter_columns_->reserve(columns.size());
+        context.filter_columns_ = std::make_shared<FieldCollection>();
         const auto& desc = context.descriptor();
         ARCTICDB_DEBUG(log::version(), "Context descriptor: {}", desc);
-        std::copy_if(desc.fields().begin(), desc.fields().end(),
-                     std::back_inserter(*context.filter_columns_),
-                     [&](auto &field) {
-                         return column_set.find(field.name()) != column_set.end();
-                     });
+        for(const auto& field : desc.fields()) {
+            if(column_set.find(field.name()) != column_set.end())
+                context.filter_columns_->add_field(field.type(), field.name());
+        }
 
         context.filter_columns_set_ = std::unordered_set<std::string_view>{};
         for(const auto& field : *context.filter_columns_)

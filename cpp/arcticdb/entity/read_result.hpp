@@ -51,7 +51,7 @@ inline ReadResult create_python_read_result(
     auto python_frame = pipelines::PythonOutputFrame{result.frame_, result.buffers_};
     util::print_total_mem_usage(__FILE__, __LINE__, __FUNCTION__);
 
-    return {version, std::move(python_frame), result.desc_.normalization(),
-            result.desc_.user_meta(), result.desc_.multi_key_meta(), std::move(result.keys_)};
+    return {version, std::move(python_frame), result.desc_.proto().normalization(),
+            result.desc_.proto().user_meta(), result.desc_.proto().multi_key_meta(), std::move(result.keys_)};
 }
 } //namespace arcticdb

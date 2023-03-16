@@ -28,6 +28,8 @@
 #include <arcticdb/util/composite.hpp>
 #include <arcticdb/pipeline/column_mapping.hpp>
 #include <arcticdb/version/schema_checks.hpp>
+#include <arcticdb/entity/merge_descriptors.hpp>
+
 
 namespace arcticdb::version_store {
 
@@ -38,35 +40,29 @@ void modify_descriptor(const std::shared_ptr<pipelines::PipelineContext>& pipeli
 
     auto& desc = *pipeline_context->desc_;
     if (opt_false(read_options.force_strings_to_object_)) {
-        auto& fields = desc.mutable_fields();
-        std::transform(
+        auto& fields = desc.fields();
+        std::for_each(
             std::begin(fields),
             std::end(fields),
-            std::begin(fields),
             [](auto& field_desc) {
-                if (data_type_from_proto(field_desc.type_desc()) == DataType::ASCII_FIXED64)
-                    set_data_type(DataType::ASCII_DYNAMIC64, *field_desc.mutable_type_desc());
+                if (field_desc.type().data_type() == DataType::ASCII_FIXED64)
+                    set_data_type(DataType::ASCII_DYNAMIC64, field_desc.mutable_type());
 
-                if (data_type_from_proto(field_desc.type_desc()) == DataType::UTF_FIXED64)
-                    set_data_type(DataType::UTF_DYNAMIC64, *field_desc.mutable_type_desc());
-
-                return field_desc;
+                if (field_desc.type().data_type() == DataType::UTF_FIXED64)
+                    set_data_type(DataType::UTF_DYNAMIC64, field_desc.mutable_type());
             });
     }
     else if (opt_false(read_options.force_strings_to_fixed_)) {
-        auto& fields = desc.mutable_fields();
-        std::transform(
+        auto& fields = desc.fields();
+        std::for_each(
             std::begin(fields),
             std::end(fields),
-            std::begin(fields),
             [](auto& field_desc) {
-                if (data_type_from_proto(field_desc.type_desc()) == DataType::ASCII_DYNAMIC64)
-                    set_data_type(DataType::ASCII_FIXED64, *field_desc.mutable_type_desc());
+                if (field_desc.type().data_type() == DataType::ASCII_DYNAMIC64)
+                    set_data_type(DataType::ASCII_FIXED64, field_desc.mutable_type());
 
-                if (data_type_from_proto(field_desc.type_desc()) == DataType::UTF_DYNAMIC64)
-                    set_data_type(DataType::UTF_FIXED64, *field_desc.mutable_type_desc());
-
-                return field_desc;
+                if (field_desc.type().data_type() == DataType::UTF_DYNAMIC64)
+                    set_data_type(DataType::UTF_FIXED64, field_desc.mutable_type());
             });
     }
 }
@@ -80,13 +76,10 @@ VersionedItem write_dataframe_impl(
     bool sparsify_floats,
     bool validate_index
     ) {
-    auto atom_key_fut = async_write_dataframe_impl(store, version_id, std::move(frame), options, de_dup_map, sparsify_floats, validate_index);
-
     ARCTICDB_SUBSAMPLE_DEFAULT(WaitForWriteCompletion)
-    auto atom_key = std::move(atom_key_fut).get();
-    auto versioned_item = VersionedItem(std::move(atom_key));
     ARCTICDB_DEBUG(log::version(), "write_dataframe_impl stream_id: {} , version_id: {}, {} rows", frame.desc.id(), version_id, frame.num_rows);
-    return versioned_item;
+    auto atom_key_fut = async_write_dataframe_impl(store, version_id, std::move(frame), options, de_dup_map, sparsify_floats, validate_index);
+    return VersionedItem(std::move(std::move(atom_key_fut).get()));
 }
 
 folly::Future<entity::AtomKey> async_write_dataframe_impl(
@@ -104,7 +97,7 @@ folly::Future<entity::AtomKey> async_write_dataframe_impl(
     frame.set_bucketize_dynamic(options.bucketize_dynamic);
     auto slicing_arg = get_slicing_policy(options, frame);
     auto partial_key = IndexPartialKey{frame.desc.id(), version_id};
-    sorting::check<ErrorCode::E_UNSORTED_DATA>(!validate_index || frame.desc.get_sorted() == arcticdb::proto::descriptors::SortedValue::ASCENDING || !std::holds_alternative<stream::TimeseriesIndex>(frame.index),
+    sorting::check<ErrorCode::E_UNSORTED_DATA>(!validate_index || frame.desc.get_sorted() == SortedValue::ASCENDING || !std::holds_alternative<stream::TimeseriesIndex>(frame.index),
                 "When calling write with validate_index enabled, input data must be sorted.");
     return write_frame(partial_key, std::move(frame), slicing_arg, store, de_dup_map, sparsify_floats);
 }
@@ -134,9 +127,9 @@ folly::Future<AtomKey> async_append_impl(
     ARCTICDB_DEBUG(log::version(), "append stream_id: {} , version_id: {}", stream_id, update_info.next_version_id_);
     auto index_segment_reader = index::get_index_reader(*(update_info.previous_index_key_), store);
     bool bucketize_dynamic = index_segment_reader.bucketize_dynamic();
-    auto row_offset = index_segment_reader.tsd().total_rows();
+    auto row_offset = index_segment_reader.tsd().proto().total_rows();
     util::check_rte(!index_segment_reader.is_pickled(), "Cannot append to pickled data");
-    sorting::check<ErrorCode::E_UNSORTED_DATA>(!validate_index || (frame.desc.get_sorted() == arcticdb::proto::descriptors::SortedValue::ASCENDING && index_segment_reader.tsd().stream_descriptor().sorted() == arcticdb::proto::descriptors::SortedValue::ASCENDING) || 
+    sorting::check<ErrorCode::E_UNSORTED_DATA>(!validate_index || (frame.desc.get_sorted() == SortedValue::ASCENDING && index_segment_reader.tsd().proto().stream_descriptor().sorted() == arcticdb::proto::descriptors::SortedValue::ASCENDING) ||
         !std::holds_alternative<stream::TimeseriesIndex>(frame.index),
         "validate_index set but input data index is not sorted.");
 
@@ -237,7 +230,8 @@ VersionedItem delete_range_impl(
 
     auto index_segment_reader = index::get_index_reader(prev, store);
     util::check_rte(!index_segment_reader.is_pickled(), "Cannot delete date range of pickled data");
-    auto index = index_type_from_descriptor(index_segment_reader.tsd().stream_descriptor());
+
+    auto index = index_type_from_descriptor(index_segment_reader.tsd().as_stream_descriptor());
     util::check(std::holds_alternative<TimeseriesIndex>(index), "Delete in range will not work as expected with a non-timeseries index");
 
     std::vector<FilterQuery<index::IndexSegmentReader>> queries =
@@ -266,7 +260,7 @@ VersionedItem delete_range_impl(
 
     std::sort(std::begin(flattened_slice_and_keys), std::end(flattened_slice_and_keys));
     bool bucketize_dynamic = index_segment_reader.bucketize_dynamic();
-    auto time_series = make_descriptor(row_count, std::move(index_segment_reader), std::nullopt, bucketize_dynamic);
+    auto time_series = timseries_descriptor_from_index_segment(row_count, std::move(index_segment_reader), std::nullopt, bucketize_dynamic);
     auto version_key_fut = util::variant_match(index, [&time_series, &flattened_slice_and_keys, &stream_id, &version_id, &store] (auto idx) {
         using IndexType = decltype(idx);
         return pipelines::index::write_index<IndexType>(std::move(time_series), std::move(flattened_slice_and_keys), IndexPartialKey{stream_id, version_id}, store);
@@ -290,9 +284,9 @@ VersionedItem update_impl(
 
     auto index_segment_reader = index::get_index_reader(*(update_info.previous_index_key_), store);
     util::check_rte(!index_segment_reader.is_pickled(), "Cannot update pickled data");
-    auto index_desc = check_index_match(frame.index, index_segment_reader.tsd().stream_descriptor().index());
+    auto index_desc = check_index_match(frame.index, index_segment_reader.tsd().proto().stream_descriptor().index());
     util::check(index_desc.kind() == IndexDescriptor::TIMESTAMP, "Update not supported for non-timeseries indexes");
-    sorting::check<ErrorCode::E_UNSORTED_DATA>(frame.desc.get_sorted() == arcticdb::proto::descriptors::SortedValue::ASCENDING && std::holds_alternative<stream::TimeseriesIndex>(frame.index) && index_segment_reader.mutable_tsd().stream_descriptor().sorted() == arcticdb::proto::descriptors::SortedValue::ASCENDING,
+    sorting::check<ErrorCode::E_UNSORTED_DATA>(frame.desc.get_sorted() == SortedValue::ASCENDING && std::holds_alternative<stream::TimeseriesIndex>(frame.index) && index_segment_reader.get_sorted() == SortedValue::ASCENDING,
         "When calling update on sorted data, the input data must be sorted.");
     bool bucketize_dynamic = index_segment_reader.bucketize_dynamic();
     (void)check_and_mark_slices(index_segment_reader, dynamic_schema, false, std::nullopt, bucketize_dynamic);
@@ -348,11 +342,12 @@ VersionedItem update_impl(
                                                          );
 
     std::sort(std::begin(flattened_slice_and_keys), std::end(flattened_slice_and_keys));
-    auto desc = stream::merge_descriptors(StreamDescriptor{std::move(*index_segment_reader.mutable_tsd().mutable_stream_descriptor())}, { frame.desc.fields() }, {});
-    // At this stage the updated data must be sorted
+    auto existing_desc = index_segment_reader.tsd().as_stream_descriptor();
+
+    auto desc = merge_descriptors(existing_desc, std::vector<std::shared_ptr<FieldCollection>>{ frame.desc.fields_ptr() }, {});
     desc.set_sorted(arcticdb::entity::SortedValue::ASCENDING);
-    auto time_series = make_descriptor(row_count, std::move(desc), frame.norm_meta, std::move(frame.user_meta), std::nullopt, bucketize_dynamic);
-    auto index = index_type_from_descriptor(time_series.stream_descriptor());
+    auto time_series = make_timeseries_descriptor(row_count, std::move(desc), std::move(frame.norm_meta), std::move(frame.user_meta), std::nullopt, std::nullopt, bucketize_dynamic);
+    auto index = index_type_from_descriptor(time_series.as_stream_descriptor());
 
     auto version_key_fut = util::variant_match(index, [&time_series, &flattened_slice_and_keys, &stream_id, &update_info, &store] (auto idx) {
         using IndexType = decltype(idx);
@@ -368,8 +363,8 @@ FrameAndDescriptor read_multi_key(
     const std::shared_ptr<Store>& store,
     const SegmentInMemory& index_key_seg) {
     const auto& multi_index_seg = index_key_seg;
-    arcticdb::proto::descriptors::TimeSeriesDescriptor tsd;
-    multi_index_seg.metadata()->UnpackTo(&tsd);
+    TimeseriesDescriptor tsd;
+    multi_index_seg.metadata()->UnpackTo(&tsd.mutable_proto());
     std::vector<AtomKey> keys;
     for (size_t idx = 0; idx < index_key_seg.row_count(); idx++) {
         keys.push_back(stream::read_key_row(index_key_seg, static_cast<ssize_t>(idx)));
@@ -379,8 +374,8 @@ FrameAndDescriptor read_multi_key(
     ReadQuery read_query;
     auto res = read_dataframe_impl(store, VersionedItem{std::move(dup)}, read_query, {});
 
-    arcticdb::proto::descriptors::TimeSeriesDescriptor multi_key_desc{tsd};
-    multi_key_desc.mutable_normalization()->CopyFrom(res.desc_.normalization());
+    TimeseriesDescriptor multi_key_desc{tsd};
+    multi_key_desc.mutable_proto().mutable_normalization()->CopyFrom(res.desc_.proto().normalization());
     return {res.frame_, multi_key_desc, keys, std::shared_ptr<BufferHolder>{}};
 }
 
@@ -438,7 +433,7 @@ std::vector<SliceAndKey> read_and_process(
         auto en = pipeline_context->overall_column_bitset_->first();
         auto en_end = pipeline_context->overall_column_bitset_->end();
         while (en < en_end) {
-            filter_columns->insert(pipeline_context->desc_->field(*en++).name());
+            filter_columns->insert(std::string(pipeline_context->desc_->field(*en++).name()));
         }
     }
 
@@ -456,7 +451,7 @@ std::vector<SliceAndKey> read_and_process(
                 auto clause_copy = std::make_shared<std::vector<Clause>>(read_query.query_->begin() + clause_index + 1, read_query.query_->end());
                 batch.emplace_back(
                         async::submit_cpu_task(
-                                async::MemSegmentPassthroughProcessingTask(store, clause_copy, std::move(val))
+                            async::MemSegmentPassthroughProcessingTask(store, clause_copy, std::move(val))
                         )
                 );
             }
@@ -497,7 +492,7 @@ SegmentInMemory read_direct(const std::shared_ptr<Store>& store,
     return frame;
 }
 
-void add_index_columns_to_query(const ReadQuery& read_query, const arcticdb::proto::descriptors::TimeSeriesDescriptor& desc) {
+void add_index_columns_to_query(const ReadQuery& read_query, const TimeseriesDescriptor& desc) {
     if(!read_query.columns.empty()) {
         auto index_columns = stream::get_index_columns_from_descriptor(desc);
         if(index_columns.empty())
@@ -517,9 +512,9 @@ FrameAndDescriptor read_index_impl(
     const VersionedItem& version) {
     auto fut_index = store->read(version.key_);
     auto [index_key, index_seg] = std::move(fut_index).get();
-    arcticdb::proto::descriptors::TimeSeriesDescriptor tsd;
-    tsd.set_total_rows(index_seg.row_count());
-    tsd.mutable_stream_descriptor()->CopyFrom(index_seg.descriptor().proto());
+    TimeseriesDescriptor tsd;
+    tsd.mutable_proto().set_total_rows(index_seg.row_count());
+    tsd.mutable_proto().mutable_stream_descriptor()->CopyFrom(index_seg.descriptor().proto());
     return {SegmentInMemory(std::move(index_seg)), tsd, {}, {}};
 }
 
@@ -539,8 +534,8 @@ void check_column_and_date_range_filterable(const pipelines::index::IndexSegment
     "The data for this symbol is pickled and does not support column stats, date_range, row_range, or column queries");
     util::check(index_segment_reader.has_timestamp_index() || !std::holds_alternative<IndexRange>(read_query.row_filter),
             "Cannot apply date range filter to symbol with non-timestamp index");
-    sorting::check<ErrorCode::E_UNSORTED_DATA>(index_segment_reader.tsd().stream_descriptor().sorted() == arcticdb::proto::descriptors::SortedValue::UNKNOWN ||
-        index_segment_reader.tsd().stream_descriptor().sorted() == arcticdb::proto::descriptors::SortedValue::ASCENDING ||
+    sorting::check<ErrorCode::E_UNSORTED_DATA>(index_segment_reader.get_sorted() == SortedValue::UNKNOWN ||
+        index_segment_reader.get_sorted() == SortedValue::ASCENDING ||
         !std::holds_alternative<IndexRange>(read_query.row_filter),
             "When filtering data using date_range, the symbol must be sorted in ascending order. ArcticDB believes it is not sorted in ascending order and cannot therefore filter the data using date_range.");
 }
@@ -582,9 +577,9 @@ void read_indexed_keys_to_pipeline(
 
     add_index_columns_to_query(read_query, index_segment_reader.tsd());
 
-    read_query.calculate_row_filter(static_cast<int64_t>(index_segment_reader.tsd().total_rows()));
+    read_query.calculate_row_filter(static_cast<int64_t>(index_segment_reader.tsd().proto().total_rows()));
     bool bucketize_dynamic = index_segment_reader.bucketize_dynamic();
-    pipeline_context->desc_ = StreamDescriptor{std::move(*index_segment_reader.mutable_tsd().mutable_stream_descriptor())};
+    pipeline_context->desc_ = index_segment_reader.tsd().as_stream_descriptor();
 
     bool dynamic_schema = opt_false(read_options.dynamic_schema_);
     auto queries = get_column_bitset_and_query_functions<index::IndexSegmentReader>(
@@ -596,8 +591,14 @@ void read_indexed_keys_to_pipeline(
     pipeline_context->slice_and_keys_ = filter_index(index_segment_reader, combine_filter_functions(queries));
     pipeline_context->bucketize_dynamic_ = bucketize_dynamic;
     pipeline_context->total_rows_ = pipeline_context->calc_rows();
+<<<<<<< HEAD
     pipeline_context->norm_meta_ = std::make_shared<arcticdb::proto::descriptors::NormalizationMetadata>(std::move(*index_segment_reader.mutable_tsd().mutable_normalization()));
     pipeline_context->user_meta_ = std::make_unique<arcticdb::proto::descriptors::UserDefinedMetadata>(std::move(*index_segment_reader.mutable_tsd().mutable_user_meta()));
+=======
+    pipeline_context->norm_meta_ = std::make_unique<arcticdb::proto::descriptors::NormalizationMetadata>(std::move(*index_segment_reader.mutable_tsd().mutable_proto().mutable_normalization()));
+    pipeline_context->user_meta_ = std::make_unique<arcticdb::proto::descriptors::UserDefinedMetadata>(std::move(*index_segment_reader.mutable_tsd().mutable_proto().mutable_user_meta()));
+    pipeline_context->bucketize_dynamic_ = bucketize_dynamic;
+>>>>>>> f9fb9bb (Encoded field)
 }
 
 void read_incompletes_to_pipeline(
@@ -609,7 +610,7 @@ void read_incompletes_to_pipeline(
     bool via_iteration,
     bool sparsify) {
 
-    auto incomplete_segments = stream::get_incomplete(
+    auto incomplete_segments = get_incomplete(
         store,
         pipeline_context->stream_id_,
         read_query.row_filter,
@@ -625,8 +626,7 @@ void read_incompletes_to_pipeline(
 
     // If there are only incompletes we need to add the index here
     if(pipeline_context->slice_and_keys_.empty()) {
-        auto tsd = timeseries_descriptor_from_any(*incomplete_segments.begin()->segment(store).metadata());
-        add_index_columns_to_query(read_query, tsd);
+        add_index_columns_to_query(read_query, incomplete_segments.begin()->segment(store).index_descriptor());
     }
 
     auto first_seg = incomplete_segments.begin()->segment(store);
@@ -634,13 +634,13 @@ void read_incompletes_to_pipeline(
         pipeline_context->desc_ = first_seg.descriptor();
 
     if (!pipeline_context->norm_meta_) {
-        pipeline_context->norm_meta_ = std::make_shared<arcticdb::proto::descriptors::NormalizationMetadata>();
-        auto segment_tsd = timeseries_descriptor_from_segment(first_seg);
-        pipeline_context->norm_meta_->CopyFrom(segment_tsd.normalization());
+        pipeline_context->norm_meta_ = std::make_unique<arcticdb::proto::descriptors::NormalizationMetadata>();
+        auto segment_tsd = first_seg.index_descriptor();
+        pipeline_context->norm_meta_->CopyFrom(segment_tsd.proto().normalization());
         ensure_norm_meta(*pipeline_context->norm_meta_, pipeline_context->stream_id_, sparsify);
     }
 
-    pipeline_context->desc_ = stream::merge_descriptors(pipeline_context->descriptor(), incomplete_segments, read_query.columns);
+    pipeline_context->desc_ = merge_descriptors(pipeline_context->descriptor(), incomplete_segments, read_query.columns);
     modify_descriptor(pipeline_context, read_options);
     if (convert_int_to_float) {
         stream::convert_descriptor_types(*pipeline_context->desc_);
@@ -930,7 +930,7 @@ FrameAndDescriptor read_dataframe_impl(
 
     ARCTICDB_DEBUG(log::version(), "Reduce and fix columns");
     reduce_and_fix_columns(pipeline_context, frame, read_options);
-    return {frame, make_descriptor(pipeline_context, {}, pipeline_context->bucketize_dynamic_), {}, buffers};
+    return {frame, timeseries_descriptor_from_pipeline_context(pipeline_context, {}, pipeline_context->bucketize_dynamic_), {}, buffers};
 }
 
 VersionedItem collate_and_write(
@@ -942,13 +942,13 @@ VersionedItem collate_and_write(
     const std::optional<arcticdb::proto::descriptors::UserDefinedMetadata>& user_meta
     ) {
     util::check(keys.size() == slices.size(), "Mismatch between slices size and key size");
-    arcticdb::proto::descriptors::TimeSeriesDescriptor tsd;
-    tsd.set_total_rows(pipeline_context->total_rows_);
-    //TODO eliminate copies
-    tsd.mutable_stream_descriptor()->CopyFrom(pipeline_context->descriptor().proto());
-    tsd.mutable_normalization()->CopyFrom(*pipeline_context->norm_meta_);
+    TimeseriesDescriptor tsd;
+
+    tsd.set_stream_descriptor(pipeline_context->descriptor());
+    tsd.mutable_proto().set_total_rows(pipeline_context->total_rows_);
+    tsd.mutable_proto().mutable_normalization()->CopyFrom(*pipeline_context->norm_meta_);
     if(user_meta)
-        tsd.mutable_user_meta()->CopyFrom(*user_meta);
+        tsd.mutable_proto().mutable_user_meta()->CopyFrom(*user_meta);
 
     auto index = stream::index_type_from_descriptor(pipeline_context->descriptor());
     return util::variant_match(index, [&store, &pipeline_context, &slices, &keys, &append_after, &tsd] (auto idx) {
@@ -1010,6 +1010,7 @@ VersionedItem sort_merge_impl(
             read_query.query_->emplace_back(SplitClause{static_cast<size_t>(split_size)});
             ExecutionContext merge_clause_context{};
             merge_clause_context.set_descriptor(pipeline_context->descriptor());
+
             read_query.query_->emplace_back(MergeClause{timeseries_index, DenseColumnPolicy{}, stream_id, std::make_shared<ExecutionContext>(std::move(merge_clause_context))});
             auto segments = read_and_process(store, pipeline_context, read_query, ReadOptions{}, pipeline_context->incompletes_after());
             pipeline_context->total_rows_ = num_versioned_rows + get_slice_rowcounts(segments);
@@ -1096,6 +1097,7 @@ VersionedItem compact_incomplete_impl(
     std::vector<FrameSlice> slices;
     bool dynamic_schema = write_options.dynamic_schema;
     auto index = index_type_from_descriptor(first_seg.descriptor());
+<<<<<<< HEAD
     auto policies = std::make_tuple(index, 
                                     dynamic_schema ? VariantSchema{DynamicSchema::default_schema(index)} : VariantSchema{FixedSchema::default_schema(index)}, 
                                     sparsify ? VariantColumnPolicy{SparseColumnPolicy{}} : VariantColumnPolicy{DenseColumnPolicy{}}
@@ -1108,6 +1110,16 @@ VersionedItem compact_incomplete_impl(
         do_compact<IndexType, SchemaType, RowCountSegmentPolicy, ColumnPolicyType>(
                 pipeline_context->incompletes_begin(),
                 pipeline_context->end(),
+=======
+
+    util::variant_match(index, [
+        &fut_vec, &slices, sparsify, pipeline_context=pipeline_context, &store, convert_int_to_float] (auto idx) {
+
+        using IndexType = decltype(idx);
+
+        if(sparsify) {
+            do_compact<IndexType, DynamicSchema, RowCountSegmentPolicy, SparseColumnPolicy>(
+>>>>>>> f9fb9bb (Encoded field)
                 pipeline_context,
                 fut_vec,
                 slices,
@@ -1125,6 +1137,7 @@ VersionedItem compact_incomplete_impl(
         pipeline_context->incompletes_after(),
         user_meta
         );
+
 
     store->remove_keys(delete_keys).get();
     return vit;

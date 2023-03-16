@@ -16,6 +16,7 @@ from arcticdb.config import _DEFAULT_ENV
 from arcticdb.version_store._store import NativeVersionStore
 from arcticdb.adapters.arctic_library_adapter import ArcticLibraryAdapter, set_library_options
 from arcticdb_ext.storage import Library
+from arcticdb.encoding_version import EncodingVersion
 from collections import namedtuple
 from dataclasses import dataclass, fields
 from distutils.util import strtobool
@@ -45,7 +46,7 @@ class S3LibraryAdapter(ArcticLibraryAdapter):
     def supports_uri(uri: str) -> bool:
         return uri.startswith("s3://") or uri.startswith("s3s://")
 
-    def __init__(self, uri: str, *args, **kwargs):
+    def __init__(self, uri: str, encoding_version: EncodingVersion, *args, **kwargs):
         match = re.match(self.REGEX, uri)
         match_groups = match.groupdict()
 
@@ -58,11 +59,12 @@ class S3LibraryAdapter(ArcticLibraryAdapter):
             self._endpoint += f":{self._query_params.port}"
 
         self._https = uri.startswith("s3s")
+        self._encoding_version = encoding_version
 
         if "amazonaws" in self._endpoint:
             self._configure_aws()
 
-        super().__init__(uri)
+        super().__init__(uri, self._encoding_version)
 
     def __repr__(self):
         return "S3(endpoint=%s, bucket=%s)" % (self._endpoint, self._bucket)
@@ -90,7 +92,9 @@ class S3LibraryAdapter(ArcticLibraryAdapter):
             use_virtual_addressing=self._query_params.use_virtual_addressing,
         )
 
-        lib = NativeVersionStore.create_store_from_config(env_cfg, _DEFAULT_ENV, self.CONFIG_LIBRARY_NAME)._library
+        lib = NativeVersionStore.create_store_from_config(
+            env_cfg, _DEFAULT_ENV, self.CONFIG_LIBRARY_NAME, encoding_version=self._encoding_version
+        )._library
 
         return lib
 
@@ -150,7 +154,9 @@ class S3LibraryAdapter(ArcticLibraryAdapter):
 
         set_library_options(env_cfg.env_by_id[_DEFAULT_ENV].lib_by_path[name], library_options)
 
-        lib = NativeVersionStore.create_store_from_config(env_cfg, _DEFAULT_ENV, name)
+        lib = NativeVersionStore.create_store_from_config(
+            env_cfg, _DEFAULT_ENV, name, encoding_version=self._encoding_version
+        )
 
         return lib._lib_cfg
 

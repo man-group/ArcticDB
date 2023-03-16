@@ -69,28 +69,28 @@ void SegmentInMemoryImpl::concatenate(SegmentInMemoryImpl&& other, bool unique_c
     }
 }
 
-position_t SegmentInMemoryImpl::add_column(const FieldDescriptor::Proto &field, size_t num_rows, bool presize) {
+position_t SegmentInMemoryImpl::add_column(const Field &field, size_t num_rows, bool presize) {
     util::check_arg(!field.name().empty(), "Empty name in field: {}", field);
     if(!column_map_)
         init_column_map();
 
-    columns_.emplace_back(std::make_shared<Column>(type_desc_from_proto(field.type_desc()), num_rows, presize, allow_sparse_));
-    const auto& new_field = descriptor_->add_field(field);
+    columns_.emplace_back(std::make_shared<Column>(field.type(), num_rows, presize, allow_sparse_));
+    auto new_field_name = descriptor_->add_field(FieldRef{field.type(), field.name()});
 
     std::lock_guard<std::mutex> lock{*column_map_mutex_};
-    column_map_->insert(new_field.name(), descriptor_->field_count() - 1);
+    column_map_->insert(new_field_name, descriptor_->field_count() - 1);
     return columns_.size() - 1;
 }
 
-position_t SegmentInMemoryImpl::add_column(const FieldDescriptor::Proto &field, const std::shared_ptr<Column>& column) {
+position_t SegmentInMemoryImpl::add_column(const Field &field, const std::shared_ptr<Column>& column) {
     if(!column_map_)
         init_column_map();
 
     columns_.emplace_back(std::move(column));
-    const auto& new_field = descriptor_->add_field(field);
+    auto new_field_name = descriptor_->add_field(FieldRef{field.type(), field.name()});
 
     std::lock_guard<std::mutex> lock{*column_map_mutex_};
-    column_map_->insert(new_field.name(), descriptor_->field_count() - 1);
+    column_map_->insert(new_field_name, descriptor_->field_count() - 1);
     return columns_.size() - 1;
 }
 
@@ -101,7 +101,7 @@ void SegmentInMemoryImpl::change_schema(StreamDescriptor descriptor) {
     for(auto col = 0u; col < descriptor.field_count(); ++col) {
         auto col_name = descriptor.field(col).name();
         auto col_index = column_index(col_name);
-        auto other_type = type_desc_from_proto(descriptor.field(col).type_desc());
+        const auto& other_type = descriptor.field(col).type();
         if(col_index) {
             auto this_type = column_unchecked(col_index.value()).type();
             util::check(this_type == other_type, "Could not convert type {} to type {} for column {}, this index {}, other index {}",
@@ -119,7 +119,7 @@ void SegmentInMemoryImpl::change_schema(StreamDescriptor descriptor) {
 }
 
 std::optional<std::string_view> SegmentInMemoryImpl::string_at(position_t row, position_t col) const {
-    auto td = type_desc_from_proto(descriptor_->field(col).type_desc());
+    auto td = descriptor_->field(col).type();
     util::check(is_sequence_type(td.data_type()), "Not a sequence type");
     util::check_arg(size_t(row) < row_count(), "Segment index {} out of bounds in string", row);
     const auto& col_ref = column(col);

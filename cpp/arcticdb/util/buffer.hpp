@@ -7,8 +7,8 @@
 
 #pragma once
 
-#include <arcticdb/util/allocator.hpp>
-#include <arcticdb/util/constructors.hpp>
+#include <util/allocator.hpp>
+#include <util/constructors.hpp>
 
 #include <cstdlib>
 #include <cstdint>
@@ -55,22 +55,24 @@ struct BufferView : public BaseBuffer<BufferView, false> {
 };
 
 struct Buffer : public BaseBuffer<Buffer, true> {
-    explicit Buffer(size_t size, std::optional<size_t> preamble = std::nullopt) :
-        preamble_bytes_(preamble.value_or(0)) {
+    void init(size_t size, std::optional<size_t> preamble = std::nullopt) {
+        preamble_bytes_ = preamble.value_or(0);
         ensure(size);
         check_invariants();
+    }
+
+    explicit Buffer(size_t size, std::optional<size_t> preamble = std::nullopt) {
+        init(size, preamble);
     }
 
     Buffer() = default;
 
     Buffer(Buffer &&other) noexcept {
-        ARCTICDB_TRACE(log::version(), "Buffer {} being move constructed", uintptr_t(this));
-            *this = std::move(other);
+        *this = std::move(other);
         check_invariants();
     }
 
     Buffer &operator=(Buffer &&b) noexcept {
-        ARCTICDB_TRACE(log::version(), "Buffer {} being move assigned", uintptr_t(this));
         deallocate();
         using std::swap;
         swap(*this, b);
@@ -137,11 +139,12 @@ struct Buffer : public BaseBuffer<Buffer, true> {
     }
 
     [[nodiscard]] Buffer clone() const {
-        ARCTICDB_TRACE(log::version(), "Buffer {} being cloned", uintptr_t(this));
-        Buffer output{ body_bytes_, preamble_bytes_};
-        if(data_ != nullptr && output.data_ != nullptr)
+        Buffer output;
+        if(total_bytes() > 0) {
+            output.init(body_bytes_, preamble_bytes_);
+            util::check(data_ != nullptr && output.data_ != nullptr, "Error in buffer allocation of size {} + {}", body_bytes_, preamble_bytes_);
             memcpy(output.data_, data_, total_bytes());
-
+        }
         return output;
     }
 
@@ -169,11 +172,10 @@ struct Buffer : public BaseBuffer<Buffer, true> {
     }
 
     inline void ensure(size_t bytes) {
-        ARCTICDB_TRACE(log::version(), "Buffer {} ensure {}", uintptr_t(this), bytes);
         if(bytes > available())
             resize(bytes);
         else {
-            ARCTICDB_TRACE(log::version(), "Buffer {} has sufficient bytes for {}, ptr {} data{}, capacity {}",
+            ARCTICDB_TRACE(log::version(), "Buffer {} has sufficient bytes for {}, ptr {} data {}, capacity {}",
                                 uintptr_t(this), bytes, uintptr_t(ptr_), uintptr_t(data_), capacity_, body_bytes_);
         }
 
@@ -224,7 +226,6 @@ struct Buffer : public BaseBuffer<Buffer, true> {
         if (bytes == 0) {
             reset();
         } else {
-            ARCTICDB_TRACE(log::version(), "{} resizing from {} to {}", uintptr_t(this), capacity_, bytes);
             auto alloc_bytes = bytes + preamble_bytes_;
             auto [mem_ptr, ts] = ptr_ ?
                                  Allocator::realloc(std::make_pair(data_, ts_), alloc_bytes)

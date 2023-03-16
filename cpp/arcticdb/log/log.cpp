@@ -22,7 +22,7 @@ namespace arcticdb::log {
 static const char* DefaultLogPattern = "%Y%m%d %H:%M:%S.%f %t %L %n | %v";
 
 constexpr auto get_default_log_level() {
-    return spdlog::level::info;
+    return spdlog::level::debug;
 }
 
 spdlog::logger &storage() {

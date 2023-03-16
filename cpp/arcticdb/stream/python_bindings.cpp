@@ -6,6 +6,7 @@
  */
 
 #include <arcticdb/stream/python_bindings.hpp>
+
 #include <pybind11/stl_bind.h>
 #include <arcticdb/python/reader.hpp>
 
@@ -59,10 +60,10 @@ void register_types(py::module &m) {
                               .def("dimension", &TypeDescriptor::dimension)
     );
     //TODO re-add this constructor
-    python_util::add_repr(py::class_<FieldDescriptor>(m, "FieldDescriptor")
-                              .def(py::init<TypeDescriptor, std::string>())
-                              .def("type_desc", &FieldDescriptor::type_desc)
-                              .def("name", &FieldDescriptor::name)
+    python_util::add_repr(py::class_<FieldRef>(m, "FieldDescriptor")
+                              .def(py::init<TypeDescriptor, std::string_view>())
+                              .def("type", &FieldRef::type)
+                              .def("name", &FieldRef::name)
     );
 
     py::enum_<IndexDescriptor::Type>(m, "IndexKind")
@@ -78,10 +79,10 @@ void register_types(py::module &m) {
 
     //TODO re-add at the end
    python_util::add_repr(py::class_<StreamDescriptor>(m, "StreamDescriptor")
-                              .def(py::init([](StreamId stream_id, IndexDescriptor idx_desc, const std::vector<FieldDescriptor>& fields) {
+    .def(py::init([](StreamId stream_id, IndexDescriptor idx_desc, const std::vector<FieldRef>& fields) {
                                   auto index = default_index_type_from_descriptor(idx_desc.proto());
                                   return util::variant_match(index, [&stream_id, &fields] (auto idx_type){
-                                      return StreamDescriptor{index_descriptor(stream_id, idx_type, fields_proto_from_range(fields))};
+                                      return StreamDescriptor{index_descriptor(stream_id, idx_type, fields_from_range(fields))};
                                   });
                               }))
                               .def("id", &StreamDescriptor::id)
@@ -97,10 +98,10 @@ void register_types(py::module &m) {
         .def_property_readonly("end_nanos_utc", &PyTimestampRange::end_nanos_utc);
 
     m.def("create_timestamp_index_stream_descriptor", [](StreamId tsid,
-                                                         const std::vector<FieldDescriptor> &fields) {
+                                                         const std::vector<FieldRef>& fields) {
         auto rg = folly::range(fields.begin(), fields.end());
         const auto index = stream::TimeseriesIndex::default_index();
-        return index.create_stream_descriptor(tsid, fields_proto_from_range(rg));
+        return index.create_stream_descriptor(tsid, fields_from_range(rg));
     });
 }
 }

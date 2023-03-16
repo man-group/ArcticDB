@@ -13,6 +13,7 @@
 #include <arcticdb/entity/atom_key.hpp>
 #include <arcticdb/entity/index_range.hpp>
 #include <arcticdb/pipeline/index_fields.hpp>
+#include <arcticdb/entity/stream_descriptor.hpp>
 
 #include <folly/Range.h>
 
@@ -28,14 +29,16 @@ template<typename Derived>
 class BaseIndex {
   public:
     template<class RangeType>
-    StreamDescriptor create_stream_descriptor(StreamId stream_id, RangeType fields) const {
-        return StreamDescriptor{stream_descriptor(stream_id, *derived(), fields)};
+    StreamDescriptor create_stream_descriptor(StreamId stream_id, RangeType&& fields) const {
+        return stream_descriptor(stream_id, *derived(), std::move(fields));
     }
 
-    StreamDescriptor create_stream_descriptor(StreamId stream_id,
-                                                     std::initializer_list<FieldDescriptor::Proto> fields) const {
-        std::vector<FieldDescriptor::Proto> fds{fields};
+    [[nodiscard]] StreamDescriptor create_stream_descriptor(
+                                              StreamId stream_id,
+                                              std::initializer_list<FieldRef> fields) const {
+        std::vector<FieldRef> fds{fields};
         return create_stream_descriptor(stream_id, folly::range(fds));
+
     }
 
     [[nodiscard]] const Derived* derived() const {
@@ -46,8 +49,8 @@ class BaseIndex {
         return {Derived::field_count(), Derived::type()};
     }
 
-    [[nodiscard]] FieldDescriptor field_proto(size_t) const {
-        return FieldDescriptor{scalar_field_proto(typename Derived::TypeDescTag::DataTypeTag().data_type, std::string(derived()->name()))};;
+    [[nodiscard]] FieldRef field(size_t) const {
+        return {static_cast<TypeDescriptor>(typename Derived::TypeDescTag{}), std::string_view(derived()->name())};
     }
 };
 
@@ -76,11 +79,11 @@ class TimeseriesIndex : public BaseIndex<TimeseriesIndex> {
         return IndexDescriptor::TIMESTAMP;
     }
 
-    void check(const StreamDescriptor::FieldsCollection &fields) const {
+    void check(const FieldCollection &fields) const {
         util::check_arg(fields.size() >= int(field_count()), "expected at least {} fields, actual {}",
                         field_count(), fields.size());
-        util::check_arg(type_desc_from_proto(fields[0].type_desc()) == this->field_proto(0).type_desc(), "expected field[0]={}, actual {}",
-                        this->field_proto(0), fields[0]);
+        util::check_arg(fields[0].type() == this->field(0).type(), "expected field[0]={}, actual {}",
+                        this->field(0), fields[0]);
     }
 
     template<typename SegmentType>
@@ -168,13 +171,12 @@ class TableIndex : public BaseIndex<TableIndex> {
         return IndexDescriptor::STRING;
     }
 
-    void check(const StreamDescriptor::FieldsCollection &fields) const {
+    void check(const FieldCollection &fields) const {
         util::check_arg(fields.size() >= int(field_count()), "expected at least {} fields, actual {}",
                         field_count(), fields.size());
 
-        google::protobuf::util::MessageDifferencer diff;
-        util::check(diff.Compare(fields[0], static_cast<const FieldDescriptor::Proto&>(field_proto(0))),
-            "Field descriptor mismatch {} != {}", fields[0], field_proto(0));
+        util::check(fields[0] == field(0),
+            "Field descriptor mismatch {} != {}", fields[0], field(0));
     }
 
     template<typename SegmentType>
@@ -246,7 +248,7 @@ class RowCountIndex : public BaseIndex<RowCountIndex> {
 
     static constexpr IndexDescriptor::Type type() { return IndexDescriptor::ROWCOUNT; }
 
-    void check(const StreamDescriptor::FieldsCollection& ) const {
+    void check(const FieldCollection& ) const {
         // No index defined
     }
 
@@ -292,7 +294,7 @@ inline Index index_type_from_descriptor(const StreamDescriptor::Proto &desc) {
         return TableIndex::make_from_descriptor(desc);
     case IndexDescriptor::ROWCOUNT:
         return RowCountIndex{};
-    default:util::raise_rte("Data obtained from storage refers to an index type that this build of ArcticDB doesn't understandi ({}).", desc.index().kind());
+    default:util::raise_rte("Data obtained from storage refers to an index type that this build of ArcticDB doesn't understand ({}).", desc.index().kind());
     }
 }
 
@@ -307,6 +309,10 @@ inline Index default_index_type_from_descriptor(const IndexDescriptor::Proto &de
     default:
         util::raise_rte("Unknown index type {} trying to generate index type", desc.kind());
     }
+}
+
+inline Index default_index_type_from_descriptor(const IndexDescriptor &desc) {
+    return default_index_type_from_descriptor(desc.proto());
 }
 
 inline Index index_type_from_descriptor(const StreamDescriptor& desc) {

@@ -29,6 +29,7 @@ from arcticdb.supported_types import time_types as supported_time_types
 from arcticdb.toolbox.library_tool import LibraryTool
 from arcticdb.version_store.processing import QueryBuilder
 from arcticdb_ext.storage import OpenMode as _OpenMode
+from arcticdb.encoding_version import EncodingVersion
 from arcticdb_ext.storage import (
     create_mem_config_resolver as _create_mem_config_resolver,
     LibraryIndex as _LibraryIndex,
@@ -262,10 +263,13 @@ class NativeVersionStore:
         return cls(library=lib, lib_cfg=lib_cfg, env=env, open_mode=open_mode)
 
     @classmethod
-    def create_store_from_config(cls, cfg, env, lib_name, open_mode=OpenMode.DELETE):
+    def create_store_from_config(
+        cls, cfg, env, lib_name, open_mode=OpenMode.DELETE, encoding_version=EncodingVersion.V1
+    ):
         from arcticdb.version_store.helper import extract_lib_config
 
         lib_cfg = extract_lib_config(cfg.env_by_id[env], lib_name)
+        lib_cfg.lib_desc.version.encoding_version = encoding_version
         lib = cls.create_lib_from_lib_config(lib_cfg, env, open_mode)
         return cls(library=lib, lib_cfg=lib_cfg, env=env, open_mode=open_mode)
 

@@ -217,6 +217,14 @@ struct PartitionClause {
     [[nodiscard]] bool can_combine_with_column_selection() const { return true; }
 };
 
+<<<<<<< HEAD
+=======
+
+inline StreamDescriptor empty_descriptor() {
+    return StreamDescriptor{StreamId{"merged"}, IndexDescriptor{0, IndexDescriptor::ROWCOUNT}};
+}
+
+>>>>>>> f9fb9bb (Encoded field)
 struct AggregationClause {
     std::shared_ptr<ExecutionContext> execution_context_;
     std::vector<AggregationFactory> aggregation_operators_;

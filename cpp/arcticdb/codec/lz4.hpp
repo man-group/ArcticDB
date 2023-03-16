@@ -32,10 +32,16 @@ struct Lz4BlockEncoder {
         opts.set_acceleration(0);
     }
 
-    template<class T>
-    static std::size_t encode_block(const Opts &opts, const T *in, BlockProtobufHelper &block_utils,
-                                    HashAccum &hasher, T *out, std::size_t out_capacity, std::ptrdiff_t &pos,
-                                    arcticdb::proto::encoding::VariantCodec &out_codec) {
+    template<class T, class CodecType>
+    static std::size_t encode_block(
+            const Opts &opts,
+            const T *in,
+            BlockProtobufHelper &block_utils,
+            HashAccum &hasher,
+            T *out,
+            std::size_t out_capacity,
+            std::ptrdiff_t &pos,
+            CodecType &out_codec) {
         int compressed_bytes = LZ4_compress_default(
             reinterpret_cast<const char *>(in),
             reinterpret_cast<char *>(out),
@@ -45,7 +51,7 @@ struct Lz4BlockEncoder {
         ARCTICDB_TRACE(log::storage(), "Block of size {} compressed to {} bytes", block_utils.bytes_, compressed_bytes);
         hasher(in, block_utils.count_);
         pos += ssize_t(compressed_bytes);
-        out_codec.mutable_lz4()->CopyFrom(opts);
+        out_codec.mutable_lz4()->MergeFrom(opts);
         return std::size_t(compressed_bytes);
     }
 };

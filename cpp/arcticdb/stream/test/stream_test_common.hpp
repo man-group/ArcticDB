@@ -25,7 +25,6 @@
 #include <arcticdb/stream/index.hpp>
 #include <filesystem>
 
-
 namespace fg = folly::gen;
 
 namespace arcticdb {
@@ -81,7 +80,7 @@ struct PilotedClock {
 
 inline auto get_simple_data_descriptor(const StreamId &id) {
     return TimeseriesIndex::default_index().create_stream_descriptor(
-        id, {scalar_field_proto(DataType::UINT64, "val")}
+        id, {scalar_field(DataType::UINT64, "val")}
     );
 }
 
@@ -180,23 +179,23 @@ NativeTensor test_string_column(ContainerType &vec, DTT, size_t num_rows) {
     return NativeTensor{bytes, 1, &strides, &shapes, dt, elsize, vec.data()};
 }
 
-inline std::vector<entity::FieldDescriptor::Proto> get_test_timeseries_fields() {
+inline std::vector<entity::FieldRef> get_test_timeseries_fields() {
     using namespace arcticdb::entity;
 
     return {
-        scalar_field_proto(DataType::UINT8, "smallints"),
-        scalar_field_proto(DataType::INT64, "bigints"),
-        scalar_field_proto(DataType::FLOAT64, "floats"),
-        scalar_field_proto(DataType::ASCII_FIXED64, "strings"),
+        scalar_field(DataType::UINT8, "smallints"),
+        scalar_field(DataType::INT64, "bigints"),
+        scalar_field(DataType::FLOAT64, "floats"),
+        scalar_field(DataType::ASCII_FIXED64, "strings"),
     };
 }
 
-inline std::vector<entity::FieldDescriptor::Proto> get_test_simple_fields() {
+inline std::vector<entity::FieldRef> get_test_simple_fields() {
     using namespace arcticdb::entity;
 
     return {
-        scalar_field_proto(DataType::UINT32, "index"),
-        scalar_field_proto(DataType::FLOAT64,  "floats"),
+        scalar_field(DataType::UINT32, "index"),
+        scalar_field(DataType::FLOAT64,  "floats"),
     };
 }
 
@@ -261,13 +260,13 @@ inline void fill_test_frame(SegmentInMemory &segment,
 }
 
 template<typename IndexType>
-StreamDescriptor get_test_descriptor(const StreamId &id, const std::vector<FieldDescriptor::Proto> &fields) {
+StreamDescriptor get_test_descriptor(const StreamId &id, const std::vector<FieldRef> &fields) {
     return IndexType::default_index().create_stream_descriptor(id, folly::Range(fields.begin(), fields.end()));
 }
 
 template<typename IndexType>
 TestTensorFrame get_test_frame(const StreamId &id,
-                               const std::vector<FieldDescriptor::Proto> &fields,
+                               const std::vector<FieldRef> &fields,
                                size_t num_rows,
                                size_t start_val,
                                size_t opt_row_offset = 0) {
