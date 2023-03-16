@@ -10,7 +10,7 @@ Additional Use Grant: You may make use of the Licensed Work under the
                       
                       A “Database Service” is a commercial offering 
                       that allows third parties (other than your employees
-                      and contractors) to access the functionalityof the
+                      and contractors) to access the functionality of the
                       Licensed Work by creating tables whose schemas are 
                       controlled by such third parties.
 
