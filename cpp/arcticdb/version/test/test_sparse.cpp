@@ -6,6 +6,7 @@
  */
 
 #include <gtest/gtest.h>
+#include <util/test/gtest_utils.hpp>
 
 #include <arcticdb/stream/index.hpp>
 #include <arcticdb/stream/schema.hpp>
@@ -191,6 +192,7 @@ TEST(Sparse, SimpleRoundtripStrings) {
 }
 
 TEST(Sparse, Multiblock) {
+    SKIP_WIN("Works OK but fills up LMDB");
     using namespace arcticdb;
     using namespace arcticdb::stream;
     using DynamicAggregator =  Aggregator<TimeseriesIndex, DynamicSchema, stream::NeverSegmentPolicy, stream::SparseColumnPolicy>;
@@ -241,6 +243,7 @@ TEST(Sparse, Multiblock) {
 }
 
 TEST(Sparse, Segment) {
+    SKIP_WIN("Works OK but fills up LMDB");
     using namespace arcticdb;
     using namespace arcticdb::stream;
     using DynamicAggregator =  Aggregator<TimeseriesIndex, DynamicSchema, stream::RowCountSegmentPolicy, stream::SparseColumnPolicy>;

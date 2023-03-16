@@ -300,6 +300,7 @@ TEST(VersionStore, GetIncompleteSymbols) {
 }
 
 TEST(VersionStore, StressBatchWrite) {
+    SKIP_WIN("Works OK but fills up LMDB");
     using namespace arcticdb;
     using namespace arcticdb::storage;
     using namespace arcticdb::stream;
