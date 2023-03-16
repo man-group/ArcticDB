@@ -15,7 +15,7 @@
 
 ---
 
-**ArcticDB** is a high performance, serverless **DataFrame database** built for the Python Data Science ecosystem. Launched in February 2023, it is the successor to [Arctic](https://github.com/man-group/arctic). 
+**ArcticDB** is a high performance, serverless **DataFrame database** built for the Python Data Science ecosystem. Launched in March 2023, it is the successor to [Arctic](https://github.com/man-group/arctic). 
 
 ArcticDB offers an intuitive Python-centric API enabling you to read and write Pandas DataFrames to S3 or LMDB utilising a fast C++ data-processing and compression engine.
 
@@ -126,7 +126,7 @@ Below you will find some basic steps required to be able to contribute to the pr
 
 We are also always looking for feedback from our dedicated community! If you have used ArcticDB please let us know, we would love to hear about your experience!
 
-### Contribution Licensing 
+### Contribution Licensing
 
 Since this project is distributed under the terms of the [BSL license](https://github.com/man-group/ArcticDB/blob/master/LICENSE.txt), contributions that you make are licensed under the same terms. For us to be able to accept your contributions, we will need explicit confirmation from you that you are able and willing to provide them under these terms, and the mechanism we use to do this is the [ArcticDB Individual Contributor License Agreement](https://github.com/man-group/ArcticDB/blob/master/LICENSE.txt). 
 
