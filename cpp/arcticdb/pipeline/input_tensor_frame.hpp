@@ -12,6 +12,7 @@
 #include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/entity/index_range.hpp>
 #include <arcticdb/entity/types.hpp>
+#include <arcticdb/util/flatten_utils.hpp>
 
 namespace arcticdb::pipelines {
 
@@ -59,11 +60,22 @@ struct InputTensorFrame {
                     if constexpr (std::is_integral_v<RawType> || std::is_floating_point_v<RawType>) {
                         util::check(static_cast<bool>(index_tensor), "Got null index tensor in set_index_range");
                         auto &tensor = index_tensor.value();
-                        auto start_t = tensor.ptr_cast<RawType>(0);
-                        auto end_t = tensor.ptr_cast<RawType>(static_cast<size_t>(tensor.shape(0) - 1));
-                        index_range.start_  = IndexValue(static_cast<timestamp>(*start_t));
-                        index_range.end_ = IndexValue(static_cast<timestamp>(*end_t));
-
+                        if (!arcticdb::util::is_cstyle_array<timestamp>(tensor)){
+                            TypedTensor<timestamp> typed_tensor{tensor};
+                            std::vector<timestamp> output(tensor.shape(0));
+                            arcticdb::util::FlattenHelper f{typed_tensor};
+                            auto info = tensor.request();
+                            auto* output_ptr = output.data();
+                            f.flatten(output_ptr, reinterpret_cast<const timestamp*>(info.ptr));
+                            index_range.start_ = output.front();
+                            index_range.end_ = output.back();
+                        }
+                        else{
+                            auto start_t = tensor.ptr_cast<RawType>(0);
+                            auto end_t = tensor.ptr_cast<RawType>(static_cast<size_t>(tensor.shape(0) - 1));
+                            index_range.start_  = IndexValue(static_cast<timestamp>(*start_t));
+                            index_range.end_ = IndexValue(static_cast<timestamp>(*end_t));
+                        }
                     } else
                         throw std::runtime_error("Unsupported non-integral index type");
                 });
