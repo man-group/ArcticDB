@@ -574,7 +574,7 @@ class NativeVersionStore:
             # Fixed size strings not implemented yet for Windows as Py_UNICODE_SIZE is 2 whereas on Linux it is 4
             normal_value = self.resolve_defaults("dynamic_strings", proto_cfg, global_default=True, **kwargs)
             if not normal_value:
-                log.warning(
+                log.debug(
                     "Windows only supports dynamic_strings=True, using dynamic strings despite configuration or kwarg"
                 )
             dynamic_strings = True
