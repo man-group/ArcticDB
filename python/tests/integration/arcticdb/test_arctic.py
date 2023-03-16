@@ -5,8 +5,9 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
-
+import sys
 from arcticdb_ext.exceptions import InternalException
+from arcticdb.exceptions import ArcticNativeNotYetImplemented
 
 try:
     from arcticdb.version_store import VersionedItem as PythonVersionedItem
@@ -20,7 +21,6 @@ from arcticdb.options import LibraryOptions
 from arcticdb import QueryBuilder
 import math
 import re
-import time
 import pytest
 import pandas as pd
 from datetime import datetime, date
@@ -939,6 +939,19 @@ def test_has_symbol(arctic_library):
     lib.delete("symbol")
     assert "symbol" not in lib
     assert lib.has_symbol("symbol", as_of="snapshot")
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="SKIP_WIN Numpy strings not supported yet")
+def test_numpy_string(arctic_library):
+    arctic_library.write("symbol", np.array(["ab", "cd", "efg"]))
+    res = arctic_library.read("symbol").data
+    np.testing.assert_array_equal(res, np.array(["ab", "cd", "efg"]))
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="SKIP_WIN Numpy strings not supported yet")
+def test_numpy_string_fails_on_windows(arctic_library):
+    with pytest.raises(ArcticNativeNotYetImplemented):
+        arctic_library.write("symbol", np.array(["ab", "cd", "efg"]))
 
 
 def test_get_description(arctic_library):

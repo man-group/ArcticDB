@@ -53,6 +53,9 @@ log = version
 from msgpack import packb, unpackb, pack, ExtType
 
 
+IS_WINDOWS = sys.platform == "win32"
+
+
 NPDDataFrame = NamedTuple(
     "NPDDataFrame",
     [
@@ -538,6 +541,8 @@ class NdArrayNormalizer(Normalizer):
     TYPE = "ndarray"
 
     def normalize(self, item, **kwargs):
+        if IS_WINDOWS and item.dtype.char == "U":
+            raise ArcticNativeNotYetImplemented("Numpy strings are not yet implemented on Windows")  # SKIP_WIN
         norm_meta = NormalizationMetadata()
         norm_meta.np.shape.extend(item.shape)
 
