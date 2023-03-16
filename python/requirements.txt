@@ -1,0 +1,14 @@
+ numpy
+ pandas <2
+ attrs
+ dataclasses ; python_version < '3.7'
+ enum-compat
+ grpcio-tools
+ protobuf >=3.5.0.post1 # Per https://github.com/grpc/grpc/blob/v1.45.3/requirements.txt
+ xxhash
+ six
+ msgpack
+ psutil
+ pyyaml
+ decorator
+prometheus_client

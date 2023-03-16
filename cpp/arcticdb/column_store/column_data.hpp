@@ -178,7 +178,7 @@ struct ColumnData {
     }
 
     template<typename TDT>
-    std::optional<TypedBlockData<TDT>>  next() {
+    std::optional<TypedBlockData<TDT>> next() {
         MemBlock* block = nullptr;
         do {
             if (pos_ == num_blocks())

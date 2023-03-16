@@ -175,8 +175,8 @@ class TableIndex : public BaseIndex<TableIndex> {
         util::check_arg(fields.size() >= int(field_count()), "expected at least {} fields, actual {}",
                         field_count(), fields.size());
 
-        util::check(fields[0] == field(0),
-            "Field descriptor mismatch {} != {}", fields[0], field(0));
+        util::check(fields.ref_at(0) == field(0),
+            "Field descriptor mismatch {} != {}", fields.ref_at(0), field(0));
     }
 
     template<typename SegmentType>

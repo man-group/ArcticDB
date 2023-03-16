@@ -1,0 +1,12 @@
+pytest
+pytest-cpp
+pytest-timeout
+packaging
+future
+pytest-server-fixtures
+mock
+ boto3
+moto
+flask  # Used by moto
+flask-cors
+hypothesis <6.73

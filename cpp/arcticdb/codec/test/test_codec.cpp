@@ -132,7 +132,7 @@ TEST(SegmentEncoderTest, EncodeSingleStringV1) {
     auto lz4ptr = opt.mutable_lz4();
     lz4ptr->set_acceleration(1);
     auto copy = s.clone();
-    Segment seg = encode_v1(SegmentInMemory{s}, opt);
+    Segment seg = encode_v1(s.clone(), opt);
 
     SegmentInMemory res = decode_segment(std::move(seg));
     ASSERT_EQ(copy.string_at(0, 1), res.string_at(0, 1));

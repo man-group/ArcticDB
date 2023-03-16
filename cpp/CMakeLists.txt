@@ -23,7 +23,7 @@ if(WIN32)
     # Guide to MSVC compilation warnings https://learn.microsoft.com/en-us/cpp/error-messages/compiler-warnings/compiler-warnings-c4000-through-c4199?view=msvc-170
     set(CMAKE_CXX_FLAGS "/DWIN32 /D_WINDOWS /GR /EHsc /bigobj /Z7 /w /wd4244 /wd4267")
     set(CMAKE_CXX_FLAGS_RELEASE "/MT /DNDEBUG")
-    set(CMAKE_CXX_FLAGS_DEBUG "/MTd /RTC1")
+    set(CMAKE_CXX_FLAGS_DEBUG "/MTd /RTC1 /Od /MP")
 else()
     set(CMAKE_CXX_FLAGS "-Wall -Wextra")
     set(CMAKE_CXX_FLAGS_DEBUG "-ggdb")

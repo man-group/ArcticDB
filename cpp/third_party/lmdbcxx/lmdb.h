@@ -1,1 +1,0 @@
-../lmdb/libraries/liblmdb/lmdb.h

@@ -671,6 +671,10 @@ public:
 
     position_t add_column(const Field &field, size_t num_rows, bool presize);
 
+    position_t add_column(FieldRef field, size_t num_rows, bool presize);
+
+    position_t add_column(FieldRef field_ref, const std::shared_ptr<Column>& column);
+
     void change_schema(StreamDescriptor descriptor);
 
     template<typename T>
@@ -724,10 +728,6 @@ public:
 
     void check_column_index(position_t idx) const {
         util::check_arg(idx < position_t(columns_.size()), "Column index {} out of bounds", idx);
-    }
-
-    static Field string_pool_descriptor() {
-        return Field{TypeDescriptor{DataType::UINT8, Dimension::Dim1}, std::string_view{"__string_pool__"}};
     }
 
     void init_column_map() const {

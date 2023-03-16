@@ -202,6 +202,14 @@ public:
         return impl_->add_column(field, column);
     }
 
+    position_t add_column(FieldRef field_ref, const std::shared_ptr<Column>& column) {
+        return impl_->add_column(field_ref, column);
+    }
+
+    position_t add_column(FieldRef field_ref, size_t num_rows, bool presize) {
+        return impl_->add_column(field_ref, num_rows, presize);
+    }
+
     size_t num_blocks() const {
         return impl_->num_blocks();
     }
@@ -300,10 +308,6 @@ public:
     size_t string_pool_size() const { return impl_->string_pool_size(); }
 
     bool has_string_pool() const { return impl_->has_string_pool(); }
-
-    static Field string_pool_descriptor() {
-        return SegmentInMemoryImpl::string_pool_descriptor();
-    }
 
     ColumnData string_pool_data() const {
         return impl_->string_pool_data();

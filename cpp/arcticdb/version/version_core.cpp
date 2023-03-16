@@ -835,9 +835,10 @@ void drop_column_stats_impl(
             // Drop all column stats
             store->remove_key(column_stats_key, remove_opts).get();
         } else {
-            for (const auto& field: segment_in_memory.fields()) {
+            auto old_fields = segment_in_memory.fields().clone();
+            for (const auto& field: old_fields) {
                 auto column_name = field.name();
-                if (!columns_to_keep.contains(column_name) && column_name != start_index_column_name && column_name != end_index_column_name) {
+                if (!columns_to_keep.contains(std::string{column_name}) && column_name != start_index_column_name && column_name != end_index_column_name) {
                     segment_in_memory.drop_column(column_name);
                 }
             }
@@ -855,9 +856,9 @@ FrameAndDescriptor read_column_stats_impl(
     // Remove try-catch once AsyncStore methods raise the new error codes themselves
     try {
         auto segment_in_memory = store->read(column_stats_key).get().second;
-        proto::descriptors::TimeSeriesDescriptor tsd;
-        tsd.set_total_rows(segment_in_memory.row_count());
-        tsd.mutable_stream_descriptor()->CopyFrom(segment_in_memory.descriptor().proto());
+        TimeseriesDescriptor tsd;
+        tsd.mutable_proto().set_total_rows(segment_in_memory.row_count());
+        tsd.set_stream_descriptor(segment_in_memory.descriptor());
         return {SegmentInMemory(std::move(segment_in_memory)), tsd, {}, {}};
     } catch (const std::exception& e) {
         storage::raise<ErrorCode::E_KEY_NOT_FOUND>("Failed to read column stats key: {}", e.what());
@@ -870,7 +871,7 @@ ColumnStats get_column_stats_info_impl(
     auto column_stats_key = index_key_to_column_stats_key(versioned_item.key_);
     // Remove try-catch once AsyncStore methods raise the new error codes themselves
     try {
-        auto stream_descriptor = std::get<StreamDescriptor::Proto>(store->read_metadata_and_descriptor(column_stats_key).get());
+        auto stream_descriptor = std::get<StreamDescriptor>(store->read_metadata_and_descriptor(column_stats_key).get());
         return ColumnStats(stream_descriptor.fields());
     } catch (const std::exception& e) {
         storage::raise<ErrorCode::E_KEY_NOT_FOUND>("Failed to read column stats key: {}", e.what());

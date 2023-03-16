@@ -77,7 +77,7 @@ struct Lz4Codec {
 
     int32_t acceleration_;
     int16_t padding_ = 0;
-};;
+};
 
 static_assert(sizeof(Lz4Codec) == encoding_size);
 

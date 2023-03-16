@@ -606,6 +606,10 @@ struct FieldRef {
     std::string_view name() const {
         return name_;
     }
+
+    friend bool operator==(const FieldRef& left, const FieldRef& right) {
+        return left.type_ == right.type_ && left.name_ == right.name_;
+    }
 };
 
 inline void set_id(arcticdb::proto::descriptors::StreamDescriptor& pb_desc, StreamId id) {
@@ -630,12 +634,21 @@ struct Field {
 
     using Proto = arcticdb::proto::descriptors::StreamDescriptor_FieldDescriptor;
 
+private:
     Field(const FieldRef& ref) {
         set(ref.type_, ref.name_);
     }
 
     Field(TypeDescriptor type, std::string_view name) {
         set(type, name);
+    }
+public:
+    static void emplace(TypeDescriptor type, std::string_view name, void* ptr) {
+        new (ptr) Field(type, name);
+    }
+
+    static Field from_ref(const FieldRef& ref) {
+        return Field(ref);
     }
 
     static size_t calc_size(std::string_view name) {
@@ -674,6 +687,23 @@ struct Field {
         auto lt = std::tie(l_name, l_data_type, l_dim);
         auto rt = std::tie(r_name, r_data_type, r_dim);
         return lt < rt;
+    }
+};
+
+struct FieldWrapper {
+    std::vector<uint8_t> data_;
+    FieldWrapper(TypeDescriptor type, std::string_view name) :
+    data_(Field::calc_size(name)) {
+        mutable_field().set(type, name);
+    }
+
+    const Field& field() const {
+        return *reinterpret_cast<const Field*>(data_.data());
+    }
+
+private:
+    Field& mutable_field() {
+        return *reinterpret_cast<Field*>(data_.data());
     }
 };
 

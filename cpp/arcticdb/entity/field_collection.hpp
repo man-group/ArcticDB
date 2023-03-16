@@ -154,6 +154,11 @@ public:
         return *(buffer_.buffer().ptr_cast<Field>(get_offset(pos), sizeof(shape_t)));
     }
 
+    [[nodiscard]] FieldRef ref_at(size_t pos) const {
+        const auto* field = buffer_.buffer().ptr_cast<Field>(get_offset(pos), sizeof(shape_t));
+        return { field->type(), field->name() };
+    }
+
     [[nodiscard]] Field& at(size_t pos) {
         return *(buffer_.buffer().ptr_cast<Field>(get_offset(pos), sizeof(shape_t)));
     }

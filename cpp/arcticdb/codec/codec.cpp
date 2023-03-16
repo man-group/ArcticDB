@@ -705,7 +705,7 @@ void decode_string_pool( const arcticdb::proto::encoding::SegmentHeader& hdr,
         ARCTICDB_TRACE(log::codec(), "Decoding string pool");
         util::check(data!=end, "Reached end of input block with string pool fields to decode");
         std::optional<util::BitMagic> bv;
-        data += decode_field(SegmentInMemory::string_pool_descriptor().type(),
+        data += decode_field(string_pool_descriptor().type(),
                        hdr.string_pool_field(),
                        data,
                        res.string_pool(),

@@ -142,7 +142,7 @@ void decode_string_pool(const arcticdb::proto::encoding::SegmentHeader & hdr, co
         if(EncodingVersion(hdr.encoding_version()) == EncodingVersion::V2)
             check_magic<StringPoolMagic>(data);
 
-        data += decode_field(SegmentInMemory::string_pool_descriptor().type(),
+        data += decode_field(string_pool_descriptor().type(),
                        hdr.string_pool_field(),
                        data,
                        context.string_pool(),

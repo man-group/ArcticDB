@@ -69,7 +69,7 @@ void SegmentInMemoryImpl::concatenate(SegmentInMemoryImpl&& other, bool unique_c
     }
 }
 
-position_t SegmentInMemoryImpl::add_column(const Field& field, size_t num_rows, bool presize) {
+position_t SegmentInMemoryImpl::add_column(FieldRef field, size_t num_rows, bool presize) {
     util::check_arg(!field.name().empty(), "Empty name in field: {}", field);
     if(!column_map_)
         init_column_map();
@@ -82,16 +82,24 @@ position_t SegmentInMemoryImpl::add_column(const Field& field, size_t num_rows, 
     return columns_.size() - 1;
 }
 
-position_t SegmentInMemoryImpl::add_column(const Field &field, const std::shared_ptr<Column>& column) {
+position_t SegmentInMemoryImpl::add_column(const Field& field, size_t num_rows, bool presize) {
+    return add_column(FieldRef{field.type(), field.name()}, num_rows, presize);
+}
+
+position_t SegmentInMemoryImpl::add_column(FieldRef field_ref, const std::shared_ptr<Column>& column) {
     if(!column_map_)
         init_column_map();
 
     columns_.emplace_back(std::move(column));
-    auto new_field_name = descriptor_->add_field(FieldRef{field.type(), field.name()});
+    auto new_field_name = descriptor_->add_field(field_ref);
 
     std::lock_guard<std::mutex> lock{*column_map_mutex_};
     column_map_->insert(new_field_name, descriptor_->field_count() - 1);
     return columns_.size() - 1;
+}
+
+position_t SegmentInMemoryImpl::add_column(const Field& field, const std::shared_ptr<Column>& column) {
+    return add_column(FieldRef{field.type(), field.name()}, column);
 }
 
 void SegmentInMemoryImpl::change_schema(StreamDescriptor descriptor) {

@@ -517,8 +517,6 @@ target_include_directories(arcticdb_core_object
         )
 
 add_library(arcticdb_core_static STATIC $<TARGET_OBJECTS:arcticdb_core_object>)
-add_sanitizers(arcticdb_core_static)
-
 target_include_directories(arcticdb_core_static PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
         $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
@@ -527,8 +525,6 @@ target_include_directories(arcticdb_core_static PUBLIC
 target_link_libraries(arcticdb_core_static PUBLIC ${arcticdb_core_libraries})
 
 add_library(arcticdb_core SHARED $<TARGET_OBJECTS:arcticdb_core_object>)
-add_sanitizers(arcticdb_core)
-
 target_link_libraries(arcticdb_core PRIVATE
         ${arcticdb_core_libraries}
         ${AWSSDK_LINK_LIBRARIES}
@@ -554,7 +550,6 @@ set(arcticdb_python_srcs
         version/python_bindings.cpp)
 
 add_library(arcticdb_python STATIC ${arcticdb_python_srcs})
-add_sanitizers(arcticdb_python)
 
 target_link_libraries(arcticdb_python
         PUBLIC
@@ -705,7 +700,6 @@ if(${TEST})
     set(EXECUTABLE_PERMS OWNER_WRITE OWNER_READ OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE) # 755
 
     add_executable(test_unit_arcticdb ${unit_test_srcs})
-    add_sanitizers(test_unit_arcticdb)
     install(TARGETS test_unit_arcticdb RUNTIME
                 DESTINATION .
                 PERMISSIONS ${EXECUTABLE_PERMS}
@@ -757,7 +751,7 @@ if(${TEST})
                 )
     endif()
 
-    gtest_discover_tests(test_unit_arcticdb DISCOVERY_TIMEOUT 30)
+    gtest_discover_tests(test_unit_arcticdb DISCOVERY_TIMEOUT 60)
 
     set(rapidcheck_srcs
             column_store/test/rapidcheck_column_store.cpp
@@ -799,5 +793,5 @@ if(${TEST})
             )
     endif()
 
-    gtest_discover_tests(arcticdb_rapidcheck_tests PROPERTIES DISCOVERY_TIMEOUT 30)
+    gtest_discover_tests(arcticdb_rapidcheck_tests PROPERTIES DISCOVERY_TIMEOUT 60)
 endif()

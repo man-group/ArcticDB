@@ -53,8 +53,8 @@ SegmentInMemory MinMaxAggregatorData::finalize(const std::vector<ColumnName>& ou
             auto max_col = std::make_shared<Column>(make_scalar_type(that->max_->data_type_), true);
             max_col->template push_back<RawType>(that->max_->get<RawType>());
 
-            seg.add_column(scalar_field_proto(min_col->type().data_type(), output_column_names[0].value), min_col);
-            seg.add_column(scalar_field_proto(max_col->type().data_type(), output_column_names[1].value), max_col);
+            seg.add_column(scalar_field(min_col->type().data_type(), output_column_names[0].value), min_col);
+            seg.add_column(scalar_field(max_col->type().data_type(), output_column_names[1].value), max_col);
         });
     }
     return seg;

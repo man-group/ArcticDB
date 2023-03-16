@@ -1794,3 +1794,5 @@ def test_get_existing_columns_in_series(lmdb_version_store, sym):
     dst = pd.Series(index=pd.date_range(pd.Timestamp("2022-01-01"), pd.Timestamp("2022-02-01")), data=0.0, name="col1")
     lib.write(sym, dst)
     assert not lmdb_version_store.read(sym, columns=["col1", "col2"]).data.empty
+    if __name__ == '__main__':
+       pytest.main()

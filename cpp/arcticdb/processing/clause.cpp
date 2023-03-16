@@ -75,8 +75,8 @@ ColumnStatsGenerationClause::process(std::shared_ptr<Store> store, Composite<Pro
     end_index_col->template push_back<NumericIndex>(std::get<NumericIndex>(end_index));
 
     SegmentInMemory seg;
-    seg.add_column(scalar_field_proto(DataType::MICROS_UTC64, start_index_column_name), start_index_col);
-    seg.add_column(scalar_field_proto(DataType::MICROS_UTC64, end_index_column_name), end_index_col);
+    seg.add_column(scalar_field(DataType::MICROS_UTC64, start_index_column_name), start_index_col);
+    seg.add_column(scalar_field(DataType::MICROS_UTC64, end_index_column_name), end_index_col);
     for (const auto& agg_data: folly::enumerate(aggregators_data)) {
        seg.concatenate(agg_data->finalize(column_stats_aggregators_->at(agg_data.index).get_output_column_names()));
     }
