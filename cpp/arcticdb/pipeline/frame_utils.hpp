@@ -88,7 +88,7 @@ void aggregator_set_data(
         util::check(type_desc.data_type() == tensor.data_type(), "Type desc {} != {} tensor type", type_desc.data_type(),
                     tensor.data_type());
         util::check(type_desc.data_type() == dt, "Type desc {} != {} static type", type_desc.data_type(), dt);
-        auto c_style = tensor.strides(0) == sizeof(RawType);
+        auto c_style = util::is_cstyle_array<RawType>(tensor);
         if constexpr (is_sequence_type(dt)) {
             ARCTICDB_SUBSAMPLE_AGG(SetDataString)
             if (is_fixed_string_type(dt)) {
