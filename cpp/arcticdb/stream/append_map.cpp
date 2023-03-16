@@ -151,7 +151,7 @@ std::vector<SliceAndKey> get_incomplete(
     const std::shared_ptr<Store> &store,
     const StreamId &stream_id,
     const pipelines::FilterRange &range,
-    unsigned long last_row,
+    uint64_t last_row,
     bool via_iteration,
     bool load_data) {
     using namespace arcticdb::pipelines;

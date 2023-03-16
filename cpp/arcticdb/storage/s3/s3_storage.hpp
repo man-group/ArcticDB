@@ -151,7 +151,7 @@ inline std::optional<Aws::Client::ClientConfiguration> parse_proxy_env_var(Aws::
     }
     // env_var format: hostname[:port]
     auto port_start_idx = env_var.rfind(':');
-    unsigned long port;
+    uint64_t port;
     if (port_start_idx == std::string::npos){
         port = endpoint_scheme == Aws::Http::Scheme::HTTPS ? 443 : 80;
     } else {

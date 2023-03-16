@@ -390,7 +390,7 @@ bool operator()(int64_t t, const std::unordered_set<uint64_t>& u) const {
         return u.count(t) > 0;
 }
 // This is the version called when checking string set membership
-bool operator()(long t, const emilib::HashSet<int64_t>& u) const {
+bool operator()(int64_t t, const emilib::HashSet<int64_t>& u) const {
     return u.contains(t);
 }
 };
@@ -413,7 +413,7 @@ bool operator()(int64_t t, const std::unordered_set<uint64_t>& u) const {
         return u.count(t) == 0;
 }
 // This is the version called when checking string set membership
-bool operator()(long t, const emilib::HashSet<int64_t>& u) const {
+bool operator()(int64_t t, const emilib::HashSet<int64_t>& u) const {
     return !u.contains(t);
 }
 };

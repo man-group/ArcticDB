@@ -7,6 +7,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 """
 import datetime
 import os
+import sys
 import pandas as pd
 import pytz
 import re
@@ -81,6 +82,9 @@ MAX_SYMBOL_SIZE = (2 ** 8) - 1
 
 
 TimeSeriesType = Union[pd.DataFrame, pd.Series]
+
+
+IS_WINDOWS = sys.platform == "win32"
 
 
 # auto_attribs=True breaks Cython-ising this code. As a result must manually create attr.ib instances.
@@ -500,7 +504,9 @@ class NativeVersionStore:
         """
         self.check_symbol_validity(symbol)
         proto_cfg = self._lib_cfg.lib_desc.version.write_options
-        dynamic_strings = self.resolve_defaults("dynamic_strings", proto_cfg, global_default=False, **kwargs)
+
+        dynamic_strings = self._resolve_dynamic_strings(kwargs)
+
         pickle_on_failure = self.resolve_defaults(
             "pickle_on_failure", proto_cfg, global_default=False, existing_value=pickle_on_failure, **kwargs
         )
@@ -544,20 +550,37 @@ class NativeVersionStore:
         if isinstance(item, NPDDataFrame):
             if parallel:
                 self.version_store.write_parallel(symbol, item, norm_meta, udm)
+                return None
             elif incomplete:
                 self.version_store.append_incomplete(symbol, item, norm_meta, udm)
+                return None
             else:
                 vit = self.version_store.write_versioned_dataframe(
                     symbol, item, norm_meta, udm, prune_previous_version, sparsify_floats
                 )
-                return VersionedItem(
-                    symbol=vit.symbol,
-                    library=self._library.library_path,
-                    version=vit.version,
-                    metadata=metadata,
-                    data=None,
-                    host=self.env,
+
+            return VersionedItem(
+                symbol=vit.symbol,
+                library=self._library.library_path,
+                version=vit.version,
+                metadata=metadata,
+                data=None,
+                host=self.env,
+            )
+
+    def _resolve_dynamic_strings(self, kwargs):
+        proto_cfg = self._lib_cfg.lib_desc.version.write_options
+        if IS_WINDOWS:
+            # Fixed size strings not implemented yet for Windows as Py_UNICODE_SIZE is 2 whereas on Linux it is 4
+            normal_value = self.resolve_defaults("dynamic_strings", proto_cfg, global_default=True, **kwargs)
+            if not normal_value:
+                log.warning(
+                    "Windows only supports dynamic_strings=True, using dynamic strings despite configuration or kwarg"
                 )
+            dynamic_strings = True
+        else:
+            dynamic_strings = self.resolve_defaults("dynamic_strings", proto_cfg, global_default=False, **kwargs)
+        return dynamic_strings
 
     last_mismatch_msg: Optional[str] = None
 
@@ -627,9 +650,7 @@ class NativeVersionStore:
         """
         self.check_symbol_validity(symbol)
 
-        dynamic_strings = self.resolve_defaults(
-            "dynamic_strings", self._lib_cfg.lib_desc.version.write_options, False, **kwargs
-        )
+        dynamic_strings = self._resolve_dynamic_strings(kwargs)
         coerce_columns = kwargs.get("coerce_columns", None)
 
         _handle_categorical_columns(symbol, dataframe)
@@ -725,9 +746,7 @@ class NativeVersionStore:
         """
         self.check_symbol_validity(symbol)
         update_query = _PythonVersionStoreUpdateQuery()
-        dynamic_strings = self.resolve_defaults(
-            "dynamic_strings", self._lib_cfg.lib_desc.version.write_options, False, **kwargs
-        )
+        dynamic_strings = self._resolve_dynamic_strings(kwargs)
         dynamic_schema = self.resolve_defaults(
             "dynamic_schema", self._lib_cfg.lib_desc.version.write_options, False, **kwargs
         )
@@ -996,7 +1015,7 @@ class NativeVersionStore:
             "prune_previous_version", proto_cfg, global_default=False, existing_value=prune_previous_version
         )
 
-        dynamic_strings = self.resolve_defaults("dynamic_strings", proto_cfg, global_default=False, **kwargs)
+        dynamic_strings = self._resolve_dynamic_strings(kwargs)
         pickle_on_failure = self.resolve_defaults(
             "pickle_on_failure", proto_cfg, global_default=False, existing_value=pickle_on_failure, **kwargs
         )
@@ -1105,7 +1124,7 @@ class NativeVersionStore:
         prune_previous_version = self.resolve_defaults(
             "prune_previous_version", proto_cfg, global_default=False, existing_value=prune_previous_version
         )
-        dynamic_strings = self.resolve_defaults("dynamic_strings", proto_cfg, global_default=False, **kwargs)
+        dynamic_strings = self._resolve_dynamic_strings(kwargs)
         if metadata_vector is None:
             metadata_itr = itertools.repeat(None)
         else:

@@ -290,7 +290,7 @@ inline AtomKey from_tokenized_atom_key(const uint8_t *data, size_t size, KeyType
         std::ostringstream strm;
         strm << *it++;
 
-        for(auto j = 0ul; j < extra; ++j) {
+        for(auto j = 0ULL; j < extra; ++j) {
             strm << NewKeyDelimiter << *it;
             it = vec.erase(it);
         }

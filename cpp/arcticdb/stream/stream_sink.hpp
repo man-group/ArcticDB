@@ -95,8 +95,8 @@ struct StreamSink {
         SegmentInMemory &&segment) = 0;
 
     struct BatchWriteArgs {
-        std::size_t lib_write_count = 0ul;
-        BatchWriteArgs() : lib_write_count(0ul) {}
+        std::size_t lib_write_count = 0ULL;
+        BatchWriteArgs() : lib_write_count(0ULL) {}
     };
 
     [[nodiscard]] virtual folly::Future<folly::Unit> write_compressed(storage::KeySegmentPair&& ks) = 0;

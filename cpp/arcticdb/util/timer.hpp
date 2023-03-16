@@ -37,14 +37,14 @@ typedef std::map<name_type, double> total_map;
 
 struct interval_results {
     double total;
-    long count;
+    int64_t count;
     double mean;
 };
 
 struct interval {
 private:
     double total_;
-    long count_;
+    int64_t count_;
     timespec timer_;
     bool running_;
 
@@ -100,8 +100,7 @@ private:
         }
     }
 
-#define BILLION  1000000000L
-
+#define BILLION  1000000000LL
     static double time_diff(timespec &start, timespec &stop) {
         double secs = stop.tv_sec - start.tv_sec;
         double nsecs = double(stop.tv_nsec - start.tv_nsec) / BILLION;

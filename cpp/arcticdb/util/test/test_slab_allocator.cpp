@@ -26,7 +26,7 @@ std::size_t const num_blocks_per_thread = 10000;
 std::size_t const num_loops = 10000;
 
 template <typename MemoryChunk>
-pointer_set<MemoryChunk> call_alloc_and_dealloc(MemoryChunk& mc, std::size_t n, long long& execution_time_ms) {
+pointer_set<MemoryChunk> call_alloc_and_dealloc(MemoryChunk& mc, std::size_t n, int64_t& execution_time_ms) {
     
     pointer_set<MemoryChunk> mcps;
     mcps.reserve(n);
@@ -55,8 +55,8 @@ void check_sets(const pointer_set<MemoryChunk>& s1, const pointer_set<MemoryChun
 template <typename MemoryChunk>
 void run_test(MemoryChunk& mc, unsigned int K)
 {
-    std::vector<long long> execution_times(num_threads);
-    long long avg = 0;
+    std::vector<int64_t> execution_times(num_threads);
+    int64_t avg = 0;
     for (size_t k = 0; k < K; ++k ) {
         std::vector<std::future<pointer_set<MemoryChunk>>> v;
         for (size_t i = 0; i < num_threads; ++i ) {

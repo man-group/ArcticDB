@@ -581,7 +581,7 @@ TEST(VersionMap, StressTestWrite) {
     std::vector<AtomKey> keys;
     const size_t num_tests = 999;
     StreamId id{"test"};
-    for (auto i = 0ul; i < num_tests; ++i) {
+    for (auto i = 0ULL; i < num_tests; ++i) {
         keys.emplace_back(
                 atom_key_builder().version_id(i).creation_ts(PilotedClock::nanos_since_epoch()).content_hash(i).start_index( \
                 4).end_index(5).build(id, KeyType::TABLE_INDEX));
@@ -605,7 +605,7 @@ TEST(VersionMap, StressTestBatchSameSymbol) {
     std::vector<AtomKey> keys;
     const size_t num_tests = 999;
     StreamId id{"test"};
-    for (auto i = 0ul; i < num_tests; ++i) {
+    for (auto i = 0ULL; i < num_tests; ++i) {
         keys.emplace_back(
             atom_key_builder().version_id(i).creation_ts(PilotedClock::nanos_since_epoch()).content_hash(i).start_index( \
             4).end_index(5).build(id, KeyType::TABLE_INDEX));
@@ -623,7 +623,7 @@ TEST(VersionMap, StressTestBatchWrite) {
     std::vector<AtomKey> keys;
     const size_t num_tests = 999;
 
-    for (auto i = 0ul; i < num_tests; ++i) {
+    for (auto i = 0ULL; i < num_tests; ++i) {
         StreamId id{fmt::format("test_{}", i)};
         keys.emplace_back(
             atom_key_builder().version_id(i).creation_ts(PilotedClock::nanos_since_epoch()).content_hash(i).start_index( \

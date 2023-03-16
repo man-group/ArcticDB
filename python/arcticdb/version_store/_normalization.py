@@ -11,6 +11,7 @@ import math
 
 import numpy as np
 import os
+import sys
 import pandas as pd
 import pickle
 import psutil
@@ -92,17 +93,6 @@ _SUPPORTED_TYPES = Union[DataFrame]  # , Series]
 _SUPPORTED_NATIVE_RETURN_TYPES = Union[FrameData]
 
 
-# Some python interpreter might be compiled with different unicode
-# width. This can lead to data corruption and we don't want to support
-# this for the time being
-# See https://sourceforge.net/p/numpy/mailman/numpy-discussion/thread/1139250278.7538.52.camel%40localhost.localdomain/#msg11998404
-def _unicode_width():
-    res = sysconfig.get_config_var("Py_UNICODE_SIZE")
-    return res if res is not None else np.array(["a"], dtype="<U1").nbytes
-
-
-_IS_UNICODE_SUPPORTED = _unicode_width() == 4
-
 if PY3:
 
     def _accept_array_string(v):
@@ -138,13 +128,10 @@ def get_sample_from_non_empty_arr(arr, arr_name):
 def coerce_string_column_to_fixed_length_array(arr, to_type, string_max_len):
     # in python3 all text will be treated as unicode
     if to_type == text_type:
-        # checking that this python interpreter is using the supported unicode char size
-        if not _IS_UNICODE_SUPPORTED:
-            raise ValueError(
-                "Input array contains unicode, "
-                "but the current platform appears to be 2 char wide "
-                "which is not supported"
-            )
+        if sys.platform == "win32":
+            # See https://sourceforge.net/p/numpy/mailman/numpy-discussion/thread/1139250278.7538.52.camel%40localhost.localdomain/#msg11998404
+            # Different wchar size on Windows is not compatible with our current internal representation of Numpy strings
+            raise ValueError("Numpy strings are not supported on Windows - use Python strings instead")
         casted_arr = arr.astype("<U" if string_max_len is None else "<U{:d}".format(string_max_len))
     else:
         casted_arr = arr.astype("S" if string_max_len is None else "S{:d}".format(string_max_len))
@@ -1268,7 +1255,7 @@ def normalize_dt_range_to_ts(dtr: "DateRangeInput") -> Tuple[Timestamp, Timestam
                 "DateRange bounds do not have timestamps, will default to UTC for the query,"
                 f"DateRange.{bound_name}={v}"
             )
-            v = pytz.utc.localize(v)
+            v = v.tz_localize("UTC")
 
         return v
 
@@ -1282,6 +1269,6 @@ def normalize_dt_range_to_ts(dtr: "DateRangeInput") -> Tuple[Timestamp, Timestam
 
     start_val = _get_name_or_pos("start", 0)
     end_val = _get_name_or_pos("end", -1)
-    s = _to_utc_ts(start_val, "start") if start_val else pytz.utc.localize(Timestamp.min)
-    e = _to_utc_ts(end_val, "end") if end_val else pytz.utc.localize(Timestamp.max)
+    s = _to_utc_ts(start_val, "start") if start_val else Timestamp.min.tz_localize("UTC")
+    e = _to_utc_ts(end_val, "end") if end_val else Timestamp.max.tz_localize("UTC")
     return s, e
