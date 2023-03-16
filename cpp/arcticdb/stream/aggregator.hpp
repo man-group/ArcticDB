@@ -273,8 +273,8 @@ private:
     }
 
     template<class T, std::enable_if_t<std::is_integral_v<T> || std::is_floating_point_v<T>, int> = 0>
-    void set_scalar_by_name(std::string_view name, T val, const TypeDescriptor::Proto &desc) {
-        position_t pos = schema_policy_.get_column_idx_by_name(segment_, name, desc, segmenting_policy_.expected_row_size(), segment_.row_count());
+    void set_scalar_by_name(std::string_view name, T val, DataType data_type) {
+        position_t pos = schema_policy_.get_column_idx_by_name(segment_, name, make_scalar_type(data_type), segmenting_policy_.expected_row_size(), segment_.row_count());
         set_scalar(pos, val);
     }
 
@@ -286,8 +286,8 @@ private:
         segment_.set_string(pos, str);
     }
 
-    void set_string_by_name(std::string_view name, std::string_view str, const TypeDescriptor::Proto &desc) {
-        position_t pos = schema_policy_.get_column_idx_by_name(segment_, name, desc, segmenting_policy_.expected_row_size(), segment_.row_count());
+    void set_string_by_name(std::string_view name, std::string_view str, DataType desc) {
+        position_t pos = schema_policy_.get_column_idx_by_name(segment_, name, make_scalar_type(desc), segmenting_policy_.expected_row_size(), segment_.row_count());
         set_string(pos, str);
     }
 
@@ -315,4 +315,4 @@ using DynamicTimestampAggregator = Aggregator<TimeseriesIndex, DynamicSchema, Ro
 }
 
 #define ARCTICDB_AGGREGATOR_H_
-#include <arcticdb/stream/aggregator-inl.hpp>
+#include "aggregator-inl.hpp"

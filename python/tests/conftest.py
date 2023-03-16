@@ -15,7 +15,7 @@ from moto.server import DomainDispatcherApplication, create_backend_app
 
 import sys
 import signal
-
+import enum
 if sys.platform == "win32":
     # Hack to define signal.SIGKILL as some deps eg pytest-test-fixtures hardcode SIGKILL terminations.
     signal.SIGKILL = signal.SIGINT
@@ -122,11 +122,11 @@ def moto_s3_uri_incl_bucket(moto_s3_endpoint_and_credentials):
 
 
 @pytest.fixture(scope="function", params=("S3", "LMDB"))
-def arctic_client(request, moto_s3_uri_incl_bucket, tmpdir):
+def arctic_client(request, moto_s3_uri_incl_bucket, tmpdir, encoding_version):
     if request.param == "S3":
-        ac = Arctic(moto_s3_uri_incl_bucket)
+        ac = Arctic(moto_s3_uri_incl_bucket, encoding_version)
     elif request.param == "LMDB":
-        ac = Arctic(f"lmdb://{tmpdir}")
+        ac = Arctic(f"lmdb://{tmpdir}", encoding_version)
     else:
         raise NotImplementedError()
 
@@ -147,7 +147,7 @@ def sym():
 
 @pytest.fixture()
 def lib_name():
-    return "local.test" + datetime.utcnow().strftime("%Y-%m-%dT%H_%M_%S_%f")
+    return "local.test" + datetime.utcnow().strftime("%Y-%m-%dT%H_%M_%S_%f-")
 
 
 @pytest.fixture
@@ -163,10 +163,19 @@ def arcticdb_test_s3_config(moto_s3_endpoint_and_credentials):
 def _version_store_factory_impl(
     used, make_cfg, default_name, *, name: str = None, reuse_name=False, **kwargs
 ) -> NativeVersionStore:
-    """Common logic behind all the factory fixtures"""
+
+    """Factory to create any number of S3 libs with the given WriteOptions or VersionStoreConfig.
+
+    `name` can be a magical value "_unique_" which will create libs with unique names.
+    This factory will clean up any libraries requested
+    """
+    if lmdb_config is None:
+        lmdb_config = {}
+
     name = name or default_name
     if name == "_unique_":
         name = name + str(len(used))
+
     assert (name not in used) or reuse_name, f"{name} is already in use"
     cfg = make_cfg(name)
     lib = cfg.env_by_id[Defaults.ENV].lib_by_path[name]
@@ -178,6 +187,41 @@ def _version_store_factory_impl(
     return out
 
 
+def lmdb_version_store_cleanup(version_store_fixture):
+
+    @functools.wraps(version_store_fixture)
+    def wrapped(*args, **kwargs):
+        result: NativeVersionStore = version_store_fixture(*args, **kwargs)
+
+        yield result
+
+        #  pytest holds a member variable `cached_result` equal to `result` above which keeps the storage alive and
+        #  locked. See https://github.com/pytest-dev/pytest/issues/5642 . So we need to decref the C++ objects keeping
+        #  the LMDB env open before they will release the lock and allow Windows to delete the LMDB files.
+        result.version_store = None
+        result._library = None
+
+        cfg = result.lib_cfg()
+        for storage in cfg.storage_by_id.values():
+            lmdb = LmdbConfig()
+            lmdb.ParseFromString(storage.config.value)
+            shutil.rmtree(lmdb.path)
+
+    return wrapped
+
+
+@enum.unique
+class EncodingVersion(enum.IntEnum):
+    V1 = 0
+    V2 = 1
+
+
+@pytest.fixture(params=list(EncodingVersion))
+def encoding_version(request) -> EncodingVersion:
+    return request.param
+
+
+>>>>>>> 92e988f (Encoded field)
 @pytest.fixture
 def version_store_factory(lib_name, tmpdir):
     """Factory to create any number of distinct LMDB libs with the given WriteOptions or VersionStoreConfig.
@@ -199,8 +243,14 @@ def version_store_factory(lib_name, tmpdir):
             kwargs["column_group_size"] = col_per_group
         if row_per_segment is not None and "segment_row_size" not in kwargs:
             kwargs["segment_row_size"] = row_per_segment
+
+        if override_name is not None:
+            library_name = override_name
+        else:
+            library_name = lib_name
+
         cfg_factory = functools.partial(create_test_lmdb_cfg, db_dir=str(tmpdir), lmdb_config=lmdb_config)
-        return _version_store_factory_impl(used, cfg_factory, lib_name, **kwargs)
+        return _version_store_factory_impl(used, cfg_factory, library_name, **kwargs)
 
     try:
         yield create_version_store
@@ -239,9 +289,37 @@ def s3_store_factory(lib_name, arcticdb_test_s3_config):
             lib.version_store.clear()
 
 
-@pytest.fixture(scope="function")
-def s3_version_store(s3_store_factory):
-    return s3_store_factory()
+@pytest.fixture
+def s3_version_store_v1(s3_store_factory):
+    return s3_store_factory(dynamic_strings=True)
+
+
+@pytest.fixture
+def s3_version_store_v2(s3_store_factory, lib_name):
+    library_name = lib_name + "_v2"
+    return s3_store_factory(dynamic_strings=True, encoding_version=int(EncodingVersion.V2), name=library_name)
+
+
+
+@pytest.fixture
+def s3_version_store_dynamic_schema_v1(s3_store_factory):
+    return s3_store_factory(dynamic_strings=True, dynamic_schema=True)
+
+
+@pytest.fixture
+def s3_version_store_dynamic_schema_v2(s3_store_factory, lib_name):
+    library_name = lib_name + "_v2"
+    return s3_store_factory(dynamic_strings=True, dynamic_schema=True, encoding_version=int(EncodingVersion.V2), name=library_name)
+
+
+@pytest.fixture
+def s3_version_store(s3_version_store_v1, s3_version_store_v2, encoding_version):
+    if encoding_version == EncodingVersion.V1:
+        return s3_version_store_v1
+    elif encoding_version == EncodingVersion.V2:
+        return s3_version_store_v2
+    else:
+        raise ValueError(f"Unexoected encoding version: {encoding_version}")
 
 
 @pytest.fixture(scope="function")
@@ -255,11 +333,28 @@ def lmdb_version_store_string_coercion(version_store_factory):
 
 
 @pytest.fixture
-def lmdb_version_store(version_store_factory):
+def lmdb_version_store_v1(version_store_factory):
     return version_store_factory(dynamic_strings=True)
 
 
 @pytest.fixture
+def lmdb_version_store_v2(version_store_factory, lib_name):
+    library_name = lib_name + "_v2"
+    return version_store_factory(dynamic_strings=True, encoding_version=int(EncodingVersion.V2), override_name=library_name)
+
+
+@pytest.fixture
+def lmdb_version_store(lmdb_version_store_v1, lmdb_version_store_v2, encoding_version):
+    if encoding_version == EncodingVersion.V1:
+        return lmdb_version_store_v1
+    elif encoding_version == EncodingVersion.V2:
+        return lmdb_version_store_v2
+    else:
+        raise ValueError(f"Unexoected encoding version: {encoding_version}")
+
+
+@pytest.fixture
+@lmdb_version_store_cleanup
 def lmdb_version_store_prune_previous(version_store_factory):
     return version_store_factory(dynamic_strings=True, prune_previous_version=True, use_tombstones=True)
 
@@ -275,11 +370,29 @@ def lmdb_version_store_column_buckets(version_store_factory):
 
 
 @pytest.fixture
-def lmdb_version_store_dynamic_schema(version_store_factory):
+def lmdb_version_store_dynamic_schema_v1(version_store_factory, lib_name):
     return version_store_factory(dynamic_schema=True, dynamic_strings=True)
 
 
 @pytest.fixture
+def lmdb_version_store_dynamic_schema_v2(version_store_factory, lib_name):
+    library_name = lib_name + "_v2"
+    return version_store_factory(dynamic_schema=True, dynamic_strings=True, encoding_version=int(EncodingVersion.V2), override_name=library_name)
+
+
+@pytest.fixture
+@lmdb_version_store_cleanup
+def lmdb_version_store_dynamic_schema(lmdb_version_store_dynamic_schema_v1, lmdb_version_store_dynamic_schema_v2, encoding_version):
+    if encoding_version == EncodingVersion.V1:
+        return lmdb_version_store_dynamic_schema_v1
+    elif encoding_version == EncodingVersion.V2:
+        return lmdb_version_store_dynamic_schema_v2
+    else:
+        raise ValueError(f"Unexoected encoding version: {encoding_version}")
+
+
+@pytest.fixture
+@lmdb_version_store_cleanup
 def lmdb_version_store_delayed_deletes(version_store_factory):
     return version_store_factory(delayed_deletes=True, dynamic_strings=True, prune_previous_version=True)
 

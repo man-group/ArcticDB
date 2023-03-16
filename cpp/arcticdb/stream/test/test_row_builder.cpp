@@ -22,8 +22,8 @@ TEST(RowBuilder, Basic) {
     const auto index = as::TimeseriesIndex::default_index();
     as::FixedSchema schema{
         index.create_stream_descriptor(123, {
-            arcticdb::scalar_field_proto(DataType::UINT8, "bbb"),
-            arcticdb::scalar_field_proto(DataType::INT8, "AAA"),
+            arcticdb::scalar_field(DataType::UINT8, "bbb"),
+            arcticdb::scalar_field(DataType::INT8, "AAA"),
         }), index
     };
 

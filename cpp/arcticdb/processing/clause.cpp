@@ -61,7 +61,7 @@ FilterClause::process(std::shared_ptr<Store> store, Composite<ProcessingSegment>
                                 });
                                 auto &slice_and_keys = proc.data();
                                 auto &last = *slice_and_keys.rbegin();
-                                last.segment(store).add_column(scalar_field_proto(data_type, name), col.column_);
+                                last.segment(store).add_column(scalar_field(data_type, name), col.column_);
                                 ++last.slice().col_range.second;
                                 output.push_back(std::move(proc));
                             },
@@ -144,8 +144,8 @@ AggregationClause::process(std::shared_ptr<Store> store, Composite<ProcessingSeg
         auto agg_construct = agg.construct();
         const auto& agg_field_pos = desc->find_field(agg_construct.get_input_column_name().value);
         util::check(agg_field_pos.has_value(), "Field {} not found in aggregation", agg_construct.get_input_column_name().value);
-        auto agg_field = desc->field(agg_field_pos.value());
-        agg_construct.set_data_type(data_type_from_proto(agg_field.type_desc()));
+        const auto& agg_field = desc->field(agg_field_pos.value());
+        agg_construct.set_data_type(agg_field.type().data_type());
         aggregators.emplace_back(agg_construct);
     }
 
@@ -220,7 +220,7 @@ AggregationClause::process(std::shared_ptr<Store> store, Composite<ProcessingSeg
         });
 
     auto index_pos =
-        seg.add_column(scalar_field_proto(grouping_data_type, grouping_column_name), grouping_map.size(), true);
+        seg.add_column(scalar_field(grouping_data_type, grouping_column_name), grouping_map.size(), true);
     execution_context_->check_output_column(grouping_column_name, grouping_data_type);
     entity::details::visit_type(grouping_data_type, [&seg, &grouping_map, index_pos](auto data_type_tag) {
         using DataTypeTagType = decltype(data_type_tag);
@@ -280,12 +280,10 @@ void merge_impl(
     };
     
     using AggregatorType = stream::Aggregator<IndexType, stream::DynamicSchema, SegmentationPolicy, DensityPolicy>;
-    auto fields = execution_context->output_descriptor_->fields();
-    StreamDescriptor::FieldsCollection new_fields{};
-    auto field_name = fields[0].name();
-    auto new_field = new_fields.Add();
-    new_field->set_name(field_name.data(), field_name.size());
-    new_field->CopyFrom(fields[0]);
+    const auto& fields = execution_context->output_descriptor_->fields();
+    FieldCollection new_fields;
+    const auto& field = fields[0];
+    new_fields.add_field(field.type(), field.name());
     
     auto index_desc = index_descriptor(stream_id, index, new_fields);
     auto desc = StreamDescriptor{index_desc};
@@ -294,7 +292,6 @@ void merge_impl(
             stream::DynamicSchema{desc, index},
             std::move(func), std::move(segmentation_policy), desc, std::nullopt
     };
-
 
     stream::do_merge<IndexType, SliceAndKeyWrapper, AggregatorType, decltype(input_streams)>(
         input_streams, agg, add_symbol_column);
@@ -392,7 +389,7 @@ RemoveColumnPartitioningClause::process(std::shared_ptr<Store> store, Composite<
                             ColumnWithStrings column_strings = std::get<ColumnWithStrings>(column);
                             const auto data_type = column_strings.column_->type().data_type();
                             if(((start_col - num_index_columns) == 0) || column_idx >= num_index_columns){
-                                new_segment.add_column(scalar_field_proto(data_type, column_name),  slice_and_key.segment(store).column_ptr(field.index));
+                                new_segment.add_column(scalar_field(data_type, column_name),  slice_and_key.segment(store).column_ptr(field.index));
                             }
                         }else {
                             util::raise_rte("Expected single column from expression");

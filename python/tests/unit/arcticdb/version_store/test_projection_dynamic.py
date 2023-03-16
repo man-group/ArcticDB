@@ -19,8 +19,8 @@ from arcticdb.util.hypothesis import (
 )
 
 
-def test_project_dynamic(lmdb_version_store_dynamic_schema):
-    lib = lmdb_version_store_dynamic_schema
+def test_project_dynamic(lmdb_version_store_dynamic_schema_v1):
+    lib = lmdb_version_store_dynamic_schema_v1
     symbol = "test_project_dynamic"
 
     df = pd.DataFrame(
@@ -59,8 +59,8 @@ def test_project_dynamic(lmdb_version_store_dynamic_schema):
         index=range_indexes(),
     )
 )
-def test_project_add_col_col_dynamic(lmdb_version_store_dynamic_schema, df):
-    lib = lmdb_version_store_dynamic_schema
+def test_project_add_col_col_dynamic(lmdb_version_store_dynamic_schema_v2, df):
+    lib = lmdb_version_store_dynamic_schema_v2
     assume(not df.empty)
     symbol = "test_project_add_col_col"
 
@@ -97,8 +97,8 @@ def test_project_add_col_col_dynamic(lmdb_version_store_dynamic_schema, df):
         index=range_indexes(),
     )
 )
-def test_project_multiply_col_val(lmdb_version_store_dynamic_schema, df):
-    lib = lmdb_version_store_dynamic_schema
+def test_project_multiply_col_val(lmdb_version_store_dynamic_schema_v1, df):
+    lib = lmdb_version_store_dynamic_schema_v1
     assume(not df.empty)
     symbol = "test_project_multiply_col_val"
 
@@ -134,8 +134,8 @@ def test_project_multiply_col_val(lmdb_version_store_dynamic_schema, df):
         index=range_indexes(),
     )
 )
-def test_project_divide_val_col(lmdb_version_store_dynamic_schema, df):
-    lib = lmdb_version_store_dynamic_schema
+def test_project_divide_val_col(s3_version_store_dynamic_schema_v2, df):
+    lib = s3_version_store_dynamic_schema_v2
     assume(not df.empty)
     symbol = "test_project_divide_val_col"
 

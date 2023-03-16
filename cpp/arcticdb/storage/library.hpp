@@ -117,7 +117,8 @@ class Library {
         util::check(!std::holds_alternative<StringId>(variant_key_id(key)) || !std::get<StringId>(variant_key_id(key)).empty(), "Unexpected empty id");
         read(Composite<VariantKey>(std::move(key)), [&res](auto &&, auto &&value) {
             res.segment() = std::move(value);
-            }, opts);
+        }, opts);
+
         return res;
     }
 

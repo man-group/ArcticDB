@@ -31,75 +31,6 @@ void register_bindings(py::module &m) {
     py::register_exception<NoSuchVersionException>(version, "NoSuchVersionException");
     py::register_exception<StreamDescriptorMismatch>(version, "StreamDescriptorMismatch");
 
-  /*  class PyFilter: public Filter {
-    public:
-        using Filter::Filter;
-
-        [[nodiscard]] util::BitSet go(const SegmentInMemory &seg) const override {
-            PYBIND11_OVERRIDE_PURE(
-                util::BitSet ,
-                Filter,
-                go,
-                seg
-            );
-        }
-
-        virtual ~PyFilter() = default;
-    };
-
-    py::class_<FilterProcessor, std::shared_ptr<FilterProcessor>>(version, "Processor")
-            .def(py::init<std::shared_ptr<Filter>, std::shared_ptr<FilterProcessor>, std::shared_ptr<FilterProcessor>>())
-            .def("set_left", &FilterProcessor::set_left)
-            .def("set_right", &FilterProcessor::set_right)
-            .def("print", &FilterProcessor::print_tree);
-
-    py::class_<Filter, PyFilter, std::shared_ptr<Filter>>(version, "Filter")
-            .def("filter", &Filter::filter);
-
-    py::class_<EqualsFilter, Filter, std::shared_ptr<EqualsFilter>>(version, "EqualsFilter")
-        .def(py::init<std::string, Value>())
-        .def("filter", &EqualsFilter::filter)
-        ;
-
-    py::class_<NotEqualsFilter, Filter, std::shared_ptr<NotEqualsFilter>>(version, "NotEqualsFilter")
-        .def(py::init<std::string, Value>())
-        .def("filter", &NotEqualsFilter::filter)
-        ;
-
-    py::class_<LessThanFilter, Filter, std::shared_ptr<LessThanFilter>>(version, "LessThanFilter")
-        .def(py::init<std::string, Value>())
-        .def("filter", &LessThanFilter::filter)
-        ;
-
-    py::class_<GreaterThanFilter, Filter, std::shared_ptr<GreaterThanFilter>>(version, "GreaterThanFilter")
-        .def(py::init<std::string, Value>())
-        .def("filter", &GreaterThanFilter::filter)
-        ;
-
-    py::class_<LessThanOrEqualFilter, Filter, std::shared_ptr<LessThanOrEqualFilter>>(version, "LessThanOrEqualFilter")
-        .def(py::init<std::string, Value>())
-        .def("filter", &LessThanOrEqualFilter::filter)
-        ;
-
-    py::class_<GreaterThanOrEqualFilter, Filter, std::shared_ptr<GreaterThanOrEqualFilter>>(version, "GreaterThanOrEqualFilter")
-        .def(py::init<std::string, Value>())
-        .def("filter", &GreaterThanOrEqualFilter::filter)
-        ;
-
-    py::class_<ListMembershipFilter, Filter, std::shared_ptr<ListMembershipFilter>>(version, "ListMembershipFilter")
-        .def(py::init<std::string, ValueList>())
-        .def("filter", &ListMembershipFilter::filter)
-        ;
-
-    py::class_<OrFilter, Filter, std::shared_ptr<OrFilter>>(version, "OrFilter")
-        .def(py::init())
-        ;
-
-    py::class_<AndFilter, Filter, std::shared_ptr<AndFilter>>(version, "AndFilter")
-            .def(py::init())
-    ;
-    */
-
     py::class_<AtomKey, std::shared_ptr<AtomKey>>(version, "AtomKey")
     .def(py::init())
     .def(py::init<StreamId, VersionId, timestamp, ContentHash, IndexValue, IndexValue, KeyType>())
@@ -158,11 +89,6 @@ void register_bindings(py::module &m) {
         return std::make_shared<ValueSet>(value_list);
     }))
     ;
-
-   // py::class_<ValueList>(version, "ValueListType")
-   //     .def(py::init<NativeTensor>());
-
-  //  version.def("ValueList", &construct_value_list);
 
     py::class_<ClauseBuilder>(version, "ClauseBuilder")
             .def(py::init())
@@ -357,7 +283,9 @@ void register_bindings(py::module &m) {
             .def_readwrite("row_filter",&UpdateQuery::row_filter);
 
     py::class_<PythonVersionStore>(version, "PythonVersionStore")
-        .def(py::init<std::shared_ptr<storage::Library>>())
+        .def(py::init<std::shared_ptr<storage::Library>, std::optional<std::string>>(),
+             py::arg("library"),
+             py::arg("license_key") = std::nullopt)
         .def("write_partitioned_dataframe",
              &PythonVersionStore::write_partitioned_dataframe,
              "Write a dataframe to the store")
@@ -412,6 +340,9 @@ void register_bindings(py::module &m) {
              py::arg("via_iteration") = true,
              py::arg("sparsify") = false,
              "sort_merge will sort and merge incomplete segments. The segments do not have to be ordered - incomplete segments can contain interleaved time periods but the final result will be fully ordered")
+         .def("sort_merge",
+              &PythonVersionStore::sort_merge,
+              "Sort and merge incomplete segments")
         .def("compact_library",
              &PythonVersionStore::compact_library,
              "Compact the whole library wherever necessary")
@@ -514,11 +445,11 @@ void register_bindings(py::module &m) {
                 ReadResult res{
                     vit,
                     PythonOutputFrame{
-                            SegmentInMemory{StreamDescriptor{std::move(*tsd.mutable_stream_descriptor())}},
+                            SegmentInMemory{tsd.as_stream_descriptor()},
                             std::make_shared<BufferHolder>()},
-                        tsd.normalization(),
-                        tsd.user_meta(),
-                        tsd.multi_key_meta(),
+                        tsd.proto().normalization(),
+                        tsd.proto().user_meta(),
+                        tsd.proto().multi_key_meta(),
                         std::vector<entity::AtomKey>{}
                 };
                 return adapt_read_df(std::move(res)); },
@@ -579,17 +510,18 @@ void register_bindings(py::module &m) {
                  std::vector<py::object> output;
                  output.reserve(results.size());
                  for(auto& [vit, tsd] : results) {
-                     ReadResult res{vit,
-                                    {SegmentInMemory{StreamDescriptor{std::move(*tsd.mutable_stream_descriptor())}}, std::make_shared<BufferHolder>()},
-                                tsd.normalization(),
-                                tsd.user_meta(),
-                                tsd.multi_key_meta(),
-                                {}};
+                     ReadResult res{vit, PythonOutputFrame{
+                         SegmentInMemory{tsd.as_stream_descriptor()}, std::make_shared<BufferHolder>()},
+                         tsd.proto().normalization(),
+                         tsd.proto().user_meta(),
+                         tsd.proto().multi_key_meta(), {}};
+
                      output.emplace_back(adapt_read_df(std::move(res)));
                  }
                  return output;
              },
-           "Batch restore a group of versions to the versions indicated")
+
+            "Batch restore a group of versions to the versions indicated")
         .def("list_versions",[](
                 PythonVersionStore& v,
                 const std::optional<StreamId> & s_id,

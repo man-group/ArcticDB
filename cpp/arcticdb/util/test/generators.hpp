@@ -30,13 +30,13 @@ struct SegmentsSink {
 };
 
 template<typename CommitFunc>
-auto get_test_aggregator(CommitFunc &&func, StreamId stream_id, std::vector<FieldDescriptor> &&fields) {
+auto get_test_aggregator(CommitFunc &&func, StreamId stream_id, std::vector<FieldRef> &&fields) {
     using namespace arcticdb::stream;
     using TestAggregator =  Aggregator<TimeseriesIndex, FixedSchema, stream::NeverSegmentPolicy>;
     auto index = TimeseriesIndex::default_index();
 
     FixedSchema schema{
-        index.create_stream_descriptor(std::move(stream_id), fields_proto_from_range(fields)), index
+        index.create_stream_descriptor(std::move(stream_id), fields_from_range(fields)), index
     };
 
     return TestAggregator(std::move(schema), std::forward<CommitFunc>(func), stream::NeverSegmentPolicy{});
@@ -47,7 +47,7 @@ struct SinkWrapperImpl {
     using SchemaPolicy = typename AggregatorType::SchemaPolicy;
     using IndexType =  typename AggregatorType::IndexType;
 
-    SinkWrapperImpl(StreamId stream_id, std::initializer_list<FieldDescriptor::Proto> fields) :
+    SinkWrapperImpl(StreamId stream_id, std::initializer_list<FieldRef> fields) :
         index_(IndexType::default_index()),
         sink_(std::make_shared<SegmentsSink>()),
         aggregator_(
@@ -60,7 +60,9 @@ struct SinkWrapperImpl {
                 sink_->segments_.push_back(std::move(mem));
             },
            typename AggregatorType::SegmentingPolicyType{}
-        ) {}
+        ) {
+
+    }
 
     auto& segment() {
         util::check(!sink_->segments_.empty(), "Segment vector empty");
@@ -79,9 +81,9 @@ using SparseSinkWrapper = SinkWrapperImpl<TestSparseAggregator>;
 
 inline SegmentInMemory get_standard_timeseries_segment(const std::string& name, size_t num_rows = 10) {
     auto wrapper = SinkWrapper(name, {
-        scalar_field_proto(DataType::INT8, "int8"),
-        scalar_field_proto(DataType::UINT64, "uint64"),
-        scalar_field_proto(DataType::UTF_DYNAMIC64, "strings")
+        scalar_field(DataType::INT8, "int8"),
+        scalar_field(DataType::UINT64, "uint64"),
+        scalar_field(DataType::UTF_DYNAMIC64, "strings")
     });
 
     for (timestamp i = 0u; i < timestamp(num_rows); ++i) {
@@ -97,8 +99,8 @@ inline SegmentInMemory get_standard_timeseries_segment(const std::string& name, 
 
 inline SegmentInMemory get_groupable_timeseries_segment(const std::string& name, size_t rows_per_group, std::initializer_list<size_t> group_ids) {
     auto wrapper = SinkWrapper(name, {
-            scalar_field_proto(DataType::INT8, "int8"),
-            scalar_field_proto(DataType::UTF_DYNAMIC64, "strings"),
+            scalar_field(DataType::INT8, "int8"),
+            scalar_field(DataType::UTF_DYNAMIC64, "strings"),
     });
 
     int i = 0;
@@ -117,9 +119,9 @@ inline SegmentInMemory get_groupable_timeseries_segment(const std::string& name,
 
 inline SegmentInMemory get_sparse_timeseries_segment(const std::string& name, size_t num_rows = 10) {
     auto wrapper = SparseSinkWrapper(name, {
-        scalar_field_proto(DataType::INT8, "int8"),
-        scalar_field_proto(DataType::UINT64,  "uint64"),
-        scalar_field_proto(DataType::UTF_DYNAMIC64, "strings"),
+        scalar_field(DataType::INT8, "int8"),
+        scalar_field(DataType::UINT64,  "uint64"),
+        scalar_field(DataType::UTF_DYNAMIC64, "strings"),
     });
 
     for (timestamp i = 0u; i < timestamp(num_rows); ++i) {
@@ -138,9 +140,9 @@ inline SegmentInMemory get_sparse_timeseries_segment(const std::string& name, si
 
 inline SegmentInMemory get_sparse_timeseries_segment_floats(const std::string& name, size_t num_rows = 10) {
     auto wrapper = SparseSinkWrapper(name, {
-        scalar_field_proto(DataType::FLOAT64, "col1"),
-        scalar_field_proto(DataType::FLOAT64, "col2"),
-        scalar_field_proto(DataType::FLOAT64, "col3"),
+        scalar_field(DataType::FLOAT64, "col1"),
+        scalar_field(DataType::FLOAT64, "col2"),
+        scalar_field(DataType::FLOAT64, "col3"),
     });
 
     for (timestamp i = 0u; i < timestamp(num_rows); ++i) {
@@ -245,12 +247,10 @@ struct SegmentToInputFrameAdapter {
         input_frame_.set_index_range();
     }
 
-
     void synthesize_norm_meta() {
-        // Copied from read_incompletes_to_pipeline()
         if (segment_.metadata()) {
-            auto segment_tsd = timeseries_descriptor_from_segment(segment_);
-            input_frame_.norm_meta.CopyFrom(segment_tsd.normalization());
+            auto segment_tsd = segment_.index_descriptor();
+            input_frame_.norm_meta.CopyFrom(segment_tsd.proto().normalization());
         }
         ensure_norm_meta(input_frame_.norm_meta, input_frame_.desc.id(), false);
     }
@@ -262,12 +262,12 @@ struct SegmentSinkWrapperImpl {
     using SchemaPolicy = typename AggregatorType::SchemaPolicy;
     using IndexType =  typename AggregatorType::IndexType;
 
-    SegmentSinkWrapperImpl(StreamId stream_id, const IndexType& index, std::vector<FieldDescriptor>&& fields) :
+        SegmentSinkWrapperImpl(StreamId stream_id, const IndexType& index, FieldCollection&& fields) :
         sink_(std::make_shared<SegmentsSink>()),
         aggregator_(
             [](const pipelines::FrameSlice&) {},
             SchemaPolicy{
-                 index.create_stream_descriptor(std::move(stream_id), fields_proto_from_range(fields)), index
+                index.create_stream_descriptor(std::move(stream_id), fields_from_range(fields)), index
             },
             [=](SegmentInMemory&& mem) {
                 sink_->segments_.push_back(std::move(mem));

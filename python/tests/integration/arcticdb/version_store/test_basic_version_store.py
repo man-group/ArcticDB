@@ -196,7 +196,7 @@ def test_negative_cases(lmdb_version_store, symbol):
     lmdb_version_store.delete(symbol)
 
 
-@pytest.mark.parametrize("lib_type", ["lmdb_version_store", "lmdb_version_store_no_symbol_list"])
+@pytest.mark.parametrize("lib_type", ["lmdb_version_store_v1", "lmdb_version_store_v2", "lmdb_version_store_no_symbol_list", "s3_version_store_v1", "s3_version_store_v2"])
 def test_list_symbols_regex(request, lib_type):
     lib = request.getfixturevalue(lib_type)
     lib.write("asdf", {"foo": "bar"}, metadata={"a": 1, "b": 10})
@@ -313,19 +313,20 @@ def test_get_info(lmdb_version_store):
     assert info["col_names"]["index"] == ["dt_index"]
     assert info["index_type"] == "index"
 
-
-def test_get_info_version(lmdb_version_store):
+@pytest.mark.parametrize("lib_type", ["lmdb_version_store_v1", "lmdb_version_store_v2", "s3_version_store_v1", "s3_version_store_v2"])
+def test_get_info_version(request, lib_type):
+    lib = request.getfixturevalue(lib_type)
     # given
     sym = "get_info_version_test"
     df = pd.DataFrame(data={"col1": np.arange(10)}, index=pd.date_range(pd.Timestamp(0), periods=10))
-    lmdb_version_store.write(sym, df)
+    lib.write(sym, df)
     df = pd.DataFrame(data={"col1": np.arange(20)}, index=pd.date_range(pd.Timestamp(0), periods=20))
-    lmdb_version_store.write(sym, df, prune_previous_version=False)
+    lib.write(sym, df, prune_previous_version=False)
 
     # when
-    info_0 = lmdb_version_store.get_info(sym, as_of=0)
-    info_1 = lmdb_version_store.get_info(sym, as_of=1)
-    latest_version = lmdb_version_store.get_info(sym)
+    info_0 = lib.get_info(sym, as_of=0)
+    info_1 = lib.get_info(sym, as_of=1)
+    latest_version = lib.get_info(sym)
 
     # then
     assert latest_version == info_1
@@ -1445,7 +1446,6 @@ def test_dynamic_schema_similar_index_column_dataframe_multiple_col(lmdb_version
     returned = lib.read("date_series").data
     assert_frame_equal(returned, date_series)
 
-
 def test_restore_version(version_store_factory):
     lmdb_version_store = version_store_factory(col_per_group=2, row_per_segment=2)
     symbol = "test_restore_version"
@@ -1753,9 +1753,9 @@ def test_diff_long_stream_descriptor_mismatch(lmdb_version_store, method, num):
         print(e)
         msg = str(e)
         for i in (1, 2, *(x for x in range(num) if x % 20 == 4), num):
-            assert f"col{i}: TD<type=INT64, dim=0>" in msg
+            assert f"FD<name=col{i}, type=TD<type=INT64, dim=0>" in msg
             if i % 20 == 4:
-                assert f"col{i}: TD<type=UTF" in msg
+                assert f"FD<name=col{i}, type=TD<type=UTF" in msg
 
 
 def test_get_non_existing_columns_in_series(lmdb_version_store, sym):

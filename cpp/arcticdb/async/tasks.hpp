@@ -28,7 +28,6 @@ namespace arcticdb::async {
 
 using KeyType = entity::KeyType;
 using AtomKey = entity::AtomKey;
-using ContentHash = entity::ContentHash;
 using IndexValue = entity::IndexValue;
 
 struct EncodeAtomTask : BaseTask {
@@ -36,22 +35,22 @@ struct EncodeAtomTask : BaseTask {
     PartialKey partial_key_;
     timestamp creation_ts_;
     SegmentInMemory segment_;
-    std::shared_ptr<storage::Library> lib_;
     std::shared_ptr<arcticdb::proto::encoding::VariantCodec> codec_meta_;
     size_t id_;
+    EncodingVersion encoding_version_;
 
     EncodeAtomTask(PartialKey &&pk,
                    timestamp creation_ts,
                    SegmentInMemory &&segment,
-                   std::shared_ptr<storage::Library> lib,
                    std::shared_ptr<arcticdb::proto::encoding::VariantCodec> codec_meta,
-                   size_t id)
+                   size_t id,
+                   EncodingVersion encoding_version)
         : partial_key_(std::move(pk)),
           creation_ts_(creation_ts),
           segment_(std::move(segment)),
-          lib_(std::move(lib)),
           codec_meta_(std::move(codec_meta)),
-          id_(id){}
+          id_(id),
+          encoding_version_(encoding_version){}
 
     EncodeAtomTask(
         KeyType key_type,
@@ -61,23 +60,20 @@ struct EncodeAtomTask : BaseTask {
         IndexValue end_index,
         timestamp creation_ts,
         SegmentInMemory &&segment,
-        const std::shared_ptr<storage::Library> &lib,
         const std::shared_ptr<arcticdb::proto::encoding::VariantCodec> &codec_meta,
-        size_t id
+        size_t id,
+        EncodingVersion encoding_version
     )
-        : EncodeAtomTask(
-                PartialKey{key_type, gen_id, std::move(stream_id), std::move(start_index), std::move(end_index)},
-                creation_ts,
-                std::move(segment),
-                lib,
-                codec_meta,
-                id) {
+        : EncodeAtomTask(PartialKey{key_type, gen_id, std::move(stream_id), std::move(start_index),
+                                    std::move(end_index)}, creation_ts,
+                         std::move(segment), codec_meta, id, encoding_version) {
     }
 
     ARCTICDB_MOVE_ONLY_DEFAULT(EncodeAtomTask)
 
     storage::KeySegmentPair encode() {
-        auto enc_seg = ::arcticdb::encode(std::move(segment_), *codec_meta_);
+        ARCTICDB_DEBUG(log::codec(), "Encoding object with partial key {}", partial_key_);
+        auto enc_seg = ::arcticdb::encode_dispatch(std::move(segment_), *codec_meta_, encoding_version_);
         auto content_hash = hash_segment_header(enc_seg.header());
 
         AtomKey k = partial_key_.build_key(creation_ts_, content_hash);
@@ -93,26 +89,26 @@ struct EncodeAtomTask : BaseTask {
 struct EncodeSegmentTask : BaseTask {
     VariantKey key_;
     SegmentInMemory segment_;
-    std::shared_ptr<storage::Library> lib_;
     std::shared_ptr<arcticdb::proto::encoding::VariantCodec> codec_meta_;
     size_t id_;
+    EncodingVersion encoding_version_;
 
     EncodeSegmentTask(entity::VariantKey key,
                       SegmentInMemory &&segment,
-                      std::shared_ptr<storage::Library> lib,
                       std::shared_ptr<arcticdb::proto::encoding::VariantCodec> codec_meta,
-                      size_t id)
+                      size_t id,
+                      EncodingVersion encoding_version)
             : key_(std::move(key)),
               segment_(std::move(segment)),
-              lib_(std::move(lib)),
               codec_meta_(std::move(codec_meta)),
-              id_(id){}
+              id_(id),
+              encoding_version_(encoding_version){}
 
 
     ARCTICDB_MOVE_ONLY_DEFAULT(EncodeSegmentTask)
 
     storage::KeySegmentPair encode() {
-        auto enc_seg = ::arcticdb::encode(std::move(segment_), *codec_meta_);
+        auto enc_seg = ::arcticdb::encode_dispatch(std::move(segment_), *codec_meta_, encoding_version_);
         return {std::move(key_), std::move(enc_seg), size_t(id_)};
     }
 
@@ -127,23 +123,26 @@ struct EncodeRefTask : BaseTask {
     StreamId id_;
     SegmentInMemory segment_;
     std::shared_ptr<arcticdb::proto::encoding::VariantCodec> codec_meta_;
+    EncodingVersion encoding_version_;
 
     EncodeRefTask(
         KeyType key_type,
         StreamId stream_id,
         SegmentInMemory &&segment,
-        std::shared_ptr<arcticdb::proto::encoding::VariantCodec> codec_meta
+        std::shared_ptr<arcticdb::proto::encoding::VariantCodec> codec_meta,
+        EncodingVersion encoding_version
     )
         : key_type_(key_type),
           id_(std::move(stream_id)),
           segment_(std::move(segment)),
-          codec_meta_(std::move(codec_meta)) {
+          codec_meta_(std::move(codec_meta)),
+          encoding_version_(encoding_version){
     }
 
     ARCTICDB_MOVE_ONLY_DEFAULT(EncodeRefTask)
 
     [[nodiscard]] storage::KeySegmentPair encode() {
-        auto enc_seg = ::arcticdb::encode(std::move(segment_), *codec_meta_);
+        auto enc_seg = ::arcticdb::encode_dispatch(std::move(segment_), *codec_meta_, encoding_version_);
         auto k = RefKey{id_, key_type_};
         return {std::move(k), std::move(enc_seg), size_t(0)};
     }
@@ -296,7 +295,7 @@ struct DecodeSegmentTask : BaseTask {
                              key_seg.segment().total_segment_size(),
                              variant_key_view(key_seg.variant_key()));
 
-        return {key_seg.variant_key(), decode(std::move(key_seg.segment()))};
+        return {key_seg.variant_key(), decode_segment(std::move(key_seg.segment()))};
     }
 };
 
@@ -342,7 +341,9 @@ struct SegmentFunctionTask : BaseTask {
     }
 };
 
-// This class is used to restart the pipeline following a repartition
+// TODO (AN-469): Only real difference between this and MemSegmentProcessingTask is whether clause.requires_repartition()
+// is checked before or after the first clause is processed. Either homogenise to one task with a bool flag switching
+// between the two behaviours, or have the caller in read_and_process check (as it already partially is).
 struct MemSegmentPassthroughProcessingTask : BaseTask {
     std::shared_ptr<Store> store_;
     std::shared_ptr<std::vector<Clause>> clauses_;
@@ -358,7 +359,7 @@ struct MemSegmentPassthroughProcessingTask : BaseTask {
     }
 
     [[nodiscard]]
-    Composite<ProcessingSegment> process(Composite<ProcessingSegment>&& proc){
+    Composite<ProcessingSegment> _process(Composite<ProcessingSegment>&& proc){
         auto procs = std::move(proc);
         for(const auto& clause : *clauses_) {
             if(clause.requires_repartition())
@@ -372,8 +373,9 @@ struct MemSegmentPassthroughProcessingTask : BaseTask {
     ARCTICDB_MOVE_ONLY_DEFAULT(MemSegmentPassthroughProcessingTask)
 
     Composite<ProcessingSegment> operator()() {
-        return process(std::move(starting_segments_.value()));
+        return _process(std::move(starting_segments_.value()));
     }
+
 };
 
 struct MemSegmentProcessingTask : BaseTask {
@@ -393,7 +395,7 @@ struct MemSegmentProcessingTask : BaseTask {
     }
 
     [[nodiscard]]
-    Composite<ProcessingSegment> process(Composite<ProcessingSegment>&& proc){
+    Composite<ProcessingSegment> _process(Composite<ProcessingSegment>&& proc){
         auto procs = std::move(proc);
         for(const auto& clause : *clauses_) {
             procs = clause.process(store_, std::move(procs));
@@ -407,7 +409,7 @@ struct MemSegmentProcessingTask : BaseTask {
     ARCTICDB_MOVE_ONLY_DEFAULT(MemSegmentProcessingTask)
 
     Composite<ProcessingSegment> operator()(Composite<pipelines::SliceAndKey>&& sk) {
-        return process(Composite<ProcessingSegment>(slice_to_segment(std::move(sk))));
+        return _process(Composite<ProcessingSegment>(slice_to_segment(std::move(sk))));
     }
 
 };
@@ -439,7 +441,7 @@ struct DecodeMetadataTask : BaseTask {
         ARCTICDB_DEBUG(log::storage(), "ReadAndDecodeMetadataTask decoding segment of size {} with key {}",
                              key_seg.segment().total_segment_size(), variant_key_view(key_seg.variant_key()));
 
-        auto meta = decode_metadata(key_seg.segment());
+        auto meta = decode_metadata_from_segment(key_seg.segment());
         std::pair<VariantKey, std::optional<google::protobuf::Any>> output;
         output.first = key_seg.variant_key();
         output.second = meta ? std::make_optional(std::move(meta.value())) : std::nullopt;
@@ -447,22 +449,46 @@ struct DecodeMetadataTask : BaseTask {
     }
 };
 
+
+struct DecodeTimeseriesDescriptorTask : BaseTask {
+    ARCTICDB_MOVE_ONLY_DEFAULT(DecodeTimeseriesDescriptorTask)
+
+    DecodeTimeseriesDescriptorTask() = default;
+
+    std::pair<VariantKey, TimeseriesDescriptor> operator()(storage::KeySegmentPair &&ks) const {
+        ARCTICDB_SAMPLE(DecodeTimeseriesDescriptorTask, 0)
+        auto key_seg = std::move(ks);
+        ARCTICDB_DEBUG(log::storage(), "DecodeTimeseriesDescriptorTask decoding segment of size {} with key {}",
+                      key_seg.segment().total_segment_size(), variant_key_view(key_seg.variant_key()));
+
+        auto maybe_desc = decode_timeseries_descriptor(key_seg.segment());
+
+        util::check(static_cast<bool>(maybe_desc), "Failed to decode timeseries descriptor");
+        return std::make_pair(
+            std::move(key_seg.variant_key()),
+            TimeseriesDescriptor{
+                std::make_shared<TimeseriesDescriptor::Proto>(std::move(std::get<1>(*maybe_desc))),
+                    std::make_shared<FieldCollection>(std::move(std::get<2>(*maybe_desc)))}
+            );
+
+    }
+};
 struct DecodeMetadataAndDescriptorTask : BaseTask {
     ARCTICDB_MOVE_ONLY_DEFAULT(DecodeMetadataAndDescriptorTask)
 
     DecodeMetadataAndDescriptorTask() = default;
 
-    std::tuple<VariantKey, std::optional<google::protobuf::Any>, StreamDescriptor::Proto> operator()(storage::KeySegmentPair &&ks) const {
+    std::tuple<VariantKey, std::optional<google::protobuf::Any>, StreamDescriptor> operator()(storage::KeySegmentPair &&ks) const {
         ARCTICDB_SAMPLE(ReadMetadataAndDescriptorTask, 0)
         auto key_seg = std::move(ks);
         ARCTICDB_DEBUG(log::storage(), "DecodeMetadataAndDescriptorTask decoding segment of size {} with key {}",
                       key_seg.segment().total_segment_size(), variant_key_view(key_seg.variant_key()));
 
-        auto meta = decode_metadata(key_seg.segment());
-        return std::make_tuple<VariantKey, std::optional<google::protobuf::Any>, StreamDescriptor::Proto>(
+        auto components = decode_metadata_and_descriptor_fields(key_seg.segment());
+        return std::make_tuple(
             std::move(key_seg.variant_key()),
-            meta ? std::make_optional(std::move(meta.value())) : std::nullopt,
-            std::move(*key_seg.segment().header().mutable_stream_descriptor())
+            std::move(components.first),
+            std::move(components.second)
             );
     }
 };
@@ -569,6 +595,7 @@ struct RemoveBatchTask : BaseTask {
     }
 
     ARCTICDB_MOVE_ONLY_DEFAULT(RemoveBatchTask)
+
 
     std::vector<stream::StreamSink::RemoveKeyResultType> operator()() {
         lib_->remove(Composite<VariantKey>(std::move(keys_)), opts_);

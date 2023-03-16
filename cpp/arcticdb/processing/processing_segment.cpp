@@ -52,6 +52,7 @@ VariantData ProcessingSegment::get(const VariantNode &name, const std::shared_pt
                         position_t(opt_idx.value())),
                         slice_and_key.segment(store).string_pool_ptr()));
         }
+        util::check(static_cast<bool>(execution_context_), "Execution context not set");
         if(execution_context_->dynamic_schema()) {
             log::version().debug("Column not found in {}", data_[0].segment(store).descriptor());
             return VariantData{EmptyResult{}};

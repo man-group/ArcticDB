@@ -23,6 +23,12 @@ namespace arcticdb::version_store {
 using namespace arcticdb::entity;
 using namespace arcticdb::pipelines;
 
+/**
+ * The VersionedEngine interface contains methods that are portable between languages.
+ *
+ * It is currently implemented by LocalVersionedEngine, but could also be implemented with a RemoteVersionedEngine that
+ * sends Protobufs down a wire (to a server with a LocalVersionedEngine talking directly to the storage).
+ */
 class VersionedEngine {
 
 public:
@@ -80,7 +86,7 @@ public:
         const PreDeleteChecks& checks = default_pre_delete_checks
     ) = 0;
 
-    virtual std::pair<VersionedItem,   arcticdb::proto::descriptors::TimeSeriesDescriptor> restore_version(
+    virtual std::pair<VersionedItem,   TimeseriesDescriptor> restore_version(
         const StreamId& id,
         const VersionQuery& version_query
         ) = 0;

@@ -86,7 +86,7 @@ def test_querybuilder_pickle(lmdb_version_store):
     generic_filter_test(lmdb_version_store, "test_querybuilder_pickle", df, q_unpickled, pandas_query)
 
 
-@pytest.mark.parametrize("lib_type", ["lmdb_version_store", "lmdb_version_store_dynamic_schema"])
+@pytest.mark.parametrize("lib_type", ["lmdb_version_store_v1", "lmdb_version_store_v2", "lmdb_version_store_dynamic_schema_v1", "lmdb_version_store_dynamic_schema_v2"])
 def test_filter_empty_dataframe(request, lib_type):
     lib = request.getfixturevalue(lib_type)
     df = DataFrame({"a": []})
@@ -108,7 +108,7 @@ def test_filter_column_not_present_static(lmdb_version_store):
         _ = lmdb_version_store.read(symbol, query_builder=q)
 
 
-@pytest.mark.parametrize("lib_type", ["lmdb_version_store", "lmdb_version_store_dynamic_schema"])
+@pytest.mark.parametrize("lib_type", ["lmdb_version_store_v1", "lmdb_version_store_v2", "lmdb_version_store_dynamic_schema_v1", "lmdb_version_store_dynamic_schema_v2"])
 def test_filter_column_attribute_syntax(request, lib_type):
     lib = request.getfixturevalue(lib_type)
     df = DataFrame({"a": [np.uint8(1), np.uint8(0)]})
@@ -127,7 +127,7 @@ def test_filter_column_attribute_syntax(request, lib_type):
 #     generic_filter_test(lmdb_version_store, "test_filter_where_syntax", df, q, pandas_query)
 
 
-@pytest.mark.parametrize("lib_type", ["lmdb_version_store", "lmdb_version_store_dynamic_schema"])
+@pytest.mark.parametrize("lib_type", ["lmdb_version_store_v1", "lmdb_version_store_v2", "lmdb_version_store_dynamic_schema_v1", "lmdb_version_store_dynamic_schema_v2"])
 def test_filter_explicit_index(request, lib_type):
     lib = request.getfixturevalue(lib_type)
     df = DataFrame({"a": [np.uint8(1), np.uint8(0)]}, index=np.arange(2))
@@ -139,7 +139,7 @@ def test_filter_explicit_index(request, lib_type):
     assert_frame_equal(df.query(pandas_query), lib.read(symbol, query_builder=q).data)
 
 
-@pytest.mark.parametrize("lib_type", ["lmdb_version_store", "lmdb_version_store_dynamic_schema"])
+@pytest.mark.parametrize("lib_type", ["lmdb_version_store_v1", "lmdb_version_store_v2", "lmdb_version_store_dynamic_schema_v1", "lmdb_version_store_dynamic_schema_v2"])
 def test_filter_infinite_value(request, lib_type):
     lib = request.getfixturevalue(lib_type)
     df = DataFrame({"a": np.arange(1)})
@@ -151,7 +151,7 @@ def test_filter_infinite_value(request, lib_type):
         _ = lib.read(symbol, query_builder=q)
 
 
-@pytest.mark.parametrize("lib_type", ["lmdb_version_store", "lmdb_version_store_dynamic_schema"])
+@pytest.mark.parametrize("lib_type", ["lmdb_version_store_v1", "lmdb_version_store_v2", "lmdb_version_store_dynamic_schema_v1", "lmdb_version_store_dynamic_schema_v2"])
 def test_filter_categorical(request, lib_type):
     lib = request.getfixturevalue(lib_type)
     df = DataFrame({"a": ["hello", "hi", "hello"]}, index=np.arange(3))
@@ -164,7 +164,7 @@ def test_filter_categorical(request, lib_type):
         _ = lib.read(symbol, query_builder=q)
 
 
-@pytest.mark.parametrize("lib_type", ["lmdb_version_store", "lmdb_version_store_dynamic_schema"])
+@pytest.mark.parametrize("lib_type", ["lmdb_version_store_v1", "lmdb_version_store_v2", "lmdb_version_store_dynamic_schema_v1", "lmdb_version_store_dynamic_schema_v2"])
 def test_filter_pickled_symbol(request, lib_type):
     lib = request.getfixturevalue(lib_type)
     symbol = "test_filter_pickled_symbol"
@@ -176,7 +176,7 @@ def test_filter_pickled_symbol(request, lib_type):
         _ = lib.read(symbol, query_builder=q)
 
 
-@pytest.mark.parametrize("lib_type", ["lmdb_version_store", "lmdb_version_store_dynamic_schema"])
+@pytest.mark.parametrize("lib_type", ["lmdb_version_store_v1", "lmdb_version_store_v2", "lmdb_version_store_dynamic_schema_v1", "lmdb_version_store_dynamic_schema_v2"])
 def test_filter_date_range_pickled_symbol(request, lib_type):
     lib = request.getfixturevalue(lib_type)
     symbol = "test_filter_date_range_pickled_symbol"

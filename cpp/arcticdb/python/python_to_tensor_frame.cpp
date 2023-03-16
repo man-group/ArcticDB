@@ -140,13 +140,10 @@ InputTensorFrame py_ndf_to_frame(
     auto col_names = item[1].cast<std::vector<std::string>>();
     auto col_vals = item[3].cast<std::vector<py::object>>();
 
-    std::vector<std::pair<std::string_view, NativeTensor>> tensors;
-    tensors.reserve(idx_names.size() + col_names.size());
-
     for (auto i = 0u; i < col_vals.size(); ++i) {
         auto tensor = obj_to_tensor(col_vals[i].ptr());
         res.num_rows = std::max(res.num_rows, tensor.shape(0));
-        res.desc.add_field(scalar_field_proto(tensor.data_type(), col_names[i]));
+        res.desc.add_field(scalar_field(tensor.data_type(), col_names[i]));
         res.field_tensors.push_back(std::move(tensor));
     }
 

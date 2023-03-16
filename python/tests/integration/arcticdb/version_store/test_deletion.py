@@ -39,7 +39,7 @@ def get_map_timeouts():
 
 
 def gen_params_store_and_timeout():
-    p = [["s3_version_store", "s3_version_store"], get_map_timeouts()]
+    p = [["s3_version_store_v1", "s3_version_store_v2", "s3_version_store_v1", "s3_version_store_v2"], get_map_timeouts()]
     return list(product(*p))
 
 

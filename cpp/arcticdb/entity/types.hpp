@@ -7,13 +7,18 @@
 
 #pragma once
 
+#include <arcticdb/util/preconditions.hpp>
+#include <arcticdb/util/constructors.hpp>
+#include <arcticdb/util/variant.hpp>
+#include <arcticdb/log/log.hpp>
+#include <arcticdb/entity/protobufs.hpp>
+#include <google/protobuf/util/message_differencer.h>
+
+#include <folly/Range.h>
 #include <fmt/format.h>
 #include <folly/Likely.h>
 #include <pybind11/pybind11.h>
 #include <pybind11/numpy.h>
-#include <arcticdb/util/preconditions.hpp>
-#include <arcticdb/util/constructors.hpp>
-#include <arcticdb/util/variant.hpp>
 
 #include <algorithm>
 #include <cstdint>
@@ -24,20 +29,9 @@
 #include <iostream>
 #include <optional>
 #include <variant>
-#include <arcticdb/log/log.hpp>
-
-#include <arcticdb/entity/protobufs.hpp>
-#include <google/protobuf/util/message_differencer.h>
-
-#include <folly/Range.h>
 
 namespace arcticdb::entity {
 
-/**
- * Contains mappings for types used in to model / describe TickStreams.
- * This will typically at first be mapping protobuf objects in order to avoid strong
- * coupling of implementation to proto
- */
 using NumericId = int64_t;
 using StringId = std::string;
 using VariantId = std::variant<NumericId, StringId>;
@@ -355,14 +349,18 @@ DIMENSION(2);
 
 Dimension as_dim_checked(uint8_t d);
 
+struct TypeDescriptor;
+
 inline void set_data_type(DataType data_type, arcticdb::proto::descriptors::TypeDescriptor& type_desc) {
     type_desc.set_size_bits(
-            static_cast<arcticdb::proto::descriptors::TypeDescriptor_SizeBits>(
-                    static_cast<std::uint8_t>(slice_bit_size(data_type))));
+        static_cast<arcticdb::proto::descriptors::TypeDescriptor_SizeBits>(
+            static_cast<std::uint8_t>(slice_bit_size(data_type))));
     type_desc.set_value_type(
-            static_cast<arcticdb::proto::descriptors::TypeDescriptor_ValueType>(
-                    static_cast<std::uint8_t>(slice_value_type(data_type))));
+        static_cast<arcticdb::proto::descriptors::TypeDescriptor_ValueType>(
+            static_cast<std::uint8_t>(slice_value_type(data_type))));
 }
+
+inline void set_data_type(DataType data_type, TypeDescriptor& type_desc);
 
 struct TypeDescriptor {
     DataType data_type_;
@@ -381,7 +379,6 @@ struct TypeDescriptor {
 
     template<typename Callable>
     auto visit_tag(Callable &&callable) const;
-
 
     bool operator==(const TypeDescriptor &o) const {
         return data_type_ == o.data_type_ && dimension_ == o.dimension_;
@@ -403,7 +400,7 @@ struct TypeDescriptor {
         return proto();
     }
 
-    Proto proto() const {
+    [[nodiscard]] Proto proto() const {
         arcticdb::proto::descriptors::TypeDescriptor output;
         output.set_dimension(static_cast<std::uint32_t>(dimension_));
         set_data_type(data_type_, output);
@@ -411,6 +408,10 @@ struct TypeDescriptor {
         return output;
     }
 };
+
+inline void set_data_type(DataType data_type, TypeDescriptor& type_desc) {
+    type_desc.data_type_ = data_type;
+}
 
 inline TypeDescriptor make_scalar_type(DataType dt) {
     return TypeDescriptor{dt, Dimension::Dim0};
@@ -434,7 +435,7 @@ inline DataType get_data_type(const arcticdb::proto::descriptors::TypeDescriptor
         );
 }
 
-inline TypeDescriptor type_desc_from_proto(const arcticdb::proto::descriptors::TypeDescriptor type_desc) {
+inline TypeDescriptor type_desc_from_proto(const arcticdb::proto::descriptors::TypeDescriptor& type_desc) {
     return {
         combine_data_type(
             static_cast<ValueType>(static_cast<uint8_t >(type_desc.value_type())),
@@ -451,63 +452,8 @@ inline DataType data_type_from_proto(const arcticdb::proto::descriptors::TypeDes
 template <typename DTT>
 using ScalarTagType = TypeDescriptorTag<DTT, DimensionTag<Dimension::Dim0>>;
 
-struct FieldDescriptor {
-    TypeDescriptor type_desc() const {
-        return type_desc_from_proto(data_.type_desc());
-    }
-
-    const std::string& name() const {
-        return data_.name();
-    }
-
-    using Proto = arcticdb::proto::descriptors::StreamDescriptor_FieldDescriptor;
-
-    Proto data_;
-
-    const auto& proto() const { return data_; }
-
-    explicit operator const Proto&()  const {
-        return proto();
-    }
-
-    FieldDescriptor() = default;
-
-    explicit FieldDescriptor(const TypeDescriptor &td, const std::string& n = std::string()) {
-        data_.mutable_type_desc()->CopyFrom(static_cast<arcticdb::proto::descriptors::TypeDescriptor>(td));
-        data_.set_name(n);
-    }
-
-    explicit FieldDescriptor(Proto&& data) :
-        data_(std::move(data)) {
-    }
-
-    friend bool operator<(const FieldDescriptor &l, const FieldDescriptor &r) {
-        const auto l_data_type = get_data_type(l.data_.type_desc());
-        const auto r_data_type = get_data_type(r.data_.type_desc());
-        const auto l_dim = l.data_.type_desc().dimension();
-        const auto r_dim = r.data_.type_desc().dimension();
-        auto lt = std::tie(l.name(), l_data_type, l_dim);
-        auto rt = std::tie(r.name(), r_data_type, r_dim);
-        return lt < rt;
-    }
-
-    ARCTICDB_MOVE_COPY_DEFAULT(FieldDescriptor)
-};
-
-template <typename Callable>
-auto visit_field(const FieldDescriptor::Proto& field, Callable&& c) {
-    auto td = type_desc_from_proto(field.type_desc());
-    return td.template visit_tag<>(std::forward<Callable>(c));
-}
-
-inline bool operator==(const FieldDescriptor &l, const FieldDescriptor &r) {
-    return l.type_desc() == r.type_desc() && l.name() == r.name();
-}
-
-template <Dimension dim>
-FieldDescriptor::Proto field_proto(DataType dt, std::string_view name) {
-    using namespace arcticdb::proto::descriptors;
-    StreamDescriptor_FieldDescriptor output;
+inline arcticdb::proto::descriptors::StreamDescriptor_FieldDescriptor field_proto(DataType dt, Dimension dim, std::string_view name) {
+    arcticdb::proto::descriptors::StreamDescriptor_FieldDescriptor output;
     if(!name.empty())
         output.set_name(name.data(), name.size());
 
@@ -521,13 +467,13 @@ FieldDescriptor::Proto field_proto(DataType dt, std::string_view name) {
 
     return output;
 }
-
-inline auto scalar_field_proto (DataType dt, std::string_view name) {
+/*
+inline auto scalar_field (DataType dt, std::string_view name) {
     return field_proto<Dimension::Dim0>(dt, name);
 }
 
-inline auto scalar_field_proto(TypeDescriptor::Proto&& proto, std::string_view name = std::string_view()) {
-    using namespace arcticdb::proto::descriptors;
+inline auto scalar_field(TypeDescriptor::Proto&& proto, std::string_view name = std::string_view()) {
+    using namespace pb2::descriptors_pb2;
     StreamDescriptor_FieldDescriptor output;
     if(!name.empty())
         output.set_name(name.data(), name.size());
@@ -537,7 +483,7 @@ inline auto scalar_field_proto(TypeDescriptor::Proto&& proto, std::string_view n
 }
 
 inline auto scalar_field_proto(const TypeDescriptor::Proto& proto, std::string_view name = std::string_view()) {
-    using namespace arcticdb::proto::descriptors;
+    using namespace pb2::descriptors_pb2;
     StreamDescriptor_FieldDescriptor output;
     if(!name.empty())
         output.set_name(name.data(), name.size());
@@ -545,7 +491,7 @@ inline auto scalar_field_proto(const TypeDescriptor::Proto& proto, std::string_v
     output.mutable_type_desc()->CopyFrom(proto);
     return output;
 }
-
+*/
 struct IndexDescriptor {
         using Proto = arcticdb::proto::descriptors::IndexDescriptor;
 
@@ -558,7 +504,6 @@ struct IndexDescriptor {
     static const Type TIMESTAMP = arcticdb::proto::descriptors::IndexDescriptor_Type_TIMESTAMP;
 
     using TypeChar = char;
-
 
     IndexDescriptor() = default;
     IndexDescriptor(size_t field_count, Type type) {
@@ -617,290 +562,91 @@ constexpr IndexDescriptor::Type from_type_char(IndexDescriptor::TypeChar type) {
     }
 }
 
-struct StreamDescriptor {
-    using Proto = arcticdb::proto::descriptors::StreamDescriptor;
+struct FieldRef {
+    TypeDescriptor type_;
+    std::string_view name_;
 
-    std::shared_ptr<Proto> data_ = std::make_shared<Proto>();
-
-    StreamDescriptor() = default;
-    ~StreamDescriptor() = default;
-
-    void set_id(const StreamId& id) {
-        util::variant_match(id,
-            [this] (const StringId& str) { data_->set_str_id(str); },
-            [this] (const NumericId& n) {
-                util::check(n >= 0, "Negative NumericId is not supported");
-                data_->set_num_id(n);
-            });
+    TypeDescriptor type() const {
+        return type_;
     }
 
-    static StreamId id_from_proto(Proto proto) {
-        if(proto.id_case() == arcticdb::proto::descriptors::StreamDescriptor::kNumId)
-            return safe_convert_to_numeric_id(proto.num_id(), "Numeric StreamId");
-        else
-            return proto.str_id();
-    }
-
-    StreamId id() const {
-      return id_from_proto(*data_);
-    }
-
-    IndexDescriptor index() const {
-        return IndexDescriptor(data_->index());
-    }
-
-    void set_index(const IndexDescriptor& idx) {
-        data_->mutable_index()->CopyFrom(idx.data_);
-    }
-
-    void set_index_type(const IndexDescriptor::Type type) {
-        data_->mutable_index()->set_kind(type);
-    }
-
-    void set_index_field_count(size_t size) {
-        data_->mutable_index()->set_field_count(size);
-    }
-
-    explicit StreamDescriptor(const StreamId& id) {
-        set_id(id);
-    }
-
-    void add_scalar_field(DataType data_type, std::string_view name) {
-        auto* new_field = data_->mutable_fields()->Add();
-        new_field->CopyFrom(scalar_field_proto(data_type, name));
-    }
-
-    using FieldsCollection = std::decay_t<decltype(data_->fields())>;
-
-    StreamDescriptor(const StreamId& id, const IndexDescriptor &idx, FieldsCollection&& f) {
-        set_id(id);
-        set_index(idx);
-        *data_->mutable_fields() = std::move(f);
-    }
-
-    explicit StreamDescriptor(arcticdb::proto::descriptors::StreamDescriptor&& data) :
-        data_(std::make_shared<Proto>(std::move(data))) {
-    }
-
-    explicit StreamDescriptor(const arcticdb::proto::descriptors::StreamDescriptor& data) {
-        data_->CopyFrom(data);
-    }
-
-    StreamDescriptor(const StreamDescriptor& other) = default;
-
-    friend void swap(StreamDescriptor& left, StreamDescriptor& right) noexcept {
-        using std::swap;
-
-        if(&left == &right)
-            return;
-
-        swap(left.data_, right.data_);
-    }
-
-    StreamDescriptor& operator=(StreamDescriptor other) {
-        swap(*this, other);
-        return *this;
-    }
-
-    StreamDescriptor(StreamDescriptor&& other) noexcept
-        : StreamDescriptor() {
-        swap(*this, other);
-    }
-
-    StreamDescriptor clone() const {
-        Proto proto;
-        proto.CopyFrom(*data_);
-        return StreamDescriptor{std::move(proto)};
-    };
-
-    const FieldsCollection& fields() const {
-        return data_->fields();
-    }
-
-    const FieldDescriptor::Proto& fields(size_t pos) const {
-        util::check(static_cast<int>(pos) < fields().size(), "Field index {} out of range", pos);
-        return data_->fields(static_cast<int>(pos));
-    }
-
-    const FieldDescriptor::Proto& operator[](std::size_t pos) const {
-        return fields(pos);
-    }
-
-    const FieldDescriptor::Proto& add_field(const FieldDescriptor::Proto& field) {
-        util::check(type_desc_from_proto(field.type_desc()).data_type() != DataType::UNKNOWN, "Can't create column with unknown data type");
-        auto new_field = data_->mutable_fields()->Add();
-        new_field->CopyFrom(field);
-        return *new_field;
-    }
-
-    decltype(auto) begin() {
-        return fields().begin();
-    }
-
-    decltype(auto) end() {
-        return fields().end();
-    }
-
-    decltype(auto) cbegin() const {
-        return fields().cbegin();
-    }
-
-    decltype(auto) cend() const {
-        return fields().cend();
-    }
-
-    size_t field_count() const {
-        return fields().size();
-    }
-
-    bool empty() const {
-        return fields().empty();
-    }
-
-    std::optional<std::size_t> find_field(std::string_view view) const {
-        auto it = std::find_if(cbegin(), cend(), [&](const auto& field) {
-            return field.name() == view;
-        });
-
-        if (it == cend()) return std::nullopt;
-        return std::distance(cbegin(), it);
-    }
-
-    friend bool operator==(const StreamDescriptor& left, const StreamDescriptor& right) {
-        google::protobuf::util::MessageDifferencer diff;
-        return diff.Compare(*left.data_, *right.data_);
-    }
-
-    friend bool operator !=(const StreamDescriptor& left, const StreamDescriptor& right) {
-        return !(left == right);
-    }
-
-    void erase_field(position_t field) {
-        util::check(field < position_t(fields().size()), "Column index out of range in drop_column");
-        auto it = begin();
-        std::advance(it, field);
-        data_->mutable_fields()->erase(it);
-    }
-
-    std::optional<FieldDescriptor::Proto> field_at(size_t pos) {
-        if (UNLIKELY(pos >= static_cast<size_t>(fields().size()))) return std::nullopt;
-        return fields(pos);
-    }
-
-    FieldsCollection& mutable_fields() {
-        return *data_->mutable_fields();
-    }
-
-    const FieldDescriptor::Proto& field(size_t pos) const {
-        return data_->fields(static_cast<int>(pos));
-    }
-
-    FieldDescriptor::Proto& field(size_t pos) {
-        return mutable_fields()[static_cast<int>(pos)];
-    }
-
-    const Proto& proto() const {
-        return *data_;
-    }
-
-    Proto& mutable_proto() {
-        return *data_;
-    }
-
-    void print_proto_debug_str() const {
-        data_->PrintDebugString();
+    std::string_view name() const {
+        return name_;
     }
 };
 
-inline void set_id(arcticdb::proto::descriptors::StreamDescriptor& pb_desc, StreamId id) {
-    std::visit([&pb_desc](auto &&arg) {
-        using IdType = std::decay_t<decltype(arg)>;
-        if constexpr (std::is_same_v<IdType, NumericId>)
-            pb_desc.set_num_id(arg);
-        else if constexpr (std::is_same_v<IdType, StringId>)
-            pb_desc.set_str_id(arg);
-        else
-            util::raise_rte("Encoding unknown descriptor type");
-    }, id);
-}
+struct Field {
+    uint32_t size_ = 0;
+    TypeDescriptor type_;
+    static constexpr size_t NameSize = 2u;
+    char name_[NameSize] = {};
 
-template <class IndexType>
-inline void set_index(arcticdb::proto::descriptors::StreamDescriptor &stream_desc) {
-    auto& pb_desc = *stream_desc.mutable_index();
-    pb_desc.set_field_count(std::uint32_t(IndexType::field_count()));
-    pb_desc.set_kind(static_cast<arcticdb::proto::descriptors::IndexDescriptor_Type>(
-                         static_cast<int>(IndexType::type())));
-}
+    ARCTICDB_NO_MOVE_OR_COPY(Field)
 
-template <typename IndexType, typename RangeType>
-arcticdb::proto::descriptors::StreamDescriptor index_descriptor(StreamId stream_id, IndexType, RangeType fields) {
-    arcticdb::proto::descriptors::StreamDescriptor output;
+    using Proto = arcticdb::proto::descriptors::StreamDescriptor_FieldDescriptor;
 
-    set_id(output, stream_id);
-    set_index<IndexType>(output);
-    output.mutable_fields()->Reserve(fields.size());
-    for(auto&& field : fields) {
-        auto new_field = output.mutable_fields()->Add();
-        *new_field = std::move(field); //TODO move?
+    Field(const FieldRef& ref) {
+        set(ref.type_, ref.name_);
     }
 
-    return output;
-}
-
-template <typename IndexType>
-StreamDescriptor::Proto index_descriptor(StreamId stream_id, IndexType index_type,
-                                          std::initializer_list<FieldDescriptor::Proto> fields) {
-    std::vector<FieldDescriptor::Proto> vec{fields};
-    return index_descriptor(stream_id, index_type, folly::range(vec));
-}
-
-template <typename IndexType, typename RangeType>
-arcticdb::proto::descriptors::StreamDescriptor stream_descriptor(StreamId stream_id, IndexType idx, RangeType fields) {
-    arcticdb::proto::descriptors::StreamDescriptor output;
-
-    util::check(fields.empty() || IndexType::field_count()== 0 || fields[0].name() != idx.field_proto(0).proto().name(), "Index fields already set");
-
-    set_id(output, stream_id);
-    set_index<IndexType>(output);
-    for(auto i = 0u; i < IndexType::field_count(); ++i) {
-        auto idx_field = output.mutable_fields()->Add();
-        idx_field->CopyFrom(idx.field_proto(i).proto()); //TODO move?
+    Field(TypeDescriptor type, std::string_view name) {
+        set(type, name);
     }
 
-    for(auto&& field : fields) {
-        auto new_field = output.mutable_fields()->Add();
-        new_field->CopyFrom(field); //TODO move?
+    static size_t calc_size(std::string_view name) {
+      return sizeof(type_) + sizeof(size_) + std::max(NameSize, name.size());
     }
 
-    return output;
-}
-
-template <typename IndexType>
-StreamDescriptor::Proto stream_descriptor(StreamId stream_id, IndexType index_type,
-                                           std::initializer_list<FieldDescriptor::Proto> fields) {
-    std::vector<FieldDescriptor::Proto> vec{fields};
-    return stream_descriptor(stream_id, index_type, folly::range(vec));
-}
-
-inline TypeDescriptor stream_id_descriptor(const StreamId &stream_id) {
-    return std::holds_alternative<NumericId>(stream_id) ?
-           TypeDescriptor(DataType::UINT64, 0) :
-           TypeDescriptor(DataType::ASCII_DYNAMIC64, 0);
-}
-
-inline DataType stream_id_data_type(const StreamId &stream_id) {
-    return std::holds_alternative<NumericId>(stream_id) ? DataType::UINT64 : DataType::ASCII_DYNAMIC64;
-}
-
-// N.B. this is inefficient and retained for testing
-template <typename RangeType>
-StreamDescriptor::FieldsCollection fields_proto_from_range(const RangeType& fields) {
-    StreamDescriptor::FieldsCollection output;
-    for(const auto& field : fields) {
-        auto ptr = output.Add();
-        ptr->CopyFrom(field.proto());
+    std::string_view name() const {
+        return {name_, size_};
     }
-    return output;
+
+    const TypeDescriptor& type() const {
+        return type_;
+    }
+
+    TypeDescriptor& mutable_type() {
+        return type_;
+    }
+
+    FieldRef ref() const {
+        return {type_, name()};
+    }
+
+    void set(TypeDescriptor type, std::string_view name) {
+        type_ = type;
+        size_ = name.size();
+        memcpy(name_, name.data(), size_);
+    }
+
+    friend bool operator<(const Field &l, const Field &r) {
+        const auto l_data_type = l.type().data_type();
+        const auto r_data_type = r.type().data_type();
+        const auto l_dim = l.type().dimension();
+        const auto r_dim = r.type().dimension();
+        const auto l_name = l.name();
+        const auto r_name = r.name();
+        auto lt = std::tie(l_name, l_data_type, l_dim);
+        auto rt = std::tie(r_name, r_data_type, r_dim);
+        return lt < rt;
+    }
+};
+
+inline FieldRef scalar_field(DataType type, std::string_view name) {
+    return {TypeDescriptor{type, Dimension::Dim0}, name};
+}
+
+template <typename Callable>
+auto visit_field(const Field& field, Callable&& c) {
+    return field.type().template visit_tag(std::forward<Callable>(c));
+}
+
+inline bool operator==(const Field& l, const Field& r) {
+    return l.type() == r.type() && l.name() == r.name();
+}
+
+inline bool operator!=(const Field& l, const Field& r) {
+    return !(l == r);
 }
 
 using UnicodeType = Py_UNICODE;
@@ -929,5 +675,27 @@ struct less<arcticdb::entity::StreamId> {
 };
 }
 
+
+
+namespace fmt {
+
+using namespace arcticdb::entity;
+
+template<>
+struct formatter<FieldRef> {
+
+    template<typename ParseContext>
+    constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
+
+    template<typename FormatContext>
+    auto format(const FieldRef f, FormatContext &ctx) const {
+        auto out = ctx.out();
+        return format_to(ctx.out(), "{}: {}", f.type_, f.name_);
+        return out;
+    }
+};
+
+}
+
 #define ARCTICDB_TYPES_H_
-#include <arcticdb/entity/types-inl.hpp>
+#include "types-inl.hpp"

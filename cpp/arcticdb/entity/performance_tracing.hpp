@@ -57,7 +57,7 @@ arcticdb::ScopedTimer runtime_sub_timer_##name = !_scoped_subtimer_##name_active
 
 //#define USE_REMOTERY
 //#define ARCTICDB_LOG_PERFORMANCE
-
+#undef USE_REMOTERY
 #if defined(USE_REMOTERY)
 
 #define ARCTICDB_SAMPLE(name, flags) \

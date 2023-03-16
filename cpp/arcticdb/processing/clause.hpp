@@ -190,8 +190,9 @@ struct PartitionClause {
     }
 };
 
+
 inline StreamDescriptor empty_descriptor() {
-    return StreamDescriptor{StreamId{"merged"}, IndexDescriptor{0, IndexDescriptor::ROWCOUNT}, {}};
+    return StreamDescriptor{StreamId{"merged"}, IndexDescriptor{0, IndexDescriptor::ROWCOUNT}};
 }
 
 struct AggregationClause {

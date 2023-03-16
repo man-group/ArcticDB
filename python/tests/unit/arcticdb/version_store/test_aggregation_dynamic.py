@@ -45,8 +45,8 @@ def assert_equal_value(data, expected):
         index=range_indexes(),
     )
 )
-def test_hypothesis_mean_agg_dynamic(lmdb_version_store_dynamic_schema, df):
-    lib = lmdb_version_store_dynamic_schema
+def test_hypothesis_mean_agg_dynamic(lmdb_version_store_dynamic_schema_v1, df):
+    lib = lmdb_version_store_dynamic_schema_v1
     assume(not df.empty)
 
     symbol = f"mean_agg-{uuid.uuid4().hex}"
@@ -77,8 +77,8 @@ def test_hypothesis_mean_agg_dynamic(lmdb_version_store_dynamic_schema, df):
         index=range_indexes(),
     )
 )
-def test_hypothesis_sum_agg_dynamic(lmdb_version_store_dynamic_schema, df):
-    lib = lmdb_version_store_dynamic_schema
+def test_hypothesis_sum_agg_dynamic(s3_version_store_dynamic_schema_v2, df):
+    lib = s3_version_store_dynamic_schema_v2
     assume(not df.empty)
 
     symbol = f"sum_agg-{uuid.uuid4().hex}"
@@ -109,8 +109,8 @@ def test_hypothesis_sum_agg_dynamic(lmdb_version_store_dynamic_schema, df):
         index=range_indexes(),
     )
 )
-def test_hypothesis_max_agg_dynamic(lmdb_version_store_dynamic_schema, df):
-    lib = lmdb_version_store_dynamic_schema
+def test_hypothesis_max_agg_dynamic(lmdb_version_store_dynamic_schema_v1, df):
+    lib = lmdb_version_store_dynamic_schema_v1
     assume(not df.empty)
 
     symbol = f"max_agg-{uuid.uuid4().hex}"
@@ -130,7 +130,8 @@ def test_hypothesis_max_agg_dynamic(lmdb_version_store_dynamic_schema, df):
         pass
 
 
-def test_sum_aggregation_dynamic(lmdb_version_store_dynamic_schema):
+def test_sum_aggregation_dynamic(s3_version_store_dynamic_schema_v2):
+    lib = s3_version_store_dynamic_schema_v2
     df = DataFrame(
         {"grouping_column": ["group_1", "group_1", "group_1", "group_2", "group_2"], "to_sum": [1, 1, 2, 2, 2]},
         index=np.arange(5),
@@ -138,29 +139,30 @@ def test_sum_aggregation_dynamic(lmdb_version_store_dynamic_schema):
     symbol = "test_sum_aggregation_dynamic"
     expected, slices = make_dynamic(df)
     for df_slice in slices:
-        lmdb_version_store_dynamic_schema.append(symbol, df_slice, write_if_missing=True)
+        lib.append(symbol, df_slice, write_if_missing=True)
 
     q = QueryBuilder()
     q = q.groupby("grouping_column").agg({"to_sum": "sum"})
 
-    received = lmdb_version_store_dynamic_schema.read(symbol, query_builder=q).data
+    received = lib.read(symbol, query_builder=q).data
     expected = expected.groupby("grouping_column").agg({"to_sum": "sum"})
     assert_equal_value(received, expected)
 
 
-def test_sum_aggregation_with_range_index_dynamic(lmdb_version_store_dynamic_schema):
+def test_sum_aggregation_with_range_index_dynamic(lmdb_version_store_dynamic_schema_v1):
+    lib = lmdb_version_store_dynamic_schema_v1
     df = DataFrame(
         {"grouping_column": ["group_1", "group_1", "group_1", "group_2", "group_2"], "to_sum": [1, 1, 2, 2, 2]}
     )
     symbol = "test_sum_aggregation_dynamic"
     expected, slices = make_dynamic(df)
     for df_slice in slices:
-        lmdb_version_store_dynamic_schema.append(symbol, df_slice, write_if_missing=True)
+        lib.append(symbol, df_slice, write_if_missing=True)
 
     q = QueryBuilder()
     q = q.groupby("grouping_column").agg({"to_sum": "sum"})
 
-    received = lmdb_version_store_dynamic_schema.read(symbol, query_builder=q).data
+    received = lib.read(symbol, query_builder=q).data
     expected = expected.groupby("grouping_column").agg({"to_sum": "sum"})
     assert_equal_value(received, expected)
 

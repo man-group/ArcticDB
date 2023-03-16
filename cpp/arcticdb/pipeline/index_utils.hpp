@@ -87,19 +87,18 @@ IndexValue index_end_from_segment(const SegmentType &seg, size_t row_id) {
 }
 
 template<class IndexType>
-    folly::Future<entity::AtomKey> write_index(
-        arcticdb::proto::descriptors::TimeSeriesDescriptor&& metadata,
-        std::vector<SliceAndKey>&& slice_and_keys,
-        const IndexPartialKey& partial_key,
-        const std::shared_ptr<stream::StreamSink>& sink);
+folly::Future<entity::AtomKey> write_index(
+    TimeseriesDescriptor&& metadata,
+    std::vector<SliceAndKey>&& slice_and_keys,
+    const IndexPartialKey& partial_key,
+    const std::shared_ptr<stream::StreamSink>& sink);
 
 folly::Future<entity::AtomKey> write_index(
     const stream::Index& index,
-    arcticdb::proto::descriptors::TimeSeriesDescriptor &&metadata,
+    TimeseriesDescriptor &&metadata,
     std::vector<SliceAndKey> &&sk,
     const IndexPartialKey &partial_key,
-    const std::shared_ptr<stream::StreamSink> &sink
-    );
+    const std::shared_ptr<stream::StreamSink> &sink);
 
 folly::Future<entity::AtomKey> write_index(
     InputTensorFrame&& frame,
@@ -118,7 +117,7 @@ folly::Future<entity::AtomKey> write_index(
 inline folly::Future<VersionedItem> index_and_version(
     const stream::Index& index,
     const std::shared_ptr<stream::StreamSink>& store,
-    arcticdb::proto::descriptors::TimeSeriesDescriptor time_series,
+    TimeseriesDescriptor time_series,
     std::vector<SliceAndKey> slice_and_keys,
     const StreamId& stream_id,
     VersionId version_id) {

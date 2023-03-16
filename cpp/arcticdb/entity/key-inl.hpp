@@ -19,7 +19,6 @@
 #include <algorithm>
 #include <variant>
 
-
 namespace arcticdb::entity {
 
 struct DefaultAtomKeyFormat {
@@ -289,7 +288,7 @@ struct formatter<KeyType> {
     constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
 
     template<typename FormatContext>
-    auto format(const KeyType k, FormatContext &ctx) const -> decltype(ctx.out()) {
+    auto format(const KeyType k, FormatContext &ctx) const {
         return  fmt::format_to(ctx.out(), "{}", key_type_short_name(k));
     }
 };

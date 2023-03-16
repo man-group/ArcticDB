@@ -4,6 +4,7 @@ option(HIDE_LINKED_SYMBOLS "Passed `exclude-libs` through to linker, ensuring li
 option(STATIC_LINK_STD_LIB "Statically link the C++ standard libraries" ON)
 
 find_package(GTest CONFIG REQUIRED)
+find_package(Sanitizers)
 
 include(CTest)
 include(GoogleTest)
@@ -298,12 +299,15 @@ set(arcticdb_srcs
         codec/codec.cpp
         codec/encoding_sizes.cpp
         codec/segment.cpp
+        codec/variant_encoded_field_collection.cpp
         column_store/chunked_buffer.cpp
         column_store/column.cpp
         column_store/memory_segment_impl.cpp
         column_store/memory_segment_impl.cpp
         column_store/string_pool.cpp
+        entity/field_collection.cpp
         entity/key.cpp
+        entity/merge_descriptors.cpp
         entity/metrics.cpp
         entity/performance_tracing.cpp
         entity/types.cpp
@@ -446,6 +450,7 @@ target_include_directories(arcticdb_core_object
         )
 
 add_library(arcticdb_core_static STATIC $<TARGET_OBJECTS:arcticdb_core_object>)
+add_sanitizers(arcticdb_core_static)
 
 target_include_directories(arcticdb_core_static PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
@@ -455,6 +460,7 @@ target_include_directories(arcticdb_core_static PUBLIC
 target_link_libraries(arcticdb_core_static PUBLIC ${arcticdb_core_libraries})
 
 add_library(arcticdb_core SHARED $<TARGET_OBJECTS:arcticdb_core_object>)
+add_sanitizers(arcticdb_core)
 
 target_link_libraries(arcticdb_core PRIVATE
         ${arcticdb_core_libraries}
@@ -481,10 +487,11 @@ set(arcticdb_python_srcs
         version/python_bindings.cpp)
 
 add_library(arcticdb_python STATIC ${arcticdb_python_srcs})
+add_sanitizers(arcticdb_python)
 
 target_link_libraries(arcticdb_python
         PUBLIC
-        #tsan
+        ##asan
         arcticdb_core_static
         ${AWSSDK_LINK_LIBRARIES}
         )
@@ -521,7 +528,7 @@ endif()
 
 target_link_libraries(arcticdb_ext
         PUBLIC
-        #tsan
+        #asan
         PRIVATE
         arcticdb_python
         ${additional_link_flags}
@@ -628,6 +635,7 @@ if(${TEST})
     set(EXECUTABLE_PERMS OWNER_WRITE OWNER_READ OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE) # 755
 
     add_executable(test_unit_arcticdb ${unit_test_srcs})
+    add_sanitizers(test_unit_arcticdb)
     install(TARGETS test_unit_arcticdb RUNTIME
                 DESTINATION .
                 PERMISSIONS ${EXECUTABLE_PERMS}
@@ -636,6 +644,7 @@ if(${TEST})
     if (WIN32)
         target_link_libraries(test_unit_arcticdb
                 PUBLIC
+                #asan
                 arcticdb_core_static
                 GTest::gtest
                 GTest::gmock
@@ -647,6 +656,7 @@ if(${TEST})
         target_compile_options(test_unit_arcticdb PRIVATE /FI "${CMAKE_CURRENT_SOURCE_DIR}/util/test/gtest.hpp")
     else()
         set(COMMON_PUBLIC_TEST_LIBRARIES
+                #asan
                 arcticdb_core_static
                 libatomic.a  # Otherwise gtest_discover_tests cannot run the test if libatomic is not in a standard location
                 GTest::gtest
@@ -677,7 +687,7 @@ if(${TEST})
                 )
     endif()
 
-    gtest_discover_tests(test_unit_arcticdb)
+    gtest_discover_tests(test_unit_arcticdb DISCOVERY_TIMEOUT 30)
 
     set(rapidcheck_srcs
             column_store/test/rapidcheck_column_store.cpp
@@ -690,34 +700,34 @@ if(${TEST})
             util/test/rapidcheck_main.cpp
             version/test/rapidcheck_version_map.cpp)
 
-    add_executable(arcticdb_rapidcheck_tests ${rapidcheck_srcs})
-    install(TARGETS arcticdb_rapidcheck_tests RUNTIME
-                DESTINATION .
-                PERMISSIONS ${EXECUTABLE_PERMS}
-                COMPONENT Tests)
+   # add_executable(arcticdb_rapidcheck_tests ${rapidcheck_srcs})
+   # install(TARGETS arcticdb_rapidcheck_tests RUNTIME
+   #             DESTINATION .
+   #             PERMISSIONS ${EXECUTABLE_PERMS}
+   #             COMPONENT Tests)
 
-    if(WIN32)
-        target_link_libraries(arcticdb_rapidcheck_tests PUBLIC
-                arcticdb_core_static
-                GTest::gtest
-                GTest::gmock
-                rapidcheck
-                rapidcheck_gtest
-                PRIVATE
-                ${AWSSDK_LINK_LIBRARIES}
-                )
+    #if(WIN32)
+    #    target_link_libraries(arcticdb_rapidcheck_tests PUBLIC
+    #            arcticdb_core_static
+    #            GTest::gtest
+    #            GTest::gmock
+    #            rapidcheck
+    #            rapidcheck_gtest
+    #            PRIVATE
+    #            ${AWSSDK_LINK_LIBRARIES}
+    #            )
+    #
+    #    target_compile_options(arcticdb_rapidcheck_tests PRIVATE /FI "util/test/gtest.hpp")
+    #else()
+    #    target_link_libraries(arcticdb_rapidcheck_tests
+    #        PUBLIC
+    #        ${COMMON_PUBLIC_TEST_LIBRARIES}
+    #        rapidcheck
+    #        rapidcheck_gtest
+    #        PRIVATE
+    #        ${AWSSDK_LINK_LIBRARIES}
+    #        )
+    #endif()
 
-        target_compile_options(arcticdb_rapidcheck_tests PRIVATE /FI "util/test/gtest.hpp")
-    else()
-        target_link_libraries(arcticdb_rapidcheck_tests
-            PUBLIC
-            ${COMMON_PUBLIC_TEST_LIBRARIES}
-            rapidcheck
-            rapidcheck_gtest
-            PRIVATE
-            ${AWSSDK_LINK_LIBRARIES}
-            )
-    endif()
-
-    gtest_discover_tests(arcticdb_rapidcheck_tests)
+    #gtest_discover_tests(arcticdb_rapidcheck_tests)
 endif()

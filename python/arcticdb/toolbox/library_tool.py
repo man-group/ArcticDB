@@ -70,7 +70,7 @@ class LibraryTool(LibraryToolImpl):
         0  2023-01-01 2023-01-02 00:00:00.000000001           0      None  1681399019580103187  3563433649738173789          84         3
         """
         segment = self.read_to_segment(key)
-        field_names = [f.name for f in segment.header.stream_descriptor.fields]
+        field_names = [f for f in segment.fields()]
         frame_data = FrameData.from_cpp(PythonOutputFrame(decode_segment(segment)))
         cols = {}
         for idx, field_name in enumerate(field_names):

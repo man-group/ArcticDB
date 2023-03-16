@@ -5,15 +5,17 @@
  * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
  */
 
-#include <gtest/gtest.h> // googletest header file
+#include <gtest/gtest.h>
 
-#include <cstdint>
-#include <algorithm>
 #include <arcticdb/column_store/memory_segment.hpp>
 #include <arcticdb/util/test/test_utils.hpp>
 #include <arcticdb/stream/test/stream_test_common.hpp>
-#include <folly/container/Enumerate.h>
 #include <arcticdb/util/test/generators.hpp>
+
+#include <folly/container/Enumerate.h>
+
+#include <cstdint>
+#include <algorithm>
 
 TEST(MemSegment, Empty) {
     using namespace arcticdb;
@@ -242,14 +244,14 @@ TEST(MemSegment, SplitSparseSegment) {
 
     for(timestamp i = 0; i < num_rows; i ++) {
         aggregator.start_row(timestamp{i})([&](auto& rb) {
-            rb.set_scalar_by_name("first", uint32_t(i * 2), make_scalar_type(DataType::UINT32));
-            rb.set_scalar_by_name("third", uint64_t(i * 4), make_scalar_type(DataType::UINT64));
+            rb.set_scalar_by_name("first", uint32_t(i * 2), DataType::UINT32);
+            rb.set_scalar_by_name("third", uint64_t(i * 4), DataType::UINT64);
             if (i%4 == 0) {
-                rb.set_scalar_by_name("second", uint64_t(i * 3), make_scalar_type(DataType::UINT64));
+                rb.set_scalar_by_name("second", uint64_t(i * 3), DataType::UINT64);
             }
             if (i%4 == 2) {
                 rb.set_scalar_by_name("strings", std::string_view{"keep_me" + std::to_string(i)},
-                                      TypeDescriptor(DataType::ASCII_DYNAMIC64, Dimension::Dim0));
+                                      DataType::ASCII_DYNAMIC64);
             }
         });
     }
@@ -367,8 +369,8 @@ TEST(MemSegment, ShuffleAndSortSparse) {
 
 TEST(MemSegment, Append) {
     StreamDescriptor descriptor{stream_descriptor(StreamId("test"), TimeseriesIndex::default_index(), {
-        scalar_field_proto(DataType::UINT8, "thing2"),
-        scalar_field_proto(DataType::UINT32, "thing3")
+        scalar_field(DataType::UINT8, "thing2"),
+        scalar_field(DataType::UINT32, "thing3")
     })};
     SegmentInMemory s1(descriptor);
     for(int row = 0; row < 10; ++row) {

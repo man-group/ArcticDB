@@ -5,6 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+import enum
 from typing import List, Optional
 
 from arcticdb.options import LibraryOptions
@@ -13,7 +14,7 @@ from arcticdb.version_store.library import Library
 from arcticdb.version_store._store import NativeVersionStore
 from arcticdb.adapters.s3_library_adapter import S3LibraryAdapter
 from arcticdb.adapters.lmdb_library_adapter import LMDBLibraryAdapter
-
+from arcticdb.encoding_version import EncodingVersion
 
 class Arctic:
     """
@@ -23,7 +24,7 @@ class Arctic:
 
     _LIBRARY_ADAPTERS = [S3LibraryAdapter, LMDBLibraryAdapter]
 
-    def __init__(self, uri: str):
+    def __init__(self, uri: str, encoding_version: EncodingVersion=EncodingVersion.V1):
         """
         Initializes a top-level Arctic library management instance.
 
@@ -88,7 +89,8 @@ class Arctic:
                 f"Invalid URI specified. Please see URI format specification for available formats. uri={uri}"
             )
 
-        self._library_adapter = _cls(uri)
+        self._encoding_version = encoding_version
+        self._library_adapter = _cls(uri, self._encoding_version)
         self._library_manager = LibraryManager(self._library_adapter.config_library)
 
     def __getitem__(self, name: str) -> Library:

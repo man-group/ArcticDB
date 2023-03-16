@@ -51,8 +51,8 @@ def test_update(version_store_factory):
     assert_frame_equal(vit.data.astype("float"), df)
 
 
-def test_update_long_strides(lmdb_version_store):
-    lib = lmdb_version_store
+def test_update_long_strides(s3_version_store):
+    lib = s3_version_store
     symbol = "test_update_long_strides"
 
     write_df = pd.DataFrame({"A": 7 * [1]}, index=pd.date_range("2023-02-01", periods=7))

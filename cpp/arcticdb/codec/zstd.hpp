@@ -7,13 +7,14 @@
 
 #pragma once
 
-#include <arcticdb/codec/core.hpp>
-#include <arcticdb/util/preconditions.hpp>
-#include <arcticdb/util/buffer.hpp>
-#include <arcticdb/util/hash.hpp>
+#include <arcticdb/codec/segment.hpp>
+#include <arcticdb/entity/performance_tracing.hpp>
+#include <arcticdb/stream/protobuf_mappings.hpp>
+#include <arcticdb/storage/common.hpp>
+#include <arcticdb/util/pb_util.hpp>
+#include <arcticdb/util/dump_bytes.hpp>
 
 #include <zstd.h>
-#include <type_traits>
 
 namespace arcticdb::detail {
 
@@ -30,10 +31,16 @@ struct ZstdBlockEncoder {
         opts.set_level(0);
     }
 
-    template<class T>
-    static std::size_t encode_block(const Opts &opts, const T *in, BlockProtobufHelper &block_utils,
-                                    HashAccum &hasher, T *out, std::size_t out_capacity, std::ptrdiff_t &pos,
-                                    arcticdb::proto::encoding::VariantCodec &out_codec) {
+    template<class T, typename CodecType>
+    static std::size_t encode_block(
+            const Opts &opts,
+            const T* in,
+            BlockProtobufHelper &block_utils,
+            HashAccum& hasher,
+            T *out,
+            std::size_t out_capacity,
+            std::ptrdiff_t &pos,
+            CodecType& out_codec) {
         std::size_t compressed_bytes = ZSTD_compress(out, out_capacity, in, block_utils.bytes_, opts.level());
         hasher(in, block_utils.count_);
         pos += compressed_bytes;
@@ -47,21 +54,25 @@ using ZstdEncoder = GenericBlockEncoder<F<TD>, TD, ZstdBlockEncoder>;
 
 struct ZstdDecoder {
 
-    /*
-     * encoder_version is here to support multiple versions but won't be used before we have them
-     */
+/*
+ * encoder_version is here to support multiple versions but won't be used before we have them
+ */
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 
     template<typename T>
-    static void decode_block(std::uint32_t encoder_version, const std::uint8_t *in, std::size_t in_bytes, T *t_out,
-                             std::size_t out_bytes) {
+    static void decode_block(
+        std::uint32_t encoder_version,
+        const std::uint8_t *in,
+        std::size_t in_bytes,
+        T *t_out,
+        std::size_t out_bytes) {
 
         const std::size_t decomp_size = ZSTD_getDecompressedSize(in, in_bytes);
-        util::check_arg(decomp_size == out_bytes, "expected out_bytes == ztd deduced bytes, actual {} != {}",
+        util::check_arg(decomp_size == out_bytes, "expected out_bytes == zstd deduced bytes, actual {} != {}",
                         out_bytes, decomp_size);
         std::size_t real_decomp = ZSTD_decompress(t_out, out_bytes, in, in_bytes);
-        util::check_arg(real_decomp == out_bytes, "expected out_bytes == ztd decompressed bytes, actual {} != {}",
+        util::check_arg(real_decomp == out_bytes, "expected out_bytes == zstd decompressed bytes, actual {} != {}",
                         out_bytes, real_decomp);
     }
 #pragma GCC diagnostic pop
