@@ -20,12 +20,13 @@ jobs:
   cibw_container:
     uses: ./.github/workflows/cibw_docker_image.yml
     with:
-      cibuildwheel_ver: "2.12.0"
+      cibuildwheel_ver: "2.12.1"
       force_update: false
 
   leader-compile:
     # First do the C++ core compilation using one Python version to seed the compilation caches (and fail quicker)
     needs: [cibw_container]
+    name: Compile
     uses: ./.github/workflows/build_steps.yml
     with:
       job_type: leader-compile
@@ -35,6 +36,7 @@ jobs:
   leader-cpp-test:
     # Compile and run the C++ tests separately concurrently with the following job
     needs: [leader-compile, cibw_container]
+    name: C++ Tests
     uses: ./.github/workflows/build_steps.yml
     with:
       job_type: cpp-tests
@@ -44,9 +46,14 @@ jobs:
   follower:
     # Then use the cached compilation artifacts to build other python versions concurrently in cibuildwheels
     needs: [leader-compile, cibw_container]
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["36", "37", "38", "39", "310", "311"]
+    name: Py${{matrix.python}}
     uses: ./.github/workflows/build_steps.yml
     with:
       job_type: follower
+      python: ${{matrix.python}}
       cmake_preset_type: ${{inputs.cmake_preset_type || (github.ref == 'refs/heads/master' && 'release' || 'debug') }}
-      cibuildwheel_ver: "2.12.0"  # Must match the cibw_container job above
       cibw_image_tag: ${{needs.cibw_container.outputs.tag}}
