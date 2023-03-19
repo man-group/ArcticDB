@@ -7,15 +7,24 @@ echo Saving results to ${test_output:="$(realpath "$tooling_dir/../cpp/out")"}
 
 function worker() {
     group=${1:?Must pass the group id argument}
-    duration_file="$test_output/pytest-durations.$group.json"
-    cp "$tooling_dir/pytest-durations.json" "$duration_file"
     shift
+    duration_file="$test_output/pytest-durations.$group.json"
+    new_root=/tmp/just_tests$group
     set -o xtrace -o pipefail
+
+    cp "$tooling_dir/pytest-durations.json" "$duration_file"
+
+    # Build a directory that's just the test assets, so can't access other Python source not in the wheel
+    # Each test also get a separate directory since there's a mystery lock somewhere preventing concurrent runs (even)
+    # from different Python processes
+    mkdir $new_root # Will fail the function if it exists for some reason
+    ln -s "$(realpath "$tooling_dir/../python/tests")" $new_root
+    cd $new_root
+
     python -m pytest -v --show-capture=no --log-file="$test_output/pytest-logger.$group.log" \
+        --junitxml="$test_output/pytest.$group.xml" \
         --splits 2 --group $group --durations-path="$duration_file" --store-durations \
-        "${@:-python/tests}" 2>&1 \
-        | sed -r "s#^[./]*(project/)?(python/tests/(([^/]+).*/([^/]+\.py))?)?#$group: \4 \5#"
-        #   Regex groups: 1        1 2             34     4   5         53 2 E.g. "1: unit test_x.py"
+        "$@" 2>&1 | sed -r "s#^(tests/.*/([^/]+\.py))?#$group: \2#"
 }
 
 for i in 1 2 ; do

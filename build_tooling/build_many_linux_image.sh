@@ -6,10 +6,10 @@ if [[ -z "$manylinux_image" ]] ; then
     echo Resolving pinned image for cibuildwheel == \
         v${cibuildwheel_ver:?'Must set either manylinux_image or cibuildwheel_ver environment variable'}
 
-    manylinux_image=$(curl -sL "https://github.com/pypa/cibuildwheel/raw/v${cibuildwheel_ver}/cibuildwheel/resources/pinned_docker_images.cfg" \
-        | awk "/${image_grep:-manylinux2014_x86_64}/ { print \$3 ; exit }" )
+    url="https://github.com/pypa/cibuildwheel/raw/v${cibuildwheel_ver}/cibuildwheel/resources/pinned_docker_images.cfg"
+    manylinux_image=$(curl -sL "$url" | awk "/${image_grep:-manylinux2014_x86_64}/ { print \$3 ; exit }" )
     if [[ -z "$manylinux_image" ]] ; then
-        echo "Failed to parse source image from cibuildwheel repo" >&2
+        echo "Failed to parse source image from cibuildwheel repo: ${url}" >&2
         exit 1
     fi
 fi
@@ -45,6 +45,7 @@ RUN yum update -y && \
     yum install -y zip openssl-devel cyrus-sasl-devel devtoolset-10-libatomic-devel libcurl-devel && \
     rpm -Uvh --nodeps \$(repoquery --location mono-{core,web,devel,data,wcf,winfx}) && \
     yum clean all && touch /etc/arcticdb_deps_installed
+LABEL io.arcticdb.cibw_ver=\"${cibuildwheel_ver}\" io.arcticdb.base=\"${manylinux_image}\"
 " > Dockerfile
 
 docker build -t $output_tag .
