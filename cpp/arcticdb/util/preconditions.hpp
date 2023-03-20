@@ -58,6 +58,14 @@ template<ErrorCode code>
 constexpr auto raise = check<code>.raise;
 }
 
+namespace sorting {
+    template<ErrorCode code>
+    constexpr auto check = util::detail::Check<code, ErrorCategory::SORTING>{};
+
+    template<ErrorCode code>
+    constexpr auto raise = check<code>.raise;
+}
+
 // TODO Change legacy codes to internal::
 namespace util {
 
