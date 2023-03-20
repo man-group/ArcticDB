@@ -63,7 +63,7 @@ std::optional<util::BitSet> check_and_mark_slices(
         RowRange current = *pos;
         std::advance(pos, 1);
         for(; pos != row_ranges.end(); ++pos){
-            util::check(pos->start() == current.end(), "Non-contiguous rows, range search on unsorted data? {} {}", current, *pos);
+            sorting::check<ErrorCode::E_UNSORTED_DATA>(pos->start() == current.end(), "Non-contiguous rows, range search on unsorted data? {} {}", current, *pos);
             current = *pos;
         }
     }
