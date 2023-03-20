@@ -106,7 +106,7 @@ Use of ArcticDB in production or for a Database Service requires a paid for lice
 
 The BSL is not certified as an open-source license, but most of the [Open Source Initiative (OSI)](https://opensource.org/) criteria are met.
 
-For each BSL release all associated alpha, beta, major, and minor (point) releases will become Apache Lisensed, version 2.0 on the same day two years after the major release date. For the license conversion dates, see the table below.
+For each BSL release all associated alpha, beta, major, and minor (point) releases will become Apache Licensed, version 2.0 on the same day two years after the major release date. For the license conversion dates, see the table below.
 
 | ArcticDB Version | License | Converts to Apache 2.0 |
 | ------------- | ------------- | ------------- |
