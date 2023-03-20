@@ -39,7 +39,7 @@ if (ARCTICDB_USING_VCPKG)
     find_package(bsoncxx REQUIRED)
     set(ARCTICDB_MONGO_LIBS mongo::mongocxx_static mongo::bsoncxx_static)
 
-    find_package(zstd CONFIG REQUIRED)  # "CONFIG" bypass our cpp/CMake/FindZstd.cmake module
+    find_package(zstd CONFIG REQUIRED)  # "CONFIG" bypasses our cpp/CMake/FindZstd.cmake module
     set(Zstd_LIBRARY $<IF:$<TARGET_EXISTS:zstd::libzstd_shared>,zstd::libzstd_shared,zstd::libzstd_static>)
 
 else()
@@ -205,7 +205,6 @@ set(arcticdb_srcs
         storage/mongo/mongo_client.hpp
         storage/mongo/mongo_instance.hpp
         storage/mongo/mongo_storage.hpp
-        storage/storage_options.hpp
         storage/s3/nfs_backed_storage.hpp
         storage/s3/nfs_backed_storage-inl.hpp
         storage/s3/s3_client_accessor.hpp

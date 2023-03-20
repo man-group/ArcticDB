@@ -25,13 +25,14 @@ from arcticdb.util.hypothesis import (
     non_zero_numeric_type_strategies,
     string_strategy,
 )
+from tests.util.mark import until
 
 
 def assert_equal_value(data, expected):
     received = data.reindex(sorted(data.columns), axis=1)
     received.sort_index(inplace=True)
     expected = expected.reindex(sorted(expected.columns), axis=1)
-    assert_frame_equal(expected, received.astype("float"))
+    assert_frame_equal(received.astype("float"), expected)
 
 
 @use_of_function_scoped_fixtures_in_hypothesis_checked
@@ -265,6 +266,7 @@ def test_segment_without_aggregation_column(lmdb_version_store_dynamic_schema):
         assert_equal_value(received, expected)
 
 
+@until("2023-04-10", pytest.mark.xfail(reason="ArcticDB/issues/130"))
 def test_minimal_repro_type_change(lmdb_version_store_dynamic_schema):
     lib = lmdb_version_store_dynamic_schema
     sym = "test_minimal_repro_type_change"
@@ -273,7 +275,7 @@ def test_minimal_repro_type_change(lmdb_version_store_dynamic_schema):
     lib.write(sym, write_df)
     append_df = pd.DataFrame({"grouping_column": ["group_1"], "to_sum": [1.5]})
     lib.append(sym, append_df)
-    df = write_df.append(append_df)
+    df = pd.concat([write_df, append_df])
     expected = df.groupby("grouping_column").agg({"to_sum": "sum"})
 
     q = QueryBuilder()
@@ -282,6 +284,7 @@ def test_minimal_repro_type_change(lmdb_version_store_dynamic_schema):
     assert_equal_value(received, expected)
 
 
+@until("2023-04-10", pytest.mark.xfail(reason="ArcticDB/issues/130"))
 def test_minimal_repro_type_change_max(lmdb_version_store_dynamic_schema):
     lib = lmdb_version_store_dynamic_schema
     sym = "test_minimal_repro_type_change_max"

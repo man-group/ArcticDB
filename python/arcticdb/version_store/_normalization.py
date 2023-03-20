@@ -255,6 +255,9 @@ def _from_tz_timestamp(ts, tz):
     return pd.Timestamp(ts).tz_localize(tz).to_pydatetime()
 
 
+_range_index_props_are_public = hasattr(RangeIndex, "start")
+
+
 def _normalize_single_index(index, index_names, index_norm, dynamic_strings=None, string_max_len=None):
     # index: pd.Index or np.ndarray -> np.ndarray
     index_tz = None
@@ -268,8 +271,8 @@ def _normalize_single_index(index, index_names, index_norm, dynamic_strings=None
                     )
                 )
             index_norm.name = _column_name_to_strings(index.name)
-        index_norm.start = index._start
-        index_norm.step = index._step
+        index_norm.start = index.start if _range_index_props_are_public else index._start
+        index_norm.step = index.step if _range_index_props_are_public else index._step
         return [], []
     else:
         coerce_type = DTN64_DTYPE if len(index) == 0 else None
