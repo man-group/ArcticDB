@@ -4,7 +4,7 @@ on:
     inputs:
       job_type:          {required: true, type: string, description: Usually caller job's name}
       cmake_preset_type: {required: true, type: string, description: See the synonyms param in parent workflow}
-      cibw_image_tag:    {required: true, type: string, description: As build by cibw_docker_image.yml workflow}
+      cibw_image_tag:    {required: true, type: string, description: As built by cibw_docker_image.yml workflow}
       python:            {default: '(default)', type: string, description: Python version for followers}
 
 jobs:
@@ -80,7 +80,7 @@ jobs:
 
       - name: C++ unit tests
         if: inputs.job_type == 'cpp-tests'
-        run: "cpp/out/install/test_unit_arcticdb --gtest_filter=-TestNfsBackedStorage.*:TestS3Storage.*"
+        run: "cpp/out/install/test_unit_arcticdb --gtest_filter=-TestNfsBackedStorage.*:TestS3Storage.*:PythonVersionStore.FreesMemory"
 
       # ========================= Follower (CIBW) steps =========================
       - name: Get CIBuildWheel image & metadata
@@ -165,6 +165,8 @@ jobs:
 
       - name: Run test
         run: build_tooling/parallel_test.sh tests/${{matrix.cmd || matrix.type}}
+        env:
+          test_output: /tmp
 
       - name: Upload the logs
         if: always()

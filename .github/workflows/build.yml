@@ -12,10 +12,8 @@ on:
         options: [debug, release]
 run-name: Building ${{github.ref}} on ${{github.event_name}} by ${{github.actor}} [${{inputs.cmake_preset_type}}]
 jobs:
-  # GitHub Actions don't allow YAML node references or other intra-file code reuse; instead, they use the clunky
-  # "reusable workflows" files or "composite actions" which requires a separate repository.
-  # Our build jobs share many steps and config, so instead of creating many workflow files and passing a millon params,
-  # they're mostly in one "steps" file and we control which steps are enabled by passing a "job_type".
+  # To avoid spreading logic and configs over multile files under GitHub's clunky "reusable workflows", most of them are
+  # in the "steps" file and this one drives it via parameters.
 
   cibw_container:
     uses: ./.github/workflows/cibw_docker_image.yml

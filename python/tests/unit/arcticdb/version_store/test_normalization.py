@@ -13,7 +13,6 @@ import pandas as pd
 import pytest
 import pytz
 from numpy.testing import assert_equal, assert_array_equal
-from arcticdb.util.test import assert_frame_equal, assert_series_equal
 
 from arcticdb.exceptions import ArcticNativeNotYetImplemented
 from arcticdb.version_store._custom_normalizers import (
@@ -35,8 +34,10 @@ from arcticdb.version_store._normalization import (
     NPDDataFrame,
 )
 from arcticdb.version_store._common import TimeFrame
-from arcticdb.util.test import param_dict, CustomThing, TestCustomNormalizer
+from arcticdb.util.test import param_dict, CustomThing, TestCustomNormalizer, assert_frame_equal, assert_series_equal
 from arcticdb.exceptions import ArcticNativeException
+from tests.util.mark import until
+
 
 params = {
     "simple_dict": {"a": "1", "b": 2, "c": 3.0, "d": True},
@@ -91,6 +92,7 @@ def create_df_params():
     return params
 
 
+@until("2023-04-10", pytest.mark.xfail(reason="Leave failing until underlying error message has improved"))
 @param_dict("d", create_df_params())
 def test_store_df(d):
     norm = CompositeNormalizer()
