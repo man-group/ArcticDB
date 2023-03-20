@@ -162,7 +162,7 @@ class InputFactories(_InputFactoryValues, Enum):
     DF_RC_NON_RANGE = (
         # Create uneven steps, so cannot be converted to RangeIndex by mistake
         lambda s, l: FactoryReturn(
-            pd.DataFrame({"col": [s] * l}, index=pd.Int64Index(s * 1000 + i * 2 + (i & 1) for i in range(l))), -(s + l)
+            pd.DataFrame({"col": [s] * l}, index=pd.Index(s * 1000 + i * 2 + (i & 1) for i in range(l))), -(s + l)
         ),
         _ROWCOUNT,
         "df",

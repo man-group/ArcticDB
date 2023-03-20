@@ -50,7 +50,7 @@ def test_roundtrip_nan(lmdb_version_store):
 
 
 def test_roundtrip_nat(lmdb_version_store):
-    nats = np.repeat(np.datetime64("NaT"), 4)
+    nats = np.repeat(pd.NaT, 4)
     d = {"col1": nats}
     df = pd.DataFrame(index=[0, 1, 2, 3], data=d)
     lmdb_version_store.write("all_nats", df)

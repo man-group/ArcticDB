@@ -276,7 +276,7 @@ def test_filter_column_not_present_dynamic(lmdb_version_store_dynamic_schema):
     symbol = "test_filter_column_not_present_static"
     lmdb_version_store_dynamic_schema.write(symbol, df)
     vit = lmdb_version_store_dynamic_schema.read(symbol, query_builder=q)
-    expected = pd.DataFrame({"a": pd.Series(dtype="int64")}, index=pd.Int64Index([], dtype="int64"))
+    expected = pd.DataFrame({"a": pd.Series(dtype="int64")}, index=pd.Index([], dtype="int64"))
     assert_frame_equal(vit.data, expected)
     print(vit.data.to_string())
 

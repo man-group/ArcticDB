@@ -7,7 +7,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 """
 import os
 from contextlib import contextmanager
-from typing import Mapping, Any, Optional, Iterable
+from typing import Mapping, Any, Optional, Iterable, NamedTuple, List, AnyStr
 import numpy as np
 import pandas as pd
 import pytest
@@ -16,9 +16,11 @@ import random
 from six import PY3
 from pkg_resources import resource_filename
 from copy import deepcopy
+from functools import wraps
+from packaging import version
+
 from arcticdb.config import Defaults
 from arcticdb.log import configure, logger_by_name
-from typing import NamedTuple, List, AnyStr
 from arcticdb.version_store._custom_normalizers import CustomNormalizer
 from arcticc.pb2.descriptors_pb2 import NormalizationMetadata
 from arcticc.pb2.logger_pb2 import LoggerConfig, LoggersConfig
@@ -26,11 +28,10 @@ from arcticc.pb2.storage_pb2 import LibraryDescriptor, VersionStoreConfig
 from arcticdb.version_store.helper import ArcticcFileConfig
 from arcticdb.config import _DEFAULT_ENVS_PATH
 from arcticdb_ext import set_config_int, get_config_int, unset_config_int
-from functools import wraps
 
 
-PANDAS_VERSION = tuple([int(i) for i in pd.__version__.split(".")])
-CHECK_FREQ_VERSION = (1, 1, 0)
+PANDAS_VERSION = version.parse(pd.__version__)
+CHECK_FREQ_VERSION = version.Version("1.1")
 
 
 def maybe_not_check_freq(f):
@@ -264,13 +265,11 @@ def test_wide_dataframe(size=10000, seed=0):
 
 
 def test_pickle():
-    return np.random.choice(
-        [
-            list(random_integers(10000, np.uint32)),
-            str(random_string(100)),
-            {"a": list(random_integers(100000, np.int32))},
-        ]
-    )
+    return (
+        list(random_integers(10000, np.uint32)),
+        str(random_string(100)),
+        {"a": list(random_integers(100000, np.int32))},
+    )[np.random.randint(0, 2)]
 
 
 def random_strings_of_length(num, length, unique):
