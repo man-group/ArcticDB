@@ -28,7 +28,8 @@ enum class ErrorCategory : BaseType {
     NORMALIZATION = 2,
     MISSING_DATA = 3,
     SCHEMA = 4,
-    STORAGE = 5
+    STORAGE = 5,
+    SORTING = 6
 };
 
 // FUTURE(GCC9): use magic_enum
@@ -38,7 +39,8 @@ inline std::unordered_map<ErrorCategory, const char*> get_error_category_names()
         {ErrorCategory::NORMALIZATION, "NORMALIZATION"},
         {ErrorCategory::MISSING_DATA, "MISSING_DATA"},
         {ErrorCategory::SCHEMA, "SCHEMA"},
-        {ErrorCategory::STORAGE, "STORAGE"}
+        {ErrorCategory::STORAGE, "STORAGE"},
+        {ErrorCategory::SORTING, "SORTING"}
     };
 }
 
@@ -57,7 +59,8 @@ inline std::unordered_map<ErrorCategory, const char*> get_error_category_names()
     ERROR_CODE(3000, E_NO_SUCH_VERSION)  \
     ERROR_CODE(4000, E_DESCRIPTOR_MISMATCH)  \
     ERROR_CODE(5000, E_KEY_NOT_FOUND) \
-    ERROR_CODE(5001, E_DUPLICATE_KEY)
+    ERROR_CODE(5001, E_DUPLICATE_KEY) \
+    ERROR_CODE(6000, E_UNSORTED_DATA)
 
 enum class ErrorCode : BaseType {
 #define ERROR_CODE(code, Name, ...) Name = code,
@@ -120,6 +123,7 @@ using NormalizationException = ArcticBaseException<ErrorCategory::NORMALIZATION>
 using NoSuchVersionException = ArcticSpecificException<ErrorCode::E_NO_SUCH_VERSION>;
 using StorageException = ArcticBaseException<ErrorCategory::STORAGE>;
 using MissingDataException = ArcticBaseException<ErrorCategory::MISSING_DATA>;
+using UnsortedDataException = ArcticSpecificException<ErrorCode::E_UNSORTED_DATA>;
 
 template<ErrorCode error_code>
 [[noreturn]] void throw_error(const std::string& msg) {
@@ -129,6 +133,11 @@ template<ErrorCode error_code>
 template<>
 [[noreturn]] inline void throw_error<ErrorCode::E_NO_SUCH_VERSION>(const std::string& msg) {
     throw ArcticSpecificException<ErrorCode::E_NO_SUCH_VERSION>(msg);
+}
+
+template<>
+[[noreturn]] inline void throw_error<ErrorCode::E_UNSORTED_DATA>(const std::string& msg) {
+    throw ArcticSpecificException<ErrorCode::E_UNSORTED_DATA>(msg);
 }
 
 }
