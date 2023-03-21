@@ -48,9 +48,9 @@ jobs:
         run: cd cpp/vcpkg ; git fetch --unshallow origin master
 
       - name: Configure sccache
-        uses: Xuanwo/sccache-action@c94e27bef21ab3fb4a5152c8a878c53262b4abb0 # FUTURE: use mozilla/ once it's merged
+        uses: mozilla-actions/sccache-action@v0.0.3
         with:
-          version: "v0.4.0-pre.8"
+          version: "v0.4.0"
 
       # ========================= Leader steps =========================
       - name: Prepare C++ compilation env
@@ -80,7 +80,16 @@ jobs:
 
       - name: C++ unit tests
         if: inputs.job_type == 'cpp-tests'
-        run: "cpp/out/install/test_unit_arcticdb --gtest_filter=-TestNfsBackedStorage.*:TestS3Storage.*:PythonVersionStore.FreesMemory"
+        run: |
+          yum install -y jq
+          cd cpp/out
+          install/test_unit_arcticdb --gtest_output=json:test_unit_arcticdb.json \
+            --gtest_filter=-TestNfsBackedStorage.*:TestS3Storage.* || true
+          [[ $(jq '.tests' test_unit_arcticdb.json) -gt 0 ]]
+          [[ $(jq '.failures' test_unit_arcticdb.json) -eq 0 ]]
+          [[ $(jq '.errors' test_unit_arcticdb.json) -eq 0 ]]
+        env:
+          ARCTICDB_memory_loglevel: INFO
 
       # ========================= Follower (CIBW) steps =========================
       - name: Get CIBuildWheel image & metadata
