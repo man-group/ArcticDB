@@ -141,7 +141,7 @@ class CMakeBuild(build_ext):
         ]
 
         if not os.path.exists(build_dir):
-            os.makedirs(build_dir, mode=0o750)
+            os.makedirs(build_dir, mode=0o755)
         subprocess.check_call(process_args, env=env, cwd=build_dir)  # No shell=True here because cmake is in env.PATH
 
 
