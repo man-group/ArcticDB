@@ -12,6 +12,7 @@
 #include <arcticdb/util/pb_util.hpp>
 #include <arcticdb/pipeline/input_tensor_frame.hpp>
 #include <arcticdb/pipeline/index_segment_reader.hpp>
+#undef GetMessage
 
 namespace arcticdb {
 
