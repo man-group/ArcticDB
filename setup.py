@@ -53,8 +53,9 @@ class CompileProtoAndBuild(build_py):
 
 
 class DevelopAndCompileProto(develop):
-    def run(self):
-        develop.run(self)
+    def install_for_development(self):
+        super().install_for_development()
+        self.reinitialize_command("protoc", python_out=self.egg_base)
         self.run_command("protoc")  # compile after updating the deps
 
 
@@ -141,7 +142,7 @@ class CMakeBuild(build_ext):
         ]
 
         if not os.path.exists(build_dir):
-            os.makedirs(build_dir, mode=0o750)
+            os.makedirs(build_dir, mode=0o755)
         subprocess.check_call(process_args, env=env, cwd=build_dir)  # No shell=True here because cmake is in env.PATH
 
 

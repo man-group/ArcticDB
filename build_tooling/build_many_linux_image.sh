@@ -14,7 +14,6 @@ if [[ -z "$manylinux_image" ]] ; then
     fi
 fi
 
-sccache_ver="v0.4.0-pre.9" # Temporary override as Github Actions support is in pre-release
 if [[ -z "$sccache_ver" ]] ; then
     sccache_ver=`curl -sL -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28" \
         https://api.github.com/repos/mozilla/sccache/releases/latest | jq ".tag_name"`

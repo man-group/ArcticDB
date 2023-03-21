@@ -3,6 +3,12 @@ on:
   push:
     branches: ["**"]
     tags: [v**]
+    paths:
+      - build_tooling/**
+      - cpp/**
+      - python/**
+      - setup.*
+      - pyproject.toml
   workflow_dispatch:
     inputs:
       cmake_preset_type:

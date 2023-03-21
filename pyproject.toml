@@ -17,7 +17,6 @@ cp {project}/build_tooling/avoid_oom.sh /usr/local/bin/
 {project}/build_tooling/vcpkg_caching.sh
 """
 build = "cp*-manylinux_x86_64"
-manylinux-x86_64-image = "local_manylinux"
 
 [tool.cibuildwheel.windows]
 build = "cp*-win_amd64"
