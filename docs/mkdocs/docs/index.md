@@ -36,7 +36,7 @@ ArcticDB is a storage engine designed for S3. As a result, you must have an avai
 !!! Storage Compatibility
 
     ArcticDB supports any S3-API compatible storage. This includes AWS S3 as well as Google Cloud Storage, which offers S3-API emulation, but not Azure Blob Storage. 
-    Providers of local networked storage solutions such as Intel and NetApp are also supported if an S3 API is provided (and it usually is)!
+    Providers of local networked storage solutions such as [VAST Universal Storage](https://vastdata.com/) are also supported if an S3 API is provided.
 
     ArcticDB also supports LMDB for local/file based storage - to use LMDB, pass an LMDB path as the URI: `Arctic('lmdb://path/to/desired/database')`.
 
