@@ -43,6 +43,14 @@ def use_of_function_scoped_fixtures_in_hypothesis_checked(fun):
     if not _function_scoped_fixture:
         return fun
 
+    existing = getattr(fun, "_hypothesis_internal_use_settings", None)
+    assert existing or getattr(fun, "is_hypothesis_test", False), "Must be used before @given/@settings"
+
+    combined = {_function_scoped_fixture, *(existing or settings.default).suppress_health_check}
+    new_settings = settings(parent=existing, suppress_health_check=combined)
+    setattr(fun, "_hypothesis_internal_use_settings", new_settings)
+    return fun
+
 
 def non_infinite(x):
     return -inf < x < inf
