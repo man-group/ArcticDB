@@ -9,7 +9,13 @@ import multiprocessing
 import boto3
 import werkzeug
 from moto.server import DomainDispatcherApplication, create_backend_app
+
+import sys
 import signal
+if sys.platform == "win32":
+    # Hack to define signal.SIGKILL as some deps eg pytest-test-fixtures hardcode SIGKILL terminations.
+    signal.SIGKILL = signal.SIGINT
+
 import time
 import os
 import pytest
@@ -42,20 +48,16 @@ configure_test_logger()
 BUCKET_ID = 0
 
 
+def run_server(port):
+    werkzeug.run_simple(
+        "0.0.0.0", port, DomainDispatcherApplication(create_backend_app, service="s3"), threaded=True, ssl_context=None
+    )
+
+
 @pytest.fixture(scope="module")
 def _moto_s3_uri_module():
     port = get_ephemeral_port()
-
-    def run_server():
-        werkzeug.run_simple(
-            "0.0.0.0",
-            port,
-            DomainDispatcherApplication(create_backend_app, service="s3"),
-            threaded=True,
-            ssl_context=None,
-        )
-
-    p = multiprocessing.Process(target=run_server)
+    p = multiprocessing.Process(target=run_server, args=(port,))
     p.start()
 
     time.sleep(0.5)
@@ -126,12 +128,12 @@ def arctic_library(moto_s3_uri_incl_bucket):
 
 @pytest.fixture()
 def sym():
-    return "test_" + datetime.utcnow().isoformat()
+    return "test" + datetime.utcnow().strftime("%Y-%m-%dT%H_%M_%S_%f")
 
 
 @pytest.fixture()
 def lib_name():
-    return "local.test_" + datetime.utcnow().isoformat()
+    return "local.test" + datetime.utcnow().strftime("%Y-%m-%dT%H_%M_%S_%f")
 
 
 @pytest.fixture
