@@ -40,6 +40,5 @@ class ArcticLibraryAdapter(ABC):
     def initialize_library(self, name: str, config: LibraryConfig):
         raise NotImplementedError
 
-    @abstractmethod
     def delete_library(self, library: Library, library_config: LibraryConfig):
-        raise NotImplementedError
+        return library._nvs.version_store.clear()

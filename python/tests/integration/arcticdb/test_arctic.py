@@ -49,10 +49,8 @@ except ImportError:
     )
 
 
-def test_library_creation_deletion(moto_s3_uri_incl_bucket):
-    ac = Arctic(moto_s3_uri_incl_bucket)
+def library_creation_deletion(ac):
     assert ac.list_libraries() == []
-
     ac.create_library("pytest_test_lib")
     with pytest.raises(ValueError):
         ac.create_library("pytest_test_lib")
@@ -67,6 +65,16 @@ def test_library_creation_deletion(moto_s3_uri_incl_bucket):
     assert not ac.list_libraries()
     with pytest.raises(Exception):  # TODO: Nicely wrap?
         _lib = ac["pytest_test_lib"]
+
+
+def test_library_creation_deletion_s3(moto_s3_uri_incl_bucket):
+    ac = Arctic(moto_s3_uri_incl_bucket)
+    library_creation_deletion(ac)
+
+
+def test_library_creation_deletion_lmdb(tmpdir):
+    ac = Arctic(f"lmdb://{tmpdir}")
+    library_creation_deletion(ac)
 
 
 def test_library_options(moto_s3_uri_incl_bucket):

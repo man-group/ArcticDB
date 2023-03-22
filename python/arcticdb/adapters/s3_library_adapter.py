@@ -177,9 +177,6 @@ class S3LibraryAdapter(ArcticLibraryAdapter):
     def initialize_library(self, name: str, config: LibraryConfig):
         pass
 
-    def delete_library(self, library: Library, library_config: LibraryConfig):
-        return library._nvs.version_store.clear()
-
     def _configure_aws(self):
         if not self._query_params.region:
             match = re.match(r"s3\.(?P<region>[a-z0-9-]+)\.amazonaws.*", self._endpoint)

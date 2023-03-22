@@ -63,6 +63,3 @@ class LMDBLibraryAdapter(ArcticLibraryAdapter):
 
     def initialize_library(self, name: str, config: LibraryConfig):
         pass
-
-    def delete_library(self, library: NativeVersionStore, library_config: LibraryConfig):
-        return library.version_store.clear()
