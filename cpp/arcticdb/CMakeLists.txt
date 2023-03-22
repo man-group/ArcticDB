@@ -102,11 +102,8 @@ IF($ENV{DEBUG_BUILD})
     ADD_DEFINITIONS(-DUSE_REMOTERY)
     ADD_DEFINITIONS(-DARCTICDB_TRACK_ALLOCS)
     ADD_DEFINITIONS(-DDEBUG_BUILD)
-    #if(WIN32)
-        # See https://github.com/pybind/pybind11/issues/3403#issuecomment-962878324
-        # Pybind pybind11*Tools.cmake try to add the same when PYTHON_IS_DEBUG, but does not seem to work?
-    #    add_compile_definitions(Py_DEBUG)
-    #endif()
+    # Uncomment to build against debug build of Python
+    #add_compile_definitions(Py_DEBUG)
 ELSE()
     message(STATUS "Not setting debug flags")
 ENDIF()
