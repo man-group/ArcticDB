@@ -98,8 +98,6 @@ constexpr ErrorCategory get_error_category(ErrorCode code) {
 
 template<ErrorCategory error_category>
 struct ArcticBaseException : public std::runtime_error {
-    ARCTICDB_MOVE_ONLY_DEFAULT(ArcticBaseException)
-
     explicit ArcticBaseException(const std::string& msg_with_error_code):
         std::runtime_error(msg_with_error_code) {
     }
@@ -107,8 +105,6 @@ struct ArcticBaseException : public std::runtime_error {
 
 template<ErrorCode specific_code>
 struct ArcticSpecificException : public ArcticBaseException<get_error_category(specific_code)> {
-    ARCTICDB_MOVE_ONLY_DEFAULT(ArcticSpecificException)
-
     static constexpr ErrorCategory category = get_error_category(specific_code);
 
     explicit ArcticSpecificException(const std::string& msg_with_error_code) :
