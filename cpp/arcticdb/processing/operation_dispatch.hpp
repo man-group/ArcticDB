@@ -269,7 +269,7 @@ VariantData binary_membership(const ColumnWithStrings& column_with_strings, Valu
                             if(func(static_cast<typename comp::right_type>(*ptr++), *typed_value_set))
                                 inserter = pos;
                         }
-                   }
+                    }
                     inserter.flush();
                 } else {
                     util::raise_rte("Cannot check membership of {} in set of {} (possible categorical?)",
