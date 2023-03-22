@@ -102,11 +102,11 @@ IF($ENV{DEBUG_BUILD})
     ADD_DEFINITIONS(-DUSE_REMOTERY)
     ADD_DEFINITIONS(-DARCTICDB_TRACK_ALLOCS)
     ADD_DEFINITIONS(-DDEBUG_BUILD)
-    if(WIN32)
+    #if(WIN32)
         # See https://github.com/pybind/pybind11/issues/3403#issuecomment-962878324
         # Pybind pybind11*Tools.cmake try to add the same when PYTHON_IS_DEBUG, but does not seem to work?
-        add_compile_definitions(Py_DEBUG)
-    endif()
+    #    add_compile_definitions(Py_DEBUG)
+    #endif()
 ELSE()
     message(STATUS "Not setting debug flags")
 ENDIF()
@@ -509,7 +509,7 @@ if (STRIP_BUILDS)
     set_target_properties(arcticdb_ext PROPERTIES LINK_FLAGS_RELEASE -s)
 endif()
 
-if (HIDE_LINKED_SYMBOLS)
+if (HIDE_LINKED_SYMBOLS AND (NOT WIN32))
     list(APPEND additional_link_flags
             "-Wl,--exclude-libs,ALL"
             "-Wl,--gc-sections"
@@ -546,7 +546,6 @@ if(${TEST})
     message("Python for test compilation:")
     unset(Python_USE_STATIC_LIBS)
     find_package(Python 3 COMPONENTS Interpreter Development REQUIRED)
-    python_utils_dump_vars_if_enabled("Python for tests")
 
     set(unit_test_srcs
             async/test/test_async.cpp
