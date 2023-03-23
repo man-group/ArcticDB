@@ -18,7 +18,7 @@ from arcticdb_ext.exceptions import (
     get_error_category,
 )
 
-# Not using arcticc.log because arcticc.__init__.py practically loads everything
+# Not using arcticdb.log because arcticdb.__init__.py practically loads everything
 from arcticdb_ext.log import log as _log, LogLevel as _LogLevel, LoggerId as _LoggerId
 
 
@@ -65,7 +65,7 @@ def arcticdb_raise(error_code: ErrorCodeEnumBase, error_msg_provider: Callable[[
     Parameters
     ----------
     error_code
-        One of the category-specific enum types in this module. The exception
+        One of the category-specific enum types in this module. The exception thrown will be based on the category.
     error_msg_provider
         A lambda to allow f-strings and other native formatting facilities in Python.
         Should return details of the error without the error code prefix.
