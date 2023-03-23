@@ -1,0 +1,18 @@
+if(NOT DEFINED ENV{CMAKE_BUILD_PARALLEL_LEVEL} OR "$ENV{CMAKE_BUILD_PARALLEL_LEVEL}" STREQUAL "")
+    include(ProcessorCount)
+    ProcessorCount(_proc_count)
+    if(${_proc_count} LESS 2)
+        message(WARNING "Failed to determine the available processor count. Assuming you have at least 2 cores. \
+            Please set the CMAKE_BUILD_PARALLEL_LEVEL environment variable.")
+        set(ENV{CMAKE_BUILD_PARALLEL_LEVEL} 2)
+    else()
+        cmake_host_system_information(RESULT _physical_mb QUERY TOTAL_PHYSICAL_MEMORY)
+        math(EXPR _needed_mb "${_proc_count} * 1500")
+        if(${_needed_mb} GREATER ${_physical_mb})
+            message(WARNING "We recommend 1500MB of physical RAM per processor core. We found ${_proc_count} cores and\
+                ${_physical_mb}MB of RAM. Use the CMAKE_BUILD_PARALLEL_LEVEL environment variable to avoid thrashing.")
+        endif()
+        set(ENV{CMAKE_BUILD_PARALLEL_LEVEL} ${_proc_count})
+    endif()
+endif()
+message(STATUS "CMAKE_BUILD_PARALLEL_LEVEL=$ENV{CMAKE_BUILD_PARALLEL_LEVEL}")

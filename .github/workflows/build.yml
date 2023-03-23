@@ -4,6 +4,7 @@ on:
     branches: ["**"]
     tags: [v**]
     paths:
+      - .github/workflows/*.yml
       - build_tooling/**
       - cpp/**
       - python/**
@@ -11,54 +12,148 @@ on:
       - pyproject.toml
   workflow_dispatch:
     inputs:
+      publish:
+        type: boolean
+      publish_env:
+        description: Environment to publish to
+        type: environment
       cmake_preset_type:
-        description: Override the preset suffix for CMAKE only. Does not affect artifact upload.
-        required: false
+        description: Override CMAKE preset type
         type: choice
-        options: [debug, release]
-run-name: Building ${{github.ref}} on ${{github.event_name}} by ${{github.actor}} [${{inputs.cmake_preset_type}}]
+        options: ["-", debug, release]
+run-name: Building ${{github.ref_name}} on ${{github.event_name}} by ${{github.actor}}
 jobs:
-  # To avoid spreading logic and configs over multile files under GitHub's clunky "reusable workflows", most of them are
-  # in the "steps" file and this one drives it via parameters.
+  common_config:
+    # Hacky way to supply common variables (as the env context is not available in jobs.*.with)
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          set +x
+          if ${{startsWith(github.ref, 'refs/tags/v')}}; then
+            echo -e "PUBLISH_ENV=ProdPypi\nCMAKE_PRESET_TYPE=release" | tee -a $GITHUB_ENV
+          elif $GITHUB_REF_PROTECTED || ${{github.ref == 'refs/heads/master'}} ; then
+            echo -e "PUBLISH_ENV=TestPypi\nCMAKE_PRESET_TYPE=release" | tee -a $GITHUB_ENV
+          else
+            echo -e "PUBLISH_ENV=${{vars.DEFAULT_PUBLISH_ENV}}\nCMAKE_PRESET_TYPE=debug" | tee -a $GITHUB_ENV
+          fi
+    outputs:
+      cibuildwheel_ver: "2.12.1"
+      publish_env: ${{inputs.publish && (inputs.publish_env || env.PUBLISH_ENV) || ''}}
+      cmake_preset_type_resolved: ${{inputs.cmake_preset_type != '-' && inputs.cmake_preset_type || env.CMAKE_PRESET_TYPE}}
+      # Full list CIBW supports: https://cibuildwheel.readthedocs.io/en/stable/options/#build-skip
+      # If adding PyPy, then must rewrite the python_impl_name in build_steps.yaml
+      linux_cibw_formats: '["cp3{0}-manylinux_x86_64"]'
+      windows_cibw_formats: '["cp3{0}-win_amd64"]'
+      linux_python_versions: ${{vars.LINUX_PYTHON_VERSIONS || '[6, 7, 8, 9, 10, 11]'}}
+      windows_python_versions: ${{vars.WINDOWS_PYTHON_VERSIONS || '[7, 8, 9, 10, 11]'}}
+      # Please declare any key you added below in build_steps.yaml:jobs.compile.strategy.matrix to aid the linting tools
+      linux_matrix: >-
+        {"os":"linux", "distro":"\"ubuntu-latest\"", "pytest_distro": "${{vars.PYTEST_DISTRO_LINUX}}",
+          "cmake_preset_prefix":"linux", "build_dir": "/tmp/cpp_build", "symbols": "*.gz",
+          "do_not_archive": ["*.so", "*.[ao]", "vcpkg_installed"]}
+      windows_matrix: >-
+        {"os":"windows", "distro":"\"windows-latest\"", "pytest_distro": "${{vars.PYTEST_DISTRO_WINDOWS}}",
+          "cmake_preset_prefix":"windows-cl", "build_dir": "C:\\cpp_build", "symbols": "*.pdb",
+          "do_not_archive": ["*.lib", "*.ilk", "*.pyd", "*.dll", "CMakeFiles/*.dir", "vcpkg_installed"]}
 
-  cibw_container:
+  cibw_docker_image:
+    needs: [common_config]
     uses: ./.github/workflows/cibw_docker_image.yml
     permissions: {packages: write}
     with:
-      cibuildwheel_ver: "2.12.1"
+      cibuildwheel_ver: ${{needs.common_config.outputs.cibuildwheel_ver}}
       force_update: false
 
-  leader-compile:
+  leader-compile-linux:
     # First do the C++ core compilation using one Python version to seed the compilation caches (and fail quicker)
-    needs: [cibw_container]
-    name: Compile
+    needs: [cibw_docker_image, common_config]
+    name: Linux Compile
     uses: ./.github/workflows/build_steps.yml
+    secrets: inherit
+    permissions: {packages: write}
     with:
       job_type: leader-compile
-      cmake_preset_type: ${{inputs.cmake_preset_type || (github.ref == 'refs/heads/master' && 'release' || 'debug') }}
-      cibw_image_tag: ${{needs.cibw_container.outputs.tag}}
+      cmake_preset_type: ${{needs.common_config.outputs.cmake_preset_type_resolved}}
+      cibw_image_tag: ${{needs.cibw_docker_image.outputs.tag}}
+      matrix: ${{needs.common_config.outputs.linux_matrix}}
 
-  leader-cpp-test:
+  leader-cpp-test-linux:
     # Compile and run the C++ tests separately concurrently with the following job
-    needs: [leader-compile, cibw_container]
-    name: C++ Tests
+    needs: [leader-compile-linux, cibw_docker_image, common_config]
+    name: Linux C++ Tests
     uses: ./.github/workflows/build_steps.yml
+    secrets: inherit
     with:
       job_type: cpp-tests
-      cmake_preset_type: ${{inputs.cmake_preset_type || (github.ref == 'refs/heads/master' && 'release' || 'debug') }}
-      cibw_image_tag: ${{needs.cibw_container.outputs.tag}}
+      cmake_preset_type: ${{needs.common_config.outputs.cmake_preset_type_resolved}}
+      cibw_image_tag: ${{needs.cibw_docker_image.outputs.tag}}
+      matrix: ${{needs.common_config.outputs.linux_matrix}}
 
-  follower:
+  follower-linux:
     # Then use the cached compilation artifacts to build other python versions concurrently in cibuildwheels
-    needs: [leader-compile, cibw_container]
+    needs: [leader-compile-linux, cibw_docker_image, common_config]
     strategy:
       fail-fast: false
       matrix:
-        python: ["36", "37", "38", "39", "310", "311"]
-    name: Py${{matrix.python}}
+        format: ${{fromJson(needs.common_config.outputs.linux_cibw_formats)}}
+        python3: ${{fromJson(needs.common_config.outputs.linux_python_versions)}}
+    name: 3.${{matrix.python3}} Linux
     uses: ./.github/workflows/build_steps.yml
+    secrets: inherit
+    permissions: {packages: write}
     with:
       job_type: follower
-      python: ${{matrix.python}}
-      cmake_preset_type: ${{inputs.cmake_preset_type || (github.ref == 'refs/heads/master' && 'release' || 'debug') }}
-      cibw_image_tag: ${{needs.cibw_container.outputs.tag}}
+      python3: ${{matrix.python3}}
+      cibw_build: ${{format(matrix.format, matrix.python3)}}
+      cibw_image_tag: ${{needs.cibw_docker_image.outputs.tag}}
+      cibw_version: ${{needs.common_config.outputs.cibuildwheel_ver}}
+      cmake_preset_type: ${{needs.common_config.outputs.cmake_preset_type_resolved}}
+      matrix: ${{needs.common_config.outputs.linux_matrix}}
+
+  leader-compile-windows:
+    needs: [common_config]
+    name: Windows Compile
+    uses: ./.github/workflows/build_steps.yml
+    secrets: inherit
+    permissions: {packages: write}
+    with:
+      job_type: leader-compile
+      cmake_preset_type: ${{needs.common_config.outputs.cmake_preset_type_resolved}}
+      matrix: ${{needs.common_config.outputs.windows_matrix}}
+
+  leader-cpp-test-windows:
+    needs: [leader-compile-windows, common_config]
+    name: Windows C++ Tests
+    uses: ./.github/workflows/build_steps.yml
+    secrets: inherit
+    with:
+      job_type: cpp-tests
+      cmake_preset_type: ${{needs.common_config.outputs.cmake_preset_type_resolved}}
+      matrix: ${{needs.common_config.outputs.windows_matrix}}
+
+  follower-windows:
+    needs: [leader-compile-windows, common_config]
+    strategy:
+      fail-fast: false
+      matrix:
+        format: ${{fromJson(needs.common_config.outputs.windows_cibw_formats)}}
+        python3: ${{fromJson(needs.common_config.outputs.windows_python_versions)}}
+    name: 3.${{matrix.python3}} Windows
+    uses: ./.github/workflows/build_steps.yml
+    secrets: inherit
+    permissions: {packages: write}
+    with:
+      job_type: follower
+      python3: ${{matrix.python3}}
+      cibw_build: ${{format(matrix.format, matrix.python3)}}
+      cibw_version: ${{needs.common_config.outputs.cibuildwheel_ver}}
+      cmake_preset_type: ${{needs.common_config.outputs.cmake_preset_type_resolved}}
+      matrix: ${{needs.common_config.outputs.windows_matrix}}
+
+  publish:
+    needs: [common_config, follower-windows, follower-linux]
+    if: ${{needs.common_config.outputs.publish_env}}
+    uses: ./.github/workflows/publish.yml
+    secrets: inherit
+    with:
+      environment: ${{needs.common_config.outputs.publish_env}}
