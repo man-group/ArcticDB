@@ -49,6 +49,12 @@ Note that for legacy reasons, the terms `symbol`, `stream`, and `stream ID` are 
 | 5000       | A missing key has been requested.                                      | ArcticDB has requested a key that does not exist in storage. Please ensure that you have requested a `symbol`, `snapshot` or `version` that exists. |
 | 5001       | ArcticDB is attempting to write to an already-existing key in storage. | This error is unexpected - please ensure that no other tools are writing data the same storage location that may conflict with ArcticDB.            |
 
+### Sorting Errors
+
+| Error Code | Cause                                                                  | Resolution                                                                                                                                          |
+|------------|------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------|
+| 6000       | Data should be sorted for this operation.                              | The requested operation requires data to be sorted. If this is a modification operation such as update, sort the input data.                        |
+
 ## Errors without numeric error codes
 
 ### Pickling errors
