@@ -10,8 +10,8 @@
       "installDir": "${sourceDir}/out/install"
     },
     {
-      "name": "windows-cl-debug",
-      "displayName": "Windows x64 Debug Cl",
+      "name": "windows-cl-release",
+      "displayName": "Windows x64 Release Cl",
       "description": "Target Windows with the Visual Studio development environment.",
       "inherits": "common",
       "generator": "Ninja",
@@ -24,7 +24,7 @@
         "strategy": "external"
       },
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_BUILD_TYPE": "Release",
         "CMAKE_C_COMPILER": "cl",
         "CMAKE_CXX_COMPILER": "cl",
         "VCPKG_TARGET_TRIPLET": "x64-windows-static"
@@ -36,14 +36,30 @@
       }
     },
     {
-      "name": "windows-cl-release",
-      "displayName": "Windows x64 Release Cl",
-      "inherits": "windows-cl-debug",
+      "name": "windows-cl-debug-logging",
+      "displayName": "Windows x64 Release with Debug Logging",
+      "description": "A release build, with debug logging enabled. Can be run in a non-debug Python interpreter.",
+      "inherits": "windows-cl-release",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Release"
+        "CMAKE_CXX_FLAGS_RELEASE": "/MT"
+      },
+      "environment": {
+        "DEBUG_BUILD": "TRUE",
+        "ARCTICDB_DEBUG_FIND_PYTHON": "TRUE"
       }
     },
-
+    {
+      "name": "windows-cl-debug",
+      "displayName": "Windows x64 Debug",
+      "description": "A debug build. Extension can only run in a debug Python interpreter build.",
+      "inherits": "windows-cl-release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      },
+      "environment": {
+        "ARCTICDB_DEBUG_FIND_PYTHON": "TRUE"
+      }
+    },
     {
       "name": "linux-debug",
       "displayName": "Linux x64 Debug",
@@ -70,6 +86,7 @@
     }
   ],
   "buildPresets": [
+    {"name": "windows-cl-debug-logging", "configurePreset": "windows-cl-debug-logging", "targets": "arcticdb_ext" },
     {"name": "windows-cl-debug",   "configurePreset": "windows-cl-debug",   "targets": "arcticdb_ext" },
     {"name": "windows-cl-release", "configurePreset": "windows-cl-release", "targets": "arcticdb_ext" },
     {"name": "linux-debug",        "configurePreset": "linux-debug",        "targets": "arcticdb_ext" },
