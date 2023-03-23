@@ -59,18 +59,14 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
-if(NOT WIN32)
-    include(PythonUtils) # Must be called before Pybind (third_party) to override its finding mechanism
-endif()
+include(PythonUtils) # Must be called before Pybind (third_party) to override its finding mechanism
 
 add_subdirectory(third_party)
 add_subdirectory(proto)
 
-if(NOT WIN32)
-    python_utils_dump_vars_if_enabled("After Pybind")
-    python_utils_check_include_dirs("accepted by pybind")
-    python_utils_check_version_is_as_expected()
-endif()
+python_utils_dump_vars_if_enabled("After Pybind")
+python_utils_check_include_dirs("accepted by pybind")
+python_utils_check_version_is_as_expected()
 
 #proto files are generated there so it's necessary to include them
 include_directories(${CMAKE_CURRENT_BINARY_DIR})

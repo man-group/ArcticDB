@@ -96,14 +96,18 @@ IF("${CMAKE_BUILD_TYPE}" STREQUAL "Debug" AND NOT DEFINED ENV{DEBUG_BUILD})
     set(ENV{DEBUG_BUILD} TRUE)
 ENDIF()
 
+IF(("${CMAKE_BUILD_TYPE}" STREQUAL "Debug") AND WIN32)
+    # See https://github.com/pybind/pybind11/issues/3403#issuecomment-962878324
+    # Pybind pybind11*Tools.cmake try to add the same when PYTHON_IS_DEBUG, but does not seem to work?
+    add_compile_definitions(Py_DEBUG)
+ENDIF()
+
 IF($ENV{DEBUG_BUILD})
     # Add macros definition here
     message("Setting debug flags")
     ADD_DEFINITIONS(-DUSE_REMOTERY)
     ADD_DEFINITIONS(-DARCTICDB_TRACK_ALLOCS)
     ADD_DEFINITIONS(-DDEBUG_BUILD)
-    # Uncomment to build against debug build of Python
-    #add_compile_definitions(Py_DEBUG)
 ELSE()
     message(STATUS "Not setting debug flags")
 ENDIF()
