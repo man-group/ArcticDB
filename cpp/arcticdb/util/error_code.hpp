@@ -29,7 +29,8 @@ enum class ErrorCategory : BaseType {
     MISSING_DATA = 3,
     SCHEMA = 4,
     STORAGE = 5,
-    SORTING = 6
+    SORTING = 6,
+    // NEW CATEGORIES MUST ALSO BE ADDED TO python_module.cpp:register_error_code_ecosystem
 };
 
 // FUTURE(GCC9): use magic_enum
@@ -119,6 +120,7 @@ using NormalizationException = ArcticBaseException<ErrorCategory::NORMALIZATION>
 using NoSuchVersionException = ArcticSpecificException<ErrorCode::E_NO_SUCH_VERSION>;
 using StorageException = ArcticBaseException<ErrorCategory::STORAGE>;
 using MissingDataException = ArcticBaseException<ErrorCategory::MISSING_DATA>;
+using SortingException = ArcticBaseException<ErrorCategory::SORTING>;
 using UnsortedDataException = ArcticSpecificException<ErrorCode::E_UNSORTED_DATA>;
 
 template<ErrorCode error_code>

@@ -226,11 +226,12 @@ void register_error_code_ecosystem(py::module& m) {
     setattr(m, "enum_value_to_prefix", enum_value_to_prefix);
     m.def("get_error_category", &get_error_category);
 
-    py::register_exception<SchemaException>(m, "SchemaException");
     py::register_exception<InternalException>(m, "InternalException");
-    py::register_exception<MissingDataException>(m, "MissingDataException");
     py::register_exception<NormalizationException>(m, "NormalizationException");
+    py::register_exception<MissingDataException>(m, "MissingDataException");
+    py::register_exception<SchemaException>(m, "SchemaException");
     py::register_exception<StorageException>(m, "StorageException");
+    py::register_exception<SortingException>(m, "SortingException");
 }
 
 
