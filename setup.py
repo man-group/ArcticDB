@@ -116,6 +116,11 @@ class CMakeBuild(build_ext):
         )
         subprocess.check_call([cmake, *common_args, "--preset", preset], cwd="cpp")
 
+        if os.getenv("ARCTICDB_CLEANUP_VCPKG_POST_CMAKE") == "1":
+            print("Will try to clean up the vcpkg build temporary directories")
+            shutil.rmtree("cpp/vcpkg/buildtrees", ignore_errors=True)
+
+
     def _configure_for_legacy_image(self, common_args, build_dir):
         print("Legacy cmake configuration")
         env = {

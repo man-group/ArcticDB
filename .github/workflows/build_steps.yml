@@ -1,29 +1,22 @@
-name: build_steps
+name: __build_steps
 on:
   workflow_call:
     inputs:
-      job_type:          {required: true, type: string, description: Usually caller job's name}
-      cmake_preset_type: {required: true, type: string, description: See the synonyms param in parent workflow}
-      cibw_image_tag:    {required: true, type: string, description: As built by cibw_docker_image.yml workflow}
-      python:            {default: '(default)', type: string, description: Python version for followers}
-
+      job_type:          {required: true, type: string, description: Selects the steps to enable}
+      cmake_preset_type: {required: true, type: string, description: release/debug}
+      matrix:            {required: true, type: string, description: JSON string to feed into the matrix}
+      cibw_image_tag:    {required: false, type: string, description: Linux only. As built by cibw_docker_image.yml workflow}
+      cibw_version:      {required: false, type: string, description: Follower only. Must match the cibw_image_tag}
+      python3:           {default: -1, type: number, description: Python 3 minor version}
+env:
+  python_impl_name: ${{inputs.python3 > 0 && format('cp3{0}', inputs.python3) || 'default'}}
 jobs:
   compile:
     strategy:
-      fail-fast: false
       matrix:
-        os: [linux]
         include:
-          - os: linux
-            distro: ubuntu-latest
-            cmake_preset_prefix: linux
-            cibw_format: "cp{0}-manylinux_x86_64"
-          # Windows is not included ATM because the build would run out of disk space ¯\_(ツ)_/¯
-          #- os: windows
-          #  distro: windows-latest
-          #  cmake_preset_prefix: windows-cl
+            - ${{fromJSON(inputs.matrix)}}
 
-    name: build on ${{matrix.os}}
     runs-on: ${{matrix.distro}}
     container: ${{ (matrix.os == 'linux' && inputs.job_type != 'follower') && inputs.cibw_image_tag || null}}
     env:
@@ -37,7 +30,9 @@ jobs:
       CIBW_ENVIRONMENT_PASS_LINUX: SCCACHE_GHA_VERSION ACTIONS_CACHE_URL ACTIONS_RUNTIME_TOKEN
         CMAKE_C_COMPILER_LAUNCHER CMAKE_CXX_COMPILER_LAUNCHER CMAKE_BUILD_PARALLEL_LEVEL
         ARCTIC_CMAKE_PRESET VCPKG_BINARY_SOURCES nuget_user nuget_token test_output
-      CIBW_BUILD: ${{format(matrix.cibw_format, inputs.python)}}
+      CIBW_BUILD: ${{format(matrix.cibw_format, inputs.python3)}}
+    defaults:
+      run: {shell: bash}
     steps:
       - name: Checkout
         uses: actions/checkout@v3.3.0
@@ -45,21 +40,27 @@ jobs:
           submodules: recursive # Just in case a dep has its own third-party deps
 
       - name: Deep checkout vcpkg
-        run: cd cpp/vcpkg ; git fetch --unshallow origin master
+        run: |
+          cd cpp/vcpkg ; git fetch --unshallow origin master
+
+          echo -e "${{matrix.envs || ''}}" >> $GITHUB_ENV
 
       - name: Configure sccache
-        uses: mozilla-actions/sccache-action@v0.0.2
+        uses: mozilla-actions/sccache-action@v0.0.3
         with:
           version: "v0.4.0"
 
       # ========================= Leader steps =========================
       - name: Prepare C++ compilation env
         if: inputs.job_type != 'follower'
-        shell: bash
         run: |
-          . build_tooling/vcpkg_caching.sh
-          yum update -y && yum install -y python3-devel
-        # The Python shipped with manylinux is missing the shared library necessary to build the tests
+          . build_tooling/vcpkg_caching.sh # Also applies to Windows
+
+          if which yum ; then
+            # The Python shipped with manylinux is missing the shared library necessary to build the tests
+            yum update -y && yum install -y python3-devel
+            echo "configure_add_args=['-DPython_ROOT_DIR=/usr/lib64', '-DPython_EXECUTABLE=/usr/bin/python3']" >> $GITHUB_ENV
+          fi
 
       - name: CMake compile
         if: inputs.job_type != 'follower'
@@ -67,7 +68,7 @@ jobs:
         with:
           cmakeListsTxtPath: ${{github.workspace}}/cpp/CMakeLists.txt
           configurePreset: ${{env.ARCTIC_CMAKE_PRESET}}
-          configurePresetAdditionalArgs: "['-DPython_ROOT_DIR=/usr/lib64', '-DPython_EXECUTABLE=/usr/bin/python3']"
+          configurePresetAdditionalArgs: ${{env.configure_add_args}}
           buildPreset: ${{env.ARCTIC_CMAKE_PRESET}}
 
       - name: Compile C++ tests
@@ -80,26 +81,28 @@ jobs:
 
       - name: C++ unit tests
         if: inputs.job_type == 'cpp-tests'
-        run: "cpp/out/install/test_unit_arcticdb --gtest_filter=-TestNfsBackedStorage.*:TestS3Storage.*"
+        run: |
+          cd cpp/out
+          install/test_unit_arcticdb --gtest_output=json:test_unit_arcticdb.json \
+            --gtest_filter=-TestNfsBackedStorage.*:TestS3Storage.* || true
+          [[ $(jq '.tests' test_unit_arcticdb.json) -gt 0 ]]
+          [[ $(jq '.failures' test_unit_arcticdb.json) -eq 0 ]]
+          [[ $(jq '.errors' test_unit_arcticdb.json) -eq 0 ]]
         env:
           ARCTICDB_memory_loglevel: INFO
 
       # ========================= Follower (CIBW) steps =========================
       - name: Get CIBuildWheel image & metadata
-        if: inputs.job_type == 'follower'
+        if: inputs.job_type == 'follower' && matrix.os == 'linux'
         run: |
             docker login ghcr.io -u token -p "${{secrets.GITHUB_TOKEN}}"
             docker pull "${{inputs.cibw_image_tag}}"
             docker inspect --type=image "${{inputs.cibw_image_tag}}" \
-              --format='cibw_version={{index .Config.Labels "io.arcticdb.cibw_ver"}}
-            manylinux_image={{index .Config.Labels "io.arcticdb.base"}}' | tee -a $GITHUB_ENV
-
-            find python/tests/* -maxdepth 0 -type d ! -name '__pycache__' ! -name 'util' -printf '"%f",' \
-              | sed 's/^/test_dirs=[/ ; s/,$/]/' | tee -a $GITHUB_ENV
+              --format='manylinux_image={{index .Config.Labels "io.arcticdb.base"}}' | tee -a $GITHUB_ENV
 
       - name: Build wheel
         if: inputs.job_type == 'follower'
-        run: pipx run cibuildwheel==${{env.cibw_version}} --output-dir /tmp/wheel/
+        run: pipx run cibuildwheel==${{inputs.cibw_version}} --output-dir ${{runner.temp}}/wheel/
         env:
           CIBW_MANYLINUX_X86_64_IMAGE: ${{inputs.cibw_image_tag}}
 
@@ -108,14 +111,19 @@ jobs:
         uses: actions/upload-artifact@v3
         with:
           name: wheel-${{env.CIBW_BUILD}}
-          path: /tmp/wheel/*.whl
+          path: ${{runner.temp}}/wheel/*.whl
+
+      - name: Discover test directory names
+        if: inputs.job_type == 'follower'
+        run: find python/tests/* -maxdepth 0 -type d ! -name '__pycache__' ! -name 'util' -printf '"%f",' |
+              sed 's/^/test_dirs=[/ ; s/,$/]/' | tee -a $GITHUB_ENV
 
       # ========================= Common =========================
       - name: Upload build metadata
         uses: actions/upload-artifact@v3
         if: always()
         with:
-          name: build-metadata-${{inputs.job_type}}-${{matrix.os}}-cp${{inputs.python}}
+          name: build-metadata-${{inputs.job_type}}-${{matrix.os}}-${{env.python_impl_name}}
           path: |
             cpp/out/*-build
             !**/*.[ao]
@@ -132,19 +140,18 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [linux]
         type: ${{fromJSON(needs.compile.outputs.test_dirs)}}
         include:
-          - os: linux
-            distro: ubuntu-latest
-            cibw_format: "cp{0}-manylinux_x86_64"
+          - ${{fromJSON(inputs.matrix)}}
           - type: hypothesis
             cmd: '{hypothesis,nonreg}' # There are so few nonreg tests, run them in the hypothesis runner
         exclude:
           - type: nonreg
-    name: ${{matrix.type}} on ${{matrix.os}}
+    name: ${{matrix.type}}
     runs-on: ${{matrix.distro}}
     container: ${{matrix.os == 'linux' && needs.compile.outputs.manylinux_image || null}}
+    defaults:
+      run: {shell: bash}
     steps:
       - name: Checkout
         uses: actions/checkout@v3.3.0
@@ -152,29 +159,37 @@ jobs:
       - name: Get wheel artifact
         uses: actions/download-artifact@v3
         with:
-          name: wheel-${{format(matrix.cibw_format, inputs.python)}}
-          path: /tmp
+          name: wheel-${{format(matrix.cibw_format, inputs.python3)}}
+          path: ${{runner.temp}}
+
+      - name: Select Python (Linux)
+        if: matrix.os == 'linux'
+        run: echo /opt/python/${{env.python_impl_name}}*/bin >> $GITHUB_PATH
+
+      - name: Select Python (Windows)
+        if: matrix.os == 'windows'
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.${{inputs.python3}}"
 
       - name: Install the wheel and dependencies
         run: |
-          set -e
-          PATH="$(echo /opt/python/cp${{inputs.python}}*/bin):$PATH"
-          echo "PATH=$PATH" | tee -a $GITHUB_ENV
           python -V
-          python -m pip install /tmp/*cp${{inputs.python}}*.whl
+          cd '${{runner.temp}}' # Works for Windows-style paths as well
+          python -m pip install *${{env.python_impl_name}}*.whl
           python -m pip install arcticdb[Testing] pytest-split
           python -m pip uninstall -y pytest-cpp || true # No longer works on 3.6
 
       - name: Run test
         run: build_tooling/parallel_test.sh tests/${{matrix.cmd || matrix.type}}
         env:
-          test_output: /tmp
+          test_output: ${{runner.temp}}
 
       - name: Upload the logs
         if: always()
         uses: actions/upload-artifact@v3
         with:
-          name: pytest-${{matrix.os}}-cp${{inputs.python}}-${{matrix.type}}
+          name: pytest-${{matrix.os}}-${{env.python_impl_name}}-${{matrix.type}}
           path: |
-            /tmp/pytest-*.log
-            /tmp/pytest-*.xml
+            ${{runner.temp}}/pytest-*.log
+            ${{runner.temp}}/pytest-*.xml

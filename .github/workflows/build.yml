@@ -18,46 +18,95 @@ on:
         options: [debug, release]
 run-name: Building ${{github.ref}} on ${{github.event_name}} by ${{github.actor}} [${{inputs.cmake_preset_type}}]
 jobs:
-  # To avoid spreading logic and configs over multile files under GitHub's clunky "reusable workflows", most of them are
-  # in the "steps" file and this one drives it via parameters.
+  common_config:
+    # Hacky way to supply common variables (as the env context is not available in jobs.*.with)
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo
+    outputs:
+      cibuildwheel_ver: "2.12.1"
+      cmake_preset_type_resolved: ${{inputs.cmake_preset_type || (github.ref == 'refs/heads/master' && 'release' || 'debug') }}
+      linux_matrix: >-
+        {"os":"linux", "distro":"ubuntu-latest", "cmake_preset_prefix":"linux", "cibw_format":"cp3{0}-manylinux_x86_64"}
+      windows_matrix: >-
+        {"os":"windows", "distro":"windows-latest", "cmake_preset_prefix":"windows-cl", "cibw_format":"cp3{0}-win_amd64",
+          "envs":"ARCTICDB_CLEANUP_VCPKG_POST_CMAKE=1"}
 
-  cibw_container:
+  cibw_docker_image:
+    needs: [common_config]
     uses: ./.github/workflows/cibw_docker_image.yml
     with:
-      cibuildwheel_ver: "2.12.1"
+      cibuildwheel_ver: ${{needs.common_config.outputs.cibuildwheel_ver}}
       force_update: false
 
-  leader-compile:
+  leader-compile-linux:
     # First do the C++ core compilation using one Python version to seed the compilation caches (and fail quicker)
-    needs: [cibw_container]
-    name: Compile
+    needs: [cibw_docker_image, common_config]
+    name: Linux Compile
     uses: ./.github/workflows/build_steps.yml
     with:
       job_type: leader-compile
-      cmake_preset_type: ${{inputs.cmake_preset_type || (github.ref == 'refs/heads/master' && 'release' || 'debug') }}
-      cibw_image_tag: ${{needs.cibw_container.outputs.tag}}
+      cmake_preset_type: ${{needs.common_config.outputs.cmake_preset_type_resolved}}
+      cibw_image_tag: ${{needs.cibw_docker_image.outputs.tag}}
+      matrix: ${{needs.common_config.outputs.linux_matrix}}
 
-  leader-cpp-test:
+  leader-cpp-test-linux:
     # Compile and run the C++ tests separately concurrently with the following job
-    needs: [leader-compile, cibw_container]
-    name: C++ Tests
+    needs: [leader-compile-linux, cibw_docker_image, common_config]
+    name: Linux C++ Tests
     uses: ./.github/workflows/build_steps.yml
     with:
       job_type: cpp-tests
-      cmake_preset_type: ${{inputs.cmake_preset_type || (github.ref == 'refs/heads/master' && 'release' || 'debug') }}
-      cibw_image_tag: ${{needs.cibw_container.outputs.tag}}
+      cmake_preset_type: ${{needs.common_config.outputs.cmake_preset_type_resolved}}
+      cibw_image_tag: ${{needs.cibw_docker_image.outputs.tag}}
+      matrix: ${{needs.common_config.outputs.linux_matrix}}
 
-  follower:
+  follower-linux:
     # Then use the cached compilation artifacts to build other python versions concurrently in cibuildwheels
-    needs: [leader-compile, cibw_container]
+    needs: [leader-compile-linux, cibw_docker_image, common_config]
     strategy:
       fail-fast: false
       matrix:
-        python: ["36", "37", "38", "39", "310", "311"]
-    name: Py${{matrix.python}}
+        python3: [6, 7, 8, 9, 10, 11]
+    name: Py3.${{matrix.python3}} Linux
     uses: ./.github/workflows/build_steps.yml
     with:
       job_type: follower
-      python: ${{matrix.python}}
-      cmake_preset_type: ${{inputs.cmake_preset_type || (github.ref == 'refs/heads/master' && 'release' || 'debug') }}
-      cibw_image_tag: ${{needs.cibw_container.outputs.tag}}
+      python3: ${{matrix.python3}}
+      cmake_preset_type: ${{needs.common_config.outputs.cmake_preset_type_resolved}}
+      cibw_image_tag: ${{needs.cibw_docker_image.outputs.tag}}
+      cibw_version: ${{needs.common_config.outputs.cibuildwheel_ver}}
+      matrix: ${{needs.common_config.outputs.linux_matrix}}
+
+  leader-compile-windows:
+    needs: [common_config]
+    name: Windows Compile
+    uses: ./.github/workflows/build_steps.yml
+    with:
+      job_type: leader-compile
+      cmake_preset_type: ${{needs.common_config.outputs.cmake_preset_type_resolved}}
+      matrix: ${{needs.common_config.outputs.windows_matrix}}
+
+  leader-cpp-test-windows:
+    needs: [leader-compile-windows, common_config]
+    name: Windows C++ Tests
+    uses: ./.github/workflows/build_steps.yml
+    with:
+      job_type: cpp-tests
+      cmake_preset_type: ${{needs.common_config.outputs.cmake_preset_type_resolved}}
+      matrix: ${{needs.common_config.outputs.windows_matrix}}
+
+  follower-windows:
+    needs: [leader-compile-windows, common_config]
+    strategy:
+      fail-fast: false
+      matrix:
+        python3: [6, 7, 8, 9, 10, 11]
+    name: Py3.${{matrix.python3}} Windows
+    uses: ./.github/workflows/build_steps.yml
+    with:
+      job_type: follower
+      python3: ${{matrix.python3}}
+      cmake_preset_type: ${{needs.common_config.outputs.cmake_preset_type_resolved}}
+      cibw_version: ${{needs.common_config.outputs.cibuildwheel_ver}}
+      matrix: ${{needs.common_config.outputs.windows_matrix}}

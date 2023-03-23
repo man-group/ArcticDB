@@ -10,3 +10,9 @@ $nuget sources add -source $url -storepasswordincleartext -name github \
     -username "${nuget_user:?nuget_user environment variable is not set}" \
     -password "${nuget_token:?nuget_token environment variable is not set}"
 $nuget setapikey "$nuget_token" -source $url
+
+case `uname -a` in
+MINGW*|*WSL*)
+    mkdir buildtrees packages ../out
+    cmd.exe /C 'compact.exe /C buildtrees packages "..\\out"'
+esac
