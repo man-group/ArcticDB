@@ -1,30 +1,34 @@
-name: build_steps
+name: __build_steps
 on:
   workflow_call:
     inputs:
-      job_type:          {required: true, type: string, description: Usually caller job's name}
-      cmake_preset_type: {required: true, type: string, description: See the synonyms param in parent workflow}
-      cibw_image_tag:    {required: true, type: string, description: As built by cibw_docker_image.yml workflow}
-      python:            {default: '(default)', type: string, description: Python version for followers}
-
+      job_type:          {required: true, type: string, description: Selects the steps to enable}
+      cmake_preset_type: {required: true, type: string, description: release/debug}
+      matrix:            {required: true, type: string, description: JSON string to feed into the matrix}
+      cibw_image_tag:    {required: false, type: string, description: Linux only. As built by cibw_docker_image.yml workflow}
+      cibw_version:      {required: false, type: string, description: Follower only. Must match the cibw_image_tag}
+      cibw_build:        {required: false, type: string, description: Follower only.}
+      python3:           {default: -1, type: number, description: Python 3 minor version}
+env:
+  python_impl_name: ${{inputs.python3 > 0 && format('cp3{0}', inputs.python3) || 'default'}}
 jobs:
   compile:
     strategy:
-      fail-fast: false
       matrix:
-        os: [linux]
+        # Declaring the dummy fields here to aid the Github Actions linting in VSCode and to provide documentation
+        os: [0] # Decouples the steps from any distro version changes
+        distro: [0]
+        cmake_preset_prefix: [0]
+        envs: [0]
+        build_dir: [0] # Must be an absolute path
+        symbols: [0] # Glob for symbol symbol files. Used for including in follower builds and exclusion on others.
+        do_not_archive: [0]
+        exclude:
+            - os: 0
         include:
-          - os: linux
-            distro: ubuntu-latest
-            cmake_preset_prefix: linux
-            cibw_format: "cp{0}-manylinux_x86_64"
-          # Windows is not included ATM because the build would run out of disk space ¯\_(ツ)_/¯
-          #- os: windows
-          #  distro: windows-latest
-          #  cmake_preset_prefix: windows-cl
+            - ${{fromJSON(inputs.matrix)}}
 
-    name: build on ${{matrix.os}}
-    runs-on: ${{matrix.distro}}
+    runs-on: ${{fromJson(matrix.distro)}}
     container: ${{ (matrix.os == 'linux' && inputs.job_type != 'follower') && inputs.cibw_image_tag || null}}
     env:
       SCCACHE_GHA_VERSION: ${{vars.SCCACHE_GHA_VERSION || 1}} # Setting this env var enables the caching
@@ -35,10 +39,14 @@ jobs:
       CMAKE_C_COMPILER_LAUNCHER: sccache
       CMAKE_CXX_COMPILER_LAUNCHER: sccache
       ARCTIC_CMAKE_PRESET: ${{matrix.cmake_preset_prefix}}-${{inputs.cmake_preset_type}}
-      CIBW_ENVIRONMENT_PASS_LINUX: SCCACHE_GHA_VERSION ACTIONS_CACHE_URL ACTIONS_RUNTIME_TOKEN
+      ARCTICDB_BUILD_DIR: ${{matrix.build_dir}}
+      CIBW_ENVIRONMENT_PASS_LINUX: SCCACHE_GHA_VERSION ACTIONS_CACHE_URL ACTIONS_RUNTIME_TOKEN VCPKG_INSTALLATION_ROOT
         VCPKG_BINARY_SOURCES VCPKG_NUGET_USER VCPKG_NUGET_TOKEN VCPKG_MAN_NUGET_USER VCPKG_MAN_NUGET_TOKEN
         CMAKE_C_COMPILER_LAUNCHER CMAKE_CXX_COMPILER_LAUNCHER CMAKE_BUILD_PARALLEL_LEVEL ARCTIC_CMAKE_PRESET
-      CIBW_BUILD: ${{format(matrix.cibw_format, inputs.python)}}
+        ARCTICDB_BUILD_DIR TEST_OUTPUT_DIR
+      ARCTICDB_DEBUG_FIND_PYTHON: ${{vars.ARCTICDB_DEBUG_FIND_PYTHON}}
+    defaults:
+      run: {shell: bash}
     steps:
       - name: Checkout
         uses: actions/checkout@v3.3.0
@@ -49,19 +57,32 @@ jobs:
         run: |
           . build_tooling/vcpkg_caching.sh # Linux follower needs another call in CIBW
           echo -e "VCPKG_BINARY_SOURCES=$VCPKG_BINARY_SOURCES\n${{matrix.envs || ''}}" | tee -a $GITHUB_ENV
+          cmake -P cpp/CMake/CpuCount.cmake | sed 's/^-- //' | tee -a $GITHUB_ENV
+        env:
+          CMAKE_BUILD_PARALLEL_LEVEL: ${{vars.CMAKE_BUILD_PARALLEL_LEVEL}}
 
       - name: Configure sccache
         uses: mozilla-actions/sccache-action@v0.0.3
         with:
           version: "v0.4.0"
 
+      - name: Windows Pagefile
+        if: matrix.os == 'windows'
+        uses: al-cheb/configure-pagefile-action@v1.3
+        with:
+          minimum-size: 2GB
+          maximum-size: 6GB
+          disk-root: "D:"  # This is also the checkout directory. Total size 12GB.
+        continue-on-error: true
+
+      - name: Enable Windows compiler commands
+        if: matrix.os == 'windows'
+        uses: ilammy/msvc-dev-cmd@v1.12.1
+
       # ========================= Leader steps =========================
       - name: Prepare C++ compilation env
         if: inputs.job_type != 'follower'
-        shell: bash
-        run: |
-          yum update -y && yum install -y python3-devel
-        # The Python shipped with manylinux is missing the shared library necessary to build the tests
+        run: . build_tooling/prep_cpp_build.sh # Also applies to Windows
 
       - name: CMake compile
         if: inputs.job_type != 'follower'
@@ -69,7 +90,7 @@ jobs:
         with:
           cmakeListsTxtPath: ${{github.workspace}}/cpp/CMakeLists.txt
           configurePreset: ${{env.ARCTIC_CMAKE_PRESET}}
-          configurePresetAdditionalArgs: "['-DPython_ROOT_DIR=/usr/lib64', '-DPython_EXECUTABLE=/usr/bin/python3']"
+          configurePresetAdditionalArgs: "['-DVCPKG_INSTALL_OPTIONS=--clean-after-build']"
           buildPreset: ${{env.ARCTIC_CMAKE_PRESET}}
 
       - name: Compile C++ tests
@@ -83,7 +104,6 @@ jobs:
       - name: C++ unit tests
         if: inputs.job_type == 'cpp-tests'
         run: |
-          yum install -y jq
           cd cpp/out
           install/test_unit_arcticdb --gtest_output=json:test_unit_arcticdb.json \
             --gtest_filter=-TestNfsBackedStorage.*:TestS3Storage.* || true
@@ -95,41 +115,55 @@ jobs:
 
       # ========================= Follower (CIBW) steps =========================
       - name: Get CIBuildWheel image & metadata
-        if: inputs.job_type == 'follower'
+        if: inputs.job_type == 'follower' && matrix.os == 'linux'
         run: |
             docker login ghcr.io -u token -p "${{secrets.GITHUB_TOKEN}}"
             docker pull "${{inputs.cibw_image_tag}}"
             docker inspect --type=image "${{inputs.cibw_image_tag}}" \
-              --format='cibw_version={{index .Config.Labels "io.arcticdb.cibw_ver"}}
-            manylinux_image={{index .Config.Labels "io.arcticdb.base"}}' | tee -a $GITHUB_ENV
-
-            find python/tests/* -maxdepth 0 -type d ! -name '__pycache__' ! -name 'util' -printf '"%f",' \
-              | sed 's/^/test_dirs=[/ ; s/,$/]/' | tee -a $GITHUB_ENV
+              --format='manylinux_image={{index .Config.Labels "io.arcticdb.base"}}' | tee -a $GITHUB_ENV
 
       - name: Build wheel
         if: inputs.job_type == 'follower'
-        run: pipx run cibuildwheel==${{env.cibw_version}} --output-dir /tmp/wheel/
+        run: pipx run cibuildwheel==${{inputs.cibw_version}}
         env:
+          CIBW_BUILD: ${{inputs.cibw_build}}
           CIBW_MANYLINUX_X86_64_IMAGE: ${{inputs.cibw_image_tag}}
 
       - name: Store wheel artifact
         if: inputs.job_type == 'follower'
         uses: actions/upload-artifact@v3
         with:
-          name: wheel-${{env.CIBW_BUILD}}
-          path: /tmp/wheel/*.whl
+          name: wheel-${{inputs.cibw_build}}
+          path: wheelhouse/*.whl
+
+      - name: Discover test directory names
+        if: inputs.job_type == 'follower'
+        run: find python/tests/* -maxdepth 0 -type d ! -name '__pycache__' ! -name 'util' -printf '"%f",' |
+              sed 's/^/test_dirs=[/ ; s/,$/]/' | tee -a $GITHUB_ENV
 
       # ========================= Common =========================
-      - name: Upload build metadata
+      - name: Disk usage
+        if: always()
+        run: du -m . "${{matrix.build_dir}}" | sort -n | tail -n 100 ; df -h
+        continue-on-error: true
+
+      - name: Make build directory readable for archiving
+        if: inputs.job_type == 'follower' && matrix.os == 'linux' && always()
+        run: sudo chown -R $UID ${{matrix.build_dir}}
+
+      - name: Archive build metadata
         uses: actions/upload-artifact@v3
         if: always()
+        env:
+          _exclusion: "\n!${{matrix.build_dir}}/**/"
         with:
-          name: build-metadata-${{inputs.job_type}}-${{matrix.os}}-cp${{inputs.python}}
-          path: |
-            cpp/out/*-build
-            !**/*.[ao]
-            !**/*.so
-            !**/vcpkg_installed
+          name: build-metadata-${{inputs.job_type}}-${{matrix.os}}-${{env.python_impl_name}}
+          retention-days: ${{inputs.job_type == 'cpp-tests' && 7 || 90}}
+          # On Windows, exclusions like "!**/*.ext" are prefixed with a drive letter (D:\) of the current working dir
+          # before matching. This breaks since we moved the build_dir to C:. Work around by templating exclusions:
+          path: ${{matrix.build_dir}}/*-build
+            ${{env._exclusion}}${{inputs.job_type == 'follower' && 'nofile' || matrix.symbols}}
+            ${{env._exclusion}}${{join(matrix.do_not_archive, env._exclusion)}}
 
     outputs:
       manylinux_image: ${{env.manylinux_image}}
@@ -141,19 +175,18 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [linux]
         type: ${{fromJSON(needs.compile.outputs.test_dirs)}}
         include:
-          - os: linux
-            distro: ubuntu-latest
-            cibw_format: "cp{0}-manylinux_x86_64"
+          - ${{fromJSON(inputs.matrix)}}
           - type: hypothesis
             cmd: '{hypothesis,nonreg}' # There are so few nonreg tests, run them in the hypothesis runner
         exclude:
           - type: nonreg
-    name: ${{matrix.type}} on ${{matrix.os}}
-    runs-on: ${{matrix.distro}}
+    name: ${{matrix.type}}
+    runs-on: ${{fromJson(matrix.pytest_distro || matrix.distro)}}
     container: ${{matrix.os == 'linux' && needs.compile.outputs.manylinux_image || null}}
+    defaults:
+      run: {shell: bash}
     steps:
       - name: Checkout
         uses: actions/checkout@v3.3.0
@@ -161,29 +194,69 @@ jobs:
       - name: Get wheel artifact
         uses: actions/download-artifact@v3
         with:
-          name: wheel-${{format(matrix.cibw_format, inputs.python)}}
-          path: /tmp
+          name: wheel-${{inputs.cibw_build}}
+          path: ${{runner.temp}}
+
+      - name: Select Python (Linux)
+        if: matrix.os == 'linux'
+        run: echo /opt/python/${{env.python_impl_name}}*/bin >> $GITHUB_PATH
+
+      - name: Select Python (Windows)
+        if: matrix.os == 'windows'
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.${{inputs.python3}}"
+
+      - name: Windows Pagefile
+        if: matrix.os == 'windows'
+        uses: al-cheb/configure-pagefile-action@v1.3
+        with:
+          minimum-size: 2GB
+          maximum-size: 8GB
+          disk-root: "D:"  # This is also the checkout directory. Total size 12GB.
+        continue-on-error: true
 
       - name: Install the wheel and dependencies
         run: |
-          set -e
-          PATH="$(echo /opt/python/cp${{inputs.python}}*/bin):$PATH"
-          echo "PATH=$PATH" | tee -a $GITHUB_ENV
+          cmake -P cpp/CMake/CpuCount.cmake | sed 's/^-- //' | tee -a $GITHUB_ENV
           python -V
-          python -m pip install /tmp/*cp${{inputs.python}}*.whl
+          cd "$RUNNER_TEMP" # Works for Windows-style paths as well
+          python -m pip install --force-reinstall *${{env.python_impl_name}}*.whl
           python -m pip install arcticdb[Testing] pytest-split
           python -m pip uninstall -y pytest-cpp || true # No longer works on 3.6
+          echo -e "${{matrix.envs || ''}}" | tee -a $GITHUB_ENV
+          if [[ -n "$MSYSTEM" ]] ; then
+            echo "LOCALAPPDATA=$LOCALAPPDATA" | tee -a $GITHUB_ENV
+            MSYS_NO_PATHCONV=1 reg.exe ADD 'HKLM\SOFTWARE\Microsoft\Windows\Windows Error Reporting\LocalDumps'
+            cd "/proc/registry/HKEY_LOCAL_MACHINE/SOFTWARE/Microsoft"
+            find "Windows NT/CurrentVersion/AeDebug" "Windows/Windows Error Reporting/LocalDumps" \
+              -type f -print -exec xxd -p '{}' \; || true
+          fi
+          ${{vars.EXTRA_TEST_PREPARE_CMD || ''}}
+        env:
+          CMAKE_BUILD_PARALLEL_LEVEL: ${{vars.CMAKE_BUILD_PARALLEL_LEVEL}}
 
       - name: Run test
         run: build_tooling/parallel_test.sh tests/${{matrix.cmd || matrix.type}}
         env:
-          test_output: /tmp
+          TEST_OUTPUT_DIR: ${{runner.temp}}
+
+      - name: Collect crash dumps (Windows)
+        if: matrix.os == 'windows' && failure()
+        uses: actions/upload-artifact@v3
+        with:
+          name: crashdump-${{matrix.os}}-${{env.python_impl_name}}-${{matrix.type}}
+          path: ${{env.LOCALAPPDATA}}/CrashDumps/
+
+      - name: Disk usage
+        if: always()
+        run: set +e ; du -m . "${PARALLEL_TEST_ROOT:-/tmp/parallel_test}" | sort -n | tail -n 100 ; df -h
+        continue-on-error: true
 
       - name: Upload the logs
         if: always()
         uses: actions/upload-artifact@v3
         with:
-          name: pytest-${{matrix.os}}-cp${{inputs.python}}-${{matrix.type}}
+          name: pytest-${{matrix.os}}-${{env.python_impl_name}}-${{matrix.type}}
           path: |
-            /tmp/pytest-*.log
-            /tmp/pytest-*.xml
+            ${{runner.temp}}/*test*

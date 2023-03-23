@@ -44,8 +44,7 @@
         "CMAKE_CXX_FLAGS_RELEASE": "/MT"
       },
       "environment": {
-        "DEBUG_BUILD": "TRUE",
-        "ARCTICDB_DEBUG_FIND_PYTHON": "TRUE"
+        "DEBUG_BUILD": "TRUE"
       }
     },
     {
@@ -55,9 +54,6 @@
       "inherits": "windows-cl-release",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug"
-      },
-      "environment": {
-        "ARCTICDB_DEBUG_FIND_PYTHON": "TRUE"
       }
     },
     {

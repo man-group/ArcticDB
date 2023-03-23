@@ -14,6 +14,11 @@ from setuptools.command.develop import develop
 from wheel.bdist_wheel import bdist_wheel
 
 
+def _log_and_run(*cmd, **kwargs):
+    print("Running " + " ".join(cmd))
+    subprocess.check_call(cmd, **kwargs)
+
+
 class CompileProto(Command):
     # When adding new protobuf versions, also update: setup.cfg, python/arcticdb/__init__.py
     _PROTOBUF_TO_GRPC_VERSION = {"3": "<=1.30.*", "4": ">=1.49"}
@@ -34,7 +39,8 @@ class CompileProto(Command):
             if "editable_wheel" in self.distribution.commands:
                 self.build_lib = "python"
             else:
-                self.set_undefined_options("build", ("build_lib", "build_lib"))  # Default to the output of the build command
+                # Default to the output location of the build command:
+                self.set_undefined_options("build", ("build_lib", "build_lib"))
         if self.proto_vers is None:
             self.proto_vers = os.getenv("ARCTICDB_PROTOC_VERS", "".join(self._PROTOBUF_TO_GRPC_VERSION)).strip()
 
@@ -54,25 +60,21 @@ class CompileProto(Command):
 
         # Manual virtualenv to avoid hard-coding Man internal locations:
         pythonpath = mkdtemp()
-        subprocess.check_call(
-            [
-                sys.executable,
-                "-mpip",
-                "install",
-                "--disable-pip-version-check",
-                "--target=" + pythonpath,
-                "grpcio-tools" + grpc_version,
-                f"protobuf=={proto_ver}.*"
-            ]
+        _log_and_run(
+            sys.executable,
+            "-mpip",
+            "install",
+            "--disable-pip-version-check",
+            "--target=" + pythonpath,
+            "grpcio-tools" + grpc_version,
+            f"protobuf=={proto_ver}.*",
         )
         env = {**os.environ, "PYTHONPATH": pythonpath, "PYTHONNOUSERSITE": "1"}
 
         # Compile
         os.makedirs(version_output_dir, exist_ok=True)
         cmd = [sys.executable, "-mgrpc_tools.protoc", "-Icpp/proto", "--python_out=" + version_output_dir]
-        cmd.extend(glob.glob(os.path.normpath("cpp/proto/arcticc/pb2/*.proto")))
-        print("Running " + " ".join(cmd))
-        subprocess.check_call(cmd, env=env)
+        _log_and_run(*cmd, *glob.glob(os.path.normpath("cpp/proto/arcticc/pb2/*.proto")), env=env)
 
         shutil.rmtree(pythonpath)
 
@@ -104,7 +106,6 @@ class CMakeBuild(build_ext):
     def build_extension(self, ext):
         dest = os.path.abspath(self.get_ext_fullpath(ext.name))
         print(f"Destination: {dest}")
-        install_args = [f"-DCMAKE_INSTALL_PREFIX={os.path.dirname(dest)}"]
 
         cmake = shutil.which("cmake")  # Windows safe
         if not cmake and platform.system() != "Windows":
@@ -118,31 +119,35 @@ class CMakeBuild(build_ext):
         search = f"cpp/out/{preset}-build"
         candidates = glob.glob(search)
         if not candidates:
-            common_args = [
+            if preset == "*":
+                suffix = "-debug" if self.debug else "-release"
+                preset = ("windows-cl" if platform.system() == "Windows" else platform.system().lower()) + suffix
+            print(
+                f"Did not find build directory with '{search}'. Will configure and build using cmake preset {preset}",
+                file=sys.stderr,
+            )
+            _log_and_run(
+                cmake,
                 "-DTEST=NO",
                 f"-DBUILD_PYTHON_VERSION={sys.version_info[0]}.{sys.version_info[1]}",
-                *install_args,
-            ]
-            self._configure_cmake_using_preset(cmake, common_args, preset, search)
+                f"-DCMAKE_INSTALL_PREFIX={os.path.dirname(dest)}",
+                "--preset",
+                preset,
+                cwd="cpp",
+            )
             candidates = glob.glob(search)
 
         assert len(candidates) == 1, f"Specify {env_var} or use a single build directory. {search}={candidates}"
-        subprocess.check_call([cmake, "--build", candidates[0], "--target", ext.name])
-        subprocess.check_call(
-            [cmake, *install_args, "-DCOMPONENT=Python_Lib", "-P", candidates[0] + "/cmake_install.cmake"]
-        )
+        try:
+            # Python API is not cgroups-aware yet, so use CMake:
+            cpu_output = subprocess.check_output([cmake, "-P", "cpp/CMake/CpuCount.cmake"], universal_newlines=True)
+            jobs = "-j", cpu_output.replace("-- CMAKE_BUILD_PARALLEL_LEVEL=", "").rstrip()
+        except Exception as e:
+            print("Failed to retrieve CPU count:", e)
+            jobs = ()
+        _log_and_run(cmake, "--build", candidates[0], *jobs, "--target", "install_" + ext.name)
 
         assert os.path.exists(dest), f"No output at {dest}, but we didn't get a bad return code from CMake?"
-
-    def _configure_cmake_using_preset(self, cmake, common_args, preset, search):
-        if preset == "*":
-            suffix = "-debug" if self.debug else "-release"
-            preset = ("windows-cl" if platform.system() == "Windows" else platform.system().lower()) + suffix
-        print(
-            f"Did not find build directory with '{search}'. Will configure and build using cmake preset {preset}",
-            file=sys.stderr,
-        )
-        subprocess.check_call([cmake, *common_args, "--preset", preset], cwd="cpp")
 
 
 if __name__ == "__main__":
