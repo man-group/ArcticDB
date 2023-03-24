@@ -476,17 +476,7 @@ struct FieldDescriptor {
         data_.mutable_type_desc()->CopyFrom(static_cast<arcticdb::proto::descriptors::TypeDescriptor>(td));
         data_.set_name(n);
     }
-/*
-    explicit FieldDescriptor(const TypeDescriptor &td, std::string_view n) {
-        data_.mutable_type_desc()->CopyFrom(static_cast<arcticdb::proto::descriptors::TypeDescriptor>(td));
-        data_.set_name(std::string(n));
-    }
 
-    explicit FieldDescriptor(const TypeDescriptor &td, const char* n) {
-        data_.mutable_type_desc()->CopyFrom(static_cast<arcticdb::proto::descriptors::TypeDescriptor>(td));
-        data_.set_name(std::string(n));
-    }
-    */
     explicit FieldDescriptor(Proto&& data) :
         data_(std::move(data)) {
     }
