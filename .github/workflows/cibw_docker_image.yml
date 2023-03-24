@@ -10,24 +10,42 @@ on:
       force_update:     {required: true, type: boolean}
     outputs:
       tag:
-        value: ${{jobs.work.outputs.tag}}
+        value: ${{vars.cibw_docker_image_override || jobs.work.outputs.tag}}
       found_existing:
         value: ${{jobs.work.outputs.found_existing}}
 
 run-name: v${{inputs.cibuildwheel_ver}}${{inputs.force_update && ' (Force)' || ''}}
 env:
-  output_tag: "ghcr.io/${{github.repository_owner}}/cibuildwheel_manylinux:${{inputs.cibuildwheel_ver}}"
+  image_name: ghcr.io/${{github.repository_owner}}/arcticdb_manylinux
 jobs:
   work:
     runs-on: ubuntu-latest
+    permissions:
+      packages: write
     steps:
+    - name: Calculate build script hash
+      run: |
+        function hash() { gh api /repos/$GITHUB_REPOSITORY/contents/$1?ref=$GITHUB_SHA -q .sha ; }
+        workflow_hash=`hash .github/workflows/cibw_docker_image.yml`
+        script_hash=`hash build_tooling/build_many_linux_image.sh`
+        image_ver="${{inputs.cibuildwheel_ver}}-$(echo $workflow_hash $script_hash | sha1sum | head -c 5)"
+        echo -e "image_ver=$image_ver\noutput_tag=$image_name:$image_ver" | tee -a $GITHUB_ENV
+      env:
+        GH_TOKEN: ${{github.token}}
+
     - name: Check for existing image
       id: find_existing
-      if: ${{! inputs.force_update}}
-      shell: bash
+      if: ${{! inputs.force_update || vars.cibw_docker_image_override}}
       run: |
+        if [[ -n "${{vars.cibw_docker_image_override}}" ]] ; then exit 0 ; fi
+
         docker login ghcr.io -u token -p "${{secrets.GITHUB_TOKEN}}"
-        docker manifest inspect ${{env.output_tag}}
+
+        function find_matching_ver() {
+          output_tag="$1:$image_ver"
+          docker manifest inspect $output_tag && echo "output_tag=$output_tag" | tee -a $GITHUB_ENV
+        }
+        find_matching_ver ghcr.io/man-group/cibuildwheel_manylinux || find_matching_ver $image_name
       continue-on-error: true
       # If  inputs.force_update, step.outcome == skipped
       # if !inputs.force_update, step.outcome == success / failure
@@ -43,11 +61,15 @@ jobs:
       env:
         cibuildwheel_ver: ${{inputs.cibuildwheel_ver}}
 
+    - name: Tag latest
+      if: steps.find_existing.outcome != 'success' && github.ref == 'refs/heads/master'
+      run: docker tag $output_tag $image_name:latest
+
     - name: Push
       if: steps.find_existing.outcome != 'success'
       run: |
         docker login ghcr.io -u token -p "${{secrets.GITHUB_TOKEN}}"
-        docker push ${{env.output_tag}}
+        docker push -a $image_name
     outputs:
       tag: ${{env.output_tag}}
       found_existing: ${{steps.find_existing.outcome}}
