@@ -17,6 +17,7 @@ before-all = """
 {project}/build_tooling/vcpkg_caching.sh
 """
 build = "cp*-manylinux_x86_64"
+manylinux-x86_64-image = "ghcr.io/man-group/cibuildwheel_manylinux:latest"
 
 [tool.cibuildwheel.windows]
 build = "cp*-win_amd64"

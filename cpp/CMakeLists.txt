@@ -59,6 +59,7 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
+set(FIND_LIBRARY_USE_LIB64_PATHS ON)
 include(PythonUtils) # Must be called before Pybind (third_party) to override its finding mechanism
 
 add_subdirectory(third_party)
