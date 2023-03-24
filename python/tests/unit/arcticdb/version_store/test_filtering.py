@@ -790,6 +790,19 @@ def test_filter_numeric_isin(lmdb_version_store, df, vals):
     generic_filter_test(lmdb_version_store, "test_filter_numeric_isin", df, q, pandas_query)
 
 
+def test_filter_numeric_isin_hashing_overflow(lmdb_version_store):
+    df = pd.DataFrame({"a": [0, 1, 2 ** 62]})
+    lmdb_version_store.write("test_filter_numeric_isin_hashing_overflow", df)
+
+    vals = [0, 1]
+    q = QueryBuilder()
+    q = q[q["a"].isin(vals)]
+    result = lmdb_version_store.read("test_filter_numeric_isin_hashing_overflow", query_builder=q).data
+
+    expected = pd.DataFrame({"a": [0, 1]})
+    assert_frame_equal(expected, result)
+
+
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(df=data_frames([column("a", elements=integral_type_strategies())], index=range_indexes()))
