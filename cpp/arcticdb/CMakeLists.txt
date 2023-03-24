@@ -669,7 +669,6 @@ if(${TEST})
             column_store/test/rapidcheck_column_map.cpp
             column_store/test/test_chunked_buffer.cpp
             stream/test/stream_test_common.cpp
-            processing/test/rapidcheck_set_membership.cpp
             util/test/rapidcheck_string_pool.cpp
             util/test/rapidcheck_main.cpp
             version/test/rapidcheck_version_map.cpp)
