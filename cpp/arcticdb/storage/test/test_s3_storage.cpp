@@ -8,6 +8,7 @@
 #include <arcticdb/storage/s3/s3_storage.hpp>
 
 #include <gtest/gtest.h>
+#include <arcticdb/util/test/gtest_utils.hpp>
 
 #include <aws/core/Aws.h>
 
@@ -160,6 +161,7 @@ TEST_F(ProxyEnvVarUpperCaseFixture, test_config_resolution_proxy) {
 }
 
 TEST_F(ProxyEnvVarLowerCasePrecedenceFixture, test_config_resolution_proxy) {
+    SKIP_WIN("Env vars are not case-sensitive on Windows");
     arcticdb::storage::s3::S3Storage::Config s3_config_http;
     s3_config_http.set_endpoint("http://test.endpoint.com");
     auto ret_cfg = arcticdb::storage::s3::get_s3_config(s3_config_http);
@@ -187,6 +189,7 @@ TEST_F(NoProxyEnvVarUpperCaseFixture, test_config_resolution_proxy) {
 }
 
 TEST_F(NoProxyEnvVarLowerCasePrecedenceFixture, test_config_resolution_proxy) {
+    SKIP_WIN("Env vars are not case-sensitive on Windows");
     arcticdb::storage::s3::S3Storage::Config s3_config;
     s3_config.set_endpoint("http://test.endpoint.com");
     auto ret_cfg = arcticdb::storage::s3::get_s3_config(s3_config);
