@@ -256,7 +256,7 @@ VariantData binary_membership(const ColumnWithStrings& column_with_strings, Valu
                 } else if constexpr (is_numeric_type(ColumnTagType::data_type) && is_numeric_type(ValueSetBaseTypeTag::data_type)) {
                     using ValueSetBaseType =  typename decltype(value_set_desc_tag)::DataTypeTag::raw_type;
 
-                    using WideType = typename binary_arithmetic_promoted_type<ColumnType, ValueSetBaseType, std::remove_reference_t<Func>>::type;
+                    using WideType = typename type_arithmetic_promoted_type<ColumnType, ValueSetBaseType, std::remove_reference_t<Func>>::type;
                     auto typed_value_set = value_set.get_set<WideType>();
                     auto column_data = column_with_strings.column_->data();
 
@@ -560,7 +560,7 @@ VariantData binary_operator(const Value& left, const Value& right, Func&& func) 
                 util::raise_rte("Non-numeric type provided to binary operation: {}", right.type());
             }
             auto right_value = *reinterpret_cast<const RightRawType*>(right.data_);
-            using TargetType = typename binary_arithmetic_promoted_type<LeftRawType, RightRawType, std::remove_reference_t<Func>>::type;
+            using TargetType = typename type_arithmetic_promoted_type<LeftRawType, RightRawType, std::remove_reference_t<Func>>::type;
             output->data_type_ = data_type_from_raw_type<TargetType>();
             *reinterpret_cast<TargetType*>(output->data_) = func.apply(left_value, right_value);
         });
@@ -588,7 +588,7 @@ VariantData binary_operator(const Value& val, const Column& col, Func&& func) {
                 util::raise_rte("Non-numeric type provided to binary operation: {}", val.type());
             }
             auto left_value = *reinterpret_cast<const LeftRawType*>(val.data_);
-            using TargetType = typename binary_arithmetic_promoted_type<LeftRawType, RightRawType, std::remove_reference_t<Func>>::type;
+            using TargetType = typename type_arithmetic_promoted_type<LeftRawType, RightRawType, std::remove_reference_t<Func>>::type;
             auto output_data_type = data_type_from_raw_type<TargetType>();
             output = std::make_unique<Column>(make_scalar_type(output_data_type), col.is_sparse());
 
@@ -630,7 +630,7 @@ VariantData binary_operator(const Column& left, const Column& right, Func&& func
             if constexpr(!is_numeric_type(RTDT::DataTypeTag::data_type)) {
                 util::raise_rte("Non-numeric type provided to binary operation: {}", right.type());
             }
-            using TargetType = typename binary_arithmetic_promoted_type<LeftRawType, RightRawType, std::remove_reference_t<Func>>::type;
+            using TargetType = typename type_arithmetic_promoted_type<LeftRawType, RightRawType, std::remove_reference_t<Func>>::type;
             auto output_data_type = data_type_from_raw_type<TargetType>();
             output = std::make_unique<Column>(make_scalar_type(output_data_type), left.is_sparse() || right.is_sparse());
             auto right_data = right.data();
@@ -675,7 +675,7 @@ VariantData binary_operator(const Column& col, const Value& val, Func&& func) {
                 util::raise_rte("Non-numeric type provided to binary operation: {}", val.type());
             }
             auto right_value = *reinterpret_cast<const RightRawType*>(val.data_);
-            using TargetType = typename binary_arithmetic_promoted_type<LeftRawType, RightRawType, std::remove_reference_t<Func>>::type;
+            using TargetType = typename type_arithmetic_promoted_type<LeftRawType, RightRawType, std::remove_reference_t<Func>>::type;
             auto output_data_type = data_type_from_raw_type<TargetType>();
             output = std::make_unique<Column>(make_scalar_type(output_data_type), col.is_sparse());
 

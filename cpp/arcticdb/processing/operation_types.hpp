@@ -120,7 +120,7 @@ struct unary_arithmetic_promoted_type {
 };
 
 template <class LHS, class RHS, class Func>
-struct binary_arithmetic_promoted_type {
+struct type_arithmetic_promoted_type {
     static constexpr size_t max_width = arithmetic_promoted_type::details::max_width_v<LHS, RHS>;
     using type = typename
         std::conditional_t<std::is_floating_point_v<LHS> || std::is_floating_point_v<RHS>,
@@ -174,7 +174,7 @@ struct binary_arithmetic_promoted_type {
                     std::conditional_t<std::is_same_v<Func, PlusOperator> || std::is_same_v<Func, MinusOperator> || std::is_same_v<Func, TimesOperator>,
                         // Plus, Minus, and Times operators can overflow if using max_width, so promote to a wider signed type
                         typename arithmetic_promoted_type::details::signed_width_t<2 * max_width>,
-                        // DivideOperator
+                        // Divide/IsIn/IsNotIn Operator
                         std::conditional_t<(std::is_signed_v<LHS> && sizeof(LHS) > sizeof(RHS)) || (std::is_signed_v<RHS> && sizeof(RHS) > sizeof(LHS)),
                             // If the signed type is strictly larger than the unsigned type, then promote to the signed type
                             typename arithmetic_promoted_type::details::signed_width_t<max_width>,
@@ -205,28 +205,28 @@ V apply(T t) {
 };
 
 struct PlusOperator {
-template<typename T, typename U, typename V = typename binary_arithmetic_promoted_type<T, U, PlusOperator>::type>
+template<typename T, typename U, typename V = typename type_arithmetic_promoted_type<T, U, PlusOperator>::type>
 V apply(T t, U u) {
     return static_cast<V>(t) + static_cast<V>(u);
 }
 };
 
 struct MinusOperator {
-template<typename T, typename U, typename V = typename binary_arithmetic_promoted_type<T, U, MinusOperator>::type>
+template<typename T, typename U, typename V = typename type_arithmetic_promoted_type<T, U, MinusOperator>::type>
 V apply(T t, U u) {
     return static_cast<V>(t) - static_cast<V>(u);
 }
 };
 
 struct TimesOperator {
-template<typename T, typename U, typename V = typename binary_arithmetic_promoted_type<T, U, TimesOperator>::type>
+template<typename T, typename U, typename V = typename type_arithmetic_promoted_type<T, U, TimesOperator>::type>
 V apply(T t, U u) {
     return static_cast<V>(t) * static_cast<V>(u);
 }
 };
 
 struct DivideOperator {
-template<typename T, typename U, typename V = typename binary_arithmetic_promoted_type<T, U, DivideOperator>::type>
+template<typename T, typename U, typename V = typename type_arithmetic_promoted_type<T, U, DivideOperator>::type>
 V apply(T t, U u) {
     return static_cast<V>(t) / static_cast<V>(u);
 }
