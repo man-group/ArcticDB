@@ -10,8 +10,6 @@ from typing import NamedTuple, Callable, Any, Optional
 from enum import Enum
 
 import numpy as np
-from hypothesis.extra.numpy import unsigned_integer_dtypes, integer_dtypes, floating_dtypes, from_dtype
-from math import inf
 import pandas as pd
 
 from arcticc.pb2.descriptors_pb2 import IndexDescriptor
@@ -21,6 +19,8 @@ from math import inf
 
 from hypothesis import settings, HealthCheck, strategies as st
 from hypothesis.extra.numpy import unsigned_integer_dtypes, integer_dtypes, floating_dtypes, from_dtype
+import hypothesis.extra.pandas as hs_pd
+
 
 _function_scoped_fixture = getattr(HealthCheck, "function_scoped_fixture", None)
 
@@ -63,6 +63,12 @@ def non_zero_and_non_infinite(x):
 @st.composite
 def integral_type_strategies(draw):
     return draw(from_dtype(draw(st.one_of([unsigned_integer_dtypes(), integer_dtypes()]))).filter(non_infinite))
+
+
+@st.composite
+def dataframes_with_names_and_dtypes(draw, names, dtype_strategy):
+    cols = [hs_pd.column(name, dtype=draw(dtype_strategy)) for name in names]
+    return draw(hs_pd.data_frames(cols, index=hs_pd.range_indexes()))
 
 
 @st.composite

@@ -32,6 +32,7 @@ from arcticdb.util.hypothesis import (
     numeric_type_strategies,
     non_zero_numeric_type_strategies,
     string_strategy,
+    dataframes_with_names_and_dtypes
 )
 
 
@@ -779,7 +780,7 @@ def test_filter_isin_clashing_sets(lmdb_version_store):
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
-    df=data_frames([column("a", elements=integral_type_strategies())], index=range_indexes()),
+    df=dataframes_with_names_and_dtypes(["a"], integral_type_strategies()),
     vals=st.frozensets(integral_type_strategies(), min_size=1),
 )
 def test_filter_numeric_isin(lmdb_version_store, df, vals):
@@ -803,9 +804,22 @@ def test_filter_numeric_isin_hashing_overflow(lmdb_version_store):
     assert_frame_equal(expected, result)
 
 
+def test_filter_numeric_isin_hashing_overflow_other_way_round(lmdb_version_store):
+    df = pd.DataFrame({"a": [-1, 0, 1]})
+    lmdb_version_store.write("test_filter_numeric_isin_hashing_overflow2", df)
+
+    vals = [0, 1, 2 ** 62]
+    q = QueryBuilder()
+    q = q[q["a"].isin(vals)]
+    result = lmdb_version_store.read("test_filter_numeric_isin_hashing_overflow2", query_builder=q).data
+
+    expected = pd.DataFrame({"a": [0, 1]})
+    assert_frame_equal(expected, result)
+
+
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
-@given(df=data_frames([column("a", elements=integral_type_strategies())], index=range_indexes()))
+@given(df=dataframes_with_names_and_dtypes(["a"], integral_type_strategies()))
 def test_filter_numeric_isin_empty_set(lmdb_version_store, df):
     assume(not df.empty)
     q = QueryBuilder()
@@ -818,7 +832,7 @@ def test_filter_numeric_isin_empty_set(lmdb_version_store, df):
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
-    df=data_frames([column("a", elements=integral_type_strategies())], index=range_indexes()),
+    df=dataframes_with_names_and_dtypes(["a"], integral_type_strategies()),
     vals=st.frozensets(integral_type_strategies(), min_size=1),
 )
 def test_filter_numeric_isnotin(lmdb_version_store, df, vals):
@@ -831,7 +845,7 @@ def test_filter_numeric_isnotin(lmdb_version_store, df, vals):
 
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
-@given(df=data_frames([column("a", elements=integral_type_strategies())], index=range_indexes()))
+@given(df=dataframes_with_names_and_dtypes(["a"], integral_type_strategies()))
 def test_filter_numeric_isnotin_empty_set(lmdb_version_store, df):
     assume(not df.empty)
     q = QueryBuilder()
