@@ -777,6 +777,12 @@ def test_filter_isin_clashing_sets(lmdb_version_store):
     generic_filter_test(lmdb_version_store, "test_filter_isin_clashing_sets", df, q, pandas_query)
 
 
+def numeric_isin_asumptions(df, vals):
+    assume(not df.empty)
+    # If df values need a uint64 to hold them then we only support unsigned vals
+    assume(df["a"].between(-2 ** 63, 2 ** 63 - 1).all() or all(v >= 0 for v in vals))
+
+
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
@@ -784,49 +790,44 @@ def test_filter_isin_clashing_sets(lmdb_version_store):
     vals=st.frozensets(integral_type_strategies(), min_size=1),
 )
 def test_filter_numeric_isin(lmdb_version_store, df, vals):
-    assume(not df.empty)
+    numeric_isin_asumptions(df, vals)
     q = QueryBuilder()
     q = q[q["a"].isin(vals)]
     pandas_query = "a in {}".format(list(vals))
     generic_filter_test(lmdb_version_store, "test_filter_numeric_isin", df, q, pandas_query)
 
 
-def test_filter_numeric_isin_hashing_overflow(lmdb_version_store):
-    df = pd.DataFrame({"a": [0, 1, 2 ** 62]})
-    lmdb_version_store.write("test_filter_numeric_isin_hashing_overflow", df)
+@pytest.mark.parametrize(
+    "df_col,isin_vals,expected_col",
+    [
+        ([0, 1, 2 ** 62], [0, 1, -1], [0, 1]),
+        ([0, 1, 2 ** 63 - 1], [0, 1, -1], [0, 1]),
+        ([0, 1, 2 ** 62], [0, 1, -1], [0, 1]),
+        ([-1, 0, 1], [0, 1, 2 ** 62], [0, 1])
+    ]
+)
+def test_filter_numeric_isin_hashing_overflows(lmdb_version_store, df_col, isin_vals, expected_col):
+    df = pd.DataFrame({"a": df_col})
+    lmdb_version_store.write("test_filter_numeric_isin_hashing_overflows", df)
 
-    vals = [0, 1]
     q = QueryBuilder()
-    q = q[q["a"].isin(vals)]
-    result = lmdb_version_store.read("test_filter_numeric_isin_hashing_overflow", query_builder=q).data
+    q = q[q["a"].isin(isin_vals)]
+    result = lmdb_version_store.read("test_filter_numeric_isin_hashing_overflows", query_builder=q).data
 
-    expected = pd.DataFrame({"a": [0, 1]})
+    expected = pd.DataFrame({"a": expected_col})
     assert_frame_equal(expected, result)
 
 
-def test_filter_numeric_isin_hashing_overflow_other_way_round(lmdb_version_store):
-    df = pd.DataFrame({"a": [-1, 0, 1]})
-    lmdb_version_store.write("test_filter_numeric_isin_hashing_overflow2", df)
+def test_filter_numeric_isin_unsigned(lmdb_version_store):
+    df = pd.DataFrame({"a": [0, 1, 2 ** 64 - 1]})
+    lmdb_version_store.write("test_filter_numeric_isin_unsigned", df)
 
-    vals = [0, 1, 2 ** 62]
     q = QueryBuilder()
-    q = q[q["a"].isin(vals)]
-    result = lmdb_version_store.read("test_filter_numeric_isin_hashing_overflow2", query_builder=q).data
+    q = q[q["a"].isin([0, 1, 2])]
+    result = lmdb_version_store.read("test_filter_numeric_isin_unsigned", query_builder=q).data
 
-    expected = pd.DataFrame({"a": [0, 1]})
+    expected = pd.DataFrame({"a": [0, 1]}, dtype=np.uint64)
     assert_frame_equal(expected, result)
-
-
-@use_of_function_scoped_fixtures_in_hypothesis_checked
-@settings(deadline=None)
-@given(df=dataframes_with_names_and_dtypes(["a"], integral_type_strategies()))
-def test_filter_numeric_isin_empty_set(lmdb_version_store, df):
-    assume(not df.empty)
-    q = QueryBuilder()
-    vals = []
-    q = q[q["a"].isin(vals)]
-    pandas_query = "a in {}".format(vals)
-    generic_filter_test(lmdb_version_store, "test_filter_numeric_isin_empty_set", df, q, pandas_query)
 
 
 @use_of_function_scoped_fixtures_in_hypothesis_checked
@@ -836,7 +837,7 @@ def test_filter_numeric_isin_empty_set(lmdb_version_store, df):
     vals=st.frozensets(integral_type_strategies(), min_size=1),
 )
 def test_filter_numeric_isnotin(lmdb_version_store, df, vals):
-    assume(not df.empty)
+    numeric_isin_asumptions(df, vals)
     q = QueryBuilder()
     q = q[q["a"].isnotin(vals)]
     pandas_query = "a not in {}".format(list(vals))
