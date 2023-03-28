@@ -106,7 +106,6 @@ IF($ENV{DEBUG_BUILD})
     # Add macros definition here
     message("Setting debug flags")
     ADD_DEFINITIONS(-DUSE_REMOTERY)
-    ADD_DEFINITIONS(-DARCTICDB_TRACK_ALLOCS)
     ADD_DEFINITIONS(-DDEBUG_BUILD)
 ELSE()
     message(STATUS "Not setting debug flags")
