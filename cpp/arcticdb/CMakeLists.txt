@@ -186,6 +186,8 @@ set(arcticdb_srcs
         pipeline/write_options.hpp
         processing/aggregation.hpp
         processing/operation_dispatch.hpp
+        processing/operation_dispatch_binary.hpp
+        processing/operation_dispatch_unary.hpp
         processing/operation_types.hpp
         processing/signed_unsigned_comparison.hpp
         processing/processing_segment.hpp
@@ -330,6 +332,11 @@ set(arcticdb_srcs
         processing/aggregation.cpp
         processing/clause.cpp
         processing/expression_node.cpp
+        processing/operation_dispatch.cpp
+        processing/operation_dispatch_unary.cpp
+        processing/operation_dispatch_binary.cpp
+        processing/operation_dispatch_binary_comparator.cpp
+        processing/operation_dispatch_binary_operator.cpp
         python/python_to_tensor_frame.cpp
         storage/config_resolvers.cpp
         storage/failure_simulation.cpp
@@ -362,7 +369,8 @@ set(arcticdb_srcs
         version/version_store_api.cpp
         version/version_utils.cpp
         version/symbol_list.cpp
-        version/schema_checks.hpp)
+        version/schema_checks.hpp
+        )
 
 add_library(arcticdb_core_object OBJECT ${arcticdb_srcs})
 
