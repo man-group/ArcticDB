@@ -12,9 +12,15 @@
 #include <arcticdb/stream/aggregator.hpp>
 #include <arcticdb/util/test/generators.hpp>
 #include <arcticdb/stream/test/stream_test_common.hpp>
-#include <arcticdb/python/python_to_tensor_frame.hpp>
 
-TEST(MergeReads, SimpleStaticSchema) {
+struct MergeReadsTestStore : arcticdb::TestStore {
+protected:
+    std::string get_name() override {
+        return "test.merge_streams";
+    }
+};
+
+TEST_F(MergeReadsTestStore, SimpleStaticSchema) {
     using namespace arcticdb;
     using namespace arcticdb::stream;
     using MergeAggregator =  Aggregator<TimeseriesIndex,
@@ -28,7 +34,6 @@ TEST(MergeReads, SimpleStaticSchema) {
 
     const std::string stream_id1("test_merge_1");
     const std::string stream_id2("test_merge_2");
-    auto version_store = test_store("test.merge_streams");
 
     MergeSinkWrapper wrapper1(stream_id1, {
         scalar_field_proto(DataType::UINT64, "thing1"),
@@ -59,12 +64,12 @@ TEST(MergeReads, SimpleStaticSchema) {
     aggregator1.commit();
     aggregator2.commit();
 
-    version_store->write_individual_segment(stream_id1, std::move(wrapper1.segment()), false);
-    version_store->write_individual_segment(stream_id2, std::move(wrapper2.segment()), false);
+    test_store_->write_individual_segment(stream_id1, std::move(wrapper1.segment()), false);
+    test_store_->write_individual_segment(stream_id2, std::move(wrapper2.segment()), false);
 
     const std::string target_id("some_merged_stuff");
     pipelines::ReadQuery read_query;
-    auto read_result = version_store->read_dataframe_merged(target_id, {stream_id1, stream_id2}, pipelines::VersionQuery{}, read_query, ReadOptions{});
+    auto read_result = test_store_->read_dataframe_merged(target_id, {stream_id1, stream_id2}, pipelines::VersionQuery{}, read_query, ReadOptions{});
     const auto& frame = read_result.frame_data.frame();
 
     for(timestamp i = 0; i < NumTests; i += 2) {
@@ -75,7 +80,7 @@ TEST(MergeReads, SimpleStaticSchema) {
     }
 }
 
-TEST(MergeReads, SparseTarget) {
+TEST_F(MergeReadsTestStore, SparseTarget) {
     using namespace arcticdb;
     using namespace arcticdb::stream;
     using MergeAggregator =  Aggregator<TimeseriesIndex,
@@ -89,7 +94,6 @@ TEST(MergeReads, SparseTarget) {
 
     const std::string stream_id1("test_merge_1");
     const std::string stream_id2("test_merge_2");
-    auto version_store = test_store("test.merge_streams");
 
     MergeSinkWrapper wrapper1(stream_id1, {
         scalar_field_proto(DataType::UINT64, "thing1"),
@@ -120,14 +124,14 @@ TEST(MergeReads, SparseTarget) {
     aggregator1.commit();
     aggregator2.commit();
 
-    version_store->write_individual_segment(stream_id1, std::move(wrapper1.segment()), false);
-    version_store->write_individual_segment(stream_id2, std::move(wrapper2.segment()), false);
+    test_store_->write_individual_segment(stream_id1, std::move(wrapper1.segment()), false);
+    test_store_->write_individual_segment(stream_id2, std::move(wrapper2.segment()), false);
 
     const std::string target_id("some_merged_stuff");
     ReadOptions read_options;
     read_options.set_allow_sparse(true);
     pipelines::ReadQuery read_query;
-    auto read_result = version_store->read_dataframe_merged(target_id, {stream_id1, stream_id2}, pipelines::VersionQuery{}, read_query, read_options);
+    auto read_result = test_store_->read_dataframe_merged(target_id, {stream_id1, stream_id2}, pipelines::VersionQuery{}, read_query, read_options);
     const auto& frame = read_result.frame_data.frame();
 
     for(timestamp i = 0; i < NumTests; i += 2) {
@@ -140,7 +144,7 @@ TEST(MergeReads, SparseTarget) {
     }
 }
 
-TEST(MergeReads, SparseSource) {
+TEST_F(MergeReadsTestStore, SparseSource) {
     using namespace arcticdb;
     using namespace arcticdb::stream;
     using DynamicAggregator =  Aggregator<TimeseriesIndex, DynamicSchema, stream::NeverSegmentPolicy, stream::SparseColumnPolicy>;
@@ -149,7 +153,6 @@ TEST(MergeReads, SparseSource) {
 
     const std::string stream_id1("test_merge_1");
     const std::string stream_id2("test_merge_2");
-    auto version_store = test_store("test.merge_streams");
 
     DynamicSinkWrapper wrapper1(stream_id1, {});
     auto& aggregator1 = wrapper1.aggregator_;
@@ -181,14 +184,14 @@ TEST(MergeReads, SparseSource) {
     aggregator1.commit();
     aggregator2.commit();
 
-    version_store->write_individual_segment(stream_id1, std::move(wrapper1.segment()), false);
-    version_store->write_individual_segment(stream_id2, std::move(wrapper2.segment()), false);
+    test_store_->write_individual_segment(stream_id1, std::move(wrapper1.segment()), false);
+    test_store_->write_individual_segment(stream_id2, std::move(wrapper2.segment()), false);
 
     const std::string target_id("some_merged_stuff");
     ReadOptions read_options;
     read_options.set_allow_sparse(true);
     pipelines::ReadQuery read_query;
-    auto read_result = version_store->read_dataframe_merged(target_id, {stream_id1, stream_id2}, pipelines::VersionQuery{}, read_query, read_options);
+    auto read_result = test_store_->read_dataframe_merged(target_id, {stream_id1, stream_id2}, pipelines::VersionQuery{}, read_query, read_options);
     const auto& frame = read_result.frame_data.frame();
 
     for(timestamp i = 0; i < NumTests; i += 4) {
