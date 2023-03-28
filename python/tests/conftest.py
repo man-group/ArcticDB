@@ -15,6 +15,7 @@ from moto.server import DomainDispatcherApplication, create_backend_app
 
 import sys
 import signal
+
 if sys.platform == "win32":
     # Hack to define signal.SIGKILL as some deps eg pytest-test-fixtures hardcode SIGKILL terminations.
     signal.SIGKILL = signal.SIGINT
@@ -30,8 +31,6 @@ from typing import Optional, Any, Dict
 from functools import partial
 
 from pytest_server_fixtures.base import get_ephemeral_port
-from arcticc.pb2.storage_pb2 import EnvironmentConfigsMap
-from arcticc.pb2.lmdb_storage_pb2 import Config as LmdbConfig
 
 from arcticdb.arctic import Arctic
 from arcticdb.version_store.helper import (
@@ -44,7 +43,8 @@ from arcticdb.config import Defaults
 from arcticdb.util.test import configure_test_logger, apply_lib_cfg
 from arcticdb.version_store.helper import ArcticMemoryConfig
 from arcticdb.version_store import NativeVersionStore
-from pandas import DataFrame
+from arcticc.pb2.storage_pb2 import EnvironmentConfigsMap  # Importing from arcticdb dynamically loads arcticc.pb2
+from arcticc.pb2.lmdb_storage_pb2 import Config as LmdbConfig
 
 configure_test_logger()
 
@@ -395,16 +395,16 @@ def lmdb_version_store_tiny_segment_dynamic(version_store_factory):
 
 @pytest.fixture
 def one_col_df():
-    def create(start=0):
-        return DataFrame({"x": np.arange(start, start + 10, dtype=np.int64)})
+    def create(start=0) -> pd.DataFrame:
+        return pd.DataFrame({"x": np.arange(start, start + 10, dtype=np.int64)})
 
     return create
 
 
 @pytest.fixture
 def two_col_df():
-    def create(start=0):
-        return DataFrame(
+    def create(start=0) -> pd.DataFrame:
+        return pd.DataFrame(
             {"x": np.arange(start, start + 10, dtype=np.int64), "y": np.arange(start + 10, start + 20, dtype=np.int64)}
         )
 
@@ -413,8 +413,8 @@ def two_col_df():
 
 @pytest.fixture
 def three_col_df():
-    def create(start=0):
-        return DataFrame(
+    def create(start=0) -> pd.DataFrame:
+        return pd.DataFrame(
             {
                 "x": np.arange(start, start + 10, dtype=np.int64),
                 "y": np.arange(start + 10, start + 20, dtype=np.int64),

@@ -7,12 +7,12 @@ As of the Change Date specified in that file, in accordance with the Business So
 """
 import numpy as np
 import pandas as pd
-from arcticc.pb2.descriptors_pb2 import TypeDescriptor
 import datetime
 import pytest
 import sys
 
 from arcticdb.util.test import assert_frame_equal
+from arcticc.pb2.descriptors_pb2 import TypeDescriptor
 
 
 def test_update_float_int(lmdb_version_store_dynamic_schema):
