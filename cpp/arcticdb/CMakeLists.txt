@@ -359,8 +359,10 @@ set(arcticdb_srcs
         util/global_lifetimes.cpp
         util/offset_string.cpp
         util/offset_string.cpp
+        util/sparse_utils.cpp
         util/string_utils.cpp
         util/trace.cpp
+        util/type_handler.cpp
         version/local_versioned_engine.cpp
         version/op_log.cpp
         version/snapshot.cpp

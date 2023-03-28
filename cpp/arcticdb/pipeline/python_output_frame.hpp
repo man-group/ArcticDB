@@ -8,6 +8,7 @@
 #pragma once
 
 #include <arcticdb/pipeline/frame_data_wrapper.hpp>
+#include <arcticdb/util/buffer_holder.hpp>
 
 namespace arcticdb::pipelines {
 
@@ -15,7 +16,7 @@ namespace py = pybind11;
 
 struct ARCTICDB_VISIBILITY_HIDDEN PythonOutputFrame {
 
-    PythonOutputFrame(const SegmentInMemory& frame);
+    PythonOutputFrame(const SegmentInMemory& frame, std::shared_ptr<BufferHolder> buffers);
 
     ~PythonOutputFrame();
 
@@ -38,5 +39,11 @@ private:
     std::vector<std::string> names_;
     std::vector<std::string> index_columns_;
     std::weak_ptr<FrameDataWrapper> arrays_;
+    std::shared_ptr<BufferHolder> buffers_;
 };
+
+inline PythonOutputFrame output_frame_from_segment(const SegmentInMemory& frame) {
+    return PythonOutputFrame(frame, {});
+}
+
 }

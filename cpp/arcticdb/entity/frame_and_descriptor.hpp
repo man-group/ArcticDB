@@ -9,6 +9,7 @@
 
 #include <arcticdb/column_store/memory_segment.hpp>
 #include <arcticdb/entity/protobufs.hpp>
+#include <arcticdb/util/buffer_holder.hpp>
 
 namespace arcticdb {
 
@@ -16,6 +17,7 @@ struct FrameAndDescriptor {
     SegmentInMemory frame_;
     arcticdb::proto::descriptors::TimeSeriesDescriptor desc_;
     std::vector<AtomKey> keys_;
+    std::shared_ptr<BufferHolder> buffers_;
 };
 
 } //namespace arcticdb

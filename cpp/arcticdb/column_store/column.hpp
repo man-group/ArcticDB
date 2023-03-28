@@ -357,6 +357,17 @@ public:
         std::swap(data_.buffer(), new_buffer);
     }
 
+    inline void set_sparse_block(ChunkedBuffer&& buffer, util::BitSet&& bitset) {
+        data_.buffer() = std::move(buffer);
+        sparse_map_ = std::move(bitset);
+    }
+
+    inline void set_sparse_block(ChunkedBuffer&& buffer, Buffer&& shapes, util::BitSet&& bitset) {
+        data_.buffer() = std::move(buffer);
+        shapes_.buffer() = std::move(shapes);
+        sparse_map_ = std::move(bitset);
+    }
+
     template<class T, template<class> class Tensor, std::enable_if_t<
             std::is_integral_v<T> || std::is_floating_point_v<T>,
             int> = 0>
@@ -397,6 +408,10 @@ public:
 
     ssize_t last_row() const {
         return last_logical_row_;
+    }
+
+    void check_magic() const {
+        magic_.check();
     }
 
     void unsparsify(size_t num_rows) {
@@ -800,8 +815,25 @@ public:
         return orig_type_.value();
     }
 
+    void set_secondary_type(TypeDescriptor type) {
+        secondary_type_ = std::move(type);
+    }
+
+    bool has_secondary_type() const {
+        return secondary_type_.has_value();
+    }
+
+    const TypeDescriptor& secondary_type() const {
+        util::check(secondary_type_.has_value(), "Requesting secondary type in a column that does not have one");
+        return *secondary_type_;
+    }
+
     void compact_blocks() {
         data_.compact_blocks();
+    }
+
+    const auto& blocks() const {
+        return data_.buffer().blocks();
     }
 
     static std::vector<std::shared_ptr<Column>> split(const std::shared_ptr<Column>& column, size_t num_rows);
@@ -912,6 +944,8 @@ private:
     bool inflated_ = false;
     bool allow_sparse_ = false;
     std::optional<util::BitMagic> sparse_map_;
+    // For types that are arrays or matrices, the member type
+    std::optional<TypeDescriptor> secondary_type_;
     util::MagicNum<'D', 'C', 'o', 'l'> magic_;
 };
 

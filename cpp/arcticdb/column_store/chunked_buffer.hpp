@@ -263,7 +263,8 @@ class ChunkedBufferImpl {
     }
 
     [[nodiscard]] const uint8_t* data() const {
-        util::check(blocks_.size() == 1, "Taking a pointer to the begining of a non-contiguous buffer");
+        util::check(blocks_.size() == 1, "Taking a pointer to the beginning of a non-contiguous buffer");
+        blocks_[0]->magic_.check();
         return blocks_[0]->data();
     }
 

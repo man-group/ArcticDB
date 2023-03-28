@@ -9,6 +9,7 @@
 
 #include <arcticdb/util/offset_string.hpp>
 #include <arcticdb/util/preprocess.hpp>
+#include <arcticdb/column_store/chunked_buffer.hpp>
 
 #include <bitmagic/bm.h>
 #include <bitmagic/bmserial.h>
@@ -18,12 +19,12 @@
 
 namespace arcticdb::util {
 
-#define NaT 0x8000000000000000
+constexpr auto NaT = 0x8000000000000000;
 
 template <typename RawType>
-inline void densify_buffer_using_bitmap(BitMagic &block_bitset, arcticdb::ChunkedBuffer &dense_buffer, const uint8_t* sparse_ptr) {
-    bm::bvector<>::enumerator en = block_bitset.first();
-    bm::bvector<>::enumerator en_end = block_bitset.end();
+void densify_buffer_using_bitmap(const util::BitSet &block_bitset, arcticdb::ChunkedBuffer &dense_buffer, const uint8_t* sparse_ptr) {
+    auto en = block_bitset.first();
+    auto en_end = block_bitset.end();
     auto element_size = sizeof(RawType);
     auto dense_ptr = dense_buffer.data();
     util::check(block_bitset.count() * element_size <= dense_buffer.bytes(),
@@ -45,10 +46,10 @@ inline void densify_buffer_using_bitmap(BitMagic &block_bitset, arcticdb::Chunke
 }
 
 template <typename RawType>
-inline void expand_dense_buffer_using_bitmap(util::BitMagic &bv, const uint8_t *dense_ptr,
+inline void expand_dense_buffer_using_bitmap(const util::BitMagic &bv, const uint8_t *dense_ptr,
                                              uint8_t *sparse_ptr) {
-    bm::bvector<>::enumerator en = bv.first();
-    bm::bvector<>::enumerator en_end = bv.end();
+    auto en = bv.first();
+    auto en_end = bv.end();
     auto element_sz = sizeof(RawType);
 
     size_t pos_in_dense_buffer = 0;
@@ -85,6 +86,11 @@ void default_initialize(uint8_t* data, size_t bytes) {
     }
 }
 
+void scan_object_type_to_sparse(
+    const PyObject* const* ptr,
+    size_t rows_to_write,
+    util::BitMagic& bitset);
+
 template <typename RawType>
 ChunkedBuffer scan_floating_point_to_sparse(
     RawType* ptr,
@@ -92,7 +98,7 @@ ChunkedBuffer scan_floating_point_to_sparse(
     util::BitMagic& block_bitset) {
     auto scan_ptr = ptr;
     for (size_t idx = 0; idx < rows_to_write; ++idx, ++scan_ptr) {
-        block_bitset[idx] = !isnan(*scan_ptr);
+        block_bitset[bv_size(idx)] = isnan(*scan_ptr) <= 0;
     }
 
     const auto bytes = block_bitset.count() * sizeof(RawType);
@@ -111,8 +117,8 @@ inline util::BitMagic deserialize_bytes_to_bitmap(const std::uint8_t*& input, si
 }
 
 inline void dump_bitvector(const util::BitMagic& bv) {
-    bm::bvector<>::enumerator en = bv.first();
-    bm::bvector<>::enumerator en_end = bv.end();
+    auto en = bv.first();
+    auto en_end = bv.end();
 
     std::vector<uint32_t> vals;
     while (en < en_end) {
@@ -122,6 +128,5 @@ inline void dump_bitvector(const util::BitMagic& bv) {
     }
     log::version().info("Bit vector values {}", vals);
 }
-
 
 }

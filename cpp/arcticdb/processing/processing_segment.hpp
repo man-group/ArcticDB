@@ -141,8 +141,10 @@ namespace arcticdb {
                 const auto row_count = block->row_count();
                 auto ptr = reinterpret_cast<const RawType*>(block->data());
                 for(auto i = 0u; i < row_count; ++i, ++ptr){
-                    size_t group = grouper->group(*ptr, col.string_pool_);
-                    output.emplace_back(bucketizer->bucket(group));
+                    if constexpr(std::is_same_v<typename Grouper::GrouperDescriptor, TypeDescriptorTag>) {
+                        auto group = grouper->group(*ptr, col.string_pool_);
+                        output.emplace_back(bucketizer->bucket(group));
+                    }
                 }
             }
         });

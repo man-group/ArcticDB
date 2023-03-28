@@ -368,7 +368,7 @@ FrameAndDescriptor read_multi_key(
 
     arcticdb::proto::descriptors::TimeSeriesDescriptor multi_key_desc{tsd};
     multi_key_desc.mutable_normalization()->CopyFrom(res.desc_.normalization());
-    return {res.frame_, multi_key_desc, keys};
+    return {res.frame_, multi_key_desc, keys, std::shared_ptr<BufferHolder>{}};
 }
 
 /*
@@ -471,6 +471,7 @@ std::vector<SliceAndKey> read_and_process(
 
 SegmentInMemory read_direct(const std::shared_ptr<Store>& store,
                             const std::shared_ptr<PipelineContext>& pipeline_context,
+                            std::shared_ptr<BufferHolder> buffers,
                             const ReadOptions& read_options) {
     ARCTICDB_DEBUG(log::version(), "Allocating frame");
     ARCTICDB_SAMPLE_DEFAULT(ReadDirect)
@@ -478,7 +479,7 @@ SegmentInMemory read_direct(const std::shared_ptr<Store>& store,
     util::print_total_mem_usage(__FILE__, __LINE__, __FUNCTION__);
 
     ARCTICDB_DEBUG(log::version(), "Fetching frame data");
-    fetch_data(frame, pipeline_context, store, opt_false(read_options.dynamic_schema_)).get();
+    fetch_data(frame, pipeline_context, store, opt_false(read_options.dynamic_schema_), buffers).get();
     util::print_total_mem_usage(__FILE__, __LINE__, __FUNCTION__);
     return frame;
 }
@@ -506,7 +507,7 @@ FrameAndDescriptor read_index_impl(
     arcticdb::proto::descriptors::TimeSeriesDescriptor tsd;
     tsd.set_total_rows(index_seg.row_count());
     tsd.mutable_stream_descriptor()->CopyFrom(index_seg.descriptor().proto());
-    return {SegmentInMemory(std::move(index_seg)), tsd, {}};
+    return {SegmentInMemory(std::move(index_seg)), tsd, {}, {}};
 }
 
 namespace {
@@ -748,6 +749,7 @@ FrameAndDescriptor read_dataframe_impl(
 
     ARCTICDB_DEBUG(log::version(), "Fetching data to frame");
     SegmentInMemory frame;
+    auto buffers = std::make_shared<BufferHolder>();
     if(!read_query.query_->empty()) {
         ARCTICDB_SAMPLE(RunPipelineAndOutput, 0)
         util::check_rte(!pipeline_context->is_pickled(),"Cannot filter pickled data");
@@ -758,12 +760,12 @@ FrameAndDescriptor read_dataframe_impl(
         ARCTICDB_SAMPLE(MarkAndReadDirect, 0)
         util::check_rte(!(pipeline_context->is_pickled() && std::holds_alternative<RowRange>(read_query.row_filter)), "Cannot use head/tail/row_range with pickled data, use plain read instead");
         mark_index_slices(pipeline_context, opt_false(read_options.dynamic_schema_), pipeline_context->bucketize_dynamic_);
-        frame = read_direct(store, pipeline_context, read_options);
+        frame = read_direct(store, pipeline_context, buffers, read_options);
     }
 
     ARCTICDB_DEBUG(log::version(), "Reduce and fix columns");
     reduce_and_fix_columns(pipeline_context, frame, read_options);
-    return {frame, make_descriptor(pipeline_context, {}, pipeline_context->bucketize_dynamic_), {}};
+    return {frame, make_descriptor(pipeline_context, {}, pipeline_context->bucketize_dynamic_), {}, buffers};
 }
 
 VersionedItem collate_and_write(

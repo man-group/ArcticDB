@@ -306,7 +306,7 @@ inline std::vector<ReadResult> frame_to_read_result(std::pair<std::vector<AtomKe
     for (auto fd : folly::enumerate(frame_and_descriptors)) {
         read_results.emplace_back(ReadResult(
             VersionedItem{std::move(keys[fd.index])},
-            PythonOutputFrame{fd->frame_},
+            PythonOutputFrame{fd->frame_, fd->buffers_},
             fd->desc_.normalization(),
             fd->desc_.user_meta(),
             fd->desc_.multi_key_meta(),
