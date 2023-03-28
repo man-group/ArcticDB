@@ -69,6 +69,22 @@ arcticdb::proto::descriptors::TimeSeriesDescriptor descriptor_from_frame(
     size_t existing_rows,
     std::optional<entity::AtomKey>&& prev_key = {});
 
+template <typename RawType>
+RawType* flatten_tensor(
+        std::optional<ChunkedBuffer>& flattened_buffer,
+        size_t rows_to_write,
+        const NativeTensor& tensor,
+        size_t slice_num,
+        size_t regular_slice_size
+        ) {
+    flattened_buffer = ChunkedBuffer::presized(rows_to_write * sizeof(RawType));
+    TypedTensor<RawType> t(tensor, slice_num, regular_slice_size, rows_to_write);
+    util::FlattenHelper flattener{t};
+    auto dst = reinterpret_cast<RawType*>(flattened_buffer->data());
+    flattener.flatten(dst, reinterpret_cast<RawType const*>(t.data()));
+    return reinterpret_cast<RawType*>(flattened_buffer->data());
+}
+
 template<typename Tensor, typename Aggregator>
 void aggregator_set_data(
     const TypeDescriptor &type_desc,
@@ -89,6 +105,7 @@ void aggregator_set_data(
                     tensor.data_type());
         util::check(type_desc.data_type() == dt, "Type desc {} != {} static type", type_desc.data_type(), dt);
         auto c_style = util::is_cstyle_array<RawType>(tensor);
+        std::optional<ChunkedBuffer> flattened_buffer;
         if constexpr (is_sequence_type(dt)) {
             ARCTICDB_SUBSAMPLE_AGG(SetDataString)
             if (is_fixed_string_type(dt)) {
@@ -105,15 +122,9 @@ void aggregator_set_data(
                 auto data = const_cast<void *>(tensor.data());
                 auto ptr_data = reinterpret_cast<PyObject **>(data);
                 ptr_data += row;
-                std::optional<ChunkedBuffer> flattened_buffer;
-                if (!c_style) {
-                    flattened_buffer = ChunkedBuffer::presized(rows_to_write * sizeof(PyObject *));
-                    TypedTensor <PyObject *> t(tensor, slice_num, regular_slice_size, rows_to_write);
-                    util::FlattenHelper flattener{t};
-                    auto dst = reinterpret_cast<PyObject **>(flattened_buffer.value().data());
-                    flattener.flatten(dst, reinterpret_cast<PyObject* const*>(t.data()));
-                    ptr_data = reinterpret_cast<PyObject **>(flattened_buffer.value().data());
-                }
+                if (!c_style)
+                    ptr_data = flatten_tensor<PyObject*>(flattened_buffer, rows_to_write, tensor, slice_num, regular_slice_size);
+
                 auto none = py::none{};
                 for (size_t s = 0; s < rows_to_write; ++s, ++ptr_data) {
                     if (*ptr_data == none.ptr()) {

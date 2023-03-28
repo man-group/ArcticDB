@@ -13,6 +13,7 @@
 #include <arcticdb/pipeline/read_options.hpp>
 #include <arcticdb/util/bitset.hpp>
 #include <arcticdb/util/shared_future.hpp>
+#include <arcticdb/util/buffer_holder.hpp>
 
 #include <folly/futures/Future.h>
 
@@ -80,19 +81,22 @@ folly::Future<std::vector<VariantKey>> fetch_data(
     const SegmentInMemory& frame,
     const std::shared_ptr<PipelineContext> &context,
     const std::shared_ptr<stream::StreamSource>& ssource,
-    bool dynamic_schema
+    bool dynamic_schema,
+    std::shared_ptr<BufferHolder> buffers
     );
 
 void decode_into_frame_static(
     SegmentInMemory &frame,
     PipelineContextRow &context,
-    Segment &&seg
+    Segment &&seg,
+    const std::shared_ptr<BufferHolder>& buffers
     );
 
 void decode_into_frame_dynamic(
         SegmentInMemory &frame,
         PipelineContextRow &context,
-        Segment &&seg
+        Segment &&seg,
+        const std::shared_ptr<BufferHolder>& buffers
 );
 
 void reduce_and_fix_columns(

@@ -48,7 +48,7 @@ inline ReadResult create_python_read_result(
     const VersionedItem& version,
     FrameAndDescriptor&& fd) {
     auto result = std::move(fd);
-    auto python_frame = pipelines::PythonOutputFrame{result.frame_};
+    auto python_frame = pipelines::PythonOutputFrame{result.frame_, result.buffers_};
     util::print_total_mem_usage(__FILE__, __LINE__, __FUNCTION__);
 
     return {version, std::move(python_frame), result.desc_.normalization(),

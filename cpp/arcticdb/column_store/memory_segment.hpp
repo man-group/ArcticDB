@@ -235,6 +235,18 @@ public:
         impl_->set_sparse_block(idx, val, rows_to_write);
     }
 
+    void set_sparse_block(position_t idx, ChunkedBuffer&& buffer, Buffer&& shapes, util::BitSet&& bitset) {
+        impl_->set_sparse_block(idx, std::move(buffer), std::move(shapes), std::move(bitset));
+    }
+
+    void set_sparse_block(position_t idx, ChunkedBuffer&& buffer, util::BitSet&& bitset) {
+        impl_->set_sparse_block(idx, std::move(buffer), std::move(bitset));
+    }
+
+    void set_secondary_type(position_t idx, TypeDescriptor type) {
+        impl_->set_secondary_type(idx, type);
+    }
+
     void set_offset(ssize_t offset) {
         impl_->set_offset(offset);
     }

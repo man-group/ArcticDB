@@ -16,6 +16,7 @@
 #include <arcticdb/pipeline/frame_slice_map.hpp>
 #include <arcticdb/async/task_scheduler.hpp>
 #include <arcticdb/util/encoding_conversion.hpp>
+#include <arcticdb/util/type_handler.hpp>
 #include <arcticdb/entity/type_utils.hpp>
 #include <arcticdb/codec/slice_data_sink.hpp>
 #include <arcticdb/storage/store.hpp>
@@ -155,31 +156,36 @@ void decode_or_expand(
     uint8_t* dest,
     const arcticdb::proto::encoding::EncodedField& encoded_field_info,
     const TypeDescriptor& type_descriptor,
-    size_t dest_bytes) {
-    std::optional<util::BitMagic> bv;
-    if(encoded_field_info.has_ndarray() && encoded_field_info.ndarray().sparse_map_bytes() > 0) {
-        const auto& ndarray = encoded_field_info.ndarray();
-        const auto bytes = encoding_size::data_uncompressed_size(ndarray);
-        ChunkedBuffer sparse{bytes};
-        SliceDataSink sparse_sink{sparse.data(), bytes};
-        data += decode(type_descriptor, encoded_field_info, data, sparse_sink, bv);
-        type_descriptor.visit_tag([dest, dest_bytes, &bv, &sparse] (const auto tdt) {
-            using TagType = decltype(tdt);
-            using RawType = typename TagType::DataTypeTag::raw_type;
-            util::default_initialize<TagType>(dest, dest_bytes);
-            util::expand_dense_buffer_using_bitmap<RawType>(bv.value(), sparse.data(), dest);
-        });
-
+    size_t dest_bytes,
+    std::shared_ptr<BufferHolder> buffers) {
+    if(auto handler = TypeHandlerRegistry::instance()->get_handler(type_descriptor.data_type()); handler) {
+        handler->handle_type(data, dest, encoded_field_info, type_descriptor, dest_bytes, buffers);
     } else {
-        SliceDataSink sink(dest, dest_bytes);
-        const auto& ndarray = encoded_field_info.ndarray();
-        if(const auto bytes = encoding_size::data_uncompressed_size(ndarray); bytes < dest_bytes) {
-            type_descriptor.visit_tag([dest, bytes, dest_bytes](const auto tdt) {
-                using TagType =   decltype(tdt);
-                util::default_initialize<TagType>(dest + bytes, dest_bytes - bytes);
+        std::optional<util::BitMagic> bv;
+        if (encoded_field_info.has_ndarray() && encoded_field_info.ndarray().sparse_map_bytes() > 0) {
+            const auto &ndarray = encoded_field_info.ndarray();
+            const auto bytes = encoding_size::data_uncompressed_size(ndarray);
+            ChunkedBuffer sparse{bytes};
+            SliceDataSink sparse_sink{sparse.data(), bytes};
+            data += decode(type_descriptor, encoded_field_info, data, sparse_sink, bv);
+            type_descriptor.visit_tag([dest, dest_bytes, &bv, &sparse](const auto tdt) {
+                using TagType = decltype(tdt);
+                using RawType = typename TagType::DataTypeTag::raw_type;
+                util::default_initialize<TagType>(dest, dest_bytes);
+                util::expand_dense_buffer_using_bitmap<RawType>(bv.value(), sparse.data(), dest);
             });
+
+        } else {
+            SliceDataSink sink(dest, dest_bytes);
+            const auto &ndarray = encoded_field_info.ndarray();
+            if (const auto bytes = encoding_size::data_uncompressed_size(ndarray); bytes < dest_bytes) {
+                type_descriptor.visit_tag([dest, bytes, dest_bytes](const auto tdt) {
+                    using TagType = decltype(tdt);
+                    util::default_initialize<TagType>(dest + bytes, dest_bytes - bytes);
+                });
+            }
+            data += decode(type_descriptor, encoded_field_info, data, sink, bv);
         }
-        data += decode(type_descriptor, encoded_field_info, data, sink, bv);
     }
 }
 
@@ -207,7 +213,8 @@ void advance_skipped_cols(const uint8_t*& data, ssize_t prev_col_offset, size_t 
 void decode_into_frame_static(
     SegmentInMemory &frame,
     PipelineContextRow &context,
-    Segment &&s) {
+    Segment &&s,
+    const std::shared_ptr<BufferHolder>& buffers) {
     auto seg = std::move(s);
     ARCTICDB_SAMPLE_DEFAULT(DecodeIntoFrame)
     const uint8_t *data = seg.buffer().data();
@@ -243,7 +250,7 @@ void decode_into_frame_static(
                         m.frame_field_descriptor_.name());
 
             util::check(data != end, "Reached end of input block with {} fields to decode", it.remaining_fields());
-            decode_or_expand(data, buffer.data() + m.offset_bytes_, encoded_field_info, m.source_type_desc_,  m.dest_bytes_);
+            decode_or_expand(data, buffer.data() + m.offset_bytes_, encoded_field_info, m.source_type_desc_,  m.dest_bytes_, buffers);
             ARCTICDB_TRACE(log::codec(), "Decoded column {} to position {}", field_name, data - begin);
 
             it.advance();
@@ -261,7 +268,8 @@ void decode_into_frame_static(
 void decode_into_frame_dynamic(
         SegmentInMemory &frame,
         PipelineContextRow &context,
-        Segment &&s) {
+        Segment &&s,
+        const std::shared_ptr<BufferHolder>& buffers) {
     ARCTICDB_SAMPLE_DEFAULT(DecodeIntoFrame)
     auto seg = std::move(s);
     const uint8_t *data = seg.buffer().data();
@@ -295,14 +303,14 @@ void decode_into_frame_dynamic(
                 util::check(static_cast<bool>(has_valid_type_promotion(m.source_type_desc_, m.dest_type_desc_)), "Can't promote type {} to type {} in field {}",
                             m.source_type_desc_, m.dest_type_desc_, m.frame_field_descriptor_.name());
 
-                    m.dest_type_desc_.visit_tag([&buffer, &m, &data, &encoded_field_info] (auto dest_desc_tag) {
+                    m.dest_type_desc_.visit_tag([&buffer, &m, &data, &encoded_field_info, &buffers] (auto dest_desc_tag) {
                         using DestinationType =  typename decltype(dest_desc_tag)::DataTypeTag::raw_type;
-                        m.source_type_desc_.visit_tag([&buffer, &m, &data, &encoded_field_info] (auto src_desc_tag ) {
+                        m.source_type_desc_.visit_tag([&buffer, &m, &data, &encoded_field_info, &buffers] (auto src_desc_tag ) {
                             using SourceType =  typename decltype(src_desc_tag)::DataTypeTag::raw_type;
                             if constexpr(std::is_arithmetic_v<SourceType> && std::is_arithmetic_v<DestinationType>) {
                                 const auto src_bytes = sizeof_datatype(m.source_type_desc_) * m.num_rows_;
                                 Buffer tmp_buf{src_bytes};
-                                decode_or_expand(data, tmp_buf.data(), encoded_field_info, m.source_type_desc_, src_bytes);
+                                decode_or_expand(data, tmp_buf.data(), encoded_field_info, m.source_type_desc_, src_bytes, buffers);
                                 auto src_ptr = reinterpret_cast<SourceType *>(tmp_buf.data());
                                 auto dest_ptr = reinterpret_cast<DestinationType *>(buffer.data() + m.offset_bytes_);
                                 for (auto i = 0u; i < m.num_rows_; ++i) {
@@ -322,7 +330,7 @@ void decode_into_frame_dynamic(
                             "Reached end of input block with {} fields to decode",
                             field_count - field_col);
 
-                decode_or_expand(data, buffer.data() + m.offset_bytes_, encoded_field_info, m.source_type_desc_, m.dest_bytes_);
+                decode_or_expand(data, buffer.data() + m.offset_bytes_, encoded_field_info, m.source_type_desc_, m.dest_bytes_, buffers);
             }
             ARCTICDB_TRACE(log::codec(), "Decoded column {} to position {}", frame.field(dst_col).name(), data - begin);
         }
@@ -995,7 +1003,8 @@ folly::Future<std::vector<VariantKey>> fetch_data(
     const SegmentInMemory& frame,
     const std::shared_ptr<PipelineContext> &context,
     const std::shared_ptr<stream::StreamSource>& ssource,
-    bool dynamic_schema
+    bool dynamic_schema,
+    std::shared_ptr<BufferHolder> buffers
     ) {
     ARCTICDB_SAMPLE_DEFAULT(FetchSlices)
     if (frame.empty())
@@ -1013,12 +1022,13 @@ folly::Future<std::vector<VariantKey>> fetch_data(
             continuations.emplace_back([
                 row = row,
                 frame = frame,
-                dynamic_schema=dynamic_schema](auto &&ks) mutable {
+                dynamic_schema=dynamic_schema,
+                &buffers](auto &&ks) mutable {
                 auto key_seg = std::forward<storage::KeySegmentPair>(ks);
                 if(dynamic_schema)
-                    decode_into_frame_dynamic(frame, row, std::move(key_seg.segment()));
+                    decode_into_frame_dynamic(frame, row, std::move(key_seg.segment()), buffers);
                 else
-                    decode_into_frame_static(frame, row, std::move(key_seg.segment()));
+                    decode_into_frame_static(frame, row, std::move(key_seg.segment()), buffers);
 
                 return std::get<AtomKey>(key_seg.variant_key());
             });

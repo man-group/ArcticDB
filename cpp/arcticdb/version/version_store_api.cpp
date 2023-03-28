@@ -718,7 +718,7 @@ FrameAndDescriptor create_frame(const StreamId& target_id, SegmentInMemory seg, 
     reduce_and_fix_columns(context, seg, read_options);
     auto norm_meta = make_timeseries_norm_meta(target_id);
     const auto desc = get_timeseries_descriptor(seg.descriptor(), seg.row_count(), std::nullopt, std::move(norm_meta));
-    return FrameAndDescriptor{std::move(seg), desc, {}};
+    return FrameAndDescriptor{std::move(seg), desc, {}, {}};
 }
 
 ReadResult PythonVersionStore::read_dataframe_merged(

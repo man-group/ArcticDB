@@ -196,7 +196,7 @@ void register_bindings(py::module &m) {
 
     using PythonOutputFrame = arcticdb::pipelines::PythonOutputFrame;
     py::class_<PythonOutputFrame>(version, "PythonOutputFrame")
-        .def(py::init<const SegmentInMemory&>())
+        .def(py::init<const SegmentInMemory&, std::shared_ptr<BufferHolder>>())
         .def_property_readonly("value", [](py::object & obj){
             auto& fd = obj.cast<PythonOutputFrame&>();
             return fd.arrays(obj);
@@ -500,8 +500,8 @@ void register_bindings(py::module &m) {
                 ReadResult res{
                     vit,
                     PythonOutputFrame{
-                            SegmentInMemory{StreamDescriptor{std::move(*tsd.mutable_stream_descriptor())}}
-                            },
+                            SegmentInMemory{StreamDescriptor{std::move(*tsd.mutable_stream_descriptor())}},
+                            std::make_shared<BufferHolder>()},
                         tsd.normalization(),
                         tsd.user_meta(),
                         tsd.multi_key_meta(),
@@ -566,7 +566,7 @@ void register_bindings(py::module &m) {
                  output.reserve(results.size());
                  for(auto& [vit, tsd] : results) {
                      ReadResult res{vit,
-                                {SegmentInMemory{StreamDescriptor{std::move(*tsd.mutable_stream_descriptor())}}},
+                                    {SegmentInMemory{StreamDescriptor{std::move(*tsd.mutable_stream_descriptor())}}, std::make_shared<BufferHolder>()},
                                 tsd.normalization(),
                                 tsd.user_meta(),
                                 tsd.multi_key_meta(),
