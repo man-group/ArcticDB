@@ -524,8 +524,20 @@ public:
     }
 
     template<class T, std::enable_if_t<std::is_integral_v<T> || std::is_floating_point_v<T>, int> = 0>
-        void set_sparse_block(position_t idx, T *val,  size_t rows_to_write) {
+    void set_sparse_block(position_t idx, T *val,  size_t rows_to_write) {
         column_unchecked(idx).set_sparse_block(row_id_ + 1, val, rows_to_write);
+    }
+
+    void set_sparse_block(position_t idx, ChunkedBuffer&& buffer, util::BitSet&& bitset) {
+        column_unchecked(idx).set_sparse_block(std::move(buffer), std::move(bitset));
+    }
+
+    void set_sparse_block(position_t idx, ChunkedBuffer&& buffer, Buffer&& shapes, util::BitSet&& bitset) {
+        column_unchecked(idx).set_sparse_block(std::move(buffer), std::move(shapes), std::move(bitset));
+    }
+
+    void set_secondary_type(position_t idx, TypeDescriptor type) {
+        column_unchecked(idx).set_secondary_type(type);
     }
 
     template<class T, std::enable_if_t<std::is_same_v<std::decay_t<T>, std::string>, int> = 0>
