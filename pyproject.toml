@@ -13,7 +13,6 @@ test-extras = "Testing"
 before-all = """
 [[ -e /etc/arcticdb_deps_installed ]] || { yum update -y && yum install -y zip \
     openssl-devel cyrus-sasl-devel devtoolset-10-libatomic-devel libcurl-devel ; }
-cp {project}/build_tooling/avoid_oom.sh /usr/local/bin/
 {project}/build_tooling/vcpkg_caching.sh
 """
 build = "cp*-manylinux_x86_64"
