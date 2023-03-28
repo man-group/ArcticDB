@@ -8,7 +8,6 @@
 #include <gtest/gtest.h>
 #include <gmock/gmock.h>
 
-#include <arcticdb/version/test/test_version_common.hpp>
 #include <arcticdb/version/version_map.hpp>
 #include <arcticdb/version/version_functions.hpp>
 #include <arcticdb/util/configs_map.hpp>
@@ -16,6 +15,7 @@
 #include <arcticdb/version/version_log.hpp>
 #include <arcticdb/version/version_map_batch_methods.hpp>
 #include <arcticdb/util/test/gtest_utils.hpp>
+#include <arcticdb/stream/test/stream_test_common.hpp>
 
 namespace arcticdb {
 
@@ -29,6 +29,12 @@ using ::testing::UnorderedElementsAre;
     auto key3 = atom_key_builder().version_id(3).creation_ts(PilotedClock::nanos_since_epoch()).content_hash(5).start_index(  \
         6).end_index(7).build(id, KeyType::TABLE_INDEX);
 
+struct VersionMapStore : TestStore {
+protected:
+    std::string get_name() override {
+        return "version_map";
+    }
+};
 
 TEST(VersionMap, Basic) {
     auto store = std::make_shared<InMemoryStore>();
@@ -576,7 +582,7 @@ TEST(VersionMap, StorageLogging) {
 
 #define GTEST_COUT std::cerr << "[          ] [ INFO ]"
 
-TEST(VersionMap, StressTestWrite) {
+TEST_F(VersionMapStore, StressTestWrite) {
     using namespace arcticdb;
     std::vector<AtomKey> keys;
     const size_t num_tests = 999;
@@ -587,19 +593,17 @@ TEST(VersionMap, StressTestWrite) {
                 4).end_index(5).build(id, KeyType::TABLE_INDEX));
     }
 
-    auto version_store = test_store("write.stress");
-    auto store = version_store->_test_get_store();
     auto version_map = std::make_shared<VersionMap>();
     std::string timer_name("write_stress");
     interval_timer timer(timer_name);
     for(const auto& key : keys) {
-        version_map->write_version(store, key);
+        version_map->write_version(test_store_->_test_get_store(), key);
     }
     timer.stop_timer(timer_name);
     GTEST_COUT << timer.display_all() << std::endl;
 }
 
-TEST(VersionMap, StressTestBatchSameSymbol) {
+TEST_F(VersionMapStore, StressTestBatchSameSymbol) {
     using namespace arcticdb;
     auto name = std::string("stress_batch");
     std::vector<AtomKey> keys;
@@ -611,13 +615,12 @@ TEST(VersionMap, StressTestBatchSameSymbol) {
             4).end_index(5).build(id, KeyType::TABLE_INDEX));
     }
 
-    auto version_store = test_store(name);
-    auto store = version_store->_test_get_store();
+    auto store = test_store_->_test_get_store();
     auto version_map = std::make_shared<VersionMap>();
-    batch_write_version(version_store->_test_get_store(), version_map, keys);
+    batch_write_version(store, version_map, keys);
 }
 
-TEST(VersionMap, StressTestBatchWrite) {
+TEST_F(VersionMapStore, StressTestBatchWrite) {
     using namespace arcticdb;
     auto name = std::string("stress_batch");
     std::vector<AtomKey> keys;
@@ -630,9 +633,8 @@ TEST(VersionMap, StressTestBatchWrite) {
             4).end_index(5).build(id, KeyType::TABLE_INDEX));
     }
 
-    auto version_store = test_store(name);
-    auto store = version_store->_test_get_store();
+    auto store = test_store_->_test_get_store();
     auto version_map = std::make_shared<VersionMap>();
-    batch_write_version(version_store->_test_get_store(), version_map, keys);
+    batch_write_version(store, version_map, keys);
 }
 } // namespace arcticdb

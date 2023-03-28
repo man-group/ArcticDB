@@ -8,7 +8,6 @@
 #include <gtest/gtest.h>
 
 #include <arcticdb/version/version_store_api.hpp>
-#include <arcticdb/storage/library.hpp>
 #include <arcticdb/storage/open_mode.hpp>
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/storage/lmdb/lmdb_storage.hpp>
@@ -16,14 +15,19 @@
 #include <arcticdb/stream/test/stream_test_common.hpp>
 #include <arcticdb/util/test/generators.hpp>
 #include <arcticdb/util/allocator.hpp>
-#include <arcticdb/util/clock.hpp>
 #include <arcticdb/codec/default_codecs.hpp>
 #include <filesystem>
 #include <chrono>
 #include <thread>
-#include <future>
 #include <folly/futures/Barrier.h>
 #include <arcticdb/util/test/gtest_utils.hpp>
+
+struct VersionStoreTest : arcticdb::TestStore {
+protected:
+    std::string get_name() override {
+        return "test.version_store";
+    }
+};
 
 auto write_version_frame(
     const StreamId& stream_id,
@@ -157,14 +161,12 @@ TEST(PythonVersionStore, IterationVsRefWrite) {
     }
 }
 
-TEST(PythonVersionStore, SortMerge) {
+TEST_F(VersionStoreTest, SortMerge) {
     using namespace arcticdb;
     using namespace arcticdb::storage;
     using namespace arcticdb::stream;
     using namespace arcticdb::pipelines;
 
-    std::string lib_name("test.compact_incomplete");
-    auto version_store = test_store(lib_name);
     size_t count = 0;
 
     std::vector<SegmentToInputFrameAdapter> data;
@@ -190,20 +192,18 @@ TEST(PythonVersionStore, SortMerge) {
     std::shuffle(data.begin(), data.end(), mt);
 
     for(auto&& frame : data) {
-        version_store->append_incomplete_frame(symbol, std::move(frame.input_frame_));
+        test_store_->append_incomplete_frame(symbol, std::move(frame.input_frame_));
     }
 
-    version_store->sort_merge_internal(symbol, std::nullopt, true, false, false, false);
+    test_store_->sort_merge_internal(symbol, std::nullopt, true, false, false, false);
 }
 
-TEST(PythonVersionStore, CompactIncompleteDynamicSchema) {
+TEST_F(VersionStoreTest, CompactIncompleteDynamicSchema) {
     using namespace arcticdb;
     using namespace arcticdb::storage;
     using namespace arcticdb::stream;
     using namespace arcticdb::pipelines;
 
-    std::string lib_name("test.compact_incomplete_dynamic");
-    auto version_store = test_store(lib_name);
     size_t count = 0;
 
     std::vector<SegmentToInputFrameAdapter> data;
@@ -234,12 +234,12 @@ TEST(PythonVersionStore, CompactIncompleteDynamicSchema) {
     std::shuffle(data.begin(), data.end(), mt);
 
     for(auto& frame : data) {
-        version_store->write_parallel_frame(symbol, std::move(frame.input_frame_));
+        test_store_->write_parallel_frame(symbol, std::move(frame.input_frame_));
     }
 
-    auto vit = version_store->compact_incomplete(symbol, false, false, true, false);
+    auto vit = test_store_->compact_incomplete(symbol, false, false, true, false);
     ReadQuery read_query;
-    auto read_result = version_store->read_dataframe_version(symbol, VersionQuery{}, read_query, ReadOptions{});
+    auto read_result = test_store_->read_dataframe_version(symbol, VersionQuery{}, read_query, ReadOptions{});
     const auto& seg = read_result.frame_data.frame();
 
     count = 0;
@@ -270,44 +270,38 @@ TEST(PythonVersionStore, CompactIncompleteDynamicSchema) {
     }
 }
 
-TEST(VersionStore, GetIncompleteSymbols) {
+TEST_F(VersionStoreTest, GetIncompleteSymbols) {
     using namespace arcticdb;
     using namespace arcticdb::storage;
     using namespace arcticdb::stream;
     using namespace arcticdb::pipelines;
 
-    std::string lib_name("test.compact_incomplete_dynamic");
-    auto version_store = test_store(lib_name);
-
     std::string stream_id1{"thing1"};
     auto wrapper1 = get_test_simple_frame(stream_id1, 15, 2);
     auto& frame1 = wrapper1.frame_;
-    version_store->append_incomplete_frame(stream_id1, std::move(frame1));
+    test_store_->append_incomplete_frame(stream_id1, std::move(frame1));
 
     std::string stream_id2{"thing2"};
     auto wrapper2 = get_test_simple_frame(stream_id2, 15, 2);
     auto& frame2 = wrapper2.frame_;
-    version_store->append_incomplete_frame(stream_id2, std::move(frame2));
+    test_store_->append_incomplete_frame(stream_id2, std::move(frame2));
 
     std::string stream_id3{"thing3"};
     auto wrapper3 = get_test_simple_frame(stream_id3, 15, 2);
     auto& frame3 = wrapper3.frame_;
-    version_store->append_incomplete_frame(stream_id3, std::move(frame3));
+    test_store_->append_incomplete_frame(stream_id3, std::move(frame3));
 
     std::set<StreamId> expected{ stream_id1, stream_id2, stream_id3};
-    auto result = version_store->get_incomplete_symbols();
+    auto result = test_store_->get_incomplete_symbols();
     ASSERT_EQ(result, expected);
 }
 
-TEST(VersionStore, StressBatchWrite) {
+TEST_F(VersionStoreTest, StressBatchWrite) {
     SKIP_WIN("Works OK but fills up LMDB");
     using namespace arcticdb;
     using namespace arcticdb::storage;
     using namespace arcticdb::stream;
     using namespace arcticdb::pipelines;
-
-    std::string lib_name("test.stress_batch_read");
-    auto version_store = test_store(lib_name);
 
     std::vector<StreamId> symbols;
     std::vector<TestTensorFrame> wrappers;
@@ -326,16 +320,14 @@ TEST(VersionStore, StressBatchWrite) {
         frames.push_back(wrapper.frame_);
     }
 
-    version_store->batch_write_internal(version_ids, symbols, frames, dedup_maps);
+    test_store_->batch_write_internal(version_ids, symbols, frames, dedup_maps);
 }
-TEST(VersionStore, StressBatchReadUncompressed) {
+
+TEST_F(VersionStoreTest, StressBatchReadUncompressed) {
     using namespace arcticdb;
     using namespace arcticdb::storage;
     using namespace arcticdb::stream;
     using namespace arcticdb::pipelines;
-
-    std::string lib_name("test.stress_batch_read");
-    auto version_store = test_store(lib_name);
 
     std::vector<StreamId> symbols;
     for(int i = 0; i < 10; ++i) {
@@ -344,16 +336,16 @@ TEST(VersionStore, StressBatchReadUncompressed) {
 
         for(int j = 0; j < 10; ++j) {
             auto wrapper = get_test_simple_frame(symbol, 10, i + j);
-            version_store->write_versioned_dataframe_internal(symbol, std::move(wrapper.frame_), false, false);
+            test_store_->write_versioned_dataframe_internal(symbol, std::move(wrapper.frame_), false, false);
         }
 
         for(int k = 1; k < 10; ++k) {
-            version_store->delete_version(symbol, k);
+            test_store_->delete_version(symbol, k);
         }
     }
 
     std::vector<ReadQuery> read_queries;
-    auto latest_versions = version_store->batch_read(symbols, std::vector<VersionQuery>{}, read_queries, ReadOptions{});
+    auto latest_versions = test_store_->batch_read(symbols, std::vector<VersionQuery>{}, read_queries, ReadOptions{});
     for(auto version : folly::enumerate(latest_versions)) {
         auto expected = get_test_simple_frame(version->item.symbol(), 10, version.index);
         bool equal = expected.segment_ == version->frame_data.frame();

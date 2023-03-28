@@ -5,7 +5,7 @@
  * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
  */
 
-#include <gtest/gtest.h> // googletest header file
+#include <gtest/gtest.h>
 #include <string>
 #include <algorithm>
 #include <fmt/format.h>
@@ -23,75 +23,10 @@ namespace as = arcticdb::stream;
 
 #define GTEST_COUT std::cerr << "[          ] [ INFO ]"
 
-std::string make_ast_name() {
-    init_random(23);
-    return fmt::format("{}_{}", "AST", random_int() % 0x100000 + 0x10000);
-}
-
-struct StubInfo {
-    StubInfo(uint8_t *data, TypeDescriptor type) : ptr(data), type_(type) {}
-    uint8_t *ptr;
-    TypeDescriptor type_;
-};
-
-inline TypeDescriptor get_type_descriptor(StubInfo &info) {
-    return info.type_;
-}
-
-template<typename T>
-struct StubArray {
-    StubArray(const std::vector<T> &data,
-              std::vector<shape_t> &shapes,
-              std::vector<stride_t>& strides,
-              TypeDescriptor type) :
-        type_(type),
-        data_(data),
-        shapes_(shapes),
-        strides_(strides) {
-    }
-
-    StubArray(const T *data,
-              size_t size,
-              const std::vector<shape_t>& shapes,
-              const std::vector<stride_t>& strides,
-              TypeDescriptor type) :
-        type_(type),
-        data_(data, data + size),
-        shapes_(shapes),
-        strides_(strides) {
-    }
-
-    StubArray(const StubArray &other) = delete;
-    StubArray &operator=(const StubArray &other) = delete;
-    StubArray(StubArray &&other) = default;
-    StubArray &operator=(StubArray &&other) = default;
-
-    StubInfo request() { return StubInfo(reinterpret_cast<uint8_t *>(data_.data()), type_); }
-    ssize_t ndim() { return 1; }
-    ssize_t nbytes() const { return data_.size() * sizeof(T); }
-    shape_t shape(int pos) { return shapes_[pos]; }
-    shape_t *shape() { return shapes_.data(); }
-    stride_t strides(int pos) { return strides_[pos]; }
-    stride_t* strides() { return strides_.data(); }
-    static size_t itemsize() { return sizeof(T); }
-  private:
-    TypeDescriptor type_;
-    std::vector<T> data_;
-    std::vector<shape_t> shapes_;
-    std::vector<stride_t> strides_;
-};
-
-static const size_t NumChars = 16;
-
-struct FixedStringStub {
-    char chars_[NumChars];
-
-    FixedStringStub() { chars_[0] = 0; }
-    explicit FixedStringStub(const std::string &str) {
-        memcpy(chars_, str.data(), std::min(str.size(), NumChars));
-    }
-    FixedStringStub(FixedStringStub &&that) {
-        memcpy(chars_, that.chars_, NumChars);
+struct IngestionStressStore : TestStore {
+protected:
+    std::string get_name() override {
+        return "ingestion_stress";
     }
 };
 
@@ -127,15 +62,13 @@ TEST(IngestionStress, ScalarInt) {
     GTEST_COUT << x << " " << timer.display_all() << std::endl;
 }
 
-TEST(IngestionStress, ScalarIntAppend) {
+TEST_F(IngestionStressStore, ScalarIntAppend) {
     using namespace arcticdb;
     const uint64_t NumColumns = 1;
     const uint64_t NumRows = 2;
     const uint64_t SegmentPolicyRows = 1000;
 
     StreamId symbol{"stable"};
-    std::string lib_name("test.scalar_int_append");
-    auto version_store = test_store(lib_name);
     std::vector<SegmentToInputFrameAdapter> data;
     // generate vals
     std::vector<FieldDescriptor> columns;
@@ -184,7 +117,7 @@ TEST(IngestionStress, ScalarIntAppend) {
     agg.commit();
 
     for(auto &seg : sink.segments_) {
-        arcticdb::stream::append_incomplete_segment(version_store->_test_get_store(), symbol, std::move(seg));
+        arcticdb::stream::append_incomplete_segment(test_store_->_test_get_store(), symbol, std::move(seg));
     }
 
     using namespace arcticdb::pipelines;
@@ -195,19 +128,17 @@ TEST(IngestionStress, ScalarIntAppend) {
     ro.set_incompletes(true);
     ReadQuery read_query;
     read_query.row_filter = universal_range();
-    auto read_result = version_store->read_dataframe_version(symbol, VersionQuery{}, read_query, ro);
+    auto read_result = test_store_->read_dataframe_version(symbol, VersionQuery{}, read_query, ro);
     GTEST_COUT << "columns in res: " << read_result.frame_data.index_columns().size();
 }
 
-TEST(IngestionStress, ScalarIntDynamicSchema) {
+TEST_F(IngestionStressStore, ScalarIntDynamicSchema) {
     const uint64_t NumColumnsFirstWrite = 5;
     const uint64_t NumColumnsSecondWrite = 10;
     const int64_t NumRows = 10;
     const uint64_t SegmentPolicyRows = 100;
     StreamId symbol{"blah"};
 
-    std::string lib_name("wdealtry.tick_ingestion4");
-    auto version_store = test_store(lib_name);
     std::vector<SegmentToInputFrameAdapter> data;
 
     // generate vals
@@ -276,7 +207,7 @@ TEST(IngestionStress, ScalarIntDynamicSchema) {
 
     for(auto &seg : sink.segments_) {
         log::version().info("Writing to symbol: {}", symbol);
-        arcticdb::stream::append_incomplete_segment(version_store->_test_get_store(), symbol, std::move(seg));
+        arcticdb::stream::append_incomplete_segment(test_store_->_test_get_store(), symbol, std::move(seg));
     }
 
     using namespace arcticdb::pipelines;
@@ -287,16 +218,14 @@ TEST(IngestionStress, ScalarIntDynamicSchema) {
     read_options.set_incompletes(true);
     ReadQuery read_query;
     read_query.row_filter = universal_range();
-    auto read_result = version_store->read_dataframe_internal(symbol, read_query, read_options);
+    auto read_result = test_store_->read_dataframe_internal(symbol, read_query, read_options);
 }
 
-TEST(IngestionStress, DynamicSchemaWithStrings) {
+TEST_F(IngestionStressStore, DynamicSchemaWithStrings) {
     const uint64_t NumRows = 10;
     const uint64_t SegmentPolicyRows = 100;
     StreamId symbol{"blah_string"};
 
-    std::string lib_name("wdealtry.tick_ingestion_3");
-    auto version_store = test_store(lib_name);
     std::vector<SegmentToInputFrameAdapter> data;
 
     const auto index = as::TimeseriesIndex::default_index();
@@ -329,7 +258,7 @@ TEST(IngestionStress, DynamicSchemaWithStrings) {
 
     for(auto &seg : sink.segments_) {
         log::version().info("Writing to symbol: {}", symbol);
-        arcticdb::stream::append_incomplete_segment(version_store->_test_get_store(), symbol, std::move(seg));
+        arcticdb::stream::append_incomplete_segment(test_store_->_test_get_store(), symbol, std::move(seg));
     }
 
     using namespace arcticdb::pipelines;
@@ -340,6 +269,6 @@ TEST(IngestionStress, DynamicSchemaWithStrings) {
     read_options.set_incompletes(true);
     ReadQuery read_query;
     read_query.row_filter = universal_range();
-    auto read_result = version_store->read_dataframe_version(symbol, VersionQuery{}, read_query, read_options);
+    auto read_result = test_store_->read_dataframe_version(symbol, VersionQuery{}, read_query, read_options);
     log::version().info("result columns: {}", read_result.frame_data.names());
 }
