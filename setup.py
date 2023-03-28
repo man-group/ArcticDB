@@ -5,7 +5,7 @@ import glob
 import platform
 import shutil
 from pathlib import Path
-from setuptools import setup, Command
+from setuptools import setup, Command, find_namespace_packages
 from setuptools import Extension, find_packages
 from setuptools.command.build_ext import build_ext
 from setuptools.command.build_py import build_py
@@ -16,34 +16,31 @@ from wheel.bdist_wheel import bdist_wheel
 class CompileProto(Command):
     description = '"protoc" generate code _pb2.py from .proto files'
     user_options = [
-        ("python-out=", "p", "Output the arcticc.pb2 package to this directory. Defaults to 'python/'"),
-        ("grpc-out-dir=", "r", "See the docs of grpc_tools.protoc"),
+        ("build-lib=", "b", "Create the arcticdb/proto/*/arcticc/pb2 subdirectories inside this base directory"),
+        ("proto-vers=", "s", "Single string listing all the protobuf major versions to compile against"),
     ]
 
     def initialize_options(self):
-        self.grpc_out_dir = None
-        self.python_out = None
+        self.build_lib = None
+        self.proto_vers = None
 
     def finalize_options(self):
-        self.set_undefined_options("build", ("build_lib", "python_out"))  # Default to the output of the build command
+        self.set_undefined_options("build", ("build_lib", "build_lib"))  # Default to the output of the build command
+        if self.proto_vers is None:
+            self.proto_vers = os.getenv("ARCTICDB_PROTOC_VERS", "34").strip()
 
     def run(self):
-        print(f"\nProtoc compilation (into '{self.python_out}')")
-        os.makedirs(self.python_out, exist_ok=True)
-        cmd = [sys.executable, "-mgrpc_tools.protoc", "-Icpp/proto", "--python_out=" + self.python_out]
-
-        if self.grpc_out_dir:
-            cmd.append(f"--grpc_python_out={self.grpc_out_dir}")
-
-        cmd.extend(glob.glob("cpp/proto/arcticc/pb2/*.proto"))
-
-        print(f"Running {cmd}")
-        subprocess.check_output(cmd)
-        if not os.path.exists(self.python_out + "/arcticc"):
-            raise RuntimeError("Unable to locate Protobuf module during compilation.")
-        else:
-            open(self.python_out + "/arcticc/__init__.py", "a").close()
-            open(self.python_out + "/arcticc/pb2/__init__.py", "a").close()
+        output_dir = self.build_lib.replace("\\", "/") + "/arcticdb/proto"
+        python = sys.version_info[:2]
+        bash = shutil.which("bash")  # Windows searches PATH last, so do it by hand
+        print(f"\nProtoc compilation (into '{output_dir}') for versions '{self.proto_vers}':")
+        for proto_ver in self.proto_vers:
+            if (python <= (3, 6) and proto_ver >= "4") or (python >= (3, 11) and proto_ver == "3"):
+                print(f"Python protobuf {proto_ver} do no run on Python {python}. Skipping...", file=sys.stderr)
+            else:
+                cmd = [bash, "build_tooling/multi_version_protoc.sh", proto_ver, output_dir, sys.executable]
+                print("Running " + " ".join(cmd))
+                subprocess.check_call(cmd)
 
 
 class CompileProtoAndBuild(build_py):
@@ -55,7 +52,7 @@ class CompileProtoAndBuild(build_py):
 class DevelopAndCompileProto(develop):
     def install_for_development(self):
         super().install_for_development()
-        self.reinitialize_command("protoc", python_out=self.egg_base)
+        self.reinitialize_command("protoc", build_lib=self.egg_base)
         self.run_command("protoc")  # compile after updating the deps
 
 
@@ -150,7 +147,8 @@ if __name__ == "__main__":
     setup(
         ext_modules=[CMakeExtension("arcticdb_ext")],
         package_dir={"": "python"},
-        packages=find_packages(where="python", exclude=["tests", "tests.*"]),
+        packages=find_packages(where="python", exclude=["tests", "tests.*"])
+        + find_namespace_packages(where="python", include=["arcticdb.proto.*"]),
         cmdclass=dict(
             build_ext=CMakeBuild,
             protoc=CompileProto,
