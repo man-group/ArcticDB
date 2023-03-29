@@ -360,7 +360,6 @@ set(arcticdb_srcs
         version/version_core.cpp
         version/version_store_api.cpp
         version/version_utils.cpp
-        version/symbol_list.cpp
         version/schema_checks.hpp)
 
 add_library(arcticdb_core_object OBJECT ${arcticdb_srcs})
