@@ -76,7 +76,7 @@ function(_python_utils_check_vars) # Arguments are the bad prefixes
         endforeach()
     endfunction()
 
-    foreach(suffix EXECUTABLE LIBRARIES LIBRARY INCLUDE_DIR INCLUDE_DIRS)
+    foreach(suffix EXECUTABLE LIBRARIES LIBRARY INCLUDE_DIR INCLUDE_DIRS FIND_ABI)
         _body(${ARGV})
     endforeach()
 
@@ -122,15 +122,30 @@ if(ARCTICDB_FIND_PYTHON_DEV_MODE)
     python_utils_check_include_dirs("supplied")
     _python_utils_check_vars(PYTHON Python3)
 
-    if(NOT "${Python_EXECUTABLE}" AND NOT "${Python_ROOT_DIR}" AND NOT "${Python_LIBRARY}")
+    if(NOT Python_EXECUTABLE AND NOT Python_ROOT_DIR AND NOT Python_LIBRARY)
         # FindPython searches the PATH environment last, but that's arguably the only correct place it should look
         find_program(Python_EXECUTABLE NAMES python3 python NAMES_PER_DIR REQUIRED NO_CMAKE_SYSTEM_PATH)
+    else()
+        set(Python_FIND_STRATEGY LOCATION)
     endif()
 
     # Let CMake find Python without telling it the BUILD_PYTHON_VERSION we wanted. This way we know third-party stuff that
     # is not aware of BUILD_PYTHON_VERSION is going to find the same thing
     find_package(Python 3 COMPONENTS Interpreter ${ARCTICDB_FIND_PYTHON_DEV_MODE} REQUIRED)
     python_utils_dump_vars_if_enabled("After our FindPython before any third-party:")
+
+    if(DEFINED Python_FIND_ABI)
+        list(GET Python_FIND_ABI 0 _find_debug_python)
+        if(${_find_debug_python})
+            # Disables https://github.com/pybind/pybind11/blame/01f938e79938fd5b9bb6df2daeff95a625f6211f/include/pybind11/detail/common.h#L148-L160
+            add_compile_definitions(Py_DEBUG)
+        endif()
+    else()
+        set_target_properties(Python::Module PROPERTIES
+                MAP_IMPORTED_CONFIG_DEBUG ";RELEASE"
+                MAP_IMPORTED_CONFIG_RELWITHDEBINFO ";RELEASE"
+            )
+    endif()
 
 else()
     set(ARCTICDB_PYTHON_PREFIX PYTHON)

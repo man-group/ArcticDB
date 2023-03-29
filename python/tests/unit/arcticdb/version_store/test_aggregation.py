@@ -117,6 +117,7 @@ def test_sum_aggregation(s3_version_store):
     s3_version_store.write(symbol, df)
 
     res = s3_version_store.read(symbol, query_builder=q)
+    res.data.sort_index(inplace=True)
 
     df = pd.DataFrame({"to_sum": [4, 4]}, index=["group_1", "group_2"])
     df.index.rename("grouping_column", inplace=True)
@@ -135,6 +136,7 @@ def test_mean_aggregation(s3_version_store):
     s3_version_store.write(symbol, df)
 
     res = s3_version_store.read(symbol, query_builder=q)
+    res.data.sort_index(inplace=True)
 
     df = pd.DataFrame({"to_mean": [4 / 3, 2]}, index=["group_1", "group_2"])
     df.index.rename("grouping_column", inplace=True)
@@ -156,6 +158,7 @@ def test_mean_aggregation_float(s3_version_store):
     s3_version_store.write(symbol, df)
 
     res = s3_version_store.read(symbol, query_builder=q)
+    res.data.sort_index(inplace=True)
 
     df = pd.DataFrame({"to_mean": [(1.1 + 1.4 + 2.5) / 3, 2.2]}, index=["group_1", "group_2"])
     df.index.rename("grouping_column", inplace=True)
@@ -177,12 +180,12 @@ def test_mean_aggregation_float_nan(lmdb_version_store):
     lmdb_version_store.write(symbol, df)
 
     res = lmdb_version_store.read(symbol, query_builder=q)
+    res.data.sort_index(inplace=True)
 
     df = pd.DataFrame({"to_mean": [(1.1 + 1.4 + 2.5) / 3, np.nan]}, index=["group_1", "group_2"])
-    received = res.data.sort_index()
     df.index.rename("grouping_column", inplace=True)
 
-    assert_frame_equal(received, df)
+    assert_frame_equal(res.data, df)
 
 
 def test_max_minus_one(lmdb_version_store):

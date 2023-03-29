@@ -43,12 +43,16 @@ from arcticdb.config import Defaults
 from arcticdb.util.test import configure_test_logger, apply_lib_cfg
 from arcticdb.version_store.helper import ArcticMemoryConfig
 from arcticdb.version_store import NativeVersionStore
+from arcticdb.version_store._normalization import MsgPackNormalizer
 from arcticc.pb2.storage_pb2 import EnvironmentConfigsMap  # Importing from arcticdb dynamically loads arcticc.pb2
 from arcticc.pb2.lmdb_storage_pb2 import Config as LmdbConfig
 
 configure_test_logger()
 
 BUCKET_ID = 0
+
+# Use a smaller memory mapped limit for all tests
+MsgPackNormalizer.MMAP_DEFAULT_SIZE = 20 * (1 << 20)
 
 
 def run_server(port):

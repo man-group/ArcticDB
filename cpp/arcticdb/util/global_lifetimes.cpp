@@ -14,6 +14,11 @@
 #include <arcticdb/entity/metrics.hpp>
 #include <arcticdb/util/buffer_pool.hpp>
 
+#if defined(_MSC_VER) && defined(_DEBUG)
+#include <crtdbg.h>
+#include <util/configs_map.hpp>
+#endif
+
 namespace arcticdb {
 
 ModuleData::~ModuleData() {
@@ -39,6 +44,14 @@ void ModuleData::destroy_instance() {
 
 void ModuleData::init() {
     ModuleData::instance_ = std::make_shared<ModuleData>();
+
+#if defined(_MSC_VER) && defined(_DEBUG)
+    if (auto config = ConfigsMap::instance()->get_int("CrtDbgDialog"); !config || config.value() == 0) {
+        log::root().info("_CrtSetReportMode(..., _CRTDBG_MODE_DEBUG)");
+        _CrtSetReportMode(_CRT_ERROR, _CRTDBG_MODE_DEBUG);
+        _CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_DEBUG);
+    }
+#endif
 }
 
 std::shared_ptr<ModuleData> ModuleData::instance_;
@@ -46,7 +59,6 @@ std::once_flag ModuleData::init_flag_;
 
 void shutdown_globals() {
     async::TaskScheduler::destroy_instance();
-    storage::s3::S3ApiInstance::destroy_instance();
     storage::mongo::MongoInstance::destroy_instance();
     ModuleData::destroy_instance();
 }
