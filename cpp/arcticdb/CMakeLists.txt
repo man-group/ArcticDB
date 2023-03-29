@@ -1,6 +1,5 @@
 option(TEST "Build all tests." ON)
 option(SSL_LINK "Link against SSL libraries." ON)
-option(STRIP_BUILDS "Strip built targets of all symbols" OFF)
 option(HIDE_LINKED_SYMBOLS "Passed `exclude-libs` through to linker, ensuring linked library symbols are not exported. Shrinks binary size." ON)
 option(STATIC_LINK_STD_LIB "Statically link the C++ standard libraries" ON)
 
@@ -97,17 +96,9 @@ IF("${CMAKE_BUILD_TYPE}" STREQUAL "Debug" AND NOT DEFINED ENV{DEBUG_BUILD})
     set(ENV{DEBUG_BUILD} TRUE)
 ENDIF()
 
-IF(("${CMAKE_BUILD_TYPE}" STREQUAL "Debug") AND WIN32)
-    # See https://github.com/pybind/pybind11/issues/3403#issuecomment-962878324
-    # Pybind pybind11*Tools.cmake try to add the same when PYTHON_IS_DEBUG, but does not seem to work?
-    add_compile_definitions(Py_DEBUG)
-ENDIF()
-
 IF($ENV{DEBUG_BUILD})
     # Add macros definition here
     message("Setting debug flags")
-    ADD_DEFINITIONS(-DUSE_REMOTERY)
-    ADD_DEFINITIONS(-DARCTICDB_TRACK_ALLOCS)
     ADD_DEFINITIONS(-DDEBUG_BUILD)
 ELSE()
     message(STATUS "Not setting debug flags")
@@ -337,7 +328,9 @@ set(arcticdb_srcs
         processing/operation_dispatch.cpp
         processing/operation_dispatch_unary.cpp
         processing/operation_dispatch_binary.cpp
-        processing/operation_dispatch_binary_comparator.cpp
+        processing/operation_dispatch_binary_eq.cpp
+        processing/operation_dispatch_binary_gt.cpp
+        processing/operation_dispatch_binary_lt.cpp
         processing/operation_dispatch_binary_operator.cpp
         python/python_to_tensor_frame.cpp
         storage/config_resolvers.cpp
@@ -504,28 +497,21 @@ target_include_directories(arcticdb_python PRIVATE
 
 
 if (NOT WIN32)
-    add_compile_options("-ggdb")
     add_compile_options("-ftemplate-depth=1000")
     add_compile_options("-Werror")
-    add_compile_options("-Wall")
-    add_compile_options("-fvisibility=hidden")
 endif ()
 
 ## arcticdb_ext python module
+# This configures: linking to Python::Module + pybind, output pre-/suf-fix, -fvisibility=hidden, strip release build
 pybind11_add_module(arcticdb_ext MODULE
         python/python_module.cpp
         python/arctic_version.cpp
         python/arctic_version.hpp
         python/reader.hpp
-        python/python_module.hpp
         python/adapt_read_dataframe.hpp
         )
 
 set (additional_link_flags "")
-if (STRIP_BUILDS)
-    set_target_properties(arcticdb_ext PROPERTIES LINK_FLAGS_RELEASE -s)
-endif()
-
 if (HIDE_LINKED_SYMBOLS AND (NOT WIN32))
     list(APPEND additional_link_flags
             "-Wl,--exclude-libs,ALL"
@@ -541,6 +527,11 @@ target_link_libraries(arcticdb_ext
         ${additional_link_flags}
         )
 
+if (WIN32)
+    target_link_options(arcticdb_ext
+            PRIVATE $<$<CONFIG:Release>:/DEBUG> $<$<CONFIG:Release>:/OPT:REF>)
+endif()
+
 target_include_directories(arcticdb_ext
         PRIVATE
         ${LIBMONGOCXX_STATIC_INCLUDE_DIRS}
@@ -550,19 +541,29 @@ target_include_directories(arcticdb_ext
         ${AWSSDK_INCLUDE_DIRS}
         )
 
-set_target_properties(arcticdb_ext PROPERTIES
-        PREFIX "${PYTHON_MODULE_PREFIX}"
-        )
-
 install(TARGETS arcticdb_ext
         LIBRARY DESTINATION . COMPONENT Python_Lib
         RUNTIME DESTINATION . COMPONENT Python_Lib)
 
+# Improves portability (in setup.py) by creating an explicit target that manually installs the library
+if(NOT WIN32 AND "${CMAKE_BUILD_TYPE}" STREQUAL "RelWithDebInfo")
+    add_custom_command(OUTPUT arcticdb_ext.gz
+            COMMAND bash -c "gzip -c $<TARGET_FILE:arcticdb_ext> > arcticdb_ext.gz"
+            DEPENDS arcticdb_ext)
+    add_custom_target(install_arcticdb_ext
+            ${CMAKE_STRIP} --strip-unneeded $<TARGET_FILE:arcticdb_ext>
+                           -o ${CMAKE_INSTALL_PREFIX}/$<TARGET_FILE_NAME:arcticdb_ext>
+            DEPENDS arcticdb_ext.gz)
+else()
+    add_custom_target(install_arcticdb_ext
+            ${CMAKE_COMMAND} -E copy $<TARGET_FILE:arcticdb_ext> ${CMAKE_INSTALL_PREFIX})
+endif()
+
 ## Unit Tests ##
 if(${TEST})
-    message("Python for test compilation:")
     unset(Python_USE_STATIC_LIBS)
     find_package(Python 3 COMPONENTS Interpreter Development REQUIRED)
+    python_utils_dump_vars_if_enabled("Python for test compilation")
 
     set(unit_test_srcs
             async/test/test_async.cpp

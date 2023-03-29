@@ -21,7 +21,12 @@ def test_dynamic_bucketize_append_variable_width(
 ):
     symbol = sym
     lmdb_version_store = version_store_factory(
-        col_per_group=colnum, row_per_segment=rownum, dynamic_schema=True, bucketize_dynamic=True, dynamic_strings=True
+        col_per_group=colnum,
+        row_per_segment=rownum,
+        dynamic_schema=True,
+        bucketize_dynamic=True,
+        dynamic_strings=True,
+        lmdb_config={"map_size": 2**30},
     )
     count = 0
     df1 = get_wide_df(count, initial_col_width, max_col_width)

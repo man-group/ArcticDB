@@ -36,26 +36,15 @@
       }
     },
     {
-      "name": "windows-cl-debug-logging",
-      "displayName": "Windows x64 Release with Debug Logging",
-      "description": "A release build, with debug logging enabled. Can be run in a non-debug Python interpreter.",
-      "inherits": "windows-cl-release",
-      "cacheVariables": {
-        "CMAKE_CXX_FLAGS_RELEASE": "/MT"
-      },
-      "environment": {
-        "DEBUG_BUILD": "TRUE"
-      }
-    },
-    {
       "name": "windows-cl-debug",
       "displayName": "Windows x64 Debug",
-      "description": "A debug build. Extension can only run in a debug Python interpreter build.",
+      "description": "Debug features enabled, but linked against release Python",
       "inherits": "windows-cl-release",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug"
       }
     },
+
     {
       "name": "linux-debug",
       "displayName": "Linux x64 Debug",
@@ -77,12 +66,11 @@
       "name": "linux-release",
       "inherits": "linux-debug",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Release"
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo"
       }
     }
   ],
   "buildPresets": [
-    {"name": "windows-cl-debug-logging", "configurePreset": "windows-cl-debug-logging", "targets": "arcticdb_ext" },
     {"name": "windows-cl-debug",   "configurePreset": "windows-cl-debug",   "targets": "arcticdb_ext" },
     {"name": "windows-cl-release", "configurePreset": "windows-cl-release", "targets": "arcticdb_ext" },
     {"name": "linux-debug",        "configurePreset": "linux-debug",        "targets": "arcticdb_ext" },

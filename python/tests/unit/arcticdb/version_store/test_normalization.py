@@ -44,8 +44,6 @@ params = {
     "pd_ts": {"a": pd.Timestamp("2018-01-12 09:15"), "b": pd.Timestamp("2017-01-31", tz="America/New_York")},
 }
 
-# Use a smaller memory mapped limit for this test, no point memor mapping 2g
-MsgPackNormalizer.MMAP_DEFAULT_SIZE = 20 * (1 << 20)
 test_msgpack_normalizer = MsgPackNormalizer()
 
 
