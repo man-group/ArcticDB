@@ -5,7 +5,6 @@ __pycache__/
 .hypothesis/
 *.egg-info/
 
-.idea/
 .vscode/
 .vs/
 .project
