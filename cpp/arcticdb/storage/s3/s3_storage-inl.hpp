@@ -36,6 +36,8 @@
 #include <boost/interprocess/streams/bufferstream.hpp>
 #include <folly/ThreadLocal.h>
 
+#undef GetMessage
+
 namespace arcticdb::storage::s3 {
 
 namespace fg = folly::gen;
