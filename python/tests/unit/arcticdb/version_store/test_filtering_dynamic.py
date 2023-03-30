@@ -270,7 +270,7 @@ def test_numeric_filter_dynamic_schema(lmdb_version_store_tiny_segment_dynamic):
 
 
 def test_filter_column_not_present_dynamic(lmdb_version_store_dynamic_schema):
-    df = pd.DataFrame({"a": np.arange(2)}, index=np.arange(2))
+    df = pd.DataFrame({"a": np.arange(2)}, index=np.arange(2), dtype="int64")
     q = QueryBuilder()
     q = q[q["b"] < 5]
     symbol = "test_filter_column_not_present_static"
@@ -278,7 +278,6 @@ def test_filter_column_not_present_dynamic(lmdb_version_store_dynamic_schema):
     vit = lmdb_version_store_dynamic_schema.read(symbol, query_builder=q)
     expected = pd.DataFrame({"a": pd.Series(dtype="int64")}, index=pd.Index([], dtype="int64"))
     assert_frame_equal(vit.data, expected)
-    print(vit.data.to_string())
 
 
 def test_filter_column_type_change(lmdb_version_store_dynamic_schema):

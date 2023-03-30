@@ -7,6 +7,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 """
 import itertools
 import time
+import sys
 
 import mock
 import numpy as np
@@ -357,12 +358,12 @@ def test_update_date_range_dataframe(lmdb_version_store):
     """Restrictive update - when date_range is specified ensure that we only touch values in that range."""
     # given
     dtidx = pd.date_range("2022-06-01", "2022-06-05")
-    df = pd.DataFrame(index=dtidx, data={"a": [1, 2, 3, 4, 5]})
+    df = pd.DataFrame(index=dtidx, data={"a": [1, 2, 3, 4, 5]}, dtype=np.int64)
     lmdb_version_store.write("sym_1", df)
 
     dtidx = pd.date_range("2022-05-01", "2022-06-10")
     a = np.arange(dtidx.shape[0])
-    update_df = pd.DataFrame(index=dtidx, data={"a": a})
+    update_df = pd.DataFrame(index=dtidx, data={"a": a}, dtype=np.int64)
 
     # when
     lmdb_version_store.update("sym_1", update_df, date_range=(datetime(2022, 6, 2), datetime(2022, 6, 4)))
@@ -1101,9 +1102,10 @@ def test_coercion_to_float(lmdb_version_store_string_coercion):
 
     assert df["col"].dtype == np.object_
 
-    with pytest.raises(ArcticNativeNotYetImplemented):
-        # Needs pickling due to the obj column
-        lib.write("test", df)
+    if sys.platform != "win32":  # SKIP_WIN Windows always uses dynamic strings
+        with pytest.raises(ArcticNativeNotYetImplemented):
+            # Needs pickling due to the obj column
+            lib.write("test", df)
 
     lib.write("test", df, coerce_columns={"col": float})
     returned = lib.read("test").data
@@ -1117,8 +1119,9 @@ def test_coercion_to_str_with_dynamic_strings(lmdb_version_store_string_coercion
     df = pd.DataFrame({"col": [None, None, "hello", "world"]})
     assert df["col"].dtype == np.object_
 
-    with pytest.raises(ArcticNativeNotYetImplemented):
-        lib.write("sym", df)
+    if sys.platform != "win32":  # SKIP_WIN Windows always uses dynamic strings
+        with pytest.raises(ArcticNativeNotYetImplemented):
+            lib.write("sym", df)
 
     with mock.patch(
         "arcticdb.version_store._normalization.get_sample_from_non_empty_arr", return_value="hello"
