@@ -16,7 +16,6 @@ from arcticdb.config import Defaults
 from arcticdb.version_store.helper import ArcticMemoryConfig
 from arcticdb_ext.storage import NoDataFoundException
 from arcticdb.util.test import config_context, random_string, assert_frame_equal
-from typing import TYPE_CHECKING
 
 
 def eprint(*args, **kwargs):

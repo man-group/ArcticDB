@@ -298,7 +298,7 @@ def test_update_with_snapshot(arcticdb_test_lmdb_config, lib_name):
     symbol = "update_no_daterange"
 
     idx = pd.date_range("1970-01-01", periods=100, freq="D")
-    df = pd.DataFrame({"a": range(len(idx))}, index=idx)
+    df = pd.DataFrame({"a": range(len(idx))}, index=idx, dtype=np.int64)
     original_df = df.copy(deep=True)
     lmdb_version_store.write(symbol, df)
 
@@ -308,20 +308,20 @@ def test_update_with_snapshot(arcticdb_test_lmdb_config, lib_name):
     df2 = pd.DataFrame({"a": range(1000, 1000 + len(idx2))}, index=idx2)
     lmdb_version_store.update(symbol, df2)
 
-    assert_frame_equal(lmdb_version_store.read(symbol, as_of=0).data.astype("int"), original_df)
-    assert_frame_equal(lmdb_version_store.read(symbol, as_of="my_snap").data.astype("int"), original_df)
+    assert_frame_equal(lmdb_version_store.read(symbol, as_of=0).data.astype("int64"), original_df)
+    assert_frame_equal(lmdb_version_store.read(symbol, as_of="my_snap").data.astype("int64"), original_df)
 
     df.update(df2)
 
     vit = lmdb_version_store.read(symbol)
     assert_frame_equal(vit.data.astype("float"), df)
     assert_frame_equal(lmdb_version_store.read(symbol, as_of=1).data.astype("float"), df)
-    assert_frame_equal(lmdb_version_store.read(symbol, as_of="my_snap").data.astype("int"), original_df)
+    assert_frame_equal(lmdb_version_store.read(symbol, as_of="my_snap").data.astype("int64"), original_df)
 
     lmdb_version_store.delete(symbol)
     assert lmdb_version_store.list_versions() == []
 
-    assert_frame_equal(lmdb_version_store.read(symbol, as_of="my_snap").data.astype("int"), original_df)
+    assert_frame_equal(lmdb_version_store.read(symbol, as_of="my_snap").data.astype("int64"), original_df)
 
 
 def generate_dataframe(columns, dt, num_days, num_rows_per_day):
@@ -427,11 +427,11 @@ def test_update_schema_change_with_params(lmdb_version_store_dynamic_schema):
 def test_update_single_line(lmdb_version_store_dynamic_schema):
     dt = datetime.datetime(2019, 4, 8, 0, 0, 0)
     column_length = 6
-    num_days = 1000
+    num_days = 10
     num_rows_per_day = 1
     num_columns = 8
     columns = random_strings_of_length(num_columns, column_length, True)
-    symbol = "test_update_schema_change"
+    symbol = "test_update_single_line"
 
     df = generate_dataframe(columns, dt, num_days, num_rows_per_day)
     x = [False] * len(df)

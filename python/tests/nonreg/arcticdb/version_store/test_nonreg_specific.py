@@ -9,6 +9,8 @@ import numpy as np
 import pandas as pd
 from arcticc.pb2.descriptors_pb2 import TypeDescriptor
 import datetime
+import pytest
+import sys
 
 from arcticdb.util.test import assert_frame_equal
 
@@ -77,6 +79,7 @@ def test_update_int_nan(lmdb_version_store_dynamic_schema):
     assert_frame_equal(expected, result)
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="SKIP_WIN Only dynamic strings are supported on Windows")
 def test_append_dynamic_to_fixed_width_strings(lmdb_version_store_dynamic_schema):
     lib = lmdb_version_store_dynamic_schema
     symbol = "test_append_dynamic_to_fixed_width_strings"
@@ -125,6 +128,7 @@ def test_append_fixed_width_to_dynamic_strings(lmdb_version_store_dynamic_schema
     assert_frame_equal(expected_df, read_df)
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="SKIP_WIN Only dynamic strings are supported on Windows")
 def test_update_dynamic_to_fixed_width_strings(lmdb_version_store_dynamic_schema):
     lib = lmdb_version_store_dynamic_schema
     symbol = "test_update_dynamic_to_fixed_width_strings"
