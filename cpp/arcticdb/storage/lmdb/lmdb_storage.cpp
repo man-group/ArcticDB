@@ -5,7 +5,6 @@
  * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
  */
 
-#include <arcticdb/storage/common.hpp>
 #include <arcticdb/storage/lmdb/lmdb_storage.hpp>
 #include <arcticdb/log/log.hpp>
 #include <arcticdb/entity/atom_key.hpp>
@@ -27,7 +26,7 @@ T or_else(T val, T or_else_val, T def = T()) {
 LmdbStorage::LmdbStorage(const LibraryPath &library_path, OpenMode mode, const Config &conf) :
     Parent(library_path, mode),
     write_mutex_(new std::mutex{}),
-    env_(std::make_unique<::lmdb::env>(::lmdb::env::create(conf.flags()))){
+    env_(std::make_unique<::lmdb::env>(::lmdb::env::create(conf.flags()))) {
     fs::path root_path = conf.path().c_str();
     auto lib_path_str = library_path.to_delim_path(fs::path::preferred_separator);
 
