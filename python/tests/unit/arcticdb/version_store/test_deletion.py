@@ -16,9 +16,6 @@ from arcticdb_ext.exceptions import InternalException
 from arcticdb.version_store._normalization import NPDDataFrame
 
 
-# configure_test_logger("DEBUG")
-
-
 def eprint(*args, **kwargs):
     print(*args, file=sys.stderr, **kwargs)
 
@@ -30,15 +27,15 @@ def test_delete_version_with_update(version_store_factory, pos, sym):
     symbol = sym
 
     idx = pd.date_range("1970-01-01", periods=100, freq="D")
-    df = pd.DataFrame({"a": range(len(idx))}, index=idx)
+    df = pd.DataFrame({"a": range(len(idx))}, index=idx, dtype=np.int64)
     original_df = df.copy(deep=True)
     lmdb_version_store.write(symbol, df)
 
     idx2 = pd.date_range("1970-01-12", periods=10, freq="D")
-    df2 = pd.DataFrame({"a": range(1000, 1000 + len(idx2))}, index=idx2)
+    df2 = pd.DataFrame({"a": range(1000, 1000 + len(idx2))}, index=idx2, dtype=np.int64)
     lmdb_version_store.update(symbol, df2)
 
-    assert_frame_equal(lmdb_version_store.read(symbol, 0).data.astype("int"), original_df)
+    assert_frame_equal(lmdb_version_store.read(symbol, 0).data.astype("int64"), original_df)
 
     df.update(df2)
 
@@ -53,8 +50,8 @@ def test_delete_version_with_update(version_store_factory, pos, sym):
         assert_frame_equal(lmdb_version_store.read(symbol).data.astype("float"), df)
         assert_frame_equal(lmdb_version_store.read(symbol, 1).data.astype("float"), df)
     else:
-        assert_frame_equal(lmdb_version_store.read(symbol).data.astype("int"), original_df)
-        assert_frame_equal(lmdb_version_store.read(symbol, 0).data.astype("int"), original_df)
+        assert_frame_equal(lmdb_version_store.read(symbol).data.astype("int64"), original_df)
+        assert_frame_equal(lmdb_version_store.read(symbol, 0).data.astype("int64"), original_df)
 
 
 @pytest.mark.skip(reason="Flaky test, needs investigation.")

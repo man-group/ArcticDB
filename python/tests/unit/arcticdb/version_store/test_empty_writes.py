@@ -20,12 +20,11 @@ def test_write_no_rows(lmdb_version_store, sym):
     assert not lmdb_version_store.is_symbol_pickled(sym)
     df.index = df.index.astype("datetime64[ns]")
     df["a"] = df["a"].astype("float64")
-    # df.iloc[:, 2] = df.iloc[:, 2].astype("string")
     assert_frame_equal(lmdb_version_store.read(sym).data, df)
 
     df2 = pd.DataFrame([[1.3, 6, "test"]], columns=column_names, index=[pd.Timestamp(0)])
     df2 = df.append(df2)
-    # coercing not needed no more
+    # coercing not needed
     lmdb_version_store.append(sym, df2, dynamic_strings=True)
     assert_frame_equal(lmdb_version_store.read(sym).data, df2)
 
@@ -33,7 +32,7 @@ def test_write_no_rows(lmdb_version_store, sym):
         [[3.3, 8, None], [2.3, 10, "test2"]], columns=column_names, index=[pd.Timestamp(1), pd.Timestamp(2)]
     )
     df2 = df2.append(df3)
-    # coercing not needed no more
+    # coercing not needed
     lmdb_version_store.append(sym, df3, dynamic_strings=True)
     assert_frame_equal(lmdb_version_store.read(sym).data, df2)
 
