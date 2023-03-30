@@ -99,12 +99,17 @@ struct NativeTensor {
 
     template<typename T>
     const T *ptr_cast(size_t pos) const {
-        util::check(ndim() == 1, "Cannot safely ptr_cast matrices in NativeTensor");
-        util::check(elsize_ != 0, "Cannot safely ptr_cast when elsize_ is zero in NativeTensor");
-        util::check(strides_[0] % elsize_ == 0,
-                    "Cannot safely ptr_cast when strides ({}) is not a multiple of elsize ({}) in NativeTensor",
-                    strides_[0], elsize_);
-        pos *= strides_[0] / elsize_;
+        bool dimension_condition = ndim() == 1;
+        bool elsize_condition = elsize_ != 0;
+        bool strides_condition = strides_[0] % elsize_ == 0;
+        util::warn(dimension_condition, "Cannot safely ptr_cast matrices in NativeTensor");
+        util::warn(elsize_condition, "Cannot safely ptr_cast when elsize_ is zero in NativeTensor");
+        util::warn(strides_condition,
+                   "Cannot safely ptr_cast to type of size {} when strides ({}) is not a multiple of elsize ({}) in NativeTensor with dtype {}",
+                   sizeof(T), strides_[0], elsize_, data_type());
+        if (dimension_condition && elsize_condition && strides_condition) {
+            pos *= strides_[0] / elsize_;
+        }
         return (&(reinterpret_cast<const T *>(ptr)[pos]));
     }
 
