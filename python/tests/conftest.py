@@ -5,7 +5,10 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+import functools
 import multiprocessing
+import shutil
+
 import boto3
 import werkzeug
 from moto.server import DomainDispatcherApplication, create_backend_app
@@ -202,6 +205,29 @@ def _version_store_factory_impl(
     return out
 
 
+def lmdb_version_store_cleanup(version_store_fixture):
+
+    @functools.wraps(version_store_fixture)
+    def wrapped(*args, **kwargs):
+        result: NativeVersionStore = version_store_fixture(*args, **kwargs)
+
+        yield result
+
+        #  pytest holds a member variable `cached_result` equal to `result` above which keeps the storage alive and
+        #  locked. See https://github.com/pytest-dev/pytest/issues/5642 . So we need to decref the C++ objects keeping
+        #  the LMDB env open before they will release the lock and allow Windows to delete the LMDB files.
+        result.version_store = None
+        result._library = None
+
+        cfg = result.lib_cfg()
+        for storage in cfg.storage_by_id.values():
+            lmdb = LmdbConfig()
+            lmdb.ParseFromString(storage.config.value)
+            shutil.rmtree(lmdb.path)
+
+    return wrapped
+
+
 @pytest.fixture
 def version_store_factory(arcticdb_test_lmdb_config, lib_name):
     """Factory to create any number of distinct LMDB libs with the given WriteOptions or VersionStoreConfig.
@@ -210,7 +236,7 @@ def version_store_factory(arcticdb_test_lmdb_config, lib_name):
     `name` can be a magical value "_unique_" which will create libs with unique names."""
     used = {}
 
-    def version_store(col_per_group: Optional[int] = None, row_per_segment: Optional[int] = None, **kwargs):
+    def version_store(col_per_group: Optional[int] = None, row_per_segment: Optional[int] = None, **kwargs) -> NativeVersionStore:
         if col_per_group is not None and "column_group_size" not in kwargs:
             kwargs["column_group_size"] = col_per_group
         if row_per_segment is not None and "segment_row_size" not in kwargs:
@@ -222,7 +248,7 @@ def version_store_factory(arcticdb_test_lmdb_config, lib_name):
 
 @pytest.fixture
 def s3_store_factory(lib_name, arcticdb_test_s3_config):
-    """Factory to create any number of S3 libs              with the given WriteOptions or VersionStoreConfig.
+    """Factory to create any number of S3 libs with the given WriteOptions or VersionStoreConfig.
 
     `name` can be a magical value "_unique_" which will create libs with unique names.
     This factory will clean up any libraries requested
@@ -259,81 +285,91 @@ def s3_version_store_prune_previous(s3_store_factory):
 
 
 @pytest.fixture
-def lmdb_version_store(version_store_factory):
-    return version_store_factory(dynamic_strings=True)
-
-
-@pytest.fixture
+@lmdb_version_store_cleanup
 def lmdb_version_store_string_coercion(version_store_factory):
     return version_store_factory()
 
 
 @pytest.fixture
+@lmdb_version_store_cleanup
 def lmdb_version_store(version_store_factory):
     return version_store_factory(dynamic_strings=True)
 
 
 @pytest.fixture
+@lmdb_version_store_cleanup
 def lmdb_version_store_column_buckets(version_store_factory):
     return version_store_factory(dynamic_schema=True, column_group_size=3, segment_row_size=2, bucketize_dynamic=True)
 
 
 @pytest.fixture
+@lmdb_version_store_cleanup
 def lmdb_version_store_dynamic_schema(version_store_factory):
     return version_store_factory(dynamic_schema=True, dynamic_strings=True)
 
 
 @pytest.fixture
+@lmdb_version_store_cleanup
 def lmdb_version_store_delayed_deletes(version_store_factory):
     return version_store_factory(delayed_deletes=True, dynamic_strings=True, prune_previous_version=True)
 
 
 @pytest.fixture
+@lmdb_version_store_cleanup
 def lmdb_version_store_tombstones_no_symbol_list(version_store_factory):
     return version_store_factory(use_tombstones=True, dynamic_schema=True, symbol_list=False, dynamic_strings=True)
 
 
 @pytest.fixture
+@lmdb_version_store_cleanup
 def lmdb_version_store_allows_pickling(version_store_factory, lib_name):
     return version_store_factory(use_norm_failure_handler_known_types=True, dynamic_strings=True)
 
 
 @pytest.fixture
+@lmdb_version_store_cleanup
 def lmdb_version_store_no_symbol_list(version_store_factory):
     return version_store_factory(col_per_group=None, row_per_segment=None, symbol_list=False)
 
 
 @pytest.fixture
+@lmdb_version_store_cleanup
 def lmdb_version_store_tombstone_and_pruning(version_store_factory):
     return version_store_factory(use_tombstones=True, prune_previous_version=True)
 
 
 @pytest.fixture
+@lmdb_version_store_cleanup
 def lmdb_version_store_tombstone(version_store_factory):
     return version_store_factory(use_tombstones=True)
 
 
 @pytest.fixture
+@lmdb_version_store_cleanup
 def lmdb_version_store_tombstone_and_sync_passive(version_store_factory):
     return version_store_factory(use_tombstones=True, sync_passive=True)
 
 
 @pytest.fixture
+@lmdb_version_store_cleanup
 def lmdb_version_store_ignore_order(version_store_factory):
     return version_store_factory(ignore_sort_order=True)
 
 
 @pytest.fixture
+@lmdb_version_store_cleanup
 def lmdb_version_store_small_segment(version_store_factory):
     return version_store_factory(column_group_size=1000, segment_row_size=1000)
 
 
 @pytest.fixture
+@lmdb_version_store_cleanup
 def lmdb_version_store_tiny_segment(version_store_factory):
     return version_store_factory(column_group_size=2, segment_row_size=2)
 
 
 @pytest.fixture
+@lmdb_version_store_cleanup
 def lmdb_version_store_tiny_segment_dynamic(version_store_factory):
     return version_store_factory(column_group_size=2, segment_row_size=2, dynamic_schema=True)
 
@@ -341,7 +377,6 @@ def lmdb_version_store_tiny_segment_dynamic(version_store_factory):
 @pytest.fixture
 def one_col_df():
     def create(start=0):
-        # type: () -> DataFrame
         return DataFrame({"x": np.arange(start, start + 10, dtype=np.int64)})
 
     return create
@@ -350,7 +385,6 @@ def one_col_df():
 @pytest.fixture
 def two_col_df():
     def create(start=0):
-        # type: () -> DataFrame
         return DataFrame(
             {"x": np.arange(start, start + 10, dtype=np.int64), "y": np.arange(start + 10, start + 20, dtype=np.int64)}
         )
@@ -361,7 +395,6 @@ def two_col_df():
 @pytest.fixture
 def three_col_df():
     def create(start=0):
-        # type: () -> DataFrame
         return DataFrame(
             {
                 "x": np.arange(start, start + 10, dtype=np.int64),
