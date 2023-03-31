@@ -41,6 +41,14 @@ struct Check {
 };
 } // namespace util::detail
 
+namespace internal {
+    template<ErrorCode code>
+    constexpr auto check = util::detail::Check<code, ErrorCategory::INTERNAL>{};
+
+    template<ErrorCode code>
+    constexpr auto raise = check<code>.raise;
+}
+
 namespace normalization {
 template<ErrorCode code>
 constexpr auto check = util::detail::Check<code, ErrorCategory::NORMALIZATION>{};
@@ -51,8 +59,25 @@ constexpr auto raise = check<code>.raise;
 
 namespace version {
 
+    template<ErrorCode code>
+    constexpr auto check = util::detail::Check<code, ErrorCategory::MISSING_DATA>{};
+
+    template<ErrorCode code>
+    constexpr auto raise = check<code>.raise;
+}
+
+namespace schema {
+    template<ErrorCode code>
+    constexpr auto check = util::detail::Check<code, ErrorCategory::SCHEMA>{};
+
+    template<ErrorCode code>
+    constexpr auto raise = check<code>.raise;
+}
+
+namespace storage {
+
 template<ErrorCode code>
-constexpr auto check = util::detail::Check<code, ErrorCategory::MISSING_DATA>{};
+constexpr auto check = util::detail::Check<code, ErrorCategory::STORAGE>{};
 
 template<ErrorCode code>
 constexpr auto raise = check<code>.raise;
@@ -65,6 +90,24 @@ namespace sorting {
     template<ErrorCode code>
     constexpr auto raise = check<code>.raise;
 }
+
+namespace user_input {
+    template<ErrorCode code>
+    constexpr auto check = util::detail::Check<code, ErrorCategory::USER_INPUT>{};
+
+    template<ErrorCode code>
+    constexpr auto raise = check<code>.raise;
+}
+
+namespace compatibility {
+    template<ErrorCode code>
+    constexpr auto check = util::detail::Check<code, ErrorCategory::COMPATIBILITY>{};
+
+    template<ErrorCode code>
+    constexpr auto raise = check<code>.raise;
+}
+
+
 
 // TODO Change legacy codes to internal::
 namespace util {

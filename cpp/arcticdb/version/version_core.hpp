@@ -8,6 +8,7 @@
 #pragma once
 
 #include <arcticdb/entity/versioned_item.hpp>
+#include <arcticdb/pipeline/column_stats.hpp>
 #include <arcticdb/pipeline/query.hpp>
 #include <arcticdb/pipeline/write_options.hpp>
 #include <arcticdb/async/task_scheduler.hpp>
@@ -76,6 +77,27 @@ VersionedItem delete_range_impl(
     const UpdateQuery& query,
     const WriteOptions&& options,
     bool dynamic_schema);
+
+AtomKey index_key_to_column_stats_key(const IndexTypeKey& index_key);
+
+void create_column_stats_impl(
+    const std::shared_ptr<Store>& store,
+    const VersionedItem& versioned_item,
+    ColumnStats& column_stats,
+    const ReadOptions& read_options);
+
+void drop_column_stats_impl(
+    const std::shared_ptr<Store>& store,
+    const VersionedItem& versioned_item,
+    const std::optional<ColumnStats>& column_stats_to_drop);
+
+FrameAndDescriptor read_column_stats_impl(
+    const std::shared_ptr<Store>& store,
+    const VersionedItem& versioned_item);
+
+ColumnStats get_column_stats_info_impl(
+    const std::shared_ptr<Store>& store,
+    const VersionedItem& versioned_item);
 
 FrameAndDescriptor read_multi_key(
     const std::shared_ptr<Store>& store,
