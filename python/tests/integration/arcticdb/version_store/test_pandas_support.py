@@ -21,7 +21,6 @@ from arcticdb.util.test import assert_frame_equal
 
 
 def test_rt_df_with_datetimeindex_with_timezone(lmdb_version_store):
-    #  type: (NativeVersionStore)->None
     df = DataFrame(
         data=["A", "BC", "DEF"],
         index=DatetimeIndex(

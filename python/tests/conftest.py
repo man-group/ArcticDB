@@ -26,7 +26,7 @@ import numpy as np
 import pandas as pd
 import random
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Any, Dict
 from functools import partial
 
 from pytest_server_fixtures.base import get_ephemeral_port
@@ -188,14 +188,27 @@ def arcticdb_test_s3_config(moto_s3_endpoint_and_credentials):
     return create
 
 
+def _apply_storage_options(storage_cfg, lmdb_config):
+    lmdb = LmdbConfig()
+    if storage_cfg.config.Unpack(lmdb):
+        for k, v in lmdb_config.items():
+            setattr(lmdb, k, v)
+        storage_cfg.config.Pack(lmdb, type_url_prefix="cxx.arctic.org")
+
+
 def _version_store_factory_impl(
-    used, make_cfg, default_name, *, name: str = None, reuse_name=False, **kwargs
+    used, make_cfg, default_name, *, name: str = None, reuse_name=False, lmdb_config: Dict[str, Any] = None, **kwargs
 ) -> NativeVersionStore:
+    if lmdb_config is None:
+        lmdb_config = {}
     name = name or default_name
     if name == "_unique_":
         name = name + str(len(used))
     assert (name not in used) or reuse_name, f"{name} is already in use"
     cfg = make_cfg(name)
+    env = cfg.env_by_id[Defaults.ENV]
+    _, storage = get_storage_for_lib_name(name, env)
+    _apply_storage_options(storage, lmdb_config)
     lib = cfg.env_by_id[Defaults.ENV].lib_by_path[name]
     # Use symbol list by default (can still be overridden by kwargs)
     lib.version.symbol_list = True
@@ -298,6 +311,12 @@ def lmdb_version_store(version_store_factory):
 
 @pytest.fixture
 @lmdb_version_store_cleanup
+def lmdb_version_store_big_map(version_store_factory):
+    return version_store_factory(lmdb_config={"map_size": 2 ** 30})
+
+
+@pytest.fixture
+@lmdb_version_store_cleanup
 def lmdb_version_store_column_buckets(version_store_factory):
     return version_store_factory(dynamic_schema=True, column_group_size=3, segment_row_size=2, bucketize_dynamic=True)
 
@@ -359,13 +378,13 @@ def lmdb_version_store_ignore_order(version_store_factory):
 @pytest.fixture
 @lmdb_version_store_cleanup
 def lmdb_version_store_small_segment(version_store_factory):
-    return version_store_factory(column_group_size=1000, segment_row_size=1000)
+    return version_store_factory(column_group_size=1000, segment_row_size=1000, lmdb_config={"map_size": 2 ** 30})
 
 
 @pytest.fixture
 @lmdb_version_store_cleanup
 def lmdb_version_store_tiny_segment(version_store_factory):
-    return version_store_factory(column_group_size=2, segment_row_size=2)
+    return version_store_factory(column_group_size=2, segment_row_size=2, lmdb_config={"map_size": 2 ** 30})
 
 
 @pytest.fixture
