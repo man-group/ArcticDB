@@ -69,7 +69,7 @@ void SegmentInMemoryImpl::concatenate(SegmentInMemoryImpl&& other, bool unique_c
     }
 }
 
-position_t SegmentInMemoryImpl::add_column(const Field &field, size_t num_rows, bool presize) {
+position_t SegmentInMemoryImpl::add_column(const Field& field, size_t num_rows, bool presize) {
     util::check_arg(!field.name().empty(), "Empty name in field: {}", field);
     if(!column_map_)
         init_column_map();

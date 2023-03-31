@@ -444,7 +444,8 @@ struct DecodeMetadataTask : BaseTask {
         auto meta = decode_metadata_from_segment(key_seg.segment());
         std::pair<VariantKey, std::optional<google::protobuf::Any>> output;
         output.first = key_seg.variant_key();
-        output.second = std::move(meta.value());
+        output.second = std::move(meta);
+
         return output;
     }
 };

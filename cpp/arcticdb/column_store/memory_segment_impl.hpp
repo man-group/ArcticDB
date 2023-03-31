@@ -774,6 +774,10 @@ public:
         return descriptor_;
     }
 
+    void attach_descriptor(std::shared_ptr<StreamDescriptor> desc) {
+        descriptor_ = std::move(desc);
+    }
+
     void drop_column(std::string_view name) {
         std::lock_guard lock(*column_map_mutex_);
         auto opt_column_index = column_index(name);
