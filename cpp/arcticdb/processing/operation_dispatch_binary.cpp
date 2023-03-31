@@ -29,7 +29,6 @@ VariantData binary_boolean(const std::shared_ptr<util::BitSet>& left, EmptyResul
         case OperationType::AND:
             return EmptyResult{};
         case OperationType::OR:
-            return left;
         case OperationType::XOR:
             return left;
         default:
@@ -56,7 +55,6 @@ VariantData binary_boolean(EmptyResult, FullResult, OperationType operation) {
         case OperationType::AND:
             return EmptyResult{};
         case OperationType::OR:
-            return FullResult{};
         case OperationType::XOR:
             return FullResult{};
         default:
@@ -67,7 +65,6 @@ VariantData binary_boolean(EmptyResult, FullResult, OperationType operation) {
 VariantData binary_boolean(FullResult, FullResult, OperationType operation) {
     switch(operation) {
         case OperationType::AND:
-            return FullResult{};
         case OperationType::OR:
             return FullResult{};
         case OperationType::XOR:
