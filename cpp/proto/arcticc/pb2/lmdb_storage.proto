@@ -7,7 +7,7 @@ message Config {
         DEFAULT = 0;
     }
 
-    string path = 1; // The directaaory in which the database files reside. This directory must already exist and be writable.
+    string path = 1; // The directory in which the database files reside. This directory must already exist and be writable.
     uint32 flags = 2; // MDB default is also 0
     uint64 map_size = 3;
     uint32 max_dbs = 4;
