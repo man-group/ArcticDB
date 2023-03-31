@@ -11,6 +11,35 @@
 
 namespace arcticdb{
 
+struct IColumnStatsAggregatorData {
+    template<class Base>
+    struct Interface : Base {
+        void aggregate(const ColumnWithStrings& input_column) { folly::poly_call<0>(*this, input_column); }
+        SegmentInMemory finalize(const std::vector<ColumnName>& output_column_names) const {
+            return folly::poly_call<1>(*this, output_column_names);
+        }
+    };
+
+    template<class T>
+    using Members = folly::PolyMembers<&T::aggregate, &T::finalize>;
+};
+
+using ColumnStatsAggregatorData = folly::Poly<IColumnStatsAggregatorData>;
+
+struct IColumnStatsAggregator {
+    template<class Base>
+    struct Interface : Base {
+        [[nodiscard]] ColumnName get_input_column_name() const { return folly::poly_call<0>(*this); };
+        [[nodiscard]] std::vector<ColumnName> get_output_column_names() const { return folly::poly_call<1>(*this); };
+        [[nodiscard]] ColumnStatsAggregatorData get_aggregator_data() const { return folly::poly_call<2>(*this); }
+    };
+
+    template<class T>
+    using Members = folly::PolyMembers<&T::get_input_column_name, &T::get_output_column_names, &T::get_aggregator_data>;
+};
+
+using ColumnStatsAggregator = folly::Poly<IColumnStatsAggregator>;
+
 struct Fraction {
     double numerator_{0.0};
     uint64_t denominator_{0};

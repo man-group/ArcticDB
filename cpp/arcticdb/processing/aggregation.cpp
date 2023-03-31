@@ -9,6 +9,56 @@
 #include <cmath>
 
 namespace arcticdb {
+
+void MinMaxAggregatorData::aggregate(const ColumnWithStrings& input_column) {
+    entity::details::visit_type(input_column.column_->type().data_type(), [&input_column, that=this] (auto type_desc_tag) {
+        using InputType = decltype(type_desc_tag);
+        if constexpr(!is_sequence_type(InputType::DataTypeTag::data_type)) {
+            using DescriptorType = std::decay_t<decltype(type_desc_tag)>;
+            using RawType = typename DescriptorType::raw_type;
+            auto col_data = input_column.column_->data();
+            while (auto block = col_data.next<ScalarTagType<DescriptorType>>()) {
+                auto ptr = reinterpret_cast<const RawType *>(block.value().data());
+                for (auto i = 0u; i < block.value().row_count(); ++i, ++ptr) {
+                    const auto& curr = RawType(*ptr);
+                    if (UNLIKELY(!that->min_.has_value())) {
+                        that->min_ = std::make_optional<Value>(curr, DescriptorType::DataTypeTag::data_type);
+                        that->max_ = std::make_optional<Value>(curr, DescriptorType::DataTypeTag::data_type);
+                    } else {
+                        that->min_->set(std::min(that->min_->get<RawType>(), curr));
+                        that->max_->set(std::max(that->max_->get<RawType>(), curr));
+                    }
+                }
+            }
+        } else {
+            schema::raise<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>(
+                    "Minmax column stat generation not supported with string types");
+        }
+    });
+}
+
+SegmentInMemory MinMaxAggregatorData::finalize(const std::vector<ColumnName>& output_column_names) const {
+    internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+            output_column_names.size() == 2,
+            "Expected 2 output column names in MinMaxAggregatorData::finalize, but got {}",
+            output_column_names.size());
+    SegmentInMemory seg;
+    if (min_.has_value()) {
+        entity::details::visit_type(min_->data_type_, [&output_column_names, &seg, that = this](auto type_desc_tag) {
+            using RawType = typename decltype(type_desc_tag)::DataTypeTag::raw_type;
+            auto min_col = std::make_shared<Column>(make_scalar_type(that->min_->data_type_), true);
+            min_col->template push_back<RawType>(that->min_->get<RawType>());
+
+            auto max_col = std::make_shared<Column>(make_scalar_type(that->max_->data_type_), true);
+            max_col->template push_back<RawType>(that->max_->get<RawType>());
+
+            seg.add_column(scalar_field_proto(min_col->type().data_type(), output_column_names[0].value), min_col);
+            seg.add_column(scalar_field_proto(max_col->type().data_type(), output_column_names[1].value), max_col);
+        });
+    }
+    return seg;
+}
+
 void Sum::aggregate(const std::optional<ColumnWithStrings>& input_column, const std::vector<size_t>& groups, size_t unique_values) {
     entity::details::visit_type(data_type_, [&input_column, unique_values, &groups, that=this] (auto global_type_desc_tag) {
         using GlobalInputType = decltype(global_type_desc_tag);
@@ -48,7 +98,7 @@ std::optional<DataType> Sum::finalize(SegmentInMemory& seg, bool, size_t unique_
             auto col = std::make_shared<Column>(make_scalar_type(that->data_type_), unique_values, true, false);
             memcpy(col->ptr(), that->aggregated_.data(), that->aggregated_.size());
             seg.add_column(scalar_field_proto(that->data_type_, that->get_output_column_name().value), col);
-            col->set_row_data(unique_values);
+            col->set_row_data(unique_values - 1);
         });
         return data_type_;
     } else {
@@ -127,7 +177,7 @@ std::optional<DataType> MaxOrMin::finalize(SegmentInMemory& seg, bool dynamic_sc
                 for(auto i = 0u; i < unique_values; ++i, ++in_ptr, ++out_ptr) {
                     *out_ptr = in_ptr->written_ ? static_cast<double>(in_ptr->value_) : std::numeric_limits<double>::quiet_NaN();                }
 
-                col->set_row_data(unique_values);
+                col->set_row_data(unique_values - 1);
                 seg.add_column(scalar_field_proto(DataType::FLOAT64, that->get_output_column_name().value), col);
             });
             return DataType::FLOAT64;
@@ -140,7 +190,7 @@ std::optional<DataType> MaxOrMin::finalize(SegmentInMemory& seg, bool dynamic_sc
                 for(auto i = 0u; i < unique_values; ++i, ++in_ptr, ++out_ptr) {
                     *out_ptr = in_ptr->value_;
                 }
-                col->set_row_data(unique_values);
+                col->set_row_data(unique_values - 1);
                 seg.add_column(scalar_field_proto(that->data_type_, that->get_output_column_name().value), col);
             });
             return data_type_;
@@ -179,7 +229,7 @@ std::optional<DataType> Mean::finalize(SegmentInMemory& seg, bool, size_t unique
         auto pos = seg.add_column(grouping_desc, data_.fractions_.size(), true);
         auto& column = seg.column(pos);
         auto ptr = reinterpret_cast<double*>(column.ptr());
-        column.set_row_data(data_.fractions_.size());
+        column.set_row_data(data_.fractions_.size() - 1);
 
         for (const auto& fraction : folly::enumerate(data_.fractions_)) {
             ptr[fraction.index] = fraction->to_double();

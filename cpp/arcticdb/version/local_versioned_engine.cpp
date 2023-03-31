@@ -13,6 +13,7 @@
 #include <arcticdb/util/optional_defaults.hpp>
 #include <arcticdb/version/snapshot.hpp>
 #include <arcticdb/stream/stream_sink.hpp>
+#include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/util/storage_lock.hpp>
 #include <arcticdb/util/test/generators.hpp>
 #include <arcticdb/entity/metrics.hpp>
@@ -59,6 +60,92 @@ void LocalVersionedEngine::delete_unreferenced_pruned_indexes(
         // Best-effort so deliberately swallow
         log::version().warn("Could not prune previous versions due to: {}", ex.what());
     }
+}
+
+void LocalVersionedEngine::create_column_stats_internal(
+    const VersionedItem& versioned_item,
+    ColumnStats& column_stats,
+    const ReadOptions& read_options) {
+    ARCTICDB_RUNTIME_SAMPLE(CreateColumnStatsInternal, 0)
+    ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: create_column_stats");
+    create_column_stats_impl(store(),
+                             versioned_item,
+                             column_stats,
+                             read_options);
+}
+
+void LocalVersionedEngine::create_column_stats_version_internal(
+    const StreamId& stream_id,
+    ColumnStats& column_stats,
+    const VersionQuery& version_query,
+    const ReadOptions& read_options) {
+    auto versioned_item = get_version_to_read(stream_id, version_query);
+    version::check<ErrorCode::E_NO_SUCH_VERSION>(
+            versioned_item.has_value(),
+            "create_column_stats_version_internal: version not found for stream '{}'",
+            stream_id
+            );
+    create_column_stats_internal(versioned_item.value(),
+                                 column_stats,
+                                 read_options);
+}
+
+void LocalVersionedEngine::drop_column_stats_internal(
+    const VersionedItem& versioned_item,
+    const std::optional<ColumnStats>& column_stats_to_drop) {
+    ARCTICDB_RUNTIME_SAMPLE(DropColumnStatsInternal, 0)
+    ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: drop_column_stats");
+    drop_column_stats_impl(store(),
+                           versioned_item,
+                           column_stats_to_drop);
+}
+
+void LocalVersionedEngine::drop_column_stats_version_internal(
+    const StreamId& stream_id,
+    const std::optional<ColumnStats>& column_stats_to_drop,
+    const VersionQuery& version_query) {
+    auto versioned_item = get_version_to_read(stream_id, version_query);
+    version::check<ErrorCode::E_NO_SUCH_VERSION>(
+            versioned_item.has_value(),
+            "drop_column_stats_version_internal: version not found for stream '{}'",
+            stream_id
+            );
+    drop_column_stats_internal(versioned_item.value(), column_stats_to_drop);
+}
+
+FrameAndDescriptor LocalVersionedEngine::read_column_stats_internal(
+    const VersionedItem& versioned_item) {
+    return read_column_stats_impl(store(), versioned_item);
+}
+
+std::pair<VersionedItem, FrameAndDescriptor> LocalVersionedEngine::read_column_stats_version_internal(
+    const StreamId& stream_id,
+    const VersionQuery& version_query) {
+    auto versioned_item = get_version_to_read(stream_id, version_query);
+    version::check<ErrorCode::E_NO_SUCH_VERSION>(
+            versioned_item.has_value(),
+            "read_column_stats_version_internal: version not found for stream '{}'",
+            stream_id
+            );
+    auto frame_and_descriptor = read_column_stats_internal(versioned_item.value());
+    return std::make_pair(versioned_item.value(), std::move(frame_and_descriptor));
+}
+
+ColumnStats LocalVersionedEngine::get_column_stats_info_internal(
+    const VersionedItem& versioned_item) {
+    return get_column_stats_info_impl(store(), versioned_item);
+}
+
+ColumnStats LocalVersionedEngine::get_column_stats_info_version_internal(
+    const StreamId& stream_id,
+    const VersionQuery& version_query) {
+    auto versioned_item = get_version_to_read(stream_id, version_query);
+    version::check<ErrorCode::E_NO_SUCH_VERSION>(
+            versioned_item.has_value(),
+            "get_column_stats_info_version_internal: version not found for stream '{}'",
+            stream_id
+            );
+    return get_column_stats_info_internal(versioned_item.value());
 }
 
 FrameAndDescriptor LocalVersionedEngine::read_dataframe_internal(
@@ -673,6 +760,18 @@ void LocalVersionedEngine::delete_trees_responsibly(
     remove_opts.ignores_missing_key_ = true;
 
     std::vector<entity::VariantKey> vks;
+    // Delete any associated column stats keys first
+    if (!dry_run) {
+        std::transform(keys_to_delete->begin(),
+                       keys_to_delete->end(),
+                       std::back_inserter(vks),
+                       [](const IndexTypeKey& index_key) {
+            return index_key_to_column_stats_key(index_key);
+        });
+        store()->remove_keys(vks, remove_opts).get();
+    }
+
+    vks.clear();
     if (!dry_run) {
         std::copy(keys_to_delete->begin(), keys_to_delete->end(), std::back_inserter(vks));
         store()->remove_keys(vks, remove_opts).get();

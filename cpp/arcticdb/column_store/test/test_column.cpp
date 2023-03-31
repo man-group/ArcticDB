@@ -136,7 +136,7 @@ TEST(Column, ChangeType) {
         column.set_scalar<int64_t>(i, i);
     }
 
-    column.change_type(DataType::FLOAT64, std::shared_ptr<StringPool>());
+    column.change_type(DataType::FLOAT64);
     auto expected = TypeDescriptor{DataType::FLOAT64, Dimension::Dim0};
 
     ASSERT_EQ(column.row_count(), 10u);
@@ -186,7 +186,7 @@ TEST(Column, Sparse) {
 TEST(Column, SparseChangeType) {
     auto column = get_sparse_column();
 
-    column->change_type(DataType::FLOAT64, std::shared_ptr<StringPool>());
+    column->change_type(DataType::FLOAT64);
     auto expected = TypeDescriptor{DataType::FLOAT64, Dimension::Dim0};
 
     ASSERT_EQ(column->row_count(), 5u);

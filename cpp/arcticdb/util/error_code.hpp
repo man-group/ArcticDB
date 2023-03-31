@@ -30,6 +30,8 @@ enum class ErrorCategory : BaseType {
     SCHEMA = 4,
     STORAGE = 5,
     SORTING = 6,
+    USER_INPUT = 7,
+    COMPATIBILITY = 8,
     // NEW CATEGORIES MUST ALSO BE ADDED TO python_module.cpp:register_error_code_ecosystem
 };
 
@@ -41,7 +43,9 @@ inline std::unordered_map<ErrorCategory, const char*> get_error_category_names()
         {ErrorCategory::MISSING_DATA, "MISSING_DATA"},
         {ErrorCategory::SCHEMA, "SCHEMA"},
         {ErrorCategory::STORAGE, "STORAGE"},
-        {ErrorCategory::SORTING, "SORTING"}
+        {ErrorCategory::SORTING, "SORTING"},
+        {ErrorCategory::USER_INPUT, "USER_INPUT"},
+        {ErrorCategory::COMPATIBILITY, "COMPATIBILITY"},
     };
 }
 
@@ -59,9 +63,15 @@ inline std::unordered_map<ErrorCategory, const char*> get_error_category_names()
     ERROR_CODE(2004, E_WRONG_SHAPE) \
     ERROR_CODE(3000, E_NO_SUCH_VERSION)  \
     ERROR_CODE(4000, E_DESCRIPTOR_MISMATCH)  \
+    ERROR_CODE(4001, E_COLUMN_DOESNT_EXIST)  \
+    ERROR_CODE(4002, E_UNSUPPORTED_COLUMN_TYPE)  \
+    ERROR_CODE(4003, E_UNSUPPORTED_INDEX_TYPE)   \
+    ERROR_CODE(4004, E_OPERATION_NOT_SUPPORTED_WITH_PICKLED_DATA)  \
     ERROR_CODE(5000, E_KEY_NOT_FOUND) \
     ERROR_CODE(5001, E_DUPLICATE_KEY) \
-    ERROR_CODE(6000, E_UNSORTED_DATA)
+    ERROR_CODE(6000, E_UNSORTED_DATA) \
+    ERROR_CODE(7000, E_INVALID_USER_ARGUMENT)\
+    ERROR_CODE(8000, E_UNRECOGNISED_COLUMN_STATS_VERSION) \
 
 enum class ErrorCode : BaseType {
 #define ERROR_CODE(code, Name, ...) Name = code,
@@ -126,6 +136,8 @@ using StorageException = ArcticCategorizedException<ErrorCategory::STORAGE>;
 using MissingDataException = ArcticCategorizedException<ErrorCategory::MISSING_DATA>;
 using SortingException = ArcticCategorizedException<ErrorCategory::SORTING>;
 using UnsortedDataException = ArcticSpecificException<ErrorCode::E_UNSORTED_DATA>;
+using UserInputException = ArcticCategorizedException<ErrorCategory::USER_INPUT>;
+using CompatibilityException = ArcticCategorizedException<ErrorCategory::COMPATIBILITY>;
 
 template<ErrorCode error_code>
 [[noreturn]] void throw_error(const std::string& msg) {

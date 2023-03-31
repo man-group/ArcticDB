@@ -77,15 +77,15 @@ inline void LmdbStorage::do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts o
     std::lock_guard<std::mutex> lock{*write_mutex_};
     auto txn = ::lmdb::txn::begin(env());
     ARCTICDB_SUBSAMPLE(LmdbStorageInTransaction, 0)
-    if (!opts.upsert_) {
-        auto keys = kvs.transform([](const auto& kv){return kv.variant_key();});
-        // Deleting keys (no error is thrown if the keys already exist)
-        auto failed_deletes = do_remove_internal(std::move(keys), txn, RemoveOpts{});
-        if(!failed_deletes.empty()) {
-            ARCTICDB_SUBSAMPLE(LmdbStorageCommit, 0)
-            txn.commit();
-            throw KeyNotFoundException(Composite<VariantKey>(std::move(failed_deletes)));
-        }
+    auto keys = kvs.transform([](const auto& kv){return kv.variant_key();});
+    // Deleting keys (no error is thrown if the keys already exist)
+    RemoveOpts remove_opts;
+    remove_opts.ignores_missing_key_ = opts.upsert_;
+    auto failed_deletes = do_remove_internal(std::move(keys), txn, remove_opts);
+    if(!failed_deletes.empty()) {
+        ARCTICDB_SUBSAMPLE(LmdbStorageCommit, 0)
+        txn.commit();
+        throw KeyNotFoundException(Composite<VariantKey>(std::move(failed_deletes)));
     }
     do_write_internal(std::move(kvs), txn);
     ARCTICDB_SUBSAMPLE(LmdbStorageCommit, 0)
@@ -158,19 +158,28 @@ inline std::vector<VariantKey> LmdbStorage::do_remove_internal(Composite<Variant
     (fg::from(ks.as_range()) | fg::move | fg::groupBy(fmt_db)).foreach([&](auto &&group) {
         auto db_name = fmt::format("{}", group.key());
         ARCTICDB_SUBSAMPLE(LmdbStorageOpenDb, 0)
-        auto dbi = ::lmdb::dbi::open(txn, db_name.data());
+        try {
+            // If no key of this type has been written before, this can fail
+            auto dbi = ::lmdb::dbi::open(txn, db_name.data());
+            for (auto &k : group.values()) {
+                auto stored_key = to_serialized_key(k);
+                MDB_val mdb_key{stored_key.size(), stored_key.data()};
+                ARCTICDB_SUBSAMPLE(LmdbStorageDel, 0)
 
-        for (auto &k : group.values()) {
-            auto stored_key = to_serialized_key(k);
-            MDB_val mdb_key{stored_key.size(), stored_key.data()};
-            ARCTICDB_SUBSAMPLE(LmdbStorageDel, 0)
-
-            if (::lmdb::dbi_del(txn, dbi.handle(), &mdb_key)) {
-                ARCTICDB_DEBUG(log::storage(), "Deleted segment for key {}", variant_key_view(k));
-            } else {
-                log::storage().warn("Failed to delete segment for key {}", variant_key_view(k) );
-                if (!opts.ignores_missing_key_) {
-                    failed_deletes.push_back(k);
+                if (::lmdb::dbi_del(txn, dbi.handle(), &mdb_key)) {
+                    ARCTICDB_DEBUG(log::storage(), "Deleted segment for key {}", variant_key_view(k));
+                } else {
+                    if (!opts.ignores_missing_key_) {
+                        log::storage().warn("Failed to delete segment for key {}", variant_key_view(k));
+                        failed_deletes.push_back(k);
+                    }
+                }
+            }
+        } catch (const std::exception& e) {
+            if (!opts.ignores_missing_key_) {
+                for (auto &k : group.values()) {
+                    log::storage().warn("Failed to delete segment for key {}", variant_key_view(k) );
+                                        failed_deletes.push_back(k);
                 }
             }
         }
