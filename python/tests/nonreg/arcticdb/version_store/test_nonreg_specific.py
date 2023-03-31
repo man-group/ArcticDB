@@ -161,15 +161,9 @@ def test_update_fixed_width_to_dynamic_strings(lmdb_version_store_dynamic_schema
     dynamic_strings_data = pd.DataFrame({"a": ["hello", "bonjour", "gutentag"]}, index=dynamic_strings_index)
     lib.write(symbol, dynamic_strings_data, dynamic_strings=True)
 
-    # info = lib.get_info(symbol)
-    # assert(TypeDescriptor.ValueType.Name(info["dtype"][0].value_type) == "DYNAMIC_STRING")
-
     fixed_width_strings_index = pd.date_range("2000-1-2", periods=1)
     fixed_width_strings_data = pd.DataFrame({"a": ["annyeonghaseyo"]}, index=fixed_width_strings_index)
     lib.update(symbol, fixed_width_strings_data, dynamic_strings=False)
-
-    # info = lib.get_info(symbol)
-    # assert(TypeDescriptor.ValueType.Name(info["dtype"][0].value_type) == "DYNAMIC_STRING")
 
     dynamic_strings_data.update(fixed_width_strings_data)
     expected_df = dynamic_strings_data
