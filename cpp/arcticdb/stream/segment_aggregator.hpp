@@ -120,7 +120,7 @@ inline void convert_descriptor_types(StreamDescriptor & descriptor) {
 inline void convert_column_types(SegmentInMemory& segment) {
     for(const auto& column : segment.columns()) {
         if(is_integer_type(column->type().data_type())) {
-            column->change_type(DataType::FLOAT64, std::shared_ptr<StringPool>{});
+            column->change_type(DataType::FLOAT64);
         }
     }
 

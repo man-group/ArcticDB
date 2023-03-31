@@ -227,7 +227,7 @@ TEST_F(VersionStoreTest, CompactIncompleteDynamicSchema) {
         }
 
         wrapper.aggregator_.commit();
-        wrapper.segment().drop_column((i % 3) + 1);
+        wrapper.segment().drop_column(fmt::format("thing{}", (i % 3) + 1));
         data.emplace_back( SegmentToInputFrameAdapter{std::move(wrapper.segment())});
     }
     std::mt19937 mt{42};

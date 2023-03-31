@@ -52,6 +52,12 @@ struct ReadQuery {
     FilterRange row_filter; // no filter by default
     std::shared_ptr<std::vector<Clause>> query_ = std::make_shared<std::vector<Clause>>();
 
+    ReadQuery() = default;
+
+    explicit ReadQuery(std::vector<Clause>&& query) {
+        query_ = std::make_shared<std::vector<Clause>>(std::move(query));
+    }
+
     void set_clause_builder(ClauseBuilder& builder) {
         ClauseBuilder b = std::move(builder);
         for (auto&& c: b.get_clauses()) {

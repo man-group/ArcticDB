@@ -638,6 +638,8 @@ public:
 
     void append(const SegmentInMemoryImpl& other);
 
+    void concatenate(SegmentInMemoryImpl&& other, bool unique_column_names);
+
     util::BitSet get_duplicates_bitset(SegmentInMemoryImpl& other);
     bool is_row_duplicate(const SegmentInMemoryImpl::Row& row);
 
@@ -756,12 +758,16 @@ public:
         return descriptor_;
     }
 
-    void drop_column(position_t column) {
-        util::check(column < position_t(columns_.size()), "Column index out of range in drop_column");
+    void drop_column(std::string_view name) {
+        std::lock_guard lock(*column_map_mutex_);
+        auto opt_column_index = column_index(name);
+        internal::check<ErrorCode::E_INVALID_ARGUMENT>(opt_column_index.has_value(), "Cannot drop column with name '{}' as it doesn't exist", name);
+        internal::check<ErrorCode::E_ASSERTION_FAILURE>(*opt_column_index < columns_.size(), "Column index out of range in drop_column");
         auto it = std::begin(columns_);
-        std::advance(it, column);
+        std::advance(it, *opt_column_index);
         columns_.erase(it);
-        descriptor_->erase_field(column);
+        descriptor_->erase_field(*opt_column_index);
+        column_map_->erase(name);
     }
 
     const FieldDescriptor::Proto& field(size_t index) const {

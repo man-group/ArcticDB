@@ -142,6 +142,7 @@ set(arcticdb_srcs
         log/log.hpp
         log/trace.hpp
         pipeline/column_mapping.hpp
+        pipeline/column_stats.hpp
         pipeline/frame_data_wrapper.hpp
         pipeline/frame_slice.hpp
         pipeline/frame_utils.hpp
@@ -296,6 +297,7 @@ set(arcticdb_srcs
         entity/performance_tracing.cpp
         entity/types.cpp
         log/log.cpp
+        pipeline/column_stats.cpp
         pipeline/frame_slice.cpp
         pipeline/frame_utils.cpp
         pipeline/index_segment_reader.cpp
