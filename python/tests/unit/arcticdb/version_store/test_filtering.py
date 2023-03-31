@@ -844,6 +844,18 @@ def test_filter_numeric_isnotin(lmdb_version_store, df, vals):
     generic_filter_test(lmdb_version_store, "test_filter_numeric_isnotin", df, q, pandas_query)
 
 
+def test_filter_numeric_isnotin_hashing_overflow(lmdb_version_store):
+    df = pd.DataFrame({"a": [256]})
+    lmdb_version_store.write("test_filter_numeric_isnotin_hashing_overflow", df)
+
+    q = QueryBuilder()
+    isnotin_vals = np.array([], np.uint8)
+    q = q[q["a"].isnotin(isnotin_vals)]
+    result = lmdb_version_store.read("test_filter_numeric_isnotin_hashing_overflow", query_builder=q).data
+
+    assert_frame_equal(df, result)
+
+
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(df=dataframes_with_names_and_dtypes(["a"], integral_type_strategies()))

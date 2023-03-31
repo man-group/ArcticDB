@@ -90,8 +90,8 @@ VariantData binary_membership(const ColumnWithStrings& column_with_strings, Valu
                 } else if constexpr (is_numeric_type(ColumnTagType::data_type) && is_numeric_type(ValueSetBaseTypeTag::data_type)) {
                     using ValueSetBaseType =  typename decltype(value_set_desc_tag)::DataTypeTag::raw_type;
 
-                    using comp = typename arcticdb::Comparable<ColumnType, ValueSetBaseType>;
-                    auto typed_value_set = value_set.get_set<typename comp::right_type>();
+                    using WideType = typename type_arithmetic_promoted_type<ColumnType, ValueSetBaseType, std::remove_reference_t<Func>>::type;
+                    auto typed_value_set = value_set.get_set<WideType>();
                     auto column_data = column_with_strings.column_->data();
 
                     util::BitSet::bulk_insert_iterator inserter(*output);
@@ -100,7 +100,7 @@ VariantData binary_membership(const ColumnWithStrings& column_with_strings, Valu
                         auto ptr = reinterpret_cast<const ColumnType*>(block.value().data());
                         const auto row_count = block.value().row_count();
                         for (auto i = 0u; i < row_count; ++i, ++pos) {
-                            if(func(static_cast<typename comp::right_type>(*ptr++), *typed_value_set))
+                            if(func(static_cast<WideType>(*ptr++), *typed_value_set))
                                 inserter = pos;
                         }
                     }
