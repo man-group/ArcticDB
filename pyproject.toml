@@ -4,7 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [tool.cibuildwheel]
 before-build = "rm -rf {package}/cpp/out ; export" # Only deletes what CIBW copied into docker
-environment-pass = "ARCTIC_CMAKE_PRESET VCPKG_BINARY_SOURCES nuget_user nuget_token CMAKE_BUILD_PARALLEL_LEVEL"
+environment-pass = """ARCTIC_CMAKE_PRESET CMAKE_BUILD_PARALLEL_LEVEL\
+    VCPKG_BINARY_SOURCES VCPKG_NUGET_USER VCPKG_NUGET_TOKEN VCPKG_MAN_NUGET_USER VCPKG_MAN_NUGET_TOKEN"""
 build-frontend = "build"
 test-extras = "Testing"
 
