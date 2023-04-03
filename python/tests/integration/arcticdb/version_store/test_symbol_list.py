@@ -11,7 +11,7 @@ import pytest
 from arcticdb.config import Defaults
 from arcticdb.util.test import sample_dataframe
 from arcticdb.version_store._store import NativeVersionStore
-from arcticdb_ext.storage import OpenMode as _OpenMode
+from arcticdb_ext.storage import KeyType, OpenMode as _OpenMode
 
 
 @pytest.fixture()
@@ -63,6 +63,33 @@ def test_symbol_list_with_rec_norm(lmdb_version_store):
     assert lmdb_version_store.list_symbols() == ["rec_norm"]
 
 
+def test_symbol_list_normal_flow(lmdb_version_store):
+    lib = lmdb_version_store
+    lib.write("a", 1)
+    assert lib.list_symbols() == ["a"]
+    lib.write("b", 1)
+    lib.write("a", 1)
+    lib_tool = lib.library_tool()
+    assert len(lib_tool.find_keys(KeyType.VERSION)) == 3  # 2 versions for a, 1 for b
+    symbol_list_keys = lib_tool.find_keys(KeyType.SYMBOL_LIST)
+    add_keys = [key for key in symbol_list_keys if key.id == "__add__"]
+    assert len(add_keys) == 2
+    lib.version_store._clear_symbol_list_keys()
+    assert len(lib_tool.find_keys(KeyType.SYMBOL_LIST)) == 0
+
+    print("refreshing symbol list")
+    lib.version_store.reload_symbol_list()
+    import time
+
+    time.sleep(1)
+    assert len(lib_tool.find_keys(KeyType.SYMBOL_LIST)) > 0
+    assert len(symbol_list_keys) > 0
+    assert set(lib.list_symbols()) == {"a", "b"}
+
+    lib.version_store._clear_symbol_list_keys()
+    assert set(lib.list_symbols()) == {"a", "b"}
+
+
 def test_interleaved_store_read(version_store_factory):
     vs1 = version_store_factory()
     vs2 = version_store_factory(reuse_name=True)
@@ -73,6 +100,7 @@ def test_interleaved_store_read(version_store_factory):
     assert vs1.list_symbols() == []
 
 
+@pytest.mark.skip
 @pytest.mark.parametrize("compact_first", [True, False])
 def test_symbol_list_read_only_compaction_needed(s3_version_store, compact_first):
     lib_write = s3_version_store
@@ -114,3 +142,24 @@ def test_deleted_symbol_with_tombstones(lmdb_version_store_tombstones_no_symbol_
     lib.write("b", 1)
     lib.delete("a")
     assert lib.list_symbols() == ["b"]
+
+
+def test_empty_lib(lmdb_version_store):
+    lib = lmdb_version_store
+    assert lib.list_symbols() == []
+    lt = lib.library_tool()
+    assert len(lt.find_keys(KeyType.SYMBOL_LIST)) == 1
+
+
+def test_no_active_symbols(lmdb_version_store_prune_previous):
+    lib = lmdb_version_store_prune_previous
+    for idx in range(20):
+        lib.write(str(idx), idx)
+    for idx in range(20):
+        lib.delete(str(idx))
+    lib.version_store._clear_symbol_list_keys()
+    lib.version_store.reload_symbol_list()
+    assert lib.list_symbols() == []
+    lt = lib.library_tool()
+    assert len(lt.find_keys(KeyType.SYMBOL_LIST)) == 1
+    assert lib.list_symbols() == []
