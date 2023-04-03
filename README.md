@@ -90,7 +90,7 @@ To find out more about working with data, visit our [docs](https://docs.arcticdb
 
 ## Build From Source
 
-Instructions for building from source coming soon. 
+Build instructions [are located here](docs/mkdocs/docs/technical/contributing.md).
 
 ## Documentation
 
