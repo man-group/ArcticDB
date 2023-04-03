@@ -238,6 +238,7 @@ set(arcticdb_srcs
         stream/stream_source.hpp
         stream/stream_utils.hpp
         stream/stream_writer.hpp
+        toolbox/library_tool.hpp
         util/allocator.hpp
         util/bitset.hpp
         util/buffer.hpp
@@ -353,6 +354,7 @@ set(arcticdb_srcs
         storage/storage_factory.cpp
         stream/aggregator.cpp
         stream/append_map.cpp
+        toolbox/library_tool.cpp
         util/allocator.cpp
         util/buffer_pool.cpp
         util/configs_map.cpp
@@ -478,8 +480,11 @@ endif ()
 ## Core python bindings, private only ##
 set(arcticdb_python_srcs
         async/python_bindings.cpp
+        codec/python_bindings.cpp
+        column_store/python_bindings.cpp
         storage/python_bindings.cpp
         stream/python_bindings.cpp
+        toolbox/python_bindings.cpp
         version/python_bindings.cpp)
 
 add_library(arcticdb_python STATIC ${arcticdb_python_srcs})

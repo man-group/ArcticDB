@@ -30,7 +30,7 @@ from arcticdb.version_store import NativeVersionStore
 from arcticdb.version_store._custom_normalizers import CustomNormalizer, register_normalizer
 from arcticdb.version_store._store import UNSUPPORTED_S3_CHARS, MAX_SYMBOL_SIZE, VersionedItem
 from arcticdb.version_store.helper import ArcticMemoryConfig, get_lib_cfg
-from arcticdb_ext.storage import NoDataFoundException
+from arcticdb_ext.storage import KeyType, NoDataFoundException
 from arcticdb_ext.version_store import NoSuchVersionException, StreamDescriptorMismatch
 from arcticc.pb2.descriptors_pb2 import NormalizationMetadata # Importing from arcticdb dynamically loads arcticc.pb2
 from arcticdb.util.test import (
@@ -1151,6 +1151,20 @@ def test_find_version(lmdb_version_store):
     assert lmdb_version_store._find_version("second").version == 0  # Latest
 
 
+def test_library_deletion_lmdb(lmdb_version_store):
+    # lmdb uses fast deletion
+    lmdb_version_store.write("a", 1)
+    lmdb_version_store.write("b", 1)
+
+    lmdb_version_store.snapshot("snap")
+    assert len(lmdb_version_store.list_symbols()) == 2
+    lmdb_version_store.version_store.clear()
+    assert len(lmdb_version_store.list_symbols()) == 0
+    lib_tool = lmdb_version_store.library_tool()
+    assert lib_tool.count_keys(KeyType.VERSION) == 0
+    assert lib_tool.count_keys(KeyType.TABLE_INDEX) == 0
+
+
 def test_resolve_defaults(arcticdb_test_lmdb_config, lib_name):
     cfg = arcticdb_test_lmdb_config(lib_name)
     arcticc = ArcticMemoryConfig(cfg, env=Defaults.ENV)
@@ -1593,6 +1607,17 @@ def test_batch_read_date_range(lmdb_version_store_tombstone_and_sync_passive):
         start = date_range[0]
         end = date_range[-1]
         assert_frame_equal(vit.data, dfs[x].loc[start:end])
+
+
+def test_index_keys_start_end_index(lmdb_version_store, sym):
+    idx = pd.date_range("2022-01-01", periods=100, freq="D")
+    df = pd.DataFrame({"a": range(len(idx))}, index=idx)
+    lmdb_version_store.write(sym, df)
+
+    lt = lmdb_version_store.library_tool()
+    key = lt.find_keys_for_id(KeyType.TABLE_INDEX, sym)[0]
+    assert key.start_index == 1640995200000000000
+    assert key.end_index == 1649548800000000001
 
 
 def test_dynamic_schema_column_hash_update(lmdb_version_store_column_buckets):

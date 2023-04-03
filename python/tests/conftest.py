@@ -322,6 +322,12 @@ def lmdb_version_store(version_store_factory):
 
 @pytest.fixture
 @lmdb_version_store_cleanup
+def lmdb_version_store_prune_previous(version_store_factory):
+    return version_store_factory(dynamic_strings=True, prune_previous_version=True, use_tombstones=True)
+
+
+@pytest.fixture
+@lmdb_version_store_cleanup
 def lmdb_version_store_big_map(version_store_factory):
     return version_store_factory(lmdb_config={"map_size": 2 ** 30})
 

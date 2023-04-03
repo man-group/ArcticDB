@@ -13,7 +13,9 @@ import time
 
 from arcticdb.util.test import assert_frame_equal
 from arcticdb_ext.exceptions import InternalException
+from arcticdb_ext.storage import KeyType, NoDataFoundException
 from arcticdb.version_store._normalization import NPDDataFrame
+from arcticdb.util.test import sample_dataframe
 
 
 def eprint(*args, **kwargs):
@@ -117,6 +119,120 @@ def test_clear_lmdb(lmdb_version_store, sym):
     assert len(lmdb_version_store.list_versions(symbol)) == 2
     lmdb_version_store.version_store.clear()
     assert len(lmdb_version_store.list_symbols()) == 0
+
+
+def test_delete_library_tool(version_store_factory, sym):
+    ut_small_all_version_store = version_store_factory(col_per_group=5, row_per_segment=10)
+    symbol = sym
+    lt = ut_small_all_version_store.library_tool()
+    ut_small_all_version_store.write(symbol, pd.DataFrame({"x": np.arange(10, dtype=np.int64)}))
+    ut_small_all_version_store.write(symbol, pd.DataFrame({"y": np.arange(10, dtype=np.int32)}))
+    df = sample_dataframe(1000)
+    ut_small_all_version_store.write(symbol, df)
+
+    assert len(ut_small_all_version_store.list_versions(symbol)) == 3
+    ut_small_all_version_store.delete(symbol)
+    for kt in KeyType.__members__.values():
+        if kt == KeyType.VERSION or kt == KeyType.VERSION_REF:
+            continue
+
+        assert len(lt.find_keys_for_id(kt, symbol)) == 0
+
+
+def test_delete_snapshot(version_store_factory):
+    lmdb_version_store = version_store_factory(col_per_group=5, row_per_segment=10)
+    lt = lmdb_version_store.library_tool()
+
+    symbol = "test_delete_snapshot"
+    snap = "test_delete_snapshot_snap"
+
+    df1 = sample_dataframe(1000)
+    lmdb_version_store.write(symbol, df1)
+    lmdb_version_store.snapshot(snap)
+
+    df2 = sample_dataframe(1000)
+    lmdb_version_store.write(symbol, df2, prune_previous_version=True)
+
+    # Should not raise as it exists in a snapshot
+    lmdb_version_store.read(symbol, 0)
+
+    assert_frame_equal(lmdb_version_store.read(symbol, as_of=snap).data, df1)
+
+    lmdb_version_store.delete_snapshot(snap)
+    with pytest.raises(NoDataFoundException):
+        lmdb_version_store.read(symbol, as_of=snap)
+
+    index_keys = lt.find_keys_for_id(KeyType.TABLE_INDEX, symbol)
+    for k in index_keys:
+        assert k.version_id != 0
+
+    data_keys = lt.find_keys_for_id(KeyType.TABLE_DATA, symbol)
+    for k in data_keys:
+        assert k.version_id != 0
+
+
+def test_tombstones_deleted_data_keys_prune(lmdb_version_store_prune_previous, sym):
+    lib = lmdb_version_store_prune_previous
+    assert lib._lib_cfg.lib_desc.version.write_options.prune_previous_version is True
+    assert lib._lib_cfg.lib_desc.version.write_options.use_tombstones is True
+    assert lib._lib_cfg.lib_desc.version.write_options.delayed_deletes is False
+    lib.write(sym, 1)
+    lib.write(sym, 2)
+    lib.write(sym, 3)
+    lib_tool = lib.library_tool()
+    data_keys = lib_tool.find_keys_for_id(KeyType.TABLE_DATA, sym)
+    assert len(data_keys) == 1
+
+    lib.delete(sym)
+    data_keys = lib_tool.find_keys_for_id(KeyType.TABLE_DATA, sym)
+    assert len(data_keys) == 0
+
+
+@pytest.mark.parametrize("delete_order", [[0, 1, 2], [1, 0, 2], [0, 2, 1], [1, 2, 0], [2, 0, 1], [2, 1, 0]])
+def test_tombstones_deleted_data_keys_version_delete(lmdb_version_store_prune_previous, sym, delete_order):
+    lib = lmdb_version_store_prune_previous
+    assert lib._lib_cfg.lib_desc.version.write_options.use_tombstones is True
+    assert lib._lib_cfg.lib_desc.version.write_options.delayed_deletes is False
+
+    lib.write(sym, 1)
+    lib.write(sym, 2, prune_previous_version=False)
+    lib.write(sym, 3, prune_previous_version=False)
+
+    lib_tool = lib.library_tool()
+    data_keys = lib_tool.find_keys_for_id(KeyType.TABLE_DATA, sym)
+    assert len(data_keys) == 3
+
+    for id in range(len(delete_order)):
+        lib.delete_version(sym, delete_order[id])
+        data_keys = lib_tool.find_keys_for_id(KeyType.TABLE_DATA, sym)
+        assert len(data_keys) == 2 - id
+
+
+def test_tombstones_deleted_data_keys_snapshot(lmdb_version_store_prune_previous, sym):
+    lib = lmdb_version_store_prune_previous
+    assert lib._lib_cfg.lib_desc.version.write_options.prune_previous_version is True
+    assert lib._lib_cfg.lib_desc.version.write_options.use_tombstones is True
+    assert lib._lib_cfg.lib_desc.version.write_options.delayed_deletes is False
+
+    lib.write(sym, 1)
+    lib.snapshot("mysnap1")
+    lib.write(sym, 2)
+    lib.snapshot("mysnap2")
+    lib.write(sym, 3)
+
+    lib_tool = lib.library_tool()
+    data_keys = lib_tool.find_keys_for_id(KeyType.TABLE_DATA, sym)
+    assert len(data_keys) == 3
+
+    lib.delete_version(sym, 2)
+
+    data_keys = lib_tool.find_keys_for_id(KeyType.TABLE_DATA, sym)
+    assert len(data_keys) == 2
+
+    lib.delete_snapshot("mysnap1")
+
+    data_keys = lib_tool.find_keys_for_id(KeyType.TABLE_DATA, sym)
+    assert len(data_keys) == 1
 
 
 def test_tombstone_of_non_existing_version(lmdb_version_store_tombstone, sym):

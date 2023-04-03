@@ -102,6 +102,8 @@ void register_bindings(py::module &m) {
 
     py::class_<AtomKey, std::shared_ptr<AtomKey>>(version, "AtomKey")
     .def(py::init())
+    .def(py::init<StreamId, VersionId, timestamp, ContentHash, IndexValue, IndexValue, KeyType>())
+    .def("change_id", &AtomKey::change_id)
     .def_property_readonly("id", &AtomKey::id)
     .def_property_readonly("version_id", &AtomKey::version_id)
     .def_property_readonly("creation_ts", &AtomKey::creation_ts)
@@ -109,6 +111,15 @@ void register_bindings(py::module &m) {
     .def_property_readonly("start_index", &AtomKey::start_index)
     .def_property_readonly("end_index", &AtomKey::end_index)
     .def_property_readonly("type", [](const AtomKey& self) {return self.type();})
+    .def("__repr__", &AtomKey::view)
+    ;
+
+    py::class_<RefKey, std::shared_ptr<RefKey>>(version, "RefKey")
+    .def(py::init())
+    .def(py::init<StreamId, KeyType>())
+    .def_property_readonly("id", &RefKey::id)
+    .def_property_readonly("type", [](const RefKey& self) {return self.type();})
+    .def("__repr__", &RefKey::view)
     ;
 
     py::class_<Value, std::shared_ptr<Value>>(version, "ValueType")
@@ -197,6 +208,9 @@ void register_bindings(py::module &m) {
     using PythonOutputFrame = arcticdb::pipelines::PythonOutputFrame;
     py::class_<PythonOutputFrame>(version, "PythonOutputFrame")
         .def(py::init<const SegmentInMemory&, std::shared_ptr<BufferHolder>>())
+        .def(py::init<>([](const SegmentInMemory& segment_in_memory) {
+            return PythonOutputFrame(segment_in_memory, std::make_shared<BufferHolder>());
+        }))
         .def_property_readonly("value", [](py::object & obj){
             auto& fd = obj.cast<PythonOutputFrame&>();
             return fd.arrays(obj);

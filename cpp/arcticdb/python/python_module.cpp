@@ -6,12 +6,13 @@
  */
 
 #include <arcticdb/async/python_bindings.hpp>
+#include <arcticdb/codec/python_bindings.hpp>
+#include <arcticdb/column_store/python_bindings.hpp>
 #include <arcticdb/storage/python_bindings.hpp>
 #include <arcticdb/stream/python_bindings.hpp>
+#include <arcticdb/toolbox/python_bindings.hpp>
 #include <arcticdb/version/python_bindings.hpp>
-#include <arcticdb/storage/python_bindings.hpp>
 #include <arcticdb/log/log.hpp>
-#include <arcticdb/util/pb_util.hpp>
 #include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/util/trace.hpp>
 #include <arcticdb/python/python_utils.hpp>
@@ -265,9 +266,9 @@ void register_metrics(py::module && m){
 
 PYBIND11_MODULE(arcticdb_ext, m) {
     m.doc() = R"pbdoc(
-        Arctic Native Extension plugin
+        ArcticDB Extension plugin
 
-        Top level package of arctic native extension plugin.
+        Top level package of ArcticDB extension plugin.
     )pbdoc";
     initialize_folly();
 #ifndef WIN32
@@ -280,8 +281,11 @@ PYBIND11_MODULE(arcticdb_ext, m) {
     register_error_code_ecosystem(exceptions);
 
     arcticdb::async::register_bindings(m);
+    arcticdb::codec::register_bindings(m);
+    arcticdb::column_store::register_bindings(m);
     arcticdb::storage::apy::register_bindings(m);
     arcticdb::stream::register_bindings(m);
+    arcticdb::toolbox::apy::register_bindings(m);
     arcticdb::version_store::register_bindings(m);
     register_configs_map_api(m);
     register_log(m.def_submodule("log"));

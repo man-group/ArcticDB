@@ -14,7 +14,7 @@ from itertools import chain, product
 
 from arcticdb.config import Defaults
 from arcticdb.version_store.helper import ArcticMemoryConfig
-from arcticdb_ext.storage import NoDataFoundException
+from arcticdb_ext.storage import KeyType, NoDataFoundException
 from arcticdb.util.test import config_context, random_string, assert_frame_equal
 
 
@@ -451,6 +451,35 @@ def test_with_snapshot_pruning_tombstones(lmdb_version_store_tombstone_and_pruni
         lib.read(symbol, 0)
 
 
+@pytest.mark.parametrize("map_timeout", get_map_timeouts())
+def test_normal_flow_with_snapshot_and_pruning(lmdb_version_store_tombstone_and_pruning, map_timeout, sym):
+    with config_context("VersionMap.ReloadInterval", map_timeout):
+        symbol = sym
+        lib = lmdb_version_store_tombstone_and_pruning
+
+        lib_tool = lmdb_version_store_tombstone_and_pruning.library_tool()
+        lib.write("sym1", 1)
+        lib.write("sym2", 1)
+
+        lib.snapshot("snap1")
+
+        lib.write("sym1", 2)
+        lib.write("sym1", 3)
+        lib.delete("sym1")
+        with pytest.raises(NoDataFoundException):
+            lib.read(symbol, 0)
+        assert lib.read("sym1", as_of="snap1").data == 1
+
+        assert len([ver for ver in lib.list_versions() if not ver["deleted"]]) == 1
+
+        version_keys = lib_tool.find_keys(KeyType.VERSION)
+        keys_for_a = [k for k in version_keys if k.id == "sym1"]
+        assert len(keys_for_a) == 3 * 2  # 2 keys for the number of writes
+
+        lib.write("sym1", 4)
+        assert len([ver for ver in lib.list_versions() if not ver["deleted"]]) == 2
+
+
 def test_deleting_tombstoned_versions(lmdb_version_store_tombstone_and_pruning, sym):
     lib = lmdb_version_store_tombstone_and_pruning
     lib.write(sym, 1)
@@ -458,6 +487,44 @@ def test_deleting_tombstoned_versions(lmdb_version_store_tombstone_and_pruning, 
     lib.write(sym, 1)
 
     # Two versions are tombstoned at this point.
+
+
+def test_delete_multi_keys(s3_version_store, sym):
+    lib = s3_version_store
+    lib.write(
+        sym,
+        data={"e": np.arange(1000), "f": np.arange(8000), "g": None},
+        metadata="realyolo2",
+        recursive_normalizers=True,
+    )
+    lt = lib.library_tool()
+    assert len(lt.find_keys(KeyType.MULTI_KEY)) != 0
+
+    lib.delete(sym)
+
+    assert len(lt.find_keys(KeyType.MULTI_KEY)) == 0
+    assert len(lt.find_keys(KeyType.TABLE_INDEX)) == 0
+    assert len(lt.find_keys(KeyType.TABLE_DATA)) == 0
+
+
+@pytest.mark.parametrize("map_timeout", get_map_timeouts())
+def test_delete_multi_keys_snapshot(lmdb_version_store, map_timeout, sym):
+    data = {"e": np.arange(1000), "f": np.arange(8000), "g": None}
+    lmdb_version_store.write(sym, data=data, metadata="realyolo2", recursive_normalizers=True)
+    lmdb_version_store.snapshot("mysnap1")
+    lmdb_version_store.delete(sym)
+
+    with pytest.raises(Exception):
+        lmdb_version_store.read(sym)
+
+    comp_dict(data, lmdb_version_store.read(sym, as_of="mysnap1").data)
+
+    lmdb_version_store.delete_snapshot("mysnap1")
+
+    lt = lmdb_version_store.library_tool()
+    assert len(lt.find_keys(KeyType.MULTI_KEY)) == 0
+    assert len(lt.find_keys(KeyType.TABLE_INDEX)) == 0
+    assert len(lt.find_keys(KeyType.TABLE_DATA)) == 0
 
 
 @pytest.mark.parametrize("index_start", range(10))
