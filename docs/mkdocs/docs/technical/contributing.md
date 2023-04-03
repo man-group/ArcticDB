@@ -1,19 +1,104 @@
-Setting up your OS dependencies
-===============================
+Docker Quickstart
+=================
 
-ManyLinux Docker image
-----------------------
-ManyLinux(https://github.com/pypa/manylinux) captures the common denominator of many Linux distributions,
-giving the confidence that code worked in this image runs everywhere.
+Note the below instructions will build a Linux X86_64 release.
 
-We [extend](https://github.com/man-group/ArcticDB/blob/master/build_tooling/build_many_linux_image.sh) it with
-additional dependencies for compilation purposes.
-You can download the output [here](https://github.com/man-group/ArcticDB/pkgs/container/cibuildwheel_manylinux).
+#### 1) Start the ArcticDB build docker image
 
-**We recommend you use this image for compilation and testing.**
+Run in a Linux terminal:
 
-Linux
------
+```bash
+docker pull ghcr.io/man-group/cibuildwheel_manylinux:2.12.1-3a897
+docker run -it ghcr.io/man-group/cibuildwheel_manylinux:2.12.1-3a897
+```
+
+> :warning: The below instructions do not have to be run in the provided docker image. They can be run against any Python installation on any Linux distribution as long as the basic build [dependencies are available](#setting-up-linux).
+> 
+> If running outside the provided docker image, please change `/opt/python/cp39-cp39/bin/python3` in the examples below 
+> to an appropriate path for Python.
+
+#### 2) Check out ArcticDB including submodules
+
+```bash
+cd 
+git clone https://github.com/man-group/ArcticDB.git
+cd ArcticDB
+git submodule init && git submodule update
+```
+
+#### 3) Kick off the build
+
+```bash
+MY_PYTHON=/opt/python/cp39-cp39/bin/python3  # change if outside docker container/building against a different python
+$MY_PYTHON -m pip install -U pip setuptools wheel grpcio-tools
+ARCTIC_CMAKE_PRESET=skip $MY_PYTHON setup.py develop
+# Change the below Python_EXECUTABLE value to build against a different Python version
+cmake -DPython_EXECUTABLE=$MY_PYTHON -DTEST=off --preset linux-debug cpp
+cmake --build --preset linux-debug cpp
+```
+
+#### 4) Run ArcticDB
+
+Ensure the below is run in the Git project root:
+
+```bash
+# PYTHONPATH first part = Python module, second part compiled C++ binary
+PYTHONPATH=`pwd`/python:`pwd`/cpp/out/linux-debug-build/arcticdb/ $MY_PYTHON
+```
+
+Now, inside the Python shell:
+
+```python
+from arcticdb import Arctic
+```
+
+Rather than setting the `PYTHONPATH` environment variable, you could install the appropriate paths into your Python environment by running (note that this will invoke the build tooling so will compile any changed files since the last compilation):
+
+```bash
+$MY_PYTHON -m pip install -ve .
+```
+
+Note that as this will copy the binary to your Python installation this will have to be run after each and every change of a C++ file. 
+
+FAQ
+===
+
+#### How do I build against different Python versions?
+
+Run `cmake` (configure, not build) with either:
+
+1. A different version of Python as the _first_ version of Python on your PATH or...
+2. Point the `Python_EXECUTABLE` CMake variable to a different Python binary
+
+Note that to build the ArcticDB C++ tests **you must have the Python static library available in your installation!**
+
+#### How do I run the Python tests?
+
+See [running tests below](#running-python-tests).
+
+#### How do I run the C++ tests?
+
+See [running tests below](#running-c-tests).
+
+#### How do I specify how many cores to build using?
+
+This is determined auto-magically by CMake at build time, but can be manually set by passing in `--parallel <num cores>` into the build command.
+
+Detailed Build Information
+==========================
+
+Docker Image Construction
+-------------------------
+
+The above docker image is built from [ManyLinux](https://github.com/pypa/manylinux). 
+Build script is located [here](https://github.com/man-group/ArcticDB/blob/master/build_tooling/build_many_linux_image.sh).
+
+GitHub output [here](https://github.com/man-group/ArcticDB/pkgs/container/cibuildwheel_manylinux).
+
+**We recommend you use this image for compilation and testing!**
+
+Setting up Linux
+----------------
 The codebase and build system can work with any reasonably recent Linux distribution with at least
 GCC 8 (10+ recommended) and CMake 3.12 (these instructions assume 3.21+).
 
@@ -26,79 +111,49 @@ See [pybind11 configuration](#pybind11-configuration).
 | Ubuntu | 20.04, 22.04 | build-essential g++-10 libpcre3-dev libsasl2-dev libsodium-dev libkrb5-dev libcurl4-openssl-dev python3-dev |
 | Centos | 7 | devtoolset-10-gcc-c++ openssl-devel cyrus-sasl-devel devtoolset-10-libatomic-devel libcurl-devel python3-devel |
 
-Windows
--------
+Setting up Windows
+------------------
 We recommend using Visual Studio 2022 (or later) to install the compiler (MSVC v142 or newer) and tools
 (Windows SDK, CMake, Python).
 
 The Python that comes with Visual Studio is sufficient for creating release builds, but for debug builds, you will have
 to separately download from [Python.org](https://www.python.org/downloads/windows/).
 
-Ways to build the code
-======================
-First steps
------------
-On Windows, you need to [configure `git` to allow symbolic links](https://stackoverflow.com/a/59761201).
+Running Python tests
+--------------------
 
-Recursively clone the repository:
-
-```bash
-git clone https://github.com/man-group/ArcticDB.git
-cd ArcticDB
-git submodule init && git submodule update
-```
-
-Quick check
------------
-If you just want to verify your setup, try running from the command line:
-
-```bash
-# Recursively checkout ArcticDB
-# Make sure the Python version you want is the first on the PATH
-
-python -m pip install -ve .
-```
-
-This will build and install ArcticDB in the current working directory.
-
-Compiling step by step
-----------------------
-During day-to-day development, it's quicker to rebuild only the part that changed.
-
-Below is `pip install -e .` broken down step by step:
-
-```bash
-# Install the necessary dependencies to run setup.py
-python -m pip install -U pip setuptools wheel grpcio-tools
-
-# Install the Python dependencies without compiling the C++
-ARCTIC_CMAKE_PRESET=skip python setup.py develop
-
-# Configure CMake (which compiles the dependencies using vcpkg)
-cmake --preset linux-debug
-
-# Compile the code
-cmake --build --preset linux-debug
-
-# Install the compiled module
-cmake --install cpp/out/linux-debug --component Python_Lib --prefix $PWD/python /cmake_install.cmake
-```
-<!-- TODO: make the install command simpler -->
-
-Running the tests
------------------
+With `python` pointing to a Python interpeter with `ArcticDB` installed/on the `PYTHON_PATH`:
 
 ```bash
 python -m pip install arcticdb[Testing]
 python -m pytest python/tests
 ```
 
+Running C++ tests
+-----------------
+
+Configure ArcticDB with TEST=on (default):
+
+```bash
+cmake -DPython_EXECUTABLE=<path to python> --preset linux-debug cpp
+```
+
+Note that `<path to python>` must point to a Python that is compatible with [Development.Embed](https://cmake.org/cmake/help/latest/module/FindPython.html). This will probably be the result of installing `python3-devel` from your dependency manager. 
+
+Inside the provided docker image, `python3-devel` resolves to Python 3.6 installed at `/usr/bin/python3`, so the resulting command will be:
+
+```bash
+cmake -DPython_EXECUTABLE=/usr/bin/python3 -DTEST=ON --preset linux-debug cpp
+```
+
+Then invoke the CMake build as normal and run the compiled test binary.
+
 CIBuildWheel
 ------------
+
 Our source repo works with [CIBuildWheel](https://github.com/pypa/cibuildwheel) which runs the compilation and tests
 against all supported Python versions in isolated environments.
 Please follow their documentation.
-
 
 Configurations
 ==============
