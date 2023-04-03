@@ -8,7 +8,7 @@ if _proto_ver in "34":
     # Use the namespace package (https://peps.python.org/pep-0420) feature to select the pb2 files matching the protobuf
     _sys.path.append(os.path.join(os.path.dirname(__file__), "proto", _proto_ver))
 else:
-    raise NotImplementedError(f"We do not support protobuf {_protobuf.__version__}")
+    raise NotImplementedError(f"We only support protobuf versions 3 & 4. You have {_protobuf.__version__}")
 
 from arcticdb.arctic import Arctic
 from arcticdb.options import LibraryOptions

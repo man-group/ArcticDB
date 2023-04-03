@@ -5,6 +5,7 @@ import glob
 import platform
 import shutil
 from pathlib import Path
+from tempfile import mkdtemp
 from setuptools import setup, Command, find_namespace_packages
 from setuptools import Extension, find_packages
 from setuptools.command.build_ext import build_ext
@@ -14,6 +15,9 @@ from wheel.bdist_wheel import bdist_wheel
 
 
 class CompileProto(Command):
+    # When adding new protobuf versions, also update: setup.cfg, python/arcticdb/__init__.py
+    _PROTOBUF_TO_GRPC_VERSION = {"3": "<=1.48.*", "4": ">=1.49"}
+
     description = '"protoc" generate code _pb2.py from .proto files'
     user_options = [
         ("build-lib=", "b", "Create the arcticdb/proto/*/arcticc/pb2 subdirectories inside this base directory"),
@@ -27,20 +31,52 @@ class CompileProto(Command):
     def finalize_options(self):
         self.set_undefined_options("build", ("build_lib", "build_lib"))  # Default to the output of the build command
         if self.proto_vers is None:
-            self.proto_vers = os.getenv("ARCTICDB_PROTOC_VERS", "34").strip()
+            self.proto_vers = os.getenv("ARCTICDB_PROTOC_VERS", "".join(self._PROTOBUF_TO_GRPC_VERSION)).strip()
 
     def run(self):
-        output_dir = self.build_lib.replace("\\", "/") + "/arcticdb/proto"
+        output_dir = os.path.join(self.build_lib, "arcticdb", "proto")
         python = sys.version_info[:2]
-        bash = shutil.which("bash")  # Windows searches PATH last, so do it by hand
         print(f"\nProtoc compilation (into '{output_dir}') for versions '{self.proto_vers}':")
         for proto_ver in self.proto_vers:
             if (python <= (3, 6) and proto_ver >= "4") or (python >= (3, 11) and proto_ver == "3"):
                 print(f"Python protobuf {proto_ver} do no run on Python {python}. Skipping...", file=sys.stderr)
             else:
-                cmd = [bash, "build_tooling/multi_version_protoc.sh", proto_ver, output_dir, sys.executable]
-                print("Running " + " ".join(cmd))
-                subprocess.check_call(cmd)
+                self._compile_one_version(proto_ver, os.path.join(output_dir, proto_ver))
+
+    def _compile_one_version(self, proto_ver: str, version_output_dir: str):
+        grpc_version = self._PROTOBUF_TO_GRPC_VERSION.get(proto_ver, None)
+        assert grpc_version, "Supported proto-vers argumets are " + ", ".join(self._PROTOBUF_TO_GRPC_VERSION)
+
+        # Manual virtualenv to avoid hard-coding Man internal locations:
+        pythonpath = mkdtemp()
+        subprocess.check_call(
+            [
+                sys.executable,
+                "-mpip",
+                "install",
+                "--disable-pip-version-check",
+                "--target=" + pythonpath,
+                "grpcio-tools" + grpc_version,
+            ]
+        )
+        env = {**os.environ, "PYTHONPATH": pythonpath}
+
+        # Check the transitively install protobuf version:
+        cmd = [sys.executable, "-c", "import google.protobuf ; print(google.protobuf.__version__)"]
+        installed_proto_ver = subprocess.check_output(cmd, env=env, universal_newlines=True)
+        match = installed_proto_ver.startswith(proto_ver + ".")
+        assert match, f"grpc{grpc_version} installed protobuf=={installed_proto_ver} but we expect {proto_ver}"
+
+        # Compile
+        os.makedirs(version_output_dir, exist_ok=True)
+        cmd = [sys.executable, "-mgrpc_tools.protoc", "-Icpp/proto", "--python_out=" + version_output_dir]
+        cmd.extend(glob.glob(os.path.normpath("cpp/proto/arcticc/pb2/*.proto")))
+        print("Running " + " ".join(cmd))
+        installed_proto_ver = subprocess.check_call(cmd, env=env)
+        open(version_output_dir + "/arcticc/__init__.py", "a").close()
+        open(version_output_dir + "/arcticc/pb2/__init__.py", "a").close()
+
+        shutil.rmtree(pythonpath)
 
 
 class CompileProtoAndBuild(build_py):
