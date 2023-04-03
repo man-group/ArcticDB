@@ -26,6 +26,7 @@ from arcticc.pb2.descriptors_pb2 import TypeDescriptor
 from arcticc.pb2.storage_pb2 import LibraryConfig, EnvironmentConfigsMap
 from arcticdb.preconditions import check
 from arcticdb.supported_types import time_types as supported_time_types
+from arcticdb.toolbox.library_tool import LibraryTool
 from arcticdb.version_store.processing import QueryBuilder
 from arcticdb_ext.storage import OpenMode as _OpenMode
 from arcticdb_ext.storage import (
@@ -2280,3 +2281,6 @@ class NativeVersionStore:
 
     def library(self):
         return self._library
+
+    def library_tool(self) -> LibraryTool:
+        return LibraryTool(self.library())
