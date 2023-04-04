@@ -25,7 +25,7 @@ import pytest
 import pandas as pd
 from datetime import datetime, date
 import numpy as np
-from arcticdb.util.test import assert_frame_equal, assert_series_equal
+from arcticdb.util.test import assert_frame_equal
 
 
 try:
@@ -49,7 +49,8 @@ except ImportError:
     )
 
 
-def library_creation_deletion(ac):
+def test_library_creation_deletion(arctic_client):
+    ac = arctic_client
     assert ac.list_libraries() == []
     ac.create_library("pytest_test_lib")
     with pytest.raises(ValueError):
@@ -65,16 +66,6 @@ def library_creation_deletion(ac):
     assert not ac.list_libraries()
     with pytest.raises(Exception):  # TODO: Nicely wrap?
         _lib = ac["pytest_test_lib"]
-
-
-def test_library_creation_deletion_s3(moto_s3_uri_incl_bucket):
-    ac = Arctic(moto_s3_uri_incl_bucket)
-    library_creation_deletion(ac)
-
-
-def test_library_creation_deletion_lmdb(tmpdir):
-    ac = Arctic(f"lmdb://{tmpdir}")
-    library_creation_deletion(ac)
 
 
 def test_library_options(moto_s3_uri_incl_bucket):
@@ -98,6 +89,7 @@ def test_library_options(moto_s3_uri_incl_bucket):
     assert write_options.de_duplication
     assert write_options.segment_row_size == 20
     assert write_options.column_group_size == 3
+    assert write_options.dynamic_strings
 
 
 def test_separation_between_libraries(moto_s3_uri_incl_bucket):
@@ -177,8 +169,7 @@ def test_library_management_path_prefix(moto_s3_uri_incl_bucket, boto_client):
 def test_basic_write_read_update_and_append(arctic_library):
     lib = arctic_library
     df = pd.DataFrame({"col1": [1, 2, 3], "col2": [4, 5, 6]})
-    written_vi = lib.write("my_symbol", df)
-    assert re.match(r"S3\(endpoint=localhost:\d+, bucket=test_bucket_\d+\)", written_vi.host)
+    lib.write("my_symbol", df)
 
     assert lib.list_symbols() == ["my_symbol"]
     assert_frame_equal(lib.read("my_symbol").data, df)
@@ -397,6 +388,10 @@ def test_repr(moto_s3_uri_incl_bucket):
         "config=S3("
         f"endpoint={s3_endpoint}, bucket={bucket})), path=pytest_test_lib, storage=s3_storage)"
     )
+
+    df = pd.DataFrame({"col1": [1, 2, 3], "col2": [4, 5, 6]})
+    written_vi = lib.write("my_symbol", df)
+    assert re.match(r"S3\(endpoint=localhost:\d+, bucket=test_bucket_\d+\)", written_vi.host)
 
 
 class A:
