@@ -11,6 +11,26 @@ from arcticdb_ext.storage import Library
 from abc import ABC, abstractmethod
 
 
+def set_library_options(lib_desc: "LibraryConfig", options: LibraryOptions):
+    write_options = lib_desc.version.write_options
+
+    write_options.dynamic_strings = True
+    write_options.recursive_normalizers = True
+    write_options.use_tombstones = True
+    write_options.fast_tombstone_all = True
+    lib_desc.version.symbol_list = True
+
+    write_options.prune_previous_version = False
+    write_options.pickle_on_failure = False
+    write_options.snapshot_dedup = False
+    write_options.delayed_deletes = False
+
+    write_options.dynamic_schema = options.dynamic_schema
+    write_options.de_duplication = options.dedup
+    write_options.segment_row_size = options.rows_per_segment
+    write_options.column_group_size = options.columns_per_segment
+
+
 class ArcticLibraryAdapter(ABC):
     CONFIG_LIBRARY_NAME = "_arctic_cfg"  # TODO: Should come from native module
 

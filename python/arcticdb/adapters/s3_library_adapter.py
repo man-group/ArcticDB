@@ -14,7 +14,7 @@ from arcticc.pb2.storage_pb2 import EnvironmentConfigsMap, LibraryConfig
 from arcticdb.version_store.helper import add_s3_library_to_env
 from arcticdb.config import _DEFAULT_ENV
 from arcticdb.version_store._store import NativeVersionStore
-from arcticdb.adapters.arctic_library_adapter import ArcticLibraryAdapter
+from arcticdb.adapters.arctic_library_adapter import ArcticLibraryAdapter, set_library_options
 from arcticdb_ext.storage import Library
 from collections import namedtuple
 from dataclasses import dataclass, fields
@@ -22,26 +22,6 @@ from distutils.util import strtobool
 
 PARSED_QUERY = namedtuple("PARSED_QUERY", ["region"])
 USE_AWS_CRED_PROVIDERS_TOKEN = "_RBAC_"
-
-
-def set_library_options(lib_desc: "LibraryConfig", options: LibraryOptions):
-    write_options = lib_desc.version.write_options
-
-    write_options.dynamic_strings = True
-    write_options.recursive_normalizers = True
-    write_options.use_tombstones = True
-    write_options.fast_tombstone_all = True
-    lib_desc.version.symbol_list = True
-
-    write_options.prune_previous_version = False
-    write_options.pickle_on_failure = False
-    write_options.snapshot_dedup = False
-    write_options.delayed_deletes = False
-
-    write_options.dynamic_schema = options.dynamic_schema
-    write_options.de_duplication = options.dedup
-    write_options.segment_row_size = options.rows_per_segment
-    write_options.column_group_size = options.columns_per_segment
 
 
 @dataclass

@@ -121,12 +121,23 @@ def moto_s3_uri_incl_bucket(moto_s3_endpoint_and_credentials):
     ] + ":" + bucket + "?access=" + aws_access_key + "&secret=" + aws_secret_key + "&port=" + port
 
 
-@pytest.fixture(scope="function")
-def arctic_library(moto_s3_uri_incl_bucket):
-    ac = Arctic(moto_s3_uri_incl_bucket)
+@pytest.fixture(scope="function", params=("S3", "LMDB"))
+def arctic_client(request, moto_s3_uri_incl_bucket, tmpdir):
+    if request.param == "S3":
+        ac = Arctic(moto_s3_uri_incl_bucket)
+    elif request.param == "LMDB":
+        ac = Arctic(f"lmdb://{tmpdir}")
+    else:
+        raise NotImplementedError()
+
     assert not ac.list_libraries()
-    ac.create_library("pytest_test_lib")
-    yield ac["pytest_test_lib"]
+    yield ac
+
+
+@pytest.fixture(scope="function")
+def arctic_library(arctic_client):
+    arctic_client.create_library("pytest_test_lib")
+    yield arctic_client["pytest_test_lib"]
 
 
 @pytest.fixture()
