@@ -311,6 +311,12 @@ void register_bindings(py::module &m) {
             .value("OR", OperationType::OR)
             .value("XOR", OperationType::XOR);
 
+    py::enum_<SortedValue>(version, "SortedValue")
+            .value("UNKNOWN", SortedValue::UNKNOWN)
+            .value("UNSORTED", SortedValue::UNSORTED)
+            .value("ASCENDING", SortedValue::ASCENDING)
+            .value("DESCENDING", SortedValue::DESCENDING);
+
     py::class_<ColumnName>(version, "ColumnName")
             .def(py::init([](const std::string& name) {
                 return ColumnName(name);

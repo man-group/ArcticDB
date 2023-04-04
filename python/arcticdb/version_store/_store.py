@@ -22,7 +22,7 @@ from pandas import Timestamp, to_datetime, Timedelta
 from typing import Any, Optional, Union, List, Mapping, Iterable, Sequence, Tuple, Dict, TYPE_CHECKING
 from contextlib import contextmanager
 
-from arcticc.pb2.descriptors_pb2 import TypeDescriptor
+from arcticc.pb2.descriptors_pb2 import TypeDescriptor, SortedValue
 from arcticc.pb2.storage_pb2 import LibraryConfig, EnvironmentConfigsMap
 from arcticdb.preconditions import check
 from arcticdb.supported_types import time_types as supported_time_types
@@ -448,6 +448,7 @@ class NativeVersionStore:
         metadata: Optional[Any] = None,
         prune_previous_version: Optional[bool] = None,
         pickle_on_failure: Optional[bool] = None,
+        validate_index: bool = False,
         **kwargs,
     ) -> Optional[VersionedItem]:
         """
@@ -483,6 +484,10 @@ class NativeVersionStore:
             Removes previous (non-snapshotted) versions from the database.
         pickle_on_failure: `bool`, default=False
             Pickle `data` if it can't be normalized.
+        validate_index: bool, default=False
+            If True, will verify that the index of `data` supports date range searches and update operations. This in effect tests that the data is sorted in ascending order. 
+            ArcticDB relies on Pandas to detect if data is sorted - you can call DataFrame.index.is_monotonic_increasing on your input DataFrame to see if Pandas believes the 
+            data to be sorted
         kwargs :
             passed through to the write handler
 
@@ -491,6 +496,11 @@ class NativeVersionStore:
         Optional[VersionedItem]
             Structure containing metadata and version number of the written symbol in the store.
             The data attribute will not be populated.
+
+        Raises
+        ------
+        UnsortedDataException
+            If data is unsorted, when validate_index is set to True.
 
         Examples
         --------
@@ -557,7 +567,7 @@ class NativeVersionStore:
                 return None
             else:
                 vit = self.version_store.write_versioned_dataframe(
-                    symbol, item, norm_meta, udm, prune_previous_version, sparsify_floats
+                    symbol, item, norm_meta, udm, prune_previous_version, sparsify_floats, validate_index
                 )
 
             return VersionedItem(
@@ -592,6 +602,7 @@ class NativeVersionStore:
         metadata: Optional[Any] = None,
         incomplete: bool = False,
         prune_previous_version: bool = False,
+        validate_index: bool = False,
         **kwargs,
     ) -> Optional[VersionedItem]:
         # FUTURE: use @overload and Literal for the existence of the return value once we ditch Python 3.6
@@ -614,6 +625,12 @@ class NativeVersionStore:
             not combined in any way with the metadata stored in the previous version.
         prune_previous_version
             Removes previous (non-snapshotted) versions from the database.
+        validate_index: bool, default=False
+            If True, will verify that resulting symbol will support date range searches and update operations. This in effect tests that the previous version of the 
+            data and `data` are both sorted in ascending order. ArcticDB relies on Pandas to detect if data is sorted - you can call DataFrame.index.is_monotonic_increasing 
+            on your input DataFrame to see if Pandas believes the data to be sorted
+        kwargs :
+            passed through to the write handler
 
         Returns
         -------
@@ -622,6 +639,11 @@ class NativeVersionStore:
             The data attribute will not be populated.
 
             Nothing is returned if `incomplete` is set because no new version will be written.
+
+        Raises
+        ------
+        UnsortedDataException
+            If data is unsorted, when validate_index is set to True.
 
         Examples
         --------
@@ -666,7 +688,7 @@ class NativeVersionStore:
                     self.version_store.append_incomplete(symbol, item, norm_meta, udm)
                 else:
                     vit = self.version_store.append(
-                        symbol, item, norm_meta, udm, write_if_missing, prune_previous_version
+                        symbol, item, norm_meta, udm, write_if_missing, prune_previous_version, validate_index
                     )
                     return VersionedItem(
                         symbol=vit.symbol,
@@ -968,6 +990,7 @@ class NativeVersionStore:
         metadata_vector: Optional[List[Any]] = None,
         prune_previous_version=None,
         pickle_on_failure=None,
+        validate_index: bool = False,
         **kwargs,
     ) -> List[VersionedItem]:
         """
@@ -991,6 +1014,12 @@ class NativeVersionStore:
             Remove previous versions from version list. Uses library default if left as None.
         pickle_on_failure : `Optional[bool]`, default=None
             Pickle results if normalization fails. Uses library default if left as None.
+        validate_index: bool, default=False
+            If True, will verify for each entry in the batch hat the index of `data` supports date range searches and update operations. 
+            This in effect tests that the data is sorted in ascending order. ArcticDB relies on Pandas to detect if data is sorted - 
+            you can call DataFrame.index.is_monotonic_increasing on your input DataFrame to see if Pandas believes the data to be sorted
+        kwargs :
+            passed through to the write handler
 
         Examples
         --------
@@ -1005,6 +1034,11 @@ class NativeVersionStore:
         List
             List of versioned items. The data attribute will be None for each versioned item.
             i-th entry corresponds to i-th element of `symbols`.
+            
+        Raises
+        ------
+        UnsortedDataException
+            If data is unsorted, when validate_index is set to True.
         """
         _check_batch_kwargs(NativeVersionStore.batch_write, NativeVersionStore.write, kwargs)
 
@@ -1042,7 +1076,9 @@ class NativeVersionStore:
         udms = [info[0] for info in normalized_infos]
         items = [info[1] for info in normalized_infos]
         norm_metas = [info[2] for info in normalized_infos]
-        cxx_versioned_items = self.version_store.batch_write(symbols, items, norm_metas, udms, prune_previous_version)
+        cxx_versioned_items = self.version_store.batch_write(
+            symbols, items, norm_metas, udms, prune_previous_version, validate_index
+        )
         return [self._convert_thin_cxx_item_to_python(v) for v in cxx_versioned_items]
 
     def batch_write_metadata(
@@ -1088,6 +1124,7 @@ class NativeVersionStore:
         data_vector: List[TimeSeriesType],
         metadata_vector: Optional[List[Any]] = None,
         prune_previous_version=None,
+        validate_index: bool = False,
         **kwargs,
     ) -> List[VersionedItem]:
         """
@@ -1109,12 +1146,23 @@ class NativeVersionStore:
             i-th entry corresponds to i-th element of `symbols`.
         prune_previous_version : `Optional[bool]`, default=None
             Remove previous versions from version list. Uses library default if left as None.
+        validate_index: bool, default=False
+            If True, will verify for each entry in the batch hat the index of `data` supports date range searches and update operations. 
+            This in effect tests that the data is sorted in ascending order. ArcticDB relies on Pandas to detect if data is sorted - 
+            you can call DataFrame.index.is_monotonic_increasing on your input DataFrame to see if Pandas believes the data to be sorted
+        kwargs :
+            passed through to the write handler
 
         Returns
         -------
         List
             List of versioned items. The data attribute will be None for each versioned item.
             i-th entry corresponds to i-th element of `symbols`.
+
+        Raises
+        ------
+        UnsortedDataException
+            If data is unsorted, when validate_index is set to True.
         """
         _check_batch_kwargs(NativeVersionStore.batch_append, NativeVersionStore.append, kwargs)
 
@@ -1126,6 +1174,7 @@ class NativeVersionStore:
             "prune_previous_version", proto_cfg, global_default=False, existing_value=prune_previous_version
         )
         dynamic_strings = self._resolve_dynamic_strings(kwargs)
+
         if metadata_vector is None:
             metadata_itr = itertools.repeat(None)
         else:
@@ -1148,7 +1197,9 @@ class NativeVersionStore:
         udms = [info[0] for info in normalized_infos]
         items = [info[1] for info in normalized_infos]
         norm_metas = [info[2] for info in normalized_infos]
-        cxx_versioned_items = self.version_store.batch_append(symbols, items, norm_metas, udms, prune_previous_version)
+        cxx_versioned_items = self.version_store.batch_append(
+            symbols, items, norm_metas, udms, prune_previous_version, validate_index
+        )
         return [self._convert_thin_cxx_item_to_python(v) for v in cxx_versioned_items]
 
     def batch_restore_version(
@@ -2225,6 +2276,7 @@ class NativeVersionStore:
             "normalization_metadata": desc.normalization,
             "type": self.get_arctic_style_type_info_for_norm(desc),
             "date_range": self.get_timerange_for_symbol(symbol, vit.version),
+            "sorted": SortedValue.Name(desc.stream_descriptor.sorted),
         }
 
     def write_metadata(
