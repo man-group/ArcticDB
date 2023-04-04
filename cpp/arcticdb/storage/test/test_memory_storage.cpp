@@ -25,7 +25,7 @@ TEST(InMemory, ReadTwice) {
     };
 
     auto test_frame =  get_test_frame<stream::TimeseriesIndex>(symbol, fields, num_rows, start_val);
-    version_store.write_versioned_dataframe_internal(symbol, std::move(test_frame.frame_), false, false);
+    version_store.write_versioned_dataframe_internal(symbol, std::move(test_frame.frame_), false, false, false);
 
     ReadQuery read_query;
     auto read_result1 = version_store.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, ReadOptions{});
