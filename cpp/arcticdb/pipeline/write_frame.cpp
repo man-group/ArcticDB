@@ -159,6 +159,41 @@ write_frame(
     return index::write_index(std::move(frame), std::move(fut_slice_keys), key, store);
 }
 
+arcticdb::entity::SortedValue deduce_sorted(arcticdb::proto::descriptors::SortedValue existing_sorted, arcticdb::proto::descriptors::SortedValue new_sorted){
+    auto final_sorted = arcticdb::entity::SortedValue::UNSORTED;
+    switch(existing_sorted){
+        case arcticdb::proto::descriptors::SortedValue::UNKNOWN:
+            if(new_sorted != arcticdb::proto::descriptors::SortedValue::UNSORTED){
+                final_sorted = arcticdb::entity::SortedValue::UNKNOWN;
+            }else{
+                final_sorted = arcticdb::entity::SortedValue::UNSORTED;
+            }
+            break;
+        case arcticdb::proto::descriptors::SortedValue::ASCENDING:
+            if(new_sorted  == arcticdb::proto::descriptors::SortedValue::UNKNOWN){
+                final_sorted = arcticdb::entity::SortedValue::UNKNOWN;
+            }else if (new_sorted  != arcticdb::proto::descriptors::SortedValue::ASCENDING){
+                final_sorted = arcticdb::entity::SortedValue::UNSORTED;
+            }else{
+                final_sorted = arcticdb::entity::SortedValue::ASCENDING;
+            }
+            break;
+        case arcticdb::proto::descriptors::SortedValue::DESCENDING:
+            if(new_sorted  == arcticdb::proto::descriptors::SortedValue::UNKNOWN){
+                final_sorted = arcticdb::entity::SortedValue::UNKNOWN;
+            }else if (new_sorted  != arcticdb::proto::descriptors::SortedValue::DESCENDING){
+                final_sorted = arcticdb::entity::SortedValue::UNSORTED;
+            }else{
+                final_sorted = arcticdb::entity::SortedValue::DESCENDING;
+            }
+            break;
+        default:
+            final_sorted = arcticdb::entity::SortedValue::UNSORTED;
+            break;
+    }
+    return final_sorted;
+}
+
 folly::Future<entity::AtomKey> append_frame(
         const IndexPartialKey& key,
         InputTensorFrame&& frame,
@@ -199,14 +234,15 @@ folly::Future<entity::AtomKey> append_frame(
     auto slices_to_write = std::move(existing_slices);
     slices_to_write.insert(std::end(slices_to_write), std::begin(slice_and_keys_to_append), std::end(slice_and_keys_to_append));
     std::sort(std::begin(slices_to_write), std::end(slices_to_write));
-
     if(dynamic_schema) {
         auto merged_descriptor =
             merge_descriptors(frame.desc, {index_segment_reader.tsd().stream_descriptor().fields()}, {});
+        merged_descriptor.set_sorted(deduce_sorted(index_segment_reader.mutable_tsd().stream_descriptor().sorted(), frame.desc.get_sorted()));
         auto pb_desc =
             make_descriptor(frame.num_rows + frame.offset, std::move(merged_descriptor), frame.norm_meta, std::move(frame.user_meta), std::nullopt, frame.bucketize_dynamic);
         return index::write_index(stream::index_type_from_descriptor(frame.desc), std::move(pb_desc), std::move(slices_to_write), key, store);
     } else {
+        frame.desc.set_sorted(deduce_sorted(index_segment_reader.mutable_tsd().stream_descriptor().sorted(), frame.desc.get_sorted()));
         return index::write_index(std::move(frame), std::move(slices_to_write), key, store);
     }
 }

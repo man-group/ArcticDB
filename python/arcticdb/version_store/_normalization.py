@@ -25,6 +25,7 @@ from collections import Counter
 from arcticdb.exceptions import ArcticNativeException, ArcticNativeNotYetImplemented
 from arcticdb.supported_types import time_types as supported_time_types
 from arcticdb.version_store.read_result import ReadResult
+from arcticdb_ext.version_store import SortedValue as _SortedValue
 from pandas.core.internals import make_block
 
 from pandas import DataFrame, MultiIndex, Series, DatetimeIndex, Index, RangeIndex
@@ -68,6 +69,7 @@ NPDDataFrame = NamedTuple(
         ("column_names", List[str]),
         ("index_values", List[np.ndarray]),
         ("columns_values", List[np.ndarray]),
+        ("sorted", _SortedValue),
     ],
 )
 
@@ -571,6 +573,7 @@ class NdArrayNormalizer(Normalizer):
                 index_values=[],
                 column_names=["ndarray"],
                 columns_values=[item.reshape(np.prod(item.shape))],
+                sorted=_SortedValue.UNKNOWN,
             ),
             metadata=norm_meta,
         )
@@ -782,9 +785,24 @@ class DataFrameNormalizer(_PandasNormalizer):
             norm_meta.df.common.columns.name = item.columns.name
         else:
             norm_meta.df.common.columns.fake_name = True
+
+        sort_status = _SortedValue.UNKNOWN
+        index = item.index
+        if hasattr(index, "is_monotonic_increasing"):
+            if index.is_monotonic_increasing:
+                sort_status = _SortedValue.ASCENDING
+            elif index.is_monotonic_decreasing:
+                sort_status = _SortedValue.DESCENDING
+            else:
+                sort_status = _SortedValue.UNSORTED
+
         return NormalizedInput(
             item=NPDDataFrame(
-                index_names=index_names, index_values=ix_vals, column_names=columns, columns_values=column_vals
+                index_names=index_names,
+                index_values=ix_vals,
+                column_names=columns,
+                columns_values=column_vals,
+                sorted=sort_status,
             ),
             metadata=norm_meta,
         )
@@ -861,7 +879,13 @@ class MsgPackNormalizer(Normalizer):
         column_val = np.array(memoryview(buffer[: size * 8]), np.uint8).view(np.uint64)
 
         return NormalizedInput(
-            item=NPDDataFrame(index_names=[], index_values=[], column_names=["bytes"], columns_values=[column_val]),
+            item=NPDDataFrame(
+                index_names=[],
+                index_values=[],
+                column_names=["bytes"],
+                columns_values=[column_val],
+                sorted=_SortedValue.UNKNOWN,
+            ),
             metadata=norm_meta,
         )
 
@@ -996,7 +1020,11 @@ class TimeFrameNormalizer(Normalizer):
 
         return NormalizedInput(
             item=NPDDataFrame(
-                index_names=index_names, index_values=ix_vals, column_names=columns_names, columns_values=columns_vals
+                index_names=index_names,
+                index_values=ix_vals,
+                column_names=columns_names,
+                columns_values=columns_vals,
+                sorted=_SortedValue.UNKNOWN,
             ),
             metadata=norm_meta,
         )
