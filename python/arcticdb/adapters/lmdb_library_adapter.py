@@ -13,7 +13,7 @@ from arcticc.pb2.storage_pb2 import EnvironmentConfigsMap, LibraryConfig
 from arcticdb.version_store.helper import add_lmdb_library_to_env
 from arcticdb.config import _DEFAULT_ENV
 from arcticdb.version_store._store import NativeVersionStore
-from arcticdb.adapters.arctic_library_adapter import ArcticLibraryAdapter
+from arcticdb.adapters.arctic_library_adapter import ArcticLibraryAdapter, set_library_options
 from arcticdb_ext.storage import Library
 
 
@@ -56,6 +56,8 @@ class LMDBLibraryAdapter(ArcticLibraryAdapter):
         env_cfg = EnvironmentConfigsMap()
 
         add_lmdb_library_to_env(env_cfg, lib_name=name, env_name=_DEFAULT_ENV, db_dir=self._path)
+
+        set_library_options(env_cfg.env_by_id[_DEFAULT_ENV].lib_by_path[name], library_options)
 
         lib = NativeVersionStore.create_store_from_config(env_cfg, _DEFAULT_ENV, name)
 
