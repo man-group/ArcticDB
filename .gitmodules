@@ -7,9 +7,6 @@
 [submodule "cpp/third_party/lmdbxx"]
 	path = cpp/third_party/lmdbxx
 	url = https://github.com/bendiken/lmdbxx.git
-[submodule "cpp/third_party/spdlog"]
-	path = cpp/third_party/spdlog
-	url = https://github.com/gabime/spdlog.git
 [submodule "cpp/third_party/recycle"]
 	path = cpp/third_party/recycle
 	url = https://github.com/steinwurf/recycle.git
