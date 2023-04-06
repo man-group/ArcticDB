@@ -468,3 +468,34 @@ def test_update_pickled_data(lmdb_version_store):
     df2 = pd.DataFrame({"a": [1000]}, index=idx[1:2])
     with pytest.raises(InternalException) as e_info:
         lmdb_version_store.update(symbol, df2)
+
+
+def test_update_with_daterange_different_column_group_size(arcticdb_test_lmdb_config, lib_name):
+    local_lib_cfg = arcticdb_test_lmdb_config(lib_name)
+    lib = local_lib_cfg.env_by_id[Defaults.ENV].lib_by_path[lib_name]
+    lib.version.write_options.column_group_size = 13
+    lmdb_version_store = ArcticMemoryConfig(local_lib_cfg, Defaults.ENV)[lib_name]
+
+    def get_frame_for_date_range(start, end):
+        df = pd.DataFrame(index=pd.date_range(start, end, freq="h"))
+        num_columns = 45
+        for i in range(num_columns):
+            df["value_" + str(i)] = df.index.day
+        return df
+
+    df1 = get_frame_for_date_range("2010-01-01", "2023-01-01")
+    lmdb_version_store.write("test", df1)
+    info = lmdb_version_store.get_info("test")
+    local_lib_cfg = arcticdb_test_lmdb_config(lib_name)
+    lib = local_lib_cfg.env_by_id[Defaults.ENV].lib_by_path[lib_name]
+    local_lib_cfg.env_by_id[Defaults.ENV].lib_by_path[lib_name].version.write_options.column_group_size = 5
+    lmdb_version_store = ArcticMemoryConfig(local_lib_cfg, Defaults.ENV)[lib_name]
+
+    df2 = get_frame_for_date_range("2020-06-01", "2022-06-01")
+    lmdb_version_store.update("test", df2)
+
+    read_data_range = DateRange("2012-01-01", "2022-08-01")
+    arctic_data = lmdb_version_store.read("test", columns=["value_5", "value_6"], date_range=read_data_range).data
+
+    dfcompare = get_frame_for_date_range("2012-01-01", "2022-08-01")[["value_5", "value_6"]]
+    assert_frame_equal(arctic_data, dfcompare)
