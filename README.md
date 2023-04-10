@@ -31,7 +31,7 @@ ArcticDB allows you to:
  * **Powerful processing**: Filter, aggregate and create new columns on-the-fly with a Pandas-like syntax
  * **C++ efficiency**: Accelerate analytics though concurrency in the C++ data-processing engine
 
-ArcticDB handles data that is big in both row count and column count, so a 20-year history of more than 400,000 unique securities can be stored in a single *symbol*. Each *symbol* is maintained as a separate entity with no shared data which means ArcticDB can scale horizontally across *symbols*, maximising the peformance potential of your compute, storage and network.
+ArcticDB handles data that is big in both row count and column count, so a 20-year history of more than 400,000 unique securities can be stored in a single *symbol*. Each *symbol* is maintained as a separate entity with no shared data which means ArcticDB can scale horizontally across *symbols*, maximising the performance potential of your compute, storage and network.
 
 ArcticDB is designed from the outset to be resilient; there is no single point of failure, and persistent data structures in the storage mean that once a version of a *symbol* has been written, it can never be corrupted by subsequent updates. Pulling compressed data directly from  storage to the client means that there is no server to overload, so your data is always available when you need it.
 
@@ -54,14 +54,17 @@ Import ArcticDB:
 Create an instance on your S3 storage (with or without explicit credentials):
 
 ```Python
->>> ac = Arctic('s3://MY_ENDPOINT:MY_BUCKET?aws_auth=true')  # Leave AWS to derive credential information
->>> ac = Arctic('s3://MY_ENDPOINT:MY_BUCKET?region=YOUR_REGION&access=ABCD&secret=DCBA') # Manually specify creds
+# Leave AWS to derive credential information
+>>> ac = Arctic('s3://MY_ENDPOINT:MY_BUCKET?aws_auth=true')
+
+# Manually specify creds
+>>> ac = Arctic('s3://MY_ENDPOINT:MY_BUCKET?region=YOUR_REGION&access=ABCD&secret=DCBA')
 ```
 
 Or create an instance on your local disk:
 
 ```Python
->>> ac = Arctic("lmdb:///<path>)  
+>>> ac = Arctic("lmdb:///<path>")  
 ```
 
 Create your first library and list the libraries in the instance:
@@ -73,6 +76,7 @@ Create your first library and list the libraries in the instance:
 
 Create a test dataframe:
 ```Python
+>>> import pandas as pd
 >>> NUM_COLUMNS=10
 >>> NUM_ROWS=100_000
 >>> df = pd.DataFrame(np.random.randint(0,100,size=(NUM_ROWS, NUM_COLUMNS)), columns=[f"COL_{i}" for i in range(NUM_COLUMNS)], index=pd.date_range('2000', periods=NUM_ROWS, freq='h'))

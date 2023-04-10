@@ -59,13 +59,13 @@ There are two methods to configure S3 access. If you happen to know the access a
 
 Otherwise, you can delegate authentication to the AWS SDK (obeys standard [AWS configuration options](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-files.html)):
 
-```
+```python
 >>> ac = Arctic('s3://ENDPOINT:BUCKET?aws_auth=true')
 ```
 
 Same as above, but using HTTPS:
 
-```
+```python
 >>> ac = Arctic('s3s://ENDPOINT:BUCKET?aws_auth=true')
 ```
 
@@ -107,7 +107,7 @@ are stored in collections called _libraries_. A single _library_ can store an ef
 
 _Libraries_ must first be initialized prior to use:
 
-```
+```python
 >>> ac.create_library('data')  # fixed schema - see note below
 >>> ac.list_libraries()
 ['data']
@@ -115,7 +115,7 @@ _Libraries_ must first be initialized prior to use:
 
 A library can then be retrieved:
 
-```
+```python
 >>> library = ac['data']
 ```
 

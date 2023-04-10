@@ -8,18 +8,12 @@ Users interact with the C++ storage engine, and therefore the storage itself, vi
 
 Please note that there is **no required server** component.
 
-<figure markdown>
-  ![Image title](../../images/ArcticArchitecture.png)
-  <figcaption>ArcticDB Architecture</figcaption>
-</figure>
+![ArcticDB Architecture](../images/ArcticArchitecture.png)
 
 ## ArcticDB DataFlow
 
 The below diagram visualises the flow of data through ArcticDB from source to storage and back again:
 
-<figure markdown>
-  ![Image title](../../images/ArcticDetailedArchitecture.png)
-  <figcaption>ArcticDB Architecture</figcaption>
-</figure>
+![ArcticDB Detailed Architecture](../images/ArcticDetailedArchitecture.png)
 
 For more information on the storage format, please see [On-Disk Storage](../on_disk_storage).
