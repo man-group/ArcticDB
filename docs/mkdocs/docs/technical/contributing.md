@@ -13,14 +13,14 @@ docker run -it ghcr.io/man-group/cibuildwheel_manylinux:2.12.1-3a897
 ```
 
 > :warning: The below instructions do not have to be run in the provided docker image. They can be run against any Python installation on any Linux distribution as long as the basic build [dependencies are available](#setting-up-linux).
-> 
-> If running outside the provided docker image, please change `/opt/python/cp39-cp39/bin/python3` in the examples below 
+>
+> If running outside the provided docker image, please change `/opt/python/cp39-cp39/bin/python3` in the examples below
 > to an appropriate path for Python.
 
 #### 2) Check out ArcticDB including submodules
 
 ```bash
-cd 
+cd
 git clone https://github.com/man-group/ArcticDB.git
 cd ArcticDB
 git submodule init && git submodule update
@@ -34,7 +34,10 @@ $MY_PYTHON -m pip install -U pip setuptools wheel grpcio-tools
 ARCTIC_CMAKE_PRESET=skip $MY_PYTHON setup.py develop
 # Change the below Python_EXECUTABLE value to build against a different Python version
 cmake -DPython_EXECUTABLE=$MY_PYTHON -DTEST=off --preset linux-debug cpp
-cmake --build --preset linux-debug cpp
+pushd cpp/out/linux-debug-build/arcticdb/
+make
+popd
+cmake -S cpp --preset linux-release
 ```
 
 #### 4) Run ArcticDB
@@ -58,7 +61,7 @@ Rather than setting the `PYTHONPATH` environment variable, you could install the
 $MY_PYTHON -m pip install -ve .
 ```
 
-Note that as this will copy the binary to your Python installation this will have to be run after each and every change of a C++ file. 
+Note that as this will copy the binary to your Python installation this will have to be run after each and every change of a C++ file.
 
 FAQ
 ===
@@ -90,7 +93,7 @@ Detailed Build Information
 Docker Image Construction
 -------------------------
 
-The above docker image is built from [ManyLinux](https://github.com/pypa/manylinux). 
+The above docker image is built from [ManyLinux](https://github.com/pypa/manylinux).
 Build script is located [here](https://github.com/man-group/ArcticDB/blob/master/build_tooling/build_many_linux_image.sh).
 
 GitHub output [here](https://github.com/man-group/ArcticDB/pkgs/container/cibuildwheel_manylinux).
@@ -138,7 +141,7 @@ Configure ArcticDB with TEST=on (default):
 cmake -DPython_EXECUTABLE=<path to python> --preset linux-debug cpp
 ```
 
-Note that `<path to python>` must point to a Python that is compatible with [Development.Embed](https://cmake.org/cmake/help/latest/module/FindPython.html). This will probably be the result of installing `python3-devel` from your dependency manager. 
+Note that `<path to python>` must point to a Python that is compatible with [Development.Embed](https://cmake.org/cmake/help/latest/module/FindPython.html). This will probably be the result of installing `python3-devel` from your dependency manager.
 
 Inside the provided docker image, `python3-devel` resolves to Python 3.6 installed at `/usr/bin/python3`, so the resulting command will be:
 

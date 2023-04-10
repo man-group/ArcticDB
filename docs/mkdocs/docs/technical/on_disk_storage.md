@@ -13,10 +13,7 @@ Despite this storage specific optimisation, the hierarchy and segment format rem
 
 ## Structural overview
 
-<figure markdown>
-  [![Structure](../images/ArcticDBSchema.png)](../images/ArcticDBSchema.png)
-  <figcaption>Storage Format Overview - S3</figcaption>
-</figure>
+![Storage Format Overview](../images/ArcticDBSchema.png)
 
 The above diagram provides an overview of this format, illustrating how ArcticDB manages the symbol metadata, version history and index layout of the data it stores. Not shown is the binary format used to store ArcticDB segments.
 
