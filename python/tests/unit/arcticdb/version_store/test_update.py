@@ -468,3 +468,32 @@ def test_update_pickled_data(lmdb_version_store):
     df2 = pd.DataFrame({"a": [1000]}, index=idx[1:2])
     with pytest.raises(InternalException) as e_info:
         lmdb_version_store.update(symbol, df2)
+
+def test_non_cstyle_numpy_update(lmdb_version_store):
+    symbol = "test_non_cstyle_numpy_update"
+    non_sorted_arr_1 = [
+        [1673740800, 846373.91],
+        [1673654400, 2243057.35],
+        [1673568000, 1091657.66],
+        [1673481600, 1523618.28],
+    ]
+    non_sorted_arr_2 = [
+        [1674000000, 990047.95],
+        [1673913600, 873934.74],
+        [1673827200, 1602216.77],
+        [1673740800, 846373.91],
+    ]
+
+    def _create_product_candles_df(arr):
+        timestamps = [pd.to_datetime(t[0], unit="s") for t in arr]
+        sorted_df = pd.DataFrame(data=arr, index=timestamps, columns=["time_start", "volume"])
+        return sorted_df.sort_index()
+
+    sorted_df_1 = _create_product_candles_df(non_sorted_arr_1)
+    sorted_df_2 = _create_product_candles_df(non_sorted_arr_2)
+
+    lmdb_version_store.write(symbol, sorted_df_1)
+    lmdb_version_store.update(symbol, sorted_df_2)
+    after_arctic = lmdb_version_store.read(symbol).data
+    before_arctic = pd.concat([sorted_df_1.iloc[:-1], sorted_df_2])
+    assert_frame_equal(after_arctic, before_arctic)
