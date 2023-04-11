@@ -514,6 +514,9 @@ void register_bindings(py::module &m) {
         .def("read_descriptor",
              &PythonVersionStore::read_descriptor,
              "Get back the descriptor for a symbol.")
+        .def("batch_read_descriptor",
+             &PythonVersionStore::batch_read_descriptor,
+             "Get back the descriptor of a list of symbols.")
         .def("restore_version",
              [&](PythonVersionStore& v,  StreamId sid, const VersionQuery& version_query) {
                 auto [vit, tsd] = v.restore_version(sid, version_query);

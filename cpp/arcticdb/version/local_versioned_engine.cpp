@@ -249,6 +249,32 @@ std::pair<VersionedItem, FrameAndDescriptor> LocalVersionedEngine::read_datafram
     return std::make_pair(version.value_or(VersionedItem{}), std::move(frame_and_descriptor));
 }
 
+std::pair<VersionedItem, std::optional<google::protobuf::Any>> LocalVersionedEngine::read_descriptor_version_internal(
+        const StreamId& stream_id,
+        const VersionQuery& version_query
+    ) {
+    ARCTICDB_SAMPLE(ReadDescriptor, 0)
+
+    auto version = get_version_to_read(stream_id, version_query);
+    version::check<ErrorCode::E_NO_SUCH_VERSION>(static_cast<bool>(version),
+                                                 "Unable to retrieve descriptor data. {}@{}: version not found", stream_id, version_query);
+
+    auto metadata_proto = store()->read_metadata(version->key_).get().second;
+    return std::pair{version.value(), metadata_proto};
+}
+
+std::vector<std::pair<VersionedItem, std::optional<google::protobuf::Any>>> LocalVersionedEngine::batch_read_descriptor_internal(
+        const std::vector<StreamId>& stream_ids,
+        const std::vector<VersionQuery>& version_queries) {
+    std::vector<folly::Future<std::pair<VersionedItem, std::optional<google::protobuf::Any>>>> results_fut;
+    for (size_t idx=0; idx < stream_ids.size(); idx++) {
+        auto version_query = version_queries.size() > idx ? version_queries[idx] : VersionQuery{};
+        results_fut.push_back(read_descriptor_version_internal(stream_ids[idx],
+                                                              version_query));
+    }
+    return folly::collect(results_fut).get();
+}
+
 void LocalVersionedEngine::flush_version_map() {
     version_map()->flush();
 }
