@@ -14,12 +14,11 @@ from numpy import datetime64
 from arcticdb.supported_types import Timestamp
 
 from arcticdb.version_store.processing import QueryBuilder
-from arcticdb.version_store._store import NativeVersionStore, VersionedItem
+from arcticdb.version_store._store import NativeVersionStore, VersionedItem, VersionQueryInput
 from arcticdb_ext.exceptions import ArcticException
 import pandas as pd
 import numpy as np
 import logging
-
 
 logger = logging.getLogger(__name__)
 
@@ -200,6 +199,26 @@ class ReadRequest(NamedTuple):
     columns: Optional[List[str]] = None
     query_builder: Optional[QueryBuilder] = None
 
+
+class ReadInfoRequest(NamedTuple):
+    """ReadInfoRequest is useful for batch methods like read_metadata_batch and get_description_batch, where we
+    only need to specify the symbol and the version information. Therefore, construction of this object is 
+    only required for these batch operations.
+
+    Attributes
+    ----------
+    symbol : str
+        See `read_metadata` method.
+    as_of: Optional[AsOf], default=none
+        See `read_metadata` method.
+
+    See Also
+    --------
+    Library.read: For documentation on the parameters.
+    """
+
+    symbol: str
+    as_of: Optional[AsOf] = None
 
 class StagedDataFinalizeMethod(Enum):
     WRITE = auto()
@@ -848,7 +867,7 @@ class Library:
 
         Parameters
         ----------
-        symbols : List[Union[str, ReadRequest]
+        symbols : List[Union[str, ReadRequest]]
             List of symbols to read.
 
         query_builder: Optional[QueryBuilder], default=None
@@ -940,6 +959,50 @@ class Library:
             will be None.
         """
         return self._nvs.read_metadata(symbol, as_of)
+
+    def read_metadata_batch(
+        self, symbols: List[Union[str, ReadInfoRequest]]
+    ) -> List[VersionedItem]:
+        """
+        Reads the metadata of multiple symbols.
+
+        Parameters
+        ----------
+        symbols : List[Union[str, ReadInfoRequest]]
+            List of symbols to read.
+        
+        Returns
+        -------
+        List[VersionedItem]
+            A list of the read results, whose i-th element corresponds to the i-th element of the ``symbols`` parameter.
+            A VersionedItem object with the metadata field set as None will be returned if the requested version of the 
+                symbol exists but there is no metadata
+            A None object will be returned if the requested version of the symbol does not exist
+        
+        See Also
+        --------
+        read_metadata
+        """
+        symbol_strings = []
+        as_ofs = []
+        def handle_read_request(s_):
+            symbol_strings.append(s_.symbol)
+            as_ofs.append(s_.as_of)
+
+        def handle_symbol(s_):
+            symbol_strings.append(s_)
+            as_ofs.append(None)
+
+        for s in symbols:
+            if isinstance(s, str):
+                handle_symbol(s)
+            elif isinstance(s, ReadInfoRequest):
+                handle_read_request(s)
+            else:
+                raise ArcticInvalidApiUsageException(
+                    f"Invalid symbol type s=[{s}] type(s)=[{type(s)}]. Only [str] and [ReadInfoRequest] are supported."
+                )
+        return self._nvs._batch_read_meta_to_versioned_items(symbol_strings, as_ofs)
 
     def write_metadata(self, symbol: str, metadata: Any) -> VersionedItem:
         """
@@ -1290,16 +1353,16 @@ class Library:
         )
 
     def get_description_batch(
-        self, symbols: List[Union[str, ReadRequest]]
+        self, symbols: List[Union[str, ReadInfoRequest]]
     ) -> List[SymbolDescription]:
         """
         Returns descriptive data for a list of ``symbols``.
 
         Parameters
         ----------
-        symbols : List[Union[str, ReadRequest]
+        symbols : List[Union[str, ReadInfoRequest]]
             List of symbols to read.
-            Params columns, date_range and query_builder from ReadRequest are not used
+            Params columns, date_range and query_builder from ReadInfoRequest are not used
 
         Returns
         -------
@@ -1315,12 +1378,6 @@ class Library:
         as_ofs = []
         def handle_read_request(s):
             symbol_strings.append(s.symbol)
-            if s.date_range is not None:
-                warnings.warn("Read batch metadata does not make use of of the data_range field", SyntaxWarning, stacklevel=2)
-            if s.columns is not None:
-                warnings.warn("Read batch metadata does not make use of the columns field", SyntaxWarning, stacklevel=2)
-            if s.query_builder is not None:
-                warnings.warn("Read batch metadata does not make use of the query field", SyntaxWarning, stacklevel=2)
             as_ofs.append(s.as_of)
 
         def handle_symbol(s):
@@ -1330,11 +1387,11 @@ class Library:
         for s in symbols:
             if isinstance(s, str):
                 handle_symbol(s)
-            elif isinstance(s, ReadRequest):
+            elif isinstance(s, ReadInfoRequest):
                 handle_read_request(s)
             else:
                 raise ArcticInvalidApiUsageException(
-                    f"Unsupported item in the symbols argument s=[{s}] type(s)=[{type(s)}]. Only [str] and [ReadRequest] are supported."
+                    f"Unsupported item in the symbols argument s=[{s}] type(s)=[{type(s)}]. Only [str] and [ReadInfoRequest] are supported."
                 )
 
         infos = self._nvs.batch_get_info(symbol_strings, as_ofs)

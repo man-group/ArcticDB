@@ -175,7 +175,7 @@ public:
         return async::submit_io_task(ReadCompressedTask{key, library_, opts});
     }
 
-    folly::Future<std::pair<VariantKey, std::optional<google::protobuf::Any>>>
+    folly::Future<std::pair<std::optional<VariantKey>, std::optional<google::protobuf::Any>>>
     read_metadata(const entity::VariantKey &key, storage::ReadKeyOpts opts) override {
         return async::submit_io_task(ReadCompressedTask{key, library_, opts})
             .via(&async::cpu_executor())

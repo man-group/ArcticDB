@@ -323,7 +323,7 @@ namespace arcticdb {
 
         HashedValue content_hash_ = 0x42;
 
-        folly::Future<std::pair<VariantKey, std::optional<google::protobuf::Any>>>
+        folly::Future<std::pair<std::optional<VariantKey>, std::optional<google::protobuf::Any>>>
 
         read_metadata(const entity::VariantKey &key, storage::ReadKeyOpts) override {
             return util::variant_match(key,
@@ -333,7 +333,7 @@ namespace arcticdb {
                                            if (it == seg_by_atom_key_.end())
                                                throw storage::KeyNotFoundException(Composite<VariantKey>(ak));
                                            ARCTICDB_DEBUG(log::storage(), "Mock store removing data for atom key {}", ak);
-                                           return std::make_pair(key, std::make_optional<google::protobuf::Any>(*it->second->metadata()));
+                                           return std::make_pair(std::make_optional<VariantKey>(key), std::make_optional<google::protobuf::Any>(*it->second->metadata()));
                                        },
                                        [&](const RefKey &rk) {
                                            auto it = seg_by_ref_key_.find(rk);
@@ -341,7 +341,7 @@ namespace arcticdb {
                                            if (it == seg_by_ref_key_.end())
                                                throw storage::KeyNotFoundException(Composite<VariantKey>(rk));
                                            ARCTICDB_DEBUG(log::storage(), "Mock store removing data for ref key {}", rk);
-                                           return std::make_pair(key, std::make_optional<google::protobuf::Any>(*it->second->metadata()));
+                                           return std::make_pair(std::make_optional<VariantKey>(key), std::make_optional<google::protobuf::Any>(*it->second->metadata()));
                                        });
         }
 
