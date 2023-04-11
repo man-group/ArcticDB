@@ -807,9 +807,8 @@ class MsgPackNormalizer(Normalizer):
     Fall back plan for the time being to store arbitrary data
     """
 
-    MMAP_DEFAULT_SIZE = 1 << 32  # Allow up to 4 gib pickles in memory, most of these compress fairly well.
-    # Allow 4gb extension and bin sizes in msgpack by default.
-    MSG_PACK_MAX_SIZE = 1 << 32
+    MMAP_DEFAULT_SIZE = (1 << 32) - 1  # Maximum object size allowed by msgpack
+    MSG_PACK_MAX_SIZE = (1 << 32) - 1
 
     def __init__(self, cfg=None):
         self._size = MsgPackNormalizer.MMAP_DEFAULT_SIZE if cfg is None else cfg.max_blob_size
@@ -1173,12 +1172,11 @@ _NORMALIZER = CompositeNormalizer()
 normalize = _NORMALIZER.normalize
 denormalize = _NORMALIZER.denormalize
 
-_MAX_USER_DEFINED_META = 16 << 20
+_MAX_USER_DEFINED_META = MsgPackNormalizer.MMAP_DEFAULT_SIZE
 
 
 def _init_msgpack_metadata():
     cfg = VersionStoreConfig.MsgPack()
-    cfg.max_blob_size = _MAX_USER_DEFINED_META
     return MsgPackNormalizer(cfg)
 
 

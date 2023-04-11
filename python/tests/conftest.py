@@ -50,7 +50,6 @@ configure_test_logger()
 
 BUCKET_ID = 0
 
-
 def run_server(port):
     werkzeug.run_simple(
         "0.0.0.0", port, DomainDispatcherApplication(create_backend_app, service="s3"), threaded=True, ssl_context=None

@@ -43,7 +43,7 @@ params = {
     "pd_ts": {"a": pd.Timestamp("2018-01-12 09:15"), "b": pd.Timestamp("2017-01-31", tz="America/New_York")},
 }
 
-# Use a smaller memory mapped limit for this test, no point memor mapping 2g
+# Use a smaller memory mapped limit for all tests, or will hit the memory size limit in github action
 MsgPackNormalizer.MMAP_DEFAULT_SIZE = 20 * (1 << 20)
 test_msgpack_normalizer = MsgPackNormalizer()
 
@@ -77,7 +77,7 @@ def test_fails_humongous_meta():
 def test_fails_humongous_data():
     norm = test_msgpack_normalizer
     with pytest.raises(ArcticNativeNotYetImplemented):
-        big = [1] * (norm.MMAP_DEFAULT_SIZE + 1)
+        big = [1] * norm.MMAP_DEFAULT_SIZE
         norm.normalize(big)
 
 
