@@ -22,6 +22,7 @@ methods.
     arcticdb.version_store.library.SymbolDescription
     arcticdb.version_store.library.WritePayload
     arcticdb.version_store.library.ReadRequest
+    arcticdb.version_store.library.ReadInfoRequest
 
 .. autoclass:: arcticdb.version_store.library.Library
     :special-members: __init__
