@@ -209,7 +209,7 @@ inline version_store::TombstoneVersionResult tombstone_version(
         // It is possible to have a tombstone key without a corresponding index_key
         // This scenario can happen in case of DR sync
         if (entry->is_tombstoned(version_id)) {
-            util::raise_rte("Version {} for symbol {} is already deleted", stream_id, version_id);
+            util::raise_rte("Version {} for symbol {} is already deleted", version_id, stream_id);
         } else {
             if (!allow_tombstoning_beyond_latest_version) {
                 auto latest_key = get_latest_version(store, version_map, stream_id, true, false);
