@@ -34,10 +34,9 @@ $MY_PYTHON -m pip install -U pip setuptools wheel grpcio-tools
 ARCTIC_CMAKE_PRESET=skip $MY_PYTHON setup.py develop
 # Change the below Python_EXECUTABLE value to build against a different Python version
 cmake -DPython_EXECUTABLE=$MY_PYTHON -DTEST=off --preset linux-debug cpp
-pushd cpp/out/linux-debug-build/arcticdb/
-make
+pushd cpp
+cmake --build --preset linux-debug
 popd
-cmake -S cpp --preset linux-release
 ```
 
 #### 4) Run ArcticDB
