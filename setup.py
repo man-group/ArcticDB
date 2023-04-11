@@ -73,8 +73,6 @@ class CompileProto(Command):
         cmd.extend(glob.glob(os.path.normpath("cpp/proto/arcticc/pb2/*.proto")))
         print("Running " + " ".join(cmd))
         installed_proto_ver = subprocess.check_call(cmd, env=env)
-        open(version_output_dir + "/arcticc/__init__.py", "a").close()
-        open(version_output_dir + "/arcticc/pb2/__init__.py", "a").close()
 
         shutil.rmtree(pythonpath)
 
