@@ -107,10 +107,11 @@ struct NativeTensor {
         util::warn(strides_condition,
                    "Cannot safely ptr_cast to type of size {} when strides ({}) is not a multiple of elsize ({}) in NativeTensor with dtype {}",
                    sizeof(T), strides_[0], elsize_, data_type());
+        ssize_t signed_pos = pos;
         if (dimension_condition && elsize_condition && strides_condition) {
-            pos *= strides_[0] / elsize_;
+            signed_pos *= strides_[0] / elsize_;
         }
-        return (&(reinterpret_cast<const T *>(ptr)[pos]));
+        return (&(reinterpret_cast<const T *>(ptr)[signed_pos]));
     }
 
     // returns number of elements, not bytesize
