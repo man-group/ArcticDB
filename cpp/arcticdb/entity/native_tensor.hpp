@@ -107,7 +107,7 @@ struct NativeTensor {
         util::warn(strides_condition,
                    "Cannot safely ptr_cast to type of size {} when strides ({}) is not a multiple of elsize ({}) in NativeTensor with dtype {}",
                    sizeof(T), strides_[0], elsize_, data_type());
-        ssize_t signed_pos = pos;
+        int64_t signed_pos = pos;
         if (dimension_condition && elsize_condition && strides_condition) {
             signed_pos *= strides_[0] / elsize_;
         }
