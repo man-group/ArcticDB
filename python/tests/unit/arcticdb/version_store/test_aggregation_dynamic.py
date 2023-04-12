@@ -25,7 +25,6 @@ from arcticdb.util.hypothesis import (
     non_zero_numeric_type_strategies,
     string_strategy,
 )
-from tests.util.mark import until
 
 
 def assert_equal_value(data, expected):
@@ -266,7 +265,7 @@ def test_segment_without_aggregation_column(lmdb_version_store_dynamic_schema):
         assert_equal_value(received, expected)
 
 
-@until("2023-04-10", pytest.mark.xfail(reason="ArcticDB/issues/130"))
+@pytest.mark.xfail(reason="ArcticDB/issues/130")
 def test_minimal_repro_type_change(lmdb_version_store_dynamic_schema):
     lib = lmdb_version_store_dynamic_schema
     sym = "test_minimal_repro_type_change"
@@ -284,7 +283,7 @@ def test_minimal_repro_type_change(lmdb_version_store_dynamic_schema):
     assert_equal_value(received, expected)
 
 
-@until("2023-04-10", pytest.mark.xfail(reason="ArcticDB/issues/130"))
+@pytest.mark.xfail(reason="ArcticDB/issues/130")
 def test_minimal_repro_type_change_max(lmdb_version_store_dynamic_schema):
     lib = lmdb_version_store_dynamic_schema
     sym = "test_minimal_repro_type_change_max"
