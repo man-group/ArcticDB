@@ -36,7 +36,6 @@ from arcticdb.version_store._normalization import (
 from arcticdb.version_store._common import TimeFrame
 from arcticdb.util.test import param_dict, CustomThing, TestCustomNormalizer, assert_frame_equal, assert_series_equal
 from arcticdb.exceptions import ArcticNativeException
-from tests.util.mark import until
 
 
 params = {
@@ -82,27 +81,14 @@ def test_fails_humongous_data():
         norm.normalize(big)
 
 
-def create_df_params():
-    params = dict()
-    if pd.__version__.startswith("1"):
-        df = pd.DataFrame(data={"C": []}, index=pd.MultiIndex(levels=[["A"], ["B"]], codes=[[], []], names=["X", "Y"]))
-    else:
-        df = pd.DataFrame(data={"C": []}, index=pd.MultiIndex(levels=[["A"], ["B"]], labels=[[], []], names=["X", "Y"]))
-    params["empty_midx"] = df
-    return params
-
-
-@until("2023-04-10", pytest.mark.xfail(reason="Leave failing until underlying error message has improved"))
-@param_dict("d", create_df_params())
-def test_store_df(d):
+def test_empty_df():
+    d = pd.DataFrame(data={"C": []}, index=pd.MultiIndex(levels=[["A"], ["B"]], codes=[[], []], names=["X", "Y"]))
     norm = CompositeNormalizer()
-    df, norm_meta = norm.normalize(d)
+    # TODO: Remove coerce_columns (#224) and/or hard-coded index column name (#222)
+    df, norm_meta = norm.normalize(d, coerce_columns={"__idx__Y": "O", "C": "float64"})
     fd = FrameData.from_npd_df(df)
     D = norm.denormalize(fd, norm_meta)
-    if pd.__version__.startswith("1"):
-        assert_equal(d.index.to_numpy(), D.index.to_numpy())
-    else:
-        assert_equal(d.index.get_values(), D.index.get_values())
+    assert_equal(d.index.to_numpy(), D.index.to_numpy())
     D.index = d.index
     assert_frame_equal(d, D)
 
