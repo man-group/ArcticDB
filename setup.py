@@ -16,7 +16,7 @@ from wheel.bdist_wheel import bdist_wheel
 
 class CompileProto(Command):
     # When adding new protobuf versions, also update: setup.cfg, python/arcticdb/__init__.py
-    _PROTOBUF_TO_GRPC_VERSION = {"3": "<=1.48.*", "4": ">=1.49"}
+    _PROTOBUF_TO_GRPC_VERSION = {"3": "<=1.30.*", "4": ">=1.49"}
 
     description = '"protoc" generate code _pb2.py from .proto files'
     user_options = [
@@ -39,13 +39,13 @@ class CompileProto(Command):
         print(f"\nProtoc compilation (into '{output_dir}') for versions '{self.proto_vers}':")
         for proto_ver in self.proto_vers:
             if (python <= (3, 6) and proto_ver >= "4") or (python >= (3, 11) and proto_ver == "3"):
-                print(f"Python protobuf {proto_ver} do no run on Python {python}. Skipping...", file=sys.stderr)
+                print(f"Python protobuf {proto_ver} do not run on Python {python}. Skipping...")
             else:
                 self._compile_one_version(proto_ver, os.path.join(output_dir, proto_ver))
 
     def _compile_one_version(self, proto_ver: str, version_output_dir: str):
         grpc_version = self._PROTOBUF_TO_GRPC_VERSION.get(proto_ver, None)
-        assert grpc_version, "Supported proto-vers argumets are " + ", ".join(self._PROTOBUF_TO_GRPC_VERSION)
+        assert grpc_version, "Supported proto-vers arguments are " + ", ".join(self._PROTOBUF_TO_GRPC_VERSION)
 
         # Manual virtualenv to avoid hard-coding Man internal locations:
         pythonpath = mkdtemp()
@@ -123,11 +123,7 @@ class CMakeBuild(build_ext):
                 f"-DBUILD_PYTHON_VERSION={sys.version_info[0]}.{sys.version_info[1]}",
                 *install_args,
             ]
-            cmake_check = subprocess.run([cmake, "-P", "cpp/CMake/CheckSupportsPreset.cmake"])
-            if cmake_check.returncode == 0:
-                self._configure_cmake_using_preset(cmake, common_args, preset, search)
-            else:
-                self._configure_for_legacy_image(common_args, "cpp/out/legacy-build")
+            self._configure_cmake_using_preset(cmake, common_args, preset, search)
             candidates = glob.glob(search)
 
         assert len(candidates) == 1, f"Specify {env_var} or use a single build directory. {search}={candidates}"
@@ -147,34 +143,6 @@ class CMakeBuild(build_ext):
             file=sys.stderr,
         )
         subprocess.check_call([cmake, *common_args, "--preset", preset], cwd="cpp")
-
-    def _configure_for_legacy_image(self, common_args, build_dir):
-        print("Legacy cmake configuration")
-        env = {
-            "TERM": "linux",  # to get colors
-            "PATH": "/opt/gcc/8.2.0/bin:/opt/cmake/bin:/usr/bin:/usr/local/bin:/bin:/sbin:/usr/sbin:/usr/local/sbin",
-            "CXX": "/opt/gcc/8.2.0/bin/g++",
-            "CC": "/opt/gcc/8.2.0/bin/gcc",
-        }
-        if "MB_PYTHON_PLATFORM_NAME" in os.environ:
-            python_root_dir = "/default-pegasus-venv"
-        else:
-            python_root_dir = Path(os.path.dirname(sys.executable)).parent
-
-        # If the cmake don't support presets, it also won't support FindPython Development.Module
-
-        process_args = [
-            "cmake",
-            f"-DPython_ROOT_DIR={python_root_dir}",
-            *common_args,
-            "-G",
-            "CodeBlocks - Unix Makefiles",
-            os.path.join(os.getcwd(), "cpp"),
-        ]
-
-        if not os.path.exists(build_dir):
-            os.makedirs(build_dir, mode=0o755)
-        subprocess.check_call(process_args, env=env, cwd=build_dir)  # No shell=True here because cmake is in env.PATH
 
 
 if __name__ == "__main__":
