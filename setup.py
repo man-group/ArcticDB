@@ -29,7 +29,12 @@ class CompileProto(Command):
         self.proto_vers = None
 
     def finalize_options(self):
-        self.set_undefined_options("build", ("build_lib", "build_lib"))  # Default to the output of the build command
+        print(self.distribution.commands)
+        if not self.build_lib:
+            if "editable_wheel" in self.distribution.commands:
+                self.build_lib = "python"
+            else:
+                self.set_undefined_options("build", ("build_lib", "build_lib"))  # Default to the output of the build command
         if self.proto_vers is None:
             self.proto_vers = os.getenv("ARCTICDB_PROTOC_VERS", "".join(self._PROTOBUF_TO_GRPC_VERSION)).strip()
 
@@ -59,7 +64,7 @@ class CompileProto(Command):
                 "grpcio-tools" + grpc_version,
             ]
         )
-        env = {**os.environ, "PYTHONPATH": pythonpath}
+        env = {**os.environ, "PYTHONPATH": pythonpath, "PYTHONNOUSERSITE": "1"}
 
         # Check the transitively install protobuf version:
         cmd = [sys.executable, "-c", "import google.protobuf ; print(google.protobuf.__version__)"]
