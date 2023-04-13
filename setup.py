@@ -62,22 +62,17 @@ class CompileProto(Command):
                 "--disable-pip-version-check",
                 "--target=" + pythonpath,
                 "grpcio-tools" + grpc_version,
+                f"protobuf=={proto_ver}.*"
             ]
         )
         env = {**os.environ, "PYTHONPATH": pythonpath, "PYTHONNOUSERSITE": "1"}
-
-        # Check the transitively install protobuf version:
-        cmd = [sys.executable, "-c", "import google.protobuf ; print(google.protobuf.__version__)"]
-        installed_proto_ver = subprocess.check_output(cmd, env=env, universal_newlines=True)
-        match = installed_proto_ver.startswith(proto_ver + ".")
-        assert match, f"grpc{grpc_version} installed protobuf=={installed_proto_ver} but we expect {proto_ver}"
 
         # Compile
         os.makedirs(version_output_dir, exist_ok=True)
         cmd = [sys.executable, "-mgrpc_tools.protoc", "-Icpp/proto", "--python_out=" + version_output_dir]
         cmd.extend(glob.glob(os.path.normpath("cpp/proto/arcticc/pb2/*.proto")))
         print("Running " + " ".join(cmd))
-        installed_proto_ver = subprocess.check_call(cmd, env=env)
+        subprocess.check_call(cmd, env=env)
 
         shutil.rmtree(pythonpath)
 
