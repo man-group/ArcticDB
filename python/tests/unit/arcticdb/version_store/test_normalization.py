@@ -68,10 +68,11 @@ def test_user_meta_and_msg_pack(d):
 
 def test_fails_humongous_meta():
     with pytest.raises(ArcticNativeNotYetImplemented):
-        from arcticdb.version_store._normalization import _MAX_USER_DEFINED_META as MAX
-
-        meta = {"a": "x" * (MAX)}
-        normalize_metadata(meta)
+        import arcticdb.version_store._normalization as _normalization
+        obj_size = 20 * (1 << 20)
+        _normalization._MAX_USER_DEFINED_META = obj_size
+        meta = {"a": "x" * (obj_size)}
+        _normalization.normalize_metadata(meta)
 
 
 def test_fails_humongous_data():

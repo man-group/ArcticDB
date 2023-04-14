@@ -1177,6 +1177,7 @@ _MAX_USER_DEFINED_META = MsgPackNormalizer.MMAP_DEFAULT_SIZE
 
 def _init_msgpack_metadata():
     cfg = VersionStoreConfig.MsgPack()
+    cfg.max_blob_size = _MAX_USER_DEFINED_META
     return MsgPackNormalizer(cfg)
 
 
