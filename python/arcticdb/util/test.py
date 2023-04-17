@@ -14,7 +14,6 @@ import pytest
 import string
 import random
 from six import PY3
-from pkg_resources import resource_filename
 from copy import deepcopy
 from functools import wraps
 from packaging import version
@@ -157,7 +156,8 @@ def config_context(name, value):
 
 
 def get_artifact_path(frag, *fragments):
-    return resource_filename("tests", "/".join(["artifacts", frag] + list(fragments)))
+    import tests
+    return os.path.join(tests.__path__, "artifacts", frag, *fragments)
 
 
 def param_dict(fields, cases=None, xfail=None, py2only=None, py3only=None):
@@ -239,12 +239,7 @@ def random_integers(size, dtype):
     ).astype(dtype)
 
 
-def test_int_col_dataframe(size=10000, seed=0):
-    np.random.seed(seed)
-    return pd.DataFrame({"uint32": random_integers(size, np.uint32)})
-
-
-def test_wide_dataframe(size=10000, seed=0):
+def get_wide_dataframe(size=10000, seed=0):
     np.random.seed(seed)
     return pd.DataFrame(
         {
@@ -264,7 +259,7 @@ def test_wide_dataframe(size=10000, seed=0):
     )
 
 
-def test_pickle():
+def get_pickle():
     return (
         list(random_integers(10000, np.uint32)),
         str(random_string(100)),

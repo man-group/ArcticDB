@@ -8,9 +8,8 @@ As of the Change Date specified in that file, in accordance with the Business So
 from arcticdb.util.test import (
     assert_frame_equal,
     sample_dataframe,
-    test_wide_dataframe,
-    test_int_col_dataframe,
-    test_pickle,
+    get_wide_dataframe,
+    get_pickle,
     random_integers,
 )
 
@@ -88,16 +87,20 @@ def read_write_sample(lib, symbol):
     lib.write(symbol, "blah")
     assert lib.read(symbol).data == "blah"
 
+def get_int_col_dataframe(size=10000, seed=0):
+    np.random.seed(seed)
+    return pd.DataFrame({"uint32": random_integers(size, np.uint32)})
+
 
 def write_and_prune_simple_df(lib, symbol):
-    df = test_int_col_dataframe(10000)
+    df = get_int_col_dataframe(10000)
     lib.write(symbol, df, metadata={"a": 1})
     assert_frame_equal(lib.read(symbol).data, df)
     assert lib.read(symbol).metadata == {"a": 1}
 
 
 def write_and_append_simple_df(lib, symbol):
-    df = test_int_col_dataframe(10000)
+    df = get_int_col_dataframe(10000)
     lib.write(symbol, df, metadata={"a": 1})
     assert_frame_equal(lib.read(symbol).data, df)
     assert lib.read(symbol).metadata == {"a": 1}
@@ -111,19 +114,19 @@ def write_and_append_simple_df(lib, symbol):
 
 
 def write_large_mixed_df_prune(lib, symbol):
-    df = test_wide_dataframe(LARGE_DF_SIZE)
+    df = get_wide_dataframe(LARGE_DF_SIZE)
     lib.write(symbol, df, metadata={"something"}, prune_previous=True)
     assert_frame_equal(lib.read(symbol).data, df)
 
 
 def write_large_mixed_df(lib, symbol):
-    df = test_wide_dataframe(LARGE_DF_SIZE)
+    df = get_wide_dataframe(LARGE_DF_SIZE)
     lib.write(symbol, df, metadata={"something"})
     assert_frame_equal(lib.read(symbol).data, df)
 
 
 def write_pickle(lib, symbol):
-    data = test_pickle()
+    data = get_pickle()
     lib.write(symbol, data)
     assert lib.read(symbol).data == data
 
