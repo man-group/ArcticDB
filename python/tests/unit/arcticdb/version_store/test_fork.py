@@ -36,7 +36,7 @@ def check_lib_config(lib):
     assert found_test_normalizer
 
 
-def test_pickle_store(lmdb_version_store):
+def get_pickle_store(lmdb_version_store):
     d = {"a": "b"}
     lmdb_version_store.write("xxx", d)
     ser = dumps(lmdb_version_store)

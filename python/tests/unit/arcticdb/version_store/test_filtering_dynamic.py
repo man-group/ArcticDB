@@ -18,7 +18,7 @@ except ImportError:
 
 
 from arcticdb.version_store.processing import QueryBuilder
-from arcticdb.util.test import test_wide_dataframe, make_dynamic, regularize_dataframe, assert_frame_equal
+from arcticdb.util.test import get_wide_dataframe, make_dynamic, regularize_dataframe, assert_frame_equal
 from arcticdb.util.hypothesis import (
     use_of_function_scoped_fixtures_in_hypothesis_checked,
     integral_type_strategies,
@@ -254,7 +254,7 @@ def test_filter_string_isnotin(lmdb_version_store_dynamic_schema, df, vals):
 def test_numeric_filter_dynamic_schema(lmdb_version_store_tiny_segment_dynamic):
     symbol = "test_numeric_filter_dynamic_schema"
     lib = lmdb_version_store_tiny_segment_dynamic
-    df = test_wide_dataframe(100)
+    df = get_wide_dataframe(100)
     expected, slices = make_dynamic(df)
     for df_slice in slices:
         lib.append(symbol, df_slice, write_if_missing=True)
