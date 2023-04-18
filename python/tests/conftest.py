@@ -46,10 +46,8 @@ from arcticdb_ext.storage import KeyType
 configure_test_logger()
 
 BUCKET_ID = 0
-
-# Use a smaller memory mapped limit for all tests
+# Use a smaller memory mapped limit for this test, no point memor mapping 2g
 MsgPackNormalizer.MMAP_DEFAULT_SIZE = 20 * (1 << 20)
-
 
 def run_server(port):
     werkzeug.run_simple(
@@ -293,6 +291,10 @@ def lmdb_version_store_tombstones_no_symbol_list(version_store_factory):
 def lmdb_version_store_allows_pickling(version_store_factory, lib_name):
     return version_store_factory(use_norm_failure_handler_known_types=True, dynamic_strings=True)
 
+@pytest.fixture
+@lmdb_version_store_cleanup
+def lmdb_version_store_allows_pickling_max_msg_pack_size(version_store_factory, lib_name):
+    return version_store_factory(use_norm_failure_handler_known_types=True, dynamic_strings=True, max_blob_size=(1 << 32) + 1024) #max size for msgpack obj size
 
 @pytest.fixture
 def lmdb_version_store_no_symbol_list(version_store_factory):
