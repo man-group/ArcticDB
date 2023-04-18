@@ -820,10 +820,10 @@ class MsgPackNormalizer(Normalizer):
     Fall back plan for the time being to store arbitrary data
     """
 
-    MMAP_DEFAULT_SIZE = (1 << 32) + 1024  # Allow up to 4 gib pickles in msgpack by default, most of these compress fairly well.
+    MSG_PACK_MAX_SIZE = (1 << 32) + 1024
+    MMAP_DEFAULT_SIZE = MSG_PACK_MAX_SIZE  # Allow up to 4 gib pickles in msgpack by default, most of these compress fairly well.
     # msgpack checks whether the size of pickled data within 1 << 32 - 1 byte only
     # Extra memory is needed in mmap for msgpack's overhead
-    MSG_PACK_MAX_SIZE = (1 << 32) + 1024
 
     def __init__(self, cfg=None):
         self._size = MsgPackNormalizer.MMAP_DEFAULT_SIZE if cfg is None else cfg.max_blob_size
