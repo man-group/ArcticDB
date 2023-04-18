@@ -12,7 +12,6 @@ from datetime import datetime as dt
 from numpy.random import RandomState
 from pandas import DataFrame, DatetimeIndex
 
-from arcticdb.version_store import NativeVersionStore
 from arcticdb.util.test import assert_frame_equal
 
 
