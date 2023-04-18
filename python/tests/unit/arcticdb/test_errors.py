@@ -9,5 +9,5 @@ test_raise_params = [(NormalizationError.E_UPDATE_NOT_SUPPORTED, NormalizationEx
 
 @pytest.mark.parametrize("code,exception", test_raise_params)
 def test_raise(code, exception):
-    with pytest.raises(exception, match=f"E{code.value} a message$"):
+    with pytest.raises(exception, match=f"^{code.value}.*a message$"):
         arcticdb_raise(code, lambda: "a message")

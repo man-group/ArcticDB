@@ -221,7 +221,7 @@ void register_error_code_ecosystem(py::module& m) {
     for (auto code : get_error_codes()) {
         auto data = get_error_code_data(code);
         code_enum.value(data.name_.data(), code, data.as_string_.data());
-        enum_value_to_prefix[py::int_((int) code)] = data.as_string_;
+        enum_value_to_prefix[py::int_((int) code)] = data.name_;
     }
 
     setattr(m, "enum_value_to_prefix", enum_value_to_prefix);

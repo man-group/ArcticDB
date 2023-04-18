@@ -34,8 +34,8 @@ enum class ErrorCategory : BaseType {
 };
 
 // FUTURE(GCC9): use magic_enum
-inline std::unordered_map<ErrorCategory, const char*> get_error_category_names() {
-    return {
+inline decltype(auto) get_error_category_names() {
+    static const std::unordered_map<ErrorCategory, const char*> error_category_map{
         {ErrorCategory::INTERNAL, "INTERNAL"},
         {ErrorCategory::NORMALIZATION, "NORMALIZATION"},
         {ErrorCategory::MISSING_DATA, "MISSING_DATA"},
@@ -43,6 +43,7 @@ inline std::unordered_map<ErrorCategory, const char*> get_error_category_names()
         {ErrorCategory::STORAGE, "STORAGE"},
         {ErrorCategory::SORTING, "SORTING"}
     };
+    return (error_category_map);
 }
 
 // A macro that will be expanded in different ways by redefining ERROR_CODE():

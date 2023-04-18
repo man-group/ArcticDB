@@ -21,7 +21,7 @@ struct Raise {
 
     template<typename...Args>
     [[noreturn]] void operator()(fmt::format_string<Args...> format, Args&&...args) const {
-        std::string combo_format = fmt::format("{}:{} {}", static_cast<std::underlying_type_t<ErrorCode>>(code), error_code_data<code>.name_, format);
+        std::string combo_format = fmt::format("{} {}:{} {} {}", static_cast<std::underlying_type_t<ErrorCode>>(code), get_error_category_names().at(get_error_category(code)), error_code_data<code>.name_, format);
         std::string msg = fmt::format(combo_format, std::forward<Args>(args)...);
         log::root().error(msg);
         throw_error<code>(msg);

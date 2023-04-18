@@ -26,16 +26,28 @@ class ErrorCodeEnumBase(Enum):
     """No members. For type-checking only"""
 
 
+"""For auto-complete use. Will be overwritten by the for loop below."""
+class InternalError:
+    pass
 class NormalizationError:
-    """For auto-complete use. Will be overwritten by the for loop below."""
-
+    pass
+class MissingDataError:
+    pass
+class SchemaError:
+    pass
+class StorageError:
+    pass
+class SortingError:
+    pass
 
 _py_module = globals()
 _enum_type_to_exception: Dict[Type[ErrorCodeEnumBase], Type[Exception]] = {}
 _enum_index: Dict[ErrorCategory, List[_ErrorCode]] = defaultdict(list)
+_int_to_ErrorCode: Dict[int, _ErrorCode] = {}
 
 for member in _ErrorCode.__members__.values():
     _enum_index[get_error_category(member)].append(member)
+    _int_to_ErrorCode[member.value] = member
 
 
 def _exception_name(category):
@@ -71,7 +83,7 @@ def arcticdb_raise(error_code: ErrorCodeEnumBase, error_msg_provider: Callable[[
         Should return details of the error without the error code prefix.
     """
     msg = error_msg_provider()
-    msg = f"{_enum_value_to_prefix[error_code.value]} {msg}"
+    msg = f"{error_code.value} {get_error_category(_int_to_ErrorCode[error_code.value])}:{_enum_value_to_prefix[error_code.value]} {msg}"
     _log(_LoggerId.ROOT, _LogLevel.ERROR, msg)
     exp = _enum_type_to_exception[type(error_code)]
     raise exp(msg)
