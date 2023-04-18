@@ -46,7 +46,7 @@ bool ec2_metadata_endpoint_reachable() {
         sockaddr_in addr;
         addr.sin_family = AF_INET;
         addr.sin_port = htons(80);
-        addr.sin_addr.s_addr = inet_addr("169.254.169.254");
+        addr.sin_addr.s_addr = inet_addr("169.254.169.254"); // EC2 Metadata endpoint
 
         connect(fd, (const sockaddr*) &addr, sizeof addr);
         return errno == EINPROGRESS ? 0 : -1;

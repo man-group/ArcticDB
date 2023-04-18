@@ -21,7 +21,7 @@ if(WIN32)
 else()
     set(CMAKE_CXX_FLAGS "-Wall -Wextra")
     set(CMAKE_CXX_FLAGS_DEBUG "-ggdb")
-    set(CMAKE_CXX_FLAGS_RELEASE "-O3") # TODO: why is -DNDEBUG from the defaults excluded?
+    set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG")
     set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O3 -ggdb")
 endif()
 

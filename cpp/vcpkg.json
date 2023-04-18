@@ -33,12 +33,10 @@
     "mongo-cxx-driver",
     {
       "name": "aws-c-io",
-      "version>=": "0.13.14",
       "$version reason": "To pick up https://github.com/awslabs/aws-c-io/pull/515"
     },
     {
       "name": "aws-sdk-cpp",
-      "version>=": "1.11.4",
       "$version reason": "Minimum version in the baseline that works with aws-c-io above.",
       "default-features": false,
       "features": [ "s3" ]
