@@ -437,3 +437,9 @@ def test_columns_names_series_dynamic(lmdb_version_store_dynamic_schema, sym):
 
     lmdb_version_store_dynamic_schema.write(sym + "dynamic_schema", date_series)
     assert_series_equal(lmdb_version_store_dynamic_schema.read(sym + "dynamic_schema").data, date_series)
+        
+def test_write_max_size_pickled_data(lmdb_version_store_allows_pickling_max_msg_pack_size):
+    symbol = "test_write_max_size_pickled_data"
+    data = bytearray(b'\x24' * ((1 << 32) - 1))
+    lmdb_version_store_allows_pickling_max_msg_pack_size.write(symbol, data, pickle_on_failure=True)
+    assert lmdb_version_store_allows_pickling_max_msg_pack_size.read(symbol).data == data
