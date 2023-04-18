@@ -28,7 +28,7 @@ S3ApiInstance::S3ApiInstance(Aws::Utils::Logging::LogLevel log_level) :
     }
     ARCTICDB_RUNTIME_DEBUG(log::storage(), "Begin initializing AWS API");
     Aws::InitAPI(options_);
-    // A safer workaround for https://github.com/aws/aws-sdk-cpp/issues/1410. AWS SDK
+    // A workaround for https://github.com/aws/aws-sdk-cpp/issues/1410.
     for (auto name : std::initializer_list<const char*>{
             "AWS_EC2_METADATA_DISABLED", "AWS_DEFAULT_REGION", "AWS_REGION", "AWS_EC2_METADATA_SERVICE_ENDPOINT" }) {
         if (!Aws::Environment::GetEnv(name).empty())
@@ -41,7 +41,7 @@ S3ApiInstance::S3ApiInstance(Aws::Utils::Logging::LogLevel log_level) :
 #ifdef WIN32
     _putenv_s("AWS_EC2_METADATA_DISABLED", "true");
 #else
-    setenv("AWS_EC2_METADATA_DISABLED", "true", true); 
+    setenv("AWS_EC2_METADATA_DISABLED", "true", true);
 #endif
 }
 

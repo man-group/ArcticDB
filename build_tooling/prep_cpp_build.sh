@@ -12,7 +12,8 @@ fi
 
 cd ..
 
-function windows_stuff() {
+case `uname -a` in
+*Microsoft*|MINGW*)
     if [[ -n "$GITHUB_ACTION" ]] ; then
         # Redirect the build directory to the more spacious C:
         if [[ "$MSYSTEM" != MINGW* ]] ; then echo "Must run $0 with git/MINGW bash" >&2
@@ -25,17 +26,6 @@ function windows_stuff() {
 
     mkdir vcpkg/buildtrees vcpkg/packages out || true
     MSYS_NO_PATHCONV=1 compact.exe /C vcpkg\\buildtrees vcpkg\\packages out
-}
-
-case `uname -a` in
-*Microsoft*)
-    # Are we in WSL to compile for Linux or is WSL bash merely used to run this script (parent process is `init`)?
-    if ps -p $PPID | grep init ; then
-        windows_stuff
-    fi
-    ;;
-MINGW*)
-    windows_stuff
     ;;
 *)
     if [[ -n "$ARCTICDB_BUILD_DIR" ]] ; then
