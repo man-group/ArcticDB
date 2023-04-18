@@ -10,6 +10,7 @@ from collections import namedtuple
 
 import numpy as np
 import pandas as pd
+import dateutil as du
 import pytest
 import pytz
 from numpy.testing import assert_equal, assert_array_equal
@@ -93,12 +94,24 @@ def test_empty_df():
     assert_frame_equal(d, D)
 
 
-def get_multiindex_df_with_tz():
+@pytest.mark.parametrize(
+    "tz", ["UTC", "Europe/Amsterdam", pytz.UTC, pytz.timezone("Europe/Amsterdam"), du.tz.gettz("UTC")]
+)
+def test_write_tz(lmdb_version_store, sym, tz):
+    assert tz is not None
+    df = pd.DataFrame(data={"col1": np.arange(10)}, index=pd.date_range(pd.Timestamp(0), periods=10, tz=tz))
+    lmdb_version_store.write(sym, df)
+    result = lmdb_version_store.read(sym).data
+    assert_frame_equal(df, result)
+    df_tz = df.index.tzinfo
+    assert str(df_tz) == str(tz)
+
+
+def get_multiindex_df_with_tz(tz):
     dt1 = datetime.datetime(2019, 4, 8, 10, 5, 2, 1)
     dt2 = datetime.datetime(2019, 4, 9, 10, 5, 2, 1)
-    nytz = pytz.timezone("America/New_York")
-    loc_dt1 = nytz.localize(dt1)
-    loc_dt2 = nytz.localize(dt2)
+    loc_dt1 = tz.localize(dt1)
+    loc_dt2 = tz.localize(dt2)
     arr1 = [loc_dt1, loc_dt1, loc_dt2, loc_dt2]
     arr2 = [loc_dt1, loc_dt1, loc_dt2, loc_dt2]
     arr3 = [0, 1, 0, 1]
@@ -108,8 +121,9 @@ def get_multiindex_df_with_tz():
     )
 
 
-def test_multiindex_with_tz():
-    d = get_multiindex_df_with_tz()
+@pytest.mark.parametrize("tz", [pytz.timezone("America/New_York"), pytz.UTC])
+def test_multiindex_with_tz(tz):
+    d = get_multiindex_df_with_tz(tz)
     norm = CompositeNormalizer(use_norm_failure_handler_known_types=True, fallback_normalizer=test_msgpack_normalizer)
     df, norm_meta = norm.normalize(d)
     fd = FrameData.from_npd_df(df)
@@ -122,8 +136,9 @@ def test_multiindex_with_tz():
     assert_frame_equal(d, denorm)
 
 
-def test_empty_df_with_multiindex_with_tz():
-    orig_df = get_multiindex_df_with_tz()
+@pytest.mark.parametrize("tz", [pytz.timezone("America/New_York"), pytz.UTC])
+def test_empty_df_with_multiindex_with_tz(tz):
+    orig_df = get_multiindex_df_with_tz(tz)
     norm = CompositeNormalizer(use_norm_failure_handler_known_types=True, fallback_normalizer=test_msgpack_normalizer)
     norm_df, norm_meta = norm.normalize(orig_df)
 

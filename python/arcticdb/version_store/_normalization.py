@@ -15,10 +15,8 @@ import sys
 import pandas as pd
 import pickle
 import psutil
-import sysconfig
 from abc import ABCMeta, abstractmethod
 
-import pytz
 from pandas.api.types import is_integer_dtype
 from arcticc.pb2.descriptors_pb2 import UserDefinedMetadata, NormalizationMetadata, MsgPackSerialization
 from arcticc.pb2.storage_pb2 import VersionStoreConfig
@@ -39,14 +37,8 @@ from arcticdb.version_store._common import _column_name_to_strings, TimeFrame
 
 PICKLE_PROTOCOL = 4
 
-try:  # 0.21+ Compatibility
-    from pandas._libs.tslib import Timestamp
-    from pandas._libs.tslibs.timezones import get_timezone
-except ImportError:
-    try:  # 0.20.x Compatibility
-        from pandas._libs.tslib import Timestamp, get_timezone
-    except ImportError:  # <= 0.19 Compatibility
-        from pandas.tslib import Timestamp, get_timezone
+from pandas._libs.tslib import Timestamp
+from pandas._libs.tslibs.timezones import get_timezone, is_utc
 
 log = version
 
@@ -301,9 +293,19 @@ def _normalize_single_index(index, index_names, index_norm, dynamic_strings=None
             index_tz = get_timezone(index[0].tzinfo)
 
         if index_tz is not None:
-            index_norm.tz = index_tz
+            index_norm.tz = _ensure_str_timezone(index_tz)
 
         return index_names, ix_vals
+
+
+def _ensure_str_timezone(index_tz):
+    if isinstance(index_tz, datetime.tzinfo) and is_utc(index_tz):
+        # Pandas started to treat UTC as a special case and give back the tzinfo object for it. We coerce it back to
+        # a str to avoid special cases for it further along our pipeline. The breaking change was:
+        # https://github.com/jbrockmendel/pandas/commit/94ce05d1bcc3c99e992c48cc99d0fd2726f43102#diff-3dba9e959e6ad7c394f0662a0e6477593fca446a6924437701ecff82b0b20b55
+        return "UTC"
+    else:
+        return index_tz
 
 
 def _denormalize_single_index(item, norm_meta):
@@ -469,7 +471,7 @@ class _PandasNormalizer(Normalizer):
             for f in fields:
                 current_index = index.levels[f]
                 if isinstance(current_index, DatetimeIndex) and current_index.tz is not None:
-                    index_norm.timezone[f] = get_timezone(current_index.tz)
+                    index_norm.timezone[f] = _ensure_str_timezone(get_timezone(current_index.tz))
                 else:
                     index_norm.timezone[f] = ""
                 if index.names[f] is None:
