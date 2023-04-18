@@ -32,10 +32,7 @@ from typing import Optional, Any, Dict
 from pytest_server_fixtures.base import get_ephemeral_port
 
 from arcticdb.arctic import Arctic
-from arcticdb.version_store.helper import (
-    create_test_lmdb_cfg,
-    create_test_s3_cfg,
-)
+from arcticdb.version_store.helper import create_test_lmdb_cfg, create_test_s3_cfg
 from arcticdb.config import Defaults
 from arcticdb.util.test import configure_test_logger, apply_lib_cfg
 from arcticdb.version_store.helper import ArcticMemoryConfig
@@ -46,8 +43,9 @@ from arcticdb_ext.storage import KeyType
 configure_test_logger()
 
 BUCKET_ID = 0
-# Use a smaller memory mapped limit for this test, no point memor mapping 2g
+# Use a smaller memory mapped limit for all tests
 MsgPackNormalizer.MMAP_DEFAULT_SIZE = 20 * (1 << 20)
+
 
 def run_server(port):
     werkzeug.run_simple(
@@ -264,7 +262,7 @@ def lmdb_version_store_prune_previous(version_store_factory):
 
 @pytest.fixture
 def lmdb_version_store_big_map(version_store_factory):
-    return version_store_factory(lmdb_config={"map_size": 2**30})
+    return version_store_factory(lmdb_config={"map_size": 2 ** 30})
 
 
 @pytest.fixture
@@ -291,10 +289,6 @@ def lmdb_version_store_tombstones_no_symbol_list(version_store_factory):
 def lmdb_version_store_allows_pickling(version_store_factory, lib_name):
     return version_store_factory(use_norm_failure_handler_known_types=True, dynamic_strings=True)
 
-@pytest.fixture
-@lmdb_version_store_cleanup
-def lmdb_version_store_allows_pickling_max_msg_pack_size(version_store_factory, lib_name):
-    return version_store_factory(use_norm_failure_handler_known_types=True, dynamic_strings=True, max_blob_size=(1 << 32) + 1024) #max size for msgpack obj size
 
 @pytest.fixture
 def lmdb_version_store_no_symbol_list(version_store_factory):
@@ -323,12 +317,12 @@ def lmdb_version_store_ignore_order(version_store_factory):
 
 @pytest.fixture
 def lmdb_version_store_small_segment(version_store_factory):
-    return version_store_factory(column_group_size=1000, segment_row_size=1000, lmdb_config={"map_size": 2**30})
+    return version_store_factory(column_group_size=1000, segment_row_size=1000, lmdb_config={"map_size": 2 ** 30})
 
 
 @pytest.fixture
 def lmdb_version_store_tiny_segment(version_store_factory):
-    return version_store_factory(column_group_size=2, segment_row_size=2, lmdb_config={"map_size": 2**30})
+    return version_store_factory(column_group_size=2, segment_row_size=2, lmdb_config={"map_size": 2 ** 30})
 
 
 @pytest.fixture
