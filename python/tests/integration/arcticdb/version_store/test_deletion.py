@@ -528,12 +528,8 @@ def test_delete_multi_keys_snapshot(lmdb_version_store, map_timeout, sym):
 
 
 @pytest.mark.parametrize("index_start", range(10))
-def test_delete_date_range_with_strings(arcticdb_test_lmdb_config, index_start, lib_name):
-    local_lib_cfg = arcticdb_test_lmdb_config(lib_name)
-    lib = local_lib_cfg.env_by_id[Defaults.ENV].lib_by_path[lib_name]
-    lib.version.write_options.column_group_size = 3
-    lib.version.write_options.segment_row_size = 3
-    lmdb_version_store = ArcticMemoryConfig(local_lib_cfg, Defaults.ENV)[lib_name]
+def test_delete_date_range_with_strings(version_store_factory, index_start):
+    lmdb_version_store = version_store_factory(column_group_size=3, segment_row_size=3)
 
     symbol = "delete_daterange"
     periods = 100
@@ -556,13 +552,9 @@ def test_delete_date_range_with_strings(arcticdb_test_lmdb_config, index_start, 
 
 
 @pytest.mark.parametrize("map_timeout", get_map_timeouts())
-def test_delete_date_range_remove_everything(arcticdb_test_lmdb_config, map_timeout, lib_name):
+def test_delete_date_range_remove_everything(version_store_factory, map_timeout):
     with config_context("VersionMap.ReloadInterval", map_timeout):
-        local_lib_cfg = arcticdb_test_lmdb_config(lib_name)
-        lib = local_lib_cfg.env_by_id[Defaults.ENV].lib_by_path[lib_name]
-        lib.version.write_options.column_group_size = 3
-        lib.version.write_options.segment_row_size = 3
-        lmdb_version_store = ArcticMemoryConfig(local_lib_cfg, Defaults.ENV)[lib_name]
+        lmdb_version_store = version_store_factory(column_group_size=3, segment_row_size=3)
 
         symbol = "delete_daterange"
         periods = 100

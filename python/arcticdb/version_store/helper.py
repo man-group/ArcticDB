@@ -27,7 +27,7 @@ from arcticdb.config import _expand_path
 from arcticdb.exceptions import ArcticNativeException, LibraryNotFound
 from arcticdb.version_store._store import NativeVersionStore
 
-from typing import Iterable
+from typing import Iterable, Dict, Any
 from arcticdb.authorization.permissions import OpenMode
 
 
@@ -167,11 +167,13 @@ def get_lib_cfg(cfg: ArcticMemoryConfig, env_name: str, lib_name: str) -> Librar
     return env.lib_by_path[lib_name]
 
 
-def add_lmdb_library_to_env(cfg, lib_name, env_name, db_dir=Defaults.DATA_DIR, description=None):
-    # type: (EnvironmentConfigsMap, LibName, EnvName, Optional[FilePath], Optional[AnyStr],Optional[AnyStr], bool)->None
+def add_lmdb_library_to_env(cfg, lib_name, env_name, db_dir=Defaults.DATA_DIR, description=None, *, lmdb_config={}):
+    # type: (EnvironmentConfigsMap, LibName, EnvName, Optional[FilePath], Optional[str], None, Dict[str, Any])->None
     env = cfg.env_by_id[env_name]
     lmdb = LmdbConfig()
     lmdb.path = db_dir
+    for k, v in lmdb_config.items():
+        setattr(lmdb, k, v)
 
     sid, storage = get_storage_for_lib_name(lib_name, env)
     storage.config.Pack(lmdb, type_url_prefix="cxx.arctic.org")
@@ -259,9 +261,9 @@ def add_s3_library_to_env(
     _add_lib_desc_to_env(env, lib_name, sid, description)
 
 
-def create_test_lmdb_cfg(lib_name=Defaults.LIB, db_dir=Defaults.DATA_DIR, description=None):
+def create_test_lmdb_cfg(lib_name: str, db_dir: str, lmdb_config: Dict[str, Any] = {}):
     cfg = EnvironmentConfigsMap()
-    add_lmdb_library_to_env(cfg, lib_name=lib_name, env_name=Defaults.ENV, db_dir=db_dir, description=description)
+    add_lmdb_library_to_env(cfg, lib_name=lib_name, env_name=Defaults.ENV, db_dir=db_dir, lmdb_config=lmdb_config)
     return cfg
 
 

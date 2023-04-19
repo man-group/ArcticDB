@@ -1165,19 +1165,14 @@ def test_library_deletion_lmdb(lmdb_version_store):
     assert lib_tool.count_keys(KeyType.TABLE_INDEX) == 0
 
 
-def test_resolve_defaults(arcticdb_test_lmdb_config, lib_name):
-    cfg = arcticdb_test_lmdb_config(lib_name)
-    arcticc = ArcticMemoryConfig(cfg, env=Defaults.ENV)
-    lib = arcticc[lib_name]
+def test_resolve_defaults(version_store_factory):
+    lib = version_store_factory()
     proto_cfg = lib._lib_cfg.lib_desc.version.write_options
     assert lib.resolve_defaults("recursive_normalizers", proto_cfg, False) is False
     os.environ["recursive_normalizers"] = "True"
     assert lib.resolve_defaults("recursive_normalizers", proto_cfg, False, uppercase=False) is True
-    cfg2 = arcticdb_test_lmdb_config(lib_name)
-    arcticc2 = ArcticMemoryConfig(cfg2, env=Defaults.ENV)
-    lib_cfg = get_lib_cfg(arcticc2, Defaults.ENV, lib_name)
-    lib_cfg.version.write_options.dynamic_strings = True
-    lib2 = arcticc2[lib_name]
+
+    lib2 = version_store_factory(dynamic_strings=True, reuse_name=True)
     proto_cfg = lib2._lib_cfg.lib_desc.version.write_options
     assert lib2.resolve_defaults("dynamic_strings", proto_cfg, False) is True
     del os.environ["recursive_normalizers"]
@@ -1245,9 +1240,8 @@ def test_read_with_asof_version_for_snapshotted_version(lmdb_version_store_tombs
     assert lib.read("a", as_of=0).data == 1
 
 
-@pytest.mark.parametrize("lmdb_version_store_with_write_option", [["use_tombstones"]], indirect=True)
-def test_get_tombstone_deletion_state_without_delayed_del(lmdb_version_store_with_write_option, sym):
-    lib = lmdb_version_store_with_write_option
+def test_get_tombstone_deletion_state_without_delayed_del(version_store_factory, sym):
+    lib = version_store_factory(use_tombstones=True, delayed_deletes=False)
     lib.write(sym, 1)
 
     lib.write(sym, 2)
@@ -1296,11 +1290,8 @@ def test_get_timerange_for_symbol_dst(lmdb_version_store, sym):
     assert maxts == datetime(2021, 4, 1, 3)
 
 
-@pytest.mark.parametrize(
-    "lmdb_version_store_with_write_option", [["use_tombstones", "sync_passive.enabled"]], indirect=True
-)
-def test_batch_read_meta_with_tombstones(lmdb_version_store_with_write_option):
-    lib = lmdb_version_store_with_write_option
+def test_batch_read_meta_with_tombstones(lmdb_version_store_tombstone_and_sync_passive):
+    lib = lmdb_version_store_tombstone_and_sync_passive
     lib.write("sym1", 1, {"meta1": 1})
     lib.write("sym1", 1, {"meta1": 2})
     lib.write("sym2", 1, {"meta2": 1})
@@ -1314,13 +1305,8 @@ def test_batch_read_meta_with_tombstones(lmdb_version_store_with_write_option):
     assert lib.read_metadata("sym1").metadata == results_dict["sym1"].metadata
 
 
-@pytest.mark.parametrize(
-    "lmdb_version_store_with_write_option",
-    [["use_tombstones", "prune_previous_version", "sync_passive.enabled"]],
-    indirect=True,
-)
-def test_batch_read_meta_with_pruning(lmdb_version_store_with_write_option):
-    lib = lmdb_version_store_with_write_option
+def test_batch_read_meta_with_pruning(version_store_factory):
+    lib = version_store_factory(use_tombstones=True, prune_previous_version=True, sync_passive=True)
     lib.write("sym1", 1, {"meta1": 1})
     lib.write("sym1", 1, {"meta1": 2})
     lib.write("sym1", 3, {"meta1": 3})
