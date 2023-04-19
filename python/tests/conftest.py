@@ -28,14 +28,11 @@ import pandas as pd
 import random
 from datetime import datetime
 from typing import Optional, Any, Dict
-from functools import partial
 
 from pytest_server_fixtures.base import get_ephemeral_port
 
 from arcticdb.arctic import Arctic
 from arcticdb.version_store.helper import (
-    get_storage_for_lib_name,
-    get_lib_cfg,
     create_test_lmdb_cfg,
     create_test_s3_cfg,
 )
@@ -44,8 +41,6 @@ from arcticdb.util.test import configure_test_logger, apply_lib_cfg
 from arcticdb.version_store.helper import ArcticMemoryConfig
 from arcticdb.version_store import NativeVersionStore
 from arcticdb.version_store._normalization import MsgPackNormalizer
-from arcticc.pb2.storage_pb2 import EnvironmentConfigsMap  # Importing from arcticdb dynamically loads arcticc.pb2
-from arcticc.pb2.lmdb_storage_pb2 import Config as LmdbConfig
 
 configure_test_logger()
 
@@ -155,45 +150,6 @@ def lib_name():
 
 
 @pytest.fixture
-def arcticdb_test_lmdb_config(tmpdir):
-    def create(lib_name):
-        return create_test_lmdb_cfg(lib_name=lib_name, db_dir=str(tmpdir))
-
-    return create
-
-
-def get_temp_dbdir(tmpdir, num):
-    return str(tmpdir.mkdir("lmdb.{:x}".format(num)))
-
-
-@pytest.fixture
-def arcticdb_test_library_config(tmpdir):
-    def create():
-        lib_name = "test.example"
-        env_name = "default"
-        cfg = EnvironmentConfigsMap()
-        env = cfg.env_by_id[env_name]
-
-        lmdb = LmdbConfig()
-        lmdb.path = get_temp_dbdir(tmpdir, 0)
-        sid, storage = get_storage_for_lib_name(lib_name, env)
-        storage.config.Pack(lmdb, type_url_prefix="cxx.arctic.org")
-
-        lib_desc = env.lib_by_path[lib_name]
-        lib_desc.storage_ids.append(sid)
-        lib_desc.name = lib_name
-        lib_desc.description = "A friendly config for testing"
-
-        version = lib_desc.version
-        version.write_options.column_group_size = 23
-        version.write_options.segment_row_size = 42
-
-        return cfg
-
-    return create
-
-
-@pytest.fixture
 def arcticdb_test_s3_config(moto_s3_endpoint_and_credentials):
     endpoint, port, bucket, aws_access_key, aws_secret_key = moto_s3_endpoint_and_credentials
 
@@ -203,27 +159,15 @@ def arcticdb_test_s3_config(moto_s3_endpoint_and_credentials):
     return create
 
 
-def _apply_storage_options(storage_cfg, lmdb_config):
-    lmdb = LmdbConfig()
-    if storage_cfg.config.Unpack(lmdb):
-        for k, v in lmdb_config.items():
-            setattr(lmdb, k, v)
-        storage_cfg.config.Pack(lmdb, type_url_prefix="cxx.arctic.org")
-
-
 def _version_store_factory_impl(
-    used, make_cfg, default_name, *, name: str = None, reuse_name=False, lmdb_config: Dict[str, Any] = None, **kwargs
+    used, make_cfg, default_name, *, name: str = None, reuse_name=False, **kwargs
 ) -> NativeVersionStore:
-    if lmdb_config is None:
-        lmdb_config = {}
+    """Common logic behind all the factory fixtures"""
     name = name or default_name
     if name == "_unique_":
         name = name + str(len(used))
     assert (name not in used) or reuse_name, f"{name} is already in use"
     cfg = make_cfg(name)
-    env = cfg.env_by_id[Defaults.ENV]
-    _, storage = get_storage_for_lib_name(name, env)
-    _apply_storage_options(storage, lmdb_config)
     lib = cfg.env_by_id[Defaults.ENV].lib_by_path[name]
     # Use symbol list by default (can still be overridden by kwargs)
     lib.version.symbol_list = True
@@ -233,45 +177,41 @@ def _version_store_factory_impl(
     return out
 
 
-def lmdb_version_store_cleanup(version_store_fixture):
-
-    @functools.wraps(version_store_fixture)
-    def wrapped(*args, **kwargs):
-        result: NativeVersionStore = version_store_fixture(*args, **kwargs)
-
-        yield result
-
-        #  pytest holds a member variable `cached_result` equal to `result` above which keeps the storage alive and
-        #  locked. See https://github.com/pytest-dev/pytest/issues/5642 . So we need to decref the C++ objects keeping
-        #  the LMDB env open before they will release the lock and allow Windows to delete the LMDB files.
-        result.version_store = None
-        result._library = None
-
-        cfg = result.lib_cfg()
-        for storage in cfg.storage_by_id.values():
-            lmdb = LmdbConfig()
-            lmdb.ParseFromString(storage.config.value)
-            shutil.rmtree(lmdb.path)
-
-    return wrapped
-
-
 @pytest.fixture
-def version_store_factory(arcticdb_test_lmdb_config, lib_name):
+def version_store_factory(lib_name, tmpdir):
     """Factory to create any number of distinct LMDB libs with the given WriteOptions or VersionStoreConfig.
 
-    Accepts legacy options col_per_group and row_per_segment which defaults to 2.
-    `name` can be a magical value "_unique_" which will create libs with unique names."""
-    used = {}
+    Accepts legacy options col_per_group and row_per_segment.
+    `name` can be a magical value "_unique_" which will create libs with unique names.
+    The values in `lmdb_config` populates the `LmdbConfig` Protobuf that creates the `Library` in C++. On Windows, it
+    can be used to override the `map_size`.
+    """
+    used: Dict[str, NativeVersionStore] = {}
 
-    def version_store(col_per_group: Optional[int] = None, row_per_segment: Optional[int] = None, **kwargs) -> NativeVersionStore:
+    def create_version_store(
+        col_per_group: Optional[int] = None,
+        row_per_segment: Optional[int] = None,
+        lmdb_config: Dict[str, Any] = {},
+        **kwargs,
+    ) -> NativeVersionStore:
         if col_per_group is not None and "column_group_size" not in kwargs:
             kwargs["column_group_size"] = col_per_group
         if row_per_segment is not None and "segment_row_size" not in kwargs:
             kwargs["segment_row_size"] = row_per_segment
-        return _version_store_factory_impl(used, arcticdb_test_lmdb_config, lib_name, **kwargs)
+        cfg_factory = functools.partial(create_test_lmdb_cfg, db_dir=str(tmpdir), lmdb_config=lmdb_config)
+        return _version_store_factory_impl(used, cfg_factory, lib_name, **kwargs)
 
-    return version_store
+    try:
+        yield create_version_store
+    finally:
+        for result in used.values():
+            #  pytest holds a member variable `cached_result` equal to `result` above which keeps the storage alive and
+            #  locked. See https://github.com/pytest-dev/pytest/issues/5642 . So we need to decref the C++ objects keeping
+            #  the LMDB env open before they will release the lock and allow Windows to delete the LMDB files.
+            result.version_store = None
+            result._library = None
+
+        shutil.rmtree(tmpdir, ignore_errors=True)
 
 
 @pytest.fixture
@@ -283,23 +223,10 @@ def s3_store_factory(lib_name, arcticdb_test_s3_config):
     """
     used = {}
     try:
-        yield partial(_version_store_factory_impl, used, arcticdb_test_s3_config, lib_name)
+        yield functools.partial(_version_store_factory_impl, used, arcticdb_test_s3_config, lib_name)
     finally:
         for lib in used.values():
             lib.version_store.clear()
-
-
-@pytest.fixture
-def lmdb_version_store_with_write_option(arcticdb_test_lmdb_config, request, lib_name):
-    config = ArcticMemoryConfig(arcticdb_test_lmdb_config(lib_name), env=Defaults.ENV)
-    lib_cfg = get_lib_cfg(config, Defaults.ENV, lib_name)
-    for option in request.param:
-        if option == "sync_passive.enabled":
-            setattr(lib_cfg.version.write_options.sync_passive, "enabled", True)
-        else:
-            setattr(lib_cfg.version.write_options, option, True)
-
-    return config[lib_name]
 
 
 @pytest.fixture(scope="function")
@@ -313,103 +240,86 @@ def s3_version_store_prune_previous(s3_store_factory):
 
 
 @pytest.fixture
-@lmdb_version_store_cleanup
 def lmdb_version_store_string_coercion(version_store_factory):
     return version_store_factory()
 
 
 @pytest.fixture
-@lmdb_version_store_cleanup
 def lmdb_version_store(version_store_factory):
     return version_store_factory(dynamic_strings=True)
 
 
 @pytest.fixture
-@lmdb_version_store_cleanup
 def lmdb_version_store_prune_previous(version_store_factory):
     return version_store_factory(dynamic_strings=True, prune_previous_version=True, use_tombstones=True)
 
 
 @pytest.fixture
-@lmdb_version_store_cleanup
 def lmdb_version_store_big_map(version_store_factory):
-    return version_store_factory(lmdb_config={"map_size": 2 ** 30})
+    return version_store_factory(lmdb_config={"map_size": 2**30})
 
 
 @pytest.fixture
-@lmdb_version_store_cleanup
 def lmdb_version_store_column_buckets(version_store_factory):
     return version_store_factory(dynamic_schema=True, column_group_size=3, segment_row_size=2, bucketize_dynamic=True)
 
 
 @pytest.fixture
-@lmdb_version_store_cleanup
 def lmdb_version_store_dynamic_schema(version_store_factory):
     return version_store_factory(dynamic_schema=True, dynamic_strings=True)
 
 
 @pytest.fixture
-@lmdb_version_store_cleanup
 def lmdb_version_store_delayed_deletes(version_store_factory):
     return version_store_factory(delayed_deletes=True, dynamic_strings=True, prune_previous_version=True)
 
 
 @pytest.fixture
-@lmdb_version_store_cleanup
 def lmdb_version_store_tombstones_no_symbol_list(version_store_factory):
     return version_store_factory(use_tombstones=True, dynamic_schema=True, symbol_list=False, dynamic_strings=True)
 
 
 @pytest.fixture
-@lmdb_version_store_cleanup
 def lmdb_version_store_allows_pickling(version_store_factory, lib_name):
     return version_store_factory(use_norm_failure_handler_known_types=True, dynamic_strings=True)
 
 
 @pytest.fixture
-@lmdb_version_store_cleanup
 def lmdb_version_store_no_symbol_list(version_store_factory):
     return version_store_factory(col_per_group=None, row_per_segment=None, symbol_list=False)
 
 
 @pytest.fixture
-@lmdb_version_store_cleanup
 def lmdb_version_store_tombstone_and_pruning(version_store_factory):
     return version_store_factory(use_tombstones=True, prune_previous_version=True)
 
 
 @pytest.fixture
-@lmdb_version_store_cleanup
 def lmdb_version_store_tombstone(version_store_factory):
     return version_store_factory(use_tombstones=True)
 
 
 @pytest.fixture
-@lmdb_version_store_cleanup
 def lmdb_version_store_tombstone_and_sync_passive(version_store_factory):
     return version_store_factory(use_tombstones=True, sync_passive=True)
 
 
 @pytest.fixture
-@lmdb_version_store_cleanup
 def lmdb_version_store_ignore_order(version_store_factory):
     return version_store_factory(ignore_sort_order=True)
 
 
 @pytest.fixture
-@lmdb_version_store_cleanup
 def lmdb_version_store_small_segment(version_store_factory):
-    return version_store_factory(column_group_size=1000, segment_row_size=1000, lmdb_config={"map_size": 2 ** 30})
+    return version_store_factory(column_group_size=1000, segment_row_size=1000, lmdb_config={"map_size": 2**30})
 
 
 @pytest.fixture
-@lmdb_version_store_cleanup
 def lmdb_version_store_tiny_segment(version_store_factory):
-    return version_store_factory(column_group_size=2, segment_row_size=2, lmdb_config={"map_size": 2 ** 30})
+    return version_store_factory(column_group_size=2, segment_row_size=2, lmdb_config={"map_size": 2**30})
 
 
 @pytest.fixture
-@lmdb_version_store_cleanup
 def lmdb_version_store_tiny_segment_dynamic(version_store_factory):
     return version_store_factory(column_group_size=2, segment_row_size=2, dynamic_schema=True)
 

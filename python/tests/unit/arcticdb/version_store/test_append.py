@@ -94,10 +94,6 @@ def gen_params_append_single():
 
 
 @pytest.mark.parametrize("colnum,periods,rownum,cols,tsbounds,append_point", gen_params_append())
-@pytest.mark.skipif(
-    sys.platform == "win32",
-    reason="SKIP_WIN Parameter dimensionality uses too much disk on Windows as LMDB file allocated up front",
-)
 def test_append_partial_read(version_store_factory, colnum, periods, rownum, cols, tsbounds, append_point):
     tz = "America/New_York"
     version_store = version_store_factory(col_per_group=colnum, row_per_segment=rownum)
@@ -121,10 +117,6 @@ def test_append_partial_read(version_store_factory, colnum, periods, rownum, col
 
 
 @pytest.mark.parametrize("colnum,periods,rownum,cols,tsbounds,append_point", gen_params_append())
-@pytest.mark.skipif(
-    sys.platform == "win32",
-    reason="SKIP_WIN Parameter dimensionality uses too much disk on Windows as LMDB file allocated up front",
-)
 def test_incomplete_append_partial_read(version_store_factory, colnum, periods, rownum, cols, tsbounds, append_point):
     tz = "America/New_York"
     version_store = version_store_factory(col_per_group=colnum, row_per_segment=rownum)
