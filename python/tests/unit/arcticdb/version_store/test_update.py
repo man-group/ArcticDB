@@ -33,15 +33,8 @@ def test_update_single_dates(lmdb_version_store_dynamic_schema):
     assert_frame_equal(lib.read(sym).data, expected)
 
 
-def test_update(arcticdb_test_lmdb_config, lib_name):
-    col_per_group = 2
-    row_per_segment = 2
-    local_lib_cfg = arcticdb_test_lmdb_config(lib_name)
-    lib = local_lib_cfg.env_by_id[Defaults.ENV].lib_by_path[lib_name]
-    lib.version.write_options.column_group_size = col_per_group
-    lib.version.write_options.segment_row_size = row_per_segment
-    lmdb_version_store = ArcticMemoryConfig(local_lib_cfg, Defaults.ENV)[lib_name]
-
+def test_update(version_store_factory):
+    lmdb_version_store = version_store_factory(col_per_group=2, row_per_segment=2)
     symbol = "update_no_daterange"
 
     idx = pd.date_range("1970-01-01", periods=100, freq="D")
@@ -95,22 +88,15 @@ def gen_params():
     "col_per_group, start_increment, end_increment, update_start, iterations, start_dist", gen_params()
 )
 def test_update_repeatedly_dynamic_schema(
-    arcticdb_test_lmdb_config,
+    version_store_factory,
     col_per_group,
     start_increment,
     end_increment,
     update_start,
     iterations,
     start_dist,
-    lib_name,
 ):
-    row_per_segment = 2
-    local_lib_cfg = arcticdb_test_lmdb_config(lib_name)
-    lib = local_lib_cfg.env_by_id[Defaults.ENV].lib_by_path[lib_name]
-    lib.version.write_options.column_group_size = col_per_group
-    lib.version.write_options.segment_row_size = row_per_segment
-    lib.version.write_options.dynamic_schema = True
-    lmdb_version_store = ArcticMemoryConfig(local_lib_cfg, Defaults.ENV)[lib_name]
+    lmdb_version_store = version_store_factory(col_per_group=col_per_group, row_per_segment=2, dynamic_schema=True)
 
     symbol = "update_dynamic_schema"
 
@@ -140,23 +126,15 @@ def test_update_repeatedly_dynamic_schema(
     "col_per_group, start_increment, end_increment, update_start, iterations, start_dist", gen_params()
 )
 def test_update_repeatedly_dynamic_schema_hashed(
-    arcticdb_test_lmdb_config,
+    version_store_factory,
     col_per_group,
     start_increment,
     end_increment,
     update_start,
     iterations,
     start_dist,
-    lib_name,
 ):
-    row_per_segment = 2
-    local_lib_cfg = arcticdb_test_lmdb_config(lib_name)
-    lib = local_lib_cfg.env_by_id[Defaults.ENV].lib_by_path[lib_name]
-    lib.version.write_options.column_group_size = col_per_group
-    lib.version.write_options.segment_row_size = row_per_segment
-    lib.version.write_options.dynamic_schema = True
-    # lib.version.write_options.bucketize_dynamic = True
-    lmdb_version_store = ArcticMemoryConfig(local_lib_cfg, Defaults.ENV)[lib_name]
+    lmdb_version_store = version_store_factory(col_per_group=col_per_group, row_per_segment=2, dynamic_schema=True)
 
     symbol = "update_dynamic_schema"
 
@@ -202,21 +180,15 @@ def test_update_repeatedly_dynamic_schema_hashed(
     "col_per_group, start_increment, end_increment, update_start, iterations, start_dist", gen_params()
 )
 def test_update_repeatedly(
-    arcticdb_test_lmdb_config,
+    version_store_factory,
     col_per_group,
     start_increment,
     end_increment,
     update_start,
     iterations,
     start_dist,
-    lib_name,
 ):
-    row_per_segment = 2
-    local_lib_cfg = arcticdb_test_lmdb_config(lib_name)
-    lib = local_lib_cfg.env_by_id[Defaults.ENV].lib_by_path[lib_name]
-    lib.version.write_options.column_group_size = col_per_group
-    lib.version.write_options.segment_row_size = row_per_segment
-    lmdb_version_store = ArcticMemoryConfig(local_lib_cfg, Defaults.ENV)[lib_name]
+    lmdb_version_store = version_store_factory(col_per_group=col_per_group, row_per_segment=2)
 
     symbol = "update_no_daterange"
 
@@ -246,21 +218,15 @@ def test_update_repeatedly(
     "col_per_group, start_increment, end_increment, update_start, iterations, start_dist", gen_params()
 )
 def test_update_repeatedly_with_strings(
-    arcticdb_test_lmdb_config,
+    version_store_factory,
     col_per_group,
     start_increment,
     end_increment,
     update_start,
     iterations,
     start_dist,
-    lib_name,
 ):
-    row_per_segment = 2
-    local_lib_cfg = arcticdb_test_lmdb_config(lib_name)
-    lib = local_lib_cfg.env_by_id[Defaults.ENV].lib_by_path[lib_name]
-    lib.version.write_options.column_group_size = col_per_group
-    lib.version.write_options.segment_row_size = row_per_segment
-    lmdb_version_store = ArcticMemoryConfig(local_lib_cfg, Defaults.ENV)[lib_name]
+    lmdb_version_store = version_store_factory(col_per_group=col_per_group, row_per_segment=2)
 
     symbol = "update_no_daterange"
 
@@ -286,14 +252,8 @@ def test_update_repeatedly_with_strings(
         assert_frame_equal(vit.data, df)
 
 
-def test_update_with_snapshot(arcticdb_test_lmdb_config, lib_name):
-    col_per_group = 2
-    row_per_segment = 2
-    local_lib_cfg = arcticdb_test_lmdb_config(lib_name)
-    lib = local_lib_cfg.env_by_id[Defaults.ENV].lib_by_path[lib_name]
-    lib.version.write_options.column_group_size = col_per_group
-    lib.version.write_options.segment_row_size = row_per_segment
-    lmdb_version_store = ArcticMemoryConfig(local_lib_cfg, Defaults.ENV)[lib_name]
+def test_update_with_snapshot(version_store_factory):
+    lmdb_version_store = version_store_factory(col_per_group=2, row_per_segment=2)
 
     symbol = "update_no_daterange"
 
@@ -468,6 +428,7 @@ def test_update_pickled_data(lmdb_version_store):
     df2 = pd.DataFrame({"a": [1000]}, index=idx[1:2])
     with pytest.raises(InternalException) as e_info:
         lmdb_version_store.update(symbol, df2)
+
 
 def test_non_cstyle_numpy_update(lmdb_version_store):
     symbol = "test_non_cstyle_numpy_update"
