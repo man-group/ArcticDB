@@ -23,8 +23,7 @@ from numpy.testing import assert_array_equal
 from pytz import timezone
 
 from arcticdb.config import Defaults
-from arcticdb.exceptions import ArcticNativeNotYetImplemented
-from arcticdb_ext.exceptions import InternalException
+from arcticdb_ext.exceptions import InternalException, NormalizationException
 from arcticdb.flattener import Flattener
 from arcticdb.version_store import NativeVersionStore
 from arcticdb.version_store._custom_normalizers import CustomNormalizer, register_normalizer
@@ -435,7 +434,7 @@ def test_empty_ndarr(lmdb_version_store):
 
 # See AN-765 for why we need no_symbol_list fixture
 def test_large_symbols(lmdb_version_store_no_symbol_list):
-    with pytest.raises(ArcticNativeNotYetImplemented):
+    with pytest.raises(NormalizationException):
         lmdb_version_store_no_symbol_list.write("a" * (MAX_SYMBOL_SIZE + 1), 1)
 
     for _ in range(5):
@@ -454,7 +453,7 @@ def test_large_symbols(lmdb_version_store_no_symbol_list):
 
 def test_unsupported_chars_in_symbols(lmdb_version_store):
     for ch in UNSUPPORTED_S3_CHARS:
-        with pytest.raises(ArcticNativeNotYetImplemented):
+        with pytest.raises(NormalizationException):
             lmdb_version_store.write(ch, 1)
 
     for _ in range(5):
@@ -1103,7 +1102,7 @@ def test_coercion_to_float(lmdb_version_store_string_coercion):
     assert df["col"].dtype == np.object_
 
     if sys.platform != "win32":  # SKIP_WIN Windows always uses dynamic strings
-        with pytest.raises(ArcticNativeNotYetImplemented):
+        with pytest.raises(NormalizationException):
             # Needs pickling due to the obj column
             lib.write("test", df)
 
@@ -1120,7 +1119,7 @@ def test_coercion_to_str_with_dynamic_strings(lmdb_version_store_string_coercion
     assert df["col"].dtype == np.object_
 
     if sys.platform != "win32":  # SKIP_WIN Windows always uses dynamic strings
-        with pytest.raises(ArcticNativeNotYetImplemented):
+        with pytest.raises(NormalizationException):
             lib.write("sym", df)
 
     with mock.patch(

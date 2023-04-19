@@ -11,7 +11,7 @@ from pandas import DataFrame, Timestamp
 import pytest
 
 from arcticdb.version_store import NativeVersionStore, VersionedItem
-from arcticdb.exceptions import ArcticNativeNotYetImplemented
+from arcticdb_ext.exceptions import NormalizationException
 from arcticdb_ext.storage import NoDataFoundException
 from arcticdb.util.test import assert_frame_equal
 
@@ -34,7 +34,7 @@ def test_rt_df_with_small_meta(lib_type, request):
 
 @pytest.mark.parametrize("lib_type", ["lmdb_version_store", "s3_version_store"])
 def test_rt_df_with_humonguous_meta(lib_type, request):
-    with pytest.raises(ArcticNativeNotYetImplemented):
+    with pytest.raises(NormalizationException):
         from arcticdb.version_store._normalization import _MAX_USER_DEFINED_META as MAX
 
         lib = request.getfixturevalue(lib_type)

@@ -6,8 +6,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 import sys
-from arcticdb_ext.exceptions import InternalException
-from arcticdb.exceptions import ArcticNativeNotYetImplemented
+from arcticdb_ext.exceptions import InternalException, NormalizationException
 
 try:
     from arcticdb.version_store import VersionedItem as PythonVersionedItem
@@ -953,7 +952,7 @@ def test_numpy_string(arctic_library):
 
 @pytest.mark.skipif(sys.platform != "win32", reason="SKIP_WIN Numpy strings not supported yet")
 def test_numpy_string_fails_on_windows(arctic_library):
-    with pytest.raises(ArcticNativeNotYetImplemented):
+    with pytest.raises(NormalizationException):
         arctic_library.write("symbol", np.array(["ab", "cd", "efg"]))
 
 

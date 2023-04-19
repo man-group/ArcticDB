@@ -22,6 +22,7 @@ from arcticc.pb2.descriptors_pb2 import UserDefinedMetadata, NormalizationMetada
 from arcticc.pb2.storage_pb2 import VersionStoreConfig
 from mmap import mmap
 from collections import Counter
+from arcticdb.util.errors import *
 from arcticdb.exceptions import ArcticNativeException
 from arcticdb.supported_types import time_types as supported_time_types
 from arcticdb.version_store.read_result import ReadResult

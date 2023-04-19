@@ -9,7 +9,3 @@ As of the Change Date specified in that file, in accordance with the Business So
 
 class ArcticNativeException(Exception):
     pass
-
-
-class ArcticNativeNotYetImplemented(Exception):
-    pass

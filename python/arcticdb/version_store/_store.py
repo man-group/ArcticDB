@@ -35,6 +35,7 @@ from arcticdb_ext.storage import (
     Library as _Library,
 )
 from arcticdb.version_store.read_result import ReadResult
+from arcticdb.util.errors import *
 from arcticdb_ext.version_store import IndexRange as _IndexRange
 from arcticdb_ext.version_store import RowRange as _RowRange
 from arcticdb_ext.version_store import HeadRange as _HeadRange
