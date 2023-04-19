@@ -46,8 +46,9 @@ from arcticdb_ext.version_store import PythonVersionStoreUpdateQuery as _PythonV
 from arcticdb_ext.version_store import PythonVersionStoreReadOptions as _PythonVersionStoreReadOptions
 from arcticdb_ext.version_store import PythonVersionStoreVersionQuery as _PythonVersionStoreVersionQuery
 from arcticdb_ext.version_store import StreamDescriptorMismatch
+from arcticdb_ext.exceptions import NormalizationException
 from arcticdb.authorization.permissions import OpenMode
-from arcticdb.exceptions import ArcticNativeNotYetImplemented, ArcticNativeException
+from arcticdb.exceptions import ArcticNativeException
 from arcticdb.flattener import Flattener
 from arcticdb.log import version as log
 from arcticdb.version_store._custom_normalizers import get_custom_normalizer, CompositeCustomNormalizer
@@ -160,7 +161,7 @@ def _handle_categorical_columns(symbol, data, throw=True):
                 symbol, categorical_columns
             )
             if throw:
-                raise ArcticNativeNotYetImplemented(message)
+                arcticdb_raise(NormalizationError.E_INCOMPATIBLE_OBJECTS, lambda: message)
             else:
                 log.warn(message)
 
@@ -243,7 +244,7 @@ class NativeVersionStore:
                 MsgPackNormalizer(nfh), use_norm_failure_handler_known_types=use_norm_failure_handler_known_types
             )
         else:
-            raise ArcticNativeNotYetImplemented("No other normalization failure handler")
+            arcticdb_raise(NormalizationError.E_UNSUPPORTED_NORMALIZATION_FAILURE_HANDLER, lambda: "No other normalization failure handler")
 
     def _initialize(self, library, env, lib_cfg, custom_normalizer, open_mode):
         self._library = library
@@ -343,7 +344,7 @@ class NativeVersionStore:
                     dynamic_schema=dynamic_schema,
                     **kwargs,
                 )
-        except ArcticNativeNotYetImplemented as ex:
+        except NormalizationException as ex:
             log.error("Not supported: normalizing symbol={}, data={}, metadata={}, {}", symbol, dataframe, metadata, ex)
             raise
         except Exception as ex:
@@ -358,13 +359,9 @@ class NativeVersionStore:
     @staticmethod
     def check_symbol_validity(symbol):
         if not len(symbol) < MAX_SYMBOL_SIZE:
-            raise ArcticNativeNotYetImplemented(
-                f"Symbol length {len(symbol)} chars exceeds the max supported length of {MAX_SYMBOL_SIZE} chars."
-            )
+            arcticdb_raise(NormalizationError.E_EXCEED_LIMIT, lambda: f"Symbol length {len(symbol)} chars exceeds the max supported length of {MAX_SYMBOL_SIZE} chars.")
         if len(set(symbol).intersection(UNSUPPORTED_S3_CHARS)):
-            raise ArcticNativeNotYetImplemented(
-                f"The symbol '{symbol}' has one or more unsupported characters({','.join(UNSUPPORTED_S3_CHARS)})."
-            )
+            arcticdb_raise(NormalizationError.E_INCOMPATIBLE_OBJECTS, lambda: f"The symbol '{symbol}' has one or more unsupported characters({','.join(UNSUPPORTED_S3_CHARS)}).")
 
     def try_flatten_and_write_composite_object(self, symbol, data, metadata, pickle_on_failure, dynamic_strings):
         fl = Flattener()

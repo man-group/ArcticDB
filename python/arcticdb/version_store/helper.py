@@ -24,8 +24,9 @@ from arcticc.pb2.storage_pb2 import (
 
 from arcticdb.config import *  # for backward compat after moving to config
 from arcticdb.config import _expand_path
-from arcticdb.exceptions import ArcticNativeException, LibraryNotFound
+from arcticdb.exceptions import ArcticNativeException
 from arcticdb.version_store._store import NativeVersionStore
+from arcticdb.util.errors import *
 
 from typing import Iterable, Dict, Any
 from arcticdb.authorization.permissions import OpenMode
@@ -309,6 +310,6 @@ def get_arctic_native_lib(lib_fqn):
     # type: (AnyStr)->NativeVersionStore
     m = _LIB_PATH_REGEX.match(lib_fqn)
     if m is None:
-        raise LibraryNotFound(lib_fqn)
+        arcticdb_raise(StorageError.E_LIBRARY_NOT_FOUND, lambda: f"{lib_fqn} not found")
     lib, path = m.group(1), m.group(2)
     return ArcticcFileConfig(config_path=path)[lib]

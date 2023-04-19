@@ -13,7 +13,3 @@ class ArcticNativeException(Exception):
 
 class ArcticNativeNotYetImplemented(Exception):
     pass
-
-
-class LibraryNotFound(Exception):
-    pass
