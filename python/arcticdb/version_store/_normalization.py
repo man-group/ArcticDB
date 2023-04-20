@@ -38,7 +38,19 @@ from arcticdb.version_store._common import _column_name_to_strings, TimeFrame
 PICKLE_PROTOCOL = 4
 
 from pandas._libs.tslib import Timestamp
-from pandas._libs.tslibs.timezones import get_timezone, is_utc
+from pandas._libs.tslibs.timezones import get_timezone
+
+
+try:
+    from pandas._libs.tslibs.timezones import is_utc as check_is_utc_if_newer_pandas
+except ImportError:
+    # not present in pandas==0.22. Safe to remove when all clients upgrade.
+    assert pd.__version__.startswith(
+        "0"
+    ), "is_utc not present in this Pandas - has it been changed in latest Pandas release?"
+
+    def check_is_utc_if_newer_pandas(*args, **kwargs):
+        return False  # the UTC specific issue is not present in old Pandas so no need to go down special case
 
 log = version
 
@@ -299,7 +311,7 @@ def _normalize_single_index(index, index_names, index_norm, dynamic_strings=None
 
 
 def _ensure_str_timezone(index_tz):
-    if isinstance(index_tz, datetime.tzinfo) and is_utc(index_tz):
+    if isinstance(index_tz, datetime.tzinfo) and check_is_utc_if_newer_pandas(index_tz):
         # Pandas started to treat UTC as a special case and give back the tzinfo object for it. We coerce it back to
         # a str to avoid special cases for it further along our pipeline. The breaking change was:
         # https://github.com/jbrockmendel/pandas/commit/94ce05d1bcc3c99e992c48cc99d0fd2726f43102#diff-3dba9e959e6ad7c394f0662a0e6477593fca446a6924437701ecff82b0b20b55
