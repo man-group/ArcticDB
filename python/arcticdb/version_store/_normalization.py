@@ -107,7 +107,6 @@ if PY3:
         # and does not transform string into bytes
         return isinstance(v, string_types) or isinstance(v, binary_type)
 
-
 else:
 
     def _accept_array_string(v):
@@ -828,15 +827,19 @@ class MsgPackNormalizer(Normalizer):
     def __init__(self, cfg=None):
         self._size = MsgPackNormalizer.MMAP_DEFAULT_SIZE if cfg is None else cfg.max_blob_size
         self.MSG_PACK_MAX_SIZE = self._size  # Override with the max_pickle size if set in config.
-        self._buffer = None
         self.strict_mode = cfg.strict_mode if cfg is not None else False
 
     def normalize(self, obj, **kwargs):
-        if self._buffer is None:
-            self._buffer = mmap(-1, self._size)
-        self._buffer.seek(0)
+        buffer = mmap(-1, self._size)
         try:
-            self._msgpack_pack(obj, self._buffer)
+            return self._pack_with_buffer(obj, buffer)
+        except:
+            buffer.close()
+            raise
+
+    def _pack_with_buffer(self, obj, buffer: mmap):
+        try:
+            self._msgpack_pack(obj, buffer)
         except ValueError as e:
             if str(e) == "data out of range":
                 raise ArcticNativeNotYetImplemented(
@@ -848,12 +851,13 @@ class MsgPackNormalizer(Normalizer):
         norm_meta = NormalizationMetadata()
         norm_meta.msg_pack_frame.version = 1
 
-        d, r = divmod(self._buffer.tell(), 8)  # pack 8 by 8
+        d, r = divmod(buffer.tell(), 8)  # pack 8 by 8
         size = d + int(r != 0)
 
-        norm_meta.msg_pack_frame.size_bytes = self._buffer.tell()
+        norm_meta.msg_pack_frame.size_bytes = buffer.tell()
 
-        column_val = np.array(memoryview(self._buffer[: size * 8]), np.uint8).view(np.uint64)
+        # FUTURE(#263): do we need to care about byte ordering?
+        column_val = np.array(memoryview(buffer[: size * 8]), np.uint8).view(np.uint64)
 
         return NormalizedInput(
             item=NPDDataFrame(index_names=[], index_values=[], column_names=["bytes"], columns_values=[column_val]),
@@ -868,35 +872,18 @@ class MsgPackNormalizer(Normalizer):
         col_data = obj.data[0].view(np.uint8)[:sb]
         return self._msgpack_unpack(memoryview(col_data))
 
-    if PY3:
+    @staticmethod
+    def _nested_msgpack_packb(obj):
+        return _packb(obj, use_bin_type=True)
 
-        @staticmethod
-        def _nested_msgpack_packb(obj):
-            return _packb(obj, use_bin_type=True)
-
-        @staticmethod
-        def _nested_msgpack_unpackb(buff, raw=False):
-            return _msgpack_compat.unpackb(
-                buff,
-                raw=raw,
-                max_ext_len=MsgPackNormalizer.MSG_PACK_MAX_SIZE,
-                max_bin_len=MsgPackNormalizer.MSG_PACK_MAX_SIZE,
-            )
-
-    else:
-
-        @staticmethod
-        def _nested_msgpack_packb(obj):
-            return _packb(obj)
-
-        @staticmethod
-        def _nested_msgpack_unpackb(buff, raw=True):
-            return unpackb(
-                buff,
-                raw=raw,
-                max_ext_len=MsgPackNormalizer.MSG_PACK_MAX_SIZE,
-                max_bin_len=MsgPackNormalizer.MSG_PACK_MAX_SIZE,
-            )
+    @staticmethod
+    def _nested_msgpack_unpackb(buff, raw=False):
+        return _msgpack_compat.unpackb(
+            buff,
+            raw=raw,
+            max_ext_len=MsgPackNormalizer.MSG_PACK_MAX_SIZE,
+            max_bin_len=MsgPackNormalizer.MSG_PACK_MAX_SIZE,
+        )
 
     def _custom_pack(self, obj):
         if isinstance(obj, pd.Timestamp):
@@ -948,40 +935,21 @@ class MsgPackNormalizer(Normalizer):
 
         return ExtType(code, data)
 
-    if PY3:
+    def _msgpack_pack(self, obj, buff):
+        try:
+            _pack(obj, buff, use_bin_type=True, default=self._custom_pack, strict_types=True)
+        except TypeError:
+            # Some ancient versions of msgpack don't support strict_types, fallback to the pack without that arg.
+            _pack(obj, buff, use_bin_type=True, default=self._custom_pack)
 
-        def _msgpack_pack(self, obj, buff):
-            try:
-                _pack(obj, buff, use_bin_type=True, default=self._custom_pack, strict_types=True)
-            except TypeError:
-                # Some ancient versions of msgpack don't support strict_types, fallback to the pack without that arg.
-                _pack(obj, buff, use_bin_type=True, default=self._custom_pack)
-
-        def _msgpack_unpack(self, buff, raw=False):
-            return _msgpack_compat.unpackb(
-                buff,
-                raw=raw,
-                ext_hook=self._ext_hook,
-                max_ext_len=MsgPackNormalizer.MSG_PACK_MAX_SIZE,
-                max_bin_len=MsgPackNormalizer.MSG_PACK_MAX_SIZE,
-            )
-
-    else:
-
-        def _msgpack_pack(self, obj, buff):
-            try:
-                _pack(obj, buff, default=self._custom_pack, strict_types=True)
-            except TypeError:
-                # Some ancient versions of msgpack don't support strict_types, fallback to the pack without that arg.
-                _pack(obj, buff, default=self._custom_pack)
-
-        def _msgpack_unpack(self, buff):
-            return unpackb(
-                buff,
-                ext_hook=self._ext_hook,
-                max_ext_len=MsgPackNormalizer.MSG_PACK_MAX_SIZE,
-                max_bin_len=MsgPackNormalizer.MSG_PACK_MAX_SIZE,
-            )
+    def _msgpack_unpack(self, buff, raw=False):
+        return _msgpack_compat.unpackb(
+            buff,
+            raw=raw,
+            ext_hook=self._ext_hook,
+            max_ext_len=MsgPackNormalizer.MSG_PACK_MAX_SIZE,
+            max_bin_len=MsgPackNormalizer.MSG_PACK_MAX_SIZE,
+        )
 
 
 class Pickler(object):

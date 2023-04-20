@@ -41,6 +41,7 @@ from arcticdb.util.test import configure_test_logger, apply_lib_cfg
 from arcticdb.version_store.helper import ArcticMemoryConfig
 from arcticdb.version_store import NativeVersionStore
 from arcticdb.version_store._normalization import MsgPackNormalizer
+from arcticdb_ext.storage import KeyType
 
 configure_test_logger()
 
@@ -203,6 +204,15 @@ def version_store_factory(lib_name, tmpdir):
 
     try:
         yield create_version_store
+    except RuntimeError as e:
+        if "mdb_" in str(e): # Dump keys
+            for store in used.values():
+                print(store)
+                lt = store.library_tool()
+                for kt in lt.key_types():
+                    for key in lt.find_keys(kt):
+                        print(key)
+        raise
     finally:
         for result in used.values():
             #  pytest holds a member variable `cached_result` equal to `result` above which keeps the storage alive and
