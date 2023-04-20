@@ -23,7 +23,6 @@ from arcticc.pb2.storage_pb2 import VersionStoreConfig
 from mmap import mmap
 from collections import Counter
 from arcticdb.util.errors import *
-from arcticdb.exceptions import ArcticNativeException
 from arcticdb.supported_types import time_types as supported_time_types
 from arcticdb.version_store.read_result import ReadResult
 from arcticdb_ext.version_store import SortedValue as _SortedValue
@@ -264,9 +263,9 @@ def _normalize_single_index(index, index_names, index_norm, dynamic_strings=None
         # skip index since we can reconstruct it, so no need to actually store it
         if index.name:
             if not isinstance(index.name, string_types):
-                raise ArcticNativeException(
-                    "Cannot use non string type as index name. Actual {} with type {}".format(
-                        index.name, type(index.name)
+                arcticdb_raise(NormalizationError.E_INCOMPATIBLE_INDEX, 
+                    lambda: "Cannot use non string type as index name. Actual {} with type {}".format(
+                    index.name, type(index.name)
                     )
                 )
             index_norm.name = _column_name_to_strings(index.name)
@@ -383,7 +382,7 @@ def _normalize_columns_names(columns_names, index_names, norm_meta, dynamic_sche
         col = columns_names[idx]
         if col is None:
             if dynamic_schema and counter[col] > 1:
-                raise ArcticNativeException("Multiple None columns not allowed in dynamic_schema")
+                arcticdb_raise(NormalizationError.E_INCOMPATIBLE_OBJECTS, lambda: "Multiple None columns not allowed in dynamic_schema")
             new_name = "__none__{}".format(0 if dynamic_schema else idx)
             norm_meta.common.col_names[new_name].is_none = True
             columns_names[idx] = new_name
@@ -392,13 +391,13 @@ def _normalize_columns_names(columns_names, index_names, norm_meta, dynamic_sche
         columns_names[idx] = col_str
         if len(col_str) == 0:
             if dynamic_schema and counter[col] > 1:
-                raise ArcticNativeException("Multiple '' columns not allowed in dynamic_schema")
+                arcticdb_raise(NormalizationError.E_INCOMPATIBLE_OBJECTS, lambda: "Multiple '' columns not allowed in dynamic_schema")
             new_name = "__empty__{}".format(0 if dynamic_schema else idx)
             norm_meta.common.col_names[new_name].is_empty = True
             columns_names[idx] = new_name
         else:
             if dynamic_schema and (counter[col] > 1):
-                raise ArcticNativeException("Same column names not allowed in dynamic_schema")
+                arcticdb_raise(NormalizationError.E_INCOMPATIBLE_OBJECTS, lambda: "Same column names not allowed in dynamic_schema")
             if counter[col] > 1 or col in index_names:
                 new_name = "__col_{}__{}".format(col, 0 if dynamic_schema else idx)
                 norm_meta.common.col_names[new_name].original_name = col_str
@@ -422,16 +421,16 @@ def _normalize_columns(
     columns_names_norm = list(map(str, columns_names))
     if not isinstance(columns_names, RangeIndex):
         if coerce_columns is not None and (set(columns_names_norm) != set(coerce_columns.keys())):
-            raise ArcticNativeException("Keys in coerce column dictionary must match columns in dataframes")
+            arcticdb_raise(NormalizationError.E_INCOMPATIBLE_OBJECTS, lambda: "Keys in coerce column dictionary must match columns in dataframes")
         columns_names_norm = _normalize_columns_names(list(columns_names), index_names, norm_meta, dynamic_schema)
 
         if columns_names_norm != list(columns_names):
             log.debug("Dataframe column names normalized")
 
     if len(columns_names_norm) != len(columns_vals):
-        raise ArcticNativeException(
-            "mismatch in columns_name and vals size in _normalize_columns {} != {}".format(
-                len(columns_names_norm), len(columns_vals)
+        arcticdb_raise(NormalizationError.E_INCOMPATIBLE_OBJECTS, 
+            lambda: "mismatch in columns_name and vals size in _normalize_columns {} != {}".format(
+            len(columns_names_norm), len(columns_vals)
             )
         )
     column_vals = [
@@ -806,7 +805,7 @@ def check_valid_msgpack(pack_module, packer_module):
     ):
         return
     log.info("Unsupported msgpack variant, got: {}, {}".format(pack_module, packer_module))
-    raise ArcticNativeException("Unsupported msgpack variant, got: {}, {}".format(pack_module, packer_module))
+    arcticdb_raise(NormalizationError.E_UNSUPPORTED_MSG_PACK, lambda: "Unsupported msgpack variant, got: {}, {}".format(pack_module, packer_module))
 
 
 def _pack(*args, **kwargs):
@@ -882,7 +881,7 @@ class MsgPackNormalizer(Normalizer):
     def denormalize(self, obj, meta):
         input_type = meta.WhichOneof("input_type")
         if input_type != "msg_pack_frame":
-            raise ArcticNativeException("Expected msg_pack_frame input, actual {}".format(meta))
+            arcticdb_raise(NormalizationError.E_DENORMALIZE_ITEM_ERROR, lambda: "Expected msg_pack_frame input, actual {}".format(meta))
         sb = meta.msg_pack_frame.size_bytes
         col_data = obj.data[0].view(np.uint8)[:sb]
         return self._msgpack_unpack(memoryview(col_data))
@@ -1165,7 +1164,7 @@ class CompositeNormalizer(Normalizer):
                 return self.msg_pack_denorm.denormalize(item, norm_meta)
 
         if self.fallback_normalizer is None:
-            raise ArcticNativeException("Cannot denormalize item with metadata {}".format(norm_meta))
+            arcticdb_raise(NormalizationError.E_DENORMALIZE_ITEM_ERROR, lambda: "Cannot denormalize item with metadata {}".format(norm_meta))
         return self.fallback_normalizer.denormalize(item, norm_meta)
 
 

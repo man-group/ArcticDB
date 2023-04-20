@@ -49,7 +49,6 @@ from arcticdb_ext.version_store import PythonVersionStoreVersionQuery as _Python
 from arcticdb_ext.version_store import StreamDescriptorMismatch
 from arcticdb_ext.exceptions import NormalizationException
 from arcticdb.authorization.permissions import OpenMode
-from arcticdb.exceptions import ArcticNativeException
 from arcticdb.flattener import Flattener
 from arcticdb.log import version as log
 from arcticdb.version_store._custom_normalizers import get_custom_normalizer, CompositeCustomNormalizer
@@ -245,7 +244,7 @@ class NativeVersionStore:
                 MsgPackNormalizer(nfh), use_norm_failure_handler_known_types=use_norm_failure_handler_known_types
             )
         else:
-            arcticdb_raise(NormalizationError.E_UNSUPPORTED_NORMALIZATION_FAILURE_HANDLER, lambda: "No other normalization failure handler")
+            arcticdb_raise(NormalizationError.E_UNSUPPORTED_MSG_PACK, lambda: "No other normalization failure handler")
 
     def _initialize(self, library, env, lib_cfg, custom_normalizer, open_mode):
         self._library = library
@@ -350,10 +349,10 @@ class NativeVersionStore:
             raise
         except Exception as ex:
             log.error("Error while normalizing symbol={}, data={}, metadata={}, {}", symbol, dataframe, metadata, ex)
-            raise ArcticNativeException(str(ex))
+            arcticdb_raise(NormalizationError.E_INCOMPATIBLE_OBJECTS, lambda: str(ex))
 
         if norm_meta is None:
-            raise ArcticNativeException("Cannot normalize input {}".format(symbol))
+            arcticdb_raise(NormalizationError.E_INCOMPATIBLE_OBJECTS, lambda: "Cannot normalize input {}".format(symbol))
 
         return udm, item, norm_meta
 
@@ -1250,7 +1249,7 @@ class NativeVersionStore:
         elif isinstance(as_of, (datetime, Timestamp)):
             version_query.set_timestamp(Timestamp(as_of).value)
         elif as_of is not None:
-            raise ArcticNativeException("Unexpected combination of read parameters")
+            arcticdb_raise(InternalError.E_INVALID_ARGUMENT, lambda: "Unexpected combination of read parameters")
 
         return version_query
 
@@ -1475,7 +1474,7 @@ class NativeVersionStore:
                     start_idx = ts_idx.searchsorted(datetime64(read_query.row_filter.start_ts, "ns"), side="left")
                     end_idx = ts_idx.searchsorted(datetime64(read_query.row_filter.end_ts, "ns"), side="right")
             else:
-                raise ArcticNativeException("Unrecognised row_filter type: {}".format(type(read_query.row_filter)))
+                arcticdb_raise(InternalError.E_INVALID_ARGUMENT, lambda: "Unrecognised row_filter type: {}".format(type(read_query.row_filter)))
             data = []
             for c in read_result.frame_data.value.data:
                 data.append(c[start_idx:end_idx])
@@ -1509,7 +1508,7 @@ class NativeVersionStore:
         version_handle = self.version_store.find_version(symbol, version_query)
 
         if version_handle is None and raise_on_missing:
-            raise KeyError(f"Cannot find version for symbol={symbol},as_of={as_of}")
+            arcticdb_raise(MissingDataError.E_NO_SUCH_VERSION, lambda: f"Cannot find version for symbol={symbol},as_of={as_of}")
 
         return version_handle
 

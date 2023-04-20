@@ -73,7 +73,7 @@ class ConfigCache {
     std::shared_ptr<Storages> create_storages(const LibraryPath &path, OpenMode mode) {
         auto maybe_descriptor = get_descriptor(path);
         if (!maybe_descriptor.has_value())
-            throw std::runtime_error(fmt::format("Library {} not found", path));
+            throw LibraryNotFoundException(fmt::format("Library {} not found", path));
 
         auto &descriptor = maybe_descriptor.value();
 

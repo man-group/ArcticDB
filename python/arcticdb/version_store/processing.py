@@ -14,7 +14,6 @@ import pandas as pd
 
 from abc import ABC, abstractmethod
 
-from arcticdb.exceptions import ArcticNativeException
 from arcticdb.supported_types import time_types as supported_time_types
 
 from arcticdb_ext.version_store import ExecutionContextOptimisation as _Optimisation
@@ -42,6 +41,7 @@ from arcticdb_ext.version_store import ExpressionNode as _ExpressionNode
 from arcticdb_ext.version_store import OperationType as _OperationType
 
 from arcticdb_ext.version_store import ClauseBuilder as _ClauseBuilder
+from arcticdb.util.errors import *
 
 COLUMN = "COLUMN"
 
@@ -614,7 +614,7 @@ CONSTRUCTOR_MAP = {
 
 def create_value(value):
     if value in [inf, -inf]:
-        raise ArcticNativeException("Infinite values not supported in queries")
+        arcticdb_raise(InternalError.E_INVALID_ARGUMENT, lambda: "Infinite values not supported in queries")
 
     if isinstance(value, np.floating):
         f = CONSTRUCTOR_MAP.get(value.dtype.kind).get(value.dtype.itemsize)
@@ -682,7 +682,7 @@ def visit_expression(expr):
                 return _handle_leaf(node)
 
         if isinstance(node, bool):
-            raise ArcticNativeException("Query is trivially {}".format(node))
+            arcticdb_raise(InternalError.E_INVALID_ARGUMENT, lambda: "Query is trivially {}".format(node))
 
         left = _visit_child(node.left)
         if node.right is not None:

@@ -78,6 +78,8 @@ private:
     mutable std::string msg_;
 };
 
+using LibraryNotFoundException = ArcticSpecificException<ErrorCode::E_LIBRARY_NOT_FOUND>;
+
 template<class Impl>
 class Storage : public StorageBase {
 public:

@@ -24,7 +24,6 @@ from arcticc.pb2.storage_pb2 import (
 
 from arcticdb.config import *  # for backward compat after moving to config
 from arcticdb.config import _expand_path
-from arcticdb.exceptions import ArcticNativeException
 from arcticdb.version_store._store import NativeVersionStore
 from arcticdb.util.errors import *
 
@@ -43,7 +42,7 @@ def create_lib_from_lib_config(lib_config, env=Defaults.ENV, open_mode=OpenMode.
 def extract_lib_config(env_cfg, lib_path):
     # type: (EnvironmentConfig, AnyStr)->LibraryConfig
     if lib_path not in env_cfg.lib_by_path:
-        raise ArcticNativeException("Missing library {} in config {}".format(lib_path, env_cfg))
+        arcticdb_raise(StorageError.E_LIBRARY_NOT_FOUND, lambda: "Missing library {} in config {}".format(lib_path, env_cfg))
     cfg = LibraryConfig()
     lib = env_cfg.lib_by_path[lib_path]
     cfg.lib_desc.CopyFrom(lib)
@@ -87,7 +86,7 @@ class ArcticcFileConfig(ArcticConfig):
 
     def _check_config(self):
         if not osp.exists(self._conf_path):
-            raise ArcticNativeException("Config file {} not found".format(self._conf_path))
+            arcticdb_raise(StorageError.E_CONFIG_NOT_FOUND, lambda: "Config file {} not found".format(self._conf_path))
 
     def __getitem__(self, lib_name):
         self._check_config()
@@ -150,7 +149,7 @@ def get_secondary_storage_for_lib_name(lib_name, env):
 def _add_lib_desc_to_env(env, lib_name, sid, description=None):
     # type: (EnvironmentConfigsMap, LibName, StorageId, Optional[AnyStr], Optional[AnyStr], bool)->None
     if lib_name in env.lib_by_path:
-        raise ArcticNativeException("Library {} already configured in {}".format(lib_name, env))
+        arcticdb_raise(StorageError.E_DUPLICATE_LIBRARY, lambda: "Library {} already configured in {}".format(lib_name, env))
     lib_desc = env.lib_by_path[lib_name]
     lib_desc.storage_ids.append(sid)
     lib_desc.name = lib_name

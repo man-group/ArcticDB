@@ -24,7 +24,7 @@ from google.protobuf.json_format import MessageToJson, Parse as JsonToMessage
 from google.protobuf.message import Message
 from typing import AnyStr, Optional
 
-from arcticdb.exceptions import ArcticNativeException
+from arcticdb.util.errors import *
 from arcticdb.log import logger_by_name, configure
 
 _HOME = osp.expanduser("~/.arctic/native")
@@ -72,7 +72,7 @@ class Defaults(object):
 def _extract_lib_config(env_cfg, lib_path):
     # type: (EnvironmentConfig)->LibraryConfig
     if lib_path not in env_cfg.lib_by_path:
-        raise ArcticNativeException("Missing library {} in config {}".format(lib_path, env_cfg))
+        arcticdb_raise(StorageError.E_LIBRARY_NOT_FOUND, lambda: "Missing library {} in config {}".format(lib_path, env_cfg))
     cfg = LibraryConfig()
     lib = env_cfg.lib_by_path[lib_path]
     cfg.lib_desc.CopyFrom(lib)
@@ -118,7 +118,7 @@ def _load_config(conf_path, conf_type):
     # type: (FilePath, Type)->Any
     p = _expand_path(conf_path)
     if not osp.exists(p):
-        raise ArcticNativeException("Config file {} for type {} not found".format(p, conf_type))
+        arcticdb_raise(StorageError.E_CONFIG_NOT_FOUND, lambda: "Config file {} for type {} not found".format(p, conf_type))
 
     converter = YamlProtoConverter(conf_type)
     with open(p, "r") as _if:

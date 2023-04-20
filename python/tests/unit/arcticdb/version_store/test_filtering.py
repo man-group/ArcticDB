@@ -22,7 +22,6 @@ from pytz import timezone
 import random
 import string
 
-from arcticdb.exceptions import ArcticNativeException
 from arcticdb.version_store.processing import QueryBuilder
 from arcticdb_ext.exceptions import InternalException
 from arcticdb.util.test import assert_frame_equal
@@ -147,7 +146,7 @@ def test_filter_infinite_value(request, lib_type):
     q = q[q["a"] < inf]
     symbol = "test_filter_infinite_value"
     lib.write(symbol, df)
-    with pytest.raises(ArcticNativeException) as e_info:
+    with pytest.raises(InternalException) as e_info:
         _ = lib.read(symbol, query_builder=q)
 
 
@@ -1849,9 +1848,9 @@ def test_filter_batch_incorrect_query_count(lmdb_version_store):
 
     q = QueryBuilder()
     q = q[q["a"] == 3]
-    with pytest.raises(ArcticNativeException):
+    with pytest.raises(InternalException):
         batch_res = lmdb_version_store.batch_read([sym1, sym2], query_builder=[q])
-    with pytest.raises(ArcticNativeException):
+    with pytest.raises(InternalException):
         batch_res = lmdb_version_store.batch_read([sym1, sym2], query_builder=[q, q, q])
 
 

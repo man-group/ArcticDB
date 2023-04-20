@@ -36,7 +36,6 @@ from arcticdb.version_store._normalization import (
 )
 from arcticdb.version_store._common import TimeFrame
 from arcticdb.util.test import param_dict, CustomThing, TestCustomNormalizer, assert_frame_equal, assert_series_equal
-from arcticdb.exceptions import ArcticNativeException
 from arcticdb_ext.exceptions import NormalizationException
 
 
@@ -411,7 +410,7 @@ def test_columns_names_dynamic_schema(lmdb_version_store_dynamic_schema, sym):
 
     df = pd.DataFrame(data={"test": [1.2, 2.2], "test2": [2.3, 3.5], "test3": [2.5, 8.5], "test4": [9.3, 1.5]})
     df.columns = ["test", None, "test", None]
-    with pytest.raises(ArcticNativeException) as e_info:
+    with pytest.raises(NormalizationException) as e_info:
         lmdb_version_store.write(sym, df)
 
 
