@@ -376,7 +376,7 @@ public:
          * that we will end up with a larger memory footprint for not calling it, but
          * there are no windows alternatives.
          */
-#ifndef _WIN32
+#if !defined(_WIN32) && !defined(__APPLE__)
         malloc_trim(0);
 #endif
     }
