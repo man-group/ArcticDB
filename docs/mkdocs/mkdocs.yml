@@ -5,7 +5,7 @@ markdown_extensions:
   - pymdownx.details
   - pymdownx.superfences
   - pymdownx.tabbed:
-      alternate_style: true 
+      alternate_style: true
   - attr_list
   - md_in_html
 
@@ -21,21 +21,21 @@ extra_css:
   - stylesheets/extra.css
 
 
-pages:
+nav:
 - Getting Started: 'index.md'
 - Overview:
     - History of ArcticDB: 'history.md'
     - Frequently Asked Questions: 'faq.md'
     - Licensing FAQs: 'licensing.md'
 - Tutorials:
-    - Fundamentals: 'tutorials/fundamentals'
+    - Fundamentals: 'tutorials/fundamentals.md'
     - Parallel Writes: 'tutorials/parallel_writes.md'
     - Snapshots: 'tutorials/snapshots.md'
     - Metadata: 'tutorials/metadata.md'
 - Library Configuration: 'lib_config.md'
 - Runtime Configuration: 'runtime_config.md'
 - Error Messages: 'error_messages.md'
-- Technical Information: 
+- Technical Information:
     - Architecture: 'technical/architecture.md'
     - On-Disk Storage: 'technical/on_disk_storage.md'
     - Arctic Migration: 'technical/migration.md'
