@@ -35,6 +35,18 @@ namespace py = pybind11;
 
 namespace arcticdb {
 
+/// @cond
+namespace detail
+{
+    // this is needed to make templates of tempaltes work
+    // since py::array_t has more than one template parameter
+    // (the rest are defaulted)
+    template< class T>
+    using py_array_t = py::array_t<T>;
+    
+} // namespace detail
+/// @endcond
+
 using namespace arcticdb::entity;
 
 // N.B. this will not catch all the things that C++ considers to be narrowing conversions, because
@@ -397,7 +409,7 @@ public:
         shapes_.ensure<shape_t>(val.ndim());
         memcpy(shapes_.ptr(), val.shape(), val.ndim() * sizeof(shape_t));
         auto info = val.request();
-        util::FlattenHelper<T, py::array_t> flatten(val);
+        util::FlattenHelper<T, detail::py_array_t> flatten(val);
         auto data_ptr = reinterpret_cast<T*>(data_.ptr());
         flatten.flatten(data_ptr, reinterpret_cast<const T*>(info.ptr));
         update_offsets(val.nbytes());
