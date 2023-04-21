@@ -22,7 +22,7 @@ class SysClock {
     static entity::timestamp nanos_since_epoch() {
         return (*folly::chrono::clock_gettime_ns)(CLOCK_REALTIME);
     }
-#ifdef _WIN32
+#if defined(_WIN32) || defined(__APPLE__)
     static entity::timestamp coarse_nanos_since_epoch() {
         auto t = std::chrono::system_clock::now();
         return std::chrono::duration_cast<std::chrono::nanoseconds>(t.time_since_epoch()).count();
