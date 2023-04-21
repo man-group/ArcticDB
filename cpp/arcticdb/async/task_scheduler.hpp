@@ -66,7 +66,11 @@ public:
                 ARCTICDB_SAMPLE_THREAD();
               func();
             });
-  }
+    }
+
+    virtual const std::string& getNamePrefix() const override{
+        return named_factory_.getNamePrefix();
+    }
 
 private:
     folly::NamedThreadFactory named_factory_;
