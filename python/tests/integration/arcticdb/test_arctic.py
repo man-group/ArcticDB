@@ -7,7 +7,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 """
 import sys
 from arcticdb_ext.exceptions import InternalException, NormalizationException, UserInputException, MissingDataException
-from arcticdb_ext.storage import VersionNotFoundException
+from arcticdb_ext.storage import VersionNotFoundException, SnapshotNotFoundException
 
 try:
     from arcticdb.version_store import VersionedItem as PythonVersionedItem
@@ -266,7 +266,7 @@ def test_delete_non_existent_snapshot(arctic_library):
     lib = arctic_library
     df = pd.DataFrame({"col1": [1, 2, 3], "col2": [4, 5, 6]})
     lib.write("my_symbol", df)
-    with pytest.raises(MissingDataException):
+    with pytest.raises(SnapshotNotFoundException):
         lib.delete_snapshot("test")
 
 

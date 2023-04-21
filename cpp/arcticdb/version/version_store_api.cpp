@@ -160,7 +160,7 @@ std::vector<VersionedItem> PythonVersionStore::batch_append(
     std::vector<AtomKey> existing_keys;
     for (const auto &stream_id: stream_ids) {
         auto update_info = stream_update_info_map.at(stream_id);
-        util::check(update_info.previous_index_key_.has_value(), "Can't batch append to nonexistent stream {}", stream_id);
+        util::check(update_info.previous_index_key_.has_value(), "Can't batch append to nonexistent stream");
         version_ids.push_back(update_info.next_version_id_);
         existing_keys.push_back(*(update_info.previous_index_key_));
     }
@@ -378,7 +378,7 @@ void PythonVersionStore::add_to_snapshot(
     std::unordered_set<StreamId> affected_keys;
     for(const auto& [id_version, key] : *stream_index_map) {
         auto [it, inserted] = affected_keys.insert(id_version.first);
-        util::check(inserted, "Multiple elements in add_to_snapshot with key {}", id_version.first);
+        util::check(inserted, "Multiple elements in add_to_snapshot with key");
     }
 
     for(auto&& key : snapshot_contents) {
@@ -568,7 +568,7 @@ VersionedItem PythonVersionStore::write_versioned_composite_data(
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: write_versioned_composite_data");
     auto maybe_prev = ::arcticdb::get_latest_version(store(), version_map(), stream_id, true, false);
     auto version_id = get_next_version_from_key(maybe_prev);
-    ARCTICDB_DEBUG(log::version(), "write_versioned_composite_data for stream_id: {} , version_id = {}", stream_id, version_id);
+    ARCTICDB_DEBUG(log::version(), "write_versioned_composite_data for stream; version_id = {}", version_id);
     // TODO: Assuming each sub key is always going to have the same version attached to it.
     std::vector<VersionId> version_ids;
     std::vector<py::object> user_metas;
@@ -901,7 +901,7 @@ void PythonVersionStore::prune_previous_versions(const StreamId& stream_id) {
     const auto entry = version_map()->check_reload(store(), stream_id, LoadParameter{LoadType::LOAD_UNDELETED},
                                                  true, false, __FUNCTION__);
     auto latest = entry->get_first_index(false);
-    util::check(latest.has_value(), "Cannot prune previous versions for non-existent stream {}", stream_id);
+    util::check(latest.has_value(), "Cannot prune previous versions for non-existent stream");
 
     auto prev_id = get_prev_version_in_entry(entry, latest->version_id());
     if (!prev_id) {
@@ -972,7 +972,7 @@ std::pair<VersionedItem, py::object> PythonVersionStore::read_metadata(
 
     auto version = get_version_to_read(stream_id, version_query);
     if(!version)
-        throw storage::VersionNotFoundException(fmt::format("read_metadata: version not found for stream", stream_id));
+        throw storage::VersionNotFoundException(fmt::format("read_metadata: version not found for stream"));
 
     auto metadata_proto = store()->read_metadata(version.value().key_).get().second;
     py::object pyobj = metadata_protobuf_to_pyobject(metadata_proto);
@@ -994,8 +994,7 @@ std::vector<VersionedItem> PythonVersionStore::batch_write_metadata(
         python_util::pb_from_python(user_meta[stream_id.index], user_meta_proto);
         const auto& update_info = stream_update_info_map.at(*stream_id);
         util::check(update_info.previous_index_key_.has_value(),
-                    "Failed to find latest version to write metadata to for symbol {}",
-                    *stream_id);
+                    "Failed to find latest version to write metadata to for symbol");
         fut_vec.push_back(async::submit_io_task(UpdateMetadataTask{store(),
                                                                    update_info,
                                                                    std::move(user_meta_proto)}));
@@ -1044,7 +1043,7 @@ std::pair<VersionedItem, py::object> PythonVersionStore::read_descriptor(
     py::object pyobj;
     auto version = get_version_to_read(stream_id, version_query);
     if(!version)
-        throw storage::VersionNotFoundException(fmt::format("read_descriptor: version not found for stream", stream_id));
+        throw storage::VersionNotFoundException(fmt::format("read_descriptor: version not found for stream"));
 
     if (auto metadata_proto = store()->read_metadata(version->key_).get().second; metadata_proto) {
         arcticdb::proto::descriptors::TimeSeriesDescriptor tsd;
@@ -1066,7 +1065,7 @@ ReadResult PythonVersionStore::read_index(
     py::object pyobj;
     auto version = get_version_to_read(stream_id, version_query);
     if(!version)
-        throw storage::VersionNotFoundException(fmt::format("read_index: version not found for stream '{}'", stream_id));
+        throw storage::VersionNotFoundException(fmt::format("read_index: version not found for stream"));
 
     auto res = read_index_impl(store(), version.value());
     return make_read_result_from_frame(res, version->key_);

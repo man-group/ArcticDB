@@ -214,13 +214,13 @@ inline version_store::TombstoneVersionResult tombstone_version(
         // It is possible to have a tombstone key without a corresponding index_key
         // This scenario can happen in case of DR sync
         if (entry->is_tombstoned(version_id)) {
-            util::raise_rte("Version {} for symbol {} is already deleted", stream_id, version_id);
+            util::raise_rte("Version {} for symbol is already deleted", version_id);
         } else {
             if (!allow_tombstoning_beyond_latest_version) {
                 auto latest_key = get_latest_version(store, version_map, stream_id, true, false);
                 if (!latest_key || latest_key.value().version_id() < version_id)
-                    util::raise_rte("Can't delete version {} for symbol {} - it's higher than the latest version",
-                            stream_id, version_id);
+                    util::raise_rte("Can't delete version {} for symbol - it's higher than the latest version",
+                            version_id);
             }
             // We will write a tombstone key even when the index_key is not found
             tombstone = version_map->write_tombstone(store, version_id, stream_id, entry, creation_ts);
@@ -353,7 +353,7 @@ inline std::set<StreamId> list_streams(
         ARCTICDB_DEBUG(log::version(), "Storage backend supports prefix matching");
         store->iterate_type(KeyType::VERSION_REF, [&store, &res, &version_map, all_symbols](auto &&vk) {
                                 auto key = std::forward<VariantKey>(vk);
-                                util::check(!variant_key_id_empty(key), "Unexpected empty id in key {}", key);
+                                util::check(!variant_key_id_empty(key), "Unexpected empty id in key");
                                 if(all_symbols)
                                     res.insert(variant_key_id(key));
                                 else
@@ -363,7 +363,7 @@ inline std::set<StreamId> list_streams(
     } else {
         store->iterate_type(KeyType::VERSION_REF, [&store, &res, &version_map, all_symbols](auto &&vk) {
             const auto key = std::forward<VariantKey>(vk);
-            util::check(!variant_key_id_empty(key), "Unexpected empty id in key {}", key);
+            util::check(!variant_key_id_empty(key), "Unexpected empty id in key");
             if(all_symbols)
                 res.insert(variant_key_id(key));
             else

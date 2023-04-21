@@ -192,8 +192,8 @@ std::unordered_set<entity::AtomKey> get_index_keys_in_snapshots(
         SegmentInMemory snapshot_segment = store->read_sync(vk).second;
         if (snapshot_segment.row_count() == 0) {
             // Snapshot has no rows, just skip this.
-            ARCTICDB_DEBUG(log::version(), "Snapshot: {} does not have index keys (searching for symbol: {}), skipping.",
-                    variant_key_id(vk), stream_id);
+            ARCTICDB_DEBUG(log::version(), "Snapshot: {} does not have index keys, skipping.",
+                    variant_key_id(vk));
           return;
         }
         auto opt_idx_for_stream_id = row_id_for_stream_in_snapshot_segment(

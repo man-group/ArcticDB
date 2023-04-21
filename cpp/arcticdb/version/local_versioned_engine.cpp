@@ -239,7 +239,7 @@ std::pair<VersionedItem, FrameAndDescriptor> LocalVersionedEngine::read_datafram
             identifier = stream_id;
         }
         else
-            throw storage::VersionNotFoundException(fmt::format("read_dataframe_version: version not found for stream '{}'", stream_id));
+            throw storage::VersionNotFoundException(fmt::format("read_dataframe_version: version not found for stream"));
     }
     else  {
         identifier = version.value();
@@ -286,7 +286,7 @@ std::shared_ptr<DeDupMap> LocalVersionedEngine::get_de_dup_map(
 
 VersionedItem LocalVersionedEngine::sort_index(const StreamId& stream_id, bool dynamic_schema) {
     auto maybe_prev = get_latest_undeleted_version(store(), version_map(), stream_id, true, false);
-    util::check(maybe_prev.has_value(), "Cannot delete from non-existent stream {}", stream_id);
+    util::check(maybe_prev.has_value(), "Cannot delete from non-existent stream");
     auto version_id = get_next_version_from_key(maybe_prev.value());
     auto [index_segment_reader, slice_and_keys] = index::read_index_to_vector(store(), maybe_prev.value());
     if(dynamic_schema) {
@@ -323,7 +323,7 @@ VersionedItem LocalVersionedEngine::delete_range_internal(
     const UpdateQuery & query,
     bool dynamic_schema) {
     auto maybe_prev = get_latest_undeleted_version(store(), version_map(), stream_id, true, false);
-    util::check(maybe_prev.has_value(), "Cannot delete from non-existent stream {}", stream_id);
+    util::check(maybe_prev.has_value(), "Cannot delete from non-existent stream");
     auto versioned_item = delete_range_impl(store(),
                                             maybe_prev.value(),
                                             query,
@@ -379,7 +379,7 @@ VersionedItem LocalVersionedEngine::update_internal(
             version_map()->write_version(store(), versioned_item.key_);
             return versioned_item;
         } else {
-            util::raise_rte("Cannot update non-existent stream {}", stream_id);
+            util::raise_rte("Cannot update non-existent stream");
         }
     }
 }
@@ -455,7 +455,7 @@ std::pair<VersionedItem, arcticdb::proto::descriptors::TimeSeriesDescriptor> Loc
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: res    tore_version");
     auto version_to_restore = get_version_to_read(stream_id, version_query);
     version::check<ErrorCode::E_VERSION_NOT_FOUND>(static_cast<bool>(version_to_restore),
-                                                 "Unable to restore {}@{}: version not found", stream_id, version_query);
+                                                 "Unable to restore stream@{}: version not found", version_query);
     auto maybe_prev = ::arcticdb::get_latest_version(store(), version_map(), stream_id, true, false);
     ARCTICDB_DEBUG(log::version(), "restore for stream_id: {} , version_id = {}", stream_id, version_to_restore->key_.version_id());
     return AsyncRestoreVersionTask{store(), version_map(), stream_id, version_to_restore->key_, maybe_prev}().get();
@@ -575,8 +575,7 @@ void LocalVersionedEngine::delete_trees_responsibly(
                                                             snaps.count(snapshot_being_deleted.value()) : 0;
                     if (snaps.size() > count_for_snapshot_being_deleted) {
                         log::version().debug(
-                                "Skipping the deletion of index {}:{} because it exists in another snapshot",
-                                target_key.id(), target_key.version_id());
+                                "Skipping the deletion of index {} because it exists in another snapshot", target_key.version_id());
                         return true;
                     }
                 }
@@ -871,7 +870,7 @@ VersionedItem LocalVersionedEngine::append_internal(
             version_map()->write_version(store(), versioned_item.key_);
             return versioned_item;
         } else {
-            util::raise_rte( "Cannot append to non-existent stream {}", stream_id);
+            util::raise_rte( "Cannot append to non-existent stream");
         }
     }
 }
@@ -970,7 +969,7 @@ timestamp LocalVersionedEngine::get_update_time_internal(
         ) {
     auto version = get_version_to_read(stream_id, version_query);
     if(!version)
-        throw storage::VersionNotFoundException(fmt::format("get_update_time: version not found for stream ", stream_id));
+        throw storage::VersionNotFoundException(fmt::format("get_update_time: version not found for stream "));
     return version->key_.creation_ts();
 }
 

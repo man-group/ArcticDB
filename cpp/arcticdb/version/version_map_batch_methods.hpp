@@ -104,7 +104,7 @@ inline std::shared_ptr<std::unordered_map<std::pair<StreamId, VersionId>, AtomKe
             },
             [output, &sym_versions](auto& sym_version, auto&& entry) {
                 auto sym_it = sym_versions.find(sym_version.first);
-                util::check(sym_it != sym_versions.end(), "Failed to find versions for symbol {}", sym_version.first);
+                util::check(sym_it != sym_versions.end(), "Failed to find versions for symbol");
                 const auto& versions = sym_it->second;
                 for(auto version : versions) {
                     auto index_key = find_index_key_for_version_id(version, entry);

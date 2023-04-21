@@ -968,7 +968,7 @@ VersionedItem compact_incomplete_impl(
     auto prev_size = pipeline_context->slice_and_keys_.size();
     read_incompletes_to_pipeline(store, pipeline_context, ReadQuery{}, ReadOptions{}, convert_int_to_float, via_iteration, sparsify);
     if (pipeline_context->slice_and_keys_.size() == prev_size) {
-        util::raise_rte("No incomplete segments found for {}", stream_id);
+        util::raise_rte("No incomplete segments found for stream");
     }
     const auto& first_seg = pipeline_context->slice_and_keys_.begin()->segment(store);
 

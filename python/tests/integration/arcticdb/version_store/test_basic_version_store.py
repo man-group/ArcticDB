@@ -1471,7 +1471,7 @@ def test_restore_version_not_found(lmdb_version_store, ver):
     lib.write("abc", 2)
     lib.write("bcd", 9)
     lib.snapshot("snap", versions={"bcd": 0})
-    with pytest.raises(NoSuchVersionException, match=r"\Wabc\W.*" + str(ver)):
+    with pytest.raises(VersionNotFoundException, match=f"'{ver}'" if isinstance(ver, str) else str(ver) + ": version not found"):
         lib.restore_version("abc", ver)
 
 

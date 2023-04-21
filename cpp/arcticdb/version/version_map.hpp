@@ -188,8 +188,8 @@ public:
             } catch (const std::exception &err) {
                 // We retry to read via ref key because it could have been modified by someone else (e.g. compaction)
                 log::version().warn(
-                        "Loading versions from storage via ref key failed with error: {} for stream {}. Retrying",
-                        err.what(), stream_id);
+                        "Loading versions from storage via ref key failed with error: {} for stream. Retrying",
+                        err.what());
                 entry->head_.reset();
                 entry->keys_.clear();
                 continue;
@@ -282,7 +282,7 @@ public:
     }
 
     std::deque<AtomKey> delete_all_versions(std::shared_ptr<Store> store, StreamIdArg stream_id) {
-        ARCTICDB_DEBUG(log::version(), "Version map deleting all versions for stream {}", stream_id);
+        ARCTICDB_DEBUG(log::version(), "Version map deleting all versions for stream");
         std::deque<AtomKey> output;
         auto index_keys = tombstone_from_key_or_all(store, stream_id);
         output.assign(std::begin(index_keys), std::end(index_keys));
@@ -428,7 +428,7 @@ public:
     }
 
     void compact(std::shared_ptr<Store> store, StreamIdArg stream_id) {
-        ARCTICDB_DEBUG(log::version(), "Version map compacting versions for stream {}", stream_id);
+        ARCTICDB_DEBUG(log::version(), "Version map compacting versions for stream");
         auto entry = check_reload(store, stream_id, LoadParameter{LoadType::LOAD_ALL}, true, false, __FUNCTION__);
         if (entry->empty()) {
             log::version().warn("Entry is empty in compact");
@@ -526,13 +526,12 @@ public:
         const VersionMapEntry& entry,
         const StreamId &stream_id) const {
         if (entry.head_) {
-            util::check(entry.head_.value().id() == stream_id, "Id mismatch for entry {} vs stream id {}",
-                        entry.head_.value().id(), stream_id);
+            util::check(entry.head_.value().id() == stream_id, "Id mismatch for entry vs stream id");
             store->remove_key_sync(entry.head_.value());
         }
         std::vector<folly::Future<Store::RemoveKeyResultType>> key_futs;
         for (const auto &key : entry.keys_) {
-            util::check(key.id() == stream_id, "Id mismatch for entry {} vs stream id {}", key.id(), stream_id);
+            util::check(key.id() == stream_id, "Id mismatch for entry vs stream id");
             if (key.type() == KeyType::VERSION)
                 key_futs.emplace_back(store->remove_key(key));
         }
@@ -562,7 +561,7 @@ private:
             std::lock_guard lock(map_mutex_);
             entry = map_.find(stream_id);
             if (entry == map_.cend()) {
-                ARCTICDB_DEBUG(log::version(), "Did not find cached entry for stream id {}", stream_id);
+                ARCTICDB_DEBUG(log::version(), "Did not find cached entry for stream id");
                 return false;
             }
         }
@@ -592,7 +591,7 @@ private:
            entry->second->load_type_ != LoadType::LOAD_UNDELETED)
             return false;
 
-        ARCTICDB_DEBUG(log::version(), "{} Using cached entry for symbol {}", uintptr_t(this), stream_id);
+        ARCTICDB_DEBUG(log::version(), "{} Using cached entry for symbol", uintptr_t(this));
         return true;
     }
 
@@ -732,7 +731,7 @@ public:
         load_via_iteration(store, stream_id, entry_iteration);
         auto maybe_latest_pair = get_latest_key_pair(entry_iteration);
         if (!maybe_latest_pair) {
-            log::version().warn("Latest version not found for {}", stream_id);
+            log::version().warn("Latest version not found for stream");
             return false;
         }
 
@@ -740,14 +739,13 @@ public:
         read_symbol_ref(store, stream_id, ref_entry);
 
         if (ref_entry.empty() || ref_entry.keys_.size() < 2) {
-            log::version().warn("Reference key error for stream id {}", stream_id);
+            log::version().warn("Reference key error for stream");
             return false;
         }
 
         util::check(static_cast<bool>(ref_entry.head_), "Expected head to be set");
         if(maybe_latest_pair.value().first != ref_entry.keys_[0] || maybe_latest_pair.value().second != ref_entry.head_.value()) {
-            log::version().warn("Ref entry is incorrect for stream {}, either {} != {} or {} != {}",
-                    stream_id,
+            log::version().warn("Ref entry is incorrect for stream, either {} != {} or {} != {}",
                     maybe_latest_pair.value().first,
                     ref_entry.head_.value(),
                     maybe_latest_pair.value().second,
@@ -761,8 +759,8 @@ public:
             entry_ref->validate();
         } catch (const std::exception& err) {
             log::version().warn(
-                    "Loading versions from storage via ref key failed with error: {} for stream {}",
-                    err.what(), stream_id);
+                    "Loading versions from storage via ref key failed with error: {} for stream",
+                    err.what());
             return false;
         }
         return true;

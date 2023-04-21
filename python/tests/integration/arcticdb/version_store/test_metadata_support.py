@@ -93,7 +93,7 @@ def test_read_metadata_by_timestamp(lmdb_version_store):
     time_after_first_write = Timestamp.utcnow()
     time.sleep(0.1)
 
-    with pytest.raises(MissingDataException):
+    with pytest.raises(VersionNotFoundException):
         lmdb_version_store.read(symbol, as_of=Timestamp(0))
 
     assert lmdb_version_store.read_metadata(symbol, as_of=time_after_first_write).metadata == metadata_v0
