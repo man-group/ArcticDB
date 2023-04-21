@@ -162,3 +162,10 @@ jobs:
     permissions: {contents: write}
     with:
       environment: ${{needs.common_config.outputs.publish_env}}
+
+  docs:
+    needs: [common_config, follower-windows, follower-linux]
+    uses: ./.github/workflows/docs.yml
+    secrets: inherit
+    with:
+      environment: ${{needs.common_config.outputs.publish_env}}
