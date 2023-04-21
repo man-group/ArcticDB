@@ -375,16 +375,30 @@ add_library(arcticdb_core_object OBJECT ${arcticdb_srcs})
 if (NOT WIN32)
     if (STATIC_LINK_STD_LIB)
         message("Statically linking standard libraries")
-        set(standard_libraries
-            -static-libgcc
-            -static-libstdc++
-        )
+        if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+             message(FATAL_ERROR "Statically linking standard libraries with CLANG is (currently) not supported")
+        elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+            set(standard_libraries
+                -static-libgcc
+                -static-libstdc++
+            )
+        else()
+            message(FATAL_ERROR "Unknown compiler: ${CMAKE_CXX_COMPILER_ID}")
+        endif()
     else()
         message("Dynamically linking standard libraries")
-        set(standard_libraries
-            stdc++
-            gcc
-        )
+        if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+            set(standard_libraries
+                stdc+
+            )
+        elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+            set(standard_libraries
+                stdc++
+                gcc
+            )
+        else()
+            message(FATAL_ERROR "Unknown compiler: ${CMAKE_CXX_COMPILER_ID}")
+        endif()
     endif()
 endif()
 
