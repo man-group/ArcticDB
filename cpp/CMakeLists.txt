@@ -6,6 +6,8 @@ project(arcticdb VERSION 0.0.1)
 
 enable_testing()
 
+option(ARCTICDB_USING_CONDA OFF)
+
 if(WIN32)
     add_compile_definitions(NOGDI)
     add_compile_definitions(WIN32_LEAN_AND_MEAN)

@@ -23,3 +23,5 @@ dependencies:
   - doxygen
   - aws-sdk-cpp
   - gtest
+  - cmake
+  - libevent
