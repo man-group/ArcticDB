@@ -411,7 +411,7 @@ if (NOT WIN32)
         message("Dynamically linking standard libraries")
         if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
             set(standard_libraries
-                stdc+
+                stdc++
             )
         elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
             set(standard_libraries
