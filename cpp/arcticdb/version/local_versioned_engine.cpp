@@ -180,7 +180,7 @@ std::optional<VersionedItem> LocalVersionedEngine::get_version_from_snapshot(
     ) {
     auto opt_snapshot =  get_snapshot(store(), snap_name);
     if (!opt_snapshot) {
-        throw storage::NoDataFoundException(snap_name);
+        throw storage::SnapshotNotFoundException(snap_name);
     }
     // A snapshot will normally be in a ref key, but for old libraries it still needs to fall back to iteration of
     // atom keys.
@@ -239,7 +239,7 @@ std::pair<VersionedItem, FrameAndDescriptor> LocalVersionedEngine::read_datafram
             identifier = stream_id;
         }
         else
-            throw storage::NoDataFoundException(fmt::format("read_dataframe_version: version not found for stream '{}'", stream_id));
+            throw storage::VersionNotFoundException(fmt::format("read_dataframe_version: version not found for stream '{}'", stream_id));
     }
     else  {
         identifier = version.value();
@@ -454,7 +454,7 @@ std::pair<VersionedItem, arcticdb::proto::descriptors::TimeSeriesDescriptor> Loc
     ) {
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: res    tore_version");
     auto version_to_restore = get_version_to_read(stream_id, version_query);
-    version::check<ErrorCode::E_NO_SUCH_VERSION>(static_cast<bool>(version_to_restore),
+    version::check<ErrorCode::E_VERSION_NOT_FOUND>(static_cast<bool>(version_to_restore),
                                                  "Unable to restore {}@{}: version not found", stream_id, version_query);
     auto maybe_prev = ::arcticdb::get_latest_version(store(), version_map(), stream_id, true, false);
     ARCTICDB_DEBUG(log::version(), "restore for stream_id: {} , version_id = {}", stream_id, version_to_restore->key_.version_id());
@@ -970,7 +970,7 @@ timestamp LocalVersionedEngine::get_update_time_internal(
         ) {
     auto version = get_version_to_read(stream_id, version_query);
     if(!version)
-        throw NoDataFoundException(fmt::format("get_update_time: version not found for stream", stream_id));
+        throw storage::VersionNotFoundException(fmt::format("get_update_time: version not found for stream ", stream_id));
     return version->key_.creation_ts();
 }
 

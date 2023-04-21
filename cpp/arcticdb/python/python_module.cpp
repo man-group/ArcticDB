@@ -233,6 +233,7 @@ void register_error_code_ecosystem(py::module& m) {
     py::register_exception<SchemaException>(m, "SchemaException");
     py::register_exception<StorageException>(m, "StorageException");
     py::register_exception<SortingException>(m, "SortingException");
+    py::register_exception<UserInputException>(m, "UserInputException");
 }
 
 

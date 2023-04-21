@@ -1249,7 +1249,7 @@ class NativeVersionStore:
         elif isinstance(as_of, (datetime, Timestamp)):
             version_query.set_timestamp(Timestamp(as_of).value)
         elif as_of is not None:
-            arcticdb_raise(InternalError.E_INVALID_ARGUMENT, lambda: "Unexpected combination of read parameters")
+            arcticdb_raise(UserInputError.E_INVALID_USER_ARGUMENT, lambda: "Unexpected combination of read parameters")
 
         return version_query
 
@@ -1474,7 +1474,7 @@ class NativeVersionStore:
                     start_idx = ts_idx.searchsorted(datetime64(read_query.row_filter.start_ts, "ns"), side="left")
                     end_idx = ts_idx.searchsorted(datetime64(read_query.row_filter.end_ts, "ns"), side="right")
             else:
-                arcticdb_raise(InternalError.E_INVALID_ARGUMENT, lambda: "Unrecognised row_filter type: {}".format(type(read_query.row_filter)))
+                arcticdb_raise(UserInputError.E_INVALID_USER_ARGUMENT, lambda: "Unrecognised row_filter type: {}".format(type(read_query.row_filter)))
             data = []
             for c in read_result.frame_data.value.data:
                 data.append(c[start_idx:end_idx])
@@ -1508,7 +1508,7 @@ class NativeVersionStore:
         version_handle = self.version_store.find_version(symbol, version_query)
 
         if version_handle is None and raise_on_missing:
-            arcticdb_raise(MissingDataError.E_NO_SUCH_VERSION, lambda: f"Cannot find version for symbol={symbol},as_of={as_of}")
+            arcticdb_raise(MissingDataError.E_VERSION_NOT_FOUND, lambda: f"Cannot find version for symbol={symbol},as_of={as_of}")
 
         return version_handle
 

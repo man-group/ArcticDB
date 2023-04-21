@@ -39,6 +39,8 @@ class StorageError:
     pass
 class SortingError:
     pass
+class UserInputError:
+    pass
 
 _py_module = globals()
 _enum_type_to_exception: Dict[Type[ErrorCodeEnumBase], Type[Exception]] = {}

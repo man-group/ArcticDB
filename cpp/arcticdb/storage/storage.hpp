@@ -40,33 +40,10 @@ private:
     VariantKey key_;
 };
 
-class NoDataFoundException : public ArcticBaseException<ErrorCategory::MISSING_DATA> {
-public:
-    explicit NoDataFoundException(VariantId key) :
-        ArcticBaseException<ErrorCategory::MISSING_DATA>(std::visit([](const auto &key) { return fmt::format("{}", key); }, key)),
-        key_(key){
-    }
-
-    explicit NoDataFoundException(const std::string& msg) :
-        ArcticBaseException<ErrorCategory::MISSING_DATA>(msg) {
-    }
-
-    explicit NoDataFoundException(const char* msg) :
-        ArcticBaseException<ErrorCategory::MISSING_DATA>(std::string(msg)) {
-    }
-
-    [[nodiscard]] const VariantId &key() const {
-        util::check(static_cast<bool>(key_), "Key not found");
-        return *key_;
-    }
-private:
-    std::optional<VariantId> key_;
-};
-
-class KeyNotFoundException : public ArcticSpecificException<ErrorCode::E_DUPLICATE_KEY> {
+class KeyNotFoundException : public ArcticSpecificException<ErrorCode::E_KEY_NOT_FOUND> {
 public:
     explicit KeyNotFoundException(Composite<VariantKey>&& keys) :
-        ArcticSpecificException<ErrorCode::E_DUPLICATE_KEY>(fmt::format("{}", keys)),
+        ArcticSpecificException<ErrorCode::E_KEY_NOT_FOUND>(fmt::format("Keys {} not found", keys)),
         keys_(std::make_shared<Composite<VariantKey>>(std::move(keys))) {
     }
 
@@ -78,7 +55,15 @@ private:
     mutable std::string msg_;
 };
 
+class SnapshotNotFoundException : public ArcticSpecificException<ErrorCode::E_SNAPSHOT_NOT_FOUND> {
+public:
+    explicit SnapshotNotFoundException(const SnapshotId& snap_name) :
+        ArcticSpecificException<ErrorCode::E_SNAPSHOT_NOT_FOUND>(fmt::format("Snapshot {} not found", snap_name)) {
+    }
+};
 using LibraryNotFoundException = ArcticSpecificException<ErrorCode::E_LIBRARY_NOT_FOUND>;
+using VersionNotFoundException = ArcticSpecificException<ErrorCode::E_VERSION_NOT_FOUND>;
+using DataNotFoundException = ArcticSpecificException<ErrorCode::E_DATA_NOT_FOUND>;
 
 template<class Impl>
 class Storage : public StorageBase {

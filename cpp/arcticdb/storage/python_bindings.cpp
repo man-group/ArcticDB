@@ -153,8 +153,12 @@ void register_bindings(py::module &m) {
         ;
 
     py::register_exception<DuplicateKeyException>(storage, "DuplicateKeyException");
-    py::register_exception<NoDataFoundException>(storage, "NoDataFoundException");
     py::register_exception<PermissionException>(storage, "PermissionException");
+    py::register_exception<KeyNotFoundException>(storage, "KeyNotFoundException");
+    py::register_exception<SnapshotNotFoundException>(storage, "SnapshotNotFoundException");
+    py::register_exception<LibraryNotFoundException>(storage, "LibraryNotFoundException");
+    py::register_exception<VersionNotFoundException>(storage, "VersionNotFoundException");
+    py::register_exception<DataNotFoundException>(storage, "DataNotFoundException");
 }
 
 } // namespace arcticdb::storage::apy

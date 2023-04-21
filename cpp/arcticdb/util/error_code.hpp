@@ -30,6 +30,7 @@ enum class ErrorCategory : BaseType {
     SCHEMA = 4,
     STORAGE = 5,
     SORTING = 6,
+    USER_INPUT = 7
     // NEW CATEGORIES MUST ALSO BE ADDED TO python_module.cpp:register_error_code_ecosystem
 };
 
@@ -41,7 +42,8 @@ inline decltype(auto) get_error_category_names() {
         {ErrorCategory::MISSING_DATA, "MISSING_DATA"},
         {ErrorCategory::SCHEMA, "SCHEMA"},
         {ErrorCategory::STORAGE, "STORAGE"},
-        {ErrorCategory::SORTING, "SORTING"}
+        {ErrorCategory::SORTING, "SORTING"},
+        {ErrorCategory::USER_INPUT, "USER_INPUT"}
     };
     return (error_category_map);
 }
@@ -61,14 +63,17 @@ inline decltype(auto) get_error_category_names() {
     ERROR_CODE(2005, E_EXCEED_LIMIT) \
     ERROR_CODE(2006, E_UNSUPPORTED_MSG_PACK) \
     ERROR_CODE(2007, E_DENORMALIZE_ITEM_ERROR) \
-    ERROR_CODE(3000, E_NO_SUCH_VERSION)  \
+    ERROR_CODE(3000, E_VERSION_NOT_FOUND)  \
+    ERROR_CODE(3001, E_KEY_NOT_FOUND) \
+    ERROR_CODE(3002, E_SNAPSHOT_NOT_FOUND) \
+    ERROR_CODE(3003, E_DATA_NOT_FOUND) \
     ERROR_CODE(4000, E_DESCRIPTOR_MISMATCH)  \
-    ERROR_CODE(5000, E_KEY_NOT_FOUND) \
-    ERROR_CODE(5001, E_DUPLICATE_KEY) \
-    ERROR_CODE(5002, E_LIBRARY_NOT_FOUND) \
-    ERROR_CODE(5003, E_CONFIG_NOT_FOUND) \
-    ERROR_CODE(5004, E_DUPLICATE_LIBRARY) \
-    ERROR_CODE(6000, E_UNSORTED_DATA)
+    ERROR_CODE(5000, E_DUPLICATE_KEY) \
+    ERROR_CODE(5001, E_LIBRARY_NOT_FOUND) \
+    ERROR_CODE(5002, E_CONFIG_NOT_FOUND) \
+    ERROR_CODE(5003, E_DUPLICATE_LIBRARY) \
+    ERROR_CODE(6000, E_UNSORTED_DATA) \
+    ERROR_CODE(7000, E_INVALID_USER_ARGUMENT)
 
 enum class ErrorCode : BaseType {
 #define ERROR_CODE(code, Name, ...) Name = code,
@@ -122,13 +127,16 @@ struct ArcticSpecificException : public ArcticBaseException<get_error_category(s
 };
 
 using InternalException = ArcticBaseException<ErrorCategory::INTERNAL>;
-using SchemaException = ArcticBaseException<ErrorCategory::SCHEMA>;
 using NormalizationException = ArcticBaseException<ErrorCategory::NORMALIZATION>;
-using NoSuchVersionException = ArcticSpecificException<ErrorCode::E_NO_SUCH_VERSION>;
-using StorageException = ArcticBaseException<ErrorCategory::STORAGE>;
 using MissingDataException = ArcticBaseException<ErrorCategory::MISSING_DATA>;
+using SchemaException = ArcticBaseException<ErrorCategory::SCHEMA>;
+using StorageException = ArcticBaseException<ErrorCategory::STORAGE>;
 using SortingException = ArcticBaseException<ErrorCategory::SORTING>;
+using UserInputException = ArcticBaseException<ErrorCategory::USER_INPUT>;
+
 using UnsortedDataException = ArcticSpecificException<ErrorCode::E_UNSORTED_DATA>;
+using NoSuchVersionException = ArcticSpecificException<ErrorCode::E_VERSION_NOT_FOUND>;
+using UpdateNotSupportedException = ArcticSpecificException<ErrorCode::E_UPDATE_NOT_SUPPORTED>;
 
 template<ErrorCode error_code>
 [[noreturn]] void throw_error(const std::string& msg) {
@@ -136,8 +144,8 @@ template<ErrorCode error_code>
 }
 
 template<>
-[[noreturn]] inline void throw_error<ErrorCode::E_NO_SUCH_VERSION>(const std::string& msg) {
-    throw ArcticSpecificException<ErrorCode::E_NO_SUCH_VERSION>(msg);
+[[noreturn]] inline void throw_error<ErrorCode::E_VERSION_NOT_FOUND>(const std::string& msg) {
+    throw ArcticSpecificException<ErrorCode::E_VERSION_NOT_FOUND>(msg);
 }
 
 template<>

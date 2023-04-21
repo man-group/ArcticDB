@@ -364,7 +364,7 @@ void PythonVersionStore::add_to_snapshot(
     util::check(version_queries.empty() || stream_ids.size() == version_queries.size(), "List length mismatch in add_to_snapshot: {} != {}", stream_ids.size(), version_queries.size());
     auto opt_snapshot =  get_snapshot(store(), snap_name);
     if (!opt_snapshot) {
-        throw NoDataFoundException(snap_name);
+        throw storage::SnapshotNotFoundException(snap_name);
     }
     auto [snap_key, snap_segment] = opt_snapshot.value();
     auto [snapshot_contents, user_meta] = get_versions_and_metadata_from_snapshot(store(), snap_key);
@@ -414,7 +414,7 @@ void PythonVersionStore::remove_from_snapshot(
 
     auto opt_snapshot =  get_snapshot(store(), snap_name);
     if (!opt_snapshot) {
-        throw NoDataFoundException(snap_name);
+        throw storage::SnapshotNotFoundException(snap_name);
     }
     auto [snap_key, snap_segment] = opt_snapshot.value();
     auto [snapshot_contents, user_meta] = get_versions_and_metadata_from_snapshot(store(), snap_key);
@@ -741,7 +741,7 @@ ReadResult PythonVersionStore::read_dataframe_merged(
                    [](auto &stream_key) { return to_atom(stream_key.second); });
 
     if(stream_index_map->empty())
-        throw NoDataFoundException("No data found for any stream ids");
+        throw storage::DataNotFoundException("No data found for any stream ids");
 
     auto [key, metadata, descriptor] = store()->read_metadata_and_descriptor(stream_index_map->begin()->second).get();
     auto index = index_type_from_descriptor(descriptor);
@@ -792,7 +792,7 @@ void PythonVersionStore::delete_snapshot(const SnapshotId& snap_name) {
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: delete_snapshot");
     auto opt_snapshot =  get_snapshot(store(), snap_name);
     if (!opt_snapshot) {
-        throw NoDataFoundException(snap_name);
+        throw storage::SnapshotNotFoundException(snap_name);
     }
     auto [snap_key, snap_segment] = opt_snapshot.value();
 
@@ -972,7 +972,7 @@ std::pair<VersionedItem, py::object> PythonVersionStore::read_metadata(
 
     auto version = get_version_to_read(stream_id, version_query);
     if(!version)
-        throw NoDataFoundException(fmt::format("read_metadata: version not found for stream", stream_id));
+        throw storage::VersionNotFoundException(fmt::format("read_metadata: version not found for stream", stream_id));
 
     auto metadata_proto = store()->read_metadata(version.value().key_).get().second;
     py::object pyobj = metadata_protobuf_to_pyobject(metadata_proto);
@@ -1044,7 +1044,7 @@ std::pair<VersionedItem, py::object> PythonVersionStore::read_descriptor(
     py::object pyobj;
     auto version = get_version_to_read(stream_id, version_query);
     if(!version)
-        throw NoDataFoundException(fmt::format("read_descriptor: version not found for stream", stream_id));
+        throw storage::VersionNotFoundException(fmt::format("read_descriptor: version not found for stream", stream_id));
 
     if (auto metadata_proto = store()->read_metadata(version->key_).get().second; metadata_proto) {
         arcticdb::proto::descriptors::TimeSeriesDescriptor tsd;
@@ -1066,7 +1066,7 @@ ReadResult PythonVersionStore::read_index(
     py::object pyobj;
     auto version = get_version_to_read(stream_id, version_query);
     if(!version)
-        throw NoDataFoundException(fmt::format("read_index: version not found for stream '{}'", stream_id));
+        throw storage::VersionNotFoundException(fmt::format("read_index: version not found for stream '{}'", stream_id));
 
     auto res = read_index_impl(store(), version.value());
     return make_read_result_from_frame(res, version->key_);

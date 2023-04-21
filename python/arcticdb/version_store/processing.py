@@ -614,7 +614,7 @@ CONSTRUCTOR_MAP = {
 
 def create_value(value):
     if value in [inf, -inf]:
-        arcticdb_raise(InternalError.E_INVALID_ARGUMENT, lambda: "Infinite values not supported in queries")
+        arcticdb_raise(UserInputError.E_INVALID_USER_ARGUMENT, lambda: "Infinite values not supported in queries")
 
     if isinstance(value, np.floating):
         f = CONSTRUCTOR_MAP.get(value.dtype.kind).get(value.dtype.itemsize)
@@ -682,7 +682,7 @@ def visit_expression(expr):
                 return _handle_leaf(node)
 
         if isinstance(node, bool):
-            arcticdb_raise(InternalError.E_INVALID_ARGUMENT, lambda: "Query is trivially {}".format(node))
+            arcticdb_raise(UserInputError.E_INVALID_USER_ARGUMENT, lambda: "Query is trivially {}".format(node))
 
         left = _visit_child(node.left)
         if node.right is not None:

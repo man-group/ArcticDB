@@ -14,7 +14,7 @@ from itertools import chain, product
 
 from arcticdb.config import Defaults
 from arcticdb.version_store.helper import ArcticMemoryConfig
-from arcticdb_ext.storage import KeyType, NoDataFoundException
+from arcticdb_ext.storage import KeyType, VersionNotFoundException
 from arcticdb.util.test import config_context, random_string, assert_frame_equal
 
 
@@ -67,7 +67,7 @@ def test_delete_all(lib_type, map_timeout, sym, request):
 
 
 def test_version_missing(s3_version_store):
-    with pytest.raises(NoDataFoundException):
+    with pytest.raises(VersionNotFoundException):
         s3_version_store.read("not_there")
 
 
@@ -89,7 +89,7 @@ def test_delete_version_basic(s3_version_store, idx, sym):
 
     s3_version_store.delete_version(symbol, idx)
 
-    with pytest.raises(NoDataFoundException):
+    with pytest.raises(VersionNotFoundException):
         s3_version_store.read(symbol, idx)
     assert len(s3_version_store.list_versions(symbol)) == 2
     if idx != 2:
@@ -101,9 +101,9 @@ def test_delete_version_basic(s3_version_store, idx, sym):
     assert_frame_equal(s3_version_store.read(symbol, (idx - 2) % 3).data, dfs[(idx - 2) % 3])
 
     s3_version_store.delete_version(symbol, (idx + 1) % 3)
-    with pytest.raises(NoDataFoundException):
+    with pytest.raises(VersionNotFoundException):
         s3_version_store.read(symbol, (idx + 1) % 3)
-    with pytest.raises(NoDataFoundException):
+    with pytest.raises(VersionNotFoundException):
         s3_version_store.read(symbol, idx)
     assert len(s3_version_store.list_versions(symbol)) == 1
     if idx == 2:
@@ -115,11 +115,11 @@ def test_delete_version_basic(s3_version_store, idx, sym):
     assert_frame_equal(s3_version_store.read(symbol, (idx + 2) % 3).data, dfs[(idx + 2) % 3])
 
     s3_version_store.delete_version(symbol, (idx + 2) % 3)
-    with pytest.raises(NoDataFoundException):
+    with pytest.raises(VersionNotFoundException):
         s3_version_store.read(symbol, (idx + 2) % 3)
-    with pytest.raises(NoDataFoundException):
+    with pytest.raises(VersionNotFoundException):
         s3_version_store.read(symbol, (idx + 1) % 3)
-    with pytest.raises(NoDataFoundException):
+    with pytest.raises(VersionNotFoundException):
         s3_version_store.read(symbol, idx)
     assert len(s3_version_store.list_versions(symbol)) == 0
 
@@ -466,7 +466,7 @@ def test_normal_flow_with_snapshot_and_pruning(lmdb_version_store_tombstone_and_
         lib.write("sym1", 2)
         lib.write("sym1", 3)
         lib.delete("sym1")
-        with pytest.raises(NoDataFoundException):
+        with pytest.raises(VersionNotFoundException):
             lib.read(symbol, 0)
         assert lib.read("sym1", as_of="snap1").data == 1
 

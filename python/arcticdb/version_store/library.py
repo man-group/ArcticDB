@@ -18,7 +18,7 @@ from arcticdb.version_store._store import NativeVersionStore, VersionedItem
 import pandas as pd
 import numpy as np
 import logging
-
+from arcticdb.util.errors import *
 
 logger = logging.getLogger(__name__)
 
@@ -37,19 +37,6 @@ See Also
 
 Library.write: for more documentation on normalisation.
 """
-
-
-class ArcticInvalidApiUsageException(RuntimeError):
-    """Exception indicating an invalid call made to the Arctic API."""
-
-
-class ArcticDuplicateSymbolsInBatchException(ArcticInvalidApiUsageException):
-    """Exception indicating that duplicate symbols were passed to a batch method of this module."""
-
-
-class ArcticUnsupportedDataTypeException(ArcticInvalidApiUsageException):
-    """Exception indicating that a method does not support the type of data provided."""
-
 
 class SymbolVersion(NamedTuple):
     """A named tuple. A symbol name - version pair.
@@ -312,7 +299,7 @@ class Library:
 
         Raises
         ------
-        ArcticUnsupportedDataTypeException
+        2000 ErrorCategory.NORMALIZATION:E_INCOMPATIBLE_OBJECTS
             If ``data`` is not of NormalizableType.
         UnsortedDataException
             If data is unsorted, when validate_index is set to True.
@@ -345,7 +332,7 @@ class Library:
         >>> lib.write(*w, staged=True)
         """
         if not isinstance(data, NORMALIZABLE_TYPES):
-            raise ArcticUnsupportedDataTypeException(
+            arcticdb_raise(NormalizationError.E_INCOMPATIBLE_OBJECTS, lambda: 
                 f"data is of a type that cannot be normalized. Consider using "
                 f"write_pickle instead. type(data)=[{type(data)}]"
             )
@@ -413,7 +400,7 @@ class Library:
     def _raise_if_duplicate_symbols_in_batch(batch):
         symbols = {p.symbol for p in batch}
         if len(symbols) < len(batch):
-            raise ArcticDuplicateSymbolsInBatchException
+            arcticdb_raise(UserInputError.E_INVALID_USER_ARGUMENT, lambda: "Duplicate symbols were passed to the batch method")
 
     @staticmethod
     def _raise_if_unsupported_type_in_write_batch(payloads):
@@ -431,7 +418,7 @@ class Library:
         )
         if len(bad_symbols) > 5:
             error_message += f" (and more)... {len(bad_symbols)} data in total have bad types."
-        raise ArcticUnsupportedDataTypeException(error_message)
+        arcticdb_raise(NormalizationError.E_INCOMPATIBLE_OBJECTS, lambda: error_message)
 
     def write_batch(
         self, payloads: List[WritePayload], prune_previous_versions: bool = True, staged=False, validate_index=True
@@ -460,9 +447,9 @@ class Library:
 
         Raises
         ------
-        ArcticDuplicateSymbolsInBatchException
+        7000 ErrorCategory.USER_INPUT.E_INVALID_USER_ARGUMENT
             When duplicate symbols appear in payload.
-        ArcticUnsupportedDataTypeException
+        2000 ErrorCategory.NORMALIZATION:E_INCOMPATIBLE_OBJECTS
             If data that is not of NormalizableType appears in any of the payloads.
         UnsortedDataException
             If data is unsorted, when validate_index is set to True.
@@ -530,7 +517,7 @@ class Library:
 
         Raises
         ------
-        ArcticDuplicateSymbolsInBatchException
+        7000 ErrorCategory.USER_INPUT.E_INVALID_USER_ARGUMENT
             When duplicate symbols appear in payload.
 
         See Also
@@ -861,7 +848,7 @@ class Library:
 
         Raises
         ------
-        ArcticInvalidApiUsageException
+        7000 ErrorCategory.USER_INPUT.E_INVALID_USER_ARGUMENT
             If kwarg query_builder and per-symbol query builders both used.
 
         Examples
@@ -893,10 +880,9 @@ class Library:
             date_ranges.append(s_.date_range)
             columns.append(s_.columns)
             if s_.query_builder is not None and query_builder is not None:
-                raise ArcticInvalidApiUsageException(
-                    "kwarg query_builder and per-symbol query builders cannot "
-                    f"both be used but {s_} had its own query_builder specified."
-                )
+                arcticdb_raise(UserInputError.E_INVALID_USER_ARGUMENT, 
+                    lambda: "kwarg query_builder and per-symbol query builders cannot "
+                    f"both be used but {s_} had its own query_builder specified.")
             else:
                 query_builders.append(s_.query_builder)
 
@@ -911,8 +897,8 @@ class Library:
             elif isinstance(s, ReadRequest):
                 handle_read_request(s)
             else:
-                raise ArcticInvalidApiUsageException(
-                    f"Invalid symbol type s=[{s}] type(s)=[{type(s)}]. Only [str] and [ReadRequest] are supported."
+                arcticdb_raise(UserInputError.E_INVALID_USER_ARGUMENT, 
+                    lambda: f"Invalid symbol type s=[{s}] type(s)=[{type(s)}]. Only [str] and [ReadRequest] are supported."
                 )
 
         return self._nvs._batch_read_to_versioned_items(
@@ -1072,7 +1058,9 @@ class Library:
         2018-01-04       8
         """
         if date_range is None:
-            raise ArcticInvalidApiUsageException("date_range must be given but was None")
+            arcticdb_raise(UserInputError.E_INVALID_USER_ARGUMENT, 
+                lambda: "date_range must be given but was None"
+            )
         self._nvs.delete(symbol, date_range=date_range)
 
     def delete_snapshot(self, snapshot_name: str) -> None:

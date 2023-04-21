@@ -24,13 +24,13 @@ from pytz import timezone
 
 from arcticdb.config import Defaults
 from arcticdb_ext.exceptions import InternalException, NormalizationException
+from arcticdb_ext.storage import KeyType, SnapshotNotFoundException, VersionNotFoundException
+from arcticdb_ext.version_store import StreamDescriptorMismatch
 from arcticdb.flattener import Flattener
 from arcticdb.version_store import NativeVersionStore
 from arcticdb.version_store._custom_normalizers import CustomNormalizer, register_normalizer
 from arcticdb.version_store._store import UNSUPPORTED_S3_CHARS, MAX_SYMBOL_SIZE, VersionedItem
 from arcticdb.version_store.helper import ArcticMemoryConfig, get_lib_cfg
-from arcticdb_ext.storage import KeyType, NoDataFoundException
-from arcticdb_ext.version_store import NoSuchVersionException, StreamDescriptorMismatch
 from arcticc.pb2.descriptors_pb2 import NormalizationMetadata # Importing from arcticdb dynamically loads arcticc.pb2
 from arcticdb.util.test import (
     sample_dataframe,
@@ -181,15 +181,15 @@ def test_negative_cases(lmdb_version_store, symbol):
 
     # Creating a snapshot in an empty library should not create it.
     lmdb_version_store.snapshot("empty_snapshot")
-    with pytest.raises(NoDataFoundException):
+    with pytest.raises(SnapshotNotFoundException):
         lmdb_version_store.delete_snapshot("empty_snapshot")
 
-    with pytest.raises(NoDataFoundException):
+    with pytest.raises(VersionNotFoundException):
         lmdb_version_store.read("does_not_exist")
-    with pytest.raises(NoDataFoundException):
+    with pytest.raises(SnapshotNotFoundException):
         lmdb_version_store.read("does_not_exist", "empty_snapshots")
 
-    with pytest.raises(NoDataFoundException):
+    with pytest.raises(SnapshotNotFoundException):
         lmdb_version_store.delete_snapshot("does_not_exist")
     lmdb_version_store.write(symbol, df)
     lmdb_version_store.delete(symbol)
@@ -528,7 +528,7 @@ def test_is_pickled_by_timestamp(lmdb_version_store):
     not_pickled = pd.DataFrame({"a": np.arange(3)})
     lmdb_version_store.write(symbol, not_pickled)
 
-    with pytest.raises(NoDataFoundException):
+    with pytest.raises(VersionNotFoundException):
         lmdb_version_store.read(symbol, pd.Timestamp(0))
     assert lmdb_version_store.is_symbol_pickled(symbol) is False
     assert lmdb_version_store.is_symbol_pickled(symbol, time_after_first_write) is True
@@ -649,7 +649,7 @@ def test_read_ts(lmdb_version_store):
     assert vitem.version == 0
     assert vitem.data == 1
 
-    with pytest.raises(NoDataFoundException):
+    with pytest.raises(VersionNotFoundException):
         lmdb_version_store.read("a", as_of=pd.Timestamp(0))
 
     brexit_almost_over = pd.Timestamp(np.iinfo(np.int64).max)  # Timestamp("2262-04-11 23:47:16.854775807")
@@ -1066,7 +1066,7 @@ def test_force_delete(lmdb_version_store):
     df4 = sample_dataframe(seed=3)
     lmdb_version_store.write("sym2", df4)
     lmdb_version_store.version_store.force_delete_symbol("sym2")
-    with pytest.raises(NoDataFoundException):
+    with pytest.raises(VersionNotFoundException):
         lmdb_version_store.read("sym2")
 
     assert_frame_equal(lmdb_version_store.read("sym1").data, df2)

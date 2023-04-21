@@ -555,8 +555,8 @@ std::optional<pipelines::index::IndexSegmentReader> get_index_segment_reader(
     try {
         index_key_seg = store->read_sync(version_info.key_);
     } catch (const std::exception& ex) {
-        ARCTICDB_DEBUG(log::version(), "Key not found from versioned item {}: {}", version_info.key_, ex.what());
-        throw storage::NoDataFoundException(version_info.key_.id());
+        ARCTICDB_DEBUG(log::version(), fmt::format("Key not found from versioned item {}: {}", version_info.key_, ex.what()));
+        throw storage::KeyNotFoundException(Composite(VariantKey(version_info.key_)));
     }
 
     if (variant_key_type(index_key_seg.first) == KeyType::MULTI_KEY) {

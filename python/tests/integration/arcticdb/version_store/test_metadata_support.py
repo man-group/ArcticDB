@@ -11,8 +11,8 @@ from pandas import DataFrame, Timestamp
 import pytest
 
 from arcticdb.version_store import NativeVersionStore, VersionedItem
-from arcticdb_ext.exceptions import NormalizationException
-from arcticdb_ext.storage import NoDataFoundException
+from arcticdb_ext.exceptions import NormalizationException, MissingDataException
+from arcticdb_ext.storage import VersionNotFoundException
 from arcticdb.util.test import assert_frame_equal
 
 
@@ -93,7 +93,7 @@ def test_read_metadata_by_timestamp(lmdb_version_store):
     time_after_first_write = Timestamp.utcnow()
     time.sleep(0.1)
 
-    with pytest.raises(NoDataFoundException):
+    with pytest.raises(MissingDataException):
         lmdb_version_store.read(symbol, as_of=Timestamp(0))
 
     assert lmdb_version_store.read_metadata(symbol, as_of=time_after_first_write).metadata == metadata_v0
@@ -121,7 +121,7 @@ def test_read_metadata_by_timestamp(lmdb_version_store):
     ts_for_v2 = sorted_versions_for_a[2]["date"]
     assert lmdb_version_store.read_metadata(symbol, as_of=ts_for_v2).metadata == metadata_v2
 
-    with pytest.raises(NoDataFoundException):
+    with pytest.raises(VersionNotFoundException):
         lmdb_version_store.read(symbol, as_of=Timestamp(0))
 
     brexit_almost_over = Timestamp(np.iinfo(np.int64).max)  # Timestamp("2262-04-11 23:47:16.854775807")

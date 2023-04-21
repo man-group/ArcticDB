@@ -8,7 +8,7 @@ import pandas as pd
 from pandas.testing import assert_frame_equal
 import pytest
 
-from arcticdb_ext.storage import KeyType, NoDataFoundException
+from arcticdb_ext.storage import KeyType, VersionNotFoundException
 
 
 def get_data_keys(lib, symbol):
@@ -121,16 +121,16 @@ def test_de_dup_with_delete(version_store_factory):
     lib.delete_version(symbol, 1)
     assert_frame_equal(lib.read(symbol).data, final_df)
     assert_frame_equal(lib.read(symbol, as_of=0).data, df1)
-    with pytest.raises(NoDataFoundException):
+    with pytest.raises(VersionNotFoundException):
         lib.read(symbol, as_of=1)
 
     assert len(get_data_keys(lib, symbol)) == 3 * num_elements / 2
 
     lib.delete_version(symbol, 2)
     assert_frame_equal(lib.read(symbol).data, df1)
-    with pytest.raises(NoDataFoundException):
+    with pytest.raises(VersionNotFoundException):
         lib.read(symbol, as_of=1)
-    with pytest.raises(NoDataFoundException):
+    with pytest.raises(VersionNotFoundException):
         lib.read(symbol, as_of=2)
 
     lib.write(symbol, final_df, prune_previous_version=True)
@@ -223,9 +223,9 @@ def test_de_dup_with_tombstones(version_store_factory):
     lib.delete_version(symbol, 2)
     assert_frame_equal(lib.read(symbol).data, new_df)
     assert_frame_equal(lib.read(symbol, as_of=0).data, df1)
-    with pytest.raises(NoDataFoundException):
+    with pytest.raises(VersionNotFoundException):
         lib.read(symbol, as_of=3)
-    with pytest.raises(NoDataFoundException):
+    with pytest.raises(VersionNotFoundException):
         lib.read(symbol, as_of=2)
 
     # tomstones deletes data (it doesn't delete data when delayed deletes is on)

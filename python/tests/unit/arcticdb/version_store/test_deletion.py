@@ -13,7 +13,7 @@ import time
 
 from arcticdb.util.test import assert_frame_equal
 from arcticdb_ext.exceptions import InternalException
-from arcticdb_ext.storage import KeyType, NoDataFoundException
+from arcticdb_ext.storage import KeyType, SnapshotNotFoundException
 from arcticdb.version_store._normalization import NPDDataFrame
 from arcticdb.util.test import sample_dataframe
 
@@ -159,7 +159,7 @@ def test_delete_snapshot(version_store_factory):
     assert_frame_equal(lmdb_version_store.read(symbol, as_of=snap).data, df1)
 
     lmdb_version_store.delete_snapshot(snap)
-    with pytest.raises(NoDataFoundException):
+    with pytest.raises(SnapshotNotFoundException):
         lmdb_version_store.read(symbol, as_of=snap)
 
     index_keys = lt.find_keys_for_id(KeyType.TABLE_INDEX, symbol)

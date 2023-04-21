@@ -6,14 +6,14 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 import sys
-from arcticdb_ext.exceptions import InternalException, NormalizationException
+from arcticdb_ext.exceptions import InternalException, NormalizationException, UserInputException, MissingDataException
+from arcticdb_ext.storage import VersionNotFoundException
 
 try:
     from arcticdb.version_store import VersionedItem as PythonVersionedItem
 except ImportError:
     # arcticdb squashes the packages
     from arcticdb._store import VersionedItem as PythonVersionedItem
-from arcticdb_ext.storage import NoDataFoundException
 
 from arcticdb.arctic import Arctic
 from arcticdb.options import LibraryOptions
@@ -30,20 +30,14 @@ from arcticdb.util.test import assert_frame_equal
 try:
     from arcticdb.version_store.library import (
         WritePayload,
-        ArcticDuplicateSymbolsInBatchException,
-        ArcticUnsupportedDataTypeException,
         ReadRequest,
-        ArcticInvalidApiUsageException,
         StagedDataFinalizeMethod,
     )
 except ImportError:
     # arcticdb squashes the packages
     from arcticdb.library import (
         WritePayload,
-        ArcticDuplicateSymbolsInBatchException,
-        ArcticUnsupportedDataTypeException,
         ReadRequest,
-        ArcticInvalidApiUsageException,
         StagedDataFinalizeMethod,
     )
 
@@ -272,7 +266,7 @@ def test_delete_non_existent_snapshot(arctic_library):
     lib = arctic_library
     df = pd.DataFrame({"col1": [1, 2, 3], "col2": [4, 5, 6]})
     lib.write("my_symbol", df)
-    with pytest.raises(NoDataFoundException):
+    with pytest.raises(MissingDataException):
         lib.delete_snapshot("test")
 
 
@@ -425,25 +419,23 @@ def test_write_batch_with_pickle_mode(arctic_library):
 def test_write_object_without_pickle_mode(arctic_library):
     """Writing outside of pickle mode should fail when the user does not use the dedicated method."""
     lib = arctic_library
-    with pytest.raises(ArcticUnsupportedDataTypeException):
+    with pytest.raises(NormalizationException):
         lib.write("test_1", A("id_1"))
 
 
 def test_write_object_in_batch_without_pickle_mode(arctic_library):
     """Writing outside of pickle mode should fail when the user does not use the dedicated method."""
     lib = arctic_library
-    with pytest.raises(ArcticUnsupportedDataTypeException) as e:
+    with pytest.raises(NormalizationException) as e:
         lib.write_batch([WritePayload("test_1", A("id_1"))])
     # omit the part with the full class path as that will change in arcticdb
-    assert e.value.args[0].startswith(
-        "payload contains some data of types that cannot be normalized. Consider using write_batch_pickle instead. symbols with bad datatypes"
-    )
+    assert "payload contains some data of types that cannot be normalized. Consider using write_batch_pickle instead. symbols with bad datatypes" in e.value.args[0]
 
 
 def test_write_object_in_batch_without_pickle_mode_many_symbols(arctic_library):
     """Writing outside of pickle mode should fail when the user does not use the dedicated method."""
     lib = arctic_library
-    with pytest.raises(ArcticUnsupportedDataTypeException) as e:
+    with pytest.raises(NormalizationException) as e:
         lib.write_batch([WritePayload(f"test_{i}", A(f"id_{i}")) for i in range(10)])
     message: str = e.value.args[0]
     assert "(and more)... 10 data in total have bad types." in message
@@ -452,7 +444,7 @@ def test_write_object_in_batch_without_pickle_mode_many_symbols(arctic_library):
 def test_write_list_without_pickle_mode(arctic_library):
     """Writing outside of pickle mode should fail when the user does not use the dedicated method."""
     lib = arctic_library
-    with pytest.raises(ArcticUnsupportedDataTypeException):
+    with pytest.raises(NormalizationException):
         lib.write("test_1", [1, 2, 3])
 
 
@@ -493,7 +485,7 @@ def test_write_batch(arctic_library):
 def test_write_batch_duplicate_symbols(arctic_library):
     """Should throw and not write if duplicate symbols are provided."""
     lib = arctic_library
-    with pytest.raises(ArcticDuplicateSymbolsInBatchException):
+    with pytest.raises(UserInputException):
         lib.write_batch(
             [
                 WritePayload("symbol_1", pd.DataFrame()),
@@ -507,7 +499,7 @@ def test_write_batch_duplicate_symbols(arctic_library):
 def test_write_batch_pickle_duplicate_symbols(arctic_library):
     """Should throw and not write if duplicate symbols are provided."""
     lib = arctic_library
-    with pytest.raises(ArcticDuplicateSymbolsInBatchException):
+    with pytest.raises(UserInputException):
         lib.write_batch_pickle(
             [
                 WritePayload("symbol_1", pd.DataFrame()),
@@ -553,9 +545,9 @@ def test_prune_previous_versions_with_write(arctic_library):
 
     # We prune by default
     lib.write("sym", pd.DataFrame())
-    with pytest.raises(NoDataFoundException):
+    with pytest.raises(VersionNotFoundException):
         lib.read("sym", as_of=0)
-    with pytest.raises(NoDataFoundException):
+    with pytest.raises(VersionNotFoundException):
         lib.read("sym", as_of=1)
 
     v3 = lib.read("sym", as_of=2).data
@@ -919,7 +911,7 @@ def test_read_batch_overall_query_builder_and_per_request_query_builder_raises(a
     q_2 = q_2[q_2["a"] < 7]
     lib.write("s", pd.DataFrame({"a": [3, 5, 7]}))
     # When & Then
-    with pytest.raises(ArcticInvalidApiUsageException):
+    with pytest.raises(UserInputException):
         lib.read_batch([ReadRequest("s", query_builder=q_1)], query_builder=q_2)
 
 
@@ -927,7 +919,7 @@ def test_read_batch_unhandled_type(arctic_library):
     """Only str and ReadRequest are supported."""
     lib = arctic_library
     lib.write("1", pd.DataFrame())
-    with pytest.raises(ArcticInvalidApiUsageException):
+    with pytest.raises(UserInputException):
         lib.read_batch([1])
 
 
