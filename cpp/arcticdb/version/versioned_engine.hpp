@@ -17,11 +17,13 @@
 #include <arcticdb/pipeline/input_tensor_frame.hpp>
 #include <arcticdb/version/version_core.hpp>
 #include <arcticdb/version/version_store_objects.hpp>
+#include <folly/SpinLock.h>
 
 namespace arcticdb::version_store {
 
 using namespace arcticdb::entity;
 using namespace arcticdb::pipelines;
+using LockType = folly::SpinLock;
 
 class VersionedEngine {
 
@@ -86,12 +88,12 @@ public:
         const VersionQuery& version_query
         ) = 0;
 
-    virtual FrameAndDescriptor read_dataframe_internal(
+    virtual folly::Future<FrameAndDescriptor> read_dataframe_internal(
         const std::variant<VersionedItem, StreamId>& identifier,
         ReadQuery& read_query,
         const ReadOptions& read_options) = 0;
 
-    virtual std::pair<VersionedItem, FrameAndDescriptor> read_dataframe_version_internal(
+    virtual folly::Future<std::pair<VersionedItem, FrameAndDescriptor>> read_dataframe_version_internal(
         const StreamId &stream_id,
         const VersionQuery& version_query,
         ReadQuery& read_query,

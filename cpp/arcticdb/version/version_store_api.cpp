@@ -819,7 +819,8 @@ ReadResult PythonVersionStore::read_dataframe_version(
     const VersionQuery& version_query,
     ReadQuery& read_query,
     const ReadOptions& read_options) {
-    auto [versioned_item, frame_and_descriptor] =  read_dataframe_version_internal(stream_id, version_query, read_query, read_options);
+    auto read_dataframe_future = read_dataframe_version_internal(stream_id, version_query, read_query, read_options);
+    auto [versioned_item, frame_and_descriptor] = std::move(read_dataframe_future).get();
     return create_python_read_result(versioned_item, std::move(frame_and_descriptor));
 }
 

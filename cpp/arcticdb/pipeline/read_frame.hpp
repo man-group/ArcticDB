@@ -66,7 +66,7 @@ void mark_index_slices(
     bool dynamic_schema,
     bool column_groups);
 
-folly::Future<std::vector<VariantKey>> fetch_data(
+folly::Future<std::vector<VariantKey>> async_fetch_data(
     const SegmentInMemory& frame,
     const std::shared_ptr<PipelineContext> &context,
     const std::shared_ptr<stream::StreamSource>& ssource,
@@ -89,7 +89,7 @@ void decode_into_frame_dynamic(
 );
 
 void reduce_and_fix_columns(
-        std::shared_ptr<PipelineContext> &context,
+        std::shared_ptr<PipelineContext> context,
         SegmentInMemory &frame,
         const ReadOptions& read_options
 );

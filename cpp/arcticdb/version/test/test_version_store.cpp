@@ -19,8 +19,8 @@
 #include <filesystem>
 #include <chrono>
 #include <thread>
-#include <folly/futures/Barrier.h>
 #include <arcticdb/util/test/gtest_utils.hpp>
+#include <folly/SpinLock.h>
 
 struct VersionStoreTest : arcticdb::TestStore {
 protected:
@@ -445,7 +445,7 @@ TEST(VersionStore, UpdateWithin) {
     version_store.update_internal(symbol, UpdateQuery{}, std::move(update_frame.frame_), false, false, false);
 
     ReadQuery read_query;
-    auto read_result = version_store.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, ReadOptions{});
+    auto read_result = version_store.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, ReadOptions{}).get();
     const auto& seg = read_result.second.frame_;
 
     for(auto i = 0u; i < num_rows; ++i) {
@@ -487,7 +487,7 @@ TEST(VersionStore, UpdateBefore) {
     version_store.update_internal(symbol, UpdateQuery{}, std::move(update_frame.frame_), false, false, false);
 
     ReadQuery read_query;
-    auto read_result = version_store.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, ReadOptions{});
+    auto read_result = version_store.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, ReadOptions{}).get();
     const auto& seg = read_result.second.frame_;
 
     for(auto i = 0u; i < num_rows + update_range.diff(); ++i) {
@@ -529,7 +529,7 @@ TEST(VersionStore, UpdateAfter) {
     version_store.update_internal(symbol, UpdateQuery{}, std::move(update_frame.frame_), false, false, false);
 
     ReadQuery read_query;
-    auto read_result = version_store.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, ReadOptions{});
+    auto read_result = version_store.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, ReadOptions{}).get();
     const auto& seg = read_result.second.frame_;
 
     for(auto i = 0u; i < num_rows + update_range.diff(); ++i) {
@@ -573,7 +573,7 @@ TEST(VersionStore, UpdateIntersectBefore) {
 
     ReadQuery read_query;
     auto
-        read_result = version_store.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, ReadOptions{});
+        read_result = version_store.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, ReadOptions{}).get();
     const auto &seg = read_result.second.frame_;
 
     for (auto i = 0u; i < num_rows + 5; ++i) {
@@ -617,7 +617,7 @@ TEST(VersionStore, UpdateIntersectAfter) {
 
     ReadQuery read_query;
     auto
-        read_result = version_store.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, ReadOptions{});
+        read_result = version_store.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, ReadOptions{}).get();
     const auto &seg = read_result.second.frame_;
 
     for (auto i = 0u; i < num_rows + 5; ++i) {
@@ -670,7 +670,7 @@ TEST(VersionStore, UpdateWithinSchemaChange) {
     ReadOptions read_options;
     read_options.set_dynamic_schema(true);
     ReadQuery read_query;
-    auto read_result = version_store.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, read_options);
+    auto read_result = version_store.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, read_options).get();
     const auto &seg = read_result.second.frame_;
 
     for (auto i = 0u;i < num_rows; ++i) {
@@ -731,7 +731,7 @@ TEST(VersionStore, UpdateWithinTypeAndSchemaChange) {
     ReadOptions read_options;
     read_options.set_dynamic_schema(true);
     ReadQuery read_query;
-    auto read_result = version_store.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, read_options);
+    auto read_result = version_store.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, read_options).get();
     const auto &seg = read_result.second.frame_;
 
     for (auto i = 0u;i < num_rows; ++i) {

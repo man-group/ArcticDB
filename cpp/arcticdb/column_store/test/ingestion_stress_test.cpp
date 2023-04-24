@@ -218,7 +218,7 @@ TEST_F(IngestionStressStore, ScalarIntDynamicSchema) {
     read_options.set_incompletes(true);
     ReadQuery read_query;
     read_query.row_filter = universal_range();
-    auto read_result = test_store_->read_dataframe_internal(symbol, read_query, read_options);
+    auto read_result = test_store_->read_dataframe_internal(symbol, read_query, read_options).get();
 }
 
 TEST_F(IngestionStressStore, DynamicSchemaWithStrings) {

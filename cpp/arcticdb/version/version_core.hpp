@@ -99,16 +99,15 @@ ColumnStats get_column_stats_info_impl(
     const std::shared_ptr<Store>& store,
     const VersionedItem& versioned_item);
 
-FrameAndDescriptor read_multi_key(
+folly::Future<FrameAndDescriptor> read_multi_key(
     const std::shared_ptr<Store>& store,
     const SegmentInMemory& index_key_seg);
 
-FrameAndDescriptor read_dataframe_impl(
+folly::Future<FrameAndDescriptor> read_dataframe_impl(
     const std::shared_ptr<Store>& store,
     const std::variant<VersionedItem, StreamId>& version_info,
     ReadQuery & read_query,
-    const ReadOptions& read_options
-    );
+    const ReadOptions& read_options);
 
 FrameAndDescriptor read_index_impl(
     const std::shared_ptr<Store>& store,

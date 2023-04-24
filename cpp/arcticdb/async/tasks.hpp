@@ -197,7 +197,7 @@ struct ReadCompressedTask : BaseTask {
 
     ReadCompressedTask(entity::VariantKey key, std::shared_ptr<storage::Library> lib, storage::ReadKeyOpts opts)
         : key_(std::move(key)),
-        lib_(std::move(lib)),
+        lib_(lib),
         opts_(opts) {
         ARCTICDB_DEBUG(log::storage(), "Creating read compressed task for key {}: {}",
                              variant_key_type(key_),
@@ -222,7 +222,7 @@ struct ReadCompressedSlicesTask : BaseTask {
 
     ReadCompressedSlicesTask(Composite<pipelines::SliceAndKey>&& sk, std::shared_ptr<storage::Library> lib)
             : slice_and_keys_(std::move(sk)),
-            lib_(std::move(lib)) {
+            lib_(lib) {
         ARCTICDB_DEBUG(log::storage(), "Creating read compressed slices task for slice and key {}",
                              slice_and_keys_);
     }
@@ -307,8 +307,8 @@ struct DecodeSlicesTask : BaseTask {
     std::shared_ptr<std::unordered_set<std::string>> filter_columns_;
 
     DecodeSlicesTask(
-            const StreamDescriptor& desc,
-            const std::shared_ptr<std::unordered_set<std::string>>& filter_columns)  :
+            const StreamDescriptor desc,
+            const std::shared_ptr<std::unordered_set<std::string>> filter_columns)  :
                 desc_(desc),
                 filter_columns_(filter_columns) {
             }
@@ -327,18 +327,18 @@ private:
 };
 
 struct SegmentFunctionTask : BaseTask {
-    stream::StreamSource::ReadContinuation func_;
+    std::shared_ptr<stream::StreamSource::ReadContinuation> func_;
 
     explicit SegmentFunctionTask(
-        stream::StreamSource::ReadContinuation func) :
-        func_(std::move(func)) {
+        std::shared_ptr<stream::StreamSource::ReadContinuation> func) :
+        func_(func) {
     }
 
     ARCTICDB_MOVE_ONLY_DEFAULT(SegmentFunctionTask)
 
      entity::VariantKey operator()(storage::KeySegmentPair &&key_seg) {
         ARCTICDB_SAMPLE(SegmentFunctionTask, 0)
-        return func_(std::move(key_seg));
+        return (*func_)(std::move(key_seg));
     }
 };
 
@@ -353,7 +353,7 @@ struct MemSegmentPassthroughProcessingTask : BaseTask {
             std::shared_ptr<std::vector<Clause>> clauses,
             Composite<ProcessingSegment>&& starting_segments) :
             store_(store),
-            clauses_(std::move(clauses)),
+            clauses_(clauses),
             starting_segments_(std::move(starting_segments)){
     }
 

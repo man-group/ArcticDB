@@ -38,12 +38,12 @@ namespace arcticdb {
             return false;
         }
 
-        std::vector<Composite<ProcessingSegment>> batch_read_uncompressed(
+        folly::Future<std::vector<Composite<ProcessingSegment>>> batch_read_uncompressed(
                 std::vector<Composite<pipelines::SliceAndKey>> &&,
                 const std::shared_ptr<std::vector<Clause>>&,
-                const StreamDescriptor&,
-                const std::shared_ptr<std::unordered_set<std::string>>&,
-                const BatchReadArgs &) override {
+                const StreamDescriptor,
+                const std::shared_ptr<std::unordered_set<std::string>>,
+                const BatchReadArgs) override {
             throw std::runtime_error("Not implemented for tests");
         }
 
@@ -275,9 +275,9 @@ namespace arcticdb {
             throw std::runtime_error("Not implemented");
         }
 
-        std::vector<VariantKey> batch_read_compressed(
+        folly::Future<std::vector<VariantKey>> batch_read_compressed(
                 std::vector<entity::VariantKey> &&keys,
-                std::vector<ReadContinuation> &&,
+                std::vector<std::shared_ptr<ReadContinuation>> &,
                 const BatchReadArgs &
         ) override {
             std::lock_guard lock{mutex_};

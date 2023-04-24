@@ -949,7 +949,7 @@ struct ReduceColumnTask : async::BaseTask {
 };
 
 void reduce_and_fix_columns(
-        std::shared_ptr<PipelineContext> &context,
+        std::shared_ptr<PipelineContext> context,
         SegmentInMemory &frame,
         const ReadOptions& read_options
 ) {
@@ -1000,7 +1000,7 @@ void reduce_and_fix_columns(
     }
 }
 
-folly::Future<std::vector<VariantKey>> fetch_data(
+folly::Future<std::vector<VariantKey>> async_fetch_data(
     const SegmentInMemory& frame,
     const std::shared_ptr<PipelineContext> &context,
     const std::shared_ptr<stream::StreamSource>& ssource,
@@ -1013,30 +1013,29 @@ folly::Future<std::vector<VariantKey>> fetch_data(
 
     std::vector<VariantKey> keys;
     keys.reserve(context->slice_and_keys_.size());
-    std::vector<stream::StreamSource::ReadContinuation> continuations;
+    std::vector<std::shared_ptr<stream::StreamSource::ReadContinuation>> continuations;
     continuations.reserve(keys.capacity());
     context->ensure_vectors();
     {
         ARCTICDB_SUBSAMPLE_DEFAULT(QueueReadContinuations)
         for ( auto& row : *context) {
             keys.emplace_back(row.slice_and_key().key());
-            continuations.emplace_back([
+            continuations.emplace_back(std::make_shared<stream::StreamSource::ReadContinuation>([
                 row = row,
                 frame = frame,
                 dynamic_schema=dynamic_schema,
-                &buffers](auto &&ks) mutable {
+                buffers](auto &&ks) mutable {
                 auto key_seg = std::forward<storage::KeySegmentPair>(ks);
                 if(dynamic_schema)
                     decode_into_frame_dynamic(frame, row, std::move(key_seg.segment()), buffers);
                 else
                     decode_into_frame_static(frame, row, std::move(key_seg.segment()), buffers);
-
                 return std::get<AtomKey>(key_seg.variant_key());
-            });
+            }));
         }
     }
     ARCTICDB_SUBSAMPLE_DEFAULT(DoBatchReadCompressed)
-    return ssource->batch_read_compressed(std::move(keys), std::move(continuations), BatchReadArgs{});
+    return  ssource->batch_read_compressed(std::move(keys), continuations, BatchReadArgs{});
 }
 
 } // namespace read

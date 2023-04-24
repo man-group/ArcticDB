@@ -19,7 +19,7 @@
 #include <arcticdb/pipeline/input_tensor_frame.hpp>
 #include <arcticdb/version/version_core.hpp>
 #include <arcticdb/version/versioned_engine.hpp>
-
+#include <folly/SpinLock.h>
 #include <sstream>
 
 namespace arcticdb::version_store {
@@ -104,16 +104,26 @@ public:
         const VersionQuery& version_query
     );
 
-    FrameAndDescriptor read_dataframe_internal(
+    folly::Future<FrameAndDescriptor> read_dataframe_internal(
         const std::variant<VersionedItem, StreamId>& identifier,
         ReadQuery& read_query,
         const ReadOptions& read_options) override;
 
-    std::pair<VersionedItem, FrameAndDescriptor> read_dataframe_version_internal(
+
+    folly::Future<std::pair<VersionedItem, FrameAndDescriptor>> read_dataframe_and_validate_version_internal(
+        std::optional<VersionedItem> version,
+        const StreamId &stream_id,
+        ReadQuery& read_query,
+        const ReadOptions& read_options);
+
+    folly::Future<std::pair<VersionedItem, FrameAndDescriptor>> read_dataframe_version_internal(
         const StreamId &stream_id,
         const VersionQuery& version_query,
         ReadQuery& read_query,
         const ReadOptions& read_options) override;
+
+    folly::Future<std::pair<VersionedItem, FrameAndDescriptor>> async_read_dataframe_version(
+        folly::Future<std::optional<AtomKey>>&& version_fut, const StreamId &stream_id, ReadQuery& read_query, const ReadOptions& read_options);
 
     std::pair<VersionedItem, std::optional<google::protobuf::Any>> read_descriptor_version_internal(
             const StreamId& stream_id,

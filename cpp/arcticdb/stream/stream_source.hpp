@@ -54,9 +54,9 @@ struct StreamSource {
 
     using ReadContinuation = folly::Function<entity::VariantKey(storage::KeySegmentPair &&)>;
 
-    virtual std::vector<entity::VariantKey> batch_read_compressed(
+    virtual folly::Future<std::vector<entity::VariantKey>> batch_read_compressed(
         std::vector<entity::VariantKey> &&keys,
-        std::vector<ReadContinuation> &&continuations,
+        std::vector<std::shared_ptr<ReadContinuation>> &continuations,
         const BatchReadArgs &args) = 0;
 
     /**
@@ -70,12 +70,12 @@ struct StreamSource {
 
     using DecodeContinuation = folly::Function<folly::Unit(SegmentInMemory &&)>;
 
-    virtual std::vector<Composite<ProcessingSegment>> batch_read_uncompressed(
+    virtual folly::Future<std::vector<Composite<ProcessingSegment>>> batch_read_uncompressed(
         std::vector<Composite<pipelines::SliceAndKey>> &&keys,
         const std::shared_ptr<std::vector<Clause>>& query,
-        const StreamDescriptor& desc,
-        const std::shared_ptr<std::unordered_set<std::string>>& filter_columns,
-        const BatchReadArgs &args) = 0;
+        const StreamDescriptor desc,
+        const std::shared_ptr<std::unordered_set<std::string>> filter_columns,
+        const BatchReadArgs args) = 0;
 
     virtual folly::Future<std::pair<std::optional<VariantKey>, std::optional<google::protobuf::Any>>> read_metadata(
         const entity::VariantKey &key,

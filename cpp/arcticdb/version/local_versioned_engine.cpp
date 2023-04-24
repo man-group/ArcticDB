@@ -148,7 +148,7 @@ ColumnStats LocalVersionedEngine::get_column_stats_info_version_internal(
     return get_column_stats_info_internal(versioned_item.value());
 }
 
-FrameAndDescriptor LocalVersionedEngine::read_dataframe_internal(
+folly::Future<FrameAndDescriptor> LocalVersionedEngine::read_dataframe_internal(
     const std::variant<VersionedItem, StreamId>& identifier,
     ReadQuery& read_query,
     const ReadOptions& read_options) {
@@ -313,12 +313,21 @@ IndexRange LocalVersionedEngine::get_index_range(
     return index::get_index_segment_range(version.value().key_, store());
 }
 
-std::pair<VersionedItem, FrameAndDescriptor> LocalVersionedEngine::read_dataframe_version_internal(
+folly::Future<std::pair<VersionedItem, FrameAndDescriptor>> LocalVersionedEngine::read_dataframe_version_internal(
     const StreamId &stream_id,
     const VersionQuery& version_query,
     ReadQuery& read_query,
     const ReadOptions& read_options) {
-    auto version = get_version_to_read(stream_id, version_query);
+        auto version = get_version_to_read(stream_id, version_query);
+        return read_dataframe_and_validate_version_internal(version, stream_id, read_query, read_options);
+}
+
+folly::Future<std::pair<VersionedItem, FrameAndDescriptor>> LocalVersionedEngine::read_dataframe_and_validate_version_internal(
+    std::optional<VersionedItem> version,
+    const StreamId &stream_id,
+    ReadQuery& read_query,
+    const ReadOptions& read_options
+    ) {
     std::variant<VersionedItem, StreamId> identifier;
     if(!version) {
         if(opt_false(read_options.incompletes_)) {
@@ -332,8 +341,10 @@ std::pair<VersionedItem, FrameAndDescriptor> LocalVersionedEngine::read_datafram
         identifier = version.value();
     }
 
-    auto frame_and_descriptor = read_dataframe_internal(identifier, read_query, read_options);
-    return std::make_pair(version.value_or(VersionedItem{}), std::move(frame_and_descriptor));
+    return read_dataframe_internal(identifier, read_query, read_options)
+    .thenValue([version](FrameAndDescriptor&& frame_and_descriptor){
+        return std::make_pair(version.value_or(VersionedItem{}), std::move(frame_and_descriptor));
+    });
 }
 
 std::pair<VersionedItem, std::optional<google::protobuf::Any>> LocalVersionedEngine::read_descriptor_version_internal(
@@ -905,7 +916,7 @@ folly::Future<FrameAndDescriptor> async_read_direct(
     mark_index_slices(pipeline_context, dynamic_schema, bucketize_dynamic);
     auto frame = allocate_frame(pipeline_context);
 
-    return fetch_data(frame, pipeline_context, store, dynamic_schema, buffers).then(
+    return async_fetch_data(frame, pipeline_context, store, dynamic_schema, buffers).then(
         [pipeline_context, frame, &read_options] (auto&&) mutable {
             reduce_and_fix_columns(pipeline_context, frame, read_options);
         }).then(
@@ -935,20 +946,29 @@ std::pair<std::vector<AtomKey>, std::vector<FrameAndDescriptor>> LocalVersionedE
     return std::make_pair(keys, folly::collect(results_fut).get());
 }
 
+folly::Future<std::pair<VersionedItem, FrameAndDescriptor>> LocalVersionedEngine::async_read_dataframe_version(
+        folly::Future<std::optional<AtomKey>>&& version_fut, const StreamId &stream_id, ReadQuery& read_query, const ReadOptions& read_options){
+    return  std::move(version_fut).via(&async::cpu_executor())
+    .thenValue([this, &stream_id, &read_query, &read_options](std::optional<AtomKey>&& key){
+        auto version = key.has_value() ? std::make_optional<VersionedItem>(std::move(to_atom(key.value()))) : std::nullopt;
+        return read_dataframe_and_validate_version_internal(version, stream_id, read_query, read_options);
+    }); 
+}
+
 std::vector<std::pair<VersionedItem, FrameAndDescriptor>> LocalVersionedEngine::batch_read_internal(
     const std::vector<StreamId>& stream_ids,
     const std::vector<VersionQuery>& version_queries,
     std::vector<ReadQuery>& read_queries,
-    const ReadOptions& read_options) {
-
+    const ReadOptions& read_options
+) {
+    auto version_queries_or_empty = version_queries.size() == stream_ids.size() ? 
+        version_queries :  std::vector<VersionQuery>{stream_ids.size(), VersionQuery{}};
+    auto versions_fut = batch_get_versions(store(), version_map(), stream_ids, version_queries_or_empty);
     std::vector<folly::Future<std::pair<VersionedItem, FrameAndDescriptor>>> results_fut;
+    std::vector<ReadQuery> empty_read_queries(stream_ids.size() - read_queries.size(), ReadQuery{});
     for (size_t idx=0; idx < stream_ids.size(); idx++) {
-        auto version_query = version_queries.size() > idx ? version_queries[idx] : VersionQuery{};
-        auto read_query = read_queries.size() > idx ? read_queries[idx] : ReadQuery{};
-        results_fut.push_back(read_dataframe_version_internal(stream_ids[idx],
-                                                              version_query,
-                                                              read_query,
-                                                              read_options));
+        auto& read_query = read_queries.size() > idx ? read_queries[idx] : empty_read_queries[idx - read_queries.size()];
+        results_fut.push_back(async_read_dataframe_version(std::move(versions_fut[idx]), stream_ids[idx], read_query, read_options));
     }
     return folly::collect(results_fut).get();
 }
@@ -1263,17 +1283,17 @@ std::unordered_map<KeyType, std::pair<size_t, size_t>> LocalVersionedEngine::sca
         });
         auto& pair = sizes[key_type];
         pair.first = keys.size();
-        std::vector<stream::StreamSource::ReadContinuation> continuations;
+        std::vector<std::shared_ptr<stream::StreamSource::ReadContinuation>> continuations;
         continuations.reserve(keys.size());
         std::atomic<size_t> key_size{0};
         for(auto i = 0u; i < keys.size(); ++i) {
-            continuations.emplace_back([&key_size] (auto&& ks) {
+            continuations.emplace_back(std::make_shared<stream::StreamSource::ReadContinuation>([&key_size] (auto&& ks) {
                 auto key_seg = std::move(ks);
                 key_size += key_seg.segment().total_segment_size();
                 return key_seg.variant_key();
-            });
+            }));
         }
-        store->batch_read_compressed(std::move(keys), std::move(continuations), BatchReadArgs{});
+        store->batch_read_compressed(std::move(keys), continuations, BatchReadArgs{}).get();
         pair.second = key_size;
     });
     return sizes;

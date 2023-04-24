@@ -280,82 +280,49 @@ public:
         return res;
     }
 
-    std::vector<VariantKey> batch_read_compressed(
+    folly::Future<std::vector<VariantKey>> batch_read_compressed(
         std::vector<entity::VariantKey> &&keys,
-        std::vector<ReadContinuation> &&continuations,
+        std::vector<std::shared_ptr<ReadContinuation>> &continuations,
         const BatchReadArgs & args) override {
         util::check(keys.size() == continuations.size(),
                     "keys and continuations must has then same number of elements");
-        std::vector<folly::Future<VariantKey>> batch;
-        batch.reserve(args.batch_size_);
-        std::vector<VariantKey> res;
-        res.reserve(keys.size());
-        for (std::size_t i = 0; i < keys.size(); ++i) {
-            auto &key = keys[i];
-            auto &cont = continuations[i];
-            batch.push_back(
-                async::submit_io_task(ReadCompressedTask(key, library_, storage::ReadKeyOpts{}))
-                    .via(&async::cpu_executor())
-                    .thenValue(SegmentFunctionTask{std::move(cont)}));
-
-            if(batch.size() == args.batch_size_) {
-                auto vec = folly::collect(batch).get();
-                res.insert(end(res), std::make_move_iterator(std::begin(vec)), std::make_move_iterator(std::end(vec)));
-                batch.clear();
-            }
-        }
-
-        if(!batch.empty()) {
-            auto vec = folly::collect(batch).get();
-            res.insert(end(res), std::make_move_iterator(std::begin(vec)), std::make_move_iterator(std::end(vec)));
-        }
-        return res;
+        std::vector<int> keys_pos(keys.size());
+        std::iota( keys_pos.begin(), keys_pos.end(), 0 );
+        auto futures = folly::window(
+            std::move(keys_pos), 
+            [this, keys, continuations](auto&& key_pos) {
+                auto key = keys[key_pos];
+                return async::submit_io_task(async::ReadCompressedTask(key, library_, storage::ReadKeyOpts{})).via(&async::cpu_executor())
+                .thenValue(SegmentFunctionTask{continuations[key_pos]});
+            }, 
+            args.batch_size_);
+        return std::move(folly::collect(futures)).via(&async::cpu_executor());
     }
 
-    std::vector<Composite<ProcessingSegment>> batch_read_uncompressed(
+    folly::Future<std::vector<Composite<ProcessingSegment>>> batch_read_uncompressed(
         std::vector<Composite<pipelines::SliceAndKey>> &&slice_and_keys,
         const std::shared_ptr<std::vector<Clause>>& query,
-        const StreamDescriptor& desc,
-        const std::shared_ptr<std::unordered_set<std::string>>& filter_columns,
-        const BatchReadArgs & args) override {
-
-        std::vector<Composite<ProcessingSegment>> res;
-        res.reserve(slice_and_keys.size());
-        std::vector<folly::Future<Composite<ProcessingSegment>>> batch;
-        size_t current_size = 0;
-        for (auto&& s : slice_and_keys) {
-            auto sk = std::move(s);
-            // By default IO bound work -> IO thread pool, CPU bound work -> CPU thread pool.
-            if(args.scheduler_ == BatchReadArgs::CPU) {
-                batch.push_back(
-                    async::submit_io_task(ReadCompressedSlicesTask(std::move(sk), library_))
-                        .via(&async::cpu_executor())
-                        .thenValue(DecodeSlicesTask{desc, filter_columns})
-                        .thenValue(MemSegmentProcessingTask{shared_from_this(),query}));
-            }
-            // IO option will execute all work in the same Folly thread potentially limiting context switches.
-            else {
-                batch.push_back(
-                    async::submit_io_task(ReadCompressedSlicesTask(std::move(sk), library_))
-                        .thenValue(DecodeSlicesTask{desc, filter_columns})
-                        .thenValue(MemSegmentProcessingTask{shared_from_this(),query}));
-            }
-
-            if(++current_size == args.batch_size_) {
-                auto segments = folly::collect(batch).get();
-                res.insert(std::end(res), std::make_move_iterator(std::begin(segments)), std::make_move_iterator(std::end(segments)));
-                current_size = 0;
-                batch.clear();
-            }
-        }
-
-        if(!batch.empty()) {
-            auto segments = folly::collect(batch).get();
-            res.insert(std::end(res), std::make_move_iterator(std::begin(segments)), std::make_move_iterator(std::end(segments)));
-        }
-
-        slice_and_keys.clear();
-        return res;
+        const StreamDescriptor desc,
+        const std::shared_ptr<std::unordered_set<std::string>> filter_columns,
+        const BatchReadArgs args) override {
+        auto futures = folly::window(
+            std::move(slice_and_keys), 
+            [this, args, desc, filter_columns, query](auto&& sk) {
+                if(args.scheduler_ == BatchReadArgs::CPU) {
+                    return async::submit_io_task(async::ReadCompressedSlicesTask(std::move(sk), library_))
+                    .via(&async::cpu_executor())
+                    .thenValue(async::DecodeSlicesTask{desc, filter_columns})
+                    .thenValue(async::MemSegmentProcessingTask{shared_from_this(),query});
+                }
+                // IO option will execute all work in the same Folly thread potentially limiting context switches.
+                else {
+                    return async::submit_io_task(async::ReadCompressedSlicesTask(std::move(sk), library_))
+                    .thenValue(async::DecodeSlicesTask{desc, filter_columns})
+                    .thenValue(async::MemSegmentProcessingTask{shared_from_this(),query});
+                }
+            }, 
+            args.batch_size_);
+        return std::move(folly::collect(futures)).via(&async::cpu_executor());
     }
 
     std::vector<folly::Future<bool>> batch_key_exists(const std::vector<entity::VariantKey> &keys) override {
