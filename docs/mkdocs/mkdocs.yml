@@ -39,4 +39,5 @@ nav:
     - Architecture: 'technical/architecture.md'
     - On-Disk Storage: 'technical/on_disk_storage.md'
     - Arctic Migration: 'technical/migration.md'
+    - Contributing: 'technical/contributing.md'
 - Python Reference Docs: './api/index.html'
