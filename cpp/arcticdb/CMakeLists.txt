@@ -453,7 +453,7 @@ if (WIN32)
 else ()
 
     if (not CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-        list (APPEND arcticdb_core_libraries stdc++fs
+        list (APPEND arcticdb_core_libraries stdc++fs)
     endif()
 
 
