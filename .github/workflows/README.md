@@ -7,8 +7,11 @@ CI system guide
 
 ## [tag.yml](tag.yml)
 
-* Creates a git tag from the selected branch (where allowed by the `TestPypi` environment's protection rules)
+* Creates a git tag from the selected branch
 * Optionally bump the selected branch to the next version
+
+This can only be invoked manually by contributors and can require further approval using the `TestPypi`
+environment's protection rules.
 
 ### Settings
 <table>
@@ -29,6 +32,10 @@ CI system guide
 * Generates a draft GitHub Release and attaches debug artifacts
 
 **Runs on forks**: Yes. Must create two environments named `TestPypi` and `ProdPypi` with Pypi creds.
+
+### Call patterns
+* Called at the end of a `build.yml` build with `pypi_publish` explicit set or resolved to true (e.g. version tag build)
+* Manual run (workflow dispatch) - Use Environment protection rules to prevent accidentally releasing the wrong branch
 
 ### Settings
 See also: [`twine` docs](https://twine.readthedocs.io/en/stable/#environment-variables).
