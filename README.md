@@ -5,7 +5,7 @@
 ---
 
 <p align="center">
-<img src="static/ArcticDBTerminal.gif" width="100%">
+<img src="https://raw.githubusercontent.com/man-group/ArcticDB/master/static/ArcticDBTerminal.gif" width="100%">
 </p>
 
 ---
@@ -17,7 +17,8 @@
 
 ---
 
-**ArcticDB** is a high performance, serverless **DataFrame database** built for the Python Data Science ecosystem. Launched in March 2023, it is the successor to [Arctic](https://github.com/man-group/arctic). 
+**ArcticDB** is a high performance, serverless **DataFrame database** built for the Python Data Science ecosystem.
+Launched in March 2023, it is the successor to [Arctic](https://github.com/man-group/arctic).
 
 ArcticDB offers an intuitive Python-centric API enabling you to read and write Pandas DataFrames to S3 or LMDB utilising a fast C++ data-processing and compression engine.
 
@@ -37,7 +38,7 @@ ArcticDB is designed from the outset to be resilient; there is no single point o
 
 ## Quickstart
 
-> :warning: **Pre-built binaries only available for Linux**: Windows and MacOS binaries are coming soon!
+> ⚠️ **Pre-built binaries only available for Linux and Windows**: MacOS binaries are coming soon!
 
 Install ArcticDB:
 
@@ -64,7 +65,7 @@ Create an instance on your S3 storage (with or without explicit credentials):
 Or create an instance on your local disk:
 
 ```Python
->>> ac = Arctic("lmdb:///<path>")  
+>>> ac = Arctic("lmdb:///<path>")
 ```
 
 Create your first library and list the libraries in the instance:
@@ -94,10 +95,6 @@ To find out more about working with data, visit our [docs](https://docs.arcticdb
 
 ---
 
-## Build From Source
-
-Build instructions [are located here](docs/mkdocs/docs/technical/contributing.md).
-
 ## Documentation
 
 The source code for the ArcticDB docs are located in the [docs](https://github.com/man-group/ArcticDB/tree/master/docs) folder, and are hosted at [docs.arcticdb.io](https://docs.arcticdb.io).
@@ -106,9 +103,11 @@ The source code for the ArcticDB docs are located in the [docs](https://github.c
 
 ArcticDB is released under a [Business Source License 1.1 (BSL)](https://github.com/man-group/ArcticDB/blob/master/LICENSE.txt)
 
-BSL features are free to use and the source code is available, but users may not use ArcticDB for production use or for a Database Service, without agreement with Man Group Operations Limited. 
+BSL features are free to use and the source code is available, but users may not use ArcticDB for production use or for
+a Database Service, without agreement with Man Group Operations Limited.
 
-Use of ArcticDB in production or for a Database Service requires a paid for license from Man Group Operations Limited and is licensed under the ArcticDB Software License Agreement. For more information please contact [arcticdb@man.com](mailto:ArcticDB@man.com). 
+Use of ArcticDB in production or for a Database Service requires a paid for license from Man Group Operations Limited
+and is licensed under the ArcticDB Software License Agreement. For more information please contact [arcticdb@man.com](mailto:ArcticDB@man.com).
 
 The BSL is not certified as an open-source license, but most of the [Open Source Initiative (OSI)](https://opensource.org/) criteria are met.
 
@@ -122,27 +121,19 @@ For each BSL release all associated alpha, beta, major, and minor (point) releas
 
 [Code of Conduct](https://github.com/man-group/ArcticDB/blob/master/CODE_OF_CONDUCT.md)
 
-This project has adopted a Code of Conduct. If you have any concerns about the Code, or behaviour that you have experienced in the project, please contact us at [arcticdb@man.com](mailto:ArcticDB@man.com). 
+This project has adopted a Code of Conduct. If you have any concerns about the Code, or behaviour that you have
+experienced in the project, please contact us at [arcticdb@man.com](mailto:ArcticDB@man.com).
 
-## Contributing
+## Contributing/Building From Source
 
 We welcome your contributions to help us improve and extend this project!
 
-Below you will find some basic steps required to be able to contribute to the project. If you have any questions about this process or any other aspect of contributing to our project, feel free to send an email to [arcticdb@man.com](mailto:ArcticDB@man.com) and we'll get your questions answered as quickly as we can.
+Please refer to the [Contributing](https://github.com/man-group/ArcticDB/blob/master/docs/mkdocs/docs/technical/contributing.md)
+page and feel free to open issues on GitHub.
 
 We are also always looking for feedback from our dedicated community! If you have used ArcticDB please let us know, we would love to hear about your experience!
 
-### Contribution Licensing
-
-Since this project is distributed under the terms of the [BSL license](https://github.com/man-group/ArcticDB/blob/master/LICENSE.txt), contributions that you make are licensed under the same terms. For us to be able to accept your contributions, we will need explicit confirmation from you that you are able and willing to provide them under these terms, and the mechanism we use to do this is the [ArcticDB Individual Contributor License Agreement](https://github.com/man-group/ArcticDB/blob/4a9f3934b736d5a62461146de7403f785268fb73/Individual%20Contributor%20License%20Agreement.md). 
-
-**Individuals** - To participate under these terms, please include the following line as the last line of the commit message for each commit in your contribution. You must use your real name (no pseudonyms, and no anonymous contributions). 
-
-Signed-Off By: Random J. Developer <random@developer.example.org>. By including this sign-off line I agree to the terms of the Contributor License Agreement.
-
-**Corporations** - For corporations who wish to make contributions to ArcticDB, please contact arcticdb@man.com and we will arrange for the CLA to be sent to the signing authority within your corporation.
-
-## Community 
+## Community
 
 We would love to hear how your ArcticDB journey evolves, email us at [arcticdb@man.com](mailto:ArcticDB@man.com) or come chat to us on [Twitter](https://www.twitter.com/arcticdb)!
 

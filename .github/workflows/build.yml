@@ -154,8 +154,15 @@ jobs:
       cmake_preset_type: ${{needs.common_config.outputs.cmake_preset_type_resolved}}
       matrix: ${{needs.common_config.outputs.windows_matrix}}
 
+  can_merge:
+    needs: [leader-cpp-test-linux, leader-cpp-test-windows, follower-linux, follower-windows]
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo Dummy job to simplify PR merge checks configuration
+      # FUTURE: add some test stats/reporting
+
   publish:
-    needs: [common_config, leader-cpp-test-linux, leader-cpp-test-windows, follower-linux, follower-windows]
+    needs: [common_config, can_merge]
     if: needs.common_config.outputs.pypi_publish && needs.common_config.outputs.publish_env
     uses: ./.github/workflows/publish.yml
     secrets: inherit
@@ -164,7 +171,7 @@ jobs:
       environment: ${{needs.common_config.outputs.publish_env}}
 
   docs:
-    needs: [common_config, follower-windows, follower-linux]
+    needs: [common_config, follower-linux] # Needs a Linux wheel to build the API docs
     uses: ./.github/workflows/docs.yml
     secrets: inherit
     with:
