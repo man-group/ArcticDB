@@ -3,11 +3,13 @@ option(SSL_LINK "Link against SSL libraries." ON)
 option(HIDE_LINKED_SYMBOLS "Passed `exclude-libs` through to linker, ensuring linked library symbols are not exported. Shrinks binary size." ON)
 option(STATIC_LINK_STD_LIB "Statically link the C++ standard libraries" ON)
 
+if(TEST)
 find_package(GTest CONFIG REQUIRED)
 
 include(CTest)
 include(GoogleTest)
 include(GenerateExportHeader)
+endif()
 
 # System and third-party libraries with built-in find_package Config
 cmake_policy(PUSH)
@@ -41,6 +43,26 @@ if (ARCTICDB_USING_VCPKG)
 
     find_package(zstd CONFIG REQUIRED)  # "CONFIG" bypasses our cpp/CMake/FindZstd.cmake module
     set(Zstd_LIBRARY $<IF:$<TARGET_EXISTS:zstd::libzstd_shared>,zstd::libzstd_shared,zstd::libzstd_static>)
+elseif(ARCTICDB_USING_CONDA)
+    find_package(double-conversion REQUIRED)
+    find_package(Libevent  REQUIRED)
+
+    find_package(Protobuf REQUIRED)
+    set(Protobuf_lite_LIBRARY protobuf::libprotobuf-lite)
+    set(Protobuf_LIBRARY protobuf::libprotobuf)
+
+    find_package(mongocxx REQUIRED)
+    find_package(bsoncxx REQUIRED)
+    set(ARCTICDB_MONGO_LIBS mongo::mongocxx_shared mongo::bsoncxx_shared)
+
+    find_package(zstd CONFIG REQUIRED)  # "CONFIG" bypasses our cpp/CMake/FindZstd.cmake module
+    set(Zstd_LIBRARY $<IF:$<TARGET_EXISTS:zstd::libzstd_shared>,zstd::libzstd_shared,zstd::libzstd_static>)
+
+
+    get_target_property(NEW_FOLLY_DEPS Folly::folly_deps INTERFACE_INCLUDE_DIRECTORIES)
+    message(STATUS "NEW_FOLLY_DEPS" ${NEW_FOLLY_DEPS})
+    list(REMOVE_ITEM NEW_FOLLY_DEPS "/usr/local/opt/openssl/include" )
+    set_target_properties(Folly::folly_deps PROPERTIES INTERFACE_INCLUDE_DIRECTORIES "${NEW_FOLLY_DEPS}")
 
 else()
     find_library(Protobuf_lite_LIBRARY NAMES libprotobuf-lite protobuf-lite REQUIRED)
@@ -430,7 +452,7 @@ if (WIN32)
             )
 else ()
 
-    if (not CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    if (NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")
         list (APPEND arcticdb_core_libraries stdc++fs)
     endif()
 
@@ -480,7 +502,7 @@ target_link_libraries(arcticdb_core PRIVATE
         ${AWSSDK_LINK_LIBRARIES}
         )
 
-GENERATE_EXPORT_HEADER(arcticdb_core)
+#GENERATE_EXPORT_HEADER(arcticdb_core)
 
 if (NOT WIN32)
     add_compile_options("-Werror")
