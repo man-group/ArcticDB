@@ -429,8 +429,13 @@ if (WIN32)
             Iconv::Iconv
             )
 else ()
+
+    if (not CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+        list (APPEND arcticdb_core_libraries stdc++fs
+    endif()
+
+
     list (APPEND arcticdb_core_libraries
-            stdc++fs
             dl
             ${Sasl2_LIBRARY}
             )
