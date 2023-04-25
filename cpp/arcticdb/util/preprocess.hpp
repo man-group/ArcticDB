@@ -7,11 +7,6 @@
 
 #pragma once
 
-#define stringify(x) #x
-#define static_to_string(x) stringify(x)
-#define source_loc __FILE__ ":" static_to_string(__LINE__)
-#define to_id(x) ([]() constexpr { return x; })
-
 #ifndef _WIN32
 #define ARCTICDB_UNUSED __attribute__((unused))
 #define ARCTICDB_UNREACHABLE  __builtin_unreachable();
