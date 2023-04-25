@@ -275,7 +275,7 @@ void merge_impl(
     using SegmentationPolicy = stream::RowCountSegmentPolicy;
     SegmentationPolicy segmentation_policy{static_cast<size_t>(num_segment_rows)};
 
-    auto func = [&ret, &input_streams, &row_range, &col_range](auto &&segment) {
+    auto func = [&ret, &row_range, &col_range](auto &&segment) {
         ret.push_back(ProcessingSegment{std::forward<SegmentInMemory>(segment), FrameSlice{col_range, row_range}});
     };
     
