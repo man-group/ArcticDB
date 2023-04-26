@@ -29,7 +29,7 @@ find_package(prometheus-cpp CONFIG REQUIRED)
 find_package(Threads REQUIRED)
 
 # Libraries compiled by vcpkg and also baked into our internal image:
-if (ARCTICDB_USING_VCPKG)
+if (ARCTICDB_USING_VCPKG AND NOT ARCTICDB_USING_CONDA)
     find_package(double-conversion REQUIRED)
     find_package(Libevent CONFIG REQUIRED)
 
