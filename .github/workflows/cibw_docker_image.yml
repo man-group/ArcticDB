@@ -16,7 +16,7 @@ on:
 
 run-name: v${{inputs.cibuildwheel_ver}}${{inputs.force_update && ' (Force)' || ''}}
 env:
-  image_name: ghcr.io/${{github.repository_owner}}/arcticdb_manylinux
+  image_name: ghcr.io/man-group/arcticdb_manylinux
 jobs:
   work:
     runs-on: ubuntu-latest
