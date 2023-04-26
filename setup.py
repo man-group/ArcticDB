@@ -14,6 +14,16 @@ from setuptools.command.develop import develop
 from wheel.bdist_wheel import bdist_wheel
 
 
+# experimental flag to indicate that we want 
+# the dependencies from a conda
+ARCTICDB_USING_CONDA  = os.environ.get("ARCTICDB_USING_CONDA")
+if ARCTICDB_USING_CONDA is None:
+    ARCTICDB_USING_CONDA = False
+else:
+    ARCTICDB_USING_CONDA = True
+
+print(f"{ARCTICDB_USING_CONDA=}")
+
 def _log_and_run(*cmd, **kwargs):
     print("Running " + " ".join(cmd))
     subprocess.check_call(cmd, **kwargs)
@@ -131,6 +141,7 @@ class CMakeBuild(build_ext):
                 "-DTEST=NO",
                 f"-DBUILD_PYTHON_VERSION={sys.version_info[0]}.{sys.version_info[1]}",
                 f"-DCMAKE_INSTALL_PREFIX={os.path.dirname(dest)}",
+                f"-DARCTICDB_USING_CONDA={int(ARCTICDB_USING_CONDA)}",
                 "--preset",
                 preset,
                 cwd="cpp",

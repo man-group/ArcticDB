@@ -10,6 +10,13 @@
       "installDir": "${sourceDir}/out/install"
     },
     {
+      "name": "common_no_vcpkg",
+      "hidden": true,
+      "description": "OS-agnostic config",
+      "binaryDir": "${sourceDir}/out/${presetName}-build",
+      "installDir": "${sourceDir}/out/install"
+    },
+    {
       "name": "windows-cl-release",
       "displayName": "Windows x64 Release Cl",
       "description": "Target Windows with the Visual Studio development environment.",
@@ -70,14 +77,15 @@
     },
     {
       "name": "darwin-debug",
-      "displayName": "Darwin  Debug",
-      "inherits": "common",
+      "displayName": "Unix",
+      "inherits": "common_no_vcpkg",
       "generator": "Unix Makefiles",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
         "CMAKE_MAKE_PROGRAM": "make",
         "CMAKE_C_COMPILER": "clang",
-        "CMAKE_CXX_COMPILER": "clang"
+        "CMAKE_CXX_COMPILER": "clang",
+        "STATIC_LINK_STD_LIB": "OFF"
       },
       "condition": {
         "type": "equals",
