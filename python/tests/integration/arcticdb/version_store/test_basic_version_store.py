@@ -32,7 +32,7 @@ from arcticdb.version_store._store import UNSUPPORTED_S3_CHARS, MAX_SYMBOL_SIZE,
 from arcticdb.version_store.helper import ArcticMemoryConfig, get_lib_cfg
 from arcticdb_ext.storage import KeyType, NoDataFoundException
 from arcticdb_ext.version_store import NoSuchVersionException, StreamDescriptorMismatch
-from arcticc.pb2.descriptors_pb2 import NormalizationMetadata # Importing from arcticdb dynamically loads arcticc.pb2
+from arcticc.pb2.descriptors_pb2 import NormalizationMetadata  # Importing from arcticdb dynamically loads arcticc.pb2
 from arcticdb.util.test import (
     sample_dataframe,
     sample_dataframe_only_strings,
@@ -196,7 +196,16 @@ def test_negative_cases(lmdb_version_store, symbol):
     lmdb_version_store.delete(symbol)
 
 
-@pytest.mark.parametrize("lib_type", ["lmdb_version_store_v1", "lmdb_version_store_v2", "lmdb_version_store_no_symbol_list", "s3_version_store_v1", "s3_version_store_v2"])
+@pytest.mark.parametrize(
+    "lib_type",
+    [
+        "lmdb_version_store_v1",
+        "lmdb_version_store_v2",
+        "lmdb_version_store_no_symbol_list",
+        "s3_version_store_v1",
+        "s3_version_store_v2",
+    ],
+)
 def test_list_symbols_regex(request, lib_type):
     lib = request.getfixturevalue(lib_type)
     lib.write("asdf", {"foo": "bar"}, metadata={"a": 1, "b": 10})
@@ -313,7 +322,10 @@ def test_get_info(lmdb_version_store):
     assert info["col_names"]["index"] == ["dt_index"]
     assert info["index_type"] == "index"
 
-@pytest.mark.parametrize("lib_type", ["lmdb_version_store_v1", "lmdb_version_store_v2", "s3_version_store_v1", "s3_version_store_v2"])
+
+@pytest.mark.parametrize(
+    "lib_type", ["lmdb_version_store_v1", "lmdb_version_store_v2", "s3_version_store_v1", "s3_version_store_v2"]
+)
 def test_get_info_version(request, lib_type):
     lib = request.getfixturevalue(lib_type)
     # given
@@ -1445,6 +1457,7 @@ def test_dynamic_schema_similar_index_column_dataframe_multiple_col(lmdb_version
     lib.write("date_series", date_series)
     returned = lib.read("date_series").data
     assert_frame_equal(returned, date_series)
+
 
 def test_restore_version(version_store_factory):
     lmdb_version_store = version_store_factory(col_per_group=2, row_per_segment=2)

@@ -157,6 +157,7 @@ def config_context(name, value):
 
 def get_artifact_path(frag, *fragments):
     import tests
+
     return os.path.join(tests.__path__, "artifacts", frag, *fragments)
 
 

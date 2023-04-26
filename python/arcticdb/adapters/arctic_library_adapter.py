@@ -33,6 +33,7 @@ def set_library_options(lib_desc: "LibraryConfig", options: LibraryOptions):
 
     lib_desc.version.encoding_version = options.encoding_version
 
+
 class ArcticLibraryAdapter(ABC):
     CONFIG_LIBRARY_NAME = "_arctic_cfg"  # TODO: Should come from native module
 

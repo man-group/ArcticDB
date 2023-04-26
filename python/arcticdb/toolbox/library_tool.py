@@ -21,7 +21,9 @@ class LibraryTool(LibraryToolImpl):
         return list(KeyType.__members__.values())
 
     @staticmethod
-    def dataframe_to_keys(df: pd.DataFrame, id: Union[str, int], filter_key_type: Optional[KeyType] = None) -> List[AtomKey]:
+    def dataframe_to_keys(
+        df: pd.DataFrame, id: Union[str, int], filter_key_type: Optional[KeyType] = None
+    ) -> List[AtomKey]:
         keys = []
         for index, row in df.iterrows():
             key_type = KeyType(row["key_type"])
@@ -77,7 +79,12 @@ class LibraryTool(LibraryToolImpl):
             cols[field_name] = frame_data.data[idx]
         return pd.DataFrame(cols, columns=field_names)
 
-    def read_to_keys(self, key: Union[AtomKey, RefKey], id: Optional[Union[str, int]] = None, filter_key_type: Optional[KeyType] = None) -> List[AtomKey]:
+    def read_to_keys(
+        self,
+        key: Union[AtomKey, RefKey],
+        id: Optional[Union[str, int]] = None,
+        filter_key_type: Optional[KeyType] = None,
+    ) -> List[AtomKey]:
         """
         Reads the segment associated with the provided key into a Pandas DataFrame format, and then converts each row in
         this DataFrame into an AtomKey if all the necessary columns are present.

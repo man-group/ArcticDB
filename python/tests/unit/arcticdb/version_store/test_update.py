@@ -88,13 +88,7 @@ def gen_params():
     "col_per_group, start_increment, end_increment, update_start, iterations, start_dist", gen_params()
 )
 def test_update_repeatedly_dynamic_schema(
-    version_store_factory,
-    col_per_group,
-    start_increment,
-    end_increment,
-    update_start,
-    iterations,
-    start_dist,
+    version_store_factory, col_per_group, start_increment, end_increment, update_start, iterations, start_dist
 ):
     lmdb_version_store = version_store_factory(col_per_group=col_per_group, row_per_segment=2, dynamic_schema=True)
 
@@ -126,13 +120,7 @@ def test_update_repeatedly_dynamic_schema(
     "col_per_group, start_increment, end_increment, update_start, iterations, start_dist", gen_params()
 )
 def test_update_repeatedly_dynamic_schema_hashed(
-    version_store_factory,
-    col_per_group,
-    start_increment,
-    end_increment,
-    update_start,
-    iterations,
-    start_dist,
+    version_store_factory, col_per_group, start_increment, end_increment, update_start, iterations, start_dist
 ):
     lmdb_version_store = version_store_factory(col_per_group=col_per_group, row_per_segment=2, dynamic_schema=True)
 
@@ -180,13 +168,7 @@ def test_update_repeatedly_dynamic_schema_hashed(
     "col_per_group, start_increment, end_increment, update_start, iterations, start_dist", gen_params()
 )
 def test_update_repeatedly(
-    version_store_factory,
-    col_per_group,
-    start_increment,
-    end_increment,
-    update_start,
-    iterations,
-    start_dist,
+    version_store_factory, col_per_group, start_increment, end_increment, update_start, iterations, start_dist
 ):
     lmdb_version_store = version_store_factory(col_per_group=col_per_group, row_per_segment=2)
 
@@ -218,13 +200,7 @@ def test_update_repeatedly(
     "col_per_group, start_increment, end_increment, update_start, iterations, start_dist", gen_params()
 )
 def test_update_repeatedly_with_strings(
-    version_store_factory,
-    col_per_group,
-    start_increment,
-    end_increment,
-    update_start,
-    iterations,
-    start_dist,
+    version_store_factory, col_per_group, start_increment, end_increment, update_start, iterations, start_dist
 ):
     lmdb_version_store = version_store_factory(col_per_group=col_per_group, row_per_segment=2)
 

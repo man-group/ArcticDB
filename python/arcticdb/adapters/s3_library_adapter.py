@@ -92,7 +92,9 @@ class S3LibraryAdapter(ArcticLibraryAdapter):
             use_virtual_addressing=self._query_params.use_virtual_addressing,
         )
 
-        lib = NativeVersionStore.create_store_from_config(env_cfg, _DEFAULT_ENV, self.CONFIG_LIBRARY_NAME, encoding_version=self._encoding_version)._library
+        lib = NativeVersionStore.create_store_from_config(
+            env_cfg, _DEFAULT_ENV, self.CONFIG_LIBRARY_NAME, encoding_version=self._encoding_version
+        )._library
 
         return lib
 
@@ -152,7 +154,9 @@ class S3LibraryAdapter(ArcticLibraryAdapter):
 
         set_library_options(env_cfg.env_by_id[_DEFAULT_ENV].lib_by_path[name], library_options)
 
-        lib = NativeVersionStore.create_store_from_config(env_cfg, _DEFAULT_ENV, name, encoding_version=self._encoding_version)
+        lib = NativeVersionStore.create_store_from_config(
+            env_cfg, _DEFAULT_ENV, name, encoding_version=self._encoding_version
+        )
 
         return lib._lib_cfg
 

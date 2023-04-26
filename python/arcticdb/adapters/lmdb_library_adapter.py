@@ -17,6 +17,7 @@ from arcticdb.adapters.arctic_library_adapter import ArcticLibraryAdapter, set_l
 from arcticdb_ext.storage import Library
 from arcticdb.encoding_version import EncodingVersion
 
+
 class LMDBLibraryAdapter(ArcticLibraryAdapter):
     """
     Use local LMDB library for storage.
@@ -49,7 +50,9 @@ class LMDBLibraryAdapter(ArcticLibraryAdapter):
 
         add_lmdb_library_to_env(env_cfg, lib_name=self.CONFIG_LIBRARY_NAME, env_name=_DEFAULT_ENV, db_dir=self._path)
 
-        lib = NativeVersionStore.create_store_from_config(env_cfg, _DEFAULT_ENV, self.CONFIG_LIBRARY_NAME, encoding_version=self._encoding_version)._library
+        lib = NativeVersionStore.create_store_from_config(
+            env_cfg, _DEFAULT_ENV, self.CONFIG_LIBRARY_NAME, encoding_version=self._encoding_version
+        )._library
 
         return lib
 
@@ -60,7 +63,9 @@ class LMDBLibraryAdapter(ArcticLibraryAdapter):
 
         set_library_options(env_cfg.env_by_id[_DEFAULT_ENV].lib_by_path[name], library_options)
 
-        lib = NativeVersionStore.create_store_from_config(env_cfg, _DEFAULT_ENV, name, encoding_version=self._encoding_version)
+        lib = NativeVersionStore.create_store_from_config(
+            env_cfg, _DEFAULT_ENV, name, encoding_version=self._encoding_version
+        )
 
         return lib._lib_cfg
 

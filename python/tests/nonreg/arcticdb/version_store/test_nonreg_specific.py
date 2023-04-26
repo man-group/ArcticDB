@@ -15,7 +15,15 @@ from arcticdb.util.test import assert_frame_equal
 from arcticc.pb2.descriptors_pb2 import TypeDescriptor
 
 
-@pytest.mark.parametrize("lib_type", ["lmdb_version_store_dynamic_schema_v1", "lmdb_version_store_dynamic_schema_v2", "s3_version_store_dynamic_schema_v1", "s3_version_store_dynamic_schema_v2"])
+@pytest.mark.parametrize(
+    "lib_type",
+    [
+        "lmdb_version_store_dynamic_schema_v1",
+        "lmdb_version_store_dynamic_schema_v2",
+        "s3_version_store_dynamic_schema_v1",
+        "s3_version_store_dynamic_schema_v2",
+    ],
+)
 def test_read_keys(lib_type, request):
     lib = request.getfixturevalue(lib_type)
     symbol = "test_update_float_int"
@@ -31,7 +39,16 @@ def test_read_keys(lib_type, request):
 
     assert_frame_equal(expected, result)
 
-@pytest.mark.parametrize("lib_type", ["lmdb_version_store_dynamic_schema_v1", "lmdb_version_store_dynamic_schema_v2", "s3_version_store_dynamic_schema_v1", "s3_version_store_dynamic_schema_v2"])
+
+@pytest.mark.parametrize(
+    "lib_type",
+    [
+        "lmdb_version_store_dynamic_schema_v1",
+        "lmdb_version_store_dynamic_schema_v2",
+        "s3_version_store_dynamic_schema_v1",
+        "s3_version_store_dynamic_schema_v2",
+    ],
+)
 def test_update_int_float(lib_type, request):
     lib = request.getfixturevalue(lib_type)
     symbol = "test_update_int_float"
@@ -47,7 +64,16 @@ def test_update_int_float(lib_type, request):
 
     assert_frame_equal(expected, result)
 
-@pytest.mark.parametrize("lib_type", ["lmdb_version_store_dynamic_schema_v1", "lmdb_version_store_dynamic_schema_v2", "s3_version_store_dynamic_schema_v1", "s3_version_store_dynamic_schema_v2"])
+
+@pytest.mark.parametrize(
+    "lib_type",
+    [
+        "lmdb_version_store_dynamic_schema_v1",
+        "lmdb_version_store_dynamic_schema_v2",
+        "s3_version_store_dynamic_schema_v1",
+        "s3_version_store_dynamic_schema_v2",
+    ],
+)
 def test_update_nan_int(lib_type, request):
     lib = request.getfixturevalue(lib_type)
     symbol = "test_update_nan_int"
@@ -63,7 +89,16 @@ def test_update_nan_int(lib_type, request):
 
     assert_frame_equal(expected, result)
 
-@pytest.mark.parametrize("lib_type", ["lmdb_version_store_dynamic_schema_v1", "lmdb_version_store_dynamic_schema_v2", "s3_version_store_dynamic_schema_v1", "s3_version_store_dynamic_schema_v2"])
+
+@pytest.mark.parametrize(
+    "lib_type",
+    [
+        "lmdb_version_store_dynamic_schema_v1",
+        "lmdb_version_store_dynamic_schema_v2",
+        "s3_version_store_dynamic_schema_v1",
+        "s3_version_store_dynamic_schema_v2",
+    ],
+)
 def test_update_int_nan(lib_type, request):
     lib = request.getfixturevalue(lib_type)
     symbol = "test_update_int_nan"
@@ -81,7 +116,15 @@ def test_update_int_nan(lib_type, request):
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="SKIP_WIN Only dynamic strings are supported on Windows")
-@pytest.mark.parametrize("lib_type", ["lmdb_version_store_dynamic_schema_v1", "lmdb_version_store_dynamic_schema_v2", "s3_version_store_dynamic_schema_v1", "s3_version_store_dynamic_schema_v2"])
+@pytest.mark.parametrize(
+    "lib_type",
+    [
+        "lmdb_version_store_dynamic_schema_v1",
+        "lmdb_version_store_dynamic_schema_v2",
+        "s3_version_store_dynamic_schema_v1",
+        "s3_version_store_dynamic_schema_v2",
+    ],
+)
 def test_append_dynamic_to_fixed_width_strings(lib_type, request):
     lib = request.getfixturevalue(lib_type)
     symbol = "test_append_dynamic_to_fixed_width_strings"
@@ -104,7 +147,16 @@ def test_append_dynamic_to_fixed_width_strings(lib_type, request):
     read_df = lib.read(symbol).data
     assert_frame_equal(expected_df, read_df)
 
-@pytest.mark.parametrize("lib_type", ["lmdb_version_store_dynamic_schema_v1", "lmdb_version_store_dynamic_schema_v2", "s3_version_store_dynamic_schema_v1", "s3_version_store_dynamic_schema_v2"])
+
+@pytest.mark.parametrize(
+    "lib_type",
+    [
+        "lmdb_version_store_dynamic_schema_v1",
+        "lmdb_version_store_dynamic_schema_v2",
+        "s3_version_store_dynamic_schema_v1",
+        "s3_version_store_dynamic_schema_v2",
+    ],
+)
 def test_append_fixed_width_to_dynamic_strings(lib_type, request):
     lib = request.getfixturevalue(lib_type)
     symbol = "test_append_fixed_width_to_dynamic_strings"
@@ -131,7 +183,15 @@ def test_append_fixed_width_to_dynamic_strings(lib_type, request):
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="SKIP_WIN Only dynamic strings are supported on Windows")
-@pytest.mark.parametrize("lib_type", ["lmdb_version_store_dynamic_schema_v1", "lmdb_version_store_dynamic_schema_v2", "s3_version_store_dynamic_schema_v1", "s3_version_store_dynamic_schema_v2"])
+@pytest.mark.parametrize(
+    "lib_type",
+    [
+        "lmdb_version_store_dynamic_schema_v1",
+        "lmdb_version_store_dynamic_schema_v2",
+        "s3_version_store_dynamic_schema_v1",
+        "s3_version_store_dynamic_schema_v2",
+    ],
+)
 def test_update_dynamic_to_fixed_width_strings(lib_type, request):
     lib = request.getfixturevalue(lib_type)
     symbol = "test_update_dynamic_to_fixed_width_strings"
@@ -155,7 +215,16 @@ def test_update_dynamic_to_fixed_width_strings(lib_type, request):
     read_df = lib.read(symbol).data
     assert_frame_equal(expected_df, read_df)
 
-@pytest.mark.parametrize("lib_type", ["lmdb_version_store_dynamic_schema_v1", "lmdb_version_store_dynamic_schema_v2", "s3_version_store_dynamic_schema_v1", "s3_version_store_dynamic_schema_v2"])
+
+@pytest.mark.parametrize(
+    "lib_type",
+    [
+        "lmdb_version_store_dynamic_schema_v1",
+        "lmdb_version_store_dynamic_schema_v2",
+        "s3_version_store_dynamic_schema_v1",
+        "s3_version_store_dynamic_schema_v2",
+    ],
+)
 def test_update_fixed_width_to_dynamic_strings(lib_type, request):
     lib = request.getfixturevalue(lib_type)
     symbol = "test_update_fixed_width_to_dynamic_strings"

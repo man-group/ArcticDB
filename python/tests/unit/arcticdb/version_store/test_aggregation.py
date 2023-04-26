@@ -183,6 +183,7 @@ def test_mean_aggregation_float_nan(lmdb_version_store_v2):
 
     df = pd.DataFrame({"to_mean": [(1.1 + 1.4 + 2.5) / 3, np.nan]}, index=["group_1", "group_2"])
     df.index.rename("grouping_column", inplace=True)
+    res.data.sort_index(inplace=True)
 
     assert_frame_equal(res.data, df)
 

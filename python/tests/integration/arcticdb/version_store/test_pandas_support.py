@@ -93,7 +93,9 @@ def test_empty_df(lmdb_version_store):
     assert df2.empty
 
 
-@pytest.mark.parametrize("lib_type", ["lmdb_version_store_v1", "lmdb_version_store_v2", "s3_version_store_v1", "s3_version_store_v2"])
+@pytest.mark.parametrize(
+    "lib_type", ["lmdb_version_store_v1", "lmdb_version_store_v2", "s3_version_store_v1", "s3_version_store_v2"]
+)
 def test_df_datetime_multi_index_with_timezones(lib_type, request):
     lib = request.getfixturevalue(lib_type)
     zone = "America/Chicago"

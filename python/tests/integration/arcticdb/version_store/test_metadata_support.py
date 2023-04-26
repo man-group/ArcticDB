@@ -20,7 +20,9 @@ from arcticdb.util.test import assert_frame_equal
 # test_rt_df stands for roundtrip dataframe (implicitly pandas given file name)
 
 
-@pytest.mark.parametrize("lib_type", ["lmdb_version_store_v1", "lmdb_version_store_v2", "s3_version_store_v1", "s3_version_store_v2"])
+@pytest.mark.parametrize(
+    "lib_type", ["lmdb_version_store_v1", "lmdb_version_store_v2", "s3_version_store_v1", "s3_version_store_v2"]
+)
 def test_rt_df_with_small_meta(lib_type, request):
     lib = request.getfixturevalue(lib_type)
     #  type: (NativeVersionStore)->None
@@ -32,7 +34,9 @@ def test_rt_df_with_small_meta(lib_type, request):
     assert meta == vit.metadata
 
 
-@pytest.mark.parametrize("lib_type", ["lmdb_version_store_v1", "lmdb_version_store_v2", "s3_version_store_v1", "s3_version_store_v2"])
+@pytest.mark.parametrize(
+    "lib_type", ["lmdb_version_store_v1", "lmdb_version_store_v2", "s3_version_store_v1", "s3_version_store_v2"]
+)
 def test_rt_df_with_humonguous_meta(lib_type, request):
     with pytest.raises(ArcticNativeNotYetImplemented):
         from arcticdb.version_store._normalization import _MAX_USER_DEFINED_META as MAX
@@ -47,7 +51,9 @@ def test_rt_df_with_humonguous_meta(lib_type, request):
         assert meta == vit.metadata
 
 
-@pytest.mark.parametrize("lib_type", ["lmdb_version_store_v1", "lmdb_version_store_v2", "s3_version_store_v1", "s3_version_store_v2"])
+@pytest.mark.parametrize(
+    "lib_type", ["lmdb_version_store_v1", "lmdb_version_store_v2", "s3_version_store_v1", "s3_version_store_v2"]
+)
 def test_read_metadata(lib_type, request):
     lib = request.getfixturevalue(lib_type)
     original_data = [1, 2, 3]
@@ -59,7 +65,9 @@ def test_read_metadata(lib_type, request):
     assert lib.read_metadata("test_symbol").metadata == metadata
 
 
-@pytest.mark.parametrize("lib_type", ["lmdb_version_store_v1", "lmdb_version_store_v2", "s3_version_store_v1", "s3_version_store_v2"])
+@pytest.mark.parametrize(
+    "lib_type", ["lmdb_version_store_v1", "lmdb_version_store_v2", "s3_version_store_v1", "s3_version_store_v2"]
+)
 def test_read_metadata_by_version(lib_type, request):
     lib = request.getfixturevalue(lib_type)
     data_v1 = [1, 2, 3]

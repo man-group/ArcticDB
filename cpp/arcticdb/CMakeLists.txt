@@ -700,34 +700,34 @@ if(${TEST})
             util/test/rapidcheck_main.cpp
             version/test/rapidcheck_version_map.cpp)
 
-   # add_executable(arcticdb_rapidcheck_tests ${rapidcheck_srcs})
-   # install(TARGETS arcticdb_rapidcheck_tests RUNTIME
-   #             DESTINATION .
-   #             PERMISSIONS ${EXECUTABLE_PERMS}
-   #             COMPONENT Tests)
+    add_executable(arcticdb_rapidcheck_tests ${rapidcheck_srcs})
+    install(TARGETS arcticdb_rapidcheck_tests RUNTIME
+                DESTINATION .
+                PERMISSIONS ${EXECUTABLE_PERMS}
+                COMPONENT Tests)
 
-    #if(WIN32)
-    #    target_link_libraries(arcticdb_rapidcheck_tests PUBLIC
-    #            arcticdb_core_static
-    #            GTest::gtest
-    #            GTest::gmock
-    #            rapidcheck
-    #            rapidcheck_gtest
-    #            PRIVATE
-    #            ${AWSSDK_LINK_LIBRARIES}
-    #            )
-    #
-    #    target_compile_options(arcticdb_rapidcheck_tests PRIVATE /FI "util/test/gtest.hpp")
-    #else()
-    #    target_link_libraries(arcticdb_rapidcheck_tests
-    #        PUBLIC
-    #        ${COMMON_PUBLIC_TEST_LIBRARIES}
-    #        rapidcheck
-    #        rapidcheck_gtest
-    #        PRIVATE
-    #        ${AWSSDK_LINK_LIBRARIES}
-    #        )
-    #endif()
+    if(WIN32)
+        target_link_libraries(arcticdb_rapidcheck_tests PUBLIC
+                arcticdb_core_static
+                GTest::gtest
+                GTest::gmock
+                rapidcheck
+                rapidcheck_gtest
+                PRIVATE
+                ${AWSSDK_LINK_LIBRARIES}
+                )
 
-    #gtest_discover_tests(arcticdb_rapidcheck_tests)
+        target_compile_options(arcticdb_rapidcheck_tests PRIVATE /FI "util/test/gtest.hpp")
+    else()
+        target_link_libraries(arcticdb_rapidcheck_tests
+            PUBLIC
+            ${COMMON_PUBLIC_TEST_LIBRARIES}
+            rapidcheck
+            rapidcheck_gtest
+            PRIVATE
+            ${AWSSDK_LINK_LIBRARIES}
+            )
+    endif()
+
+    gtest_discover_tests(arcticdb_rapidcheck_tests)
 endif()

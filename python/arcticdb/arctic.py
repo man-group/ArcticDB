@@ -16,6 +16,7 @@ from arcticdb.adapters.s3_library_adapter import S3LibraryAdapter
 from arcticdb.adapters.lmdb_library_adapter import LMDBLibraryAdapter
 from arcticdb.encoding_version import EncodingVersion
 
+
 class Arctic:
     """
     Top-level library management class. Arctic instances can be configured against an S3 environment and enable the
@@ -24,7 +25,7 @@ class Arctic:
 
     _LIBRARY_ADAPTERS = [S3LibraryAdapter, LMDBLibraryAdapter]
 
-    def __init__(self, uri: str, encoding_version: EncodingVersion=EncodingVersion.V1):
+    def __init__(self, uri: str, encoding_version: EncodingVersion = EncodingVersion.V1):
         """
         Initializes a top-level Arctic library management instance.
 

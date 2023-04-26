@@ -8,6 +8,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 
 from arcticdb.encoding_version import EncodingVersion
 
+
 class LibraryOptions:
     """
     Configuration options that can be applied when libraries are created.
@@ -26,7 +27,13 @@ class LibraryOptions:
     """
 
     def __init__(
-        self, *, dynamic_schema: bool = False, dedup: bool = False, rows_per_segment=100_000, columns_per_segment=127, encoding_version: EncodingVersion = EncodingVersion.V1
+        self,
+        *,
+        dynamic_schema: bool = False,
+        dedup: bool = False,
+        rows_per_segment=100_000,
+        columns_per_segment=127,
+        encoding_version: EncodingVersion = EncodingVersion.V1,
     ):
         """
         Parameters
