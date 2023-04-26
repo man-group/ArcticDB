@@ -24,11 +24,11 @@ TEST(Cursor, Behaviour) {
     ASSERT_EQ(b.size<uint8_t>(), 100);
     // ASSERT_THROW(b.ensure_bytes( 20), std::invalid_argument); // uncommitted data
     ASSERT_NO_THROW(b.commit());
-    ASSERT_THROW(b.commit(), ArcticBaseException<ErrorCategory::INTERNAL>); //commit called twice
+    ASSERT_THROW(b.commit(), ArcticCategorizedException<ErrorCategory::INTERNAL>); //commit called twice
     ASSERT_EQ(b.size<uint8_t>(), 100);
     ASSERT_NO_THROW(b.ptr_cast<uint64_t>(5, sizeof(uint64_t)));
     ASSERT_NO_THROW(b.ptr_cast<uint64_t>(11, sizeof(uint64_t)));
-    ASSERT_THROW(b.ptr_cast<uint64_t>(13, sizeof(uint64_t)), ArcticBaseException<ErrorCategory::INTERNAL>); // Cursor overflow
+    ASSERT_THROW(b.ptr_cast<uint64_t>(13, sizeof(uint64_t)), ArcticCategorizedException<ErrorCategory::INTERNAL>); // Cursor overflow
     ASSERT_NO_THROW(b.ensure_bytes(20));
     ASSERT_NO_THROW(b.commit());
     ASSERT_EQ(b.size<uint8_t>(), 120);

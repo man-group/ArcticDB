@@ -63,7 +63,7 @@ These errors relate to data being pickled, which limits the operations available
 
 Furthermore, it is not possible to partially read/update/append the data using the ArcticDB API or use the QueryBuilder with pickled symbols. 
 
-All of these errors are of type `ArcticNativeCxxException`.
+All of these errors are of type `arcticdb.exceptions.ArcticException`.
 
 | Error messages | Cause | Resolution |
 |:--------------|:-------|:-----------|
@@ -74,7 +74,7 @@ All of these errors are of type `ArcticNativeCxxException`.
 
 Errors that can be encountered when creating  and deleting snapshots, or trying to read data from a specific snapshot.
 
-All of these errors are of type `ArcticNativeCxxException` unless specified otherwise.
+All of these errors are of type `arcticdb.exceptions.ArcticException`.
 
 | Error messages | Cause | Resolution |
 |:--------------|:-------|:-----------|
@@ -86,7 +86,7 @@ All of these errors are of type `ArcticNativeCxxException` unless specified othe
 
 A select few operations with ArcticDB require the symbol to exist and have at least one live version. These errors occur when this is not the case.
 
-All of these errors are of type `ArcticNativeCxxException`.
+All of these errors are of type `arcticdb.exceptions.ArcticException`.
 
 | Error messages | Cause | Resolution |
 |:--------------|:-------|:-----------|
@@ -96,7 +96,7 @@ All of these errors are of type `ArcticNativeCxxException`.
 
 All calls to `delete_data_in_range` and `update`, and calls to `read` using the `date_range` optional argument, require the existing data to have a *sorted* timestamp index. ArcticDB does not check this condition at write time.
 
-All of these errors are of type `ArcticNativeCxxException`.
+All of these errors are of type `arcticdb.exceptions.ArcticException`.
 
 | Error messages | Cause | Resolution |
 |:--------------|:-------|:-----------|
@@ -111,7 +111,7 @@ Due to the client-only nature of ArcticDB, it is not possible to know if a `Quer
 * Whether a specified column exists
 * What the type of the data held in a specified column is if it does exist
 
-All of these errors are of type `ArcticNativeCxxException`.
+All of these errors are of type `arcticdb.exceptions.ArcticException`.
 
 | Error messages | Cause | Resolution |
 |:--------------|:-------|:-----------|

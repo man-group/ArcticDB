@@ -211,13 +211,13 @@ class RowBuilder {
                     aggregator_.set_scalar(pos, conv_val);
                     nbytes_ += sizeof(RawType);
                 } else {
-                    throw ArcticBaseException<ErrorCategory::INTERNAL>(fmt::format(
+                    throw ArcticCategorizedException<ErrorCategory::INTERNAL>(fmt::format(
                         "Expected type_descriptor={}, type={}; actual value={}, type {}",
                         data_type_from_proto(descriptor().fields(pos).type_desc()), typeid(conv_val).name(),
                         val, typeid(val).name()));
                 }
             } else {
-                throw ArcticBaseException<ErrorCategory::INTERNAL>(fmt::format(
+                throw ArcticCategorizedException<ErrorCategory::INTERNAL>(fmt::format(
                     "Expected type_descriptor={}; actual scalar cpp_type={}, value={}",
                     TypeDescriptor{tag}, typeid(val).name(), val));
             }
