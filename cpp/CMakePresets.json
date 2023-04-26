@@ -44,7 +44,6 @@
         "CMAKE_BUILD_TYPE": "Debug"
       }
     },
-
     {
       "name": "linux-debug",
       "displayName": "Linux x64 Debug",
@@ -68,12 +67,38 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "RelWithDebInfo"
       }
+    },
+    {
+      "name": "darwin-debug",
+      "displayName": "Darwin  Debug",
+      "inherits": "common",
+      "generator": "Unix Makefiles",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_MAKE_PROGRAM": "make",
+        "CMAKE_C_COMPILER": "clang",
+        "CMAKE_CXX_COMPILER": "clang"
+      },
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Darwin"
+      }
+    },
+    {
+      "name": "darwin-release",
+      "inherits": "darwin-debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo"
+      }
     }
   ],
   "buildPresets": [
     {"name": "windows-cl-debug",   "configurePreset": "windows-cl-debug",   "targets": "arcticdb_ext" },
     {"name": "windows-cl-release", "configurePreset": "windows-cl-release", "targets": "arcticdb_ext" },
     {"name": "linux-debug",        "configurePreset": "linux-debug",        "targets": "arcticdb_ext" },
-    {"name": "linux-release",      "configurePreset": "linux-release",      "targets": "arcticdb_ext" }
+    {"name": "linux-release",      "configurePreset": "linux-release",      "targets": "arcticdb_ext" },
+    {"name": "darwin-debug",       "configurePreset": "darwin-debug",       "targets": "arcticdb_ext" },
+    {"name": "darwin-release",     "configurePreset": "darwin-release",     "targets": "arcticdb_ext" }
   ]
 }
