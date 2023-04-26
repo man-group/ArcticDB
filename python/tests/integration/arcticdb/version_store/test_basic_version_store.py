@@ -18,18 +18,17 @@ import pytest
 import random
 import string
 from collections import namedtuple
-from datetime import datetime, timedelta
+from datetime import datetime
 from numpy.testing import assert_array_equal
 from pytz import timezone
 
-from arcticdb.config import Defaults
 from arcticdb.exceptions import ArcticNativeNotYetImplemented
 from arcticdb_ext.exceptions import InternalException, NoSuchVersionException
 from arcticdb.flattener import Flattener
 from arcticdb.version_store import NativeVersionStore
 from arcticdb.version_store._custom_normalizers import CustomNormalizer, register_normalizer
 from arcticdb.version_store._store import UNSUPPORTED_S3_CHARS, MAX_SYMBOL_SIZE, VersionedItem
-from arcticdb.version_store.helper import ArcticMemoryConfig, get_lib_cfg
+from arcticdb_ext.exceptions import _ArcticLegacyCompatibilityException
 from arcticdb_ext.storage import KeyType, NoDataFoundException
 from arcticdb_ext.version_store import StreamDescriptorMismatch
 from arcticc.pb2.descriptors_pb2 import NormalizationMetadata  # Importing from arcticdb dynamically loads arcticc.pb2
@@ -1750,7 +1749,7 @@ def test_diff_long_stream_descriptor_mismatch(lmdb_version_store, method, num):
             lib.update("x", pd.DataFrame(bad_row, index=dr), date_range=dr)
         assert False, "should throw"
     except StreamDescriptorMismatch as e:
-        print(e)
+        assert not isinstance(e, _ArcticLegacyCompatibilityException)
         msg = str(e)
         for i in (1, 2, *(x for x in range(num) if x % 20 == 4), num):
             assert f"col{i}: TD<type=INT64, dim=0>" in msg

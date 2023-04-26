@@ -40,19 +40,19 @@ private:
     VariantKey key_;
 };
 
-class NoDataFoundException : public ArcticBaseException<ErrorCategory::MISSING_DATA> {
+class NoDataFoundException : public ArcticCategorizedException<ErrorCategory::MISSING_DATA> {
 public:
     explicit NoDataFoundException(VariantId key) :
-        ArcticBaseException<ErrorCategory::MISSING_DATA>(std::visit([](const auto &key) { return fmt::format("{}", key); }, key)),
-        key_(key){
+            ArcticCategorizedException<ErrorCategory::MISSING_DATA>(std::visit([](const auto &key) { return fmt::format("{}", key); }, key)),
+            key_(key){
     }
 
     explicit NoDataFoundException(const std::string& msg) :
-        ArcticBaseException<ErrorCategory::MISSING_DATA>(msg) {
+            ArcticCategorizedException<ErrorCategory::MISSING_DATA>(msg) {
     }
 
     explicit NoDataFoundException(const char* msg) :
-        ArcticBaseException<ErrorCategory::MISSING_DATA>(std::string(msg)) {
+            ArcticCategorizedException<ErrorCategory::MISSING_DATA>(std::string(msg)) {
     }
 
     [[nodiscard]] const VariantId &key() const {
