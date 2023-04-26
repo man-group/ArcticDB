@@ -159,43 +159,7 @@ int rec_call(int i){
         return rec_call(i-1);
 }
 
-void register_exception(py::module && m) {
-
-    std::set_terminate([]{
-        auto eptr = std::current_exception();
-        try {
-            std::rethrow_exception(eptr);
-        } catch (const std::exception &e) {
-            std::string msg = fmt::format("{}({}).\n{}", arcticdb::get_type_name(typeid(e)), e.what(),
-                    arcticdb::get_stack());
-            arcticdb::log::root().error("Terminate called in thread {}: {}\n Aborting",
-                    folly::getCurrentThreadName().value_or("Unknown"), msg);
-            std::abort();
-        }
-    });
-
-    static py::exception<arcticdb::ArcticNativeCxxException> ex(m, "ArcticNativeCxxException");
-
-    py::register_exception_translator([](std::exception_ptr p) {
-        try {
-            if (p) std::rethrow_exception(p);
-        } catch (const arcticdb::ArcticNativeCxxException & e){
-            ex(e.what());
-        } catch (const py::stop_iteration &e){
-            // let stop iteration bubble up, since this is how python implements iteration termination
-            std::rethrow_exception(p);
-        } catch (const std::exception &e) {
-            std::string msg = fmt::format("{}({})", arcticdb::get_type_name(typeid(e)), e.what());
-            ex(msg.c_str());
-        }
-    });
-
-    m.def("throw_native", [](int i){
-        return rec_call(i);
-    });
-}
-
-void register_exceptions(py::module&) {
+void register_termination_handler() {
     std::set_terminate([]{
         auto eptr = std::current_exception();
         try {
@@ -208,7 +172,7 @@ void register_exceptions(py::module&) {
     });
 }
 
-void register_error_code_ecosystem(py::module& m) {
+void register_error_code_ecosystem(py::module& m, py::exception<arcticdb::ArcticException>& base_exception) {
     using namespace arcticdb;
 
     auto cat_enum = py::enum_<ErrorCategory>(m, "ErrorCategory");
@@ -227,15 +191,35 @@ void register_error_code_ecosystem(py::module& m) {
     setattr(m, "enum_value_to_prefix", enum_value_to_prefix);
     m.def("get_error_category", &get_error_category);
 
-    py::register_exception<InternalException>(m, "InternalException");
-    py::register_exception<NoSuchVersionException>(m, "NoSuchVersionException");
-    py::register_exception<NormalizationException>(m, "NormalizationException");
-    py::register_exception<MissingDataException>(m, "MissingDataException");
-    py::register_exception<SchemaException>(m, "SchemaException");
-    py::register_exception<StorageException>(m, "StorageException");
-    py::register_exception<SortingException>(m, "SortingException");
-}
+    // legacy exception base type kept for backwards compat with Man Python client
+    struct ArcticCompatibilityException : public ArcticException {};
+    auto compat_exception = py::register_exception<ArcticCompatibilityException>(
+            m, "_ArcticLegacyCompatibilityException", base_exception);
 
+    static py::exception<InternalException> internal_exception(m, "InternalException", compat_exception.ptr());
+
+    py::register_exception_translator([](std::exception_ptr p) {
+        try {
+            if (p) std::rethrow_exception(p);
+        } catch (const arcticdb::InternalException & e){
+            internal_exception(e.what());
+        } catch (const py::stop_iteration &e){
+            // let stop iteration bubble up, since this is how python implements iteration termination
+            std::rethrow_exception(p);
+        } catch (const std::exception &e) {
+            std::string msg = fmt::format("{}({})", arcticdb::get_type_name(typeid(e)), e.what());
+            internal_exception(msg.c_str());
+        }
+    });
+
+    py::register_exception<NoSuchVersionException>(m, "NoSuchVersionException");
+    py::register_exception<NormalizationException>(m, "NormalizationException", compat_exception.ptr());
+    py::register_exception<MissingDataException>(m, "MissingDataException", compat_exception.ptr());
+    py::register_exception<SchemaException>(m, "SchemaException", compat_exception.ptr());
+    py::register_exception<StorageException>(m, "StorageException", compat_exception.ptr());
+    py::register_exception<SortingException>(m, "SortingException", compat_exception.ptr());
+    py::register_exception<UnsortedDataException>(m, "UnsortedDataException", compat_exception.ptr());
+}
 
 void reinit_scheduler() {
     ARCTICDB_DEBUG(arcticdb::log::version(), "Post-fork, reinitializing the task scheduler");
@@ -278,16 +262,16 @@ PYBIND11_MODULE(arcticdb_ext, m) {
 #endif
     // Set up the global exception handlers first, so module-specific exception handler can override it:
     auto exceptions = m.def_submodule("exceptions");
-    register_exceptions(exceptions);
-    register_error_code_ecosystem(exceptions);
+    auto base_exception = py::register_exception<arcticdb::ArcticException>(exceptions, "ArcticException");
+    register_error_code_ecosystem(exceptions, base_exception);
 
     arcticdb::async::register_bindings(m);
     arcticdb::codec::register_bindings(m);
     arcticdb::column_store::register_bindings(m);
-    arcticdb::storage::apy::register_bindings(m);
+    arcticdb::storage::apy::register_bindings(m, base_exception);
     arcticdb::stream::register_bindings(m);
     arcticdb::toolbox::apy::register_bindings(m);
-    arcticdb::version_store::register_bindings(m);
+    arcticdb::version_store::register_bindings(m, base_exception);
     register_configs_map_api(m);
     register_log(m.def_submodule("log"));
     register_instrumentation(m.def_submodule("instrumentation"));
@@ -300,6 +284,8 @@ PYBIND11_MODULE(arcticdb_ext, m) {
     };
 
     m.add_object("_cleanup", py::capsule(cleanup_callback));
+
+    register_termination_handler();
 
 #ifdef VERSION_INFO
     m.attr("__version__") = VERSION_INFO;

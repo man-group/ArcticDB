@@ -14,7 +14,6 @@
 #include <folly/concurrency/ConcurrentHashMap.h>
 #include <arcticdb/util/slab_allocator.hpp>
 #include <arcticdb/util/configs_map.hpp>
-#include <arcticdb/util/trace.hpp>
 #include <folly/ThreadCachedInt.h>
 #include <arcticdb/util/timer.hpp>
 
@@ -137,7 +136,6 @@ struct TracingData {
         total_allocs_calls_++;
         if (size != page_size) {
             total_irregular_allocs_++;
-//            ARCTICDB_TRACE(log::codec(), "Stack during irregular alloc: {}", get_stack());
         }
         ARCTICDB_DEBUG(log::codec(), "Allocated {} to {}:{}, total allocation size {}, total irregular allocs {}/{}",
                             util::MemBytes{size},

@@ -15,6 +15,7 @@ from arcticdb.supported_types import Timestamp
 
 from arcticdb.version_store.processing import QueryBuilder
 from arcticdb.version_store._store import NativeVersionStore, VersionedItem
+from arcticdb_ext.exceptions import ArcticException
 import pandas as pd
 import numpy as np
 import logging
@@ -39,7 +40,7 @@ Library.write: for more documentation on normalisation.
 """
 
 
-class ArcticInvalidApiUsageException(RuntimeError):
+class ArcticInvalidApiUsageException(ArcticException):
     """Exception indicating an invalid call made to the Arctic API."""
 
 
