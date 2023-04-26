@@ -1,7 +1,5 @@
 ## Building
 
-We are doing this manually for now until we have CI builds running.
-
 Work in this directory.
 
 ### mkdocs
