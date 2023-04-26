@@ -138,8 +138,9 @@ jobs:
 
       - name: Discover test directory names
         if: inputs.job_type == 'follower'
-        run: find python/tests/* -maxdepth 0 -type d ! -name '__pycache__' ! -name 'util' -printf '"%f",' |
-              sed 's/^/test_dirs=[/ ; s/,$/]/' | tee -a $GITHUB_ENV
+        # There are so few nonreg tests, run them in the hypothesis runner
+        run: find python/tests/* -maxdepth 0 -type d ! -regex '.*\(__pycache__\|util\|nonreg\)' -printf '"%f",' |
+              sed 's/^/test_dirs=[/ ; s/"hypothesis"/"{hypothesis,nonreg}"/ ; s/,$/]/' | tee -a $GITHUB_ENV
 
       # ========================= Common =========================
       - name: Disk usage
@@ -175,13 +176,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        type: ${{fromJSON(needs.compile.outputs.test_dirs)}}
+        type: ${{fromJSON(vars.TEST_DIRS_OVERRIDE || needs.compile.outputs.test_dirs)}}
         include:
           - ${{fromJSON(inputs.matrix)}}
-          - type: hypothesis
-            cmd: '{hypothesis,nonreg}' # There are so few nonreg tests, run them in the hypothesis runner
-        exclude:
-          - type: nonreg
     name: ${{matrix.type}}
     runs-on: ${{fromJson(matrix.pytest_distro || matrix.distro)}}
     container: ${{matrix.os == 'linux' && needs.compile.outputs.manylinux_image || null}}
@@ -230,14 +227,14 @@ jobs:
             MSYS_NO_PATHCONV=1 reg.exe ADD 'HKLM\SOFTWARE\Microsoft\Windows\Windows Error Reporting\LocalDumps'
             cd "/proc/registry/HKEY_LOCAL_MACHINE/SOFTWARE/Microsoft"
             find "Windows NT/CurrentVersion/AeDebug" "Windows/Windows Error Reporting/LocalDumps" \
-              -type f -print -exec xxd -p '{}' \; || true
+              -type f -print -exec xxd -c 64 '{}' \; || true
           fi
           ${{vars.EXTRA_TEST_PREPARE_CMD || ''}}
         env:
           CMAKE_BUILD_PARALLEL_LEVEL: ${{vars.CMAKE_BUILD_PARALLEL_LEVEL}}
 
       - name: Run test
-        run: build_tooling/parallel_test.sh tests/${{matrix.cmd || matrix.type}}
+        run: build_tooling/parallel_test.sh tests/${{matrix.type}}
         env:
           TEST_OUTPUT_DIR: ${{runner.temp}}
 
