@@ -37,7 +37,6 @@ chmod 555 sccache
 
 echo "
 FROM $manylinux_image
-RUN cp \$(which bash) /usr/local/bin/suid_bash && chown 0:0 /usr/local/bin/suid_bash && chmod u+s /usr/local/bin/suid_bash
 RUN rpmkeys --import 'https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x3FA7E0328081BFF6A14DA29AA6A19B38D3D831EF' && \
     curl https://download.mono-project.com/repo/centos7-stable.repo > /etc/yum.repos.d/mono-centos7-stable.repo && \
     sed -i 's|#baseurl=http://mirror.centos.org|baseurl=http://olcentgbl.trafficmanager.net|' /etc/yum.repos.d/CentOS-Base.repo && \
@@ -45,7 +44,8 @@ RUN rpmkeys --import 'https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x3F
             s/#?exclude.*/exclude=.edu/' /etc/yum/pluginconf.d/fastestmirror.conf
 ADD sccache /usr/local/bin/
 RUN yum update -y && \
-    yum install -y zip jq openssl-devel cyrus-sasl-devel devtoolset-10-libatomic-devel libcurl-devel python3-devel && \
+    yum install -y zip jq less devtoolset-11-gdb \
+      openssl-devel cyrus-sasl-devel devtoolset-10-libatomic-devel libcurl-devel python3-devel && \
     rpm -Uvh --nodeps \$(repoquery --location mono-{core,web,devel,data,wcf,winfx}) && \
     yum clean all && touch /etc/arcticdb_deps_installed
 LABEL io.arcticdb.cibw_ver=\"${cibuildwheel_ver}\" io.arcticdb.base=\"${manylinux_image}\"
