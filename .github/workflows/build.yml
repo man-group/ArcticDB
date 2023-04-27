@@ -1,7 +1,7 @@
 name: Build and Test
 on:
   push:
-    branches: ["**"]
+    branches: [master]
     tags: [v**]
     paths:
       - .github/workflows/*.yml
@@ -10,6 +10,16 @@ on:
       - python/**
       - setup.*
       - pyproject.toml
+  pull_request:
+    # Not using `pull_request_target` due to its error-prone security model. `pull_request` builds only have read-only
+    # access to the source (man-group) repo, so cannot annotate on PRs, but otherwise, the build should work.
+    # Per docs: only runs when a pull_request event's activity type is opened, synchronize, or reopened.
+    # For these event types, the $GITHUB_REF points to a hidden HEAD that previews the effect of the PR when merged.
+    paths:
+      # Build system changes shall only run on the base repo via manual triggering
+      - .github/workflows/*.yml # FIXME
+      - cpp/**
+      - python/**
   workflow_dispatch:
     inputs:
       pypi_publish:
@@ -37,12 +47,14 @@ jobs:
             echo -e "PUBLISH_ENV=${{vars.DEFAULT_PUBLISH_ENV}}\nCMAKE_PRESET_TYPE=$DEFAULT_PRESET" | tee -a $GITHUB_ENV
           fi
         env:
-          DEFAULT_PRESET: ${{startsWith(github.repository, 'man-group/ArcticDB') && 'release' || vars.DEFAULT_CMAKE_PRESET_TYPE || 'debug'}}
+          DEFAULT_PRESET: "${{(startsWith(github.repository, 'man-group/ArcticDB') || github.event_name == 'pull_request')
+            && 'release' || vars.DEFAULT_CMAKE_PRESET_TYPE || 'debug'}}"
     outputs:
       cibuildwheel_ver: "2.12.1"
       publish_env: ${{inputs.publish_env || env.PUBLISH_ENV || ''}}
       pypi_publish: ${{inputs.pypi_publish || env.PYPI_PUBLISH}}
       cmake_preset_type_resolved: ${{inputs.cmake_preset_type != '-' && inputs.cmake_preset_type || env.CMAKE_PRESET_TYPE}}
+      pr_source_owner: ${{github.event.pull_request.head.repo.owner.name}}
       # Full list CIBW supports: https://cibuildwheel.readthedocs.io/en/stable/options/#build-skip
       # If adding PyPy, then must rewrite the python_impl_name in build_steps.yaml
       linux_cibw_formats: '["cp3{0}-manylinux_x86_64"]'
@@ -63,9 +75,9 @@ jobs:
   cibw_docker_image:
     needs: [common_config]
     uses: ./.github/workflows/cibw_docker_image.yml
-    permissions: {packages: write}
     with:
       cibuildwheel_ver: ${{needs.common_config.outputs.cibuildwheel_ver}}
+      pr_source_owner: ${{needs.common_config.outputs.pr_source_owner}}
       force_update: false
 
   leader-compile-linux:

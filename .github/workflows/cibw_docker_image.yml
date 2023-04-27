@@ -8,7 +8,7 @@ on:
     inputs:
       cibuildwheel_ver: {required: true, type: string}
       force_update:     {required: true, type: boolean}
-      pr_source_repo:   {required: false, type: string}
+      pr_source_owner:  {required: false, type: string}
     outputs:
       tag:
         value: ${{vars.cibw_docker_image_override || jobs.check.outputs.tag}}
@@ -32,7 +32,7 @@ jobs:
         echo -e "image_ver=$image_ver\nimage_name=$image_name\noutput_tag=$image_name:$image_ver" | tee -a $GITHUB_ENV
       env:
         GH_TOKEN: ${{github.token}}
-        REPO_OWNER: ${{inputs.pr_source_repo || github.repository_owner}}
+        REPO_OWNER: ${{inputs.pr_source_owner || github.repository_owner}}
 
     - name: Check for existing image
       id: find_existing
@@ -62,8 +62,6 @@ jobs:
     needs: [check]
     if: needs.check.outputs.found_existing != 'success'
     runs-on: ubuntu-latest
-    permissions:
-      packages: write
     steps:
     - name: Checkout
       uses: actions/checkout@v3.3.0
