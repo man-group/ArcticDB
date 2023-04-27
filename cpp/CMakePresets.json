@@ -10,7 +10,7 @@
       "installDir": "${sourceDir}/out/install"
     },
     {
-      "name": "common_no_vcpkg",
+      "name": "common_conda",
       "hidden": true,
       "description": "OS-agnostic config",
       "binaryDir": "${sourceDir}/out/${presetName}-build",
@@ -36,10 +36,20 @@
         "CMAKE_CXX_COMPILER": "cl",
         "VCPKG_TARGET_TRIPLET": "x64-windows-static"
       },
-      "condition": {
-        "type": "equals",
-        "lhs": "${hostSystemName}",
-        "rhs": "Windows"
+      "condition" : {
+        "type" : "allOf",
+        "conditions" : [
+          {
+            "type" : "equals",
+            "lhs" : "${hostSystemName}",
+            "rhs" : "Darwin"
+          },
+          {
+            "type" : "notEquals",
+            "lhs" : "$env{ARCTICDB_USE_CONDA}",
+            "rhs" : "1"
+          }
+        ]
       }
     },
     {
@@ -62,10 +72,20 @@
         "CMAKE_C_COMPILER": "gcc",
         "CMAKE_CXX_COMPILER": "g++"
       },
-      "condition": {
-        "type": "equals",
-        "lhs": "${hostSystemName}",
-        "rhs": "Linux"
+      "condition" : {
+        "type" : "allOf",
+        "conditions" : [
+          {
+            "type" : "equals",
+            "lhs" : "${hostSystemName}",
+            "rhs" : "Darwin"
+          },
+          {
+            "type" : "notEquals",
+            "lhs" : "$env{ARCTICDB_USE_CONDA}",
+            "rhs" : "1"
+          }
+        ]
       }
     },
     {
@@ -76,9 +96,43 @@
       }
     },
     {
-      "name": "darwin-debug",
+      "name": "linux-conda-debug",
+      "displayName": "Linux x64 Debug",
+      "inherits": "common_conda",
+      "generator": "Unix Makefiles",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_MAKE_PROGRAM": "make",
+        "CMAKE_C_COMPILER": "gcc",
+        "CMAKE_CXX_COMPILER": "g++"
+      },
+      "condition" : {
+        "type" : "allOf",
+        "conditions" : [
+          {
+            "type" : "equals",
+            "lhs" : "${hostSystemName}",
+            "rhs" : "Linux"
+          },
+          {
+            "type" : "equals",
+            "lhs" : "$env{ARCTICDB_USE_CONDA}",
+            "rhs" : "1"
+          }
+        ]
+      }
+    },
+    {
+      "name": "linux-conda-release",
+      "inherits": "linux-conda-debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo"
+      }
+    },
+    {
+      "name": "darwin-conda-debug",
       "displayName": "Unix",
-      "inherits": "common_no_vcpkg",
+      "inherits": "common_conda",
       "generator": "Unix Makefiles",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
@@ -87,15 +141,25 @@
         "CMAKE_CXX_COMPILER": "clang",
         "STATIC_LINK_STD_LIB": "OFF"
       },
-      "condition": {
-        "type": "equals",
-        "lhs": "${hostSystemName}",
-        "rhs": "Darwin"
+      "condition" : {
+        "type" : "allOf",
+        "conditions" : [
+          {
+            "type" : "equals",
+            "lhs" : "${hostSystemName}",
+            "rhs" : "Darwin"
+          },
+          {
+            "type" : "equals",
+            "lhs" : "$env{ARCTICDB_USE_CONDA}",
+            "rhs" : "1"
+          }
+        ]
       }
     },
     {
-      "name": "darwin-release",
-      "inherits": "darwin-debug",
+      "name": "darwin-conda-release",
+      "inherits": "darwin-conda-debug",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "RelWithDebInfo"
       }
@@ -106,7 +170,9 @@
     {"name": "windows-cl-release", "configurePreset": "windows-cl-release", "targets": "arcticdb_ext" },
     {"name": "linux-debug",        "configurePreset": "linux-debug",        "targets": "arcticdb_ext" },
     {"name": "linux-release",      "configurePreset": "linux-release",      "targets": "arcticdb_ext" },
-    {"name": "darwin-debug",       "configurePreset": "darwin-debug",       "targets": "arcticdb_ext" },
-    {"name": "darwin-release",     "configurePreset": "darwin-release",     "targets": "arcticdb_ext" }
+    {"name": "linux-conda-debug",        "configurePreset": "linux-conda-debug",        "targets": "arcticdb_ext" },
+    {"name": "linux-conda-release",      "configurePreset": "linux-conda-release",      "targets": "arcticdb_ext" },
+    {"name": "darwin-conda-debug",       "configurePreset": "darwin-conda-debug",       "targets": "arcticdb_ext" },
+    {"name": "darwin-codda-release",     "configurePreset": "darwin-conda-release",     "targets": "arcticdb_ext" }
   ]
 }
