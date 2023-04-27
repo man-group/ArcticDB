@@ -130,8 +130,9 @@ class CMakeBuild(build_ext):
         candidates = glob.glob(search)
         if not candidates:
             if preset == "*":
+                conda_suffix = "-conda" if ARCTICDB_USING_CONDA else ""
                 suffix = "-debug" if self.debug else "-release"
-                preset = ("windows-cl" if platform.system() == "Windows" else platform.system().lower()) + suffix
+                preset = ("windows-cl" if platform.system() == "Windows" else platform.system().lower()) + conda_suffix + suffix
             print(
                 f"Did not find build directory with '{search}'. Will configure and build using cmake preset {preset}",
                 file=sys.stderr,

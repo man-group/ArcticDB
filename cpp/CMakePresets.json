@@ -46,7 +46,7 @@
           },
           {
             "type" : "notEquals",
-            "lhs" : "$env{ARCTICDB_USE_CONDA}",
+            "lhs" : "$env{ARCTICDB_USING_CONDA}",
             "rhs" : "1"
           }
         ]
@@ -82,7 +82,7 @@
           },
           {
             "type" : "notEquals",
-            "lhs" : "$env{ARCTICDB_USE_CONDA}",
+            "lhs" : "$env{ARCTICDB_USING_CONDA}",
             "rhs" : "1"
           }
         ]
@@ -116,7 +116,7 @@
           },
           {
             "type" : "equals",
-            "lhs" : "$env{ARCTICDB_USE_CONDA}",
+            "lhs" : "$env{ARCTICDB_USING_CONDA}",
             "rhs" : "1"
           }
         ]
@@ -131,7 +131,7 @@
     },
     {
       "name": "darwin-conda-debug",
-      "displayName": "Unix",
+      "displayName": "Darwin Conda",
       "inherits": "common_conda",
       "generator": "Unix Makefiles",
       "cacheVariables": {
@@ -151,7 +151,7 @@
           },
           {
             "type" : "equals",
-            "lhs" : "$env{ARCTICDB_USE_CONDA}",
+            "lhs" : "$env{ARCTICDB_USING_CONDA}",
             "rhs" : "1"
           }
         ]
