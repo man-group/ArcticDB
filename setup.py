@@ -142,7 +142,6 @@ class CMakeBuild(build_ext):
                 "-DTEST=NO",
                 f"-DBUILD_PYTHON_VERSION={sys.version_info[0]}.{sys.version_info[1]}",
                 f"-DCMAKE_INSTALL_PREFIX={os.path.dirname(dest)}",
-                f"-DARCTICDB_USING_CONDA={int(ARCTICDB_USING_CONDA)}",
                 "--preset",
                 preset,
                 cwd="cpp",

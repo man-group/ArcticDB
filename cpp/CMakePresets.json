@@ -14,7 +14,12 @@
       "hidden": true,
       "description": "OS-agnostic config",
       "binaryDir": "${sourceDir}/out/${presetName}-build",
-      "installDir": "${sourceDir}/out/install"
+      "installDir": "${sourceDir}/out/install",
+      "cacheVariables": {
+        "ARCTICDB_USING_CONDA": "ON",
+        "ARCTICDB_USING_VCPKG": "OFF",
+        "STATIC_LINK_STD_LIB": "OFF"
+      }
     },
     {
       "name": "windows-cl-release",
