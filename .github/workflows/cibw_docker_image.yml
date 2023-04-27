@@ -8,20 +8,19 @@ on:
     inputs:
       cibuildwheel_ver: {required: true, type: string}
       force_update:     {required: true, type: boolean}
+      pr_source_repo:   {required: false, type: string}
     outputs:
       tag:
-        value: ${{vars.cibw_docker_image_override || jobs.work.outputs.tag}}
+        value: ${{vars.cibw_docker_image_override || jobs.check.outputs.tag}}
       found_existing:
-        value: ${{jobs.work.outputs.found_existing}}
+        value: ${{jobs.check.outputs.found_existing}}
 
 run-name: v${{inputs.cibuildwheel_ver}}${{inputs.force_update && ' (Force)' || ''}}
 env:
-  image_name: ghcr.io/${{github.repository_owner}}/arcticdb_manylinux
+  ARTIFACT_NAME: arcticdb_manylinux
 jobs:
-  work:
+  check:
     runs-on: ubuntu-latest
-    permissions:
-      packages: write
     steps:
     - name: Calculate build script hash
       run: |
@@ -29,9 +28,11 @@ jobs:
         workflow_hash=`hash .github/workflows/cibw_docker_image.yml`
         script_hash=`hash build_tooling/build_many_linux_image.sh`
         image_ver="${{inputs.cibuildwheel_ver}}-$(echo $workflow_hash $script_hash | sha1sum | head -c 5)"
-        echo -e "image_ver=$image_ver\noutput_tag=$image_name:$image_ver" | tee -a $GITHUB_ENV
+        image_name="ghcr.io/${REPO_OWNER,,}/$ARTIFACT_NAME"
+        echo -e "image_ver=$image_ver\nimage_name=$image_name\noutput_tag=$image_name:$image_ver" | tee -a $GITHUB_ENV
       env:
         GH_TOKEN: ${{github.token}}
+        REPO_OWNER: ${{inputs.pr_source_repo || github.repository_owner}}
 
     - name: Check for existing image
       id: find_existing
@@ -41,35 +42,38 @@ jobs:
 
         docker login ghcr.io -u token -p "${{secrets.GITHUB_TOKEN}}"
 
-        function find_matching_ver() {
-          output_tag="$1:$image_ver"
-          docker manifest inspect $output_tag && echo "output_tag=$output_tag" | tee -a $GITHUB_ENV
-        }
-        find_matching_ver ghcr.io/man-group/cibuildwheel_manylinux || find_matching_ver $image_name
+        man_tag=ghcr.io/man-group/$ARTIFACT_NAME:$image_ver
+
+        if docker manifest inspect $man_tag ; then
+          echo "output_tag=$man_tag" | tee -a $GITHUB_ENV
+        else
+          docker manifest inspect $output_tag
+        fi
       continue-on-error: true
       # If  inputs.force_update, step.outcome == skipped
       # if !inputs.force_update, step.outcome == success / failure
+      # if cibw_docker_image_override, step.outcome == success
       # So the remaining steps only need to be done if this step.outcome != success
+    outputs:
+      tag: ${{env.output_tag}}
+      found_existing: ${{steps.find_existing.outcome}}
 
+  build:
+    needs: [check]
+    if: needs.check.outputs.found_existing != 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+    steps:
     - name: Checkout
-      if: steps.find_existing.outcome != 'success'
       uses: actions/checkout@v3.3.0
 
     - name: Build
-      if: steps.find_existing.outcome != 'success'
       run: build_tooling/build_many_linux_image.sh
       env:
         cibuildwheel_ver: ${{inputs.cibuildwheel_ver}}
 
-    - name: Tag latest
-      if: steps.find_existing.outcome != 'success' && github.ref == 'refs/heads/master'
-      run: docker tag $output_tag $image_name:latest
-
     - name: Push
-      if: steps.find_existing.outcome != 'success'
       run: |
         docker login ghcr.io -u token -p "${{secrets.GITHUB_TOKEN}}"
         docker push -a $image_name
-    outputs:
-      tag: ${{env.output_tag}}
-      found_existing: ${{steps.find_existing.outcome}}
