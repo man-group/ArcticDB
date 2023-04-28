@@ -1,0 +1,30 @@
+name: arcticdb
+channels:
+  - conda-forge
+dependencies:
+  - lmdb
+  - boost-cpp  
+  - fmt
+  - spdlog
+  - folly
+  - lz4-c
+  - prometheus-cpp
+  - double-conversion
+  - libevent
+  - libprotobuf  
+  - libmongocxx
+  - zstd
+  - pybind11
+  - pcre
+  - gflags
+  - cyrus-sasl
+  - python
+  - msgpack-c
+  - doxygen
+  - aws-sdk-cpp
+  - gtest
+  - cmake
+  - bitmagic
+  - numpy
+  - pandas
+  - libiconv

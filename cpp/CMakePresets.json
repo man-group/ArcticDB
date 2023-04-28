@@ -67,6 +67,51 @@
       }
     },
     {
+      "name": "windows-cl-conda-release",
+      "displayName": "Windows x64 Release Cl",
+      "description": "Target Windows with the Visual Studio development environment.",
+      "inherits": "common_conda",
+      "generator": "Ninja",
+      "architecture": {
+        "value": "x64",
+        "strategy": "external"
+      },
+      "toolset": {
+        "value": "host=x64",
+        "strategy": "external"
+      },
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_C_COMPILER": "cl",
+        "CMAKE_CXX_COMPILER": "cl",
+        "VCPKG_TARGET_TRIPLET": "x64-windows-static"
+      },
+      "condition" : {
+        "type" : "allOf",
+        "conditions" : [
+          {
+            "type" : "equals",
+            "lhs" : "${hostSystemName}",
+            "rhs" : "Darwin"
+          },
+          {
+            "type" : "equals",
+            "lhs" : "$env{ARCTICDB_USING_CONDA}",
+            "rhs" : "1"
+          }
+        ]
+      }
+    },
+    {
+      "name": "windows-cl-conda-debug",
+      "displayName": "Windows x64 Debug",
+      "description": "Debug features enabled, but linked against release Python",
+      "inherits": "windows-cl-conda-release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
       "name": "linux-debug",
       "displayName": "Linux x64 Debug",
       "inherits": "common",
@@ -171,13 +216,15 @@
     }
   ],
   "buildPresets": [
-    {"name": "windows-cl-debug",   "configurePreset": "windows-cl-debug",   "targets": "arcticdb_ext" },
-    {"name": "windows-cl-release", "configurePreset": "windows-cl-release", "targets": "arcticdb_ext" },
-    {"name": "linux-debug",        "configurePreset": "linux-debug",        "targets": "arcticdb_ext" },
-    {"name": "linux-release",      "configurePreset": "linux-release",      "targets": "arcticdb_ext" },
-    {"name": "linux-conda-debug",        "configurePreset": "linux-conda-debug",        "targets": "arcticdb_ext" },
-    {"name": "linux-conda-release",      "configurePreset": "linux-conda-release",      "targets": "arcticdb_ext" },
-    {"name": "darwin-conda-debug",       "configurePreset": "darwin-conda-debug",       "targets": "arcticdb_ext" },
-    {"name": "darwin-codda-release",     "configurePreset": "darwin-conda-release",     "targets": "arcticdb_ext" }
+    {"name": "windows-cl-debug",          "configurePreset": "windows-cl-debug",          "targets": "arcticdb_ext" },
+    {"name": "windows-cl-release",        "configurePreset": "windows-cl-release",        "targets": "arcticdb_ext" },
+    {"name": "windows-cl-conda-debug",    "configurePreset": "windows-cl-conda-debug",    "targets": "arcticdb_ext" },
+    {"name": "windows-cl-conda-release",  "configurePreset": "windows-cl-conda-release",  "targets": "arcticdb_ext" },
+    {"name": "linux-debug",               "configurePreset": "linux-debug",               "targets": "arcticdb_ext" },
+    {"name": "linux-release",             "configurePreset": "linux-release",             "targets": "arcticdb_ext" },
+    {"name": "linux-conda-debug",        "configurePreset": "linux-conda-debug",          "targets": "arcticdb_ext" },
+    {"name": "linux-conda-release",      "configurePreset": "linux-conda-release",        "targets": "arcticdb_ext" },
+    {"name": "darwin-conda-debug",       "configurePreset": "darwin-conda-debug",         "targets": "arcticdb_ext" },
+    {"name": "darwin-codda-release",     "configurePreset": "darwin-conda-release",       "targets": "arcticdb_ext" }
   ]
 }

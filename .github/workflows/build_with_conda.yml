@@ -5,8 +5,6 @@ on:
 
 jobs:
   unix:
-
-
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest]
@@ -23,7 +21,7 @@ jobs:
           environment-file: environment_unix.yml
           environment-name: arcticdb
 
-      # Linux and macOS
+ 
       - name: Build
         shell: bash -l {0}
         run: |
@@ -31,3 +29,26 @@ jobs:
         env:
           ARCTICDB_USING_CONDA: 1
 
+  unix:
+    strategy:
+      matrix:
+        os: [windows-latest]
+
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: recursive
+      - name: Install Conda environment from environment.yml
+        uses: mamba-org/provision-with-micromamba@main
+
+        with:
+          environment-file: environment_win.yml
+          environment-name: arcticdb
+
+      - name: Run Python
+        shell: powershell
+        run: |
+          python -m pip install -v -e .
+        env:
+          ARCTICDB_USING_CONDA: 1
