@@ -32,3 +32,4 @@ dependencies:
   - krb5
   - werkzeug
   - moto
+  - pytest-server-fixtures
