@@ -2508,6 +2508,103 @@ class NativeVersionStore:
                 )
             )
 
+    def is_symbol_fragmented(self, symbol: str, segment_size: int = None) -> bool:
+        """
+        Check whether the number of segments that would be reduced by compaction is more than or equal to the
+        value specified by the configuration option "SymbolDataCompact.SegmentCount" (defaults to 100).
+
+        Parameters
+        ----------
+        symbol: `str`
+            Symbol name.
+        segment_size: `int`
+            Target for maximum no. of rows per segment, after compaction.
+            If parameter is not provided, library option for segments's maximum row size will be used
+
+        Notes
+        ----------
+        Config map setting - SymbolDataCompact.SegmentCount will be replaced by a library setting
+        in the future. This API will allow overriding the setting as well.
+        
+        Returns
+        -------
+        bool
+        """
+        return self.version_store.is_symbol_fragmented(symbol, segment_size)
+
+    def defragment_symbol_data(self, symbol: str, segment_size: Optional[int] = None) -> VersionedItem:
+        """
+        Compacts fragmented segments by merging row-sliced segments (https://docs.arcticdb.io/technical/on_disk_storage/#data-layer).
+        This method calls `is_symbol_fragmented` to determine whether to proceed with the defragmentation operation. 
+
+        CAUTION - Please note that a major restriction of this method at present is that any column slicing present on the data will be
+        removed in the new version created as a result of this method. 
+        As a result, if the impacted symbol has more than 127 columns (default value), the performance of selecting individual columns of 
+        the symbol (by using the `columns` parameter) may be negatively impacted in the defragmented version. 
+        If your symbol has less than 127 columns this caveat does not apply. 
+        For more information, please see `columns_per_segment` here:
+
+        https://docs.arcticdb.io/api/arcticdb/arcticdb.LibraryOptions
+
+        Parameters
+        ----------
+        symbol: `str`
+            Symbol name.
+        segment_size: `int`
+            Target for maximum no. of rows per segment, after compaction.
+            If parameter is not provided, library option - "segment_row_size" will be used
+            Note that no. of rows per segment, after compaction, may exceed the target.
+            It is for achieving smallest no. of segment after compaction. Please refer to below example for further explantion.
+
+        Returns
+        -------
+        VersionedItem
+            Structure containing metadata and version number of the defragmented symbol in the store.
+
+        Raises
+        ------
+        1002 ErrorCategory.INTERNAL:E_ASSERTION_FAILURE
+            If `is_symbol_fragmented` returns false.
+        2001 ErrorCategory.NORMALIZATION:E_UNIMPLEMENTED_INPUT_TYPE
+            If library option - "bucketize_dynamic" is ON.
+
+        Examples
+        --------
+        >>> lib.write("symbol", pd.DataFrame({"A": [0]}, index=[pd.Timestamp(0)]))
+        >>> lib.append("symbol", pd.DataFrame({"A": [1, 2]}, index=[pd.Timestamp(1), pd.Timestamp(2)]))
+        >>> lib.append("symbol", pd.DataFrame({"A": [3]}, index=[pd.Timestamp(3)]))
+        >>> lib.read_index(sym)
+                            start_index                     end_index  version_id stream_id          creation_ts          content_hash  index_type  key_type  start_col  end_col  start_row  end_row
+        1970-01-01 00:00:00.000000000 1970-01-01 00:00:00.000000001          20    b'sym'  1678974096622685727   6872717287607530038          84         2          1        2          0        1
+        1970-01-01 00:00:00.000000001 1970-01-01 00:00:00.000000003          21    b'sym'  1678974096931527858  12345256156783683504          84         2          1        2          1        3
+        1970-01-01 00:00:00.000000003 1970-01-01 00:00:00.000000004          22    b'sym'  1678974096970045987   7952936283266921920          84         2          1        2          3        4
+        >>> lib.version_store.defragment_symbol_data("symbol", 2)
+        >>> lib.read_index(sym)  # Returns two segments rather than three as a result of the defragmentation operation
+                            start_index                     end_index  version_id stream_id          creation_ts         content_hash  index_type  key_type  start_col  end_col  start_row  end_row
+        1970-01-01 00:00:00.000000000 1970-01-01 00:00:00.000000003          23    b'sym'  1678974097067271451  5576804837479525884          84         2          1        2          0        3
+        1970-01-01 00:00:00.000000003 1970-01-01 00:00:00.000000004          23    b'sym'  1678974097067427062  7952936283266921920          84         2          1        2          3        4
+
+        Notes
+        ----------
+        Config map setting - SymbolDataCompact.SegmentCount will be replaced by a library setting
+        in the future. This API will allow overriding the setting as well.
+        """
+
+        if self._lib_cfg.lib_desc.version.write_options.bucketize_dynamic:
+            raise ArcticNativeNotYetImplemented(
+                f"Support for library with 'bucketize_dynamic' ON is not implemented yet"
+            )
+
+        result = self.version_store.defragment_symbol_data(symbol, segment_size)
+        return VersionedItem(
+            symbol=result.symbol,
+            library=self._library.library_path,
+            version=result.version,
+            metadata=None,
+            data=None,
+            host=self.env,
+        )
+
     def library(self):
         return self._library
 

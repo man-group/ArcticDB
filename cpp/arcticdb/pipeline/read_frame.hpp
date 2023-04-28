@@ -35,21 +35,12 @@ std::optional<util::BitSet> check_and_mark_slices(
     if (slice_and_keys.empty())
         return output;
 
-    auto &index_slice = slice_and_keys.begin()->slice_;
     ColRange col_range;
     bool is_first = true;
     size_t count = 0u;
     std::set<RowRange> row_ranges;
     for (auto[opt_seg, slice, key] : slice_and_keys) {
-        if(has_column_groups) {
-          is_first = row_ranges.insert(slice.row_range).second;
-        } else if (slice.col_range != col_range) {
-            if(!dynamic_schema)
-                is_first = slice.col_range == index_slice.col_range;
-            
-            col_range = slice.col_range;
-        }
-        row_ranges.insert(slice.row_range);
+        is_first = row_ranges.insert(slice.row_range).second;
         if(return_bitset)
             output.value()[output.value().size()] = (dynamic_schema && !has_column_groups) || is_first || (incompletes_after && count >= incompletes_after.value());
 

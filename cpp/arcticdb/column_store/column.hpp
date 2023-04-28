@@ -521,14 +521,18 @@ public:
 
     void sort_external(const JiveTable& jive_table);
 
-    void mark_absent_rows(size_t start_pos, size_t num_rows) {
+    void mark_absent_rows(size_t num_rows) {
         if(sparse_permitted()) {
-            if(!sparse_map_ && last_logical_row_ != -1)
-                backfill_sparse_map(last_logical_row_);
-
+            if(!sparse_map_){
+                if (last_physical_row_ != -1)
+                    backfill_sparse_map(last_physical_row_);
+                else
+                    sparse_map();
+            }
             last_logical_row_ += static_cast<ssize_t>(num_rows);
         } else {
-            default_initialize_rows(start_pos, num_rows, true);
+            util::check(last_logical_row_ == last_physical_row_, "Expected logical and physical rows to be equal in non-sparse column");
+            default_initialize_rows(last_logical_row_ + 1, num_rows, true);
         }
     }
 

@@ -71,7 +71,8 @@ inline void merge_string_columns(const SegmentInMemory& segment, const std::shar
 
 inline void merge_segments(
     std::vector<SegmentInMemory>& segments,
-    SegmentInMemory& merged) {
+    SegmentInMemory& merged,
+    bool is_sparse) {
     ARCTICDB_DEBUG(log::version(), "Appending {} segments", segments.size());
     timestamp min_idx = std::numeric_limits<timestamp>::max();
     timestamp max_idx = std::numeric_limits<timestamp>::min();
@@ -80,8 +81,12 @@ inline void merge_segments(
         const auto& latest = *history.rbegin();
         ARCTICDB_DEBUG(log::version(), "Appending segment with {} rows", latest.row_count());
         for(const auto& field : latest.descriptor().fields()) {
-            if(!merged.column_index(field.name()))
-                merged.add_column(field, 0, false);
+            if(!merged.column_index(field.name())){//TODO: Bottleneck for wide segments
+                auto pos = merged.add_column(field, 0, false);
+                if (!is_sparse){
+                    merged.column(pos).mark_absent_rows(merged.row_count());
+                }
+            }
         }
         if (latest.row_count() && latest.descriptor().index().type() == IndexDescriptor::TIMESTAMP) {
             min_idx = std::min(min_idx, latest.begin()->begin()->value<timestamp>());
@@ -131,7 +136,7 @@ template<class Index, class Schema, class SegmentingPolicy = RowCountSegmentPoli
     class SegmentAggregator : public Aggregator<Index, Schema, SegmentingPolicy, DensityPolicy> {
 public:
     using AggregatorType = Aggregator<Index, Schema, SegmentingPolicy, DensityPolicy>;
-    using SliceCallBack = folly::Function<void(pipelines::FrameSlice)>;
+    using SliceCallBack = folly::Function<void(pipelines::FrameSlice&&)>;
 
     SegmentAggregator(
         SliceCallBack&& slice_callback,
@@ -166,17 +171,24 @@ public:
         if(segments_.size() == 1) {
             // One segment, and it could be huge, so don't duplicate it
             AggregatorType::segment() = segments_[0];
-            if(!Schema::is_sparse())
-                AggregatorType::segment().change_schema(AggregatorType::default_descriptor());
+            if(!DensityPolicy::allow_sparse){ //static schema must have all columns as column slicing is removed
+                auto descriptor = AggregatorType::default_descriptor();
+                for(const auto& field : AggregatorType::segment().fields()) {//segment's index is not set up here
+                    if(!descriptor.find_field(field.name())){//TODO: Bottleneck for wide segments
+                        descriptor.add_field(field);//dynamic schema's default descriptor has no data column
+                    }
+                }
+                AggregatorType::segment().change_schema(descriptor);
+            }
         }
         else {
             AggregatorType::segment().init_column_map();
-            merge_segments(segments_, AggregatorType::segment());
+            merge_segments(segments_, AggregatorType::segment(), DensityPolicy::allow_sparse);
         }
         auto slice = merge_slices(slices_, AggregatorType::segment().descriptor());
         if (AggregatorType::segment().row_count() > 0) {
             AggregatorType::commit_impl();
-            slice_callback_(slice);
+            slice_callback_(std::move(slice));
         }
         segments_.clear();
         slices_.clear();
