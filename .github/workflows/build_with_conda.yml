@@ -7,16 +7,21 @@ jobs:
   unix:
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest]
-        compiler: [clang, gcc]
-
         include:
-          - compiler: clang
+          - os: macos-latest
+            compiler: clang
             CC: clang
             CXX: clang++
-          - compiler: gcc
+
+          - os: ubuntu-latest
+            compiler: gcc
             CC: gcc
             CXX: g++
+          
+          - os: ubuntu-latest
+            compiler: clang
+            CC: clang
+            CXX: clang++
             
       fail-fast: false
     runs-on: ${{ matrix.os }}
