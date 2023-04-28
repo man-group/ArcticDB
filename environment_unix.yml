@@ -29,3 +29,4 @@ dependencies:
   - pandas
   - pytest
   - boto3
+  - krb5
