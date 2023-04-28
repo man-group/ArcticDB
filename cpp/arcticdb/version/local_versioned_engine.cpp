@@ -844,13 +844,40 @@ VersionedItem LocalVersionedEngine::compact_incomplete_dynamic(
     auto update_info = get_latest_undeleted_version_and_next_version_id(store(), version_map(), stream_id, true, false);
     auto versioned_item =  compact_incomplete_impl(
             store_, stream_id, user_meta, update_info,
-            append, convert_int_to_float, via_iteration, sparsify);
+            append, convert_int_to_float, via_iteration, sparsify, get_write_options());
 
     version_map_->write_version(store_, versioned_item.key_);
 
     if(cfg_.symbol_list())
         symbol_list().add_symbol(store_, stream_id);
 
+    return versioned_item;
+}
+
+bool LocalVersionedEngine::is_symbol_fragmented(const StreamId& stream_id, std::optional<size_t> segment_size) {
+    auto update_info = get_latest_undeleted_version_and_next_version_id(
+            store(), version_map(), stream_id, true, false);
+    auto pre_defragmentation_info = get_pre_defragmentation_info(
+        store(), stream_id, update_info, get_write_options(), segment_size.value_or(cfg_.write_options().segment_row_size()));
+    return is_symbol_fragmented_impl(pre_defragmentation_info.segments_need_compaction);
+}
+
+VersionedItem LocalVersionedEngine::defragment_symbol_data(const StreamId& stream_id, std::optional<size_t> segment_size) {
+    log::version().info("Defragmenting data for symbol {}", stream_id);
+
+    // Currently defragmentation only for latest version - is there a use-case to allow compaction for older data?
+    auto update_info = get_latest_undeleted_version_and_next_version_id(
+        store(), version_map(), stream_id, true, false);
+
+    auto versioned_item = defragment_symbol_data_impl(
+            store(), stream_id, update_info, get_write_options(),
+            segment_size.has_value() ? segment_size.value() : cfg_.write_options().segment_row_size());
+
+    version_map_->write_version(store_, versioned_item.key_);
+
+    if(cfg_.symbol_list())
+        symbol_list().add_symbol(store_, stream_id);
+    
     return versioned_item;
 }
 

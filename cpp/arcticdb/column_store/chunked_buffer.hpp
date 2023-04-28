@@ -299,7 +299,7 @@ class ChunkedBufferImpl {
 
     template<typename T>
     const T* internal_ptr_cast(size_t pos_bytes, size_t required_bytes) const {
-        check_bytes(required_bytes, pos_bytes);
+        check_bytes(pos_bytes, required_bytes);
         auto [block, pos] = block_and_offset(pos_bytes);
         return reinterpret_cast<const T*>(block->internal_ptr(pos));
     }

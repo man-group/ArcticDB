@@ -831,6 +831,10 @@ struct StreamDescriptor {
     }
 };
 
+inline StreamDescriptor empty_descriptor(arcticdb::proto::descriptors::IndexDescriptor::Type type = arcticdb::proto::descriptors::IndexDescriptor::ROWCOUNT, const StreamId &id = "merged") {
+    return StreamDescriptor{StreamId{id}, IndexDescriptor{0, type}, {}};
+}
+
 inline void set_id(arcticdb::proto::descriptors::StreamDescriptor& pb_desc, StreamId id) {
     std::visit([&pb_desc](auto &&arg) {
         using IdType = std::decay_t<decltype(arg)>;

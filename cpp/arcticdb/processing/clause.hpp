@@ -217,10 +217,6 @@ struct PartitionClause {
     [[nodiscard]] bool can_combine_with_column_selection() const { return true; }
 };
 
-inline StreamDescriptor empty_descriptor() {
-    return StreamDescriptor{StreamId{"merged"}, IndexDescriptor{0, IndexDescriptor::ROWCOUNT}, {}};
-}
-
 struct AggregationClause {
     std::shared_ptr<ExecutionContext> execution_context_;
     std::vector<AggregationFactory> aggregation_operators_;
@@ -475,10 +471,16 @@ public:
 
 struct RemoveColumnPartitioningClause {
     std::shared_ptr<ExecutionContext> execution_context_;
+    const bool dedup_rows_;
+    const arcticdb::proto::descriptors::IndexDescriptor::Type descriptor_type_;
 
     RemoveColumnPartitioningClause(
-            std::shared_ptr<ExecutionContext> execution_context ) :
-            execution_context_(std::move(execution_context)) {
+            std::shared_ptr<ExecutionContext> execution_context,
+            const arcticdb::proto::descriptors::IndexDescriptor::Type descriptor_type = IndexDescriptor::ROWCOUNT,
+            bool dedup_rows = false) :
+            execution_context_(std::move(execution_context)),
+            dedup_rows_(dedup_rows),
+            descriptor_type_(descriptor_type) {
     }
     [[nodiscard]] Composite<ProcessingSegment>
     process(std::shared_ptr<Store> store, Composite<ProcessingSegment> &&p) const;

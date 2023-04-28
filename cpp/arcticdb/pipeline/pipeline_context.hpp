@@ -121,7 +121,7 @@ struct PipelineContext : public std::enable_shared_from_this<PipelineContext> {
     std::optional<std::unordered_set<std::string_view>> filter_columns_set_;
     std::optional<SegmentInMemory> multi_key_;
     std::optional<util::BitSet> overall_column_bitset_;
-    util::BitSet compacted_;
+    std::vector<unsigned char> compacted_;
     std::optional<size_t> incompletes_after_;
     bool bucketize_dynamic_ = false;
 
@@ -129,16 +129,28 @@ struct PipelineContext : public std::enable_shared_from_this<PipelineContext> {
         return PipelineContextRow{shared_from_this(), num};
     }
 
-    size_t last_slice_row() const {
-        return slice_and_keys_.empty() ? 0 : slice_and_keys_.rbegin()->slice_.row_range.second;
+    size_t last_row() const {
+        if (slice_and_keys_.empty())
+            return 0;
+        else{
+            if (bucketize_dynamic_){
+                size_t max_row = 0;
+                std::for_each(slice_and_keys_.begin(), slice_and_keys_.end(), [&max_row](const auto &sk){
+                    max_row = std::max(max_row, sk.slice_.row_range.second);
+                });
+                return max_row;
+            }
+            else
+                return slice_and_keys_.rbegin()->slice_.row_range.second;
+        }
     }
 
-    size_t first_slice_row() const {
+    size_t first_row() const {
         return slice_and_keys_.empty() ? 0 : slice_and_keys_.begin()->slice_.row_range.first;
     }
 
     size_t calc_rows() const {
-        return last_slice_row() - first_slice_row();
+        return last_row() - first_row();
     }
 
     const StreamDescriptor& descriptor() const {
