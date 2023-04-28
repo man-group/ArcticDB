@@ -28,27 +28,3 @@ jobs:
           python -m pip install -v -e .
         env:
           ARCTICDB_USING_CONDA: 1
-
-  win:
-    strategy:
-      matrix:
-        os: [windows-latest]
-
-    runs-on: ${{ matrix.os }}
-    steps:
-      - uses: actions/checkout@v3
-        with:
-          submodules: recursive
-      - name: Install Conda environment from environment.yml
-        uses: mamba-org/provision-with-micromamba@main
-
-        with:
-          environment-file: environment_win.yml
-          environment-name: arcticdb
-
-      - name: Run Python
-        shell: powershell
-        run: |
-          python -m pip install -v -e .
-        env:
-          ARCTICDB_USING_CONDA: 1
