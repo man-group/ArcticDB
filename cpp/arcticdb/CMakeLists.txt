@@ -28,6 +28,10 @@ find_package(LZ4 REQUIRED)
 find_package(prometheus-cpp CONFIG REQUIRED)
 find_package(Threads REQUIRED)
 
+if(NOT WIN32)
+    find_package(KRB5 REQUIRED)
+endif()
+
 # Libraries compiled by vcpkg and also baked into our internal image:
 if (ARCTICDB_USING_VCPKG AND NOT ARCTICDB_USING_CONDA)
     find_package(double-conversion REQUIRED)
@@ -470,7 +474,7 @@ if (SSL_LINK)
     find_package(OpenSSL REQUIRED)
     list(APPEND arcticdb_core_libraries OpenSSL::SSL)
     if (NOT WIN32)
-        list(APPEND arcticdb_core_libraries krb5)
+        list(APPEND arcticdb_core_libraries ${KRB5_LIBRARIES})
     endif()
 endif ()
 
