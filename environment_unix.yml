@@ -31,3 +31,4 @@ dependencies:
   - boto3
   - krb5
   - werkzeug
+  - moto
