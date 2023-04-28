@@ -9,19 +9,8 @@ jobs:
       matrix:
         include:
           - os: macos-latest
-            compiler: clang
-            CC: clang
-            CXX: clang++
+          - os: ubuntu-latest
 
-          - os: ubuntu-latest
-            compiler: gcc
-            CC: gcc
-            CXX: g++
-          
-          - os: ubuntu-latest
-            compiler: clang
-            CC: clang
-            CXX: clang++
             
       fail-fast: false
     runs-on: ${{ matrix.os }}
@@ -36,19 +25,13 @@ jobs:
           environment-file: environment_unix.yml
           environment-name: arcticdb
 
-      - name: Install dedicated compiler
-        shell: bash -l {0}
-        run: |
-          micromamba install ${{ matrix.compiler }}
- 
       - name: Build
         shell: bash -l {0}
         run: |
           python -m pip install -v -e .
         env:
           ARCTICDB_USING_CONDA: 1
-          CC: "$CONDA_PREFIX/bin/{{matrix.CC}}"
-          CXX: "$CONDA_PREFIX/bin/{{matrix.CXX}}"
+
 
       - name: Test with pytest
         shell: bash -l {0}

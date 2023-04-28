@@ -2,6 +2,7 @@ name: arcticdb
 channels:
   - conda-forge
 dependencies:
+  - cxx-compiler
   - lmdb
   - boost-cpp  
   - fmt
@@ -30,3 +31,4 @@ dependencies:
   - pytest
   - boto3
   - krb5
+  - werkzeug
