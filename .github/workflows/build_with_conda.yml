@@ -26,5 +26,5 @@ jobs:
       - name: Build
         shell: bash -l {0}
         run: |
-          python -m pip -e install .
+          python -m pip install -e .
 
