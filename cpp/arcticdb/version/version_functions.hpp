@@ -10,11 +10,14 @@
 #include <arcticdb/version/version_map.hpp>
 #include <arcticdb/version/version_store_objects.hpp>
 
-// without this we see a false positive warning with clanmg
+
+// without this we see a false positive warning with clang
 // version_functions.hpp:121:6: error: function 'is_indexish' is not needed and will not be emitted [-Werror,-Wunneeded-internal-declaration]
+#ifdef __clang__
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunneeded-internal-declaration"
- 
+#endif
+
 namespace arcticdb {
 
 inline std::optional<AtomKey> get_latest_undeleted_version(
@@ -379,4 +382,6 @@ inline std::set<StreamId> list_streams(
 }
 
 }
+#ifdef __clang__
 #pragma GCC diagnostic pop
+#endif
