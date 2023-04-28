@@ -1,0 +1,25 @@
+jobs:
+  unix:
+
+
+    strategy:
+    matrix:
+      os: [ubuntu-latest, macos-latest]
+
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Install Conda environment from environment.yml
+        uses: mamba-org/provision-with-micromamba@main
+
+        with:
+          environment-file: environment_unix.yml
+          environment-name: arcticdb
+
+      # Linux and macOS
+      - name: Build
+        shell: bash -l {0}
+        run: |
+          python pip -e install .
+

@@ -24,4 +24,6 @@ dependencies:
   - aws-sdk-cpp
   - gtest
   - cmake
-  - libevent
+  - bitmagic
+  - numpy
+  - pandas
