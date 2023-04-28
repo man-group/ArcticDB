@@ -14,7 +14,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v3
-
+        with:
+          submodules: recursive
       - name: Install Conda environment from environment.yml
         uses: mamba-org/provision-with-micromamba@main
 
