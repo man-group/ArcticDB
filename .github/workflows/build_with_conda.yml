@@ -25,7 +25,7 @@ jobs:
       - name: Install dedicated compiler
         shell: bash -l {0}
         run: |
-          micromamba install ${{ compiler }}
+          micromamba install ${{ matrix.compiler }}
  
       - name: Build
         shell: bash -l {0}
