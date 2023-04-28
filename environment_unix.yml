@@ -27,3 +27,5 @@ dependencies:
   - bitmagic
   - numpy
   - pandas
+  - pytest
+  - boto3
