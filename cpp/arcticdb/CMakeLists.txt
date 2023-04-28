@@ -560,10 +560,6 @@ if (HIDE_LINKED_SYMBOLS AND (NOT WIN32))
                 "--exclude-libs,--gc-sections,ALL"
                 )
     endif()
-    list(APPEND additional_link_flags
-            "-Wl"
-            "-Wl"
-            )
 endif()
 
 target_link_libraries(arcticdb_ext
