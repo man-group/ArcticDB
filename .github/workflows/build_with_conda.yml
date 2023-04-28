@@ -8,6 +8,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest]
+        compiler: [clang, gcc]
       fail-fast: false
     runs-on: ${{ matrix.os }}
     steps:
@@ -21,6 +22,10 @@ jobs:
           environment-file: environment_unix.yml
           environment-name: arcticdb
 
+      - name: Install dedicated compiler
+        shell: bash -l {0}
+        run: |
+          micromamba install ${{ compiler }}
  
       - name: Build
         shell: bash -l {0}
