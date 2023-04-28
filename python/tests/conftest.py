@@ -201,7 +201,7 @@ def version_store_factory(lib_name, tmpdir):
     try:
         yield create_version_store
     except RuntimeError as e:
-        if "mdb_" in str(e): # Dump keys when we get uncaught exception from LMDB:
+        if "mdb_" in str(e):  # Dump keys when we get uncaught exception from LMDB:
             for store in used.values():
                 print(store)
                 lt = store.library_tool()

@@ -364,6 +364,12 @@ void register_bindings(py::module &m, py::exception<arcticdb::ArcticException>& 
         .def("compact_library",
              &PythonVersionStore::compact_library,
              "Compact the whole library wherever necessary")
+        .def("is_symbol_fragmented",
+             &PythonVersionStore::is_symbol_fragmented,
+             "Check if there are enough small data segments which can be compacted")
+        .def("defragment_symbol_data",
+             &PythonVersionStore::defragment_symbol_data,
+             "Compact small data segments into larger data segments")
         .def("get_incomplete_symbols",
              &PythonVersionStore::get_incomplete_symbols,
              "Get all the symbols that have incomplete entries")
