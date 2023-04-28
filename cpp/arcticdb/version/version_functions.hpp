@@ -11,13 +11,6 @@
 #include <arcticdb/version/version_store_objects.hpp>
 
 
-// without this we see a false positive warning with clang
-// version_functions.hpp:121:6: error: function 'is_indexish' is not needed and will not be emitted [-Werror,-Wunneeded-internal-declaration]
-#ifdef __clang__
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wunneeded-internal-declaration"
-#endif
-
 namespace arcticdb {
 
 inline std::optional<AtomKey> get_latest_undeleted_version(
@@ -125,25 +118,19 @@ inline std::optional<AtomKey> get_next_version(
     }
 }
 
-namespace {
-bool is_indexish(const AtomKeyImpl& key, ARCTICDB_UNUSED const std::shared_ptr<VersionMapEntry>& _) {
-    return is_index_key_type(key.type());
-}
-}
-
 inline bool is_indexish_and_not_tombstoned(const AtomKeyImpl& key, const std::shared_ptr<VersionMapEntry>& entry) {
     return is_index_key_type(key.type()) && !entry->is_tombstoned(key);
 }
 
 template<typename MatchingAcceptor, typename PrevAcceptor, typename NextAcceptor,
-        typename KeyFilter=decltype(is_indexish)>
+        typename KeyFilter>
 inline bool get_matching_prev_and_next_versions(
         const std::shared_ptr<VersionMapEntry> entry,
         VersionId version_id,
         MatchingAcceptor matching_acceptor,
         PrevAcceptor prev_acceptor,
         NextAcceptor next_acceptor,
-        KeyFilter key_filter=is_indexish) {
+        KeyFilter key_filter) {
     bool found_version = false;
     const IndexTypeKey* last = nullptr;
 
@@ -382,6 +369,3 @@ inline std::set<StreamId> list_streams(
 }
 
 }
-#ifdef __clang__
-#pragma GCC diagnostic pop
-#endif
