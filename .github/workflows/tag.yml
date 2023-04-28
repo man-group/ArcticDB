@@ -5,10 +5,10 @@ on:
       version:
         type: string
         required: true
-      next_version:
+      bump:
         description: Bump branch to the next version
-        type: boolean
-        default: true
+        type: choice
+        options: ["No", minor, patch, prerelease, build] # Major must be changed by hand
       overwrite:
         description: Force push tag
         type: boolean
@@ -26,7 +26,8 @@ jobs:
       BASH_FUNC_tag_and_push%%: |-
         () {
           sed -ri '/^\[metadata]/, /^\[/ s/^version[[:blank:]]*=.*/version = '$2/ setup.cfg
-          git add setup.cfg
+          git add setup.cfg README.md
+          git status
           git diff --cached --exit-code || git commit -m "$1 v$2"
           set -x
           git push origin HEAD:$3 $4
@@ -40,18 +41,20 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v3.3.0
         with:
-          submodules: recursive
           token: ${{secrets.TAGGING_TOKEN}}
 
       - name: Tag required version
         run: |
           git config user.name "GitHub Actions"
           git config user.email "arcticdb@man.com"
+          git switch -C tagging ${{github.ref}}
+          # Remove the build status badge from a version tag
+          sed -i 's#<img src="https://github.com/man-group/ArcticDB/actions/workflows/build.yml/badge.svg"/>##' README.md || true
           tag_and_push "Tagging" ${{inputs.version}} refs/tags/v${{inputs.version}} ${{inputs.overwrite && '-f' || ''}}
 
       - name: Bump ${{github.ref_name}} to the next version
-        if: inputs.next_version
+        if: inputs.bump != 'No'
         run: |
-          git reset --hard ${{github.ref}}
-          new_ver=`python3 -m semver bump ${{vars.PART_TO_BUMP_AFTER_TAG}} '${{inputs.version}}'`
+          git switch -C bumping ${{github.ref}}
+          new_ver=`python3 -m semver bump ${{inputs.bump}} '${{inputs.version}}'`
           tag_and_push "Bumping to" $new_ver ${{github.ref}}

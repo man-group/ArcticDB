@@ -121,7 +121,8 @@ std::vector<VersionedItem> PythonVersionStore::batch_write(
     const std::vector<py::tuple> &items,
     const std::vector<py::object> &norms,
     const std::vector<py::object> &user_metas,
-    bool prune_previous_versions) {
+    bool prune_previous_versions,
+    bool validate_index) {
 
     std::vector<VersionId> version_ids;
     auto write_options = get_write_options();
@@ -140,7 +141,7 @@ std::vector<VersionedItem> PythonVersionStore::batch_write(
         }
     }
     auto frames = create_input_tensor_frames(stream_ids, items, norms, user_metas);
-    auto index_keys = batch_write_internal(std::move(version_ids), stream_ids, std::move(frames), std::move(de_dup_maps));
+    auto index_keys = batch_write_internal(std::move(version_ids), stream_ids, std::move(frames), std::move(de_dup_maps), validate_index);
     return batch_write_index_keys_to_version_map(index_keys, stream_update_info_map, prune_previous_versions);
 }
 
@@ -149,7 +150,8 @@ std::vector<VersionedItem> PythonVersionStore::batch_append(
     const std::vector<py::tuple> &items,
     const std::vector<py::object> &norms,
     const std::vector<py::object> &user_metas,
-    bool prune_previous_versions) {
+    bool prune_previous_versions,
+    bool validate_index) {
     auto write_options = get_write_options();
     auto stream_update_info_map = batch_get_latest_undeleted_version_and_next_version_id(store(),
                                                                                          version_map(),
@@ -163,7 +165,7 @@ std::vector<VersionedItem> PythonVersionStore::batch_append(
         existing_keys.push_back(*(update_info.previous_index_key_));
     }
     auto frames = create_input_tensor_frames(stream_ids, items, norms, user_metas);
-    auto index_keys = batch_append_internal(std::move(version_ids), stream_ids, std::move(existing_keys), std::move(frames), write_options);
+    auto index_keys = batch_append_internal(std::move(version_ids), stream_ids, std::move(existing_keys), std::move(frames), write_options, validate_index);
     return batch_write_index_keys_to_version_map(index_keys, stream_update_info_map, prune_previous_versions);
 }
 
@@ -529,7 +531,8 @@ VersionedItem PythonVersionStore::write_partitioned_dataframe(
             version_id,
             convert::py_ndf_to_frame(subkeyname, partitioned_dfs[idx], norm_meta, py::none()),
             write_options,
-            de_dup_map);
+            de_dup_map,
+            false);
         index_keys.emplace_back(versioned_item.key_);
     }
 
@@ -580,7 +583,7 @@ VersionedItem PythonVersionStore::write_versioned_composite_data(
     }
 
     auto frames = create_input_tensor_frames(sub_keys, items, norm_metas, user_metas);
-    auto index_keys = batch_write_internal(std::move(version_ids), sub_keys, std::move(frames), std::move(de_dup_maps));
+    auto index_keys = batch_write_internal(std::move(version_ids), sub_keys, std::move(frames), std::move(de_dup_maps), false);
     auto multi_key = write_multi_index_entry(store(), index_keys, stream_id, metastruct, user_meta, version_id);
     auto versioned_item = VersionedItem(to_atom(multi_key));
     version_map()->write_version(store(), versioned_item.key_);
@@ -597,10 +600,11 @@ VersionedItem PythonVersionStore::write_versioned_dataframe(
     const py::object& norm,
     const py::object& user_meta,
     bool prune_previous_versions,
-    bool sparsify_floats) {
+    bool sparsify_floats,
+    bool validate_index) {
     ARCTICDB_SAMPLE(WriteVersionedDataframe, 0)
     auto frame = convert::py_ndf_to_frame(stream_id, item, norm, user_meta);
-    auto versioned_item = write_versioned_dataframe_internal(stream_id, std::move(frame), prune_previous_versions, sparsify_floats);
+    auto versioned_item = write_versioned_dataframe_internal(stream_id, std::move(frame), prune_previous_versions, sparsify_floats, validate_index);
 
     if(cfg().symbol_list())
         symbol_list().add_symbol(store(), stream_id);
@@ -614,9 +618,10 @@ VersionedItem PythonVersionStore::append(
     const py::object &norm,
     const py::object & user_meta,
     bool upsert,
-    bool prune_previous_versions) {
+    bool prune_previous_versions,
+    bool validate_index) {
     return append_internal(stream_id, convert::py_ndf_to_frame(stream_id, item, norm, user_meta), upsert,
-                           prune_previous_versions);
+                           prune_previous_versions, validate_index);
 }
 
 VersionedItem PythonVersionStore::update(

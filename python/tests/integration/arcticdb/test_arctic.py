@@ -1079,4 +1079,3 @@ def test_reload_symbol_list(moto_s3_uri_incl_bucket, boto_client):
 
     lib.reload_symbol_list()
     assert len(get_symbol_list_keys()) == 1
-
