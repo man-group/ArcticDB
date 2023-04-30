@@ -29,31 +29,31 @@ def test_delete_version_with_update(version_store_factory, pos, sym):
     symbol = sym
 
     idx = pd.date_range("1970-01-01", periods=100, freq="D")
-    df = pd.DataFrame({"a": range(len(idx))}, index=idx, dtype=np.int64)
+    df = pd.DataFrame({"a": np.arange(len(idx), dtype='float')}, index=idx)
     original_df = df.copy(deep=True)
     lmdb_version_store.write(symbol, df)
 
     idx2 = pd.date_range("1970-01-12", periods=10, freq="D")
-    df2 = pd.DataFrame({"a": range(1000, 1000 + len(idx2))}, index=idx2, dtype=np.int64)
+    df2 = pd.DataFrame({"a": np.arange(1000, 1000 + len(idx2), dtype='float')}, index=idx2)
     lmdb_version_store.update(symbol, df2)
 
-    assert_frame_equal(lmdb_version_store.read(symbol, 0).data.astype("int64"), original_df)
+    assert_frame_equal(lmdb_version_store.read(symbol, 0).data, original_df)
 
     df.update(df2)
 
     vit = lmdb_version_store.read(symbol)
-    assert_frame_equal(vit.data.astype("float"), df)
-    assert_frame_equal(lmdb_version_store.read(symbol, 1).data.astype("float"), df)
+    assert_frame_equal(vit.data, df)
+    assert_frame_equal(lmdb_version_store.read(symbol, 1).data, df)
 
     lmdb_version_store.delete_version(symbol, pos)
     assert len(lmdb_version_store.list_versions()) == 1
 
     if pos == 0:
-        assert_frame_equal(lmdb_version_store.read(symbol).data.astype("float"), df)
-        assert_frame_equal(lmdb_version_store.read(symbol, 1).data.astype("float"), df)
+        assert_frame_equal(lmdb_version_store.read(symbol).data, df)
+        assert_frame_equal(lmdb_version_store.read(symbol, 1).data, df)
     else:
-        assert_frame_equal(lmdb_version_store.read(symbol).data.astype("int64"), original_df)
-        assert_frame_equal(lmdb_version_store.read(symbol, 0).data.astype("int64"), original_df)
+        assert_frame_equal(lmdb_version_store.read(symbol).data, original_df)
+        assert_frame_equal(lmdb_version_store.read(symbol, 0).data, original_df)
 
 
 @pytest.mark.skip(reason="Flaky test, needs investigation.")

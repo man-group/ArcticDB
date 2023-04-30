@@ -294,7 +294,7 @@ def test_filter_column_type_change(lmdb_version_store_dynamic_schema):
     q = QueryBuilder()
     q = q[q["col"] == 1]
     received = lib.read(symbol, query_builder=q).data
-    expected = df1.append(df2).query("col == 1")
+    expected = pd.concat((df1, df2)).query("col == 1")
     assert np.array_equal(expected, received)
 
     # Fixed width strings, width 1
@@ -310,5 +310,5 @@ def test_filter_column_type_change(lmdb_version_store_dynamic_schema):
     q = QueryBuilder()
     q = q[q["col"] == "a"]
     received = lib.read(symbol, query_builder=q).data
-    expected = df1.append(df2).append(df3).query("col == 'a'")
+    expected = pd.concat((df1, df2, df3)).query("col == 'a'")
     assert np.array_equal(expected, received)
