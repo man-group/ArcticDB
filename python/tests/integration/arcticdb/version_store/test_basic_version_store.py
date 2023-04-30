@@ -1555,7 +1555,7 @@ def test_batch_append(lmdb_version_store_tombstone, three_col_df):
     assert all(type(v) == VersionedItem for v in append_result)
 
     for sym in multi_data.keys():
-        expected = multi_data[sym].append(multi_append[sym])
+        expected = pd.concat((multi_data[sym], multi_append[sym]))
         vit = lmdb_version_store.read(sym)
         assert_frame_equal(expected, vit.data)
         assert vit.metadata == append_metadata[sym]

@@ -5,6 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+import datetime
 import numpy as np
 import pandas as pd
 import pytest
@@ -156,8 +157,8 @@ def test_categorical_series(lmdb_version_store):
 def test_categorical_multi_index(lmdb_version_store):
     lib = lmdb_version_store
     symbol = "test_categorical_multi_index"
-    dt1 = pd.datetime(2019, 4, 8, 10, 5, 2, 1)
-    dt2 = pd.datetime(2019, 4, 9, 10, 5, 2, 1)
+    dt1 = datetime.datetime(2019, 4, 8, 10, 5, 2, 1)
+    dt2 = datetime.datetime(2019, 4, 9, 10, 5, 2, 1)
     arr1 = [dt1, dt1, dt2, dt2]
     arr2 = [0, 1, 0, 1]
     original_df = pd.DataFrame(
@@ -166,8 +167,8 @@ def test_categorical_multi_index(lmdb_version_store):
         index=pd.MultiIndex.from_arrays([arr1, arr2], names=["datetime", "level"]),
     )
     lib.write(symbol, original_df)
-    dt1 = pd.datetime(2019, 4, 10, 10, 5, 2, 1)
-    dt2 = pd.datetime(2019, 4, 11, 10, 5, 2, 1)
+    dt1 = datetime.datetime(2019, 4, 10, 10, 5, 2, 1)
+    dt2 = datetime.datetime(2019, 4, 11, 10, 5, 2, 1)
     arr1 = [dt1, dt1, dt2, dt2]
     append_df = pd.DataFrame(
         data={"a": np.arange(20, 24)},

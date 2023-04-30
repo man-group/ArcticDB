@@ -725,10 +725,10 @@ class DataFrameNormalizer(_PandasNormalizer):
                     index_col = index_col.dt.tz_localize(tz)
 
                 levels.append(index_col)
-            if pd.__version__.startswith("1"):
-                index = pd.MultiIndex(levels=levels, codes=[[]] * len(levels), names=index_names)
-            else:
+            if pd.__version__.startswith("0"):
                 index = pd.MultiIndex(levels=levels, labels=[[]] * len(levels), names=index_names)
+            else:
+                index = pd.MultiIndex(levels=levels, codes=[[]] * len(levels), names=index_names)
             df = df.iloc[:, midx.field_count :]
             df.index = index
         else:
