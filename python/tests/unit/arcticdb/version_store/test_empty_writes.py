@@ -45,7 +45,7 @@ def test_write_no_columns_dynamic_schema(lmdb_version_store_dynamic_schema, sym)
     assert_frame_equal(lmdb_version_store_dynamic_schema.read(sym).data, df)
 
     df2 = pd.DataFrame([[1.3, 6, "test"]], columns=column_names, index=[pd.Timestamp(2)])
-    df3 = df.append(df2)
+    df3 = pd.concat([df, df2])
     # pandas will cast 'b' to float64 to fill the previous rows with NaNs
     df3["b"] = [0, 0, 6]
     df3["b"] = df3["b"].astype("int64")
@@ -58,7 +58,7 @@ def test_write_no_columns_dynamic_schema(lmdb_version_store_dynamic_schema, sym)
         columns=column_names + ["d"],
         index=[pd.Timestamp(3), pd.Timestamp(4)],
     )
-    df5 = df3.append(df4)
+    df5 = pd.concat((df3, df4))
     lmdb_version_store_dynamic_schema.append(sym, df4, dynamic_strings=True)
     assert_frame_equal(lmdb_version_store_dynamic_schema.read(sym).data, df5)
 
@@ -70,14 +70,14 @@ def test_write_no_columns_static_schema(lmdb_version_store, sym):
     assert_frame_equal(lmdb_version_store.read(sym).data, df)
 
     df2 = pd.DataFrame(index=[pd.Timestamp(2)])
-    df3 = df.append(df2)
+    df3 = pd.concat((df, df2))
 
     lmdb_version_store.append(sym, df2)
     ans = lmdb_version_store.read(sym).data
     assert_frame_equal(ans, df3)
 
     df4 = pd.DataFrame(index=[pd.Timestamp(3), pd.Timestamp(4)])
-    df5 = df3.append(df4)
+    df5 = pd.concat((df3, df4))
     lmdb_version_store.append(sym, df4, dynamic_strings=True)
     assert_frame_equal(lmdb_version_store.read(sym).data, df5)
 
@@ -115,7 +115,7 @@ def test_update_no_columns_dynamic_schema(lmdb_version_store_dynamic_schema, sym
     df2 = pd.DataFrame([[1.3, 6, "test"]], columns=column_names, index=[pd.Timestamp(0)])
     lmdb_version_store_dynamic_schema.update(sym, df2)
     # update in arctic native (outer join) behaves a bit differently than DataFrame.update (left join)
-    df2 = df2.append(pd.DataFrame([[np.nan, 0, np.nan]], columns=column_names, index=[pd.Timestamp(1)]))
+    df2 = pd.concat((df2, pd.DataFrame([[np.nan, 0, np.nan]], columns=column_names, index=[pd.Timestamp(1)])))
     ans = lmdb_version_store_dynamic_schema.read(sym).data
     assert_frame_equal(ans, df2)
 

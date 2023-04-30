@@ -33,7 +33,7 @@ def test_append_stress(lmdb_version_store):
         dt = dt + datetime.timedelta(days=1)
         new_df = dataframe_for_date(dt, identifiers)
         lmdb_version_store.append(symbol, new_df)
-        df = df.append(new_df)
+        df = pd.concat((df, new_df))
         vit = lmdb_version_store.read(symbol)
         assert_frame_equal(vit.data, df)
 
@@ -53,7 +53,7 @@ def test_write_parallel_stress(lmdb_version_store):
         dt = dt + datetime.timedelta(days=1)
         new_df = dataframe_for_date(dt, identifiers)
         dataframes.append(new_df)
-        df = df.append(new_df)
+        df = pd.concat((df, new_df))
 
     random.shuffle(dataframes)
     for d in dataframes:
@@ -82,7 +82,7 @@ def test_write_parallel_stress_schema_change(lmdb_version_store):
         new_df = pd.DataFrame(data=vals, index=index)
 
         dataframes.append(new_df)
-        df = df.append(new_df)
+        df = pd.concat((df, new_df))
         dt = dt + datetime.timedelta(days=1)
 
     random.shuffle(dataframes)
@@ -116,7 +116,7 @@ def test_write_parallel_stress_schema_change_strings(lmdb_version_store_big_map)
         new_df = pd.DataFrame(data=vals, index=index)
 
         dataframes.append(new_df)
-        df = df.append(new_df)
+        df = pd.concat((df, new_df))
         dt = dt + datetime.timedelta(days=1)
 
     random.shuffle(dataframes)
@@ -150,7 +150,7 @@ def test_write_parallel_stress_schema_change_strings_with_nan(lmdb_version_store
         new_df = pd.DataFrame(data=vals, index=index)
 
         dataframes.append(new_df)
-        df = df.append(new_df)
+        df = pd.concat((df, new_df))
         dt = dt + datetime.timedelta(days=1)
 
     random.shuffle(dataframes)
@@ -184,7 +184,7 @@ def test_change_to_dynamic_strings(lmdb_version_store):
             lmdb_version_store.append(symbol, new_df, dynamic_strings=False, write_if_missing=True)
         else:
             lmdb_version_store.append(symbol, new_df, dynamic_strings=True)
-        df = df.append(new_df)
+        df = pd.concat((df, new_df))
         dt = dt + datetime.timedelta(days=1)
 
     vit = lmdb_version_store.read(symbol)
@@ -209,7 +209,7 @@ def test_write_parallel_stress_many_chunks(lmdb_version_store):
         new_df = pd.DataFrame(data=vals, index=index)
 
         dataframes.append(new_df)
-        df = df.append(new_df)
+        df = pd.concat((df, new_df))
         dt = dt + datetime.timedelta(days=1)
 
     random.shuffle(dataframes)
