@@ -139,7 +139,9 @@ InputTensorFrame py_ndf_to_frame(
     // Fill tensors
     auto col_names = item[1].cast<std::vector<std::string>>();
     auto col_vals = item[3].cast<std::vector<py::object>>();
+    auto sorted = item[4].cast<SortedValue>();
 
+    res.set_sorted(sorted);
     std::vector<std::pair<std::string_view, NativeTensor>> tensors;
     tensors.reserve(idx_names.size() + col_names.size());
 
