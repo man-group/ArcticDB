@@ -184,7 +184,7 @@ public:
                     return;
 
                 follow_version_chain(store, ref_entry, entry, load_params);
-
+                break;
             } catch (const std::exception &err) {
                 // We retry to read via ref key because it could have been modified by someone else (e.g. compaction)
                 log::version().warn(
@@ -194,9 +194,8 @@ public:
                 entry->keys_.clear();
                 continue;
             }
-            break;
         }
-        util::check_rte(max_trials >= 0,"Couldn't read via ref key even after multiple trials");
+        util::check_rte(max_trials >= 0, "Couldn't read via ref key even after multiple attempts");
         if (validate_)
             entry->validate();
     }
@@ -463,7 +462,10 @@ public:
         remove_entry_version_keys(store, old_entry, stream_id);
     }
 
-
+    /**
+     * @param skip_compat Do not check the legacy "journal" entries
+     * @param iterate_on_failure Use `iterate_type` (slow!) if the linked-list-based load logic throws
+     */
     std::shared_ptr<VersionMapEntry> check_reload(
         std::shared_ptr<Store> store,
         StreamIdArg stream_id,
@@ -650,20 +652,23 @@ private:
         const auto clock_unsync_tolerance = ConfigsMap::instance()->get_int("VersionMap.UnsyncTolerance",
                                                                             DEFAULT_CLOCK_UNSYNC_TOLERANCE);
         entry->last_reload_time_ = Clock::nanos_since_epoch() - clock_unsync_tolerance;
-        entry->load_type_ = load_param.load_type_;
+        entry->load_type_ = LoadType::NOT_LOADED; // FUTURE: to make more thread-safe with #368
 
         try {
             auto temp = std::make_shared<VersionMapEntry>(*entry);
             load_via_ref_key(store, stream_id, load_param, temp);
             std::swap(*entry, *temp);
+            entry->load_type_ = load_param.load_type_;
         }
         catch (const std::runtime_error &err) {
-            ARCTICDB_DEBUG(log::version(),
-                    "Loading versions from storage via ref key failed with error: {}, if iterate_on_failure is set will continue to load via iteration",
-                    err.what());
+            if (iterate_on_failure) {
+                log::version().info(
+                        "Loading versions from storage via ref key failed with error: {}, will load via iteration",
+                        err.what());
+            } else {
+                throw;
+            }
         }
-        // Load via iteration always does a full load & sort, as we don't want to rely on things being in a particular
-        // order in the storage
         if (iterate_on_failure && entry->empty()) {
             (void) load_via_iteration(store, stream_id, entry);
             entry->load_type_ = LoadType::LOAD_ALL;

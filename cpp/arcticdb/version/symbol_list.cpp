@@ -5,7 +5,7 @@
  * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
  */
 
-#include <arcticdb/version/symbol_list.hpp>
+#include <version/symbol_list.hpp>
 
 namespace arcticdb {
 
@@ -13,74 +13,95 @@ using namespace arcticdb::stream;
 
 static const StreamId compaction_id {CompactionId};
 
-    SymbolList::CollectionType SymbolList::load_symbols(const std::shared_ptr<Store>& store, bool no_compaction) {
-        auto all_keys = get_all_symbol_list_keys(store);
-        auto maybe_last_compaction = last_compaction(all_keys);
-        if(!maybe_last_compaction && !no_compaction) {
-            SYMBOL_LIST_RUNTIME_LOG("Failed to find most recent compaction, reloading all");
-            StorageLock lock{CompactionLockName};
-            timestamp creation_ts = store->current_timestamp();
-            // We choose the creation_ts for the compacted key just before we do the version key iteration
-            auto symbols = load_from_version_keys(store);
-            try {
-                if (lock.try_lock(store)) {
-                    SYMBOL_LIST_RUNTIME_LOG("Got lock");
-                    OnExit on_exit([&, store = store]() { lock.unlock(store); });
-                    write_symbols(store, symbols, compaction_id, creation_ts).get();
-                    delete_keys(store, all_keys);
-                } else {
-                    SYMBOL_LIST_RUNTIME_LOG("Not writing symbols as another write is in progress");
-                }
-            } catch (const storage::PermissionException& ex) {
-                SYMBOL_LIST_RUNTIME_LOG("Can't compact symbol list in read-only mode");
-            } catch (const std::system_error& ex) {
-                SYMBOL_LIST_RUNTIME_LOG("Caught error in symbol list write: {}", ex.what());
-            }
-            // Acceptable to swallow the exceptions above and return symbols because it is loaded from the source
-            // (version keys) without involving the (inaccessible) symbol list cache:
-            return symbols;
-        }
-        else {
-            if(all_keys.size() > max_delta_ && !no_compaction) {
-                SYMBOL_LIST_RUNTIME_LOG("Symbol chain too long, doing compaction");
-                return compact(store, all_keys);
-            }
-            else {
-                auto compaction_and_deltas = KeyVector{all_keys.begin() + maybe_last_compaction.value_or(0), all_keys.end()};
-                return load_from_storage(store, compaction_and_deltas);
-            }
-        }
-    }
+struct SymbolList::LoadResult {
+    mutable KeyVector symbol_list_keys;
+    /** The last CompactionId key in symbol_list_keys, if any. */
+    std::optional<KeyVectorItr> maybe_last_compaction;
+    mutable CollectionType symbols;
+    arcticdb::timestamp timestamp;
 
-    SymbolList::CollectionType SymbolList::compact(std::shared_ptr<Store> store, const std::vector<AtomKey>& symbol_keys) {
+    KeyVector&& detach_symbol_list_keys() const { return std::move(symbol_list_keys); }
+    CollectionType&& detach_symbols() const { return std::move(symbols); }
+};
+
+SymbolList::LoadResult SymbolList::attempt_load(const std::shared_ptr<Store>& store) {
+    SYMBOL_LIST_RUNTIME_LOG("Symbol list load attempt");
+    LoadResult load_result;
+    // See RFC 006 for the explanation of each step below.
+    // Step 0
+    load_result.symbol_list_keys = get_all_symbol_list_keys(store);
+    // Step 1
+    load_result.maybe_last_compaction = last_compaction(load_result.symbol_list_keys);
+
+    if (load_result.maybe_last_compaction) {
+        load_result.timestamp = load_result.symbol_list_keys.rbegin()->creation_ts(); // Per step 5
+        load_result.symbols = load_from_symbol_list_keys(store,
+                {*load_result.maybe_last_compaction, load_result.symbol_list_keys.cend()});
+    } else {
+        load_result.timestamp = store->current_timestamp();
+        load_result.symbols = load_from_version_keys(store);
+    }
+    return load_result;
+}
+
+SymbolList::CollectionType SymbolList::load(const std::shared_ptr<Store>& store, bool no_compaction) {
+    // Steps 0-1
+    const LoadResult load_result = ExponentialBackoff<std::runtime_error>(100, 2000)
+            .go([this, &store]() { return attempt_load(store); });
+
+    // Step 2
+    if (!no_compaction && (load_result.symbol_list_keys.size() > max_delta_ || !load_result.maybe_last_compaction)) {
+        SYMBOL_LIST_RUNTIME_LOG("Compaction necessary. Obtaining lock...");
         try {
-            StorageLock lock{CompactionLockName};
-            SYMBOL_LIST_RUNTIME_LOG("Doing symbol list compaction with {} keys", symbol_keys.size());
-            if(lock.try_lock(store)) {
-                SYMBOL_LIST_RUNTIME_LOG("Got lock");
-                OnExit on_exit([&, store=store] () { lock.unlock(store); });
-                // Rescan keys inside the lock just in case another compaction
-                // is just finishing (N.B. unlikely)
-                auto all_symbols = get_all_symbol_list_keys(store);
-                auto symbols = load_from_storage(store, all_symbols);
-                write_symbols(store, symbols, compaction_id, symbol_keys.rbegin()->creation_ts()).get();
+            // Step 3
+            if (StorageLock lock{CompactionLockName}; lock.try_lock(store)) {
+                OnExit x([&lock, &store] { lock.unlock(store); });
 
-
-                delete_keys(store, all_symbols);
-                return symbols;
+                // Step 4
+                SYMBOL_LIST_RUNTIME_LOG("Checking whether we still need to compact under lock");
+                if (can_update_symbol_list(store, load_result.maybe_last_compaction)) {
+                    // Step 5
+                    auto written = write_symbols(store, load_result.symbols, compaction_id, load_result.timestamp).get();
+                    delete_keys(store, load_result.detach_symbol_list_keys(), std::get<AtomKey>(written)).get();
+                }
             } else {
-                SYMBOL_LIST_RUNTIME_LOG("Didn't get lock, not compacting");
+                SYMBOL_LIST_RUNTIME_LOG("Not compacting the symbol list due to lock contention");
             }
-        } catch(const storage::PermissionException& ex) {
-            SYMBOL_LIST_RUNTIME_LOG("Can't compact symbol list in read-only mode, loading from storage");
-        } catch (const std::system_error& ex) {
-            SYMBOL_LIST_RUNTIME_LOG("Caught error in symbol list write: {}", ex.what());
+        } catch (const storage::PermissionException& ex) {
+            // Note: this only reflects AN's permission check and is not thrown by the Storage
+            SYMBOL_LIST_RUNTIME_LOG("Not compacting the symbol list due to lack of permission");
+        } catch (const std::exception& ex) {
+            log::version().warn("Ignoring the error while trying to compact the symbol list: {}", ex.what());
         }
-
-        SYMBOL_LIST_RUNTIME_LOG("Fallback load_from_storage");
-        auto all_symbols = get_all_symbol_list_keys(store);
-        return load_from_storage(store, all_symbols);
     }
+
+    return load_result.detach_symbols();
+}
+
+bool SymbolList::can_update_symbol_list(const std::shared_ptr<Store>& store,
+        const std::optional<KeyVectorItr>& maybe_last_compaction) {
+    // See step 4 implementation details table:
+    bool found_last = false;
+    bool has_newer = false;
+
+    if (maybe_last_compaction.has_value()) {
+        // Symbol list keys source
+        store->iterate_type(KeyType::SYMBOL_LIST,
+                [&found_last, &has_newer, &last_compaction_key = *maybe_last_compaction.value()](auto&& key) {
+                    auto atom = to_atom(key);
+                    if (atom == last_compaction_key) found_last = true;
+                    if (atom.creation_ts() > last_compaction_key.creation_ts()) has_newer = true;
+            }, std::get<std::string>(compaction_id));
+    } else {
+        // Version keys source
+        store->iterate_type(KeyType::SYMBOL_LIST, [&has_newer](auto&&) {
+                has_newer = true;
+            }, std::get<std::string>(compaction_id));
+    }
+
+    SYMBOL_LIST_RUNTIME_LOG("found_last={}, has_newer={}", found_last, has_newer);
+    return (!maybe_last_compaction || found_last) && !has_newer;
+}
 
     void SymbolList::write_journal(const std::shared_ptr<Store>& store, const StreamId& symbol, std::string action) {
         SegmentInMemory seg{journal_stream_descriptor(action, symbol)};
@@ -98,6 +119,7 @@ static const StreamId compaction_id {CompactionId};
     }
 
     SymbolList::CollectionType SymbolList::load_from_version_keys(const std::shared_ptr<Store>& store) {
+        SYMBOL_LIST_RUNTIME_LOG("Loading symbols from version keys");
         std::vector<StreamId> stream_ids;
         store->iterate_type(KeyType::VERSION_REF, [&] (const auto& key) {
             auto id = variant_key_id(key);
@@ -147,8 +169,10 @@ static const StreamId compaction_id {CompactionId};
         return store->write(KeyType::SYMBOL_LIST, 0, stream_id, creation_ts, 0, 0, std::move(list_segment));
     }
 
-    SymbolList::CollectionType SymbolList::load_from_storage(const std::shared_ptr<StreamSource>& store, const std::vector<AtomKey>& keys) {
-        SYMBOL_LIST_RUNTIME_LOG("Loading from storage");
+    SymbolList::CollectionType SymbolList::load_from_symbol_list_keys(
+            const std::shared_ptr<StreamSource>& store,
+            const folly::Range<KeyVectorItr>& keys) {
+        SYMBOL_LIST_RUNTIME_LOG("Loading symbols from symbol list keys");
         bool read_compaction = false;
         CollectionType symbols{};
         for(const auto& key : keys) {
@@ -217,27 +241,31 @@ static const StreamId compaction_id {CompactionId};
         return output;
     }
 
-    void SymbolList::delete_keys(
-            std::shared_ptr<Store> store, const KeyVector& lists) {
-        std::vector<VariantKey> vars;
-        vars.reserve(lists.size());
-        for(const auto& atom_key: lists)
-            vars.emplace_back(VariantKey{atom_key});
-        store->remove_keys(vars).get();
+    folly::Future<std::vector<Store::RemoveKeyResultType>>
+    SymbolList::delete_keys(const std::shared_ptr<Store>& store, KeyVector&& to_remove, const AtomKey& exclude) {
+        std::vector<VariantKey> variant_keys;
+        variant_keys.reserve(to_remove.size());
+        for(auto& atom_key: to_remove) {
+            // Corner case: if the newly written Compaction key (exclude) has the same timestamp as an existing one
+            // (e.g. when a previous compaction round failed in the deletion step), we don't want to delete the former
+            if (atom_key != exclude) {
+                variant_keys.emplace_back(std::move(atom_key));
+            }
+        }
+
+        return store->remove_keys(variant_keys);
     }
 
-    std::optional<SymbolList::KeyVector::difference_type> SymbolList::last_compaction(const KeyVector& keys) {
+    auto SymbolList::last_compaction(const KeyVector& keys) -> std::optional<KeyVectorItr> {
         auto pos = std::find_if(keys.rbegin(), keys.rend(), [] (const auto& key) {
             return key.id() == compaction_id;
         }) ;
 
-        if(pos == keys.rend())
+        if (pos == keys.rend()) {
             return std::nullopt;
-
-        auto forward_pos = std::distance(std::begin(keys), pos.base()) - 1;
-        util::check(keys[forward_pos].id() == compaction_id,
-                "Compaction point {} is incorrect in vector of size {}", forward_pos, keys.size());
-        return std::make_optional(forward_pos);
+        } else {
+            return { (pos + 1).base() }; // reverse_iterator -> forward itr has an offset of 1 per docs
+        }
     }
 
 } //namespace arcticdb

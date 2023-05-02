@@ -9,7 +9,7 @@
 
 namespace arcticdb {
 std::shared_ptr<StorageFailureSimulator> StorageFailureSimulator::instance(){
-    std::call_once(StorageFailureSimulator::init_flag_, &StorageFailureSimulator::init);
+    std::call_once(StorageFailureSimulator::init_flag_, &StorageFailureSimulator::reset);
     return StorageFailureSimulator::instance_;
 }
 
