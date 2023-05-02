@@ -536,13 +536,9 @@ if (HIDE_LINKED_SYMBOLS AND (NOT WIN32))
 
     if (NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")
         list(APPEND additional_link_flags
-                "--exclude-libs,--gc-sections,ALL"
-                )
+            "-Wl,--exclude-libs,ALL"
+            "-Wl,--gc-sections")
     endif()
-    list(APPEND additional_link_flags
-            "-Wl"
-            "-Wl"
-            )
 endif()
 
 target_link_libraries(arcticdb_ext
