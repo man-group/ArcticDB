@@ -13,14 +13,12 @@
 #include <arcticdb/python/arctic_version.hpp>
 #include <arcticdb/python/python_utils.hpp>
 #include <arcticdb/pipeline/query.hpp>
-#include <folly/Singleton.h>
 #include <arcticdb/storage/mongo/mongo_instance.hpp>
 #include <arcticdb/processing/operation_types.hpp>
 #include <arcticdb/processing/expression_node.hpp>
 #include <arcticdb/processing/execution_context.hpp>
 #include <arcticdb/pipeline/value_set.hpp>
 #include <arcticdb/python/adapt_read_dataframe.hpp>
-#include <arcticdb/version/snapshot.hpp>
 #include <arcticdb/version/schema_checks.hpp>
 
 namespace arcticdb::version_store {

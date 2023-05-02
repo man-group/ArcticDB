@@ -10,7 +10,7 @@ import time
 from pandas import Timestamp
 import pytest
 
-from arcticdb_ext.exceptions import NoSuchVersionException
+from arcticdb.exceptions import NoSuchVersionException
 
 
 def test_read_descriptor(lmdb_version_store, one_col_df):
