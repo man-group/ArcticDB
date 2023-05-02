@@ -22,15 +22,13 @@ from datetime import datetime
 from numpy.testing import assert_array_equal
 from pytz import timezone
 
-from arcticdb.exceptions import ArcticNativeNotYetImplemented
-from arcticdb_ext.exceptions import InternalException, NoSuchVersionException
+from arcticdb.exceptions import ArcticNativeNotYetImplemented, InternalException, NoSuchVersionException, StreamDescriptorMismatch
 from arcticdb.flattener import Flattener
 from arcticdb.version_store import NativeVersionStore
 from arcticdb.version_store._custom_normalizers import CustomNormalizer, register_normalizer
 from arcticdb.version_store._store import UNSUPPORTED_S3_CHARS, MAX_SYMBOL_SIZE, VersionedItem
 from arcticdb_ext.exceptions import _ArcticLegacyCompatibilityException
 from arcticdb_ext.storage import KeyType, NoDataFoundException
-from arcticdb_ext.version_store import StreamDescriptorMismatch
 from arcticc.pb2.descriptors_pb2 import NormalizationMetadata  # Importing from arcticdb dynamically loads arcticc.pb2
 from arcticdb.util.test import (
     sample_dataframe,
