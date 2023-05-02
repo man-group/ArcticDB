@@ -119,7 +119,7 @@ class StreamWriter : boost::noncopyable {
         auto verify = [version_id = version_id_, stream_id = stream_id()](const VariantKey &key) {
             util::check_arg(version_id == to_atom(key).version_id(), "Invalid key expected version_id={}, actual={}",
                             version_id, key);
-            util::check_arg(stream_id == to_atom(key).id(), "Invalid key, expected stream_id={}, actual={}",
+            util::check_arg(stream_id == to_atom(key).id(), "Invalid key, expected symbol={}, actual={}",
                             stream_id, key);
         };
 
