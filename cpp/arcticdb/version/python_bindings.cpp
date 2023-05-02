@@ -311,6 +311,12 @@ void register_bindings(py::module &m) {
             .value("OR", OperationType::OR)
             .value("XOR", OperationType::XOR);
 
+    py::enum_<SortedValue>(version, "SortedValue")
+            .value("UNKNOWN", SortedValue::UNKNOWN)
+            .value("UNSORTED", SortedValue::UNSORTED)
+            .value("ASCENDING", SortedValue::ASCENDING)
+            .value("DESCENDING", SortedValue::DESCENDING);
+
     py::class_<ColumnName>(version, "ColumnName")
             .def(py::init([](const std::string& name) {
                 return ColumnName(name);
@@ -508,6 +514,9 @@ void register_bindings(py::module &m) {
         .def("read_descriptor",
              &PythonVersionStore::read_descriptor,
              "Get back the descriptor for a symbol.")
+        .def("batch_read_descriptor",
+             &PythonVersionStore::batch_read_descriptor,
+             "Get back the descriptor of a list of symbols.")
         .def("restore_version",
              [&](PythonVersionStore& v,  StreamId sid, const VersionQuery& version_query) {
                 auto [vit, tsd] = v.restore_version(sid, version_query);
