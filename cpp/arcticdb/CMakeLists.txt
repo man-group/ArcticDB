@@ -43,27 +43,6 @@ if (ARCTICDB_USING_VCPKG)
 
     find_package(zstd CONFIG REQUIRED)  # "CONFIG" bypasses our cpp/CMake/FindZstd.cmake module
     set(Zstd_LIBRARY $<IF:$<TARGET_EXISTS:zstd::libzstd_shared>,zstd::libzstd_shared,zstd::libzstd_static>)
-elseif(ARCTICDB_USING_CONDA)
-    find_package(double-conversion REQUIRED)
-    find_package(Libevent  REQUIRED)
-
-    find_package(Protobuf REQUIRED)
-    set(Protobuf_lite_LIBRARY protobuf::libprotobuf-lite)
-    set(Protobuf_LIBRARY protobuf::libprotobuf)
-
-    find_package(mongocxx REQUIRED)
-    find_package(bsoncxx REQUIRED)
-    set(ARCTICDB_MONGO_LIBS mongo::mongocxx_shared mongo::bsoncxx_shared)
-
-    find_package(zstd CONFIG REQUIRED)  # "CONFIG" bypasses our cpp/CMake/FindZstd.cmake module
-    set(Zstd_LIBRARY $<IF:$<TARGET_EXISTS:zstd::libzstd_shared>,zstd::libzstd_shared,zstd::libzstd_static>)
-
-
-    get_target_property(NEW_FOLLY_DEPS Folly::folly_deps INTERFACE_INCLUDE_DIRECTORIES)
-    message(STATUS "NEW_FOLLY_DEPS" ${NEW_FOLLY_DEPS})
-    list(REMOVE_ITEM NEW_FOLLY_DEPS "/usr/local/opt/openssl/include" )
-    set_target_properties(Folly::folly_deps PROPERTIES INTERFACE_INCLUDE_DIRECTORIES "${NEW_FOLLY_DEPS}")
-
 else()
     find_library(Protobuf_lite_LIBRARY NAMES libprotobuf-lite protobuf-lite REQUIRED)
     find_library(Protobuf_LIBRARY NAMES libprotobuf protobuf REQUIRED)
@@ -502,7 +481,7 @@ target_link_libraries(arcticdb_core PRIVATE
         ${AWSSDK_LINK_LIBRARIES}
         )
 
-#GENERATE_EXPORT_HEADER(arcticdb_core)
+GENERATE_EXPORT_HEADER(arcticdb_core)
 
 if (NOT WIN32)
     add_compile_options("-Werror")
