@@ -44,6 +44,10 @@ struct InputTensorFrame {
         offset = off;
     }
 
+    void set_sorted(SortedValue sorted) {
+        desc.set_sorted(sorted);
+    }
+
     void set_bucketize_dynamic(bool bucketize) const {
         bucketize_dynamic = bucketize;
     }

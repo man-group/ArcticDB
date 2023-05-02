@@ -65,7 +65,8 @@ class PythonVersionStore : public LocalVersionedEngine {
         const py::object &norm,
         const py::object & user_meta,
         bool prune_previous_versions,
-        bool allow_sparse);
+        bool allow_sparse,
+        bool validate_index);
 
     VersionedItem write_versioned_composite_data(
         const StreamId& stream_id,
@@ -92,7 +93,8 @@ class PythonVersionStore : public LocalVersionedEngine {
         const py::object &norm,
         const py::object & user_meta,
         bool upsert,
-        bool prune_previous_versions);
+        bool prune_previous_versions,
+        bool validate_index);
 
     VersionedItem update(
         const StreamId& stream_id,
@@ -160,6 +162,10 @@ class PythonVersionStore : public LocalVersionedEngine {
         const StreamId& stream_id,
         const VersionQuery& version_query
     );
+
+    std::vector<std::pair<VersionedItem, py::object>> batch_read_descriptor(
+        const std::vector<StreamId>& stream_ids,
+        const std::vector<VersionQuery>& version_queries);
 
     std::pair<VersionedItem, py::object> read_descriptor(
         const StreamId& stream_id,
@@ -235,7 +241,8 @@ class PythonVersionStore : public LocalVersionedEngine {
         const std::vector<py::tuple> &items,
         const std::vector<py::object> &norms,
         const std::vector<py::object> &user_metas,
-        bool prune_previous_versions);
+        bool prune_previous_versions,
+        bool validate_index);
 
     std::vector<VersionedItem> batch_write_metadata(
         std::vector<StreamId> stream_ids,
@@ -247,7 +254,8 @@ class PythonVersionStore : public LocalVersionedEngine {
         const std::vector<py::tuple> &items,
         const std::vector<py::object> &norms,
         const std::vector<py::object> &user_metas,
-        bool prune_previous_versions);
+        bool prune_previous_versions,
+        bool ensre_sorted);
 
     std::vector<std::pair<VersionedItem, arcticdb::proto::descriptors::TimeSeriesDescriptor>> batch_restore_version(
         const std::vector<StreamId>& id,
