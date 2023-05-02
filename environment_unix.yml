@@ -34,3 +34,4 @@ dependencies:
   - moto
   - pytest-server-fixtures
   - hypothesis
+  - pytest-sugar
