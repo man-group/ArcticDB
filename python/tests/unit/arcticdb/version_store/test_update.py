@@ -15,8 +15,9 @@ import random
 from arcticdb.config import Defaults
 from arcticdb.version_store.helper import ArcticMemoryConfig
 from arcticdb.util.test import random_strings_of_length, random_string, random_floats, assert_frame_equal
-from arcticdb_ext.exceptions import InternalException
+from arcticdb_ext.exceptions import InternalException, SortingException
 from tests.util.date import DateRange
+from pandas import MultiIndex
 
 
 def test_update_single_dates(lmdb_version_store_dynamic_schema):
@@ -88,13 +89,7 @@ def gen_params():
     "col_per_group, start_increment, end_increment, update_start, iterations, start_dist", gen_params()
 )
 def test_update_repeatedly_dynamic_schema(
-    version_store_factory,
-    col_per_group,
-    start_increment,
-    end_increment,
-    update_start,
-    iterations,
-    start_dist,
+    version_store_factory, col_per_group, start_increment, end_increment, update_start, iterations, start_dist
 ):
     lmdb_version_store = version_store_factory(col_per_group=col_per_group, row_per_segment=2, dynamic_schema=True)
 
@@ -126,13 +121,7 @@ def test_update_repeatedly_dynamic_schema(
     "col_per_group, start_increment, end_increment, update_start, iterations, start_dist", gen_params()
 )
 def test_update_repeatedly_dynamic_schema_hashed(
-    version_store_factory,
-    col_per_group,
-    start_increment,
-    end_increment,
-    update_start,
-    iterations,
-    start_dist,
+    version_store_factory, col_per_group, start_increment, end_increment, update_start, iterations, start_dist
 ):
     lmdb_version_store = version_store_factory(col_per_group=col_per_group, row_per_segment=2, dynamic_schema=True)
 
@@ -180,13 +169,7 @@ def test_update_repeatedly_dynamic_schema_hashed(
     "col_per_group, start_increment, end_increment, update_start, iterations, start_dist", gen_params()
 )
 def test_update_repeatedly(
-    version_store_factory,
-    col_per_group,
-    start_increment,
-    end_increment,
-    update_start,
-    iterations,
-    start_dist,
+    version_store_factory, col_per_group, start_increment, end_increment, update_start, iterations, start_dist
 ):
     lmdb_version_store = version_store_factory(col_per_group=col_per_group, row_per_segment=2)
 
@@ -218,13 +201,7 @@ def test_update_repeatedly(
     "col_per_group, start_increment, end_increment, update_start, iterations, start_dist", gen_params()
 )
 def test_update_repeatedly_with_strings(
-    version_store_factory,
-    col_per_group,
-    start_increment,
-    end_increment,
-    update_start,
-    iterations,
-    start_dist,
+    version_store_factory, col_per_group, start_increment, end_increment, update_start, iterations, start_dist
 ):
     lmdb_version_store = version_store_factory(col_per_group=col_per_group, row_per_segment=2)
 
@@ -408,14 +385,26 @@ def test_update_single_line(lmdb_version_store_dynamic_schema):
         x[idx] = True
         if first:
             lmdb_version_store_dynamic_schema.write(symbol, df[idx:])
+            info = lmdb_version_store_dynamic_schema.get_info(symbol)
+            print(info["sorted"])
+            assert info["sorted"] == "ASCENDING"
             first = False
         else:
+            info = lmdb_version_store_dynamic_schema.get_info(symbol)
+            print(info["sorted"])
+            assert info["sorted"] == "ASCENDING"
             lmdb_version_store_dynamic_schema.update(symbol, df[idx:])
+            info = lmdb_version_store_dynamic_schema.get_info(symbol)
+            print(info["sorted"])
+            assert info["sorted"] == "ASCENDING"
 
     vit = lmdb_version_store_dynamic_schema.read(symbol)
     df.sort_index(axis=1, inplace=True)
     result = vit.data
     result.sort_index(axis=1, inplace=True)
+    info = lmdb_version_store_dynamic_schema.get_info(symbol)
+    print(info["sorted"])
+    assert info["sorted"] == "ASCENDING"
     assert_frame_equal(df, vit.data)
 
 
@@ -458,3 +447,97 @@ def test_non_cstyle_numpy_update(lmdb_version_store):
     after_arctic = lmdb_version_store.read(symbol).data
     before_arctic = pd.concat([sorted_df_1.iloc[:-1], sorted_df_2])
     assert_frame_equal(after_arctic, before_arctic)
+
+
+def test_update_non_sorted_exception(lmdb_version_store):
+    symbol = "bad_update"
+
+    num_initial_rows = 20
+    initial_timestamp = pd.Timestamp("2019-01-01")
+    dtidx = pd.date_range(initial_timestamp, periods=num_initial_rows)
+    df = pd.DataFrame({"c": np.arange(0, num_initial_rows, dtype=np.int64)}, index=dtidx)
+    assert df.index.is_monotonic_increasing == True
+
+    lmdb_version_store.write(symbol, df)
+    info = lmdb_version_store.get_info(symbol)
+    assert info["sorted"] == "ASCENDING"
+
+    num_rows = 20
+    initial_timestamp = pd.Timestamp("2020-01-01")
+    dtidx = np.roll(pd.date_range(initial_timestamp, periods=num_rows), 3)
+    df2 = pd.DataFrame({"c": np.arange(0, num_rows, dtype=np.int64)}, index=dtidx)
+    assert df2.index.is_monotonic_increasing == False
+
+    with pytest.raises(SortingException):
+        lmdb_version_store.update(symbol, df2)
+
+def test_update_existing_non_sorted_exception(lmdb_version_store):
+    symbol = "bad_update"
+
+    num_initial_rows = 20
+    initial_timestamp = pd.Timestamp("2019-01-01")
+    dtidx = np.roll(pd.date_range(initial_timestamp, periods=num_initial_rows), 3)
+    df = pd.DataFrame({"c": np.arange(0, num_initial_rows, dtype=np.int64)}, index=dtidx)
+    assert df.index.is_monotonic_increasing == False
+
+    lmdb_version_store.write(symbol, df)
+    info = lmdb_version_store.get_info(symbol)
+    assert info["sorted"] == "UNSORTED"
+
+    num_rows = 20
+    initial_timestamp = pd.Timestamp("2020-01-01")
+    dtidx = pd.date_range(initial_timestamp, periods=num_rows)
+    df2 = pd.DataFrame({"c": np.arange(0, num_rows, dtype=np.int64)}, index=dtidx)
+    assert df2.index.is_monotonic_increasing == True
+
+    with pytest.raises(SortingException):
+        lmdb_version_store.update(symbol, df2)
+
+def test_update_non_sorted_multi_index_exception(lmdb_version_store):
+    symbol = "bad_write"
+    num_initial_rows = 20
+    num_rows = 20
+    initial_timestamp = pd.Timestamp("2020-01-01")
+    dtidx1 = pd.date_range(initial_timestamp, periods=num_initial_rows)
+    dtidx2 = np.arange(0, num_initial_rows)
+    dtidx = np.roll(pd.date_range(initial_timestamp, periods=num_initial_rows), 3)
+    df = pd.DataFrame(
+        {"c": np.arange(0, num_rows, dtype=np.int64)},
+        index=pd.MultiIndex.from_arrays([dtidx1, dtidx2], names=["datetime", "level"]),
+    )
+    assert isinstance(df.index, MultiIndex) == True
+    assert df.index.is_monotonic_increasing == True
+    lmdb_version_store.write(symbol, df)
+
+    num_rows = 20
+    initial_timestamp = pd.Timestamp("2020-01-01")
+    dtidx1 = np.roll(pd.date_range(initial_timestamp, periods=num_initial_rows), 3)
+    dtidx2 = np.arange(0, num_initial_rows)
+    dtidx = np.roll(pd.date_range(initial_timestamp, periods=num_initial_rows), 3)
+    df = pd.DataFrame(
+        {"c": np.arange(0, num_rows, dtype=np.int64)},
+        index=pd.MultiIndex.from_arrays([dtidx1, dtidx2], names=["datetime", "level"]),
+    )
+    assert isinstance(df.index, MultiIndex) == True
+    assert df.index.is_monotonic_increasing == False
+    lmdb_version_store.write(symbol, df)
+
+    with pytest.raises(SortingException):
+        lmdb_version_store.update(symbol, df)
+
+
+def test_update_non_sorted_range_index_exception(lmdb_version_store):
+    symbol = "bad_write"
+    num_rows = 20
+    dtidx = pd.RangeIndex(0, num_rows, 1)
+    df = pd.DataFrame({"c": np.arange(0, num_rows, dtype=np.int64)}, index=dtidx)
+    assert df.index.is_monotonic_increasing == True
+    lmdb_version_store.write(symbol, df)
+
+    symbol = "bad_write"
+    num_rows = 20
+    dtidx = pd.RangeIndex(0, num_rows, 1)
+    df = pd.DataFrame({"c": np.arange(0, num_rows, dtype=np.int64)}, index=dtidx)
+    assert df.index.is_monotonic_increasing == True
+    with pytest.raises(InternalException):
+        lmdb_version_store.update(symbol, df)

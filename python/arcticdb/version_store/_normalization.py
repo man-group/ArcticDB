@@ -25,6 +25,7 @@ from collections import Counter
 from arcticdb.exceptions import ArcticNativeException, ArcticNativeNotYetImplemented
 from arcticdb.supported_types import time_types as supported_time_types
 from arcticdb.version_store.read_result import ReadResult
+from arcticdb_ext.version_store import SortedValue as _SortedValue
 from pandas.core.internals import make_block
 
 from pandas import DataFrame, MultiIndex, Series, DatetimeIndex, Index, RangeIndex
@@ -38,7 +39,19 @@ from arcticdb.version_store._common import _column_name_to_strings, TimeFrame
 PICKLE_PROTOCOL = 4
 
 from pandas._libs.tslib import Timestamp
-from pandas._libs.tslibs.timezones import get_timezone, is_utc
+from pandas._libs.tslibs.timezones import get_timezone
+
+
+try:
+    from pandas._libs.tslibs.timezones import is_utc as check_is_utc_if_newer_pandas
+except ImportError:
+    # not present in pandas==0.22. Safe to remove when all clients upgrade.
+    assert pd.__version__.startswith(
+        "0"
+    ), "is_utc not present in this Pandas - has it been changed in latest Pandas release?"
+
+    def check_is_utc_if_newer_pandas(*args, **kwargs):
+        return False  # the UTC specific issue is not present in old Pandas so no need to go down special case
 
 log = version
 
@@ -56,6 +69,7 @@ NPDDataFrame = NamedTuple(
         ("column_names", List[str]),
         ("index_values", List[np.ndarray]),
         ("columns_values", List[np.ndarray]),
+        ("sorted", _SortedValue),
     ],
 )
 
@@ -94,7 +108,6 @@ if PY3:
         # TODO remove this once arctic keeps the string type under the hood
         # and does not transform string into bytes
         return isinstance(v, string_types) or isinstance(v, binary_type)
-
 
 else:
 
@@ -299,7 +312,7 @@ def _normalize_single_index(index, index_names, index_norm, dynamic_strings=None
 
 
 def _ensure_str_timezone(index_tz):
-    if isinstance(index_tz, datetime.tzinfo) and is_utc(index_tz):
+    if isinstance(index_tz, datetime.tzinfo) and check_is_utc_if_newer_pandas(index_tz):
         # Pandas started to treat UTC as a special case and give back the tzinfo object for it. We coerce it back to
         # a str to avoid special cases for it further along our pipeline. The breaking change was:
         # https://github.com/jbrockmendel/pandas/commit/94ce05d1bcc3c99e992c48cc99d0fd2726f43102#diff-3dba9e959e6ad7c394f0662a0e6477593fca446a6924437701ecff82b0b20b55
@@ -560,6 +573,7 @@ class NdArrayNormalizer(Normalizer):
                 index_values=[],
                 column_names=["ndarray"],
                 columns_values=[item.reshape(np.prod(item.shape))],
+                sorted=_SortedValue.UNKNOWN,
             ),
             metadata=norm_meta,
         )
@@ -771,9 +785,24 @@ class DataFrameNormalizer(_PandasNormalizer):
             norm_meta.df.common.columns.name = item.columns.name
         else:
             norm_meta.df.common.columns.fake_name = True
+
+        sort_status = _SortedValue.UNKNOWN
+        index = item.index
+        if hasattr(index, "is_monotonic_increasing"):
+            if index.is_monotonic_increasing:
+                sort_status = _SortedValue.ASCENDING
+            elif index.is_monotonic_decreasing:
+                sort_status = _SortedValue.DESCENDING
+            else:
+                sort_status = _SortedValue.UNSORTED
+
         return NormalizedInput(
             item=NPDDataFrame(
-                index_names=index_names, index_values=ix_vals, column_names=columns, columns_values=column_vals
+                index_names=index_names,
+                index_values=ix_vals,
+                column_names=columns,
+                columns_values=column_vals,
+                sorted=sort_status,
             ),
             metadata=norm_meta,
         )
@@ -809,22 +838,27 @@ class MsgPackNormalizer(Normalizer):
     Fall back plan for the time being to store arbitrary data
     """
 
-    MMAP_DEFAULT_SIZE = 1 << 32  # Allow up to 4 gib pickles in memory, most of these compress fairly well.
-    # Allow 4gb extension and bin sizes in msgpack by default.
-    MSG_PACK_MAX_SIZE = 1 << 32
+    MSG_PACK_MAX_SIZE = (1 << 32) + 1024
+    MMAP_DEFAULT_SIZE = MSG_PACK_MAX_SIZE  # Allow up to 4 gib pickles in msgpack by default, most of these compress fairly well.
+    # msgpack checks whether the size of pickled data within 1 << 32 - 1 byte only
+    # Extra memory is needed in mmap for msgpack's overhead
 
     def __init__(self, cfg=None):
         self._size = MsgPackNormalizer.MMAP_DEFAULT_SIZE if cfg is None else cfg.max_blob_size
         self.MSG_PACK_MAX_SIZE = self._size  # Override with the max_pickle size if set in config.
-        self._buffer = None
         self.strict_mode = cfg.strict_mode if cfg is not None else False
 
     def normalize(self, obj, **kwargs):
-        if self._buffer is None:
-            self._buffer = mmap(-1, self._size)
-        self._buffer.seek(0)
+        buffer = mmap(-1, self._size)
         try:
-            self._msgpack_pack(obj, self._buffer)
+            return self._pack_with_buffer(obj, buffer)
+        except:
+            buffer.close()
+            raise
+
+    def _pack_with_buffer(self, obj, buffer: mmap):
+        try:
+            self._msgpack_pack(obj, buffer)
         except ValueError as e:
             if str(e) == "data out of range":
                 raise ArcticNativeNotYetImplemented(
@@ -836,15 +870,22 @@ class MsgPackNormalizer(Normalizer):
         norm_meta = NormalizationMetadata()
         norm_meta.msg_pack_frame.version = 1
 
-        d, r = divmod(self._buffer.tell(), 8)  # pack 8 by 8
+        d, r = divmod(buffer.tell(), 8)  # pack 8 by 8
         size = d + int(r != 0)
 
-        norm_meta.msg_pack_frame.size_bytes = self._buffer.tell()
+        norm_meta.msg_pack_frame.size_bytes = buffer.tell()
 
-        column_val = np.array(memoryview(self._buffer[: size * 8]), np.uint8).view(np.uint64)
+        # FUTURE(#263): do we need to care about byte ordering?
+        column_val = np.array(memoryview(buffer[: size * 8]), np.uint8).view(np.uint64)
 
         return NormalizedInput(
-            item=NPDDataFrame(index_names=[], index_values=[], column_names=["bytes"], columns_values=[column_val]),
+            item=NPDDataFrame(
+                index_names=[],
+                index_values=[],
+                column_names=["bytes"],
+                columns_values=[column_val],
+                sorted=_SortedValue.UNKNOWN,
+            ),
             metadata=norm_meta,
         )
 
@@ -856,35 +897,18 @@ class MsgPackNormalizer(Normalizer):
         col_data = obj.data[0].view(np.uint8)[:sb]
         return self._msgpack_unpack(memoryview(col_data))
 
-    if PY3:
+    @staticmethod
+    def _nested_msgpack_packb(obj):
+        return _packb(obj, use_bin_type=True)
 
-        @staticmethod
-        def _nested_msgpack_packb(obj):
-            return _packb(obj, use_bin_type=True)
-
-        @staticmethod
-        def _nested_msgpack_unpackb(buff, raw=False):
-            return _msgpack_compat.unpackb(
-                buff,
-                raw=raw,
-                max_ext_len=MsgPackNormalizer.MSG_PACK_MAX_SIZE,
-                max_bin_len=MsgPackNormalizer.MSG_PACK_MAX_SIZE,
-            )
-
-    else:
-
-        @staticmethod
-        def _nested_msgpack_packb(obj):
-            return _packb(obj)
-
-        @staticmethod
-        def _nested_msgpack_unpackb(buff, raw=True):
-            return unpackb(
-                buff,
-                raw=raw,
-                max_ext_len=MsgPackNormalizer.MSG_PACK_MAX_SIZE,
-                max_bin_len=MsgPackNormalizer.MSG_PACK_MAX_SIZE,
-            )
+    @staticmethod
+    def _nested_msgpack_unpackb(buff, raw=False):
+        return _msgpack_compat.unpackb(
+            buff,
+            raw=raw,
+            max_ext_len=MsgPackNormalizer.MSG_PACK_MAX_SIZE,
+            max_bin_len=MsgPackNormalizer.MSG_PACK_MAX_SIZE,
+        )
 
     def _custom_pack(self, obj):
         if isinstance(obj, pd.Timestamp):
@@ -936,40 +960,21 @@ class MsgPackNormalizer(Normalizer):
 
         return ExtType(code, data)
 
-    if PY3:
+    def _msgpack_pack(self, obj, buff):
+        try:
+            _pack(obj, buff, use_bin_type=True, default=self._custom_pack, strict_types=True)
+        except TypeError:
+            # Some ancient versions of msgpack don't support strict_types, fallback to the pack without that arg.
+            _pack(obj, buff, use_bin_type=True, default=self._custom_pack)
 
-        def _msgpack_pack(self, obj, buff):
-            try:
-                _pack(obj, buff, use_bin_type=True, default=self._custom_pack, strict_types=True)
-            except TypeError:
-                # Some ancient versions of msgpack don't support strict_types, fallback to the pack without that arg.
-                _pack(obj, buff, use_bin_type=True, default=self._custom_pack)
-
-        def _msgpack_unpack(self, buff, raw=False):
-            return _msgpack_compat.unpackb(
-                buff,
-                raw=raw,
-                ext_hook=self._ext_hook,
-                max_ext_len=MsgPackNormalizer.MSG_PACK_MAX_SIZE,
-                max_bin_len=MsgPackNormalizer.MSG_PACK_MAX_SIZE,
-            )
-
-    else:
-
-        def _msgpack_pack(self, obj, buff):
-            try:
-                _pack(obj, buff, default=self._custom_pack, strict_types=True)
-            except TypeError:
-                # Some ancient versions of msgpack don't support strict_types, fallback to the pack without that arg.
-                _pack(obj, buff, default=self._custom_pack)
-
-        def _msgpack_unpack(self, buff):
-            return unpackb(
-                buff,
-                ext_hook=self._ext_hook,
-                max_ext_len=MsgPackNormalizer.MSG_PACK_MAX_SIZE,
-                max_bin_len=MsgPackNormalizer.MSG_PACK_MAX_SIZE,
-            )
+    def _msgpack_unpack(self, buff, raw=False):
+        return _msgpack_compat.unpackb(
+            buff,
+            raw=raw,
+            ext_hook=self._ext_hook,
+            max_ext_len=MsgPackNormalizer.MSG_PACK_MAX_SIZE,
+            max_bin_len=MsgPackNormalizer.MSG_PACK_MAX_SIZE,
+        )
 
 
 class Pickler(object):
@@ -1015,7 +1020,11 @@ class TimeFrameNormalizer(Normalizer):
 
         return NormalizedInput(
             item=NPDDataFrame(
-                index_names=index_names, index_values=ix_vals, column_names=columns_names, columns_values=columns_vals
+                index_names=index_names,
+                index_values=ix_vals,
+                column_names=columns_names,
+                columns_values=columns_vals,
+                sorted=_SortedValue.UNKNOWN,
             ),
             metadata=norm_meta,
         )

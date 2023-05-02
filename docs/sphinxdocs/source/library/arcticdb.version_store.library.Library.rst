@@ -1,4 +1,4 @@
-arcticdb.version\_store.library.Library
+﻿arcticdb.version\_store.library.Library
 =======================================
 
 .. currentmodule:: arcticdb.version_store.library
@@ -30,6 +30,7 @@ arcticdb.version\_store.library.Library
       ~Library.read
       ~Library.read_batch
       ~Library.read_metadata
+      ~Library.reload_symbol_list
       ~Library.snapshot
       ~Library.sort_and_finalize_staged_data
       ~Library.tail
