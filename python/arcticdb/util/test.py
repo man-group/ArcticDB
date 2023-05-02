@@ -361,6 +361,8 @@ def apply_lib_cfg(lib_cfg: LibraryDescriptor, cfg_dict: Mapping[str, Any]):
             setattr(write_opts, k, v)
         elif k in VersionStoreConfig.DESCRIPTOR.fields_by_name:
             setattr(lib_cfg.version, k, v)
+        elif k in VersionStoreConfig.MsgPack.DESCRIPTOR.fields_by_name:
+            setattr(lib_cfg.version.msg_pack, k, v)
         elif k in LibraryDescriptor.DESCRIPTOR.fields_by_name:
             setattr(lib_cfg, k, v)
         else:

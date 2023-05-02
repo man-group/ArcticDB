@@ -249,6 +249,32 @@ std::pair<VersionedItem, FrameAndDescriptor> LocalVersionedEngine::read_datafram
     return std::make_pair(version.value_or(VersionedItem{}), std::move(frame_and_descriptor));
 }
 
+std::pair<VersionedItem, std::optional<google::protobuf::Any>> LocalVersionedEngine::read_descriptor_version_internal(
+        const StreamId& stream_id,
+        const VersionQuery& version_query
+    ) {
+    ARCTICDB_SAMPLE(ReadDescriptor, 0)
+
+    auto version = get_version_to_read(stream_id, version_query);
+    version::check<ErrorCode::E_NO_SUCH_VERSION>(static_cast<bool>(version),
+                                                 "Unable to retrieve descriptor data. {}@{}: version not found", stream_id, version_query);
+
+    auto metadata_proto = store()->read_metadata(version->key_).get().second;
+    return std::pair{version.value(), metadata_proto};
+}
+
+std::vector<std::pair<VersionedItem, std::optional<google::protobuf::Any>>> LocalVersionedEngine::batch_read_descriptor_internal(
+        const std::vector<StreamId>& stream_ids,
+        const std::vector<VersionQuery>& version_queries) {
+    std::vector<folly::Future<std::pair<VersionedItem, std::optional<google::protobuf::Any>>>> results_fut;
+    for (size_t idx=0; idx < stream_ids.size(); idx++) {
+        auto version_query = version_queries.size() > idx ? version_queries[idx] : VersionQuery{};
+        results_fut.push_back(read_descriptor_version_internal(stream_ids[idx],
+                                                              version_query));
+    }
+    return folly::collect(results_fut).get();
+}
+
 void LocalVersionedEngine::flush_version_map() {
     version_map()->flush();
 }
@@ -368,8 +394,10 @@ VersionedItem LocalVersionedEngine::update_internal(
             auto versioned_item =  write_dataframe_impl(store_,
                                                         update_info.next_version_id_,
                                                         std::move(frame),
-                                                        write_options
-                                                        );
+                                                        write_options,
+                                                        std::make_shared<DeDupMap>(),
+                                                        false,
+                                                        true);
 
             if(cfg_.symbol_list())
                 symbol_list().add_symbol(store_, stream_id);
@@ -414,7 +442,8 @@ VersionedItem LocalVersionedEngine::write_versioned_dataframe_internal(
     const StreamId& stream_id,
     InputTensorFrame&& frame,
     bool prune_previous_versions,
-    bool allow_sparse
+    bool allow_sparse,
+    bool validate_index
     ) {
     ARCTICDB_SAMPLE(WriteVersionedDataFrame, 0)
 
@@ -431,7 +460,8 @@ VersionedItem LocalVersionedEngine::write_versioned_dataframe_internal(
         std::move(frame),
         write_options,
         de_dup_map,
-        allow_sparse);
+        allow_sparse,
+        validate_index);
 
     if(prune_previous_versions) {
         auto pruned_indexes = version_map()->write_and_prune_previous(store(), versioned_item.key_, maybe_prev);
@@ -801,7 +831,8 @@ std::vector<AtomKey> LocalVersionedEngine::batch_write_internal(
     std::vector<VersionId> version_ids,
     const std::vector<StreamId>& stream_ids,
     std::vector<InputTensorFrame> frames,
-    std::vector<std::shared_ptr<DeDupMap>> de_dup_maps
+    std::vector<std::shared_ptr<DeDupMap>> de_dup_maps,
+    bool validate_index
 ) {
     ARCTICDB_SAMPLE(WriteDataFrame, 0)
     ARCTICDB_DEBUG(log::version(), "Batch writing {} dataframes", stream_ids.size());
@@ -813,7 +844,8 @@ std::vector<AtomKey> LocalVersionedEngine::batch_write_internal(
             std::move(frames[idx]),
             get_write_options(),
             de_dup_maps[idx],
-            false
+            false,
+            validate_index
         ));
     }
     return folly::collect(results_fut).get();
@@ -825,7 +857,8 @@ VersionedItem LocalVersionedEngine::append_internal(
     const StreamId& stream_id,
     InputTensorFrame&& frame,
     bool upsert,
-    bool prune_previous_versions) {
+    bool prune_previous_versions,
+    bool validate_index) {
 
     auto update_info = get_latest_undeleted_version_and_next_version_id(store(),
                                                                         version_map(),
@@ -837,7 +870,8 @@ VersionedItem LocalVersionedEngine::append_internal(
         auto versioned_item = append_impl(store(),
                                           update_info,
                                           std::move(frame),
-                                          get_write_options());
+                                          get_write_options(),
+                                          validate_index);
         if (prune_previous_versions) {
             auto pruned_indexes = version_map()->write_and_prune_previous(store(), versioned_item.key_, update_info.previous_index_key_);
             delete_unreferenced_pruned_indexes(pruned_indexes, versioned_item.key_);
@@ -851,7 +885,10 @@ VersionedItem LocalVersionedEngine::append_internal(
             auto versioned_item =  write_dataframe_impl(store_,
                                                         update_info.next_version_id_,
                                                         std::move(frame),
-                                                        write_options
+                                                        write_options,
+                                                        std::make_shared<DeDupMap>(),
+                                                        false,
+                                                        validate_index
                                                         );
 
             if(cfg_.symbol_list())
@@ -870,12 +907,13 @@ std::vector<AtomKey> LocalVersionedEngine::batch_append_internal(
     const std::vector<StreamId>& stream_ids,
     std::vector<AtomKey> prevs,
     std::vector<InputTensorFrame> frames,
-    const WriteOptions& write_options) {
+    const WriteOptions& write_options,
+    bool validate_index) {
 
     std::vector<folly::Future<AtomKey>> append_futures;
     for(auto id : folly::enumerate(stream_ids)) {
         UpdateInfo update_info{prevs[id.index], version_ids[id.index]};
-        append_futures.emplace_back(async_append_impl(store(), update_info, std::move(frames[id.index]), write_options));
+        append_futures.emplace_back(async_append_impl(store(), update_info, std::move(frames[id.index]), write_options, validate_index));
     }
 
     return folly::collect(append_futures).get();

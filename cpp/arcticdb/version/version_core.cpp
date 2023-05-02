@@ -78,9 +78,10 @@ VersionedItem write_dataframe_impl(
     pipelines::InputTensorFrame&& frame,
     const WriteOptions& options,
     const std::shared_ptr<DeDupMap>& de_dup_map,
-    bool sparsify_floats
+    bool sparsify_floats,
+    bool validate_index
     ) {
-    auto atom_key_fut = async_write_dataframe_impl(store, version_id, std::move(frame), options, de_dup_map, sparsify_floats);
+    auto atom_key_fut = async_write_dataframe_impl(store, version_id, std::move(frame), options, de_dup_map, sparsify_floats, validate_index);
 
     ARCTICDB_SUBSAMPLE_DEFAULT(WaitForWriteCompletion)
     auto atom_key = std::move(atom_key_fut).get();
@@ -95,7 +96,8 @@ folly::Future<entity::AtomKey> async_write_dataframe_impl(
     InputTensorFrame&& frame,
     const WriteOptions& options,
     const std::shared_ptr<DeDupMap> &de_dup_map,
-    bool sparsify_floats
+    bool sparsify_floats,
+    bool validate_index
     ) {
     ARCTICDB_SAMPLE(DoWrite, 0)
 
@@ -103,6 +105,8 @@ folly::Future<entity::AtomKey> async_write_dataframe_impl(
     frame.set_bucketize_dynamic(options.bucketize_dynamic);
     auto slicing_arg = get_slicing_policy(options, frame);
     auto partial_key = IndexPartialKey{frame.desc.id(), version_id};
+    sorting::check<ErrorCode::E_UNSORTED_DATA>(!validate_index || frame.desc.get_sorted() == arcticdb::proto::descriptors::SortedValue::ASCENDING || !std::holds_alternative<stream::TimeseriesIndex>(frame.index),
+                "When calling write with validate_index enabled, input data must be sorted.");
     return write_frame(partial_key, std::move(frame), slicing_arg, store, de_dup_map, sparsify_floats);
 }
 
@@ -123,7 +127,8 @@ folly::Future<AtomKey> async_append_impl(
     const std::shared_ptr<Store>& store,
     const UpdateInfo& update_info,
     InputTensorFrame&& frame,
-    const WriteOptions& options) {
+    const WriteOptions& options,
+    bool validate_index) {
 
     util::check(update_info.previous_index_key_.has_value(), "Cannot append as there is no previous index key to append to");
     const StreamId stream_id = frame.desc.id();
@@ -132,6 +137,9 @@ folly::Future<AtomKey> async_append_impl(
     bool bucketize_dynamic = index_segment_reader.bucketize_dynamic();
     auto row_offset = index_segment_reader.tsd().total_rows();
     util::check_rte(!index_segment_reader.is_pickled(), "Cannot append to pickled data");
+    sorting::check<ErrorCode::E_UNSORTED_DATA>(!validate_index || (frame.desc.get_sorted() == arcticdb::proto::descriptors::SortedValue::ASCENDING && index_segment_reader.tsd().stream_descriptor().sorted() == arcticdb::proto::descriptors::SortedValue::ASCENDING) || 
+        !std::holds_alternative<stream::TimeseriesIndex>(frame.index),
+        "validate_index set but input data index is not sorted.");
 
     frame.set_offset(static_cast<ssize_t>(row_offset));
     fix_descriptor_mismatch_or_throw(APPEND, options.dynamic_schema, index_segment_reader, frame);
@@ -145,13 +153,15 @@ VersionedItem append_impl(
     const std::shared_ptr<Store>& store,
     const UpdateInfo& update_info,
     InputTensorFrame&& frame,
-    const WriteOptions& options) {
+    const WriteOptions& options,
+    bool validate_index) {
 
     ARCTICDB_SUBSAMPLE_DEFAULT(WaitForWriteCompletion)
     auto version_key_fut = async_append_impl(store,
                                              update_info,
                                              std::move(frame),
-                                             options);
+                                             options,
+                                             validate_index);
     auto version_key = std::move(version_key_fut).get();
     auto versioned_item = VersionedItem(to_atom(std::move(version_key)));
     ARCTICDB_DEBUG(log::version(), "write_dataframe_impl stream_id: {} , version_id: {}", versioned_item.symbol(), update_info.next_version_id_);
@@ -281,10 +291,12 @@ VersionedItem update_impl(
 
     auto index_segment_reader = index::get_index_reader(*(update_info.previous_index_key_), store);
     util::check_rte(!index_segment_reader.is_pickled(), "Cannot update pickled data");
+    auto index_desc = check_index_match(frame.index, index_segment_reader.tsd().stream_descriptor().index());
+    util::check(index_desc.kind() == IndexDescriptor::TIMESTAMP, "Update not supported for non-timeseries indexes");
+    sorting::check<ErrorCode::E_UNSORTED_DATA>(frame.desc.get_sorted() == arcticdb::proto::descriptors::SortedValue::ASCENDING && std::holds_alternative<stream::TimeseriesIndex>(frame.index) && index_segment_reader.mutable_tsd().stream_descriptor().sorted() == arcticdb::proto::descriptors::SortedValue::ASCENDING,
+        "When calling update on sorted data, the input data must be sorted.");
     bool bucketize_dynamic = index_segment_reader.bucketize_dynamic();
     (void)check_and_mark_slices(index_segment_reader, dynamic_schema, false, std::nullopt, bucketize_dynamic);
-    auto index_desc = check_index_match(frame.index, index_segment_reader.tsd().stream_descriptor().index());
-    util::check(index_desc.kind() == IndexDescriptor::TIMESTAMP, "Update will not work as expected with a non-timeseries index");
 
     fix_descriptor_mismatch_or_throw(UPDATE, dynamic_schema, index_segment_reader, frame);
 
@@ -338,6 +350,8 @@ VersionedItem update_impl(
 
     std::sort(std::begin(flattened_slice_and_keys), std::end(flattened_slice_and_keys));
     auto desc = stream::merge_descriptors(StreamDescriptor{std::move(*index_segment_reader.mutable_tsd().mutable_stream_descriptor())}, { frame.desc.fields() }, {});
+    // At this stage the updated data must be sorted
+    desc.set_sorted(arcticdb::entity::SortedValue::ASCENDING);
     auto time_series = make_descriptor(row_count, std::move(desc), frame.norm_meta, std::move(frame.user_meta), std::nullopt, bucketize_dynamic);
     auto index = index_type_from_descriptor(time_series.stream_descriptor());
 
@@ -526,6 +540,10 @@ void check_column_and_date_range_filterable(const pipelines::index::IndexSegment
     "The data for this symbol is pickled and does not support date_range, row_range, or column queries");
     util::check(index_segment_reader.has_timestamp_index() || !std::holds_alternative<IndexRange>(read_query.row_filter),
             "Cannot apply date range filter to symbol with non-timestamp index");
+    sorting::check<ErrorCode::E_UNSORTED_DATA>(index_segment_reader.tsd().stream_descriptor().sorted() == arcticdb::proto::descriptors::SortedValue::UNKNOWN ||
+        index_segment_reader.tsd().stream_descriptor().sorted() == arcticdb::proto::descriptors::SortedValue::ASCENDING ||
+        !std::holds_alternative<IndexRange>(read_query.row_filter),
+            "When filtering data using date_range, the symbol must be sorted in ascending order. ArcticDB believes it is not sorted in ascending order and cannot therefore filter the data using date_range.");
 }
 }
 
@@ -746,7 +764,6 @@ FrameAndDescriptor read_dataframe_impl(
 
     modify_descriptor(pipeline_context, read_options);
     generate_filtered_field_descriptors(pipeline_context, read_query.columns);
-
     ARCTICDB_DEBUG(log::version(), "Fetching data to frame");
     SegmentInMemory frame;
     auto buffers = std::make_shared<BufferHolder>();
