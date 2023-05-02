@@ -48,7 +48,8 @@ public:
         const StreamId& stream_id,
         InputTensorFrame&& frame,
         bool upsert,
-        bool prune_previous_versions) override;
+        bool prune_previous_versions,
+        bool validate_index) override;
 
     VersionedItem delete_range_internal(
         const StreamId& stream_id,
@@ -111,6 +112,10 @@ public:
         ReadQuery& read_query,
         const ReadOptions& read_options) override;
 
+    std::pair<VersionedItem, std::optional<google::protobuf::Any>> read_descriptor_version_internal(
+            const StreamId& stream_id,
+            const VersionQuery& version_query);
+
     void write_parallel_frame(
         const StreamId& stream_id,
         InputTensorFrame&& frame) const override;
@@ -157,7 +162,8 @@ public:
         const StreamId& stream_id,
         InputTensorFrame&& frame,
         bool prune_previous_versions,
-        bool allow_sparse
+        bool allow_sparse,
+        bool validate_index
     ) override;
 
     VersionedItem write_versioned_metadata_internal(
@@ -193,7 +199,8 @@ public:
         std::vector<VersionId> version_ids,
         const std::vector<StreamId>& stream_ids,
         std::vector<InputTensorFrame> frames,
-        std::vector<std::shared_ptr<DeDupMap>> de_dup_maps
+        std::vector<std::shared_ptr<DeDupMap>> de_dup_maps,
+        bool validate_index
     );
 
     std::vector<AtomKey> batch_append_internal(
@@ -201,7 +208,8 @@ public:
         const std::vector<StreamId>& stream_ids,
         std::vector<AtomKey> prevs,
         std::vector<InputTensorFrame> frames,
-        const WriteOptions& write_options);
+        const WriteOptions& write_options,
+        bool validate_index);
 
     std::pair<std::vector<AtomKey>, std::vector<FrameAndDescriptor>> batch_read_keys(
         const std::vector<AtomKey> &keys,
@@ -213,6 +221,10 @@ public:
         const std::vector<VersionQuery>& version_queries,
         std::vector<ReadQuery>& read_queries,
         const ReadOptions& read_options);
+
+    std::vector<std::pair<VersionedItem, std::optional<google::protobuf::Any>>> batch_read_descriptor_internal(
+            const std::vector<StreamId>& stream_ids,
+            const std::vector<VersionQuery>& version_queries);
 
     std::vector<std::pair<VersionedItem, arcticdb::proto::descriptors::TimeSeriesDescriptor>> batch_restore_version_internal(
         const std::vector<StreamId>& stream_ids,

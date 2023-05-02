@@ -14,6 +14,7 @@ import dateutil as du
 import pytest
 import pytz
 from numpy.testing import assert_equal, assert_array_equal
+from arcticdb_ext.version_store import SortedValue as _SortedValue
 
 from arcticdb.exceptions import ArcticNativeNotYetImplemented
 from arcticdb.version_store._custom_normalizers import (
@@ -146,6 +147,7 @@ def test_empty_df_with_multiindex_with_tz(tz):
         column_names=norm_df.column_names,
         index_values=[norm_df.index_values[0][0:0]],
         columns_values=[col_vals[0:0] for col_vals in norm_df.columns_values],
+        sorted=_SortedValue.UNKNOWN,
     )
 
     fd = FrameData.from_npd_df(sliced_norm_df)
