@@ -38,6 +38,14 @@ namespace arcticdb::entity {
  * This will typically at first be mapping protobuf objects in order to avoid strong
  * coupling of implementation to proto
  */
+
+ enum class SortedValue : uint8_t {
+    UNKNOWN = 0,
+    UNSORTED = 1,
+    ASCENDING = 2,
+    DESCENDING = 3,
+};
+
 using NumericId = int64_t;
 using StringId = std::string;
 using VariantId = std::variant<NumericId, StringId>;
@@ -653,6 +661,17 @@ struct StreamDescriptor {
         data_->mutable_index()->CopyFrom(idx.data_);
     }
 
+    void set_sorted(SortedValue sorted) {
+        switch (sorted) {
+            case SortedValue::UNSORTED:data_->set_sorted(arcticc::pb2::descriptors_pb2::SortedValue::UNSORTED);break;
+            case SortedValue::DESCENDING:data_->set_sorted(arcticc::pb2::descriptors_pb2::SortedValue::DESCENDING);break;
+            case SortedValue::ASCENDING:data_->set_sorted(arcticc::pb2::descriptors_pb2::SortedValue::ASCENDING);break;
+            default:data_->set_sorted(arcticc::pb2::descriptors_pb2::SortedValue::UNKNOWN);
+        }
+    }
+    arcticc::pb2::descriptors_pb2::SortedValue get_sorted() {
+        return data_->sorted();
+    }
     void set_index_type(const IndexDescriptor::Type type) {
         data_->mutable_index()->set_kind(type);
     }

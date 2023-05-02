@@ -980,6 +980,103 @@ def test_get_description(arctic_library):
     assert info.last_update_time > original_info.last_update_time
 
 
+def test_get_description_batch(arctic_library):
+    lib = arctic_library
+
+    # given
+    df = pd.DataFrame({"column": [1, 2, 3, 4]}, index=pd.date_range(start="1/1/2018", end="1/4/2018"))
+    df.index.rename("named_index", inplace=True)
+    lib.write("symbol1", df)
+    to_append_df = pd.DataFrame({"column": [5, 6]}, index=pd.date_range(start="1/5/2018", end="1/6/2018"))
+    to_append_df.index.rename("named_index", inplace=True)
+    lib.append("symbol1", to_append_df)
+
+    df = pd.DataFrame({"column": [1, 2, 3, 4]}, index=pd.date_range(start="1/1/2019", end="1/4/2019"))
+    df.index.rename("named_index", inplace=True)
+    lib.write("symbol2", df)
+    to_append_df = pd.DataFrame({"column": [5, 6]}, index=pd.date_range(start="1/5/2019", end="1/6/2019"))
+    to_append_df.index.rename("named_index", inplace=True)
+    lib.append("symbol2", to_append_df)
+
+    df = pd.DataFrame({"column": [1, 2, 3, 4]}, index=pd.date_range(start="1/1/2020", end="1/4/2020"))
+    df.index.rename("named_index", inplace=True)
+    lib.write("symbol3", df)
+    to_append_df = pd.DataFrame({"column": [5, 6]}, index=pd.date_range(start="1/5/2020", end="1/6/2020"))
+    to_append_df.index.rename("named_index", inplace=True)
+    lib.append("symbol3", to_append_df)
+    # when
+    infos = lib.get_description_batch(["symbol1", "symbol2", "symbol3"])
+    original_infos = lib.get_description_batch([ReadRequest("symbol1", as_of=0), ReadRequest("symbol2", as_of=0), ReadRequest("symbol3", as_of=0)])
+
+    assert infos[0].date_range == (datetime(2018, 1, 1), datetime(2018, 1, 6))
+    assert infos[1].date_range == (datetime(2019, 1, 1), datetime(2019, 1, 6))
+    assert infos[2].date_range == (datetime(2020, 1, 1), datetime(2020, 1, 6))
+
+    assert original_infos[0].date_range == (datetime(2018, 1, 1), datetime(2018, 1, 4))
+    assert original_infos[1].date_range == (datetime(2019, 1, 1), datetime(2019, 1, 4))
+    assert original_infos[2].date_range == (datetime(2020, 1, 1), datetime(2020, 1, 4))
+
+    list_infos = list(zip(infos, original_infos))
+    # then
+    for info, original_info in list_infos:
+        assert [c[0] for c in info.columns] == ["column"]
+        assert info.index[0] == ["named_index"]
+        assert info.index_type == "index"
+        assert info.row_count == 6
+        assert original_info.row_count == 4
+        assert info.last_update_time > original_info.last_update_time
+
+
+def test_get_description_batch_multiple_versions(arctic_library):
+    lib = arctic_library
+
+    # given
+    df = pd.DataFrame({"column": [1, 2, 3, 4]}, index=pd.date_range(start="1/1/2018", end="1/4/2018"))
+    df.index.rename("named_index", inplace=True)
+    lib.write("symbol1", df)
+    to_append_df = pd.DataFrame({"column": [5, 6]}, index=pd.date_range(start="1/5/2018", end="1/6/2018"))
+    to_append_df.index.rename("named_index", inplace=True)
+    lib.append("symbol1", to_append_df)
+
+    df = pd.DataFrame({"column": [1, 2, 3, 4]}, index=pd.date_range(start="1/1/2019", end="1/4/2019"))
+    df.index.rename("named_index", inplace=True)
+    lib.write("symbol2", df)
+    to_append_df = pd.DataFrame({"column": [5, 6]}, index=pd.date_range(start="1/5/2019", end="1/6/2019"))
+    to_append_df.index.rename("named_index", inplace=True)
+    lib.append("symbol2", to_append_df)
+
+    df = pd.DataFrame({"column": [1, 2, 3, 4]}, index=pd.date_range(start="1/1/2020", end="1/4/2020"))
+    df.index.rename("named_index", inplace=True)
+    lib.write("symbol3", df)
+    to_append_df = pd.DataFrame({"column": [5, 6]}, index=pd.date_range(start="1/5/2020", end="1/6/2020"))
+    to_append_df.index.rename("named_index", inplace=True)
+    lib.append("symbol3", to_append_df)
+
+    infos_multiple_version = lib.get_description_batch([ReadRequest("symbol1", as_of=0), ReadRequest("symbol2", as_of=0), ReadRequest("symbol3", as_of=0), 
+                                                        ReadRequest("symbol1", as_of=1), ReadRequest("symbol2", as_of=1), ReadRequest("symbol3", as_of=1)])
+
+    infos = infos_multiple_version[3:6]
+    original_infos = infos_multiple_version[0:3]
+
+    assert infos[0].date_range == (datetime(2018, 1, 1), datetime(2018, 1, 6))
+    assert infos[1].date_range == (datetime(2019, 1, 1), datetime(2019, 1, 6))
+    assert infos[2].date_range == (datetime(2020, 1, 1), datetime(2020, 1, 6))
+
+    assert original_infos[0].date_range == (datetime(2018, 1, 1), datetime(2018, 1, 4))
+    assert original_infos[1].date_range == (datetime(2019, 1, 1), datetime(2019, 1, 4))
+    assert original_infos[2].date_range == (datetime(2020, 1, 1), datetime(2020, 1, 4))
+
+    list_infos = list(zip(infos, original_infos))
+    # then
+    for info, original_info in list_infos:
+        assert [c[0] for c in info.columns] == ["column"]
+        assert info.index[0] == ["named_index"]
+        assert info.index_type == "index"
+        assert info.row_count == 6
+        assert original_info.row_count == 4
+        assert info.last_update_time > original_info.last_update_time
+
+
 def test_tail(arctic_library):
     lib = arctic_library
 
@@ -1079,4 +1176,3 @@ def test_reload_symbol_list(moto_s3_uri_incl_bucket, boto_client):
 
     lib.reload_symbol_list()
     assert len(get_symbol_list_keys()) == 1
-

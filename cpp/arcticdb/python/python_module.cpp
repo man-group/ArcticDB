@@ -228,6 +228,7 @@ void register_error_code_ecosystem(py::module& m) {
     m.def("get_error_category", &get_error_category);
 
     py::register_exception<InternalException>(m, "InternalException");
+    py::register_exception<NoSuchVersionException>(m, "NoSuchVersionException");
     py::register_exception<NormalizationException>(m, "NormalizationException");
     py::register_exception<MissingDataException>(m, "MissingDataException");
     py::register_exception<SchemaException>(m, "SchemaException");
