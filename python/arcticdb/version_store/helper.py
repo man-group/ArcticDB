@@ -7,7 +7,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 """
 import re
 import time
-
+from typing import Iterable, Dict, Any, Union
 
 from arcticc.pb2.lmdb_storage_pb2 import Config as LmdbConfig
 from arcticc.pb2.s3_storage_pb2 import Config as S3Config
@@ -27,8 +27,6 @@ from arcticdb.config import *  # for backward compat after moving to config
 from arcticdb.config import _expand_path
 from arcticdb.exceptions import ArcticNativeException, LibraryNotFound
 from arcticdb.version_store._store import NativeVersionStore
-
-from typing import Iterable, Dict, Any
 from arcticdb.authorization.permissions import OpenMode
 
 
@@ -277,7 +275,8 @@ def create_test_lmdb_cfg(lib_name: str, db_dir: str, lmdb_config: Dict[str, Any]
     return cfg
 
 
-def create_test_s3_cfg(lib_name, credential_name, credential_key, bucket_name, endpoint):
+def create_test_s3_cfg(lib_name, credential_name, credential_key, bucket_name, endpoint, *, with_prefix=True):
+    # type: (str, str, str, str, str, None, Union[str, bool, None]) -> EnvironmentConfigsMap
     cfg = EnvironmentConfigsMap()
     add_s3_library_to_env(
         cfg,
@@ -287,6 +286,7 @@ def create_test_s3_cfg(lib_name, credential_name, credential_key, bucket_name, e
         credential_key=credential_key,
         bucket_name=bucket_name,
         endpoint=endpoint,
+        with_prefix=with_prefix,
     )
     return cfg
 
