@@ -6,11 +6,12 @@ import pytest
 import sys
 from numpy.testing import assert_array_equal
 
+from pandas import MultiIndex
 from arcticdb.version_store._common import TimeFrame
 from arcticdb.version_store import NativeVersionStore
 from arcticdb.util.test import random_integers, assert_frame_equal
 from arcticdb.util.hypothesis import InputFactories
-from arcticdb_ext.exceptions import InternalException, NormalizationException
+from arcticdb_ext.exceptions import InternalException, NormalizationException, SortingException
 
 
 def test_append_simple(lmdb_version_store):
@@ -280,3 +281,162 @@ def test_(initial: InputFactories, append: InputFactories, match, swap, lmdb_ver
     to_append, _ = append.make(abs(next_start), 1)
     with pytest.raises(NormalizationException):
         lib.append("s", to_append, match=match)
+
+
+def test_append_non_sorted_exception(lmdb_version_store):
+    symbol = "bad_append"
+
+    num_initial_rows = 20
+    initial_timestamp = pd.Timestamp("2019-01-01")
+    dtidx = pd.date_range(initial_timestamp, periods=num_initial_rows)
+    df = pd.DataFrame({"c": np.arange(0, num_initial_rows, dtype=np.int64)}, index=dtidx)
+    assert df.index.is_monotonic_increasing == True
+
+    lmdb_version_store.write(symbol, df)
+    info = lmdb_version_store.get_info(symbol)
+    assert info["sorted"] == "ASCENDING"
+
+    num_rows = 20
+    initial_timestamp = pd.Timestamp("2020-01-01")
+    dtidx = np.roll(pd.date_range(initial_timestamp, periods=num_rows), 3)
+    df2 = pd.DataFrame({"c": np.arange(0, num_rows, dtype=np.int64)}, index=dtidx)
+    assert df2.index.is_monotonic_increasing == False
+
+    with pytest.raises(SortingException):
+        lmdb_version_store.append(symbol, df2, validate_index=True)
+
+def test_append_existing_non_sorted_exception(lmdb_version_store):
+    symbol = "bad_append"
+
+    num_initial_rows = 20
+    initial_timestamp = pd.Timestamp("2019-01-01")
+    dtidx = np.roll(pd.date_range(initial_timestamp, periods=num_initial_rows), 3)
+    df = pd.DataFrame({"c": np.arange(0, num_initial_rows, dtype=np.int64)}, index=dtidx)
+    assert df.index.is_monotonic_increasing == False
+
+    lmdb_version_store.write(symbol, df)
+    info = lmdb_version_store.get_info(symbol)
+    assert info["sorted"] == "UNSORTED"
+
+    num_rows = 20
+    initial_timestamp = pd.Timestamp("2020-01-01")
+    dtidx = pd.date_range(initial_timestamp, periods=num_rows)
+    df2 = pd.DataFrame({"c": np.arange(0, num_rows, dtype=np.int64)}, index=dtidx)
+    assert df2.index.is_monotonic_increasing == True
+
+    with pytest.raises(SortingException):
+        lmdb_version_store.append(symbol, df2, validate_index=True)
+
+def test_append_non_sorted_non_validate_index(lmdb_version_store):
+    symbol = "bad_append"
+
+    num_initial_rows = 20
+    initial_timestamp = pd.Timestamp("2019-01-01")
+    dtidx = pd.date_range(initial_timestamp, periods=num_initial_rows)
+    df = pd.DataFrame({"c": np.arange(0, num_initial_rows, dtype=np.int64)}, index=dtidx)
+    assert df.index.is_monotonic_increasing == True
+
+    lmdb_version_store.write(symbol, df)
+    info = lmdb_version_store.get_info(symbol)
+    assert info["sorted"] == "ASCENDING"
+
+    num_rows = 20
+    initial_timestamp = pd.Timestamp("2020-01-01")
+    dtidx = np.roll(pd.date_range(initial_timestamp, periods=num_rows), 3)
+    df2 = pd.DataFrame({"c": np.arange(0, num_rows, dtype=np.int64)}, index=dtidx)
+    assert df2.index.is_monotonic_increasing == False
+    lmdb_version_store.append(symbol, df2)
+
+
+def test_append_non_sorted_multi_index_exception(lmdb_version_store):
+    symbol = "bad_append"
+
+    num_initial_rows = 20
+    initial_timestamp = pd.Timestamp("2019-01-01")
+    dtidx1 = pd.date_range(initial_timestamp, periods=num_initial_rows)
+    dtidx2 = np.roll(np.arange(0, num_initial_rows), 3)
+    df = pd.DataFrame(
+        {"c": np.arange(0, num_initial_rows, dtype=np.int64)},
+        index=pd.MultiIndex.from_arrays([dtidx1, dtidx2], names=["datetime", "level"]),
+    )
+    assert isinstance(df.index, MultiIndex) == True
+    assert df.index.is_monotonic_increasing == True
+
+    lmdb_version_store.write(symbol, df)
+    info = lmdb_version_store.get_info(symbol)
+    assert info["sorted"] == "ASCENDING"
+
+    num_rows = 20
+    initial_timestamp = pd.Timestamp("2020-01-01")
+    dtidx1 = np.roll(pd.date_range(initial_timestamp, periods=num_rows), 3)
+    dtidx2 = np.arange(0, num_rows)
+    df2 = pd.DataFrame(
+        {"c": np.arange(0, num_rows, dtype=np.int64)},
+        index=pd.MultiIndex.from_arrays([dtidx1, dtidx2], names=["datetime", "level"]),
+    )
+    assert df2.index.is_monotonic_increasing == False
+    assert isinstance(df.index, MultiIndex) == True
+
+    with pytest.raises(SortingException):
+        lmdb_version_store.append(symbol, df2, validate_index=True)
+
+
+def test_append_non_sorted_range_index_non_exception(lmdb_version_store):
+    symbol = "bad_append"
+
+    num_initial_rows = 20
+    dtidx = pd.RangeIndex(0, num_initial_rows, 1)
+    df = pd.DataFrame({"c": np.arange(0, num_initial_rows, dtype=np.int64)}, index=dtidx)
+
+    lmdb_version_store.write(symbol, df)
+    info = lmdb_version_store.get_info(symbol)
+    assert info["sorted"] == "ASCENDING"
+
+    num_rows = 20
+    dtidx = pd.RangeIndex(num_initial_rows, num_initial_rows + num_rows, 1)
+    dtidx = np.roll(dtidx, 3)
+    df2 = pd.DataFrame({"c": np.arange(0, num_rows, dtype=np.int64)}, index=dtidx)
+    assert df2.index.is_monotonic_increasing == False
+    with pytest.raises(NormalizationException):
+        lmdb_version_store.append(symbol, df2)
+
+
+def test_append_mix_sorted_non_sorted(lmdb_version_store):
+    symbol = "bad_append"
+
+    num_initial_rows = 20
+    initial_timestamp = pd.Timestamp("2019-01-01")
+    dtidx = pd.date_range(initial_timestamp, periods=num_initial_rows)
+    df = pd.DataFrame({"c": np.arange(0, num_initial_rows, dtype=np.int64)}, index=dtidx)
+    assert df.index.is_monotonic_increasing == True
+
+    lmdb_version_store.write(symbol, df)
+    info = lmdb_version_store.get_info(symbol)
+    assert info["sorted"] == "ASCENDING"
+
+    num_rows = 20
+    initial_timestamp = pd.Timestamp("2020-01-01")
+    dtidx = pd.date_range(initial_timestamp, periods=num_rows)
+    df2 = pd.DataFrame({"c": np.arange(0, num_rows, dtype=np.int64)}, index=dtidx)
+    assert df2.index.is_monotonic_increasing == True
+    lmdb_version_store.append(symbol, df2)
+    info = lmdb_version_store.get_info(symbol)
+    assert info["sorted"] == "ASCENDING"
+
+    num_rows = 20
+    initial_timestamp = pd.Timestamp("2021-01-01")
+    dtidx = np.roll(pd.date_range(initial_timestamp, periods=num_rows), 3)
+    df2 = pd.DataFrame({"c": np.arange(0, num_rows, dtype=np.int64)}, index=dtidx)
+    assert df2.index.is_monotonic_increasing == False
+    lmdb_version_store.append(symbol, df2)
+    info = lmdb_version_store.get_info(symbol)
+    assert info["sorted"] == "UNSORTED"
+
+    num_rows = 20
+    initial_timestamp = pd.Timestamp("2022-01-01")
+    dtidx = pd.date_range(initial_timestamp, periods=num_rows)
+    df2 = pd.DataFrame({"c": np.arange(0, num_rows, dtype=np.int64)}, index=dtidx)
+    assert df2.index.is_monotonic_increasing == True
+    lmdb_version_store.append(symbol, df2)
+    info = lmdb_version_store.get_info(symbol)
+    assert info["sorted"] == "UNSORTED"

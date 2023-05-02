@@ -38,7 +38,8 @@ public:
         const StreamId& stream_id,
         InputTensorFrame&& frame,
         bool upsert,
-        bool prune_previous_versions) = 0;
+        bool prune_previous_versions,
+        bool validate_index) = 0;
 
     virtual VersionedItem delete_range_internal(
         const StreamId& stream_id,
@@ -100,7 +101,8 @@ public:
         const StreamId& stream_id,
         InputTensorFrame&& frame,
         bool prune_previous_versions,
-        bool allow_sparse
+        bool allow_sparse,
+        bool validate_index
     ) = 0;
 
     virtual std::pair<VersionedItem, std::vector<AtomKey>> write_individual_segment(
