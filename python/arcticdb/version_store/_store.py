@@ -2192,34 +2192,7 @@ class NativeVersionStore:
     def open_mode(self):
         return self._open_mode
 
-    def get_info(self, symbol: str, as_of: Optional[VersionQueryInput] = None) -> Dict[str, Any]:
-        """
-        Returns descriptive data for `symbol`.
-
-        Parameters
-        ----------
-        symbol : `str`
-            symbol name
-        as_of : `Optional[VersionQueryInput]`, default=None
-            See documentation of `read` method for more details.
-
-        Returns
-        -------
-        `Dict[str, Any]`
-            Dictionary containing the following fields:
-
-            - col_names, `Dict`
-            - dtype, `List`
-            - rows, `int`
-            - last_update, `datetime`
-            - input_type, `str`
-            - index_type, `index_type`
-            - normalization_metadata,
-            - type, `str`
-            - date_range, `tuple`
-        """
-        version_query = self._get_version_query(as_of)
-        vit, desc = self.version_store.read_descriptor(symbol, version_query)
+    def _process_info(self, symbol: str, vit, desc, as_of: Optional[VersionQueryInput] = None) -> Dict[str, Any]:
         columns = [f.name for f in desc.stream_descriptor.fields]
         dtypes = [f.type_desc for f in desc.stream_descriptor.fields]
         index = []
@@ -2278,6 +2251,84 @@ class NativeVersionStore:
             "date_range": self.get_timerange_for_symbol(symbol, vit.version),
             "sorted": SortedValue.Name(desc.stream_descriptor.sorted),
         }
+
+    def get_info(self, symbol: str, as_of: Optional[VersionQueryInput] = None) -> Dict[str, Any]:
+        """
+        Returns descriptive data for `symbol`.
+
+        Parameters
+        ----------
+        symbol : `str`
+            symbol name
+        as_of : `Optional[VersionQueryInput]`, default=None
+            See documentation of `read` method for more details.
+
+        Returns
+        -------
+        `Dict[str, Any]`
+            Dictionary containing the following fields:
+
+            - col_names, `Dict`
+            - dtype, `List`
+            - rows, `int`
+            - last_update, `datetime`
+            - input_type, `str`
+            - index_type, `index_type`
+            - normalization_metadata,
+            - type, `str`
+            - date_range, `tuple`
+        """
+        version_query = self._get_version_query(as_of)
+        vit, desc = self.version_store.read_descriptor(symbol, version_query)
+        return self._process_info(symbol, vit, desc, as_of)
+
+    def batch_get_info(
+        self, symbols: List[str], as_ofs: Optional[List[VersionQueryInput]] = None
+    ) -> List[Dict[str, Any]]:
+        """
+        Returns descriptive data for a list of `symbols`.
+
+        Parameters
+        ----------
+        symbols : `str`
+            symbols: `List[str]`
+                List of symbols to read the descriptor info for.
+            as_ofs: `Optional[List[VersionQueryInput]]`, default=None
+                List of version queries. See documentation of `read` method for more details.
+                i-th entry corresponds to i-th element of `symbols`.
+
+        Returns
+        -------
+        `List[Dict[str, Any]]`
+            List of Dictionaries containing the following fields:
+
+            - col_names, `Dict`
+            - dtype, `List`
+            - rows, `int`
+            - last_update, `datetime`
+            - input_type, `str`
+            - index_type, `index_type`
+            - normalization_metadata,
+            - type, `str`
+            - date_range, `tuple`
+        """
+        as_ofs_lists = []
+        if as_ofs == None:
+            as_ofs_lists = [None] * len(symbols)
+        else:
+            as_ofs_lists = as_ofs
+
+        version_queries = []
+        for as_of in as_ofs_lists:
+            version_queries.append(self._get_version_query(as_of))
+        list_descriptors = self.version_store.batch_read_descriptor(symbols, version_queries)
+        args_list = list(zip(list_descriptors, symbols, version_queries, as_ofs_lists))
+        list_infos = []
+        for descriptor, symbol, version_query, as_of in args_list:
+            vit = descriptor[0]
+            desc = descriptor[1]
+            list_infos.append(self._process_info(symbol, vit, desc, as_of))
+        return list_infos
 
     def write_metadata(
         self, symbol: str, metadata: Any, prune_previous_version: Optional[bool] = None
