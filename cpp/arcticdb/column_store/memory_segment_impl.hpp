@@ -171,21 +171,21 @@ public:
                 class SegmentIterator;
 
             template<class OtherValue>
-                bool equal(const RowIterator<OtherValue> &other) const {
-                    return location_ == other.location_;
-                }
+            bool equal(const RowIterator<OtherValue> &other) const {
+                return location_ == other.location_;
+            }
 
-                void increment() { ++location_.column_id_; }
+            void increment() { ++location_.column_id_; }
 
-                void decrement() { --location_.column_id_; }
+            void decrement() { --location_.column_id_; }
 
-                void advance(ptrdiff_t n) { location_.column_id_ += n; }
+            void advance(ptrdiff_t n) { location_.column_id_ += n; }
 
-                ValueType &dereference() const {
-                    return location_;
-                }
+            ValueType &dereference() const {
+                return location_;
+            }
 
-                mutable Location location_;
+            mutable Location location_;
         };
 
     struct Row {
@@ -207,10 +207,9 @@ public:
         }
 
         bool operator<(const Row &other) const {
-            return entity::visit_field(parent_->field(0), [that=this, &other](auto type_desc_tag) {
+            return entity::visit_field(parent_->field(0), [this, &other](auto type_desc_tag) {
                 using RawType =  typename decltype(type_desc_tag)::DataTypeTag::raw_type;
-                return that->parent_->scalar_at<RawType>(that->row_id_, 0) <
-                other.parent_->scalar_at<RawType>(other.row_id_, 0);
+                return parent_->scalar_at<RawType>(row_id_, 0) < other.parent_->scalar_at<RawType>(other.row_id_, 0);
             });
         }
 
@@ -349,25 +348,25 @@ public:
                 class SegmentIterator;
 
             template<class OtherValue>
-                bool equal(const SegmentIterator<OtherValue> &other) const {
-                    return row_ == other.row_;
-                }
+            bool equal(const SegmentIterator<OtherValue> &other) const {
+                return row_ == other.row_;
+            }
 
-                std::ptrdiff_t distance_to(const SegmentIterator &other) const {
-                    return other.row_.row_id_ - row_.row_id_;
-                }
+            std::ptrdiff_t distance_to(const SegmentIterator &other) const {
+                return other.row_.row_id_ - row_.row_id_;
+            }
 
-                void increment() { ++row_.row_id_; }
+            void increment() { ++row_.row_id_; }
 
-                void decrement() { --row_.row_id_; }
+            void decrement() { --row_.row_id_; }
 
-                void advance(ptrdiff_t n) { row_.row_id_ += n; }
+            void advance(ptrdiff_t n) { row_.row_id_ += n; }
 
-                ValueType &dereference() const {
-                    return row_;
-                }
+            ValueType &dereference() const {
+                return row_;
+            }
 
-                mutable Row row_;
+            mutable Row row_;
         };
 
     using iterator = SegmentIterator<Row>;
