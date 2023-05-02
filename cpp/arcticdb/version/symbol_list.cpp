@@ -177,29 +177,30 @@ static const StreamId compaction_id {CompactionId};
     }
 
     void SymbolList::read_list_from_storage(const std::shared_ptr<StreamSource>& store, const AtomKey& key,
-            CollectionType& symbols) {
-        auto key_seg = store->read(key).get();
+                                            CollectionType& symbols) {
         ARCTICDB_DEBUG(log::version(), "Reading list from storage with key {}", key);
-        auto field_desc = key_seg.second.descriptor().field_at(0);
-        if(!field_desc)
-            util::raise_rte("Expected at least one column in symbol list with key {}", key);
+        auto key_seg = store->read(key).get().second;
+        auto field_desc = key_seg.descriptor().field_at(0);
+        missing_data::check<ErrorCode::E_UNREADABLE_SYMBOL_LIST>(field_desc.has_value(),
+            "Expected at least one column in symbol list with key {}", key);
 
-        auto data_type = data_type_from_proto(field_desc->type_desc());
-        if (key_seg.second.row_count() > 0) {
-            for (auto row : key_seg.second) {
-                if (data_type == DataType::UINT64) {
-                    row.visit_scalar_type(0, uint64_t{}, [&](auto val) {
-                        ARCTICDB_DEBUG(log::version(), "Reading numeric symbol {}", val.value());
-                        symbols.insert(StreamId{safe_convert_to_numeric_id(val.value(), "Numeric symbol")});
-                    });
-                } else if (data_type == DataType::ASCII_DYNAMIC64) {
-                    row.visit_string(0, [&](const auto &val) {
-                        ARCTICDB_DEBUG(log::version(), "Reading string symbol '{}'", val.value());
-                        symbols.insert(StreamId{std::string{val.value()}});
-                    });
-                } else {
-                    util::raise_rte("Encountered unknown key type");
+        if (key_seg.row_count() > 0) {
+            auto data_type = data_type_from_proto(field_desc->type_desc());
+            if (data_type == DataType::UINT64) {
+                for (auto row : key_seg) {
+                    auto num_id = key_seg.scalar_at<uint64_t>(row.row_id_, 0).value();
+                    ARCTICDB_DEBUG(log::version(), "Reading numeric symbol {}", num_id);
+                    symbols.emplace(safe_convert_to_numeric_id(num_id, "Numeric symbol"));
                 }
+            } else if (data_type == DataType::ASCII_DYNAMIC64) {
+                for (auto row : key_seg) {
+                    auto sym = key_seg.string_at(row.row_id_, 0).value();
+                    ARCTICDB_DEBUG(log::version(), "Reading string symbol '{}'", sym);
+                    symbols.emplace(std::string{sym});
+                }
+            } else {
+                missing_data::raise<ErrorCode::E_UNREADABLE_SYMBOL_LIST>(
+                        "The symbol list contains unsupported symbol type: {}", data_type);
             }
         }
     }

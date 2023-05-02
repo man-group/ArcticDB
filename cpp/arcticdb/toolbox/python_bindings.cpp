@@ -11,6 +11,7 @@
 #include <arcticdb/storage/s3/s3_storage_tool.hpp>
 #include <arcticdb/toolbox/library_tool.hpp>
 #include <arcticdb/util/memory_tracing.hpp>
+#include <arcticdb/version/symbol_list.hpp>
 
 namespace arcticdb::toolbox::apy {
 
@@ -57,6 +58,17 @@ void register_bindings(py::module &m) {
             .def("get_prefix_info", &S3StorageTool::get_prefix_info)
             .def("get_object_size", &S3StorageTool::get_file_size)
             .def("delete_object", &S3StorageTool::delete_object);
+
+    // For tests:
+    tools.add_object("CompactionId", py::str(arcticdb::CompactionId));
+    tools.add_object("CompactionLockName", py::str(arcticdb::CompactionLockName));
+
+    py::class_<StorageLockWrapper>(tools, "StorageLock")
+            .def("lock", &StorageLockWrapper::lock)
+            .def("unlock", &StorageLockWrapper::unlock)
+            .def("lock_timeout", &StorageLockWrapper::lock_timeout)
+            .def("try_lock", &StorageLockWrapper::try_lock)
+            ;
 }
 
 } // namespace arcticdb::toolbox::apy
