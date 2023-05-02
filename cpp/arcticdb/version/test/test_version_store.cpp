@@ -320,7 +320,7 @@ TEST_F(VersionStoreTest, StressBatchWrite) {
         frames.push_back(wrapper.frame_);
     }
 
-    test_store_->batch_write_internal(version_ids, symbols, frames, dedup_maps);
+    test_store_->batch_write_internal(version_ids, symbols, frames, dedup_maps, false);
 }
 
 TEST_F(VersionStoreTest, StressBatchReadUncompressed) {
@@ -336,7 +336,7 @@ TEST_F(VersionStoreTest, StressBatchReadUncompressed) {
 
         for(int j = 0; j < 10; ++j) {
             auto wrapper = get_test_simple_frame(symbol, 10, i + j);
-            test_store_->write_versioned_dataframe_internal(symbol, std::move(wrapper.frame_), false, false);
+            test_store_->write_versioned_dataframe_internal(symbol, std::move(wrapper.frame_), false, false, false);
         }
 
         for(int k = 1; k < 10; ++k) {
@@ -437,7 +437,7 @@ TEST(VersionStore, UpdateWithin) {
     };
 
     auto test_frame =  get_test_frame<stream::TimeseriesIndex>(symbol, fields, num_rows, start_val);
-    version_store.write_versioned_dataframe_internal(symbol, std::move(test_frame.frame_), false, false);
+    version_store.write_versioned_dataframe_internal(symbol, std::move(test_frame.frame_), false, false, false);
 
     RowRange update_range{10, 15};
     size_t update_val{1};
@@ -479,7 +479,7 @@ TEST(VersionStore, UpdateBefore) {
     };
 
     auto test_frame =  get_test_frame<stream::TimeseriesIndex>(symbol, fields, num_rows, start_val);
-    version_store.write_versioned_dataframe_internal(symbol, std::move(test_frame.frame_), false, false);
+    version_store.write_versioned_dataframe_internal(symbol, std::move(test_frame.frame_), false, false, false);
 
     RowRange update_range{0, 10};
     size_t update_val{1};
@@ -521,7 +521,7 @@ TEST(VersionStore, UpdateAfter) {
     };
 
     auto test_frame =  get_test_frame<stream::TimeseriesIndex>(symbol, fields, num_rows, start_val);
-    version_store.write_versioned_dataframe_internal(symbol, std::move(test_frame.frame_), false, false);
+    version_store.write_versioned_dataframe_internal(symbol, std::move(test_frame.frame_), false, false, false);
 
     RowRange update_range{100, 110};
     size_t update_val{1};
@@ -563,7 +563,7 @@ TEST(VersionStore, UpdateIntersectBefore) {
     };
 
     auto test_frame = get_test_frame<stream::TimeseriesIndex>(symbol, fields, num_rows, start_val);
-    version_store.write_versioned_dataframe_internal(symbol, std::move(test_frame.frame_), false, false);
+    version_store.write_versioned_dataframe_internal(symbol, std::move(test_frame.frame_), false, false, false);
 
     RowRange update_range{0, 10};
     size_t update_val{1};
@@ -607,7 +607,7 @@ TEST(VersionStore, UpdateIntersectAfter) {
     };
 
     auto test_frame = get_test_frame<stream::TimeseriesIndex>(symbol, fields, num_rows, start_val);
-    version_store.write_versioned_dataframe_internal(symbol, std::move(test_frame.frame_), false, false);
+    version_store.write_versioned_dataframe_internal(symbol, std::move(test_frame.frame_), false, false, false);
 
     RowRange update_range{95, 105};
     size_t update_val{1};
@@ -652,7 +652,7 @@ TEST(VersionStore, UpdateWithinSchemaChange) {
 
     auto test_frame = get_test_frame<stream::TimeseriesIndex>(symbol, fields, num_rows, start_val);
     version_store.
-        write_versioned_dataframe_internal(symbol, std::move(test_frame.frame_), false, false);
+        write_versioned_dataframe_internal(symbol, std::move(test_frame.frame_), false, false, false);
 
     RowRange update_range{10, 15};
     size_t update_val{1};
@@ -713,7 +713,7 @@ TEST(VersionStore, UpdateWithinTypeAndSchemaChange) {
     };
 
     auto test_frame = get_test_frame<stream::TimeseriesIndex>(symbol, fields, num_rows, start_val);
-    version_store.write_versioned_dataframe_internal(symbol, std::move(test_frame.frame_), false, false);
+    version_store.write_versioned_dataframe_internal(symbol, std::move(test_frame.frame_), false, false, false);
 
     RowRange update_range{10, 15};
     size_t update_val{1};

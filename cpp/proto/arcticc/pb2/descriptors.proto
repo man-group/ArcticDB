@@ -57,6 +57,13 @@ message IndexDescriptor {
     Type kind = 2;
 }
 
+enum SortedValue {
+    UNKNOWN = 0;
+    UNSORTED = 1;
+    ASCENDING = 2;
+    DESCENDING = 3;
+}
+
 message StreamDescriptor {
     /* Channel can output a single type of data possibly containing multiple fields */
     oneof id
@@ -74,7 +81,7 @@ message StreamDescriptor {
     repeated FieldDescriptor fields = 4;
     uint64 type_hash = 5;
     string timezone = 6;  // unused but reserved in case first class support is needed
-    bool sorted = 7;
+    SortedValue sorted = 7;
     uint64 in_bytes = 8;
     uint64 out_bytes = 9;
 }

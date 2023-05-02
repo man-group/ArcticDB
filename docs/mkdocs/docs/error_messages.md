@@ -53,7 +53,7 @@ Note that for legacy reasons, the terms `symbol`, `stream`, and `stream ID` are 
 
 | Error Code | Cause                                                                  | Resolution                                                                                                                                          |
 |------------|------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------|
-| 6000       | Data should be sorted for this operation.                              | The requested operation requires data to be sorted. If this is a modification operation such as update, sort the input data.                        |
+| 6000       | Data should be sorted for this operation.                              | The requested operation requires data to be sorted. If this is a modification operation such as update, sort the input data. ArcticDB relies on Pandas to detect if data is sorted - you can call DataFrame.index.is_monotonic_increasing on your input DataFrame to see if Pandas believes the data to be sorted
 
 ## Errors without numeric error codes
 
