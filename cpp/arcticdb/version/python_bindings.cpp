@@ -9,6 +9,7 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 #include <pybind11/numpy.h>
+#include <pybind11/operators.h>
 #include <arcticdb/version/version_store_api.hpp>
 #include <arcticdb/python/arctic_version.hpp>
 #include <arcticdb/python/python_utils.hpp>
@@ -39,6 +40,8 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
     .def_property_readonly("start_index", &AtomKey::start_index)
     .def_property_readonly("end_index", &AtomKey::end_index)
     .def_property_readonly("type", [](const AtomKey& self) {return self.type();})
+    .def(pybind11::self == pybind11::self)
+    .def(pybind11::self != pybind11::self)
     .def("__repr__", &AtomKey::view)
     ;
 
@@ -47,6 +50,8 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
     .def(py::init<StreamId, KeyType>())
     .def_property_readonly("id", &RefKey::id)
     .def_property_readonly("type", [](const RefKey& self) {return self.type();})
+    .def(pybind11::self == pybind11::self)
+    .def(pybind11::self != pybind11::self)
     .def("__repr__", &RefKey::view)
     ;
 

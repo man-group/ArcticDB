@@ -74,7 +74,7 @@ public:
         }
 
         template<class Callable>
-            auto visit(Callable &&c) const {
+        auto visit(Callable &&c) const {
             return entity::visit_field(parent_->descriptor().field(column_id_), [that=this, c=std::forward<Callable>(c)](auto type_desc_tag) {
                 using RawType = typename std::decay_t<decltype(type_desc_tag)>::DataTypeTag::raw_type;
                 return c(that->parent_->scalar_at<RawType>(that->row_id_, that->column_id_));
@@ -82,29 +82,29 @@ public:
         }
 
         template<class Callable>
-            auto visit_string(Callable &&c) const {
+        auto visit_string(Callable &&c) const {
             return entity::visit_field(parent_->descriptor().field(column_id_), [that=this, c = std::forward<Callable>(c)](auto type_desc_tag) {
                 using DTT = typename std::decay_t<decltype(type_desc_tag)>::DataTypeTag;
                 if constexpr(is_sequence_type(DTT::data_type))
-                return c(that->parent_->string_at(that->row_id_, position_t(that->column_id_)));
+                    return c(that->parent_->string_at(that->row_id_, position_t(that->column_id_)));
             });
         }
 
         template<class Callable>
-            auto visit_field(Callable &&c) const {
+        auto visit_field(Callable &&c) const {
             const auto& field = parent_->descriptor().field(column_id_);
             return entity::visit_field(parent_->descriptor().field(column_id_), [&field, that=this, c = std::forward<Callable>(c)](auto type_desc_tag) {
                 using DataTypeTag = typename std::decay_t<decltype(type_desc_tag)>::DataTypeTag;
                 using RawType = typename DataTypeTag::raw_type;
                 if constexpr (is_sequence_type(DataTypeTag::data_type))
-                return c(that->parent_->string_at(that->row_id_, position_t(that->column_id_)), std::string_view{field.name()}, type_desc_from_proto(field.type_desc()));
+                    return c(that->parent_->string_at(that->row_id_, position_t(that->column_id_)), std::string_view{field.name()}, type_desc_from_proto(field.type_desc()));
                 else
                     return c(that->parent_->scalar_at<RawType>(that->row_id_, that->column_id_), std::string_view{field.name()}, type_desc_from_proto(field.type_desc()));
             });
         }
 
         template<class Callable>
-            auto visit(Callable &&c) {
+        auto visit(Callable &&c) {
             return entity::visit_field(parent_->descriptor().field(column_id_), [that=this, c=std::forward<Callable>(c)](auto type_desc_tag) {
                 using RawType = typename std::decay_t<decltype(type_desc_tag)>::DataTypeTag::raw_type;
                 return c(that->parent_->reference_at<RawType>(that->row_id_, that->column_id_));
@@ -198,39 +198,6 @@ public:
         parent_(parent),
         row_id_(row_id_) {}
 
-        template<typename Callable>
-        auto visit_field(size_t field_num, Callable &&c) const {
-            return type_desc_from_proto(descriptor()[field_num].type_desc()).visit_tag(std::forward<Callable>(c));
-        }
-
-        template<typename Callable>
-        auto visit_scalar(size_t field_num, Callable &&c) const {
-            return type_desc_from_proto(descriptor()[field_num].type_desc()).visit_tag([field_num, that=this, c = std::forward<Callable>(c)](auto type_desc_tag) {
-                using RawType =  typename decltype(type_desc_tag)::DataTypeTag::raw_type;
-                return c(that->parent_->scalar_at<RawType>(that->row_id_, field_num));
-            });
-        }
-
-        template<typename Callable, typename RestrictType>
-        auto visit_scalar_type(size_t field_num, const RestrictType &, Callable &&c) const {
-            return type_desc_from_proto(descriptor()[field_num].type_desc()).visit_tag([field_num, that=this, c = std::forward<Callable>(c)](auto type_desc_tag) {
-                using RawType =  typename decltype(type_desc_tag)::DataTypeTag::raw_type;
-                if constexpr(std::is_same_v<RawType, RestrictType>)
-                return c(that->parent_->scalar_at<RawType>(that->row_id_, field_num));
-            });
-        }
-
-        template<typename Callable>
-        auto visit_string(size_t field_num, Callable &&c) const {
-            return type_desc_from_proto(descriptor()[field_num].type_desc()).visit_tag([field_num, that=this, c = std::forward<Callable>(c)](auto type_desc_tag) {
-                using DTT =  typename decltype(type_desc_tag)::DataTypeTag;
-                if constexpr(is_sequence_type(DTT::data_type))
-                return c(that->parent_->string_at(that->row_id_, position_t(field_num)));
-                else
-                    util::raise_rte("Invalid type {} in visit_string", DTT::data_type);
-            });
-        }
-
         [[nodiscard]] SegmentInMemoryImpl& segment() const {
             return *parent_;
         }
@@ -240,7 +207,7 @@ public:
         }
 
         bool operator<(const Row &other) const {
-            return visit_field(0, [that=this, &other](auto type_desc_tag) {
+            return entity::visit_field(parent_->field(0), [that=this, &other](auto type_desc_tag) {
                 using RawType =  typename decltype(type_desc_tag)::DataTypeTag::raw_type;
                 return that->parent_->scalar_at<RawType>(that->row_id_, 0) <
                 other.parent_->scalar_at<RawType>(other.row_id_, 0);

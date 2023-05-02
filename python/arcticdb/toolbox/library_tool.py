@@ -3,16 +3,30 @@ Copyright 2023 Man Group Operations Limited
 Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
-from typing import Optional, Union, List
-
+from typing import Optional, Union, List, Dict, Any
 import pandas as pd
 
 from arcticdb.version_store._normalization import FrameData
-from arcticdb_ext.codec import Segment, decode_segment
-from arcticdb_ext.storage import KeyType, Library
+from arcticdb_ext.codec import decode_segment
+from arcticdb_ext.storage import KeyType
 from arcticdb_ext.stream import SegmentInMemory
 from arcticdb_ext.tools import LibraryTool as LibraryToolImpl
 from arcticdb_ext.version_store import AtomKey, PythonOutputFrame, RefKey
+
+VariantKey = Union[AtomKey, RefKey]
+
+_KEY_PROPERTIES = {
+    key_type: {k: v for k, v in vars(key_type).items() if isinstance(v, property)} for key_type in (AtomKey, RefKey)
+}
+
+
+def key_to_props_dict(key: VariantKey) -> Dict[str, Any]:
+    return {k: v.fget(key) for k, v in _KEY_PROPERTIES[type(key)].items()}
+
+
+def props_dict_to_atom_key(d: Dict[str, Any]) -> AtomKey:
+    args = tuple(d[k] for k in _KEY_PROPERTIES[AtomKey])
+    return AtomKey(*args)
 
 
 class LibraryTool(LibraryToolImpl):
@@ -45,17 +59,17 @@ class LibraryTool(LibraryToolImpl):
     def find_keys_for_symbol(self, key_type: KeyType, id: Union[str, int]) -> Union[List[AtomKey], List[RefKey]]:
         return self.find_keys_for_id(key_type, id)
 
-    def read_to_segment_in_memory(self, key: Union[AtomKey, RefKey]) -> SegmentInMemory:
+    def read_to_segment_in_memory(self, key: VariantKey) -> SegmentInMemory:
         return decode_segment(self.read_to_segment(key))
 
-    def read_to_dataframe(self, key: Union[AtomKey, RefKey]) -> pd.DataFrame:
+    def read_to_dataframe(self, key: VariantKey) -> pd.DataFrame:
         """
         Reads the segment associated with the provided key into a Pandas DataFrame format. Any strings in the segment
         are replaced with Nones.
 
         Parameters
         ----------
-        key : Union[AtomKey, RefKey]
+        key : VariantKey
            The key in storage to read.
 
         Returns
@@ -80,10 +94,7 @@ class LibraryTool(LibraryToolImpl):
         return pd.DataFrame(cols, columns=field_names)
 
     def read_to_keys(
-        self,
-        key: Union[AtomKey, RefKey],
-        id: Optional[Union[str, int]] = None,
-        filter_key_type: Optional[KeyType] = None,
+        self, key: VariantKey, id: Optional[Union[str, int]] = None, filter_key_type: Optional[KeyType] = None
     ) -> List[AtomKey]:
         """
         Reads the segment associated with the provided key into a Pandas DataFrame format, and then converts each row in
@@ -91,7 +102,7 @@ class LibraryTool(LibraryToolImpl):
 
         Parameters
         ----------
-        key : Union[AtomKey, RefKey]
+        key : VariantKey
            The key in storage to read.
 
         id: Optional[Union[str, int]], default=None
