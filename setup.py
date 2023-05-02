@@ -117,28 +117,23 @@ class CMakeBuild(build_ext):
         preset = os.getenv(env_var, "*")
         if preset == "skip":
             return
+        if preset == "*":
+            suffix = "-debug" if self.debug else "-release"
+            preset = ("windows-cl" if platform.system() == "Windows" else platform.system().lower()) + suffix
+        _log_and_run(
+            cmake,
+            "-DTEST=NO",
+            f"-DBUILD_PYTHON_VERSION={sys.version_info[0]}.{sys.version_info[1]}",
+            f"-DCMAKE_INSTALL_PREFIX={os.path.dirname(dest)}",
+            "--preset",
+            preset,
+            cwd="cpp",
+        )
+
         search = f"cpp/out/{preset}-build"
         candidates = glob.glob(search)
-        if not candidates:
-            if preset == "*":
-                suffix = "-debug" if self.debug else "-release"
-                preset = ("windows-cl" if platform.system() == "Windows" else platform.system().lower()) + suffix
-            print(
-                f"Did not find build directory with '{search}'. Will configure and build using cmake preset {preset}",
-                file=sys.stderr,
-            )
-            _log_and_run(
-                cmake,
-                "-DTEST=NO",
-                f"-DBUILD_PYTHON_VERSION={sys.version_info[0]}.{sys.version_info[1]}",
-                f"-DCMAKE_INSTALL_PREFIX={os.path.dirname(dest)}",
-                "--preset",
-                preset,
-                cwd="cpp",
-            )
-            candidates = glob.glob(search)
-
         assert len(candidates) == 1, f"Specify {env_var} or use a single build directory. {search}={candidates}"
+
         try:
             # Python API is not cgroups-aware yet, so use CMake:
             cpu_output = subprocess.check_output([cmake, "-P", "cpp/CMake/CpuCount.cmake"], universal_newlines=True)
