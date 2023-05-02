@@ -29,6 +29,7 @@
 #include <set>
 #include <mutex>
 
+// FUTURE(GitHub #297)
 #define SYMBOL_LIST_RUNTIME_LOG(...) ARCTICDB_RUNTIME_DEBUG(log::version(), "Symbol List: {}: ", __func__, __VA_ARGS__)
 
 namespace arcticdb {
@@ -44,6 +45,7 @@ class SymbolList {
     using StreamId = entity::StreamId;
     using CollectionType  = std::set<StreamId>;
     using KeyVector = std::vector<entity::AtomKey>;
+    using KeyVectorItr = KeyVector::const_iterator;
 
     StreamId type_holder_;
     uint64_t max_delta_ = 0;
@@ -56,12 +58,7 @@ class SymbolList {
         version_map_(std::move(version_map)){
     }
 
-    CollectionType load(const std::shared_ptr<Store>& store, bool no_compaction) {
-        return ExponentialBackoff<std::runtime_error>(100, 2000).go([&]() {
-            SYMBOL_LIST_RUNTIME_LOG("Symbol list load attempt");
-            return load_symbols(store, no_compaction);
-        });
-    }
+    CollectionType load(const std::shared_ptr<Store>& store, bool no_compaction);
 
     std::vector<StreamId> get_symbols(const std::shared_ptr<Store>& store, bool no_compaction=false) {
         SYMBOL_LIST_RUNTIME_LOG("no_compaction={}", no_compaction); // function name logged in macro
@@ -88,17 +85,14 @@ class SymbolList {
         delete_all_keys_of_type(KeyType::SYMBOL_LIST, store, true);
     }
 
-    void reload(const std::shared_ptr<Store>& store) {
-        clear(store);
-        load(store, false);
-    }
-
 private:
-    // Making each function return the collection instead of using a shared field removes the possibility of the field
-    // being left blank by mistake
-    CollectionType load_symbols(const std::shared_ptr<Store>& store, bool no_compaction);
+    struct LoadResult;
 
-    CollectionType compact(std::shared_ptr<Store> store, const std::vector<AtomKey>& symbol_keys);
+    LoadResult attempt_load(const std::shared_ptr<Store>& store);
+
+    static bool can_update_symbol_list(
+            const std::shared_ptr<Store>& store,
+            const std::optional<KeyVectorItr>& last_compaction);
 
     void write_symbol(const std::shared_ptr<Store>& store, const StreamId& symbol) {
         write_journal(store, symbol, AddSymbol);
@@ -118,18 +112,19 @@ private:
             const StreamId& stream_id,
             timestamp creation_ts);
 
-    [[nodiscard]] CollectionType load_from_storage(const std::shared_ptr<StreamSource>& store, const
-        std::vector<AtomKey>& keys);
+    [[nodiscard]] CollectionType load_from_symbol_list_keys(
+            const std::shared_ptr<StreamSource>& store,
+            const folly::Range<KeyVectorItr>& keys);
 
     void read_list_from_storage(const std::shared_ptr<StreamSource>& store, const AtomKey& key,
             CollectionType& symbols);
 
     [[nodiscard]] KeyVector get_all_symbol_list_keys(const std::shared_ptr<StreamSource>& store) const;
 
-    void delete_keys(
-            std::shared_ptr<Store> store, const KeyVector& lists);
+    [[nodiscard]] static folly::Future<std::vector<Store::RemoveKeyResultType>>
+    delete_keys(const std::shared_ptr<Store>& store, KeyVector&& to_remove, const AtomKey& exclude);
 
-    std::optional<KeyVector::difference_type> last_compaction(const KeyVector& keys);
+    static auto last_compaction(const KeyVector& keys) -> std::optional<KeyVectorItr>;
 
     inline StreamDescriptor symbol_stream_descriptor(const StreamId& stream_id) {
         auto data_type = std::holds_alternative<StringId>(type_holder_) ? DataType::ASCII_DYNAMIC64 : DataType::UINT64;
@@ -158,9 +153,9 @@ struct WriteSymbolTask : async::BaseTask {
             std::shared_ptr<Store> store,
             std::shared_ptr<SymbolList> symbol_list,
             StreamId stream_id) :
-            store_(store),
-            symbol_list_(symbol_list),
-            stream_id_(stream_id) {
+            store_(std::move(store)),
+            symbol_list_(std::move(symbol_list)),
+            stream_id_(std::move(stream_id)) {
     }
 
     folly::Future<folly::Unit> operator()() {

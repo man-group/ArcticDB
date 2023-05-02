@@ -48,8 +48,14 @@ struct OnExit {
         func_(std::move(func)) {}
 
     ~OnExit() {
-        if(!released_)
-            func_();
+        if(!released_) {
+            // Must not throw in destructor to avoid crashes
+            try {
+                func_();
+            } catch (const std::exception& e) {
+                log::lock().error("Exception in OnExit: {}", e.what());
+            }
+        }
     }
 
     void release() {

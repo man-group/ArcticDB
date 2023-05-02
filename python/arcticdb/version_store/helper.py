@@ -275,8 +275,15 @@ def create_test_lmdb_cfg(lib_name: str, db_dir: str, lmdb_config: Dict[str, Any]
     return cfg
 
 
-def create_test_s3_cfg(lib_name, credential_name, credential_key, bucket_name, endpoint, *, with_prefix=True):
-    # type: (str, str, str, str, str, None, Union[str, bool, None]) -> EnvironmentConfigsMap
+def create_test_s3_cfg(
+    lib_name: str,
+    credential_name: str,
+    credential_key: str,
+    bucket_name: str,
+    endpoint: str,
+    *,
+    with_prefix: Union[str, bool, None] = True,
+) -> EnvironmentConfigsMap:
     cfg = EnvironmentConfigsMap()
     add_s3_library_to_env(
         cfg,

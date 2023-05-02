@@ -6,7 +6,7 @@
  */
 
 #include <gtest/gtest.h>
-#include <gmock/gmock.h>
+#include <gmock/gmock-matchers.h>
 #include <arcticdb/processing/clause.hpp>
 #include <arcticdb/util/test/generators.hpp>
 #include <folly/futures/Future.h>
@@ -21,7 +21,7 @@ void segment_scalar_assert_all_values_equal(const arcticdb::ProcessingSegment& s
     segment_memory.init_column_map();
     auto column_index = segment_memory.column_index(name.value).value();
     size_t row_counter = 0;
-    for (auto row : segment_memory) {
+    for (const auto& row : segment_memory) {
         if (auto maybe_val = row.scalar_at<T>(column_index); maybe_val){
             ASSERT_THAT(expected, testing::Contains(maybe_val.value()));
             row_counter++;
