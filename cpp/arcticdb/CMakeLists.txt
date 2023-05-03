@@ -57,8 +57,11 @@ if(NOT ${ARCTICDB_USING_CONDA})
     set(Zstd_LIBRARY $<IF:$<TARGET_EXISTS:zstd::libzstd_shared>,zstd::libzstd_shared,zstd::libzstd_static>)
 else()
 
+    # ARCTICDB_USE_CONDA is used to resolve include paths.
+    add_compile_definitions(ARCTICDB_USE_CONDA)
     find_package(pybind11 REQUIRED)
     find_package(xxHash REQUIRED)
+    find_package(robin_hood REQUIRED)
     find_package(Libevent  REQUIRED)
 
     set(ARCTICDB_MONGO_LIBS mongo::mongocxx_shared mongo::bsoncxx_shared)
@@ -285,7 +288,6 @@ set(arcticdb_srcs
         util/string_utils.hpp
         util/third_party/emilib_map.hpp
         util/third_party/emilib_set.hpp
-        util/third_party/robin_hood.hpp
         util/timeouts.hpp
         util/timer.hpp
         util/trace.hpp
@@ -384,6 +386,12 @@ set(arcticdb_srcs
         version/symbol_list.cpp
         version/schema_checks.hpp
         )
+# PCRE
+if(NOT ${ARCTICDB_USING_CONDA})
+    list (APPEND arcticdb_srcs
+        util/third_party/robin_hood.hpp
+    )
+endif()
 
 add_library(arcticdb_core_object OBJECT ${arcticdb_srcs})
 
@@ -562,14 +570,6 @@ pybind11_add_module(arcticdb_ext MODULE
         )
 
 set (additional_link_flags "")
-if (HIDE_LINKED_SYMBOLS AND (NOT WIN32))
-
-    if (NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-        list(APPEND additional_link_flags
-            "-Wl,--exclude-libs,ALL"
-            "-Wl,--gc-sections")
-    endif()
-endif()
 
 target_link_libraries(arcticdb_ext
         PUBLIC
