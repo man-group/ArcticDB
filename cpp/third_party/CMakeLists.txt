@@ -1,4 +1,6 @@
-add_subdirectory(pybind11)
+if(NOT ${ARCTICDB_USING_CONDA})
+    add_subdirectory(pybind11)
+endif()
 add_subdirectory(xxhash)
 add_subdirectory(lmdbcxx)
 add_subdirectory(Remotery)

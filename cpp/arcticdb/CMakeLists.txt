@@ -48,6 +48,9 @@ if (ARCTICDB_USING_VCPKG AND NOT ${ARCTICDB_USING_CONDA})
     find_package(zstd CONFIG REQUIRED)  # "CONFIG" bypasses our cpp/CMake/FindZstd.cmake module
     set(Zstd_LIBRARY $<IF:$<TARGET_EXISTS:zstd::libzstd_shared>,zstd::libzstd_shared,zstd::libzstd_static>)
 elseif(${ARCTICDB_USING_CONDA})
+
+    find_package(pybind11 REQUIRED)
+
     find_package(double-conversion REQUIRED)
     find_package(Libevent  REQUIRED)
 
