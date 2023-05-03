@@ -44,3 +44,4 @@ dependencies:
   - robin_hood
   - rapidcheck
   - recycle
+  - lmdbxx
