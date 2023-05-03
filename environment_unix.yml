@@ -45,3 +45,4 @@ dependencies:
   - rapidcheck
   - recycle
   - lmdbxx
+  - remotery

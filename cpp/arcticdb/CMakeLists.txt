@@ -62,6 +62,7 @@ else()
     find_package(recycle REQUIRED)
     find_package(LMDB REQUIRED)
     find_package(LMDBXX REQUIRED)
+    find_package(remotery REQUIRED)
 
     set(ARCTICDB_MONGO_LIBS mongo::mongocxx_shared mongo::bsoncxx_shared)
 
@@ -443,7 +444,6 @@ set (arcticdb_core_libraries
         ${ARCTICDB_MONGO_LIBS}
         spdlog::spdlog
         Folly::folly # Transitively includes: double-conversion, gflags, glog, libevent, libssl, libcrypto, libiberty, libsodium
-        remotery_static
         )
 
 # Dependencies expose different names of their libraries depending
@@ -459,6 +459,7 @@ if(${ARCTICDB_USING_CONDA})
         pcre
         msgpack-c
         ${LMDB_LIBRARIES}
+        ${remotery_LIBRARY}
     )
 else()
 
@@ -469,6 +470,7 @@ else()
         unofficial::pcre::pcre
         msgpackc-cxx
         lmdb
+        remotery_static
     )
 endif()
 
