@@ -526,13 +526,13 @@ public:
         const VersionMapEntry& entry,
         const StreamId &stream_id) const {
         if (entry.head_) {
-            util::check(entry.head_.value().id() == stream_id, "Id mismatch for entry {} vs stream id {}",
+            util::check(entry.head_.value().id() == stream_id, "Id mismatch for entry {} vs symbol {}",
                         entry.head_.value().id(), stream_id);
             store->remove_key_sync(entry.head_.value());
         }
         std::vector<folly::Future<Store::RemoveKeyResultType>> key_futs;
         for (const auto &key : entry.keys_) {
-            util::check(key.id() == stream_id, "Id mismatch for entry {} vs stream id {}", key.id(), stream_id);
+            util::check(key.id() == stream_id, "Id mismatch for entry {} vs symbol {}", key.id(), stream_id);
             if (key.type() == KeyType::VERSION)
                 key_futs.emplace_back(store->remove_key(key));
         }
