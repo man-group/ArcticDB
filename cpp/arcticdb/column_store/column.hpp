@@ -22,7 +22,7 @@
 #include <arcticdb/util/sparse_utils.hpp>
 
 #include <folly/Likely.h>
-#include <folly/container/Enumerate.h> 
+#include <folly/container/Enumerate.h>
 #include <pybind11/pybind11.h>
 #include <pybind11/numpy.h>
 #include <bitmagic/bm.h>
