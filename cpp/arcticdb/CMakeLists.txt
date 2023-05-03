@@ -5,11 +5,11 @@ option(STATIC_LINK_STD_LIB "Statically link the C++ standard libraries" ON)
 
 if(${TEST})
 find_package(GTest CONFIG REQUIRED)
-
 include(CTest)
 include(GoogleTest)
-include(GenerateExportHeader)
 endif()
+
+include(GenerateExportHeader)
 
 # System and third-party libraries with built-in find_package Config
 cmake_policy(PUSH)
