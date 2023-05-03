@@ -55,6 +55,7 @@ else()
     find_package(xxHash REQUIRED)
     find_package(PCRE REQUIRED)
     find_package(Libevent  REQUIRED)
+    find_package(recycle REQUIRED)
 
     set(ARCTICDB_MONGO_LIBS mongo::mongocxx_shared mongo::bsoncxx_shared)
 
@@ -451,6 +452,7 @@ if(${ARCTICDB_USING_CONDA})
 else()
 
     add_compile_definitions(ARCTICDB_USING_STATIC_XXHASH)
+
     list (APPEND arcticdb_core_libraries
         xxhash_static
         unofficial::pcre::pcre
