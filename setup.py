@@ -130,6 +130,7 @@ class CMakeBuild(build_ext):
         if preset == "*":
             conda_suffix = "-conda" if ARCTICDB_USING_CONDA else ""
             suffix = "-debug" if self.debug else "-release"
+            suffix = conda_suffix + suffix
             preset = ("windows-cl" if platform.system() == "Windows" else platform.system().lower()) + suffix
         _log_and_run(
             cmake,
