@@ -62,9 +62,7 @@ TEST(Clause, Partition) {
     Composite<ProcessingSegment> comp;
     comp.push_back(std::move(proc_seg));
 
-    ExecutionContext context{};
-    context.root_node_name_ = ExpressionName("int8");
-    PartitionClause<arcticdb::grouping::HashingGroupers, arcticdb::grouping::ModuloBucketizer> partition{std::make_shared<ExecutionContext>(std::move(context))};
+    PartitionClause<arcticdb::grouping::HashingGroupers, arcticdb::grouping::ModuloBucketizer> partition{"int8"};
 
     auto partitioned = partition.process(empty, std::move(comp));
 
@@ -88,9 +86,7 @@ TEST(Clause, PartitionString) {
     Composite<ProcessingSegment> comp;
     comp.push_back(std::move(proc_seg));
 
-    ExecutionContext context{};
-    context.root_node_name_ = ExpressionName("strings");
-    PartitionClause<arcticdb::grouping::HashingGroupers, arcticdb::grouping::ModuloBucketizer> partition{std::make_shared<ExecutionContext>(std::move(context))};
+    PartitionClause<arcticdb::grouping::HashingGroupers, arcticdb::grouping::ModuloBucketizer> partition{"strings"};
 
     auto partitioned = partition.process(empty, std::move(comp));
 
@@ -189,10 +185,8 @@ TEST(Clause, Merge) {
 
     StreamDescriptor descriptor{};
     descriptor.add_field(scalar_field_proto(DataType::MICROS_UTC64, "time"));
-    ExecutionContext merge_clause_context{};
-    merge_clause_context.set_descriptor(descriptor);
     auto stream_id = StreamId("Merge");
-    MergeClause merge_clause{TimeseriesIndex{"time"}, DenseColumnPolicy{}, stream_id, std::make_shared<ExecutionContext>(std::move(merge_clause_context))};
+    MergeClause merge_clause{TimeseriesIndex{"time"}, DenseColumnPolicy{}, stream_id, descriptor};
     std::shared_ptr<Store> empty;
     auto res = merge_clause.process(empty, std::move(comp));
     ASSERT_EQ(res.size(), 4u);
