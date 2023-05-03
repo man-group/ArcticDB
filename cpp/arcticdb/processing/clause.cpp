@@ -12,7 +12,6 @@
 #include <arcticdb/util/composite.hpp>
 #include <arcticdb/processing/clause.hpp>
 #include <arcticdb/pipeline/value_set.hpp>
-#include <arcticdb/util/third_party/emilib_map.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>
 
 namespace arcticdb {

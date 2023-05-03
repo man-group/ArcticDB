@@ -11,8 +11,7 @@
 
 #include <arcticdb/processing/signed_unsigned_comparison.hpp>
 #include <arcticdb/util/preconditions.hpp>
-#include <folly/container/F14Set.h>
-#include <arcticdb/util/third_party/emilib_set.hpp>
+#include <arcticdb/util/third_party/robin_hood.hpp>
 
 namespace arcticdb {
 // If reordering this enum, is_binary_operation may also need to be changed
@@ -390,7 +389,7 @@ bool operator()(int64_t t, const std::unordered_set<uint64_t>& u) const {
         return u.count(t) > 0;
 }
 // This is the version called when checking string set membership
-bool operator()(int64_t t, const emilib::HashSet<int64_t>& u) const {
+bool operator()(int64_t t, const robin_hood::unordered_set<int64_t>& u) const {
     return u.contains(t);
 }
 };
@@ -413,7 +412,7 @@ bool operator()(int64_t t, const std::unordered_set<uint64_t>& u) const {
         return u.count(t) == 0;
 }
 // This is the version called when checking string set membership
-bool operator()(int64_t t, const emilib::HashSet<int64_t>& u) const {
+bool operator()(int64_t t, const robin_hood::unordered_set<int64_t>& u) const {
     return !u.contains(t);
 }
 };

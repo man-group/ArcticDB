@@ -8,7 +8,6 @@
 #include <arcticdb/column_store/string_pool.hpp>
 #include <arcticdb/util/offset_string.hpp>
 #include <arcticdb/column_store/segment_utils.hpp>
-#include <arcticdb/util/third_party/emilib_set.hpp>
 #include <arcticdb/util/third_party/robin_hood.hpp>
 
 namespace arcticdb {
@@ -76,7 +75,7 @@ std::optional<position_t> StringPool::get_offset_for_column(std::string_view str
     return output;
 }
 
-emilib::HashSet<position_t> StringPool::get_offsets_for_column(const std::shared_ptr<std::unordered_set<std::string>>& strings, const Column& column) {
+robin_hood::unordered_set<position_t> StringPool::get_offsets_for_column(const std::shared_ptr<std::unordered_set<std::string>>& strings, const Column& column) {
     auto unique_values = unique_values_for_string_column(column);
     remove_nones_and_nans(unique_values);
     robin_hood::unordered_flat_map<std::string_view, offset_t> col_values;
@@ -85,7 +84,7 @@ emilib::HashSet<position_t> StringPool::get_offsets_for_column(const std::shared
         col_values.emplace(block_.const_at(pos), pos);
     }
 
-    emilib::HashSet<position_t> output;
+    robin_hood::unordered_set<position_t> output;
     for(const auto& string : *strings) {
         auto loc = col_values.find(string);
         if(loc != col_values.end())
