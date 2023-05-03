@@ -637,14 +637,14 @@ struct StreamDescriptor {
         util::variant_match(id,
             [this] (const StringId& str) { data_->set_str_id(str); },
             [this] (const NumericId& n) {
-                util::check(n >= 0, "Negative NumericId is not supported");
+                util::check(n >= 0, "Negative numeric symbol is not supported");
                 data_->set_num_id(n);
             });
     }
 
     static StreamId id_from_proto(Proto proto) {
         if(proto.id_case() == arcticdb::proto::descriptors::StreamDescriptor::kNumId)
-            return safe_convert_to_numeric_id(proto.num_id(), "Numeric StreamId");
+            return safe_convert_to_numeric_id(proto.num_id(), "Numeric symbol");
         else
             return proto.str_id();
     }

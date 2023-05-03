@@ -160,7 +160,7 @@ std::vector<VersionedItem> PythonVersionStore::batch_append(
     std::vector<AtomKey> existing_keys;
     for (const auto &stream_id: stream_ids) {
         auto update_info = stream_update_info_map.at(stream_id);
-        util::check(update_info.previous_index_key_.has_value(), "Can't batch append to nonexistent stream {}", stream_id);
+        util::check(update_info.previous_index_key_.has_value(), "Can't batch append to nonexistent symbol {}", stream_id);
         version_ids.push_back(update_info.next_version_id_);
         existing_keys.push_back(*(update_info.previous_index_key_));
     }
@@ -733,7 +733,7 @@ ReadResult PythonVersionStore::read_dataframe_merged(
     const ReadQuery &query,
     const ReadOptions& read_options) {
     if (stream_ids.empty())
-        util::raise_rte("No string ids given");
+        util::raise_rte("No symbols given");
 
     auto stream_index_map = batch_get_latest_version(store(), version_map(), stream_ids, false);
     std::vector<AtomKey> index_keys;
@@ -741,7 +741,7 @@ ReadResult PythonVersionStore::read_dataframe_merged(
                    [](auto &stream_key) { return to_atom(stream_key.second); });
 
     if(stream_index_map->empty())
-        throw NoDataFoundException("No data found for any stream ids");
+        throw NoDataFoundException("No data found for any symbols");
 
     auto [key, metadata, descriptor] = store()->read_metadata_and_descriptor(stream_index_map->begin()->second).get();
     auto index = index_type_from_descriptor(descriptor);
@@ -901,7 +901,7 @@ void PythonVersionStore::prune_previous_versions(const StreamId& stream_id) {
     const auto entry = version_map()->check_reload(store(), stream_id, LoadParameter{LoadType::LOAD_UNDELETED},
                                                  true, false, __FUNCTION__);
     auto latest = entry->get_first_index(false);
-    util::check(latest.has_value(), "Cannot prune previous versions for non-existent stream {}", stream_id);
+    util::check(latest.has_value(), "Cannot prune previous versions for non-existent symbol {}", stream_id);
 
     auto prev_id = get_prev_version_in_entry(entry, latest->version_id());
     if (!prev_id) {
@@ -972,7 +972,7 @@ std::pair<VersionedItem, py::object> PythonVersionStore::read_metadata(
 
     auto version = get_version_to_read(stream_id, version_query);
     if(!version)
-        throw NoDataFoundException(fmt::format("read_metadata: version not found for stream", stream_id));
+        throw NoDataFoundException(fmt::format("read_metadata: version not found for symbol", stream_id));
 
     auto metadata_proto = store()->read_metadata(version.value().key_).get().second;
     py::object pyobj = metadata_protobuf_to_pyobject(metadata_proto);
@@ -1039,22 +1039,36 @@ std::pair<VersionedItem, py::object> PythonVersionStore::read_descriptor(
     const StreamId& stream_id,
     const VersionQuery& version_query
     ) {
-    ARCTICDB_SAMPLE(ReadDescriptor, 0)
-
+    auto [version, metadata_proto] = read_descriptor_version_internal(stream_id, version_query);
     py::object pyobj;
-    auto version = get_version_to_read(stream_id, version_query);
-    if(!version)
-        throw NoDataFoundException(fmt::format("read_descriptor: version not found for stream", stream_id));
-
-    if (auto metadata_proto = store()->read_metadata(version->key_).get().second; metadata_proto) {
+    if (metadata_proto.has_value()) {
         arcticdb::proto::descriptors::TimeSeriesDescriptor tsd;
         metadata_proto->UnpackTo(&tsd);
         pyobj = python_util::pb_to_python(tsd);
     } else {
         pyobj = pybind11::none();
     }
+    return std::make_pair(version, pyobj);
+}
 
-    return std::pair{version.value(), pyobj};
+std::vector<std::pair<VersionedItem, py::object>> PythonVersionStore::batch_read_descriptor(
+        const std::vector<StreamId>& stream_ids,
+        const std::vector<VersionQuery>& version_queries){
+    
+    auto vector_descriptors = batch_read_descriptor_internal(stream_ids, version_queries);
+    std::vector<std::pair<VersionedItem, py::object>> output_vector;
+    for (auto [version, metadata_proto] : vector_descriptors) {
+        py::object pyobj;
+        if (metadata_proto.has_value()) {
+            arcticdb::proto::descriptors::TimeSeriesDescriptor tsd;
+            metadata_proto->UnpackTo(&tsd);
+            pyobj = python_util::pb_to_python(tsd);
+        } else {
+            pyobj = pybind11::none();
+        }
+        output_vector.push_back(std::make_pair(version, pyobj));
+    }
+    return output_vector;
 }
 
 ReadResult PythonVersionStore::read_index(
@@ -1066,7 +1080,7 @@ ReadResult PythonVersionStore::read_index(
     py::object pyobj;
     auto version = get_version_to_read(stream_id, version_query);
     if(!version)
-        throw NoDataFoundException(fmt::format("read_index: version not found for stream '{}'", stream_id));
+        throw NoDataFoundException(fmt::format("read_index: version not found for symbol '{}'", stream_id));
 
     auto res = read_index_impl(store(), version.value());
     return make_read_result_from_frame(res, version->key_);

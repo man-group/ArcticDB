@@ -15,6 +15,7 @@ from arcticdb.supported_types import Timestamp
 
 from arcticdb.version_store.processing import QueryBuilder
 from arcticdb.version_store._store import NativeVersionStore, VersionedItem
+from arcticdb_ext.exceptions import ArcticException
 import pandas as pd
 import numpy as np
 import logging
@@ -39,7 +40,7 @@ Library.write: for more documentation on normalisation.
 """
 
 
-class ArcticInvalidApiUsageException(RuntimeError):
+class ArcticInvalidApiUsageException(ArcticException):
     """Exception indicating an invalid call made to the Arctic API."""
 
 
@@ -912,7 +913,7 @@ class Library:
                 handle_read_request(s)
             else:
                 raise ArcticInvalidApiUsageException(
-                    f"Invalid symbol type s=[{s}] type(s)=[{type(s)}]. Only [str] and [ReadRequest] are supported."
+                    f"Unsupported item in the symbols argument s=[{s}] type(s)=[{type(s)}]. Only [str] and [ReadRequest] are supported."
                 )
 
         return self._nvs._batch_read_to_versioned_items(
@@ -1275,7 +1276,7 @@ class Library:
         """
         info = self._nvs.get_info(symbol, as_of)
 
-        last_update_time = pd.to_datetime(info["last_update"]).to_pydatetime()
+        last_update_time = pd.to_datetime(info["last_update"])
         columns = tuple(NameWithDType(n, t) for n, t in zip(info["col_names"]["columns"], info["dtype"]))
         index = NameWithDType(info["col_names"]["index"], info["col_names"]["index_dtype"])
 
@@ -1287,6 +1288,73 @@ class Library:
             index_type=info["index_type"],
             date_range=info["date_range"],
         )
+
+    def get_description_batch(
+        self, symbols: List[Union[str, ReadRequest]]
+    ) -> List[SymbolDescription]:
+        """
+        Returns descriptive data for a list of ``symbols``.
+
+        Parameters
+        ----------
+        symbols : List[Union[str, ReadRequest]
+            List of symbols to read.
+            Params columns, date_range and query_builder from ReadRequest are not used
+
+        Returns
+        -------
+        List[SymbolDescription]
+            A list of the descriptive data, whose i-th element corresponds to the i-th element of the ``symbols`` parameter.
+
+        See Also
+        --------
+        SymbolDescription
+            For documentation on each field.
+        """
+        symbol_strings = []
+        as_ofs = []
+        def handle_read_request(s):
+            symbol_strings.append(s.symbol)
+            if s.date_range is not None:
+                warnings.warn("Read batch metadata does not make use of of the data_range field", SyntaxWarning, stacklevel=2)
+            if s.columns is not None:
+                warnings.warn("Read batch metadata does not make use of the columns field", SyntaxWarning, stacklevel=2)
+            if s.query_builder is not None:
+                warnings.warn("Read batch metadata does not make use of the query field", SyntaxWarning, stacklevel=2)
+            as_ofs.append(s.as_of)
+
+        def handle_symbol(s):
+            symbol_strings.append(s)
+            as_ofs.append(None)
+
+        for s in symbols:
+            if isinstance(s, str):
+                handle_symbol(s)
+            elif isinstance(s, ReadRequest):
+                handle_read_request(s)
+            else:
+                raise ArcticInvalidApiUsageException(
+                    f"Unsupported item in the symbols argument s=[{s}] type(s)=[{type(s)}]. Only [str] and [ReadRequest] are supported."
+                )
+
+        infos = self._nvs.batch_get_info(symbol_strings, as_ofs)
+        list_descriptions = []
+        for info in infos:
+            last_update_time = pd.to_datetime(info["last_update"])
+            columns = tuple(NameWithDType(n, t) for n, t in zip(info["col_names"]["columns"], info["dtype"]))
+            index = NameWithDType(info["col_names"]["index"], info["col_names"]["index_dtype"])
+
+            list_descriptions.append(
+                SymbolDescription(
+                    columns=columns,
+                    index=index,
+                    row_count=info["rows"],
+                    last_update_time=last_update_time,
+                    index_type=info["index_type"],
+                    date_range=info["date_range"],
+                )
+            )
+        return list_descriptions
 
     def reload_symbol_list(self):
         """
