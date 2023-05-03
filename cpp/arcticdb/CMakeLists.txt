@@ -59,6 +59,7 @@ else()
     find_package(robin_hood REQUIRED)
     find_package(rapidcheck REQUIRED)
     find_package(msgpack-c REQUIRED)
+    find_package(recycle REQUIRED)
 
     set(ARCTICDB_MONGO_LIBS mongo::mongocxx_shared mongo::bsoncxx_shared)
 

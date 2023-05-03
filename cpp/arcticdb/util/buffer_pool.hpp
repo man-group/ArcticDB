@@ -9,7 +9,11 @@
 
 #include <arcticdb/util/buffer.hpp>
 
-#include <third_party/recycle/src/recycle/shared_pool.hpp>
+#ifdef ARCTICDB_USING_CONDA
+    #include <recycle/shared_pool.hpp>
+#else
+    #include <third_party/recycle/src/recycle/shared_pool.hpp>
+#endif
 
 
 namespace arcticdb {

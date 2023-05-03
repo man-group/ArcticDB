@@ -43,3 +43,4 @@ dependencies:
   - semimap
   - robin_hood
   - rapidcheck
+  - recycle
