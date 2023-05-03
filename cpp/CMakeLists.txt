@@ -35,12 +35,6 @@ if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release)
 endif()
 
-if(${CMAKE_TOOLCHAIN_FILE} MATCHES "vcpkg.cmake$")
-    message(STATUS "CMAKE_TOOLCHAIN_FILE is set to vcpkg, so will use find_package to find the libraries")
-    set(ARCTICDB_USING_VCPKG ON)
-endif()
-
-
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
