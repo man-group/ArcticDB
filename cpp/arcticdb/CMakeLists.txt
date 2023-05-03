@@ -29,7 +29,7 @@ find_package(prometheus-cpp CONFIG REQUIRED)
 find_package(Threads REQUIRED)
 
 if(NOT WIN32)
-    find_package(KRB5 REQUIRED)
+    find_package(Kerberos REQUIRED)
 endif()
 
 # Libraries compiled by vcpkg and also baked into our internal image:
@@ -486,7 +486,7 @@ if (SSL_LINK)
     find_package(OpenSSL REQUIRED)
     list(APPEND arcticdb_core_libraries OpenSSL::SSL)
     if (NOT WIN32)
-        list(APPEND arcticdb_core_libraries ${KRB5_LIBRARIES})
+        list(APPEND arcticdb_core_libraries ${KERBEROS_LIBRARY})
     endif()
 endif ()
 
@@ -499,6 +499,7 @@ target_include_directories(arcticdb_core_object
         ${LIBMONGOCXX_STATIC_INCLUDE_DIRS}
         ${LIBBSONCXX_STATIC_INCLUDE_DIRS}
         ${BITMAGIC_INCLUDE_DIRS}
+        ${KERBEROS_INCLUDE_DIR}
         $PYTHON_NUMPY_INCLUDE_DIR
         )
 
