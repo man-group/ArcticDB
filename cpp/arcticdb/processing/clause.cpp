@@ -37,10 +37,15 @@ ColumnStatsGenerationClause::process(std::shared_ptr<Store> store, Composite<Pro
     internal::check<ErrorCode::E_INVALID_ARGUMENT>(
             !procs.empty(),
             "ColumnStatsGenerationClause::process does not make sense with no processing segments");
+    std::optional<bool> dynamic_schema;
     procs.broadcast(
-            [&store, &start_indexes, &end_indexes, &aggregators_data, that = this](
+            [&store, &start_indexes, &end_indexes, &dynamic_schema, &aggregators_data, that=this](
                     auto &proc) {
-                proc.set_execution_context(that->execution_context_);
+                if (dynamic_schema.has_value()) {
+                    util::check(*dynamic_schema == proc.dynamic_schema_, "All ProcessingSegments should agree on whether dynamic schema is true or false");
+                } else {
+                    dynamic_schema = proc.dynamic_schema_;
+                }
                 for (const auto& slice_and_key: proc.data_) {
                     start_indexes.insert(slice_and_key.key_->start_index());
                     end_indexes.insert(slice_and_key.key_->end_index());
@@ -52,7 +57,7 @@ ColumnStatsGenerationClause::process(std::shared_ptr<Store> store, Composite<Pro
                         auto input_column_with_strings = std::get<ColumnWithStrings>(input_column);
                         agg_data->aggregate(input_column_with_strings);
                     } else {
-                        if(!that->execution_context_->dynamic_schema())
+                        if(!proc.dynamic_schema_)
                             internal::raise<ErrorCode::E_ASSERTION_FAILURE>(
                                     "Unable to resolve column denoted by aggregation operator: '{}'",
                                     input_column_name);
@@ -73,27 +78,31 @@ ColumnStatsGenerationClause::process(std::shared_ptr<Store> store, Composite<Pro
     auto end_index_col = std::make_shared<Column>(make_scalar_type(DataType::MICROS_UTC64), true);
     start_index_col->template push_back<NumericIndex>(std::get<NumericIndex>(start_index));
     end_index_col->template push_back<NumericIndex>(std::get<NumericIndex>(end_index));
+    start_index_col->set_row_data(0);
+    end_index_col->set_row_data(0);
 
     SegmentInMemory seg;
+    seg.descriptor().set_index(IndexDescriptor(0, IndexDescriptor::ROWCOUNT));
     seg.add_column(scalar_field_proto(DataType::MICROS_UTC64, start_index_column_name), start_index_col);
     seg.add_column(scalar_field_proto(DataType::MICROS_UTC64, end_index_column_name), end_index_col);
     for (const auto& agg_data: folly::enumerate(aggregators_data)) {
        seg.concatenate(agg_data->finalize(column_stats_aggregators_->at(agg_data.index).get_output_column_names()));
     }
     seg.set_row_id(0);
-    return Composite{ProcessingSegment{std::move(seg)}};
+    util::check(dynamic_schema.has_value(), "Cannot proceed with processing pipeline without knowing dynamic schema value");
+    return Composite{ProcessingSegment{std::move(seg), *dynamic_schema}};
 }
 
 [[nodiscard]] Composite<ProcessingSegment>
 FilterClause::process(std::shared_ptr<Store> store, Composite<ProcessingSegment> &&p) const {
     auto procs = std::move(p);
     Composite<ProcessingSegment> output;
-    procs.broadcast([&store, &execution_context = execution_context_, &output](auto &proc) {
-        proc.set_execution_context(execution_context);
-        auto variant_data = proc.get(execution_context->root_node_name_, store);
+    procs.broadcast([&optimisation=optimisation_, &store, &expression_context = expression_context_, &output](auto &proc) {
+        proc.set_expression_context(expression_context);
+        auto variant_data = proc.get(expression_context->root_node_name_, store);
         util::variant_match(variant_data,
-                            [&proc, &output, &store](const std::shared_ptr<util::BitSet> &bitset) {
-                                proc.apply_filter(*bitset, store);
+                            [&optimisation, &proc, &output, &store](const std::shared_ptr<util::BitSet> &bitset) {
+                                proc.apply_filter(*bitset, store, optimisation);
                                 output.push_back(std::move(proc));
                             },
                             [](EmptyResult) {
@@ -109,40 +118,44 @@ FilterClause::process(std::shared_ptr<Store> store, Composite<ProcessingSegment>
     return output;
 }
 
+[[nodiscard]] std::string FilterClause::to_string() const {
+    return expression_context_ ? fmt::format("WHERE {}", expression_context_->root_node_name_.value) : "";
+}
+
 [[nodiscard]] Composite<ProcessingSegment> ProjectClause::process(std::shared_ptr<Store> store,
                                                                   Composite<ProcessingSegment> &&p) const {
     auto procs = std::move(p);
     Composite<ProcessingSegment> output;
-    procs.broadcast([&store, &execution_context = execution_context_, &output, that = this](auto &proc) {
-        proc.set_execution_context(execution_context);
-        auto variant_data = proc.get(execution_context->root_node_name_, store);
+    procs.broadcast([&store, &expression_context = expression_context_, &output, that = this](auto &proc) {
+        proc.set_expression_context(expression_context);
+        auto variant_data = proc.get(expression_context->root_node_name_, store);
         util::variant_match(variant_data,
-                            [&proc, &output, &store, &execution_context, &that](ColumnWithStrings &col) {
+                            [&proc, &output, &store, &that](ColumnWithStrings &col) {
 
                                 const auto data_type = col.column_->type().data_type();
-                                const std::string_view name = that->column_name_;
+                                const std::string_view name = that->output_column_;
 
-                                std::call_once(*that->add_column_, [context = execution_context, &data_type, &name]() {
-                                    std::scoped_lock lock{*context->column_mutex_};
-                                    context->output_descriptor_->add_scalar_field(data_type, name);
-                                });
                                 auto &slice_and_keys = proc.data();
                                 auto &last = *slice_and_keys.rbegin();
                                 last.segment(store).add_column(scalar_field_proto(data_type, name), col.column_);
                                 ++last.slice().col_range.second;
                                 output.push_back(std::move(proc));
                             },
-                            [&proc, &output, &execution_context](const EmptyResult&) {
-                                if(execution_context->dynamic_schema())
+                            [&proc, &output](const EmptyResult&) {
+                                if(proc.dynamic_schema_)
                                     output.push_back(std::move(proc));
                                 else
                                     util::raise_rte("Cannot project from empty column with static schema");
                             },
                             [](const auto &) {
-                                util::raise_rte("Expected bitset from filter clause");
+                                util::raise_rte("Expected column from projection clause");
                             });
     });
     return output;
+}
+
+[[nodiscard]] std::string ProjectClause::to_string() const {
+    return expression_context_ ? fmt::format("PROJECT Column[\"{}\"] = {}", output_column_, expression_context_->root_node_name_.value) : "";
 }
 
 class GroupingMap {
@@ -197,43 +210,50 @@ std::vector<Composite<ProcessingSegment>> single_partition(std::vector<Composite
 
 [[nodiscard]] Composite<ProcessingSegment>
 AggregationClause::process(std::shared_ptr<Store> store, Composite<ProcessingSegment> &&p) const {
-    std::call_once(*reset_descriptor_, [context = execution_context_]() {
-        std::scoped_lock lock{*context->column_mutex_};
-        context->orig_output_descriptor_ = context->output_descriptor_;
-        context->output_descriptor_ = empty_descriptor();
-    });
-    SegmentInMemory seg{empty_descriptor()};
     auto procs = std::move(p);
-    size_t num_unique = 0;
-    std::vector<Aggregation> aggregators;
-    auto desc = execution_context_->orig_output_descriptor_;
-    for (const auto &agg : aggregation_operators_){
-        auto agg_construct = agg.construct();
-        const auto& agg_field_pos = desc->find_field(agg_construct.get_input_column_name().value);
-        util::check(agg_field_pos.has_value(), "Field {} not found in aggregation", agg_construct.get_input_column_name().value);
-        auto agg_field = desc->field(agg_field_pos.value());
-        agg_construct.set_data_type(data_type_from_proto(agg_field.type_desc()));
-        aggregators.emplace_back(agg_construct);
+    std::vector<GroupingAggregatorData> aggregators_data;
+    internal::check<ErrorCode::E_INVALID_ARGUMENT>(
+            !aggregators_.empty(),
+            "AggregationClause::process does not make sense with no aggregators");
+    for (const auto &agg: aggregators_){
+        aggregators_data.emplace_back(agg.get_aggregator_data());
     }
 
+    // Work out the common type between the processing segments for the columns being aggregated
+    procs.broadcast([&store, &aggregators_data, &aggregators=aggregators_](auto& proc) {
+        for (auto agg_data: folly::enumerate(aggregators_data)) {
+            auto input_column_name = aggregators.at(agg_data.index).get_input_column_name();
+            auto input_column = proc.get(input_column_name, store);
+            std::optional<ColumnWithStrings> opt_input_column;
+            if (std::holds_alternative<ColumnWithStrings>(input_column)) {
+                agg_data->add_data_type(std::get<ColumnWithStrings>(input_column).column_->type().data_type());
+            }
+        }
+    });
+
+    size_t num_unique = 0;
     auto offset = 0;
-    auto grouping_column_name = execution_context_->root_node_name_.value;
     auto string_pool = std::make_shared<StringPool>();
     DataType grouping_data_type;
     GroupingMap grouping_map;
+    std::optional<bool> dynamic_schema;
     procs.broadcast(
-        [&store, &num_unique, &execution_context =
-        execution_context_, &grouping_data_type, &grouping_map, &offset, &aggregators, &string_pool, &grouping_column_name](
+        [&store, &num_unique, &dynamic_schema,
+        &grouping_data_type, &grouping_map, &offset, &aggregators_data, &string_pool, that=this](
             auto &proc) {
-            proc.set_execution_context(execution_context);
-            //TODO this is a hack, ideally the grouping should be able to be an expression
-            auto partitioning_column = proc.get(ColumnName(grouping_column_name), store);
+            if (dynamic_schema.has_value()) {
+                internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+                        *dynamic_schema == proc.dynamic_schema_,
+                        "All ProcessingSegments should agree on whether dynamic schema is true or false");
+            } else {
+                dynamic_schema = proc.dynamic_schema_;
+            }
+            auto partitioning_column = proc.get(ColumnName(that->grouping_column_), store);
             if (std::holds_alternative<ColumnWithStrings>(partitioning_column)) {
                 ColumnWithStrings col = std::get<ColumnWithStrings>(partitioning_column);
                 entity::details::visit_type(col.column_->type().data_type(),
-                                            [&proc_ =
-                                            proc, &grouping_map, &offset, &aggregators, &string_pool, &col, &num_unique, &store, &grouping_data_type](
-                                                auto data_type_tag) {
+                                            [&proc_=proc, &grouping_map, &offset, &aggregators_data, &string_pool, &col,
+                                             &num_unique, &store, &grouping_data_type, that](auto data_type_tag) {
                                                 using DataTypeTagType = decltype(data_type_tag);
                                                 using RawType = typename DataTypeTagType::raw_type;
                                                 constexpr auto data_type = DataTypeTagType::data_type;
@@ -268,17 +288,14 @@ AggregationClause::process(std::shared_ptr<Store> store, Composite<ProcessingSeg
 
                                                 num_unique = offset;
                                                 util::check(num_unique != 0, "Got zero unique values");
-                                                for (Aggregation &agg : aggregators) {
-                                                    auto input_column = proc_.get(agg.get_input_column_name(), store);
+                                                for (auto agg_data: folly::enumerate(aggregators_data)) {
+                                                    auto input_column_name = that->aggregators_.at(agg_data.index).get_input_column_name();
+                                                    auto input_column = proc_.get(input_column_name, store);
                                                     std::optional<ColumnWithStrings> opt_input_column;
                                                     if (std::holds_alternative<ColumnWithStrings>(input_column)) {
                                                         opt_input_column.emplace(std::get<ColumnWithStrings>(input_column));
                                                     }
-                                                    agg.aggregate(opt_input_column,
-                                                                    row_to_group,
-                                                                    num_unique);
-
-
+                                                    agg_data->aggregate(opt_input_column, row_to_group, num_unique);
                                                 }
                                             });
             } else {
@@ -286,9 +303,15 @@ AggregationClause::process(std::shared_ptr<Store> store, Composite<ProcessingSeg
             }
         });
 
-    auto index_pos =
-        seg.add_column(scalar_field_proto(grouping_data_type, grouping_column_name), grouping_map.size(), true);
-    execution_context_->check_output_column(grouping_column_name, grouping_data_type);
+    internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+            dynamic_schema.has_value(),
+            "Cannot proceed with processing pipeline without knowing dynamic schema value");
+
+    SegmentInMemory seg;
+    auto index_col = std::make_shared<Column>(make_scalar_type(grouping_data_type), grouping_map.size(), true, false);
+    auto index_pos = seg.add_column(scalar_field_proto(grouping_data_type, grouping_column_), index_col);
+    seg.descriptor().set_index(IndexDescriptor(0, IndexDescriptor::ROWCOUNT));
+
     entity::details::visit_type(grouping_data_type, [&seg, &grouping_map, index_pos](auto data_type_tag) {
         using DataTypeTagType = decltype(data_type_tag);
         using RawType = typename DataTypeTagType::raw_type;
@@ -307,23 +330,19 @@ AggregationClause::process(std::shared_ptr<Store> store, Composite<ProcessingSeg
         for (const auto &element : elements)
             *index_ptr++ = element.first;
     });
+    index_col->set_row_data(grouping_map.size() - 1);
 
-    for (auto &agg : aggregators) {
-        auto data_type = agg.finalize(seg, execution_context_->dynamic_schema(), num_unique);
-        if(data_type)
-            execution_context_->check_output_column(agg.get_output_column_name().value, data_type.value());
+    for (auto agg_data: folly::enumerate(aggregators_data)) {
+        seg.concatenate(agg_data->finalize(aggregators_.at(agg_data.index).get_output_column_name(), *dynamic_schema, num_unique));
     }
 
     seg.set_string_pool(string_pool);
     seg.set_row_id(num_unique - 1);
-    std::call_once(*set_name_index_, [context = execution_context_, grouping_column_name]() {
-        std::scoped_lock lock{*context->name_index_mutex_};
-        auto norm_desc = context->get_norm_meta_descriptor();
-        norm_desc->mutable_df()->mutable_common()->mutable_index()->set_name(grouping_column_name);
-        norm_desc->mutable_df()->mutable_common()->mutable_index()->clear_fake_name();
-        norm_desc->mutable_df()->mutable_common()->mutable_index()->set_is_not_range_index(true);
-    });
-    return Composite{ProcessingSegment{std::move(seg)}};
+    return Composite{ProcessingSegment{std::move(seg), *dynamic_schema}};
+}
+
+[[nodiscard]] std::string AggregationClause::to_string() const {
+    return fmt::format("AGGREGATE {}", aggregation_map_);
 }
 
 template<typename IndexType, typename DensityPolicy, typename QueueType, typename Comparator, typename StreamId>
@@ -335,19 +354,20 @@ void merge_impl(
         const arcticdb::pipelines::RowRange row_range,
         const arcticdb::pipelines::ColRange col_range,
         IndexType index,
-        std::shared_ptr<ExecutionContext> execution_context
+        const StreamDescriptor& stream_descriptor,
+        bool dynamic_schema
 ) {
     using namespace arcticdb::pipelines;
     auto num_segment_rows = ConfigsMap::instance()->get_int("Merge.SegmentSize", 100000);
     using SegmentationPolicy = stream::RowCountSegmentPolicy;
     SegmentationPolicy segmentation_policy{static_cast<size_t>(num_segment_rows)};
 
-    auto func = [&ret, &row_range, &col_range](auto &&segment) {
-        ret.push_back(ProcessingSegment{std::forward<SegmentInMemory>(segment), FrameSlice{col_range, row_range}});
+    auto func = [&ret, &row_range, &col_range, dynamic_schema](auto &&segment) {
+        ret.push_back(ProcessingSegment{std::forward<SegmentInMemory>(segment), FrameSlice{col_range, row_range}, dynamic_schema});
     };
     
     using AggregatorType = stream::Aggregator<IndexType, stream::DynamicSchema, SegmentationPolicy, DensityPolicy>;
-    auto fields = execution_context->output_descriptor_->fields();
+    auto fields = stream_descriptor.fields();
     StreamDescriptor::FieldsCollection new_fields{};
     auto field_name = fields[0].name();
     auto new_field = new_fields.Add();
@@ -391,7 +411,15 @@ MergeClause::process(std::shared_ptr<Store> store, Composite<ProcessingSegment> 
         size_t max_end_row = 0;
         size_t min_start_col = std::numeric_limits<size_t>::max();
         size_t max_end_col = 0;
-        procs.broadcast([&input_streams, &store, &min_start_row, &max_end_row, &min_start_col, &max_end_col](auto &&proc) {
+        std::optional<bool> dynamic_schema;
+        procs.broadcast([&input_streams, &store, &min_start_row, &max_end_row, &min_start_col, &max_end_col, &dynamic_schema](auto &&proc) {
+            if (dynamic_schema.has_value()) {
+                internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+                        *dynamic_schema == proc.dynamic_schema_,
+                        "All ProcessingSegments should agree on whether dynamic schema is true or false");
+            } else {
+                dynamic_schema = proc.dynamic_schema_;
+            }
             auto slice_and_keys = proc.release_data();
             for (auto &&slice_and_key: slice_and_keys) {
                 size_t start_row = slice_and_key.slice().row_range.start();
@@ -407,11 +435,14 @@ MergeClause::process(std::shared_ptr<Store> store, Composite<ProcessingSegment> 
                                                              store));
             }
         });
+        internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+                dynamic_schema.has_value(),
+                "Cannot proceed with processing pipeline without knowing dynamic schema value");
         const RowRange row_range{min_start_row, max_end_row};
         const ColRange col_range{min_start_col, max_end_col};
         Composite<ProcessingSegment> ret;
         std::visit(
-                [&ret, &input_streams, add_symbol_column = add_symbol_column_, &comp = compare, stream_id = stream_id_, &row_range, &col_range, execution_context = execution_context_](auto idx,
+                [&ret, &input_streams, add_symbol_column = add_symbol_column_, &comp = compare, stream_id = stream_id_, &row_range, &col_range, &stream_descriptor = stream_descriptor_, &dynamic_schema](auto idx,
                                                                                                 auto density) {
                     merge_impl<decltype(idx), decltype(density), decltype(input_streams), decltype(comp), decltype(stream_id)>(ret,
                                                                                                           input_streams,
@@ -420,7 +451,8 @@ MergeClause::process(std::shared_ptr<Store> store, Composite<ProcessingSegment> 
                                                                                                           row_range,
                                                                                                           col_range,
                                                                                                           idx,
-                                                                                                          execution_context);
+                                                                                                          stream_descriptor,
+                                                                                                          *dynamic_schema);
                 }, index_, density_policy_);
 
         return ret;
@@ -431,8 +463,7 @@ RemoveColumnPartitioningClause::process(std::shared_ptr<Store> store, Composite<
         using namespace arcticdb::pipelines;
         auto procs = std::move(p);
         Composite<ProcessingSegment> output;
-        auto index = stream::index_type_from_descriptor(execution_context_->output_descriptor_.value());
-        util::variant_match(index,
+        util::variant_match(index_,
         [&](const stream::TimeseriesIndex &) {
             size_t num_index_columns = stream::TimeseriesIndex::field_count();
             procs.broadcast([&store, &output, &num_index_columns, this](ProcessingSegment &proc) {
@@ -470,7 +501,7 @@ RemoveColumnPartitioningClause::process(std::shared_ptr<Store> store, Composite<
                 }
                 const RowRange row_range{min_start_row, max_end_row};
                 const ColRange col_range{min_start_col, max_end_col};
-                output.push_back(ProcessingSegment{std::move(new_segment), FrameSlice{col_range, row_range}});
+                output.push_back(ProcessingSegment{std::move(new_segment), FrameSlice{col_range, row_range}, proc.dynamic_schema_});
             });
         },
         [&](const auto &) {

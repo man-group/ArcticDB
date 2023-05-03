@@ -11,6 +11,9 @@ import hypothesis.strategies as st
 import numpy as np
 import pandas as pd
 
+import pytest
+pytestmark = pytest.mark.processing
+
 try:
     from pandas.errors import UndefinedVariableError
 except ImportError:

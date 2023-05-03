@@ -8,12 +8,11 @@
 #include <arcticdb/processing/processing_segment.hpp>
 
 namespace arcticdb {
-void ProcessingSegment::apply_filter(const util::BitSet& bitset,
-                  const std::shared_ptr<Store>& store) {
-    // execution_context_ is null with the legacy filtering implementation
-    // Remove null check once legacy filtering is deprecated
-    auto filter_down_stringpool = execution_context_ &&
-        execution_context_->optimisation_ == ExecutionContext::Optimisation::MEMORY;
+void ProcessingSegment::apply_filter(
+    const util::BitSet& bitset,
+    const std::shared_ptr<Store>& store,
+    PipelineOptimisation optimisation) {
+    auto filter_down_stringpool = optimisation == PipelineOptimisation::MEMORY;
 
     for (auto& slice_and_key: data_) {
         auto seg = filter_segment(slice_and_key.segment(store),
@@ -52,7 +51,7 @@ VariantData ProcessingSegment::get(const VariantNode &name, const std::shared_pt
                         position_t(opt_idx.value())),
                         slice_and_key.segment(store).string_pool_ptr()));
         }
-        if(execution_context_->dynamic_schema()) {
+        if(dynamic_schema_) {
             log::version().debug("Column not found in {}", data_[0].segment(store).descriptor());
             return VariantData{EmptyResult{}};
         }
@@ -60,17 +59,17 @@ VariantData ProcessingSegment::get(const VariantNode &name, const std::shared_pt
             util::raise_rte("Unexpected column name");
         },
         [&](const ValueName &value_name) {
-        return VariantData(execution_context_->values_.get_value(value_name.value));
+        return VariantData(expression_context_->values_.get_value(value_name.value));
         },
         [&](const ValueSetName &value_set_name) {
-        return VariantData(execution_context_->value_sets_.get_value(value_set_name.value));
+        return VariantData(expression_context_->value_sets_.get_value(value_set_name.value));
         },
         [&](const ExpressionName &expression_name) {
         if (auto computed = computed_data_.find(expression_name.value);
         computed != std::end(computed_data_)) {
             return computed->second;
         } else {
-            auto expr = execution_context_->expression_nodes_.get_value(expression_name.value);
+            auto expr = expression_context_->expression_nodes_.get_value(expression_name.value);
             auto data = expr->compute(self(), store);
             computed_data_.try_emplace(expression_name.value, data);
             return data;

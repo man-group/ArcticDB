@@ -10,7 +10,7 @@
 #include <arcticdb/entity/key.hpp>
 #include <arcticdb/column_store/column.hpp>
 #include <arcticdb/pipeline/value.hpp>
-#include <arcticdb/processing/execution_context.hpp>
+#include <arcticdb/processing/expression_context.hpp>
 #include <arcticdb/processing/expression_node.hpp>
 #include <arcticdb/processing/processing_segment.hpp>
 #include <arcticdb/entity/types.hpp>
@@ -34,6 +34,9 @@
 
 namespace arcticdb {
 
+using NormMetaDescriptor = std::shared_ptr<arcticdb::proto::descriptors::NormalizationMetadata>;
+
+
 struct IClause {
     template<class Base>
     struct Interface : Base {
@@ -49,13 +52,22 @@ struct IClause {
 
         [[nodiscard]] bool requires_repartition() const { return folly::poly_call<2>(*this); }
 
-        [[nodiscard]] std::shared_ptr<ExecutionContext> execution_context() const { return folly::poly_call<3>(*this); }
+        [[nodiscard]] bool can_combine_with_column_selection() const { return folly::poly_call<3>(*this); }
 
-        [[nodiscard]] bool can_combine_with_column_selection() const { return folly::poly_call<4>(*this); }
+        [[nodiscard]] std::optional<std::unordered_set<std::string>> input_columns() const { return folly::poly_call<4>(*this); }
+
+        // Returns the name of the index after this clause if it has been modified, std::nullopt otherwise
+        [[nodiscard]] std::optional<std::string> new_index() const { return folly::poly_call<5>(*this); }
     };
 
     template<class T>
-    using Members = folly::PolyMembers<&T::process, &T::repartition, &T::requires_repartition, &T::execution_context, &T::can_combine_with_column_selection>;
+    using Members = folly::PolyMembers<
+            &T::process,
+            &T::repartition,
+            &T::requires_repartition,
+            &T::can_combine_with_column_selection,
+            &T::input_columns,
+            &T::new_index>;
 };
 
 using Clause = folly::Poly<IClause>;
@@ -63,44 +75,65 @@ using Clause = folly::Poly<IClause>;
 std::vector<Composite<ProcessingSegment>> single_partition(std::vector<Composite<ProcessingSegment>> &&segs);
 
 struct ColumnStatsGenerationClause {
-    std::shared_ptr<ExecutionContext> execution_context_;
+    std::unordered_set<std::string> input_columns_;
     std::shared_ptr<std::vector<ColumnStatsAggregator>> column_stats_aggregators_;
 
-    explicit ColumnStatsGenerationClause(std::shared_ptr<ExecutionContext> execution_context,
+    explicit ColumnStatsGenerationClause(std::unordered_set<std::string>&& input_columns,
                                          std::shared_ptr<std::vector<ColumnStatsAggregator>> column_stats_aggregators) :
-            execution_context_(std::move(execution_context)),
+            input_columns_(std::move(input_columns)),
             column_stats_aggregators_(std::move(column_stats_aggregators)) {
     }
+
+    ARCTICDB_MOVE_COPY_DEFAULT(ColumnStatsGenerationClause)
 
     [[nodiscard]] Composite<ProcessingSegment>
     process(std::shared_ptr<Store> store, Composite<ProcessingSegment> &&p) const;
 
-    [[nodiscard]] std::shared_ptr<ExecutionContext> execution_context() const { return execution_context_; }
+    [[nodiscard]] std::optional<std::unordered_set<std::string>> input_columns() const {
+        return input_columns_;
+    }
 
     [[nodiscard]] bool requires_repartition() const { return false; }
 
     [[nodiscard]] std::optional<std::vector<Composite<ProcessingSegment>>>
     repartition([[maybe_unused]] std::vector<Composite<ProcessingSegment>> &&) const { return std::nullopt; }
     [[nodiscard]] bool can_combine_with_column_selection() const { return false; }
+    [[nodiscard]] std::optional<std::string> new_index() const { return std::nullopt; }
 };
 
 struct FilterClause {
-    std::shared_ptr<ExecutionContext> execution_context_;
+    std::unordered_set<std::string> input_columns_;
+    std::shared_ptr<ExpressionContext> expression_context_;
+    PipelineOptimisation optimisation_;
 
-    explicit FilterClause(std::shared_ptr<ExecutionContext> execution_context) :
-        execution_context_(std::move(execution_context)) {
-    }
+    explicit FilterClause(std::unordered_set<std::string> input_columns,
+                          ExpressionContext expression_context,
+                          std::optional<PipelineOptimisation> optimisation) :
+        input_columns_(std::move(input_columns)),
+        expression_context_(std::make_shared<ExpressionContext>(std::move(expression_context))),
+        optimisation_(optimisation.value_or(PipelineOptimisation::SPEED)) {}
+
+    FilterClause() = delete;
+
+    ARCTICDB_MOVE_COPY_DEFAULT(FilterClause)
 
     [[nodiscard]] Composite<ProcessingSegment>
     process(std::shared_ptr<Store> store, Composite<ProcessingSegment> &&p) const;
 
-    [[nodiscard]] std::shared_ptr<ExecutionContext> execution_context() const { return execution_context_; }
+    [[nodiscard]] std::optional<std::unordered_set<std::string>> input_columns() const {
+        return input_columns_;
+    }
 
     [[nodiscard]] bool requires_repartition() const { return false; }
 
     [[nodiscard]] std::optional<std::vector<Composite<ProcessingSegment>>>
     repartition([[maybe_unused]] std::vector<Composite<ProcessingSegment>> &&) const { return std::nullopt; }
     [[nodiscard]] bool can_combine_with_column_selection() const { return true; }
+    [[nodiscard]] std::optional<std::string> new_index() const { return std::nullopt; }
+    [[nodiscard]] std::string to_string() const;
+    void set_pipeline_optimisation(PipelineOptimisation pipeline_optimisation) {
+        optimisation_ = pipeline_optimisation;
+    }
 };
 
 /**
@@ -115,6 +148,8 @@ struct RowNumberLimitClause {
 
     explicit RowNumberLimitClause(size_t n) : n(n) {}
 
+    ARCTICDB_MOVE_COPY_DEFAULT(RowNumberLimitClause)
+
     [[nodiscard]] Composite<ProcessingSegment>
     process(std::shared_ptr<Store> store, Composite<ProcessingSegment> &&p) const {
         auto procs = std::move(p);
@@ -123,7 +158,7 @@ struct RowNumberLimitClause {
             if (row_range.start() == 0ULL && row_range.end() > n) {
                 util::BitSet bv(static_cast<util::BitSet::size_type>(row_range.diff()));
                 bv.set_range(0, bv_size(n));
-                proc.apply_filter(bv, store);
+                proc.apply_filter(bv, store, PipelineOptimisation::MEMORY);
             } else if (!warning_shown) {
                 warning_shown = true;
                 log::version().info("RowNumberLimitFilter bypassed because rows.start() == {}", row_range.start());
@@ -132,7 +167,9 @@ struct RowNumberLimitClause {
         return procs;
     }
 
-    [[nodiscard]] std::shared_ptr<ExecutionContext> execution_context() const { return nullptr; }
+    [[nodiscard]] std::optional<std::unordered_set<std::string>> input_columns() const {
+        return std::nullopt;
+    }
 
     mutable bool warning_shown = false; // folly::Poly can't deal with atomic_bool
     [[nodiscard]] bool requires_repartition() const { return false; }
@@ -140,27 +177,30 @@ struct RowNumberLimitClause {
     [[nodiscard]] std::optional<std::vector<Composite<ProcessingSegment>>>
     repartition([[maybe_unused]] std::vector<Composite<ProcessingSegment>> &&) const { return std::nullopt; }
     [[nodiscard]] bool can_combine_with_column_selection() const { return true; }
+    [[nodiscard]] std::optional<std::string> new_index() const { return std::nullopt; }
 };
 
 template<typename GrouperType, typename BucketizerType>
 struct PartitionClause {
-    std::shared_ptr<ExecutionContext> execution_context_;
+    std::string grouping_column_;
 
-    explicit PartitionClause(std::shared_ptr<ExecutionContext> execution_context) :
-            execution_context_(std::move(execution_context)) {
+    explicit PartitionClause(const std::string& grouping_column) :
+            grouping_column_(grouping_column) {
     }
+    PartitionClause() = delete;
+
+    ARCTICDB_MOVE_COPY_DEFAULT(PartitionClause)
 
     [[nodiscard]] Composite<ProcessingSegment>
     process(std::shared_ptr<Store> store, Composite<ProcessingSegment> &&p) const {
         Composite<ProcessingSegment> output;
 
         auto procs = std::move(p);
-        procs.broadcast([&output, &store, &execution_context = execution_context_](auto &proc) {
-            proc.set_execution_context(execution_context);
+        procs.broadcast([&output, &store, &grouping_column = grouping_column_](auto &proc) {
             // TODO (AN-469): I would push all of the logic between here and calling partition_processing_segment down
             // into partition_processing_segment, just passing the column name to group on, processing segment, and
             // store in
-            auto partitioning_column = proc.get(ColumnName(execution_context->root_node_name_.value), store);
+            auto partitioning_column = proc.get(ColumnName(grouping_column), store);
             if (std::holds_alternative<ColumnWithStrings>(partitioning_column)) {
                 ColumnWithStrings col = std::get<ColumnWithStrings>(partitioning_column);
 
@@ -186,7 +226,9 @@ struct PartitionClause {
         return output;
     }
 
-    [[nodiscard]] std::shared_ptr<ExecutionContext> execution_context() const { return execution_context_; }
+    [[nodiscard]] std::optional<std::unordered_set<std::string>> input_columns() const {
+        return std::unordered_set<std::string>({grouping_column_});
+    }
 
     [[nodiscard]] bool requires_repartition() const { return true; }
 
@@ -215,50 +257,81 @@ struct PartitionClause {
         return ret;
     }
     [[nodiscard]] bool can_combine_with_column_selection() const { return true; }
+    [[nodiscard]] std::optional<std::string> new_index() const { return std::nullopt; }
+    [[nodiscard]] std::string to_string() const {
+        return fmt::format("GROUPBY Column[\"{}\"]", grouping_column_);
+    }
 };
 
 struct AggregationClause {
-    std::shared_ptr<ExecutionContext> execution_context_;
-    std::vector<AggregationFactory> aggregation_operators_;
-    std::shared_ptr<std::once_flag> reset_descriptor_ = std::make_shared<std::once_flag>();
-    std::shared_ptr<std::once_flag> set_name_index_ = std::make_shared<std::once_flag>();
+    std::string grouping_column_;
+    std::unordered_set<std::string> input_columns_;
+    std::unordered_map<std::string, std::string> aggregation_map_;
+    std::vector<GroupingAggregator> aggregators_;
+
     AggregationClause() = delete;
 
     ARCTICDB_MOVE_COPY_DEFAULT(AggregationClause)
 
-    AggregationClause(std::shared_ptr<ExecutionContext> execution_context,
-                               std::vector<AggregationFactory> &&aggregation_operators) :
-            execution_context_(std::move(execution_context)),
-            aggregation_operators_(std::forward<std::vector<AggregationFactory>>(aggregation_operators)) {
+    AggregationClause(const std::string& grouping_column, const std::unordered_map<std::string, std::string>& aggregations):
+            grouping_column_(grouping_column),
+            aggregation_map_(aggregations) {
+        for (const auto& [column_name, aggregation_operator]: aggregations) {
+            auto [_, inserted] = input_columns_.insert(column_name);
+            user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(inserted,
+                                                                  "Cannot perform two aggregations over the same column: {}",
+                                                                  column_name);
+            auto typed_column_name = ColumnName(column_name);
+            if (aggregation_operator == "sum") {
+                aggregators_.emplace_back(SumAggregator(typed_column_name, typed_column_name));
+            } else if (aggregation_operator == "mean") {
+                aggregators_.emplace_back(MeanAggregator(typed_column_name, typed_column_name));
+            } else if (aggregation_operator == "max") {
+                aggregators_.emplace_back(MaxOrMinAggregator(typed_column_name, typed_column_name, Extremum::MAX));
+            } else if (aggregation_operator == "min") {
+                aggregators_.emplace_back(MaxOrMinAggregator(typed_column_name, typed_column_name, Extremum::MIN));
+            } else {
+                user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>("Unknown aggregation operator provided: {}", aggregation_operator);
+            }
+        }
     }
 
     [[nodiscard]] Composite<ProcessingSegment>
     process(std::shared_ptr<Store> store, Composite<ProcessingSegment> &&p) const;
 
-    [[nodiscard]] std::shared_ptr<ExecutionContext> execution_context() const { return execution_context_; }
+    [[nodiscard]] std::optional<std::unordered_set<std::string>> input_columns() const {
+        return input_columns_;
+    }
 
     [[nodiscard]] bool requires_repartition() const { return false; }
 
     [[nodiscard]] std::optional<std::vector<Composite<ProcessingSegment>>>
     repartition([[maybe_unused]] std::vector<Composite<ProcessingSegment>> &&comps) const { return std::nullopt; }
     [[nodiscard]] bool can_combine_with_column_selection() const { return false; }
+    [[nodiscard]] std::optional<std::string> new_index() const { return grouping_column_; }
+    [[nodiscard]] std::string to_string() const;
 };
 
 struct PassthroughClause {
+    PassthroughClause() = default;
+    ARCTICDB_MOVE_COPY_DEFAULT(PassthroughClause)
+
     [[nodiscard]] Composite<ProcessingSegment>
     process([[maybe_unused]] const std::shared_ptr<Store> &store, Composite<ProcessingSegment> &&p) const {
         auto procs = std::move(p);
         return procs;
     }
 
-    [[nodiscard]] std::shared_ptr<ExecutionContext> execution_context() const { return nullptr; }
+    [[nodiscard]] std::optional<std::unordered_set<std::string>> input_columns() const {
+        return std::nullopt;
+    }
 
     [[nodiscard]] std::optional<std::vector<Composite<ProcessingSegment>>>
     repartition([[maybe_unused]] std::vector<Composite<ProcessingSegment>> &&comps) const { return std::nullopt; }
 
     [[nodiscard]] bool requires_repartition() const { return false; }
     [[nodiscard]] bool can_combine_with_column_selection() const { return true; }
-
+    [[nodiscard]] std::optional<std::string> new_index() const { return std::nullopt; }
 };
 
 struct SliceAndKeyWrapper {
@@ -293,23 +366,25 @@ struct MergeClause {
     StreamId stream_id_;
     bool add_symbol_column_ = false;
     StreamId target_id_;
-    const std::shared_ptr<ExecutionContext> execution_context_;
+    StreamDescriptor stream_descriptor_;
 
     MergeClause(
             stream::Index index,
             const stream::VariantColumnPolicy &density_policy,
             const StreamId& stream_id,
-            std::shared_ptr<ExecutionContext> execution_context ) :
+            const StreamDescriptor& stream_descriptor) :
             index_(std::move(index)),
             density_policy_(density_policy),
             stream_id_(stream_id),
-            execution_context_(std::move(execution_context)) {
+            stream_descriptor_(stream_descriptor) {
     }
 
     [[nodiscard]] Composite<ProcessingSegment>
     process(std::shared_ptr<Store> store, Composite<ProcessingSegment> &&p) const;
 
-    [[nodiscard]] std::shared_ptr<ExecutionContext> execution_context() const { return nullptr; }
+    [[nodiscard]] std::optional<std::unordered_set<std::string>> input_columns() const {
+        return std::nullopt;
+    }
 
     [[nodiscard]] std::optional<std::vector<Composite<ProcessingSegment>>>
 
@@ -319,6 +394,7 @@ struct MergeClause {
 
     [[nodiscard]] bool requires_repartition() const { return true; }
     [[nodiscard]] bool can_combine_with_column_selection() const { return true; }
+    [[nodiscard]] std::optional<std::string> new_index() const { return std::nullopt; }
 };
 
 struct SplitClause {
@@ -345,7 +421,7 @@ struct SplitClause {
                 for (auto &item : split_segs) {
                     end_row = start_row + item.row_count();
                     const RowRange row_range{start_row, end_row};
-                    ret.push_back(ProcessingSegment{std::move(item), FrameSlice{col_range, row_range}});
+                    ret.push_back(ProcessingSegment{std::move(item), FrameSlice{col_range, row_range}, proc.dynamic_schema_});
                     start_row = end_row;
                 }
             }
@@ -353,13 +429,16 @@ struct SplitClause {
         return ret;
     }
 
-    [[nodiscard]] std::shared_ptr<ExecutionContext> execution_context() const { return nullptr; }
+    [[nodiscard]] std::optional<std::unordered_set<std::string>> input_columns() const {
+        return std::nullopt;
+    }
 
     [[nodiscard]] std::optional<std::vector<Composite<ProcessingSegment>>>
     repartition([[maybe_unused]] std::vector<Composite<ProcessingSegment>> &&comps) const { return std::nullopt; }
 
     [[nodiscard]] bool requires_repartition() const { return false; }
     [[nodiscard]] bool can_combine_with_column_selection() const { return true; }
+    [[nodiscard]] std::optional<std::string> new_index() const { return std::nullopt; }
 };
 
 struct SortClause {
@@ -381,111 +460,73 @@ struct SortClause {
         return procs;
     }
 
-    [[nodiscard]] std::shared_ptr<ExecutionContext> execution_context() const { return nullptr; }
+    [[nodiscard]] std::optional<std::unordered_set<std::string>> input_columns() const {
+        return std::nullopt;
+    }
 
     [[nodiscard]] std::optional<std::vector<Composite<ProcessingSegment>>>
     repartition([[maybe_unused]] std::vector<Composite<ProcessingSegment>> &&comps) const { return std::nullopt; }
 
     [[nodiscard]] bool requires_repartition() const { return false; }
     [[nodiscard]] bool can_combine_with_column_selection() const { return true; }
+    [[nodiscard]] std::optional<std::string> new_index() const { return std::nullopt; }
 };
 
 struct ProjectClause {
-    //TODO can't use root node name all the time, do something like this
-    //const std::shared_ptr<std::map<std::string, std::string>> projections_;
-    std::string column_name_;
-    const std::shared_ptr<ExecutionContext> execution_context_;
-    std::shared_ptr<std::once_flag> add_column_ = std::make_shared<std::once_flag>();
+    std::unordered_set<std::string> input_columns_;
+    std::string output_column_;
+    std::shared_ptr<ExpressionContext> expression_context_;
 
-    //TODO support multiple projections
-    //explicit ProjectClause(std::shared_ptr<std::map<std::string, std::string>> projections) :
-    explicit ProjectClause(const std::string& column_name, std::shared_ptr<ExecutionContext> execution_context) :
-        column_name_(column_name),
-        execution_context_(std::move(execution_context)) {
+    explicit ProjectClause(std::unordered_set<std::string> input_columns,
+                           std::string output_column,
+                           ExpressionContext expression_context) :
+            input_columns_(input_columns),
+            output_column_(output_column),
+            expression_context_(std::make_shared<ExpressionContext>(std::move(expression_context))) {
     }
+
+    ProjectClause() = delete;
+
+    ARCTICDB_MOVE_COPY_DEFAULT(ProjectClause)
 
     [[nodiscard]] Composite<ProcessingSegment>
     process(std::shared_ptr<Store> store, Composite<ProcessingSegment> &&p) const;
 
-    [[nodiscard]] std::shared_ptr<ExecutionContext> execution_context() const { return execution_context_; }
+    [[nodiscard]] std::optional<std::unordered_set<std::string>> input_columns() const {
+        return input_columns_;
+    }
 
     [[nodiscard]] std::optional<std::vector<Composite<ProcessingSegment>>>
     repartition([[maybe_unused]] std::vector<Composite<ProcessingSegment>> &&comps) const { return std::nullopt; }
 
     [[nodiscard]] bool requires_repartition() const { return false; }
     [[nodiscard]] bool can_combine_with_column_selection() const { return true; }
-};
-
-class ClauseBuilder {
-private:
-    std::vector<Clause> clauses_;
-    std::shared_ptr<ExecutionContext> execution_context_;
-    std::vector<AggregationFactory> operators_;
-
-public:
-    void add_ProjectClause(const std::string& column_name, const std::shared_ptr<ExecutionContext>& ec) {
-        clauses_.emplace_back(ProjectClause(column_name, ec));
-    }
-
-    void add_FilterClause(const std::shared_ptr<ExecutionContext>& ec) {
-        clauses_.emplace_back(FilterClause(ec));
-    }
-
-    void prepare_AggregationClause(const std::shared_ptr<ExecutionContext>& ec) {
-        execution_context_ = ec;
-        if (!operators_.empty()) {
-            util::raise_rte("Prior aggregation clause not finalised before adding new aggregation clause!");
-        }
-
-        operators_ = std::vector<AggregationFactory>{};
-    }
-
-    void add_SumAggregationOperator(ColumnName &&input, ColumnName &&output) {
-        operators_.emplace_back(Sum{std::move(input), std::move(output)});
-    }
-
-    void add_MeanAggregationOperator(ColumnName &&input, ColumnName &&output) {
-        operators_.emplace_back(Mean{std::move(input), std::move(output)});
-    }
-
-    void add_MaxAggregationOperator(ColumnName &&input, ColumnName &&output) {
-        operators_.emplace_back(MaxOrMin{std::move(input), std::move(output), Extremum::max});
-    }
-
-    void add_MinAggregationOperator(ColumnName &&input, ColumnName &&output) {
-        operators_.emplace_back(MaxOrMin{std::move(input), std::move(output), Extremum::min});
-    }
-
-    void finalize_AggregationClause() {
-        // TODO: Complete hack. Two clauses shouldn't share an EC.
-        clauses_.emplace_back(
-                 PartitionClause<arcticdb::grouping::HashingGroupers, arcticdb::grouping::ModuloBucketizer>{execution_context_});
-        clauses_.emplace_back(AggregationClause{execution_context_, std::move(operators_)});
-        execution_context_.reset();
-    }
-
-    [[nodiscard]] std::vector<Clause> get_clauses() const {
-        return clauses_;
-    }
+    [[nodiscard]] std::optional<std::string> new_index() const { return std::nullopt; }
+    [[nodiscard]] std::string to_string() const;
 };
 
 struct RemoveColumnPartitioningClause {
-    std::shared_ptr<ExecutionContext> execution_context_;
+    stream::Index index_;
     const bool dedup_rows_;
     const arcticdb::proto::descriptors::IndexDescriptor::Type descriptor_type_;
 
     RemoveColumnPartitioningClause(
-            std::shared_ptr<ExecutionContext> execution_context,
+            const stream::Index& index,
             const arcticdb::proto::descriptors::IndexDescriptor::Type descriptor_type = IndexDescriptor::ROWCOUNT,
             bool dedup_rows = false) :
-            execution_context_(std::move(execution_context)),
+            index_(index),
             dedup_rows_(dedup_rows),
             descriptor_type_(descriptor_type) {
     }
+
+    ARCTICDB_MOVE_COPY_DEFAULT(RemoveColumnPartitioningClause)
+
     [[nodiscard]] Composite<ProcessingSegment>
     process(std::shared_ptr<Store> store, Composite<ProcessingSegment> &&p) const;
 
-    [[nodiscard]] std::shared_ptr<ExecutionContext> execution_context() const { return nullptr; }
+    [[nodiscard]] std::optional<std::unordered_set<std::string>> input_columns() const {
+        return std::nullopt;
+    }
 
     mutable bool warning_shown = false; // folly::Poly can't deal with atomic_bool
     [[nodiscard]] bool requires_repartition() const { return false; }
@@ -493,6 +534,7 @@ struct RemoveColumnPartitioningClause {
     [[nodiscard]] std::optional<std::vector<Composite<ProcessingSegment>>>
     repartition([[maybe_unused]] std::vector<Composite<ProcessingSegment>> &&) const { return std::nullopt; }
     [[nodiscard]] bool can_combine_with_column_selection() const { return false; }
+    [[nodiscard]] std::optional<std::string> new_index() const { return std::nullopt; }
 };
 
 }//namespace arcticdb

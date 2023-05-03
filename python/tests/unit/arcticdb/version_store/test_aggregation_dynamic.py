@@ -27,6 +27,8 @@ from arcticdb.util.hypothesis import (
     string_strategy,
 )
 
+pytestmark = pytest.mark.processing
+
 
 def assert_equal_value(data, expected):
     received = data.reindex(sorted(data.columns), axis=1)
@@ -81,6 +83,27 @@ def test_hypothesis_mean_agg_dynamic(lmdb_version_store_dynamic_schema, df):
 def test_hypothesis_sum_agg_dynamic(lmdb_version_store_dynamic_schema, df):
     lib = lmdb_version_store_dynamic_schema
     assume(not df.empty)
+
+    symbol = f"sum_agg-{uuid.uuid4().hex}"
+    expected, slices = make_dynamic(df)
+    for df_slice in slices:
+        lib.append(symbol, df_slice, write_if_missing=True)
+
+    try:
+        q = QueryBuilder()
+        q = q.groupby("grouping_column").agg({"a": "sum"})
+        expected = expected.groupby("grouping_column").agg({"a": "sum"})
+
+        vit = lib.read(symbol, query_builder=q)
+        assert_equal_value(vit.data, expected)
+    # pandas 1.0 raises SpecificationError rather than KeyError if the column in "agg" doesn't exist
+    except (KeyError, SpecificationError):
+        pass
+
+
+def test_sum_agg_dynamic(lmdb_version_store_dynamic_schema):
+    df = pd.DataFrame({"grouping_column": [1, 0], "a": [1.0, 1.0]})
+    lib = lmdb_version_store_dynamic_schema
 
     symbol = f"sum_agg-{uuid.uuid4().hex}"
     expected, slices = make_dynamic(df)

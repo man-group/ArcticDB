@@ -6,7 +6,7 @@
  */
 
 #include <gtest/gtest.h>
-#include <arcticdb/processing/execution_context.hpp>
+#include <arcticdb/processing/expression_context.hpp>
 #include <arcticdb/processing/expression_node.hpp>
 #include <arcticdb/processing/processing_segment.hpp>
 #include <arcticdb/util/test/generators.hpp>
@@ -28,12 +28,12 @@ TEST(ExpressionNode, AddBasic) {
 
     wrapper.aggregator_.commit();
     auto& seg = wrapper.segment();
-    ProcessingSegment proc(std::move(seg));
+    ProcessingSegment proc(std::move(seg), false);
     auto node = std::make_shared<ExpressionNode>(ColumnName("thing1"), ColumnName("thing2"), OperationType::ADD);
-    auto execution_context = std::make_shared<ExecutionContext>();
-    execution_context->root_node_name_ = ExpressionName("new_thing");
-    execution_context->add_expression_node("new_thing", node);
-    proc.set_execution_context(execution_context);
+    auto expression_context = std::make_shared<ExpressionContext>();
+    expression_context->root_node_name_ = ExpressionName("new_thing");
+    expression_context->add_expression_node("new_thing", node);
+    proc.set_expression_context(expression_context);
     std::shared_ptr<Store> empty;
     auto ret = proc.get(ExpressionName("new_thing"), empty);
     const auto& col = std::get<ColumnWithStrings>(ret).column_;

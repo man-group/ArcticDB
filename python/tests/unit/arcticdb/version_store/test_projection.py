@@ -18,6 +18,18 @@ from arcticdb.util.hypothesis import (
     string_strategy,
 )
 
+import pytest
+pytestmark = pytest.mark.processing
+
+def test_project_with_column_slicing(lmdb_version_store):
+    lib = lmdb_version_store
+    sym = "test_project_with_column_slicing"
+    df = pd.DataFrame({"source_col": np.arange(10), "data_col": np.arange(10, 20)}, index=np.arange(10))
+    lib.write(sym, df)
+    q = QueryBuilder()
+    q = q.apply("projected_col", q["source_col"] * 2)
+    received = lib.read(sym, query_builder=q).data
+
 
 def test_project(s3_version_store):
     lib = s3_version_store

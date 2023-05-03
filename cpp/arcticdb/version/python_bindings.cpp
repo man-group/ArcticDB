@@ -17,7 +17,7 @@
 #include <arcticdb/storage/mongo/mongo_instance.hpp>
 #include <arcticdb/processing/operation_types.hpp>
 #include <arcticdb/processing/expression_node.hpp>
-#include <arcticdb/processing/execution_context.hpp>
+#include <arcticdb/processing/expression_context.hpp>
 #include <arcticdb/pipeline/value_set.hpp>
 #include <arcticdb/python/adapt_read_dataframe.hpp>
 #include <arcticdb/version/schema_checks.hpp>
@@ -86,25 +86,6 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
         return std::make_shared<ValueSet>(value_list);
     }))
     ;
-
-    py::class_<ClauseBuilder>(version, "ClauseBuilder")
-            .def(py::init())
-            .def("add_ProjectClause", &ClauseBuilder::add_ProjectClause)
-            .def("add_FilterClause", &ClauseBuilder::add_FilterClause)
-            .def("prepare_AggregationClause", &ClauseBuilder::prepare_AggregationClause)
-            .def("add_MeanAggregationOperator", [&](ClauseBuilder& v,  std::string input_column, std::string output_column) {
-                return v.add_MeanAggregationOperator(ColumnName(input_column), ColumnName(output_column));
-            })
-            .def("add_SumAggregationOperator", [&](ClauseBuilder& v,  std::string input_column, std::string output_column) {
-                return v.add_SumAggregationOperator(ColumnName(input_column), ColumnName(output_column));
-            })
-            .def("add_MaxAggregationOperator", [&](ClauseBuilder& v,  std::string input_column, std::string output_column) {
-              return v.add_MaxAggregationOperator(ColumnName(input_column), ColumnName(output_column));
-            })
-            .def("add_MinAggregationOperator", [&](ClauseBuilder& v,  std::string input_column, std::string output_column) {
-                return v.add_MinAggregationOperator(ColumnName(input_column), ColumnName(output_column));
-            })
-        .def("finalize_AggregationClause", &ClauseBuilder::finalize_AggregationClause);
 
     py::class_<VersionQuery>(version, "PythonVersionStoreVersionQuery")
         .def(py::init())
@@ -206,12 +187,55 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
                 return std::get<timestamp>(self.end_);
             });
 
+    py::class_<FilterClause, std::shared_ptr<FilterClause>>(version, "FilterClause")
+            .def(py::init<
+                    std::unordered_set<std::string>,
+                    ExpressionContext,
+                    std::optional<PipelineOptimisation>>())
+            .def("__str__", &FilterClause::to_string)
+            .def("set_pipeline_optimisation", &FilterClause::set_pipeline_optimisation);
+
+    py::class_<ProjectClause, std::shared_ptr<ProjectClause>>(version, "ProjectClause")
+            .def(py::init<
+                    std::unordered_set<std::string>,
+                    std::string,
+                    ExpressionContext>())
+            .def("__str__", &ProjectClause::to_string);
+
+    using GroupByClause = PartitionClause<arcticdb::grouping::HashingGroupers, arcticdb::grouping::ModuloBucketizer>;
+
+    py::class_<GroupByClause, std::shared_ptr<GroupByClause>>(version, "GroupByClause")
+            .def(py::init<std::string>())
+            .def_property_readonly("grouping_column", [](const GroupByClause& self) {
+                return self.grouping_column_;
+            })
+            .def("__str__", &GroupByClause::to_string);
+
+    py::class_<AggregationClause, std::shared_ptr<AggregationClause>>(version, "AggregationClause")
+            .def(py::init<std::string, std::unordered_map<std::string, std::string>>())
+            .def("__str__", &AggregationClause::to_string);
+
     py::class_<ReadQuery>(version, "PythonVersionStoreReadQuery")
             .def(py::init())
             .def_readwrite("columns",&ReadQuery::columns)
             .def_readwrite("row_range",&ReadQuery::row_range)
             .def_readwrite("row_filter",&ReadQuery::row_filter)
-            .def("set_clause_builder", &ReadQuery::set_clause_builder);
+            // Unsurprisingly, pybind11 doesn't understand folly::poly, so use vector of variants here
+            .def("add_clauses",
+                 [](ReadQuery& self,
+                    std::vector<std::variant<std::shared_ptr<FilterClause>,
+                                std::shared_ptr<ProjectClause>,
+                                std::shared_ptr<GroupByClause>,
+                                std::shared_ptr<AggregationClause>>> clauses) {
+                std::vector<std::shared_ptr<Clause>> _clauses;
+                for (auto&& clause: clauses) {
+                    util::variant_match(
+                        clause,
+                        [&](auto&& clause) {_clauses.emplace_back(std::make_shared<Clause>(*clause));}
+                    );
+                }
+                self.add_clauses(_clauses);
+            });
 
     py::enum_<OperationType>(version, "OperationType")
             .value("ABS", OperationType::ABS)
@@ -272,18 +296,16 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
                 return ExpressionNode(left, operation_type);
             }));
 
-    py::enum_<ExecutionContext::Optimisation>(version, "ExecutionContextOptimisation")
-            .value("SPEED", ExecutionContext::Optimisation::SPEED)
-            .value("MEMORY", ExecutionContext::Optimisation::MEMORY);
+    py::enum_<PipelineOptimisation>(version, "PipelineOptimisation")
+            .value("SPEED", PipelineOptimisation::SPEED)
+            .value("MEMORY", PipelineOptimisation::MEMORY);
 
-    py::class_<ExecutionContext, std::shared_ptr<ExecutionContext>>(version, "ExecutionContext")
+    py::class_<ExpressionContext, std::shared_ptr<ExpressionContext>>(version, "ExpressionContext")
             .def(py::init())
-            .def("add_column", &ExecutionContext::add_column)
-            .def("add_expression_node", &ExecutionContext::add_expression_node)
-            .def("add_value", &ExecutionContext::add_value)
-            .def("add_value_set", &ExecutionContext::add_value_set)
-            .def_readwrite("root_node_name", &ExecutionContext::root_node_name_)
-            .def_readwrite("optimisation", &ExecutionContext::optimisation_);
+            .def("add_expression_node", &ExpressionContext::add_expression_node)
+            .def("add_value", &ExpressionContext::add_value)
+            .def("add_value_set", &ExpressionContext::add_value_set)
+            .def_readwrite("root_node_name", &ExpressionContext::root_node_name_);
 
     py::class_<UpdateQuery>(version, "PythonVersionStoreUpdateQuery")
             .def(py::init())

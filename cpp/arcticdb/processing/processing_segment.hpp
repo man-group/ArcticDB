@@ -13,7 +13,7 @@
 #include <fmt/core.h>
 
 #include <arcticdb/column_store/memory_segment.hpp>
-#include <arcticdb/processing/execution_context.hpp>
+#include <arcticdb/processing/expression_context.hpp>
 #include <arcticdb/processing/expression_node.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>
 #include <arcticdb/pipeline/filter_segment.hpp>
@@ -22,6 +22,11 @@
 #include <arcticdb/util/variant.hpp>
 
 namespace arcticdb {
+    enum class PipelineOptimisation : uint8_t {
+        SPEED,
+        MEMORY
+    };
+
     /*
      * A processing segment is designed to be used in conjunction with the clause processing framework.
      * Each clause will execute in turn and will be passed the same mutable ProcessingSegment which it will have free
@@ -30,10 +35,10 @@ namespace arcticdb {
      *
      * ProcessingSegment contains two main member attributes:
      *
-     * ExecutionContext: This contains the expression tree for the currently running clause - each clause contains an
+     * ExpressionContext: This contains the expression tree for the currently running clause - each clause contains an
      * expression tree containing nodes that map to columns, constant values or other nodes in the tree. This allows
-     * for the processing of expressions such as `(df['a'] + 4) < df['b']`. One instance of an execution context can be
-     * shared across many ProcessingSegment's. See ExecutionContext class for more documentation.
+     * for the processing of expressions such as `(df['a'] + 4) < df['b']`. One instance of an expression context can be
+     * shared across many ProcessingSegment's. See ExpressionContext class for more documentation.
      *
      * computed_data_: This contains a map from node name to previously computed result. Should an expression such as
      * df['col1'] + 1 appear multiple times in the tree this allows us to only perform the computation once and spill
@@ -46,32 +51,46 @@ namespace arcticdb {
         //    segment in order for "get" calls to make sense
         // 2: As "get" uses cached results where possible, it is not obvious which processing segment should hold the
         //    cached result for operations involving 2 columns (probably both). By moving these cached results up a level
-        //    to contain all of the information for a given row, this becomes unambiguous.
+        //    to contain all the information for a given row, this becomes unambiguous.
         std::vector<pipelines::SliceAndKey> data_;
-        std::shared_ptr<ExecutionContext> execution_context_;
+        std::shared_ptr<ExpressionContext> expression_context_;
         std::unordered_map<std::string, VariantData> computed_data_;
+        bool dynamic_schema_;
 
         // Set by PartitioningClause
         std::optional<size_t> bucket_;
 
         ProcessingSegment() = default;
 
-        ProcessingSegment(SegmentInMemory &&seg, pipelines::FrameSlice&& slice, std::optional<size_t> bucket = std::nullopt) :
+        ProcessingSegment(SegmentInMemory &&seg,
+                          pipelines::FrameSlice&& slice,
+                          bool dynamic_schema,
+                          std::optional<size_t> bucket = std::nullopt) :
+                dynamic_schema_(dynamic_schema),
                 bucket_(bucket) {
             data_.emplace_back(pipelines::SliceAndKey{std::move(seg), std::move(slice)});
         }
 
-        explicit ProcessingSegment(pipelines::SliceAndKey &&sk, std::optional<size_t> bucket = std::nullopt) :
+        explicit ProcessingSegment(pipelines::SliceAndKey &&sk,
+                                   bool dynamic_schema,
+                                   std::optional<size_t> bucket = std::nullopt) :
+                dynamic_schema_(dynamic_schema),
                 bucket_(bucket) {
             data_.emplace_back(pipelines::SliceAndKey{std::move(sk)});
         }
 
-        explicit ProcessingSegment(std::vector<pipelines::SliceAndKey> &&sk, std::optional<size_t> bucket = std::nullopt) :
+        explicit ProcessingSegment(std::vector<pipelines::SliceAndKey> &&sk,
+                                   bool dynamic_schema,
+                                   std::optional<size_t> bucket = std::nullopt) :
+                dynamic_schema_(dynamic_schema),
                 bucket_(bucket) {
             data_ = std::move(sk);
         }
 
-        explicit ProcessingSegment(SegmentInMemory &&seg, std::optional<size_t> bucket = std::nullopt) :
+        explicit ProcessingSegment(SegmentInMemory &&seg,
+                                   bool dynamic_schema,
+                                   std::optional<size_t> bucket = std::nullopt) :
+                dynamic_schema_(dynamic_schema),
                 bucket_(bucket) {
             data_.emplace_back(pipelines::SliceAndKey{std::move(seg)});
         }
@@ -100,10 +119,10 @@ namespace arcticdb {
             bucket_ = bucket;
         }
 
-        void apply_filter(const util::BitSet& bitset, const std::shared_ptr<Store>& store);
+        void apply_filter(const util::BitSet& bitset, const std::shared_ptr<Store>& store, PipelineOptimisation optimisation);
 
-        void set_execution_context(const std::shared_ptr<ExecutionContext>& execution_context) {
-            execution_context_ = execution_context;
+        void set_expression_context(const std::shared_ptr<ExpressionContext>& expression_context) {
+            expression_context_ = expression_context;
         }
 
         // The name argument to this function is either a column/value name, or uniquely identifies an ExpressionNode object.
@@ -152,7 +171,12 @@ namespace arcticdb {
     }
 
     template<typename Grouper, typename Bucketizer>
-    Composite<ProcessingSegment> partition_processing_segment(const ProcessingSegment& input, const ColumnWithStrings& col, const std::shared_ptr<Store>& store, std::shared_ptr<Grouper> grouper, std::shared_ptr<Bucketizer> bucketizer) {
+    Composite<ProcessingSegment> partition_processing_segment(
+            const ProcessingSegment& input,
+            const ColumnWithStrings& col,
+            const std::shared_ptr<Store>& store,
+            std::shared_ptr<Grouper> grouper,
+            std::shared_ptr<Bucketizer> bucketizer) {
         Composite<ProcessingSegment> output;
         auto bucket_vec = get_buckets(col, grouper, bucketizer);
         std::vector<util::BitSet> bitsets;
@@ -170,6 +194,7 @@ namespace arcticdb {
         for(auto bitset : folly::enumerate(bitsets)) {
             if(bitset->count() != 0) {
                 ProcessingSegment proc;
+                proc.dynamic_schema_ = input.dynamic_schema_;
                 proc.set_bucket(bitset.index);
                 for (auto& seg_slice_and_key : input.data()) {
                     const SegmentInMemory& seg = seg_slice_and_key.segment(store);

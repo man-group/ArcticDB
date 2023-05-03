@@ -13,7 +13,7 @@
 #include <fmt/core.h>
 
 #include <arcticdb/column_store/memory_segment.hpp>
-#include <arcticdb/processing/execution_context.hpp>
+#include <arcticdb/processing/expression_context.hpp>
 #include <arcticdb/processing/expression_node.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>
 #include <arcticdb/pipeline/filter_segment.hpp>
