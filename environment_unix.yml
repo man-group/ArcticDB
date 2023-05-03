@@ -6,7 +6,7 @@ dependencies:
   - boost-cpp  
   - fmt
   - spdlog
-  - folly =="2022.10.31.00"
+  - folly == "2022.10.31"
   - lz4-c
   - prometheus-cpp
   - double-conversion
