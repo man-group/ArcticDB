@@ -19,7 +19,7 @@ except:
     from pandas.core.base import SpecificationError
 
 from arcticdb.version_store.processing import QueryBuilder
-from arcticdb_ext.exceptions import InternalException
+from arcticdb_ext.exceptions import InternalException, SchemaException
 from arcticdb.util.test import make_dynamic, assert_frame_equal
 from arcticdb.util.hypothesis import (
     use_of_function_scoped_fixtures_in_hypothesis_checked,
@@ -174,8 +174,8 @@ def test_group_empty_dataframe_dynamic(lmdb_version_store_dynamic_schema):
 
     symbol = "test_group_empty_dataframe"
     lmdb_version_store_dynamic_schema.write(symbol, df)
-    vit = lmdb_version_store_dynamic_schema.read(symbol, query_builder=q)
-    assert vit.data.empty
+    with pytest.raises(SchemaException):
+        _ = lmdb_version_store_dynamic_schema.read(symbol, query_builder=q)
 
 
 def test_group_pickled_symbol_dynamic(lmdb_version_store_dynamic_schema):
@@ -194,7 +194,7 @@ def test_group_column_not_present_dynamic(lmdb_version_store_dynamic_schema):
     q = q.groupby("grouping_column").agg({"to_mean": "mean"})
     symbol = "test_group_column_not_present"
     lmdb_version_store_dynamic_schema.write(symbol, df)
-    with pytest.raises(InternalException) as e_info:
+    with pytest.raises(SchemaException):
         _ = lmdb_version_store_dynamic_schema.read(symbol, query_builder=q)
 
 
@@ -266,7 +266,6 @@ def test_segment_without_aggregation_column(lmdb_version_store_dynamic_schema):
         assert_equal_value(received, expected)
 
 
-@pytest.mark.xfail(reason="ArcticDB/issues/130")
 def test_minimal_repro_type_change(lmdb_version_store_dynamic_schema):
     lib = lmdb_version_store_dynamic_schema
     sym = "test_minimal_repro_type_change"
@@ -284,7 +283,6 @@ def test_minimal_repro_type_change(lmdb_version_store_dynamic_schema):
     assert_equal_value(received, expected)
 
 
-@pytest.mark.xfail(reason="ArcticDB/issues/130")
 def test_minimal_repro_type_change_max(lmdb_version_store_dynamic_schema):
     lib = lmdb_version_store_dynamic_schema
     sym = "test_minimal_repro_type_change_max"
@@ -316,3 +314,28 @@ def test_minimal_repro_type_sum_similar_string_group_values(lmdb_version_store_d
     q = q.groupby("grouping_column").agg({"to_sum": "sum"})
     received = lib.read(sym, query_builder=q).data
     assert_equal_value(received, expected)
+
+
+def test_aggregation_grouping_column_missing_from_row_group(lmdb_version_store_dynamic_schema):
+    lib = lmdb_version_store_dynamic_schema
+    df0 = DataFrame(
+        {"to_sum": [1, 2], "grouping_column": ["group_1", "group_2"]},
+        index=np.arange(2),
+    )
+    df1 = DataFrame(
+        {"to_sum": [3, 4]},
+        index=np.arange(2, 4),
+    )
+    expected = df0.append(df1).groupby("grouping_column").agg({"to_sum": "sum"})
+
+    symbol = "test_aggregation_grouping_column_missing_from_row_group"
+    lib.write(symbol, df0)
+    lib.append(symbol, df1)
+
+    q = QueryBuilder()
+    q = q.groupby("grouping_column").agg({"to_sum": "sum"})
+
+    res = lib.read(symbol, query_builder=q)
+    res.data.sort_index(inplace=True)
+
+    assert_frame_equal(res.data, expected)

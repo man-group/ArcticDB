@@ -742,7 +742,7 @@ struct StreamDescriptor {
     }
 
     const FieldDescriptor::Proto& add_field(const FieldDescriptor::Proto& field) {
-        util::check(type_desc_from_proto(field.type_desc()).data_type() != DataType::UNKNOWN, "Can't create column with unknown data type");
+        util::check(type_desc_from_proto(field.type_desc()).data_type() != DataType::UNKNOWN, "Can't create column in add_field with unknown data type");
         auto new_field = data_->mutable_fields()->Add();
         new_field->CopyFrom(field);
         return *new_field;

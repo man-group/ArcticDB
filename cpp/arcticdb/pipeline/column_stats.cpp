@@ -2,7 +2,6 @@
 
 #include <arcticdb/processing/aggregation_interface.hpp>
 #include <arcticdb/processing/aggregation.hpp>
-#include <arcticdb/processing/execution_context.hpp>
 #include <arcticdb/entity/type_utils.hpp>
 #include <arcticdb/util/preconditions.hpp>
 
@@ -223,24 +222,26 @@ std::optional<Clause> ColumnStats::clause() const {
     if (column_stats_.empty()) {
         return std::nullopt;
     }
-    auto execution_context = std::make_shared<ExecutionContext>();
+    std::unordered_set<std::string> input_columns;
     auto index_generation_aggregators = std::make_shared<std::vector<ColumnStatsAggregator>>();
     for (const auto& [column, column_stat_types]: column_stats_) {
-        execution_context->columns_.emplace(column);
+        input_columns.emplace(column);
 
         for (const auto& column_stat_type: column_stat_types) {
             switch (column_stat_type) {
                 case ColumnStatType::MINMAX:
-                    index_generation_aggregators->emplace_back(MinMaxAggregator(ColumnName(column),
-                                                                               ColumnName(to_segment_column_name(column, ColumnStatTypeInternal::MIN)),
-                                                                               ColumnName(to_segment_column_name(column, ColumnStatTypeInternal::MAX))));
+                    index_generation_aggregators->emplace_back(
+                            MinMaxAggregator(ColumnName(column),
+                                             ColumnName(to_segment_column_name(column, ColumnStatTypeInternal::MIN)),
+                                             ColumnName(to_segment_column_name(column, ColumnStatTypeInternal::MAX)))
+                                             );
                     break;
                 default:
                     internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Unrecognised ColumnStatType");
             }
         }
     }
-    return ColumnStatsGenerationClause(execution_context, index_generation_aggregators);
+    return ColumnStatsGenerationClause(std::move(input_columns), index_generation_aggregators);
 }
 
 bool ColumnStats::operator==(const ColumnStats& right) const {
