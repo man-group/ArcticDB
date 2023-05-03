@@ -6,8 +6,11 @@ add_subdirectory(lmdbcxx)
 add_subdirectory(Remotery)
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/Remotery/lib)
+if(NOT ${ARCTICDB_USING_CONDA})
+    add_subdirectory(semimap EXCLUDE_FROM_ALL)
+endif()
+
 add_subdirectory(rapidcheck EXCLUDE_FROM_ALL)
 add_subdirectory(rapidcheck/extras/gtest EXCLUDE_FROM_ALL)
-add_subdirectory(semimap EXCLUDE_FROM_ALL)
 add_subdirectory(recycle EXCLUDE_FROM_ALL)
 add_subdirectory(msgpack-c EXCLUDE_FROM_ALL)
