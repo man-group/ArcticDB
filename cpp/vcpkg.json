@@ -4,11 +4,7 @@
   "dependencies": [
     "fmt",
     "spdlog",
-    {
-      "name": "pcre",
-      "platform": "!linux",
-      "$platform reason": "Distro-maintained one often have security fixes"
-    },
+    "pcre",
     {
       "name": "protobuf",
       "default-features": false,

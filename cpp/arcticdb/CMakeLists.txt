@@ -27,66 +27,42 @@ find_package(Gflags REQUIRED)
 find_package(LZ4 REQUIRED)
 find_package(prometheus-cpp CONFIG REQUIRED)
 find_package(Threads REQUIRED)
+find_package(unofficial-pcre REQUIRED)
+find_package(double-conversion REQUIRED)
 
-if(NOT WIN32)
-    find_package(Kerberos REQUIRED)
-endif()
 
-# Libraries compiled by vcpkg and also baked into our internal image:
-if (ARCTICDB_USING_VCPKG AND NOT ${ARCTICDB_USING_CONDA})
-    find_package(double-conversion REQUIRED)
+find_package(Protobuf REQUIRED)
+set(Protobuf_lite_LIBRARY protobuf::libprotobuf-lite)
+set(Protobuf_LIBRARY protobuf::libprotobuf)
+
+find_package(mongocxx REQUIRED)
+find_package(bsoncxx REQUIRED)
+set(ARCTICDB_MONGO_LIBS mongo::mongocxx_static mongo::bsoncxx_static)
+find_package(zstd CONFIG REQUIRED)
+
+find_package(zstd CONFIG REQUIRED)  # "CONFIG" bypasses our cpp/CMake/FindZstd.cmake module
+
+if(not ${ARCTICDB_USING_CONDA})
     find_package(Libevent CONFIG REQUIRED)
-
-    find_package(Protobuf REQUIRED)
-    set(Protobuf_lite_LIBRARY protobuf::libprotobuf-lite)
-    set(Protobuf_LIBRARY protobuf::libprotobuf)
-
-    find_package(mongocxx REQUIRED)
-    find_package(bsoncxx REQUIRED)
     set(ARCTICDB_MONGO_LIBS mongo::mongocxx_static mongo::bsoncxx_static)
-
-    find_package(zstd CONFIG REQUIRED)  # "CONFIG" bypasses our cpp/CMake/FindZstd.cmake module
     set(Zstd_LIBRARY $<IF:$<TARGET_EXISTS:zstd::libzstd_shared>,zstd::libzstd_shared,zstd::libzstd_static>)
-elseif(${ARCTICDB_USING_CONDA})
+else()
 
     find_package(pybind11 REQUIRED)
     find_package(xxHash REQUIRED)
-
-    find_package(double-conversion REQUIRED)
     find_package(Libevent  REQUIRED)
 
-    find_package(Protobuf REQUIRED)
-    set(Protobuf_lite_LIBRARY protobuf::libprotobuf-lite)
-    set(Protobuf_LIBRARY protobuf::libprotobuf)
-
-    find_package(mongocxx REQUIRED)
-    find_package(bsoncxx REQUIRED)
     set(ARCTICDB_MONGO_LIBS mongo::mongocxx_shared mongo::bsoncxx_shared)
 
     find_package(zstd CONFIG REQUIRED)  # "CONFIG" bypasses our cpp/CMake/FindZstd.cmake module
-    set(Zstd_LIBRARY $<IF:$<TARGET_EXISTS:zstd::libzstd_shared>,zstd::libzstd_shared,zstd::libzstd_static>)
-
+    set(Zstd_LIBRARY zstd::libzstd_shared)
 
     get_target_property(NEW_FOLLY_DEPS Folly::folly_deps INTERFACE_INCLUDE_DIRECTORIES)
     message(STATUS "NEW_FOLLY_DEPS" ${NEW_FOLLY_DEPS})
     list(REMOVE_ITEM NEW_FOLLY_DEPS "/usr/local/opt/openssl/include" )
     set_target_properties(Folly::folly_deps PROPERTIES INTERFACE_INCLUDE_DIRECTORIES "${NEW_FOLLY_DEPS}")
 
-else()
-    find_library(Protobuf_lite_LIBRARY NAMES libprotobuf-lite protobuf-lite REQUIRED)
-    find_library(Protobuf_LIBRARY NAMES libprotobuf protobuf REQUIRED)
-
-    find_package(Zstd MODULE REQUIRED) # Uses our FindZstd module, which sets Zstd_LIBRARY
-
-    find_package(libmongocxx-static REQUIRED)
-    find_package(libbsoncxx-static REQUIRED)
-    string(REPLACE "/usr/lib64/libsasl2.so;" "" LIBMONGOCXX_STATIC_LIBRARIES_NO_SASL "${LIBMONGOCXX_STATIC_LIBRARIES}")
-    set(ARCTICDB_MONGO_LIBS ${LIBMONGOCXX_STATIC_LIBRARIES_NO_SASL} ${LIBBSONCXX_STATIC_LIBRARIES})
-
-    get_target_property(NEW_FOLLY_DEPS Folly::folly_deps INTERFACE_LINK_LIBRARIES)
-    list(TRANSFORM NEW_FOLLY_DEPS REPLACE "/usr/local/lib/libsodium\\.so" "libsodium.a")
-    set_target_properties(Folly::folly_deps PROPERTIES INTERFACE_LINK_LIBRARIES "${NEW_FOLLY_DEPS}")
-endif()
+endfif()
 
 # Libraries baked into the internal and external Linux images are found by searching various paths
 # On Windows, vcpkg will provide a "Config" which takes precedence
@@ -450,7 +426,7 @@ set (arcticdb_core_libraries
         spdlog::spdlog
         Folly::folly # Transitively includes: double-conversion, gflags, glog, libevent, libssl, libcrypto, libiberty, libsodium
         remotery_static
-        ${Pcre_LIBRARY}
+        unofficial::pcre::pcre
         )
 
 # no static libraries when usinmg conda
@@ -737,7 +713,7 @@ if(${TEST})
                 )
     endif()
 
-    gtest_discover_tests(test_unit_arcticdb)
+    gtest_discover_tests(test_unit_arcticdb PROPERTIES DISCOVERY_TIMEOUT 30)
 
     set(rapidcheck_srcs
             column_store/test/rapidcheck_column_store.cpp
@@ -779,5 +755,5 @@ if(${TEST})
             )
     endif()
 
-    gtest_discover_tests(arcticdb_rapidcheck_tests)
+    gtest_discover_tests(arcticdb_rapidcheck_tests PROPERTIES DISCOVERY_TIMEOUT 30)
 endif()
