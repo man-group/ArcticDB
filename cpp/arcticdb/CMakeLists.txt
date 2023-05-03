@@ -57,6 +57,7 @@ else()
     find_package(Libevent  REQUIRED)
     find_package(semimap REQUIRED)
     find_package(robin_hood REQUIRED)
+    find_package(rapidcheck REQUIRED)
 
     set(ARCTICDB_MONGO_LIBS mongo::mongocxx_shared mongo::bsoncxx_shared)
 
