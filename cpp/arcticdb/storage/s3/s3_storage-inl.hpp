@@ -249,7 +249,7 @@ void do_read_impl(Composite<VariantKey> && ks,
     std::vector<VariantKey> failed_reads;
 
     (fg::from(ks.as_range()) | fg::move | fg::groupBy(fmt_db)).foreach(
-        [&s3_client, &bucket_name, &fmt_db, &root_folder, b=std::move(bucketizer), &visitor, &failed_reads,
+        [&s3_client, &bucket_name, &root_folder, b=std::move(bucketizer), &visitor, &failed_reads,
          opts=opts] (auto&& group) {
 
         for (auto& k : group.values()) {
