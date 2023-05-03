@@ -13,11 +13,15 @@
 #ifdef ARCTICDB_USING_STATIC_XXHASH
 #error "THIS IS WRONG"
 #define XXH_STATIC_LINKING_ONLY
+#else
+#define XXH_INLINE_ALL
 #endif 
 #include <xxhash.h>
 #ifdef ARCTICDB_USING_STATIC_XXHASH
 #undef XXH_STATIC_LINKING_ONLY
-#endif
+#else
+#undef XXH_INLINE_ALL
+#endif 
 
 #include <folly/hash/Hash.h>
 
