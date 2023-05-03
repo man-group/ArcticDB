@@ -35,3 +35,4 @@ dependencies:
   - pytest-server-fixtures
   - hypothesis < 6.73
   - pytest-sugar
+  - xxhash

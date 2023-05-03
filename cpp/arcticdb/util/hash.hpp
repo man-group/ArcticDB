@@ -10,9 +10,14 @@
 #include <cstdint>
 #include <string_view>
 
+#ifdef ARCTICDB_USING_STATIC_XXHASH
+#error "THIS IS WRONG"
 #define XXH_STATIC_LINKING_ONLY
+#endif 
 #include <xxhash.h>
+#ifdef ARCTICDB_USING_STATIC_XXHASH
 #undef XXH_STATIC_LINKING_ONLY
+#endif
 
 #include <folly/hash/Hash.h>
 

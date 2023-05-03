@@ -50,6 +50,7 @@ if (ARCTICDB_USING_VCPKG AND NOT ${ARCTICDB_USING_CONDA})
 elseif(${ARCTICDB_USING_CONDA})
 
     find_package(pybind11 REQUIRED)
+    find_package(xxHash REQUIRED)
 
     find_package(double-conversion REQUIRED)
     find_package(Libevent  REQUIRED)
@@ -442,7 +443,6 @@ set (arcticdb_core_libraries
         fmt::fmt
         ${Protobuf_lite_LIBRARY}
         ${Protobuf_LIBRARY}
-        xxhash_static
         ${LZ4_LIBRARY}
         ${Zstd_LIBRARY}
         lmdb
@@ -452,6 +452,15 @@ set (arcticdb_core_libraries
         remotery_static
         ${Pcre_LIBRARY}
         )
+
+# no static libraries when usinmg conda
+if(${ARCTICDB_USING_CONDA})
+    add_compile_definitions(ARCTICDB_USING_CONDA)
+    list (APPEND arcticdb_core_libraries xxHash::xxHash)
+else()
+    add_compile_definitions(ARCTICDB_USING_STATIC_XXHASH)
+    list (APPEND arcticdb_core_libraries xxhash_static)
+endif()
 
 if (WIN32)
     list (APPEND arcticdb_core_libraries
