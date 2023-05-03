@@ -21,7 +21,7 @@ TEST(MemSegment, Empty) {
     SegmentInMemory s;
     ASSERT_EQ(s.row_count(), 0);
     ASSERT_EQ(s.num_columns(), 0);
-    ASSERT_THROW(s.column(12), ArcticBaseException<ErrorCategory::INTERNAL>);
+    ASSERT_THROW(s.column(12), ArcticCategorizedException<ErrorCategory::INTERNAL>);
     //  ASSERT_THROW(s.scalar_at<uint16_t>(3, 6), std::invalid_argument);
     ASSERT_NO_THROW(s.clear());
     // Even though this index is out of bounds it will not throw as there are no columns to visit

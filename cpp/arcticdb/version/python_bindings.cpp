@@ -13,92 +13,21 @@
 #include <arcticdb/python/arctic_version.hpp>
 #include <arcticdb/python/python_utils.hpp>
 #include <arcticdb/pipeline/query.hpp>
-#include <folly/Singleton.h>
 #include <arcticdb/storage/mongo/mongo_instance.hpp>
 #include <arcticdb/processing/operation_types.hpp>
 #include <arcticdb/processing/expression_node.hpp>
 #include <arcticdb/processing/execution_context.hpp>
 #include <arcticdb/pipeline/value_set.hpp>
 #include <arcticdb/python/adapt_read_dataframe.hpp>
-#include <arcticdb/version/snapshot.hpp>
 #include <arcticdb/version/schema_checks.hpp>
 
 namespace arcticdb::version_store {
 
-void register_bindings(py::module &m) {
+void register_bindings(py::module &m, py::exception<arcticdb::ArcticException>& base_exception) {
     auto version = m.def_submodule("version_store", "Versioned storage implementation apis");
 
-    py::register_exception<NoSuchVersionException>(version, "NoSuchVersionException");
-    py::register_exception<StreamDescriptorMismatch>(version, "StreamDescriptorMismatch");
-
-  /*  class PyFilter: public Filter {
-    public:
-        using Filter::Filter;
-
-        [[nodiscard]] util::BitSet go(const SegmentInMemory &seg) const override {
-            PYBIND11_OVERRIDE_PURE(
-                util::BitSet ,
-                Filter,
-                go,
-                seg
-            );
-        }
-
-        virtual ~PyFilter() = default;
-    };
-
-    py::class_<FilterProcessor, std::shared_ptr<FilterProcessor>>(version, "Processor")
-            .def(py::init<std::shared_ptr<Filter>, std::shared_ptr<FilterProcessor>, std::shared_ptr<FilterProcessor>>())
-            .def("set_left", &FilterProcessor::set_left)
-            .def("set_right", &FilterProcessor::set_right)
-            .def("print", &FilterProcessor::print_tree);
-
-    py::class_<Filter, PyFilter, std::shared_ptr<Filter>>(version, "Filter")
-            .def("filter", &Filter::filter);
-
-    py::class_<EqualsFilter, Filter, std::shared_ptr<EqualsFilter>>(version, "EqualsFilter")
-        .def(py::init<std::string, Value>())
-        .def("filter", &EqualsFilter::filter)
-        ;
-
-    py::class_<NotEqualsFilter, Filter, std::shared_ptr<NotEqualsFilter>>(version, "NotEqualsFilter")
-        .def(py::init<std::string, Value>())
-        .def("filter", &NotEqualsFilter::filter)
-        ;
-
-    py::class_<LessThanFilter, Filter, std::shared_ptr<LessThanFilter>>(version, "LessThanFilter")
-        .def(py::init<std::string, Value>())
-        .def("filter", &LessThanFilter::filter)
-        ;
-
-    py::class_<GreaterThanFilter, Filter, std::shared_ptr<GreaterThanFilter>>(version, "GreaterThanFilter")
-        .def(py::init<std::string, Value>())
-        .def("filter", &GreaterThanFilter::filter)
-        ;
-
-    py::class_<LessThanOrEqualFilter, Filter, std::shared_ptr<LessThanOrEqualFilter>>(version, "LessThanOrEqualFilter")
-        .def(py::init<std::string, Value>())
-        .def("filter", &LessThanOrEqualFilter::filter)
-        ;
-
-    py::class_<GreaterThanOrEqualFilter, Filter, std::shared_ptr<GreaterThanOrEqualFilter>>(version, "GreaterThanOrEqualFilter")
-        .def(py::init<std::string, Value>())
-        .def("filter", &GreaterThanOrEqualFilter::filter)
-        ;
-
-    py::class_<ListMembershipFilter, Filter, std::shared_ptr<ListMembershipFilter>>(version, "ListMembershipFilter")
-        .def(py::init<std::string, ValueList>())
-        .def("filter", &ListMembershipFilter::filter)
-        ;
-
-    py::class_<OrFilter, Filter, std::shared_ptr<OrFilter>>(version, "OrFilter")
-        .def(py::init())
-        ;
-
-    py::class_<AndFilter, Filter, std::shared_ptr<AndFilter>>(version, "AndFilter")
-            .def(py::init())
-    ;
-    */
+    py::register_exception<NoSuchVersionException>(version, "NoSuchVersionException", base_exception.ptr());
+    py::register_exception<StreamDescriptorMismatch>(version, "StreamDescriptorMismatch", base_exception.ptr());
 
     py::class_<AtomKey, std::shared_ptr<AtomKey>>(version, "AtomKey")
     .def(py::init())
@@ -158,11 +87,6 @@ void register_bindings(py::module &m) {
         return std::make_shared<ValueSet>(value_list);
     }))
     ;
-
-   // py::class_<ValueList>(version, "ValueListType")
-   //     .def(py::init<NativeTensor>());
-
-  //  version.def("ValueList", &construct_value_list);
 
     py::class_<ClauseBuilder>(version, "ClauseBuilder")
             .def(py::init())

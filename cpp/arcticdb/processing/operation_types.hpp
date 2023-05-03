@@ -389,10 +389,11 @@ bool operator()(int64_t t, const std::unordered_set<uint64_t>& u) const {
     else
         return u.count(t) > 0;
 }
-// This is the version called when checking string set membership
-bool operator()(int64_t t, const emilib::HashSet<int64_t>& u) const {
+// This is the version called when checking string set membership with T = uint64_t and U = int64_t
+template<typename T, typename U>
+bool operator()(T t, const emilib::HashSet<U>& u) const {
     return u.contains(t);
-}
+} 
 };
 
 struct IsNotInOperator {
@@ -412,8 +413,9 @@ bool operator()(int64_t t, const std::unordered_set<uint64_t>& u) const {
     else
         return u.count(t) == 0;
 }
-// This is the version called when checking string set membership
-bool operator()(int64_t t, const emilib::HashSet<int64_t>& u) const {
+// This is the version called when checking string set membership with T = uint64_t and U = int64_t
+template<typename T, typename U>
+bool operator()(T t, const emilib::HashSet<U>& u) const {
     return !u.contains(t);
 }
 };

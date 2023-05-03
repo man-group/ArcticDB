@@ -239,7 +239,7 @@ std::pair<VersionedItem, FrameAndDescriptor> LocalVersionedEngine::read_datafram
             identifier = stream_id;
         }
         else
-            throw storage::NoDataFoundException(fmt::format("read_dataframe_version: version not found for stream '{}'", stream_id));
+            throw storage::NoDataFoundException(fmt::format("read_dataframe_version: version not found for symbol '{}'", stream_id));
     }
     else  {
         identifier = version.value();
@@ -312,7 +312,7 @@ std::shared_ptr<DeDupMap> LocalVersionedEngine::get_de_dup_map(
 
 VersionedItem LocalVersionedEngine::sort_index(const StreamId& stream_id, bool dynamic_schema) {
     auto maybe_prev = get_latest_undeleted_version(store(), version_map(), stream_id, true, false);
-    util::check(maybe_prev.has_value(), "Cannot delete from non-existent stream {}", stream_id);
+    util::check(maybe_prev.has_value(), "Cannot delete from non-existent symbol {}", stream_id);
     auto version_id = get_next_version_from_key(maybe_prev.value());
     auto [index_segment_reader, slice_and_keys] = index::read_index_to_vector(store(), maybe_prev.value());
     if(dynamic_schema) {
@@ -349,7 +349,7 @@ VersionedItem LocalVersionedEngine::delete_range_internal(
     const UpdateQuery & query,
     bool dynamic_schema) {
     auto maybe_prev = get_latest_undeleted_version(store(), version_map(), stream_id, true, false);
-    util::check(maybe_prev.has_value(), "Cannot delete from non-existent stream {}", stream_id);
+    util::check(maybe_prev.has_value(), "Cannot delete from non-existent symbol {}", stream_id);
     auto versioned_item = delete_range_impl(store(),
                                             maybe_prev.value(),
                                             query,
@@ -405,7 +405,7 @@ VersionedItem LocalVersionedEngine::update_internal(
             version_map()->write_version(store(), versioned_item.key_);
             return versioned_item;
         } else {
-            util::raise_rte("Cannot update non-existent stream {}", stream_id);
+            util::raise_rte("Cannot update non-existent symbol {}", stream_id);
         }
     }
 }
@@ -897,7 +897,7 @@ VersionedItem LocalVersionedEngine::append_internal(
             version_map()->write_version(store(), versioned_item.key_);
             return versioned_item;
         } else {
-            util::raise_rte( "Cannot append to non-existent stream {}", stream_id);
+            util::raise_rte( "Cannot append to non-existent symbol {}", stream_id);
         }
     }
 }
@@ -965,7 +965,7 @@ std::map<StreamId, VersionVectorType> get_multiple_sym_versions_from_query(
 std::vector<std::pair<VersionedItem, arcticdb::proto::descriptors::TimeSeriesDescriptor>> LocalVersionedEngine::batch_restore_version_internal(
     const std::vector<StreamId>& stream_ids,
     const std::vector<VersionQuery>& version_queries) {
-    util::check(stream_ids.size() == version_queries.size(), "Stream id vs version query size mismatch: {} != {}", stream_ids.size(), version_queries.size());
+    util::check(stream_ids.size() == version_queries.size(), "Symbol vs version query size mismatch: {} != {}", stream_ids.size(), version_queries.size());
     auto sym_versions = get_sym_versions_from_query(stream_ids, version_queries);
     util::check(sym_versions.size() == version_queries.size(), "Restore versions requires specific version to be supplied");
     auto previous = batch_get_latest_version(store(), version_map(), stream_ids, false);
@@ -977,7 +977,7 @@ std::vector<std::pair<VersionedItem, arcticdb::proto::descriptors::TimeSeriesDes
         auto maybe_prev = prev == std::end(*previous) ? std::nullopt : std::make_optional<AtomKey>(to_atom(prev->second));
 
         auto version = versions_to_restore->find(*stream_id);
-        util::check(version != std::end(*versions_to_restore), "Did not find version for stream_id {}", *stream_id);
+        util::check(version != std::end(*versions_to_restore), "Did not find version for symbol {}", *stream_id);
         fut_vec.emplace_back(async::submit_io_task(AsyncRestoreVersionTask{store(), version_map(), *stream_id, to_atom(version->second), maybe_prev}));
     }
     auto output = folly::collect(fut_vec).get();
@@ -996,14 +996,14 @@ timestamp LocalVersionedEngine::get_update_time_internal(
         ) {
     auto version = get_version_to_read(stream_id, version_query);
     if(!version)
-        throw NoDataFoundException(fmt::format("get_update_time: version not found for stream", stream_id));
+        throw NoDataFoundException(fmt::format("get_update_time: version not found for symbol", stream_id));
     return version->key_.creation_ts();
 }
 
 std::vector<timestamp> LocalVersionedEngine::batch_get_update_times(
         const std::vector<StreamId>& stream_ids,
         const std::vector<VersionQuery>& version_queries) {
-    util::check(stream_ids.size() == version_queries.size(), "Stream id vs version query size mismatch: {} != {}", stream_ids.size(), version_queries.size());
+    util::check(stream_ids.size() == version_queries.size(), "Symbol vs version query size mismatch: {} != {}", stream_ids.size(), version_queries.size());
     std::vector<timestamp> results;
     for(const auto& stream_id : folly::enumerate(stream_ids)) {
         const auto& query = version_queries[stream_id.index];

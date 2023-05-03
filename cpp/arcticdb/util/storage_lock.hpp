@@ -15,6 +15,7 @@
 #include <arcticdb/util/configs_map.hpp>
 
 #include <folly/portability/PThread.h>
+#include <folly/system/ThreadId.h>
 
 #include <mutex>
 
@@ -61,11 +62,7 @@ struct StorageLockTimeout : public std::runtime_error {
 };
 
 inline uint64_t get_thread_id() {
-#ifdef _WIN32
-    return pthread_self()->threadID;
-#else
-    return pthread_self();
-#endif
+    return folly::getCurrentThreadID();
 }
 
 template <class ClockType = util::SysClock>

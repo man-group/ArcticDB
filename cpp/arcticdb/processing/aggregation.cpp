@@ -18,7 +18,7 @@ void Sum::aggregate(const std::optional<ColumnWithStrings>& input_column, const 
             that->aggregated_.resize(sizeof(GlobalRawType)* unique_values);
             auto out_ptr = reinterpret_cast<GlobalRawType*>(that->aggregated_.data());
             if(input_column.has_value()) {
-                entity::details::visit_type(input_column->column_->type().data_type(), [&input_column, unique_values, &groups, &out_ptr, that=that] (auto type_desc_tag) {
+                entity::details::visit_type(input_column->column_->type().data_type(), [&input_column, &groups, &out_ptr] (auto type_desc_tag) {
                     using InputType = decltype(type_desc_tag);
                     if constexpr(!is_sequence_type(InputType::DataTypeTag::data_type)) {
                         using TypeDescriptorTag =  typename OutputType<InputType>::type;
@@ -68,7 +68,7 @@ void MaxOrMin::aggregate(const std::optional<ColumnWithStrings>& input_column, c
                 auto col_data = input_column->column_->data();
                 auto out_ptr = reinterpret_cast<MaybeValue<GlobalRawType>*>(that->aggregated_.data());
                 std::fill(out_ptr + prev_size, out_ptr + unique_values, MaybeValue<GlobalRawType>{});
-                entity::details::visit_type(input_column->column_->type().data_type(), [&input_column, unique_values, &groups, &out_ptr, &col_data, that=that] (auto type_desc_tag) {
+                entity::details::visit_type(input_column->column_->type().data_type(), [&groups, &out_ptr, &col_data, that=that] (auto type_desc_tag) {
                     using InputType = decltype(type_desc_tag);
                     if constexpr(!is_sequence_type(InputType::DataTypeTag::data_type)) {
                         using TypeDescriptorTag =  typename OutputType<InputType>::type;
