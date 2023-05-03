@@ -75,9 +75,9 @@ struct ErrorCodeData {
 };
 
 template<ErrorCode code>
-constexpr ErrorCodeData error_code_data{};
+inline constexpr ErrorCodeData error_code_data{};
 
-#define ERROR_CODE(code, Name, ...) template<> constexpr ErrorCodeData error_code_data<ErrorCode::Name> \
+#define ERROR_CODE(code, Name, ...) template<> inline constexpr ErrorCodeData error_code_data<ErrorCode::Name> \
     { #Name, "E" #code };
 ARCTIC_ERROR_CODES
 #undef ERROR_CODE
