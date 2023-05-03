@@ -155,7 +155,7 @@ AggregationClause::process(std::shared_ptr<Store> store, Composite<ProcessingSeg
     DataType grouping_data_type;
     GroupingMap grouping_map;
     procs.broadcast(
-        [&store, &num_unique, &seg, &execution_context =
+        [&store, &num_unique, &execution_context =
         execution_context_, &grouping_data_type, &grouping_map, &offset, &aggregators, &string_pool, &grouping_column_name](
             auto &proc) {
             proc.set_execution_context(execution_context);
@@ -165,7 +165,7 @@ AggregationClause::process(std::shared_ptr<Store> store, Composite<ProcessingSeg
                 ColumnWithStrings col = std::get<ColumnWithStrings>(partitioning_column);
                 entity::details::visit_type(col.column_->type().data_type(),
                                             [&proc_ =
-                                            proc, &grouping_map, &offset, &aggregators, &string_pool, &col, &num_unique, &store, &grouping_data_type, &execution_context](
+                                            proc, &grouping_map, &offset, &aggregators, &string_pool, &col, &num_unique, &store, &grouping_data_type](
                                                 auto data_type_tag) {
                                                 using DataTypeTagType = decltype(data_type_tag);
                                                 using RawType = typename DataTypeTagType::raw_type;
@@ -249,7 +249,7 @@ AggregationClause::process(std::shared_ptr<Store> store, Composite<ProcessingSeg
 
     seg.set_string_pool(string_pool);
     seg.set_row_id(num_unique - 1);
-    std::call_once(*set_name_index_, [context = execution_context_, grouping_column_name, index_pos]() {
+    std::call_once(*set_name_index_, [context = execution_context_, grouping_column_name]() {
         std::scoped_lock lock{*context->name_index_mutex_};
         auto norm_desc = context->get_norm_meta_descriptor();
         norm_desc->mutable_df()->mutable_common()->mutable_index()->set_name(grouping_column_name);
@@ -275,7 +275,7 @@ void merge_impl(
     using SegmentationPolicy = stream::RowCountSegmentPolicy;
     SegmentationPolicy segmentation_policy{static_cast<size_t>(num_segment_rows)};
 
-    auto func = [&ret, &input_streams, &row_range, &col_range](auto &&segment) {
+    auto func = [&ret, &row_range, &col_range](auto &&segment) {
         ret.push_back(ProcessingSegment{std::forward<SegmentInMemory>(segment), FrameSlice{col_range, row_range}});
     };
     
@@ -368,7 +368,7 @@ RemoveColumnPartitioningClause::process(std::shared_ptr<Store> store, Composite<
         util::variant_match(index,
         [&](const stream::TimeseriesIndex &) {
             size_t num_index_columns = stream::TimeseriesIndex::field_count();
-            procs.broadcast([&store, &output, &num_index_columns, this](ProcessingSegment &proc) {
+            procs.broadcast([&store, &output, &num_index_columns](ProcessingSegment &proc) {
                 SegmentInMemory new_segment{empty_descriptor()};
                 new_segment.set_row_id(proc.data()[0].segment_->get_row_id());
                 size_t min_start_row = std::numeric_limits<size_t>::max();
