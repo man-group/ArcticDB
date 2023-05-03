@@ -56,6 +56,7 @@ else()
     find_package(PCRE REQUIRED)
     find_package(Libevent  REQUIRED)
     find_package(semimap REQUIRED)
+    find_package(remotery REQUIRED)
 
     set(ARCTICDB_MONGO_LIBS mongo::mongocxx_shared mongo::bsoncxx_shared)
 
@@ -433,7 +434,6 @@ set (arcticdb_core_libraries
         ${ARCTICDB_MONGO_LIBS}
         spdlog::spdlog
         Folly::folly # Transitively includes: double-conversion, gflags, glog, libevent, libssl, libcrypto, libiberty, libsodium
-        remotery_static
         )
 
 
@@ -448,6 +448,7 @@ if(${ARCTICDB_USING_CONDA})
     list (APPEND arcticdb_core_libraries
         xxHash::xxHash
         pcre
+        ${remotery_LIBRARY}
     )
 else()
 
@@ -455,6 +456,7 @@ else()
     list (APPEND arcticdb_core_libraries
         xxhash_static
         unofficial::pcre::pcre
+        remotery_static
     )
 endif()
 
