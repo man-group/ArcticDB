@@ -78,9 +78,11 @@ inline void print_total_mem_usage(const char *file ARCTICDB_UNUSED, int line ARC
         return;
     }
 
-    for(auto i = 0u; i < 7u; ++i)
-        fscanf(statm_file, "%d", &mem_stat[i]);
-
+    for(auto i = 0u; i < 7u; ++i){
+        // https://stackoverflow.com/questions/7271939/warning-ignoring-return-value-of-scanf-declared-with-attribute-warn-unused-r
+        // this "if" is needed to avoid warning of unused return value
+        if(fscanf(statm_file, "%d", &mem_stat[i])){}
+    }
     fclose(statm_file);
     ARCTICDB_DEBUG(log::memory(), "{} ({}:{}) size {} resident {} share {} text {} data/stack {}",
                        file,
