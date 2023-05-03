@@ -23,7 +23,7 @@ namespace arcticdb::entity {
                 id_(std::move(id)),
                 key_type_(key_type),
                 old_type_(old_type) {
-            util::check(!std::holds_alternative<StringId>(id_) || !std::get<StringId>(id_).empty(), "Empty string id in reference key");
+            util::check(!std::holds_alternative<StringId>(id_) || !std::get<StringId>(id_).empty(), "Empty symbol in reference key");
             util::check(old_type || is_ref_key_class(key_type), "Can't create ref key with non-ref key class keytype {}", key_type);
         }
 

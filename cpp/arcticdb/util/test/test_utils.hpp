@@ -11,7 +11,6 @@
 #include <arcticdb/stream/index.hpp>
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/entity/native_tensor.hpp>
-#include <arcticdb/util/trace.hpp>
 #include <arcticdb/util/preconditions.hpp>
 
 #include <vector>

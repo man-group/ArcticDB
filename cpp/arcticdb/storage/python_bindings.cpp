@@ -32,7 +32,7 @@ std::shared_ptr<LibraryIndex> create_library_index(const std::string &environmen
     return std::make_shared<LibraryIndex>(EnvironmentName{environment_name}, mem_resolver);
 }
 
-void register_bindings(py::module &m) {
+void register_bindings(py::module &m, py::exception<arcticdb::ArcticException>& base_exception) {
     auto storage = m.def_submodule("storage", "Segment storage implementation apis");
 
     py::enum_<KeyType>(storage, "KeyType")
@@ -152,9 +152,9 @@ void register_bindings(py::module &m) {
         })
         ;
 
-    py::register_exception<DuplicateKeyException>(storage, "DuplicateKeyException");
-    py::register_exception<NoDataFoundException>(storage, "NoDataFoundException");
-    py::register_exception<PermissionException>(storage, "PermissionException");
+    py::register_exception<DuplicateKeyException>(storage, "DuplicateKeyException", base_exception.ptr());
+    py::register_exception<NoDataFoundException>(storage, "NoDataFoundException", base_exception.ptr());
+    py::register_exception<PermissionException>(storage, "PermissionException", base_exception.ptr());
 }
 
 } // namespace arcticdb::storage::apy

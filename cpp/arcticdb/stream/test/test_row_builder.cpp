@@ -62,7 +62,7 @@ TEST(RowBuilder, Basic) {
 //    ASSERT_EQ(2, agg.row_count());
 
     // monotonic index
-    ASSERT_THROW(rb.start_row(timestamp{1}), ArcticBaseException<ErrorCategory::INTERNAL>);
+    ASSERT_THROW(rb.start_row(timestamp{1}), ArcticCategorizedException<ErrorCategory::INTERNAL>);
 
     // all fields required by schema
     rb.start_row(timestamp{3});
@@ -74,7 +74,7 @@ TEST(RowBuilder, Basic) {
     ASSERT_EQ(agg.row_count(), 0);
 
     // index survives commit_row
-    ASSERT_THROW(rb.start_row(timestamp{1}), ArcticBaseException<ErrorCategory::INTERNAL>);
+    ASSERT_THROW(rb.start_row(timestamp{1}), ArcticCategorizedException<ErrorCategory::INTERNAL>);
 
     // can still build using a row builder
 
