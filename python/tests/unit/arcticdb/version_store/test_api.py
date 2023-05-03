@@ -10,7 +10,7 @@ import time
 from pandas import Timestamp
 import pytest
 
-from arcticdb_ext.storage import NoDataFoundException
+from arcticdb.exceptions import NoSuchVersionException
 
 
 def test_read_descriptor(lmdb_version_store, one_col_df):
@@ -63,7 +63,7 @@ def test_column_names_by_timestamp(lmdb_version_store, one_col_df, two_col_df):
     after_two_col_write = Timestamp.now(tz="UTC")
 
     # Assert querying with a time before the first write raises an exception
-    with pytest.raises(NoDataFoundException):
+    with pytest.raises(NoSuchVersionException):
         lmdb_version_store.column_names(symbol, as_of=Timestamp("1970-01-01", tz="UTC"))
 
     # Assert query with the timestamp after the one col write returns only a single column

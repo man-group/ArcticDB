@@ -25,6 +25,7 @@ from collections import Counter
 from arcticdb.exceptions import ArcticNativeException, ArcticNativeNotYetImplemented
 from arcticdb.supported_types import time_types as supported_time_types
 from arcticdb.version_store.read_result import ReadResult
+from arcticdb_ext.version_store import SortedValue as _SortedValue
 from pandas.core.internals import make_block
 
 from pandas import DataFrame, MultiIndex, Series, DatetimeIndex, Index, RangeIndex
@@ -68,6 +69,7 @@ NPDDataFrame = NamedTuple(
         ("column_names", List[str]),
         ("index_values", List[np.ndarray]),
         ("columns_values", List[np.ndarray]),
+        ("sorted", _SortedValue),
     ],
 )
 
@@ -571,6 +573,7 @@ class NdArrayNormalizer(Normalizer):
                 index_values=[],
                 column_names=["ndarray"],
                 columns_values=[item.reshape(np.prod(item.shape))],
+                sorted=_SortedValue.UNKNOWN,
             ),
             metadata=norm_meta,
         )
@@ -782,9 +785,24 @@ class DataFrameNormalizer(_PandasNormalizer):
             norm_meta.df.common.columns.name = item.columns.name
         else:
             norm_meta.df.common.columns.fake_name = True
+
+        sort_status = _SortedValue.UNKNOWN
+        index = item.index
+        if hasattr(index, "is_monotonic_increasing"):
+            if index.is_monotonic_increasing:
+                sort_status = _SortedValue.ASCENDING
+            elif index.is_monotonic_decreasing:
+                sort_status = _SortedValue.DESCENDING
+            else:
+                sort_status = _SortedValue.UNSORTED
+
         return NormalizedInput(
             item=NPDDataFrame(
-                index_names=index_names, index_values=ix_vals, column_names=columns, columns_values=column_vals
+                index_names=index_names,
+                index_values=ix_vals,
+                column_names=columns,
+                columns_values=column_vals,
+                sorted=sort_status,
             ),
             metadata=norm_meta,
         )
@@ -820,9 +838,10 @@ class MsgPackNormalizer(Normalizer):
     Fall back plan for the time being to store arbitrary data
     """
 
-    MMAP_DEFAULT_SIZE = 1 << 32  # Allow up to 4 gib pickles in memory, most of these compress fairly well.
-    # Allow 4gb extension and bin sizes in msgpack by default.
-    MSG_PACK_MAX_SIZE = 1 << 32
+    MSG_PACK_MAX_SIZE = (1 << 32) + 1024
+    MMAP_DEFAULT_SIZE = MSG_PACK_MAX_SIZE  # Allow up to 4 gib pickles in msgpack by default, most of these compress fairly well.
+    # msgpack checks whether the size of pickled data within 1 << 32 - 1 byte only
+    # Extra memory is needed in mmap for msgpack's overhead
 
     def __init__(self, cfg=None):
         self._size = MsgPackNormalizer.MMAP_DEFAULT_SIZE if cfg is None else cfg.max_blob_size
@@ -860,7 +879,13 @@ class MsgPackNormalizer(Normalizer):
         column_val = np.array(memoryview(buffer[: size * 8]), np.uint8).view(np.uint64)
 
         return NormalizedInput(
-            item=NPDDataFrame(index_names=[], index_values=[], column_names=["bytes"], columns_values=[column_val]),
+            item=NPDDataFrame(
+                index_names=[],
+                index_values=[],
+                column_names=["bytes"],
+                columns_values=[column_val],
+                sorted=_SortedValue.UNKNOWN,
+            ),
             metadata=norm_meta,
         )
 
@@ -995,7 +1020,11 @@ class TimeFrameNormalizer(Normalizer):
 
         return NormalizedInput(
             item=NPDDataFrame(
-                index_names=index_names, index_values=ix_vals, column_names=columns_names, columns_values=columns_vals
+                index_names=index_names,
+                index_values=ix_vals,
+                column_names=columns_names,
+                columns_values=columns_vals,
+                sorted=_SortedValue.UNKNOWN,
             ),
             metadata=norm_meta,
         )
