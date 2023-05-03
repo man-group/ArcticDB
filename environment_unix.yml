@@ -33,5 +33,5 @@ dependencies:
   - werkzeug
   - moto
   - pytest-server-fixtures
-  - hypothesis
+  - hypothesis < 6.73
   - pytest-sugar
