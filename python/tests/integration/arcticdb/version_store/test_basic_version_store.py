@@ -320,8 +320,8 @@ def test_get_info_version(lmdb_version_store):
     lmdb_version_store.write(sym, df, prune_previous_version=False)
 
     # when
-    info_0 = lmdb_version_store.get_info(sym, as_of=0)
-    info_1 = lmdb_version_store.get_info(sym, as_of=1)
+    info_0 = lmdb_version_store.get_info(sym, version=0)
+    info_1 = lmdb_version_store.get_info(sym, version=1)
     latest_version = lmdb_version_store.get_info(sym)
 
     # then

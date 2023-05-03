@@ -1977,7 +1977,7 @@ class NativeVersionStore:
         `List[str]`
             A list of column names associated with the symbol as of the specified revision.
         """
-        return self.get_info(symbol, as_of=as_of)["col_names"]["columns"]
+        return self.get_info(symbol, version=as_of)["col_names"]["columns"]
 
     def update_time(self, symbol: str, as_of: Optional[VersionQueryInput] = None) -> datetime64:
         """
@@ -2252,7 +2252,7 @@ class NativeVersionStore:
             "sorted": SortedValue.Name(desc.stream_descriptor.sorted),
         }
 
-    def get_info(self, symbol: str, as_of: Optional[VersionQueryInput] = None) -> Dict[str, Any]:
+    def get_info(self, symbol: str, version: Optional[VersionQueryInput] = None) -> Dict[str, Any]:
         """
         Returns descriptive data for `symbol`.
 
@@ -2260,7 +2260,7 @@ class NativeVersionStore:
         ----------
         symbol : `str`
             symbol name
-        as_of : `Optional[VersionQueryInput]`, default=None
+        version : `Optional[VersionQueryInput]`, default=None
             See documentation of `read` method for more details.
 
         Returns
@@ -2278,9 +2278,9 @@ class NativeVersionStore:
             - type, `str`
             - date_range, `tuple`
         """
-        version_query = self._get_version_query(as_of)
+        version_query = self._get_version_query(version)
         vit, desc = self.version_store.read_descriptor(symbol, version_query)
-        return self._process_info(symbol, vit, desc, as_of)
+        return self._process_info(symbol, vit, desc, version)
 
     def batch_get_info(
         self, symbols: List[str], as_ofs: Optional[List[VersionQueryInput]] = None
