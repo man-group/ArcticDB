@@ -1725,7 +1725,7 @@ def test_modification_methods_dont_return_input_data(lmdb_version_store, batch, 
 def test_diff_long_stream_descriptor_mismatch(lmdb_version_store, method, num):
     lib: NativeVersionStore = lmdb_version_store
     lib.write("x", pd.DataFrame({f"col{i}": [i, i + 1, i + 2] for i in range(num)}, index=pd.date_range(0, periods=3)))
-    bad_row = {f"col{i}": (["a"] if i % 20 == 4 else [i]) for i in (0, *range(3, num + 1))}
+    bad_row = {f"col{i}": ["a"] if i % 20 == 4 else [i] for i in (0, *range(3, num + 1))}
     try:
         if method == "append":
             lib.append("x", pd.DataFrame(bad_row, index=pd.date_range("1970-01-04", periods=1)))

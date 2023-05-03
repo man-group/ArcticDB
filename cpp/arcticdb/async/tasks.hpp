@@ -303,13 +303,10 @@ struct DecodeSegmentTask : BaseTask {
 struct DecodeSlicesTask : BaseTask {
     ARCTICDB_MOVE_ONLY_DEFAULT(DecodeSlicesTask)
 
-    StreamDescriptor desc_;
     std::shared_ptr<std::unordered_set<std::string>> filter_columns_;
 
     DecodeSlicesTask(
-            const StreamDescriptor& desc,
             const std::shared_ptr<std::unordered_set<std::string>>& filter_columns)  :
-                desc_(desc),
                 filter_columns_(filter_columns) {
             }
 
@@ -342,49 +339,18 @@ struct SegmentFunctionTask : BaseTask {
     }
 };
 
-// This class is used to restart the pipeline following a repartition
-struct MemSegmentPassthroughProcessingTask : BaseTask {
-    std::shared_ptr<Store> store_;
-    std::shared_ptr<std::vector<Clause>> clauses_;
-    std::optional<Composite<ProcessingSegment>> starting_segments_;
-
-    explicit MemSegmentPassthroughProcessingTask(
-            const std::shared_ptr<Store> store,
-            std::shared_ptr<std::vector<Clause>> clauses,
-            Composite<ProcessingSegment>&& starting_segments) :
-            store_(store),
-            clauses_(std::move(clauses)),
-            starting_segments_(std::move(starting_segments)){
-    }
-
-    [[nodiscard]]
-    Composite<ProcessingSegment> process(Composite<ProcessingSegment>&& proc){
-        auto procs = std::move(proc);
-        for(const auto& clause : *clauses_) {
-            if(clause.requires_repartition())
-                break;
-
-            procs = clause.process(store_, std::move(procs));
-        }
-        return procs;
-    }
-
-    ARCTICDB_MOVE_ONLY_DEFAULT(MemSegmentPassthroughProcessingTask)
-
-    Composite<ProcessingSegment> operator()() {
-        return process(std::move(starting_segments_.value()));
-    }
-};
-
 struct MemSegmentProcessingTask : BaseTask {
     std::shared_ptr<Store> store_;
-    std::shared_ptr<std::vector<Clause>> clauses_;
+    std::vector<std::shared_ptr<Clause>> clauses_;
+    std::optional<Composite<ProcessingSegment>> procs_;
 
     explicit MemSegmentProcessingTask(
            const std::shared_ptr<Store> store,
-           std::shared_ptr<std::vector<Clause>> clauses) :
+           std::vector<std::shared_ptr<Clause>> clauses,
+           std::optional<Composite<ProcessingSegment>>&& procs = std::nullopt) :
         store_(store),
-        clauses_(std::move(clauses)) {
+        clauses_(std::move(clauses)),
+        procs_(std::move(procs)) {
     }
 
     ProcessingSegment slice_to_segment(Composite<pipelines::SliceAndKey>&& is) {
@@ -395,10 +361,10 @@ struct MemSegmentProcessingTask : BaseTask {
     [[nodiscard]]
     Composite<ProcessingSegment> process(Composite<ProcessingSegment>&& proc){
         auto procs = std::move(proc);
-        for(const auto& clause : *clauses_) {
-            procs = clause.process(store_, std::move(procs));
+        for(const auto& clause : clauses_) {
+            procs = clause->process(store_, std::move(procs));
 
-            if(clause.requires_repartition())
+            if(clause->clause_info().requires_repartition_)
                 break;
         }
         return procs;
@@ -408,6 +374,13 @@ struct MemSegmentProcessingTask : BaseTask {
 
     Composite<ProcessingSegment> operator()(Composite<pipelines::SliceAndKey>&& sk) {
         return process(Composite<ProcessingSegment>(slice_to_segment(std::move(sk))));
+    }
+
+    Composite<ProcessingSegment> operator()() {
+        internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+                procs_.has_value(),
+                "MemSegmentProcessingTask () operator expects processing segments to be provided in ctor");
+        return process(std::move(*procs_));
     }
 
 };
