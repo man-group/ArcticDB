@@ -32,7 +32,7 @@ from arcticdb.util.hypothesis import (
     numeric_type_strategies,
     non_zero_numeric_type_strategies,
     string_strategy,
-    dataframes_with_names_and_dtypes
+    dataframes_with_names_and_dtypes,
 )
 
 
@@ -803,8 +803,8 @@ def test_filter_numeric_isin(lmdb_version_store, df, vals):
         ([0, 1, 2 ** 62], [0, 1, -1], [0, 1]),
         ([0, 1, 2 ** 63 - 1], [0, 1, -1], [0, 1]),
         ([0, 1, 2 ** 62], [0, 1, -1], [0, 1]),
-        ([-1, 0, 1], [0, 1, 2 ** 62], [0, 1])
-    ]
+        ([-1, 0, 1], [0, 1, 2 ** 62], [0, 1]),
+    ],
 )
 def test_filter_numeric_isin_hashing_overflows(lmdb_version_store, df_col, isin_vals, expected_col):
     df = pd.DataFrame({"a": df_col})

@@ -279,7 +279,7 @@ struct VersionMapEntry {
             id_to_version_id[head_.value().id()].push_back(head_.value().version_id());
         for (const auto& k: keys_)
             id_to_version_id[k.id()].push_back(k.version_id());
-        util::check_rte(id_to_version_id.size() == 1, "Multiple stream_ids in keys: {}", fmt::format("{}", id_to_version_id));
+        util::check_rte(id_to_version_id.size() == 1, "Multiple symbols in keys: {}", fmt::format("{}", id_to_version_id));
     }
 
     void try_set_tombstone_all(const AtomKey& key) {

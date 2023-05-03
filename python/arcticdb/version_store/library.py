@@ -15,6 +15,7 @@ from arcticdb.supported_types import Timestamp
 
 from arcticdb.version_store.processing import QueryBuilder
 from arcticdb.version_store._store import NativeVersionStore, VersionedItem
+from arcticdb_ext.exceptions import ArcticException
 import pandas as pd
 import numpy as np
 import logging
@@ -39,7 +40,7 @@ Library.write: for more documentation on normalisation.
 """
 
 
-class ArcticInvalidApiUsageException(RuntimeError):
+class ArcticInvalidApiUsageException(ArcticException):
     """Exception indicating an invalid call made to the Arctic API."""
 
 
@@ -256,6 +257,7 @@ class Library:
         metadata: Any = None,
         prune_previous_versions: bool = True,
         staged=False,
+        validate_index=True,
     ) -> VersionedItem:
         """
         Write ``data`` to the specified ``symbol``. If ``symbol`` already exists then a new version will be created to
@@ -296,6 +298,10 @@ class Library:
             Removes previous (non-snapshotted) versions from the database.
         staged : bool, default=False
             Whether to write to a staging area rather than immediately to the library.
+        validate_index: bool, default=False
+            If True, will verify that the index of `data` supports date range searches and update operations. This in effect tests that the data is sorted in ascending order. 
+            ArcticDB relies on Pandas to detect if data is sorted - you can call DataFrame.index.is_monotonic_increasing on your input DataFrame to see if Pandas believes the 
+            data to be sorted
 
             Note that each unit of staged data must a) be datetime indexed and b) not overlap with any other unit of
             staged data. Note that this will create symbols with Dynamic Schema enabled.
@@ -309,6 +315,8 @@ class Library:
         ------
         ArcticUnsupportedDataTypeException
             If ``data`` is not of NormalizableType.
+        UnsortedDataException
+            If data is unsorted, when validate_index is set to True.
 
         Examples
         --------
@@ -350,6 +358,7 @@ class Library:
             prune_previous_version=prune_previous_versions,
             pickle_on_failure=False,
             parallel=staged,
+            validate_index=validate_index,
         )
 
     def write_pickle(
@@ -426,7 +435,7 @@ class Library:
         raise ArcticUnsupportedDataTypeException(error_message)
 
     def write_batch(
-        self, payloads: List[WritePayload], prune_previous_versions: bool = True, staged=False
+        self, payloads: List[WritePayload], prune_previous_versions: bool = True, staged=False, validate_index=True
     ) -> List[VersionedItem]:
         """
         Write a batch of multiple symbols.
@@ -439,6 +448,10 @@ class Library:
             See `write`.
         staged: `bool`, default=False
             See `write`.
+        validate_index: bool, default=False
+            If True, will verify for each entry in the batch hat the index of `data` supports date range searches and update operations. 
+            This in effect tests that the data is sorted in ascending order. ArcticDB relies on Pandas to detect if data is sorted - 
+            you can call DataFrame.index.is_monotonic_increasing on your input DataFrame to see if Pandas believes the data to be sorted
 
         Returns
         -------
@@ -452,6 +465,8 @@ class Library:
             When duplicate symbols appear in payload.
         ArcticUnsupportedDataTypeException
             If data that is not of NormalizableType appears in any of the payloads.
+        UnsortedDataException
+            If data is unsorted, when validate_index is set to True.
 
         See Also
         --------
@@ -490,6 +505,7 @@ class Library:
             prune_previous_version=prune_previous_versions,
             pickle_on_failure=False,
             parallel=staged,
+            validate_index=validate_index,
         )
 
     def write_batch_pickle(
@@ -535,7 +551,12 @@ class Library:
         )
 
     def append(
-        self, symbol: str, data: NormalizableType, metadata: Any = None, prune_previous_versions: bool = False
+        self,
+        symbol: str,
+        data: NormalizableType,
+        metadata: Any = None,
+        prune_previous_versions: bool = False,
+        validate_index: bool = True,
     ) -> Optional[VersionedItem]:
         """
         Appends the given data to the existing, stored data. Append always appends along the index. A new version will
@@ -558,11 +579,20 @@ class Library:
             not combined in any way with the metadata stored in the previous version.
         prune_previous_versions
             Removes previous (non-snapshotted) versions from the database when True.
+        validate_index: bool, default=False
+            If True, will verify that resulting symbol will support date range searches and update operations. This in effect tests that the previous version of the 
+            data and `data` are both sorted in ascending order. ArcticDB relies on Pandas to detect if data is sorted - you can call DataFrame.index.is_monotonic_increasing 
+            on your input DataFrame to see if Pandas believes the data to be sorted
 
         Returns
         -------
         VersionedItem
             Structure containing metadata and version number of the written symbol in the store.
+
+        Raises
+        ------
+        UnsortedDataException
+            If data is unsorted, when validate_index is set to True.
 
         Examples
         --------
@@ -597,7 +627,11 @@ class Library:
         2018-01-06       6
         """
         return self._nvs.append(
-            symbol=symbol, dataframe=data, metadata=metadata, prune_previous_version=prune_previous_versions
+            symbol=symbol,
+            dataframe=data,
+            metadata=metadata,
+            prune_previous_version=prune_previous_versions,
+            validate_index=validate_index,
         )
 
     def update(
@@ -879,7 +913,7 @@ class Library:
                 handle_read_request(s)
             else:
                 raise ArcticInvalidApiUsageException(
-                    f"Invalid symbol type s=[{s}] type(s)=[{type(s)}]. Only [str] and [ReadRequest] are supported."
+                    f"Unsupported item in the symbols argument s=[{s}] type(s)=[{type(s)}]. Only [str] and [ReadRequest] are supported."
                 )
 
         return self._nvs._batch_read_to_versioned_items(
@@ -1242,7 +1276,7 @@ class Library:
         """
         info = self._nvs.get_info(symbol, as_of)
 
-        last_update_time = pd.to_datetime(info["last_update"]).to_pydatetime()
+        last_update_time = pd.to_datetime(info["last_update"])
         columns = tuple(NameWithDType(n, t) for n, t in zip(info["col_names"]["columns"], info["dtype"]))
         index = NameWithDType(info["col_names"]["index"], info["col_names"]["index_dtype"])
 
@@ -1254,6 +1288,73 @@ class Library:
             index_type=info["index_type"],
             date_range=info["date_range"],
         )
+
+    def get_description_batch(
+        self, symbols: List[Union[str, ReadRequest]]
+    ) -> List[SymbolDescription]:
+        """
+        Returns descriptive data for a list of ``symbols``.
+
+        Parameters
+        ----------
+        symbols : List[Union[str, ReadRequest]
+            List of symbols to read.
+            Params columns, date_range and query_builder from ReadRequest are not used
+
+        Returns
+        -------
+        List[SymbolDescription]
+            A list of the descriptive data, whose i-th element corresponds to the i-th element of the ``symbols`` parameter.
+
+        See Also
+        --------
+        SymbolDescription
+            For documentation on each field.
+        """
+        symbol_strings = []
+        as_ofs = []
+        def handle_read_request(s):
+            symbol_strings.append(s.symbol)
+            if s.date_range is not None:
+                warnings.warn("Read batch metadata does not make use of of the data_range field", SyntaxWarning, stacklevel=2)
+            if s.columns is not None:
+                warnings.warn("Read batch metadata does not make use of the columns field", SyntaxWarning, stacklevel=2)
+            if s.query_builder is not None:
+                warnings.warn("Read batch metadata does not make use of the query field", SyntaxWarning, stacklevel=2)
+            as_ofs.append(s.as_of)
+
+        def handle_symbol(s):
+            symbol_strings.append(s)
+            as_ofs.append(None)
+
+        for s in symbols:
+            if isinstance(s, str):
+                handle_symbol(s)
+            elif isinstance(s, ReadRequest):
+                handle_read_request(s)
+            else:
+                raise ArcticInvalidApiUsageException(
+                    f"Unsupported item in the symbols argument s=[{s}] type(s)=[{type(s)}]. Only [str] and [ReadRequest] are supported."
+                )
+
+        infos = self._nvs.batch_get_info(symbol_strings, as_ofs)
+        list_descriptions = []
+        for info in infos:
+            last_update_time = pd.to_datetime(info["last_update"])
+            columns = tuple(NameWithDType(n, t) for n, t in zip(info["col_names"]["columns"], info["dtype"]))
+            index = NameWithDType(info["col_names"]["index"], info["col_names"]["index_dtype"])
+
+            list_descriptions.append(
+                SymbolDescription(
+                    columns=columns,
+                    index=index,
+                    row_count=info["rows"],
+                    last_update_time=last_update_time,
+                    index_type=info["index_type"],
+                    date_range=info["date_range"],
+                )
+            )
+        return list_descriptions
 
     def reload_symbol_list(self):
         """
