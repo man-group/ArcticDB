@@ -309,14 +309,9 @@ void decode_into_frame_static(
     const uint8_t *end = begin + seg.buffer().bytes();
     auto &hdr = seg.header();
     auto index_fieldcount = get_index_field_count(frame);
-<<<<<<< HEAD
-    data = skip_metadata_field(hdr, data);
-    context.set_descriptor(std::move(*hdr.mutable_stream_descriptor()));
-    context.set_compacted(hdr.compacted());
-=======
     data = skip_heading_fields(hdr, data);
-    context.set_descriptor(StreamDescriptor{std::make_shared<StreamDescriptor::Proto>(std::move(*hdr.mutable_stream_descriptor())), seg.fields_ptr()});
->>>>>>> f9fb9bb (Encoded field)
+    context.set_descriptor(StreamDescriptor{ std::make_shared<StreamDescriptor::Proto>(std::move(*hdr.mutable_stream_descriptor())), seg.fields_ptr() });
+    context.set_compacted(hdr.compacted());
     ARCTICDB_DEBUG(log::version(), "Num fields: {}", seg.header().fields_size());
     const bool has_magic_nums = EncodingVersion(hdr.encoding_version()) == EncodingVersion::V2;
 

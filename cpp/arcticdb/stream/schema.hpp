@@ -25,21 +25,16 @@ class FixedSchema {
   public:
     FixedSchema(StreamDescriptor desc, Index index) :
         desc_(std::move(desc)),
-<<<<<<< HEAD
-        index_(index){}
+        index_(std::move(index)) {
+        util::check(desc_.proto().has_index(), "Stream descriptor without index");
+    }
 
     static FixedSchema default_schema(const Index& index) {
-        return util::variant_match(index, [] (auto idx) {
+        return util::variant_match(index, [](auto idx) {
             using IndexType = std::remove_reference_t<decltype(idx)>;
-            return FixedSchema(StreamDescriptor(), IndexType::default_index());
-        });
-    }
-=======
-        index_(std::move(index)) {
-    util::check(desc_.proto().has_index(), "Stream descriptor without index");
+        return FixedSchema(StreamDescriptor(), IndexType::default_index());
+    });
 }
-
->>>>>>> f9fb9bb (Encoded field)
 
     void check(std::size_t pos, TypeDescriptor td) const {
         util::check_range(pos, desc_.fields().size(), "No field in fixed schema at supplied idx");

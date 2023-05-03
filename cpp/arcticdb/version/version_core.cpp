@@ -589,16 +589,10 @@ void read_indexed_keys_to_pipeline(
         bucketize_dynamic);
 
     pipeline_context->slice_and_keys_ = filter_index(index_segment_reader, combine_filter_functions(queries));
-    pipeline_context->bucketize_dynamic_ = bucketize_dynamic;
     pipeline_context->total_rows_ = pipeline_context->calc_rows();
-<<<<<<< HEAD
-    pipeline_context->norm_meta_ = std::make_shared<arcticdb::proto::descriptors::NormalizationMetadata>(std::move(*index_segment_reader.mutable_tsd().mutable_normalization()));
-    pipeline_context->user_meta_ = std::make_unique<arcticdb::proto::descriptors::UserDefinedMetadata>(std::move(*index_segment_reader.mutable_tsd().mutable_user_meta()));
-=======
     pipeline_context->norm_meta_ = std::make_unique<arcticdb::proto::descriptors::NormalizationMetadata>(std::move(*index_segment_reader.mutable_tsd().mutable_proto().mutable_normalization()));
     pipeline_context->user_meta_ = std::make_unique<arcticdb::proto::descriptors::UserDefinedMetadata>(std::move(*index_segment_reader.mutable_tsd().mutable_proto().mutable_user_meta()));
     pipeline_context->bucketize_dynamic_ = bucketize_dynamic;
->>>>>>> f9fb9bb (Encoded field)
 }
 
 void read_incompletes_to_pipeline(
@@ -1097,7 +1091,6 @@ VersionedItem compact_incomplete_impl(
     std::vector<FrameSlice> slices;
     bool dynamic_schema = write_options.dynamic_schema;
     auto index = index_type_from_descriptor(first_seg.descriptor());
-<<<<<<< HEAD
     auto policies = std::make_tuple(index, 
                                     dynamic_schema ? VariantSchema{DynamicSchema::default_schema(index)} : VariantSchema{FixedSchema::default_schema(index)}, 
                                     sparsify ? VariantColumnPolicy{SparseColumnPolicy{}} : VariantColumnPolicy{DenseColumnPolicy{}}
@@ -1110,16 +1103,6 @@ VersionedItem compact_incomplete_impl(
         do_compact<IndexType, SchemaType, RowCountSegmentPolicy, ColumnPolicyType>(
                 pipeline_context->incompletes_begin(),
                 pipeline_context->end(),
-=======
-
-    util::variant_match(index, [
-        &fut_vec, &slices, sparsify, pipeline_context=pipeline_context, &store, convert_int_to_float] (auto idx) {
-
-        using IndexType = decltype(idx);
-
-        if(sparsify) {
-            do_compact<IndexType, DynamicSchema, RowCountSegmentPolicy, SparseColumnPolicy>(
->>>>>>> f9fb9bb (Encoded field)
                 pipeline_context,
                 fut_vec,
                 slices,

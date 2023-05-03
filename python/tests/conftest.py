@@ -144,11 +144,7 @@ def sym():
 
 @pytest.fixture()
 def lib_name():
-<<<<<<< HEAD
     return f"local.test_{random.randint(0, 999)}_{datetime.utcnow().strftime('%Y-%m-%dT%H_%M_%S_%f')}"
-=======
-    return "local.test" + datetime.utcnow().strftime("%Y-%m-%dT%H_%M_%S_%f-")
->>>>>>> f9fb9bb (Encoded field)
 
 
 @pytest.fixture
