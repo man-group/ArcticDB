@@ -8,7 +8,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 import numpy as np
 import pandas as pd
 import pytest
-from arcticdb_ext.exceptions import SortingException, NormalizationException
+from arcticdb.exceptions import SortingException, NormalizationException
 from pandas import MultiIndex
 
 

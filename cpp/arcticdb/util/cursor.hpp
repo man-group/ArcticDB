@@ -12,7 +12,6 @@
 #include <memory>
 #include <vector>
 
-#include <arcticdb/util/trace.hpp>
 #include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/util/constructors.hpp>
 #include <arcticdb/entity/types.hpp>

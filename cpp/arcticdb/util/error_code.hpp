@@ -97,35 +97,39 @@ constexpr ErrorCategory get_error_category(ErrorCode code) {
     return static_cast<ErrorCategory>(static_cast<BaseType>(code) / error_category_scale);
 }
 
-template<ErrorCategory error_category>
-struct ArcticBaseException : public std::runtime_error {
-    explicit ArcticBaseException(const std::string& msg_with_error_code):
-        std::runtime_error(msg_with_error_code) {
+struct ArcticException : public std::runtime_error {
+    explicit ArcticException(const std::string& msg_with_error_code):
+            std::runtime_error(msg_with_error_code) {
     }
 };
 
+template<ErrorCategory error_category>
+struct ArcticCategorizedException : public ArcticException {
+    using ArcticException::ArcticException;
+};
+
 template<ErrorCode specific_code>
-struct ArcticSpecificException : public ArcticBaseException<get_error_category(specific_code)> {
+struct ArcticSpecificException : public ArcticCategorizedException<get_error_category(specific_code)> {
     static constexpr ErrorCategory category = get_error_category(specific_code);
 
     explicit ArcticSpecificException(const std::string& msg_with_error_code) :
-    ArcticBaseException<category>(msg_with_error_code) {
+            ArcticCategorizedException<category>(msg_with_error_code) {
         static_assert(get_error_category(specific_code) == category);
     }
 };
 
-using InternalException = ArcticBaseException<ErrorCategory::INTERNAL>;
-using SchemaException = ArcticBaseException<ErrorCategory::SCHEMA>;
-using NormalizationException = ArcticBaseException<ErrorCategory::NORMALIZATION>;
+using InternalException = ArcticCategorizedException<ErrorCategory::INTERNAL>;
+using SchemaException = ArcticCategorizedException<ErrorCategory::SCHEMA>;
+using NormalizationException = ArcticCategorizedException<ErrorCategory::NORMALIZATION>;
 using NoSuchVersionException = ArcticSpecificException<ErrorCode::E_NO_SUCH_VERSION>;
-using StorageException = ArcticBaseException<ErrorCategory::STORAGE>;
-using MissingDataException = ArcticBaseException<ErrorCategory::MISSING_DATA>;
-using SortingException = ArcticBaseException<ErrorCategory::SORTING>;
+using StorageException = ArcticCategorizedException<ErrorCategory::STORAGE>;
+using MissingDataException = ArcticCategorizedException<ErrorCategory::MISSING_DATA>;
+using SortingException = ArcticCategorizedException<ErrorCategory::SORTING>;
 using UnsortedDataException = ArcticSpecificException<ErrorCode::E_UNSORTED_DATA>;
 
 template<ErrorCode error_code>
 [[noreturn]] void throw_error(const std::string& msg) {
-    throw ArcticBaseException<get_error_category(error_code)>(msg);
+    throw ArcticCategorizedException<get_error_category(error_code)>(msg);
 }
 
 template<>

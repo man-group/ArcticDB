@@ -12,10 +12,8 @@ from itertools import product
 import datetime
 import random
 
-from arcticdb.config import Defaults
-from arcticdb.version_store.helper import ArcticMemoryConfig
 from arcticdb.util.test import random_strings_of_length, random_string, random_floats, assert_frame_equal
-from arcticdb_ext.exceptions import InternalException, SortingException
+from arcticdb.exceptions import InternalException, SortingException
 from tests.util.date import DateRange
 from pandas import MultiIndex
 

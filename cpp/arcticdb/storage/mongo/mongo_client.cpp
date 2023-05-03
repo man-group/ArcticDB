@@ -328,7 +328,7 @@ storage::KeySegmentPair MongoClientImpl::read_segment(const std::string &databas
             );
         } else {
             // find_one returned nothing, if this was an exception it would fall through to the catch below.
-            throw std::runtime_error(fmt::format("Missing key in mongo: {} for stream_id: {}", key, stream_id));
+            throw std::runtime_error(fmt::format("Missing key in mongo: {} for symbol: {}", key, stream_id));
         }
     }
     catch(const std::exception& ex) {

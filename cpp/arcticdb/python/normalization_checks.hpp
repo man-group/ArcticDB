@@ -11,7 +11,7 @@
 
 namespace arcticdb {
 
-using NormalizationException = ArcticBaseException<ErrorCategory::NORMALIZATION>;
+using NormalizationException = ArcticCategorizedException<ErrorCategory::NORMALIZATION>;
 
 namespace pipelines {
 struct InputTensorFrame;
