@@ -48,7 +48,7 @@
           {
             "type" : "equals",
             "lhs" : "${hostSystemName}",
-            "rhs" : "Darwin"
+            "rhs" : "Windows"
           },
           {
             "type" : "notEquals",
@@ -93,7 +93,7 @@
           {
             "type" : "equals",
             "lhs" : "${hostSystemName}",
-            "rhs" : "Darwin"
+            "rhs" : "Windows"
           },
           {
             "type" : "equals",
