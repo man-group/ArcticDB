@@ -410,7 +410,7 @@ endif ()
 
 list (APPEND arcticdb_core_libraries Threads::Threads) # comes last for weakreference resolution pthread_atexit in folly
 
-SET(ARCTICDB_CORE_INCLUDES
+set(arcticdb_core_includes
     ${LIBMONGOCXX_STATIC_INCLUDE_DIRS}
     ${LIBBSONCXX_STATIC_INCLUDE_DIRS}
     ${BITMAGIC_INCLUDE_DIRS}
@@ -424,7 +424,7 @@ if (SSL_LINK)
     list(APPEND arcticdb_core_libraries OpenSSL::SSL)
     if (NOT WIN32)
         list(APPEND arcticdb_core_libraries ${KERBEROS_LIBRARY})
-        SET(ARCTICDB_CORE_INCLUDES ${ARCTICDB_CORE_INCLUDES} ${KERBEROS_INCLUDE_DIR})
+        list(APPEND arcticdb_core_includes  ${KERBEROS_INCLUDE_DIR})
     endif()
 endif ()
 
@@ -434,7 +434,7 @@ target_include_directories(arcticdb_core_object
         PRIVATE
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
         $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
-        ${ARCTICDB_CORE_INCLUDES}
+        ${arcticdb_core_includes}
         )
 
 add_library(arcticdb_core_static STATIC $<TARGET_OBJECTS:arcticdb_core_object>)
