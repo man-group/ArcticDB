@@ -29,6 +29,10 @@ find_package(unofficial-pcre REQUIRED)
 find_package(double-conversion REQUIRED)
 find_package(Libevent CONFIG REQUIRED)
 
+if(NOT WIN32 and ${SSL_LINK})
+    find_package(Kerberos REQUIRED)
+endif()
+
 find_package(Protobuf REQUIRED)
 set(Protobuf_lite_LIBRARY protobuf::libprotobuf-lite)
 set(Protobuf_LIBRARY protobuf::libprotobuf)
@@ -406,12 +410,21 @@ endif ()
 
 list (APPEND arcticdb_core_libraries Threads::Threads) # comes last for weakreference resolution pthread_atexit in folly
 
+SET(ARCTICDB_CORE_INCLUDES
+    ${LIBMONGOCXX_STATIC_INCLUDE_DIRS}
+    ${LIBBSONCXX_STATIC_INCLUDE_DIRS}
+    ${BITMAGIC_INCLUDE_DIRS}
+    ${KERBEROS_INCLUDE_DIR}
+    $PYTHON_NUMPY_INCLUDE_DIR
+)
+
 if (SSL_LINK)
     message("Linking against SSL")
     find_package(OpenSSL REQUIRED)
     list(APPEND arcticdb_core_libraries OpenSSL::SSL)
     if (NOT WIN32)
-        list(APPEND arcticdb_core_libraries krb5)
+        list(APPEND arcticdb_core_libraries ${KERBEROS_LIBRARY})
+        SET(ARCTICDB_CORE_INCLUDES ${ARCTICDB_CORE_INCLUDES} ${KERBEROS_INCLUDE_DIR})
     endif()
 endif ()
 
@@ -421,10 +434,7 @@ target_include_directories(arcticdb_core_object
         PRIVATE
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
         $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
-        ${LIBMONGOCXX_STATIC_INCLUDE_DIRS}
-        ${LIBBSONCXX_STATIC_INCLUDE_DIRS}
-        ${BITMAGIC_INCLUDE_DIRS}
-        $PYTHON_NUMPY_INCLUDE_DIR
+        ${ARCTICDB_CORE_INCLUDES}
         )
 
 add_library(arcticdb_core_static STATIC $<TARGET_OBJECTS:arcticdb_core_object>)
