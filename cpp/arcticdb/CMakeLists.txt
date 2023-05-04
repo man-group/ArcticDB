@@ -412,7 +412,6 @@ list (APPEND arcticdb_core_libraries Threads::Threads) # comes last for weakrefe
 
 set(arcticdb_core_includes
     ${BITMAGIC_INCLUDE_DIRS}
-    ${KERBEROS_INCLUDE_DIR}
 )
 
 if (SSL_LINK)
