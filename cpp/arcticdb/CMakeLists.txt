@@ -6,10 +6,13 @@ option(STATIC_LINK_STD_LIB "Statically link the C++ standard libraries" ON)
 if(${TEST})
 find_package(GTest CONFIG REQUIRED)
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
 find_package(Sanitizers)
 
 >>>>>>> f9fb9bb (Encoded field)
+=======
+>>>>>>> 0859163 (clang related changes)
 include(CTest)
 include(GoogleTest)
 endif()
