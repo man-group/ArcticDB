@@ -411,11 +411,7 @@ endif ()
 list (APPEND arcticdb_core_libraries Threads::Threads) # comes last for weakreference resolution pthread_atexit in folly
 
 set(arcticdb_core_includes
-    ${LIBMONGOCXX_STATIC_INCLUDE_DIRS}
-    ${LIBBSONCXX_STATIC_INCLUDE_DIRS}
     ${BITMAGIC_INCLUDE_DIRS}
-    ${KERBEROS_INCLUDE_DIR}
-    $PYTHON_NUMPY_INCLUDE_DIR
 )
 
 if (SSL_LINK)
