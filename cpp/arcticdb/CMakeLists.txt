@@ -30,6 +30,9 @@ find_package(Threads REQUIRED)
 find_package(unofficial-pcre REQUIRED)
 find_package(double-conversion REQUIRED)
 
+if(NOT WIN32 AND ${SSL_LINK})
+    find_package(Kerberos REQUIRED)
+endif()
 
 find_package(Protobuf REQUIRED)
 set(Protobuf_lite_LIBRARY protobuf::libprotobuf-lite)
