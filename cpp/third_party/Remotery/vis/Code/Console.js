@@ -26,7 +26,7 @@ Console = (function()
 		// Setup command history control
 		this.CommandHistory = LocalStore.Get("App", "Global", "CommandHistory", [ ]);
 		this.CommandIndex = 0;
-		this.MaxNbCommands = 200;
+		this.MaxNbCommands = 10000;
 		DOM.Event.AddHandler(this.UserInput.EditNode, "keydown", Bind(OnKeyPress, this));
 		DOM.Event.AddHandler(this.UserInput.EditNode, "focus", Bind(OnFocus, this));
 
@@ -37,6 +37,8 @@ Console = (function()
 		this.Server = server;
 		server.SetConsole(this);
 		server.AddMessageHandler("LOGM", Bind(OnLog, this));
+		
+		this.Window.SetOnResize(Bind(OnUserResize, this));
 	}
 
 
@@ -53,25 +55,26 @@ Console = (function()
 		this.Window.SetPosition(BORDER, height - BORDER - 200);
 		this.Window.SetSize(width - 2 * BORDER, HEIGHT);
 
-		// Place controls
-		var parent_size = this.Window.Size;
-		var mid_w = parent_size[0] / 3;
-		this.UserInput.SetPosition(BORDER, parent_size[1] - 2 * BORDER - 30);
-		this.UserInput.SetSize(parent_size[0] - 100, 18);
-		var output_height = this.UserInput.Position[1] - 2 * BORDER;
-		this.PageContainer.SetPosition(BORDER, BORDER);
-		this.PageContainer.SetSize(mid_w - 2 * BORDER, output_height);
-		this.AppContainer.SetPosition(mid_w, BORDER);
-		this.AppContainer.SetSize(parent_size[0] - mid_w - BORDER, output_height);
+		ResizeInternals(this);
 	}
 
 
-	function OnLog(self, socket, data_view)
+	Console.prototype.TriggerUpdate = function()
 	{
-		var data_view_reader = new DataViewReader(data_view, 4);
+		this.AppTextUpdatePending = true;
+	}
+
+
+	function OnLog(self, socket, data_view_reader)
+	{
 		var text = data_view_reader.GetString();
 		self.AppTextBuffer = LogText(self.AppTextBuffer, text);
-		self.AppTextUpdatePending = true;
+
+		// Don't register text as updating if disconnected as this implies a trace is being loaded, which we want to speed up
+		if (self.Server.Connected())
+		{
+			self.AppTextUpdatePending = true;
+		}
 	}
 
 
@@ -91,12 +94,31 @@ Console = (function()
 
 		// Append to local text buffer and ensure clip the oldest text to ensure a max size
 		existing_text = existing_text + new_text;
-		var max_len = 10 * 1024;
+		var max_len = 100 * 1024;
 		var len = existing_text.length;
 		if (len > max_len)
 			existing_text = existing_text.substr(len - max_len, max_len);
 
 		return existing_text;
+	}
+
+	function OnUserResize(self, evt)
+	{
+		ResizeInternals(self);
+	}
+
+	function ResizeInternals(self)
+	{
+		// Place controls
+		var parent_size = self.Window.Size;
+		var mid_w = parent_size[0] / 3;
+		self.UserInput.SetPosition(BORDER, parent_size[1] - 2 * BORDER - 30);
+		self.UserInput.SetSize(parent_size[0] - 100, 18);
+		var output_height = self.UserInput.Position[1] - 2 * BORDER;
+		self.PageContainer.SetPosition(BORDER, BORDER);
+		self.PageContainer.SetSize(mid_w - 2 * BORDER, output_height);
+		self.AppContainer.SetPosition(mid_w, BORDER);
+		self.AppContainer.SetSize(parent_size[0] - mid_w - BORDER, output_height);
 	}
 
 

@@ -3,10 +3,12 @@ option(SSL_LINK "Link against SSL libraries." ON)
 option(HIDE_LINKED_SYMBOLS "Passed `exclude-libs` through to linker, ensuring linked library symbols are not exported. Shrinks binary size." ON)
 option(STATIC_LINK_STD_LIB "Statically link the C++ standard libraries" ON)
 
+if(${TEST})
 find_package(GTest CONFIG REQUIRED)
-
 include(CTest)
 include(GoogleTest)
+endif()
+
 include(GenerateExportHeader)
 
 # System and third-party libraries with built-in find_package Config
@@ -361,16 +363,30 @@ add_library(arcticdb_core_object OBJECT ${arcticdb_srcs})
 if (NOT WIN32)
     if (STATIC_LINK_STD_LIB)
         message("Statically linking standard libraries")
-        set(standard_libraries
-            -static-libgcc
-            -static-libstdc++
-        )
+        if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+             message(FATAL_ERROR "Statically linking standard libraries with CLANG is (currently) not supported")
+        elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+            set(standard_libraries
+                -static-libgcc
+                -static-libstdc++
+            )
+        else()
+            message(FATAL_ERROR "Unknown compiler: ${CMAKE_CXX_COMPILER_ID}")
+        endif()
     else()
         message("Dynamically linking standard libraries")
-        set(standard_libraries
-            stdc++
-            gcc
-        )
+        if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+            set(standard_libraries
+                stdc++
+            )
+        elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+            set(standard_libraries
+                stdc++
+                gcc
+            )
+        else()
+            message(FATAL_ERROR "Unknown compiler: ${CMAKE_CXX_COMPILER_ID}")
+        endif()
     endif()
 endif()
 
@@ -401,8 +417,13 @@ if (WIN32)
             Iconv::Iconv
             )
 else ()
+
+    if (NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+        list (APPEND arcticdb_core_libraries stdc++fs)
+    endif()
+
+
     list (APPEND arcticdb_core_libraries
-            stdc++fs
             dl
             ${Sasl2_LIBRARY}
             )
@@ -501,10 +522,12 @@ pybind11_add_module(arcticdb_ext MODULE
 
 set (additional_link_flags "")
 if (HIDE_LINKED_SYMBOLS AND (NOT WIN32))
-    list(APPEND additional_link_flags
+
+    if (NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+        list(APPEND additional_link_flags
             "-Wl,--exclude-libs,ALL"
-            "-Wl,--gc-sections"
-            )
+            "-Wl,--gc-sections")
+    endif()
 endif()
 
 target_link_libraries(arcticdb_ext
