@@ -374,3 +374,28 @@ OR OTHER DEALINGS IN THE SOFTWARE.
 Except as contained in this notice, the name of a copyright holder shall not
 be used in advertising or otherwise to promote the sale, use or other dealings
 in this Software without prior written authorization of the copyright holder.
+
+--------------------------------------------------------------------------------
+This product includes code from Apache Impala, which includes the following in
+its NOTICE file:
+
+  Apache Impala
+  Copyright 2019 The Apache Software Foundation
+
+  This product includes software developed at
+  The Apache Software Foundation (http://www.apache.org/).
+
+  Portions of this software were developed at
+  Cloudera, Inc (http://www.cloudera.com/).
+
+  This product includes software developed by the OpenSSL
+  Project for use in the OpenSSL Toolkit (http://www.openssl.org/)
+
+  This product includes cryptographic software written by Eric Young
+  (eay@cryptsoft.com).  This product includes software written by Tim
+  Hudson (tjh@cryptsoft.com).
+
+  This product includes software developed by the University of Chicago,
+  as Operator of Argonne National Laboratory.
+  Copyright (C) 1999 University of Chicago. All rights reserved.
+--------------------------------------------------------------------------------
