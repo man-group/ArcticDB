@@ -3,7 +3,8 @@ option(SSL_LINK "Link against SSL libraries." ON)
 option(HIDE_LINKED_SYMBOLS "Passed `exclude-libs` through to linker, ensuring linked library symbols are not exported. Shrinks binary size." ON)
 option(STATIC_LINK_STD_LIB "Statically link the C++ standard libraries" ON)
 
-if(TEST)
+
+if(${TEST})
 find_package(GTest CONFIG REQUIRED)
 include(CTest)
 include(GoogleTest)
@@ -565,8 +566,8 @@ if (HIDE_LINKED_SYMBOLS AND (NOT WIN32))
 
     if (NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")
         list(APPEND additional_link_flags
-                "--exclude-libs,--gc-sections,ALL"
-                )
+            "-Wl,--exclude-libs,ALL"
+            "-Wl,--gc-sections")
     endif()
 endif()
 
