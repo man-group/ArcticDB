@@ -37,7 +37,7 @@ namespace arcticdb {
 
 /// @cond
 
-// this is needed to make templates of tempaltes work
+// this is needed to make templates of templates work
 // since py::array_t has more than one template parameter
 // (the rest are defaulted)
 template< class T>
