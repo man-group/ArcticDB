@@ -29,7 +29,7 @@ find_package(unofficial-pcre REQUIRED)
 find_package(double-conversion REQUIRED)
 find_package(Libevent CONFIG REQUIRED)
 
-if(NOT WIN32 and ${SSL_LINK})
+if(NOT WIN32 AND ${SSL_LINK})
     find_package(Kerberos REQUIRED)
 endif()
 
