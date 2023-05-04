@@ -27,7 +27,12 @@ find_package(Gflags REQUIRED)
 find_package(LZ4 REQUIRED)
 find_package(prometheus-cpp CONFIG REQUIRED)
 find_package(Threads REQUIRED)
-find_package(unofficial-pcre REQUIRED)
+if(NOT ARCTICDB_USING_CONDA)
+    find_package(unofficial-pcre REQUIRED)
+else()
+    find_package(PCRE REQUIRED)
+endif()
+
 find_package(double-conversion REQUIRED)
 
 if(NOT WIN32 AND ${SSL_LINK})
@@ -45,7 +50,7 @@ find_package(zstd CONFIG REQUIRED)
 
 find_package(zstd CONFIG REQUIRED)  # "CONFIG" bypasses our cpp/CMake/FindZstd.cmake module
 
-if(not ${ARCTICDB_USING_CONDA})
+if(NOT ${ARCTICDB_USING_CONDA})
     find_package(Libevent CONFIG REQUIRED)
     set(ARCTICDB_MONGO_LIBS mongo::mongocxx_static mongo::bsoncxx_static)
     set(Zstd_LIBRARY $<IF:$<TARGET_EXISTS:zstd::libzstd_shared>,zstd::libzstd_shared,zstd::libzstd_static>)
@@ -429,10 +434,17 @@ set (arcticdb_core_libraries
         spdlog::spdlog
         Folly::folly # Transitively includes: double-conversion, gflags, glog, libevent, libssl, libcrypto, libiberty, libsodium
         remotery_static
-        unofficial::pcre::pcre
         )
 
-# no static libraries when usinmg conda
+
+# PCRE 
+if(${ARCTICDB_USING_CONDA})
+    list (APPEND arcticdb_core_libraries pcre)
+else()
+    list (APPEND arcticdb_core_libraries unofficial::pcre::pcre)
+endif()
+
+# no static libraries when using conda
 if(${ARCTICDB_USING_CONDA})
     add_compile_definitions(ARCTICDB_USING_CONDA)
     list (APPEND arcticdb_core_libraries xxHash::xxHash)
