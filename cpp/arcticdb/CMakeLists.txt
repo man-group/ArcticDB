@@ -65,7 +65,7 @@ else()
     list(REMOVE_ITEM NEW_FOLLY_DEPS "/usr/local/opt/openssl/include" )
     set_target_properties(Folly::folly_deps PROPERTIES INTERFACE_INCLUDE_DIRECTORIES "${NEW_FOLLY_DEPS}")
 
-endfif()
+endif()
 
 # Libraries baked into the internal and external Linux images are found by searching various paths
 # On Windows, vcpkg will provide a "Config" which takes precedence
