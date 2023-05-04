@@ -1,39 +1,31 @@
 Remotery
 --------
 
-[![Build Status](https://travis-ci.org/Celtoys/Remotery.svg?branch=master)](https://travis-ci.org/Celtoys/Remotery)
-[![Build status](https://ci.appveyor.com/api/projects/status/d1o8620mws9ihbsd?svg=true)](https://ci.appveyor.com/project/Celtoys/remotery)
+[![Build](https://github.com/Celtoys/Remotery/actions/workflows/build.yml/badge.svg?branch=main)](https://github.com/Celtoys/Remotery/actions/workflows/build.yml)
 
 A realtime CPU/GPU profiler hosted in a single C file with a viewer that runs in a web browser.
 
 ![screenshot](screenshot.png?raw=true)
 
-Supported Platforms:
-
-* Windows
-* Linux
-* OSX
-* iOS
-* Android
-* XBox One
-* FreeBSD
-
-Supported GPU Profiling APIS:
-
-* D3D 11
-* OpenGL
-* CUDA
-* Metal
-
 Features:
 
 * Lightweight instrumentation of multiple threads running on the CPU.
-* Web viewer that runs in Chrome, Firefox and Safari. Custom WebSockets server
-  transmits sample data to the browser on a latent thread.
-* Profiles itself and shows how it's performing in the viewer.
+* Web viewer that runs in Chrome, Firefox and Safari; on Desktops, Mobiles or Tablets.
+* GPU UI rendering, bypassing the DOM completely, for real-time 60hz viewer updates at 10,000x the performance.
+* Automatic thread sampler that tells you what processor cores your threads are running on without requiring Administrator privileges.
+* Drop saved traces onto the Remotery window to load historical runs for inspection.
 * Console output for logging text.
 * Console input for sending commands to your game.
+* A Property API for recording named/typed values over time, alongside samples.
+* Profiles itself and shows how it's performing in the viewer.
 
+Supported Profiling Platforms:
+
+* Windows 7/8/10/11/UWP (Hololens), Linux, OSX, iOS, Android, Xbox One/Series, Free BSD.
+
+Supported GPU Profiling APIS:
+
+* D3D 11/12, OpenGL, CUDA, Metal.
 
 Compiling
 ---------
@@ -48,6 +40,10 @@ Compiling
   library linkage. For example to compile the same run: cc lib/Remotery.c sample/sample.c
   -I lib -pthread -lm
 
+* FreeBSD - the easiest way is to take a look at the official port
+  ([devel/remotery](https://www.freshports.org/devel/remotery/)) and modify the port's
+  Makefile if needed. There is also a package available via `pkg install remotery`.
+
 You can define some extra macros to modify what features are compiled into Remotery:
 
     Macro               Default     Description
@@ -56,6 +52,7 @@ You can define some extra macros to modify what features are compiled into Remot
     RMT_USE_TINYCRT     0           Used by the Celtoys TinyCRT library (not released yet)
     RMT_USE_CUDA        0           Assuming CUDA headers/libs are setup, allow CUDA profiling
     RMT_USE_D3D11       0           Assuming Direct3D 11 headers/libs are setup, allow D3D11 GPU profiling
+    RMT_USE_D3D12       0           Allow D3D12 GPU profiling
     RMT_USE_OPENGL      0           Allow OpenGL GPU profiling (dynamically links OpenGL libraries on available platforms)
     RMT_USE_METAL       0           Allow Metal profiling of command buffers
 
@@ -140,8 +137,7 @@ ensure the current thread has the context you specify in rmtCUDABind.context.
 Sampling Direct3D 11 GPU activity
 ---------------------------------
 
-Remotery allows sampling of GPU activity on your main D3D11 context. After initialising Remotery, you need
-to bind it to D3D11 with a single call from the thread that owns the device context:
+Remotery allows sampling of D3D11 GPU activity on multiple devices on multiple threads. After initialising Remotery, you need to bind it to D3D11 with a single call from the thread that owns the device context:
 
     // Parameters are ID3D11Device* and ID3D11DeviceContext*
     rmt_BindD3D11(d3d11_device, d3d11_context);
@@ -161,8 +157,7 @@ Sampling is then a simple case of:
         // ... D3D code ...
     }
 
-Support for multiple contexts can be added pretty easily if there is demand for the feature. When you shutdown
-your D3D11 device and context, ensure you notify Remotery before shutting down Remotery itself:
+Subsequent sampling calls from the same thread will use that device/context combination. When you shutdown your D3D11 device and context, ensure you notify Remotery before shutting down Remotery itself:
 
     rmt_UnbindD3D11();
 

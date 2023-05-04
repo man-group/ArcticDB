@@ -17,7 +17,13 @@ TitleWindow = (function()
 		this.PauseButton = this.Window.AddControlNew(new WM.Button("Pause", 5, 5, { toggle: true }));
 		this.PauseButton.SetOnClick(Bind(OnPausePressed, this));
 
+		this.SyncButton = this.Window.AddControlNew(new WM.Button("Sync Timelines", 5, 5, { toggle: true}));
+		this.SyncButton.SetOnClick(Bind(OnSyncPressed, this));
+		this.SyncButton.SetState(this.Settings.SyncTimelines);
+
 		server.AddMessageHandler("PING", Bind(OnPing, this));
+		
+		this.Window.SetOnResize(Bind(OnUserResize, this));
 	}
 
 
@@ -30,17 +36,57 @@ TitleWindow = (function()
 	TitleWindow.prototype.WindowResized = function(width, height)
 	{
 		this.Window.SetSize(width - 2 * 10, 50);
-		this.PauseButton.SetPosition(width - 80, 5);
+		ResizeInternals(this);
+	}
+
+	TitleWindow.prototype.Pause = function()
+	{
+		if (!this.Settings.IsPaused)
+		{
+			this.PauseButton.SetText("Paused");
+			this.PauseButton.SetState(true);
+			this.Settings.IsPaused = true;
+		}
+	}
+
+	TitleWindow.prototype.Unpause = function()
+	{
+		if (this.Settings.IsPaused)
+		{
+			this.PauseButton.SetText("Pause");
+			this.PauseButton.SetState(false);
+			this.Settings.IsPaused = false;
+		}
+	}
+
+	function OnUserResize(self, evt)
+	{
+		ResizeInternals(self);
+	}
+
+	function ResizeInternals(self)
+	{
+		self.PauseButton.SetPosition(self.Window.Size[0] - 60, 5);
+		self.SyncButton.SetPosition(self.Window.Size[0] - 155, 5);
 	}
 
 
 	function OnPausePressed(self)
 	{
-		self.Settings.IsPaused = self.PauseButton.IsPressed();
-		if (self.Settings.IsPaused)
-			self.PauseButton.SetText("Paused");
+		if (self.PauseButton.IsPressed())
+		{
+			self.Pause();
+		}
 		else
-			self.PauseButton.SetText("Pause");
+		{
+			self.Unpause();
+		}
+	}
+
+
+	function OnSyncPressed(self)
+	{
+		self.Settings.SyncTimelines = self.SyncButton.IsPressed();
 	}
 
 

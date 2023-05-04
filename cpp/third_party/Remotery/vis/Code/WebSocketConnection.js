@@ -15,10 +15,14 @@ WebSocketConnection = (function()
 	}
 
 
+	WebSocketConnection.prototype.Connecting = function()
+	{
+		return this.Socket != null && this.Socket.readyState == WebSocket.CONNECTING;
+	}
+
 	WebSocketConnection.prototype.Connected = function()
 	{
-		// Will return true if the socket is also in the process of connecting
-		return this.Socket != null;
+		return this.Socket != null && this.Socket.readyState == WebSocket.OPEN;
 	}
 
 
@@ -45,9 +49,8 @@ WebSocketConnection = (function()
 
 	WebSocketConnection.prototype.Connect = function(address)
 	{
-		// Disconnect if already connected
-		if (this.Connected())
-			this.Disconnect();
+		// Abandon previous connection attempt
+		this.Disconnect();
 
 		Log(this, "Connecting to " + address);
 
@@ -63,8 +66,11 @@ WebSocketConnection = (function()
 	WebSocketConnection.prototype.Disconnect = function()
 	{
 		Log(this, "Disconnecting");
-		if (this.Connected())
+		if (this.Socket != null)
+		{
 			this.Socket.close();
+			this.Socket = null;
+		}
 	}
 
 
@@ -81,13 +87,13 @@ WebSocketConnection = (function()
 	}
 
 
-	function CallMessageHandlers(self, message_name, data_view)
+	function CallMessageHandlers(self, message_name, data_view, length)
 	{
 		if (message_name in self.MessageHandlers)
 		{
 			var handlers = self.MessageHandlers[message_name];
 			for (var i in handlers)
-			    handlers[i](self, data_view);
+			    handlers[i](self, data_view, length);
 		}
 	}
 
@@ -121,15 +127,21 @@ WebSocketConnection = (function()
 
 	function OnMessage(self, event)
 	{
-	    var data_view = new DataView(event.data);
+	    let data_view = new DataView(event.data);
+		let data_view_reader = new DataViewReader(data_view, 0);
+		self.CallMessageHandlers(data_view_reader);
+	}
 
-	    var id = String.fromCharCode(
-            data_view.getInt8(0),
-            data_view.getInt8(1),
-            data_view.getInt8(2),
-            data_view.getInt8(3));
+	WebSocketConnection.prototype.CallMessageHandlers = function(data_view_reader)
+	{
+		// Decode standard message header
+		const id = data_view_reader.GetStringOfLength(4);
+		const length = data_view_reader.GetUInt32();
 
-        CallMessageHandlers(self, id, data_view);
+		// Pass the length of the message left to parse
+		CallMessageHandlers(this, id, data_view_reader, length - 8);
+
+		return [ id, length ];
 	}
 
 
