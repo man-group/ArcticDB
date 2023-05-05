@@ -23,7 +23,7 @@ jobs:
           environment-file: environment_unix.yml
           environment-name: arcticdb
 
-      - name: Build
+      - name: Build ArcticDB with conda (ARCTICDB_USING_CONDA=1)
         shell: bash -l {0}
         run: |
           python -m pip install -v -e .
