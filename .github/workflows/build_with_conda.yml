@@ -1,7 +1,6 @@
 name: Build with conda
 on:
   push:
-  pull_request:
 
 jobs:
   unix:
