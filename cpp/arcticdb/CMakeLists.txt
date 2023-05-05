@@ -48,7 +48,6 @@ set(Protobuf_LIBRARY protobuf::libprotobuf)
 find_package(mongocxx REQUIRED)
 find_package(bsoncxx REQUIRED)
 set(ARCTICDB_MONGO_LIBS mongo::mongocxx_static mongo::bsoncxx_static)
-find_package(zstd CONFIG REQUIRED)
 
 find_package(zstd CONFIG REQUIRED)  # "CONFIG" bypasses our cpp/CMake/FindZstd.cmake module
 
