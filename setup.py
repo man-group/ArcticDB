@@ -17,11 +17,8 @@ from wheel.bdist_wheel import bdist_wheel
 
 # experimental flag to indicate that we want
 # the dependencies from a conda
-ARCTICDB_USING_CONDA  = os.environ.get("ARCTICDB_USING_CONDA")
-if ARCTICDB_USING_CONDA is None:
-    ARCTICDB_USING_CONDA = False
-else:
-    ARCTICDB_USING_CONDA = True
+ARCTICDB_USING_CONDA  = os.environ.get("ARCTICDB_USING_CONDA", "0")
+ARCTICDB_USING_CONDA = ARCTICDB_USING_CONDA != "0"
 
 print(f"ARCTICDB_USING_CONDA={ARCTICDB_USING_CONDA}")
 
