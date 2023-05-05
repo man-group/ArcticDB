@@ -4,22 +4,26 @@ namespace("WM");
 
 WM.Window = (function()
 {
-	var template_html = "																								\
-		<div class='Window'>																							\
-			<div class='WindowTitleBar'>																				\
-				<div class='WindowTitleBarText notextsel' style='float:left'>Window Title Bar</div>						\
-				<div class='WindowTitleBarClose notextsel' style='float:right'>O</div>									\
-			</div>																										\
-			<div class='WindowBody'>																					\
-			</div>																										\
-		</div>";
+	var template_html = multiline(function(){/*																								\
+		<div class='Window'>
+			<div class='WindowTitleBar'>
+				<div class='WindowTitleBarText notextsel' style='float:left'>Window Title Bar</div>
+				<div class='WindowTitleBarClose notextsel' style='float:right'>&#10005;</div>
+			</div>
+			<div class='WindowBody'>
+			</div>
+			<div class='WindowResizeHandle notextsel'>&#8944;</div>
+		</div>
+	*/});
 
 
-	function Window(manager, title, x, y, width, height, parent_node)
+	function Window(manager, title, x, y, width, height, parent_node, user_data)
 	{
 		this.Manager = manager;
 		this.ParentNode = parent_node || document.body;
+		this.userData = user_data;
 		this.OnMove = null;
+		this.OnResize = null;
 		this.Visible = false;
 		this.AnimatedShow = false;
 
@@ -28,6 +32,7 @@ WM.Window = (function()
 		this.TitleBarNode = DOM.Node.FindWithClass(this.Node, "WindowTitleBar");
 		this.TitleBarTextNode = DOM.Node.FindWithClass(this.Node, "WindowTitleBarText");
 		this.TitleBarCloseNode = DOM.Node.FindWithClass(this.Node, "WindowTitleBarClose");
+		this.ResizeHandleNode = DOM.Node.FindWithClass(this.Node, "WindowResizeHandle");
 		this.BodyNode = DOM.Node.FindWithClass(this.Node, "WindowBody");
 
 		// Setup the position and dimensions of the window
@@ -40,17 +45,24 @@ WM.Window = (function()
 		// Hook up event handlers
 		DOM.Event.AddHandler(this.Node, "mousedown", Bind(this, "SetTop"));
 		DOM.Event.AddHandler(this.TitleBarNode, "mousedown", Bind(this, "BeginMove"));
-		DOM.Event.AddHandler(this.TitleBarCloseNode, "mousedown", Bind(this, "Hide"));
+		DOM.Event.AddHandler(this.ResizeHandleNode, "mousedown", Bind(this, "BeginResize"));
+		DOM.Event.AddHandler(this.TitleBarCloseNode, "mouseup", Bind(this, "Hide"));
 
 		// Create delegates for removable handlers
 		this.MoveDelegate = Bind(this, "Move");
-		this.EndMoveDelegate = Bind(this, "EndMove");		
+		this.EndMoveDelegate = Bind(this, "EndMove")
+		this.ResizeDelegate = Bind(this, "Resize");
+		this.EndResizeDelegate = Bind(this, "EndResize");	
 	}
-
 
 	Window.prototype.SetOnMove = function(on_move)
 	{
 		this.OnMove = on_move;
+	}
+
+	Window.prototype.SetOnResize = function(on_resize)
+	{
+		this.OnResize = on_resize;
 	}
 
 
@@ -73,9 +85,9 @@ WM.Window = (function()
 	}
 
 
-	Window.prototype.Hide = function()
+	Window.prototype.Hide = function(evt)
 	{
-		if (this.Node.parentNode == this.ParentNode)
+		if (this.Node.parentNode == this.ParentNode && evt.button == 0)
 		{
 			if (this.AnimatedShow)
 			{
@@ -95,9 +107,19 @@ WM.Window = (function()
 	
 	Window.prototype.HideNoAnim = function()
 	{
-		// Remove node
-		this.ParentNode.removeChild(this.Node);
-		this.Visible = false;
+		if (this.Node.parentNode == this.ParentNode)
+		{
+			// Remove node
+			this.ParentNode.removeChild(this.Node);
+			this.Visible = false;
+		}
+	}
+
+
+	Window.prototype.Close = function()
+	{
+		this.HideNoAnim();
+		this.Manager.RemoveWindow(this);
 	}
 
 
@@ -134,6 +156,15 @@ WM.Window = (function()
 		control.ParentNode = this.BodyNode;
 		this.BodyNode.appendChild(control.Node);
 		return control;
+	}
+
+
+	Window.prototype.RemoveControl = function(control)
+	{
+		if (control.ParentNode == this.BodyNode)
+		{
+			control.ParentNode.removeChild(control.Node);
+		}
 	}
 
 
@@ -218,6 +249,45 @@ WM.Window = (function()
 		DOM.Event.StopDefaultAction(evt);
 	}
 
+	
+	Window.prototype.BeginResize = function(evt)
+	{
+		// Calculate offset of the window from the mouse down position
+		var mouse_pos = DOM.Event.GetMousePosition(evt);
+		this.MousePosBeforeResize = [ mouse_pos[0], mouse_pos[1] ];
+		this.SizeBeforeResize = this.Size;
+
+		// Dynamically add handlers for movement and release
+		DOM.Event.AddHandler(document, "mousemove", this.ResizeDelegate);
+		DOM.Event.AddHandler(document, "mouseup", this.EndResizeDelegate);
+
+		DOM.Event.StopDefaultAction(evt);
+	}
+
+
+	Window.prototype.Resize = function(evt)
+	{
+		// Use the offset at the beginning of movement to drag the window around
+		var mouse_pos = DOM.Event.GetMousePosition(evt);
+		var offset = [ mouse_pos[0] - this.MousePosBeforeResize[0], mouse_pos[1] - this.MousePosBeforeResize[1] ];
+		this.SetSize(this.SizeBeforeResize[0] + offset[0], this.SizeBeforeResize[1] + offset[1]);
+
+		if (this.OnResize)
+			this.OnResize(this, this.Size);
+
+		DOM.Event.StopDefaultAction(evt);
+	}
+
+
+	Window.prototype.EndResize = function(evt)
+	{
+		// Remove handlers added during mouse down
+		DOM.Event.RemoveHandler(document, "mousemove", this.ResizeDelegate);
+		DOM.Event.RemoveHandler(document, "mouseup", this.EndResizeDelegate);
+
+		DOM.Event.StopDefaultAction(evt);
+	}
+
 
 	Window.prototype.SetPosition = function(x, y)
 	{
@@ -228,8 +298,13 @@ WM.Window = (function()
 
 	Window.prototype.SetSize = function(w, h)
 	{
+		w = Math.max(80, w);
+		h = Math.max(15, h);
 		this.Size = [ w, h ];
 		DOM.Node.SetSize(this.Node, this.Size);
+		
+		if (this.OnResize)
+			this.OnResize(this, this.Size);
 	}
 
 

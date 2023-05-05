@@ -2,7 +2,7 @@
 
 TimelineRow = (function()
 {
-    var row_template = function(){/*
+    const RowLabelTemplate = `
         <div class='TimelineRow'>
             <div class='TimelineRowCheck TimelineBox'>
                 <input class='TimelineRowCheckbox' type='checkbox' />
@@ -14,59 +14,47 @@ TimelineRow = (function()
                 <div class='TimelineRowExpandButton'>-</div>
             </div>
             <div class='TimelineRowLabel TimelineBox'></div>
-            <canvas class='TimelineRowCanvas'></canvas>
             <div style="clear:left"></div>
-        </div>
-*/}.toString().split(/\n/).slice(1, -1).join("\n");
+        </div>`
 
 
-    var CANVAS_Y_OFFSET = 0;
-    var CANVAS_BORDER = 1;
     var SAMPLE_HEIGHT = 16;
-    var SAMPLE_BORDER = 1;
+    var SAMPLE_BORDER = 2;
     var SAMPLE_Y_SPACING = SAMPLE_HEIGHT + SAMPLE_BORDER * 2;
-    var SAMPLE_Y_OFFSET = CANVAS_Y_OFFSET + CANVAS_BORDER + 1;
 
 
-    function TimelineRow(name, width, parent_node, frame_history, check_handler)
+    function TimelineRow(gl, name, timeline, frame_history, check_handler)
     {
         this.Name = name;
+        this.timeline = timeline;
 
         // Create the row HTML and add to the parent
-        this.ContainerNode = DOM.Node.CreateHTML(row_template);
-        this.Node = DOM.Node.FindWithClass(this.ContainerNode, "TimelineRowData");
-        this.LabelNode = DOM.Node.FindWithClass(this.ContainerNode, "TimelineRowLabel");
-        this.LabelNode.innerHTML = name;
-        this.CheckboxNode = DOM.Node.FindWithClass(this.ContainerNode, "TimelineRowCheckbox");
-        var expand_node_0 = DOM.Node.FindWithClass(this.ContainerNode, "TimelineRowExpand", 0);
-        var expand_node_1 = DOM.Node.FindWithClass(this.ContainerNode, "TimelineRowExpand", 1);
-        this.IncNode = DOM.Node.FindWithClass(expand_node_0, "TimelineRowExpandButton");
-        this.DecNode = DOM.Node.FindWithClass(expand_node_1, "TimelineRowExpandButton");
-        this.CanvasNode = DOM.Node.FindWithClass(this.ContainerNode, "TimelineRowCanvas");
-        parent_node.appendChild(this.ContainerNode);
+        this.LabelContainerNode = DOM.Node.CreateHTML(RowLabelTemplate);
+        const label_node = DOM.Node.FindWithClass(this.LabelContainerNode, "TimelineRowLabel");
+        label_node.innerHTML = name;
+        timeline.TimelineLabels.Node.appendChild(this.LabelContainerNode);
 
         // All sample view windows visible by default
-        this.CheckboxNode.checked = true;
-        DOM.Event.AddHandler(this.CheckboxNode, "change", function(evt) { check_handler(name, evt); });
+        const checkbox_node = DOM.Node.FindWithClass(this.LabelContainerNode, "TimelineRowCheckbox");
+        checkbox_node.checked = true;
+        checkbox_node.addEventListener("change", (e) => check_handler(name, e));
 
         // Manually hook-up events to simulate div:active
         // I can't get the equivalent CSS to work in Firefox, so...
-        DOM.Event.AddHandler(this.IncNode, "mousedown", ExpandButtonDown);
-        DOM.Event.AddHandler(this.IncNode, "mouseup", ExpandButtonUp);
-        DOM.Event.AddHandler(this.IncNode, "mouseleave", ExpandButtonUp);
-        DOM.Event.AddHandler(this.DecNode, "mousedown", ExpandButtonDown);
-        DOM.Event.AddHandler(this.DecNode, "mouseup", ExpandButtonUp);
-        DOM.Event.AddHandler(this.DecNode, "mouseleave", ExpandButtonUp);
+        const expand_node_0 = DOM.Node.FindWithClass(this.LabelContainerNode, "TimelineRowExpand", 0);
+        const expand_node_1 = DOM.Node.FindWithClass(this.LabelContainerNode, "TimelineRowExpand", 1);
+        const inc_node = DOM.Node.FindWithClass(expand_node_0, "TimelineRowExpandButton");
+        const dec_node = DOM.Node.FindWithClass(expand_node_1, "TimelineRowExpandButton");
+        inc_node.addEventListener("mousedown", ExpandButtonDown);
+        inc_node.addEventListener("mouseup", ExpandButtonUp);
+        inc_node.addEventListener("mouseleave", ExpandButtonUp);
+        dec_node.addEventListener("mousedown", ExpandButtonDown);
+        dec_node.addEventListener("mouseup", ExpandButtonUp);
+        dec_node.addEventListener("mouseleave", ExpandButtonUp);
 
         // Pressing +/i increases/decreases depth
-        DOM.Event.AddHandler(this.IncNode, "click", Bind(IncDepth, this));
-        DOM.Event.AddHandler(this.DecNode, "click", Bind(DecDepth, this));
-
-        // Setup the canvas
-        this.Depth = 1;
-        this.Ctx = this.CanvasNode.getContext("2d");
-        this.SetSize(width);
-        this.Clear();
+        inc_node.addEventListener("click", () => this.IncDepth());
+        dec_node.addEventListener("click", () => this.DecDepth());
 
         // Frame index to start at when looking for first visible sample
         this.StartFrameIndex = 0;
@@ -74,32 +62,23 @@ TimelineRow = (function()
         this.FrameHistory = frame_history;
         this.VisibleFrames = [ ];
         this.VisibleTimeRange = null;
-
-        // Sample the mouse is currently hovering over
-        this.HoverSample = null;
-        this.HoverSampleDepth = 0;
+        this.Depth = 1;
 
         // Currently selected sample
-        this.SelectedSample = null;
-        this.SelectedSampleDepth = 0;
+        this.SelectSampleInfo = null;
+
+        // Create WebGL sample buffers
+        this.sampleBuffer = new glDynamicBuffer(gl, glDynamicBufferType.Buffer, gl.FLOAT, 4);
+        this.colourBuffer = new glDynamicBuffer(gl, glDynamicBufferType.Buffer, gl.UNSIGNED_BYTE, 4);
+
+        // An initial SetSize call to restore containers to their original size after traces were loaded prior to this
+        this.SetSize();
     }
 
 
-    TimelineRow.prototype.SetSize = function(width)
+    TimelineRow.prototype.SetSize = function()
     {
-        // Must ALWAYS set the width/height properties together. Setting one on its own has weird side-effects.
-        this.CanvasNode.width = width;
-        this.CanvasNode.height = CANVAS_BORDER + SAMPLE_BORDER + SAMPLE_Y_SPACING * this.Depth;
-        this.Draw(true);
-    }
-
-
-    TimelineRow.prototype.Clear = function()
-    {
-        // Fill box that shows the boundary between thread rows
-        this.Ctx.fillStyle = "#666"
-        var b = CANVAS_BORDER;
-        this.Ctx.fillRect(b, b, this.CanvasNode.width - b * 2, this.CanvasNode.height - b * 2);
+        this.LabelContainerNode.style.height = SAMPLE_Y_SPACING * this.Depth;
     }
 
 
@@ -150,87 +129,186 @@ TimelineRow = (function()
     }
 
 
-    TimelineRow.prototype.Draw = function(draw_text)
+    TimelineRow.prototype.DrawSampleHighlight = function(gl_canvas, container, frame, offset, depth, selected)
     {
-        this.Clear();
+        if (depth <= this.Depth)
+        {
+            const gl = gl_canvas.gl;
+            const program = gl_canvas.timelineHighlightProgram;
 
-        // Draw all root samples in the visible frame set
+            gl_canvas.SetContainerUniforms(program, container);
+    
+            // Set row parameters
+            const row_rect = this.LabelContainerNode.getBoundingClientRect();
+            glSetUniform(gl, program, "inRow.yOffset", row_rect.top);
+    
+            // Set sample parameters
+            const float_offset = offset / 4;
+            glSetUniform(gl, program, "inStartMs", frame.sampleFloats[float_offset + g_sampleOffsetFloats_Start]);
+            glSetUniform(gl, program, "inLengthMs", frame.sampleFloats[float_offset + g_sampleOffsetFloats_Length]);
+            glSetUniform(gl, program, "inDepth", depth);
+
+            // Set colour
+            glSetUniform(gl, program, "inColourR", 1.0);
+            glSetUniform(gl, program, "inColourG", selected ? 0.0 : 1.0);
+            glSetUniform(gl, program, "inColourB", selected ? 0.0 : 1.0);
+
+            gl_canvas.EnableBlendPremulAlpha();
+            gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+            gl_canvas.DisableBlend();
+        }
+    }
+
+
+    TimelineRow.prototype.DrawSampleGpuToCpu = function(gl_canvas, container, frame, offset, depth)
+    {
+        // Is this a GPU sample?
+        const float_offset = offset / 4;
+        const start_ms = frame.sampleFloats[float_offset + g_sampleOffsetFloats_GpuToCpu];
+        if (start_ms > 0)
+        {
+            const gl = gl_canvas.gl;
+            const program = gl_canvas.timelineGpuToCpuProgram;
+
+            gl_canvas.SetContainerUniforms(program, container);
+
+            // Set row parameters
+            const row_rect = this.LabelContainerNode.getBoundingClientRect();
+            glSetUniform(gl, program, "inRow.yOffset", row_rect.top);
+
+            // Set sample parameters
+            const length_ms = frame.sampleFloats[float_offset + g_sampleOffsetFloats_Start] - start_ms;
+            glSetUniform(gl, program, "inStartMs", start_ms);
+            glSetUniform(gl, program, "inLengthMs", length_ms);
+            glSetUniform(gl, program, "inDepth", depth);
+
+            gl_canvas.EnableBlendPremulAlpha();
+            gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+            gl_canvas.DisableBlend();
+        }
+    }
+
+
+    TimelineRow.prototype.DisplayHeight = function()
+    {
+        return this.LabelContainerNode.clientHeight;
+    }
+
+
+    TimelineRow.prototype.YOffset = function()
+    {
+        return this.LabelContainerNode.offsetTop;
+    }
+
+
+    function GatherSamples(self, frame, samples_per_depth)
+    {
+        const sample_data_view = frame.sampleDataView;
+
+        for (let offset = 0; offset < sample_data_view.byteLength; offset += g_nbBytesPerSample)
+        {
+            depth = sample_data_view.getUint8(offset + g_sampleOffsetBytes_Depth) + 1;
+            if (depth > self.Depth)
+            {
+                continue;
+            }
+
+            // Ensure there's enough entries for each depth
+            while (depth >= samples_per_depth.length)
+            {
+                samples_per_depth.push([]);
+            }
+
+            let samples_this_depth = samples_per_depth[depth];
+            samples_this_depth.push([frame, offset]);
+        }
+    }
+
+
+    TimelineRow.prototype.Draw = function(gl_canvas, container)
+    {
+        let samples_per_depth = [];
+
+        // Gather all sample data in the visible frame set
         for (var i in this.VisibleFrames)
         {
             var frame = this.VisibleFrames[i];
-            DrawSamples(this, frame.Samples, 1, draw_text);
+            GatherSamples(this, frame, samples_per_depth);
         }
-    }
 
-
-    function DrawSamples(self, samples, depth, draw_text)
-    {
-        for (var i in samples)
+        // Count number of samples required
+        let nb_samples = 0;
+        for (const samples_this_depth of samples_per_depth)
         {
-            var sample = samples[i];
-            DrawSample(self, sample, depth, draw_text);
-
-            if (depth < self.Depth && sample.children != null)
-                DrawSamples(self, sample.children, depth + 1, draw_text);
+            nb_samples += samples_this_depth.length;
         }
-    }
 
-
-    TimelineRow.prototype.UpdateHoverSample = function(mouse_state, x_offset)
-    {
-        var hover = GetSampleAtPosition(this, mouse_state, x_offset);
-        if (hover)
-            this.SetHoverSample(hover[1], hover[2]);
-        return hover;
-    }
-
-
-    TimelineRow.prototype.UpdateSelectedSample = function(mouse_state, x_offset)
-    {
-        var select = GetSampleAtPosition(this, mouse_state, x_offset);
-        if (select)
-            this.SetSelectedSample(select[1], select[2]);
-        return select;
-    }
-
-
-    TimelineRow.prototype.SetHoverSample = function(sample, sample_depth)
-    {
-        if (sample != this.HoverSample)
+        // Resize buffers to match any new count of samples
+        const gl = gl_canvas.gl;
+        const program = gl_canvas.timelineProgram;
+        if (nb_samples > this.sampleBuffer.nbEntries)
         {
-            // Discard old highlight
-            // TODO: When zoomed right out, tiny samples are anti-aliased and this becomes inaccurate
-            var old_sample = this.HoverSample;
-            var old_sample_depth = this.HoverSampleDepth;
-            this.HoverSample = null;
-            this.HoverSampleDepth = 0;
-            DrawSample(this, old_sample, old_sample_depth, true);
+            this.sampleBuffer.ResizeToFitNextPow2(nb_samples);
+            this.colourBuffer.ResizeToFitNextPow2(nb_samples);
 
-            // Add new highlight
-            this.HoverSample = sample;
-            this.HoverSampleDepth = sample_depth;
-            DrawSample(this, sample, sample_depth, true);
+            // Have to create a new VAO for these buffers
+            this.vertexArrayObject = gl.createVertexArray();
+            gl.bindVertexArray(this.vertexArrayObject);
+            this.sampleBuffer.BindAsInstanceAttribute(program, "inSample_TextOffset");
+            this.colourBuffer.BindAsInstanceAttribute(program, "inColour_TextLength");
         }
+
+        // CPU write destination for samples
+        let cpu_samples = this.sampleBuffer.cpuArray;
+        let cpu_colours = this.colourBuffer.cpuArray;
+        let sample_pos = 0;
+
+        // TODO(don): Pack offsets into the sample buffer, instead?
+        // Puts all samples together into one growing buffer (will need ring buffer management).
+        // Offset points into that.
+        // Remains to be seen how much of this can be done given the limitations of WebGL2...
+
+        // Copy samples to the CPU buffer
+        // TODO(don): Use a ring buffer instead and take advantage of timeline scrolling adding new samples at the beginning/end
+        for (let depth = 0; depth < samples_per_depth.length; depth++)
+        {
+            let samples_this_depth = samples_per_depth[depth];
+            for (const [frame, offset] of samples_this_depth)
+            {
+                const float_offset = offset / 4;
+
+                cpu_samples[sample_pos + 0] = frame.sampleFloats[float_offset + g_sampleOffsetFloats_Start];
+                cpu_samples[sample_pos + 1] = frame.sampleFloats[float_offset + g_sampleOffsetFloats_Length];
+                cpu_samples[sample_pos + 2] = depth;
+                cpu_samples[sample_pos + 3] = frame.sampleFloats[float_offset + g_sampleOffsetFloats_NameOffset];
+
+                cpu_colours[sample_pos + 0] = frame.sampleDataView.getUint8(offset + g_sampleOffsetBytes_Colour + 0);
+                cpu_colours[sample_pos + 1] = frame.sampleDataView.getUint8(offset + g_sampleOffsetBytes_Colour + 1);
+                cpu_colours[sample_pos + 2] = frame.sampleDataView.getUint8(offset + g_sampleOffsetBytes_Colour + 2);
+                cpu_colours[sample_pos + 3] = frame.sampleFloats[float_offset + g_sampleOffsetFloats_NameLength];
+
+                sample_pos += 4;
+            }
+        }
+
+        // Upload to GPU
+        this.sampleBuffer.UploadData();
+        this.colourBuffer.UploadData();
+
+        gl_canvas.SetContainerUniforms(program, container);
+
+        // Set row parameters
+        const row_rect = this.LabelContainerNode.getBoundingClientRect();
+        glSetUniform(gl, program, "inRow.yOffset", row_rect.top);
+
+        gl.bindVertexArray(this.vertexArrayObject);
+        gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, nb_samples);
     }
 
 
-    TimelineRow.prototype.SetSelectedSample = function(sample, sample_depth)
+    TimelineRow.prototype.SetSelectSample = function(sample_info)
     {
-        if (sample != this.SelectedSample)
-        {
-            // Discard old highlight
-            // TODO: When zoomed right out, tiny samples are anti-aliased and this becomes inaccurate
-            var old_sample = this.SelectedSample;
-            var old_sample_depth = this.SelectedSampleDepth;
-            this.SelectedSample = null;
-            this.SelectedSampleDepth = 0;
-            DrawSample(this, old_sample, old_sample_depth, true);
-
-            // Add new highlight
-            this.SelectedSample = sample;
-            this.SelectedSampleDepth = sample_depth;
-            DrawSample(this, sample, sample_depth, true);
-        }
+        this.SelectSampleInfo = sample_info;
     }
 
 
@@ -248,48 +326,47 @@ TimelineRow = (function()
     }
 
 
-    function IncDepth(self)
+    TimelineRow.prototype.IncDepth = function()
     {
-        self.Depth++;
-        self.SetSize(self.CanvasNode.width);
+        this.Depth++;
+        this.SetSize();
     }
 
 
-    function DecDepth(self)
+    TimelineRow.prototype.DecDepth = function()
     {
-        if (self.Depth > 1)
+        if (this.Depth > 1)
         {
-            self.Depth--;
-            self.SetSize(self.CanvasNode.width);
+            this.Depth--;
+            this.SetSize();
+
+            // Trigger scroll handling to ensure reducing the depth reduces the display height
+            this.timeline.MoveVertically(0);
         }
     }
 
 
-    function GetSampleAtPosition(self, mouse_state, x_offset)
+    TimelineRow.prototype.GetSampleAtPosition = function(time_us, mouse_y)
     {
-        // Mouse movement can occur before any data is sent to a timeline row
-        var time_range = self.VisibleTimeRange;
-        if (time_range == null)
-            return;
+        // Calculate depth of the mouse cursor
+        const depth = Math.min(Math.floor(mouse_y / SAMPLE_Y_SPACING) + 1, this.Depth);
 
-        // Get the time the mouse is over
-        var x = mouse_state.Position[0] - x_offset;
-        var time_us = time_range.Start_us + x / time_range.usPerPixel;
-
-        var canvas_y_offset = DOM.Node.GetPosition(self.CanvasNode)[1];
-        var mouse_y_offset = mouse_state.Position[1] - canvas_y_offset;
-        mouse_y_offset = Math.min(Math.max(mouse_y_offset, 0), self.CanvasNode.height);
-        var depth = Math.floor(mouse_y_offset / SAMPLE_Y_SPACING) + 1;
-        
         // Search for the first frame to intersect this time
-        for (var i in self.VisibleFrames)
+        for (let i in this.VisibleFrames)
         {
-            var frame = self.VisibleFrames[i];
-            if (time_us >= frame.StartTime_us && time_us < frame.EndTime_us)
+            // Use the sample's closed interval to detect hits.
+            // Rendering of samples ensures a sample is never smaller than one pixel so that all samples always draw, irrespective
+            // of zoom level. If a half-open interval is used then some visible samples will be unselectable due to them being
+            // smaller than a pixel. This feels pretty odd and the closed interval fixes this feeling well.
+            // TODO(don): There are still inconsistencies, need to shift to pixel range checking to match exactly.
+            const frame = this.VisibleFrames[i];
+            if (time_us >= frame.StartTime_us && time_us <= frame.EndTime_us)
             {
-                var found_sample = FindSample(self, frame.Samples, time_us, depth, 1);
+                const found_sample = FindSample(this, frame, time_us, depth, 1);
                 if (found_sample != null)
-                    return [ frame, found_sample[0], found_sample[1] ];
+                {
+                    return [ frame, found_sample[0], found_sample[1], this ];
+                }
             }
         }
 
@@ -297,81 +374,25 @@ TimelineRow = (function()
     }
 
 
-    function FindSample(self, samples, time_us, target_depth, depth)
+    function FindSample(self, frame, time_us, target_depth, depth)
     {
-        for (var i in samples)
+        // Search entire frame of samples looking for a depth and time range that contains the input time
+        const sample_data_view = frame.sampleDataView;
+        for (let offset = 0; offset < sample_data_view.byteLength; offset += g_nbBytesPerSample)
         {
-            var sample = samples[i];
+            depth = sample_data_view.getUint8(offset + g_sampleOffsetBytes_Depth) + 1;
             if (depth == target_depth)
             {
-                if (time_us >= sample.us_start && time_us < sample.us_start + sample.us_length)
-                    return [ sample, depth ];
-            }
-
-            else if (depth < target_depth && sample.children != null)
-            {
-                var found_sample = FindSample(self, sample.children, time_us, target_depth, depth + 1);
-                if (found_sample != null)
-                    return found_sample;
+                const us_start = sample_data_view.getFloat32(offset + g_sampleOffsetBytes_Start, true) * 1000.0;
+                const us_length = sample_data_view.getFloat32(offset + g_sampleOffsetBytes_Length, true) * 1000.0;
+                if (time_us >= us_start && time_us < us_start + us_length)
+                {
+                    return [ offset, depth ];
+                }
             }
         }
 
         return null;
-    }
-
-
-    function DrawSample(self, sample, depth, draw_text)
-    {
-        if (sample == null)
-            return;
-
-        // Determine pixel range of the sample
-        var time_range = self.VisibleTimeRange;
-        var x0 = time_range.PixelOffset(sample.us_start);
-        var x1 = x0 + time_range.PixelSize(sample.us_length);
-
-        // Clip to padded timeline row
-        var min_x = 3;
-        var max_x = self.CanvasNode.width - 5;
-        x0 = Math.min(Math.max(x0, min_x), max_x);
-        x1 = Math.min(Math.max(x1, min_x), max_x);
-
-        var offset_x = x0;
-        var offset_y = SAMPLE_Y_OFFSET + (depth - 1) * SAMPLE_Y_SPACING;
-        var size_x = x1 - x0;
-        var size_y = SAMPLE_HEIGHT;
-
-        // Normal rendering
-        var ctx = self.Ctx;
-        ctx.fillStyle = sample.colour;
-        ctx.fillRect(offset_x, offset_y, size_x, size_y);
-
-        // Highlight rendering
-        var b = (sample == self.HoverSample) ? 255 : 0;
-        var r = (sample == self.SelectedSample) ? 255 : 0;
-        if (b + r > 0)
-        {
-            ctx.lineWidth = 1;
-            ctx.strokeStyle = "rgb(" + r + ", 0, " + b + ")";
-            ctx.strokeRect(offset_x + 0.5, offset_y + 0.5, size_x - 1, size_y - 1);
-        }
-
-        // Draw sample names clipped to the bounds of the sample
-        // Also reject tiny samples with no space to render text
-        if (draw_text && size_x > 8)
-        {
-            ctx.save();
-            ctx.beginPath();
-            ctx.rect(offset_x + 2.5, offset_y + 1.5, size_x - 5, size_y - 3);
-            ctx.clip();
-            ctx.font = "9px verdana";
-            ctx.fillStyle = "black";
-            var text = sample.name.string
-            text += " (" + sample.ms_length + "ms";
-            text += ", " + sample.call_count + "c)";
-            ctx.fillText(text, offset_x + 5.5, offset_y + 1.5 + 9);
-            ctx.restore();
-        }
     }
 
 

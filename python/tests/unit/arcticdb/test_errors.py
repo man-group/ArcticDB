@@ -1,11 +1,9 @@
 import pytest
 
 from arcticdb.util.errors import *
-import arcticdb_ext.exceptions as ae
-from arcticdb_ext.exceptions import *  # keep as wildcard so all_exception_types below includes everything
+import arcticdb.exceptions as ae
+from arcticdb.exceptions import *  # keep as wildcard so all_exception_types below includes everything
 from arcticdb_ext.exceptions import _ArcticLegacyCompatibilityException
-from arcticdb_ext.storage import NoDataFoundException
-from arcticdb_ext.version_store import NoSuchVersionException
 
 
 test_raise_params = [(NormalizationError.E_UPDATE_NOT_SUPPORTED, NormalizationException)]
@@ -34,6 +32,11 @@ def test_raise(code, exception):
 @pytest.mark.parametrize("exception_type", all_exception_types)
 def test_base_exception(exception_type):
     assert issubclass(exception_type, ArcticException)
+
+
+def test_base_exception_is_runtimeerror():
+    with pytest.raises(RuntimeError):
+        raise ArcticException("A bad thing happened")
 
 
 def test_compat_exception():

@@ -7,6 +7,7 @@
 
 #include <arcticdb/storage/mongo/mongo_client.hpp>
 
+#include <bsoncxx/string/to_string.hpp>
 #include <bsoncxx/builder/stream/document.hpp>
 #include <bsoncxx/types.hpp>
 #include <mongocxx/uri.hpp>
@@ -29,7 +30,7 @@ namespace detail {
 template<typename ElementType>
 std::string get_string_element(const ElementType& element) {
 #if (MONGOCXX_VERSION_MAJOR * 1000 + MONGOCXX_VERSION_MINOR) >= 3007
-    return std::string(element.get_string());
+    return bsoncxx::string::to_string(element.get_string().value);
 #else
     return element.get_utf8().value.data();
 #endif

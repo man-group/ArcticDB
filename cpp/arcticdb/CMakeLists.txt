@@ -3,10 +3,12 @@ option(SSL_LINK "Link against SSL libraries." ON)
 option(HIDE_LINKED_SYMBOLS "Passed `exclude-libs` through to linker, ensuring linked library symbols are not exported. Shrinks binary size." ON)
 option(STATIC_LINK_STD_LIB "Statically link the C++ standard libraries" ON)
 
+if(${TEST})
 find_package(GTest CONFIG REQUIRED)
-
 include(CTest)
 include(GoogleTest)
+endif()
+
 include(GenerateExportHeader)
 
 # System and third-party libraries with built-in find_package Config
@@ -25,38 +27,24 @@ find_package(Gflags REQUIRED)
 find_package(LZ4 REQUIRED)
 find_package(prometheus-cpp CONFIG REQUIRED)
 find_package(Threads REQUIRED)
+find_package(unofficial-pcre REQUIRED)
+find_package(double-conversion REQUIRED)
+find_package(Libevent CONFIG REQUIRED)
 
-# Libraries compiled by vcpkg and also baked into our internal image:
-if (ARCTICDB_USING_VCPKG)
-    find_package(double-conversion REQUIRED)
-    find_package(Libevent CONFIG REQUIRED)
-
-    find_package(Protobuf REQUIRED)
-    set(Protobuf_lite_LIBRARY protobuf::libprotobuf-lite)
-    set(Protobuf_LIBRARY protobuf::libprotobuf)
-
-    find_package(mongocxx REQUIRED)
-    find_package(bsoncxx REQUIRED)
-    set(ARCTICDB_MONGO_LIBS mongo::mongocxx_static mongo::bsoncxx_static)
-
-    find_package(zstd CONFIG REQUIRED)  # "CONFIG" bypasses our cpp/CMake/FindZstd.cmake module
-    set(Zstd_LIBRARY $<IF:$<TARGET_EXISTS:zstd::libzstd_shared>,zstd::libzstd_shared,zstd::libzstd_static>)
-
-else()
-    find_library(Protobuf_lite_LIBRARY NAMES libprotobuf-lite protobuf-lite REQUIRED)
-    find_library(Protobuf_LIBRARY NAMES libprotobuf protobuf REQUIRED)
-
-    find_package(Zstd MODULE REQUIRED) # Uses our FindZstd module, which sets Zstd_LIBRARY
-
-    find_package(libmongocxx-static REQUIRED)
-    find_package(libbsoncxx-static REQUIRED)
-    string(REPLACE "/usr/lib64/libsasl2.so;" "" LIBMONGOCXX_STATIC_LIBRARIES_NO_SASL "${LIBMONGOCXX_STATIC_LIBRARIES}")
-    set(ARCTICDB_MONGO_LIBS ${LIBMONGOCXX_STATIC_LIBRARIES_NO_SASL} ${LIBBSONCXX_STATIC_LIBRARIES})
-
-    get_target_property(NEW_FOLLY_DEPS Folly::folly_deps INTERFACE_LINK_LIBRARIES)
-    list(TRANSFORM NEW_FOLLY_DEPS REPLACE "/usr/local/lib/libsodium\\.so" "libsodium.a")
-    set_target_properties(Folly::folly_deps PROPERTIES INTERFACE_LINK_LIBRARIES "${NEW_FOLLY_DEPS}")
+if(NOT WIN32 AND ${SSL_LINK})
+    find_package(Kerberos REQUIRED)
 endif()
+
+find_package(Protobuf REQUIRED)
+set(Protobuf_lite_LIBRARY protobuf::libprotobuf-lite)
+set(Protobuf_LIBRARY protobuf::libprotobuf)
+
+find_package(mongocxx REQUIRED)
+find_package(bsoncxx REQUIRED)
+set(ARCTICDB_MONGO_LIBS mongo::mongocxx_static mongo::bsoncxx_static)
+
+find_package(zstd CONFIG REQUIRED)
+set(Zstd_LIBRARY $<IF:$<TARGET_EXISTS:zstd::libzstd_shared>,zstd::libzstd_shared,zstd::libzstd_static>)
 
 # Libraries baked into the internal and external Linux images are found by searching various paths
 # On Windows, vcpkg will provide a "Config" which takes precedence
@@ -373,16 +361,30 @@ add_library(arcticdb_core_object OBJECT ${arcticdb_srcs})
 if (NOT WIN32)
     if (STATIC_LINK_STD_LIB)
         message("Statically linking standard libraries")
-        set(standard_libraries
-            -static-libgcc
-            -static-libstdc++
-        )
+        if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+             message(FATAL_ERROR "Statically linking standard libraries with CLANG is (currently) not supported")
+        elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+            set(standard_libraries
+                -static-libgcc
+                -static-libstdc++
+            )
+        else()
+            message(FATAL_ERROR "Unknown compiler: ${CMAKE_CXX_COMPILER_ID}")
+        endif()
     else()
         message("Dynamically linking standard libraries")
-        set(standard_libraries
-            stdc++
-            gcc
-        )
+        if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+            set(standard_libraries
+                stdc++
+            )
+        elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+            set(standard_libraries
+                stdc++
+                gcc
+            )
+        else()
+            message(FATAL_ERROR "Unknown compiler: ${CMAKE_CXX_COMPILER_ID}")
+        endif()
     endif()
 endif()
 
@@ -405,7 +407,7 @@ set (arcticdb_core_libraries
         spdlog::spdlog
         Folly::folly # Transitively includes: double-conversion, gflags, glog, libevent, libssl, libcrypto, libiberty, libsodium
         remotery_static
-        ${Pcre_LIBRARY}
+        unofficial::pcre::pcre
         )
 
 if (WIN32)
@@ -413,8 +415,13 @@ if (WIN32)
             Iconv::Iconv
             )
 else ()
+
+    if (NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+        list (APPEND arcticdb_core_libraries stdc++fs)
+    endif()
+
+
     list (APPEND arcticdb_core_libraries
-            stdc++fs
             dl
             ${Sasl2_LIBRARY}
             )
@@ -422,12 +429,17 @@ endif ()
 
 list (APPEND arcticdb_core_libraries Threads::Threads) # comes last for weakreference resolution pthread_atexit in folly
 
+set(arcticdb_core_includes
+    ${BITMAGIC_INCLUDE_DIRS}
+)
+
 if (SSL_LINK)
     message("Linking against SSL")
     find_package(OpenSSL REQUIRED)
     list(APPEND arcticdb_core_libraries OpenSSL::SSL)
     if (NOT WIN32)
-        list(APPEND arcticdb_core_libraries krb5)
+        list(APPEND arcticdb_core_libraries ${KERBEROS_LIBRARY})
+        list(APPEND arcticdb_core_includes  ${KERBEROS_INCLUDE_DIR})
     endif()
 endif ()
 
@@ -437,10 +449,7 @@ target_include_directories(arcticdb_core_object
         PRIVATE
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
         $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
-        ${LIBMONGOCXX_STATIC_INCLUDE_DIRS}
-        ${LIBBSONCXX_STATIC_INCLUDE_DIRS}
-        ${BITMAGIC_INCLUDE_DIRS}
-        $PYTHON_NUMPY_INCLUDE_DIR
+        ${arcticdb_core_includes}
         )
 
 add_library(arcticdb_core_static STATIC $<TARGET_OBJECTS:arcticdb_core_object>)
@@ -511,10 +520,12 @@ pybind11_add_module(arcticdb_ext MODULE
 
 set (additional_link_flags "")
 if (HIDE_LINKED_SYMBOLS AND (NOT WIN32))
-    list(APPEND additional_link_flags
+
+    if (NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+        list(APPEND additional_link_flags
             "-Wl,--exclude-libs,ALL"
-            "-Wl,--gc-sections"
-            )
+            "-Wl,--gc-sections")
+    endif()
 endif()
 
 target_link_libraries(arcticdb_ext
@@ -675,7 +686,7 @@ if(${TEST})
                 )
     endif()
 
-    gtest_discover_tests(test_unit_arcticdb)
+    gtest_discover_tests(test_unit_arcticdb PROPERTIES DISCOVERY_TIMEOUT 30)
 
     set(rapidcheck_srcs
             column_store/test/rapidcheck_column_store.cpp
@@ -717,5 +728,5 @@ if(${TEST})
             )
     endif()
 
-    gtest_discover_tests(arcticdb_rapidcheck_tests)
+    gtest_discover_tests(arcticdb_rapidcheck_tests PROPERTIES DISCOVERY_TIMEOUT 30)
 endif()
