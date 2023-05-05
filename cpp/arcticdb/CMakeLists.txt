@@ -36,9 +36,6 @@ endif()
 
 find_package(double-conversion REQUIRED)
 
-if(NOT WIN32 AND ${SSL_LINK})
-    find_package(Kerberos REQUIRED)
-endif()
 
 if(NOT WIN32 AND ${SSL_LINK})
     find_package(Kerberos REQUIRED)
