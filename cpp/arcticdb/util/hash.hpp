@@ -10,6 +10,7 @@
 #include <cstdint>
 #include <string_view>
 
+// Adapt macro inlining depending on xxhash's linkage for the build.
 #ifdef ARCTICDB_USING_STATIC_XXHASH
 #define XXH_STATIC_LINKING_ONLY
 #else
