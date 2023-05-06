@@ -437,20 +437,25 @@ set (arcticdb_core_libraries
         )
 
 
-# PCRE 
+# Dependencies expose different names of their libraries depending
+# on their origin (i.e. vendored source or packages on conda-forge). 
 if(${ARCTICDB_USING_CONDA})
-    list (APPEND arcticdb_core_libraries pcre)
-else()
-    list (APPEND arcticdb_core_libraries unofficial::pcre::pcre)
-endif()
-
-# no static libraries when using conda
-if(${ARCTICDB_USING_CONDA})
+    # ARCTICDB_USING_CONDA is used in header of the files including vendored
+    # sources to be able to use dependencies via conda at compile time.
     add_compile_definitions(ARCTICDB_USING_CONDA)
-    list (APPEND arcticdb_core_libraries xxHash::xxHash)
+    
+    # We must use dynamic libraries.
+    list (APPEND arcticdb_core_libraries
+        xxHash::xxHash
+        pcre
+    )
 else()
+
     add_compile_definitions(ARCTICDB_USING_STATIC_XXHASH)
-    list (APPEND arcticdb_core_libraries xxhash_static)
+    list (APPEND arcticdb_core_libraries
+        xxhash_static
+        unofficial::pcre::pcre
+    )
 endif()
 
 if (WIN32)
