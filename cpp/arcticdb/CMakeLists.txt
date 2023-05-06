@@ -511,7 +511,7 @@ target_link_libraries(arcticdb_core PRIVATE
         ${AWSSDK_LINK_LIBRARIES}
         )
 
-#GENERATE_EXPORT_HEADER(arcticdb_core)
+GENERATE_EXPORT_HEADER(arcticdb_core)
 
 if (NOT WIN32)
     add_compile_options("-Werror")
