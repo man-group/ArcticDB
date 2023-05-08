@@ -716,7 +716,9 @@ void copy_segments_to_frame(const std::shared_ptr<Store>& store, const std::shar
 SegmentInMemory prepare_output_frame(std::vector<SliceAndKey>&& items, const std::shared_ptr<PipelineContext>& pipeline_context, const std::shared_ptr<Store>& store, const ReadOptions& read_options) {
     pipeline_context->clear_vectors();
     pipeline_context->slice_and_keys_ = std::move(items);
-    std::sort(std::begin(pipeline_context->slice_and_keys_), std::end(pipeline_context->slice_and_keys_));
+	std::sort(std::begin(pipeline_context->slice_and_keys_), std::end(pipeline_context->slice_and_keys_), [] (const auto& left, const auto& right) {
+		return std::tie(left.slice_.row_range, left.slice_.col_range) < std::tie(right.slice_.row_range, right.slice_.col_range);
+	});
     adjust_slice_rowcounts(pipeline_context);
     const auto dynamic_schema = opt_false(read_options.dynamic_schema_);
     mark_index_slices(pipeline_context, dynamic_schema, pipeline_context->bucketize_dynamic_);
@@ -1038,7 +1040,7 @@ VersionedItem sort_merge_impl(
             aggregator.commit();
         },
         [&](const auto &) {
-            util::raise_rte("Not supported index type for sort merge implementation");
+            util::raise_rte("Sort merge only supports datetime indexed data. You data does not have a datetime index.");
         }
         );
 
@@ -1093,8 +1095,9 @@ VersionedItem compact_incomplete_impl(
     std::vector<folly::Future<VariantKey>> fut_vec;
     std::vector<FrameSlice> slices;
     bool dynamic_schema = write_options.dynamic_schema;
-    auto policies = std::make_tuple(index_type_from_descriptor(first_seg.descriptor()), 
-                                    dynamic_schema ? VariantSchema{DynamicSchema::default_schema()} : VariantSchema{FixedSchema::default_schema()}, 
+    auto index = index_type_from_descriptor(first_seg.descriptor());
+    auto policies = std::make_tuple(index, 
+                                    dynamic_schema ? VariantSchema{DynamicSchema::default_schema(index)} : VariantSchema{FixedSchema::default_schema(index)}, 
                                     sparsify ? VariantColumnPolicy{SparseColumnPolicy{}} : VariantColumnPolicy{DenseColumnPolicy{}}
                                     );
     util::variant_match(std::move(policies), [
@@ -1153,7 +1156,7 @@ PredefragmentationInfo get_pre_defragmentation_info(
         if (slice.row_range.diff() < segment_size && !compaction_start_info)
             compaction_start_info = {slice.row_range.start(), segment_idx};
             
-        if (slice.col_range.start() == 1){
+        if (slice.col_range.start() == pipeline_context->descriptor().index().field_count()){//where data column starts
             first_col_segment_idx.emplace_back(slice.row_range.start(), segment_idx);
             if (new_segment_row_size == 0)
                 ++num_to_segments_after_compact;
@@ -1195,8 +1198,9 @@ VersionedItem defragment_symbol_data_impl(
     // in the new index segment, we will start appending after this value
     std::vector<folly::Future<VariantKey>> fut_vec;
     std::vector<FrameSlice> slices;
-    auto policies = std::make_tuple(index_type_from_descriptor(pre_defragmentation_info.pipeline_context->descriptor()),
-                                    options.dynamic_schema ? VariantSchema{DynamicSchema::default_schema()} : VariantSchema{FixedSchema::default_schema()}
+    auto index = index_type_from_descriptor(pre_defragmentation_info.pipeline_context->descriptor());
+    auto policies = std::make_tuple(index,
+                                    options.dynamic_schema ? VariantSchema{DynamicSchema::default_schema(index)} : VariantSchema{FixedSchema::default_schema(index)}
                                     );
 
     util::variant_match(std::move(policies), [

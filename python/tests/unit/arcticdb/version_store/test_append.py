@@ -450,7 +450,7 @@ def test_append_mix_sorted_non_sorted(lmdb_version_store):
 @given(
     col_per_append_df=st.integers(2, 100),
     col_name_set=st.integers(1, 10000),
-    num_of_rowss=st.lists(st.lists(st.integers(1, 20), min_size=1, max_size=10), min_size=1, max_size=10),
+    num_rows_per_test_cycle=st.lists(st.lists(st.integers(1, 20), min_size=1, max_size=10), min_size=1, max_size=10),
     column_group_size=st.integers(2, 100),
     segment_row_size=st.integers(2, 100),
     dynamic_schema=st.booleans(),
@@ -461,7 +461,7 @@ def test_append_with_defragmentation(
     sym,
     col_per_append_df,
     col_name_set,
-    num_of_rowss,
+    num_rows_per_test_cycle,
     get_wide_df,
     column_group_size,
     segment_row_size,
@@ -546,7 +546,7 @@ def test_append_with_defragmentation(
 
     assume(col_per_append_df <= col_name_set)
     assume(
-        num_of_row % 2 != 0 for num_of_rows in num_of_rowss for num_of_row in num_of_rows
+        num_of_row % 2 != 0 for num_of_rows in num_rows_per_test_cycle for num_of_row in num_of_rows
     )  # Make sure at least one successful compaction run per cycle
 
     set_config_int("SymbolDataCompact.SegmentCount", 1)
@@ -559,7 +559,7 @@ def test_append_with_defragmentation(
         dynamic_strings=dynamic_strings,
         reuse_name=True,
     )
-    for num_of_rows in num_of_rowss:
+    for num_of_rows in num_rows_per_test_cycle:
         before_compact, index_offset = run_test(
             lib,
             col_per_append_df,

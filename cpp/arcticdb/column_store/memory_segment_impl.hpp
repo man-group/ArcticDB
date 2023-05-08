@@ -1099,6 +1099,10 @@ public:
         return output;
     }
 
+    StreamId get_index_col_name() const{
+        return descriptor().id();
+    }
+
 private:
     ssize_t row_id_ = -1;
     std::shared_ptr<StreamDescriptor> descriptor_ = std::make_shared<StreamDescriptor>();
