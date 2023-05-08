@@ -2508,7 +2508,7 @@ class NativeVersionStore:
                 )
             )
 
-    def is_symbol_fragmented(self, symbol: str, segment_size: int = None) -> bool:
+    def is_symbol_fragmented(self, symbol: str, segment_size: Optional[int] = None) -> bool:
         """
         Check whether the number of segments that would be reduced by compaction is more than or equal to the
         value specified by the configuration option "SymbolDataCompact.SegmentCount" (defaults to 100).

@@ -170,40 +170,22 @@ void adjust_slice_rowcounts(const std::shared_ptr<pipelines::PipelineContext>& p
 
 size_t adjust_slice_rowcounts(std::vector<pipelines::SliceAndKey> & slice_and_keys) {
     using namespace arcticdb::pipelines;
-    auto current_col = slice_and_keys[0].slice_.col_range;
-    std::queue<std::pair<size_t, size_t>> columns_first_offset;
-    columns_first_offset.emplace(slice_and_keys[0].slice_.col_range.second, 0);
-    size_t offset = 0u;
-    for (auto& slice_and_key : slice_and_keys) {
-        if (slice_and_key.slice_.col_range != current_col) {
-            //for handling column-sliced repeated compaction
-            //start_col end_col start_row   end_row
-            //1         4       0           2
-            //1         3       2           3
-            //3         4       2           3
-            if (slice_and_key.slice_.col_range.first != current_col.first) {
-                while (true){
-                    if (columns_first_offset.empty()){ //Non-continuous column in segments, after filtering (test_filter_column_slicing_different_segments)
-                        offset = 0u;
-                        break;
-                    }
-                    else if (slice_and_key.slice_.col_range.first == columns_first_offset.front().first) {
-                        offset = columns_first_offset.front().second;
-                        columns_first_offset.pop();
-                        break;
-                    }
-                    columns_first_offset.pop();
-                }
-            }
-            columns_first_offset.emplace(slice_and_key.slice_.col_range.second, offset);
-            current_col = slice_and_key.slice_.col_range;
-        }
-        size_t rows = slice_and_key.slice_.row_range.diff();
-        RowRange updated{offset, offset + rows};
-        offset += rows;
-        slice_and_key.slice_.row_range = updated;
-    }
-    return offset;
+    if(slice_and_keys.empty())
+		return 0u;
+	
+	auto offset = slice_and_keys[0].slice_.row_range.first;
+	auto diff = slice_and_keys[0].slice_.row_range.diff();
+    auto col_begin = slice_and_keys[0].slice_.col_range.first;
+	
+	for(auto it = slice_and_keys.begin(); it != slice_and_keys.end(); ++it) {
+		if(it != slice_and_keys.begin() && it->slice_.col_range.first == col_begin) {
+			offset += diff;
+			diff = it->slice_.row_range.diff();
+		}
+		it->slice_.row_range = RowRange{offset, offset + diff};
+	}
+	
+	return offset + diff;
 }
 
 size_t get_slice_rowcounts(std::vector<pipelines::SliceAndKey> & slice_and_keys) {
