@@ -27,8 +27,11 @@ class FixedSchema {
         desc_(std::move(desc)),
         index_(index){}
 
-    static FixedSchema default_schema() {
-        return FixedSchema(StreamDescriptor(), stream::TimeseriesIndex::default_index());
+    static FixedSchema default_schema(const Index& index) {
+        return util::variant_match(index, [] (auto idx) {
+            using IndexType = std::remove_reference_t<decltype(idx)>;
+            return FixedSchema(StreamDescriptor(), IndexType::default_index());
+        });
     }
 
     void check(std::size_t pos, TypeDescriptor td) const {
@@ -79,8 +82,11 @@ public:
         desc_(default_dynamic_descriptor(desc, index)),
         index_(index) { }
 
-    static DynamicSchema default_schema() {
-        return DynamicSchema(StreamDescriptor(), stream::TimeseriesIndex::default_index());
+    static DynamicSchema default_schema(const Index& index) {
+        return util::variant_match(index, [] (auto idx) {
+            using IndexType = std::remove_reference_t<decltype(idx)>;
+            return DynamicSchema(StreamDescriptor(), IndexType::default_index());
+        });
     }
 
     void check(std::size_t pos ARCTICDB_UNUSED, TypeDescriptor td ARCTICDB_UNUSED) const {

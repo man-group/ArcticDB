@@ -427,6 +427,10 @@ public:
         return output;
     }
 
+    StreamId get_index_col_name() const{
+        return impl_->get_index_col_name();
+    }
+
 private:
     explicit SegmentInMemory(std::shared_ptr<SegmentInMemoryImpl> impl) :
             impl_(std::move(impl)) {}
