@@ -77,7 +77,7 @@ struct StreamSource {
         const std::shared_ptr<std::unordered_set<std::string>>& filter_columns,
         const BatchReadArgs &args) = 0;
 
-    virtual folly::Future<std::pair<VariantKey, std::optional<google::protobuf::Any>>> read_metadata(
+    virtual folly::Future<std::pair<std::optional<VariantKey>, std::optional<google::protobuf::Any>>> read_metadata(
         const entity::VariantKey &key,
         storage::ReadKeyOpts opts = storage::ReadKeyOpts{}) = 0;
 
