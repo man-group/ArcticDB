@@ -713,7 +713,7 @@ if(${TEST})
             version/test/test_version_store.cpp
             version/test/test_sorting_info_state_machine.cpp
             version/test/version_map_model.hpp
-            )
+            version/test/test_stream_version_data.cpp version/test/test_version_map_batch.cpp)
 
     set(EXECUTABLE_PERMS OWNER_WRITE OWNER_READ OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE) # 755
 
