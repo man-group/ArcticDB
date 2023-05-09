@@ -27,14 +27,7 @@ find_package(Gflags REQUIRED)
 find_package(LZ4 REQUIRED)
 find_package(prometheus-cpp CONFIG REQUIRED)
 find_package(Threads REQUIRED)
-if(NOT ARCTICDB_USING_CONDA)
-    find_package(unofficial-pcre REQUIRED)
-else()
-    find_package(PCRE REQUIRED)
-endif()
-
 find_package(double-conversion REQUIRED)
-
 
 if(NOT WIN32 AND ${SSL_LINK})
     find_package(Kerberos REQUIRED)
@@ -49,6 +42,7 @@ find_package(bsoncxx REQUIRED)
 find_package(zstd CONFIG REQUIRED)  # "CONFIG" bypasses our cpp/CMake/FindZstd.cmake module
 
 if(NOT ${ARCTICDB_USING_CONDA})
+    find_package(unofficial-pcre REQUIRED)
     find_package(Libevent CONFIG REQUIRED)
     set(ARCTICDB_MONGO_LIBS mongo::mongocxx_static mongo::bsoncxx_static)
     set(Zstd_LIBRARY $<IF:$<TARGET_EXISTS:zstd::libzstd_shared>,zstd::libzstd_shared,zstd::libzstd_static>)
@@ -56,6 +50,7 @@ else()
 
     find_package(pybind11 REQUIRED)
     find_package(xxHash REQUIRED)
+    find_package(PCRE REQUIRED)
     find_package(Libevent  REQUIRED)
 
     set(ARCTICDB_MONGO_LIBS mongo::mongocxx_shared mongo::bsoncxx_shared)
@@ -435,12 +430,12 @@ set (arcticdb_core_libraries
 
 
 # Dependencies expose different names of their libraries depending
-# on their origin (i.e. vendored source or packages on conda-forge). 
+# on their origin (i.e. vendored source or packages on conda-forge).
 if(${ARCTICDB_USING_CONDA})
     # ARCTICDB_USING_CONDA is used in header of the files including vendored
     # sources to be able to use dependencies via conda at compile time.
     add_compile_definitions(ARCTICDB_USING_CONDA)
-    
+
     # We must use dynamic libraries.
     list (APPEND arcticdb_core_libraries
         xxHash::xxHash
