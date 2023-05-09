@@ -17,7 +17,6 @@
       "installDir": "${sourceDir}/out/install",
       "cacheVariables": {
         "ARCTICDB_USING_CONDA": "ON",
-        "ARCTICDB_USING_VCPKG": "OFF",
         "STATIC_LINK_STD_LIB": "OFF",
         "HIDE_LINKED_SYMBOLS": "OFF"
       }
