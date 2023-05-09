@@ -41,6 +41,11 @@ TEST_F(VersionMapBatchStore, Simple) {
         add_versions_for_stream(version_map, store, stream, 5);
     }
 
+    for(auto i = 5u; i < 10u; ++i) {
+        auto stream = fmt::format("stream_{}", i);
+        add_versions_for_stream(version_map, store, stream, 5);
+    }
+
     for(auto i = 0u; i < 5; ++i) {
         auto stream = fmt::format("stream_{}", i);
         add_versions_for_stream(version_map, store, stream, 5, 5);
@@ -60,5 +65,20 @@ TEST_F(VersionMapBatchStore, Simple) {
     stream_ids.push_back(StreamId{"stream_8"});
     version_queries.push_back(VersionQuery{SpecificVersionQuery{4}, false, false});
 
-    batch_get_versions(store, version_map, stream_ids, version_queries);
+
+    auto versions = folly::collect(batch_get_versions(store, version_map, stream_ids, version_queries)).get();
+    ASSERT_EQ(versions[0]->id(), StreamId{"stream_1"});
+    ASSERT_EQ(versions[0]->version_id(), 4);
+
+    ASSERT_EQ(versions[1]->id(), StreamId{"stream_4"});
+    ASSERT_EQ(versions[1]->version_id(), 4);
+
+    ASSERT_EQ(versions[2]->id(), StreamId{"stream_1"});
+    ASSERT_EQ(versions[2]->version_id(), 1);
+
+    ASSERT_EQ(versions[3]->id(), StreamId{"stream_3"});
+    ASSERT_EQ(versions[3]->version_id(), 7);
+
+    ASSERT_EQ(versions[4]->id(), StreamId{"stream_8"});
+    ASSERT_EQ(versions[4]->version_id(), 4);
 }
