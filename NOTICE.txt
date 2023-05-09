@@ -7,6 +7,9 @@ All rights reserved.
 * Copyright (C) 2007-2012 Mozilla Foundation.  All rights reserved.
 * Copyright (C) 2009-present Facebook, Inc.  All rights reserved.
 
+This product includes software from the PRCE project (BSD).
+https://www.pcre.org/licence.txt
+
 This product includes software from the LZ4 project (BSD, 2-Clause).
 https://github.com/lz4/lz4/blob/dev/lib/LICENSE
 
@@ -102,7 +105,7 @@ This product includes software from the spdlog project (MIT).
 
 This product includes software from emilib
   * https://github.com/emilk/emilib
-  
+
 This product includes software from robin_hood hashmap and hashset (MIT)
   * Copyright (c) 2018-2021 Martin Ankerl
   * https://github.com/martinus/robin-hood-hashing
@@ -242,9 +245,9 @@ MIT License
   LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
   OF CONTRACT, TORT OR OTHERWISE,  ARISING FROM, OUT OF OR IN CONNECTION
   WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
-  
+
 ---------------------------------------------------------------------------------------------------------------
-  
+
   The OpenLDAP Public License
   Version 2.8, 17 August 2003
 
