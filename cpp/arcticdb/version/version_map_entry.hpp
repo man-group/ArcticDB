@@ -27,12 +27,19 @@ enum class LoadType :
     LOAD_LATEST_UNDELETED = 2,
     LOAD_DOWNTO = 3,
     LOAD_UNDELETED = 4,
-    LOAD_ALL = 5
+    LOAD_FROM_TIME = 5,
+    LOAD_ALL = 6
 };
 
 struct LoadParameter {
     explicit LoadParameter(LoadType load_type) :
         load_type_(load_type) {
+    }
+
+    LoadParameter(LoadType load_type, timestamp load_from_time) :
+        load_type_(load_type),
+        load_from_time_(load_from_time) {
+        util::check(load_type_ == LoadType::LOAD_FROM_TIME, "Load to timestamp parameter {} supplied with the wrong load type argument: {}", load_from_time_.value(), int(load_type_));
     }
 
     LoadParameter(LoadType load_type, VersionId load_until) :
@@ -43,6 +50,7 @@ struct LoadParameter {
 
     LoadType load_type_ = LoadType::NOT_LOADED;
     std::optional<VersionId> load_until_ = std::nullopt;
+    std::optional<timestamp> load_from_time_ = std::nullopt;
 
     void validate() const {
         util::check(load_type_ == LoadType::LOAD_DOWNTO ? static_cast<bool>(load_until_) : !static_cast<bool>(load_until_),
@@ -315,9 +323,13 @@ struct VersionMapEntry {
     std::optional<AtomKey> tombstone_all_;
 };
 
+inline bool is_live_index_type_key(const AtomKeyImpl& key, const std::shared_ptr<VersionMapEntry>& entry) {
+    return is_index_key_type(key.type()) && !entry->is_tombstoned(key);
+}
+
 inline std::optional<VersionId> get_prev_version_in_entry(const std::shared_ptr<VersionMapEntry>& entry, VersionId version_id) {
     //sorted in decreasing order
-    //entry->keys_ is not sorted in version_id any more (due to tombstones), we only need to fetch live index keys
+    //entry->keys_ is not sorted in version_id anymore (due to tombstones), we only need to fetch live index keys
     //which will be sorted on version_id
     auto index_keys = entry->get_indexes(false);
 
@@ -346,11 +358,14 @@ inline std::optional<VersionId> get_next_version_in_entry(const std::shared_ptr<
     return std::nullopt;
 }
 
-inline std::optional<AtomKey> find_index_key_for_version_id(VersionId version_id, const std::shared_ptr<VersionMapEntry>& entry) {
+inline std::optional<AtomKey> find_index_key_for_version_id(VersionId version_id, const std::shared_ptr<VersionMapEntry>& entry, bool included_deleted=true) {
     auto key = std::find_if(std::begin(entry->keys_), std::end(entry->keys_), [version_id] (const auto& key) {
-        return key.type() == KeyType::TABLE_INDEX && key.version_id() == version_id;
+        return is_index_key_type(key.type()) && key.version_id() == version_id;
     });
-    return key == std::end(entry->keys_) ? std::nullopt : std::make_optional(*key);
+    if(key == std::end(entry->keys_))
+        return std::nullopt;
+
+    return included_deleted || !entry->is_tombstoned(*key) ? std::make_optional(*key) : std::nullopt;
 }
 
 inline std::optional<std::pair<AtomKey, AtomKey>> get_latest_key_pair(const std::shared_ptr<VersionMapEntry>& entry) {
