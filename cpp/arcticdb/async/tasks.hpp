@@ -433,15 +433,15 @@ struct DecodeMetadataTask : BaseTask {
 
     DecodeMetadataTask() = default;
 
-    std::pair<VariantKey, std::optional<google::protobuf::Any>> operator()(storage::KeySegmentPair &&ks) const {
+    std::pair<std::optional<VariantKey>, std::optional<google::protobuf::Any>> operator()(storage::KeySegmentPair &&ks) const {
         ARCTICDB_SAMPLE(ReadMetadataTask, 0)
         auto key_seg = std::move(ks);
         ARCTICDB_DEBUG(log::storage(), "ReadAndDecodeMetadataTask decoding segment of size {} with key {}",
                              key_seg.segment().total_segment_size(), variant_key_view(key_seg.variant_key()));
 
         auto meta = decode_metadata(key_seg.segment());
-        std::pair<VariantKey, std::optional<google::protobuf::Any>> output;
-        output.first = key_seg.variant_key();
+        std::pair<std::optional<VariantKey>, std::optional<google::protobuf::Any>> output;
+        output.first = std::make_optional(key_seg.variant_key());
         output.second = meta ? std::make_optional(std::move(meta.value())) : std::nullopt;
         return output;
     }

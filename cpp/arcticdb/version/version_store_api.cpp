@@ -368,15 +368,19 @@ void PythonVersionStore::add_to_snapshot(
     }
     auto [snap_key, snap_segment] = opt_snapshot.value();
     auto [snapshot_contents, user_meta] = get_versions_and_metadata_from_snapshot(store(), snap_key);
-    auto stream_index_map = get_stream_index_map(stream_ids, version_queries);
+    auto [specific_versions_index_map, latest_versions_index_map] = get_stream_index_map(stream_ids, version_queries);
+    for(const auto& latest_version : *latest_versions_index_map) {
+        specific_versions_index_map->try_emplace(std::make_pair(latest_version.first, latest_version.second.version_id()), latest_version.second);
+    }
+
     auto missing = filter_keys_on_existence(
-            utils::copy_of_values_as<VariantKey>(*stream_index_map), store(), false);
+            utils::copy_of_values_as<VariantKey>(*specific_versions_index_map), store(), false);
     util::check(missing.empty(), "Cannot snapshot version(s) that have been deleted: {}", missing);
 
     std::vector<AtomKey> deleted_keys;
     std::vector<AtomKey> retained_keys;
     std::unordered_set<StreamId> affected_keys;
-    for(const auto& [id_version, key] : *stream_index_map) {
+    for(const auto& [id_version, key] : *specific_versions_index_map) {
         auto [it, inserted] = affected_keys.insert(id_version.first);
         util::check(inserted, "Multiple elements in add_to_snapshot with key {}", id_version.first);
     }
@@ -390,7 +394,7 @@ void PythonVersionStore::add_to_snapshot(
         }
     }
 
-    for(auto&& [id, key] : *stream_index_map)
+    for(auto&& [id, key] : *specific_versions_index_map)
         retained_keys.emplace_back(std::move(key));
 
     std::sort(std::begin(retained_keys), std::end(retained_keys));
@@ -1028,9 +1032,14 @@ std::vector<std::pair<VersionedItem, py::object>> PythonVersionStore::batch_read
 
     std::vector<std::pair<VersionedItem, py::object>> results;
     for (auto [key, meta_proto]: metadata) {
-        VersionedItem version{std::move(to_atom(key))};
-        auto res = std::make_pair(version, metadata_protobuf_to_pyobject(meta_proto));
-        results.push_back(res);
+            if(meta_proto.has_value()) {
+                VersionedItem version{std::move(to_atom(*key))};
+                auto res = std::make_pair(version, metadata_protobuf_to_pyobject(meta_proto));
+                results.push_back(res);
+            }else{
+                auto res = std::make_pair(VersionedItem(), py::none());
+                results.push_back(res);   
+            }
     }
     return results;
 }

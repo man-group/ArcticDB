@@ -34,6 +34,7 @@ try:
         ArcticDuplicateSymbolsInBatchException,
         ArcticUnsupportedDataTypeException,
         ReadRequest,
+        ReadInfoRequest,
         ArcticInvalidApiUsageException,
         StagedDataFinalizeMethod,
     )
@@ -44,6 +45,7 @@ except ImportError:
         ArcticDuplicateSymbolsInBatchException,
         ArcticUnsupportedDataTypeException,
         ReadRequest,
+        ReadInfoRequest,
         ArcticInvalidApiUsageException,
         StagedDataFinalizeMethod,
     )
@@ -164,6 +166,85 @@ def test_library_management_path_prefix(moto_s3_uri_incl_bucket, boto_client):
     assert not ac.list_libraries()
     with pytest.raises(Exception):  # TODO: Nicely wrap?
         _lib = ac["pytest_test_lib"]
+
+
+def test_read_meta_batch_with_tombstones(arctic_library):
+    lib = arctic_library
+    lib.write_pickle("sym1", 1, {"meta1": 1}, prune_previous_versions=False)
+    lib.write_pickle("sym2", 2, {"meta2": 2}, prune_previous_versions=False)
+    lib.write_pickle("sym3", 3, {"meta3": 3}, prune_previous_versions=False)
+    lib.write_pickle("sym_no_meta", 4, prune_previous_versions=False)
+
+    lib.write_pickle("sym1", 1, {"meta1": 4}, prune_previous_versions=False)
+    lib.write_pickle("sym2", 2, {"meta2": 5}, prune_previous_versions=False)
+    lib.write_pickle("sym3", 3, {"meta3": 6}, prune_previous_versions=False)
+    lib.write_pickle("sym_no_meta", 4, prune_previous_versions=False)
+
+    lib.write_pickle("sym1", 1, {"meta1": 6}, prune_previous_versions=False)
+    lib.write_pickle("sym2", 2, {"meta2": 7}, prune_previous_versions=False)
+    lib.write_pickle("sym3", 3, {"meta3": 8}, prune_previous_versions=False)
+    lib.write_pickle("sym_no_meta", 4, prune_previous_versions=False)
+
+    results_list = lib.read_metadata_batch(["sym1", "sym2", "sym_no_exist", "sym3", "sym_no_meta"])
+
+    assert results_list[0].metadata == {"meta1": 6}
+    assert results_list[1].metadata == {"meta2": 7}
+    assert results_list[2] is None
+    assert results_list[3].metadata == {"meta3": 8}
+    assert results_list[4].metadata is None
+
+    lib.delete("sym1", versions=2)
+    lib.delete("sym2", versions=2)
+    lib.delete("sym3", versions=2)
+    lib.delete("sym_no_meta", versions=2)
+
+    results_list = lib.read_metadata_batch(["sym1", "sym2", "sym_no_exist" ,"sym3", "sym_no_meta"])
+    assert results_list[0].metadata == {"meta1": 4}
+    assert results_list[1].metadata == {"meta2": 5}
+    assert results_list[2] is None
+    assert results_list[3].metadata == {"meta3": 6}
+    assert results_list[4].metadata is None
+
+    assert lib.read_metadata("sym1").metadata == results_list[0].metadata
+    assert lib.read_metadata("sym2").metadata == results_list[1].metadata
+    assert lib.read_metadata("sym3").metadata == results_list[3].metadata
+    assert lib.read_metadata("sym_no_meta").metadata == results_list[4].metadata
+
+
+def test_read_meta_batch_with_as_ofs(arctic_library):
+    lib = arctic_library
+    lib.write_pickle("sym1", 1, {"meta1": 1}, prune_previous_versions=False)
+    lib.write_pickle("sym2", 2, {"meta2": 2}, prune_previous_versions=False)
+    lib.write_pickle("sym3", 3, {"meta3": 3}, prune_previous_versions=False)
+
+    lib.write_pickle("sym1", 1, {"meta1": 4}, prune_previous_versions=False)
+    lib.write_pickle("sym2", 2, {"meta2": 5}, prune_previous_versions=False)
+    lib.write_pickle("sym3", 3, {"meta3": 6}, prune_previous_versions=False)
+
+    lib.write_pickle("sym1", 1, {"meta1": 7}, prune_previous_versions=False)
+    lib.write_pickle("sym2", 2, {"meta2": 8}, prune_previous_versions=False)
+    lib.write_pickle("sym3", 3, {"meta3": 9}, prune_previous_versions=False)
+
+    results_list = lib.read_metadata_batch([ReadInfoRequest("sym1", as_of=0), ReadInfoRequest("sym2", as_of=0), ReadInfoRequest("sym2", as_of=5), "sym_no_exist", ReadInfoRequest("sym3", as_of=0)])
+    assert results_list[0].metadata == {"meta1": 1}
+    assert results_list[1].metadata == {"meta2": 2}
+    assert results_list[2] is None
+    assert results_list[3] is None
+    assert results_list[4].metadata == {"meta3": 3}
+
+    results_list = lib.read_metadata_batch([ReadInfoRequest("sym1", as_of=1), ReadInfoRequest("sym2", as_of=1), ReadInfoRequest("sym2", as_of=5), "sym_no_exist", ReadInfoRequest("sym3", as_of=1)])
+    assert results_list[0].metadata == {"meta1": 4}
+    assert results_list[1].metadata == {"meta2": 5}
+    assert results_list[2] is None
+    assert results_list[3] is None
+    assert results_list[4].metadata == {"meta3": 6}
+
+    results_list = lib.read_metadata_batch([ReadInfoRequest("sym2", as_of=0), ReadInfoRequest("sym2", as_of=1), ReadInfoRequest("sym3", as_of=1), "sym1", ReadInfoRequest("sym2", as_of=2)])
+    assert results_list[0].metadata == {"meta2": 2}
+    assert results_list[1].metadata == {"meta2": 5}
+    assert results_list[2].metadata == {"meta3": 6}
+    assert results_list[3].metadata == {"meta1": 7}
+    assert results_list[4].metadata == {"meta2": 8}
 
 
 def test_basic_write_read_update_and_append(arctic_library):
@@ -1006,7 +1087,7 @@ def test_get_description_batch(arctic_library):
     lib.append("symbol3", to_append_df)
     # when
     infos = lib.get_description_batch(["symbol1", "symbol2", "symbol3"])
-    original_infos = lib.get_description_batch([ReadRequest("symbol1", as_of=0), ReadRequest("symbol2", as_of=0), ReadRequest("symbol3", as_of=0)])
+    original_infos = lib.get_description_batch([ReadInfoRequest("symbol1", as_of=0), ReadInfoRequest("symbol2", as_of=0), ReadInfoRequest("symbol3", as_of=0)])
 
     assert infos[0].date_range == (datetime(2018, 1, 1), datetime(2018, 1, 6))
     assert infos[1].date_range == (datetime(2019, 1, 1), datetime(2019, 1, 6))
@@ -1052,8 +1133,8 @@ def test_get_description_batch_multiple_versions(arctic_library):
     to_append_df.index.rename("named_index", inplace=True)
     lib.append("symbol3", to_append_df)
 
-    infos_multiple_version = lib.get_description_batch([ReadRequest("symbol1", as_of=0), ReadRequest("symbol2", as_of=0), ReadRequest("symbol3", as_of=0), 
-                                                        ReadRequest("symbol1", as_of=1), ReadRequest("symbol2", as_of=1), ReadRequest("symbol3", as_of=1)])
+    infos_multiple_version = lib.get_description_batch([ReadInfoRequest("symbol1", as_of=0), ReadInfoRequest("symbol2", as_of=0), ReadInfoRequest("symbol3", as_of=0), 
+                                                        ReadInfoRequest("symbol1", as_of=1), ReadInfoRequest("symbol2", as_of=1), ReadInfoRequest("symbol3", as_of=1)])
 
     infos = infos_multiple_version[3:6]
     original_infos = infos_multiple_version[0:3]

@@ -28,6 +28,8 @@ namespace arcticdb::version_store {
  *
  * Requirements for the latter is fluid, so methods here could be lifted.
  */
+using SpecificAndLatestVersionKeys = std::pair<std::shared_ptr<std::unordered_map<std::pair<StreamId, VersionId>, AtomKey>>,
+                                                std::shared_ptr<std::unordered_map<StreamId, AtomKey>>>;
 class LocalVersionedEngine : public VersionedEngine {
 
 public:
@@ -236,7 +238,7 @@ public:
             const std::vector<StreamId>& stream_ids,
             const std::vector<VersionQuery>& version_queries);
 
-    std::vector<std::pair<VariantKey, std::optional<google::protobuf::Any>>> batch_read_metadata_internal(
+    std::vector<std::pair<std::optional<VariantKey>, std::optional<google::protobuf::Any>>> batch_read_metadata_internal(
         const std::vector<StreamId>& stream_ids,
         const std::vector<VersionQuery>& version_queries);
 
@@ -311,8 +313,11 @@ protected:
      * Get the queried, if specified, otherwise the latest, versions of index keys for each specified stream.
      * @param version_queries Only explicit versions are supported at the moment. The implementation currently
      * accepts deleted versions (e.g. to support reading snapshots) and it's the caller's responsibility to verify.
+     * A pair of std unordered maps are returned. The first one contains all the Atom keys for those queries that we 
+     * have specified a version. The second one contains all the Atom keys of the last undeleted version for those 
+     * queries that we haven't specified any version.
      */
-    std::shared_ptr<std::unordered_map<std::pair<StreamId, VersionId>, AtomKey>> get_stream_index_map(
+    SpecificAndLatestVersionKeys get_stream_index_map(
         const std::vector<StreamId>& stream_ids,
         const std::vector<VersionQuery>& version_queries);
 
