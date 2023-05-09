@@ -11,6 +11,9 @@
 #include <arcticdb/version/version_map.hpp>
 #include <arcticdb/version/version_tasks.hpp>
 #include <arcticdb/version/version_store_objects.hpp>
+#include <arcticdb/pipeline/query.hpp>
+
+#include <folly/futures/FutureSplitter.h>
 
 namespace arcticdb {
 
@@ -113,6 +116,132 @@ inline std::shared_ptr<std::unordered_map<std::pair<StreamId, VersionId>, AtomKe
                     }
                 }
             });
+
+    return output;
+}
+
+struct StreamVersionData {
+    StreamVersionData(const pipelines::VersionQuery& version_query) {
+        react(version_query);
+    }
+
+    StreamVersionData() = default;
+
+    size_t count_ = 0;
+    LoadParameter load_param_ = LoadParameter{LoadType::LOAD_LATEST_UNDELETED};
+
+    void react(const pipelines::VersionQuery& version_query) {
+        util::variant_match(version_query.content_, [that = this](const auto &query) {
+            that->do_react(query);
+        });
+    }
+
+    void do_react(std::monostate) {
+        ++count_;
+    }
+
+    void do_react(const pipelines::SpecificVersionQuery& specific_version) {
+        ++count_;
+        switch(load_param_.load_type_) {
+        case LoadType::LOAD_LATEST_UNDELETED:
+            load_param_ = LoadParameter{LoadType::LOAD_DOWNTO, specific_version.version_id_};
+            break;
+        case LoadType::LOAD_DOWNTO:
+            util::check(load_param_.load_until_.has_value(), "Expect LOAD_DOWNTO to have version specificed");
+            load_param_.load_until_ = std::min(load_param_.load_until_.value(), specific_version.version_id_);
+            break;
+        case LoadType::LOAD_FROM_TIME:
+            load_param_ = LoadParameter{LoadType::LOAD_UNDELETED};
+            break;
+        default:
+            util::raise_rte("Unexpected load state {} applying specific version query", load_param_.load_type_);
+        }
+    }
+
+    void do_react(const pipelines::TimestampVersionQuery& timestamp_query) {
+        ++count_;
+        switch(load_param_.load_type_) {
+        case LoadType::LOAD_LATEST_UNDELETED:
+            load_param_ = LoadParameter{LoadType::LOAD_FROM_TIME, timestamp_query.timestamp_};
+            break;
+        case LoadType::LOAD_FROM_TIME:
+            util::check(load_param_.load_from_time_.has_value(), "Expect LOAD_TO_TIME to have timestamp specificed");
+            load_param_.load_from_time_ = std::min(load_param_.load_from_time_.value(), timestamp_query.timestamp_);
+            break;
+        case LoadType::LOAD_DOWNTO:
+            load_param_ = LoadParameter{LoadType::LOAD_UNDELETED};
+            break;
+        default:
+            util::raise_rte("Unexpected load state {} applying specific version query", load_param_.load_type_);
+        }
+    }
+
+    void do_react(const pipelines::SnapshotVersionQuery&) {
+        util::raise_rte("Snapshot not currently supported in generic batch read version");
+    }
+};
+
+inline std::optional<AtomKey> get_key_for_version_query(const std::shared_ptr<VersionMapEntry>& version_map_entry, const pipelines::VersionQuery& version_query) {
+    return util::variant_match(version_query.content_,
+        [&version_map_entry] (const pipelines::SpecificVersionQuery& specific_version) {
+        return find_index_key_for_version_id(specific_version.version_id_, version_map_entry);
+    },
+    [&version_map_entry] (const pipelines::TimestampVersionQuery& timestamp_version) {
+       return find_index_key_for_version_id(timestamp_version.timestamp_, version_map_entry);
+    },
+    [&version_map_entry] (const std::monostate&) {
+       return version_map_entry->get_first_index(false);
+       },
+    [] (const auto&) -> std::optional<AtomKey> {
+        util::raise_rte("Unsupported version query type");
+    });
+}
+
+inline std::vector<folly::Future<std::optional<AtomKey>>> batch_get_versions(
+    const std::shared_ptr<Store>& store,
+    const std::shared_ptr<VersionMap>& version_map,
+    const std::vector<StreamId>& symbols,
+    const std::vector<pipelines::VersionQuery>& version_queries) {
+    ARCTICDB_SAMPLE(BatchGetVersion, 0)
+    util::check(symbols.size() == version_queries.size(), "Symbol and version query list mismatch: {} != {}", symbols.size(), version_queries.size());
+
+    robin_hood::unordered_flat_map<StreamId, StreamVersionData> version_data;
+    for(const auto& symbol : folly::enumerate(symbols)) {
+        auto it = version_data.find(*symbol);
+        if(it == version_data.end())
+            version_data.insert(robin_hood::pair<StreamId, StreamVersionData>(*symbol, StreamVersionData{version_queries[symbol.index]}));
+        else
+            it->second.react(version_queries[symbol.index]);
+    }
+
+    using SplitterType = folly::FutureSplitter<std::shared_ptr<VersionMapEntry>>;
+    robin_hood::unordered_flat_map<StreamId, SplitterType> shared_futures;
+    std::vector<folly::Future<std::optional<AtomKey>>> output;
+    output.reserve(symbols.size());
+    for(const auto& symbol : folly::enumerate(symbols)) {
+        const auto it = version_data.find(*symbol);
+        util::check(it != version_data.end(), "Missing version data for symbol {}", *symbol);
+        if(it->second.count_ == 1) {
+            output.push_back(async::submit_io_task(CheckReloadTask{store, version_map, *symbol,
+                                                                   it->second.load_param_}).thenValue([version_query =
+            version_queries[symbol.index]](auto version_map_entry) {
+                return get_key_for_version_query(version_map_entry, version_query);
+            }));
+        } else {
+            auto fut = shared_futures.find(*symbol);
+            if(fut == shared_futures.end()) {
+                auto [splitter, inserted] = shared_futures.emplace(*symbol, folly::FutureSplitter(async::submit_io_task(CheckReloadTask{store, version_map, *symbol,
+                                                                                                                                                                           it->second.load_param_})));
+                output.push_back(splitter->second.getFuture().thenValue([version_query = version_queries[symbol.index]](auto version_map_entry) {
+                    return get_key_for_version_query(version_map_entry, version_query);
+                }));
+            } else {
+                output.push_back(fut->second.getFuture().thenValue([version_query = version_queries[symbol.index]](auto version_map_entry) {
+                    return get_key_for_version_query(version_map_entry, version_query);
+                }));
+            }
+        }
+    }
 
     return output;
 }
