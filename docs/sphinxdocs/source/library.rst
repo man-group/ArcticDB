@@ -26,6 +26,7 @@ methods.
 
 .. autoclass:: arcticdb.version_store.library.Library
     :special-members: __init__
+    :members:
 
 .. automodule:: arcticdb.version_store.library
     :members: arcticdb.version_store.library.NormalizableType,arcticdb.version_store.library.ArcticInvalidApiUsageException,arcticdb.version_store.library.ArcticDuplicateSymbolsInBatchException,arcticdb.version_store.library.ArcticUnsupportedDataTypeException,arcticdb.version_store.library.SymbolVersion,arcticdb.version_store.library.VersionInfo,arcticdb.version_store.library.SymbolDescription,arcticdb.version_store.library.WritePayload,arcticdb.version_store.library.ReadRequest
