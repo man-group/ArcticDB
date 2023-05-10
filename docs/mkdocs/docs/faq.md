@@ -73,7 +73,7 @@ Yes.
 
 On each `write`, ArcticDB will check the previous version of the symbol that you are writing (and _only_ this version - other symbols will not be scanned!) and skip the write of identical [segments](../technical/on_disk_storage). Please keep in mind however that this is most effective when version `n` is equal to version `n-1` plus additional data at the end - and only at the end! If there is additional data inserted into the in the middle, then all segments occuring after that modification will almost certainly differ. ArcticDB segments data at fixed intervals and data is only de-duplicated if the hashes of the data segments are identical - as a result, a one row offset will prevent effective de-duplication.
 
-Note that this is a library configuration option that is off by default, see `help(LibraryOptions)` for details of how to enable it.
+Note that this is a library configuration option that is off by default, see [`help(LibraryOptions)`](https://docs.arcticdb.io/api/arcticdb/arcticdb.LibraryOptions) for details of how to enable it.
 
 ### *How does ArcticDB enable advanced analytics?*
 
