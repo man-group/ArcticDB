@@ -40,6 +40,14 @@ from arcticdb.util.test import (
 from tests.util.date import DateRange
 
 
+if sys.platform == "win32":
+    # leave out Mongo as spinning up a Mongo instance in Windows CI is fiddly, and Mongo support is only
+    # currently required for Linux for internal use.
+    SMOKE_TEST_VERSION_STORES = ["lmdb_version_store", "s3_version_store"]  # SKIP_WIN
+else:
+    SMOKE_TEST_VERSION_STORES = ["lmdb_version_store", "s3_version_store", "mongo_version_store"]
+
+
 @pytest.fixture()
 def symbol():
     return "sym" + str(random.randint(0, 10000))
@@ -60,7 +68,7 @@ def test_simple_flow(lmdb_version_store_no_symbol_list, symbol):
     assert lmdb_version_store_no_symbol_list.list_symbols() == lmdb_version_store_no_symbol_list.list_versions() == []
 
 
-@pytest.mark.parametrize("version_store", ["lmdb_version_store", "mongo_version_store"])
+@pytest.mark.parametrize("version_store", SMOKE_TEST_VERSION_STORES)
 def test_with_prune(request, version_store, symbol):
     version_store = request.getfixturevalue(version_store)
     df = sample_dataframe()
@@ -535,7 +543,7 @@ def test_is_pickled_by_timestamp(lmdb_version_store):
     assert lmdb_version_store.is_symbol_pickled(symbol, pd.Timestamp(np.iinfo(np.int64).max)) is False
 
 
-@pytest.mark.parametrize("version_store", ["lmdb_version_store", "mongo_version_store"])
+@pytest.mark.parametrize("version_store", SMOKE_TEST_VERSION_STORES)
 def test_list_versions(request, version_store):
     version_store = request.getfixturevalue(version_store)
     version_store.write("a", 1)  # a, v0

@@ -52,11 +52,11 @@ jobs:
       # Please declare any key you added below in build_steps.yaml:jobs.compile.strategy.matrix to aid the linting tools
       # Please update publish.yml if changing the symbols value!!
       linux_matrix: >-
-        {"os":"linux", "distro":"\"ubuntu-latest\"", "pytest_distro": "${{vars.PYTEST_DISTRO_LINUX}}",
+        {"os":"linux", "distro":"\"ubuntu-latest\"",
           "cmake_preset_prefix":"linux", "build_dir": "/tmp/cpp_build", "symbols": "*.gz",
           "do_not_archive": ["*.so", "*.[ao]", "vcpkg_installed"]}
       windows_matrix: >-
-        {"os":"windows", "distro":"\"windows-latest\"", "pytest_distro": "${{vars.PYTEST_DISTRO_WINDOWS}}",
+        {"os":"windows", "distro":"\"windows-latest\"",
           "cmake_preset_prefix":"windows-cl", "build_dir": "C:\\cpp_build", "symbols": "*.pdb",
           "do_not_archive": ["*.lib", "*.ilk", "*.pyd", "*.dll", "CMakeFiles/*.dir", "vcpkg_installed"]}
 
