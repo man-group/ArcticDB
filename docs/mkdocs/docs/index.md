@@ -23,7 +23,7 @@ The below guide covers installation, setup and basic usage. More detailed inform
 
 ### Installation
 
-ArcticDB supports Python 3.6 - 3.10. To install, simply run:
+ArcticDB supports Python 3.6 - 3.11. To install, simply run:
 
 ```
 pip install arcticdb
@@ -46,7 +46,7 @@ To get started, we can import ArcticDB and instantiate it:
 >>> ac = Arctic(<URI>)
 ```
 
-For more information on the format of _<URI\>_, please view the docstring (`>>> help(Arctic)`). Below we'll run through some setup examples.
+For more information on the format of _<URI\>_, please view the docstring ([`>>> help(Arctic)`](https://docs.arcticdb.io/api/arcticdb#arcticdb.Arctic)). Below we'll run through some setup examples.
 
 #### S3 Configuration Examples
 
@@ -211,7 +211,7 @@ ArcticDB enables you to slice by _row_ and by _column_.
 
 ###### Filtering
 
-ArcticDB uses a Pandas-_like_ syntax to describe how to filter data. For more details including the limitations, please view the docstring (`help(QueryBuilder)`). 
+ArcticDB uses a Pandas-_like_ syntax to describe how to filter data. For more details including the limitations, please view the docstring ([`help(QueryBuilder)`](https://docs.arcticdb.io/api/query_builder)).
 
 !!! info "ArcticDB Filtering Philosphy & Restrictions"
 
