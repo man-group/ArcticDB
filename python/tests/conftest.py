@@ -29,6 +29,7 @@ import random
 from datetime import datetime
 from typing import Optional, Any, Dict
 
+import requests
 from pytest_server_fixtures.base import get_ephemeral_port
 
 from arcticdb.arctic import Arctic
@@ -142,7 +143,7 @@ def sym():
 
 @pytest.fixture()
 def lib_name():
-    return "local.test" + datetime.utcnow().strftime("%Y-%m-%dT%H_%M_%S_%f")
+    return f"local.test_{random.randint(0, 999)}_{datetime.utcnow().strftime('%Y-%m-%dT%H_%M_%S_%f')}"
 
 
 @pytest.fixture
@@ -235,11 +236,26 @@ def s3_store_factory(lib_name, arcticdb_test_s3_config):
 
 
 @pytest.fixture
-def mongo_store_factory(mongo_server_sess, lib_name):
+def mongo_store_factory(request, lib_name):
     """Similar capability to `s3_store_factory`, but uses a mongo store."""
-    used = {}
-    uri = "mongodb://{}:{}".format(mongo_server_sess.hostname, mongo_server_sess.port)
+    # Use MongoDB if it's running (useful in CI), otherwise spin one up with pytest-server-fixtures.
+    mongo_host = os.getenv("CI_MONGO_HOST", "localhost")
+    mongo_port = os.getenv("CI_MONGO_PORT", 27017)
+    mongo_path = f"{mongo_host}:{mongo_port}"
+    try:
+        res = requests.get(f"http://{mongo_path}")
+        have_running_mongo = res.status_code == 200 and "mongodb" in res.text.lower()
+    except requests.exceptions.ConnectionError:
+        have_running_mongo = False
+
+    if have_running_mongo:
+        uri = f"mongodb://{mongo_path}"
+    else:
+        mongo_server_sess = request.getfixturevalue("mongo_server_sess")
+        uri = f"mongodb://{mongo_server_sess.hostname}:{mongo_server_sess.port}"
+
     cfg_maker = functools.partial(create_test_mongo_cfg, uri=uri)
+    used = {}
     try:
         yield functools.partial(_version_store_factory_impl, used, cfg_maker, lib_name)
     finally:

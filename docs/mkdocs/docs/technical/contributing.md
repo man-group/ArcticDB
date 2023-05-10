@@ -125,6 +125,12 @@ GCC 8 (10+ recommended) and CMake 3.12 (these instructions assume 3.21+).
 A development install of Python 3.6+ (with `libpython.a` or `.so` and full headers) is also necessary.
 See [pybind11 configuration](#pybind11-configuration).
 
+We require a Mongo executable for a couple of Python tests on Linux. You can check whether you have
+it with `mongod --version`.
+
+Search the internet for "mongo installation Linux" for instructions for your distro if you do not
+already have `mongod` available.
+
 ### Dependencies by distro
 | Distro | Versions reported to work | Packages |
 |---|---|---|
