@@ -2,6 +2,9 @@
 
 #include <arcticdb/codec/segment.hpp>
 
+#pragma pack(push)
+#pragma pack(1)
+
 namespace arcticdb {
 
 inline std::pair<const uint8_t*, const uint8_t*> get_segment_begin_end(const Segment& segment, const arcticdb::proto::encoding::SegmentHeader& hdr)  {
@@ -34,7 +37,7 @@ struct ZstdCodec { //: public CodecBase<ZstdCodec> {
     int32_t level_ = 0;
     bool is_streaming = false;
     uint8_t padding_ = 0;
-} __attribute__((packed));
+};
 
 static_assert(sizeof(ZstdCodec) == encoding_size);
 
@@ -61,7 +64,7 @@ struct TurboPforCodec {
 
     SubCodec sub_codec_ = SubCodec::UNKNOWN;
     uint16_t padding_ = 0;
-} __attribute__((packed));
+};
 
 static_assert(sizeof(TurboPforCodec) == encoding_size);
 
@@ -74,7 +77,7 @@ struct Lz4Codec {
 
     int32_t acceleration_;
     int16_t padding_ = 0;
-} __attribute__((packed));;
+};;
 
 static_assert(sizeof(Lz4Codec) == encoding_size);
 
@@ -83,7 +86,7 @@ struct PassthroughCodec {
 
     uint32_t unused_ = 0;
     uint16_t padding_ = 0;
-} __attribute__((packed));
+};
 
 static_assert(sizeof(PassthroughCodec) == encoding_size);
 
@@ -405,15 +408,10 @@ struct EncodedField {
 
 static_assert(sizeof(EncodedField) - sizeof(EncodedBlock) == EncodedField::Size);
 
-template <size_t x>
-struct none_type;
-
-//none_type<sizeof(EncodedField)> thing;
-//none_type<sizeof(EncodedBlock)> thing2;
-//none_type<EncodedField::Size> thing3;
-
 inline size_t encoded_field_bytes(const EncodedField &encoded_field) {
     return sizeof(EncodedField) + (sizeof(EncodedBlock) * ((encoded_field.shapes_count_ + encoded_field.values_count_) - 1));
 }
+
+#pragma pack(pop)
 
 } //namespace arcticc

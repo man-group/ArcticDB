@@ -683,7 +683,7 @@ inline FieldRef scalar_field(DataType type, std::string_view name) {
 
 template <typename Callable>
 auto visit_field(const Field& field, Callable&& c) {
-    return field.type().template visit_tag(std::forward<Callable>(c));
+    return field.type().visit_tag(std::forward<Callable>(c));
 }
 
 inline bool operator==(const Field& l, const Field& r) {
