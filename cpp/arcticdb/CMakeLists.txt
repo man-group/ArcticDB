@@ -230,6 +230,7 @@ set(arcticdb_srcs
         util/container_filter_wrapper.hpp
         util/cursored_buffer.hpp
         util/cursor.hpp
+        util/decimal.hpp
         util/encoding_conversion.hpp
         util/exponential_backoff.hpp
         util/flatten_utils.hpp
@@ -341,6 +342,7 @@ set(arcticdb_srcs
         util/allocator.cpp
         util/buffer_pool.cpp
         util/configs_map.cpp
+        util/decimal.cpp
         util/error_code.cpp
         util/global_lifetimes.cpp
         util/offset_string.cpp
@@ -618,6 +620,7 @@ if(${TEST})
             util/test/test_buffer_pool.cpp
             util/test/test_composite.cpp
             util/test/test_cursor.cpp
+            util/test/test_decimal.cpp
             util/test/test_exponential_backoff.cpp
             util/test/test_format_date.cpp
             util/test/test_hash.cpp

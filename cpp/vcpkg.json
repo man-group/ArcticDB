@@ -42,6 +42,7 @@
     "boost-callable-traits",
     "boost-circular-buffer",
     "boost-optional",
+    "boost-multiprecision",
     "bitmagic",
     {
       "name": "libiconv",
@@ -102,6 +103,7 @@
     { "name": "boost-move", "version": "1.80.0#1" },
     { "name": "boost-mp11", "version": "1.80.0#1" },
     { "name": "boost-mpl", "version": "1.80.0#1" },
+    { "name": "boost-multiprecision", "version": "1.80.0#1" },
     { "name": "boost-multi-index", "version": "1.80.0#1" },
     { "name": "boost-numeric-conversion", "version": "1.80.0#1" },
     { "name": "boost-optional", "version": "1.80.0#1" },
