@@ -322,12 +322,10 @@ TEST(VersionMap, TombstoneAllRemoveFastTombstone) {
     THREE_SIMPLE_KEYS
 
     auto version_map = std::make_shared<VersionMap>();
-    version_map->set_fast_tombstone_all(true);
     version_map->set_validate(true);
     version_map->write_and_prune_previous(store, key1, std::nullopt);
     auto maybe_prev = get_latest_version(store, version_map,  id, true, false);
     version_map->write_and_prune_previous(store, key2, maybe_prev.value());
-    version_map->set_fast_tombstone_all(false);
     maybe_prev = get_latest_version(store, version_map,  id, true, false);
     version_map->write_and_prune_previous(store, key3, maybe_prev.value());
     auto versions = get_all_versions(store, version_map, id, true, false);

@@ -110,7 +110,6 @@ class VersionMapImpl {
     MapType map_;
     bool validate_ = false;
     bool log_changes_ = false;
-    bool fast_tombstone_all_ = false;
     std::optional<timestamp> reload_interval_;
     mutable std::mutex map_mutex_;
     std::shared_ptr<LockTable> lock_table_ = std::make_shared<LockTable>();
@@ -122,10 +121,6 @@ public:
 
     void set_validate(bool value) {
         validate_ = value;
-    }
-
-    void set_fast_tombstone_all(bool value) {
-        fast_tombstone_all_ = value;
     }
 
     void set_log_changes(bool value) {
@@ -173,7 +168,7 @@ public:
         std::shared_ptr<Store> store,
         const StreamId& stream_id,
         const LoadParameter load_params,
-         const std::shared_ptr<VersionMapEntry>& entry) {
+        const std::shared_ptr<VersionMapEntry>& entry) {
         load_params.validate();
         auto max_trials = ConfigsMap::instance()->get_int("VersionMap.MaxReadRefTrials", 2);
         while (max_trials--) {
@@ -242,10 +237,7 @@ public:
     }
 
     /**
-     * Tombstone all non-deleted versions of the given stream and do the related housekeeping. It works in two modes:
-     * - fast_tombstone_all_: Writes a TOMBSTONE_ALL for the latest undeleted version
-     * - Otherwise: writes individual TOMBSTONES for each version (replaces any previous TOMBSTONE_ALL)
-     *
+     * Tombstone all non-deleted versions of the given stream and do the related housekeeping.
      * @param first_key_to_tombstone The first key in the version chain that should be tombstoned. When empty
      * then the first index key onwards is tombstoned, so the whole chain is tombstoned.
      */
@@ -267,9 +259,13 @@ public:
         const AtomKey &key, const
         std::optional<AtomKey>& previous_key) {
         ARCTICDB_DEBUG(log::version(), "Version map pruning previous versions for stream {}", key.id());
-        auto load_type = fast_tombstone_all_ ? LoadType::LOAD_UNDELETED : LoadType::LOAD_ALL;
-        auto entry = check_reload(store, key.id(), LoadParameter{load_type}, true, false,
-                             __FUNCTION__);
+        auto entry = check_reload(
+                store,
+                key.id(),
+                LoadParameter{LoadType::LOAD_UNDELETED},
+                true,
+                false,
+                __FUNCTION__);
         auto result = tombstone_from_key_or_all_internal(store, key.id(), previous_key, entry);
 
         do_write(store, key, entry);
@@ -884,9 +880,13 @@ private:
                                                             std::optional<AtomKey> first_key_to_tombstone = std::nullopt,
                                                             std::shared_ptr<VersionMapEntry> entry = nullptr) {
         if (!entry) {
-            auto load_type = fast_tombstone_all_ ? LoadType::LOAD_UNDELETED : LoadType::LOAD_ALL;
-            entry = check_reload(store, stream_id, LoadParameter{load_type}, true, false,
-                                 __FUNCTION__);
+            entry = check_reload(
+                    store,
+                    stream_id,
+                    LoadParameter{LoadType::LOAD_UNDELETED},
+                    true,
+                    false,
+                    __FUNCTION__);
         }
         if (!first_key_to_tombstone)
             first_key_to_tombstone = entry->get_first_index(false);
@@ -900,44 +900,11 @@ private:
         }
 
         if (!output.empty()) {
-            if(fast_tombstone_all_) {
-                auto tombstone_key = write_tombstone_all_key(store, first_key_to_tombstone.value(), entry);
-
-                if(log_changes_)
-                    log_tombstone_all(store, stream_id, tombstone_key.version_id());
-
-            } else {
-                for (const auto &index : output) {
-                    auto tombstone = write_tombstone(store, index, index.id(), entry);
-                    entry->tombstones_.insert(std::make_pair(index.version_id(), std::move(tombstone)));
-                }
+            auto tombstone_key = write_tombstone_all_key(store, first_key_to_tombstone.value(), entry);
+            if(log_changes_) {
+                log_tombstone_all(store, stream_id, tombstone_key.version_id());
             }
         }
-
-        // Get rid of tombstone_all key if not set on this library
-        if(!fast_tombstone_all_ && entry->tombstone_all_) {
-            auto all_indexes = entry->get_indexes(true);
-            for(const auto& index_key : all_indexes) {
-                if(entry->is_tombstoned_via_tombstone_all(index_key.version_id()) &&
-                   !entry->has_individual_tombstone(index_key.version_id())) {
-                    auto tombstone = index_to_tombstone(index_key, index_key.id(), store->current_timestamp());
-                    entry->tombstones_.try_emplace(tombstone.version_id(), tombstone);
-                    entry->keys_.push_front(tombstone);
-                }
-            }
-
-            remove_entry_version_keys(store, entry, stream_id);
-            entry->keys_.erase(std::remove_if(
-                                       std::begin(entry->keys_),
-                                       std::end(entry->keys_),
-                                       [](const auto& k){
-                                           return k.type() == KeyType::TOMBSTONE_ALL || k.type() == KeyType::VERSION; }),
-                               std::end(entry->keys_));
-
-            auto version_id = all_indexes.begin()->version_id();
-            entry->head_ = write_entry_to_storage(store, stream_id, version_id, entry);
-        }
-
         return output;
     }
 };

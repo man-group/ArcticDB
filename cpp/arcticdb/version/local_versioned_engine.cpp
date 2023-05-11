@@ -1225,9 +1225,6 @@ void LocalVersionedEngine::configure(const storage::LibraryDescriptor::VariantSt
         if(cfg.has_failure_sim()) {
             store->set_failure_sim(cfg.failure_sim());
         }
-        if(cfg.write_options().descriptor()->FindFieldByLowercaseName("fast_tombstone_all")) {
-          version_map->set_fast_tombstone_all(cfg.write_options().fast_tombstone_all());
-        }
         if(cfg.write_options().has_sync_passive()) {
             version_map->set_log_changes(cfg.write_options().sync_passive().enabled());
         }
