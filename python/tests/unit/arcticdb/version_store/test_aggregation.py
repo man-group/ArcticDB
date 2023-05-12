@@ -70,6 +70,9 @@ def test_hypothesis_sum_agg(lmdb_version_store, df):
     q = QueryBuilder()
     q = q.groupby("grouping_column").agg({"a": "sum"})
     expected = df.groupby("grouping_column").agg({"a": "sum"})
+    expected.replace(
+        np.nan, np.inf, inplace=True
+    )  # New version of pandas treats values which exceeds limits as np.nan rather than np.inf, as in old version and arcticdb
 
     symbol = "sum_agg"
     lib.write(symbol, df)
