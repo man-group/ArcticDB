@@ -65,13 +65,13 @@ public:
 
     void read_proto(const RuntimeConfig& config) {
         for(auto& val : config.int_values())
-            map_of_int.insert(std::make_pair(val.first, val.second));
+            map_of_int.insert(std::make_pair(boost::to_upper_copy<std::string>(val.first), val.second));
 
         for(auto& val : config.string_values())
-            map_of_string.insert(std::make_pair(val.first, val.second));
+            map_of_string.insert(std::make_pair(boost::to_upper_copy<std::string>(val.first), val.second));
 
         for(auto& val : config.double_values())
-            map_of_double.insert(std::make_pair(val.first, val.second));
+            map_of_double.insert(std::make_pair(boost::to_upper_copy<std::string>(val.first), val.second));
     }
 
      static ConfigsMap from_proto(const RuntimeConfig& config) {
