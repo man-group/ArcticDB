@@ -29,12 +29,12 @@ def test_delete_version_with_update(version_store_factory, pos, sym):
     symbol = sym
 
     idx = pd.date_range("1970-01-01", periods=100, freq="D")
-    df = pd.DataFrame({"a": np.arange(len(idx), dtype='float')}, index=idx)
+    df = pd.DataFrame({"a": np.arange(len(idx), dtype="float")}, index=idx)
     original_df = df.copy(deep=True)
     lmdb_version_store.write(symbol, df)
 
     idx2 = pd.date_range("1970-01-12", periods=10, freq="D")
-    df2 = pd.DataFrame({"a": np.arange(1000, 1000 + len(idx2), dtype='float')}, index=idx2)
+    df2 = pd.DataFrame({"a": np.arange(1000, 1000 + len(idx2), dtype="float")}, index=idx2)
     lmdb_version_store.update(symbol, df2)
 
     assert_frame_equal(lmdb_version_store.read(symbol, 0).data, original_df)
