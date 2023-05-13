@@ -37,11 +37,11 @@ def test_update(version_store_factory):
     symbol = "update_no_daterange"
 
     idx = pd.date_range("1970-01-01", periods=100, freq="D")
-    df = pd.DataFrame({"a": np.arange(len(idx), dtype='float')}, index=idx)
+    df = pd.DataFrame({"a": np.arange(len(idx), dtype="float")}, index=idx)
     lmdb_version_store.write(symbol, df)
 
     idx2 = pd.date_range("1970-01-12", periods=10, freq="D")
-    df2 = pd.DataFrame({"a": np.arange(1000, 1000 + len(idx2), dtype='float')}, index=idx2)
+    df2 = pd.DataFrame({"a": np.arange(1000, 1000 + len(idx2), dtype="float")}, index=idx2)
     lmdb_version_store.update(symbol, df2)
 
     vit = lmdb_version_store.read(symbol)
@@ -94,7 +94,7 @@ def test_update_repeatedly_dynamic_schema(
     symbol = "update_dynamic_schema"
 
     idx = pd.date_range("1970-01-01", periods=100, freq="D")
-    df = pd.DataFrame({"a": np.arange(len(idx), dtype='float')}, index=idx)
+    df = pd.DataFrame({"a": np.arange(len(idx), dtype="float")}, index=idx)
     lmdb_version_store.write(symbol, df)
     update_end = update_start + start_dist
 
@@ -107,7 +107,7 @@ def test_update_repeatedly_dynamic_schema(
             continue
 
         idx2 = pd.date_range(update_date, periods=periods, freq="D")
-        df2 = pd.DataFrame({"a": np.arange(1000 + x, 1000 + x + len(idx2), dtype='float')}, index=idx2)
+        df2 = pd.DataFrame({"a": np.arange(1000 + x, 1000 + x + len(idx2), dtype="float")}, index=idx2)
         lmdb_version_store.update(symbol, df2)
 
         vit = lmdb_version_store.read(symbol)
@@ -128,11 +128,11 @@ def test_update_repeatedly_dynamic_schema_hashed(
     idx = pd.date_range("1970-01-01", periods=100, freq="D")
     l = len(idx)
     df = pd.DataFrame({
-        "a": np.arange(l, dtype='float'), 
-        "b": np.arange(1, l + 1, dtype='float'),
-        "c": np.arange(2, l + 2, dtype='float'),
-        "d": np.arange(3, l + 3, dtype='float'),
-        "e": np.arange(4, l + 4, dtype='float')
+        "a": np.arange(l, dtype="float"), 
+        "b": np.arange(1, l + 1, dtype="float"),
+        "c": np.arange(2, l + 2, dtype="float"),
+        "d": np.arange(3, l + 3, dtype="float"),
+        "e": np.arange(4, l + 4, dtype="float")
     }, index=idx)
 
     lmdb_version_store.write(symbol, df)
@@ -150,11 +150,11 @@ def test_update_repeatedly_dynamic_schema_hashed(
         l = len(idx2)
         df2 = pd.DataFrame(
             {
-                "a": np.arange(x, l + x, dtype='float'),
-                "b": np.arange(1 + x, l + 1 + x, dtype='float'),
-                "c": np.arange(2 + x, l + 2 + x, dtype='float'),
-                "d": np.arange(3 + x, l + 3 + x, dtype='float'),
-                "e": np.arange(4 + x, l + 4 + x, dtype='float'),
+                "a": np.arange(x, l + x, dtype="float"),
+                "b": np.arange(1 + x, l + 1 + x, dtype="float"),
+                "c": np.arange(2 + x, l + 2 + x, dtype="float"),
+                "d": np.arange(3 + x, l + 3 + x, dtype="float"),
+                "e": np.arange(4 + x, l + 4 + x, dtype="float"),
             },
             index=idx2,
         )
@@ -177,7 +177,7 @@ def test_update_repeatedly(
     symbol = "update_no_daterange"
 
     idx = pd.date_range("1970-01-01", periods=100, freq="D")
-    df = pd.DataFrame({"a": np.arange(len(idx), dtype='float')}, index=idx)
+    df = pd.DataFrame({"a": np.arange(len(idx), dtype="float")}, index=idx)
     lmdb_version_store.write(symbol, df)
     update_end = update_start + start_dist
 
@@ -190,7 +190,7 @@ def test_update_repeatedly(
             continue
 
         idx2 = pd.date_range(update_date, periods=periods, freq="D")
-        df2 = pd.DataFrame({"a": np.arange(1000 + x, 1000 + x + len(idx2), dtype='float')}, index=idx2)
+        df2 = pd.DataFrame({"a": np.arange(1000 + x, 1000 + x + len(idx2), dtype="float")}, index=idx2)
         lmdb_version_store.update(symbol, df2)
 
         vit = lmdb_version_store.read(symbol)
@@ -236,14 +236,14 @@ def test_update_with_snapshot(version_store_factory):
     symbol = "update_no_daterange"
 
     idx = pd.date_range("1970-01-01", periods=100, freq="D")
-    df = pd.DataFrame({"a": np.arange(len(idx), dtype='float')}, index=idx)
+    df = pd.DataFrame({"a": np.arange(len(idx), dtype="float")}, index=idx)
     original_df = df.copy(deep=True)
     lmdb_version_store.write(symbol, df)
 
     lmdb_version_store.snapshot("my_snap")
 
     idx2 = pd.date_range("1970-01-12", periods=10, freq="D")
-    df2 = pd.DataFrame({"a": np.arange(1000, 1000 + len(idx2), dtype='float')}, index=idx2)
+    df2 = pd.DataFrame({"a": np.arange(1000, 1000 + len(idx2), dtype="float")}, index=idx2)
     lmdb_version_store.update(symbol, df2)
 
     assert_frame_equal(lmdb_version_store.read(symbol, as_of=0).data, original_df)
