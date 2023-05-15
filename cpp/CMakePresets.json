@@ -222,9 +222,9 @@
     {"name": "windows-cl-conda-release",  "configurePreset": "windows-cl-conda-release",  "targets": "arcticdb_ext" },
     {"name": "linux-debug",               "configurePreset": "linux-debug",               "targets": "arcticdb_ext" },
     {"name": "linux-release",             "configurePreset": "linux-release",             "targets": "arcticdb_ext" },
-    {"name": "linux-conda-debug",        "configurePreset": "linux-conda-debug",          "targets": "arcticdb_ext" },
-    {"name": "linux-conda-release",      "configurePreset": "linux-conda-release",        "targets": "arcticdb_ext" },
-    {"name": "darwin-conda-debug",       "configurePreset": "darwin-conda-debug",         "targets": "arcticdb_ext" },
-    {"name": "darwin-codda-release",     "configurePreset": "darwin-conda-release",       "targets": "arcticdb_ext" }
+    {"name": "linux-conda-debug",         "configurePreset": "linux-conda-debug",         "targets": "arcticdb_ext" },
+    {"name": "linux-conda-release",       "configurePreset": "linux-conda-release",       "targets": "arcticdb_ext" },
+    {"name": "darwin-conda-debug",        "configurePreset": "darwin-conda-debug",        "targets": "arcticdb_ext" },
+    {"name": "darwin-codda-release",      "configurePreset": "darwin-conda-release",      "targets": "arcticdb_ext" }
   ]
 }
