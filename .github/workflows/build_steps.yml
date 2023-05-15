@@ -23,6 +23,7 @@ jobs:
         build_dir: [0] # Must be an absolute path
         symbols: [0] # Glob for symbol symbol files. Used for including in follower builds and exclusion on others.
         do_not_archive: [0]
+        test_services: [0] # Github service containers to spin up for the pytest run
         exclude:
             - os: 0
         include:
@@ -170,73 +171,8 @@ jobs:
       manylinux_image: ${{env.manylinux_image}}
       test_dirs: ${{env.test_dirs}}
 
-  python_tests_windows:
-    if: inputs.job_type == 'follower' && fromJSON(inputs.matrix).os == 'windows'
-    needs: [compile]
-    strategy:
-      fail-fast: false
-      matrix:
-        type: ${{fromJSON(vars.TEST_DIRS_OVERRIDE || needs.compile.outputs.test_dirs)}}
-        include:
-          - ${{fromJSON(inputs.matrix)}}
-    name: ${{matrix.type}}
-    runs-on: ${{fromJson(matrix.pytest_distro || matrix.distro)}}
-    defaults:
-      run: {shell: bash}
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v3.3.0
-
-      - name: Get wheel artifact
-        uses: actions/download-artifact@v3
-        with:
-          name: wheel-${{inputs.cibw_build}}
-          path: ${{runner.temp}}
-
-      - name: Select Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: "3.${{inputs.python3}}"
-
-      - name: Pagefile
-        uses: al-cheb/configure-pagefile-action@v1.3
-        with:
-          minimum-size: 2GB
-          maximum-size: 8GB
-          disk-root: "D:"  # This is also the checkout directory. Total size 12GB.
-        continue-on-error: true
-
-      - name: Install the wheel and dependencies
-        uses: ./.github/actions/install-wheel
-        with:
-          python_impl_name: ${{env.python_impl_name}}
-          envs: ${{matrix.envs}}
-        env:
-          CMAKE_BUILD_PARALLEL_LEVEL: ${{vars.CMAKE_BUILD_PARALLEL_LEVEL}}
-
-      - name: Run test
-        run: build_tooling/parallel_test.sh tests/${{matrix.type}}
-        env:
-          TEST_OUTPUT_DIR: ${{runner.temp}}
-
-      - name: Collect crash dumps
-        if: failure()
-        uses: actions/upload-artifact@v3
-        with:
-          name: crashdump-${{matrix.os}}-${{env.python_impl_name}}-${{matrix.type}}
-          path: ${{env.LOCALAPPDATA}}/CrashDumps/
-
-      - name: Upload the logs
-        if: always()
-        uses: actions/upload-artifact@v3
-        with:
-          name: pytest-${{matrix.os}}-${{env.python_impl_name}}-${{matrix.type}}
-          path: |
-            ${{runner.temp}}/*test*
-
-  python_tests_linux:
-    if: inputs.job_type == 'follower' && fromJSON(inputs.matrix).os == 'linux'
+  python_tests:
+    if: inputs.job_type == 'follower'
     needs: [compile]
     strategy:
       fail-fast: false
@@ -246,14 +182,10 @@ jobs:
           - ${{fromJSON(inputs.matrix)}}
     name: ${{matrix.type}}
     runs-on: ${{fromJson(matrix.distro)}}
-    container: ${{needs.compile.outputs.manylinux_image || null}}
+    container: ${{matrix.os == 'linux' && needs.compile.outputs.manylinux_image || null}}
     defaults:
       run: {shell: bash}
-
-    services:
-      mongodb:
-        image: mongo:4.4
-
+    services: ${{fromJSON(matrix.test_services)}}
     steps:
       - name: Checkout
         uses: actions/checkout@v3.3.0
@@ -264,14 +196,42 @@ jobs:
           name: wheel-${{inputs.cibw_build}}
           path: ${{runner.temp}}
 
-      - name: Select Python
+      - name: Select Python (Linux)
+        if: matrix.os == 'linux'
         run: echo /opt/python/${{env.python_impl_name}}*/bin >> $GITHUB_PATH
 
-      - name: Install the wheel and dependencies
-        uses: ./.github/actions/install-wheel
+      - name: Select Python (Windows)
+        if: matrix.os == 'windows'
+        uses: actions/setup-python@v4
         with:
-          python_impl_name: ${{env.python_impl_name}}
-          envs: ${{matrix.envs}}
+          python-version: "3.${{inputs.python3}}"
+
+      - name: Windows Pagefile
+        if: matrix.os == 'windows'
+        uses: al-cheb/configure-pagefile-action@v1.3
+        with:
+          minimum-size: 2GB
+          maximum-size: 8GB
+          disk-root: "D:"  # This is also the checkout directory. Total size 12GB.
+        continue-on-error: true
+
+      - name: Install the wheel and dependencies
+        run: |
+          cmake -P cpp/CMake/CpuCount.cmake | sed 's/^-- //' | tee -a $GITHUB_ENV
+          python -V
+          cd "$RUNNER_TEMP" # Works for Windows-style paths as well
+          python -m pip install --force-reinstall *${{env.python_impl_name}}*.whl
+          python -m pip install arcticdb[Testing] pytest-split
+          python -m pip uninstall -y pytest-cpp || true # No longer works on 3.6
+          echo -e "${{matrix.envs || ''}}" | tee -a $GITHUB_ENV
+          if [[ -n "$MSYSTEM" ]] ; then
+            echo "LOCALAPPDATA=$LOCALAPPDATA" | tee -a $GITHUB_ENV
+            MSYS_NO_PATHCONV=1 reg.exe ADD 'HKLM\SOFTWARE\Microsoft\Windows\Windows Error Reporting\LocalDumps'
+            cd "/proc/registry/HKEY_LOCAL_MACHINE/SOFTWARE/Microsoft"
+            find "Windows NT/CurrentVersion/AeDebug" "Windows/Windows Error Reporting/LocalDumps" \
+              -type f -print -exec xxd -c 64 '{}' \; || true
+          fi
+          ${{vars.EXTRA_TEST_PREPARE_CMD || ''}}
         env:
           CMAKE_BUILD_PARALLEL_LEVEL: ${{vars.CMAKE_BUILD_PARALLEL_LEVEL}}
 
@@ -281,6 +241,18 @@ jobs:
           TEST_OUTPUT_DIR: ${{runner.temp}}
           # Use the Mongo created in the service container above to test against
           CI_MONGO_HOST: mongodb
+
+      - name: Collect crash dumps (Windows)
+        if: matrix.os == 'windows' && failure()
+        uses: actions/upload-artifact@v3
+        with:
+          name: crashdump-${{matrix.os}}-${{env.python_impl_name}}-${{matrix.type}}
+          path: ${{env.LOCALAPPDATA}}/CrashDumps/
+
+      - name: Disk usage
+        if: always()
+        run: set +e ; du -m . "${PARALLEL_TEST_ROOT:-/tmp/parallel_test}" | sort -n | tail -n 100 ; df -h
+        continue-on-error: true
 
       - name: Upload the logs
         if: always()
