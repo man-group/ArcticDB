@@ -13,7 +13,7 @@ dependencies:
   - prometheus-cpp
   - double-conversion
   - libevent
-  - libprotobuf
+  - libprotobuf < 4
   - libmongocxx
   - zstd
   - pybind11
