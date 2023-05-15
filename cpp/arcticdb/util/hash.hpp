@@ -10,9 +10,18 @@
 #include <cstdint>
 #include <string_view>
 
+// Adapt macro inlining depending on xxhash's linkage for the build.
+#ifdef ARCTICDB_USING_STATIC_XXHASH
 #define XXH_STATIC_LINKING_ONLY
+#else
+#define XXH_INLINE_ALL
+#endif 
 #include <xxhash.h>
+#ifdef ARCTICDB_USING_STATIC_XXHASH
 #undef XXH_STATIC_LINKING_ONLY
+#else
+#undef XXH_INLINE_ALL
+#endif 
 
 #include <folly/hash/Hash.h>
 

@@ -44,8 +44,6 @@ struct ColumnWithStrings {
     std::shared_ptr<Column> column_;
     const std::shared_ptr<StringPool> string_pool_;
 
-    ARCTICDB_MOVE_COPY_DEFAULT(ColumnWithStrings)
-
     explicit ColumnWithStrings(std::unique_ptr<Column>&& col) :
         column_(std::move(col)) {
     }
