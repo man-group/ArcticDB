@@ -15,6 +15,13 @@ from setuptools.command.develop import develop
 from wheel.bdist_wheel import bdist_wheel
 
 
+# experimental flag to indicate that we want
+# the dependencies from a conda
+ARCTICDB_USING_CONDA  = os.environ.get("ARCTICDB_USING_CONDA", "0")
+ARCTICDB_USING_CONDA = ARCTICDB_USING_CONDA != "0"
+
+print(f"ARCTICDB_USING_CONDA={ARCTICDB_USING_CONDA}")
+
 def _log_and_run(*cmd, **kwargs):
     print("Running " + " ".join(cmd))
     subprocess.check_call(cmd, **kwargs)
@@ -118,7 +125,9 @@ class CMakeBuild(build_ext):
         if preset == "skip":
             return
         if preset == "*":
+            conda_suffix = "-conda" if ARCTICDB_USING_CONDA else ""
             suffix = "-debug" if self.debug else "-release"
+            suffix = conda_suffix + suffix
             preset = ("windows-cl" if platform.system() == "Windows" else platform.system().lower()) + suffix
         _log_and_run(
             cmake,

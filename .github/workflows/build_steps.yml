@@ -23,6 +23,7 @@ jobs:
         build_dir: [0] # Must be an absolute path
         symbols: [0] # Glob for symbol symbol files. Used for including in follower builds and exclusion on others.
         do_not_archive: [0]
+        test_services: [0] # Github service containers to spin up for the pytest run
         exclude:
             - os: 0
         include:
@@ -180,10 +181,11 @@ jobs:
         include:
           - ${{fromJSON(inputs.matrix)}}
     name: ${{matrix.type}}
-    runs-on: ${{fromJson(matrix.pytest_distro || matrix.distro)}}
+    runs-on: ${{fromJson(matrix.distro)}}
     container: ${{matrix.os == 'linux' && needs.compile.outputs.manylinux_image || null}}
     defaults:
       run: {shell: bash}
+    services: ${{fromJSON(matrix.test_services)}}
     steps:
       - name: Checkout
         uses: actions/checkout@v3.3.0
@@ -237,6 +239,8 @@ jobs:
         run: build_tooling/parallel_test.sh tests/${{matrix.type}}
         env:
           TEST_OUTPUT_DIR: ${{runner.temp}}
+          # Use the Mongo created in the service container above to test against
+          CI_MONGO_HOST: mongodb
 
       - name: Collect crash dumps (Windows)
         if: matrix.os == 'windows' && failure()
