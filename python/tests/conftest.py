@@ -28,12 +28,20 @@ import pandas as pd
 import random
 from datetime import datetime
 from typing import Optional, Any, Dict
+import subprocess
+from pathlib import Path
+import socket
 
 import requests
 from pytest_server_fixtures.base import get_ephemeral_port
 
 from arcticdb.arctic import Arctic
-from arcticdb.version_store.helper import create_test_lmdb_cfg, create_test_s3_cfg, create_test_mongo_cfg
+from arcticdb.version_store.helper import (
+    create_test_lmdb_cfg,
+    create_test_s3_cfg,
+    create_test_mongo_cfg,
+    create_test_azure_cfg,
+)
 from arcticdb.config import Defaults
 from arcticdb.util.test import configure_test_logger, apply_lib_cfg
 from arcticdb.version_store.helper import ArcticMemoryConfig
@@ -147,6 +155,28 @@ def lib_name():
     return f"local.test_{random.randint(0, 999)}_{datetime.utcnow().strftime('%Y-%m-%dT%H_%M_%S_%f')}"
 
 
+@pytest.fixture
+def arcticdb_test_s3_config(moto_s3_endpoint_and_credentials):
+    endpoint, port, bucket, aws_access_key, aws_secret_key = moto_s3_endpoint_and_credentials
+
+    def create(lib_name):
+        return create_test_s3_cfg(lib_name, aws_access_key, aws_secret_key, bucket, endpoint)
+
+    return create
+
+
+@pytest.fixture
+def arcticdb_test_azure_config(azurite_port):
+    def create(lib_name):
+        global BUCKET_ID
+        bucket = f"testbucket{BUCKET_ID}"
+        BUCKET_ID = BUCKET_ID + 1
+        print(bucket)
+        return create_test_azure_cfg(lib_name=lib_name, credential_name="devstoreaccount1", credential_key="Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==", container_name=bucket, endpoint="0.0.0.0:"+str(azurite_port), is_https=False, connect_to_azurite=True)
+
+    return create
+
+
 def _version_store_factory_impl(
     used, make_cfg, default_name, *, name: str = None, reuse_name=False, **kwargs
 ) -> NativeVersionStore:
@@ -234,6 +264,21 @@ def s3_store_factory(lib_name, moto_s3_endpoint_and_credentials):
 
 
 @pytest.fixture
+def azure_store_factory(lib_name, arcticdb_test_azure_config):
+    """Factory to create any number of S3 libs with the given WriteOptions or VersionStoreConfig.
+
+    `name` can be a magical value "_unique_" which will create libs with unique names.
+    This factory will clean up any libraries requested
+    """
+    used = {}
+    try:
+        yield functools.partial(_version_store_factory_impl, used, arcticdb_test_azure_config, lib_name)
+    finally:
+        for lib in used.values():
+            lib.version_store.clear()
+
+
+@pytest.fixture
 def mongo_store_factory(request, lib_name):
     """Similar capability to `s3_store_factory`, but uses a mongo store."""
     # Use MongoDB if it's running (useful in CI), otherwise spin one up with pytest-server-fixtures.
@@ -274,6 +319,11 @@ def mongo_version_store(mongo_store_factory):
 @pytest.fixture(scope="function")
 def s3_version_store_prune_previous(s3_store_factory):
     return s3_store_factory(prune_previous_version=True)
+
+
+@pytest.fixture(scope="function")
+def azure_version_store(spawn_azurite, azure_store_factory):
+    return azure_store_factory()
 
 
 @pytest.fixture
@@ -411,3 +461,53 @@ def get_wide_df():
         return pd.DataFrame(index=[pd.Timestamp(ts)], data={str(col): get_val(col) for col in cols})
 
     return get_df
+
+
+@pytest.fixture(scope="module")
+def azurite_port():
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    port=10000
+    max_port=65535
+    while port <= max_port:
+        try:
+            sock.bind(('', port))
+            sock.close()
+            return port
+        except OSError:
+            port += 1
+    raise IOError('no free ports')
+
+
+@pytest.fixture(scope="module")
+def spawn_azurite(azurite_port):
+    if sys.platform == "linux":
+        print("Spawning Azurite")
+        port = str(azurite_port)
+        temp_folder = "azurite" + port
+        shutil.rmtree(temp_folder, ignore_errors=True)
+        os.mkdir(temp_folder)
+        p = subprocess.Popen(["azurite", "--silent", "--blobPort", port, "--blobHost", "0.0.0.0", "--queuePort", "0", "--tablePort", "0"], cwd=temp_folder)
+
+        time.sleep(2)
+        yield
+        print("Killing Azurite")
+        p.kill()
+        shutil.rmtree(temp_folder, ignore_errors=True)
+    else:
+        yield
+
+
+@pytest.fixture(
+    scope="function",
+    params=["s3_version_store", "azure_version_store"] if sys.platform == "linux" else ["s3_version_store"]
+)
+def object_version_store(request):
+    yield request.getfixturevalue(request.param)
+
+
+@pytest.fixture(
+    scope="function",
+    params=["lmdb_version_store", "s3_version_store", "azure_version_store"] if sys.platform == "linux" else ["lmdb_version_store", "s3_version_store"]
+)
+def object_and_lmdb_version_store(request):
+    yield request.getfixturevalue(request.param)

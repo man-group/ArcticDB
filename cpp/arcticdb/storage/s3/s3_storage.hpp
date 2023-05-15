@@ -15,7 +15,7 @@
 #include <aws/core/auth/AWSCredentialsProvider.h>
 #include <arcticdb/log/log.hpp>
 #include <arcticdb/storage/s3/s3_api.hpp>
-#include <arcticdb/storage/s3/s3_utils.hpp>
+#include <arcticdb/storage/object_store_utils.hpp>
 #include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/storage/s3/s3_client_accessor.hpp>
 #include <arcticdb/util/composite.hpp>
