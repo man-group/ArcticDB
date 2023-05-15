@@ -212,10 +212,11 @@ def test_append_out_of_order_and_sort(lmdb_version_store_ignore_order):
     assert_frame_equal(vit.data, test)
 
 
-def test_upsert_with_delete(lmdb_version_store):
+def test_upsert_with_delete(lmdb_version_store_big_map):
+    lib = lmdb_version_store_big_map
     symbol = "upsert_with_delete"
-    lmdb_version_store.version_store.remove_incomplete(symbol)
-    lmdb_version_store.version_store._set_validate_version_map()
+    lib.version_store.remove_incomplete(symbol)
+    lib.version_store._set_validate_version_map()
 
     num_rows = 1111
     dtidx = pd.date_range("1970-01-01", periods=num_rows)
@@ -227,16 +228,16 @@ def test_upsert_with_delete(lmdb_version_store):
 
     for idx, df in enumerate(list_df):
         if idx % 3 == 0:
-            lmdb_version_store.delete(symbol)
+            lib.delete(symbol)
 
-        lmdb_version_store.append(symbol, df, write_if_missing=True)
+        lib.append(symbol, df, write_if_missing=True)
 
     first = list_df[len(list_df) - 3]
     second = list_df[len(list_df) - 2]
     third = list_df[len(list_df) - 1]
-    print(type(first))
+
     expected = pd.concat([first, second, third])
-    vit = lmdb_version_store.read(symbol)
+    vit = lib.read(symbol)
     assert_frame_equal(vit.data, expected)
 
 

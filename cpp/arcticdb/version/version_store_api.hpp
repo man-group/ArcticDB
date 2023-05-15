@@ -18,6 +18,7 @@
 #include <arcticdb/version/snapshot.hpp>
 #include <arcticdb/version/symbol_list.hpp>
 #include <arcticdb/entity/protobufs.hpp>
+#include <arcticdb/pipeline/column_stats.hpp>
 #include <arcticdb/pipeline/write_options.hpp>
 #include <arcticdb/entity/versioned_item.hpp>
 #include <arcticdb/pipeline/query.hpp>
@@ -135,6 +136,24 @@ class PythonVersionStore : public LocalVersionedEngine {
         const StreamId& stream_id,
         const py::object & user_meta,
         bool prune_previous_versions);
+
+    void create_column_stats_version(
+        const StreamId& stream_id,
+        ColumnStats& column_stats,
+        const VersionQuery& version_query);
+
+    void drop_column_stats_version(
+        const StreamId& stream_id,
+        const std::optional<ColumnStats>& column_stats_to_drop,
+        const VersionQuery& version_query);
+
+    ReadResult read_column_stats_version(
+        const StreamId& stream_id,
+        const VersionQuery& version_query);
+
+    ColumnStats get_column_stats_info_version(
+        const StreamId& stream_id,
+        const VersionQuery& version_query);
 
     ReadResult read_dataframe_version(
         const StreamId &stream_id,

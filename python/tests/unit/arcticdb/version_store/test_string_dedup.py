@@ -67,7 +67,7 @@ def test_string_dedup_dynamic_schema(lmdb_version_store_dynamic_schema):
     original_df = generate_dataframe(["col1"], 1000, unique_strings, "2000-1-1")
     # This will be different to original_df, as the value in each row is chosen at random from the unique string pool
     append_df = generate_dataframe(["col1"], 1000, unique_strings, "2010-1-1")
-    total_df = original_df.append(append_df)
+    total_df = pd.concat((original_df, append_df))
 
     # Fixed width to dynamic
     lib.write(symbol, original_df, dynamic_strings=False)

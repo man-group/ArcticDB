@@ -19,7 +19,7 @@ import difflib
 from datetime import datetime
 from numpy import datetime64
 from pandas import Timestamp, to_datetime, Timedelta
-from typing import Any, Optional, Union, List, Mapping, Iterable, Sequence, Tuple, Dict, TYPE_CHECKING
+from typing import Any, Optional, Union, List, Mapping, Iterable, Sequence, Tuple, Dict, Set, TYPE_CHECKING
 from contextlib import contextmanager
 
 from arcticc.pb2.descriptors_pb2 import TypeDescriptor, SortedValue
@@ -45,6 +45,7 @@ from arcticdb_ext.version_store import PythonVersionStoreReadQuery as _PythonVer
 from arcticdb_ext.version_store import PythonVersionStoreUpdateQuery as _PythonVersionStoreUpdateQuery
 from arcticdb_ext.version_store import PythonVersionStoreReadOptions as _PythonVersionStoreReadOptions
 from arcticdb_ext.version_store import PythonVersionStoreVersionQuery as _PythonVersionStoreVersionQuery
+from arcticdb_ext.version_store import ColumnStats as _ColumnStats
 from arcticdb_ext.version_store import StreamDescriptorMismatch
 from arcticdb.authorization.permissions import OpenMode
 from arcticdb.exceptions import ArcticNativeNotYetImplemented, ArcticNativeException
@@ -798,6 +799,116 @@ class NativeVersionStore:
                 host=self.env,
             )
 
+    def create_column_stats(
+            self,
+            symbol: str,
+            column_stats: Dict[str, Set[str]],
+            as_of: VersionQueryInput = None,
+    ) -> None:
+        """
+        Calculates the specified column statistics for each row-slice for the given symbol. In the future, these
+        statistics will be used by `QueryBuilder` filtering operations to reduce the number of data segments read out
+        of storage.
+
+        Parameters
+        ----------
+        symbol: `str`
+            Symbol name.
+        column_stats: `Dict[str, Set[str]]`
+            The column stats to create.
+            Keys are column names.
+            Values are sets of statistic types to build for that column. Options are:
+                "MINMAX" : store the minimum and maximum value for the column in each row-slice
+        as_of : `str` or `int` or `datetime.datetime`
+            Create the column stats for the version as it was as_of the point in time.
+            `int` : specific version number
+            `str` : snapshot name which contains the version
+            `datetime.datetime` : the version of the data that existed as_of the requested point in time
+
+        Returns
+        -------
+        None
+        """
+        column_stats = self._get_column_stats(column_stats)
+        version_query = self._get_version_query(as_of)
+        self.version_store.create_column_stats_version(symbol, column_stats, version_query)
+
+    def drop_column_stats(
+            self,
+            symbol: str,
+            column_stats: Optional[Dict[str, Set[str]]] = None,
+            as_of: VersionQueryInput = None,
+    ) -> None:
+        """
+        Deletes the specified column statistics for the given symbol.
+
+        Parameters
+        ----------
+        symbol: `str`
+            Symbol name.
+        column_stats: `Optional[Dict[str, Set[str]]], default=None`
+            The column stats to drop. If not provided, all column stats will be dropped.
+            See documentation of `create_column_stats` method for more details.
+        as_of : `str` or `int` or `datetime.datetime`
+            Create the column stats for the version as it was as_of the point in time.
+            `int` : specific version number
+            `str` : snapshot name which contains the version
+            `datetime.datetime` : the version of the data that existed as_of the requested point in time
+
+        Returns
+        -------
+        None
+        """
+        column_stats = self._get_column_stats(column_stats)
+        version_query = self._get_version_query(as_of)
+        self.version_store.drop_column_stats_version(symbol, column_stats, version_query)
+
+    def read_column_stats(self, symbol: str, as_of: VersionQueryInput = None, **kwargs) -> pd.DataFrame:
+        """
+        Read all the column statistics data that has been generated for the given symbol.
+
+        Parameters
+        ----------
+        symbol: `str`
+            Symbol name.
+        as_of : `str` or `int` or `datetime.datetime`
+            Create the column stats for the version as it was as_of the point in time.
+            `int` : specific version number
+            `str` : snapshot name which contains the version
+            `datetime.datetime` : the version of the data that existed as_of the requested point in time
+
+        Returns
+        -------
+        `pandas.DataFrame`
+            DataFrame representing the stored column statistics for each row-slice in a human-readable format.
+        """
+        version_query = self._get_version_query(as_of, **kwargs)
+        data = denormalize_dataframe(self.version_store.read_column_stats_version(symbol, version_query))
+        return data
+
+    def get_column_stats_info(self, symbol: str, as_of: VersionQueryInput = None, **kwargs) -> Dict[str, Set[str]]:
+        """
+        Read the column statistics dictionary for the given symbol.
+
+        Parameters
+        ----------
+        symbol: `str`
+            Symbol name.
+        as_of : `str` or `int` or `datetime.datetime`
+            Create the column stats for the version as it was as_of the point in time.
+            `int` : specific version number
+            `str` : snapshot name which contains the version
+            `datetime.datetime` : the version of the data that existed as_of the requested point in time
+
+        Returns
+        -------
+        `Dict[str, Set[str]]`
+            A dict from column names to sets of column stats that have been generated for that column.
+            In the same format as the `column_stats` argument provided to `create_column_stats` and `drop_column_stats`.
+        """
+        version_query = self._get_version_query(as_of, **kwargs)
+        return self.version_store.get_column_stats_info_version(symbol, version_query).to_map()
+
     def _batch_read_keys(self, atom_keys):
         for result in self.version_store.batch_read_keys(atom_keys):
             read_result = ReadResult(*result)
@@ -1362,6 +1473,9 @@ class NativeVersionStore:
         read_options = self._get_read_options(**kwargs)
         read_query = self._get_read_query(date_range, row_range, columns, query_builder)
         return version_query, read_options, read_query
+
+    def _get_column_stats(self, column_stats):
+        return None if column_stats is None else _ColumnStats(column_stats)
 
     def read(
         self,

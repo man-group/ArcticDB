@@ -40,13 +40,17 @@ Note that for legacy reasons, the terms `symbol`, `stream`, and `stream ID` are 
 | Error Code | Cause                                                      | Resolution                                                                                                                                                                                                                                                                             |
 |------------|------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | 4000       | The number, type, or name of the columns has been changed. | Ensure that the type and order of the columns has not changed when appending or updating the previous version. This restriction only applies when `Dynamic Schema` is disabled - if you require the columns sets to change, please enable the `Dynamic Schema` option on your library. |
+| 4001       | The specified column does not exist. | Please specify a valid column - use the `get_description` method to see all of the columns associated with a given symbol. |
+| 4002       | The requested operation is not supported with the type of column provided. | Certain operations are not supported over all column types e.g. arithmetic with the `QueryBuilder` over string columns - use the `get_description` method to see all of the columns associated with a given symbol, along with their types. |
+| 4003       | The requested operation is not supported with the index type of the symbol provided. | Certain operations are not supported over all index types e.g. column statistics generation with a string index - use the `get_description` method to see the index(es) associated with a given symbol, along with their types. |
+| 4004       | The requested operation is not supported with pickled data. | Certain operations are not supported with pickled data e.g. `date_range` filtering. If such operations are required, you must ensure that the data is of a normalizable type, such that it can be written using the `write` method, and does not require the `write_pickle` method. |
 
 
 ### Storage Errors
 
 | Error Code | Cause                                                                  | Resolution                                                                                                                                          |
 |------------|------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------|
-| 5000       | A missing key has been requested.                                      | ArcticDB has requested a key that does not exist in storage. Please ensure that you have requested a `symbol`, `snapshot` or `version` that exists. |
+| 5000       | A missing key has been requested.                                      | ArcticDB has requested a key that does not exist in storage. Please ensure that you have requested a `symbol`, `snapshot`, `version`, or column statistic that exists. |
 | 5001       | ArcticDB is attempting to write to an already-existing key in storage. | This error is unexpected - please ensure that no other tools are writing data the same storage location that may conflict with ArcticDB.            |
 
 ### Sorting Errors
@@ -54,6 +58,18 @@ Note that for legacy reasons, the terms `symbol`, `stream`, and `stream ID` are 
 | Error Code | Cause                                                                  | Resolution                                                                                                                                          |
 |------------|------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------|
 | 6000       | Data should be sorted for this operation.                              | The requested operation requires data to be sorted. If this is a modification operation such as update, sort the input data. ArcticDB relies on Pandas to detect if data is sorted - you can call DataFrame.index.is_monotonic_increasing on your input DataFrame to see if Pandas believes the data to be sorted
+
+### User Input Errors
+
+| Error Code | Cause                                                                  | Resolution                                                                                                                                          |
+|------------|------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------|
+| 7000       | The input provided by the user is invalid in some fashion.             | The resolution will depend on the nature of the incorrect input, and should be explained in the associated error message. |
+
+### Compatibility Errors
+
+| Error Code | Cause                                                                  | Resolution                                                                                                                                          |
+|------------|------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------|
+| 8000       | The version of ArcticDB being used to read the column statistics does not understand the statistics format. | Update ArcticDB to (at least) the same version as that being used to create the column statistics. |
 
 ## Errors without numeric error codes
 

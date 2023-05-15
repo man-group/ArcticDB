@@ -68,6 +68,8 @@ const KeyData& get_key_data(KeyType key_type) {
     STRING_REF(KeyType::BACKUP_SNAPSHOT_REF, bref, 'B')
     STRING_KEY(KeyType::TOMBSTONE_ALL, tall, 'q')
     STRING_REF(KeyType::LIBRARY_CONFIG, cref, 'C')
+    STRING_KEY(KeyType::COLUMN_STATS, cstats, 'S')
+
 
     const auto& data =  KeyMap::get(int(key_type));
     util::check(data.short_name_ != 'u', "Could not get data for key_type {}", static_cast<int>(key_type));

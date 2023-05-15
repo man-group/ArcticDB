@@ -26,9 +26,10 @@
 # - Try to find the Libevent config processing library
 # Once done this will define
 #
-# LIBEVENT_FOUND - System has Libevent
-# LIBEVENT_INCLUDE_DIR - the Libevent include directory
-# LIBEVENT_LIBRARIES 0 The libraries needed to use LibEvLibeventent
+#    LIBEVENT_FOUND - System has Libevent
+#    LIBEVENT_INCLUDE_DIR - the Libevent include directory
+#    LIBEVENT_LIBRARIES - The libraries needed to use Libevent
+#
 find_path     (LIBEVENT_INCLUDE_DIR NAMES event.h)
 find_library  (LIBEVENT_LIBRARY     NAMES event)
 find_library  (LIBEVENT_CORE        NAMES event_core)

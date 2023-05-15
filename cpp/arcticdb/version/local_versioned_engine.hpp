@@ -12,6 +12,7 @@
 #include <arcticdb/version/symbol_list.hpp>
 #include <arcticdb/version/snapshot.hpp>
 #include <arcticdb/entity/protobufs.hpp>
+#include <arcticdb/pipeline/column_stats.hpp>
 #include <arcticdb/pipeline/write_options.hpp>
 #include <arcticdb/entity/versioned_item.hpp>
 #include <arcticdb/pipeline/query.hpp>
@@ -173,6 +174,40 @@ public:
         bool prune_previous_versions,
         arcticdb::proto::descriptors::UserDefinedMetadata&& user_meta
     );
+
+    void create_column_stats_internal(
+        const VersionedItem& versioned_item,
+        ColumnStats& column_stats,
+        const ReadOptions& read_options);
+
+    void create_column_stats_version_internal(
+        const StreamId& stream_id,
+        ColumnStats& column_stats,
+        const VersionQuery& version_query,
+        const ReadOptions& read_options);
+
+    void drop_column_stats_internal(
+        const VersionedItem& versioned_item,
+        const std::optional<ColumnStats>& column_stats_to_drop);
+
+    void drop_column_stats_version_internal(
+        const StreamId& stream_id,
+        const std::optional<ColumnStats>& column_stats_to_drop,
+        const VersionQuery& version_query);
+
+    FrameAndDescriptor read_column_stats_internal(
+        const VersionedItem& versioned_item);
+
+    std::pair<VersionedItem, FrameAndDescriptor> read_column_stats_version_internal(
+        const StreamId& stream_id,
+        const VersionQuery& version_query);
+
+    ColumnStats get_column_stats_info_internal(
+        const VersionedItem& versioned_item);
+
+    ColumnStats get_column_stats_info_version_internal(
+        const StreamId& stream_id,
+        const VersionQuery& version_query);
 
     std::pair<VersionedItem, std::vector<AtomKey>> write_individual_segment(
         const StreamId& stream_id,

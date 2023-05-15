@@ -50,15 +50,39 @@ struct IClause {
         [[nodiscard]] bool requires_repartition() const { return folly::poly_call<2>(*this); }
 
         [[nodiscard]] std::shared_ptr<ExecutionContext> execution_context() const { return folly::poly_call<3>(*this); }
+
+        [[nodiscard]] bool can_combine_with_column_selection() const { return folly::poly_call<4>(*this); }
     };
 
     template<class T>
-    using Members = folly::PolyMembers<&T::process, &T::repartition, &T::requires_repartition, &T::execution_context>;
+    using Members = folly::PolyMembers<&T::process, &T::repartition, &T::requires_repartition, &T::execution_context, &T::can_combine_with_column_selection>;
 };
 
 using Clause = folly::Poly<IClause>;
 
 std::vector<Composite<ProcessingSegment>> single_partition(std::vector<Composite<ProcessingSegment>> &&segs);
+
+struct ColumnStatsGenerationClause {
+    std::shared_ptr<ExecutionContext> execution_context_;
+    std::shared_ptr<std::vector<ColumnStatsAggregator>> column_stats_aggregators_;
+
+    explicit ColumnStatsGenerationClause(std::shared_ptr<ExecutionContext> execution_context,
+                                         std::shared_ptr<std::vector<ColumnStatsAggregator>> column_stats_aggregators) :
+            execution_context_(std::move(execution_context)),
+            column_stats_aggregators_(std::move(column_stats_aggregators)) {
+    }
+
+    [[nodiscard]] Composite<ProcessingSegment>
+    process(std::shared_ptr<Store> store, Composite<ProcessingSegment> &&p) const;
+
+    [[nodiscard]] std::shared_ptr<ExecutionContext> execution_context() const { return execution_context_; }
+
+    [[nodiscard]] bool requires_repartition() const { return false; }
+
+    [[nodiscard]] std::optional<std::vector<Composite<ProcessingSegment>>>
+    repartition([[maybe_unused]] std::vector<Composite<ProcessingSegment>> &&) const { return std::nullopt; }
+    [[nodiscard]] bool can_combine_with_column_selection() const { return false; }
+};
 
 struct FilterClause {
     std::shared_ptr<ExecutionContext> execution_context_;
@@ -76,6 +100,7 @@ struct FilterClause {
 
     [[nodiscard]] std::optional<std::vector<Composite<ProcessingSegment>>>
     repartition([[maybe_unused]] std::vector<Composite<ProcessingSegment>> &&) const { return std::nullopt; }
+    [[nodiscard]] bool can_combine_with_column_selection() const { return true; }
 };
 
 /**
@@ -114,6 +139,7 @@ struct RowNumberLimitClause {
 
     [[nodiscard]] std::optional<std::vector<Composite<ProcessingSegment>>>
     repartition([[maybe_unused]] std::vector<Composite<ProcessingSegment>> &&) const { return std::nullopt; }
+    [[nodiscard]] bool can_combine_with_column_selection() const { return true; }
 };
 
 template<typename GrouperType, typename BucketizerType>
@@ -188,6 +214,7 @@ struct PartitionClause {
 
         return ret;
     }
+    [[nodiscard]] bool can_combine_with_column_selection() const { return true; }
 };
 
 inline StreamDescriptor empty_descriptor() {
@@ -218,6 +245,7 @@ struct AggregationClause {
 
     [[nodiscard]] std::optional<std::vector<Composite<ProcessingSegment>>>
     repartition([[maybe_unused]] std::vector<Composite<ProcessingSegment>> &&comps) const { return std::nullopt; }
+    [[nodiscard]] bool can_combine_with_column_selection() const { return false; }
 };
 
 struct PassthroughClause {
@@ -233,6 +261,7 @@ struct PassthroughClause {
     repartition([[maybe_unused]] std::vector<Composite<ProcessingSegment>> &&comps) const { return std::nullopt; }
 
     [[nodiscard]] bool requires_repartition() const { return false; }
+    [[nodiscard]] bool can_combine_with_column_selection() const { return true; }
 
 };
 
@@ -293,6 +322,7 @@ struct MergeClause {
     }
 
     [[nodiscard]] bool requires_repartition() const { return true; }
+    [[nodiscard]] bool can_combine_with_column_selection() const { return true; }
 };
 
 struct SplitClause {
@@ -333,6 +363,7 @@ struct SplitClause {
     repartition([[maybe_unused]] std::vector<Composite<ProcessingSegment>> &&comps) const { return std::nullopt; }
 
     [[nodiscard]] bool requires_repartition() const { return false; }
+    [[nodiscard]] bool can_combine_with_column_selection() const { return true; }
 };
 
 struct SortClause {
@@ -360,6 +391,7 @@ struct SortClause {
     repartition([[maybe_unused]] std::vector<Composite<ProcessingSegment>> &&comps) const { return std::nullopt; }
 
     [[nodiscard]] bool requires_repartition() const { return false; }
+    [[nodiscard]] bool can_combine_with_column_selection() const { return true; }
 };
 
 struct ProjectClause {
@@ -385,6 +417,7 @@ struct ProjectClause {
     repartition([[maybe_unused]] std::vector<Composite<ProcessingSegment>> &&comps) const { return std::nullopt; }
 
     [[nodiscard]] bool requires_repartition() const { return false; }
+    [[nodiscard]] bool can_combine_with_column_selection() const { return true; }
 };
 
 class ClauseBuilder {
@@ -457,6 +490,7 @@ struct RemoveColumnPartitioningClause {
 
     [[nodiscard]] std::optional<std::vector<Composite<ProcessingSegment>>>
     repartition([[maybe_unused]] std::vector<Composite<ProcessingSegment>> &&) const { return std::nullopt; }
+    [[nodiscard]] bool can_combine_with_column_selection() const { return false; }
 };
 
 }//namespace arcticdb

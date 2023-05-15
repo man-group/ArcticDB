@@ -70,7 +70,7 @@ def test_observation_time(lmdb_version_store):
         },
         index=pd.date_range(pd.Timestamp(year=2000, month=1, day=5), periods=hours_per_day, freq="H"),
     )
-    df_total = df_1.append(df_2).append(df_3).append(df_4).append(df_5)
+    df_total = pd.concat((df_1, df_2, df_3, df_4, df_5))
 
     # Write the data for 2000-01-03
     lib.write(sym, df_3)
@@ -95,11 +95,11 @@ def test_observation_time(lmdb_version_store):
     q = QueryBuilder()
     q = q[q[observed_col_name] < pd.Timestamp(year=2000, month=1, day=5)]
     received = lib.read(sym, query_builder=q).data
-    assert np.array_equal(df_3.append(df_4_initial), received)
+    assert np.array_equal(pd.concat((df_3, df_4_initial)), received)
     q = QueryBuilder()
     q = q[q[observed_col_name] < pd.Timestamp(year=2000, month=1, day=6)]
     received = lib.read(sym, query_builder=q).data
-    assert np.array_equal(df_3.append(df_4_initial).append(df_5), received)
+    assert np.array_equal(pd.concat((df_3, df_4_initial, df_5)), received)
 
     # Now backfill data for 2000-01-01 and 2000-01-02
     lib.update(sym, df_1)
@@ -113,19 +113,19 @@ def test_observation_time(lmdb_version_store):
     q = QueryBuilder()
     q = q[q[observed_col_name] < pd.Timestamp(year=2000, month=1, day=3)]
     received = lib.read(sym, query_builder=q).data
-    assert np.array_equal(df_1.append(df_2), received)
+    assert np.array_equal(pd.concat((df_1, df_2)), received)
     q = QueryBuilder()
     q = q[q[observed_col_name] < pd.Timestamp(year=2000, month=1, day=4)]
     received = lib.read(sym, query_builder=q).data
-    assert np.array_equal(df_1.append(df_2).append(df_3), received)
+    assert np.array_equal(pd.concat((df_1, df_2, df_3)), received)
     q = QueryBuilder()
     q = q[q[observed_col_name] < pd.Timestamp(year=2000, month=1, day=5)]
     received = lib.read(sym, query_builder=q).data
-    assert np.array_equal(df_1.append(df_2).append(df_3).append(df_4_initial), received)
+    assert np.array_equal(pd.concat((df_1, df_2, df_3, df_4_initial)), received)
     q = QueryBuilder()
     q = q[q[observed_col_name] < pd.Timestamp(year=2000, month=1, day=6)]
     received = lib.read(sym, query_builder=q).data
-    assert np.array_equal(df_1.append(df_2).append(df_3).append(df_4_initial).append(df_5), received)
+    assert np.array_equal(pd.concat((df_1, df_2, df_3, df_4_initial, df_5)), received)
 
     # Finally, update with the rows missing on 2000-01-04
     lib.update(sym, df_4_patch)
@@ -138,16 +138,16 @@ def test_observation_time(lmdb_version_store):
     q = QueryBuilder()
     q = q[q[observed_col_name] < pd.Timestamp(year=2000, month=1, day=3)]
     received = lib.read(sym, query_builder=q).data
-    assert np.array_equal(df_1.append(df_2), received)
+    assert np.array_equal(pd.concat((df_1, df_2)), received)
     q = QueryBuilder()
     q = q[q[observed_col_name] < pd.Timestamp(year=2000, month=1, day=4)]
     received = lib.read(sym, query_builder=q).data
-    assert np.array_equal(df_1.append(df_2).append(df_3), received)
+    assert np.array_equal(pd.concat((df_1, df_2, df_3)), received)
     q = QueryBuilder()
     q = q[q[observed_col_name] < pd.Timestamp(year=2000, month=1, day=5)]
     received = lib.read(sym, query_builder=q).data
-    assert np.array_equal(df_1.append(df_2).append(df_3).append(df_4), received)
+    assert np.array_equal(pd.concat((df_1, df_2, df_3, df_4)), received)
     q = QueryBuilder()
     q = q[q[observed_col_name] < pd.Timestamp(year=2000, month=1, day=6)]
     received = lib.read(sym, query_builder=q).data
-    assert np.array_equal(df_1.append(df_2).append(df_3).append(df_4).append(df_5), received)
+    assert np.array_equal(pd.concat((df_1, df_2, df_3, df_4, df_5)), received)

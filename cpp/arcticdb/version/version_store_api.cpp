@@ -401,7 +401,7 @@ void PythonVersionStore::add_to_snapshot(
     if(variant_key_type(snap_key) == KeyType::SNAPSHOT_REF && cfg().write_options().delayed_deletes()) {
         tombstone_snapshot(store(), to_ref(snap_key), std::move(snap_segment), version_map()->log_changes());
     } else {
-        delete_tree(deleted_keys);
+        delete_trees_responsibly(deleted_keys, get_master_snapshots_map(store()), snap_name);
         if (version_map()->log_changes()) {
             log_delete_snapshot(store(), snap_name);
         }
@@ -442,7 +442,7 @@ void PythonVersionStore::remove_from_snapshot(
     if(variant_key_type(snap_key) == KeyType::SNAPSHOT_REF && cfg().write_options().delayed_deletes()) {
         tombstone_snapshot(store(), to_ref(snap_key), std::move(snap_segment), version_map()->log_changes());
     } else {
-        delete_tree(deleted_keys);
+        delete_trees_responsibly(deleted_keys, get_master_snapshots_map(store()), snap_name);
         if (version_map()->log_changes()) {
             log_delete_snapshot(store(), snap_name);
         }
@@ -671,6 +671,37 @@ VersionedItem PythonVersionStore::write_metadata(
     arcticdb::proto::descriptors::UserDefinedMetadata user_meta_proto;
     python_util::pb_from_python(user_meta, user_meta_proto);
     return write_versioned_metadata_internal(stream_id, prune_previous_versions, std::move(user_meta_proto));
+}
+
+void PythonVersionStore::create_column_stats_version(
+    const StreamId& stream_id,
+    ColumnStats& column_stats,
+    const VersionQuery& version_query) {
+    ReadOptions read_options;
+    read_options.set_dynamic_schema(cfg().write_options().dynamic_schema());
+    create_column_stats_version_internal(stream_id, column_stats, version_query, read_options);
+}
+
+void PythonVersionStore::drop_column_stats_version(
+    const StreamId& stream_id,
+    const std::optional<ColumnStats>& column_stats_to_drop,
+    const VersionQuery& version_query) {
+    drop_column_stats_version_internal(stream_id, column_stats_to_drop, version_query);
+}
+
+ReadResult PythonVersionStore::read_column_stats_version(
+    const StreamId& stream_id,
+    const VersionQuery& version_query) {
+    ARCTICDB_SAMPLE(ReadColumnStats, 0)
+    auto [versioned_item, frame_and_descriptor] = read_column_stats_version_internal(stream_id, version_query);
+    return make_read_result_from_frame(frame_and_descriptor, versioned_item.key_);
+}
+
+ColumnStats PythonVersionStore::get_column_stats_info_version(
+    const StreamId& stream_id,
+    const VersionQuery& version_query) {
+    ARCTICDB_SAMPLE(GetColumnStatsInfo, 0)
+    return get_column_stats_info_version_internal(stream_id, version_query);
 }
 
 VersionedItem PythonVersionStore::compact_incomplete(

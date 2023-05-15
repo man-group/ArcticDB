@@ -35,12 +35,18 @@ inline std::optional<entity::TypeDescriptor> has_valid_type_promotion(entity::Ty
     if(source.dimension() != target.dimension())
         return std::nullopt;
 
+    if (source == target)
+        return target;
+
     auto source_type = source.data_type();
     auto target_type = target.data_type();
     auto source_size = slice_bit_size(source_type);
     auto target_size = slice_bit_size(target_type);
 
-    if (is_unsigned_type(source_type)) {
+    if (is_time_type(source_type)) {
+        if (!is_time_type(target_type))
+            return std::nullopt;
+    } else if (is_unsigned_type(source_type)) {
         if (is_unsigned_type(target_type)) {
             // UINT->UINT, target_size must be >= source_size
             if (source_size > target_size)
@@ -93,12 +99,24 @@ inline std::optional<entity::TypeDescriptor> has_valid_type_promotion(entity::Ty
     return entity::TypeDescriptor{combine_data_type(slice_value_type(target_type), target_size), target.dimension()};
 }
 
+inline std::optional<entity::TypeDescriptor> has_valid_type_promotion(
+    const proto::descriptors::TypeDescriptor& source,
+    const proto::descriptors::TypeDescriptor& target) {
+    return has_valid_type_promotion(entity::type_desc_from_proto(source), entity::type_desc_from_proto(target));
+}
+
 inline std::optional<entity::TypeDescriptor> has_valid_common_type(entity::TypeDescriptor left, entity::TypeDescriptor right) {
     auto maybe_common_type = has_valid_type_promotion(left, right);
     if (!maybe_common_type) {
         maybe_common_type = has_valid_type_promotion(right, left);
     }
     return maybe_common_type;
+}
+
+inline std::optional<entity::TypeDescriptor> has_valid_common_type(
+    const proto::descriptors::TypeDescriptor& left,
+    const proto::descriptors::TypeDescriptor& right) {
+    return has_valid_common_type(entity::type_desc_from_proto(left), entity::type_desc_from_proto(right));
 }
 
 }

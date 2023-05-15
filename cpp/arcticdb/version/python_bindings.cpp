@@ -12,6 +12,7 @@
 #include <arcticdb/version/version_store_api.hpp>
 #include <arcticdb/python/arctic_version.hpp>
 #include <arcticdb/python/python_utils.hpp>
+#include <arcticdb/pipeline/column_stats.hpp>
 #include <arcticdb/pipeline/query.hpp>
 #include <arcticdb/storage/mongo/mongo_instance.hpp>
 #include <arcticdb/processing/operation_types.hpp>
@@ -241,6 +242,10 @@ void register_bindings(py::module &m, py::exception<arcticdb::ArcticException>& 
             .value("ASCENDING", SortedValue::ASCENDING)
             .value("DESCENDING", SortedValue::DESCENDING);
 
+    py::class_<ColumnStats>(version, "ColumnStats")
+            .def(py::init<std::unordered_map<std::string, std::unordered_set<std::string>>>())
+            .def("to_map", &ColumnStats::to_map);
+
     py::class_<ColumnName>(version, "ColumnName")
             .def(py::init([](const std::string& name) {
                 return ColumnName(name);
@@ -321,6 +326,20 @@ void register_bindings(py::module &m, py::exception<arcticdb::ArcticException>& 
          .def("write_metadata",
              &PythonVersionStore::write_metadata,
              "Create a new version with new metadata and data from the last version")
+        .def("create_column_stats_version",
+             &PythonVersionStore::create_column_stats_version,
+             "Create column stats")
+        .def("drop_column_stats_version",
+             &PythonVersionStore::drop_column_stats_version,
+             "Drop column stats")
+        .def("read_column_stats_version",
+             [&](PythonVersionStore& v,  StreamId sid, const VersionQuery& version_query){
+                 return adapt_read_df(v.read_column_stats_version(sid, version_query));
+             },
+             "Read the column stats")
+        .def("get_column_stats_info_version",
+             &PythonVersionStore::get_column_stats_info_version,
+             "Get info about column stats")
          .def("remove_incomplete",
              &PythonVersionStore::remove_incomplete,
              "Delete incomplete segments")

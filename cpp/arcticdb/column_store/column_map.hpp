@@ -39,6 +39,18 @@ public:
         column_offsets_[pool_.get_view(off_str.offset())] = index;
     }
 
+    void erase(std::string_view name) {
+        auto it = column_offsets_.find(name);
+        internal::check<ErrorCode::E_INVALID_ARGUMENT>(it != column_offsets_.end(), "Cannot drop column with name '{}' as it doesn't exist", name);
+        auto dropped_offset = it->second;
+        column_offsets_.erase(it);
+        for (auto& [_, offset]: column_offsets_) {
+            if (offset > dropped_offset) {
+                offset--;
+            }
+        }
+    }
+
     void set_from_descriptor(const StreamDescriptor& descriptor) {
         for(const auto& field : folly::enumerate(descriptor.fields())) {
             insert(field->name(), field.index);

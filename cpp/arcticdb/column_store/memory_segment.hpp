@@ -185,12 +185,16 @@ public:
         impl_->append(*other.impl_);
     }
 
+    void concatenate(SegmentInMemory&& other, bool unique_column_names=true) {
+        impl_->concatenate(std::move(*other.impl_), unique_column_names);
+    }
+
     util::BitSet get_duplicates_bitset(SegmentInMemory& other) {
         return impl_->get_duplicates_bitset(*other.impl_);
     }
 
-    void drop_column(position_t column) {
-        impl_->drop_column(column);
+    void drop_column(std::string_view name) {
+        impl_->drop_column(name);
     }
 
     template<typename T>
