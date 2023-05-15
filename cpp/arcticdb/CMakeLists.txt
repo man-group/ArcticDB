@@ -515,6 +515,19 @@ endif ()
 
 target_link_libraries(arcticdb_core_object PUBLIC ${arcticdb_core_libraries})
 
+set (azure_package
+        Azure::azure-identity
+        Azure::azure-storage-blobs
+        )
+
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake-modules")
+include(AzureVcpkg)
+az_vcpkg_integrate()
+
+find_package(azure-identity-cpp CONFIG REQUIRED)
+find_package(azure-storage-blobs-cpp CONFIG REQUIRED)
+target_link_libraries(arcticdb_core_object PRIVATE ${azure_package})
+
 target_include_directories(arcticdb_core_object
         PRIVATE
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
@@ -536,6 +549,7 @@ add_library(arcticdb_core SHARED $<TARGET_OBJECTS:arcticdb_core_object>)
 target_link_libraries(arcticdb_core PRIVATE
         ${arcticdb_core_libraries}
         ${AWSSDK_LINK_LIBRARIES}
+        ${azure_package}
         )
 
 GENERATE_EXPORT_HEADER(arcticdb_core)
@@ -568,6 +582,7 @@ target_link_libraries(arcticdb_python
         #tsan
         arcticdb_core_static
         ${AWSSDK_LINK_LIBRARIES}
+        ${azure_package}
         )
 
 target_include_directories(arcticdb_python PRIVATE
@@ -733,6 +748,7 @@ if(${TEST})
                 GTest::gmock
                 PRIVATE
                 ${AWSSDK_LINK_LIBRARIES}
+                ${azure_package}
                 )
 
         # Fix gtest/folly unistd conflict until one of them fixes it. There's another copy for rapidtest
@@ -760,6 +776,7 @@ if(${TEST})
             ${COMMON_PUBLIC_TEST_LIBRARIES}
             PRIVATE
             ${AWSSDK_LINK_LIBRARIES}
+            ${azure_package}
             )
 
         target_include_directories(test_unit_arcticdb PRIVATE
@@ -800,6 +817,8 @@ if(${TEST})
                 rapidcheck_gtest
                 PRIVATE
                 ${RAPIDCHECK_PRIVATE_LIBRARIES}
+                ${AWSSDK_LINK_LIBRARIES}
+                ${azure_package}
                 )
 
         target_compile_options(arcticdb_rapidcheck_tests PRIVATE /FI "util/test/gtest.hpp")
@@ -811,6 +830,8 @@ if(${TEST})
             rapidcheck_gtest
             PRIVATE
             ${RAPIDCHECK_PRIVATE_LIBRARIES}
+            ${AWSSDK_LINK_LIBRARIES}
+            ${azure_package}
             )
     endif()
 
