@@ -48,6 +48,9 @@ if(NOT ${ARCTICDB_USING_CONDA})
     set(Zstd_LIBRARY $<IF:$<TARGET_EXISTS:zstd::libzstd_shared>,zstd::libzstd_shared,zstd::libzstd_static>)
 else()
 
+    SET(STATIC_LINK_STD_LIB OFF)
+    SET(HIDE_LINKED_SYMBOLS OFF)
+
     find_package(pybind11 REQUIRED)
     find_package(xxHash REQUIRED)
     find_package(PCRE REQUIRED)

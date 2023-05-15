@@ -16,9 +16,7 @@
       "binaryDir": "${sourceDir}/out/${presetName}-build",
       "installDir": "${sourceDir}/out/install",
       "cacheVariables": {
-        "ARCTICDB_USING_CONDA": "ON",
-        "STATIC_LINK_STD_LIB": "OFF",
-        "HIDE_LINKED_SYMBOLS": "OFF"
+        "ARCTICDB_USING_CONDA": "ON"
       }
     },
     {
