@@ -965,7 +965,7 @@ public:
                 using ColumnTagType = typename TypeDescriptorTag::DataTypeTag;
                 using RawType = typename ColumnTagType::raw_type;
 
-                util::BitSet final_bitset = std::move(filter_bitset);
+                util::BitSet final_bitset = filter_bitset;
                 auto sparse_map = (*column)->opt_sparse_map();
                 std::unique_ptr<util::BitIndex> sparse_idx;
                 auto output_col_idx = column.index;
