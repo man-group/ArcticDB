@@ -90,7 +90,8 @@ This quickstart uses build dependencies from [conda-forge](https://conda-forge.o
 It is a pre-requisite for releasing ArcticDB on conda-forge.
 
 **⚠️ At the time of writing, installing ArcticDB with this setup under Windows is not possible
-since [no distribution of folly for Windows is not available on conda-forge](https://anaconda.org/conda-forge/folly).**
+since [no distribution of folly for Windows is not available on conda-forge](https://anaconda.org/conda-forge/folly).
+For tracking progress on packaging folly for Windows on conda-forge, see: [`conda-forge/folly-feedstock#98`](https://github.com/conda-forge/folly-feedstock/pull/98)**
 
  - [Install `mamba`](https://mamba.readthedocs.io/en/latest/installation.html)
  - Create the `arcticdb` environment from its specification (`environment_unix.yml`):
