@@ -13,6 +13,7 @@ dependencies:
   - prometheus-cpp
   - double-conversion
   - libevent
+  - mongodb
   - libprotobuf < 4
   - libmongocxx
   - zstd

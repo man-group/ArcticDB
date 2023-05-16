@@ -10,7 +10,7 @@ jobs:
           - os: macos-latest
             mongo_bin:  /Users/runner/micromamba-root/envs/arcticdb/bin
           - os: ubuntu-latest
-          mongo_bin:  /home/runner/micromamba-root/envs/arcticdb/bin
+            mongo_bin:  /home/runner/micromamba-root/envs/arcticdb/bin
       fail-fast: false
     runs-on: ${{ matrix.os }}
     steps:
