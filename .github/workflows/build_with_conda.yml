@@ -9,11 +9,10 @@ on:
   pull_request:
 
 jobs:
-  unix:
+  linux:
     strategy:
       matrix:
         include:
-          - os: macos-latest
           - os: ubuntu-latest
 
       fail-fast: false
@@ -30,7 +29,6 @@ jobs:
           environment-name: arcticdb
           
       - name: Start MongoDB
-        if: ${{ matrix.os }} == "ubuntu-latest"
         uses: supercharge/mongodb-github-action@1.8.0
         with:
           mongodb-port: 27017
@@ -51,3 +49,34 @@ jobs:
         env:
           CI_MONGO_PORT: 27017
           CI_MONGO_HOST: localhost
+  macos:
+    strategy:
+      matrix:
+        include:
+          - os: macos-latest
+
+      fail-fast: false
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: recursive
+
+      - name: Install Conda environment from environment_unix.yml
+        uses: mamba-org/provision-with-micromamba@main
+        with:
+          environment-file: environment_unix.yml
+          environment-name: arcticdb
+          
+      - name: Build ArcticDB with conda (ARCTICDB_USING_CONDA=1)
+        shell: bash -l {0}
+        run: |
+          python -m pip install -v -e .
+        env:
+          ARCTICDB_USING_CONDA: 1
+
+      - name: Test with pytest
+        shell: bash -l {0}
+        run: |
+          cd python
+          python -m pytest tests
