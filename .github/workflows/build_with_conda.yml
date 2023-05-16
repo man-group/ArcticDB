@@ -22,15 +22,15 @@ jobs:
       - uses: actions/checkout@v3
         with:
           submodules: recursive
+
       - name: Install Conda environment from environment_unix.yml
         uses: mamba-org/provision-with-micromamba@main
-
         with:
           environment-file: environment_unix.yml
           environment-name: arcticdb
           
       - name: Start MongoDB
-        if: {{ matrix.os }} == 'ubuntu-latest'
+        if: ${{ matrix.os }} == "ubuntu-latest"
         uses: supercharge/mongodb-github-action@1.8.0
         with:
           mongodb-port: 27017
