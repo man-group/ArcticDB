@@ -19,6 +19,9 @@ we will arrange for the CLA to be sent to the signing authority within your corp
 Docker Quickstart
 =================
 
+This quickstart builds a release using build dependencies from vcpkg.
+ArcticDB releases on PyPi use vcpkg dependencies in the manner as described below.
+
 Note the below instructions will build a Linux X86_64 release.
 
 #### 1) Start the ArcticDB build docker image
@@ -82,6 +85,9 @@ Note that as this will copy the binary to your Python installation this will hav
 
 mamba and conda-forge Quickstart
 ================================
+
+This quickstart uses build dependencies from [conda-forge](https://conda-forge.org/).
+It is a pre-requisite for releasing ArcticDB on conda-forge.
 
 **⚠️ At the time of writing, installing ArcticDB with this setup under Windows is not possible
 since [no distribution of folly for Windows is not available on conda-forge](https://anaconda.org/conda-forge/folly).**
