@@ -422,13 +422,13 @@ def test_update_pickled_data(lmdb_version_store):
 
 def test_non_cstyle_numpy_update(lmdb_version_store):
     symbol = "test_non_cstyle_numpy_update"
-    non_sorted_arr_1 = [
+    not_sorted_arr_1 = [
         [1673740800, 846373.91],
         [1673654400, 2243057.35],
         [1673568000, 1091657.66],
         [1673481600, 1523618.28],
     ]
-    non_sorted_arr_2 = [
+    not_sorted_arr_2 = [
         [1674000000, 990047.95],
         [1673913600, 873934.74],
         [1673827200, 1602216.77],
@@ -440,8 +440,8 @@ def test_non_cstyle_numpy_update(lmdb_version_store):
         sorted_df = pd.DataFrame(data=arr, index=timestamps, columns=["time_start", "volume"])
         return sorted_df.sort_index()
 
-    sorted_df_1 = _create_product_candles_df(non_sorted_arr_1)
-    sorted_df_2 = _create_product_candles_df(non_sorted_arr_2)
+    sorted_df_1 = _create_product_candles_df(not_sorted_arr_1)
+    sorted_df_2 = _create_product_candles_df(not_sorted_arr_2)
 
     lmdb_version_store.write(symbol, sorted_df_1)
     lmdb_version_store.update(symbol, sorted_df_2)
@@ -450,7 +450,7 @@ def test_non_cstyle_numpy_update(lmdb_version_store):
     assert_frame_equal(after_arctic, before_arctic)
 
 
-def test_update_non_sorted_exception(lmdb_version_store):
+def test_update_input_not_sorted_exception(lmdb_version_store):
     symbol = "bad_update"
 
     num_initial_rows = 20
@@ -472,7 +472,8 @@ def test_update_non_sorted_exception(lmdb_version_store):
     with pytest.raises(SortingException):
         lmdb_version_store.update(symbol, df2)
 
-def test_update_existing_non_sorted_exception(lmdb_version_store):
+
+def test_update_existing_not_sorted_exception(lmdb_version_store):
     symbol = "bad_update"
 
     num_initial_rows = 20
@@ -494,14 +495,62 @@ def test_update_existing_non_sorted_exception(lmdb_version_store):
     with pytest.raises(SortingException):
         lmdb_version_store.update(symbol, df2)
 
-def test_update_non_sorted_multi_index_exception(lmdb_version_store):
+
+def test_update_input_descending_exception(lmdb_version_store):
+    symbol = "bad_update"
+
+    num_initial_rows = 20
+    initial_timestamp = pd.Timestamp("2019-01-01")
+    dtidx = pd.date_range(initial_timestamp, periods=num_initial_rows)
+    df = pd.DataFrame({"c": np.arange(0, num_initial_rows, dtype=np.int64)}, index=dtidx)
+    assert df.index.is_monotonic_increasing == True
+
+    lmdb_version_store.write(symbol, df)
+    info = lmdb_version_store.get_info(symbol)
+    assert info["sorted"] == "ASCENDING"
+
+    num_rows = 20
+    initial_timestamp = pd.Timestamp("2020-01-01")
+    dtidx = reversed(pd.date_range(initial_timestamp, periods=num_rows))
+    df2 = pd.DataFrame({"c": np.arange(0, num_rows, dtype=np.int64)}, index=dtidx)
+    assert df2.index.is_monotonic_increasing == False
+    assert df2.index.is_monotonic_decreasing == True
+
+    with pytest.raises(SortingException):
+        lmdb_version_store.update(symbol, df2)
+
+
+def test_update_existing_descending_exception(lmdb_version_store):
+    symbol = "bad_update"
+
+    num_initial_rows = 20
+    initial_timestamp = pd.Timestamp("2019-01-01")
+    dtidx = reversed(pd.date_range(initial_timestamp, periods=num_initial_rows))
+    df = pd.DataFrame({"c": np.arange(0, num_initial_rows, dtype=np.int64)}, index=dtidx)
+    assert df.index.is_monotonic_increasing == False
+    assert df.index.is_monotonic_decreasing == True
+
+    lmdb_version_store.write(symbol, df)
+    info = lmdb_version_store.get_info(symbol)
+    assert info["sorted"] == "DESCENDING"
+
+    num_rows = 20
+    initial_timestamp = pd.Timestamp("2020-01-01")
+    dtidx = pd.date_range(initial_timestamp, periods=num_rows)
+    df2 = pd.DataFrame({"c": np.arange(0, num_rows, dtype=np.int64)}, index=dtidx)
+    assert df2.index.is_monotonic_increasing == True
+
+    with pytest.raises(SortingException):
+        lmdb_version_store.update(symbol, df2)
+
+
+def test_update_not_sorted_input_multi_index_exception(lmdb_version_store):
     symbol = "bad_write"
     num_initial_rows = 20
     num_rows = 20
     initial_timestamp = pd.Timestamp("2020-01-01")
     dtidx1 = pd.date_range(initial_timestamp, periods=num_initial_rows)
     dtidx2 = np.arange(0, num_initial_rows)
-    dtidx = np.roll(pd.date_range(initial_timestamp, periods=num_initial_rows), 3)
     df = pd.DataFrame(
         {"c": np.arange(0, num_rows, dtype=np.int64)},
         index=pd.MultiIndex.from_arrays([dtidx1, dtidx2], names=["datetime", "level"]),
@@ -514,7 +563,24 @@ def test_update_non_sorted_multi_index_exception(lmdb_version_store):
     initial_timestamp = pd.Timestamp("2020-01-01")
     dtidx1 = np.roll(pd.date_range(initial_timestamp, periods=num_initial_rows), 3)
     dtidx2 = np.arange(0, num_initial_rows)
-    dtidx = np.roll(pd.date_range(initial_timestamp, periods=num_initial_rows), 3)
+    df = pd.DataFrame(
+        {"c": np.arange(0, num_rows, dtype=np.int64)},
+        index=pd.MultiIndex.from_arrays([dtidx1, dtidx2], names=["datetime", "level"]),
+    )
+    assert isinstance(df.index, MultiIndex) == True
+    assert df.index.is_monotonic_increasing == False
+
+    with pytest.raises(SortingException):
+        lmdb_version_store.update(symbol, df)
+
+
+def test_update_not_sorted_existing_multi_index_exception(lmdb_version_store):
+    symbol = "bad_write"
+    num_initial_rows = 20
+    num_rows = 20
+    initial_timestamp = pd.Timestamp("2020-01-01")
+    dtidx1 = np.roll(pd.date_range(initial_timestamp, periods=num_initial_rows), 3)
+    dtidx2 = np.arange(0, num_initial_rows)
     df = pd.DataFrame(
         {"c": np.arange(0, num_rows, dtype=np.int64)},
         index=pd.MultiIndex.from_arrays([dtidx1, dtidx2], names=["datetime", "level"]),
@@ -523,11 +589,22 @@ def test_update_non_sorted_multi_index_exception(lmdb_version_store):
     assert df.index.is_monotonic_increasing == False
     lmdb_version_store.write(symbol, df)
 
+    num_rows = 20
+    initial_timestamp = pd.Timestamp("2020-01-01")
+    dtidx1 = pd.date_range(initial_timestamp, periods=num_initial_rows)
+    dtidx2 = np.arange(0, num_initial_rows)
+    df = pd.DataFrame(
+        {"c": np.arange(0, num_rows, dtype=np.int64)},
+        index=pd.MultiIndex.from_arrays([dtidx1, dtidx2], names=["datetime", "level"]),
+    )
+    assert isinstance(df.index, MultiIndex) == True
+    assert df.index.is_monotonic_increasing == True
+
     with pytest.raises(SortingException):
         lmdb_version_store.update(symbol, df)
 
 
-def test_update_non_sorted_range_index_exception(lmdb_version_store):
+def test_update_not_sorted_range_index_exception(lmdb_version_store):
     symbol = "bad_write"
     num_rows = 20
     dtidx = pd.RangeIndex(0, num_rows, 1)

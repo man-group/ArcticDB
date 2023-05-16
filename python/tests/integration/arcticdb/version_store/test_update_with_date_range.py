@@ -99,7 +99,6 @@ def lmdb_version_store_custom_norm(version_store_factory):
 @pytest.mark.parametrize(
     "with_timezone_attr,timezone_", [(True, None), (True, timezone.utc), (False, None)]
 )
-@pytest.mark.skip("These fail due to too strict unsorted data checks, PR #388 should resolve")
 def test_update_date_range_non_pandas_dataframe(lmdb_version_store_custom_norm, with_timezone_attr, timezone_):
     """Check that updates with a daterange work for a simple non-Pandas timeseries.
 
@@ -111,9 +110,11 @@ def test_update_date_range_non_pandas_dataframe(lmdb_version_store_custom_norm, 
     dtidx = pd.date_range("2022-06-01", "2022-06-05")
     df = pd.DataFrame(index=dtidx, data={"a": [1, 2, 3, 4, 5]})
     version_store.write("sym_1", CustomTimeseries(df, with_timezone_attr=with_timezone_attr, timezone_=timezone_))
+    info = version_store.get_info("sym_1")
+    assert info["sorted"] == "UNKNOWN"
 
     dtidx = pd.date_range("2022-05-01", "2022-06-10")
-    a = np.arange(dtidx.shape[0])
+    a = np.arange(dtidx.shape[0]).astype(np.int64)
     update_df = pd.DataFrame(index=dtidx, data={"a": a})
 
     # when
@@ -122,6 +123,8 @@ def test_update_date_range_non_pandas_dataframe(lmdb_version_store_custom_norm, 
         CustomTimeseries(update_df, with_timezone_attr=with_timezone_attr, timezone_=timezone_),
         date_range=(datetime(2022, 6, 2), datetime(2022, 6, 4)),
     )
+    info = version_store.get_info("sym_1")
+    assert info["sorted"] == "UNKNOWN"
 
     # then
     result = version_store.read("sym_1").data
