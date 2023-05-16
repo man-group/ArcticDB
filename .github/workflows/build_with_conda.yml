@@ -8,9 +8,7 @@ jobs:
       matrix:
         include:
           - os: macos-latest
-            mongo_ci_port: 27017
           - os: ubuntu-latest
-            mongo_ci_port: 27017
 
       fail-fast: false
     runs-on: ${{ matrix.os }}
@@ -24,7 +22,13 @@ jobs:
         with:
           environment-file: environment_unix.yml
           environment-name: arcticdb
-
+          
+      - name: Start MongoDB
+        if: {{ matrix.os }} == 'ubuntu-latest'
+        uses: supercharge/mongodb-github-action@1.8.0
+        with:
+          mongodb-port: 27017
+          
       - name: Build ArcticDB with conda (ARCTICDB_USING_CONDA=1)
         shell: bash -l {0}
         run: |
@@ -32,10 +36,6 @@ jobs:
         env:
           ARCTICDB_USING_CONDA: 1
 
-      - name: Start MongoDB
-        uses: supercharge/mongodb-github-action@1.8.0
-        with:
-          mongodb-port: 27017
 
       - name: Test with pytest
         shell: bash -l {0}

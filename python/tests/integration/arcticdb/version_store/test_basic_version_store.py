@@ -40,10 +40,11 @@ from arcticdb.util.test import (
 from tests.util.date import DateRange
 
 
-if sys.platform == "win32":
+if sys.platform == "win32" or sys.platform == "darwin":
     # leave out Mongo as spinning up a Mongo instance in Windows CI is fiddly, and Mongo support is only
     # currently required for Linux for internal use.
-    SMOKE_TEST_VERSION_STORES = ["lmdb_version_store", "s3_version_store"]  # SKIP_WIN
+    # We also skip it on Mac as github actions containers don't work with macos
+    SMOKE_TEST_VERSION_STORES = ["lmdb_version_store", "s3_version_store"]  # SKIP_WIN and SKIP_MAC
 else:
     SMOKE_TEST_VERSION_STORES = ["lmdb_version_store", "s3_version_store", "mongo_version_store"]
 
