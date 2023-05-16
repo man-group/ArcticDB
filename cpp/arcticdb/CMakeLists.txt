@@ -696,6 +696,7 @@ if(${TEST})
             version/test/test_symbol_list.cpp
             version/test/test_version_map.cpp
             version/test/test_version_store.cpp
+            version/test/test_sorting_info_state_machine.cpp
             version/test/version_map_model.hpp
             )
 
