@@ -6,7 +6,8 @@ on:
   # been introduced in the target branch last commits.
   # See: https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows#pull_request
   push:
-  - master
+    branches:
+      - 'master'
   pull_request:
 
 jobs:
