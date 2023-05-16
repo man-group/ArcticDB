@@ -1,6 +1,13 @@
 name: Build with conda
 on:
+  # For Pull-Requests, this runs the CI on merge commit
+  # of HEAD with the target branch instead on HEAD, allowing
+  # testing against potential new states which might have
+  # been introduced in the target branch last commits.
+  # See: https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows#pull_request
   push:
+  - master
+  pull_request:
 
 jobs:
   unix:
@@ -42,6 +49,6 @@ jobs:
         run: |
           cd python
           python -m pytest tests
-        env: 
+        env:
           CI_MONGO_PORT: 27017
           CI_MONGO_HOST: localhost
