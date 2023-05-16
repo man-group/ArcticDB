@@ -80,6 +80,35 @@ $MY_PYTHON -m pip install -ve .
 
 Note that as this will copy the binary to your Python installation this will have to be run after each and every change of a C++ file.
 
+mamba and conda-forge Quickstart
+================================
+
+ - [Install `mamba`](https://mamba.readthedocs.io/en/latest/installation.html)
+ - Create the `arcticdb` environment from its specification (`environment_unix.yml`):
+
+  ```bash
+  mamba env create -f environment_unix.yml
+  ```
+
+ - Activate the `arcticdb` environment (you will need to do this for every new shell session):
+
+  ```bash
+  mamba activate arcticdb
+  ```
+
+ - Build and install ArcticDB in the `arcticdb` environment using dependencies installed in this environement:
+   We recommend using the [`editable` installation](https://setuptools.pypa.io/en/latest/userguide/development_mode.html) for development:
+
+  ```bash
+  ARCTICDB_USING_CONDA=1 python -m pip install --verbose --editable .
+  ```
+
+ - Use ArcticDB from Python:
+
+  ```python
+  from arcticdb import Arctic
+  ```
+
 FAQ
 ===
 
