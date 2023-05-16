@@ -84,6 +84,26 @@ inline auto slice_end_pos(const FrameSlice& slice, const InputTensorFrame& frame
     return (slice.row_range.second-1) - frame.offset;
 }
 
+template <typename T>
+inline auto end_index_generator(T end_index){//works for both rawtype and rawtype encapsulated in variant
+    if constexpr(std::is_same_v<T, stream::IndexValue>){
+        std::visit(
+            [](auto &index){
+                if constexpr(std::is_same_v<std::remove_reference_t<decltype(index)>, entity::NumericIndex>){
+                    index += timestamp(1);
+                }
+            }
+            , end_index);
+        return end_index;
+    }
+    else if constexpr(std::is_same_v<T, timestamp>){
+        return end_index + timestamp(1);
+    }
+    else{
+        return end_index;
+    }
+}
+
 inline auto get_partial_key_gen( const InputTensorFrame& frame, const IndexPartialKey& key)
 {
     using PartialKey = stream::StreamSink::PartialKey;
@@ -95,7 +115,7 @@ inline auto get_partial_key_gen( const InputTensorFrame& frame, const IndexParti
             auto* start = idx.ptr_cast<timestamp>(slice_begin_pos(s, frame));
             auto* end = idx.ptr_cast<timestamp>(slice_end_pos(s, frame));
             return PartialKey{
-                    KeyType::TABLE_DATA, key.version_id, key.id, *start, *end + timestamp(1)};
+                    KeyType::TABLE_DATA, key.version_id, key.id, *start, end_index_generator(*end)};
         }
         else {
             return PartialKey{

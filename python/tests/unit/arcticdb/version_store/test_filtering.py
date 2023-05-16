@@ -34,6 +34,7 @@ from arcticdb.util.hypothesis import (
     string_strategy,
     dataframes_with_names_and_dtypes,
 )
+from arcticdb_ext import set_config_int
 
 
 def generic_filter_test(version_store, symbol, df, arctic_query, pandas_query, dynamic_strings=True):
@@ -2004,3 +2005,29 @@ def test_filter_bool_short_circuiting():
     _clear(q1, q2)
 
     assert not errors
+
+
+def test_filter_with_column_slicing_defragmented(lmdb_version_store_tiny_segment):
+    set_config_int("SymbolDataCompact.SegmentCount", 0)
+
+    df = pd.DataFrame(
+        index=pd.date_range(pd.Timestamp(0), periods=3),
+        data={
+            "a": pd.date_range("2000-01-01", periods=3),
+            "b": pd.date_range("2000-01-01", periods=3),
+            "c": pd.date_range("2000-01-01", periods=3),
+        },
+    )
+    pd_ts = pd.Timestamp("2000-01-05")
+    symbol = "test_filter_with_column_filtering"
+    for ts in [pd_ts, pd_ts.to_pydatetime()]:
+        q = QueryBuilder()
+        q = q[q["a"] < ts]
+        pandas_query = "a < @ts"
+        lmdb_version_store_tiny_segment.write(symbol, df[:1])
+        lmdb_version_store_tiny_segment.append(symbol, df[1:2])
+        lmdb_version_store_tiny_segment.defragment_symbol_data(symbol, None)
+        lmdb_version_store_tiny_segment.append(symbol, df[2:])
+        received = lmdb_version_store_tiny_segment.read(symbol, query_builder=q).data
+        expected = df.query(pandas_query)
+        assert np.array_equal(expected, received) and (not expected.empty and not received.empty)

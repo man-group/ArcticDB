@@ -55,6 +55,7 @@ else()
     find_package(xxHash REQUIRED)
     find_package(PCRE REQUIRED)
     find_package(Libevent  REQUIRED)
+    find_package(semimap REQUIRED)
     find_package(recycle REQUIRED)
 
     set(ARCTICDB_MONGO_LIBS mongo::mongocxx_shared mongo::bsoncxx_shared)
