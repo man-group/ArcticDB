@@ -83,6 +83,9 @@ Note that as this will copy the binary to your Python installation this will hav
 mamba and conda-forge Quickstart
 ================================
 
+**⚠️ At the time of writing, installing ArcticDB with this setup under Windows is not possible
+since [no distribution of folly for Windows is not available on conda-forge](https://anaconda.org/conda-forge/folly).**
+
  - [Install `mamba`](https://mamba.readthedocs.io/en/latest/installation.html)
  - Create the `arcticdb` environment from its specification (`environment_unix.yml`):
 
