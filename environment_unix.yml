@@ -8,13 +8,12 @@ dependencies:
   - spdlog
   # This is the last version published on vcpkg the usual
   # installation setup depends on.
-  - folly==2022.10.24
+  - folly <=2022.10.31
   - lz4-c
   - prometheus-cpp
   - double-conversion
   - libevent
   - libprotobuf < 4
-  - mongodb
   - libmongocxx
   - zstd
   - pybind11
