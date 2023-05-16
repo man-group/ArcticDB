@@ -14,6 +14,7 @@ dependencies:
   - double-conversion
   - libevent
   - libprotobuf < 4
+  - mongodb
   - libmongocxx
   - zstd
   - pybind11
