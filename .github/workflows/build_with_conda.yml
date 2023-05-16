@@ -8,8 +8,9 @@ jobs:
       matrix:
         include:
           - os: macos-latest
+            mongo_bin:  /Users/runner/micromamba-root/envs/arcticdb/bin
           - os: ubuntu-latest
-
+          mongo_bin:  /home/runner/micromamba-root/envs/arcticdb/bin
       fail-fast: false
     runs-on: ${{ matrix.os }}
     steps:
@@ -36,3 +37,5 @@ jobs:
         run: |
           cd python
           python -m pytest tests
+        env: 
+          SERVER_FIXTURES_MONGO_BIN: ${{ matrix.mongo_bin }}
