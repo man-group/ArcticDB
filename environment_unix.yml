@@ -40,3 +40,4 @@ dependencies:
   - hypothesis < 6.73
   - pytest-sugar
   - xxhash
+  - semimap
