@@ -1007,7 +1007,7 @@ public:
                             auto rank_in_filter = filter_bitset.rank(*bitset_iter, *filter_idx);
                             if (rank_in_filter - 1 != pos_output) {
                                 // setting sparse_map - marking all rows in output as NULL until this point
-                                output_col.mark_absent_rows(pos_output, rank_in_filter - pos_output - 1);
+                                output_col.mark_absent_rows(rank_in_filter - pos_output - 1);
                                 pos_output = rank_in_filter - 1;
                             }
                             auto offset = sparse_map.value().rank(*bitset_iter, *sparse_idx) - row_count_so_far - 1;
@@ -1097,6 +1097,10 @@ public:
             output.emplace_back(filter(bitset));
         }
         return output;
+    }
+
+    StreamId get_index_col_name() const{
+        return descriptor().id();
     }
 
 private:

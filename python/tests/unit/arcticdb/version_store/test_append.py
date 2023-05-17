@@ -5,13 +5,15 @@ from itertools import chain, product, combinations
 import pytest
 import sys
 from numpy.testing import assert_array_equal
+from hypothesis import given, assume, settings, strategies as st
 
 from pandas import MultiIndex
 from arcticdb.version_store._common import TimeFrame
 from arcticdb.version_store import NativeVersionStore
 from arcticdb.util.test import random_integers, assert_frame_equal
-from arcticdb.util.hypothesis import InputFactories
+from arcticdb.util.hypothesis import InputFactories, use_of_function_scoped_fixtures_in_hypothesis_checked
 from arcticdb_ext.exceptions import InternalException, NormalizationException, SortingException
+from arcticdb_ext import set_config_int
 
 
 def test_append_simple(lmdb_version_store):
@@ -441,3 +443,149 @@ def test_append_mix_sorted_non_sorted(lmdb_version_store):
     lmdb_version_store.append(symbol, df2)
     info = lmdb_version_store.get_info(symbol)
     assert info["sorted"] == "UNSORTED"
+
+
+@use_of_function_scoped_fixtures_in_hypothesis_checked
+@settings(deadline=None, max_examples=10)
+@given(
+    col_per_append_df=st.integers(2, 100),
+    col_name_set=st.integers(1, 10000),
+    num_rows_per_test_cycle=st.lists(st.lists(st.integers(1, 20), min_size=1, max_size=10), min_size=1, max_size=10),
+    column_group_size=st.integers(2, 100),
+    segment_row_size=st.integers(2, 100),
+    dynamic_schema=st.booleans(),
+    dynamic_strings=st.booleans(),
+    df_in_str=st.booleans(),
+)
+def test_append_with_defragmentation(
+    sym,
+    col_per_append_df,
+    col_name_set,
+    num_rows_per_test_cycle,
+    get_wide_df,
+    column_group_size,
+    segment_row_size,
+    dynamic_schema,
+    dynamic_strings,
+    df_in_str,
+    version_store_factory,
+):
+    def get_wide_and_long_df(start_idx, end_idx, col_per_append_df, col_name_set, df_in_str):
+        df = pd.DataFrame()
+        for idx in range(start_idx, end_idx):
+            df = pd.concat([df, get_wide_df(idx, col_per_append_df, col_name_set)])
+        if col_per_append_df == col_name_set:  # manually sort them for static schema, for newer version of panda
+            df = df.reindex(sorted(list(df.columns)), axis=1)
+        df = df.astype(str if df_in_str else np.float64)
+        return df
+
+    def get_no_of_segments_after_defragmentation(df, merged_segment_row_size):
+        new_segment_row_size = no_of_segments = 0
+        for start_row, end_row in pd.Series(df.end_row.values, index=df.start_row).to_dict().items():
+            no_of_segments = no_of_segments + 1 if new_segment_row_size == 0 else no_of_segments
+            new_segment_row_size += end_row - start_row
+            if new_segment_row_size >= merged_segment_row_size:
+                new_segment_row_size = 0
+        return no_of_segments
+
+    def get_no_of_column_merged_segments(df):
+        return len(pd.Series(df.end_row.values, index=df.start_row).to_dict().items())
+
+    def run_test(
+        lib,
+        col_per_append_df,
+        col_name_set,
+        merged_segment_row_size,
+        df_in_str,
+        before_compact,
+        index_offset,
+        num_of_rows,
+    ):
+        for num_of_row in num_of_rows:
+            start_index = index_offset
+            index_offset += num_of_row
+            end_index = index_offset
+            df = get_wide_and_long_df(start_index, end_index, col_per_append_df, col_name_set, df_in_str)
+            before_compact = pd.concat([before_compact, df])
+            if start_index == 0:
+                lib.write(sym, df)
+            else:
+                lib.append(sym, df)
+            segment_details = lib.read_index(sym)
+            assert lib.is_symbol_fragmented(sym, None) is (
+                get_no_of_segments_after_defragmentation(segment_details, merged_segment_row_size)
+                != get_no_of_column_merged_segments(segment_details)
+            )
+        if get_no_of_segments_after_defragmentation(
+            segment_details, merged_segment_row_size
+        ) != get_no_of_column_merged_segments(segment_details):
+            seg_details_before_compaction = lib.read_index(sym)
+            lib.defragment_symbol_data(sym, None)
+            res = lib.read(sym).data
+            res = res.reindex(sorted(list(res.columns)), axis=1)
+            res = res.replace("", 0.0)
+            res = res.fillna(0.0)
+            before_compact = before_compact.reindex(sorted(list(before_compact.columns)), axis=1)
+            before_compact = before_compact.fillna(0.0)
+
+            seg_details = lib.read_index(sym)
+
+            assert_frame_equal(before_compact, res)
+
+            assert len(seg_details) == get_no_of_segments_after_defragmentation(
+                seg_details_before_compaction, merged_segment_row_size
+            )
+            indexs = (
+                seg_details["end_index"].astype(str).str.rsplit(" ", n=2).agg(" ".join).reset_index()
+            )  # start_index and end_index got merged into one column
+            assert np.array_equal(indexs.iloc[1:, 0].astype(str).values, indexs.iloc[:-1, 1].astype(str).values)
+        else:
+            with pytest.raises(InternalException):
+                lib.defragment_symbol_data(sym, None)
+        return before_compact, index_offset
+
+    assume(col_per_append_df <= col_name_set)
+    assume(
+        num_of_row % 2 != 0 for num_of_rows in num_rows_per_test_cycle for num_of_row in num_of_rows
+    )  # Make sure at least one successful compaction run per cycle
+
+    set_config_int("SymbolDataCompact.SegmentCount", 1)
+    before_compact = pd.DataFrame()
+    index_offset = 0
+    lib = version_store_factory(
+        column_group_size=column_group_size,
+        segment_row_size=segment_row_size,
+        dynamic_schema=dynamic_schema,
+        dynamic_strings=dynamic_strings,
+        reuse_name=True,
+    )
+    for num_of_rows in num_rows_per_test_cycle:
+        before_compact, index_offset = run_test(
+            lib,
+            col_per_append_df,
+            col_name_set if dynamic_schema else col_per_append_df,
+            segment_row_size,
+            df_in_str,
+            before_compact,
+            index_offset,
+            num_of_rows,
+        )
+
+
+def test_append_with_cont_mem_problem(sym, lmdb_version_store_tiny_segment_dynamic):
+    set_config_int("SymbolDataCompact.SegmentCount", 1)
+    df0 = pd.DataFrame({"0": ["01234567890123456"]}, index=[pd.Timestamp(0)])
+    df1 = pd.DataFrame({"0": ["012345678901234567"]}, index=[pd.Timestamp(1)])
+    df2 = pd.DataFrame({"0": ["0123456789012345678"]}, index=[pd.Timestamp(2)])
+    df3 = pd.DataFrame({"0": ["01234567890123456789"]}, index=[pd.Timestamp(3)])
+    df = pd.concat([df0, df1, df2, df3])
+
+    for _ in range(100):
+        lib = lmdb_version_store_tiny_segment_dynamic
+        lib.write(sym, df0).version
+        lib.append(sym, df1).version
+        lib.append(sym, df2).version
+        lib.append(sym, df3).version
+        lib.version_store.defragment_symbol_data(sym, None)
+        res = lib.read(sym).data
+        assert_frame_equal(df, res)

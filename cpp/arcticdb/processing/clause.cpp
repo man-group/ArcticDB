@@ -16,6 +16,7 @@
 
 #include <arcticdb/util/third_party/emilib_set.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>
+#include <arcticdb/stream/segment_aggregator.hpp>
 
 namespace arcticdb {
 
@@ -434,8 +435,8 @@ RemoveColumnPartitioningClause::process(std::shared_ptr<Store> store, Composite<
         util::variant_match(index,
         [&](const stream::TimeseriesIndex &) {
             size_t num_index_columns = stream::TimeseriesIndex::field_count();
-            procs.broadcast([&store, &output, &num_index_columns](ProcessingSegment &proc) {
-                SegmentInMemory new_segment{empty_descriptor()};
+            procs.broadcast([&store, &output, &num_index_columns, this](ProcessingSegment &proc) {
+                SegmentInMemory new_segment{empty_descriptor(descriptor_type_, proc.data()[0].segment_->get_index_col_name())};
                 new_segment.set_row_id(proc.data()[0].segment_->get_row_id());
                 size_t min_start_row = std::numeric_limits<size_t>::max();
                 size_t max_end_row = 0;
@@ -465,6 +466,7 @@ RemoveColumnPartitioningClause::process(std::shared_ptr<Store> store, Composite<
                         }
                         column_idx++;
                     }
+                    stream::merge_string_columns(slice_and_key.segment(store), new_segment.string_pool_ptr(), dedup_rows_);
                 }
                 const RowRange row_range{min_start_row, max_end_row};
                 const ColRange col_range{min_start_col, max_end_col};
@@ -472,11 +474,10 @@ RemoveColumnPartitioningClause::process(std::shared_ptr<Store> store, Composite<
             });
         },
         [&](const auto &) {
-            util::raise_rte("Not supported index type for sort merge implementation");
+            util::raise_rte("Column partition removal only supports datetime indexed data. You data does not have a datetime index.");
         }
         );
         return output;
 }
-    
 
 }

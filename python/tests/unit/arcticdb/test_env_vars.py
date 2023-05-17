@@ -26,7 +26,7 @@ def test_get_normal(key, value, mocks):
     set_config_from_env_vars({_ARCTICDB_ENV_VAR_PREFIX + key: str(value)})
     for typ, setter in mocks.items():
         if typ is type(value):
-            setter.assert_called_with("a" if key.startswith("a_") else "without.suffix", value)
+            setter.assert_called_with("a".upper() if key.startswith("a_") else "without.suffix".upper(), value)
         else:
             setter.assert_not_called()
 

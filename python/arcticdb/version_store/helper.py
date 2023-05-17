@@ -12,6 +12,7 @@ import time
 from arcticc.pb2.lmdb_storage_pb2 import Config as LmdbConfig
 from arcticc.pb2.s3_storage_pb2 import Config as S3Config
 from arcticc.pb2.in_memory_storage_pb2 import Config as MemoryConfig
+from arcticc.pb2.mongo_storage_pb2 import Config as MongoConfig
 from arcticc.pb2.storage_pb2 import (
     EnvironmentConfigsMap,
     EnvironmentConfig,
@@ -147,7 +148,6 @@ def get_secondary_storage_for_lib_name(lib_name, env):
 
 
 def _add_lib_desc_to_env(env, lib_name, sid, description=None):
-    # type: (EnvironmentConfigsMap, LibName, StorageId, Optional[AnyStr], Optional[AnyStr], bool)->None
     if lib_name in env.lib_by_path:
         raise ArcticNativeException("Library {} already configured in {}".format(lib_name, env))
     lib_desc = env.lib_by_path[lib_name]
@@ -181,13 +181,25 @@ def add_lmdb_library_to_env(cfg, lib_name, env_name, db_dir=Defaults.DATA_DIR, d
 
 
 def add_memory_library_to_env(cfg, lib_name, env_name, description=None):
-    # type: (EnvironmentConfigsMap, LibName, EnvName, Optional[FilePath], Optional[AnyStr],Optional[AnyStr], bool)->None
     env = cfg.env_by_id[env_name]
     in_mem = MemoryConfig()
 
     sid, storage = get_storage_for_lib_name(lib_name, env)
     storage.config.Pack(in_mem, type_url_prefix="cxx.arctic.org")
-    _add_lib_desc_to_env(env, lib_name, sid, description, lib_type, prefer_native)
+    _add_lib_desc_to_env(env, lib_name, sid, description)
+
+
+def add_mongo_library_to_env(
+        cfg, lib_name, env_name, uri=None, description=None
+):
+    env = cfg.env_by_id[env_name]
+    mongo = MongoConfig()
+    if uri is not None:
+        mongo.uri = uri
+
+    sid, storage = get_storage_for_lib_name(lib_name, env)
+    storage.config.Pack(mongo, type_url_prefix="cxx.arctic.org")
+    _add_lib_desc_to_env(env, lib_name, sid, description)
 
 
 def get_s3_proto(
@@ -284,6 +296,12 @@ def create_test_s3_cfg(lib_name, credential_name, credential_key, bucket_name, e
 def create_test_memory_cfg(lib_name=Defaults.LIB, description=None):
     cfg = EnvironmentConfigsMap()
     add_memory_library_to_env(cfg, lib_name=lib_name, env_name=Defaults.ENV, description=description)
+    return cfg
+
+
+def create_test_mongo_cfg(lib_name=Defaults.LIB, uri="mongodb://localhost:27017", description=None):
+    cfg = EnvironmentConfigsMap()
+    add_mongo_library_to_env(cfg, lib_name=lib_name, env_name=Defaults.ENV, uri=uri, description=description)
     return cfg
 
 

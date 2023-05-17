@@ -7,11 +7,13 @@
 
 #pragma once
 
+#include <boost/algorithm/string.hpp>
 #include <arcticdb/entity/protobufs.hpp>
 
 #include <unordered_map>
 #include <memory>
 #include <optional>
+#include <mutex>
 
 namespace arcticdb {
 
@@ -31,21 +33,21 @@ public:
 
 #define HANDLE_TYPE(LABEL, TYPE)     \
     void set_##LABEL(const std::string& label, TYPE val) { \
-        map_of_##LABEL[label] = val; \
+        map_of_##LABEL[boost::to_upper_copy<std::string>(label)] = val; \
     } \
 \
     TYPE get_##LABEL(const std::string& label, TYPE default_val) const { \
-        auto it = map_of_##LABEL.find(label); \
+        auto it = map_of_##LABEL.find(boost::to_upper_copy<std::string>(label)); \
         return it == map_of_##LABEL.cend() ? default_val : it->second; \
     } \
  \
     std::optional<TYPE> get_##LABEL(const std::string& label) const { \
-        auto it = map_of_##LABEL.find(label); \
+        auto it = map_of_##LABEL.find(boost::to_upper_copy<std::string>(label)); \
         return it == map_of_##LABEL.cend() ? std::nullopt : std::make_optional(it->second); \
     } \
 \
     void unset_##LABEL(const std::string& label) { \
-        map_of_##LABEL.erase(label); \
+        map_of_##LABEL.erase(boost::to_upper_copy<std::string>(label)); \
     } \
 
     // Also update python_module.cpp::register_configs_map_api() if below is changed:
@@ -64,13 +66,13 @@ public:
 
     void read_proto(const RuntimeConfig& config) {
         for(auto& val : config.int_values())
-            map_of_int.insert(std::make_pair(val.first, val.second));
+            map_of_int.insert(std::make_pair(boost::to_upper_copy<std::string>(val.first), val.second));
 
         for(auto& val : config.string_values())
-            map_of_string.insert(std::make_pair(val.first, val.second));
+            map_of_string.insert(std::make_pair(boost::to_upper_copy<std::string>(val.first), val.second));
 
         for(auto& val : config.double_values())
-            map_of_double.insert(std::make_pair(val.first, val.second));
+            map_of_double.insert(std::make_pair(boost::to_upper_copy<std::string>(val.first), val.second));
     }
 
      static ConfigsMap from_proto(const RuntimeConfig& config) {

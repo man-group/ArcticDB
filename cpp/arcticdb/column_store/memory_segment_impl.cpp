@@ -49,7 +49,7 @@ void SegmentInMemoryImpl::append(const SegmentInMemoryImpl& other) {
             }
         } else {
             ARCTICDB_DEBUG(log::version(), "Marking {} absent rows for column {}", other.row_count(), col_name);
-            column_unchecked(col).mark_absent_rows(row_count(), other.row_count());
+            column_unchecked(col).mark_absent_rows(other.row_count());
         }
     }
     set_row_id(row_id_ + other.row_count());

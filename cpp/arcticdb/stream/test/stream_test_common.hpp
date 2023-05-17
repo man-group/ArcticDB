@@ -309,7 +309,7 @@ inline std::pair<storage::LibraryPath, arcticdb::proto::storage::LibraryConfig> 
     auto library_path = storage::LibraryPath::from_delim_path(unique_lib_name);
     auto storage_id = fmt::format("{}_store", unique_lib_name);
     config.mutable_lib_desc()->add_storage_ids(storage_id);
-    config.mutable_storage_by_id()->insert(google::protobuf::MapPair(storage_id, lmdb_config));
+    config.mutable_storage_by_id()->insert(google::protobuf::MapPair<std::decay_t<decltype(storage_id)>, std::decay_t<decltype(lmdb_config)> >(storage_id, lmdb_config));
     return std::make_pair(library_path, config);
 }
 
