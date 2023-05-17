@@ -7,6 +7,7 @@
 
 #pragma once
 
+#include <cstddef> // for std::size_t
 #include <variant>
 
 namespace arcticdb::util {
@@ -20,12 +21,12 @@ struct is_tuple : std::false_type{};
 template <typename ...T>
 struct is_tuple<std::tuple<T...>> : std::true_type{};
 
-template<size_t... I, class... TupleTs, class...Ts>
+template<std::size_t... I, class... TupleTs, class...Ts>
 auto variant_match(std::index_sequence<I...>, const std::tuple<TupleTs...> &v, Ts... ts){
     return std::visit(overload{ts...}, std::get<I>(v)...);
 }
 
-template<size_t... I, class... TupleTs, class...Ts>
+template<std::size_t... I, class... TupleTs, class...Ts>
 auto variant_match(std::index_sequence<I...>, std::tuple<TupleTs...> &&v, Ts... ts){
     return std::visit(overload{ts...}, std::get<I>(v)...);
 }

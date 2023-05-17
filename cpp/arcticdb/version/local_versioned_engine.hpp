@@ -325,7 +325,7 @@ protected:
             bool append,
             bool convert_int_to_float,
             bool via_iteration,
-            bool sparsify);
+            bool sparsify) override;
 
     /**
      * Take tombstoned indexes that have been pruned in the version map and perform the actual deletion
