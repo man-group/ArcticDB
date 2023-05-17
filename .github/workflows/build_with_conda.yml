@@ -17,6 +17,11 @@ jobs:
 
       fail-fast: false
     runs-on: ${{ matrix.os }}
+
+    services:
+      mongodb:
+        image: mongo:4.4
+
     steps:
       - uses: actions/checkout@v3
         with:
@@ -28,11 +33,6 @@ jobs:
           environment-file: environment_unix.yml
           environment-name: arcticdb
           
-      - name: Start MongoDB
-        uses: supercharge/mongodb-github-action@1.8.0
-        with:
-          mongodb-port: 27017
-          
       - name: Build ArcticDB with conda (ARCTICDB_USING_CONDA=1)
         shell: bash -l {0}
         run: |
@@ -40,15 +40,12 @@ jobs:
         env:
           ARCTICDB_USING_CONDA: 1
 
-
       - name: Test with pytest
         shell: bash -l {0}
         run: |
           cd python
           python -m pytest tests
-        env:
-          CI_MONGO_PORT: 27017
-          CI_MONGO_HOST: localhost
+
   macos:
     strategy:
       matrix:
@@ -57,6 +54,7 @@ jobs:
 
       fail-fast: false
     runs-on: ${{ matrix.os }}
+    
     steps:
       - uses: actions/checkout@v3
         with:
