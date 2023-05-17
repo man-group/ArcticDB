@@ -57,6 +57,7 @@ else()
     find_package(Libevent  REQUIRED)
     find_package(semimap REQUIRED)
     find_package(remotery REQUIRED)
+    find_package(msgpack-c REQUIRED)
 
     set(ARCTICDB_MONGO_LIBS mongo::mongocxx_shared mongo::bsoncxx_shared)
 
@@ -423,7 +424,6 @@ set (arcticdb_core_libraries
         arcticdb_proto
         prometheus-cpp::push
         prometheus-cpp::pull
-        msgpackc-cxx
         ${standard_libraries}
         fmt::fmt
         ${Protobuf_lite_LIBRARY}
@@ -435,7 +435,6 @@ set (arcticdb_core_libraries
         spdlog::spdlog
         Folly::folly # Transitively includes: double-conversion, gflags, glog, libevent, libssl, libcrypto, libiberty, libsodium
         )
-
 
 # Dependencies expose different names of their libraries depending
 # on their origin (i.e. vendored source or packages on conda-forge).
@@ -449,14 +448,17 @@ if(${ARCTICDB_USING_CONDA})
         xxHash::xxHash
         pcre
         ${remotery_LIBRARY}
+        msgpack-c
     )
 else()
 
     add_compile_definitions(ARCTICDB_USING_STATIC_XXHASH)
+
     list (APPEND arcticdb_core_libraries
         xxhash_static
         unofficial::pcre::pcre
         remotery_static
+        msgpackc-cxx
     )
 endif()
 
