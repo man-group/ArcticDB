@@ -25,8 +25,7 @@ jobs:
     env:
       BASH_FUNC_tag_and_push%%: |-
         () {
-          sed -ri '/^\[metadata]/, /^\[/ s/^version[[:blank:]]*=.*/version = '$2/ setup.cfg
-          git add setup.cfg README.md
+          python3 version_io.py $2
           git status
           git diff --cached --exit-code || git commit -m "$1 v$2"
           set -x
@@ -50,6 +49,7 @@ jobs:
           git switch -C tagging ${{github.ref}}
           # Remove the build status badge from a version tag
           sed -i 's#<img src="https://github.com/man-group/ArcticDB/actions/workflows/build.yml/badge.svg"/>##' README.md || true
+          git add README.md
           tag_and_push "Tagging" ${{inputs.version}} refs/tags/v${{inputs.version}} ${{inputs.overwrite && '-f' || ''}}
 
       - name: Bump ${{github.ref_name}} to the next version

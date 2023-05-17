@@ -10,5 +10,4 @@ from arcticdb.options import LibraryOptions
 from arcticdb.tools import set_config_from_env_vars
 
 set_config_from_env_vars(_os.environ)
-
-__version__ = "1.1.1.dev0"
+__version__ = _ext.__version__

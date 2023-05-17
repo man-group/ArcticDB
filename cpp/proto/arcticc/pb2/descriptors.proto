@@ -239,6 +239,27 @@ message UserDefinedMetadata {
     }
 }
 
+message WriterInfo {
+    enum Platform {
+        UNKNOWN_PLATFORM = 0;
+        LINUX = 1;
+        WINDOWS = 2;
+        APPLE = 3;
+    }
+    Platform platform = 1;
+
+    enum Compiler {
+        UNKNOWN_CC = 0;
+        GCC = 1;
+        CLANG = 2;
+        MSVC = 3;
+    }
+    Compiler cc = 2;
+    uint32 cc_version = 3; // Same encoding as version except _MSC_FULL_VER is used as is
+
+    uint32 version = 4; // ArcticDB SemVer major * 1e6 + minor * 1e3 + patch
+}
+
 enum KeyType
 {
     STREAM_GROUP = 0;
@@ -301,4 +322,6 @@ message TimeSeriesDescriptor
 message SymbolListDescriptor
 {
     bool enabled = 1;
+    WriterInfo initial_writer = 2;
+    uint32 min_writer_version = 3;
 }

@@ -576,8 +576,6 @@ endif ()
 # This configures: linking to Python::Module + pybind, output pre-/suf-fix, -fvisibility=hidden, strip release build
 pybind11_add_module(arcticdb_ext MODULE
         python/python_module.cpp
-        python/arctic_version.cpp
-        python/arctic_version.hpp
         python/reader.hpp
         python/adapt_read_dataframe.hpp
         )

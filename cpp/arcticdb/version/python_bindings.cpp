@@ -11,7 +11,7 @@
 #include <pybind11/numpy.h>
 #include <pybind11/operators.h>
 #include <arcticdb/version/version_store_api.hpp>
-#include <arcticdb/python/arctic_version.hpp>
+#include <arcticdb/util/version_number.hpp>
 #include <arcticdb/python/python_utils.hpp>
 #include <arcticdb/pipeline/column_stats.hpp>
 #include <arcticdb/pipeline/query.hpp>
@@ -21,6 +21,7 @@
 #include <arcticdb/processing/execution_context.hpp>
 #include <arcticdb/pipeline/value_set.hpp>
 #include <arcticdb/python/adapt_read_dataframe.hpp>
+#include <arcticdb/python/python_utils.hpp>
 #include <arcticdb/version/schema_checks.hpp>
 
 namespace arcticdb::version_store {
@@ -577,6 +578,11 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
         .def("latest_timestamp",
              &PythonVersionStore::latest_timestamp,
              "Returns latest timestamp of a symbol")
+        .def("get_latest_symbol_list_compaction_descriptor",
+            [](PythonVersionStore& v) {
+                auto maybe_descriptor = v.get_latest_symbol_list_compaction_descriptor();
+                return maybe_descriptor ? python_util::pb_to_python(*maybe_descriptor) : py::none();
+            })
         ;
 
     py::class_<LocalVersionedEngine>(version, "VersionedEngine")

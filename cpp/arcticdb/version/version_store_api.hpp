@@ -314,6 +314,11 @@ class PythonVersionStore : public LocalVersionedEngine {
 
     std::vector<AtomKey> get_version_history(const StreamId& stream_id);
 
+    // For diagnostics.
+    auto get_latest_symbol_list_compaction_descriptor() {
+        return symbol_list_ptr()->get_latest_compaction_descriptor(store());
+    }
+
 private:
 
     std::vector<VersionedItem> batch_write_index_keys_to_version_map(

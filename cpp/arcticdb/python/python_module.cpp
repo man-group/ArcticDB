@@ -17,7 +17,6 @@
 #include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/util/trace.hpp>
 #include <arcticdb/python/python_utils.hpp>
-#include <arcticdb/python/arctic_version.hpp>
 #include <arcticdb/entity/performance_tracing.hpp>
 #include <arcticdb/entity/metrics.hpp>
 #include <arcticdb/entity/protobufs.hpp>
@@ -25,6 +24,7 @@
 #include <arcticdb/util/global_lifetimes.hpp>
 #include <arcticdb/util/configs_map.hpp>
 #include <arcticdb/util/error_code.hpp>
+#include <arcticdb/util/version_number.hpp>
 
 #include <pybind11/pybind11.h>
 #include <folly/system/ThreadName.h>
@@ -281,7 +281,6 @@ PYBIND11_MODULE(arcticdb_ext, m) {
     arcticdb::stream::register_bindings(m);
     arcticdb::toolbox::apy::register_bindings(m);
 
-    m.def("get_version_string", &arcticdb::get_arcticdb_version_string);
     m.def("read_runtime_config", [](const py::object object) {
         auto config = arcticc::pb2::config_pb2::RuntimeConfig{};
         arcticdb::python_util::pb_from_python(object, config);
@@ -308,10 +307,6 @@ PYBIND11_MODULE(arcticdb_ext, m) {
 
     register_termination_handler();
 
-#ifdef VERSION_INFO
-    m.attr("__version__") = VERSION_INFO;
-#else
-    m.attr("__version__") = "dev";
-#endif
+    m.attr("__version__") = ARCTICDB_VERSION_STR;
 }
 

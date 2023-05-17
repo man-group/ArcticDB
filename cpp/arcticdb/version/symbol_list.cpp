@@ -6,6 +6,7 @@
  */
 
 #include <version/symbol_list.hpp>
+#include <arcticdb/util/writer_info.hpp>
 
 namespace arcticdb {
 
@@ -17,6 +18,7 @@ struct SymbolList::LoadResult {
     mutable KeyVector symbol_list_keys;
     /** The last CompactionId key in symbol_list_keys, if any. */
     std::optional<KeyVectorItr> maybe_last_compaction;
+    SymbolList::OptDescriptor maybe_last_compaction_descriptor;
     mutable CollectionType symbols;
     arcticdb::timestamp timestamp;
 
@@ -36,7 +38,8 @@ SymbolList::LoadResult SymbolList::attempt_load(const std::shared_ptr<Store>& st
     if (load_result.maybe_last_compaction) {
         load_result.timestamp = load_result.symbol_list_keys.rbegin()->creation_ts(); // Per step 5
         load_result.symbols = load_from_symbol_list_keys(store,
-                {*load_result.maybe_last_compaction, load_result.symbol_list_keys.cend()});
+                {*load_result.maybe_last_compaction, load_result.symbol_list_keys.cend()},
+                load_result.maybe_last_compaction_descriptor);
     } else {
         load_result.timestamp = store->current_timestamp();
         load_result.symbols = load_from_version_keys(store);
@@ -61,7 +64,8 @@ SymbolList::CollectionType SymbolList::load(const std::shared_ptr<Store>& store,
                 SYMBOL_LIST_RUNTIME_LOG("Checking whether we still need to compact under lock");
                 if (can_update_symbol_list(store, load_result.maybe_last_compaction)) {
                     // Step 5
-                    auto written = write_symbols(store, load_result.symbols, compaction_id, load_result.timestamp).get();
+                    auto written = write_symbols(store, load_result.symbols, compaction_id, load_result.timestamp,
+                            load_result.maybe_last_compaction_descriptor).get();
                     delete_keys(store, load_result.detach_symbol_list_keys(), std::get<AtomKey>(written)).get();
                 }
             } else {
@@ -136,11 +140,11 @@ bool SymbolList::can_update_symbol_list(const std::shared_ptr<Store>& store,
         return symbols;
     }
 
-    folly::Future<VariantKey> SymbolList::write_symbols(
-        const std::shared_ptr<Store>& store,
-        const CollectionType& symbols,
-        const StreamId& stream_id,
-        timestamp creation_ts)  {
+    folly::Future<VariantKey> SymbolList::write_symbols(const std::shared_ptr<Store>& store,
+            const CollectionType& symbols,
+            const StreamId& stream_id,
+            timestamp creation_ts,
+            const OptDescriptor& existing_descriptor) {
 
         SYMBOL_LIST_RUNTIME_LOG("Writing {} symbols to symbol list cache", symbols.size());
         SegmentInMemory list_segment{symbol_stream_descriptor(stream_id)};
@@ -159,25 +163,34 @@ bool SymbolList::can_update_symbol_list(const std::shared_ptr<Store>& store,
             );
             list_segment.end_row();
         }
-        if(symbols.empty()) {
-            google::protobuf::Any any = {};
-            arcticdb::proto::descriptors::SymbolListDescriptor metadata;
+
+        arcticdb::proto::descriptors::SymbolListDescriptor metadata;
+        if (existing_descriptor) {
+            metadata.CopyFrom(*existing_descriptor);
+            if (ARCTICDB_VERSION_INT < metadata.min_writer_version()) {
+                metadata.set_min_writer_version(ARCTICDB_VERSION_INT);
+            }
+        } else {
             metadata.set_enabled(true);
-            any.PackFrom(metadata);
-            list_segment.set_metadata(std::move(any));
+            util::set_static_writer_info_fields(*metadata.mutable_initial_writer());
+            metadata.set_min_writer_version(ARCTICDB_VERSION_INT);
         }
+        google::protobuf::Any any = {};
+        any.PackFrom(metadata);
+        list_segment.set_metadata(std::move(any));
+
         return store->write(KeyType::SYMBOL_LIST, 0, stream_id, creation_ts, 0, 0, std::move(list_segment));
     }
 
-    SymbolList::CollectionType SymbolList::load_from_symbol_list_keys(
-            const std::shared_ptr<StreamSource>& store,
-            const folly::Range<KeyVectorItr>& keys) {
+    SymbolList::CollectionType SymbolList::load_from_symbol_list_keys(const std::shared_ptr<StreamSource>& store,
+            const folly::Range<KeyVectorItr>& keys,
+            OptDescriptor& descriptor_out) {
         SYMBOL_LIST_RUNTIME_LOG("Loading symbols from symbol list keys");
         bool read_compaction = false;
         CollectionType symbols{};
         for(const auto& key : keys) {
             if(key.id() == compaction_id) {
-                read_list_from_storage(store, key, symbols);
+                read_list_from_storage(store, key, symbols, descriptor_out);
                 read_compaction = true;
             }
             else {
@@ -200,10 +213,17 @@ bool SymbolList::can_update_symbol_list(const std::shared_ptr<Store>& store,
         return symbols;
     }
 
-    void SymbolList::read_list_from_storage(const std::shared_ptr<StreamSource>& store, const AtomKey& key,
-                                            CollectionType& symbols) {
+    void SymbolList::read_list_from_storage(const std::shared_ptr<StreamSource>& store,
+            const AtomKey& key,
+            CollectionType& symbols,
+            OptDescriptor& descriptor_out) {
         ARCTICDB_DEBUG(log::version(), "Reading list from storage with key {}", key);
         auto key_seg = store->read(key).get().second;
+        if (key_seg.metadata()) {
+            descriptor_out.emplace();
+            key_seg.metadata()->UnpackTo(&descriptor_out.value());
+        }
+
         auto field_desc = key_seg.descriptor().field_at(0);
         missing_data::check<ErrorCode::E_UNREADABLE_SYMBOL_LIST>(field_desc.has_value(),
             "Expected at least one column in symbol list with key {}", key);
@@ -268,4 +288,14 @@ bool SymbolList::can_update_symbol_list(const std::shared_ptr<Store>& store,
         }
     }
 
+SymbolList::OptDescriptor SymbolList::get_latest_compaction_descriptor(const std::shared_ptr<Store>& store) {
+    auto result = attempt_load(store);
+    if (result.maybe_last_compaction) {
+        auto any = store->read_metadata(*result.maybe_last_compaction.value()).get().second;
+        proto::descriptors::SymbolListDescriptor metadata;
+        any->UnpackTo(&metadata);
+        return metadata;
+    }
+    return {};
+}
 } //namespace arcticdb

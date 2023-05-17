@@ -5,7 +5,6 @@ import glob
 import platform
 import shutil
 import re
-from pathlib import Path
 from tempfile import mkdtemp
 from setuptools import setup, Command, find_namespace_packages
 from setuptools import Extension, find_packages
@@ -14,13 +13,20 @@ from setuptools.command.build_py import build_py
 from setuptools.command.develop import develop
 from wheel.bdist_wheel import bdist_wheel
 
+_saved = list(sys.path)
+sys.path += [os.getcwd()]  # Pip parses `package_dir={"": "python"}` below
+from version_io import resolve_version
+
+sys.path = _saved
+
 
 # experimental flag to indicate that we want
 # the dependencies from a conda
-ARCTICDB_USING_CONDA  = os.environ.get("ARCTICDB_USING_CONDA", "0")
+ARCTICDB_USING_CONDA = os.environ.get("ARCTICDB_USING_CONDA", "0")
 ARCTICDB_USING_CONDA = ARCTICDB_USING_CONDA != "0"
 
 print(f"ARCTICDB_USING_CONDA={ARCTICDB_USING_CONDA}")
+
 
 def _log_and_run(*cmd, **kwargs):
     print("Running " + " ".join(cmd))
@@ -163,6 +169,7 @@ def readme():
 
 if __name__ == "__main__":
     setup(
+        version=resolve_version(),
         ext_modules=[CMakeExtension("arcticdb_ext")],
         package_dir={"": "python"},
         packages=find_packages(where="python", exclude=["tests", "tests.*"])

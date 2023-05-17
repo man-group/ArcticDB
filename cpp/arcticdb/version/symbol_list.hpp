@@ -85,6 +85,10 @@ class SymbolList {
         delete_all_keys_of_type(KeyType::SYMBOL_LIST, store, true);
     }
 
+    using OptDescriptor = std::optional<proto::descriptors::SymbolListDescriptor>;
+    // For diagnostics.
+    OptDescriptor get_latest_compaction_descriptor(const std::shared_ptr<Store>& store);
+
 private:
     struct LoadResult;
 
@@ -106,18 +110,20 @@ private:
 
     [[nodiscard]] CollectionType load_from_version_keys(const std::shared_ptr<Store>& store);
 
-    [[nodiscard]] folly::Future<VariantKey> write_symbols(
-            const std::shared_ptr<Store>& store,
+    [[nodiscard]] folly::Future<VariantKey> write_symbols(const std::shared_ptr<Store>& store,
             const CollectionType& symbols,
             const StreamId& stream_id,
-            timestamp creation_ts);
+            timestamp creation_ts,
+            const OptDescriptor& existing_descriptor);
 
-    [[nodiscard]] CollectionType load_from_symbol_list_keys(
-            const std::shared_ptr<StreamSource>& store,
-            const folly::Range<KeyVectorItr>& keys);
+    [[nodiscard]] SymbolList::CollectionType load_from_symbol_list_keys(const std::shared_ptr<StreamSource>& store,
+            const folly::Range<KeyVectorItr>& keys,
+            OptDescriptor& descriptor_out);
 
-    void read_list_from_storage(const std::shared_ptr<StreamSource>& store, const AtomKey& key,
-            CollectionType& symbols);
+    void read_list_from_storage(const std::shared_ptr<StreamSource>& store,
+            const AtomKey& key,
+            CollectionType& symbols,
+            OptDescriptor& descriptor_out);
 
     [[nodiscard]] KeyVector get_all_symbol_list_keys(const std::shared_ptr<StreamSource>& store) const;
 
