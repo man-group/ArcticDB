@@ -14,7 +14,7 @@ import pandas as pd
 
 from abc import ABC, abstractmethod
 
-from arcticdb.exceptions import ArcticNativeException
+from arcticdb.exceptions import ArcticNativeException, UserInputException
 from arcticdb.supported_types import time_types as supported_time_types
 
 from arcticdb_ext.version_store import ExecutionContextOptimisation as _Optimisation
@@ -230,15 +230,19 @@ def value_list_from_args(*args):
         collection = args
     array_list = []
     value_set = set()
+    contains_integer = False
     if len(collection) > 0:
         for value in collection:
             if value not in value_set:
                 value_set.add(value)
                 if isinstance(value, supported_time_types):
                     value = int(value.timestamp() * 1_000_000_000)
-                dtype = np.min_scalar_type(value) if isinstance(value, (int, np.integer)) else None
-                array_list.append(np.full(1, value, dtype=dtype))
+                elem = np.array([value]) if isinstance(value, (int, np.integer)) else np.full(1, value, dtype=None)
+                array_list.append(elem)
+                contains_integer = contains_integer or isinstance(value, (int, np.integer))
         value_list = np.concatenate(array_list)
+        if contains_integer and value_list.dtype == np.float64:
+            raise UserInputException("Invalid datatype conversion to double")
         if value_list.dtype == np.float16:
             value_list = value_list.astype(np.float32)
         elif value_list.dtype.kind == "U":
