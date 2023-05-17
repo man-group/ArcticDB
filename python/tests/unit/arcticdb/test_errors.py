@@ -16,6 +16,7 @@ specific_exception_types = [
     StorageException,
     SortingException,
     UnsortedDataException,
+    UserInputException,
 ]
 
 all_exception_types = [
