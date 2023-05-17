@@ -35,7 +35,6 @@ std::optional<util::BitSet> check_and_mark_slices(
     if (slice_and_keys.empty())
         return output;
 
-    ColRange col_range;
     bool is_first = true;
     size_t count = 0u;
     std::set<RowRange> row_ranges;
