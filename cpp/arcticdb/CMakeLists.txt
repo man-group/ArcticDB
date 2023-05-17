@@ -56,6 +56,7 @@ else()
     find_package(PCRE REQUIRED)
     find_package(Libevent  REQUIRED)
     find_package(semimap REQUIRED)
+    find_package(msgpack-c REQUIRED)
 
     set(ARCTICDB_MONGO_LIBS mongo::mongocxx_shared mongo::bsoncxx_shared)
 
@@ -422,7 +423,6 @@ set (arcticdb_core_libraries
         arcticdb_proto
         prometheus-cpp::push
         prometheus-cpp::pull
-        msgpackc-cxx
         ${standard_libraries}
         fmt::fmt
         ${Protobuf_lite_LIBRARY}
@@ -436,7 +436,6 @@ set (arcticdb_core_libraries
         remotery_static
         )
 
-
 # Dependencies expose different names of their libraries depending
 # on their origin (i.e. vendored source or packages on conda-forge).
 if(${ARCTICDB_USING_CONDA})
@@ -448,13 +447,16 @@ if(${ARCTICDB_USING_CONDA})
     list (APPEND arcticdb_core_libraries
         xxHash::xxHash
         pcre
+        msgpack-c
     )
 else()
 
     add_compile_definitions(ARCTICDB_USING_STATIC_XXHASH)
+
     list (APPEND arcticdb_core_libraries
         xxhash_static
         unofficial::pcre::pcre
+        msgpackc-cxx
     )
 endif()
 
