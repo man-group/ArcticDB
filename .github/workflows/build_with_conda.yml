@@ -1,13 +1,15 @@
 name: Build with conda
 on:
   push:
+    branches:
+      - master
   # For Pull-Requests, this runs the CI on merge commit
   # of HEAD with the target branch instead on HEAD, allowing
   # testing against potential new states which might have
   # been introduced in the target branch last commits.
   # See: https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows#pull_request
   pull_request:
-
+    
 jobs:
   linux:
     strategy:
@@ -54,7 +56,7 @@ jobs:
 
       fail-fast: false
     runs-on: ${{ matrix.os }}
-    
+
     steps:
       - uses: actions/checkout@v3
         with:
