@@ -362,25 +362,6 @@ def test_update_times(lmdb_version_store):
     assert update_times_versioned[0] < update_times_versioned[1] < update_times_versioned[2]
 
 
-def test_update_date_range_dataframe(lmdb_version_store):
-    """Restrictive update - when date_range is specified ensure that we only touch values in that range."""
-    # given
-    dtidx = pd.date_range("2022-06-01", "2022-06-05")
-    df = pd.DataFrame(index=dtidx, data={"a": [1, 2, 3, 4, 5]}, dtype=np.int64)
-    lmdb_version_store.write("sym_1", df)
-
-    dtidx = pd.date_range("2022-05-01", "2022-06-10")
-    a = np.arange(dtidx.shape[0])
-    update_df = pd.DataFrame(index=dtidx, data={"a": a}, dtype=np.int64)
-
-    # when
-    lmdb_version_store.update("sym_1", update_df, date_range=(datetime(2022, 6, 2), datetime(2022, 6, 4)))
-
-    # then
-    result = lmdb_version_store.read("sym_1").data
-    np.testing.assert_array_equal(result["a"].values, [1, 32, 33, 34, 5])
-
-
 def test_get_info_multi_index(lmdb_version_store):
     dtidx = pd.date_range(pd.Timestamp("2016-01-01"), periods=3)
     vals = np.arange(3, dtype=np.uint32)

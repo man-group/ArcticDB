@@ -185,7 +185,7 @@ def param_dict(fields, cases=None, xfail=None, py2only=None, py3only=None):
 
 
 def configure_test_logger(level="INFO"):
-    level = os.getenv("ARCTICC_TEST_LOG_LEVEL", "INFO")
+    level = os.getenv("ARCTICC_TEST_LOG_LEVEL", level)
     if os.getenv("ARCTICC_TEST_FILE_LOGGING"):
         outputs = ["file", "console"]
     else:
