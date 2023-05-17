@@ -9,7 +9,7 @@ on:
   # been introduced in the target branch last commits.
   # See: https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows#pull_request
   pull_request:
-    
+
 jobs:
   linux:
     strategy:
@@ -23,6 +23,8 @@ jobs:
     services:
       mongodb:
         image: mongo:4.4
+        ports:
+          - 27017:27017
 
     steps:
       - uses: actions/checkout@v3
@@ -34,7 +36,7 @@ jobs:
         with:
           environment-file: environment_unix.yml
           environment-name: arcticdb
-          
+
       - name: Build ArcticDB with conda (ARCTICDB_USING_CONDA=1)
         shell: bash -l {0}
         run: |
@@ -67,7 +69,7 @@ jobs:
         with:
           environment-file: environment_unix.yml
           environment-name: arcticdb
-          
+
       - name: Build ArcticDB with conda (ARCTICDB_USING_CONDA=1)
         shell: bash -l {0}
         run: |
