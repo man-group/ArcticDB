@@ -12,6 +12,7 @@
 #include <algorithm>
 #include <vector>
 #include <string>
+#include <cstdint>
 
 namespace arcticdb::util {
 

@@ -277,6 +277,10 @@ public:
         const std::vector<StreamId>& stream_ids,
         const std::vector<VersionQuery>& version_queries);
 
+    bool is_symbol_fragmented(const StreamId& stream_id, std::optional<size_t> segment_size) override;
+
+    VersionedItem defragment_symbol_data(const StreamId& stream_id, std::optional<size_t> segment_size) override;
+    
     StorageLockWrapper get_storage_lock(const StreamId& stream_id) override;
 
     void delete_storage() override;
@@ -321,7 +325,7 @@ protected:
             bool append,
             bool convert_int_to_float,
             bool via_iteration,
-            bool sparsify);
+            bool sparsify) override;
 
     /**
      * Take tombstoned indexes that have been pruned in the version map and perform the actual deletion

@@ -27,9 +27,7 @@ find_package(Gflags REQUIRED)
 find_package(LZ4 REQUIRED)
 find_package(prometheus-cpp CONFIG REQUIRED)
 find_package(Threads REQUIRED)
-find_package(unofficial-pcre REQUIRED)
 find_package(double-conversion REQUIRED)
-find_package(Libevent CONFIG REQUIRED)
 
 if(NOT WIN32 AND ${SSL_LINK})
     find_package(Kerberos REQUIRED)
@@ -41,10 +39,34 @@ set(Protobuf_LIBRARY protobuf::libprotobuf)
 
 find_package(mongocxx REQUIRED)
 find_package(bsoncxx REQUIRED)
-set(ARCTICDB_MONGO_LIBS mongo::mongocxx_static mongo::bsoncxx_static)
+find_package(zstd CONFIG REQUIRED)  # "CONFIG" bypasses our cpp/CMake/FindZstd.cmake module
 
-find_package(zstd CONFIG REQUIRED)
-set(Zstd_LIBRARY $<IF:$<TARGET_EXISTS:zstd::libzstd_shared>,zstd::libzstd_shared,zstd::libzstd_static>)
+if(NOT ${ARCTICDB_USING_CONDA})
+    find_package(unofficial-pcre REQUIRED)
+    find_package(Libevent CONFIG REQUIRED)
+    set(ARCTICDB_MONGO_LIBS mongo::mongocxx_static mongo::bsoncxx_static)
+    set(Zstd_LIBRARY $<IF:$<TARGET_EXISTS:zstd::libzstd_shared>,zstd::libzstd_shared,zstd::libzstd_static>)
+else()
+
+    SET(STATIC_LINK_STD_LIB OFF)
+    SET(HIDE_LINKED_SYMBOLS OFF)
+
+    find_package(pybind11 REQUIRED)
+    find_package(xxHash REQUIRED)
+    find_package(PCRE REQUIRED)
+    find_package(Libevent  REQUIRED)
+    find_package(semimap REQUIRED)
+
+    set(ARCTICDB_MONGO_LIBS mongo::mongocxx_shared mongo::bsoncxx_shared)
+
+    set(Zstd_LIBRARY zstd::libzstd_shared)
+
+    get_target_property(NEW_FOLLY_DEPS Folly::folly_deps INTERFACE_INCLUDE_DIRECTORIES)
+    message(STATUS "NEW_FOLLY_DEPS" ${NEW_FOLLY_DEPS})
+    list(REMOVE_ITEM NEW_FOLLY_DEPS "/usr/local/opt/openssl/include" )
+    set_target_properties(Folly::folly_deps PROPERTIES INTERFACE_INCLUDE_DIRECTORIES "${NEW_FOLLY_DEPS}")
+
+endif()
 
 # Libraries baked into the internal and external Linux images are found by searching various paths
 # On Windows, vcpkg will provide a "Config" which takes precedence
@@ -405,7 +427,6 @@ set (arcticdb_core_libraries
         fmt::fmt
         ${Protobuf_lite_LIBRARY}
         ${Protobuf_LIBRARY}
-        xxhash_static
         ${LZ4_LIBRARY}
         ${Zstd_LIBRARY}
         lmdb
@@ -413,8 +434,29 @@ set (arcticdb_core_libraries
         spdlog::spdlog
         Folly::folly # Transitively includes: double-conversion, gflags, glog, libevent, libssl, libcrypto, libiberty, libsodium
         remotery_static
-        unofficial::pcre::pcre
         )
+
+
+# Dependencies expose different names of their libraries depending
+# on their origin (i.e. vendored source or packages on conda-forge).
+if(${ARCTICDB_USING_CONDA})
+    # ARCTICDB_USING_CONDA is used in header of the files including vendored
+    # sources to be able to use dependencies via conda at compile time.
+    add_compile_definitions(ARCTICDB_USING_CONDA)
+
+    # We must use dynamic libraries.
+    list (APPEND arcticdb_core_libraries
+        xxHash::xxHash
+        pcre
+    )
+else()
+
+    add_compile_definitions(ARCTICDB_USING_STATIC_XXHASH)
+    list (APPEND arcticdb_core_libraries
+        xxhash_static
+        unofficial::pcre::pcre
+    )
+endif()
 
 if (WIN32)
     list (APPEND arcticdb_core_libraries
@@ -561,7 +603,7 @@ install(TARGETS arcticdb_ext
         RUNTIME DESTINATION . COMPONENT Python_Lib)
 
 # Improves portability (in setup.py) by creating an explicit target that manually installs the library
-if(NOT WIN32 AND "${CMAKE_BUILD_TYPE}" STREQUAL "RelWithDebInfo")
+if(NOT WIN32 AND "${CMAKE_BUILD_TYPE}" STREQUAL "RelWithDebInfo" AND NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     add_custom_command(OUTPUT arcticdb_ext.gz
             COMMAND bash -c "gzip -c $<TARGET_FILE:arcticdb_ext> >arcticdb_ext.gz"
             DEPENDS arcticdb_ext)
