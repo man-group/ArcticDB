@@ -24,11 +24,13 @@ import string
 
 from arcticdb.exceptions import ArcticNativeException
 from arcticdb.version_store.processing import QueryBuilder
-from arcticdb_ext.exceptions import InternalException
+from arcticdb_ext.exceptions import InternalException, UserInputException
 from arcticdb.util.test import assert_frame_equal
 from arcticdb.util.hypothesis import (
     use_of_function_scoped_fixtures_in_hypothesis_checked,
     integral_type_strategies,
+    unsigned_integral_type_strategies,
+    signed_integral_type_strategies,
     numeric_type_strategies,
     non_zero_numeric_type_strategies,
     string_strategy,
@@ -775,9 +777,26 @@ def test_filter_compare_string_number_col_col(lmdb_version_store, df):
 @settings(deadline=None)
 @given(
     df=data_frames([column("a", elements=string_strategy)], index=range_indexes()),
-    vals=st.frozensets(integral_type_strategies(), min_size=1),
+    vals=st.frozensets(signed_integral_type_strategies(), min_size=1),
 )
-def test_filter_isin_string_number(lmdb_version_store, df, vals):
+def test_filter_isin_string_number_signed(lmdb_version_store, df, vals):
+    assume(not df.empty)
+    q = QueryBuilder()
+    q = q[q["a"].isin(vals)]
+    symbol = "test_filter_isin_string_number"
+    lmdb_version_store.write(symbol, df, dynamic_strings=True)
+    with pytest.raises(InternalException) as e_info:
+        _ = lmdb_version_store.read(symbol, query_builder=q)
+
+
+@use_of_function_scoped_fixtures_in_hypothesis_checked
+# Note min_size=1 for the sets in the following two tests, as an empty set does not have an associated type
+@settings(deadline=None)
+@given(
+    df=data_frames([column("a", elements=string_strategy)], index=range_indexes()),
+    vals=st.frozensets(unsigned_integral_type_strategies(), min_size=1),
+)
+def test_filter_isin_string_number_unsigned(lmdb_version_store, df, vals):
     assume(not df.empty)
     q = QueryBuilder()
     q = q[q["a"].isin(vals)]
@@ -828,9 +847,23 @@ def numeric_isin_asumptions(df, vals):
 @settings(deadline=None)
 @given(
     df=dataframes_with_names_and_dtypes(["a"], integral_type_strategies()),
-    vals=st.frozensets(integral_type_strategies(), min_size=1),
+    vals=st.frozensets(signed_integral_type_strategies(), min_size=1),
 )
-def test_filter_numeric_isin(lmdb_version_store, df, vals):
+def test_filter_numeric_isin_signed(lmdb_version_store, df, vals):
+    numeric_isin_asumptions(df, vals)
+    q = QueryBuilder()
+    q = q[q["a"].isin(vals)]
+    pandas_query = "a in {}".format(list(vals))
+    generic_filter_test(lmdb_version_store, "test_filter_numeric_isin", df, q, pandas_query)
+
+
+@use_of_function_scoped_fixtures_in_hypothesis_checked
+@settings(deadline=None)
+@given(
+    df=dataframes_with_names_and_dtypes(["a"], integral_type_strategies()),
+    vals=st.frozensets(unsigned_integral_type_strategies(), min_size=1),
+)
+def test_filter_numeric_isin_unsigned(lmdb_version_store, df, vals):
     numeric_isin_asumptions(df, vals)
     q = QueryBuilder()
     q = q[q["a"].isin(vals)]
@@ -875,15 +908,34 @@ def test_filter_numeric_isin_unsigned(lmdb_version_store):
 @settings(deadline=None)
 @given(
     df=dataframes_with_names_and_dtypes(["a"], integral_type_strategies()),
-    vals=st.frozensets(integral_type_strategies(), min_size=1),
+    vals=st.frozensets(unsigned_integral_type_strategies(), min_size=1),
 )
-def test_filter_numeric_isnotin(lmdb_version_store, df, vals):
+def test_filter_numeric_isnotin_unsigned(lmdb_version_store, df, vals):
     numeric_isin_asumptions(df, vals)
     q = QueryBuilder()
     q = q[q["a"].isnotin(vals)]
     pandas_query = "a not in {}".format(list(vals))
     generic_filter_test(lmdb_version_store, "test_filter_numeric_isnotin", df, q, pandas_query)
 
+@use_of_function_scoped_fixtures_in_hypothesis_checked
+@settings(deadline=None)
+@given(
+    df=dataframes_with_names_and_dtypes(["a"], integral_type_strategies()),
+    vals=st.frozensets(signed_integral_type_strategies(), min_size=1),
+)
+def test_filter_numeric_isnotin_signed(lmdb_version_store, df, vals):
+    numeric_isin_asumptions(df, vals)
+    q = QueryBuilder()
+    q = q[q["a"].isnotin(vals)]
+    pandas_query = "a not in {}".format(list(vals))
+    generic_filter_test(lmdb_version_store, "test_filter_numeric_isnotin", df, q, pandas_query)
+
+
+def test_filter_numeric_isnotin_mixed_types_exception():
+    vals=[np.int64(-1), np.uint64(4294967296)]
+    q = QueryBuilder()
+    with pytest.raises(UserInputException) as e_info:
+        q = q[q["a"].isnotin(vals)]
 
 def test_filter_numeric_isnotin_hashing_overflow(lmdb_version_store):
     df = pd.DataFrame({"a": [256]})
@@ -933,7 +985,6 @@ def test_filter_fixed_width_string_isin_truncation(lmdb_version_store):
     generic_filter_test(
         lmdb_version_store, "test_filter_fixed_width_string_isin_truncation", df, q, pandas_query, dynamic_strings=False
     )
-
 
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
