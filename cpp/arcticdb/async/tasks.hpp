@@ -359,7 +359,7 @@ struct MemSegmentPassthroughProcessingTask : BaseTask {
     }
 
     [[nodiscard]]
-    Composite<ProcessingSegment> _process(Composite<ProcessingSegment>&& proc){
+    Composite<ProcessingSegment> process(Composite<ProcessingSegment>&& proc){
         auto procs = std::move(proc);
         for(const auto& clause : *clauses_) {
             if(clause.requires_repartition())
@@ -373,7 +373,7 @@ struct MemSegmentPassthroughProcessingTask : BaseTask {
     ARCTICDB_MOVE_ONLY_DEFAULT(MemSegmentPassthroughProcessingTask)
 
     Composite<ProcessingSegment> operator()() {
-        return _process(std::move(starting_segments_.value()));
+        return process(std::move(starting_segments_.value()));
     }
 
 };
@@ -395,7 +395,7 @@ struct MemSegmentProcessingTask : BaseTask {
     }
 
     [[nodiscard]]
-    Composite<ProcessingSegment> _process(Composite<ProcessingSegment>&& proc){
+    Composite<ProcessingSegment> process(Composite<ProcessingSegment>&& proc){
         auto procs = std::move(proc);
         for(const auto& clause : *clauses_) {
             procs = clause.process(store_, std::move(procs));
@@ -409,7 +409,7 @@ struct MemSegmentProcessingTask : BaseTask {
     ARCTICDB_MOVE_ONLY_DEFAULT(MemSegmentProcessingTask)
 
     Composite<ProcessingSegment> operator()(Composite<pipelines::SliceAndKey>&& sk) {
-        return _process(Composite<ProcessingSegment>(slice_to_segment(std::move(sk))));
+        return process(Composite<ProcessingSegment>(slice_to_segment(std::move(sk))));
     }
 
 };

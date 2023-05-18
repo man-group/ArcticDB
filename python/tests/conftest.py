@@ -256,7 +256,6 @@ def s3_store_factory(lib_name, arcticdb_test_s3_config):
 
 
 @pytest.fixture
-<<<<<<< HEAD
 def mongo_store_factory(request, lib_name):
     """Similar capability to `s3_store_factory`, but uses a mongo store."""
     # Use MongoDB if it's running (useful in CI), otherwise spin one up with pytest-server-fixtures.
@@ -284,10 +283,6 @@ def mongo_store_factory(request, lib_name):
             lib.version_store.clear()
 
 
-@pytest.fixture(scope="function")
-def s3_version_store(s3_store_factory):
-    return s3_store_factory()
-=======
 def s3_version_store_v1(s3_store_factory):
     return s3_store_factory(dynamic_strings=True)
 
