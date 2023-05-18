@@ -41,4 +41,5 @@ dependencies:
   - pytest-sugar
   - xxhash
   - semimap
+  - remotery
   - robin_hood

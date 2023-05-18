@@ -56,6 +56,7 @@ else()
     find_package(PCRE REQUIRED)
     find_package(Libevent  REQUIRED)
     find_package(semimap REQUIRED)
+    find_package(remotery REQUIRED)
     find_package(msgpack-c REQUIRED)
     find_package(robin_hood REQUIRED)
 
@@ -440,7 +441,6 @@ set (arcticdb_core_libraries
         ${ARCTICDB_MONGO_LIBS}
         spdlog::spdlog
         Folly::folly # Transitively includes: double-conversion, gflags, glog, libevent, libssl, libcrypto, libiberty, libsodium
-        remotery_static
         )
 
 # Dependencies expose different names of their libraries depending
@@ -454,6 +454,7 @@ if(${ARCTICDB_USING_CONDA})
     list (APPEND arcticdb_core_libraries
         xxHash::xxHash
         pcre
+        ${remotery_LIBRARY}
         msgpack-c
     )
 else()
@@ -463,6 +464,7 @@ else()
     list (APPEND arcticdb_core_libraries
         xxhash_static
         unofficial::pcre::pcre
+        remotery_static
         msgpackc-cxx
     )
 endif()
