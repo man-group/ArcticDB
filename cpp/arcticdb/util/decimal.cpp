@@ -198,10 +198,10 @@ namespace arcticdb {
         }
 
         void NumberComponents::expand_exponent(int decimal_point_position) {
-            arcticdb::util::check_arg(
-                    size_ > 0 || exponent_ == 0,
-                    "Cannot parse decimal from string. "
-                    "There must be at least one digit before the exponent.");
+            if(size_ == 0) {
+                digits_[size_++] = '0';
+            }
+
             const int digits_after_decimal_point = is_decimal() ? size_ - decimal_point_position : 0;
             const int zeros_to_append = std::max(0, exponent_ - digits_after_decimal_point);
             arcticdb::util::check_arg(

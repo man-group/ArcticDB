@@ -223,3 +223,16 @@ inline bool check_test_frame(const TestDataFrame &data_frame,
 
     return check_read_frame(data_frame, stream_reader, errors);
 }
+
+namespace arrow {
+    class Decimal128;
+}
+
+namespace rc {
+    template<>
+    struct Arbitrary<arrow::Decimal128> {
+        static Gen<arrow::Decimal128> arbitrary();
+    };
+}
+
+rc::Gen<std::string> gen_decimal_string();
