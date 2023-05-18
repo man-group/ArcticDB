@@ -58,6 +58,7 @@ else()
     find_package(semimap REQUIRED)
     find_package(remotery REQUIRED)
     find_package(msgpack-c REQUIRED)
+    find_package(rapidcheck REQUIRED)
     find_package(robin_hood REQUIRED)
 
     set(ARCTICDB_MONGO_LIBS mongo::mongocxx_shared mongo::bsoncxx_shared)
