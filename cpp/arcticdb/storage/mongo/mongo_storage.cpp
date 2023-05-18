@@ -37,7 +37,7 @@ MongoStorage::MongoStorage(
     instance_.reset(); //Just want to ensure singleton here, not hang onto it
     auto key_rg = lib.as_range();
     auto it = key_rg.begin();
-    db_ = fmt::format("arcticdb_{}", *it++);
+    db_ = fmt::format("arcticc_{}", *it++);
     std::ostringstream strm;
     for (; it != key_rg.end(); ++it) {
         strm << *it->get() << "__";
