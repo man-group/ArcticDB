@@ -42,3 +42,6 @@ dependencies:
   - xxhash
   - semimap
   - recycle
+  - rapidcheck
+  - remotery
+  - robin_hood

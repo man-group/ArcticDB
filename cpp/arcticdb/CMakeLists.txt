@@ -57,7 +57,10 @@ else()
     find_package(Libevent  REQUIRED)
     find_package(semimap REQUIRED)
     find_package(recycle REQUIRED)
+    find_package(remotery REQUIRED)
     find_package(msgpack-c REQUIRED)
+    find_package(rapidcheck REQUIRED)
+    find_package(robin_hood REQUIRED)
 
     set(ARCTICDB_MONGO_LIBS mongo::mongocxx_shared mongo::bsoncxx_shared)
 
@@ -284,7 +287,6 @@ set(arcticdb_srcs
         util/string_utils.hpp
         util/third_party/emilib_map.hpp
         util/third_party/emilib_set.hpp
-        util/third_party/robin_hood.hpp
         util/timeouts.hpp
         util/timer.hpp
         util/trace.hpp
@@ -386,6 +388,13 @@ set(arcticdb_srcs
         version/schema_checks.hpp
         )
 
+# Exclude vendored sources when using conda.
+if(NOT ${ARCTICDB_USING_CONDA})
+    list (APPEND arcticdb_srcs
+        util/third_party/robin_hood.hpp
+    )
+endif()
+
 add_library(arcticdb_core_object OBJECT ${arcticdb_srcs})
 
 if (NOT WIN32)
@@ -434,7 +443,6 @@ set (arcticdb_core_libraries
         ${ARCTICDB_MONGO_LIBS}
         spdlog::spdlog
         Folly::folly # Transitively includes: double-conversion, gflags, glog, libevent, libssl, libcrypto, libiberty, libsodium
-        remotery_static
         )
 
 # Dependencies expose different names of their libraries depending
@@ -448,6 +456,7 @@ if(${ARCTICDB_USING_CONDA})
     list (APPEND arcticdb_core_libraries
         xxHash::xxHash
         pcre
+        ${remotery_LIBRARY}
         msgpack-c
     )
 else()
@@ -457,6 +466,7 @@ else()
     list (APPEND arcticdb_core_libraries
         xxhash_static
         unofficial::pcre::pcre
+        remotery_static
         msgpackc-cxx
     )
 endif()
