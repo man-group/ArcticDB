@@ -11,7 +11,12 @@
 #include <arcticdb/util/offset_string.hpp>
 #include <arcticdb/column_store/string_pool.hpp>
 #include <folly/container/Enumerate.h>
-#include <arcticdb/util/third_party/robin_hood.hpp>
+
+#ifdef ARCTICDB_USING_CONDA
+    #include <robin_hood.h>
+#else
+    #include <arcticdb/util/third_party/robin_hood.hpp>
+#endif
 
 #include <string>
 #include <unordered_map>
