@@ -25,7 +25,7 @@ def test_update_date_range_dataframe(lmdb_version_store):
     """Restrictive update - when date_range is specified ensure that we only touch values in that range."""
     # given
     dtidx = pd.date_range("2022-06-01", "2022-06-05")
-    df = pd.DataFrame(index=dtidx, data={"a": [1, 2, 3, 4, 5]}, dtype=np.int64)
+    df = pd.DataFrame(index=dtidx, data={"a": [1, 2, 3, 4, 5]})
     lmdb_version_store.write("sym_1", df)
 
     dtidx = pd.date_range("2022-05-01", "2022-06-10")
@@ -40,51 +40,30 @@ def test_update_date_range_dataframe(lmdb_version_store):
     np.testing.assert_array_equal(result["a"].values, [1, 32, 33, 34, 5])
 
 
-class CustomIndex:
-    def __init__(self, index: pd.Index):
-        self.wrapped = index
-
-    def __len__(self):
-        return len(self.wrapped)
-
-    def __getitem__(self, item):
-        return self.wrapped[item]
-
-    def __getattr__(self, name):
-        if name in ("is_monotonic_increasing", "is_monotonic_decreasing"):
-            raise AttributeError("These Pandas settings are not implemented on this non-Pandas timeseries index")
-        return getattr(self.wrapped, name)
-
-
 class CustomTimeseries:
     """Simulation of a non-Pandas DataFrame-like object, with some behaviour similar to a legacy one used in Man."""
 
-    def __init__(self, wrapped: pd.DataFrame, *args, custom_index: bool, with_timezone_attr: bool, timezone):
-        if timezone and not with_timezone_attr:
+    def __init__(self, wrapped: pd.DataFrame, *, with_timezone_attr: bool, timezone_):
+        if timezone_ and not with_timezone_attr:
             raise RuntimeError("Meaningless test case - set with_timezone_attr=True")
         if with_timezone_attr:
-            self.timezone = timezone
-        if custom_index:
-            self.index = CustomIndex(wrapped.index)
+            self.timezone = timezone_
         self.wrapped = wrapped
         self.with_timezone_attr = with_timezone_attr
-        self.custom_index = custom_index
 
     def __getitem__(self, item):
         if isinstance(item, slice):
             open_ended = slice(item.start + timedelta(microseconds=1), item.stop - timedelta(microseconds=1), item.step)
             return CustomTimeseries(
                 self.wrapped[open_ended],
-                custom_index=self.custom_index,
                 with_timezone_attr=self.with_timezone_attr,
-                timezone=self.timezone,
+                timezone_=getattr(self, "timezone", None),
             )
         else:
             return CustomTimeseries(
                 self.wrapped[item],
-                custom_index=self.custom_index,
                 with_timezone_attr=self.with_timezone_attr,
-                timezone=self.timezone,
+                timezone_=getattr(self, "timezone", None)
             )
 
     def __getattr__(self, name):
@@ -105,7 +84,7 @@ class CustomTimeseriesNormalizer(CustomNormalizer):
 
     def denormalize(self, item, norm_meta):
         df = pd.DataFrame(index=item.times, data=dict(zip(item.columns_names, item.columns_values)))
-        return CustomTimeseries(df, custom_index=False, with_timezone_attr=True, timezone=None)
+        return CustomTimeseries(df, with_timezone_attr=True, timezone_=None)
 
 
 @pytest.fixture
@@ -118,7 +97,7 @@ def lmdb_version_store_custom_norm(version_store_factory):
 
 
 @pytest.mark.parametrize(
-    "with_timezone_attr,timezone_", [(True, None), (True, None), (True, timezone.utc), (False, None)]
+    "with_timezone_attr,timezone_", [(True, None), (True, timezone.utc), (False, None)]
 )
 @pytest.mark.skip("These fail due to too strict unsorted data checks, PR #388 should resolve")
 def test_update_date_range_non_pandas_dataframe(lmdb_version_store_custom_norm, with_timezone_attr, timezone_):
@@ -130,17 +109,17 @@ def test_update_date_range_non_pandas_dataframe(lmdb_version_store_custom_norm, 
 
     # given
     dtidx = pd.date_range("2022-06-01", "2022-06-05")
-    df = pd.DataFrame(index=dtidx, data={"a": [1, 2, 3, 4, 5]}, dtype=np.int64)
-    version_store.write("sym_1", CustomTimeseries(df, with_timezone_attr=with_timezone_attr, timezone=timezone_))
+    df = pd.DataFrame(index=dtidx, data={"a": [1, 2, 3, 4, 5]})
+    version_store.write("sym_1", CustomTimeseries(df, with_timezone_attr=with_timezone_attr, timezone_=timezone_))
 
     dtidx = pd.date_range("2022-05-01", "2022-06-10")
     a = np.arange(dtidx.shape[0])
-    update_df = pd.DataFrame(index=dtidx, data={"a": a}, dtype=np.int64)
+    update_df = pd.DataFrame(index=dtidx, data={"a": a})
 
     # when
     version_store.update(
         "sym_1",
-        CustomTimeseries(update_df, with_timezone_attr=with_timezone_attr, timezone=timezone_),
+        CustomTimeseries(update_df, with_timezone_attr=with_timezone_attr, timezone_=timezone_),
         date_range=(datetime(2022, 6, 2), datetime(2022, 6, 4)),
     )
 
@@ -162,7 +141,7 @@ def test_update_date_range_dataframe_multiindex(lmdb_version_store):
     dtidx = pd.date_range("2022-05-01", "2022-06-10")
     second_level = np.arange(dtidx.shape[0])
     a = np.arange(dtidx.shape[0])
-    update_df = pd.DataFrame(index=pd.MultiIndex.from_arrays([dtidx, second_level]), data={"a": a}, dtype=np.int64)
+    update_df = pd.DataFrame(index=pd.MultiIndex.from_arrays([dtidx, second_level]), data={"a": a})
 
     # when
     lmdb_version_store.update(sym, update_df, date_range=(datetime(2022, 6, 2), datetime(2022, 6, 4)))
