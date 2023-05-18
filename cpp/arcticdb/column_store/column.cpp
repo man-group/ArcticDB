@@ -54,7 +54,6 @@ void Column::append(const Column& other, position_t at_row) {
         return;
     }
 
-    util::check(sparse_permitted(), "Non-sparse append in dense column not permitted");
     if(!was_sparse) {
         if(!was_empty)
             backfill_sparse_map(initial_row_count - 1);

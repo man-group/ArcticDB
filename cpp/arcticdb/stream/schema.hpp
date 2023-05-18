@@ -25,7 +25,14 @@ class FixedSchema {
   public:
     FixedSchema(StreamDescriptor desc, const Index& index) :
         desc_(std::move(desc)),
-        index_(std::move(index)){}
+        index_(index){}
+
+    static FixedSchema default_schema(const Index& index) {
+        return util::variant_match(index, [] (auto idx) {
+            using IndexType = std::remove_reference_t<decltype(idx)>;
+            return FixedSchema(StreamDescriptor(), IndexType::default_index());
+        });
+    }
 
     void check(std::size_t pos, TypeDescriptor td) const {
         util::check_range(pos, desc_.fields().size(), "No field in fixed schema at supplied idx");
@@ -58,8 +65,6 @@ class FixedSchema {
         return index_;
     }
 
-    static constexpr bool is_sparse() { return false; }
-
   private:
     StreamDescriptor desc_;
     Index index_;
@@ -76,6 +81,13 @@ public:
     explicit DynamicSchema(const StreamDescriptor& desc, const Index& index) :
         desc_(default_dynamic_descriptor(desc, index)),
         index_(index) { }
+
+    static DynamicSchema default_schema(const Index& index) {
+        return util::variant_match(index, [] (auto idx) {
+            using IndexType = std::remove_reference_t<decltype(idx)>;
+            return DynamicSchema(StreamDescriptor(), IndexType::default_index());
+        });
+    }
 
     void check(std::size_t pos ARCTICDB_UNUSED, TypeDescriptor td ARCTICDB_UNUSED) const {
     }
@@ -108,8 +120,6 @@ public:
     StreamDescriptor default_descriptor() const {
         return desc_.clone();
     }
-
-    static constexpr bool is_sparse() { return true; }
 
 private:
     StreamDescriptor desc_;
