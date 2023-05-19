@@ -33,3 +33,6 @@ dist/
 cmake-build-*/
 dist_release/
 CMakeUserPresets.json
+
+*_pb2.py
+*.mdb
