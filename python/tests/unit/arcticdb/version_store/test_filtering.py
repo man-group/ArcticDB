@@ -675,6 +675,46 @@ def test_filter_datetime_timezone_aware_hypothesis(version_store_factory, df_dt,
         assert True
 
 
+def test_filter_datetime_nanoseconds(lmdb_version_store):
+    sym = "test_filter_datetime_nanoseconds"
+
+    # Dataframe has three rows and a single column containing timestamps 1 nanosecond apart
+    timestamp_1 = pd.Timestamp("2023-03-15 10:30:00")
+    timestamp_0 = timestamp_1 - pd.Timedelta(1, unit="ns")
+    timestamp_2 = timestamp_1 + pd.Timedelta(1, unit="ns")
+    df = pd.DataFrame(data=[timestamp_0, timestamp_1, timestamp_2], columns=["col"])
+
+    lmdb_version_store.write(sym, df)
+
+    # Try to read all rows
+    qb_all = QueryBuilder()
+    qb_all = qb_all[(qb_all["col"] >= timestamp_0) & (qb_all["col"] <= timestamp_2)]
+    all_rows_result = lmdb_version_store.read(sym, query_builder=qb_all).data
+    assert_frame_equal(all_rows_result, df)
+
+    # Try to read only the first row
+    qb_first = QueryBuilder()
+    qb_first = qb_first[(qb_first["col"] >= timestamp_0) & (qb_first["col"] <= timestamp_0)]
+    first_row_result = lmdb_version_store.read(sym, query_builder=qb_first).data
+    assert_frame_equal(first_row_result, df.iloc[[0]])
+
+    # Try to read first and second rows
+    qb_first_and_second = QueryBuilder()
+    qb_first_and_second = qb_first_and_second[
+        (qb_first_and_second["col"] >= timestamp_0) & (qb_first_and_second["col"] <= timestamp_1)
+    ]
+    first_and_second_row_result = lmdb_version_store.read(sym, query_builder=qb_first_and_second).data
+    assert_frame_equal(first_and_second_row_result, df.iloc[[0, 1]])
+
+    # Try to read second and third rows
+    qb_second_and_third = QueryBuilder()
+    qb_second_and_third = qb_second_and_third[
+        (qb_second_and_third["col"] >= timestamp_1) & (qb_second_and_third["col"] <= timestamp_2)
+    ]
+    second_and_third_row_result = lmdb_version_store.read(sym, query_builder=qb_second_and_third).data
+    assert_frame_equal(second_and_third_row_result, df.iloc[[1, 2]].reset_index(drop=True))
+
+
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(df=data_frames([column("a", elements=string_strategy)], index=range_indexes()), val=numeric_type_strategies())
