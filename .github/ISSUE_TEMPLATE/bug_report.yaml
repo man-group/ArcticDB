@@ -22,7 +22,9 @@ body:
     label: Steps/Code to Reproduce
     description: |
       Please add a [minimal code example](https://matthewrocklin.com/minimal-bug-reports) that can reproduce the error when running it.
-    Be as succinct as possible, **do not depend on external data files**: instead you can generate synthetic data using `numpy.random`.
+      Be as succinct as possible, **do not depend on external data files**: instead you can generate synthetic data using `numpy.random`.
+      If your bug report appears to be dependant on the external data files and cannot be reproduced without, please describe your data
+      files in as much detail as you can.
 
       If the code is too long, feel free to put it in a [public gist](https://gist.github.com) and link it in the issue.
 
