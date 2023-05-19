@@ -49,14 +49,6 @@ namespace arcticdb {
             return c == 'E' || c == 'e';
         }
 
-        static inline void trim_trailing_zeroes(std::string_view& str) {
-            const size_t last_non_zero = str.find_last_not_of('0');
-            if(last_non_zero != std::string::npos) {
-                const size_t zeros_to_remove = str.length() - last_non_zero - 1;
-                str.remove_suffix(zeros_to_remove);
-            }
-        }
-
         static inline void trim_leading_zeroes(std::string_view& str) {
             const size_t first_non_zero = str.find_first_not_of('0');
             if(first_non_zero != std::string::npos) {
@@ -111,10 +103,9 @@ namespace arcticdb {
 
             void handle_sign(std::string_view& input);
             void handle_exponent(std::string_view& input, int exponent_position);
-            void handle_insignificant_zeros(std::string_view& input) const;
             SpecialSymbols scan_for_special_symbols(std::string_view input);
             void expand_exponent(int decimal_point_position);
-            void parse_significant_digits(std::string_view input);
+            void parse_digits(std::string_view input);
 
             std::array<char, max_digits + 1> digits_;
             int exponent_;
@@ -129,8 +120,7 @@ namespace arcticdb {
             trim_leading_zeroes(input);
             const SpecialSymbols special_symbols = scan_for_special_symbols(input);
             handle_exponent(input, special_symbols.exponent_position);
-            handle_insignificant_zeros(input);
-            parse_significant_digits(input);
+            parse_digits(input);
             expand_exponent(special_symbols.decimal_point_position);
         }
 
@@ -177,13 +167,7 @@ namespace arcticdb {
             return result;
         }
 
-        void NumberComponents::handle_insignificant_zeros(std::string_view &input) const {
-            if(is_decimal()) {
-                trim_trailing_zeroes(input);
-            }
-        }
-
-        void NumberComponents::parse_significant_digits(std::string_view input) {
+        void NumberComponents::parse_digits(std::string_view input) {
             for(const char symbol : input) {
                 arcticdb::util::check_arg(size_ < max_digits,
                                           "Cannot parse decimal from string. "
