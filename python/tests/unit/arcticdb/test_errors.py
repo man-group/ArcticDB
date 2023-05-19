@@ -81,4 +81,5 @@ def test_no_such_version_exception(lmdb_version_store):
     with pytest.raises(NoSuchVersionException) as e:
         lmdb_version_store.restore_version("sym", as_of=999)
     assert not issubclass(e.type, _ArcticLegacyCompatibilityException)
+    assert issubclass(e.type, NoDataFoundException)
     assert issubclass(e.type, ArcticException)
