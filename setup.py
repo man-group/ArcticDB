@@ -29,12 +29,7 @@ def _log_and_run(*cmd, **kwargs):
 
 class CompileProto(Command):
     # When adding new protobuf versions, also update: setup.cfg, python/arcticdb/__init__.py
-    _PROTOBUF_TO_GRPC_VERSION = {
-        # By default, reduce grpc tools below 1.30 for proto3 for compat with Man's oldest Python protobuf client version.
-        # When building for conda-forge, instead use the latest grpc tools for proto3.
-        "3": "<1.49" if ARCTICDB_USING_CONDA else "<=1.30.*",
-        "4": ">=1.49"
-    }
+    _PROTOBUF_TO_GRPC_VERSION = {"3": "<=1.30.*", "4": ">=1.49"}
 
     description = '"protoc" generate code _pb2.py from .proto files'
     user_options = [
