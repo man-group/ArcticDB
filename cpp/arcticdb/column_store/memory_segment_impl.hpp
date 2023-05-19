@@ -965,26 +965,31 @@ public:
                 using ColumnTagType = typename TypeDescriptorTag::DataTypeTag;
                 using RawType = typename ColumnTagType::raw_type;
 
-                util::BitSet final_bitset = std::move(filter_bitset);
+                const util::BitSet* final_bitset;
+                util::BitSet bitset_including_sparse;
                 auto sparse_map = (*column)->opt_sparse_map();
                 std::unique_ptr<util::BitIndex> sparse_idx;
                 auto output_col_idx = column.index;
                 if (is_input_sparse || sparse_map) {
                     filter_idx = std::make_unique<util::BitIndex>();
                     filter_bitset.build_rs_index(filter_idx.get());
+                    bitset_including_sparse = filter_bitset;
                     if (sparse_map) {
-                        final_bitset = final_bitset.bit_and(sparse_map.value());
+                        bitset_including_sparse = bitset_including_sparse.bit_and(sparse_map.value());
                         // Index is built to make rank queries faster
                         sparse_idx = std::make_unique<util::BitIndex>();
                         sparse_map.value().build_rs_index(sparse_idx.get());
                     } else {
-                        final_bitset.resize((*column)->row_count());
+                        bitset_including_sparse.resize((*column)->row_count());
                     }
-                    if (final_bitset.count() == 0) {
+                    if (bitset_including_sparse.count() == 0) {
                         // No values are set in the sparse column, s    kip it
                         return;
                     }
-                    output_col_idx = output->add_column(field(column.index), final_bitset.count(), true);
+                    output_col_idx = output->add_column(field(column.index), bitset_including_sparse.count(), true);
+                    final_bitset = &bitset_including_sparse;
+                } else {
+                    final_bitset = &filter_bitset;
                 }
                 auto& output_col = output->column(output_col_idx);
                 if (sparse_map)
@@ -992,18 +997,18 @@ public:
                 auto output_ptr = reinterpret_cast<RawType*>(output_col.ptr());
                 auto input_data =  (*column)->data();
 
-                auto bitset_iter = final_bitset.first();
+                auto bitset_iter = final_bitset->first();
                 auto row_count_so_far = 0;
 
                 // Defines the position in output sparse column where we want to write data next (only used in sparse)
                 // For dense, we just do +1
                 util::BitSetSizeType pos_output = 0;
                 while(auto block = input_data.next<TypeDescriptorTag>()) {
-                    if (bitset_iter == final_bitset.end())
+                    if (bitset_iter == final_bitset->end())
                         break;
                     auto input_ptr = block.value().data();
                     if (sparse_map) {
-                        while(bitset_iter != final_bitset.end()) {
+                        while(bitset_iter != final_bitset->end()) {
                             auto rank_in_filter = filter_bitset.rank(*bitset_iter, *filter_idx);
                             if (rank_in_filter - 1 != pos_output) {
                                 // setting sparse_map - marking all rows in output as NULL until this point
@@ -1035,7 +1040,7 @@ public:
                         }
                     } else {
                         const auto row_count = block.value().row_count();
-                        const auto bitset_end = final_bitset.end();
+                        const auto bitset_end = final_bitset->end();
                         do {
                             const auto offset = *bitset_iter - row_count_so_far;
                             if (offset >= row_count)
