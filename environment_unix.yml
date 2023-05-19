@@ -41,4 +41,8 @@ dependencies:
   - pytest-sugar
   - xxhash
   - semimap
+  - recycle
+  - rapidcheck
+  - remotery
+  - robin_hood
   - lmdbxx
