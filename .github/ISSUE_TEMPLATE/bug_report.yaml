@@ -1,0 +1,137 @@
+name: Bug Report
+description: Create a report to help us reproduce and correct the bug
+labels: ['bug']
+
+body:
+- type: markdown
+  attributes:
+    value: >
+      #### Before submitting a bug, please make sure the issue hasn't been already
+      addressed by searching through [the past issues](https://github.com/man-group/ArcticDB/issues).
+
+- type: textarea
+  attributes:
+    label: Describe the bug
+    description: >
+      A clear and concise description of what the bug is.
+  validations:
+    required: true
+
+- type: textarea
+  attributes:
+    label: Steps/Code to Reproduce
+    description: |
+      Please add a [minimal code example](https://matthewrocklin.com/minimal-bug-reports) that can reproduce the error when running it.
+      Be as succinct as possible, **do not depend on external data files**: instead you can generate synthetic data using `numpy.random`.
+      If your bug report appears to be dependent on external data files and cannot be reproduced without them, please describe your data
+      files in as much detail as you can.
+
+      If the code is too long, feel free to put it in a [public gist](https://gist.github.com) and link it in the issue.
+
+      In short, **we are going to copy-paste your code** to run it and we expect to get the same result as you.
+
+      We acknowledge that [crafting a minimal reproducible code example](https://matthewrocklin.com/minimal-bug-reports) requires some
+      effort on your side but it really helps the maintainers quickly reproduce the problem and analyze its cause without any ambiguity.
+      Ambiguous bug reports tend to be slower to fix because they will require more effort and back and forth discussion between the
+      maintainers and the reporter to pin-point the precise conditions necessary to reproduce the problem.
+    placeholder: |
+      ```python
+      from arcticdb import Arctic
+
+      Arctic()
+      ```
+  validations:
+    required: true
+
+- type: textarea
+  attributes:
+    label: Expected Results
+    description: >
+      Please paste or describe the expected results.
+    placeholder: >
+      Example: No error is thrown.
+  validations:
+    required: true
+
+- type: textarea
+  attributes:
+    label: Actual Results
+    description: |
+      Please paste or describe the results you observe instead of the expected results.
+      If you observe an error, please paste the error message including the **full traceback** of the exception.
+      For instance the code above raises the following exception:
+
+      ```python-traceback
+      ---------------------------------------------------------------------------
+      TypeError                                 Traceback (most recent call last)
+      Cell In[4], line 1
+      ----> 1 Arctic()
+
+      TypeError: Arctic.__init__() missing 1 required positional argument: 'uri'
+      ```
+    placeholder: >
+      Please paste or specifically describe the actual output or traceback.
+  validations:
+    required: true
+
+- type: textarea
+  attributes:
+    label: OS (Including Linux Distribution)
+    placeholder: >
+      Fedora Linux 38 (Workstation Edition), Kernel 6.2.14-300.fc38.x86_64
+  validations:
+    required: true
+
+- type: textarea
+  attributes:
+    label: Python Version
+    description: |
+      The version of Python can be obtained by running:
+        ```bash
+        python3 -c 'import sys; print(sys.version)'
+        ```
+    placeholder: >
+      1.1.0
+  validations:
+    required: true
+
+- type: textarea
+  attributes:
+    label: ArcticDB Version
+    description: |
+      ArcticDB Version can be obtained by running:
+
+        ```bash
+        pip freeze | grep arcticdb
+        ```
+
+      or if using `conda`:
+
+        ```bash
+        conda list | grep arcticdb
+        ```
+    placeholder: >
+      1.1.0
+  validations:
+    required: true
+
+- type: textarea
+  attributes:
+    label: Backend storage used
+    placeholder: >
+      AWS S3, GCP S3, LMDB, etc.
+  validations:
+    required: true
+
+- type: textarea
+  attributes:
+    label: Additional Context
+    description: |
+      Add any other context about the problem here.
+  validations:
+    required: true
+
+- type: markdown
+  attributes:
+    value: >
+      Thank you for contributing to ArcticDB!
