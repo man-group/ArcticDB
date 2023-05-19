@@ -621,11 +621,12 @@ def create_value(value):
     elif isinstance(value, np.integer):
         min_scalar_type = np.min_scalar_type(value)
         f = CONSTRUCTOR_MAP.get(min_scalar_type.kind).get(min_scalar_type.itemsize)
+    elif isinstance(value, (pd.Timestamp, pd.Timedelta)):
+        # pd.Timestamp is in supported_time_types, but its timestamp() method can't provide ns precision
+        value = value.value
+        f = ValueInt64
     elif isinstance(value, supported_time_types):
         value = int(value.timestamp() * 1_000_000_000)
-        f = ValueInt64
-    elif isinstance(value, pd.Timedelta):
-        value = value.value
         f = ValueInt64
     elif isinstance(value, datetime.timedelta):
         value = int(value.total_seconds() * 1_000_000_000)
