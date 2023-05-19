@@ -68,16 +68,19 @@ class CompileProto(Command):
 
         # Manual virtualenv to avoid hard-coding Man internal locations:
         pythonpath = mkdtemp()
-        _log_and_run(
-            sys.executable,
-            "-mpip",
-            "install",
-            "--disable-pip-version-check",
-            "--target=" + pythonpath,
-            "grpcio-tools" + grpc_version,
-            f"protobuf=={proto_ver}.*",
-        )
-        env = {**os.environ, "PYTHONPATH": pythonpath, "PYTHONNOUSERSITE": "1"}
+        if not ARCTICDB_USING_CONDA:
+            _log_and_run(
+                sys.executable,
+                "-mpip",
+                "install",
+                "--disable-pip-version-check",
+                "--target=" + pythonpath,
+                "grpcio-tools" + grpc_version,
+                f"protobuf=={proto_ver}.*",
+            )
+            env = {**os.environ, "PYTHONPATH": pythonpath, "PYTHONNOUSERSITE": "1"}
+        else:
+            env = {**os.environ}
 
         # Compile
         os.makedirs(version_output_dir, exist_ok=True)
