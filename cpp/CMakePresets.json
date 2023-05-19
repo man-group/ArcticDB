@@ -116,9 +116,7 @@
       "generator": "Unix Makefiles",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
-        "CMAKE_MAKE_PROGRAM": "make",
-        "CMAKE_C_COMPILER": "cc",
-        "CMAKE_CXX_COMPILER": "c++"
+        "CMAKE_MAKE_PROGRAM": "make"
       },
       "condition" : {
         "type" : "allOf",
@@ -150,9 +148,7 @@
       "generator": "Unix Makefiles",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
-        "CMAKE_MAKE_PROGRAM": "make",
-        "CMAKE_C_COMPILER": "cc",
-        "CMAKE_CXX_COMPILER": "c++"
+        "CMAKE_MAKE_PROGRAM": "make"
       },
       "condition" : {
         "type" : "allOf",
