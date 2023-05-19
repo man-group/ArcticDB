@@ -46,4 +46,4 @@ dependencies:
   - remotery
   - robin_hood
   - lmdbxx
-  - arrow-cpp
+  - libarrow
