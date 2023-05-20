@@ -328,7 +328,7 @@ private:
 
     std::vector<VersionedItem> batch_write_index_keys_to_version_map(
         const std::vector<AtomKey>& index_keys,
-        const std::unordered_map<StreamId, UpdateInfo>& stream_update_info_map,
+        const std::vector<UpdateInfo>& stream_update_info_vector,
         bool prune_previous_versions);
 
     void delete_snapshot_sync(const SnapshotId& snap_name, const VariantKey& snap_key);
