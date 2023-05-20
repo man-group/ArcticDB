@@ -21,8 +21,8 @@ TEST(SegmentAggregator, Basic) {
     size_t count = 0;
     for (size_t i = 0; i < 10; ++i) {
         auto wrapper = SinkWrapper(symbol, {
-            scalar_field_proto(DataType::UINT64, "numbers"),
-            scalar_field_proto(DataType::ASCII_DYNAMIC64, "strings")
+            scalar_field(DataType::UINT64, "numbers"),
+            scalar_field(DataType::ASCII_DYNAMIC64, "strings")
         });
 
         for(timestamp j = 0; j < 20; ++j ) {
@@ -36,10 +36,10 @@ TEST(SegmentAggregator, Basic) {
         segments.emplace_back(std::move(wrapper.segment()));
     }
 
-    SegmentSinkWrapper seg_wrapper(symbol, TimeseriesIndex::default_index(), {
-        FieldDescriptor{scalar_field_proto(DataType::UINT64, "numbers")},
-        FieldDescriptor{scalar_field_proto(DataType::ASCII_DYNAMIC64, "strings")}
-    });
+    SegmentSinkWrapper seg_wrapper(symbol, TimeseriesIndex::default_index(), fields_from_range(std::vector<FieldRef>{
+        scalar_field(DataType::UINT64, "numbers"),
+        scalar_field(DataType::ASCII_DYNAMIC64, "strings")
+    }));
 
     for(auto& segment : segments) {
         pipelines::FrameSlice slice(segment);

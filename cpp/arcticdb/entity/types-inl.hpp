@@ -125,17 +125,16 @@ struct formatter<arcticdb::entity::TypeDescriptor> {
 };
 
 template<>
-struct formatter<arcticdb::entity::FieldDescriptor> {
+struct formatter<arcticdb::entity::Field> {
     template<typename ParseContext>
     constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
 
     template<typename FormatContext>
-    auto format(const arcticdb::entity::FieldDescriptor &fd, FormatContext &ctx) const {
+    auto format(const arcticdb::entity::Field &fd, FormatContext &ctx) const {
         if (!fd.name().empty())
-            return format_to(ctx.out(), "FD<name={}, type={}>", fd.name(), fd.type_desc());
+            return format_to(ctx.out(), "FD<name={}, type={}>", fd.name(), fd.type());
         else
-            return format_to(ctx.out(), "FD<type={}>", fd.type_desc());
-
+            return format_to(ctx.out(), "FD<type={}>", fd.type());
     }
 };
 
@@ -147,28 +146,6 @@ struct formatter<arcticdb::entity::IndexDescriptor> {
     template<typename FormatContext>
     auto format(const arcticdb::entity::IndexDescriptor &idx, FormatContext &ctx) const {
         return format_to(ctx.out(), "IDX<size={}, kind={}>", idx.field_count(), static_cast<char>(idx.type()));
-    }
-};
-
-template<>
-struct formatter<arcticdb::entity::StreamDescriptor> {
-    template<typename ParseContext>
-    constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
-
-    template<typename FormatContext>
-    auto format(const arcticdb::entity::StreamDescriptor &sd, FormatContext &ctx) const {
-        return format_to(ctx.out(), "TSD<tsid={}, idx={}, fields={}>", sd.id(), sd.index(), sd.fields());
-    }
-};
-
-template<>
-struct formatter<arcticdb::entity::StreamDescriptor::Proto> {
-    template<typename ParseContext>
-    constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
-
-    template<typename FormatContext>
-    auto format(const arcticdb::entity::StreamDescriptor::Proto &sd, FormatContext &ctx) const {
-        return format_to(ctx.out(), "{}", sd.DebugString());
     }
 };
 template<>

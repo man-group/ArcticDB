@@ -12,6 +12,7 @@ from enum import Enum, IntFlag
 from itertools import zip_longest
 import attr
 import os
+import pytest
 
 from hypothesis import strategies as st, assume, stateful, settings, HealthCheck
 from hypothesis.stateful import RuleBasedStateMachine, Bundle, rule, invariant, run_state_machine_as_test
@@ -311,8 +312,9 @@ class VersionStoreComparison(RuleBasedStateMachine):
         self._check_batch_read(list(snap.sym_vers), list(snap.sym_vers.values()))
 
 
-def test_stateful(lmdb_version_store_delayed_deletes):
-    VersionStoreComparison._lib = lmdb_version_store_delayed_deletes
+@pytest.mark.parametrize("lib_type", ["lmdb_version_store_delayed_deletes_v1", "lmdb_version_store_delayed_deletes_v2"])
+def test_stateful(lib_type, request):
+    VersionStoreComparison._lib = request.getfixturevalue(lib_type)
     run_state_machine_as_test(
         VersionStoreComparison,
         settings=settings(  # Note: timeout is a legacy parameter
@@ -324,8 +326,8 @@ def test_stateful(lmdb_version_store_delayed_deletes):
     )
 
 
-def test_single(lmdb_version_store_delayed_deletes):
-    VersionStoreComparison._lib = lmdb_version_store_delayed_deletes
+def test_single(lmdb_version_store_delayed_deletes_v1):
+    VersionStoreComparison._lib = lmdb_version_store_delayed_deletes_v1
     state = VersionStoreComparison()
     # Copy and paste the reproduction script hypothesis generated below:
     # print("Press enter to continue"); import sys; sys.stdin.readline()

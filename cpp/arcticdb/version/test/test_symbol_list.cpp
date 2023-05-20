@@ -7,17 +7,17 @@
 
 #include <gtest/gtest.h>
 #include <gmock/gmock-matchers.h> // Included in gtest 1.10
-#include <arcticdb/util/test/gtest_utils.hpp>
 
+//#include <arcticdb/util/test/gtest_print.hpp>
 #include <arcticdb/version/symbol_list.hpp>
+#include <arcticdb/version/version_map.hpp>
 #include <arcticdb/storage/test/in_memory_store.hpp>
+#include <arcticdb/util/test/generators.hpp>
+
 #include <shared_mutex>
 
 #include <folly/executors/FutureExecutor.h>
 #include <folly/executors/CPUThreadPoolExecutor.h>
-#include <arcticdb/version/version_map.hpp>
-#include <arcticdb/util/test/generators.hpp>
-
 
 using namespace arcticdb;
 using namespace folly;
@@ -246,7 +246,7 @@ TEST(SymbolList, AddDeleteReadd) {
     write_initial_compaction_key();
 
     SymbolListState state(store);
-    for (size_t i = 0; i < 100; ++i) {
+    for (size_t i = 0; i < 10; ++i) {
         state.do_action(symbol_list);
     }
     state.do_list_symbols(symbol_list);

@@ -25,8 +25,9 @@
 namespace arcticdb::version_store {
 
 LocalVersionedEngine::LocalVersionedEngine(
-        const std::shared_ptr<storage::Library>& library) :
-    store_(std::make_shared<async::AsyncStore<util::SysClock>>(library, codec::default_lz4_codec())),
+        const std::shared_ptr<storage::Library>& library,
+        const std::optional<std::string>& license_key ARCTICDB_UNUSED) :
+    store_(std::make_shared<async::AsyncStore<util::SysClock>>(library, codec::default_lz4_codec(), encoding_version(library->config()))),
     symbol_list_(std::make_shared<SymbolList>(version_map_)){
     configure(library->config());
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Created versioned engine at {} for library path {}  with config {}", uintptr_t(this),
@@ -212,7 +213,7 @@ std::optional<VersionedItem> LocalVersionedEngine::get_specific_version(
     auto key = ::arcticdb::get_specific_version(store(), version_map(), stream_id, version_id, opt_true(version_query.skip_compat_),
                                                    opt_true(version_query.iterate_on_failure_));
     if (!key) {
-        log::version().warn("Version {} for symbol {} is missing, checking snapshots (this can be slow)", version_id, stream_id);
+        ARCTICDB_DEBUG(log::version(), "Version {} for symbol {} is missing, checking snapshots:", version_id, stream_id);
         auto index_keys = get_index_keys_in_snapshots(store(), stream_id);
         auto index_key = std::find_if(index_keys.begin(), index_keys.end(), [version_id](const AtomKey& k) {
             return k.version_id() == version_id;
@@ -415,13 +416,15 @@ VersionedItem LocalVersionedEngine::sort_index(const StreamId& stream_id, bool d
     }
 
     auto total_rows = adjust_slice_rowcounts(slice_and_keys);
-    auto index = index_type_from_descriptor(index_segment_reader.tsd().stream_descriptor());
+
+    auto index = index_type_from_descriptor(index_segment_reader.tsd().proto().stream_descriptor());
     bool bucketize_dynamic = index_segment_reader.bucketize_dynamic();
-    auto time_series = make_descriptor(
+    auto time_series = make_timeseries_descriptor(
         total_rows,
-        StreamDescriptor{std::move(*index_segment_reader.mutable_tsd().mutable_stream_descriptor())},
-        *index_segment_reader.mutable_tsd().mutable_normalization(),
-        std::move(*index_segment_reader.mutable_tsd().mutable_user_meta()),
+        StreamDescriptor{index_segment_reader.mutable_tsd().as_stream_descriptor()},
+        std::move(*index_segment_reader.mutable_tsd().mutable_proto().mutable_normalization()),
+        std::move(*index_segment_reader.mutable_tsd().mutable_proto().mutable_user_meta()),
+        std::nullopt,
         std::nullopt,
         bucketize_dynamic);
 
@@ -561,11 +564,11 @@ VersionedItem LocalVersionedEngine::write_versioned_dataframe_internal(
     }
 }
 
-std::pair<VersionedItem, arcticdb::proto::descriptors::TimeSeriesDescriptor> LocalVersionedEngine::restore_version(
+std::pair<VersionedItem, TimeseriesDescriptor> LocalVersionedEngine::restore_version(
     const StreamId& stream_id,
     const VersionQuery& version_query
     ) {
-    ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: res    tore_version");
+    ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: restore_version");
     auto version_to_restore = get_version_to_read(stream_id, version_query);
     version::check<ErrorCode::E_NO_SUCH_VERSION>(static_cast<bool>(version_to_restore),
                                                  "Unable to restore {}@{}: version not found", stream_id, version_query);
@@ -593,7 +596,7 @@ std::pair<VersionedItem, std::vector<AtomKey>> LocalVersionedEngine::write_indiv
     };
 
     auto frame_slice = FrameSlice{segment};
-    auto descriptor = get_timeseries_descriptor(segment.descriptor(), segment.row_count(), std::nullopt, {});
+    auto descriptor = make_timeseries_descriptor(segment.row_count(),segment.descriptor().clone(), {}, std::nullopt,std::nullopt, std::nullopt, false);
     auto key = store_->write(pk, std::move(segment)).get();
     std::vector sk{SliceAndKey{frame_slice, to_atom(key)}};
     auto index_key_fut = index::write_index(index, std::move(descriptor), std::move(sk), IndexPartialKey{stream_id, version_id}, store_);
@@ -791,19 +794,19 @@ void LocalVersionedEngine::delete_trees_responsibly(
 void LocalVersionedEngine::remove_incomplete(
     const StreamId& stream_id
     ) {
-    stream::remove_incomplete_segments(store_, stream_id);
+    remove_incomplete_segments(store_, stream_id);
 }
 
 std::set<StreamId> LocalVersionedEngine::get_incomplete_symbols() {
-    return stream::get_incomplete_symbols(store_);
+    return ::arcticdb::get_incomplete_symbols(store_);
 }
 
 std::set<StreamId> LocalVersionedEngine::get_incomplete_refs() {
-    return stream::get_incomplete_refs(store_);
+    return ::arcticdb::get_incomplete_refs(store_);
 }
 
 std::set<StreamId> LocalVersionedEngine::get_active_incomplete_refs() {
-    return stream::get_active_incomplete_refs(store_);
+    return ::arcticdb::get_active_incomplete_refs(store_);
 }
 
 void LocalVersionedEngine::push_incompletes_to_symbol_list(const std::set<StreamId>& incompletes) {
@@ -817,19 +820,19 @@ void LocalVersionedEngine::push_incompletes_to_symbol_list(const std::set<Stream
 void LocalVersionedEngine::append_incomplete_frame(
     const StreamId& stream_id,
     InputTensorFrame&& frame) const {
-    arcticdb::stream::append_incomplete(store_, stream_id, std::move(frame));
+    arcticdb::append_incomplete(store_, stream_id, std::move(frame));
 }
 
 void LocalVersionedEngine::append_incomplete_segment(
     const StreamId& stream_id,
     SegmentInMemory &&seg) {
-    arcticdb::stream::append_incomplete_segment(store_, stream_id, std::move(seg));
+    arcticdb::append_incomplete_segment(store_, stream_id, std::move(seg));
 }
 
 void LocalVersionedEngine::write_parallel_frame(
     const StreamId& stream_id,
     InputTensorFrame&& frame) const {
-    stream::write_parallel(store_, stream_id, std::move(frame));
+    write_parallel(store_, stream_id, std::move(frame));
 }
 
 VersionedItem LocalVersionedEngine::compact_incomplete_dynamic(
@@ -888,7 +891,7 @@ folly::Future<FrameAndDescriptor> async_read_direct(
     std::shared_ptr<BufferHolder> buffers,
     const ReadOptions& read_options) {
     auto index_segment_reader = std::make_shared<index::IndexSegmentReader>(std::move(index_segment));
-    auto pipeline_context = std::make_shared<PipelineContext>(StreamDescriptor{*index_segment_reader->mutable_tsd().mutable_stream_descriptor()});
+    auto pipeline_context = std::make_shared<PipelineContext>(StreamDescriptor{index_segment_reader->tsd().as_stream_descriptor()});
     pipeline_context->set_selected_columns(read_query.columns);
     const bool dynamic_schema = opt_false(read_options.dynamic_schema_);
     const bool bucketize_dynamic = index_segment_reader->bucketize_dynamic();
@@ -1088,7 +1091,7 @@ std::map<StreamId, VersionVectorType> get_multiple_sym_versions_from_query(
     return sym_versions;
 }
 
-std::vector<std::pair<VersionedItem, arcticdb::proto::descriptors::TimeSeriesDescriptor>> LocalVersionedEngine::batch_restore_version_internal(
+std::vector<std::pair<VersionedItem, TimeseriesDescriptor>> LocalVersionedEngine::batch_restore_version_internal(
     const std::vector<StreamId>& stream_ids,
     const std::vector<VersionQuery>& version_queries) {
     util::check(stream_ids.size() == version_queries.size(), "Symbol vs version query size mismatch: {} != {}", stream_ids.size(), version_queries.size());
@@ -1096,7 +1099,7 @@ std::vector<std::pair<VersionedItem, arcticdb::proto::descriptors::TimeSeriesDes
     util::check(sym_versions.size() == version_queries.size(), "Restore versions requires specific version to be supplied");
     auto previous = batch_get_latest_version(store(), version_map(), stream_ids, false);
     auto versions_to_restore = batch_get_specific_version(store(), version_map(), sym_versions);
-    std::vector<folly::Future<std::pair<VersionedItem, arcticdb::proto::descriptors::TimeSeriesDescriptor>>> fut_vec;
+    std::vector<folly::Future<std::pair<VersionedItem, TimeseriesDescriptor>>> fut_vec;
 
     for(const auto& stream_id : folly::enumerate(stream_ids)) {
         auto prev = previous->find(*stream_id);
@@ -1245,7 +1248,7 @@ void LocalVersionedEngine::configure(const storage::LibraryDescriptor::VariantSt
 }
 
 timestamp LocalVersionedEngine::latest_timestamp(const std::string& symbol) {
-    if(auto latest_incomplete = stream::latest_incomplete_timestamp(store(), symbol); latest_incomplete)
+    if(auto latest_incomplete = latest_incomplete_timestamp(store(), symbol); latest_incomplete)
         return latest_incomplete.value();
 
     if(auto latest_key = get_latest_version(symbol, VersionQuery{}); latest_key)
@@ -1293,10 +1296,10 @@ WriteOptions LocalVersionedEngine::get_write_options() const  {
 
 AtomKey LocalVersionedEngine::_test_write_segment(const std::string& symbol) {
     auto wrapper = SinkWrapper(symbol, {
-        scalar_field_proto(DataType::UINT64, "thing1"),
-        scalar_field_proto(DataType::UINT64, "thing2"),
-        scalar_field_proto(DataType::UINT64, "thing3"),
-        scalar_field_proto(DataType::UINT64, "thing4")
+        scalar_field(DataType::UINT64, "thing1"),
+        scalar_field(DataType::UINT64, "thing2"),
+        scalar_field(DataType::UINT64, "thing3"),
+        scalar_field(DataType::UINT64, "thing4")
     });
 
     for(size_t j = 0; j < 20; ++j ) {

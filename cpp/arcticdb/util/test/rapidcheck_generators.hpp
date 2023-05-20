@@ -67,13 +67,14 @@ struct Arbitrary<arcticdb::entity::StreamDescriptor> {
         const auto id = *gen::arbitrary<std::string>();
         const auto num_fields = *gen::arbitrary<size_t>();
         const auto field_names = *gen::container<std::unordered_set<std::string>>(num_fields, gen::nonEmpty(gen::string<std::string>()));
-        std::vector<FieldDescriptor> field_descriptors;
+        arcticdb::FieldCollection field_descriptors;
         for (const auto& field_name: field_names) {
-            field_descriptors.emplace_back(FieldDescriptor{arcticdb::entity::scalar_field_proto(*gen_numeric_datatype(), field_name)});
+            field_descriptors.add_field(arcticdb::entity::scalar_field(*gen_numeric_datatype(), field_name));
         }
+        auto desc =stream_descriptor(arcticdb::entity::StreamId{id}, RowCountIndex{}, arcticdb::fields_from_range(field_descriptors));
         return gen::build<StreamDescriptor>(
-            gen::set(&StreamDescriptor::data_, gen::just(
-                (std::make_shared<StreamDescriptor::Proto>(stream_descriptor(arcticdb::entity::StreamId{id}, RowCountIndex{}, fields_proto_from_range(field_descriptors))))))
+            gen::set(&StreamDescriptor::data_, gen::just(desc.data_)),
+            gen::set(&StreamDescriptor::fields_, gen::just(desc.fields_))
         );
     }
 };
@@ -110,9 +111,9 @@ namespace as = arcticdb::stream;
 namespace ac = arcticdb::entity;
 
 inline as::FixedSchema schema_from_test_frame(const TestDataFrame &data_frame, StreamId stream_id) {
-    std::vector<FieldDescriptor::Proto> fields;
+    arcticdb::FieldCollection fields;
     for (size_t i = 0; i < data_frame.num_columns_; ++i)
-        fields.emplace_back(arcticdb::entity::scalar_field_proto(data_frame.types_[i].data_type(), data_frame.column_names_[i]));
+        fields.add_field(arcticdb::entity::scalar_field(data_frame.types_[i].data_type(), data_frame.column_names_[i]));
 
     const auto index = as::TimeseriesIndex::default_index();
     return as::FixedSchema{
@@ -172,20 +173,20 @@ bool check_read_frame(const TestDataFrame &data_frame, ReaderType &reader, std::
     bool success = true;
     auto timestamp = data_frame.start_ts_;
     auto row = 0u;
-    reader.foreach_row([&](auto &&row_ref) {
+    reader.foreach_row([&timestamp, &data_frame, &errors, &row, &success](auto &&row_ref) {
         timestamp += data_frame.timestamp_increments_[row];
         for (size_t col = 0; col < data_frame.num_columns_; ++col) {
             data_frame.types_[col].visit_tag([&](auto type_desc_tag) {
                 arcticdb::entity::DataType dt = TypeDescriptor(type_desc_tag).data_type();
                 arcticdb::entity::DataType
-                    stored_dt = data_type_from_proto(row_ref.segment().column_descriptor(col + 1).type_desc());
+                    stored_dt = row_ref.segment().column_descriptor(col + 1).type().data_type();
                 if (dt != stored_dt) {
                     errors.push_back(fmt::format("Type mismatch {} != {} at pos {}:{}", dt, stored_dt, col, row));
                     success = false;
                 }
                 auto dimension = static_cast<uint64_t>(TypeDescriptor(type_desc_tag).dimension());
-                auto stored_dimension = row_ref.segment().column_descriptor(col + 1).type_desc().dimension();
-                if (dimension != stored_dimension) {
+                auto stored_dimension = row_ref.segment().column_descriptor(col + 1).type().dimension();
+                if (dimension != static_cast<uint64_t>(stored_dimension)) {
                     errors.push_back(fmt::format("Dimension mismatch {} != {} at pos {}:{}",
                                                  dimension,
                                                  stored_dimension,

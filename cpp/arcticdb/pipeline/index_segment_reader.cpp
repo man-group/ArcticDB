@@ -24,8 +24,19 @@ IndexSegmentReader get_index_reader(const AtomKey &prev_index, const std::shared
 }
 
 IndexSegmentReader::IndexSegmentReader(SegmentInMemory&& s) : seg_(std::move(s)) {
-    seg_.metadata()->UnpackTo(&tsd_);
-    ARCTICDB_DEBUG(log::version(), "Decoded index segment descriptor: {}", tsd_.DebugString());
+    seg_.metadata()->UnpackTo(&tsd_.mutable_proto());
+    if(seg_.has_index_fields()) {
+        tsd_.mutable_fields() = seg_.detach_index_fields();
+        tsd_.mutable_fields().regenerate_offsets();
+    } else {
+        TimeseriesDescriptor::Proto tsd;
+        if(seg_.metadata()->UnpackTo(&tsd)) {
+            tsd_.mutable_fields() = fields_from_proto(tsd.stream_descriptor());
+        } else {
+            util::raise_rte("Unable to unpack index fields");
+        }
+    }
+    ARCTICDB_DEBUG(log::version(), "Decoded index segment descriptor: {}", tsd_.proto().DebugString());
 }
 
 const Column &IndexSegmentReader::column(Fields field) const {
@@ -47,7 +58,7 @@ IndexRange get_index_segment_range(
 }
 
 bool IndexSegmentReader::bucketize_dynamic() const {
-    return tsd().has_column_groups() && tsd().column_groups().enabled();
+    return tsd().proto().has_column_groups() && tsd().proto().column_groups().enabled();
 }
 
 SliceAndKey IndexSegmentReader::row(std::size_t r) const {
@@ -94,11 +105,11 @@ IndexSegmentIterator IndexSegmentReader::last() const {
 }
 
 bool IndexSegmentReader::is_pickled() const {
-    return tsd_.normalization().input_type_case() == arcticdb::proto::descriptors::NormalizationMetadata::InputTypeCase::kMsgPackFrame;
+    return tsd_.proto().normalization().input_type_case() == arcticdb::proto::descriptors::NormalizationMetadata::InputTypeCase::kMsgPackFrame;
 }
 
 bool IndexSegmentReader::has_timestamp_index() const {
-    return tsd_.stream_descriptor().index().kind() == arcticdb::proto::descriptors::IndexDescriptor::Type::IndexDescriptor_Type_TIMESTAMP;
+    return tsd_.proto().stream_descriptor().index().kind() == arcticdb::proto::descriptors::IndexDescriptor::Type::IndexDescriptor_Type_TIMESTAMP;
 }
 
 } // namespace  arcticdb::pipelines::index

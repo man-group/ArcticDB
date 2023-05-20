@@ -290,7 +290,9 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
             .def_readwrite("row_filter",&UpdateQuery::row_filter);
 
     py::class_<PythonVersionStore>(version, "PythonVersionStore")
-        .def(py::init<std::shared_ptr<storage::Library>>())
+        .def(py::init<std::shared_ptr<storage::Library>, std::optional<std::string>>(),
+             py::arg("library"),
+             py::arg("license_key") = std::nullopt)
         .def("write_partitioned_dataframe",
              &PythonVersionStore::write_partitioned_dataframe,
              "Write a dataframe to the store")
@@ -359,6 +361,9 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
              py::arg("via_iteration") = true,
              py::arg("sparsify") = false,
              "sort_merge will sort and merge incomplete segments. The segments do not have to be ordered - incomplete segments can contain interleaved time periods but the final result will be fully ordered")
+         .def("sort_merge",
+              &PythonVersionStore::sort_merge,
+              "Sort and merge incomplete segments")
         .def("compact_library",
              &PythonVersionStore::compact_library,
              "Compact the whole library wherever necessary")
@@ -470,11 +475,11 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
                 ReadResult res{
                     vit,
                     PythonOutputFrame{
-                            SegmentInMemory{StreamDescriptor{std::move(*tsd.mutable_stream_descriptor())}},
+                            SegmentInMemory{tsd.as_stream_descriptor()},
                             std::make_shared<BufferHolder>()},
-                        tsd.normalization(),
-                        tsd.user_meta(),
-                        tsd.multi_key_meta(),
+                        tsd.proto().normalization(),
+                        tsd.proto().user_meta(),
+                        tsd.proto().multi_key_meta(),
                         std::vector<entity::AtomKey>{}
                 };
                 return adapt_read_df(std::move(res)); },
@@ -535,17 +540,18 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
                  std::vector<py::object> output;
                  output.reserve(results.size());
                  for(auto& [vit, tsd] : results) {
-                     ReadResult res{vit,
-                                    {SegmentInMemory{StreamDescriptor{std::move(*tsd.mutable_stream_descriptor())}}, std::make_shared<BufferHolder>()},
-                                tsd.normalization(),
-                                tsd.user_meta(),
-                                tsd.multi_key_meta(),
-                                {}};
+                     ReadResult res{vit, PythonOutputFrame{
+                         SegmentInMemory{tsd.as_stream_descriptor()}, std::make_shared<BufferHolder>()},
+                         tsd.proto().normalization(),
+                         tsd.proto().user_meta(),
+                         tsd.proto().multi_key_meta(), {}};
+
                      output.emplace_back(adapt_read_df(std::move(res)));
                  }
                  return output;
              },
-           "Batch restore a group of versions to the versions indicated")
+
+            "Batch restore a group of versions to the versions indicated")
         .def("list_versions",[](
                 PythonVersionStore& v,
                 const std::optional<StreamId> & s_id,

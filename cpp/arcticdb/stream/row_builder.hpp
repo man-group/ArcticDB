@@ -122,25 +122,14 @@ class RowBuilder {
     }
 
     template<class T, std::enable_if_t<std::is_integral_v<T> || std::is_floating_point_v<T>, int> = 0>
-    void set_scalar_by_name(std::string_view name, T val, const TypeDescriptor::Proto &desc) {
-        aggregator_.set_scalar_by_name(name, val, desc);
+    void set_scalar_by_name(std::string_view name, T val, DataType data_type) {
+        aggregator_.set_scalar_by_name(name, val, data_type);
         nbytes_ += sizeof(T);
     }
 
     template<class T, std::enable_if_t<std::is_same_v<std::decay_t<T>, std::string_view>, int> = 0>
-    void set_scalar_by_name(std::string_view name, T val, const TypeDescriptor::Proto &desc) {
-        aggregator_.set_string_by_name(name, val, desc);
-    }
-
-    template<class T, std::enable_if_t<std::is_integral_v<T> || std::is_floating_point_v<T>, int> = 0>
-    void set_scalar_by_name(std::string_view name, T val, const TypeDescriptor &desc) {
-        aggregator_.set_scalar_by_name(name, val, desc.proto());
-        nbytes_ += sizeof(T);
-    }
-
-    template<class T, std::enable_if_t<std::is_same_v<std::decay_t<T>, std::string_view>, int> = 0>
-    void set_scalar_by_name(std::string_view name, T val, const TypeDescriptor &desc) {
-        aggregator_.set_string_by_name(name, val, desc.proto());
+    void set_scalar_by_name(std::string_view name, T val, DataType data_type) {
+                aggregator_.set_string_by_name(name, val, data_type);
     }
 
     void set_string(std::size_t pos, const std::string &str) {
@@ -213,7 +202,7 @@ class RowBuilder {
                 } else {
                     throw ArcticCategorizedException<ErrorCategory::INTERNAL>(fmt::format(
                         "Expected type_descriptor={}, type={}; actual value={}, type {}",
-                        data_type_from_proto(descriptor().fields(pos).type_desc()), typeid(conv_val).name(),
+                        descriptor().fields(pos).type(), typeid(conv_val).name(),
                         val, typeid(val).name()));
                 }
             } else {
@@ -235,9 +224,9 @@ class RowBuilder {
     void check_pos(std::size_t pos) {
         util::check_arg(pos >= index().field_count(),
                         "expected position > {} (field count), actual {} in set_string (view)", index().field_count(), pos);
-        auto td = aggregator_.descriptor()[pos];
+        const auto& td = aggregator_.descriptor()[pos];
         util::check_arg(
-                is_sequence_type(data_type_from_proto(td.type_desc())),
+                is_sequence_type(td.type().data_type()),
                 "Set string called on non-string type column");
     }
 

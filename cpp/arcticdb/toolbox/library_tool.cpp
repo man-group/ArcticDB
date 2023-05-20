@@ -37,7 +37,7 @@ void LibraryTool::remove(VariantKey key) {
 }
 
 void LibraryTool::clear_ref_keys() {
-    auto store = std::make_shared<arcticdb::async::AsyncStore<util::SysClock>>(lib_, codec::default_lz4_codec());
+    auto store = std::make_shared<arcticdb::async::AsyncStore<util::SysClock>>(lib_, codec::default_lz4_codec(), encoding_version(lib_->config()));
     delete_all_keys_of_type(KeyType::SNAPSHOT_REF, store, false);
 }
 
@@ -58,7 +58,7 @@ int LibraryTool::count_keys(entity::KeyType kt) {
 }
 
 std::vector<bool> LibraryTool::batch_key_exists(const std::vector<VariantKey>& keys) {
-    auto store = std::make_shared<arcticdb::async::AsyncStore<util::SysClock>>(lib_, codec::default_lz4_codec());
+    auto store = std::make_shared<arcticdb::async::AsyncStore<util::SysClock>>(lib_, codec::default_lz4_codec(), encoding_version(lib_->config()));
     auto key_exists_fut = store->batch_key_exists(keys);
     return folly::collect(key_exists_fut).get();
 }
@@ -78,7 +78,7 @@ std::vector<VariantKey> LibraryTool::find_keys_for_id(entity::KeyType kt, const 
 }
 
 std::string LibraryTool::get_key_path(const VariantKey& key) {
-    std::string out = "";
+    std::string out;
     lib_->storage_specific([&out, &key](const storage::s3::S3Storage& s3) {
         out = s3.get_key_path(key);
     });

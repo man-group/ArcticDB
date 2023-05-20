@@ -180,11 +180,11 @@ static const StreamId compaction_id {CompactionId};
             CollectionType& symbols) {
         auto key_seg = store->read(key).get();
         ARCTICDB_DEBUG(log::version(), "Reading list from storage with key {}", key);
-        auto field_desc = key_seg.second.descriptor().field_at(0);
-        if(!field_desc)
+        if(key_seg.second.descriptor().fields().empty())
             util::raise_rte("Expected at least one column in symbol list with key {}", key);
 
-        auto data_type = data_type_from_proto(field_desc->type_desc());
+        const auto& field_desc = key_seg.second.descriptor().fields().at(0);
+        const auto data_type = field_desc.type().data_type();
         if (key_seg.second.row_count() > 0) {
             for (auto row : key_seg.second) {
                 if (data_type == DataType::UINT64) {

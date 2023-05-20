@@ -107,16 +107,16 @@ TEST(TestLmdbStorage, Strings) {
     s.end_row();
 
     google::protobuf::Any any;
-    arcticdb::proto::descriptors::TimeSeriesDescriptor metadata;
-    metadata.set_total_rows(12);
-    metadata.mutable_stream_descriptor()->CopyFrom(s.descriptor().proto());
-    any.PackFrom(metadata);
+    arcticdb::TimeseriesDescriptor metadata;
+    metadata.mutable_proto().set_total_rows(12);
+    metadata.mutable_proto().mutable_stream_descriptor()->CopyFrom(s.descriptor().proto());
+    any.PackFrom(metadata.proto());
     s.set_metadata(std::move(any));
 
     arcticdb::proto::encoding::VariantCodec opt;
     auto lz4ptr = opt.mutable_lz4();
     lz4ptr->set_acceleration(1);
-    Segment seg = encode(s.clone(), opt);
+    Segment seg = encode_v1(s.clone(), opt);
 
     auto environment_name = as::EnvironmentName{"res"};
     auto storage_name = as::StorageName{"lmdb_01"};
@@ -141,7 +141,7 @@ TEST(TestLmdbStorage, Strings) {
     }, as::ReadKeyOpts{});
     ASSERT_EQ(res.segment().header().start_ts(), 1234);
 
-    SegmentInMemory res_mem = decode(std::move(res.segment()));
+    SegmentInMemory res_mem = decode_segment(std::move(res.segment()));
     ASSERT_EQ(s.string_at(0, 1), res_mem.string_at(0, 1));
     ASSERT_EQ(std::string("happy"), res_mem.string_at(0, 1));
     ASSERT_EQ(s.string_at(1, 3), res_mem.string_at(1, 3));

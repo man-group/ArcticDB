@@ -14,6 +14,7 @@
 #include <folly/container/F14Map.h>
 
 #include <boost/noncopyable.hpp>
+
 #include <cstdint>
 
 namespace arcticdb {
@@ -60,11 +61,19 @@ struct IndexSegmentReader {
 
     bool bucketize_dynamic() const;
 
-    const arcticdb::proto::descriptors::TimeSeriesDescriptor& tsd() const {
+    SortedValue get_sorted() const {
+        return sorted_value_from_proto(tsd().proto().stream_descriptor().sorted());
+    }
+
+    void set_sorted(SortedValue sorted)  {
+        mutable_tsd().mutable_proto().mutable_stream_descriptor()->set_sorted(sorted_value_to_proto(sorted));
+    }
+
+    const TimeseriesDescriptor& tsd() const {
         return tsd_;
     }
 
-    arcticdb::proto::descriptors::TimeSeriesDescriptor& mutable_tsd() {
+    TimeseriesDescriptor& mutable_tsd() {
         return tsd_;
     }
 
@@ -76,7 +85,7 @@ private:
     mutable std::unordered_map<ColRange, std::shared_ptr<StreamDescriptor>, AxisRange::Hasher> descriptor_by_col_group_;
 #endif
     SegmentInMemory seg_;
-    arcticdb::proto::descriptors::TimeSeriesDescriptor tsd_;
+    TimeseriesDescriptor tsd_;
 };
 
 struct IndexSegmentIterator {

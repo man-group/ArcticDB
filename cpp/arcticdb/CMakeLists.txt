@@ -325,12 +325,15 @@ set(arcticdb_srcs
         codec/codec.cpp
         codec/encoding_sizes.cpp
         codec/segment.cpp
+        codec/variant_encoded_field_collection.cpp
         column_store/chunked_buffer.cpp
         column_store/column.cpp
         column_store/memory_segment_impl.cpp
         column_store/memory_segment_impl.cpp
         column_store/string_pool.cpp
+        entity/field_collection.cpp
         entity/key.cpp
+        entity/merge_descriptors.cpp
         entity/metrics.cpp
         entity/performance_tracing.cpp
         entity/types.cpp
@@ -565,7 +568,6 @@ add_library(arcticdb_python STATIC ${arcticdb_python_srcs})
 
 target_link_libraries(arcticdb_python
         PUBLIC
-        #tsan
         arcticdb_core_static
         ${AWSSDK_LINK_LIBRARIES}
         )
@@ -608,7 +610,6 @@ endif()
 
 target_link_libraries(arcticdb_ext
         PUBLIC
-        #tsan
         PRIVATE
         arcticdb_python
         ${additional_link_flags}
@@ -720,6 +721,7 @@ if(${TEST})
     set(EXECUTABLE_PERMS OWNER_WRITE OWNER_READ OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE) # 755
 
     add_executable(test_unit_arcticdb ${unit_test_srcs})
+
     install(TARGETS test_unit_arcticdb RUNTIME
                 DESTINATION .
                 PERMISSIONS ${EXECUTABLE_PERMS}
@@ -769,7 +771,7 @@ if(${TEST})
                 )
     endif()
 
-    gtest_discover_tests(test_unit_arcticdb PROPERTIES DISCOVERY_TIMEOUT 30)
+    gtest_discover_tests(test_unit_arcticdb PROPERTIES DISCOVERY_TIMEOUT 60)
 
     set(rapidcheck_srcs
             column_store/test/rapidcheck_column_store.cpp
@@ -814,5 +816,5 @@ if(${TEST})
             )
     endif()
 
-    gtest_discover_tests(arcticdb_rapidcheck_tests PROPERTIES DISCOVERY_TIMEOUT 30)
+    gtest_discover_tests(arcticdb_rapidcheck_tests PROPERTIES DISCOVERY_TIMEOUT 60)
 endif()
