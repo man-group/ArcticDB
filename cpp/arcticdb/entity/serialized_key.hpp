@@ -186,7 +186,7 @@ struct formatter<KeyDescriptor> {
 
     template<typename FormatContext>
     auto format(const KeyDescriptor &kd, FormatContext &ctx) const {
-        return format_to(ctx.out(), "{}{}{}{}", kd.identifier, char(kd.id_type), char(kd.index_type),
+        return format_to(ctx.out(), FMT_COMPILE("{}{}{}{}"), kd.identifier, char(kd.id_type), char(kd.index_type),
                          char(kd.format_type));
     }
 };
@@ -249,7 +249,7 @@ inline RefKey from_serialized_ref_key(const uint8_t *data, KeyType key_type) {
 
 inline std::string to_tokenized_key(const AtomKey &key) {
     KeyDescriptor kd{key, FormatType::TOKENIZED};
-    return fmt::format("{}*{}*{}*{}*{}*{}*{}",
+    return fmt::format(FMT_COMPILE("{}*{}*{}*{}*{}*{}*{}"),
                        kd,
                        key.id(),
                        key.version_id(),
@@ -261,7 +261,7 @@ inline std::string to_tokenized_key(const AtomKey &key) {
 
 inline std::string to_tokenized_key(const RefKey &key) {
     KeyDescriptor kd{key, FormatType::TOKENIZED};
-    return fmt::format("{}*{}",
+    return fmt::format(FMT_COMPILE("{}*{}"),
                        kd,
                        key.id());
 }

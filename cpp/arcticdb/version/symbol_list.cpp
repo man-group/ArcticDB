@@ -204,16 +204,18 @@ bool SymbolList::can_update_symbol_list(const std::shared_ptr<Store>& store,
         return symbols;
     }
 
-    void SymbolList::read_list_from_storage(const std::shared_ptr<StreamSource>& store, const AtomKey& key,
-                                            CollectionType& symbols) {
+    void SymbolList::read_list_from_storage(
+        const std::shared_ptr<StreamSource>& store,
+        const AtomKey& key,
+        CollectionType& symbols) {
         ARCTICDB_DEBUG(log::version(), "Reading list from storage with key {}", key);
         auto key_seg = store->read(key).get().second;
-        auto field_desc = key_seg.descriptor().field_at(0);
-        missing_data::check<ErrorCode::E_UNREADABLE_SYMBOL_LIST>(field_desc.has_value(),
+        missing_data::check<ErrorCode::E_UNREADABLE_SYMBOL_LIST>( key_seg.descriptor().field_count() > 0,
             "Expected at least one column in symbol list with key {}", key);
 
+        const auto& field_desc = key_seg.descriptor().field(0);
         if (key_seg.row_count() > 0) {
-            auto data_type = data_type_from_proto(field_desc->type_desc());
+            auto data_type =  field_desc.type().data_type();
             if (data_type == DataType::UINT64) {
                 for (auto row : key_seg) {
                     auto num_id = key_seg.scalar_at<uint64_t>(row.row_id_, 0).value();

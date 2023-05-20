@@ -36,15 +36,15 @@ TEST_F(MergeReadsTestStore, SimpleStaticSchema) {
     const std::string stream_id2("test_merge_2");
 
     MergeSinkWrapper wrapper1(stream_id1, {
-        scalar_field_proto(DataType::UINT64, "thing1"),
-        scalar_field_proto(DataType::UINT64, "thing2")}
+        scalar_field(DataType::UINT64, "thing1"),
+        scalar_field(DataType::UINT64, "thing2")}
         );
 
     auto& aggregator1 = wrapper1.aggregator_;
 
     MergeSinkWrapper wrapper2(stream_id2, {
-        scalar_field_proto(DataType::UINT64, "thing1"),
-        scalar_field_proto(DataType::UINT64, "thing2")}
+        scalar_field(DataType::UINT64, "thing1"),
+        scalar_field(DataType::UINT64, "thing2")}
     );
 
     auto& aggregator2 = wrapper2.aggregator_;
@@ -96,15 +96,15 @@ TEST_F(MergeReadsTestStore, SparseTarget) {
     const std::string stream_id2("test_merge_2");
 
     MergeSinkWrapper wrapper1(stream_id1, {
-        scalar_field_proto(DataType::UINT64, "thing1"),
-        scalar_field_proto(DataType::UINT64, "thing2")}
+        scalar_field(DataType::UINT64, "thing1"),
+        scalar_field(DataType::UINT64, "thing2")}
     );
 
     auto& aggregator1 = wrapper1.aggregator_;
 
     MergeSinkWrapper wrapper2(stream_id2, {
-        scalar_field_proto(DataType::UINT64, "thing1"),
-        scalar_field_proto(DataType::UINT64, "thing3")}
+        scalar_field(DataType::UINT64, "thing1"),
+        scalar_field(DataType::UINT64, "thing3")}
     );
 
     auto& aggregator2 = wrapper2.aggregator_;
@@ -161,23 +161,23 @@ TEST_F(MergeReadsTestStore, SparseSource) {
 
     for(timestamp i = 0; i < NumTests; i += 4) {
         aggregator1.start_row(i)([&] (auto&& rb) {
-            rb.set_scalar_by_name("first", int64_t(i), make_scalar_type(DataType::INT64));
-            rb.set_scalar_by_name("second", int64_t(i + 1), make_scalar_type(DataType::INT64));
+            rb.set_scalar_by_name("first", int64_t(i), DataType::INT64);
+            rb.set_scalar_by_name("second", int64_t(i + 1), DataType::INT64);
         });
 
         aggregator2.start_row(i + 1)([&] (auto&& rb) {
-            rb.set_scalar_by_name("first", int64_t(i + 1), make_scalar_type(DataType::INT64));
-            rb.set_scalar_by_name("third", int64_t(i + 2), make_scalar_type(DataType::INT64));
+            rb.set_scalar_by_name("first", int64_t(i + 1), DataType::INT64);
+            rb.set_scalar_by_name("third", int64_t(i + 2), DataType::INT64);
         });
 
         aggregator1.start_row(i + 2)([&] (auto&& rb) {
-            rb.set_scalar_by_name("first", int64_t(i + 2), make_scalar_type(DataType::INT64));
-            rb.set_scalar_by_name("third", int64_t(i + 3), make_scalar_type(DataType::INT64));
+            rb.set_scalar_by_name("first", int64_t(i + 2), DataType::INT64);
+            rb.set_scalar_by_name("third", int64_t(i + 3), DataType::INT64);
         });
 
         aggregator2.start_row(i + 3)([&] (auto&& rb) {
-            rb.set_scalar_by_name("first", int64_t(i + 3), make_scalar_type(DataType::INT64));
-            rb.set_scalar_by_name("fourth", int64_t(i + 4), make_scalar_type(DataType::INT64));
+            rb.set_scalar_by_name("first", int64_t(i + 3), DataType::INT64);
+            rb.set_scalar_by_name("fourth", int64_t(i + 4), DataType::INT64);
         });
     }
 

@@ -4,11 +4,11 @@
  *
  * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
  */
-#include <arcticdb/storage/s3/s3_api.hpp>
-#include <arcticdb/storage/s3/s3_storage.hpp>
 
 #include <gtest/gtest.h>
 #include <arcticdb/util/test/gtest_utils.hpp>
+#include <arcticdb/storage/s3/s3_api.hpp>
+#include <arcticdb/storage/s3/s3_storage.hpp>
 
 #include <aws/core/Aws.h>
 
@@ -91,7 +91,7 @@ protected:
 TEST(TestS3Storage, proxy_env_var_parsing) {
     using namespace arcticdb::storage::s3;
     using namespace Aws::Http;
-    auto instance = arcticdb::storage::s3::S3ApiInstance::instance();
+    auto api = S3ApiInstance::instance();
     struct ProxyConfig {
         Scheme endpoint_scheme_;
         Scheme proxy_scheme_;

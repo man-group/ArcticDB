@@ -8,6 +8,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 from arcticdb.options import LibraryOptions
 from arcticc.pb2.storage_pb2 import LibraryConfig
 from arcticdb_ext.storage import Library, StorageOverride
+from arcticdb.encoding_version import EncodingVersion
 from abc import ABC, abstractmethod
 from typing import Optional
 
@@ -31,12 +32,14 @@ def set_library_options(lib_desc: "LibraryConfig", options: LibraryOptions):
     write_options.segment_row_size = options.rows_per_segment
     write_options.column_group_size = options.columns_per_segment
 
+    lib_desc.version.encoding_version = options.encoding_version
+
 
 class ArcticLibraryAdapter(ABC):
     CONFIG_LIBRARY_NAME = "_arctic_cfg"  # TODO: Should come from native module
 
     @abstractmethod
-    def __init__(self, uri: str):
+    def __init__(self, uri: str, encoding_version: EncodingVersion):
         pass
 
     @abstractmethod

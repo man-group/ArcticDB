@@ -7,7 +7,6 @@
 
 #pragma once
 
-
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/util/buffer.hpp>
 #include <arcticdb/column_store/chunked_buffer.hpp>
@@ -17,16 +16,11 @@
 
 #include <cstdint>
 
-// Provides a typed block iterator over the contents of a column
 namespace arcticdb {
 using namespace arcticdb::entity;
 
 template<typename TDT>
 struct TypedBlockData {
-    /*
-     * Thin layer that helps create an iterator over the elements of the block taking the size of data and
-     * shape into account. Maybe a bit too much overkill given how thin this is?
-     */
     template <class ValueType>
     class TypedColumnBlockIterator :  public boost::iterator_facade<TypedColumnBlockIterator<ValueType>, ValueType, boost::random_access_traversal_tag> {
       public:
@@ -139,7 +133,7 @@ struct ColumnData {
 
   public:
     ColumnData(
-        const ChunkedBuffer*data,
+        const ChunkedBuffer* data,
         const Buffer* shapes,
         const TypeDescriptor &type,
         const util::BitMagic* bit_vector) :
@@ -184,7 +178,7 @@ struct ColumnData {
     }
 
     template<typename TDT>
-    std::optional<TypedBlockData<TDT>>  next() {
+    std::optional<TypedBlockData<TDT>> next() {
         MemBlock* block = nullptr;
         do {
             if (pos_ == num_blocks())

@@ -1158,11 +1158,7 @@ class CompositeNormalizer(Normalizer):
                 "You can set pickle_on_failure param to force pickling of this object instead."
                 "(Note: Pickling has worse performance and stricter memory limitations)"
             )
-            log.error(
-                error_message,
-                type(item),
-                ex,
-            )
+            log.error(error_message, type(item), ex)
             raise
 
     def denormalize(self, item, norm_meta):

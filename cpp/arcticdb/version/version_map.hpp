@@ -174,7 +174,8 @@ public:
         const LoadParameter load_params,
         const std::shared_ptr<VersionMapEntry>& entry) {
         load_params.validate();
-        auto max_trials = ConfigsMap::instance()->get_int("VersionMap.MaxReadRefTrials", 2);
+        static const auto max_trial_config = ConfigsMap::instance()->get_int("VersionMap.MaxReadRefTrials", 2);
+        auto max_trials = max_trial_config;
         while (max_trials--) {
             try {
                 VersionMapEntry ref_entry;
@@ -194,7 +195,8 @@ public:
                 continue;
             }
         }
-        util::check_rte(max_trials >= 0, "Couldn't read via ref key even after multiple attempts");
+        util::check_rte(max_trials >= 0,"Couldn't read via ref key {} even after multiple trials", stream_id);
+
         if (validate_)
             entry->validate();
     }
@@ -292,7 +294,7 @@ public:
         int64_t num_blocks = std::count_if(entry->keys_.cbegin(), entry->keys_.cend(),
                                             [](const AtomKey &key) { return key.type() == KeyType::VERSION; });
 
-        const auto max_blocks = ConfigsMap::instance()->get_int("VersionMap.MaxVersionBlocks", 5);
+        static const auto max_blocks = ConfigsMap::instance()->get_int("VersionMap.MaxVersionBlocks", 5);
         if (num_blocks < max_blocks) {
             ARCTICDB_DEBUG(log::version(), "Not compacting as number of blocks {} is less than the permitted {}", num_blocks,
                                  max_blocks);

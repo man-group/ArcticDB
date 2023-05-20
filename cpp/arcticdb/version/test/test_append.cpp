@@ -20,7 +20,7 @@ TEST(Append, OutOfOrder) {
     };
 
     auto agg = get_test_aggregator(std::move(commit_func), "test", {
-        FieldDescriptor{scalar_field_proto(DataType::UINT64, "uint64")}
+        scalar_field(DataType::UINT64, "uint64")
     });
 
     for (size_t i = 0; i < 10; ++i) {

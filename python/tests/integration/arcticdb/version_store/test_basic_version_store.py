@@ -34,6 +34,7 @@ from arcticdb.version_store._custom_normalizers import CustomNormalizer, registe
 from arcticdb.version_store._store import UNSUPPORTED_S3_CHARS, MAX_SYMBOL_SIZE, VersionedItem
 from arcticdb_ext.exceptions import _ArcticLegacyCompatibilityException
 from arcticdb_ext.storage import KeyType, NoDataFoundException
+from arcticdb_ext.version_store import NoSuchVersionException, StreamDescriptorMismatch
 from arcticc.pb2.descriptors_pb2 import NormalizationMetadata  # Importing from arcticdb dynamically loads arcticc.pb2
 from arcticdb.util.test import (
     sample_dataframe,
@@ -46,12 +47,23 @@ from tests.util.date import DateRange
 
 
 if sys.platform == "linux":
-    SMOKE_TEST_VERSION_STORES = ["lmdb_version_store", "s3_version_store", "mongo_version_store"]
+    SMOKE_TEST_VERSION_STORES = [
+        "lmdb_version_store_v1",
+        "lmdb_version_store_v2",
+        "s3_version_store_v1",
+        "s3_version_store_v2",
+        "mongo_version_store",
+    ]
 else:
     # leave out Mongo as spinning up a Mongo instance in Windows CI is fiddly, and Mongo support is only
     # currently required for Linux for internal use.
     # We also skip it on Mac as github actions containers don't work with macos
-    SMOKE_TEST_VERSION_STORES = ["lmdb_version_store", "s3_version_store"]  # SKIP_WIN and SKIP_MAC
+    SMOKE_TEST_VERSION_STORES = [
+        "lmdb_version_store_v1",
+        "lmdb_version_store_v2",
+        "s3_version_store_v1",
+        "s3_version_store_v2",
+    ]  # SKIP_WIN and SKIP_MAC
 
 
 @pytest.fixture()
@@ -219,7 +231,16 @@ def test_negative_cases(lmdb_version_store, symbol):
     lmdb_version_store.delete(symbol)
 
 
-@pytest.mark.parametrize("lib_type", ["lmdb_version_store", "lmdb_version_store_no_symbol_list"])
+@pytest.mark.parametrize(
+    "lib_type",
+    [
+        "lmdb_version_store_v1",
+        "lmdb_version_store_v2",
+        "lmdb_version_store_no_symbol_list",
+        "s3_version_store_v1",
+        "s3_version_store_v2",
+    ],
+)
 def test_list_symbols_regex(request, lib_type):
     lib = request.getfixturevalue(lib_type)
     lib.write("asdf", {"foo": "bar"}, metadata={"a": 1, "b": 10})
@@ -337,18 +358,22 @@ def test_get_info(lmdb_version_store):
     assert info["index_type"] == "index"
 
 
-def test_get_info_version(lmdb_version_store):
+@pytest.mark.parametrize(
+    "lib_type", ["lmdb_version_store_v1", "lmdb_version_store_v2", "s3_version_store_v1", "s3_version_store_v2"]
+)
+def test_get_info_version(request, lib_type):
+    lib = request.getfixturevalue(lib_type)
     # given
     sym = "get_info_version_test"
     df = pd.DataFrame(data={"col1": np.arange(10)}, index=pd.date_range(pd.Timestamp(0), periods=10))
-    lmdb_version_store.write(sym, df)
+    lib.write(sym, df)
     df = pd.DataFrame(data={"col1": np.arange(20)}, index=pd.date_range(pd.Timestamp(0), periods=20))
-    lmdb_version_store.write(sym, df, prune_previous_version=False)
+    lib.write(sym, df, prune_previous_version=False)
 
     # when
-    info_0 = lmdb_version_store.get_info(sym, version=0)
-    info_1 = lmdb_version_store.get_info(sym, version=1)
-    latest_version = lmdb_version_store.get_info(sym)
+    info_0 = lib.get_info(sym, version=0)
+    info_1 = lib.get_info(sym, version=1)
+    latest_version = lib.get_info(sym)
 
     # then
     assert latest_version == info_1
@@ -1785,9 +1810,9 @@ def test_diff_long_stream_descriptor_mismatch(lmdb_version_store, method, num):
         assert not isinstance(e, _ArcticLegacyCompatibilityException)
         msg = str(e)
         for i in (1, 2, *(x for x in range(num) if x % 20 == 4), num):
-            assert f"col{i}: TD<type=INT64, dim=0>" in msg
+            assert f"FD<name=col{i}, type=TD<type=INT64, dim=0>" in msg
             if i % 20 == 4:
-                assert f"col{i}: TD<type=UTF" in msg
+                assert f"FD<name=col{i}, type=TD<type=UTF" in msg
 
 
 def test_get_non_existing_columns_in_series(lmdb_version_store, sym):
@@ -1802,3 +1827,5 @@ def test_get_existing_columns_in_series(lmdb_version_store, sym):
     dst = pd.Series(index=pd.date_range(pd.Timestamp("2022-01-01"), pd.Timestamp("2022-02-01")), data=0.0, name="col1")
     lib.write(sym, dst)
     assert not lmdb_version_store.read(sym, columns=["col1", "col2"]).data.empty
+    if __name__ == "__main__":
+        pytest.main()

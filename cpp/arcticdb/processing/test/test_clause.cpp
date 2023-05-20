@@ -142,14 +142,12 @@ TEST(Clause, Split) {
     auto res = split_clause.process(empty, std::move(comp));
     ASSERT_EQ(res.size(), 10);
 
-    std::vector<FieldDescriptor> desc;
+    FieldCollection desc;
     const auto& fields = copied.descriptor().fields();
     auto beg = std::begin(fields);
     std::advance(beg, 1);
     for(auto field = beg; field != std::end(fields); ++field) {
-        FieldDescriptor::Proto proto;
-        proto.CopyFrom(*field);
-        desc.emplace_back(std::move(proto));
+            desc.add_field(field->ref());
     }
 
     SegmentSinkWrapper seg_wrapper(symbol, TimeseriesIndex::default_index(), std::move(desc));
@@ -184,7 +182,7 @@ TEST(Clause, Merge) {
     }
 
     StreamDescriptor descriptor{};
-    descriptor.add_field(scalar_field_proto(DataType::MICROS_UTC64, "time"));
+    descriptor.add_field(FieldRef{make_scalar_type(DataType::MICROS_UTC64),"time"});
     auto stream_id = StreamId("Merge");
     MergeClause merge_clause{TimeseriesIndex{"time"}, DenseColumnPolicy{}, stream_id, descriptor};
     std::shared_ptr<Store> empty;

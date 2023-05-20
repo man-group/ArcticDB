@@ -52,6 +52,7 @@ VariantData ProcessingSegment::get(const VariantNode &name, const std::shared_pt
                         slice_and_key.segment(store).string_pool_ptr()));
             }
         }
+
         if (expression_context_ && !expression_context_->dynamic_schema_) {
             internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Column {} not found in {}",
                                                             column_name,

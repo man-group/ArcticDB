@@ -7,11 +7,8 @@
 
 #pragma once
 
-#include <arcticdb/log/log.hpp>
-#include <arcticdb/util/buffer.hpp>
 #include <arcticdb/util/magic_num.hpp>
 
-#include <boost/dynamic_bitset.hpp>
 #include <bitmagic/bm.h>
 
 namespace arcticdb {

@@ -51,7 +51,8 @@ class PythonVersionStore : public LocalVersionedEngine {
 
   public:
     explicit PythonVersionStore(
-        const std::shared_ptr<storage::Library>& library);
+        const std::shared_ptr<storage::Library>& library,
+        const std::optional<std::string>& license_key = std::nullopt);
 
     VersionedItem write_dataframe_specific_version(
         const StreamId& stream_id,
@@ -276,7 +277,7 @@ class PythonVersionStore : public LocalVersionedEngine {
         bool prune_previous_versions,
         bool ensre_sorted);
 
-    std::vector<std::pair<VersionedItem, arcticdb::proto::descriptors::TimeSeriesDescriptor>> batch_restore_version(
+    std::vector<std::pair<VersionedItem, TimeseriesDescriptor>> batch_restore_version(
         const std::vector<StreamId>& id,
         const std::vector<VersionQuery>& version_query);
 
@@ -308,6 +309,15 @@ class PythonVersionStore : public LocalVersionedEngine {
 
     void fix_symbol_trees(const std::vector<StreamId>& symbols);
 
+    /**
+     * Main business logic of the DeleteTombstonedData background job. Delete tombstoned versions and snapshots.
+     * @param limit_stream_id Test-specific. If non-empty, limit scope to tombstoned versions in the given stream.
+     * @param min_age_sec Minimum age of index keys that can be deleted in unit of seconds.
+     * @param stresser_sync Only used by stress tests to synchronise steps.
+     */
+    void delete_tombstones(const std::string& limit_stream_id, bool dry_run, uint64_t min_age_sec,
+            folly::futures::Barrier* stresser_sync = nullptr, size_t batch_size = 2000);
+
     std::unordered_map<VersionId, bool> get_all_tombstoned_versions(const StreamId &stream_id);
 
     std::vector<SliceAndKey> list_incompletes(const StreamId& stream_id);
@@ -331,9 +341,9 @@ inline std::vector<ReadResult> frame_to_read_result(std::vector<std::pair<Versio
         read_results.emplace_back(ReadResult(
             item,
             PythonOutputFrame{fd.frame_, fd.buffers_},
-            fd.desc_.normalization(),
-            fd.desc_.user_meta(),
-            fd.desc_.multi_key_meta(),
+            fd.desc_.proto().normalization(),
+            fd.desc_.proto().user_meta(),
+            fd.desc_.proto().multi_key_meta(),
             std::vector<AtomKey>{}));
     }
     return read_results;

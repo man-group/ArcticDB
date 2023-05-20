@@ -20,8 +20,8 @@
 #include <string>
 #include <vector>
 
-namespace aa = arcticdb::async;
 namespace ac = arcticdb;
+namespace aa = arcticdb::async;
 namespace as = arcticdb::storage;
 namespace asl = arcticdb::storage::lmdb;
 namespace ast = arcticdb::stream;
@@ -43,7 +43,7 @@ TEST(Async, SinkBasic) {
 
     auto seg = ac::SegmentInMemory();
     aa::EncodeAtomTask enc{
-        ac::entity::KeyType::GENERATION, 6, 123, 456, 457, 999, std::move(seg), lib, codec_opt, size_t(0)
+        ac::entity::KeyType::GENERATION, 6, 123, 456, 457, 999, std::move(seg), codec_opt, size_t(0), ac::EncodingVersion::V2
     };
 
     auto v = sched.submit_cpu_task(enc).via(&aa::io_executor()).thenValue(aa::WriteSegmentTask{lib}).get();
@@ -58,7 +58,6 @@ TEST(Async, SinkBasic) {
 }
 
 TEST(Async, DeDupTest) {
-
     as::EnvironmentName environment_name{"research"};
     as::StorageName storage_name("lmdb_local");
     as::LibraryPath library_path{"a", "b"};
@@ -70,7 +69,7 @@ TEST(Async, DeDupTest) {
     as::UserAuth au{"abc"};
     auto lib = library_index.get_library(library_path, as::OpenMode::WRITE, au);
     auto codec_opt = std::make_shared<arcticdb::proto::encoding::VariantCodec>();
-    aa::AsyncStore store(lib, *codec_opt);
+    aa::AsyncStore store(lib, *codec_opt, ac::EncodingVersion::V2);
     auto seg = ac::SegmentInMemory();
 
     std::vector<std::pair<ast::StreamSink::PartialKey, ac::SegmentInMemory>> key_segments;
@@ -99,11 +98,11 @@ TEST(Async, DeDupTest) {
 struct DummyTask : arcticdb::async::BaseTask {
     folly::Future<int> operator()() {
         using namespace arcticdb;
-        arcticdb::init_random(42);
+        init_random(42);
         ::sleep(3);
         auto x = 0;
         for(auto i = 0; i < 250; ++i) {
-            x += arcticdb::random_int();
+            x += random_int();
         }
         return x;
     }
@@ -150,4 +149,78 @@ TEST(Async, CollectWithThrow) {
    }
 
    log::version().info("Collect returned");
+}
+
+using IndexSegmentReader = int;
+
+int get_index_segment_reader_impl(arcticdb::StreamId id) {
+    std::cout << "Getting " << fmt::format("{}", id) << std::endl;
+    return 5;
+}
+
+folly::Future<int> get_index_segment_reader(folly::Future<arcticdb::StreamId>&& fut) {
+    return std::move(fut).via(&arcticdb::async::io_executor()).thenValue(get_index_segment_reader_impl);
+}
+
+std::string do_read_impl(IndexSegmentReader&& idx) {
+    return fmt::format("{}", idx);
+}
+
+folly::Future<std::string> do_read(folly::Future<IndexSegmentReader>&& fut) {
+    return std::move(fut).via(&arcticdb::async::cpu_executor()).thenValue(do_read_impl);
+}
+
+TEST(Async, SemiFuturePassing) {
+    using namespace folly;
+    using namespace arcticdb;
+    StreamId id{"thing"};
+    Promise<StreamId> p;
+    Future<StreamId> f = p.getFuture();
+    auto f2 = get_index_segment_reader(std::move(f));
+
+    auto f3 = do_read(std::move(f2));
+    p.setValue("symbol");
+    auto thing = std::move(f3).get();
+    std::cout << thing << std::endl;
+}
+
+folly::Future<int> num_slices(folly::Future<int>&& f) {
+    return std::move(f).thenValue([] (auto x) {
+        return x;
+    });
+}
+
+struct Thing : arcticdb::async::BaseTask {
+    int x_;
+
+    Thing(int x) : x_(x) {}
+
+    int operator ()() {
+        return x_ + 2;
+    }
+};
+
+auto multiplex(folly::Future<int> &&n) {
+    using namespace arcticdb;
+
+    return std::move(n).thenValue([](auto i) {
+        std::vector<folly::Future<int>> futs;
+        for (auto x = 0; x < i; ++x) {
+            futs.push_back(async::submit_cpu_task(Thing{x}));
+        }
+        return folly::collect(futs);
+    });
+}
+
+TEST(Async, DynamicSizing) {
+    using namespace folly;
+    using namespace arcticdb;
+    StreamId id{"thing"};
+    Promise<int> p;
+    Future<int> f = p.getFuture();
+    auto f1 = num_slices(std::move(f));
+    auto f2 = multiplex(std::move(f1));
+    p.setValue(5);
+    auto v = std::move(f2).get();
+    std::cout << "thing" << std::endl;
 }
