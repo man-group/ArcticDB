@@ -47,7 +47,7 @@ public:
     }
 
     explicit SegmentInMemory(
-        const StreamDescriptor&& tsd,
+        StreamDescriptor&& tsd,
         size_t expected_column_size = 0,
         bool presize = false,
         bool allow_sparse = false) :
@@ -72,7 +72,7 @@ public:
         impl_->push_back(row);
     }
 
-    auto column_descriptor(size_t col) const {
+    auto& column_descriptor(size_t col) const {
         return impl_->column_descriptor(col);
     }
 
@@ -94,6 +94,7 @@ public:
         return *left.impl_ == *right.impl_;
     }
 
+
     const auto& fields() const {
         return impl_->fields();
     }
@@ -104,6 +105,30 @@ public:
 
     std::optional<std::size_t> column_index(std::string_view name) const {
         return impl_->column_index(name);
+    }
+
+    std::shared_ptr<FieldCollection> index_fields() const {
+        return impl_->index_fields();
+    }
+
+    bool has_index_fields() const {
+        return impl_->has_index_fields();
+    }
+
+    TimeseriesDescriptor index_descriptor() {
+        return impl_->index_descriptor();
+    }
+
+    FieldCollection&& detach_index_fields() {
+        return impl_->detach_index_fields();
+    }
+
+    std::shared_ptr<arcticdb::proto::descriptors::TimeSeriesDescriptor> timeseries_proto() {
+        return impl_->timeseries_proto();
+    }
+
+    void set_index_fields(std::shared_ptr<FieldCollection> fields) {
+        impl_->set_index_fields(std::move(fields));
     }
 
     void init_column_map() const  {
@@ -169,12 +194,20 @@ public:
         return impl_->columns();
     }
 
-    position_t add_column(const FieldDescriptor::Proto &field, size_t num_rows, bool presize) {
+    position_t add_column(const Field &field, size_t num_rows, bool presize) {
         return impl_->add_column(field, num_rows, presize);
     }
 
-    position_t add_column(const FieldDescriptor::Proto &field, const std::shared_ptr<Column>& column) {
+    position_t add_column(const Field &field, const std::shared_ptr<Column>& column) {
         return impl_->add_column(field, column);
+    }
+
+    position_t add_column(FieldRef field_ref, const std::shared_ptr<Column>& column) {
+        return impl_->add_column(field_ref, column);
+    }
+
+    position_t add_column(FieldRef field_ref, size_t num_rows, bool presize) {
+        return impl_->add_column(field_ref, num_rows, presize);
     }
 
     size_t num_blocks() const {
@@ -213,6 +246,11 @@ public:
 
     std::optional<Column::StringArrayData> string_array_at(position_t row, position_t col) {
         return impl_->string_array_at(row, col);
+    }
+
+    void set_timeseries_descriptor(TimeseriesDescriptor&& tsd) {
+        util::check(!tsd.proto_is_null(), "Got null timeseries descriptor in set_timeseries_descriptor");
+        impl_->set_timeseries_descriptor(std::move(tsd));
     }
 
     size_t num_columns() const { return impl_->num_columns(); }
@@ -271,10 +309,6 @@ public:
 
     bool has_string_pool() const { return impl_->has_string_pool(); }
 
-    static FieldDescriptor string_pool_descriptor() {
-        return SegmentInMemoryImpl::string_pool_descriptor();
-    }
-
     ColumnData string_pool_data() const {
         return impl_->string_pool_data();
     }
@@ -294,6 +328,11 @@ public:
     const std::shared_ptr<StreamDescriptor>& descriptor_ptr() const {
         return impl_->descriptor_ptr();
     }
+
+    void attach_descriptor(std::shared_ptr<StreamDescriptor> desc) {
+        impl_->attach_descriptor(std::move(desc));
+    }
+
     StringPool &string_pool() {
         return impl_->string_pool();
     }

@@ -98,5 +98,5 @@ size_t get_index_field_count(const SegmentInMemory& frame);
 
 StreamDescriptor get_filtered_descriptor(
         const StreamDescriptor& desc,
-        const std::shared_ptr<std::vector<FieldDescriptor::Proto>>& filter_columns);
+        const std::shared_ptr<FieldCollection>& filter_columns);
 } // namespace  arcticdb::pipelines

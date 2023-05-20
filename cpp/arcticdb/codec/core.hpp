@@ -8,10 +8,9 @@
 #pragma once
 
 #include <arcticdb/entity/protobufs.hpp>
-#include <arcticdb/entity/types.hpp>
-
 #include <arcticdb/util/buffer.hpp>
 #include <arcticdb/util/hash.hpp>
+#include <arcticdb/entity/types.hpp>
 #include <arcticdb/log/log.hpp>
 
 #include <type_traits>
@@ -23,14 +22,16 @@ struct BlockProtobufHelper {
     std::size_t count_;
     std::size_t bytes_;
 
-    void set_pb(arcticdb::proto::encoding::Block &block_pb, HashedValue h, std::size_t encoded_size) const {
-        block_pb.set_in_bytes(static_cast<uint32_t>(bytes_));
-        block_pb.set_out_bytes(static_cast<uint32_t>(encoded_size));
-        block_pb.set_hash(h);
+    template <typename BlockType>
+    void set_block_data(BlockType& block, HashedValue h, std::size_t encoded_size) const {
+        block.set_in_bytes(static_cast<uint32_t>(bytes_));
+        block.set_out_bytes(static_cast<uint32_t>(encoded_size));
+        block.set_hash(h);
     }
 
-    void set_version(arcticdb::proto::encoding::Block &block_pb, std::uint32_t version) const {
-        block_pb.set_encoder_version(version);
+    template <typename BlockType>
+    void set_version(BlockType& block, std::uint32_t version) const {
+        block.set_encoder_version(version);
     }
 };
 
@@ -39,27 +40,30 @@ struct NdArrayBlock {
     BlockProtobufHelper shapes_;
     BlockProtobufHelper values_;
 
-    void update_field_size(arcticdb::proto::encoding::NDArrayEncodedField &field) const {
+    template <typename EncodedFieldType>
+    void update_field_size(EncodedFieldType &field) const {
         auto existing_items_count = field.items_count();
         field.set_items_count(existing_items_count + static_cast<std::uint32_t>(item_count_));
     }
 
-    void set_pb(
-        arcticdb::proto::encoding::Block* shapes_pb,
-        arcticdb::proto::encoding::Block* values_pb,
+    template <typename BlockType>
+    void set_block_data(
+        BlockType* shapes_pb,
+        BlockType* values_pb,
         HashedValue shape_hash,
         std::size_t encoded_shape_bytes,
         HashedValue values_hash,
         std::size_t encoded_values_bytes
         ) {
         ARCTICDB_TRACE(log::codec(), "Setting encoded bytes: {}:{}", encoded_shape_bytes, encoded_values_bytes);
-        shapes_.set_pb(*shapes_pb, shape_hash, encoded_shape_bytes);
-        values_.set_pb(*values_pb, values_hash, encoded_values_bytes);
+        shapes_.set_block_data(*shapes_pb, shape_hash, encoded_shape_bytes);
+        values_.set_block_data(*values_pb, values_hash, encoded_values_bytes);
     }
 
+    template <typename BlockType>
     void set_version(
-        arcticdb::proto::encoding::Block* shapes_pb,
-        arcticdb::proto::encoding::Block* values_pb,
+        BlockType* shapes_pb,
+        BlockType* values_pb,
         std::uint32_t version,
         std::uint32_t shape_version) {
         shapes_.set_version(*shapes_pb, shape_version);
@@ -131,13 +135,12 @@ class CodecHelper {
  */
 template<class BE, class DefaultOpt>
 struct ShapeEncodingFromBlock {
-
     static constexpr decltype(BE::VERSION) VERSION = BE::VERSION;
     static decltype(BE::max_compressed_size(0)) max_compressed_size(std::size_t s) {
         return BE::max_compressed_size(s);
     }
 
-    template<class T>
+    template<class T, class EncodedFieldType>
     static std::size_t encode_block(
         const T *in,
         BlockProtobufHelper &block_utils,
@@ -145,7 +148,7 @@ struct ShapeEncodingFromBlock {
         T *out,
         std::size_t out_capacity,
         std::ptrdiff_t &pos,
-        arcticdb::proto::encoding::VariantCodec &out_codec) {
+        EncodedFieldType &out_codec) {
         typename BE::Opts opts;
         DefaultOpt::set_shape_defaults(opts);
         return BE::encode_block(opts, in, block_utils, hasher, out, out_capacity, pos, out_codec);
@@ -178,9 +181,7 @@ struct GenericBlockEncoder {
     GenericBlockEncoder() = delete;
     GenericBlockEncoder(GenericBlockEncoder &&enc) = delete;
 
-    static size_t max_compressed_size(
-        const BlockType &block
-    ) {
+    static size_t max_compressed_size(const BlockType &block) {
         Helper helper;
         helper.hasher_.reset(helper.seed);
         std::size_t block_row_count = block.row_count();
@@ -204,10 +205,11 @@ struct GenericBlockEncoder {
         }
     }
 
+    template <typename EncodedFieldType>
     static void encode(
         const typename EncoderType::Opts &opts,
         BlockType &block,
-        arcticdb::proto::encoding::EncodedField &field,
+        EncodedFieldType &field,
         Buffer &out,
         std::ptrdiff_t &pos
         ) {
@@ -235,7 +237,7 @@ struct GenericBlockEncoder {
            const auto compressed_size = EncoderType::encode_block(opts, block.data(), helper_scalar_block, helper.hasher_, t_out,
                                                            max_compressed_size, pos, *value_pb->mutable_codec());
 
-            helper_scalar_block.set_pb(*value_pb, helper.hasher_.digest(), compressed_size);
+            helper_scalar_block.set_block_data(*value_pb, helper.hasher_.digest(), compressed_size);
             helper_scalar_block.set_version(*value_pb, EncoderType::VERSION);
         } else {
             auto helper_array_block = Helper::nd_array_block(block_row_count, block.shapes());
@@ -250,13 +252,15 @@ struct GenericBlockEncoder {
 
             // write shapes
             auto s_out = reinterpret_cast<shape_t *>(out.data() + pos);
-            const auto shape_comp_size = ShapeEncoding::encode_block(block.shapes(),
-                                                                      helper_array_block.shapes_,
-                                                                      helper.hasher_,
-                                                                      s_out,
-                                                                      comp_shapes,
-                                                                      pos,
-                                                                      *shape_pb->mutable_codec());
+            const auto shape_comp_size = ShapeEncoding::encode_block(
+                block.shapes(),
+                helper_array_block.shapes_,
+                helper.hasher_,
+                s_out,
+                comp_shapes,
+                pos,
+                *shape_pb->mutable_codec());
+
             HashedValue shape_hash = helper.get_digest_and_reset();
 
             // write values
@@ -273,7 +277,7 @@ struct GenericBlockEncoder {
 
             auto digest = helper.hasher_.digest();
             helper_array_block.update_field_size(*field_nd_array);
-            helper_array_block.set_pb(shape_pb, value_pb, shape_hash, shape_comp_size, digest, values_comp_size);
+            helper_array_block.set_block_data(shape_pb, value_pb, shape_hash, shape_comp_size, digest, values_comp_size);
             helper_array_block.set_version(shape_pb, value_pb, EncoderType::VERSION, ShapeEncoding::VERSION);
         }
     }

@@ -22,7 +22,6 @@
 #include <arcticdb/entity/descriptor_item.hpp>
 
 #include <sstream>
-
 namespace arcticdb::version_store {
 
 /**
@@ -36,7 +35,8 @@ class LocalVersionedEngine : public VersionedEngine {
 
 public:
     explicit LocalVersionedEngine(
-        const std::shared_ptr<storage::Library>& library);
+        const std::shared_ptr<storage::Library>& library,
+        const std::optional<std::string>& license_key = std::nullopt);
 
     virtual ~LocalVersionedEngine() = default;
 
@@ -64,7 +64,7 @@ public:
         const StreamId& stream_id,
         SegmentInMemory &&seg) override;
 
-    std::pair<VersionedItem, arcticdb::proto::descriptors::TimeSeriesDescriptor> restore_version(
+    std::pair<VersionedItem, TimeseriesDescriptor> restore_version(
         const StreamId& id,
         const VersionQuery& version_query
         ) override;
@@ -284,7 +284,7 @@ public:
             const std::vector<StreamId>& stream_ids,
             const std::vector<VersionQuery>& version_queries);
 
-    std::vector<std::pair<VersionedItem, arcticdb::proto::descriptors::TimeSeriesDescriptor>> batch_restore_version_internal(
+    std::vector<std::pair<VersionedItem, TimeseriesDescriptor>> batch_restore_version_internal(
         const std::vector<StreamId>& stream_ids,
         const std::vector<VersionQuery>& version_queries);
 
@@ -385,13 +385,13 @@ protected:
         const std::vector<StreamId>& stream_ids,
         const std::vector<VersionQuery>& version_queries);
 
-
 private:
 
     std::shared_ptr<Store> store_;
     arcticdb::proto::storage::VersionStoreConfig cfg_;
     std::shared_ptr<VersionMap> version_map_ = std::make_shared<VersionMap>();
     std::shared_ptr<SymbolList> symbol_list_;
+    std::optional<std::string> license_key_;
 };
 
 } // arcticdb::version_store

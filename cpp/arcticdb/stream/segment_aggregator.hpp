@@ -57,7 +57,7 @@ inline void merge_string_column(
 inline void merge_string_columns(const SegmentInMemory& segment, const std::shared_ptr<StringPool>& merged_pool, bool verify) {
     for (size_t c = 0; c < segment.descriptor().field_count(); ++c) {
         auto &frame_field = segment.field(c);
-        auto field_type = type_desc_from_proto(frame_field.type_desc());
+        const auto& field_type = frame_field.type();
 
         if (!is_sequence_type(field_type.data_type_))
             continue;
@@ -117,8 +117,8 @@ inline pipelines::FrameSlice merge_slices(
 
 inline void convert_descriptor_types(StreamDescriptor & descriptor) {
     for(size_t i = 0; i < descriptor.field_count(); ++i) {
-        if(is_integer_type(data_type_from_proto(descriptor.field(i).type_desc())))
-            set_data_type(DataType::FLOAT64, *descriptor.field(i).mutable_type_desc());
+        if(is_integer_type(descriptor.field(i).type().data_type()))
+            set_data_type(DataType::FLOAT64, descriptor.mutable_field(i).mutable_type());
     }
 }
 

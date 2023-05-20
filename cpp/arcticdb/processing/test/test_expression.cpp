@@ -15,8 +15,8 @@ TEST(ExpressionNode, AddBasic) {
     using namespace arcticdb;
     StreamId symbol("test_add");
     auto wrapper = SinkWrapper(symbol, {
-            scalar_field_proto(DataType::UINT64, "thing1"),
-            scalar_field_proto(DataType::UINT64, "thing2")
+            scalar_field(DataType::UINT64, "thing1"),
+            scalar_field(DataType::UINT64, "thing2")
     });
 
     for(auto j = 0; j < 20; ++j ) {

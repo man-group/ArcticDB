@@ -27,10 +27,6 @@ inline bool trivially_compatible_types(entity::TypeDescriptor left, entity::Type
     return false;
 }
 
-inline bool trivially_compatible_types(const arcticdb::proto::descriptors::TypeDescriptor& left, const arcticdb::proto::descriptors::TypeDescriptor& right) {
-    return trivially_compatible_types(entity::type_desc_from_proto(left), entity::type_desc_from_proto(right));
-}
-
 inline std::optional<entity::TypeDescriptor> has_valid_type_promotion(entity::TypeDescriptor source, entity::TypeDescriptor target) {
     if(source.dimension() != target.dimension())
         return std::nullopt;
