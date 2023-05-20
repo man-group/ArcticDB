@@ -5,7 +5,6 @@
  * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
  */
 
-
 #include <arcticdb/stream/row_builder.hpp>
 #include <arcticdb/stream/aggregator.hpp>
 
@@ -26,7 +25,7 @@ TEST(Aggregator, BasicAndSegmenting) {
     const auto index = as::TimeseriesIndex::default_index();
     as::FixedSchema schema{
         index.create_stream_descriptor(123, {
-            scalar_field_proto(DataType::UINT8, "uint8"),
+            scalar_field(DataType::UINT8, "uint8"),
         }), index
     };
 

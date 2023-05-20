@@ -125,3 +125,20 @@ struct StreamSink {
 };
 
 } // namespace arcticdb::stream
+
+namespace fmt {
+    using namespace arcticdb::stream;
+
+    template<>
+    struct formatter<StreamSink::PartialKey> {
+        template<typename ParseContext>
+        constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
+
+        template<typename FormatContext>
+        auto format(const StreamSink::PartialKey &pk, FormatContext &ctx) const {
+            return format_to(ctx.out(), "'{}:{}:{}:{}:{}",
+                             pk.key_type, pk.stream_id, pk.version_id, pk.start_index, pk.end_index);
+        }
+    };
+}
+

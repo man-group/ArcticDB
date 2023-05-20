@@ -23,6 +23,7 @@ from arcticdb_ext.storage import NoDataFoundException
 from arcticdb.arctic import Arctic
 from arcticdb.adapters.s3_library_adapter import S3LibraryAdapter
 from arcticdb.options import LibraryOptions
+from arcticdb.encoding_version import EncodingVersion
 from arcticdb import QueryBuilder
 from arcticc.pb2.s3_storage_pb2 import Config as S3Config
 
@@ -87,7 +88,7 @@ def test_uri_override(moto_s3_uri_incl_bucket):
 
     wrong_uri = "s3://otherhost:test_bucket_0?access=dog&secret=cat&port=17988&region=blah"
     altered_ac = Arctic(moto_s3_uri_incl_bucket)
-    altered_ac._library_adapter = S3LibraryAdapter(wrong_uri)
+    altered_ac._library_adapter = S3LibraryAdapter(wrong_uri, EncodingVersion.V2)
     # At this point the library_manager is still correct, so we can write
     # and retrieve libraries, but the library_adapter has fake credentials
     altered_ac.create_library("override_endpoint", LibraryOptions())

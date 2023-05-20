@@ -17,25 +17,24 @@
 namespace arcticdb {
 using namespace arcticdb::pipelines;
 
-std::pair<arcticdb::proto::descriptors::TimeSeriesDescriptor , std::vector<SliceAndKey>> get_sample_slice_and_key(StreamId stream_id, VersionId version_id, size_t col_slices = 1, size_t row_slices = 10) {
+std::pair<TimeseriesDescriptor , std::vector<SliceAndKey>> get_sample_slice_and_key(StreamId stream_id, VersionId version_id, size_t col_slices = 1, size_t row_slices = 10) {
     StreamDescriptor stream_desc{
         stream_id,
-        IndexDescriptor{1, IndexDescriptor::TIMESTAMP},
-        {}
+        IndexDescriptor{1, IndexDescriptor::TIMESTAMP}
     };
 
-    stream_desc.add_field(scalar_field_proto(DataType::MICROS_UTC64, "time"));
+    stream_desc.add_field(scalar_field(DataType::MICROS_UTC64, "time"));
 
     const auto step = 10;
     auto start_col = 1;
     auto end_col = start_col + step;
 
     for (auto i = 0u; i < step * col_slices; ++i) {
-        stream_desc.add_field(scalar_field_proto(DataType::UINT8, fmt::format("col_{}", i)));
+        stream_desc.add_field(scalar_field(DataType::UINT8, fmt::format("col_{}", i)));
     }
 
-    arcticdb::proto::descriptors::TimeSeriesDescriptor metadata;
-    metadata.mutable_stream_descriptor()->CopyFrom(stream_desc.proto());
+    TimeseriesDescriptor metadata;
+    metadata.set_stream_descriptor(stream_desc);
     std::vector<SliceAndKey> slice_and_keys;
 
     for(auto col_range = 0u; col_range < col_slices; ++col_range) {
@@ -91,7 +90,7 @@ TEST(IndexFilter, Static) {
     auto key = std::move(key_fut).get();
     auto seg = mock_store->read(key, storage::ReadKeyOpts{}).get();
     pipelines::index::IndexSegmentReader isr{std::move(seg.second)};
-    auto pipeline_context = std::make_shared<PipelineContext>(StreamDescriptor{isr.tsd().stream_descriptor()});
+    auto pipeline_context = std::make_shared<PipelineContext>(StreamDescriptor{isr.tsd().as_stream_descriptor()});
 
     ReadQuery read_query{};
     read_query.row_filter = IndexRange{25, 65};
@@ -127,7 +126,7 @@ TEST(IndexFilter, Dynamic) {
     auto key = std::move(key_fut).get();
     auto seg = mock_store->read(key, storage::ReadKeyOpts{}).get();
     pipelines::index::IndexSegmentReader isr{std::move(seg.second)};
-    auto pipeline_context = std::make_shared<PipelineContext>(StreamDescriptor(isr.tsd().stream_descriptor()));
+    auto pipeline_context = std::make_shared<PipelineContext>(StreamDescriptor(isr.tsd().as_stream_descriptor()));
 
     ReadQuery read_query{};
     read_query.row_filter = IndexRange{25, 65};
@@ -163,7 +162,7 @@ TEST(IndexFilter, StaticMulticolumn) {
     auto key = std::move(key_fut).get();
     auto seg = mock_store->read(key, storage::ReadKeyOpts{}).get();
     pipelines::index::IndexSegmentReader isr{std::move(seg.second)};
-    auto pipeline_context = std::make_shared<PipelineContext>(StreamDescriptor(isr.tsd().stream_descriptor()));
+    auto pipeline_context = std::make_shared<PipelineContext>(StreamDescriptor(isr.tsd().as_stream_descriptor()));
 
     ReadQuery read_query{};
     read_query.row_filter = IndexRange{25, 65};
@@ -203,7 +202,7 @@ TEST(IndexFilter, MultiColumnSelectAll) {
     auto key = std::move(key_fut).get();
     auto seg = mock_store->read(key, storage::ReadKeyOpts{}).get();
     pipelines::index::IndexSegmentReader isr{std::move(seg.second)};
-    auto pipeline_context = std::make_shared<PipelineContext>(StreamDescriptor{isr.tsd().stream_descriptor()});
+    auto pipeline_context = std::make_shared<PipelineContext>(StreamDescriptor{isr.tsd().as_stream_descriptor()});
 
     ReadQuery read_query{};
     read_query.row_filter = IndexRange{0, 100};
@@ -238,7 +237,7 @@ TEST(IndexFilter, StaticMulticolumnFilterColumns) {
     auto key = std::move(key_fut).get();
     auto seg = mock_store->read(key, storage::ReadKeyOpts{}).get();
     pipelines::index::IndexSegmentReader isr{std::move(seg.second)};
-    auto pipeline_context = std::make_shared<PipelineContext>(StreamDescriptor{isr.tsd().stream_descriptor()});
+    auto pipeline_context = std::make_shared<PipelineContext>(StreamDescriptor{isr.tsd().as_stream_descriptor()});
 
     ReadQuery read_query{};
     read_query.row_filter = IndexRange{25, 65};

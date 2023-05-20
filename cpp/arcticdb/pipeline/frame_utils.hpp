@@ -11,7 +11,6 @@
 #include <arcticdb/column_store/string_pool.hpp>
 #include <arcticdb/column_store/chunked_buffer.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>
-#include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/entity/atom_key.hpp>
 #include <arcticdb/pipeline/input_tensor_frame.hpp>
 #include <arcticdb/stream/protobuf_mappings.hpp>
@@ -19,7 +18,8 @@
 #include <arcticdb/python/python_types.hpp>
 #include <arcticdb/python/python_to_tensor_frame.hpp>
 #include <arcticdb/pipeline/string_pool_utils.hpp>
-#include <arcticdb/util/flatten_utils.hpp>
+#include <util/flatten_utils.hpp>
+#include <arcticdb/entity/timeseries_descriptor.hpp>
 
 namespace arcticdb {
 
@@ -45,26 +45,30 @@ inline size_t get_max_string_size(const pipelines::PipelineContextRow& context_r
     return max_length;
 }
 
-arcticdb::proto::descriptors::TimeSeriesDescriptor make_descriptor(
-    size_t rows,
+TimeseriesDescriptor make_timeseries_descriptor(
+    size_t total_rows,
     StreamDescriptor&& desc,
-    arcticdb::proto::descriptors::NormalizationMetadata& norm_meta,
-    std::optional<arcticdb::proto::descriptors::UserDefinedMetadata>&& user_meta,
-    std::optional<AtomKey>&& prev_key = std::nullopt,
-    bool bucketize_dynamic=false);
+    arcticdb::proto::descriptors::NormalizationMetadata&& norm_meta,
+    std::optional<arcticdb::proto::descriptors::UserDefinedMetadata>&& um,
+    std::optional<AtomKey>&& prev_key,
+    std::optional<AtomKey>&& next_key,
+    bool bucketize_dynamic
+    );
 
-arcticdb::proto::descriptors::TimeSeriesDescriptor make_descriptor(
-    size_t rows,
+TimeseriesDescriptor timseries_descriptor_from_index_segment(
+    size_t total_rows,
     pipelines::index::IndexSegmentReader&& index_segment_reader,
-    std::optional<AtomKey>&& prev_key = std::nullopt,
-    bool bucketize_dynamic=false);
+    std::optional<AtomKey>&& prev_key,
+    bool bucketize_dynamic
+    );
 
-arcticdb::proto::descriptors::TimeSeriesDescriptor make_descriptor(
+TimeseriesDescriptor timeseries_descriptor_from_pipeline_context(
     const std::shared_ptr<pipelines::PipelineContext>& pipeline_context,
-    std::optional<AtomKey>&& prev_key = std::nullopt,
-    bool bucketize_dynamic=false);
+    std::optional<AtomKey>&& prev_key,
+    bool bucketize_dynamic);
 
-arcticdb::proto::descriptors::TimeSeriesDescriptor descriptor_from_frame(
+
+TimeseriesDescriptor index_descriptor_from_frame(
     pipelines::InputTensorFrame&& frame,
     size_t existing_rows,
     std::optional<entity::AtomKey>&& prev_key = {});
@@ -172,44 +176,14 @@ void aggregator_set_data(
     });
 }
 
-inline arcticdb::proto::descriptors::TimeSeriesDescriptor timeseries_descriptor_from_any(const google::protobuf::Any& any) {
-    arcticdb::proto::descriptors::TimeSeriesDescriptor tsd;
-    any.UnpackTo(&tsd);
-    return tsd;
-}
-
-inline arcticdb::proto::descriptors::TimeSeriesDescriptor timeseries_descriptor_from_segment(const SegmentInMemory& seg) {
-    util::check(seg.metadata(), "Can't get descriptor from null metadata");
-    return timeseries_descriptor_from_any(*seg.metadata());
-}
-
-inline arcticdb::proto::descriptors::TimeSeriesDescriptor default_pandas_descriptor(const SegmentInMemory& segment) {
+inline TimeseriesDescriptor default_pandas_descriptor(const SegmentInMemory& segment) {
     arcticdb::proto::descriptors::TimeSeriesDescriptor desc;
     desc.mutable_stream_descriptor()->CopyFrom(segment.descriptor().proto());
     desc.set_total_rows(segment.row_count());
     arcticdb::proto::descriptors::NormalizationMetadata_PandasDataFrame pandas;
     desc.mutable_normalization()->mutable_df()->CopyFrom(pandas);
-    return desc;
+    return {std::make_shared<TimeseriesDescriptor::Proto>(std::move(desc)), std::make_shared<FieldCollection>(segment.descriptor().fields().clone())};
 }
-
-arcticdb::proto::descriptors::TimeSeriesDescriptor get_timeseries_descriptor(
-    const StreamDescriptor& descriptor,
-    size_t total_rows,
-    const std::optional<AtomKey>& next_key,
-    arcticdb::proto::descriptors::NormalizationMetadata&& norm_meta);
-
-google::protobuf::Any pack_timeseries_descriptor(
-    StreamDescriptor&& descriptor,
-    size_t total_rows,
-    const std::optional<AtomKey>& next_key,
-    arcticdb::proto::descriptors::NormalizationMetadata&& norm_meta);
-
-SegmentInMemory segment_from_frame(
-    pipelines::InputTensorFrame&& frame,
-    size_t existing_rows,
-    std::optional<entity::AtomKey>&& prev_key,
-    bool allow_sparse = false
-);
 
 namespace pipelines {
 struct SliceAndKey;

@@ -7,16 +7,6 @@
 
 #include <arcticdb/version/version_store_api.hpp>
 
-#include <arcticdb/entity/types.hpp>
-#include <arcticdb/stream/schema.hpp>
-#include <arcticdb/stream/stream_writer.hpp>
-#include <arcticdb/stream/index.hpp>
-#include <arcticdb/util/clock.hpp>
-#include <arcticdb/util/timeouts.hpp>
-#include <arcticdb/util/variant.hpp>
-#include <arcticdb/stream/protobuf_mappings.hpp>
-#include <fmt/format.h>
-#include <pybind11/pybind11.h>
 #include <arcticdb/python/python_utils.hpp>
 #include <arcticdb/async/async_store.hpp>
 #include <arcticdb/version/version_map.hpp>
@@ -30,8 +20,6 @@
 #include <arcticdb/entity/descriptor_item.hpp>
 #include <arcticdb/pipeline/query.hpp>
 #include <arcticdb/pipeline/slicing.hpp>
-
-#include <regex>
 #include <arcticdb/pipeline/input_tensor_frame.hpp>
 #include <arcticdb/util/optional_defaults.hpp>
 #include <arcticdb/python/python_to_tensor_frame.hpp>
@@ -40,6 +28,9 @@
 #include <arcticdb/version/version_map_batch_methods.hpp>
 #include <arcticdb/version/version_utils.hpp>
 #include <arcticdb/pipeline/pipeline_utils.hpp>
+#include <arcticdb/pipeline/frame_utils.hpp>
+
+#include <regex>
 
 namespace arcticdb::version_store {
 
@@ -49,8 +40,8 @@ using namespace arcticdb::storage;
 
 constexpr auto coarse_nano = &util::SysClock::coarse_nanos_since_epoch;
 
-PythonVersionStore::PythonVersionStore(const std::shared_ptr<storage::Library>& library) :
-    LocalVersionedEngine(library) {
+PythonVersionStore::PythonVersionStore(const std::shared_ptr<storage::Library>& library, const std::optional<std::string>& license_key) :
+    LocalVersionedEngine(library, license_key) {
 }
 
 VersionedItem PythonVersionStore::write_dataframe_specific_version(
@@ -759,7 +750,7 @@ FrameAndDescriptor create_frame(const StreamId& target_id, SegmentInMemory seg, 
     seg.unsparsify();
     reduce_and_fix_columns(context, seg, read_options);
     auto norm_meta = make_timeseries_norm_meta(target_id);
-    const auto desc = get_timeseries_descriptor(seg.descriptor(), seg.row_count(), std::nullopt, std::move(norm_meta));
+    const auto desc = make_timeseries_descriptor(seg.row_count(), seg.descriptor().clone(), std::move(norm_meta), std::nullopt, std::nullopt, std::nullopt, false);
     return FrameAndDescriptor{std::move(seg), desc, {}, {}};
 }
 
@@ -866,6 +857,8 @@ void PythonVersionStore::delete_snapshot_sync(const SnapshotId& snap_name, const
     }
 }
 
+namespace {
+
 std::vector<SnapshotVariantKey> ARCTICDB_UNUSED iterate_snapshot_tombstones (
     const std::string& limit_stream_id,
     std::set<IndexTypeKey>& candidates,
@@ -899,6 +892,8 @@ std::vector<SnapshotVariantKey> ARCTICDB_UNUSED iterate_snapshot_tombstones (
     }
     return snap_tomb_keys;
 }
+
+} // namespace
 
 void PythonVersionStore::delete_version(
     const StreamId& stream_id,
@@ -1057,7 +1052,7 @@ std::vector<VersionedItem> PythonVersionStore::batch_write_metadata(
     return output;
 }
 
-std::vector<std::pair<VersionedItem, arcticdb::proto::descriptors::TimeSeriesDescriptor>> PythonVersionStore::batch_restore_version(
+std::vector<std::pair<VersionedItem, TimeseriesDescriptor>> PythonVersionStore::batch_restore_version(
     const std::vector<StreamId>& stream_ids,
     const std::vector<VersionQuery>& version_queries) {
     return batch_restore_version_internal(stream_ids, version_queries);
@@ -1125,7 +1120,7 @@ void PythonVersionStore::compact_library(size_t batch_size) {
 }
 
 std::vector<SliceAndKey> PythonVersionStore::list_incompletes(const StreamId& stream_id) {
-    return stream::get_incomplete(store(), stream_id, unspecified_range(), 0u, true, false);
+    return get_incomplete(store(), stream_id, unspecified_range(), 0u, true, false);
 }
 
 void PythonVersionStore::clear() {

@@ -17,6 +17,7 @@ from arcticdb.config import _DEFAULT_ENV
 from arcticdb.version_store._store import NativeVersionStore
 from arcticdb.adapters.arctic_library_adapter import ArcticLibraryAdapter, set_library_options
 from arcticdb_ext.storage import Library, StorageOverride
+from arcticdb.encoding_version import EncodingVersion
 
 
 class LMDBLibraryAdapter(ArcticLibraryAdapter):
@@ -32,14 +33,15 @@ class LMDBLibraryAdapter(ArcticLibraryAdapter):
     def supports_uri(uri: str) -> bool:
         return uri.startswith("lmdb://")
 
-    def __init__(self, uri: str, *args, **kwargs):
+    def __init__(self, uri: str, encoding_version: EncodingVersion, *args, **kwargs):
         match = re.match(self.REGEX, uri)
         match_groups = match.groupdict()
 
         self._path = os.path.abspath(match_groups["path"])
+        self._encoding_version = encoding_version
         os.makedirs(self._path, exist_ok=True)
 
-        super().__init__(uri)
+        super().__init__(uri, self._encoding_version)
 
     def __repr__(self):
         return "LMDB(path=%s)" % self._path
@@ -50,7 +52,9 @@ class LMDBLibraryAdapter(ArcticLibraryAdapter):
 
         add_lmdb_library_to_env(env_cfg, lib_name=self.CONFIG_LIBRARY_NAME, env_name=_DEFAULT_ENV, db_dir=self._path)
 
-        lib = NativeVersionStore.create_store_from_config(env_cfg, _DEFAULT_ENV, self.CONFIG_LIBRARY_NAME)._library
+        lib = NativeVersionStore.create_store_from_config(
+            env_cfg, _DEFAULT_ENV, self.CONFIG_LIBRARY_NAME, encoding_version=self._encoding_version
+        )._library
 
         return lib
 
@@ -64,7 +68,9 @@ class LMDBLibraryAdapter(ArcticLibraryAdapter):
 
         set_library_options(env_cfg.env_by_id[_DEFAULT_ENV].lib_by_path[name], library_options)
 
-        lib = NativeVersionStore.create_store_from_config(env_cfg, _DEFAULT_ENV, name)
+        lib = NativeVersionStore.create_store_from_config(
+            env_cfg, _DEFAULT_ENV, name, encoding_version=self._encoding_version
+        )
 
         return lib._lib_cfg
 

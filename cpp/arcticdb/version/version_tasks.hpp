@@ -11,7 +11,6 @@
 #include <arcticdb/pipeline/read_frame.hpp>
 #include <arcticdb/pipeline/index_utils.hpp>
 #include <arcticdb/version/version_store_objects.hpp>
-#include <arcticdb/pipeline/frame_utils.hpp>
 
 namespace arcticdb {
 
@@ -38,10 +37,10 @@ struct UpdateMetadataTask : async::BaseTask {
         auto index_key = *(update_info_.previous_index_key_);
         auto segment = store_->read_sync(index_key).second;
 
-        arcticdb::proto::descriptors::TimeSeriesDescriptor tsd = timeseries_descriptor_from_segment(segment);
+        auto tsd = segment.index_descriptor();
         google::protobuf::Any output = {};
-        tsd.mutable_user_meta()->CopyFrom(user_meta_);
-        output.PackFrom(tsd);
+        tsd.mutable_proto().mutable_user_meta()->CopyFrom(user_meta_);
+        output.PackFrom(tsd.proto());
 
         segment.override_metadata(std::move(output));
         return to_atom(store_->write_sync(index_key.type(), update_info_.next_version_id_, index_key.id(), index_key.start_index(),
@@ -69,19 +68,18 @@ struct AsyncRestoreVersionTask : async::BaseTask {
         maybe_prev_(std::move(maybe_prev)) {
     }
 
-    folly::Future<std::pair<VersionedItem, arcticdb::proto::descriptors::TimeSeriesDescriptor>> operator()() {
+    folly::Future<std::pair<VersionedItem, TimeseriesDescriptor>> operator()() {
         using namespace arcticdb::pipelines;
         auto [index_segment_reader, slice_and_keys] = index::read_index_to_vector(store_, index_key_);
 
         if (maybe_prev_ && maybe_prev_->version_id() == index_key_.version_id()) {
-            folly::Promise<std::pair<VersionedItem, arcticdb::proto::descriptors::TimeSeriesDescriptor>> promise;
+            folly::Promise<std::pair<VersionedItem, TimeseriesDescriptor>> promise;
             auto future = promise.getFuture();
             promise.setTry(folly::Try(std::make_pair(VersionedItem{index_key_}, index_segment_reader.tsd())));
             return future;
         } else {
-            auto tsd = std::make_shared<arcticdb::proto::descriptors::TimeSeriesDescriptor>();
+            auto tsd = std::make_shared<TimeseriesDescriptor>(index_segment_reader.tsd().clone());
             auto sk = std::make_shared<std::vector<SliceAndKey>>(std::move(slice_and_keys));
-            tsd->CopyFrom(index_segment_reader.tsd());
             auto version_id = get_next_version_from_key(maybe_prev_);
             std::vector<folly::Future<VariantKey>> fut_keys;
             for (const auto &slice_and_key : *sk)
@@ -96,7 +94,7 @@ struct AsyncRestoreVersionTask : async::BaseTask {
                 }
                 return res;
             }).thenValue([store=store_, version_map=version_map_, tsd=tsd, stream_id=stream_id_, version_id] (auto&& new_slice_and_keys) {
-                auto index = index_type_from_descriptor(tsd->stream_descriptor());
+                auto index = index_type_from_descriptor(tsd->as_stream_descriptor());
                 return index::index_and_version(index, store, *tsd, new_slice_and_keys, stream_id, version_id);
             }).thenValue([store=store_, version_map=version_map_, tsd=tsd] (auto versioned_item) {
                 version_map->write_version(store, versioned_item.key_);

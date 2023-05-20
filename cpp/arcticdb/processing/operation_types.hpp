@@ -8,6 +8,7 @@
 #pragma once
 
 #include <unordered_set>
+#include <optional>
 
 #include <arcticdb/processing/signed_unsigned_comparison.hpp>
 #include <arcticdb/util/preconditions.hpp>
