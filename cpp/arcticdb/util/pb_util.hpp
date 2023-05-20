@@ -21,9 +21,8 @@ namespace arcticdb::util {
 
 template<class Msg, class ExcType=std::invalid_argument>
 [[noreturn]] void raise_error_msg(const char *pattern, const Msg &msg) {
-    std::string s;
-    google::protobuf::TextFormat::PrintToString(msg, &s);
-    throw ExcType(fmt::format(pattern, s));
+   // google::protobuf::TextFormat::PrintToString(msg, &s);
+    throw ExcType(fmt::format(pattern, msg.DebugString()));
 }
 
 namespace {
@@ -38,7 +37,7 @@ void pack_to_any(const Msg &msg, google::protobuf::Any &any) {
 inline folly::StringPiece get_arcticdb_pb_type_name(const google::protobuf::Any &any) {
     folly::StringPiece sp{any.type_url()};
     if (!sp.startsWith(TYPE_URL)) {
-        raise_error_msg("Not a valid arcticdb proto msg", any);
+        raise_error_msg("Not a valid arcticc proto msg", any);
     }
     return sp.subpiece(sizeof(TYPE_URL), sp.size());
 }

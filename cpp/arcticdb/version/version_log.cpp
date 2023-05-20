@@ -7,16 +7,16 @@
 
 #include <arcticdb/version/version_log.hpp>
 
-#include <arcticdb/util/variant.hpp>
+#include <util/variant.hpp>
 
 namespace arcticdb {
     StreamDescriptor log_compacted_stream_descriptor(const StreamId& stream_id,
                                                      DataType symbol_datatype) {
         return StreamDescriptor{stream_descriptor(stream_id, RowCountIndex(), {
-            scalar_field_proto(symbol_datatype, "symbol"),
-            scalar_field_proto(DataType::UINT64, "version_id"),
-            scalar_field_proto(DataType::ASCII_DYNAMIC64, "action"),
-            scalar_field_proto(DataType::MICROS_UTC64, "creation_ts"),
+            scalar_field(symbol_datatype, "symbol"),
+            scalar_field(DataType::UINT64, "version_id"),
+            scalar_field(DataType::ASCII_DYNAMIC64, "action"),
+            scalar_field(DataType::MICROS_UTC64, "creation_ts"),
             } )};
     }
 

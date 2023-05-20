@@ -22,9 +22,9 @@ SegmentInMemory merge_column_stats_segments(const std::vector<SegmentInMemory>& 
     std::vector<std::string> field_names;
     for (auto &segment : segments) {
         for (const auto &field: segment.descriptor().fields()) {
-            auto new_type = entity::type_desc_from_proto(field.type_desc());
-            if (auto it = field_name_to_index.find(field.name()); it != field_name_to_index.end()) {
-                auto &merged_type = type_descriptors.at(field_name_to_index.at(field.name()));
+            auto new_type = field.type();
+            if (auto it = field_name_to_index.find(std::string{field.name()}); it != field_name_to_index.end()) {
+                auto &merged_type = type_descriptors.at(field_name_to_index.at(std::string{field.name()}));
                 auto opt_common_type = has_valid_common_type(merged_type, new_type);
                 internal::check<ErrorCode::E_ASSERTION_FAILURE>(opt_common_type.has_value(),
                                                                 "No valid common type between {} and {} in {}",
@@ -38,7 +38,7 @@ SegmentInMemory merge_column_stats_segments(const std::vector<SegmentInMemory>& 
         }
     }
     for (const auto& type_descriptor: folly::enumerate(type_descriptors)) {
-        merged.add_column(FieldDescriptor(*type_descriptor, field_names.at(type_descriptor.index)).proto(), 0, false);
+        merged.add_column(FieldRef{*type_descriptor, field_names.at(type_descriptor.index)}, 0, false);
     }
     for (auto &segment : segments) {
         merged.append(segment);
@@ -151,7 +151,7 @@ ColumnStats::ColumnStats(const std::unordered_map<std::string, std::unordered_se
     }
 }
 
-ColumnStats::ColumnStats(const google::protobuf::RepeatedPtrField<proto::descriptors::StreamDescriptor_FieldDescriptor>& column_stats_fields) {
+ColumnStats::ColumnStats(const FieldCollection& column_stats_fields) {
     for (const auto& field: column_stats_fields) {
         if (field.name() != start_index_column_name && field.name() != end_index_column_name) {
             auto [column_name, index_type] = from_segment_column_name(field.name());

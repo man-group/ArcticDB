@@ -6,6 +6,7 @@
  */
 
 #include <arcticdb/processing/aggregation.hpp>
+
 #include <cmath>
 
 namespace arcticdb {
@@ -52,8 +53,8 @@ SegmentInMemory MinMaxAggregatorData::finalize(const std::vector<ColumnName>& ou
             auto max_col = std::make_shared<Column>(make_scalar_type(that->max_->data_type_), true);
             max_col->template push_back<RawType>(that->max_->get<RawType>());
 
-            seg.add_column(scalar_field_proto(min_col->type().data_type(), output_column_names[0].value), min_col);
-            seg.add_column(scalar_field_proto(max_col->type().data_type(), output_column_names[1].value), max_col);
+            seg.add_column(scalar_field(min_col->type().data_type(), output_column_names[0].value), min_col);
+            seg.add_column(scalar_field(max_col->type().data_type(), output_column_names[1].value), max_col);
         });
     }
     return seg;
@@ -97,7 +98,7 @@ std::optional<DataType> Sum::finalize(SegmentInMemory& seg, bool, size_t unique_
             that->aggregated_.resize(sizeof(RawType)* unique_values);
             auto col = std::make_shared<Column>(make_scalar_type(that->data_type_), unique_values, true, false);
             memcpy(col->ptr(), that->aggregated_.data(), that->aggregated_.size());
-            seg.add_column(scalar_field_proto(that->data_type_, that->get_output_column_name().value), col);
+            seg.add_column(scalar_field(that->data_type_, that->get_output_column_name().value), col);
             col->set_row_data(unique_values - 1);
         });
         return data_type_;
@@ -178,7 +179,7 @@ std::optional<DataType> MaxOrMin::finalize(SegmentInMemory& seg, bool dynamic_sc
                     *out_ptr = in_ptr->written_ ? static_cast<double>(in_ptr->value_) : std::numeric_limits<double>::quiet_NaN();                }
 
                 col->set_row_data(unique_values - 1);
-                seg.add_column(scalar_field_proto(DataType::FLOAT64, that->get_output_column_name().value), col);
+                seg.add_column(scalar_field(DataType::FLOAT64, that->get_output_column_name().value), col);
             });
             return DataType::FLOAT64;
         } else {
@@ -190,8 +191,9 @@ std::optional<DataType> MaxOrMin::finalize(SegmentInMemory& seg, bool dynamic_sc
                 for(auto i = 0u; i < unique_values; ++i, ++in_ptr, ++out_ptr) {
                     *out_ptr = in_ptr->value_;
                 }
+
                 col->set_row_data(unique_values - 1);
-                seg.add_column(scalar_field_proto(that->data_type_, that->get_output_column_name().value), col);
+                seg.add_column(scalar_field(that->data_type_, that->get_output_column_name().value), col);
             });
             return data_type_;
         }
@@ -225,8 +227,7 @@ void Mean::aggregate(const std::optional<ColumnWithStrings>& input_column, const
 std::optional<DataType> Mean::finalize(SegmentInMemory& seg, bool, size_t unique_values) {
     if(!data_.fractions_.empty()) {
         data_.fractions_.resize(unique_values);
-        auto grouping_desc = scalar_field_proto(arcticdb::entity::DataType::FLOAT64, get_output_column_name().value);
-        auto pos = seg.add_column(grouping_desc, data_.fractions_.size(), true);
+        auto pos = seg.add_column(scalar_field(arcticdb::entity::DataType::FLOAT64, get_output_column_name().value), data_.fractions_.size(), true);
         auto& column = seg.column(pos);
         auto ptr = reinterpret_cast<double*>(column.ptr());
         column.set_row_data(data_.fractions_.size() - 1);

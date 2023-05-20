@@ -217,6 +217,12 @@ struct PartitionClause {
     [[nodiscard]] bool can_combine_with_column_selection() const { return true; }
 };
 
+inline StreamDescriptor empty_descriptor(arcticdb::proto::descriptors::IndexDescriptor::Type type = arcticdb::proto::descriptors::IndexDescriptor::ROWCOUNT, const StreamId &id = "merged") {
+    const auto index = stream::variant_index_from_type(type);
+    const auto field_count = util::variant_match(index, [] (const auto& idx) { return idx.field_count(); });
+    return StreamDescriptor{StreamId{id}, IndexDescriptor{field_count, type}, std::make_shared<FieldCollection>()};
+}
+
 struct AggregationClause {
     std::shared_ptr<ExecutionContext> execution_context_;
     std::vector<AggregationFactory> aggregation_operators_;

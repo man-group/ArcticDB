@@ -35,13 +35,13 @@ TEST(IngestionStress, ScalarInt) {
     const int64_t NumRows = 10000;
     const uint64_t SegmentPolicyRows = 1000;
 
-    std::vector<FieldDescriptor> columns;
+    std::vector<FieldRef> columns;
     for (auto i = 0; i < NumColumns; ++i)
-        columns.push_back(FieldDescriptor(scalar_field_proto(DataType::UINT64, "uint64")));
+        columns.push_back(scalar_field(DataType::UINT64, "uint64"));
 
     const auto index = as::TimeseriesIndex::default_index();
     as::FixedSchema schema{
-        index.create_stream_descriptor(123, fields_proto_from_range(columns)), index
+        index.create_stream_descriptor(123, fields_from_range(std::move(columns))), index
     };
 
     SegmentsSink sink;
@@ -71,9 +71,9 @@ TEST_F(IngestionStressStore, ScalarIntAppend) {
     StreamId symbol{"stable"};
     std::vector<SegmentToInputFrameAdapter> data;
     // generate vals
-    std::vector<FieldDescriptor> columns;
+    FieldCollection columns;
     for (timestamp i = 0; i < timestamp(NumColumns); ++i) {
-        columns.push_back(FieldDescriptor(scalar_field_proto(DataType::UINT64, fmt::format("col_{}", i))));
+        columns.add_field(scalar_field(DataType::UINT64, fmt::format("col_{}", i)));
     }
 
     const auto index = as::TimeseriesIndex::default_index();
@@ -92,33 +92,31 @@ TEST_F(IngestionStressStore, ScalarIntAppend) {
     for (timestamp i = 0; i < timestamp(NumRows); ++i) {
         agg.start_row(timestamp{i})([&](auto &rb) {
             for (timestamp j = 1u; j <= timestamp(NumColumns); ++j)
-                rb.set_scalar_by_name(columns[j-1].name(), uint64_t(i + j), columns[j-1].type_desc());
+                rb.set_scalar_by_name(columns[j-1].name(), uint64_t(i + j), columns[j-1].type().data_type());
         });
     }
     timer.stop_timer(timer_name);
     GTEST_COUT << x << " " << timer.display_all() << std::endl;
 
 
-    std::vector<FieldDescriptor> columns_second;
+    FieldCollection columns_second;
     for (auto i = 0; i < 2; ++i) {
-        columns_second.emplace_back(FieldDescriptor(scalar_field_proto(DataType::UINT64, fmt::format("col_{}", i))));
+        columns_second.add_field(scalar_field(DataType::UINT64, fmt::format("col_{}", i)));
     }
 
-    auto new_descriptor = index.create_stream_descriptor(symbol, fields_proto_from_range(columns_second));
-
+    auto new_descriptor = index.create_stream_descriptor(symbol, fields_from_range(columns_second));
     for (timestamp i = 0u; i < timestamp(NumRows); ++i) {
         agg.start_row(timestamp(i + NumRows))([&](auto &rb) {
             for (uint64_t j = 1u; j <= 2; ++j)
-                rb.set_scalar_by_name(columns_second[j-1].name(), uint64_t(i + j), columns_second[j-1].type_desc());
+                rb.set_scalar_by_name(columns_second[j-1].name(), uint64_t(i + j), columns_second[j-1].type().data_type());
         });
     }
     GTEST_COUT << " 2 done";
 
     agg.commit();
 
-    for(auto &seg : sink.segments_) {
-        arcticdb::stream::append_incomplete_segment(test_store_->_test_get_store(), symbol, std::move(seg));
-    }
+    for(auto &seg : sink.segments_)
+        arcticdb::append_incomplete_segment(test_store_->_test_get_store(), symbol, std::move(seg));
 
     using namespace arcticdb::pipelines;
 
@@ -142,10 +140,10 @@ TEST_F(IngestionStressStore, ScalarIntDynamicSchema) {
     std::vector<SegmentToInputFrameAdapter> data;
 
     // generate vals
-    std::vector<FieldDescriptor> columns_first;
-    std::vector<FieldDescriptor::Proto> columns_second;
+    FieldCollection columns_first;
+    FieldCollection columns_second;
     for (timestamp i = 0; i < timestamp(NumColumnsFirstWrite); ++i) {
-        columns_first.emplace_back(scalar_field_proto(DataType::UINT64,  fmt::format("col_{}", i)));
+        columns_first.add_field(scalar_field(DataType::UINT64,  fmt::format("col_{}", i)));
     }
 
     const auto index = as::TimeseriesIndex::default_index();
@@ -161,7 +159,7 @@ TEST_F(IngestionStressStore, ScalarIntDynamicSchema) {
     for (timestamp i = 0; i < timestamp(NumRows); ++i) {
         agg.start_row(timestamp{i})([&](auto &rb) {
             for (uint64_t j = 1u; j < NumColumnsFirstWrite; ++j)
-                rb.set_scalar_by_name(columns_first[j-1].name(), uint64_t(i + j), columns_first[j-1].type_desc());
+                rb.set_scalar_by_name(columns_first[j-1].name(), uint64_t(i + j), columns_first[j-1].type().data_type());
         });
     }
     timer.stop_timer(timer_name);
@@ -169,16 +167,16 @@ TEST_F(IngestionStressStore, ScalarIntDynamicSchema) {
 
     // Now try and write rows with more columns
     for (timestamp i = 0; i < timestamp(NumColumnsSecondWrite); ++i) {
-        columns_second.emplace_back(scalar_field_proto(DataType::UINT64,  fmt::format("col_{}", i)));
+        columns_second.add_field(scalar_field(DataType::UINT64,  fmt::format("col_{}", i)));
     }
-    auto new_descriptor = index.create_stream_descriptor(symbol, columns_second);
+    auto new_descriptor = index.create_stream_descriptor(symbol, columns_second.clone());
 
     // Now write again.
 
     for (timestamp i = 0; i < NumRows; ++i) {
         agg.start_row(timestamp{i + NumRows})([&](auto &rb) {
             for (uint64_t j = 1u; j < NumColumnsSecondWrite; ++j)
-                rb.set_scalar_by_name(columns_second[j-1].name(), uint64_t(i + j), columns_second[j-1].type_desc());
+                rb.set_scalar_by_name(columns_second[j-1].name(), uint64_t(i + j), columns_second[j-1].type().data_type());
         });
     }
     GTEST_COUT << " 2 done";
@@ -188,7 +186,7 @@ TEST_F(IngestionStressStore, ScalarIntDynamicSchema) {
     for (auto i = 0u; i < NumRows; ++i) {
         agg.start_row(timestamp{i + NumRows * 2})([&](auto &rb) {
             for (uint64_t j = 1u; j < NumColumnsFirstWrite; ++j)
-                rb.set_scalar_by_name(columns_first[j].name(), uint64_t(i + j), columns_first[j].type_desc());
+                rb.set_scalar_by_name(columns_first[j].name(), uint64_t(i + j), columns_first[j].type().data_type());
         });
     }
     GTEST_COUT << " 3 done";
@@ -197,7 +195,7 @@ TEST_F(IngestionStressStore, ScalarIntDynamicSchema) {
     for (auto i = 0u; i < NumRows; ++i) {
         agg.start_row(timestamp{i + NumRows * 3})([&](auto &rb) {
             for (uint64_t j = 1u; j < NumColumnsSecondWrite; ++j)
-                rb.set_scalar_by_name(columns_second[j].name(), uint64_t(i + j), columns_second[j].type_desc());
+                rb.set_scalar_by_name(columns_second[j].name(), uint64_t(i + j), columns_second[j].type().data_type());
         });
     }
 
@@ -207,7 +205,7 @@ TEST_F(IngestionStressStore, ScalarIntDynamicSchema) {
 
     for(auto &seg : sink.segments_) {
         log::version().info("Writing to symbol: {}", symbol);
-        arcticdb::stream::append_incomplete_segment(test_store_->_test_get_store(), symbol, std::move(seg));
+        arcticdb::append_incomplete_segment(test_store_->_test_get_store(), symbol, std::move(seg));
     }
 
     using namespace arcticdb::pipelines;
@@ -230,10 +228,10 @@ TEST_F(IngestionStressStore, DynamicSchemaWithStrings) {
 
     const auto index = as::TimeseriesIndex::default_index();
     as::DynamicSchema schema{
-           index.create_stream_descriptor(symbol, {
-                    scalar_field_proto(DataType::INT64, "INT64"),
-                    scalar_field_proto(DataType::ASCII_FIXED64, "ASCII"),
-                    }), index
+        index.create_stream_descriptor(symbol, {
+                    scalar_field(DataType::INT64, "INT64"),
+                    scalar_field(DataType::ASCII_FIXED64, "ASCII"),
+            }), index
     };
 
     SegmentsSink sink;
@@ -246,9 +244,9 @@ TEST_F(IngestionStressStore, DynamicSchemaWithStrings) {
 
     for (auto i = 0u; i < NumRows; ++i) {
         agg.start_row(timestamp{i})([&](auto &rb) {
-            rb.set_scalar_by_name("INT64", uint64_t(i), make_scalar_type(DataType::INT64));
+            rb.set_scalar_by_name("INT64", uint64_t(i), DataType::INT64);
             auto val = fmt::format("hi_{}", i);
-            rb.set_scalar_by_name("ASCII", std::string_view{val}, make_scalar_type(DataType::ASCII_FIXED64));
+            rb.set_scalar_by_name("ASCII", std::string_view{val}, DataType::ASCII_FIXED64);
         });
     }
     timer.stop_timer(timer_name);
@@ -258,7 +256,7 @@ TEST_F(IngestionStressStore, DynamicSchemaWithStrings) {
 
     for(auto &seg : sink.segments_) {
         log::version().info("Writing to symbol: {}", symbol);
-        arcticdb::stream::append_incomplete_segment(test_store_->_test_get_store(), symbol, std::move(seg));
+        arcticdb::append_incomplete_segment(test_store_->_test_get_store(), symbol, std::move(seg));
     }
 
     using namespace arcticdb::pipelines;

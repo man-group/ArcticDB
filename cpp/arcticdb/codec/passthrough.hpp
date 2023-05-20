@@ -32,7 +32,8 @@ struct PassthroughEncoder {
         }
     }
 
-    static void encode(BlockType<TD> &block, arcticdb::proto::encoding::EncodedField &field, Buffer &out, std::ptrdiff_t &pos) {
+    template <typename EncodedFieldType>
+    static void encode(BlockType<TD> &block, EncodedFieldType &field, Buffer &out, std::ptrdiff_t &pos) {
         using namespace arcticdb::entity;
         using Helper = CodecHelper<TD>;
         using T = typename Helper::T;
@@ -55,7 +56,7 @@ struct PassthroughEncoder {
             auto total_row_count = nd_array->items_count() + block_row_count;
             nd_array->set_items_count(total_row_count);
             auto values_pb = nd_array->add_values();
-            v_block.set_pb(*values_pb, helper.hasher_.digest(), v_block.bytes_);
+            v_block.set_block_data(*values_pb, helper.hasher_.digest(), v_block.bytes_);
         } else {
             auto helper_array_block = Helper::nd_array_block(block_row_count, block.shapes());
             helper.ensure_buffer(out, pos, helper_array_block.shapes_.bytes_ + helper_array_block.values_.bytes_);
@@ -72,7 +73,7 @@ struct PassthroughEncoder {
             auto values_pb = field_nd_array->add_values();
             auto shapes_pb = field_nd_array->add_shapes();
             helper_array_block.update_field_size(*field_nd_array);
-            helper_array_block.set_pb(shapes_pb, values_pb, shape_hash, helper_array_block.shapes_.bytes_,
+            helper_array_block.set_block_data(shapes_pb, values_pb, shape_hash, helper_array_block.shapes_.bytes_,
                                       helper.hasher_.digest(), helper_array_block.values_.bytes_);
         }
     }

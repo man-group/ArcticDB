@@ -33,7 +33,7 @@ namespace arcticdb::storage {
     class LibraryManager {
     public:
         explicit LibraryManager(std::shared_ptr<storage::Library> library) :
-            store_(std::make_shared<async::AsyncStore<util::SysClock>>(library, codec::default_lz4_codec())){
+            store_(std::make_shared<async::AsyncStore<util::SysClock>>(library, codec::default_lz4_codec(), encoding_version(library->config()))){
         }
 
         void write_library_config(const py::object& lib_cfg, const LibraryPath& path){
@@ -46,7 +46,7 @@ namespace arcticdb::storage {
             segment.set_metadata(std::move(output));
 
             store_->write_sync(
-                    entity::KeyType::LIBRARY_CONFIG,
+                    entity::KeyType::                       LIBRARY_CONFIG,
                     StreamId(path.to_delim_path()),
                     std::move(segment)
             );

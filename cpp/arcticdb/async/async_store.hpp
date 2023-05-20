@@ -24,9 +24,12 @@ class AsyncStore : public Store {
 public:
     AsyncStore(
         std::shared_ptr<storage::Library> library,
-        const arcticdb::proto::encoding::VariantCodec &codec) :
+        const arcticdb::proto::encoding::VariantCodec &codec,
+        EncodingVersion encoding_version
+    ) :
         library_(std::move(library)),
-        codec_(new arcticdb::proto::encoding::VariantCodec{codec}) {
+        codec_(std::make_shared<arcticdb::proto::encoding::VariantCodec>(codec)),
+        encoding_version_(encoding_version) {
     }
 
     folly::Future<entity::VariantKey> write(
@@ -44,7 +47,7 @@ public:
 
         return async::submit_cpu_task(EncodeAtomTask{
             key_type, version_id, stream_id, start_index, end_index, current_timestamp(),
-            std::move(segment), library_, codec_, size_t(0)
+            std::move(segment), codec_, size_t(0), encoding_version_
         })
             .via(&async::io_executor())
             .thenValue(WriteSegmentTask{library_});
@@ -66,7 +69,7 @@ public:
 
         return async::submit_cpu_task(EncodeAtomTask{
             key_type, version_id, stream_id, start_index, end_index, creation_ts,
-            std::move(segment), library_, codec_, size_t(0)
+            std::move(segment),  codec_, size_t(0), encoding_version_
         })
         .via(&async::io_executor())
         .thenValue(WriteSegmentTask{library_});
@@ -82,7 +85,7 @@ public:
         SegmentInMemory &&segment) override {
         util::check(is_ref_key_class(key_type), "Expected ref key type got  {}", key_type);
         return async::submit_cpu_task(EncodeRefTask{
-            key_type, stream_id, std::move(segment), codec_
+            key_type, stream_id, std::move(segment), codec_, encoding_version_
         })
             .via(&async::io_executor())
             .thenValue(WriteSegmentTask{library_});
@@ -103,7 +106,7 @@ public:
 
         auto encoded = EncodeAtomTask{
                 key_type, version_id, stream_id, start_index, end_index, current_timestamp(),
-                std::move(segment), library_, codec_, size_t(0)
+                std::move(segment), codec_, size_t(0), encoding_version_
         }();
         return WriteSegmentTask{library_}(std::move(encoded));
     }
@@ -117,7 +120,7 @@ public:
             const StreamId& stream_id,
             SegmentInMemory &&segment) override {
         util::check(is_ref_key_class(key_type), "Expected ref key type got  {}", key_type);
-        auto encoded = EncodeRefTask{key_type, stream_id, std::move(segment), codec_}();
+        auto encoded = EncodeRefTask{key_type, stream_id, std::move(segment), codec_, encoding_version_}();
         return WriteSegmentTask{library_}(std::move(encoded));
     }
 
@@ -137,7 +140,7 @@ public:
                     segment.descriptor().id());
 
         return async::submit_cpu_task(EncodeSegmentTask{
-            key, std::move(segment), library_, codec_, size_t(0)
+            key, std::move(segment), codec_, size_t(0), encoding_version_
         })
         .via(&async::io_executor())
         .thenValue(UpdateSegmentTask{library_, opts});
@@ -182,13 +185,21 @@ public:
             .thenValue(DecodeMetadataTask{});
     }
 
-    folly::Future<std::tuple<VariantKey, std::optional<google::protobuf::Any>, StreamDescriptor::Proto>>
+    folly::Future<std::tuple<VariantKey, std::optional<google::protobuf::Any>, StreamDescriptor>>
     read_metadata_and_descriptor(
-        const entity::VariantKey& key,
-        storage::ReadKeyOpts opts) override {
+            const entity::VariantKey& key,
+            storage::ReadKeyOpts opts) override {
         return async::submit_io_task(ReadCompressedTask{key, library_, opts})
         .via(&async::cpu_executor())
         .thenValue(DecodeMetadataAndDescriptorTask{});
+    }
+
+    folly::Future<std::pair<VariantKey, TimeseriesDescriptor>>
+    read_timeseries_descriptor(
+            const entity::VariantKey& key) override {
+        return async::submit_io_task(ReadCompressedTask{key, library_, storage::ReadKeyOpts{}})
+            .via(&async::cpu_executor())
+            .thenValue(DecodeTimeseriesDescriptorTask{});
     }
 
     folly::Future<bool> key_exists(const entity::VariantKey &key) override {
@@ -224,7 +235,7 @@ public:
     }
 
     folly::Future<std::vector<RemoveKeyResultType>> remove_keys(const std::vector<entity::VariantKey> &keys, storage::RemoveOpts opts) override {
-        return keys.size() == 0 ?
+        return keys.empty() ?
             std::vector<RemoveKeyResultType>() :
             async::submit_io_task(RemoveBatchTask{keys, library_, opts});
     }
@@ -252,9 +263,10 @@ public:
     }
 
     std::vector<storage::KeySegmentPair> batch_read_compressed(
-        std::vector<entity::VariantKey> &&keys,
+        std::vector<entity::VariantKey> &&ks,
         const BatchReadArgs &args,
         bool may_fail) override {
+        auto keys = std::move(ks);
         std::vector<folly::Future<storage::KeySegmentPair>> batch{};
         batch.reserve(args.batch_size_);
         std::vector<storage::KeySegmentPair> res;
@@ -281,9 +293,11 @@ public:
     }
 
     std::vector<VariantKey> batch_read_compressed(
-        std::vector<entity::VariantKey> &&keys,
-        std::vector<ReadContinuation> &&continuations,
+        std::vector<entity::VariantKey> &&ks,
+        std::vector<ReadContinuation> &&cs,
         const BatchReadArgs & args) override {
+        auto continuations = std::move(cs);
+        auto keys = std::move(ks);
         util::check(keys.size() == continuations.size(),
                     "keys and continuations must has then same number of elements");
         std::vector<folly::Future<VariantKey>> batch;
@@ -291,7 +305,7 @@ public:
         std::vector<VariantKey> res;
         res.reserve(keys.size());
         for (std::size_t i = 0; i < keys.size(); ++i) {
-            auto &key = keys[i];
+            const auto &key = keys[i];
             auto &cont = continuations[i];
             batch.push_back(
                 async::submit_io_task(ReadCompressedTask(key, library_, storage::ReadKeyOpts{}))
@@ -313,19 +327,18 @@ public:
     }
 
     std::vector<Composite<ProcessingSegment>> batch_read_uncompressed(
-        std::vector<Composite<pipelines::SliceAndKey>> &&slice_and_keys,
+        std::vector<Composite<pipelines::SliceAndKey>> &&sks,
         const std::shared_ptr<std::vector<Clause>>& query,
         const StreamDescriptor& desc,
         const std::shared_ptr<std::unordered_set<std::string>>& filter_columns,
         const BatchReadArgs & args) override {
-
+        auto slice_and_keys = std::move(sks);
         std::vector<Composite<ProcessingSegment>> res;
         res.reserve(slice_and_keys.size());
         std::vector<folly::Future<Composite<ProcessingSegment>>> batch;
         size_t current_size = 0;
         for (auto&& s : slice_and_keys) {
             auto sk = std::move(s);
-            // By default IO bound work -> IO thread pool, CPU bound work -> CPU thread pool.
             if(args.scheduler_ == BatchReadArgs::CPU) {
                 batch.push_back(
                     async::submit_io_task(ReadCompressedSlicesTask(std::move(sk), library_))
@@ -333,7 +346,6 @@ public:
                         .thenValue(DecodeSlicesTask{desc, filter_columns})
                         .thenValue(MemSegmentProcessingTask{shared_from_this(),query}));
             }
-            // IO option will execute all work in the same Folly thread potentially limiting context switches.
             else {
                 batch.push_back(
                     async::submit_io_task(ReadCompressedSlicesTask(std::move(sk), library_))
@@ -373,13 +385,14 @@ public:
         });
     }
 
-    folly::Future<std::vector<VariantKey>> batch_write(std::vector<std::pair<PartialKey, SegmentInMemory>> &&key_segments,
-                const std::shared_ptr<DeDupMap>& de_dup_map,
-                const BatchWriteArgs &args) override {
+    folly::Future<std::vector<VariantKey>> batch_write(
+        std::vector<std::pair<PartialKey, SegmentInMemory>> &&key_seg_pairs,
+        const std::shared_ptr<DeDupMap>& de_dup_map,
+        const BatchWriteArgs &args) override {
+        auto key_segments = std::move(key_seg_pairs);
         std::size_t write_count = args.lib_write_count == 0 ? 16ULL : args.lib_write_count;
 
-        std::shared_ptr<std::vector<VariantKey>> res = std::make_shared<std::vector<VariantKey>>(key_segments.size());
-
+        auto res = std::make_shared<std::vector<VariantKey>>(key_segments.size());
         auto count = 0ULL;
         for (std::size_t start = 0ULL, nxt; start < key_segments.size(); start = nxt) {
             nxt = std::min(start + write_count, key_segments.size());
@@ -389,10 +402,11 @@ public:
             std::vector<folly::Future<folly::Unit>> futs;
             futs.reserve(range.size());
 
-            for(auto& kv : range) {
+            for(auto& [key, seg] : range) {
                 futs.emplace_back(async::submit_cpu_task(
-                    EncodeAtomTask(std::move(kv.first), ClockType::nanos_since_epoch(), std::move(kv.second), library_, codec_, count++))
-                                       .thenValue([de_dup_map, res](auto &&key_seg) {
+                    EncodeAtomTask(std::move(key), ClockType::nanos_since_epoch(), std::move(seg), codec_, count++, encoding_version_))
+                                       .thenValue([de_dup_map, res](auto&& ks) {
+                    auto key_seg = std::forward<decltype(ks)>(ks);
                     auto de_dup_key = de_dup_map ? de_dup_map->get_key_if_present(key_seg.atom_key()) : std::nullopt;
 
                     if (de_dup_key) {
@@ -402,9 +416,10 @@ public:
                     } else {
                         ARCTICDB_DEBUG(log::version(), "No existing key with same contents: writing new object {}", key_seg.atom_key());
                         (*res)[key_seg.id()] = (key_seg.atom_key());
-                        return std::make_pair(std::forward<storage::KeySegmentPair>(key_seg), true);
+                        return std::make_pair(std::move(key_seg), true);
                     }
-                }).thenValue([key_segs=key_segs, key_seg_mutex=key_seg_mutex](auto && pair_key_write) {
+                }).thenValue([key_segs=key_segs, key_seg_mutex=key_seg_mutex](auto&& pk) {
+                        auto pair_key_write = std::forward<decltype(pk)>(pk);
                         if (pair_key_write.second) {
                             std::lock_guard kl{*key_seg_mutex};
                             ARCTICDB_DEBUG(log::version(), "Enqueuing {} for write", pair_key_write.first.atom_key());
@@ -430,6 +445,7 @@ public:
 private:
     std::shared_ptr<storage::Library> library_;
     std::shared_ptr<arcticdb::proto::encoding::VariantCodec> codec_;
+    const EncodingVersion encoding_version_;
 };
 
 } // namespace arcticdb::async

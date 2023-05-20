@@ -134,17 +134,17 @@ private:
     inline StreamDescriptor symbol_stream_descriptor(const StreamId& stream_id) {
         auto data_type = std::holds_alternative<StringId>(type_holder_) ? DataType::ASCII_DYNAMIC64 : DataType::UINT64;
         return StreamDescriptor{stream_descriptor(stream_id, RowCountIndex(), {
-            scalar_field_proto(data_type, "symbol")}
+            scalar_field(data_type, "symbol")}
         )};
     };
 
     inline StreamDescriptor journal_stream_descriptor(const StreamId& action, const StreamId& id) {
         return util::variant_match(id,
         [&action] (const NumericId&) {
-            return StreamDescriptor{stream_descriptor(action, RowCountIndex(), { scalar_field_proto(DataType::UINT64, "symbol") })};
+            return StreamDescriptor{stream_descriptor(action, RowCountIndex(), { scalar_field(DataType::UINT64, "symbol") })};
         },
         [&action] (const StringId&) {
-            return StreamDescriptor{stream_descriptor(action, RowCountIndex(), { scalar_field_proto(DataType::UTF_DYNAMIC64, "symbol") })};
+            return StreamDescriptor{stream_descriptor(action, RowCountIndex(), { scalar_field(DataType::UTF_DYNAMIC64, "symbol") })};
         });
     };
 };

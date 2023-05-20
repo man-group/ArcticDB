@@ -196,7 +196,7 @@ public:
             }
             break;
         }
-        util::check_rte(max_trials >= 0,"Couldn't read via ref key even after multiple trials");
+        util::check_rte(max_trials >= 0,"Couldn't read via ref key {} even after multiple trials", stream_id);
         if (validate_)
             entry->validate();
     }

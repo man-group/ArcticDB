@@ -111,6 +111,7 @@ if PY3:
         # and does not transform string into bytes
         return isinstance(v, string_types) or isinstance(v, binary_type)
 
+
 else:
 
     def _accept_array_string(v):
@@ -179,8 +180,9 @@ def _to_primitive(arr, arr_name, dynamic_strings, string_max_len=None, coerce_co
     if len(arr) == 0:
         if coerce_column_type is None:
             raise ArcticNativeNotYetImplemented(
-                "coercing column type is required when empty column of object type, Column type={} for column={}"
-                .format(arr.dtype, arr_name)
+                "coercing column type is required when empty column of object type, Column type={} for column={}".format(
+                    arr.dtype, arr_name
+                )
             )
         else:
             return arr.astype(coerce_column_type)
@@ -1158,11 +1160,7 @@ class CompositeNormalizer(Normalizer):
                 "You can set pickle_on_failure param to force pickling of this object instead."
                 "(Note: Pickling has worse performance and stricter memory limitations)"
             )
-            log.error(
-                error_message,
-                type(item),
-                ex,
-            )
+            log.error(error_message, type(item), ex)
             raise
 
     def denormalize(self, item, norm_meta):
