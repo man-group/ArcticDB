@@ -26,7 +26,7 @@ namespace arcticdb::pipelines {
 
 using namespace arcticdb::stream;
 
-std::vector<folly::Future<SliceAndKey>> slice_and_write(
+folly::Future<std::vector<SliceAndKey>> slice_and_write(
         InputTensorFrame &frame,
         const SlicingPolicy &slicing,
         folly::Function<stream::StreamSink::PartialKey(const FrameSlice &)> &&partial_key_gen,
@@ -35,16 +35,17 @@ std::vector<folly::Future<SliceAndKey>> slice_and_write(
         bool allow_sparse = false
 );
 
-std::vector<folly::Future<SliceAndKey>> write_slices(
-    const InputTensorFrame &frame,
-    const std::vector<FrameSlice> &slices,
-    const SlicingPolicy& slicing,
-    folly::Function<stream::StreamSink::PartialKey(const FrameSlice &)>&& partial_key_gen,
-    const std::shared_ptr<stream::StreamSink>& sink,
-    const std::shared_ptr<DeDupMap>& de_dup_map);
+folly::Future<std::vector<SliceAndKey>> write_slices(
+        const InputTensorFrame &frame,
+        std::vector<FrameSlice>&& slices,
+        const SlicingPolicy &slicing,
+        folly::Function<stream::StreamSink::PartialKey(const FrameSlice &)>&& partial_key_gen,
+        const std::shared_ptr<stream::StreamSink>& sink,
+        const std::shared_ptr<DeDupMap>& de_dup_map,
+        bool sparsify_floats);
 
 folly::Future<entity::AtomKey> write_frame(
-    const IndexPartialKey &key,
+    IndexPartialKey &&key,
     InputTensorFrame&& frame,
     const SlicingPolicy &slicing,
     const std::shared_ptr<Store> &store,

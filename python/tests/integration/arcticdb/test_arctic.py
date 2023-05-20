@@ -31,10 +31,16 @@ import math
 import re
 import pytest
 import pandas as pd
-from datetime import datetime, date, timezone
+from datetime import datetime, date, timezone, timedelta
 import numpy as np
-from arcticdb.util.test import assert_frame_equal
 from numpy import datetime64
+from arcticdb.util.test import (
+    assert_frame_equal,
+    random_strings_of_length,
+    random_floats,
+)
+import random
+
 
 try:
     from arcticdb.version_store.library import (
@@ -57,6 +63,17 @@ except ImportError:
         ArcticInvalidApiUsageException,
         StagedDataFinalizeMethod,
     )
+
+
+def generate_dataframe(columns, dt, num_days, num_rows_per_day):
+    dataframes = []
+    for _ in range(num_days):
+        index = pd.Index([dt + timedelta(seconds=s) for s in range(num_rows_per_day)])
+        vals = {c: random_floats(num_rows_per_day) for c in columns}
+        new_df = pd.DataFrame(data=vals, index=index)
+        dataframes.append(new_df)
+        dt = dt + timedelta(days=1)
+    return pd.concat(dataframes)
 
 
 def test_library_creation_deletion(arctic_client):
@@ -673,23 +690,6 @@ def test_write_non_native_frame_without_pickle_mode(arctic_library):
         lib.write("test_1", df)
 
 
-def test_write_batch(arctic_library):
-    """Should be able to write a batch of data."""
-    lib = arctic_library
-    df_1 = pd.DataFrame({"col1": [1, 2, 3], "col2": [4, 5, 6]})
-    df_2 = pd.DataFrame({"col1": [-1, -2, -3], "col2": [-4, -5, -6], "anothercol": [0, 0, 0]})
-
-    batch = lib.write_batch([WritePayload("symbol_1", df_1), WritePayload("symbol_2", df_2, metadata="great_metadata")])
-
-    assert_frame_equal(lib.read("symbol_1", columns=["col1"]).data, df_1[["col1"]])
-    assert_frame_equal(lib.read("symbol_2", columns=["col1"]).data, df_2[["col1"]])
-    assert_frame_equal(lib.read("symbol_2", columns=["anothercol"]).data, df_2[["anothercol"]])
-
-    symbol_2_loaded = lib.read("symbol_2")
-    assert symbol_2_loaded.metadata == "great_metadata"
-    assert all(type(w) == PythonVersionedItem for w in batch)
-
-
 def test_write_batch_duplicate_symbols(arctic_library):
     """Should throw and not write if duplicate symbols are provided."""
     lib = arctic_library
@@ -716,6 +716,34 @@ def test_write_pickle_batch_duplicate_symbols(arctic_library):
         )
 
     assert not lib.list_symbols()
+
+
+def test_write_batch(library_factory):
+    """Should be able to write different size of batch of data."""
+    lib = library_factory(LibraryOptions(rows_per_segment=10))
+    assert lib._nvs._lib_cfg.lib_desc.version.write_options.segment_row_size == 10
+    num_columns = 16
+    num_days = 200
+    num_symbols = 200
+    dt = datetime(2019, 4, 8, 0, 0, 0)
+    column_length = 6
+    num_rows_per_day = 1
+    list_requests = []
+    list_dataframes = {}
+    for sym in range(num_symbols):
+        columns = random_strings_of_length(num_columns, column_length, True)
+        df = generate_dataframe(random.sample(columns, 6), dt, num_days, num_rows_per_day)
+        list_requests.append(WritePayload("symbol_" + str(sym), df, metadata="great_metadata" + str(sym)))
+        list_dataframes[sym] = df
+
+    batch = lib.write_batch(list_requests)
+    assert all(type(w) == PythonVersionedItem for w in batch)
+
+    for sym in range(num_symbols):
+        original_dataframe = list_dataframes[sym]
+        read_dataframe = lib.read("symbol_" + str(sym))
+        assert read_dataframe.metadata == "great_metadata" + str(sym)
+        assert_frame_equal(read_dataframe.data, original_dataframe)
 
 
 def test_write_with_unpacking(arctic_library):

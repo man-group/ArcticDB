@@ -49,7 +49,7 @@ auto write_version_frame(
     auto wrapper = get_test_simple_frame(stream_id, rows, start_val);
     auto& frame = wrapper.frame_;
     auto store = pvs._test_get_store();
-    auto var_key = write_frame(pk, std::move(frame), slicing, store, de_dup_map).get();
+    auto var_key = write_frame(std::move(pk), std::move(frame), slicing, store, de_dup_map).get();
     auto key = to_atom(var_key); // Moves
     if (update_version_map) {
         pvs._test_get_version_map()->write_version(store, key);
@@ -320,7 +320,7 @@ TEST_F(VersionStoreTest, StressBatchWrite) {
         frames.push_back(wrapper.frame_);
     }
 
-    test_store_->batch_write_internal(version_ids, symbols, frames, dedup_maps, false);
+    folly::collect(test_store_->batch_write_internal(version_ids, symbols, std::move(frames), dedup_maps, false)).get();
 }
 
 TEST_F(VersionStoreTest, StressBatchReadUncompressed) {
