@@ -24,6 +24,7 @@
 #include <arcticdb/stream/append_map.hpp>
 #include <arcticdb/version/version_utils.hpp>
 #include <arcticdb/entity/merge_descriptors.hpp>
+#include <arcticdb/async/task_scheduler.hpp>
 
 #include <pybind11/pybind11.h>
 
@@ -32,9 +33,9 @@ namespace arcticdb::pipelines {
 using namespace arcticdb::entity;
 using namespace arcticdb::stream;
 
-std::vector<folly::Future<SliceAndKey>> write_slices(
+folly::Future<std::vector<SliceAndKey>> write_slices(
         const InputTensorFrame &frame,
-        const std::vector<FrameSlice> &slices,
+        std::vector<FrameSlice>&& slices,
         const SlicingPolicy &slicing,
         folly::Function<stream::StreamSink::PartialKey(const FrameSlice &)>&& partial_key_gen,
         const std::shared_ptr<stream::StreamSink>& sink,
@@ -107,14 +108,14 @@ std::vector<folly::Future<SliceAndKey>> write_slices(
     auto fut_writes = sink->batch_write(std::move(key_segs), de_dup_map);
 
     ARCTICDB_SUBSAMPLE_DEFAULT(WriteSlicesWait)
-    return std::move(fut_writes).thenValue([&](auto &&keys) {
-        std::vector<folly::Future<SliceAndKey>> res;
+    return std::move(fut_writes).thenValue([slices = std::move(slices)](auto &&keys) mutable {
+        std::vector<SliceAndKey> res;
         res.reserve(keys.size());
         for (std::size_t i = 0; i < res.capacity(); ++i) {
             res.emplace_back(SliceAndKey{slices[i], std::move(to_atom(keys[i]))});
         }
         return res;
-    }).get();
+    });
 }
 
 folly::Future<entity::VariantKey> write_multi_index(
@@ -131,7 +132,7 @@ folly::Future<entity::VariantKey> write_multi_index(
     return writer.commit();
 }
 
-std::vector<folly::Future<SliceAndKey>> slice_and_write(
+folly::Future<std::vector<SliceAndKey>> slice_and_write(
         InputTensorFrame &frame,
         const SlicingPolicy &slicing,
         folly::Function<stream::StreamSink::PartialKey(const FrameSlice &)>&& partial_key_gen,
@@ -140,15 +141,13 @@ std::vector<folly::Future<SliceAndKey>> slice_and_write(
         bool sparsify_floats) {
     ARCTICDB_SUBSAMPLE_DEFAULT(SliceFrame)
     auto slices = slice(frame, slicing);
-
     ARCTICDB_SUBSAMPLE_DEFAULT(SliceAndWrite)
-    auto fut_slice_keys = write_slices(frame, slices, slicing, std::move(partial_key_gen), sink, de_dup_map, sparsify_floats);
-    return fut_slice_keys;
+    return write_slices(frame, std::move(slices), slicing, std::move(partial_key_gen), sink, de_dup_map, sparsify_floats);
 }
 
 folly::Future<entity::AtomKey>
 write_frame(
-        const IndexPartialKey& key,
+        IndexPartialKey&& key,
         InputTensorFrame&& frame,
         const SlicingPolicy &slicing,
         const std::shared_ptr<Store>& store,
@@ -158,7 +157,9 @@ write_frame(
     auto fut_slice_keys = slice_and_write(frame, slicing, get_partial_key_gen(frame, key), store, de_dup_map, sparsify_floats);
     // Write the keys of the slices into an index segment
     ARCTICDB_SUBSAMPLE_DEFAULT(WriteIndex)
-    return index::write_index(std::move(frame), std::move(fut_slice_keys), key, store);
+    return std::move(fut_slice_keys).thenValue([frame = std::move(frame), key = std::move(key), &store](auto&& slice_keys) mutable {
+        return index::write_index(std::move(frame), std::move(slice_keys), key, store);
+    });
 }
 
 folly::Future<entity::AtomKey> append_frame(
@@ -193,8 +194,7 @@ folly::Future<entity::AtomKey> append_frame(
     );
 
     auto existing_slices = unfiltered_index(index_segment_reader);
-    auto fut_slice_keys = slice_and_write(frame, slicing, get_partial_key_gen(frame, key), store);
-    auto keys_fut = folly::collect(fut_slice_keys);
+    auto keys_fut = slice_and_write(frame, slicing, get_partial_key_gen(frame, key), store);
 
     auto slice_and_keys_to_append = keys_fut.wait().value();
 
