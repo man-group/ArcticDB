@@ -247,10 +247,10 @@ public:
         bool sparsify
         );
 
-    std::vector<AtomKey> batch_write_internal(
+    folly::Future<std::vector<AtomKey>> batch_write_internal(
         std::vector<VersionId> version_ids,
         const std::vector<StreamId>& stream_ids,
-        std::vector<InputTensorFrame> frames,
+        std::vector<InputTensorFrame>&& frames,
         std::vector<std::shared_ptr<DeDupMap>> de_dup_maps,
         bool validate_index
     );

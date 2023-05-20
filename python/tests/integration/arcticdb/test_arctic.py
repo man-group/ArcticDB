@@ -31,10 +31,16 @@ import math
 import re
 import pytest
 import pandas as pd
-from datetime import datetime, date, timezone
+from datetime import datetime, date, timezone, timedelta
 import numpy as np
-from arcticdb.util.test import assert_frame_equal
 from numpy import datetime64
+from arcticdb.util.test import (
+    assert_frame_equal,
+    random_strings_of_length,
+    random_floats,
+)
+import random
+
 
 try:
     from arcticdb.version_store.library import (
@@ -57,6 +63,17 @@ except ImportError:
         ArcticInvalidApiUsageException,
         StagedDataFinalizeMethod,
     )
+
+
+def generate_dataframe(columns, dt, num_days, num_rows_per_day):
+    dataframes = []
+    for _ in range(num_days):
+        index = pd.Index([dt + timedelta(seconds=s) for s in range(num_rows_per_day)])
+        vals = {c: random_floats(num_rows_per_day) for c in columns}
+        new_df = pd.DataFrame(data=vals, index=index)
+        dataframes.append(new_df)
+        dt = dt + timedelta(days=1)
+    return pd.concat(dataframes)
 
 
 def test_library_creation_deletion(arctic_client):
@@ -716,6 +733,34 @@ def test_write_pickle_batch_duplicate_symbols(arctic_library):
         )
 
     assert not lib.list_symbols()
+
+
+@pytest.mark.parametrize("num_columns", [8, 16])
+@pytest.mark.parametrize("num_days", [10, 200])
+@pytest.mark.parametrize("num_symbols", [100, 200])
+def test_write_batch_stress(arctic_library, num_columns, num_days, num_symbols):
+    """Should be able to write different size of batch of data."""
+    lib = arctic_library
+    dt = datetime(2019, 4, 8, 0, 0, 0)
+    column_length = 6
+    num_rows_per_day = 1
+    list_requests = []
+    list_dataframes = {}
+    for sym in range(num_symbols):
+        columns = random_strings_of_length(num_columns, column_length, True)
+        df = generate_dataframe(random.sample(columns, 6), dt, num_days, num_rows_per_day)
+        list_requests.append(WritePayload("symbol_" + str(sym), df))
+        list_dataframes[sym] = df
+
+    batch = lib.write_batch(list_requests)
+    assert all(type(w) == PythonVersionedItem for w in batch)
+
+    for sym in range(num_symbols):
+        original_dataframe = list_dataframes[sym]
+        for col in original_dataframe.columns:
+            read_column_data = lib.read("symbol_" + str(sym), columns=[col]).data
+            original_column_data = original_dataframe[[col]]
+            assert_frame_equal(read_column_data, original_column_data)
 
 
 def test_write_with_unpacking(arctic_library):

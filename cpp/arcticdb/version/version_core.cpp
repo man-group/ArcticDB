@@ -332,8 +332,7 @@ VersionedItem update_impl(
     frame.set_bucketize_dynamic(bucketize_dynamic);
     auto slicing_arg = get_slicing_policy(options, frame);
 
-    auto fut_slice_keys = slice_and_write(frame, slicing_arg, get_partial_key_gen(frame, IndexPartialKey{stream_id, update_info.next_version_id_}), store);
-    auto new_slice_and_keys = folly::collect(fut_slice_keys).wait().value();
+    auto new_slice_and_keys = slice_and_write(frame, slicing_arg, get_partial_key_gen(frame, IndexPartialKey{stream_id, update_info.next_version_id_}), store).wait().value();
     std::sort(std::begin(new_slice_and_keys), std::end(new_slice_and_keys));
 
     IndexRange orig_filter_range;

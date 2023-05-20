@@ -1058,10 +1058,10 @@ std::vector<std::pair<VersionedItem, FrameAndDescriptor>> LocalVersionedEngine::
     return folly::collect(results_fut).get();
 }
 
-std::vector<AtomKey> LocalVersionedEngine::batch_write_internal(
+folly::Future<std::vector<AtomKey>> LocalVersionedEngine::batch_write_internal(
     std::vector<VersionId> version_ids,
     const std::vector<StreamId>& stream_ids,
-    std::vector<InputTensorFrame> frames,
+    std::vector<InputTensorFrame>&& frames,
     std::vector<std::shared_ptr<DeDupMap>> de_dup_maps,
     bool validate_index
 ) {
@@ -1079,7 +1079,7 @@ std::vector<AtomKey> LocalVersionedEngine::batch_write_internal(
             validate_index
         ));
     }
-    return folly::collect(results_fut).get();
+    return folly::collect(results_fut).via(&async::cpu_executor());
 }
 
 

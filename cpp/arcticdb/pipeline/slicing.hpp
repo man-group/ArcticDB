@@ -67,9 +67,9 @@ SlicingPolicy get_slicing_policy(
 
 std::vector<FrameSlice> slice(InputTensorFrame &frame, const SlicingPolicy& slicer);
 
-std::vector<folly::Future<SliceAndKey>> write_slices(
+folly::Future<std::vector<SliceAndKey>> write_slices(
     const InputTensorFrame &frame,
-    const std::vector<FrameSlice> &slices,
+    const std::shared_ptr<std::vector<FrameSlice>> slices,
     const SlicingPolicy& slicing,
     folly::Function<stream::StreamSink::PartialKey(const FrameSlice &)>&& partial_key_gen,
     const std::shared_ptr<stream::StreamSink>& sink,

@@ -40,28 +40,25 @@ inline std::shared_ptr<std::unordered_map<StreamId, AtomKey>> batch_get_latest_v
 }
 
 // The logic here is the same as get_latest_undeleted_version_and_next_version_id
-inline std::unordered_map<StreamId, version_store::UpdateInfo> batch_get_latest_undeleted_version_and_next_version_id(
+inline std::vector<folly::Future<version_store::UpdateInfo>> async_batch_get_latest_undeleted_version_and_next_version_id(
         const std::shared_ptr<Store> &store,
         const std::shared_ptr<VersionMap> &version_map,
         const std::vector<StreamId> &stream_ids) {
     ARCTICDB_SAMPLE(BatchGetLatestUndeletedVersionAndNextVersionId, 0)
-    std::unordered_map<StreamId, version_store::UpdateInfo> output;
-
-    async::submit_tasks_for_range(stream_ids,
-                                  [store, version_map](auto& stream_id) {
-        return async::submit_io_task(CheckReloadTask{store,
+    std::vector<folly::Future<version_store::UpdateInfo>> vector_fut;
+    for (auto& stream_id: stream_ids){
+        vector_fut.push_back(async::submit_io_task(CheckReloadTask{store,
                                                      version_map,
                                                      stream_id,
-                                                     LoadParameter{LoadType::LOAD_LATEST_UNDELETED}});
-        },
-        [&output](auto& id, auto&& entry) {
-        auto latest_version = entry->get_first_index(true);
-        auto latest_undeleted_version = entry->get_first_index(false);
-        VersionId next_version_id = latest_version.has_value() ? latest_version->version_id() + 1 : 0;
-        output[id] =  {latest_undeleted_version, next_version_id};
-    });
-
-    return output;
+                                                     LoadParameter{LoadType::LOAD_LATEST_UNDELETED}})
+        .thenValue([](auto&& entry){
+            auto latest_version = entry->get_first_index(true);
+            auto latest_undeleted_version = entry->get_first_index(false);
+            VersionId next_version_id = latest_version.has_value() ? latest_version->version_id() + 1 : 0;
+            return version_store::UpdateInfo{latest_undeleted_version, next_version_id};
+        }));
+    }
+    return vector_fut;
 }
 
 inline std::shared_ptr<std::unordered_map<StreamId, AtomKey>> batch_get_specific_version(
@@ -264,12 +261,12 @@ inline void batch_write_and_prune_previous(
     const std::shared_ptr<Store> &store,
     const std::shared_ptr<VersionMap> &version_map,
     const std::vector<AtomKey> &keys,
-    const std::unordered_map<StreamId, version_store::UpdateInfo>& stream_update_info_map) {
+    const std::vector<version_store::UpdateInfo>& stream_update_info_vector) {
     std::vector<folly::Future<folly::Unit>> results;
     results.reserve(keys.size());
-    for (const auto &key : keys) {
-        auto previous_index_key = stream_update_info_map.at(key.id()).previous_index_key_;
-        results.emplace_back(async::submit_io_task(WriteAndPrunePreviousTask{store, version_map, key, previous_index_key}));
+    for(auto key : folly::enumerate(keys)){
+        auto previous_index_key = stream_update_info_vector[key.index].previous_index_key_;
+        results.emplace_back(async::submit_io_task(WriteAndPrunePreviousTask{store, version_map, *key, previous_index_key}));
     }
 
     folly::collect(results).wait();

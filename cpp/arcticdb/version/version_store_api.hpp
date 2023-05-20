@@ -255,6 +255,12 @@ class PythonVersionStore : public LocalVersionedEngine {
         const std::optional<bool>& iterate_on_failure,
         const std::optional<bool>& skip_snapshots);
 
+    std::vector<VersionId> create_version_id_and_dedup_map(
+        std::vector<version_store::UpdateInfo>& vector_update_info, 
+        const std::vector<StreamId>& stream_ids, 
+        std::vector<std::shared_ptr<DeDupMap>>& de_dup_maps,
+        WriteOptions& write_options);
+
     // Batch methods
     std::vector<VersionedItem> batch_write(
         const std::vector<StreamId> &stream_ids,
@@ -328,7 +334,7 @@ private:
 
     std::vector<VersionedItem> batch_write_index_keys_to_version_map(
         const std::vector<AtomKey>& index_keys,
-        const std::unordered_map<StreamId, UpdateInfo>& stream_update_info_map,
+        const std::vector<UpdateInfo>& stream_update_info_vector,
         bool prune_previous_versions);
 
     void delete_snapshot_sync(const SnapshotId& snap_name, const VariantKey& snap_key);

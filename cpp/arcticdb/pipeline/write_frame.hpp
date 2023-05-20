@@ -26,7 +26,7 @@ namespace arcticdb::pipelines {
 
 using namespace arcticdb::stream;
 
-std::vector<folly::Future<SliceAndKey>> slice_and_write(
+folly::Future<std::vector<SliceAndKey>> slice_and_write(
         InputTensorFrame &frame,
         const SlicingPolicy &slicing,
         folly::Function<stream::StreamSink::PartialKey(const FrameSlice &)> &&partial_key_gen,
