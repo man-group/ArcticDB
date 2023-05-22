@@ -90,7 +90,7 @@ public:
 
 private:
     void get_time(timespec &tm) {
-#ifdef _WIN32
+#if  defined(_WIN32) || defined(__APPLE__)
         int rc = clock_gettime(CLOCK_REALTIME, &tm);
 #else
         int rc = clock_gettime(CLOCK_MONOTONIC, &tm);
