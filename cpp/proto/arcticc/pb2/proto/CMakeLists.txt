@@ -15,17 +15,24 @@ SET(PROTO_IN_FILES
         logger.proto
         )
 
+set(proto_import_regex "import \"arcticc/pb2/([^\"]+\\.proto)\"")
+
 # Slightly alter the original proto files to cope with grpc incompat with py3+
 foreach(filename ${PROTO_IN_FILES})
-    FILE(READ "../${filename}" infile)
-    STRING(REPLACE "import \"arcticc/pb2/" "import \"" infile_mod "${infile}")
-    FILE(WRITE "${CMAKE_CURRENT_BINARY_DIR}/${filename}" "${infile_mod}")
-    list (APPEND PROTO_ALTERED_FILES "${CMAKE_CURRENT_BINARY_DIR}/${filename}")
-endforeach(filename)
+    # Parse import statements
+    set(in_file "../${filename}")
+    file(READ "${in_file}" in_file_str)
+    string(REGEX MATCHALL ${proto_import_regex} proto_imports "${in_file_str}")
+    string(REGEX REPLACE ${proto_import_regex} "${CMAKE_CURRENT_BINARY_DIR}/\\1" in_file_depends "${proto_imports}")
 
-add_custom_command(OUTPUT ${PROTO_ALTERED_FILES}
-        COMMAND echo
-        SOURCES ${PROTO_IN_FILES})
+    # Wrap the transform logic in a cmake script to allow tracking of file change relationships
+    set(out_file "${CMAKE_CURRENT_BINARY_DIR}/${filename}")
+    add_custom_command(OUTPUT "${out_file}"
+            COMMAND ${CMAKE_COMMAND} "-DIN_FILE=${in_file}" "-DOUT_FILE=${out_file}" -P transform_proto.cmake
+            WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+            DEPENDS ${in_file} ${in_file_depends})
+    list(APPEND PROTO_ALTERED_FILES "${out_file}")
+endforeach(filename)
 
 # Generate c++ files from altered proto
 INCLUDE_DIRECTORIES(${PROTOBUF_INCLUDE_DIR})
