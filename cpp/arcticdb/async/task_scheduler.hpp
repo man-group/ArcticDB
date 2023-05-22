@@ -67,13 +67,13 @@ public:
               func();
             });
     
-    // we use a modern version of folly when consuming dependencies from conda
-    #ifdef ARCTICDB_USING_CONDA
-        virtual const std::string& getNamePrefix() const override{
-            return named_factory_.getNamePrefix();
-        }
-    #endif
   }
+// we use a modern version of folly when consuming dependencies from conda
+#ifdef ARCTICDB_USING_CONDA
+    virtual const std::string& getNamePrefix() const override{
+        return named_factory_.getNamePrefix();
+    }
+#endif
 
 private:
     folly::NamedThreadFactory named_factory_;
