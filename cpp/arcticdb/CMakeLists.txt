@@ -61,6 +61,8 @@ else()
     find_package(msgpack-c REQUIRED)
     find_package(rapidcheck REQUIRED)
     find_package(robin_hood REQUIRED)
+    find_package(LMDB REQUIRED)
+    find_package(LMDBXX REQUIRED)
 
     set(ARCTICDB_MONGO_LIBS mongo::mongocxx_shared mongo::bsoncxx_shared)
 
@@ -439,7 +441,6 @@ set (arcticdb_core_libraries
         ${Protobuf_LIBRARY}
         ${LZ4_LIBRARY}
         ${Zstd_LIBRARY}
-        lmdb
         ${ARCTICDB_MONGO_LIBS}
         spdlog::spdlog
         Folly::folly # Transitively includes: double-conversion, gflags, glog, libevent, libssl, libcrypto, libiberty, libsodium
@@ -458,6 +459,7 @@ if(${ARCTICDB_USING_CONDA})
         pcre
         ${remotery_LIBRARY}
         msgpack-c
+        ${LMDB_LIBRARIES}
     )
 else()
 
@@ -468,6 +470,7 @@ else()
         unofficial::pcre::pcre
         remotery_static
         msgpackc-cxx
+        lmdb
     )
 endif()
 

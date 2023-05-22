@@ -45,3 +45,4 @@ dependencies:
   - rapidcheck
   - remotery
   - robin_hood
+  - lmdbxx

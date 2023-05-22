@@ -254,14 +254,14 @@ void ColumnStats::parse_version(std::string_view version_string) {
                 dot_position != std::string::npos,
                 "Unexpected version string in column stats column name (expected vX.Y): {}", version_string);
     auto candidate = version_string.substr(1, dot_position - 1);
-    uint64_t major_version;
+    uint64_t major_version = 0;
     auto result = std::from_chars(candidate.data(), candidate.data() + candidate.size(), major_version);
     internal::check<ErrorCode::E_ASSERTION_FAILURE>(
             result.ec != std::errc::invalid_argument,
             "Expected positive integer in version string, but got: {}", candidate);
 
     candidate = version_string.substr(dot_position + 1, std::string::npos);
-    uint64_t minor_version;
+    uint64_t minor_version = 0;
     result = std::from_chars(candidate.data(), candidate.data() + candidate.size(), minor_version);
     internal::check<ErrorCode::E_ASSERTION_FAILURE>(
             result.ec != std::errc::invalid_argument,
