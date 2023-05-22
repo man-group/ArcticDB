@@ -15,7 +15,9 @@
 #include <arcticdb/stream/stream_sink.hpp>
 #include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/util/storage_lock.hpp>
-//#include <arcticdb/util/test/generators.hpp>
+#ifdef ARCTICDB_TEST
+#include <arcticdb/util/test/generators.hpp>
+#endif
 #include <arcticdb/entity/metrics.hpp>
 #include <arcticdb/version/version_tasks.hpp>
 #include <arcticdb/pipeline/index_utils.hpp>
@@ -1291,6 +1293,7 @@ WriteOptions LocalVersionedEngine::get_write_options() const  {
     return  WriteOptions::from_proto(cfg().write_options());
 }
 
+#ifdef ARCTICDB_TEST
 AtomKey LocalVersionedEngine::_test_write_segment(const std::string& symbol) {
     auto wrapper = SinkWrapper(symbol, {
         scalar_field_proto(DataType::UINT64, "thing1"),
@@ -1312,6 +1315,7 @@ AtomKey LocalVersionedEngine::_test_write_segment(const std::string& symbol) {
     return to_atom(store()->write(KeyType::TABLE_DATA, VersionId{}, StreamId{symbol}, 0, 0, std::move(wrapper.segment())).get());
 }
 
+
 std::shared_ptr<VersionMap> LocalVersionedEngine::_test_get_version_map() {
     return version_map();
 }
@@ -1319,4 +1323,5 @@ std::shared_ptr<VersionMap> LocalVersionedEngine::_test_get_version_map() {
 void LocalVersionedEngine::_test_set_store(std::shared_ptr<Store> store) {
     set_store(std::move(store));
 }
+#endif // ARCTICDB_TEST
 } // arcticdb::version_store

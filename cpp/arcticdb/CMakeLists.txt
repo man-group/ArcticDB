@@ -8,6 +8,7 @@ find_package(GTest CONFIG REQUIRED)
 include(CTest)
 include(GoogleTest)
 find_package(rapidcheck REQUIRED)
+add_compile_definitions(ARCTICDB_TEST)
 endif()
 
 include(GenerateExportHeader)
