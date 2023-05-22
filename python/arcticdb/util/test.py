@@ -31,6 +31,7 @@ from arcticdb_ext import set_config_int, get_config_int, unset_config_int
 
 PANDAS_VERSION = version.parse(pd.__version__)
 CHECK_FREQ_VERSION = version.Version("1.1")
+IS_PANDAS_ZERO = PANDAS_VERSION < version.Version("1.0")
 
 
 def maybe_not_check_freq(f):
