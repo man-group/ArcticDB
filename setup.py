@@ -20,6 +20,9 @@ from wheel.bdist_wheel import bdist_wheel
 ARCTICDB_USING_CONDA  = os.environ.get("ARCTICDB_USING_CONDA", "0")
 ARCTICDB_USING_CONDA = ARCTICDB_USING_CONDA != "0"
 
+ARCTICDB_CPU_COUNT  = os.environ.get("ARCTICDB_USING_CONDA", "0")
+ARCTICDB_CPU_COUNT = int(ARCTICDB_CPU_COUNT)
+
 print(f"ARCTICDB_USING_CONDA={ARCTICDB_USING_CONDA}")
 
 def _log_and_run(*cmd, **kwargs):
@@ -146,13 +149,17 @@ class CMakeBuild(build_ext):
         candidates = glob.glob(search)
         assert len(candidates) == 1, f"Specify {env_var} or use a single build directory. {search}={candidates}"
 
-        try:
-            # Python API is not cgroups-aware yet, so use CMake:
-            cpu_output = subprocess.check_output([cmake, "-P", "cpp/CMake/CpuCount.cmake"], universal_newlines=True)
+        if ARCTICDB_CPU_COUNT == 0:
             jobs = "-j", cpu_output.replace("-- CMAKE_BUILD_PARALLEL_LEVEL=", "").rstrip()
-        except Exception as e:
-            print("Failed to retrieve CPU count:", e)
-            jobs = ()
+            try:
+                # Python API is not cgroups-aware yet, so use CMa ke:
+                cpu_output = subprocess.check_output([cmake, "-P", "cpp/CMake/CpuCount.cmake"], universal_newlines=True)
+                jobs = "-j", cpu_output.replace("-- CMAKE_BUILD_PARALLEL_LEVEL=", "").rstrip()
+            except Exception as e:
+                print("Failed to retrieve CPU count:", e)
+                jobs = ()
+        else:
+            jobs = "-j", str(ARCTICDB_CPU_COUNT)
         _log_and_run(cmake, "--build", candidates[0], *jobs, "--target", "install_" + ext.name)
 
         assert os.path.exists(dest), f"No output at {dest}, but we didn't get a bad return code from CMake?"
