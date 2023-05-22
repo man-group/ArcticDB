@@ -114,7 +114,7 @@ private:
         }
     }
 
-#define       1000000000LL
+#define BILLION  1000000000LL
     static double time_diff(timespec &start, timespec &stop) {
         double secs = stop.tv_sec - start.tv_sec;
         double nsecs = double(stop.tv_nsec - start.tv_nsec) / BILLION;
