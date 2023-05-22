@@ -13,6 +13,12 @@
 #include <folly/portability/Time.h>
 #endif
 
+#ifdef __MACH__
+#include <mach/clock.h>
+#include <mach/mach.h>
+#endif
+
+
 #include <folly/Function.h>
 #include <fmt/format.h>
 
@@ -90,8 +96,16 @@ public:
 
 private:
     void get_time(timespec &tm) {
-#if  defined(_WIN32) || defined(__APPLE__)
+#if  defined(_WIN32)
         int rc = clock_gettime(CLOCK_REALTIME, &tm);
+#elif defined(__MACH__)
+        clock_serv_t cclock;
+        mach_timespec_t mts;
+        host_get_clock_service(mach_host_self(), CALENDAR_CLOCK, &cclock);
+        clock_get_time(cclock, &mts);
+        mach_port_deallocate(mach_task_self(), cclock);
+        ts->tv_sec = mts.tv_sec;
+        ts->tv_nsec = mts.tv_nsec;
 #else
         int rc = clock_gettime(CLOCK_MONOTONIC, &tm);
 #endif
@@ -100,7 +114,7 @@ private:
         }
     }
 
-#define BILLION  1000000000LL
+#define       1000000000LL
     static double time_diff(timespec &start, timespec &stop) {
         double secs = stop.tv_sec - start.tv_sec;
         double nsecs = double(stop.tv_nsec - start.tv_nsec) / BILLION;
