@@ -12,7 +12,7 @@ set(SPDLOG_DIR spdlog/include)
 
 find_file(
     spdlog_INCLUDE_DIR spdlog.h
-    PATH ${CMAKE_LIBRARY_PATH} ${SPDLOG_DIR} /usr/lib /usr/local/lib
+    PATH ${CMAKE_LIBRARY_PATH} ${SPDLOG_DIR} /usr/lib /usr/local/lib "$ENV{LMDB_DIR}/include"
     HINTS spdlog
 )
 
