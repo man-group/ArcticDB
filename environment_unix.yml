@@ -21,21 +21,23 @@ dependencies:
   - aws-sdk-cpp
   - prometheus-cpp
   - libprotobuf < 4
-  - bitmagic==7.12.3
-  - spdlog=1.11.0
-  - fmt==9.1.0
+  - bitmagic
+  - spdlog
+  - fmt
   - folly==2022.10.31 # latest version published on vcpkg
   # Vendored build dependencies (see `cpp/thirdparty`)
   # Versions must be kept in sync
-  - xxhash==0.8.1  # assuming the vendored copy is the latest version
-  - semimap==1.0.0
-  - robin_hood==3.11.5
-  - rapidcheck==2023.4.13 # assuming the vendored copy is the latest version
+  - xxhash
+  - semimap
+  - robin_hood
+  - rapidcheck
+  - msgpack-c
+  - recycle
+  - remotery
+  # Matches the version of lmdb and lmdbxx as vendored
+  # via submodules.
   - lmdb==0.9.22
   - lmdbxx==0.9.14
-  - msgpack-c=6.0.0  # taking the latest on conda-forge based on the vendored CHANGELOG's
-  - recycle==6.0.0  # greatest smallest version based on the submodule commit
-  - remotery==1.2.1
   # Python dependences
   - python
   - numpy
