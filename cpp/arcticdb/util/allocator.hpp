@@ -374,7 +374,7 @@ public:
          * that we will end up with a larger memory footprint for not calling it, but
          * there are no windows alternatives.
          */
-#if !defined(_WIN32) && !defined(__APPLE__)
+#if !defined(_WIN32) && !defined(__APPLE__) && !defined(ARCTICDB_CONDA_BUILD)
         malloc_trim(0);
 #endif
     }
