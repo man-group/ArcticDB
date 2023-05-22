@@ -49,6 +49,11 @@ if(NOT ${ARCTICDB_USING_CONDA})
     set(Zstd_LIBRARY $<IF:$<TARGET_EXISTS:zstd::libzstd_shared>,zstd::libzstd_shared,zstd::libzstd_static>)
 else()
 
+    # ARCTICDB_USING_CONDA is used in header of the files including vendored
+    # sources to be able to use dependencies via conda at compile time.
+    add_compile_definitions(ARCTICDB_USING_CONDA)
+    
+
     SET(STATIC_LINK_STD_LIB OFF)
     SET(HIDE_LINKED_SYMBOLS OFF)
 
@@ -449,9 +454,6 @@ set (arcticdb_core_libraries
 # Dependencies expose different names of their libraries depending
 # on their origin (i.e. vendored source or packages on conda-forge).
 if(${ARCTICDB_USING_CONDA})
-    # ARCTICDB_USING_CONDA is used in header of the files including vendored
-    # sources to be able to use dependencies via conda at compile time.
-    add_compile_definitions(ARCTICDB_USING_CONDA)
 
     # We must use dynamic libraries.
     list (APPEND arcticdb_core_libraries
