@@ -22,10 +22,7 @@
 #include <mutex>
 #include <unordered_set>
 
-// for malloc_trim check if malloc_trim is available
-// 
-
-// check for linux
+// for malloc_trim on linux
 #if defined(__linux__) && defined(__GLIBC__) 
     #include <malloc.h>
 #endif
