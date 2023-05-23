@@ -150,7 +150,6 @@ class CMakeBuild(build_ext):
         assert len(candidates) == 1, f"Specify {env_var} or use a single build directory. {search}={candidates}"
 
         if ARCTICDB_CPU_COUNT == 0:
-            jobs = "-j", cpu_output.replace("-- CMAKE_BUILD_PARALLEL_LEVEL=", "").rstrip()
             try:
                 # Python API is not cgroups-aware yet, so use CMa ke:
                 cpu_output = subprocess.check_output([cmake, "-P", "cpp/CMake/CpuCount.cmake"], universal_newlines=True)
