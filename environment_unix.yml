@@ -8,6 +8,8 @@ dependencies:
   - gflags
   - doxygen
   - boost-cpp
+  - grpcio-tools
+  - protobuf
   # Build dependencies
   - krb5
   - lz4-c
