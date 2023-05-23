@@ -20,7 +20,7 @@ from wheel.bdist_wheel import bdist_wheel
 ARCTICDB_USING_CONDA  = os.environ.get("ARCTICDB_USING_CONDA", "0")
 ARCTICDB_USING_CONDA = ARCTICDB_USING_CONDA != "0"
 
-ARCTICDB_CPU_COUNT  = os.environ.get("ARCTICDB_USING_CONDA", "0")
+ARCTICDB_CPU_COUNT  = os.environ.get("ARCTICDB_CPU_COUNT", "0")
 ARCTICDB_CPU_COUNT = int(ARCTICDB_CPU_COUNT)
 
 print(f"ARCTICDB_USING_CONDA={ARCTICDB_USING_CONDA}")
@@ -69,7 +69,7 @@ class CompileProto(Command):
         grpc_version = self._PROTOBUF_TO_GRPC_VERSION.get(proto_ver, None)
         assert grpc_version, "Supported proto-vers arguments are " + ", ".join(self._PROTOBUF_TO_GRPC_VERSION)
 
-        # Manual virtualenv to avoid hard-coding Man internal locations:
+        # Manual virtualenv to avoid hard-coding Man internal locations
         pythonpath = mkdtemp()
         if not ARCTICDB_USING_CONDA:
             _log_and_run(
@@ -83,6 +83,7 @@ class CompileProto(Command):
             )
             env = {**os.environ, "PYTHONPATH": pythonpath, "PYTHONNOUSERSITE": "1"}
         else:
+            # grpcio-tools is already installed in the conda environment (see environment.yml)
             env = {**os.environ}
 
         # Compile
@@ -151,7 +152,7 @@ class CMakeBuild(build_ext):
 
         if ARCTICDB_CPU_COUNT == 0:
             try:
-                # Python API is not cgroups-aware yet, so use CMa ke:
+                # Python API is not cgroups-aware yet, so use CMake:
                 cpu_output = subprocess.check_output([cmake, "-P", "cpp/CMake/CpuCount.cmake"], universal_newlines=True)
                 jobs = "-j", cpu_output.replace("-- CMAKE_BUILD_PARALLEL_LEVEL=", "").rstrip()
             except Exception as e:
