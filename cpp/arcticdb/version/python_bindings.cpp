@@ -485,11 +485,9 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
         .def("dump_versions",
              &PythonVersionStore::dump_versions,
              "Dump version data.")
-#ifdef ARCTICDB_TEST
         .def("_set_validate_version_map",
              &PythonVersionStore::_test_set_validate_version_map,
              "Validate the version map.")
-#endif
         .def("_clear_symbol_list_keys",
              &PythonVersionStore::_clear_symbol_list_keys,
              "Delete all ref keys of type SYMBOL_LIST.")

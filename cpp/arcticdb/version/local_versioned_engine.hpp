@@ -312,7 +312,6 @@ public:
     std::unordered_map<KeyType, std::pair<size_t, size_t>> scan_object_sizes();
     std::shared_ptr<Store>& _test_get_store() { return store_; }
 
-    #ifdef ARCTICDB_TEST
     AtomKey _test_write_segment(const std::string& symbol);
 
     void _test_set_validate_version_map() {
@@ -321,7 +320,6 @@ public:
     void _test_set_store(std::shared_ptr<Store> store);
     std::shared_ptr<VersionMap> _test_get_version_map();
 
-    #endif
 protected:
     VersionedItem compact_incomplete_dynamic(
             const StreamId& stream_id,
