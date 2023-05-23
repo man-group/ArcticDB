@@ -230,3 +230,44 @@ void fix_stream_ids_of_index_keys(
     const StreamId &stream_id,
     const std::shared_ptr<VersionMapEntry> &entry);
 }
+
+inline arcticdb::proto::descriptors::SortedValue deduce_sorted(arcticdb::proto::descriptors::SortedValue existing_frame, arcticdb::proto::descriptors::SortedValue input_frame){
+    using namespace arcticdb;
+    constexpr auto UNKNOWN = proto::descriptors::SortedValue::UNKNOWN;
+    constexpr auto ASCENDING = proto::descriptors::SortedValue::ASCENDING;
+    constexpr auto DESCENDING = proto::descriptors::SortedValue::DESCENDING;
+    constexpr auto UNSORTED = proto::descriptors::SortedValue::UNSORTED;
+
+    auto final_state = UNSORTED;
+    switch(existing_frame){
+        case UNKNOWN:
+            if(input_frame != UNSORTED){
+                final_state = UNKNOWN;
+            }else{
+                final_state = UNSORTED;
+            }
+            break;
+        case ASCENDING:
+            if(input_frame  == UNKNOWN){
+                final_state = UNKNOWN;
+            }else if (input_frame  != ASCENDING){
+                final_state = UNSORTED;
+            }else{
+                final_state = ASCENDING;
+            }
+            break;
+        case DESCENDING:
+            if(input_frame  == UNKNOWN){
+                final_state = UNKNOWN;
+            }else if (input_frame  != DESCENDING){
+                final_state = UNSORTED;
+            }else{
+                final_state = DESCENDING;
+            }
+            break;
+        default:
+            final_state = UNSORTED;
+            break;
+    }
+    return final_state;
+}

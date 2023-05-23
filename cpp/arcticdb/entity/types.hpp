@@ -661,15 +661,11 @@ struct StreamDescriptor {
         data_->mutable_index()->CopyFrom(idx.data_);
     }
 
-    void set_sorted(SortedValue sorted) {
-        switch (sorted) {
-            case SortedValue::UNSORTED:data_->set_sorted(arcticc::pb2::descriptors_pb2::SortedValue::UNSORTED);break;
-            case SortedValue::DESCENDING:data_->set_sorted(arcticc::pb2::descriptors_pb2::SortedValue::DESCENDING);break;
-            case SortedValue::ASCENDING:data_->set_sorted(arcticc::pb2::descriptors_pb2::SortedValue::ASCENDING);break;
-            default:data_->set_sorted(arcticc::pb2::descriptors_pb2::SortedValue::UNKNOWN);
-        }
+    void set_sorted(arcticdb::proto::descriptors::SortedValue sorted) {
+        data_->set_sorted(sorted);
     }
-    arcticc::pb2::descriptors_pb2::SortedValue get_sorted() {
+    
+    arcticdb::proto::descriptors::SortedValue get_sorted() {
         return data_->sorted();
     }
     void set_index_type(const IndexDescriptor::Type type) {
