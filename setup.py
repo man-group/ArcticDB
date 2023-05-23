@@ -72,6 +72,9 @@ class CompileProto(Command):
         # Manual virtualenv to avoid hard-coding Man internal locations
         pythonpath = mkdtemp()
         if not ARCTICDB_USING_CONDA:
+            # Python protobuf 3 and 4 are incompatible and we do not want to dictate which version of protobuf
+            # the user can have, so we compile the Python binding files with both versions and dynamically load
+            # the correct version at run time.
             _log_and_run(
                 sys.executable,
                 "-mpip",
