@@ -51,7 +51,8 @@
     "openssl",
     "double-conversion",
     "libevent",
-    "gtest"
+    "gtest",
+    "rapidcheck"
   ],
   "overrides": [
     {
