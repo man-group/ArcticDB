@@ -56,6 +56,11 @@ else()
     # https://conda-forge.org/docs/maintainer/knowledge_base.html#newer-c-features-with-old-sdk
     add_compile_definitions(_LIBCPP_DISABLE_AVAILABILITY)
 
+    if(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
+        remove_definitions(-DFOLLY_HAVE_PREADV)
+        remove_definitions(-DFOLLY_HAVE_PWRITEV)
+    endif()
+
     SET(STATIC_LINK_STD_LIB OFF)
     SET(HIDE_LINKED_SYMBOLS OFF)
 
