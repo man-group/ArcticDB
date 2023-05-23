@@ -22,6 +22,7 @@
 #include <arcticdb/pipeline/frame_utils.hpp>
 #include <arcticdb/pipeline/write_frame.hpp>
 #include <arcticdb/stream/append_map.hpp>
+#include <arcticdb/version/version_utils.hpp>
 
 #include <pybind11/pybind11.h>
 
@@ -157,41 +158,6 @@ write_frame(
     // Write the keys of the slices into an index segment
     ARCTICDB_SUBSAMPLE_DEFAULT(WriteIndex)
     return index::write_index(std::move(frame), std::move(fut_slice_keys), key, store);
-}
-
-arcticdb::entity::SortedValue deduce_sorted(arcticdb::proto::descriptors::SortedValue existing_sorted, arcticdb::proto::descriptors::SortedValue new_sorted){
-    auto final_sorted = arcticdb::entity::SortedValue::UNSORTED;
-    switch(existing_sorted){
-        case arcticdb::proto::descriptors::SortedValue::UNKNOWN:
-            if(new_sorted != arcticdb::proto::descriptors::SortedValue::UNSORTED){
-                final_sorted = arcticdb::entity::SortedValue::UNKNOWN;
-            }else{
-                final_sorted = arcticdb::entity::SortedValue::UNSORTED;
-            }
-            break;
-        case arcticdb::proto::descriptors::SortedValue::ASCENDING:
-            if(new_sorted  == arcticdb::proto::descriptors::SortedValue::UNKNOWN){
-                final_sorted = arcticdb::entity::SortedValue::UNKNOWN;
-            }else if (new_sorted  != arcticdb::proto::descriptors::SortedValue::ASCENDING){
-                final_sorted = arcticdb::entity::SortedValue::UNSORTED;
-            }else{
-                final_sorted = arcticdb::entity::SortedValue::ASCENDING;
-            }
-            break;
-        case arcticdb::proto::descriptors::SortedValue::DESCENDING:
-            if(new_sorted  == arcticdb::proto::descriptors::SortedValue::UNKNOWN){
-                final_sorted = arcticdb::entity::SortedValue::UNKNOWN;
-            }else if (new_sorted  != arcticdb::proto::descriptors::SortedValue::DESCENDING){
-                final_sorted = arcticdb::entity::SortedValue::UNSORTED;
-            }else{
-                final_sorted = arcticdb::entity::SortedValue::DESCENDING;
-            }
-            break;
-        default:
-            final_sorted = arcticdb::entity::SortedValue::UNSORTED;
-            break;
-    }
-    return final_sorted;
 }
 
 folly::Future<entity::AtomKey> append_frame(
