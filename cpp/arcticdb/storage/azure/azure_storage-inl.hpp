@@ -17,7 +17,7 @@
 #include <google/protobuf/io/zero_copy_stream_impl_lite.h>
 #include <folly/gen/Base.h>
 #include <arcticdb/storage/storage_utils.hpp>
-#include <arcticdb/storage/s3/s3_utils.hpp>
+#include <arcticdb/storage/object_store_utils.hpp>
 #include <arcticdb/storage/storage_options.hpp>
 #include <arcticdb/entity/serialized_key.hpp>
 #include <arcticdb/util/exponential_backoff.hpp>
@@ -46,18 +46,18 @@ void do_write_impl(
     const std::string& root_folder,
     Azure::Storage::Blobs::BlobContainerClient& container_client,
     KeyBucketizer&& bucketizer) {
-    ARCTICDB_SAMPLE(S3StorageWrite, 0)
+    ARCTICDB_SAMPLE(AzureStorageWrite, 0)
     auto fmt_db = [](auto&& kv) { return kv.key_type(); };
 
     (fg::from(kvs.as_range()) | fg::move | fg::groupBy(fmt_db)).foreach(
         [&container_client, &root_folder, b=std::move(bucketizer)] (auto&& group) {
-        auto key_type_folder = s3::s3_key_type_folder(root_folder, group.key());
+        auto key_type_folder = object_store_utils::key_type_folder(root_folder, group.key());
         ARCTICDB_TRACE(log::storage(), "Azure key_type_folder is {}", key_type_folder);
 
         ARCTICDB_SUBSAMPLE(AzureStorageWriteValues, 0)
         for (auto& kv : group.values()) {
             auto& k = kv.variant_key();
-            auto blob_name = s3::s3_object_path(b.bucketize(key_type_folder, k), k);
+            auto blob_name = object_store_utils::object_path(b.bucketize(key_type_folder, k), k);
             auto& seg = kv.segment();
 
             std::shared_ptr<Buffer> tmp;
@@ -119,8 +119,8 @@ void do_read_impl(Composite<VariantKey> && ks,
         [&container_client, &root_folder, b=std::move(bucketizer), &visitor, &failed_reads,
          opts=opts] (auto&& group) {
         for (auto& k : group.values()) {
-            auto key_type_folder = s3::s3_key_type_folder(root_folder, variant_key_type(k));
-            auto blob_name = s3::s3_object_path(b.bucketize(key_type_folder, k), k);
+            auto key_type_folder = object_store_utils::key_type_folder(root_folder, variant_key_type(k));
+            auto blob_name = object_store_utils::object_path(b.bucketize(key_type_folder, k), k);
             try{
                 auto blob_client = container_client.GetBlockBlobClient(blob_name);
                 auto properties = blob_client.GetProperties().Value;
@@ -159,9 +159,9 @@ void do_remove_impl(Composite<VariantKey>&& ks,
     if (connect_to_azurite){ //https://github.com/Azure/Azurite/issues/1822 due to an open issue of Azurite not filling subrequeset response after batch delete
         (fg::from(ks.as_range()) | fg::move | fg::groupBy(fmt_db)).foreach(
             [&container_client, &root_folder, b=std::move(bucketizer), &failed_deletes, &ks] (auto&& group) {
-                auto key_type_folder = s3::s3_key_type_folder(root_folder, group.key());
+                auto key_type_folder = object_store_utils::key_type_folder(root_folder, group.key());
                 for (auto& k : group.values()) {
-                    auto blob_name = s3::s3_object_path(b.bucketize(key_type_folder, k), k);
+                    auto blob_name = object_store_utils::object_path(b.bucketize(key_type_folder, k), k);
                     ARCTICDB_RUNTIME_DEBUG(log::storage(), "Removing azure object with key {}", blob_name);
                     ARCTICDB_SUBSAMPLE(AzureStorageDeleteObjects, 0)
                     bool deleted = false;
@@ -190,10 +190,10 @@ void do_remove_impl(Composite<VariantKey>&& ks,
 
         (fg::from(ks.as_range()) | fg::move | fg::groupBy(fmt_db)).foreach(
             [&container_client, &root_folder, b=std::move(bucketizer), &failed_deletes, &batch, &ks, delete_object_limit=delete_object_limit] (auto&& group) {//bypass incorrect 'set but no used" error for delete_object_limit
-                auto key_type_folder = s3::s3_key_type_folder(root_folder, group.key());
+                auto key_type_folder = object_store_utils::key_type_folder(root_folder, group.key());
                 std::vector<Azure::Storage::DeferredResponse<Azure::Storage::Blobs::Models::DeleteBlobResult>> subrequest_responses;
                 for (auto k : folly::enumerate(group.values())) {
-                    auto blob_name = s3::s3_object_path(b.bucketize(key_type_folder, *k), *k);
+                    auto blob_name = object_store_utils::object_path(b.bucketize(key_type_folder, *k), *k);
                     ARCTICDB_RUNTIME_DEBUG(log::storage(), "Removing azure object with key {}", blob_name);
                     subrequest_responses.push_back(batch.DeleteBlob(blob_name));
                     if (k.index + 1 == delete_object_limit || k.index + 1 == group.size()) {
@@ -238,8 +238,8 @@ void do_iterate_type_impl(KeyType key_type,
                           PrefixHandler&& prefix_handler = default_prefix_handler(),
                           const std::string& prefix = std::string{}
 ) {
-    ARCTICDB_SAMPLE(S3StorageIterateType, 0)
-    auto key_type_dir = s3::s3_key_type_folder(root_folder, key_type);
+    ARCTICDB_SAMPLE(AzureStorageIterateType, 0)
+    auto key_type_dir = object_store_utils::key_type_folder(root_folder, key_type);
 
     KeyDescriptor key_descriptor(prefix,
         is_ref_key_class(key_type) ? IndexDescriptor::UNKNOWN : IndexDescriptor::TIMESTAMP, FormatType::TOKENIZED);
@@ -280,8 +280,8 @@ bool do_key_exists_impl(
     Azure::Storage::Blobs::BlobContainerClient& container_client,
     KeyBucketizer&& bucketizer
 ) {
-    auto key_type_folder = s3::s3_key_type_folder(root_folder, variant_key_type(key));
-    auto blob_name = s3::s3_object_path(bucketizer.bucketize(key_type_folder, key), key);
+    auto key_type_folder = object_store_utils::key_type_folder(root_folder, variant_key_type(key));
+    auto blob_name = object_store_utils::object_path(bucketizer.bucketize(key_type_folder, key), key);
     try{
         auto blob_client = container_client.GetBlockBlobClient(blob_name);
         auto properties = blob_client.GetProperties().Value;
@@ -301,20 +301,20 @@ bool do_key_exists_impl(
 } //namespace detail
 
 inline void AzureStorage::do_write(Composite<KeySegmentPair>&& kvs) {
-    detail::do_write_impl(std::move(kvs), root_folder_, container_client_, s3::detail::FlatBucketizer{});
+    detail::do_write_impl(std::move(kvs), root_folder_, container_client_, object_store_utils::FlatBucketizer{});
 }
 
 inline void AzureStorage::do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts) {
-    detail::do_update_impl(std::move(kvs), root_folder_, container_client_, s3::detail::FlatBucketizer{});
+    detail::do_update_impl(std::move(kvs), root_folder_, container_client_, object_store_utils::FlatBucketizer{});
 }
 
 template<class Visitor>
 void AzureStorage::do_read(Composite<VariantKey>&& ks, Visitor&& visitor, ReadKeyOpts opts) {
-    detail::do_read_impl(std::move(ks), std::move(visitor), root_folder_, container_client_, s3::detail::FlatBucketizer{}, opts);
+    detail::do_read_impl(std::move(ks), std::move(visitor), root_folder_, container_client_, object_store_utils::FlatBucketizer{}, opts);
 }
 
 inline void AzureStorage::do_remove(Composite<VariantKey>&& ks, RemoveOpts) {
-    detail::do_remove_impl(std::move(ks), root_folder_, container_client_, s3::detail::FlatBucketizer{}, connect_to_azurite_);
+    detail::do_remove_impl(std::move(ks), root_folder_, container_client_, object_store_utils::FlatBucketizer{}, connect_to_azurite_);
 }
 
 
@@ -325,11 +325,11 @@ void AzureStorage::do_iterate_type(KeyType key_type, Visitor&& visitor, const st
         return !prefix.empty() ? fmt::format("{}/{}*{}", key_type_dir, key_descriptor, prefix) : key_type_dir;
     };
 
-    detail::do_iterate_type_impl(key_type, std::move(visitor), root_folder_, container_client_, s3::detail::FlatBucketizer{}, std::move(prefix_handler), prefix);
+    detail::do_iterate_type_impl(key_type, std::move(visitor), root_folder_, container_client_, object_store_utils::FlatBucketizer{}, std::move(prefix_handler), prefix);
 }
 
 inline bool AzureStorage::do_key_exists(const VariantKey& key) {
-    return detail::do_key_exists_impl(key, root_folder_, container_client_, s3::detail::FlatBucketizer{});
+    return detail::do_key_exists_impl(key, root_folder_, container_client_, object_store_utils::FlatBucketizer{});
 }
 
 } // namespace arcticdb::storage::azure

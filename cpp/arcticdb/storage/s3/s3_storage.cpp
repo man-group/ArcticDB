@@ -35,7 +35,7 @@ std::streamsize S3StreamBuffer::xsputn(const char_type* s, std::streamsize n) {
 S3Storage::S3Storage(const LibraryPath &library_path, OpenMode mode, const Config &conf) :
     Parent(library_path, mode),
     s3_api_(S3ApiInstance::instance()),
-    root_folder_(get_root_folder(library_path)),
+    root_folder_(object_store_utils::get_root_folder(library_path)),
     bucket_name_(conf.bucket_name()) {
 
     auto creds = get_aws_credentials(conf);
@@ -51,7 +51,7 @@ S3Storage::S3Storage(const LibraryPath &library_path, OpenMode mode, const Confi
     if (!conf.prefix().empty()) {
         ARCTICDB_RUNTIME_DEBUG(log::storage(), "S3 prefix found, using: {}", conf.prefix());
         auto prefix_path = LibraryPath::from_delim_path(conf.prefix(), '.');
-        root_folder_ = get_root_folder(prefix_path);
+        root_folder_ = object_store_utils::get_root_folder(prefix_path);
     } else {
         ARCTICDB_RUNTIME_DEBUG(log::storage(), "S3 prefix not found, will use {}", root_folder_);
     }

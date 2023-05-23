@@ -217,6 +217,7 @@ set(arcticdb_srcs
         storage/common.hpp
         storage/config_resolvers.hpp
         storage/failure_simulation.hpp
+        storage/object_store_utils.hpp
         storage/library.hpp
         storage/library_index.hpp
         storage/library_manager.hpp
@@ -233,7 +234,6 @@ set(arcticdb_srcs
         storage/s3/s3_storage-inl.hpp
         storage/s3/s3_storage_tool.hpp
         storage/s3/s3_storage_tool-inl.hpp
-        storage/s3/s3_utils.hpp
         storage/azure/azure_storage-inl.hpp
         storage/azure/azure_storage.hpp
         storage/storage_factory.hpp

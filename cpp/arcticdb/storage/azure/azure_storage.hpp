@@ -9,8 +9,7 @@
 
 #include <arcticdb/storage/storage.hpp>
 #include <arcticdb/storage/storage_factory.hpp>
-#include <arcticdb/storage/s3/s3_utils.hpp>
-#include <arcticdb/storage/s3/s3_client_accessor.hpp>
+#include <arcticdb/storage/object_store_utils.hpp>
 #include <arcticdb/log/log.hpp>
 #include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/util/composite.hpp>
@@ -93,23 +92,23 @@ class AzureStorageFactory final : public StorageFactory<AzureStorageFactory> {
     Config conf_;
 };
 
-inline arcticdb::proto::storage::VariantStorage pack_config(const std::string &bucket_name) {
+inline arcticdb::proto::storage::VariantStorage pack_config(const std::string &container_name) {
     arcticdb::proto::storage::VariantStorage output;
-    arcticdb::proto::s3_storage::Config cfg;
-    cfg.set_bucket_name(bucket_name);
+    arcticdb::proto::azure_storage::Config cfg;
+    cfg.set_container_name(container_name);
     util::pack_to_any(cfg, *output.mutable_config());
     return output;
 }
 
 inline arcticdb::proto::storage::VariantStorage pack_config(
-        const std::string &bucket_name,
+        const std::string &container_name,
         const std::string &credential_name,
         const std::string &credential_key,
         const std::string &endpoint
         ) {
     arcticdb::proto::storage::VariantStorage output;
-    arcticdb::proto::s3_storage::Config cfg;
-    cfg.set_bucket_name(bucket_name);
+    arcticdb::proto::azure_storage::Config cfg;
+    cfg.set_container_name(container_name);
     cfg.set_credential_name(credential_name);
     cfg.set_credential_key(credential_key);
     cfg.set_endpoint(endpoint);
