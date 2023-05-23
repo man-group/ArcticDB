@@ -540,7 +540,9 @@ target_link_libraries(arcticdb_core PRIVATE
 GENERATE_EXPORT_HEADER(arcticdb_core)
 
 if (NOT WIN32)
-    add_compile_options("-Werror")
+    if(NOT ${ARCTICDB_USING_CONDA})
+        add_compile_options("-Werror")
+    endif()
     add_compile_options("-ggdb")
     add_compile_options("-fvisibility=hidden")
     add_compile_options("-fno-omit-frame-pointer")
@@ -574,7 +576,9 @@ target_include_directories(arcticdb_python PRIVATE
 
 if (NOT WIN32)
     add_compile_options("-ftemplate-depth=1000")
-    add_compile_options("-Werror")
+    if(NOT ${ARCTICDB_USING_CONDA})
+        add_compile_options("-Werror")
+    endif()
 endif ()
 
 ## arcticdb_ext python module
