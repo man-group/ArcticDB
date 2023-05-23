@@ -7,6 +7,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 """
 import copy
 import datetime
+from datetime import timedelta
 import math
 
 import numpy as np
@@ -1255,6 +1256,10 @@ def restrict_data_to_date_range_only(data: T, *, start: Timestamp, end: Timestam
         if not data.index.get_level_values(0).tz:
             start, end = _strip_tz(start, end)
         data = data.loc[pd.to_datetime(start) : pd.to_datetime(end)]
+    else:  # non-Pandas, try to slice it anyway
+        if not getattr(data, "timezone", None):
+            start, end = _strip_tz(start, end)
+        data = data[start.to_pydatetime() - timedelta(microseconds=1) : end.to_pydatetime() + timedelta(microseconds=1)]
     return data
 
 

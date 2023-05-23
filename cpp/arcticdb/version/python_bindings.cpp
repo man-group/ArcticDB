@@ -24,10 +24,8 @@
 
 namespace arcticdb::version_store {
 
-void register_bindings(py::module &m, py::exception<arcticdb::ArcticException>& base_exception) {
-    auto version = m.def_submodule("version_store", "Versioned storage implementation apis");
+void register_bindings(py::module &version, py::exception<arcticdb::ArcticException>& base_exception) {
 
-    py::register_exception<NoSuchVersionException>(version, "NoSuchVersionException", base_exception.ptr());
     py::register_exception<StreamDescriptorMismatch>(version, "StreamDescriptorMismatch", base_exception.ptr());
 
     py::class_<AtomKey, std::shared_ptr<AtomKey>>(version, "AtomKey")
@@ -577,14 +575,6 @@ void register_bindings(py::module &m, py::exception<arcticdb::ArcticException>& 
              &PythonVersionStore::latest_timestamp,
              "Returns latest timestamp of a symbol")
         ;
-
-    m.def("get_version_string", &get_arcticdb_version_string);
-
-    m.def("read_runtime_config", [](const py::object object) {
-        auto config = RuntimeConfig{};
-         python_util::pb_from_python(object, config);
-         read_runtime_config(config);
-    });
 
     py::class_<LocalVersionedEngine>(version, "VersionedEngine")
       .def(py::init<std::shared_ptr<storage::Library>>())

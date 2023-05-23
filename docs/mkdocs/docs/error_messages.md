@@ -1,14 +1,15 @@
 # Error Messages
 
-This page details the exceptions and associated error messages users are most likely to encounter, what they mean, and what (if anything) can be done to resolve the issue.
+This page details the exceptions and associated error messages users are most likely to encounter,
+what they mean, and what (if anything) can be done to resolve the issue.
 
-Note that for legacy reasons, the terms `symbol`, `stream`, and `stream ID` are used interchangeably.
+For legacy reasons, the terms `symbol`, `stream`, and `stream ID` are used interchangeably.
 
 ## Errors with numeric error codes
 
 !!! note
 
-    Please note that we are in the process of adding error codes to all user-facing errors. As a result, this section will expand as error codes are added to existing errors.
+    We are in the process of adding error codes to all user-facing errors. As a result, this section will expand as error codes are added to existing errors.
 
 ### Internal Errors
 
@@ -134,3 +135,26 @@ All of these errors are of type `arcticdb.exceptions.ArcticException`.
 | Unexpected column name | A column name was specified with the `QueryBuilder` that does not exist for this symbol, and the library has dynamic schema disabled. | None of the supported `QueryBuilder` operations (filtering, projections, group-bys and aggregations) make sense with non-existent columns. |
 | Non-numeric type provided to binary operation: <typename\> | Error messages like this imply that an operation that ArcticDB does not support was provided in the `QueryBuilder` argument e.g. adding two string columns together. | The `get_description` method can be used to inspect the types of the columns. A full list of supported operations are provided in the `QueryBuilder` [API documentation](/api/query_builder). |
 | Cannot compare <typename 1\> to <typename 2\> (possible categorical?) | If `get_description` indicates that a column is of categorical type, and this categorical is being used to store string values, then comparisons to other strings will fail with an error message like this one. | Categorical support in ArcticDB is [extremely limited](/faq#does-arcticdb-support-categorical-data), but may be added in the future. |
+
+## Exception Hierarchy
+
+ArcticDB exceptions are exposed in `arcticdb.exceptions` and sit in a hierarchy:
+
+```
+RuntimeError
+└-- ArcticException
+    |-- ArcticNativeNotYetImplemented
+    |-- DuplicateKeyException
+    |-- MissingDataException
+    |-- NoDataFoundException
+    |-- NoSuchVersionException
+    |-- NormalizationException
+    |-- PermissionException
+    |-- SchemaException
+    |-- SortingException
+    |   └-- UnsortedDataException
+    |-- StorageException
+    |-- StreamDescriptorMismatch
+    └-- InternalException
+```
+

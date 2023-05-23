@@ -2,36 +2,48 @@ name: arcticdb
 channels:
   - conda-forge
 dependencies:
-  - lmdb
+  # Build tools
+  - cmake
+  - gtest
+  - gflags
+  - doxygen
   - boost-cpp
-  - fmt
-  - spdlog
-  # This is the last version published on vcpkg the usual
-  # installation setup depends on.
-  - folly==2022.10.31
+  # Build dependencies
+  - krb5
   - lz4-c
-  - prometheus-cpp
   - double-conversion
   - libevent
-  - libprotobuf < 4
   - libmongocxx
   - zstd
   - pybind11
   - pcre
-  - gflags
   - cyrus-sasl
-  - python
-  - msgpack-c
-  - doxygen
   - aws-sdk-cpp
-  - gtest
-  - cmake
+  - prometheus-cpp
+  - libprotobuf < 4
   - bitmagic
+  - spdlog
+  - fmt
+  - folly==2022.10.31 # latest version published on vcpkg
+  # Vendored build dependencies (see `cpp/thirdparty`)
+  # Versions must be kept in sync
+  - xxhash
+  - semimap
+  - robin_hood
+  - rapidcheck
+  - msgpack-c
+  - recycle
+  - remotery
+  # Matches the version of lmdb and lmdbxx as vendored
+  # via submodules.
+  - lmdb==0.9.22
+  - lmdbxx==0.9.14
+  # Python dependences
+  - python
   - numpy
   - pandas
   - pytest
   - boto3
-  - krb5
   - werkzeug
   - moto
   - pytest-server-fixtures
@@ -39,10 +51,3 @@ dependencies:
   # See: https://github.com/man-group/ArcticDB/pull/291
   - hypothesis < 6.73
   - pytest-sugar
-  - xxhash
-  - semimap
-  - robin_hood
-  - rapidcheck
-  - recycle
-  - lmdbxx
-  - remotery

@@ -64,12 +64,13 @@ else()
     find_package(PCRE REQUIRED)
     find_package(Libevent  REQUIRED)
     find_package(semimap REQUIRED)
-    find_package(robin_hood REQUIRED)
-    find_package(msgpack-c REQUIRED)
+
     find_package(recycle REQUIRED)
+    find_package(remotery REQUIRED)
+    find_package(msgpack-c REQUIRED)
+    find_package(robin_hood REQUIRED)
     find_package(LMDB REQUIRED)
     find_package(LMDBXX REQUIRED)
-    find_package(remotery REQUIRED)
 
     set(ARCTICDB_MONGO_LIBS mongo::mongocxx_shared mongo::bsoncxx_shared)
 
@@ -461,9 +462,9 @@ if(${ARCTICDB_USING_CONDA})
     list (APPEND arcticdb_core_libraries
         xxHash::xxHash
         pcre
+        ${remotery_LIBRARY}
         msgpack-c
         ${LMDB_LIBRARIES}
-        ${remotery_LIBRARY}
     )
 else()
 
@@ -472,9 +473,9 @@ else()
     list (APPEND arcticdb_core_libraries
         xxhash_static
         unofficial::pcre::pcre
+        remotery_static
         msgpackc-cxx
         lmdb
-        remotery_static
     )
 endif()
 
