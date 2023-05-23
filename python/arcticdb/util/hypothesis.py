@@ -64,6 +64,13 @@ def non_zero_and_non_infinite(x):
 def integral_type_strategies(draw):
     return draw(from_dtype(draw(st.one_of([unsigned_integer_dtypes(), integer_dtypes()]))).filter(non_infinite))
 
+@st.composite
+def signed_integral_type_strategies(draw):
+    return draw(from_dtype(draw(st.one_of([integer_dtypes()]))).filter(non_infinite))
+
+@st.composite
+def unsigned_integral_type_strategies(draw):
+    return draw(from_dtype(draw(st.one_of([unsigned_integer_dtypes()]))).filter(non_infinite))
 
 @st.composite
 def dataframes_with_names_and_dtypes(draw, names, dtype_strategy):
