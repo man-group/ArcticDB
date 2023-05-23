@@ -41,7 +41,7 @@ dependencies:
   - lmdb==0.9.22
   - lmdbxx==0.9.14
   # Python dependences
-  - python
+  - python =3.10
   - numpy
   - pandas
   - pytest
