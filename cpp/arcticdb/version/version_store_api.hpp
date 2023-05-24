@@ -324,19 +324,16 @@ private:
     void delete_snapshot_sync(const SnapshotId& snap_name, const VariantKey& snap_key);
 };
 
-inline std::vector<ReadResult> frame_to_read_result(std::pair<std::vector<AtomKey>, std::vector<FrameAndDescriptor>>&& keys_frame_and_descriptors) {
-    auto& keys = keys_frame_and_descriptors.first;
-    auto& frame_and_descriptors = keys_frame_and_descriptors.second;
-
+inline std::vector<ReadResult> frame_to_read_result(std::vector<std::pair<VersionedItem, FrameAndDescriptor>>&& keys_frame_and_descriptors) {
     std::vector<ReadResult> read_results;
-    read_results.reserve(keys.size());
-    for (auto fd : folly::enumerate(frame_and_descriptors)) {
+    read_results.reserve(keys_frame_and_descriptors.size());
+    for (auto [item, fd] : keys_frame_and_descriptors) {
         read_results.emplace_back(ReadResult(
-            VersionedItem{std::move(keys[fd.index])},
-            PythonOutputFrame{fd->frame_, fd->buffers_},
-            fd->desc_.normalization(),
-            fd->desc_.user_meta(),
-            fd->desc_.multi_key_meta(),
+            item,
+            PythonOutputFrame{fd.frame_, fd.buffers_},
+            fd.desc_.normalization(),
+            fd.desc_.user_meta(),
+            fd.desc_.multi_key_meta(),
             std::vector<AtomKey>{}));
     }
     return read_results;

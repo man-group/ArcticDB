@@ -345,7 +345,7 @@ TEST_F(VersionStoreTest, StressBatchReadUncompressed) {
     }
 
     std::vector<ReadQuery> read_queries;
-    auto latest_versions = test_store_->batch_read(symbols, std::vector<VersionQuery>{}, read_queries, ReadOptions{});
+    auto latest_versions = test_store_->batch_read(symbols, std::vector<VersionQuery>(10), read_queries, ReadOptions{});
     for(auto version : folly::enumerate(latest_versions)) {
         auto expected = get_test_simple_frame(version->item.symbol(), 10, version.index);
         bool equal = expected.segment_ == version->frame_data.frame();

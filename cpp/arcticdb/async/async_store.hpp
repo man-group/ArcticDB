@@ -280,36 +280,27 @@ public:
         return res;
     }
 
-    std::vector<VariantKey> batch_read_compressed(
-        std::vector<entity::VariantKey> &&keys,
-        std::vector<ReadContinuation> &&continuations,
+    folly::Future<std::vector<VariantKey>> batch_read_compressed(
+        std::vector<entity::VariantKey>&& keys,
+        std::vector<ReadContinuation>&& continuations,
         const BatchReadArgs & args) override {
-        util::check(keys.size() == continuations.size(),
-                    "keys and continuations must has then same number of elements");
-        std::vector<folly::Future<VariantKey>> batch;
-        batch.reserve(args.batch_size_);
-        std::vector<VariantKey> res;
-        res.reserve(keys.size());
-        for (std::size_t i = 0; i < keys.size(); ++i) {
-            auto &key = keys[i];
-            auto &cont = continuations[i];
-            batch.push_back(
-                async::submit_io_task(ReadCompressedTask(key, library_, storage::ReadKeyOpts{}))
-                    .via(&async::cpu_executor())
-                    .thenValue(SegmentFunctionTask{std::move(cont)}));
 
-            if(batch.size() == args.batch_size_) {
-                auto vec = folly::collect(batch).get();
-                res.insert(end(res), std::make_move_iterator(std::begin(vec)), std::make_move_iterator(std::end(vec)));
-                batch.clear();
-            }
+        util::check(!keys.empty(), "Unexpected empty keys in batch_read_compressed");
+
+        auto key_seg_futs = folly::window(keys, [*this] (auto&& key) {
+                return async::submit_io_task(ReadCompressedTask(std::move(key), library_, storage::ReadKeyOpts{}));
+            }, args.batch_size_);
+
+        util::check(key_seg_futs.size() == keys.size(), "Size mismatch in batch_read_compressed: {} != {}", key_seg_futs.size(), keys.size());
+        std::vector<folly::Future<VariantKey>> result;
+        result.reserve(key_seg_futs.size());
+        for(auto&& key_seg_fut : folly::enumerate(key_seg_futs)) {
+            result.emplace_back(std::move(*key_seg_fut).thenValue([continuation=std::move(continuations[key_seg_fut.index])] (auto&& key_seg) mutable {
+                return continuation(std::move(key_seg));
+            }));
         }
 
-        if(!batch.empty()) {
-            auto vec = folly::collect(batch).get();
-            res.insert(end(res), std::make_move_iterator(std::begin(vec)), std::make_move_iterator(std::end(vec)));
-        }
-        return res;
+        return folly::collect(result).via(&async::io_executor());
     }
 
     std::vector<Composite<ProcessingSegment>> batch_read_uncompressed(
