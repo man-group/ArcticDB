@@ -40,17 +40,24 @@ namespace detail {
 
 static const size_t BATCH_SUBREQUEST_LIMIT = 1000;
 
+inline Azure::Core::Context get_context(unsigned int request_timeout){
+    Azure::Core::Context requestContext; //TODO: Maybe can be static but need to be careful with its shared_ptr and ContextSharedState
+    return requestContext.WithDeadline(std::chrono::system_clock::now() + std::chrono::milliseconds(request_timeout));
+}
+
 template<class KeyBucketizer>
 void do_write_impl(
     Composite<KeySegmentPair>&& kvs,
     const std::string& root_folder,
     Azure::Storage::Blobs::BlobContainerClient& container_client,
-    KeyBucketizer&& bucketizer) {
+    KeyBucketizer&& bucketizer,
+    const Azure::Storage::Blobs::UploadBlockBlobFromOptions& upload_option,
+    unsigned int request_timeout) {
     ARCTICDB_SAMPLE(AzureStorageWrite, 0)
     auto fmt_db = [](auto&& kv) { return kv.key_type(); };
 
     (fg::from(kvs.as_range()) | fg::move | fg::groupBy(fmt_db)).foreach(
-        [&container_client, &root_folder, b=std::move(bucketizer)] (auto&& group) {
+        [&container_client, &root_folder, b=std::move(bucketizer), &upload_option, &request_timeout] (auto&& group) {
         auto key_type_folder = object_store_utils::key_type_folder(root_folder, group.key());
         ARCTICDB_TRACE(log::storage(), "Azure key_type_folder is {}", key_type_folder);
 
@@ -71,10 +78,9 @@ void do_write_impl(
                             write_size);
 
             ARCTICDB_SUBSAMPLE(AzureStorageUploadObject, 0)
-
             try{
                 auto blob_client = container_client.GetBlockBlobClient(blob_name);
-                blob_client.UploadFrom(dst, write_size);
+                blob_client.UploadFrom(dst, write_size, upload_option, get_context(request_timeout));
             }
             catch (const Azure::Core::RequestFailedException& e){
                 util::raise_rte("Failed to write azure with key '{}' {} {}: {}",
@@ -97,35 +103,39 @@ void do_update_impl(
         Composite<KeySegmentPair>&& kvs,
         const std::string& root_folder,
         Azure::Storage::Blobs::BlobContainerClient& container_client,
-        KeyBucketizer&& bucketizer) {
+        KeyBucketizer&& bucketizer,
+        const Azure::Storage::Blobs::UploadBlockBlobFromOptions& upload_option,
+        unsigned int request_timeout) {
     // azure updates the key if it already exists
-    do_write_impl(std::move(kvs), root_folder, container_client, std::move(bucketizer));
+    do_write_impl(std::move(kvs), root_folder, container_client, std::move(bucketizer), upload_option, request_timeout);
 }
 
 struct UnexpectedAzureErrorException : public std::exception {};
 
 template<class Visitor, class KeyBucketizer>
 void do_read_impl(Composite<VariantKey> && ks,
-                  Visitor&& visitor,
-                  const std::string& root_folder,
-                  Azure::Storage::Blobs::BlobContainerClient& container_client,
-                  KeyBucketizer&& bucketizer,
-                  ReadKeyOpts opts) {
+                Visitor&& visitor,
+                const std::string& root_folder,
+                Azure::Storage::Blobs::BlobContainerClient& container_client,
+                KeyBucketizer&& bucketizer,
+                ReadKeyOpts opts,
+                const Azure::Storage::Blobs::DownloadBlobToOptions& download_option,
+                unsigned int request_timeout) {
     ARCTICDB_SAMPLE(AzureStorageRead, 0)
     auto fmt_db = [](auto&& k) { return variant_key_type(k); };
     std::vector<VariantKey> failed_reads;
 
     (fg::from(ks.as_range()) | fg::move | fg::groupBy(fmt_db)).foreach(
         [&container_client, &root_folder, b=std::move(bucketizer), &visitor, &failed_reads,
-         opts=opts] (auto&& group) {
+         opts=opts, &download_option, &request_timeout] (auto&& group) {
         for (auto& k : group.values()) {
             auto key_type_folder = object_store_utils::key_type_folder(root_folder, variant_key_type(k));
             auto blob_name = object_store_utils::object_path(b.bucketize(key_type_folder, k), k);
             try{
                 auto blob_client = container_client.GetBlockBlobClient(blob_name);
-                auto properties = blob_client.GetProperties().Value;
+                auto properties = blob_client.GetProperties(Azure::Storage::Blobs::GetBlobPropertiesOptions{}, get_context(request_timeout)).Value;
                 std::shared_ptr<Buffer> buffer = std::make_shared<Buffer>(properties.BlobSize);
-                blob_client.DownloadTo(buffer->preamble(), buffer->available());
+                blob_client.DownloadTo(buffer->preamble(), buffer->available(), download_option, get_context(request_timeout));
                 ARCTICDB_SUBSAMPLE(AzureStorageVisitSegment, 0)
                 visitor(k, Segment::from_buffer(std::move(buffer)));
 
@@ -152,13 +162,14 @@ void do_remove_impl(Composite<VariantKey>&& ks,
                     const std::string& root_folder,
                     Azure::Storage::Blobs::BlobContainerClient& container_client,
                     KeyBucketizer&& bucketizer,
-                    bool connect_to_azurite) {
+                    bool connect_to_azurite,
+                    unsigned int request_timeout) {
     ARCTICDB_SUBSAMPLE(AzureStorageDeleteBatch, 0)
     auto fmt_db = [](auto&& k) { return variant_key_type(k); };
     std::vector<VariantKey> failed_deletes;
     if (connect_to_azurite){ //https://github.com/Azure/Azurite/issues/1822 due to an open issue of Azurite not filling subrequeset response after batch delete
         (fg::from(ks.as_range()) | fg::move | fg::groupBy(fmt_db)).foreach(
-            [&container_client, &root_folder, b=std::move(bucketizer), &failed_deletes, &ks] (auto&& group) {
+            [&container_client, &root_folder, b=std::move(bucketizer), &failed_deletes, &ks, &request_timeout] (auto&& group) {
                 auto key_type_folder = object_store_utils::key_type_folder(root_folder, group.key());
                 for (auto& k : group.values()) {
                     auto blob_name = object_store_utils::object_path(b.bucketize(key_type_folder, k), k);
@@ -167,7 +178,7 @@ void do_remove_impl(Composite<VariantKey>&& ks,
                     bool deleted = false;
                     try{
                         auto blob_client = container_client.GetBlockBlobClient(blob_name);
-                        auto response = blob_client.Delete();
+                        auto response = blob_client.Delete(Azure::Storage::Blobs::DeleteBlobOptions{}, get_context(request_timeout));
                         deleted = response.Value.Deleted;
                     }
                     catch (const Azure::Core::RequestFailedException& e){
@@ -189,7 +200,7 @@ void do_remove_impl(Composite<VariantKey>&& ks,
         auto batch = container_client.CreateBatch();
 
         (fg::from(ks.as_range()) | fg::move | fg::groupBy(fmt_db)).foreach(
-            [&container_client, &root_folder, b=std::move(bucketizer), &failed_deletes, &batch, &ks, delete_object_limit=delete_object_limit] (auto&& group) {//bypass incorrect 'set but no used" error for delete_object_limit
+            [&container_client, &root_folder, b=std::move(bucketizer), &failed_deletes, &batch, &ks, delete_object_limit=delete_object_limit, &request_timeout] (auto&& group) {//bypass incorrect 'set but no used" error for delete_object_limit
                 auto key_type_folder = object_store_utils::key_type_folder(root_folder, group.key());
                 std::vector<Azure::Storage::DeferredResponse<Azure::Storage::Blobs::Models::DeleteBlobResult>> subrequest_responses;
                 for (auto k : folly::enumerate(group.values())) {
@@ -199,7 +210,7 @@ void do_remove_impl(Composite<VariantKey>&& ks,
                     if (k.index + 1 == delete_object_limit || k.index + 1 == group.size()) {
                         ARCTICDB_SUBSAMPLE(AzureStorageDeleteObjects, 0)
                         try{
-                            auto response = container_client.SubmitBatch(batch);
+                            auto response = container_client.SubmitBatch(batch, Azure::Storage::Blobs::SubmitBlobBatchOptions(), get_context(request_timeout));
                         }
                         catch (const Azure::Core::RequestFailedException& e){
                             util::raise_rte("Failed to create azure segment batch remove request {}: {}",
@@ -301,20 +312,20 @@ bool do_key_exists_impl(
 } //namespace detail
 
 inline void AzureStorage::do_write(Composite<KeySegmentPair>&& kvs) {
-    detail::do_write_impl(std::move(kvs), root_folder_, container_client_, object_store_utils::FlatBucketizer{});
+    detail::do_write_impl(std::move(kvs), root_folder_, container_client_, object_store_utils::FlatBucketizer{}, upload_option_, request_timeout_);
 }
 
 inline void AzureStorage::do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts) {
-    detail::do_update_impl(std::move(kvs), root_folder_, container_client_, object_store_utils::FlatBucketizer{});
+    detail::do_update_impl(std::move(kvs), root_folder_, container_client_, object_store_utils::FlatBucketizer{}, upload_option_, request_timeout_);
 }
 
 template<class Visitor>
 void AzureStorage::do_read(Composite<VariantKey>&& ks, Visitor&& visitor, ReadKeyOpts opts) {
-    detail::do_read_impl(std::move(ks), std::move(visitor), root_folder_, container_client_, object_store_utils::FlatBucketizer{}, opts);
+    detail::do_read_impl(std::move(ks), std::move(visitor), root_folder_, container_client_, object_store_utils::FlatBucketizer{}, opts, download_option_, request_timeout_);
 }
 
 inline void AzureStorage::do_remove(Composite<VariantKey>&& ks, RemoveOpts) {
-    detail::do_remove_impl(std::move(ks), root_folder_, container_client_, object_store_utils::FlatBucketizer{}, connect_to_azurite_);
+    detail::do_remove_impl(std::move(ks), root_folder_, container_client_, object_store_utils::FlatBucketizer{}, connect_to_azurite_, request_timeout_);
 }
 
 

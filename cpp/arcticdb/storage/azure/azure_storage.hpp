@@ -63,13 +63,13 @@ class AzureStorage final : public Storage<AzureStorage> {
     }
 
   private:
-    auto& client() { return container_client_; }
-    const std::string& root_folder() const { return root_folder_; }
-
     std::string blob_container_url_;
     Azure::Storage::Blobs::BlobContainerClient container_client_;
     std::string root_folder_;
     bool connect_to_azurite_;
+    unsigned int request_timeout_;
+    Azure::Storage::Blobs::UploadBlockBlobFromOptions upload_option_;
+    Azure::Storage::Blobs::DownloadBlobToOptions download_option_;
 };
 
 

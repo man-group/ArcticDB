@@ -8,10 +8,8 @@ message Config {
     string credential_key = 3;
     string endpoint = 4;
     uint32 max_connections = 5;
-    uint32 connect_timeout = 6;
-    uint32 request_timeout = 7;
-    bool ssl = 8;
-    string prefix = 9;
-    bool https = 10;
-    bool connect_to_azurite = 11;
+    uint32 request_timeout = 6;
+    string prefix = 7;
+    bool https = 8;
+    bool connect_to_azurite = 9;
 }
