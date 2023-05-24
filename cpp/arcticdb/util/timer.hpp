@@ -13,12 +13,6 @@
 #include <folly/portability/Time.h>
 #endif
 
-#ifdef __MACH__
-#include <mach/clock.h>
-#include <mach/mach.h>
-#endif
-
-
 #include <folly/Function.h>
 #include <fmt/format.h>
 
