@@ -113,6 +113,7 @@ jobs:
     with:
       job_type: follower
       python3: ${{matrix.python3}}
+      python_deps: ${{matrix.python_deps}}
       cibw_build: ${{format('cp3{0}-manylinux_x86_64', matrix.python3)}}
       cibw_image_tag: ${{needs.cibw_docker_image.outputs.tag}}
       cibw_version: ${{needs.common_config.outputs.cibuildwheel_ver}}
