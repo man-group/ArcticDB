@@ -3,6 +3,9 @@
 #include <arcticdb/version/version_map_batch_methods.hpp>
 #include <arcticdb/stream/test/stream_test_common.hpp>
 
+using namespace arcticdb;
+using namespace arcticdb::pipelines;
+
 struct VersionMapBatchStore : arcticdb::TestStore {
 protected:
     std::string get_name() override {
@@ -29,56 +32,231 @@ void add_versions_for_stream(
 };
 }
 
-TEST_F(VersionMapBatchStore, Simple) {
-    using namespace arcticdb;
-    using namespace arcticdb::pipelines;
-
+TEST_F(VersionMapBatchStore, SimpleVersionIdQueries) {
     auto store = test_store_->_test_get_store();
     auto version_map = std::make_shared<VersionMap>();
 
-    for(auto i = 0u; i < 5; ++i) {
-        auto stream = fmt::format("stream_{}", i);
-        add_versions_for_stream(version_map, store, stream, 5);
-    }
+    uint64_t num_streams = 10;
+    uint64_t num_versions_per_stream = 5;
 
-    for(auto i = 5u; i < 10u; ++i) {
+    for(uint64_t i = 0; i < num_streams; ++i) {
         auto stream = fmt::format("stream_{}", i);
-        add_versions_for_stream(version_map, store, stream, 5);
-    }
-
-    for(auto i = 0u; i < 5; ++i) {
-        auto stream = fmt::format("stream_{}", i);
-        add_versions_for_stream(version_map, store, stream, 5, 5);
+        add_versions_for_stream(version_map, store, stream, num_versions_per_stream);
     }
 
     std::vector<StreamId> stream_ids;
     std::vector<VersionQuery> version_queries;
 
-    stream_ids.push_back(StreamId{"stream_1"});
-    version_queries.push_back(VersionQuery{SpecificVersionQuery{4}, false, false});
-    stream_ids.push_back(StreamId{"stream_4"});
-    version_queries.push_back(VersionQuery{SpecificVersionQuery{4}, false, false});
-    stream_ids.push_back(StreamId{"stream_1"});
-    version_queries.push_back(VersionQuery{SpecificVersionQuery{1}, false, false});
-    stream_ids.push_back(StreamId{"stream_3"});
-    version_queries.push_back(VersionQuery{SpecificVersionQuery{7}, false, false});
-    stream_ids.push_back(StreamId{"stream_8"});
-    version_queries.push_back(VersionQuery{SpecificVersionQuery{4}, false, false});
+    // Add queries
+    for(uint64_t i = 0; i < num_streams; i++){
+        auto stream = fmt::format("stream_{}", i);
+        for(uint64_t j = 0; j < num_versions_per_stream; j++){
+            stream_ids.push_back(StreamId{stream});
+            version_queries.push_back(VersionQuery{SpecificVersionQuery{j}, false, false});
+        }
+    }
 
-
+    // do batch versions read
     auto versions = folly::collect(batch_get_versions(store, version_map, stream_ids, version_queries)).get();
-    ASSERT_EQ(versions[0]->id(), StreamId{"stream_1"});
-    ASSERT_EQ(versions[0]->version_id(), 4);
+    
+    // Do the checks
+    for(uint64_t i = 0; i < num_streams; i++){
+        auto stream = fmt::format("stream_{}", i);
+        for(uint64_t j = 0; j < num_versions_per_stream; j++){
+            uint64_t idx = i * num_versions_per_stream + j;
+            ASSERT_EQ(versions[idx]->id(), StreamId{stream});
+            ASSERT_EQ(versions[idx]->version_id(), j);
+        }
+    }
+}
 
-    ASSERT_EQ(versions[1]->id(), StreamId{"stream_4"});
-    ASSERT_EQ(versions[1]->version_id(), 4);
+TEST_F(VersionMapBatchStore, SimpleTimestampQueries) {
+    auto store = test_store_->_test_get_store();
+    auto version_map = std::make_shared<VersionMap>();
 
-    ASSERT_EQ(versions[2]->id(), StreamId{"stream_1"});
-    ASSERT_EQ(versions[2]->version_id(), 1);
+    uint64_t num_streams = 10;
+    uint64_t num_versions_per_stream = 5;
 
-    ASSERT_EQ(versions[3]->id(), StreamId{"stream_3"});
-    ASSERT_EQ(versions[3]->version_id(), 7);
+    for(uint64_t i = 0; i < num_streams; ++i) {
+        auto stream = fmt::format("stream_{}", i);
+        add_versions_for_stream(version_map, store, stream, num_versions_per_stream);
+    }
 
-    ASSERT_EQ(versions[4]->id(), StreamId{"stream_8"});
-    ASSERT_EQ(versions[4]->version_id(), 4);
+    std::vector<StreamId> stream_ids;
+    std::vector<VersionQuery> version_queries;
+
+    // First, for test purposes information, we retrieve the full information the stored data
+    // in order to know the timestamps
+
+    // Add queries
+    for(uint64_t i = 0; i < num_streams; i++){
+        auto stream = fmt::format("stream_{}", i);
+        for(uint64_t j = 0; j < num_versions_per_stream; j++){
+            stream_ids.push_back(StreamId{stream});
+            version_queries.push_back(VersionQuery{SpecificVersionQuery{j}, false, false});
+        }
+    }
+
+    // do batch versions read
+    auto versions = folly::collect(batch_get_versions(store, version_map, stream_ids, version_queries)).get();
+
+    //Secondly, once we have the timestamps in hand, we are going to query them
+    version_queries.clear();
+    for(uint64_t i = 0; i < num_streams; i++){
+        for(uint64_t j = 0; j < num_versions_per_stream; j++){
+            uint64_t idx = i * num_versions_per_stream + j;
+            version_queries.push_back(VersionQuery{TimestampVersionQuery{timestamp(versions[idx]->creation_ts())}, false, false});
+        }
+    }
+
+    // Now we can perform the actual batch query per timestamps
+    auto versions_querying_with_timestamp = folly::collect(batch_get_versions(store, version_map, stream_ids, version_queries)).get();
+
+    // Do the checks
+    for(uint64_t i = 0; i < num_streams; i++){
+        auto stream = fmt::format("stream_{}", i);
+        for(uint64_t j = 0; j < num_versions_per_stream; j++){
+            uint64_t idx = i * num_versions_per_stream + j;
+            ASSERT_EQ(versions_querying_with_timestamp[idx]->id(), StreamId{stream});
+            ASSERT_EQ(versions_querying_with_timestamp[idx]->version_id(), versions[idx]->version_id());
+            ASSERT_EQ(versions_querying_with_timestamp[idx]->creation_ts(), versions[idx]->creation_ts());
+        }
+    }
+}
+
+
+TEST_F(VersionMapBatchStore, MultipleVersionsSameSymbolVersionIdQueries) {
+    auto store = test_store_->_test_get_store();
+    auto version_map = std::make_shared<VersionMap>();
+
+    auto stream = fmt::format("stream_{}", 0);
+    uint64_t num_versions = 50;
+
+    // Add versions
+    add_versions_for_stream(version_map, store, stream, num_versions);
+
+    std::vector<StreamId> stream_ids;
+    std::vector<VersionQuery> version_queries;
+
+    // Add queries
+    for(uint64_t i = 0; i < num_versions; i++){
+        stream_ids.push_back(StreamId{"stream_0"});
+        version_queries.push_back(VersionQuery{SpecificVersionQuery{i}, false, false});
+    }
+
+    // Do query
+    auto versions = folly::collect(batch_get_versions(store, version_map, stream_ids, version_queries)).get();
+    
+    // Check results
+    for(uint64_t i = 0; i < num_versions; i++){
+        ASSERT_EQ(versions[i]->id(), StreamId{stream});
+        ASSERT_EQ(versions[i]->version_id(), i);
+    }
+}
+
+
+TEST_F(VersionMapBatchStore, MultipleVersionsSameSymbolTimestampQueries) {
+    auto store = test_store_->_test_get_store();
+    auto version_map = std::make_shared<VersionMap>();
+
+    uint64_t num_versions = 50;
+    
+    // Add versions
+    auto stream = fmt::format("stream_{}", 0);
+    std::vector<StreamId> stream_ids;
+    std::vector<VersionQuery> version_queries;
+    add_versions_for_stream(version_map, store, stream, num_versions);
+
+    // First, for test purposes information, we retrieve the full information the stored data
+    // in order to know the timestamps
+
+    // Add queries
+    for(uint64_t i = 0; i < num_versions; i++){
+        stream_ids.push_back(StreamId{"stream_0"});
+        version_queries.push_back(VersionQuery{SpecificVersionQuery{i}, false, false});
+    }
+
+    // Do query
+    auto versions = folly::collect(batch_get_versions(store, version_map, stream_ids, version_queries)).get();
+
+    //Secondly, once we have the timestamps in hand, we are going to query them
+    version_queries.clear();
+    for(uint64_t i = 0; i < num_versions; i++){
+        version_queries.push_back(VersionQuery{TimestampVersionQuery{timestamp(versions[i]->creation_ts())}, false, false});
+    }
+
+    // Now we can perform the actual batch query per timestamps
+    auto versions_querying_with_timestamp = folly::collect(batch_get_versions(store, version_map, stream_ids, version_queries)).get();
+
+    // Do the checks
+    for(uint64_t i = 0; i < num_versions; i++){
+        ASSERT_EQ(versions_querying_with_timestamp[i]->id(), StreamId{stream});
+        ASSERT_EQ(versions_querying_with_timestamp[i]->version_id(), versions[i]->version_id());
+        ASSERT_EQ(versions_querying_with_timestamp[i]->creation_ts(), versions[i]->creation_ts());
+    }
+}
+
+TEST_F(VersionMapBatchStore, CombinedQueries) {
+    auto store = test_store_->_test_get_store();
+    auto version_map = std::make_shared<VersionMap>();
+
+    uint64_t num_streams = 10;
+    uint64_t num_versions_per_stream = 5;
+
+    for(uint64_t i = 0; i < num_streams; ++i) {
+        auto stream = fmt::format("stream_{}", i);
+        add_versions_for_stream(version_map, store, stream, num_versions_per_stream);
+    }
+
+    std::vector<StreamId> stream_ids;
+    std::vector<VersionQuery> version_queries;
+
+    // First, for test purposes information, we retrieve the full information the stored data
+    // in order to know the timestamps
+
+    // Add queries
+    for(uint64_t i = 0; i < num_streams; i++){
+        auto stream = fmt::format("stream_{}", i);
+        for(uint64_t j = 0; j < num_versions_per_stream; j++){
+            stream_ids.push_back(StreamId{stream});
+            version_queries.push_back(VersionQuery{SpecificVersionQuery{j}, false, false});
+        }
+    }
+
+    // do batch versions read
+    auto versions = folly::collect(batch_get_versions(store, version_map, stream_ids, version_queries)).get();
+
+    //Secondly, once we have the timestamps in hand, we are going to query them
+    version_queries.clear();
+    stream_ids.clear();
+    for(uint64_t i = 0; i < num_streams; i++){
+        auto stream = fmt::format("stream_{}", i);
+        for(uint64_t j = 0; j < num_versions_per_stream; j++){
+            uint64_t idx = i * num_versions_per_stream + j;
+            stream_ids.push_back(StreamId{stream});
+            version_queries.push_back(VersionQuery{SpecificVersionQuery{j}, false, false});
+            stream_ids.push_back(StreamId{stream});
+            version_queries.push_back(VersionQuery{TimestampVersionQuery{timestamp(versions[idx]->creation_ts())}, false, false});
+            stream_ids.push_back(StreamId{stream});
+            version_queries.push_back(VersionQuery{std::monostate{}, false, false});
+        }
+    }
+
+    auto versions_querying_with_mix_types = folly::collect(batch_get_versions(store, version_map, stream_ids, version_queries)).get();
+
+    // Do the checks
+    for(uint64_t i = 0; i < num_streams; i++){
+        auto stream = fmt::format("stream_{}", i);
+        for(uint64_t j = 0; j < num_versions_per_stream; j++){
+            uint64_t idx_versions = i * num_versions_per_stream + j;
+            uint64_t idx = idx_versions * 3;
+            ASSERT_EQ(versions_querying_with_mix_types[idx]->id(), StreamId{stream});
+            ASSERT_EQ(versions_querying_with_mix_types[idx + 1]->id(), StreamId{stream});
+            ASSERT_EQ(versions_querying_with_mix_types[idx + 2]->id(), StreamId{stream});
+            ASSERT_EQ(versions_querying_with_mix_types[idx]->version_id(), j);
+            ASSERT_EQ(versions_querying_with_mix_types[idx + 1]->version_id(), versions[idx_versions]->version_id());
+            ASSERT_EQ(versions_querying_with_mix_types[idx + 1]->creation_ts(), versions[idx_versions]->creation_ts());
+            ASSERT_EQ(versions_querying_with_mix_types[idx + 2]->version_id(), num_versions_per_stream - 1);
+        }
+    }
 }

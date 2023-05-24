@@ -358,9 +358,22 @@ inline std::optional<VersionId> get_next_version_in_entry(const std::shared_ptr<
     return std::nullopt;
 }
 
-inline std::optional<AtomKey> find_index_key_for_version_id(VersionId version_id, const std::shared_ptr<VersionMapEntry>& entry, bool included_deleted=true) {
+inline std::optional<AtomKey> find_index_key_for_version_id(
+    VersionId version_id,
+    const std::shared_ptr<VersionMapEntry>& entry,
+    bool included_deleted=true) {
     auto key = std::find_if(std::begin(entry->keys_), std::end(entry->keys_), [version_id] (const auto& key) {
         return is_index_key_type(key.type()) && key.version_id() == version_id;
+    });
+    if(key == std::end(entry->keys_))
+        return std::nullopt;
+
+    return included_deleted || !entry->is_tombstoned(*key) ? std::make_optional(*key) : std::nullopt;
+}
+
+inline std::optional<AtomKey> find_index_key_for_version_timestamp(timestamp as_of, const std::shared_ptr<VersionMapEntry>& entry, bool included_deleted=true) {
+    auto key = std::find_if(std::begin(entry->keys_), std::end(entry->keys_), [as_of] (const auto& key) {
+        return is_index_key_type(key.type()) && key.creation_ts() == as_of;
     });
     if(key == std::end(entry->keys_))
         return std::nullopt;
