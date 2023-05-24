@@ -20,13 +20,10 @@ from wheel.bdist_wheel import bdist_wheel
 ARCTICDB_USING_CONDA  = os.environ.get("ARCTICDB_USING_CONDA", "0")
 ARCTICDB_USING_CONDA = ARCTICDB_USING_CONDA != "0"
 
-<<<<<<< HEAD
+# numbert of cores to use for compilation
 ARCTICDB_BUILD_CPU_COUNT  = os.environ.get("ARCTICDB_USING_CONDA", "0")
 ARCTICDB_BUILD_CPU_COUNT = int(ARCTICDB_BUILD_CPU_COUNT)
-=======
-ARCTICDB_CPU_COUNT  = os.environ.get("ARCTICDB_CPU_COUNT", "0")
-ARCTICDB_CPU_COUNT = int(ARCTICDB_CPU_COUNT)
->>>>>>> a13a3ec479ae788050d5d10c0f74a4059d889e56
+
 
 print(f"ARCTICDB_USING_CONDA={ARCTICDB_USING_CONDA}")
 
