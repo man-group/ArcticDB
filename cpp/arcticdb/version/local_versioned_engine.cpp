@@ -1160,31 +1160,25 @@ SpecificAndLatestVersionKeys LocalVersionedEngine::get_stream_index_map(
     return std::make_pair(specific_versions, latest_versions);
 }
 
+folly::Future<std::pair<std::optional<VariantKey>, std::optional<google::protobuf::Any>>> LocalVersionedEngine::get_metadata_async(folly::Future<std::optional<AtomKey>>&& version_fut){
+    return  std::move(version_fut)
+    .thenValue([this](std::optional<AtomKey> key){
+        if (key.has_value()){
+            return store()->read_metadata(key.value());
+        }else{
+            return folly::makeFuture(std::make_pair(std::nullopt, std::nullopt));
+        }
+    });
+}
+
 std::vector<std::pair<std::optional<VariantKey>, std::optional<google::protobuf::Any>>> LocalVersionedEngine::batch_read_metadata_internal(
     const std::vector<StreamId>& stream_ids,
     const std::vector<VersionQuery>& version_queries
     ) {
-    auto [specific_versions_index_map, latest_versions_index_map] = get_stream_index_map(stream_ids, version_queries);
-    auto version_queries_is_empty = version_queries.empty();
+    auto versions_fut = batch_get_versions(store(), version_map(), stream_ids, version_queries);
     std::vector<folly::Future<std::pair<std::optional<VariantKey>, std::optional<google::protobuf::Any>>>> fut_vec;
-    for(const auto& stream_id : folly::enumerate(stream_ids)) {
-        if(!version_queries_is_empty && std::holds_alternative<SpecificVersionQuery>(version_queries[stream_id.index].content_)){
-            const auto& query = version_queries[stream_id.index].content_;
-            auto specific_version_map_key = std::make_pair(*stream_id, std::get<SpecificVersionQuery>(query).version_id_);
-            auto specific_version_it = specific_versions_index_map->find(specific_version_map_key);
-            if (specific_version_it != specific_versions_index_map->end()){
-                fut_vec.push_back(store()->read_metadata(specific_version_it->second));
-            }else{
-                fut_vec.push_back(std::make_pair(std::nullopt, std::nullopt));
-            }
-        }else{
-            auto last_version_it = latest_versions_index_map->find(*stream_id);
-            if(last_version_it != latest_versions_index_map->end()) {
-                fut_vec.push_back(store()->read_metadata(last_version_it->second));
-            }else{
-                fut_vec.push_back(std::make_pair(std::nullopt, std::nullopt));   
-            }
-        }
+    for (auto& version: versions_fut){
+        fut_vec.push_back(get_metadata_async(std::move(version)));
     }
     return folly::collect(fut_vec).get();
 }
