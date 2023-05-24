@@ -247,6 +247,26 @@ def test_read_meta_batch_with_as_ofs(arctic_library):
     assert results_list[4].metadata == {"meta2": 8}
 
 
+def test_read_meta_batch_with_as_ofs_stress(arctic_library):
+    lib = arctic_library
+    num_symbols = 10
+    num_versions = 20
+    for sym in range(num_symbols):
+        for version in range(num_versions):
+            lib.write_pickle("sym_"+str(sym), version, metadata={"meta_"+str(sym): version}, prune_previous_versions=False)
+
+    requests = [ReadInfoRequest("sym_"+str(sym), as_of=version) for sym in range(num_symbols) for version in range(num_versions) ]
+    results_list = lib.read_metadata_batch(requests)
+    for sym in range(num_symbols):
+        for version in range(num_versions):
+            idx = sym * num_versions + version
+            assert results_list[idx].metadata == {"meta_"+str(sym): version}
+
+    requests = ["sym_"+str(sym) for sym in range(num_symbols)]
+    results_list = lib.read_metadata_batch(requests)
+    for sym in range(num_symbols):
+        assert results_list[sym].metadata == {"meta_"+str(sym): num_versions - 1}
+
 def test_basic_write_read_update_and_append(arctic_library):
     lib = arctic_library
     df = pd.DataFrame({"col1": [1, 2, 3], "col2": [4, 5, 6]})
@@ -526,6 +546,7 @@ def test_write_object_in_batch_without_pickle_mode_many_symbols(arctic_library):
     """Writing outside of pickle mode should fail when the user does not use the dedicated method."""
     lib = arctic_library
     with pytest.raises(ArcticUnsupportedDataTypeException) as e:
+        lib.write_batch([WritePayload(f"test_{i}", A(f"id_{i}")) for i in range(10)])
         lib.write_batch([WritePayload(f"test_{i}", A(f"id_{i}")) for i in range(10)])
     message: str = e.value.args[0]
     assert "(and more)... 10 data in total have bad types." in message

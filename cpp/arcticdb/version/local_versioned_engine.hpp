@@ -175,6 +175,12 @@ public:
         arcticdb::proto::descriptors::UserDefinedMetadata&& user_meta
     );
 
+    folly::Future<std::pair<std::optional<VariantKey>, std::optional<google::protobuf::Any>>> get_metadata_future_impl(
+        std::optional<AtomKey> key);
+
+    folly::Future<std::pair<std::optional<VariantKey>, std::optional<google::protobuf::Any>>> get_metadata_future(
+        folly::Future<std::optional<AtomKey>>&& version_fut);
+
     void create_column_stats_internal(
         const VersionedItem& versioned_item,
         ColumnStats& column_stats,
