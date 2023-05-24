@@ -96,25 +96,14 @@ public:
 
 private:
     void get_time(timespec &tm) {
-#if  defined(_WIN32)
+#ifdef _WIN32
         int rc = clock_gettime(CLOCK_REALTIME, &tm);
-        if (rc == -1) {
-            throw std::runtime_error("Failed to get time");
-        }
-#elif defined(__MACH__)
-        clock_serv_t cclock;
-        mach_timespec_t mts;
-        host_get_clock_service(mach_host_self(), CALENDAR_CLOCK, &cclock);
-        clock_get_time(cclock, &mts);
-        mach_port_deallocate(mach_task_self(), cclock);
-        tm.tv_sec = mts.tv_sec;
-        tm.tv_nsec = mts.tv_nsec;
 #else
         int rc = clock_gettime(CLOCK_MONOTONIC, &tm);
+#endif
         if (rc == -1) {
             throw std::runtime_error("Failed to get time");
         }
-#endif
     }
 
 #define BILLION  1000000000LL
