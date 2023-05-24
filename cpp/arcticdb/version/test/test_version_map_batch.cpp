@@ -2,6 +2,7 @@
 
 #include <arcticdb/version/version_map_batch_methods.hpp>
 #include <arcticdb/stream/test/stream_test_common.hpp>
+#include <arcticdb/util/test/gtest_utils.hpp>
 
 using namespace arcticdb;
 using namespace arcticdb::pipelines;
@@ -33,6 +34,7 @@ void add_versions_for_stream(
 }
 
 TEST_F(VersionMapBatchStore, SimpleVersionIdQueries) {
+    SKIP_WIN("Exceeds LMDB map size");
     auto store = test_store_->_test_get_store();
     auto version_map = std::make_shared<VersionMap>();
 
@@ -71,11 +73,14 @@ TEST_F(VersionMapBatchStore, SimpleVersionIdQueries) {
 }
 
 TEST_F(VersionMapBatchStore, SimpleTimestampQueries) {
+    SKIP_WIN("Exceeds LMDB map size");
+    ScopedConfig cpu_threads("VersionStore.NumCPUThreads", 1);
+    ScopedConfig io_threads("VersionStore.NumIOThreads", 1);
     auto store = test_store_->_test_get_store();
     auto version_map = std::make_shared<VersionMap>();
 
-    uint64_t num_streams = 10;
-    uint64_t num_versions_per_stream = 5;
+    uint64_t num_streams = 1000;
+    uint64_t num_versions_per_stream = 500;
 
     for(uint64_t i = 0; i < num_streams; ++i) {
         auto stream = fmt::format("stream_{}", i);
@@ -126,6 +131,7 @@ TEST_F(VersionMapBatchStore, SimpleTimestampQueries) {
 
 
 TEST_F(VersionMapBatchStore, MultipleVersionsSameSymbolVersionIdQueries) {
+    SKIP_WIN("Exceeds LMDB map size");
     auto store = test_store_->_test_get_store();
     auto version_map = std::make_shared<VersionMap>();
 
@@ -137,6 +143,7 @@ TEST_F(VersionMapBatchStore, MultipleVersionsSameSymbolVersionIdQueries) {
 
     std::vector<StreamId> stream_ids;
     std::vector<VersionQuery> version_queries;
+
 
     // Add queries
     for(uint64_t i = 0; i < num_versions; i++){
@@ -156,6 +163,7 @@ TEST_F(VersionMapBatchStore, MultipleVersionsSameSymbolVersionIdQueries) {
 
 
 TEST_F(VersionMapBatchStore, MultipleVersionsSameSymbolTimestampQueries) {
+    SKIP_WIN("Exceeds LMDB map size");
     auto store = test_store_->_test_get_store();
     auto version_map = std::make_shared<VersionMap>();
 
@@ -197,6 +205,7 @@ TEST_F(VersionMapBatchStore, MultipleVersionsSameSymbolTimestampQueries) {
 }
 
 TEST_F(VersionMapBatchStore, CombinedQueries) {
+    SKIP_WIN("Exceeds LMDB map size");
     auto store = test_store_->_test_get_store();
     auto version_map = std::make_shared<VersionMap>();
 

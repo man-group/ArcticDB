@@ -231,8 +231,8 @@ inline std::vector<folly::Future<std::optional<AtomKey>>> batch_get_versions(
         } else {
             auto fut = shared_futures.find(*symbol);
             if(fut == shared_futures.end()) {
-                auto check_reload_task_fut = async::submit_io_task(CheckReloadTask{store, version_map, *symbol, it->second.load_param_});
-                auto [splitter, inserted] = shared_futures.emplace(*symbol, folly::FutureSplitter(std::move(check_reload_task_fut)));
+                auto [splitter, inserted] = shared_futures.emplace(*symbol, folly::FutureSplitter(async::submit_io_task(CheckReloadTask{store, version_map, *symbol, it->second.load_param_})));
+
                 version_entry_fut = splitter->second.getFuture();
             } else {
                 version_entry_fut = fut->second.getFuture();
