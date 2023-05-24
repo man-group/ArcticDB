@@ -52,6 +52,7 @@ else()
 
     # ARCTICDB_USING_CONDA is used in header of the files including vendored
     # sources to be able to use dependencies via conda at compile time.
+    # TODO: rely on CMake directives instead of `ARCTICDB_USING_CONDA`.
     add_compile_definitions(ARCTICDB_USING_CONDA)
     # https://conda-forge.org/docs/maintainer/knowledge_base.html#newer-c-features-with-old-sdk
     add_compile_definitions(_LIBCPP_DISABLE_AVAILABILITY)
