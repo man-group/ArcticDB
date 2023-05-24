@@ -94,8 +94,8 @@ jobs:
       - name: Gather wheels from run ${{inputs.run_id}}
         if: inputs.run_id > 0
         run: |
-          gh run download ${{inputs.run_id}} -p 'wheel-*'
-          mv wheel-*/* .
+          gh run download ${{inputs.run_id}} -p 'wheel-cp*'
+          mv wheel-cp*/* .
         env:
           GH_TOKEN: ${{github.token}}
           GH_REPO: ${{github.repository}}
@@ -119,7 +119,7 @@ jobs:
             const client = new dhc.DownloadHttpClient();
             const artifactsResponse = await client.listArtifacts();
             for (const artifact of artifactsResponse.value) {
-                if (artifact.name.startsWith("wheel-")) {
+                if (artifact.name.startsWith("wheel-cp")) {
                   console.log(`Downloading ${artifact.name} to ${cwd}`);
                   const itemsResponse = await client.getContainerItems(artifact.name, artifact.fileContainerResourceUrl);
                   const downloadSpecs = ds.getDownloadSpecification(artifact.name, itemsResponse.value, cwd, false);
