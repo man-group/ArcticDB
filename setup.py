@@ -20,6 +20,10 @@ from wheel.bdist_wheel import bdist_wheel
 ARCTICDB_USING_CONDA  = os.environ.get("ARCTICDB_USING_CONDA", "0")
 ARCTICDB_USING_CONDA = ARCTICDB_USING_CONDA != "0"
 
+# numbert of cores to use for compilation
+CMAKE_BUILD_PARALLEL_LEVEL  = os.environ.get("CMAKE_BUILD_PARALLEL_LEVEL", "0")
+CMAKE_BUILD_PARALLEL_LEVEL = int(CMAKE_BUILD_PARALLEL_LEVEL)
+
 print(f"ARCTICDB_USING_CONDA={ARCTICDB_USING_CONDA}")
 
 def _log_and_run(*cmd, **kwargs):
@@ -66,18 +70,25 @@ class CompileProto(Command):
         grpc_version = self._PROTOBUF_TO_GRPC_VERSION.get(proto_ver, None)
         assert grpc_version, "Supported proto-vers arguments are " + ", ".join(self._PROTOBUF_TO_GRPC_VERSION)
 
-        # Manual virtualenv to avoid hard-coding Man internal locations:
+        # Manual virtualenv to avoid hard-coding Man internal locations
         pythonpath = mkdtemp()
-        _log_and_run(
-            sys.executable,
-            "-mpip",
-            "install",
-            "--disable-pip-version-check",
-            "--target=" + pythonpath,
-            "grpcio-tools" + grpc_version,
-            f"protobuf=={proto_ver}.*",
-        )
-        env = {**os.environ, "PYTHONPATH": pythonpath, "PYTHONNOUSERSITE": "1"}
+        if not ARCTICDB_USING_CONDA:
+            # Python protobuf 3 and 4 are incompatible and we do not want to dictate which version of protobuf
+            # the user can have, so we compile the Python binding files with both versions and dynamically load
+            # the correct version at run time.
+            _log_and_run(
+                sys.executable,
+                "-mpip",
+                "install",
+                "--disable-pip-version-check",
+                "--target=" + pythonpath,
+                "grpcio-tools" + grpc_version,
+                f"protobuf=={proto_ver}.*",
+            )
+            env = {**os.environ, "PYTHONPATH": pythonpath, "PYTHONNOUSERSITE": "1"}
+        else:
+            # grpcio-tools is already installed in the conda environment (see environment.yml)
+            env = {**os.environ}
 
         # Compile
         os.makedirs(version_output_dir, exist_ok=True)
@@ -143,13 +154,16 @@ class CMakeBuild(build_ext):
         candidates = glob.glob(search)
         assert len(candidates) == 1, f"Specify {env_var} or use a single build directory. {search}={candidates}"
 
-        try:
-            # Python API is not cgroups-aware yet, so use CMake:
-            cpu_output = subprocess.check_output([cmake, "-P", "cpp/CMake/CpuCount.cmake"], universal_newlines=True)
-            jobs = "-j", cpu_output.replace("-- CMAKE_BUILD_PARALLEL_LEVEL=", "").rstrip()
-        except Exception as e:
-            print("Failed to retrieve CPU count:", e)
-            jobs = ()
+        if CMAKE_BUILD_PARALLEL_LEVEL == 0:
+            try:
+                # Python API is not cgroups-aware yet, so use CMake:
+                cpu_output = subprocess.check_output([cmake, "-P", "cpp/CMake/CpuCount.cmake"], universal_newlines=True)
+                jobs = "-j", cpu_output.replace("-- CMAKE_BUILD_PARALLEL_LEVEL=", "").rstrip()
+            except Exception as e:
+                print("Failed to retrieve CPU count:", e)
+                jobs = ()
+        else:
+            jobs = "-j", str(CMAKE_BUILD_PARALLEL_LEVEL)
         _log_and_run(cmake, "--build", candidates[0], *jobs, "--target", "install_" + ext.name)
 
         assert os.path.exists(dest), f"No output at {dest}, but we didn't get a bad return code from CMake?"

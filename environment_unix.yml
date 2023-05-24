@@ -8,6 +8,9 @@ dependencies:
   - gflags
   - doxygen
   - boost-cpp
+  - grpcio
+  - grpcio-tools
+  - protobuf
   # Build dependencies
   - krb5
   - lz4-c
@@ -24,7 +27,7 @@ dependencies:
   - bitmagic
   - spdlog
   - fmt
-  - folly==2022.10.31 # latest version published on vcpkg
+  - folly >2022.10.31 # latest version published on vcpkg
   # Vendored build dependencies (see `cpp/thirdparty`)
   # Versions must be kept in sync
   - xxhash
@@ -39,15 +42,17 @@ dependencies:
   - lmdb==0.9.22
   - lmdbxx==0.9.14
   # Python dependences
-  - python
+  - python =3.10 # Python 3.11 requires protobuf>=4
   - numpy
-  - pandas
+  - pandas < 2
   - pytest
   - boto3
   - werkzeug
   - moto
   - pytest-server-fixtures
+  - msgpack-python
   # Pinned to avoid test disruption (in phase with the pin in setup.cfg)
   # See: https://github.com/man-group/ArcticDB/pull/291
   - hypothesis < 6.73
   - pytest-sugar
+
