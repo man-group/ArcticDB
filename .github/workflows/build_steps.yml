@@ -3,7 +3,7 @@ on:
   workflow_call:
     inputs:
       job_type:          {required: true, type: string, description: Selects the steps to enable}
-      cmake_preset_type: {required: false, type: string, description: release/debug}
+      cmake_preset_type: {required: true, type: string, description: release/debug}
       matrix:            {required: true, type: string, description: JSON string to feed into the matrix}
       cibw_image_tag:    {required: false, type: string, description: Linux only. As built by cibw_docker_image.yml workflow}
       cibw_version:      {required: false, type: string, description: Follower only. Must match the cibw_image_tag}
@@ -31,7 +31,7 @@ jobs:
             - ${{fromJSON(inputs.matrix)}}
 
     runs-on: ${{fromJson(matrix.distro)}}
-    container: ${{ (matrix.os == 'linux' && inputs.job_type != 'follower' && inputs.job_type != 'pytest_compat') && inputs.cibw_image_tag || null}}
+    container: ${{ (matrix.os == 'linux' && inputs.job_type != 'follower') && inputs.cibw_image_tag || null}}
     env:
       SCCACHE_GHA_VERSION: ${{vars.SCCACHE_GHA_VERSION || 1}} # Setting this env var enables the caching
       VCPKG_NUGET_USER: ${{secrets.VCPKG_NUGET_USER || github.repository_owner}}
@@ -83,11 +83,11 @@ jobs:
 
       # ========================= Leader steps =========================
       - name: Prepare C++ compilation env
-        if: inputs.job_type != 'follower' && inputs.job_type != 'pytest_compat'
+        if: inputs.job_type != 'follower'
         run: . build_tooling/prep_cpp_build.sh # Also applies to Windows
 
       - name: CMake compile
-        if: inputs.job_type != 'follower' && inputs.job_type != 'pytest_compat'
+        if: inputs.job_type != 'follower'
         uses: lukka/run-cmake@v10
         with:
           cmakeListsTxtPath: ${{github.workspace}}/cpp/CMakeLists.txt
@@ -173,7 +173,7 @@ jobs:
       test_dirs: ${{env.test_dirs}}
 
   python_tests:
-    if: inputs.job_type == 'follower' || inputs.job_type == 'pytest_compat'
+    if: inputs.job_type == 'follower'
     needs: [compile]
     strategy:
       fail-fast: false
