@@ -1312,7 +1312,6 @@ AtomKey LocalVersionedEngine::_test_write_segment(const std::string& symbol) {
     return to_atom(store()->write(KeyType::TABLE_DATA, VersionId{}, StreamId{symbol}, 0, 0, std::move(wrapper.segment())).get());
 }
 
-
 std::shared_ptr<VersionMap> LocalVersionedEngine::_test_get_version_map() {
     return version_map();
 }

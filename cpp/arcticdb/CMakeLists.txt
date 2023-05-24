@@ -541,6 +541,8 @@ GENERATE_EXPORT_HEADER(arcticdb_core)
 
 if (NOT WIN32)
     if(NOT ${ARCTICDB_USING_CONDA})
+        # Compilers on conda-forge are relatively strict.
+        # For now, we do not want to treat warnings as errors for those builds.
         add_compile_options("-Werror")
     endif()
     add_compile_options("-ggdb")
@@ -577,6 +579,8 @@ target_include_directories(arcticdb_python PRIVATE
 if (NOT WIN32)
     add_compile_options("-ftemplate-depth=1000")
     if(NOT ${ARCTICDB_USING_CONDA})
+        # Compilers on conda-forge are relatively strict.
+        # For now, we do not want to treat warnings as errors for those builds.
         add_compile_options("-Werror")
     endif()
 endif ()

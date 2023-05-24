@@ -42,9 +42,9 @@ dependencies:
   - lmdb==0.9.22
   - lmdbxx==0.9.14
   # Python dependences
-  - python =3.10
+  - python =3.10 # Python 3.11 requires protobuf>=4
   - numpy
-  - pandas
+  - pandas < 2
   - pytest
   - boto3
   - werkzeug
@@ -55,4 +55,4 @@ dependencies:
   # See: https://github.com/man-group/ArcticDB/pull/291
   - hypothesis < 6.73
   - pytest-sugar
- 
+
