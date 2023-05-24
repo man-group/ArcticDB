@@ -138,6 +138,7 @@ TEST_F(VersionMapBatchStore, MultipleVersionsSameSymbolVersionIdQueries) {
     std::vector<StreamId> stream_ids;
     std::vector<VersionQuery> version_queries;
 
+
     // Add queries
     for(uint64_t i = 0; i < num_versions; i++){
         stream_ids.push_back(StreamId{"stream_0"});

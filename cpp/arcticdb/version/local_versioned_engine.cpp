@@ -881,8 +881,9 @@ VersionedItem LocalVersionedEngine::defragment_symbol_data(const StreamId& strea
     return versioned_item;
 }
 
-folly::Future<FrameAndDescriptor> async_read_direct(
+folly::Future<std::pair<VersionedItem, FrameAndDescriptor>> async_read_direct(
     const std::shared_ptr<Store>& store,
+    const VariantKey& index_key,
     SegmentInMemory&& index_segment,
     const ReadQuery& read_query,
     std::shared_ptr<BufferHolder> buffers,
@@ -905,16 +906,17 @@ folly::Future<FrameAndDescriptor> async_read_direct(
     mark_index_slices(pipeline_context, dynamic_schema, bucketize_dynamic);
     auto frame = allocate_frame(pipeline_context);
 
-    return fetch_data(frame, pipeline_context, store, dynamic_schema, buffers).then(
-        [pipeline_context, frame, &read_options] (auto&&) mutable {
+    return fetch_data(frame, pipeline_context, store, dynamic_schema, buffers).thenValue(
+        [pipeline_context, frame, &read_options](auto &&) mutable {
             reduce_and_fix_columns(pipeline_context, frame, read_options);
-        }).then(
-            [index_segment_reader, frame] (auto&&) {
-                return FrameAndDescriptor{frame, std::move(index_segment_reader->mutable_tsd()), {}, {}};
-            });
+        }).thenValue(
+        [index_segment_reader, frame, index_key, buffers](auto &&) {
+            return std::make_pair(VersionedItem{to_atom(index_key)},
+                                  FrameAndDescriptor{frame, std::move(index_segment_reader->mutable_tsd()), {}, buffers});
+        });
 }
 
-std::pair<std::vector<AtomKey>, std::vector<FrameAndDescriptor>> LocalVersionedEngine::batch_read_keys(
+std::vector<std::pair<VersionedItem, FrameAndDescriptor>> LocalVersionedEngine::batch_read_keys(
     const std::vector<AtomKey> &keys,
     const std::vector<ReadQuery> &read_queries,
     const ReadOptions& read_options) {
@@ -925,14 +927,40 @@ std::pair<std::vector<AtomKey>, std::vector<FrameAndDescriptor>> LocalVersionedE
     }
     auto indexes = folly::collect(index_futures).get();
 
-    std::vector<folly::Future<FrameAndDescriptor>> results_fut;
+    std::vector<folly::Future<std::pair<VersionedItem, FrameAndDescriptor>>> results_fut;
     auto i = 0u;
     util::check(read_queries.empty() || read_queries.size() == keys.size(), "Expected read queries to either be empty or equal to size of keys");
-    for (auto&& [index_key, index_segment]: indexes) {
-        results_fut.push_back(async_read_direct(store(), std::move(index_segment), read_queries.empty() ? ReadQuery{} : read_queries[i++], std::make_shared<BufferHolder>(), read_options));
+    for (auto&& [index_key, index_segment] : indexes) {
+        results_fut.push_back(async_read_direct(store(), keys[i], std::move(index_segment), read_queries.empty() ? ReadQuery{} : read_queries[i], std::make_shared<BufferHolder>(), read_options));
+        ++i;
     }
     Allocator::instance()->trim();
-    return std::make_pair(keys, folly::collect(results_fut).get());
+    return folly::collect(results_fut).get();
+}
+
+std::vector<std::pair<VersionedItem, FrameAndDescriptor>> LocalVersionedEngine::temp_batch_read_internal_direct(
+    const std::vector<StreamId> &stream_ids,
+    const std::vector<VersionQuery> &version_queries,
+    std::vector<ReadQuery> &read_queries,
+    const ReadOptions &read_options) {
+    auto versions = batch_get_versions(store(), version_map(), stream_ids, version_queries);
+    std::vector<folly::Future<std::pair<VersionedItem, FrameAndDescriptor>>> output;
+    for (auto &&version : folly::enumerate(versions)) {
+        auto read_query = read_queries.empty() ? ReadQuery{} : read_queries[version.index];
+        output.emplace_back(std::move(*version).thenValue([store = store()](auto maybe_index_key) -> ReadKeyOutput {
+            util::check(static_cast<bool>(maybe_index_key), "Version not found for stream");
+            return store->read_sync(maybe_index_key.value());
+        }).thenValue([store = store(), read_query = std::move(read_query), read_options](auto &&key_segment_pair) {
+            auto [index_key, index_segment] = std::move(key_segment_pair);
+            return async_read_direct(store,
+                                     std::move(index_key),
+                                     std::move(index_segment),
+                                     read_query,
+                                     std::make_shared<BufferHolder>(),
+                                     read_options);
+        }));
+    }
+    return folly::collect(output).get();
 }
 
 std::vector<std::pair<VersionedItem, FrameAndDescriptor>> LocalVersionedEngine::batch_read_internal(
@@ -940,6 +968,12 @@ std::vector<std::pair<VersionedItem, FrameAndDescriptor>> LocalVersionedEngine::
     const std::vector<VersionQuery>& version_queries,
     std::vector<ReadQuery>& read_queries,
     const ReadOptions& read_options) {
+
+    if(std::none_of(std::begin(read_queries), std::end(read_queries), [] (const auto& read_query) {
+        return !read_query.query_->empty();
+    })) {
+        return temp_batch_read_internal_direct(stream_ids, version_queries, read_queries, read_options);
+    }
 
     std::vector<folly::Future<std::pair<VersionedItem, FrameAndDescriptor>>> results_fut;
     for (size_t idx=0; idx < stream_ids.size(); idx++) {
@@ -1274,16 +1308,15 @@ std::unordered_map<KeyType, std::pair<size_t, size_t>> LocalVersionedEngine::sca
         auto& pair = sizes[key_type];
         pair.first = keys.size();
         std::vector<stream::StreamSource::ReadContinuation> continuations;
-        continuations.reserve(keys.size());
         std::atomic<size_t> key_size{0};
-        for(auto i = 0u; i < keys.size(); ++i) {
+        for(auto&& key : keys) {
             continuations.emplace_back([&key_size] (auto&& ks) {
                 auto key_seg = std::move(ks);
                 key_size += key_seg.segment().total_segment_size();
                 return key_seg.variant_key();
             });
         }
-        store->batch_read_compressed(std::move(keys), std::move(continuations), BatchReadArgs{});
+        store->batch_read_compressed(std::move(keys), std::move(continuations),BatchReadArgs{});
         pair.second = key_size;
     });
     return sizes;
