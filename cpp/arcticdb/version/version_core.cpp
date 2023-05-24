@@ -559,17 +559,6 @@ void ensure_norm_meta(arcticdb::proto::descriptors::NormalizationMetadata& norm_
         norm_meta.mutable_df()->mutable_common()->mutable_index()->set_tz("UTC");
 }
 
-void check_column_and_date_range_filterable(const pipelines::index::IndexSegmentReader& index_segment_reader, const ReadQuery& read_query) {
-    util::check(!index_segment_reader.is_pickled()
-    || (read_query.columns.empty() && std::holds_alternative<std::monostate>(read_query.row_filter)),
-    "The data for this symbol is pickled and does not support column stats, date_range, row_range, or column queries");
-    util::check(index_segment_reader.has_timestamp_index() || !std::holds_alternative<IndexRange>(read_query.row_filter),
-            "Cannot apply date range filter to symbol with non-timestamp index");
-    sorting::check<ErrorCode::E_UNSORTED_DATA>(index_segment_reader.tsd().stream_descriptor().sorted() == arcticdb::proto::descriptors::SortedValue::UNKNOWN ||
-        index_segment_reader.tsd().stream_descriptor().sorted() == arcticdb::proto::descriptors::SortedValue::ASCENDING ||
-        !std::holds_alternative<IndexRange>(read_query.row_filter),
-            "When filtering data using date_range, the symbol must be sorted in ascending order. ArcticDB believes it is not sorted in ascending order and cannot therefore filter the data using date_range.");
-}
 }
 
 std::optional<pipelines::index::IndexSegmentReader> get_index_segment_reader(

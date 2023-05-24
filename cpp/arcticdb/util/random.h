@@ -42,7 +42,7 @@ inline double random_double() {
 }
 
 inline double random_probability() {
-    return double(random_int()) / std::numeric_limits< uint64_t >::max();
+    return double(random_int()) / static_cast<double>(std::numeric_limits< uint64_t >::max());
 }
 
 inline char random_char() {
