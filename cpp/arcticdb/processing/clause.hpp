@@ -506,19 +506,6 @@ struct ProjectClause {
 };
 
 struct RemoveColumnPartitioningClause {
-    stream::Index index_;
-    const bool dedup_rows_;
-    const arcticdb::proto::descriptors::IndexDescriptor::Type descriptor_type_;
-
-    RemoveColumnPartitioningClause(
-            const stream::Index& index,
-            const arcticdb::proto::descriptors::IndexDescriptor::Type descriptor_type = IndexDescriptor::ROWCOUNT,
-            bool dedup_rows = false) :
-            index_(index),
-            dedup_rows_(dedup_rows),
-            descriptor_type_(descriptor_type) {
-    }
-
     ARCTICDB_MOVE_COPY_DEFAULT(RemoveColumnPartitioningClause)
 
     [[nodiscard]] Composite<ProcessingSegment>

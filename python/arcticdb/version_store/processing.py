@@ -15,9 +15,8 @@ import pandas as pd
 
 from typing import Dict
 
-from arcticdb.exceptions import ArcticNativeException
-from arcticdb.log import version as log
-from arcticdb.preconditions import check, UserInputException
+from arcticdb.exceptions import ArcticNativeException, UserInputException
+from arcticdb.preconditions import check
 from arcticdb.supported_types import time_types as supported_time_types
 
 from arcticdb_ext.version_store import PipelineOptimisation as _Optimisation

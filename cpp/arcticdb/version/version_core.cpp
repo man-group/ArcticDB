@@ -1083,7 +1083,7 @@ VersionedItem sort_merge_impl(
     util::variant_match(index,
         [&](const stream::TimeseriesIndex &timeseries_index) {
             read_query.clauses_.emplace_back(std::make_shared<Clause>(SortClause{timeseries_index.name()}));
-            read_query.clauses_.emplace_back(std::make_shared<Clause>(RemoveColumnPartitioningClause{timeseries_index}));
+            read_query.clauses_.emplace_back(std::make_shared<Clause>(RemoveColumnPartitioningClause{}));
             const auto split_size = ConfigsMap::instance()->get_int("Split.RowCount", 10000);
             read_query.clauses_.emplace_back(std::make_shared<Clause>(SplitClause{static_cast<size_t>(split_size)}));
             read_query.clauses_.emplace_back(std::make_shared<Clause>(MergeClause{timeseries_index, DenseColumnPolicy{}, stream_id, pipeline_context->descriptor()}));
@@ -1281,9 +1281,7 @@ VersionedItem defragment_symbol_data_impl(
 
     util::variant_match(std::move(policies), [
         &fut_vec, &slices, &store, &options, &pre_defragmentation_info, segment_size=segment_size] (auto &&idx, auto &&schema) {
-        ExecutionContext remove_column_partition_context{};
-        remove_column_partition_context.set_descriptor(pre_defragmentation_info.pipeline_context->descriptor());
-        pre_defragmentation_info.read_query.query_->emplace_back(RemoveColumnPartitioningClause{std::make_shared<ExecutionContext>(std::move(remove_column_partition_context))});
+        pre_defragmentation_info.read_query.clauses_.emplace_back(std::make_shared<Clause>(RemoveColumnPartitioningClause{}));
         auto segments = read_and_process(store, pre_defragmentation_info.pipeline_context, pre_defragmentation_info.read_query, defragmentation_read_options_generator(options), pre_defragmentation_info.append_after.value());
         using IndexType = std::remove_reference_t<decltype(idx)>;
         using SchemaType = std::remove_reference_t<decltype(schema)>;

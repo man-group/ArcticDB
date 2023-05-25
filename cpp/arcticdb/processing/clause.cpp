@@ -463,51 +463,31 @@ RemoveColumnPartitioningClause::process(std::shared_ptr<Store> store, Composite<
         using namespace arcticdb::pipelines;
         auto procs = std::move(p);
         Composite<ProcessingSegment> output;
-        util::variant_match(index_,
-        [&](const stream::TimeseriesIndex &) {
-            size_t num_index_columns = stream::TimeseriesIndex::field_count();
-            procs.broadcast([&store, &output, &num_index_columns, this](ProcessingSegment &proc) {
-                SegmentInMemory new_segment{empty_descriptor(descriptor_type_, proc.data()[0].segment_->get_index_col_name())};
-                new_segment.set_row_id(proc.data()[0].segment_->get_row_id());
-                size_t min_start_row = std::numeric_limits<size_t>::max();
-                size_t max_end_row = 0;
-                size_t min_start_col = std::numeric_limits<size_t>::max();
-                size_t max_end_col = 0;
-                for (auto &slice_and_key: proc.data()) {
-                    size_t start_row = slice_and_key.slice().row_range.start();
-                    min_start_row = start_row < min_start_row ? start_row : min_start_row;
-                    size_t end_row = slice_and_key.slice().row_range.end();
-                    max_end_row = end_row > max_end_row ? end_row : max_end_row;
-                    size_t start_col = slice_and_key.slice().col_range.start();
-                    min_start_col = start_col < min_start_col ? start_col : min_start_col;
-                    size_t end_col = slice_and_key.slice().col_range.end();
-                    max_end_col = end_col > max_end_col ? end_col : max_end_col;
-                    size_t column_idx = 0;
-                    for(auto field : folly::enumerate(slice_and_key.segment(store).descriptor().fields())) {
-                        const auto column_name = field->name();
-                        auto column = proc.get(ColumnName(column_name), store);
-                        if (std::holds_alternative<ColumnWithStrings>(column)) {
-                            ColumnWithStrings column_strings = std::get<ColumnWithStrings>(column);
-                            const auto data_type = column_strings.column_->type().data_type();
-                            if(((start_col - num_index_columns) == 0) || column_idx >= num_index_columns){
-                                new_segment.add_column(scalar_field_proto(data_type, column_name),  slice_and_key.segment(store).column_ptr(field.index));
-                            }
-                        }else {
-                            util::raise_rte("Expected single column from expression");
-                        }
-                        column_idx++;
-                    }
-                    stream::merge_string_columns(slice_and_key.segment(store), new_segment.string_pool_ptr(), dedup_rows_);
+        procs.broadcast([&store, &output](ProcessingSegment &proc) {
+            size_t min_start_row = std::numeric_limits<size_t>::max();
+            size_t max_end_row = 0;
+            size_t min_start_col = std::numeric_limits<size_t>::max();
+            size_t max_end_col = 0;
+            std::optional<SegmentInMemory> output_seg;
+            for (auto& slice_and_key: proc.data()) {
+                min_start_row = std::min(min_start_row, slice_and_key.slice().row_range.start());
+                max_end_row = std::max(max_end_row, slice_and_key.slice().row_range.end());
+                min_start_col = std::min(min_start_col, slice_and_key.slice().col_range.start());
+                max_end_col = std::max(max_end_col, slice_and_key.slice().col_range.end());
+                auto segment = std::move(slice_and_key.segment(store));
+                if (output_seg.has_value()) {
+                    stream::merge_string_columns(segment, output_seg->string_pool_ptr(), false);
+                    output_seg->concatenate(std::move(segment), true);
+                } else {
+                    output_seg = std::make_optional<SegmentInMemory>(std::move(segment));
                 }
+            }
+            if (output_seg.has_value()) {
                 const RowRange row_range{min_start_row, max_end_row};
                 const ColRange col_range{min_start_col, max_end_col};
-                output.push_back(ProcessingSegment{std::move(new_segment), FrameSlice{col_range, row_range}, proc.dynamic_schema_});
-            });
-        },
-        [&](const auto &) {
-            util::raise_rte("Column partition removal only supports datetime indexed data. You data does not have a datetime index.");
-        }
-        );
+                output.push_back(ProcessingSegment{std::move(*output_seg), FrameSlice{col_range, row_range}, proc.dynamic_schema_});
+            }
+        });
         return output;
 }
 
