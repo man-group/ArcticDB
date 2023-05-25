@@ -16,6 +16,13 @@ option(
 )
 
 
+option(
+    ARCTICDB_BUILD_PYTHON_EXTENSION
+    "should the python extension be build"
+    ON
+)
+
+
 if(WIN32)
     add_compile_definitions(NOGDI)
     add_compile_definitions(WIN32_LEAN_AND_MEAN)

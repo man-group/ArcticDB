@@ -551,11 +551,9 @@ if (NOT WIN32)
     add_compile_options("-fno-omit-frame-pointer")
 endif ()
 
-
-
-add_subdirectory(python)
-
-
+if(${ARCTICDB_BUILD_PYTHON_EXTENSION})
+    add_subdirectory(python)
+endif()
 
 set (additional_link_flags "")
 if (HIDE_LINKED_SYMBOLS AND (NOT WIN32))
@@ -566,6 +564,38 @@ if (HIDE_LINKED_SYMBOLS AND (NOT WIN32))
             "-Wl,--gc-sections")
     endif()
 endif()
+
+message("INSTALL" ${CMAKE_INSTALL_PREFIX})
+
+# install headers
+
+
+
+#install all hpp files but exclude python folder
+install(DIRECTORY ${CMAKE_SOURCE_DIR}/
+        DESTINATION include
+        FILES_MATCHING PATTERN "*.hpp"
+        PATTERN "python/*" EXCLUDE
+        )
+
+# install libraries
+install(TARGETS arcticdb_core
+        EXPORT arcticdb_core
+        LIBRARY DESTINATION lib
+        ARCHIVE DESTINATION lib
+        RUNTIME DESTINATION bin
+        INCLUDES DESTINATION include
+        )
+
+install(TARGETS arcticdb_core_static
+        EXPORT arcticdb_core_static
+        LIBRARY DESTINATION lib
+        ARCHIVE DESTINATION lib
+        RUNTIME DESTINATION bin
+        INCLUDES DESTINATION include
+        )
+
+
 
 ## Unit Tests ##
 if(${TEST})
