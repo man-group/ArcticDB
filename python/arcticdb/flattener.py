@@ -49,7 +49,7 @@ class Flattener:
         tokens = symbol.split(self.SEPARATOR)
         vaguely_readable_name = "_".join([token[-3:] for token in tokens])[: (self.MAX_KEY_LENGTH - hash_length)]
 
-        shortened_hash = str(int(hashlib.sha256(convert).hexdigest(), 16) % 10 ** hash_length)
+        shortened_hash = str(int(hashlib.sha256(convert).hexdigest(), 16) % 10**hash_length)
         return "{}_{}".format(vaguely_readable_name, shortened_hash)
 
     def can_flatten(self, item):

@@ -55,6 +55,13 @@ jobs:
         with:
           submodules: recursive # Just in case a dep has its own third-party deps
 
+      - name: Black Python formatting
+        uses: psf/black@stable
+        with:
+          options: "--check --line-length 120"
+          version: "~= 22.8"
+          src: "./python"
+
       - name: Extra envs
         run: |
           . build_tooling/vcpkg_caching.sh # Linux follower needs another call in CIBW

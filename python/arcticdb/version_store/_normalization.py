@@ -54,6 +54,7 @@ except ImportError:
     def check_is_utc_if_newer_pandas(*args, **kwargs):
         return False  # the UTC specific issue is not present in old Pandas so no need to go down special case
 
+
 log = version
 
 from msgpack import packb, unpackb, pack, ExtType
@@ -840,7 +841,9 @@ class MsgPackNormalizer(Normalizer):
     """
 
     MSG_PACK_MAX_SIZE = (1 << 32) + 1024
-    MMAP_DEFAULT_SIZE = MSG_PACK_MAX_SIZE  # Allow up to 4 gib pickles in msgpack by default, most of these compress fairly well.
+    MMAP_DEFAULT_SIZE = (
+        MSG_PACK_MAX_SIZE  # Allow up to 4 gib pickles in msgpack by default, most of these compress fairly well.
+    )
     # msgpack checks whether the size of pickled data within 1 << 32 - 1 byte only
     # Extra memory is needed in mmap for msgpack's overhead
 

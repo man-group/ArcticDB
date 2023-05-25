@@ -22,7 +22,12 @@ from datetime import datetime
 from numpy.testing import assert_array_equal
 from pytz import timezone
 
-from arcticdb.exceptions import ArcticNativeNotYetImplemented, InternalException, NoSuchVersionException, StreamDescriptorMismatch
+from arcticdb.exceptions import (
+    ArcticNativeNotYetImplemented,
+    InternalException,
+    NoSuchVersionException,
+    StreamDescriptorMismatch,
+)
 from arcticdb.flattener import Flattener
 from arcticdb.version_store import NativeVersionStore
 from arcticdb.version_store._custom_normalizers import CustomNormalizer, register_normalizer
@@ -552,21 +557,9 @@ def test_list_versions(request, version_store):
             res.add((v_info["symbol"], v_info["version"]))
         return res
 
-    assert get_tuples_from_version_info(version_store.list_versions(snapshot="snap1")) == {
-        ("a", 2),
-        ("b", 0),
-        ("c", 0),
-    }
-    assert get_tuples_from_version_info(version_store.list_versions(snapshot="snap2")) == {
-        ("a", 2),
-        ("b", 1),
-        ("c", 0),
-    }
-    assert get_tuples_from_version_info(version_store.list_versions(snapshot="snap3")) == {
-        ("a", 2),
-        ("b", 1),
-        ("c", 1),
-    }
+    assert get_tuples_from_version_info(version_store.list_versions(snapshot="snap1")) == {("a", 2), ("b", 0), ("c", 0)}
+    assert get_tuples_from_version_info(version_store.list_versions(snapshot="snap2")) == {("a", 2), ("b", 1), ("c", 0)}
+    assert get_tuples_from_version_info(version_store.list_versions(snapshot="snap3")) == {("a", 2), ("b", 1), ("c", 1)}
 
 
 def test_list_versions_deleted_flag(lmdb_version_store):
