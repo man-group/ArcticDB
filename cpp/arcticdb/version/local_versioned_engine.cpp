@@ -353,13 +353,18 @@ std::pair<VersionedItem, std::optional<google::protobuf::Any>> LocalVersionedEng
 std::vector<std::pair<VersionedItem, std::optional<google::protobuf::Any>>> LocalVersionedEngine::batch_read_descriptor_internal(
         const std::vector<StreamId>& stream_ids,
         const std::vector<VersionQuery>& version_queries) {
-    std::vector<folly::Future<std::pair<VersionedItem, std::optional<google::protobuf::Any>>>> results_fut;
-    for (size_t idx=0; idx < stream_ids.size(); idx++) {
-        auto version_query = version_queries.size() > idx ? version_queries[idx] : VersionQuery{};
-        results_fut.push_back(read_descriptor_version_internal(stream_ids[idx],
-                                                              version_query));
+    auto versions_fut = batch_get_versions(store(), version_map(), stream_ids, version_queries);
+    std::vector<folly::Future<std::pair<std::optional<VariantKey>, std::optional<google::protobuf::Any>>>> fut_vec;
+    for (auto& version: versions_fut){
+        fut_vec.push_back(get_metadata_future(std::move(version)));
     }
-    return folly::collect(results_fut).get();
+    auto metadata_vector = folly::collect(fut_vec).get();
+    std::vector<std::pair<VersionedItem, std::optional<google::protobuf::Any>>> output;
+    output.reserve(metadata_vector.size());
+    std::transform(metadata_vector.begin(), metadata_vector.end(), std::back_inserter(output),
+               [](std::pair<std::optional<VariantKey>, std::optional<google::protobuf::Any>> meta) { return std::make_pair(VersionedItem{std::move(to_atom(meta.first.value()))}, std::move(meta.second)); });
+
+    return output;
 }
 
 void LocalVersionedEngine::flush_version_map() {
