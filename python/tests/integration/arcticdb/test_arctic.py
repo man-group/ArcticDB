@@ -1235,6 +1235,33 @@ def test_get_description_batch_multiple_versions(arctic_library):
         assert info.last_update_time > original_info.last_update_time
 
 
+def test_read_description_batch_stress(arctic_library):
+    lib = arctic_library
+    num_symbols = 8
+    num_versions = 12
+    start_year = 2000
+    start_day = 1
+    for sym in range(num_symbols):
+        for version in range(num_versions):
+            start_date = pd.Timestamp(str("{}/1/{}".format(start_year + sym, start_day + version)))
+            end_date = pd.Timestamp(str("{}/1/{}".format(start_year + sym, start_day + version + 3)))
+            df = pd.DataFrame({"column": [1, 2, 3, 4]}, index=pd.date_range(start=start_date, end=end_date))
+            lib.write("sym_" + str(sym), df, prune_previous_versions=False)
+    requests = [
+        ReadInfoRequest("sym_" + str(sym), as_of=version)
+        for sym in range(num_symbols)
+        for version in range(num_versions)
+    ]
+    results_list = lib.get_description_batch(requests)
+    for sym in range(num_symbols):
+        for version in range(num_versions):
+            idx = sym * num_versions + version
+            assert results_list[idx].date_range == (
+                datetime(start_year + sym, 1, start_day + version),
+                datetime(start_year + sym, 1, start_day + version + 3),
+            )
+
+
 def test_tail(arctic_library):
     lib = arctic_library
 
