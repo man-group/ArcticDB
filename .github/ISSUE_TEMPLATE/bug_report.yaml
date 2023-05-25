@@ -19,24 +19,30 @@ body:
   attributes:
     label: Steps/Code to Reproduce
     description: |
-      Please add a [minimal code example](https://matthewrocklin.com/minimal-bug-reports) that can reproduce the error when running it.
-      Be as succinct as possible, **do not depend on external data files**: instead you can generate synthetic data using `numpy.random`.
+      Please add a [minimal code example](https://matthewrocklin.com/minimal-bug-reports) that can reproduce the error
+      and the output/exception/stack trace if possible.
+
+      Be as succinct as possible and avoid external data files. Instead you can generate synthetic data using `numpy.random`.
       If your bug report appears to be dependent on external data files and cannot be reproduced without them, please describe your data
       files in as much detail as you can.
 
       If the code is too long, feel free to put it in a [public gist](https://gist.github.com) and link it in the issue.
 
-      In short, **we are going to copy-paste your code** to run it and we expect to get the same result as you.
-
-      We acknowledge that [crafting a minimal reproducible code example](https://matthewrocklin.com/minimal-bug-reports) requires some
-      effort on your side but it really helps the maintainers quickly reproduce the problem and analyze its cause without any ambiguity.
-      Ambiguous bug reports tend to be slower to fix because they will require more effort and back and forth discussion between the
-      maintainers and the reporter to pin-point the precise conditions necessary to reproduce the problem.
+      We acknowledge that this requires some effort but it really helps us locate the problem and we thank you for helping us out ❤️
     placeholder: |
       ```python
       from arcticdb import Arctic
 
       Arctic()
+      ```
+
+      Output:
+      ```python-traceback
+      ---------------------------------------------------------------------------
+      TypeError                                 Traceback (most recent call last)
+      Cell In[4], line 1
+      ----> 1 Arctic()
+      TypeError: Arctic.__init__() missing 1 required positional argument: 'uri'
       ```
   validations:
     required: true
@@ -44,39 +50,8 @@ body:
 - type: textarea
   attributes:
     label: Expected Results
-    description: >
-      Please paste or describe the expected results.
     placeholder: >
       Example: No error is thrown.
-  validations:
-    required: true
-
-- type: textarea
-  attributes:
-    label: Actual Results
-    description: |
-      Please paste or describe the results you observe instead of the expected results.
-      If you observe an error, please paste the error message including the **full traceback** of the exception.
-      For instance the code above raises the following exception:
-
-      ```python-traceback
-      ---------------------------------------------------------------------------
-      TypeError                                 Traceback (most recent call last)
-      Cell In[4], line 1
-      ----> 1 Arctic()
-
-      TypeError: Arctic.__init__() missing 1 required positional argument: 'uri'
-      ```
-    placeholder: >
-      Please paste or specifically describe the actual output or traceback.
-  validations:
-    required: true
-
-- type: textarea
-  attributes:
-    label: OS (Including Linux Distribution)
-    placeholder: >
-      Fedora Linux 38 (Workstation Edition), Kernel 6.2.14-300.fc38.x86_64
   validations:
     required: true
 
@@ -95,7 +70,7 @@ body:
   validations:
     required: true
 
-- type: textarea
+- type: input
   attributes:
     label: Backend storage used
     placeholder: >
