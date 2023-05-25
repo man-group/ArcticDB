@@ -20,7 +20,6 @@ if PY3:
     def _stringify(v):
         return str(v, "utf-8")
 
-
 else:
 
     def _stringify(v):

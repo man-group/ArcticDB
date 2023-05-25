@@ -19,9 +19,7 @@ specific_exception_types = [
     UserInputException,
 ]
 
-all_exception_types = [
-    globals()[e] for e in dir(ae) if e.endswith("Exception") or e.endswith("Error")
-]
+all_exception_types = [globals()[e] for e in dir(ae) if e.endswith("Exception") or e.endswith("Error")]
 
 
 @pytest.mark.parametrize("code,exception", test_raise_params)
@@ -66,6 +64,7 @@ def test_snapshot_error(lmdb_version_store):
     lmdb_version_store.snapshot("snap")
     with pytest.raises(InternalException) as e:
         lmdb_version_store.snapshot("snap")
+
 
 def test_symbol_not_found_exception(lmdb_version_store):
     """Check we match the legacy behaviour where this is not an _ArcticLegacyCompatibilityException"""

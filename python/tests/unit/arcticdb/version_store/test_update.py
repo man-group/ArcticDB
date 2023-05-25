@@ -127,13 +127,16 @@ def test_update_repeatedly_dynamic_schema_hashed(
 
     idx = pd.date_range("1970-01-01", periods=100, freq="D")
     l = len(idx)
-    df = pd.DataFrame({
-        "a": np.arange(l, dtype="float"), 
-        "b": np.arange(1, l + 1, dtype="float"),
-        "c": np.arange(2, l + 2, dtype="float"),
-        "d": np.arange(3, l + 3, dtype="float"),
-        "e": np.arange(4, l + 4, dtype="float")
-    }, index=idx)
+    df = pd.DataFrame(
+        {
+            "a": np.arange(l, dtype="float"),
+            "b": np.arange(1, l + 1, dtype="float"),
+            "c": np.arange(2, l + 2, dtype="float"),
+            "d": np.arange(3, l + 3, dtype="float"),
+            "e": np.arange(4, l + 4, dtype="float"),
+        },
+        index=idx,
+    )
 
     lmdb_version_store.write(symbol, df)
     update_end = update_start + start_dist

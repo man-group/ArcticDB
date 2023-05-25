@@ -158,6 +158,7 @@ def config_context(name, value):
 
 def get_artifact_path(frag, *fragments):
     import tests
+
     return os.path.join(tests.__path__, "artifacts", frag, *fragments)
 
 
@@ -473,7 +474,7 @@ def make_dynamic(df, num_slices=10):
             df_slice = df_slice.drop(columns=[col_to_drop])
         column_index += 1
         slices.append(df_slice)
-    
+
     expected = pd.concat(slices)
     return expected, slices
 
