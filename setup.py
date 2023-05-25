@@ -19,11 +19,6 @@ from wheel.bdist_wheel import bdist_wheel
 # the dependencies from a conda
 ARCTICDB_USING_CONDA  = os.environ.get("ARCTICDB_USING_CONDA", "0")
 ARCTICDB_USING_CONDA = ARCTICDB_USING_CONDA != "0"
-
-# numbert of cores to use for compilation
-CMAKE_BUILD_PARALLEL_LEVEL  = os.environ.get("CMAKE_BUILD_PARALLEL_LEVEL", "0")
-CMAKE_BUILD_PARALLEL_LEVEL = int(CMAKE_BUILD_PARALLEL_LEVEL)
-
 print(f"ARCTICDB_USING_CONDA={ARCTICDB_USING_CONDA}")
 
 def _log_and_run(*cmd, **kwargs):
@@ -154,7 +149,8 @@ class CMakeBuild(build_ext):
         candidates = glob.glob(search)
         assert len(candidates) == 1, f"Specify {env_var} or use a single build directory. {search}={candidates}"
 
-        if CMAKE_BUILD_PARALLEL_LEVEL == 0:
+        cmake_build_parallel_level = os.getenv("CMAKE_BUILD_PARALLEL_LEVEL", None)
+        if not cmake_build_parallel_level:
             try:
                 # Python API is not cgroups-aware yet, so use CMake:
                 cpu_output = subprocess.check_output([cmake, "-P", "cpp/CMake/CpuCount.cmake"], universal_newlines=True)
@@ -163,11 +159,16 @@ class CMakeBuild(build_ext):
                 print("Failed to retrieve CPU count:", e)
                 jobs = ()
         else:
-            jobs = "-j", str(CMAKE_BUILD_PARALLEL_LEVEL)
-        _log_and_run(cmake, "--build", candidates[0], *jobs, "--target", "install_" + ext.name)
+            jobs = "-j", cmake_build_parallel_level
+
+        try:
+            _log_and_run(cmake, "--build", candidates[0], *jobs, "--target", "install_" + ext.name)
+        finally:
+            launcher = os.getenv("CMAKE_CXX_COMPILER_LAUNCHER", "")
+            if "sccache" in launcher and "AUDITWHEEL_PLAT" in os.environ:
+                subprocess.run([launcher, "--show-stats"])
 
         assert os.path.exists(dest), f"No output at {dest}, but we didn't get a bad return code from CMake?"
-
 
 def readme():
     github_emoji = re.compile(r":[a-z_]+:")

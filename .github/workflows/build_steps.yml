@@ -7,11 +7,8 @@ on:
       matrix:            {required: true, type: string, description: JSON string to feed into the matrix}
       cibw_image_tag:    {required: false, type: string, description: Linux only. As built by cibw_docker_image.yml workflow}
       cibw_version:      {required: false, type: string, description: Follower only. Must match the cibw_image_tag}
-      cibw_build:        {required: false, type: string, description: Follower only.}
+      python_deps_ids:   {default: '[""]', type: string, description: Follower test matrix parameter. JSON string.}
       python3:           {default: -1, type: number, description: Python 3 minor version}
-      python_deps:       {required: false, type: string, description: Python requirements.txt in build_tooling to test against}
-env:
-  python_impl_name: ${{inputs.python3 > 0 && format('cp3{0}', inputs.python3) || 'default'}}
 jobs:
   compile:
     strategy:
@@ -20,6 +17,7 @@ jobs:
         os: [0] # Decouples the steps from any distro version changes
         distro: [0]
         cmake_preset_prefix: [0]
+        cibw_build_suffix: [0]
         envs: [0]
         build_dir: [0] # Must be an absolute path
         symbols: [0] # Glob for symbol symbol files. Used for including in follower builds and exclusion on others.
@@ -28,9 +26,9 @@ jobs:
         exclude:
             - os: 0
         include:
-            - ${{fromJSON(inputs.matrix)}}
+            - ${{fromJSON(inputs.matrix)[0]}} # The items after 0 are for tests only
 
-    runs-on: ${{fromJson(matrix.distro)}}
+    runs-on: ${{matrix.distro}}
     container: ${{ (matrix.os == 'linux' && inputs.job_type != 'follower') && inputs.cibw_image_tag || null}}
     env:
       SCCACHE_GHA_VERSION: ${{vars.SCCACHE_GHA_VERSION || 1}} # Setting this env var enables the caching
@@ -47,6 +45,8 @@ jobs:
         CMAKE_C_COMPILER_LAUNCHER CMAKE_CXX_COMPILER_LAUNCHER CMAKE_BUILD_PARALLEL_LEVEL ARCTIC_CMAKE_PRESET
         ARCTICDB_BUILD_DIR TEST_OUTPUT_DIR
       ARCTICDB_DEBUG_FIND_PYTHON: ${{vars.ARCTICDB_DEBUG_FIND_PYTHON}}
+      python_impl_name: ${{inputs.python3 > 0 && format('cp3{0}', inputs.python3) || 'default'}}
+      CIBW_BUILD: ${{format('cp3{0}-{1}', inputs.python3, matrix.cibw_build_suffix)}}
     defaults:
       run: {shell: bash}
     steps:
@@ -135,14 +135,13 @@ jobs:
         if: inputs.job_type == 'follower'
         run: pipx run cibuildwheel==${{inputs.cibw_version}}
         env:
-          CIBW_BUILD: ${{inputs.cibw_build}}
           CIBW_MANYLINUX_X86_64_IMAGE: ${{inputs.cibw_image_tag}}
 
       - name: Store wheel artifact
         if: inputs.job_type == 'follower'
         uses: actions/upload-artifact@v3
         with:
-          name: wheel-${{inputs.python_deps || inputs.cibw_build}}
+          name: wheel-${{env.CIBW_BUILD}}
           path: wheelhouse/*.whl
 
       - name: Discover test directory names
@@ -167,7 +166,7 @@ jobs:
         env:
           _exclusion: "\n!${{matrix.build_dir}}/**/"
         with:
-          name: build-metadata-${{inputs.job_type}}-${{matrix.os}}-${{env.python_impl_name}}-${{inputs.python_deps || ''}}
+          name: build-metadata-${{inputs.job_type}}-${{matrix.os}}-${{env.python_impl_name}}
           retention-days: ${{inputs.job_type == 'cpp-tests' && 7 || 90}}
           # On Windows, exclusions like "!**/*.ext" are prefixed with a drive letter (D:\) of the current working dir
           # before matching. This breaks since we moved the build_dir to C:. Work around by templating exclusions:
@@ -177,7 +176,9 @@ jobs:
 
     outputs:
       manylinux_image: ${{env.manylinux_image}}
+      python_impl_name: ${{env.python_impl_name}}
       test_dirs: ${{env.test_dirs}}
+      cibw_build: ${{env.CIBW_BUILD}}
 
   python_tests:
     if: inputs.job_type == 'follower'
@@ -186,14 +187,18 @@ jobs:
       fail-fast: false
       matrix:
         type: ${{fromJSON(vars.TEST_DIRS_OVERRIDE || needs.compile.outputs.test_dirs)}}
+        python_deps_id: ${{fromJson(inputs.python_deps_ids)}}
         include:
-          - ${{fromJSON(inputs.matrix)}}
-    name: ${{matrix.type}}
-    runs-on: ${{fromJson(matrix.distro)}}
+          ${{fromJSON(inputs.matrix)}}
+    name: ${{matrix.type}}${{matrix.python_deps_id}}
+    runs-on: ${{matrix.distro}}
     container: ${{matrix.os == 'linux' && needs.compile.outputs.manylinux_image || null}}
     defaults:
       run: {shell: bash}
-    services: ${{fromJSON(matrix.test_services)}}
+    services: ${{matrix.test_services}}
+    env:
+      python_impl_name: ${{needs.compile.outputs.python_impl_name}}
+      distinguishing_name: ${{matrix.os}}-${{needs.compile.outputs.python_impl_name}}-${{matrix.type}}${{matrix.python_deps_id}}
     steps:
       - name: Checkout
         uses: actions/checkout@v3.3.0
@@ -201,7 +206,7 @@ jobs:
       - name: Get wheel artifact
         uses: actions/download-artifact@v3
         with:
-          name: wheel-${{inputs.python_deps || inputs.cibw_build}}
+          name: wheel-${{needs.compile.outputs.cibw_build}}
           path: ${{runner.temp}}
 
       - name: Select Python (Linux)
@@ -235,9 +240,9 @@ jobs:
           python -V
           cd "$RUNNER_TEMP" # Works for Windows-style paths as well
           python -m pip install --force-reinstall *${{env.python_impl_name}}*.whl
-          if [[ -n "${{inputs.python_deps || ''}}" ]] ; then
-            echo "Using deps ${{inputs.python_deps}}"
-            python -m pip install --force-reinstall -r $GITHUB_WORKSPACE/build_tooling/${{inputs.python_deps}}
+          if [[ -n "${{matrix.python_deps || ''}}" ]] ; then
+            echo "Using deps ${{matrix.python_deps}}"
+            python -m pip install --force-reinstall -r $GITHUB_WORKSPACE/build_tooling/${{matrix.python_deps}}
           fi
           python -m pip install arcticdb[Testing] pytest-split
           python -m pip uninstall -y pytest-cpp || true # No longer works on 3.6
@@ -245,10 +250,6 @@ jobs:
           echo -e "${{matrix.envs || ''}}" | tee -a $GITHUB_ENV
           if [[ -n "$MSYSTEM" ]] ; then
             echo "LOCALAPPDATA=$LOCALAPPDATA" | tee -a $GITHUB_ENV
-            MSYS_NO_PATHCONV=1 reg.exe ADD 'HKLM\SOFTWARE\Microsoft\Windows\Windows Error Reporting\LocalDumps'
-            cd "/proc/registry/HKEY_LOCAL_MACHINE/SOFTWARE/Microsoft"
-            find "Windows NT/CurrentVersion/AeDebug" "Windows/Windows Error Reporting/LocalDumps" \
-              -type f -print -exec xxd -c 64 '{}' \; || true
           fi
           ${{vars.EXTRA_TEST_PREPARE_CMD || ''}}
         env:
@@ -265,7 +266,7 @@ jobs:
         if: matrix.os == 'windows' && failure()
         uses: actions/upload-artifact@v3
         with:
-          name: crashdump-${{matrix.os}}-${{env.python_impl_name}}-${{matrix.type}}
+          name: crashdump-${{env.distinguishing_name}}
           path: ${{env.LOCALAPPDATA}}/CrashDumps/
 
       - name: Disk usage
@@ -277,6 +278,6 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v3
         with:
-          name: pytest-${{matrix.os}}-${{env.python_impl_name}}-${{matrix.type}}-${{inputs.python_deps || ''}}
+          name: pytest-${{env.distinguishing_name}}
           path: |
             ${{runner.temp}}/*test*
