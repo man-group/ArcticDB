@@ -185,6 +185,7 @@ set(arcticdb_srcs
         entity/types-inl.hpp
         entity/variant_key.hpp
         entity/versioned_item.hpp
+        entity/descriptor_item.hpp
         log/log.hpp
         log/trace.hpp
         pipeline/column_mapping.hpp

@@ -771,6 +771,10 @@ public:
             metadata_ = std::make_unique<google::protobuf::Any>(std::move(meta));
     }
 
+    bool has_metadata() {
+        return static_cast<bool>(metadata_);
+    }
+
     const google::protobuf::Any *metadata() const {
         return metadata_.get();
     }

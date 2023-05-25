@@ -19,6 +19,7 @@
 #include <arcticdb/pipeline/input_tensor_frame.hpp>
 #include <arcticdb/version/version_core.hpp>
 #include <arcticdb/version/versioned_engine.hpp>
+#include <arcticdb/entity/descriptor_item.hpp>
 
 #include <sstream>
 
@@ -115,7 +116,7 @@ public:
         ReadQuery& read_query,
         const ReadOptions& read_options) override;
 
-    std::pair<VersionedItem, std::optional<google::protobuf::Any>> read_descriptor_version_internal(
+    DescriptorItem read_descriptor_internal(
             const StreamId& stream_id,
             const VersionQuery& version_query);
 
@@ -176,10 +177,18 @@ public:
     );
 
     folly::Future<std::pair<std::optional<VariantKey>, std::optional<google::protobuf::Any>>> get_metadata(
-        std::optional<AtomKey> key);
+        std::optional<AtomKey>&& key);
 
     folly::Future<std::pair<std::optional<VariantKey>, std::optional<google::protobuf::Any>>> get_metadata_async(
         folly::Future<std::optional<AtomKey>>&& version_fut);
+
+    folly::Future<DescriptorItem> get_descriptor(
+        AtomKey&& key);
+
+    folly::Future<DescriptorItem> get_descriptor_async(
+        folly::Future<std::optional<AtomKey>>&& version_fut,
+        const StreamId& stream_id,
+        const VersionQuery& version_query);
 
     void create_column_stats_internal(
         const VersionedItem& versioned_item,
@@ -271,7 +280,7 @@ public:
         std::vector<ReadQuery>& read_queries,
         const ReadOptions& read_options);
 
-    std::vector<std::pair<VersionedItem, std::optional<google::protobuf::Any>>> batch_read_descriptor_internal(
+    std::vector<DescriptorItem> batch_read_descriptor_internal(
             const std::vector<StreamId>& stream_ids,
             const std::vector<VersionQuery>& version_queries);
 

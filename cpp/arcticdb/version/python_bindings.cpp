@@ -136,6 +136,25 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
         .def_property_readonly("symbol", &VersionedItem::symbol)
         .def_property_readonly("version", &VersionedItem::version);
 
+    py::class_<DescriptorItem>(version, "DescriptorItem")
+        .def_property_readonly("symbol", &DescriptorItem::symbol)
+        .def_property_readonly("version", &DescriptorItem::version)
+        .def_property_readonly("start_index", &DescriptorItem::start_index)
+        .def_property_readonly("end_index", &DescriptorItem::end_index)
+        .def_property_readonly("creation_ts", &DescriptorItem::creation_ts)
+        .def_property_readonly("timeseries_descriptor", [](const DescriptorItem& self) {
+          py::object pyobj;
+          auto timeseries_descriptor = self.timeseries_descriptor();
+          if (timeseries_descriptor.has_value()) {
+               arcticdb::proto::descriptors::TimeSeriesDescriptor tsd;
+               timeseries_descriptor->UnpackTo(&tsd);
+               pyobj = python_util::pb_to_python(tsd);
+          } else {
+               pyobj = pybind11::none();
+          }
+          return pyobj;
+        });
+
     py::class_<pipelines::FrameSlice, std::shared_ptr<pipelines::FrameSlice>>(version, "FrameSlice")
         .def_property_readonly("col_range", &pipelines::FrameSlice::columns)
         .def_property_readonly("row_range", &pipelines::FrameSlice::rows);
