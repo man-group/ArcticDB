@@ -337,18 +337,16 @@ std::pair<VersionedItem, FrameAndDescriptor> LocalVersionedEngine::read_datafram
     return std::make_pair(version.value_or(VersionedItem{}), std::move(frame_and_descriptor));
 }
 
-std::pair<VersionedItem, std::optional<google::protobuf::Any>> LocalVersionedEngine::read_descriptor_version_internal(
+std::pair<VersionedItem, std::optional<google::protobuf::Any>> LocalVersionedEngine::read_descriptor_internal(
         const StreamId& stream_id,
         const VersionQuery& version_query
     ) {
     ARCTICDB_SAMPLE(ReadDescriptor, 0)
-
-    auto version = get_version_to_read(stream_id, version_query);
-    missing_data::check<ErrorCode::E_NO_SUCH_VERSION>(static_cast<bool>(version),
+    auto metadata = read_metadata_internal(stream_id, version_query);
+    missing_data::check<ErrorCode::E_NO_SUCH_VERSION>(static_cast<bool>(metadata.first.has_value()),
         "Unable to retrieve descriptor data. {}@{}: version not found", stream_id, version_query);
-
-    auto metadata_proto = store()->read_metadata(version->key_).get().second;
-    return std::pair{version.value(), metadata_proto};
+    VersionedItem version{std::move(to_atom(*metadata.first))};
+    return std::pair{version, metadata.second};
 }
 
 std::vector<std::pair<VersionedItem, std::optional<google::protobuf::Any>>> LocalVersionedEngine::batch_read_descriptor_internal(

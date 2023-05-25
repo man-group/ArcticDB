@@ -1086,7 +1086,7 @@ std::pair<VersionedItem, py::object> PythonVersionStore::read_descriptor(
     const StreamId& stream_id,
     const VersionQuery& version_query
     ) {
-    auto [version, metadata_proto] = read_descriptor_version_internal(stream_id, version_query);
+    auto [version, metadata_proto] = read_descriptor_internal(stream_id, version_query);
     py::object pyobj;
     if (metadata_proto.has_value()) {
         arcticdb::proto::descriptors::TimeSeriesDescriptor tsd;

@@ -115,7 +115,7 @@ public:
         ReadQuery& read_query,
         const ReadOptions& read_options) override;
 
-    std::pair<VersionedItem, std::optional<google::protobuf::Any>> read_descriptor_version_internal(
+    std::pair<VersionedItem, std::optional<google::protobuf::Any>> read_descriptor_internal(
             const StreamId& stream_id,
             const VersionQuery& version_query);
 
