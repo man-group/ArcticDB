@@ -27,6 +27,7 @@
 #include <arcticdb/util/ranges_from_future.hpp>
 
 #include <arcticdb/entity/versioned_item.hpp>
+#include <arcticdb/entity/descriptor_item.hpp>
 #include <arcticdb/pipeline/query.hpp>
 #include <arcticdb/pipeline/slicing.hpp>
 
@@ -1082,40 +1083,18 @@ std::vector<std::pair<VersionedItem, py::object>> PythonVersionStore::batch_read
     return results;
 }
 
-std::pair<VersionedItem, py::object> PythonVersionStore::read_descriptor(
+DescriptorItem PythonVersionStore::read_descriptor(
     const StreamId& stream_id,
     const VersionQuery& version_query
     ) {
-    auto [version, metadata_proto] = read_descriptor_version_internal(stream_id, version_query);
-    py::object pyobj;
-    if (metadata_proto.has_value()) {
-        arcticdb::proto::descriptors::TimeSeriesDescriptor tsd;
-        metadata_proto->UnpackTo(&tsd);
-        pyobj = python_util::pb_to_python(tsd);
-    } else {
-        pyobj = pybind11::none();
-    }
-    return std::make_pair(version, pyobj);
+    return read_descriptor_internal(stream_id, version_query);
 }
 
-std::vector<std::pair<VersionedItem, py::object>> PythonVersionStore::batch_read_descriptor(
+std::vector<DescriptorItem> PythonVersionStore::batch_read_descriptor(
         const std::vector<StreamId>& stream_ids,
         const std::vector<VersionQuery>& version_queries){
     
-    auto vector_descriptors = batch_read_descriptor_internal(stream_ids, version_queries);
-    std::vector<std::pair<VersionedItem, py::object>> output_vector;
-    for (auto [version, metadata_proto] : vector_descriptors) {
-        py::object pyobj;
-        if (metadata_proto.has_value()) {
-            arcticdb::proto::descriptors::TimeSeriesDescriptor tsd;
-            metadata_proto->UnpackTo(&tsd);
-            pyobj = python_util::pb_to_python(tsd);
-        } else {
-            pyobj = pybind11::none();
-        }
-        output_vector.push_back(std::make_pair(version, pyobj));
-    }
-    return output_vector;
+    return batch_read_descriptor_internal(stream_ids, version_queries);
 }
 
 ReadResult PythonVersionStore::read_index(

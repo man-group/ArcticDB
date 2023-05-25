@@ -1341,8 +1341,12 @@ class Library:
         last_update_time = pd.to_datetime(info["last_update"], utc=True)
         columns = tuple(NameWithDType(n, t) for n, t in zip(info["col_names"]["columns"], info["dtype"]))
         index = NameWithDType(info["col_names"]["index"], info["col_names"]["index_dtype"])
-        date_range = tuple(map(lambda x: x.replace(tzinfo=datetime.timezone.utc), info["date_range"]))
-
+        date_range = tuple(
+            map(
+                lambda x: x.replace(tzinfo=datetime.timezone.utc) if not np.isnat(np.datetime64(x)) else x,
+                info["date_range"],
+            )
+        )
         return SymbolDescription(
             columns=columns,
             index=index,
@@ -1397,10 +1401,15 @@ class Library:
         infos = self._nvs.batch_get_info(symbol_strings, as_ofs)
         list_descriptions = []
         for info in infos:
-            last_update_time = pd.to_datetime(info["last_update"])
+            last_update_time = pd.to_datetime(info["last_update"], utc=True)
             columns = tuple(NameWithDType(n, t) for n, t in zip(info["col_names"]["columns"], info["dtype"]))
             index = NameWithDType(info["col_names"]["index"], info["col_names"]["index_dtype"])
-
+            date_range = tuple(
+                map(
+                    lambda x: x.replace(tzinfo=datetime.timezone.utc) if not np.isnat(np.datetime64(x)) else x,
+                    info["date_range"],
+                )
+            )
             list_descriptions.append(
                 SymbolDescription(
                     columns=columns,
@@ -1408,7 +1417,7 @@ class Library:
                     row_count=info["rows"],
                     last_update_time=last_update_time,
                     index_type=info["index_type"],
-                    date_range=info["date_range"],
+                    date_range=date_range,
                 )
             )
         return list_descriptions
