@@ -202,7 +202,7 @@ class ReadRequest(NamedTuple):
 
 class ReadInfoRequest(NamedTuple):
     """ReadInfoRequest is useful for batch methods like read_metadata_batch and get_description_batch, where we
-    only need to specify the symbol and the version information. Therefore, construction of this object is 
+    only need to specify the symbol and the version information. Therefore, construction of this object is
     only required for these batch operations.
 
     Attributes
@@ -219,6 +219,7 @@ class ReadInfoRequest(NamedTuple):
 
     symbol: str
     as_of: Optional[AsOf] = None
+
 
 class StagedDataFinalizeMethod(Enum):
     WRITE = auto()
@@ -301,8 +302,8 @@ class Library:
 
         Note: ArcticDB will use the 0-th level index of the Pandas DataFrame for its on-disk index.
 
-        Any non-`DatetimeIndex` will converted into an internal `RowCount` index. That is, ArcticDB will assign each 
-        row a monotonically increasing integer identifier and that will be used for the index. 
+        Any non-`DatetimeIndex` will converted into an internal `RowCount` index. That is, ArcticDB will assign each
+        row a monotonically increasing integer identifier and that will be used for the index.
 
         Parameters
         ----------
@@ -318,8 +319,8 @@ class Library:
         staged : bool, default=False
             Whether to write to a staging area rather than immediately to the library.
         validate_index: bool, default=False
-            If True, will verify that the index of `data` supports date range searches and update operations. This in effect tests that the data is sorted in ascending order. 
-            ArcticDB relies on Pandas to detect if data is sorted - you can call DataFrame.index.is_monotonic_increasing on your input DataFrame to see if Pandas believes the 
+            If True, will verify that the index of `data` supports date range searches and update operations. This in effect tests that the data is sorted in ascending order.
+            ArcticDB relies on Pandas to detect if data is sorted - you can call DataFrame.index.is_monotonic_increasing on your input DataFrame to see if Pandas believes the
             data to be sorted
 
             Note that each unit of staged data must a) be datetime indexed and b) not overlap with any other unit of
@@ -468,8 +469,8 @@ class Library:
         staged: `bool`, default=False
             See `write`.
         validate_index: bool, default=False
-            If True, will verify for each entry in the batch hat the index of `data` supports date range searches and update operations. 
-            This in effect tests that the data is sorted in ascending order. ArcticDB relies on Pandas to detect if data is sorted - 
+            If True, will verify for each entry in the batch hat the index of `data` supports date range searches and update operations.
+            This in effect tests that the data is sorted in ascending order. ArcticDB relies on Pandas to detect if data is sorted -
             you can call DataFrame.index.is_monotonic_increasing on your input DataFrame to see if Pandas believes the data to be sorted
 
         Returns
@@ -579,7 +580,7 @@ class Library:
     ) -> Optional[VersionedItem]:
         """
         Appends the given data to the existing, stored data. Append always appends along the index. A new version will
-        be created to reference the newly-appended data. Append only accepts data for which the index of the first 
+        be created to reference the newly-appended data. Append only accepts data for which the index of the first
         row is equal to or greater than the index of the last row in the existing data.
 
         Appends containing differing column sets to the existing data are only possible if the library has been
@@ -599,8 +600,8 @@ class Library:
         prune_previous_versions
             Removes previous (non-snapshotted) versions from the database when True.
         validate_index: bool, default=False
-            If True, will verify that resulting symbol will support date range searches and update operations. This in effect tests that the previous version of the 
-            data and `data` are both sorted in ascending order. ArcticDB relies on Pandas to detect if data is sorted - you can call DataFrame.index.is_monotonic_increasing 
+            If True, will verify that resulting symbol will support date range searches and update operations. This in effect tests that the previous version of the
+            data and `data` are both sorted in ascending order. ArcticDB relies on Pandas to detect if data is sorted - you can call DataFrame.index.is_monotonic_increasing
             on your input DataFrame to see if Pandas believes the data to be sorted
 
         Returns
@@ -754,10 +755,9 @@ class Library:
     def sort_and_finalize_staged_data(
         self, symbol: str, mode: Optional[StagedDataFinalizeMethod] = StagedDataFinalizeMethod.WRITE
     ):
-
         """
-        sort_merge will sort and finalize staged data. This differs from `finalize_staged_data` in that it 
-        can support staged segments with interleaved time periods - the end result will be ordered. This requires 
+        sort_merge will sort and finalize staged data. This differs from `finalize_staged_data` in that it
+        can support staged segments with interleaved time periods - the end result will be ordered. This requires
         performing a full sort in memory so can be time consuming.
 
         Parameters
@@ -960,9 +960,7 @@ class Library:
         """
         return self._nvs.read_metadata(symbol, as_of)
 
-    def read_metadata_batch(
-        self, symbols: List[Union[str, ReadInfoRequest]]
-    ) -> List[VersionedItem]:
+    def read_metadata_batch(self, symbols: List[Union[str, ReadInfoRequest]]) -> List[VersionedItem]:
         """
         Reads the metadata of multiple symbols.
 
@@ -970,21 +968,22 @@ class Library:
         ----------
         symbols : List[Union[str, ReadInfoRequest]]
             List of symbols to read.
-        
+
         Returns
         -------
         List[VersionedItem]
             A list of the read results, whose i-th element corresponds to the i-th element of the ``symbols`` parameter.
-            A VersionedItem object with the metadata field set as None will be returned if the requested version of the 
+            A VersionedItem object with the metadata field set as None will be returned if the requested version of the
                 symbol exists but there is no metadata
             A None object will be returned if the requested version of the symbol does not exist
-        
+
         See Also
         --------
         read_metadata
         """
         symbol_strings = []
         as_ofs = []
+
         def handle_read_request(s_):
             symbol_strings.append(s_.symbol)
             as_ofs.append(s_.as_of)
@@ -1100,7 +1099,7 @@ class Library:
             self._nvs.delete_version(symbol, v)
 
     def prune_previous_versions(self, symbol):
-        """ Removes all (non-snapshotted) versions from the database for the given symbol, except the latest.
+        """Removes all (non-snapshotted) versions from the database for the given symbol, except the latest.
 
         Parameters
         ----------
@@ -1352,9 +1351,7 @@ class Library:
             date_range=info["date_range"],
         )
 
-    def get_description_batch(
-        self, symbols: List[Union[str, ReadInfoRequest]]
-    ) -> List[SymbolDescription]:
+    def get_description_batch(self, symbols: List[Union[str, ReadInfoRequest]]) -> List[SymbolDescription]:
         """
         Returns descriptive data for a list of ``symbols``.
 
@@ -1376,6 +1373,7 @@ class Library:
         """
         symbol_strings = []
         as_ofs = []
+
         def handle_read_request(s):
             symbol_strings.append(s.symbol)
             as_ofs.append(s.as_of)
@@ -1436,7 +1434,7 @@ class Library:
         ----------
         Config map setting - SymbolDataCompact.SegmentCount will be replaced by a library setting
         in the future. This API will allow overriding the setting as well.
-        
+
         Returns
         -------
         bool
@@ -1446,13 +1444,13 @@ class Library:
     def defragment_symbol_data(self, symbol: str, segment_size: Optional[int] = None) -> VersionedItem:
         """
         Compacts fragmented segments by merging row-sliced segments (https://docs.arcticdb.io/technical/on_disk_storage/#data-layer).
-        This method calls `is_symbol_fragmented` to determine whether to proceed with the defragmentation operation. 
+        This method calls `is_symbol_fragmented` to determine whether to proceed with the defragmentation operation.
 
         CAUTION - Please note that a major restriction of this method at present is that any column slicing present on the data will be
-        removed in the new version created as a result of this method. 
-        As a result, if the impacted symbol has more than 127 columns (default value), the performance of selecting individual columns of 
-        the symbol (by using the `columns` parameter) may be negatively impacted in the defragmented version. 
-        If your symbol has less than 127 columns this caveat does not apply. 
+        removed in the new version created as a result of this method.
+        As a result, if the impacted symbol has more than 127 columns (default value), the performance of selecting individual columns of
+        the symbol (by using the `columns` parameter) may be negatively impacted in the defragmented version.
+        If your symbol has less than 127 columns this caveat does not apply.
         For more information, please see `columns_per_segment` here:
 
         https://docs.arcticdb.io/api/arcticdb/arcticdb.LibraryOptions

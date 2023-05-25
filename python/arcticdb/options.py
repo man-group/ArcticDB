@@ -44,9 +44,9 @@ class LibraryOptions:
             retrieval of specific columns regardless of the total number of columns stored in the symbol.
 
             If True, then updates and appends can contain columns not originally seen in the
-            most recent write call. The data will be dynamically backfilled on read when required for the new columns. 
-            Furthermore, Arctic will support numeric type promotions should the type of a column change - for example, 
-            should column A be of type int32 on write, and of type float on the next append, the column will be returned as 
+            most recent write call. The data will be dynamically backfilled on read when required for the new columns.
+            Furthermore, Arctic will support numeric type promotions should the type of a column change - for example,
+            should column A be of type int32 on write, and of type float on the next append, the column will be returned as
             a float to Pandas on read. Supported promotions include (narrow) integer to (wider) integer, and integer to float.
 
             When enabled, ArcticDB will only tile across the rows of the data. This will result in slower column

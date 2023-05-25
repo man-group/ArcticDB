@@ -415,8 +415,8 @@ class QueryBuilder:
 
     def apply(self, name, expr):
         """
-        Apply enables new columns to be created using supported QueryBuilder numeric operations. See the documentation for the 
-        QueryBuilder class for more information on supported expressions - any expression valid in a filter is valid when using 
+        Apply enables new columns to be created using supported QueryBuilder numeric operations. See the documentation for the
+        QueryBuilder class for more information on supported expressions - any expression valid in a filter is valid when using
         `apply`.
 
         Parameters
@@ -463,13 +463,13 @@ class QueryBuilder:
 
     def groupby(self, expr: str):
         """
-        Group symbol by column name. GroupBy operations must be followed by an aggregation operator. Currently the following four aggregation 
+        Group symbol by column name. GroupBy operations must be followed by an aggregation operator. Currently the following four aggregation
         operators are supported:
             * "mean" - compute the mean of the group
             * "sum" - compute the sum of the group
             * "min" - compute the min of the group
             * "max" - compute the max of the group
-        
+
         For usage examples, see below.
 
         Parameters

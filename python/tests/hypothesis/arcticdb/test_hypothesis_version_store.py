@@ -77,7 +77,6 @@ class WriteMode(IntFlag):
 
 
 class VersionStoreComparison(RuleBasedStateMachine):
-
     _lib: NativeVersionStore
     _visible_symbols: Set[str]
     _versions: Dict[str, List[Version]]  # Symbol -> List of Versions

@@ -189,9 +189,7 @@ def add_memory_library_to_env(cfg, lib_name, env_name, description=None):
     _add_lib_desc_to_env(env, lib_name, sid, description)
 
 
-def add_mongo_library_to_env(
-        cfg, lib_name, env_name, uri=None, description=None
-):
+def add_mongo_library_to_env(cfg, lib_name, env_name, uri=None, description=None):
     env = cfg.env_by_id[env_name]
     mongo = MongoConfig()
     if uri is not None:
