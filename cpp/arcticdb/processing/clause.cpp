@@ -231,15 +231,15 @@ AggregationClause::process(std::shared_ptr<Store> store, Composite<ProcessingSeg
         }
     });
 
-    size_t num_unique = 0;
-    auto offset = 0;
+    size_t num_unique{0};
+    size_t next_group_id{0};
     auto string_pool = std::make_shared<StringPool>();
     DataType grouping_data_type;
     GroupingMap grouping_map;
     std::optional<bool> dynamic_schema;
     procs.broadcast(
         [&store, &num_unique, &dynamic_schema,
-        &grouping_data_type, &grouping_map, &offset, &aggregators_data, &string_pool, that=this](
+        &grouping_data_type, &grouping_map, &next_group_id, &aggregators_data, &string_pool, that=this](
             auto &proc) {
             if (dynamic_schema.has_value()) {
                 internal::check<ErrorCode::E_ASSERTION_FAILURE>(
@@ -252,7 +252,7 @@ AggregationClause::process(std::shared_ptr<Store> store, Composite<ProcessingSeg
             if (std::holds_alternative<ColumnWithStrings>(partitioning_column)) {
                 ColumnWithStrings col = std::get<ColumnWithStrings>(partitioning_column);
                 entity::details::visit_type(col.column_->type().data_type(),
-                                            [&proc_=proc, &grouping_map, &offset, &aggregators_data, &string_pool, &col,
+                                            [&proc_=proc, &grouping_map, &next_group_id, &aggregators_data, &string_pool, &col,
                                              &num_unique, &store, &grouping_data_type, that](auto data_type_tag) {
                                                 using DataTypeTagType = decltype(data_type_tag);
                                                 using RawType = typename DataTypeTagType::raw_type;
@@ -261,6 +261,7 @@ AggregationClause::process(std::shared_ptr<Store> store, Composite<ProcessingSeg
                                                 std::vector<size_t> row_to_group;
                                                 row_to_group.reserve(col.column_->row_count());
                                                 auto input_data = col.column_->data();
+                                                auto hash_to_group = grouping_map.get<RawType>();
                                                 while (auto block = input_data.next<ScalarTagType<DataTypeTagType>>()) {
                                                     const auto row_count = block->row_count();
                                                     auto ptr = block->data();
@@ -276,17 +277,16 @@ AggregationClause::process(std::shared_ptr<Store> store, Composite<ProcessingSeg
                                                         } else {
                                                             val = *ptr;
                                                         }
-                                                        auto hashes = grouping_map.get<RawType>();
-                                                        if (auto it = hashes->find(val); it == hashes->end()) {
-                                                            row_to_group.push_back(offset);
-                                                            hashes->try_emplace(val, offset++);
+                                                        if (auto it = hash_to_group->find(val); it == hash_to_group->end()) {
+                                                            row_to_group.push_back(next_group_id);
+                                                            hash_to_group->try_emplace(val, next_group_id++);
                                                         } else {
                                                             row_to_group.push_back(it->second);
                                                         }
                                                     }
                                                 }
 
-                                                num_unique = offset;
+                                                num_unique = next_group_id;
                                                 util::check(num_unique != 0, "Got zero unique values");
                                                 for (auto agg_data: folly::enumerate(aggregators_data)) {
                                                     auto input_column_name = that->aggregators_.at(agg_data.index).get_input_column_name();

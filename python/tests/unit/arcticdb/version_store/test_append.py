@@ -518,6 +518,21 @@ def test_append_mix_ascending_descending(lmdb_version_store):
     assert info["sorted"] == "UNSORTED"
 
 
+def test_defrag(lmdb_version_store_tiny_segment_dynamic):
+    set_config_int("SymbolDataCompact.SegmentCount", 1)
+    lib = lmdb_version_store_tiny_segment_dynamic
+    sym = "test_defrag"
+    write_df = pd.DataFrame({0: [5.0, 10.0], 1: [6.0, 12.0], 2: [7.0, 17.0], 3: [8.0, 18.0]}, index=pd.date_range("2000-01-01", periods=2))
+    append_df = pd.DataFrame({0: [12.0, 5.0], 1: [1.0, 6.0], 3: [0.0, 8.0]}, index=pd.date_range("2000-01-03", periods=2))
+    lib.write(sym, write_df)
+    lib.append(sym, append_df)
+    read_df_1 = lib.read(sym).data
+    lib.defragment_symbol_data(sym, None)
+    read_df_2 = lib.read(sym).data
+    print(read_df_2)
+
+
+@pytest.mark.defrag
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None, max_examples=10)
 @given(
@@ -603,6 +618,7 @@ def test_append_with_defragmentation(
 
             seg_details = lib.read_index(sym)
 
+
             assert_frame_equal(before_compact, res)
 
             assert len(seg_details) == get_no_of_segments_after_defragmentation(
@@ -613,6 +629,7 @@ def test_append_with_defragmentation(
             )  # start_index and end_index got merged into one column
             assert np.array_equal(indexs.iloc[1:, 0].astype(str).values, indexs.iloc[:-1, 1].astype(str).values)
         else:
+            pass
             with pytest.raises(InternalException):
                 lib.defragment_symbol_data(sym, None)
         return before_compact, index_offset
@@ -644,7 +661,7 @@ def test_append_with_defragmentation(
             num_of_rows,
         )
 
-
+@pytest.mark.defrag
 def test_append_with_cont_mem_problem(sym, lmdb_version_store_tiny_segment_dynamic):
     set_config_int("SymbolDataCompact.SegmentCount", 1)
     df0 = pd.DataFrame({"0": ["01234567890123456"]}, index=[pd.Timestamp(0)])
