@@ -6,7 +6,7 @@ if(${CMAKE_SOURCE_DIR} STREQUAL ${CMAKE_CURRENT_SOURCE_DIR})
         SET(ARCTICDB_CORE_LIBRARY arcticdb::arcticdb_core_static)
     endif()
 else()
-    SET(ARCTICDB_CORE_LIBRARY arcticdb::arcticdb_core_static)
+    SET(ARCTICDB_CORE_LIBRARY arcticdb_core_static)
 endif()
 
     

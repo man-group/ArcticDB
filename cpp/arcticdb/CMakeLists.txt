@@ -567,7 +567,6 @@ endif()
 
 message("INSTALL" ${CMAKE_INSTALL_PREFIX})
 
-
 # Set standard installation directories
 set(RUNTIME_DESTINATION ${CMAKE_INSTALL_PREFIX}/bin) #DLL
 set(LIBRARY_DESTINATION ${CMAKE_INSTALL_PREFIX}/lib) # Libraries (.so, .lib, .dylib)
