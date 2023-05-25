@@ -1,5 +1,4 @@
 if(${CMAKE_SOURCE_DIR} STREQUAL ${CMAKE_CURRENT_SOURCE_DIR})    
-    message(FATAL_ERROR "This file should not be included directly yet. Use the top-level CMakeLists.txt instead.")
     find_package(arcticdb REQUIRED)
     if(${ARCTICDB_USING_CONDA})
     SET(ARCTICDB_CORE_LIBRARY arcticdb::arcticdb_core_shared)
@@ -26,7 +25,7 @@ add_library(arcticdb_python STATIC ${arcticdb_python_srcs})
 target_link_libraries(arcticdb_python
         PUBLIC
         #tsan
-        arcticdb_core_static
+        ${ARCTICDB_CORE_LIBRARY}
         ${AWSSDK_LINK_LIBRARIES}
         )
 

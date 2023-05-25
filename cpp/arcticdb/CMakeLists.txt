@@ -567,9 +567,26 @@ endif()
 
 message("INSTALL" ${CMAKE_INSTALL_PREFIX})
 
-# install headers
 
+# Set standard installation directories
+set(RUNTIME_DESTINATION ${CMAKE_INSTALL_PREFIX}/bin) #DLL
+set(LIBRARY_DESTINATION ${CMAKE_INSTALL_PREFIX}/lib) # Libraries (.so, .lib, .dylib)
+set(ARCHIVE_DESTINATION ${CMAKE_INSTALL_PREFIX}/lib) # Archives files (if needed)
+set(INCLUDES_DESTINATION ${CMAKE_INSTALL_PREFIX}/include) # Install headers in a headers directory
+set(INCLUDES_INSTALL_DIR ${INCLUDES_DESTINATION}/arcticdb) #Add a ModernCmake directory after headers/
 
+# Generate cmake configuration scripts (MC = ModernCMake)
+# Where to generate cmake files (build dir)
+set(ARCTICDB_GENERATED_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
+# Name of cmake config files
+set(ARCTICDB_VERSION_CONFIG "${ARCTICDB_GENERATED_DIR}/${PROJECT_NAME}ConfigVersion.cmake")
+set(ARCTICDB_PROJECT_CONFIG "${ARCTICDB_GENERATED_DIR}/${PROJECT_NAME}Config.cmake")
+# Name of CMake Targets file (ModernCMakeTargets.cmake)
+set(MC_TARGETS_EXPORT_NAME "${PROJECT_NAME}Targets")
+# Where to install cmake "Targets" files
+set(ARCTICDB_CONFIG_INSTALL_DIR "lib/cmake/${PROJECT_NAME}")
+# Set a namespace before targets (each target will be prefixed by ModernCMake::)
+set(ARCTICDB_NAMESPACE "${PROJECT_NAME}::")
 
 #install all hpp files but exclude python folder
 install(DIRECTORY ${CMAKE_SOURCE_DIR}/
@@ -578,14 +595,14 @@ install(DIRECTORY ${CMAKE_SOURCE_DIR}/
         PATTERN "python/*" EXCLUDE
         )
 
-# install libraries
-install(TARGETS arcticdb_core
-        EXPORT arcticdb_core
-        LIBRARY DESTINATION lib
-        ARCHIVE DESTINATION lib
-        RUNTIME DESTINATION bin
-        INCLUDES DESTINATION include
-        )
+# Install A library, the EXPORT is required to export your library as a COMPONENTS (ModernCMake::A)
+install(TARGETS arcticdb_proto arcticdb_core  arcticdb_core_static
+  EXPORT ${MC_TARGETS_EXPORT_NAME}
+  RUNTIME DESTINATION ${RUNTIME_DESTINATION}
+  LIBRARY DESTINATION ${LIBRARY_DESTINATION}
+  ARCHIVE DESTINATION ${ARCHIVE_DESTINATION}
+)
+
 
 install(TARGETS arcticdb_core_static
         EXPORT arcticdb_core_static
@@ -594,6 +611,27 @@ install(TARGETS arcticdb_core_static
         RUNTIME DESTINATION bin
         INCLUDES DESTINATION include
         )
+
+
+#Generate basic config version files
+include(CMakePackageConfigHelpers)
+# This is a cmake function that create basic ProjectconfigVersion.cmake files.
+write_basic_package_version_file(
+    "${ARCTICDB_VERSION_CONFIG}" VERSION ${MC_VERSION} COMPATIBILITY SameMajorVersion
+)
+# Configure the config.cmake.in
+configure_file("${CMAKE_SOURCE_DIR}/arcticdbConfig.cmake.in" "${ARCTICDB_PROJECT_CONFIG}" @ONLY)
+
+# Install cmake config files
+install(
+    FILES "${ARCTICDB_PROJECT_CONFIG}" "${ARCTICDB_VERSION_CONFIG}"
+    DESTINATION "${ARCTICDB_CONFIG_INSTALL_DIR}")
+
+# Install cmake targets files
+install(
+    EXPORT "${MC_TARGETS_EXPORT_NAME}"
+    NAMESPACE "${MC_NAMESPACE}"
+    DESTINATION "${ARCTICDB_CONFIG_INSTALL_DIR}")
 
 
 
