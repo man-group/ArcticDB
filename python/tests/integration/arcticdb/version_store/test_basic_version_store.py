@@ -357,6 +357,44 @@ def test_get_info_version(lmdb_version_store):
     assert info_1["last_update"] > info_0["last_update"]
 
 
+def test_get_info_date_range(lmdb_version_store):
+    # given
+    sym = "test_get_info_date_range"
+    df = pd.DataFrame(data={"col1": np.arange(10)}, index=pd.date_range(pd.Timestamp(0), periods=10))
+    lmdb_version_store.write(sym, df)
+    df = pd.DataFrame(data={"col1": np.arange(20)}, index=pd.date_range(pd.Timestamp(0), periods=20))
+    lmdb_version_store.write(sym, df, prune_previous_version=False)
+
+    # when
+    info_0 = lmdb_version_store.get_info(sym, version=0)
+    info_1 = lmdb_version_store.get_info(sym, version=1)
+    latest_version = lmdb_version_store.get_info(sym)
+
+    # then
+    assert latest_version == info_1
+    assert info_1["date_range"] == lmdb_version_store.get_timerange_for_symbol(sym, version=1)
+    assert info_0["date_range"] == lmdb_version_store.get_timerange_for_symbol(sym, version=0)
+
+
+def test_get_info_version_no_columns_nat(lmdb_version_store):
+    sym = "test_get_info_version_no_columns_nat"
+    column_names = ["a", "b", "c"]
+    df = pd.DataFrame(columns=column_names)
+    df["b"] = df["b"].astype("int64")
+    lmdb_version_store.write(sym, df, dynamic_strings=True, coerce_columns={"a": float, "b": int, "c": str})
+    info = lmdb_version_store.get_info(sym)
+    assert np.isnat(info["date_range"][0]) == True
+    assert np.isnat(info["date_range"][1]) == True
+
+
+def test_get_info_version_empty_nat(lmdb_version_store):
+    sym = "test_get_info_version_empty_nat"
+    lmdb_version_store.write(sym, pd.DataFrame())
+    info = lmdb_version_store.get_info(sym)
+    assert np.isnat(info["date_range"][0]) == True
+    assert np.isnat(info["date_range"][1]) == True
+
+
 def test_update_times(lmdb_version_store):
     # given
     df = pd.DataFrame(data={"col1": np.arange(10)}, index=pd.date_range(pd.Timestamp(0), periods=10))

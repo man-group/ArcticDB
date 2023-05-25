@@ -6,10 +6,12 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 import sys
+import os
 
 import pytz
 from arcticdb_ext.exceptions import InternalException
 from arcticdb.exceptions import ArcticNativeNotYetImplemented
+from pandas import Timestamp
 
 try:
     from arcticdb.version_store import VersionedItem as PythonVersionedItem
@@ -31,7 +33,7 @@ import pandas as pd
 from datetime import datetime, date, timezone
 import numpy as np
 from arcticdb.util.test import assert_frame_equal
-
+from numpy import datetime64
 
 try:
     from arcticdb.version_store.library import (
@@ -1207,13 +1209,43 @@ def test_get_description_batch(arctic_library):
         [ReadInfoRequest("symbol1", as_of=0), ReadInfoRequest("symbol2", as_of=0), ReadInfoRequest("symbol3", as_of=0)]
     )
 
-    assert infos[0].date_range == (datetime(2018, 1, 1), datetime(2018, 1, 6))
-    assert infos[1].date_range == (datetime(2019, 1, 1), datetime(2019, 1, 6))
-    assert infos[2].date_range == (datetime(2020, 1, 1), datetime(2020, 1, 6))
+    assert infos[0].date_range == tuple(
+        map(
+            lambda x: x.replace(tzinfo=timezone.utc) if not np.isnat(np.datetime64(x)) else x,
+            (datetime(2018, 1, 1), datetime(2018, 1, 6)),
+        )
+    )
+    assert infos[1].date_range == tuple(
+        map(
+            lambda x: x.replace(tzinfo=timezone.utc) if not np.isnat(np.datetime64(x)) else x,
+            (datetime(2019, 1, 1), datetime(2019, 1, 6)),
+        )
+    )
+    assert infos[2].date_range == tuple(
+        map(
+            lambda x: x.replace(tzinfo=timezone.utc) if not np.isnat(np.datetime64(x)) else x,
+            (datetime(2020, 1, 1), datetime(2020, 1, 6)),
+        )
+    )
 
-    assert original_infos[0].date_range == (datetime(2018, 1, 1), datetime(2018, 1, 4))
-    assert original_infos[1].date_range == (datetime(2019, 1, 1), datetime(2019, 1, 4))
-    assert original_infos[2].date_range == (datetime(2020, 1, 1), datetime(2020, 1, 4))
+    assert original_infos[0].date_range == tuple(
+        map(
+            lambda x: x.replace(tzinfo=timezone.utc) if not np.isnat(np.datetime64(x)) else x,
+            (datetime(2018, 1, 1), datetime(2018, 1, 4)),
+        )
+    )
+    assert original_infos[1].date_range == tuple(
+        map(
+            lambda x: x.replace(tzinfo=timezone.utc) if not np.isnat(np.datetime64(x)) else x,
+            (datetime(2019, 1, 1), datetime(2019, 1, 4)),
+        )
+    )
+    assert original_infos[2].date_range == tuple(
+        map(
+            lambda x: x.replace(tzinfo=timezone.utc) if not np.isnat(np.datetime64(x)) else x,
+            (datetime(2020, 1, 1), datetime(2020, 1, 4)),
+        )
+    )
 
     list_infos = list(zip(infos, original_infos))
     # then
@@ -1265,13 +1297,43 @@ def test_get_description_batch_multiple_versions(arctic_library):
     infos = infos_multiple_version[3:6]
     original_infos = infos_multiple_version[0:3]
 
-    assert infos[0].date_range == (datetime(2018, 1, 1), datetime(2018, 1, 6))
-    assert infos[1].date_range == (datetime(2019, 1, 1), datetime(2019, 1, 6))
-    assert infos[2].date_range == (datetime(2020, 1, 1), datetime(2020, 1, 6))
+    assert infos[0].date_range == tuple(
+        map(
+            lambda x: x.replace(tzinfo=timezone.utc) if not np.isnat(np.datetime64(x)) else x,
+            (datetime(2018, 1, 1), datetime(2018, 1, 6)),
+        )
+    )
+    assert infos[1].date_range == tuple(
+        map(
+            lambda x: x.replace(tzinfo=timezone.utc) if not np.isnat(np.datetime64(x)) else x,
+            (datetime(2019, 1, 1), datetime(2019, 1, 6)),
+        )
+    )
+    assert infos[2].date_range == tuple(
+        map(
+            lambda x: x.replace(tzinfo=timezone.utc) if not np.isnat(np.datetime64(x)) else x,
+            (datetime(2020, 1, 1), datetime(2020, 1, 6)),
+        )
+    )
 
-    assert original_infos[0].date_range == (datetime(2018, 1, 1), datetime(2018, 1, 4))
-    assert original_infos[1].date_range == (datetime(2019, 1, 1), datetime(2019, 1, 4))
-    assert original_infos[2].date_range == (datetime(2020, 1, 1), datetime(2020, 1, 4))
+    assert original_infos[0].date_range == tuple(
+        map(
+            lambda x: x.replace(tzinfo=timezone.utc) if not np.isnat(np.datetime64(x)) else x,
+            (datetime(2018, 1, 1), datetime(2018, 1, 4)),
+        )
+    )
+    assert original_infos[1].date_range == tuple(
+        map(
+            lambda x: x.replace(tzinfo=timezone.utc) if not np.isnat(np.datetime64(x)) else x,
+            (datetime(2019, 1, 1), datetime(2019, 1, 4)),
+        )
+    )
+    assert original_infos[2].date_range == tuple(
+        map(
+            lambda x: x.replace(tzinfo=timezone.utc) if not np.isnat(np.datetime64(x)) else x,
+            (datetime(2020, 1, 1), datetime(2020, 1, 4)),
+        )
+    )
 
     list_infos = list(zip(infos, original_infos))
     # then
@@ -1282,6 +1344,52 @@ def test_get_description_batch_multiple_versions(arctic_library):
         assert info.row_count == 6
         assert original_info.row_count == 4
         assert info.last_update_time > original_info.last_update_time
+
+
+def test_read_description_batch_high_amount(arctic_library):
+    lib = arctic_library
+    num_symbols = 10
+    num_versions = 10
+    start_year = 2000
+    start_day = 1
+    for sym in range(num_symbols):
+        for version in range(num_versions):
+            start_date = pd.Timestamp(str("{}/1/{}".format(start_year + sym, start_day + version)))
+            end_date = pd.Timestamp(str("{}/1/{}".format(start_year + sym, start_day + version + 3)))
+            df = pd.DataFrame({"column": [1, 2, 3, 4]}, index=pd.date_range(start=start_date, end=end_date))
+            lib.write("sym_" + str(sym), df, prune_previous_versions=False)
+    requests = [
+        ReadInfoRequest("sym_" + str(sym), as_of=version)
+        for sym in range(num_symbols)
+        for version in range(num_versions)
+    ]
+    results_list = lib.get_description_batch(requests)
+    for sym in range(num_symbols):
+        for version in range(num_versions):
+            idx = sym * num_versions + version
+            date_ramge_comp = (
+                datetime(start_year + sym, 1, start_day + version),
+                datetime(start_year + sym, 1, start_day + version + 3),
+            )
+            date_range_comp_with_utc = tuple(
+                map(lambda x: x.replace(tzinfo=timezone.utc) if not np.isnat(np.datetime64(x)) else x, date_ramge_comp)
+            )
+            assert results_list[idx].date_range == date_range_comp_with_utc
+            if version > 0:
+                assert results_list[idx].last_update_time > results_list[idx - 1].last_update_time
+                assert results_list[idx].last_update_time.tz == pytz.UTC
+
+
+def test_read_description_batch_empty_nat(arctic_library):
+    lib = arctic_library
+    num_symbols = 10
+    for sym in range(num_symbols):
+        lib.write("sym_" + str(sym), pd.DataFrame())
+    requests = [ReadInfoRequest("sym_" + str(sym)) for sym in range(num_symbols)]
+    results_list = lib.get_description_batch(requests)
+    for sym in range(num_symbols):
+        assert np.isnat(results_list[sym].date_range[0]) == True
+        assert np.isnat(results_list[sym].date_range[1]) == True
 
 
 def test_tail(arctic_library):

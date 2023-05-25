@@ -314,6 +314,10 @@ public:
         impl_->set_metadata(std::move(meta));
     }
 
+    bool has_metadata() {
+        return impl_->has_metadata();
+    }
+
     void override_metadata(google::protobuf::Any &&meta) {
         impl_->override_metadata(std::move(meta));
     }

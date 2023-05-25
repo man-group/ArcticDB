@@ -337,30 +337,93 @@ std::pair<VersionedItem, FrameAndDescriptor> LocalVersionedEngine::read_datafram
     return std::make_pair(version.value_or(VersionedItem{}), std::move(frame_and_descriptor));
 }
 
-std::pair<VersionedItem, std::optional<google::protobuf::Any>> LocalVersionedEngine::read_descriptor_version_internal(
-        const StreamId& stream_id,
-        const VersionQuery& version_query
-    ) {
-    ARCTICDB_SAMPLE(ReadDescriptor, 0)
+folly::Future<DescriptorItem> LocalVersionedEngine::get_descriptor(
+    AtomKey&& key){
+    return store()->read(key)
+    .thenValue([](auto&& key_seg_pair) -> DescriptorItem {
+        auto key_seg = std::move(std::get<0>(key_seg_pair));
+        auto seg = std::move(std::get<1>(key_seg_pair));
+        auto timeseries_descriptor = seg.has_metadata() ? std::make_optional<google::protobuf::Any>(*seg.metadata()) : std::nullopt;
+        auto start_index = seg.column(position_t(index::Fields::start_index)).type().visit_tag([&](auto column_desc_tag) -> std::optional<NumericIndex> {
+            using ColumnDescriptorType = std::decay_t<decltype(column_desc_tag)>;
+            using ColumnTagType =  typename ColumnDescriptorType::DataTypeTag;
+            if (seg.row_count() == 0) {
+                return std::nullopt;
+            } else if constexpr (is_numeric_type(ColumnTagType::data_type)) {
+                std::optional<NumericIndex> start_index;
+                auto column_data = seg.column(position_t(index::Fields::start_index)).data();
+                while (auto block = column_data.template next<ColumnDescriptorType>()) {
+                    auto ptr = reinterpret_cast<const NumericIndex *>(block.value().data());
+                    const auto row_count = block.value().row_count();
+                    for (auto i = 0u; i < row_count; ++i) {
+                        auto value = *ptr++;
+                        start_index = start_index.has_value() ? std::min(start_index.value(), value) : value; 
+                    }
+                }
+                return start_index;
+            } else {
+                util::raise_rte("Unsupported index type {}", seg.column(position_t(index::Fields::start_index)).type());
+            }
+        });
 
-    auto version = get_version_to_read(stream_id, version_query);
-    missing_data::check<ErrorCode::E_NO_SUCH_VERSION>(static_cast<bool>(version),
-        "Unable to retrieve descriptor data. {}@{}: version not found", stream_id, version_query);
-
-    auto metadata_proto = store()->read_metadata(version->key_).get().second;
-    return std::pair{version.value(), metadata_proto};
+        auto end_index = seg.column(position_t(index::Fields::end_index)).type().visit_tag([&](auto column_desc_tag) -> std::optional<NumericIndex> {
+            using ColumnDescriptorType = std::decay_t<decltype(column_desc_tag)>;
+            using ColumnTagType =  typename ColumnDescriptorType::DataTypeTag;
+            if (seg.row_count() == 0) {
+                return std::nullopt;
+            } else if constexpr (is_numeric_type(ColumnTagType::data_type)) {
+                std::optional<NumericIndex> end_index;
+                auto column_data = seg.column(position_t(index::Fields::end_index)).data();
+                while (auto block = column_data.template next<ColumnDescriptorType>()) {
+                    auto ptr = reinterpret_cast<const NumericIndex *>(block.value().data());
+                    const auto row_count = block.value().row_count();
+                    for (auto i = 0u; i < row_count; ++i) {
+                        auto value = *ptr++;
+                        end_index = end_index.has_value() ? std::max(end_index.value(), value) : value; 
+                    }
+                }
+                return end_index;
+            } else {
+                util::raise_rte("Unsupported index type {}", seg.column(position_t(index::Fields::end_index)).type());
+            }
+        });
+        return DescriptorItem{std::move(to_atom(key_seg)), std::move(start_index), std::move(end_index), std::move(timeseries_descriptor)};
+    });
 }
 
-std::vector<std::pair<VersionedItem, std::optional<google::protobuf::Any>>> LocalVersionedEngine::batch_read_descriptor_internal(
-        const std::vector<StreamId>& stream_ids,
-        const std::vector<VersionQuery>& version_queries) {
-    std::vector<folly::Future<std::pair<VersionedItem, std::optional<google::protobuf::Any>>>> results_fut;
-    for (size_t idx=0; idx < stream_ids.size(); idx++) {
-        auto version_query = version_queries.size() > idx ? version_queries[idx] : VersionQuery{};
-        results_fut.push_back(read_descriptor_version_internal(stream_ids[idx],
-                                                              version_query));
+folly::Future<DescriptorItem> LocalVersionedEngine::get_descriptor_async(
+    folly::Future<std::optional<AtomKey>>&& version_fut,
+    const StreamId& stream_id,
+    const VersionQuery& version_query){
+    return  std::move(version_fut)
+    .thenValue([this, &stream_id, &version_query](std::optional<AtomKey>&& key){
+        missing_data::check<ErrorCode::E_NO_SUCH_VERSION>(key.has_value(),
+        "Unable to retrieve descriptor data. {}@{}: version not found", stream_id, version_query);
+        return get_descriptor(std::move(key.value()));
+    }).via(&async::cpu_executor());
+}
+
+DescriptorItem LocalVersionedEngine::read_descriptor_internal(
+    const StreamId& stream_id,
+    const VersionQuery& version_query
+    ) {
+    ARCTICDB_SAMPLE(ReadDescriptor, 0)
+    auto version = get_version_to_read(stream_id, version_query);
+    missing_data::check<ErrorCode::E_NO_SUCH_VERSION>(version.has_value(),
+        "Unable to retrieve descriptor data. {}@{}: version not found", stream_id, version_query);
+    return get_descriptor(std::move(version->key_)).get();
+}
+
+std::vector<DescriptorItem> LocalVersionedEngine::batch_read_descriptor_internal(
+    const std::vector<StreamId>& stream_ids,
+    const std::vector<VersionQuery>& version_queries) {
+    auto versions_fut = batch_get_versions(store(), version_map(), stream_ids, version_queries);
+    std::vector<folly::Future<DescriptorItem>> fut_vec;
+    for(const auto& stream_id : folly::enumerate(stream_ids)) {
+        fut_vec.push_back(
+            get_descriptor_async(std::move(versions_fut[stream_id.index]), *stream_id, version_queries[stream_id.index]));
     }
-    return folly::collect(results_fut).get();
+    return folly::collect(fut_vec).get();
 }
 
 void LocalVersionedEngine::flush_version_map() {
@@ -1199,7 +1262,7 @@ SpecificAndLatestVersionKeys LocalVersionedEngine::get_stream_index_map(
 }
 
 folly::Future<std::pair<std::optional<VariantKey>, std::optional<google::protobuf::Any>>> LocalVersionedEngine::get_metadata(
-    std::optional<AtomKey> key){
+    std::optional<AtomKey>&& key){
     if (key.has_value()){
         return store()->read_metadata(key.value());
     }else{
@@ -1210,8 +1273,8 @@ folly::Future<std::pair<std::optional<VariantKey>, std::optional<google::protobu
 folly::Future<std::pair<std::optional<VariantKey>, std::optional<google::protobuf::Any>>> LocalVersionedEngine::get_metadata_async(
     folly::Future<std::optional<AtomKey>>&& version_fut){
     return  std::move(version_fut)
-    .thenValue([this](std::optional<AtomKey> key){
-        return get_metadata(key);
+    .thenValue([this](std::optional<AtomKey>&& key){
+        return get_metadata(std::move(key));
     });
 }
 
@@ -1233,7 +1296,7 @@ std::pair<std::optional<VariantKey>, std::optional<google::protobuf::Any>> Local
     ) {
     auto version = get_version_to_read(stream_id, version_query);
     std::optional<AtomKey> key = version.has_value() ? std::make_optional<AtomKey>(version->key_) : std::nullopt;
-    return get_metadata(key).get();
+    return get_metadata(std::move(key)).get();
 }
 
 
@@ -1311,7 +1374,7 @@ std::unordered_map<KeyType, std::pair<size_t, size_t>> LocalVersionedEngine::sca
         std::vector<stream::StreamSource::ReadContinuation> continuations;
         std::atomic<size_t> key_size{0};
         for(auto&& key : keys) {
-            continuations.emplace_back([&key_size] (auto&& ks) {
+            continuations.emplace_back([&key,&key_size] (auto&& ks) {
                 auto key_seg = std::move(ks);
                 key_size += key_seg.segment().total_segment_size();
                 return key_seg.variant_key();
