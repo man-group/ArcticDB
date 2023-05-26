@@ -62,6 +62,7 @@ def generic_filter_test_strings(version_store, symbol, df, arctic_query, pandas_
         generic_filter_test(version_store, symbol, df, arctic_query, pandas_query, dynamic_strings)
 
 
+@pytest.mark.pickling
 def test_querybuilder_shallow_copy(lmdb_version_store):
     df = DataFrame({"a": [0, 1]}, index=np.arange(2))
     q = QueryBuilder()
@@ -72,6 +73,7 @@ def test_querybuilder_shallow_copy(lmdb_version_store):
     generic_filter_test(lmdb_version_store, "test_querybuilder_shallow_copy", df, q_copy, pandas_query)
 
 
+@pytest.mark.pickling
 def test_querybuilder_deepcopy(lmdb_version_store):
     df = DataFrame({"a": [0, 1]}, index=np.arange(2))
     q = QueryBuilder()
@@ -83,6 +85,7 @@ def test_querybuilder_deepcopy(lmdb_version_store):
     generic_filter_test(lmdb_version_store, "test_querybuilder_deepcopy", df, q_copy, pandas_query)
 
 
+@pytest.mark.pickling
 def test_querybuilder_pickle(lmdb_version_store):
     df = DataFrame({"a": [0, 1]}, index=np.arange(2))
     q = QueryBuilder()

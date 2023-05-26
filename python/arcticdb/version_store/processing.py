@@ -5,9 +5,8 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
-import copy
+from collections import namedtuple
 import datetime
-from enum import Enum
 from math import inf
 
 import numpy as np
@@ -258,11 +257,11 @@ def value_list_from_args(*args):
     return value_list
 
 
-class SupportedClauses(Enum):
-    FILTER = 1
-    PROJECTION = 2
-    GROUPBY = 3
-    AGGREGATION = 4
+# These are just used for shallow/deep copying, pickling, and equality checks
+PythonFilterClause = namedtuple("PythonFilterClause", ["expr"])
+PythonProjectionClause = namedtuple("PythonProjectionClause", ["name", "expr"])
+PythonGroupByClause = namedtuple("PythonGroupByClause", ["name"])
+PythonAggregationClause = namedtuple("PythonAggregationClause", ["aggregations"])
 
 
 class QueryBuilder:
@@ -389,7 +388,7 @@ class QueryBuilder:
         """
         input_columns, expression_context = visit_expression(expr)
         self.clauses.append(_ProjectClause(input_columns, name, expression_context))
-        self._python_clauses.append((SupportedClauses.PROJECTION, name, expr))
+        self._python_clauses.append(PythonProjectionClause(name, expr))
         return self
 
     def groupby(self, name: str):
@@ -466,7 +465,7 @@ class QueryBuilder:
             Modified QueryBuilder object.
         """
         self.clauses.append(_GroupByClause(name))
-        self._python_clauses.append((SupportedClauses.GROUPBY, name))
+        self._python_clauses.append(PythonGroupByClause(name))
         return self
 
     def agg(self, aggregations: Dict[str, str]):
@@ -475,7 +474,7 @@ class QueryBuilder:
         for v in aggregations.values():
             v = v.lower()
         self.clauses.append(_AggregationClause(self.clauses[-1].grouping_column, aggregations))
-        self._python_clauses.append((SupportedClauses.AGGREGATION, aggregations))
+        self._python_clauses.append(PythonAggregationClause(aggregations))
         return self
 
     def __eq__(self, right):
@@ -494,7 +493,7 @@ class QueryBuilder:
                 item = ExpressionNode.compose(item, _OperationType.IDENTITY, None)
             input_columns, expression_context = visit_expression(item)
             self.clauses.append(_FilterClause(input_columns, expression_context, self._optimisation))
-            self._python_clauses.append((SupportedClauses.FILTER, item))
+            self._python_clauses.append(PythonFilterClause(item))
             return self
 
     def __getattr__(self, key):
@@ -508,19 +507,19 @@ class QueryBuilder:
     def __setstate__(self, state):
         vars(self).update(state)
         self.clauses = []
-        for pickling_clause in self._python_clauses:
-            if pickling_clause[0] == SupportedClauses.FILTER:
-                input_columns, expression_context = visit_expression(pickling_clause[1])
+        for python_clause in self._python_clauses:
+            if isinstance(python_clause, PythonFilterClause):
+                input_columns, expression_context = visit_expression(python_clause.expr)
                 self.clauses.append(_FilterClause(input_columns, expression_context, self._optimisation))
-            elif pickling_clause[0] == SupportedClauses.PROJECTION:
-                input_columns, expression_context = visit_expression(pickling_clause[2])
-                self.clauses.append(_ProjectClause(input_columns, pickling_clause[1], expression_context))
-            elif pickling_clause[0] == SupportedClauses.GROUPBY:
-                self.clauses.append(_GroupByClause(pickling_clause[1]))
-            elif pickling_clause[0] == SupportedClauses.AGGREGATION:
-                self.clauses.append(_AggregationClause(self.clauses[-1].grouping_column, pickling_clause[1]))
+            elif isinstance(python_clause, PythonProjectionClause):
+                input_columns, expression_context = visit_expression(python_clause.expr)
+                self.clauses.append(_ProjectClause(input_columns, python_clause.name, expression_context))
+            elif isinstance(python_clause, PythonGroupByClause):
+                self.clauses.append(_GroupByClause(python_clause.name))
+            elif isinstance(python_clause, PythonAggregationClause):
+                self.clauses.append(_AggregationClause(self.clauses[-1].grouping_column, python_clause.aggregations))
             else:
-                raise ArcticNativeException(f"Unrecognised clause type {pickling_clause[0]} when unpickling QueryBuilder")
+                raise ArcticNativeException(f"Unrecognised clause type {type(python_clause)} when unpickling QueryBuilder")
 
     def __deepcopy__(self, memo):
         cls = self.__class__
