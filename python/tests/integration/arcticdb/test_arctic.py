@@ -1257,3 +1257,8 @@ def test_reload_symbol_list(moto_s3_uri_incl_bucket, boto_client):
 
     lib.reload_symbol_list()
     assert len(get_symbol_list_keys()) == 1
+
+
+def test_get_uri(moto_s3_uri_incl_bucket):
+    ac = Arctic(moto_s3_uri_incl_bucket)
+    assert ac.get_uri() == moto_s3_uri_incl_bucket
