@@ -25,7 +25,7 @@ import string
 from arcticdb.exceptions import ArcticNativeException
 from arcticdb.version_store.processing import QueryBuilder
 from arcticdb_ext.exceptions import InternalException, UserInputException
-from arcticdb.util.test import assert_frame_equal
+from arcticdb.util.test import assert_frame_equal, IS_PANDAS_ZERO
 from arcticdb.util.hypothesis import (
     use_of_function_scoped_fixtures_in_hypothesis_checked,
     integral_type_strategies,
@@ -892,7 +892,7 @@ def test_filter_numeric_isin_hashing_overflows(lmdb_version_store, df_col, isin_
     assert_frame_equal(expected, result)
 
 
-def test_filter_numeric_isin_unsigned(lmdb_version_store):
+def test_filter_numeric_isin_unsigned_max_uint64(lmdb_version_store):
     df = pd.DataFrame({"a": [0, 1, 2 ** 64 - 1]})
     lmdb_version_store.write("test_filter_numeric_isin_unsigned", df)
 
@@ -910,6 +910,7 @@ def test_filter_numeric_isin_unsigned(lmdb_version_store):
     df=dataframes_with_names_and_dtypes(["a"], integral_type_strategies()),
     vals=st.frozensets(unsigned_integral_type_strategies(), min_size=1),
 )
+@pytest.mark.skipif(IS_PANDAS_ZERO, reason="Early Pandas filtering does not handle unsigned well")
 def test_filter_numeric_isnotin_unsigned(lmdb_version_store, df, vals):
     numeric_isin_asumptions(df, vals)
     q = QueryBuilder()

@@ -36,7 +36,8 @@ from arcticdb.version_store._normalization import (
     NPDDataFrame,
 )
 from arcticdb.version_store._common import TimeFrame
-from arcticdb.util.test import param_dict, CustomThing, TestCustomNormalizer, assert_frame_equal, assert_series_equal
+from arcticdb.util.test import \
+    param_dict, CustomThing, TestCustomNormalizer, assert_frame_equal, assert_series_equal, IS_PANDAS_ZERO
 from arcticdb.exceptions import ArcticNativeException
 
 
@@ -82,13 +83,18 @@ def test_fails_humongous_data():
 
 
 def test_empty_df():
-    d = pd.DataFrame(data={"C": []}, index=pd.MultiIndex(levels=[["A"], ["B"]], codes=[[], []], names=["X", "Y"]))
+    if IS_PANDAS_ZERO:
+        d = pd.DataFrame(data={"C": []}, index=pd.MultiIndex(levels=[["A"], ["B"]], labels=[[], []], names=["X", "Y"]))
+    else:
+        d = pd.DataFrame(data={"C": []}, index=pd.MultiIndex(levels=[["A"], ["B"]], codes=[[], []], names=["X", "Y"]))
+
     norm = CompositeNormalizer()
     # TODO: Remove coerce_columns (#224) and/or hard-coded index column name (#222)
     df, norm_meta = norm.normalize(d, coerce_columns={"__idx__Y": "O", "C": "float64"})
     fd = FrameData.from_npd_df(df)
     D = norm.denormalize(fd, norm_meta)
-    assert_equal(d.index.to_numpy(), D.index.to_numpy())
+    if not IS_PANDAS_ZERO:
+        assert_equal(d.index.to_numpy(), D.index.to_numpy())
     D.index = d.index
     assert_frame_equal(d, D)
 

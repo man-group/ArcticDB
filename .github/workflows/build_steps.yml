@@ -9,6 +9,7 @@ on:
       cibw_version:      {required: false, type: string, description: Follower only. Must match the cibw_image_tag}
       cibw_build:        {required: false, type: string, description: Follower only.}
       python3:           {default: -1, type: number, description: Python 3 minor version}
+      python_deps:       {required: false, type: string, description: Python requirements.txt in build_tooling to test against}
 env:
   python_impl_name: ${{inputs.python3 > 0 && format('cp3{0}', inputs.python3) || 'default'}}
 jobs:
@@ -134,7 +135,7 @@ jobs:
         if: inputs.job_type == 'follower'
         uses: actions/upload-artifact@v3
         with:
-          name: wheel-${{inputs.cibw_build}}
+          name: wheel-${{inputs.python_deps || inputs.cibw_build}}
           path: wheelhouse/*.whl
 
       - name: Discover test directory names
@@ -159,7 +160,7 @@ jobs:
         env:
           _exclusion: "\n!${{matrix.build_dir}}/**/"
         with:
-          name: build-metadata-${{inputs.job_type}}-${{matrix.os}}-${{env.python_impl_name}}
+          name: build-metadata-${{inputs.job_type}}-${{matrix.os}}-${{env.python_impl_name}}-${{inputs.python_deps || ''}}
           retention-days: ${{inputs.job_type == 'cpp-tests' && 7 || 90}}
           # On Windows, exclusions like "!**/*.ext" are prefixed with a drive letter (D:\) of the current working dir
           # before matching. This breaks since we moved the build_dir to C:. Work around by templating exclusions:
@@ -193,7 +194,7 @@ jobs:
       - name: Get wheel artifact
         uses: actions/download-artifact@v3
         with:
-          name: wheel-${{inputs.cibw_build}}
+          name: wheel-${{inputs.python_deps || inputs.cibw_build}}
           path: ${{runner.temp}}
 
       - name: Select Python (Linux)
@@ -221,8 +222,13 @@ jobs:
           python -V
           cd "$RUNNER_TEMP" # Works for Windows-style paths as well
           python -m pip install --force-reinstall *${{env.python_impl_name}}*.whl
+          if [[ -n "${{inputs.python_deps || ''}}" ]] ; then
+            echo "Using deps ${{inputs.python_deps}}"
+            python -m pip install --force-reinstall -r $GITHUB_WORKSPACE/build_tooling/${{inputs.python_deps}}
+          fi
           python -m pip install arcticdb[Testing] pytest-split
           python -m pip uninstall -y pytest-cpp || true # No longer works on 3.6
+          python -m pip list
           echo -e "${{matrix.envs || ''}}" | tee -a $GITHUB_ENV
           if [[ -n "$MSYSTEM" ]] ; then
             echo "LOCALAPPDATA=$LOCALAPPDATA" | tee -a $GITHUB_ENV
@@ -258,6 +264,6 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v3
         with:
-          name: pytest-${{matrix.os}}-${{env.python_impl_name}}-${{matrix.type}}
+          name: pytest-${{matrix.os}}-${{env.python_impl_name}}-${{matrix.type}}-${{inputs.python_deps || ''}}
           path: |
             ${{runner.temp}}/*test*
