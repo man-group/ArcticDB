@@ -211,15 +211,20 @@ struct PartitionClause {
 
                     auto grouper = std::make_shared<ResolvedGrouperType>(ResolvedGrouperType());
                     // TODO (AN-469): We should put some thought into how to pick an appropriate value for num_buckets
-                    auto num_cores = std::thread::hardware_concurrency() == 0 ? 16 : std::thread::hardware_concurrency();
+                    auto num_cores =
+                            std::thread::hardware_concurrency() == 0 ? 16 : std::thread::hardware_concurrency();
                     auto num_buckets = ConfigsMap::instance()->get_int("Partition.NumBuckets", num_cores);
                     auto bucketizer = std::make_shared<BucketizerType>(num_buckets);
 
                     output.push_back(
-                            partition_processing_segment<ResolvedGrouperType, BucketizerType>(proc, col, store, grouper, bucketizer));
+                            partition_processing_segment<ResolvedGrouperType, BucketizerType>(proc, col, store, grouper,
+                                                                                              bucketizer));
                 });
             } else {
-                util::raise_rte("Expected single column from expression");
+                internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+                        proc.dynamic_schema_,
+                        "Grouping column missing from row-slice in static schema symbol"
+                        );
             }
         });
 

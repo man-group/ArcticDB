@@ -444,6 +444,17 @@ void set_output_descriptors(
         const Composite<ProcessingSegment>& merged_procs,
         const std::vector<std::shared_ptr<Clause>>& clauses,
         const std::shared_ptr<PipelineContext>& pipeline_context) {
+    std::optional<std::string> index_column;
+    for (auto clause = clauses.rbegin(); clause != clauses.rend(); ++clause) {
+        if (auto new_index = (*clause)->new_index(); new_index.has_value()) {
+            index_column = new_index;
+            pipeline_context->norm_meta_->mutable_df()->mutable_common()->mutable_index()->set_name(*new_index);
+            pipeline_context->norm_meta_->mutable_df()->mutable_common()->mutable_index()->clear_fake_name();
+            pipeline_context->norm_meta_->mutable_df()->mutable_common()->mutable_index()->set_is_not_range_index(
+                    true);
+            break;
+        }
+    }
     std::optional<StreamDescriptor> new_stream_descriptor;
     merged_procs.broadcast([&new_stream_descriptor](const auto& proc) {
         if (!new_stream_descriptor.has_value()) {
@@ -470,11 +481,19 @@ void set_output_descriptors(
         auto original_stream_descriptor = pipeline_context->descriptor();
         StreamDescriptor final_stream_descriptor{original_stream_descriptor.id()};
         final_stream_descriptor.set_index(new_stream_descriptor->index());
+        // Erase field from new_stream_descriptor as we add them to final_stream_descriptor, as all fields left in new_stream_descriptor
+        // after these operations were created by the processing pipeline, and so should be appended
+        // Index columns should always appear first
+        if (index_column.has_value()) {
+            auto opt_idx = new_stream_descriptor->find_field(*index_column);
+            internal::check<ErrorCode::E_ASSERTION_FAILURE>(opt_idx.has_value(), "New index column not found in processing pipeline");
+            final_stream_descriptor.add_field(new_stream_descriptor->field(*opt_idx));
+            new_stream_descriptor->erase_field(*opt_idx);
+        }
         for (const auto& field: original_stream_descriptor.fields()) {
             if (auto position = new_stream_descriptor->find_field(field.name()); position.has_value()) {
                 final_stream_descriptor.add_field(new_stream_descriptor->field(*position));
-                // Erase, all fields left in new_stream_descriptor after this loop were created by the procesing
-                // pipeline, and so should be appended
+
                 new_stream_descriptor->erase_field(*position);
             }
         }
@@ -482,16 +501,6 @@ void set_output_descriptors(
             final_stream_descriptor.add_field(field);
         }
         pipeline_context->set_descriptor(final_stream_descriptor);
-    }
-
-    for (auto clause = clauses.rbegin(); clause != clauses.rend(); ++clause) {
-        if (auto new_index = (*clause)->new_index(); new_index.has_value()) {
-            pipeline_context->norm_meta_->mutable_df()->mutable_common()->mutable_index()->set_name(*new_index);
-            pipeline_context->norm_meta_->mutable_df()->mutable_common()->mutable_index()->clear_fake_name();
-            pipeline_context->norm_meta_->mutable_df()->mutable_common()->mutable_index()->set_is_not_range_index(
-                    true);
-            break;
-        }
     }
 }
 
