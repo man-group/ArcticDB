@@ -90,6 +90,7 @@ class Arctic:
 
         self._library_adapter = _cls(uri)
         self._library_manager = LibraryManager(self._library_adapter.config_library)
+        self._uri = uri
 
     def __getitem__(self, name: str) -> Library:
         lib = NativeVersionStore(
@@ -190,3 +191,18 @@ class Arctic:
         A list of all library names that exist in this Arctic instance.
         """
         return self._library_manager.list_libraries()
+
+    def get_uri(self) -> str:
+        """
+        Returns the URI that was used to create the Arctic instance.
+
+        Examples
+        --------
+        >>> arctic = Arctic('s3://MY_ENDPOINT:MY_BUCKET')
+        >>> arctic.get_uri()
+
+        Returns
+        -------
+        s3://MY_ENDPOINT:MY_BUCKET
+        """
+        return self._uri
