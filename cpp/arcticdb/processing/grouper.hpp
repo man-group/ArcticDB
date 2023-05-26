@@ -35,12 +35,16 @@ public:
         using DataTypeTag = typename GrouperDescriptor::DataTypeTag;
         using RawType = typename DataTypeTag::raw_type;
 
-        size_t group(RawType key, std::shared_ptr<StringPool> sp) const {
+        std::optional<size_t> group(RawType key, std::shared_ptr<StringPool> sp) const {
             constexpr DataType dt = DataTypeTag::data_type;
-            HashedValue hash_result;
+            std::optional<HashedValue> hash_result;
             if constexpr(dt == DataType::ASCII_FIXED64 || dt == DataType::ASCII_DYNAMIC64 || dt == DataType::UTF_FIXED64 || dt == DataType::UTF_DYNAMIC64) {
                 // TODO (AN-468): This will throw on Nones/NaNs
-                hash_result = hash(sp->get_view(key));
+                if (is_a_string(key)) {
+                    hash_result = hash(sp->get_view(key));
+                } else {
+                    hash_result = std::nullopt;
+                }
             } else {
                 hash_result = hash<RawType>(&key, 1);
             }

@@ -195,10 +195,21 @@ struct PartitionClause {
     process(std::shared_ptr<Store> store, Composite<ProcessingSegment> &&p) const {
         Composite<ProcessingSegment> output;
         auto procs = std::move(p);
-        procs.broadcast([&output, &store, &grouping_column = grouping_column_](auto &proc) {
+        std::optional<bool> dynamic_schema;
+        procs.broadcast([&output, &store, &dynamic_schema, &grouping_column = grouping_column_](auto &proc) {
+            if (dynamic_schema.has_value()) {
+                internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+                        *dynamic_schema == proc.dynamic_schema_,
+                        "All ProcessingSegments should agree on whether dynamic schema is true or false");
+            } else {
+                dynamic_schema = proc.dynamic_schema_;
+            }
             output.push_back(partition_processing_segment<GrouperType, BucketizerType>(store, proc, ColumnName(grouping_column)));
         });
-        schema::check<ErrorCode::E_COLUMN_DOESNT_EXIST>(output.size() != 0, "GroupBy called with non-existent grouping column {}", grouping_column_);
+        internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+                dynamic_schema.has_value(),
+                "Cannot proceed with processing pipeline without knowing dynamic schema value");
+        schema::check<ErrorCode::E_COLUMN_DOESNT_EXIST>(*dynamic_schema || output.size() != 0, "GroupBy called with non-existent grouping column {}", grouping_column_);
         return output;
     }
 
@@ -212,6 +223,12 @@ struct PartitionClause {
     repartition([[maybe_unused]] std::vector<Composite<ProcessingSegment>> &&c) const {
         auto comps = std::move(c);
         std::unordered_map<size_t, Composite<ProcessingSegment>> partition_map;
+        schema::check<ErrorCode::E_COLUMN_DOESNT_EXIST>(
+                std::any_of(comps.begin(), comps.end(), [](const Composite<ProcessingSegment>& proc) {
+                    return proc.size() > 0;
+                }),
+                "Grouping column {} does not exist or is empty", grouping_column_
+                );
 
         for (auto &comp : comps) {
             comp.broadcast([&partition_map](auto &proc) {

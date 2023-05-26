@@ -11,7 +11,7 @@ import pandas as pd
 from pandas import DataFrame
 
 from arcticdb.version_store.processing import QueryBuilder
-from arcticdb_ext.exceptions import InternalException
+from arcticdb_ext.exceptions import InternalException, SchemaException
 from arcticdb.util.test import assert_frame_equal
 from arcticdb.util.hypothesis import (
     use_of_function_scoped_fixtures_in_hypothesis_checked,
@@ -223,8 +223,8 @@ def test_group_empty_dataframe(lmdb_version_store):
 
     symbol = "test_group_empty_dataframe"
     lmdb_version_store.write(symbol, df)
-    vit = lmdb_version_store.read(symbol, query_builder=q)
-    assert vit.data.empty
+    with pytest.raises(SchemaException):
+        _ = lmdb_version_store.read(symbol, query_builder=q)
 
 
 def test_group_pickled_symbol(lmdb_version_store):
@@ -291,6 +291,35 @@ def test_group_column_splitting_strings(lmdb_version_store_tiny_segment):
     vit = lib.read(symbol, query_builder=q)
     vit.data.sort_index(inplace=True)
     assert_frame_equal(expected, vit.data)
+
+
+def test_aggregation_with_nones_and_nans_in_string_grouping_column(version_store_factory):
+    lib = version_store_factory(column_group_size=2, segment_row_size=2, dynamic_schema=True, dynamic_strings=True)
+    symbol = "test_aggregation_with_nones_and_nans_in_string_grouping_column"
+    # Structured so that the row-slices of the grouping column contain:
+    # 1 - All strings
+    # 2 - Strings and Nones
+    # 3 - Strings and NaNs
+    # 4 - All Nones
+    # 5 - All NaNs
+    # 6 - Nones and NaNs
+    df = DataFrame(
+        {
+            "grouping_column": ["group_1", "group_2", "group_1", None, np.nan, "group_2", None, None, np.nan, np.nan, None, np.nan],
+            "to_sum": np.arange(12),
+        },
+        index=np.arange(12),
+    )
+    lib.write(symbol, df, dynamic_strings=True)
+
+    expected = df.groupby("grouping_column").agg({"to_sum": "sum"})
+
+    q = QueryBuilder()
+    q = q.groupby("grouping_column").agg({"to_sum": "sum"})
+    res = lib.read(symbol, query_builder=q)
+    res.data.sort_index(inplace=True)
+
+    assert_frame_equal(res.data, expected)
 
 
 def test_docstring_example_query_builder_apply(lmdb_version_store):

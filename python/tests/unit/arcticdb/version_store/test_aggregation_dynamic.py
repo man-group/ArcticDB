@@ -176,8 +176,8 @@ def test_group_empty_dataframe_dynamic(lmdb_version_store_dynamic_schema):
 
     symbol = "test_group_empty_dataframe"
     lmdb_version_store_dynamic_schema.write(symbol, df)
-    vit = lmdb_version_store_dynamic_schema.read(symbol, query_builder=q)
-    assert vit.data.empty
+    with pytest.raises(SchemaException):
+        _ = lmdb_version_store_dynamic_schema.read(symbol, query_builder=q)
 
 
 def test_group_pickled_symbol_dynamic(lmdb_version_store_dynamic_schema):

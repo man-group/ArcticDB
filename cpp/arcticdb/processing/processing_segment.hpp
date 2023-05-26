@@ -144,13 +144,11 @@ namespace arcticdb {
         return output;
     }
 
-    using BucketVectorType = std::vector<size_t>;
-
     template<typename Grouper, typename Bucketizer>
-    BucketVectorType get_buckets(const ColumnWithStrings& col, std::shared_ptr<Grouper> grouper, std::shared_ptr<Bucketizer> bucketizer) {
+    std::vector<size_t> get_buckets(const ColumnWithStrings& col, std::shared_ptr<Grouper> grouper, std::shared_ptr<Bucketizer> bucketizer) {
         auto input_data = col.column_->data();
 
-        BucketVectorType output;
+        std::vector<size_t> output;
         output.reserve(col.column_->row_count());
         col.column_->type().visit_tag([&input_data, &grouper, &bucketizer, &col, &output] (auto type_desc_tag) {
             using TypeDescriptorTag =  decltype(type_desc_tag);
@@ -161,53 +159,14 @@ namespace arcticdb {
                 auto ptr = reinterpret_cast<const RawType*>(block->data());
                 for(auto i = 0u; i < row_count; ++i, ++ptr){
                     if constexpr(std::is_same_v<typename Grouper::GrouperDescriptor, TypeDescriptorTag>) {
-                        auto group = grouper->group(*ptr, col.string_pool_);
-                        output.emplace_back(bucketizer->bucket(group));
+                        auto opt_group = grouper->group(*ptr, col.string_pool_);
+                        if (opt_group.has_value()) {
+                            output.emplace_back(bucketizer->bucket(*opt_group));
+                        }
                     }
                 }
             }
         });
-        return output;
-    }
-
-    template<typename Grouper, typename Bucketizer>
-    Composite<ProcessingSegment> partition_processing_segment(
-            const ProcessingSegment& input,
-            const ColumnWithStrings& col,
-            const std::shared_ptr<Store>& store,
-            std::shared_ptr<Grouper> grouper,
-            std::shared_ptr<Bucketizer> bucketizer) {
-        Composite<ProcessingSegment> output;
-        auto bucket_vec = get_buckets(col, grouper, bucketizer);
-        std::vector<util::BitSet> bitsets;
-        bitsets.resize(bucketizer->num_buckets());
-        std::vector<util::BitSet::bulk_insert_iterator> iterators;
-        for(auto& bitset : bitsets)
-            iterators.emplace_back(util::BitSet::bulk_insert_iterator(bitset));
-
-        for(auto val : folly::enumerate(bucket_vec))
-            iterators[*val] = val.index;
-
-        for(auto& iterator : iterators)
-            iterator.flush();
-
-        for(auto bitset : folly::enumerate(bitsets)) {
-            if(bitset->count() != 0) {
-                ProcessingSegment proc;
-                proc.dynamic_schema_ = input.dynamic_schema_;
-                proc.set_bucket(bitset.index);
-                for (auto& seg_slice_and_key : input.data()) {
-                    const SegmentInMemory& seg = seg_slice_and_key.segment(store);
-                    bitset->resize(seg.row_count());
-                    auto new_seg = filter_segment(seg, *bitset);
-                    pipelines::FrameSlice new_slice{seg_slice_and_key.slice()};
-                    new_slice.adjust_rows(new_seg.row_count());
-
-                    proc.data().emplace_back(pipelines::SliceAndKey{std::move(new_seg), std::move(new_slice)});
-                }
-                output.push_back(std::move(proc));
-            }
-        }
         return output;
     }
 
