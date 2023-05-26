@@ -892,7 +892,7 @@ def test_filter_numeric_isin_hashing_overflows(lmdb_version_store, df_col, isin_
     assert_frame_equal(expected, result)
 
 
-def test_filter_numeric_isin_unsigned_not_hypothesis(lmdb_version_store):
+def test_filter_numeric_isin_unsigned_max_uint64(lmdb_version_store):
     df = pd.DataFrame({"a": [0, 1, 2 ** 64 - 1]})
     lmdb_version_store.write("test_filter_numeric_isin_unsigned", df)
 
