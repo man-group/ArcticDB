@@ -2091,7 +2091,7 @@ def test_filter_bool_short_circuiting():
 
     assert not errors
 
-@pytest.mark.defrag
+
 def test_filter_with_column_slicing_defragmented(lmdb_version_store_tiny_segment):
     set_config_int("SymbolDataCompact.SegmentCount", 0)
 

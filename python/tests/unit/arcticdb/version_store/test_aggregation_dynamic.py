@@ -101,27 +101,6 @@ def test_hypothesis_sum_agg_dynamic(lmdb_version_store_dynamic_schema, df):
         pass
 
 
-def test_sum_agg_dynamic(lmdb_version_store_dynamic_schema):
-    df = pd.DataFrame({"grouping_column": [1, 0], "a": [1.0, 1.0]})
-    lib = lmdb_version_store_dynamic_schema
-
-    symbol = f"sum_agg-{uuid.uuid4().hex}"
-    expected, slices = make_dynamic(df)
-    for df_slice in slices:
-        lib.append(symbol, df_slice, write_if_missing=True)
-
-    try:
-        q = QueryBuilder()
-        q = q.groupby("grouping_column").agg({"a": "sum"})
-        expected = expected.groupby("grouping_column").agg({"a": "sum"})
-
-        vit = lib.read(symbol, query_builder=q)
-        assert_equal_value(vit.data, expected)
-    # pandas 1.0 raises SpecificationError rather than KeyError if the column in "agg" doesn't exist
-    except (KeyError, SpecificationError):
-        pass
-
-
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
