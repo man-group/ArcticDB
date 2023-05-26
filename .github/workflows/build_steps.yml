@@ -223,6 +223,12 @@ jobs:
           disk-root: "D:"  # This is also the checkout directory. Total size 12GB.
         continue-on-error: true
 
+      - name: Install azurite
+        if: matrix.os == 'linux'
+        run: |
+          yum install -y npm
+          npm install -g azurite
+
       - name: Install the wheel and dependencies
         run: |
           cmake -P cpp/CMake/CpuCount.cmake | sed 's/^-- //' | tee -a $GITHUB_ENV
