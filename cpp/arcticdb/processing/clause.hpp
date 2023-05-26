@@ -194,40 +194,11 @@ struct PartitionClause {
     [[nodiscard]] Composite<ProcessingSegment>
     process(std::shared_ptr<Store> store, Composite<ProcessingSegment> &&p) const {
         Composite<ProcessingSegment> output;
-
         auto procs = std::move(p);
         procs.broadcast([&output, &store, &grouping_column = grouping_column_](auto &proc) {
-            // TODO (AN-469): I would push all of the logic between here and calling partition_processing_segment down
-            // into partition_processing_segment, just passing the column name to group on, processing segment, and
-            // store in
-            auto partitioning_column = proc.get(ColumnName(grouping_column), store);
-            if (std::holds_alternative<ColumnWithStrings>(partitioning_column)) {
-                ColumnWithStrings col = std::get<ColumnWithStrings>(partitioning_column);
-
-                col.column_->type().visit_tag([&output, &proc, &col, &store](auto type_desc_tag) {
-                    using TypeDescriptorTag = decltype(type_desc_tag);
-
-                    using ResolvedGrouperType = typename GrouperType::template Grouper<TypeDescriptorTag>;
-
-                    auto grouper = std::make_shared<ResolvedGrouperType>(ResolvedGrouperType());
-                    // TODO (AN-469): We should put some thought into how to pick an appropriate value for num_buckets
-                    auto num_cores =
-                            std::thread::hardware_concurrency() == 0 ? 16 : std::thread::hardware_concurrency();
-                    auto num_buckets = ConfigsMap::instance()->get_int("Partition.NumBuckets", num_cores);
-                    auto bucketizer = std::make_shared<BucketizerType>(num_buckets);
-
-                    output.push_back(
-                            partition_processing_segment<ResolvedGrouperType, BucketizerType>(proc, col, store, grouper,
-                                                                                              bucketizer));
-                });
-            } else {
-                internal::check<ErrorCode::E_ASSERTION_FAILURE>(
-                        proc.dynamic_schema_,
-                        "Grouping column missing from row-slice in static schema symbol"
-                        );
-            }
+            output.push_back(partition_processing_segment<GrouperType, BucketizerType>(store, proc, ColumnName(grouping_column)));
         });
-
+        schema::check<ErrorCode::E_COLUMN_DOESNT_EXIST>(output.size() != 0, "GroupBy called with non-existent grouping column {}", grouping_column_);
         return output;
     }
 

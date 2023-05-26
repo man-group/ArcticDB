@@ -211,4 +211,63 @@ namespace arcticdb {
         return output;
     }
 
+    template<typename GrouperType, typename BucketizerType>
+    Composite<ProcessingSegment> partition_processing_segment(
+            const std::shared_ptr<Store>& store,
+            ProcessingSegment& input,
+            const ColumnName& grouping_column_name) {
+        Composite<ProcessingSegment> output;
+        auto get_result = input.get(ColumnName(grouping_column_name), store);
+        if (std::holds_alternative<ColumnWithStrings>(get_result)) {
+            auto partitioning_column = std::get<ColumnWithStrings>(get_result);
+            partitioning_column.column_->type().visit_tag([&output, &input, &partitioning_column, &store](auto type_desc_tag) {
+                using TypeDescriptorTag = decltype(type_desc_tag);
+                using ResolvedGrouperType = typename GrouperType::template Grouper<TypeDescriptorTag>;
+
+                auto grouper = std::make_shared<ResolvedGrouperType>(ResolvedGrouperType());
+                // TODO (AN-469): We should put some thought into how to pick an appropriate value for num_buckets
+                auto num_cores =
+                        std::thread::hardware_concurrency() == 0 ? 16 : std::thread::hardware_concurrency();
+                auto num_buckets = ConfigsMap::instance()->get_int("Partition.NumBuckets", num_cores);
+                auto bucketizer = std::make_shared<BucketizerType>(num_buckets);
+                auto bucket_vec = get_buckets(partitioning_column, grouper, bucketizer);
+                std::vector<util::BitSet> bitsets;
+                bitsets.resize(bucketizer->num_buckets());
+                std::vector<util::BitSet::bulk_insert_iterator> iterators;
+                for(auto& bitset : bitsets)
+                    iterators.emplace_back(util::BitSet::bulk_insert_iterator(bitset));
+
+                for(auto val : folly::enumerate(bucket_vec))
+                    iterators[*val] = val.index;
+
+                for(auto& iterator : iterators)
+                    iterator.flush();
+
+                for(auto bitset : folly::enumerate(bitsets)) {
+                    if(bitset->count() != 0) {
+                        ProcessingSegment proc;
+                        proc.dynamic_schema_ = input.dynamic_schema_;
+                        proc.set_bucket(bitset.index);
+                        for (auto& seg_slice_and_key : input.data()) {
+                            const SegmentInMemory& seg = seg_slice_and_key.segment(store);
+                            bitset->resize(seg.row_count());
+                            auto new_seg = filter_segment(seg, *bitset);
+                            pipelines::FrameSlice new_slice{seg_slice_and_key.slice()};
+                            new_slice.adjust_rows(new_seg.row_count());
+
+                            proc.data().emplace_back(pipelines::SliceAndKey{std::move(new_seg), std::move(new_slice)});
+                        }
+                        output.push_back(std::move(proc));
+                    }
+                }
+            });
+        } else {
+            internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+                    input.dynamic_schema_,
+                    "Grouping column missing from row-slice in static schema symbol"
+            );
+        }
+        return output;
+    }
+
 } //namespace arcticdb

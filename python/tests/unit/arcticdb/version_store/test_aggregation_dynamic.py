@@ -19,7 +19,7 @@ except:
     from pandas.core.base import SpecificationError
 
 from arcticdb.version_store.processing import QueryBuilder
-from arcticdb_ext.exceptions import InternalException
+from arcticdb_ext.exceptions import InternalException, SchemaException
 from arcticdb.util.test import make_dynamic, assert_frame_equal
 from arcticdb.util.hypothesis import (
     use_of_function_scoped_fixtures_in_hypothesis_checked,
@@ -196,7 +196,7 @@ def test_group_column_not_present_dynamic(lmdb_version_store_dynamic_schema):
     q = q.groupby("grouping_column").agg({"to_mean": "mean"})
     symbol = "test_group_column_not_present"
     lmdb_version_store_dynamic_schema.write(symbol, df)
-    with pytest.raises(InternalException) as e_info:
+    with pytest.raises(SchemaException):
         _ = lmdb_version_store_dynamic_schema.read(symbol, query_builder=q)
 
 
