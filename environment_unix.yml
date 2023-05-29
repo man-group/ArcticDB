@@ -39,7 +39,7 @@ dependencies:
   - recycle
   # Matches the version of lmdb and lmdbxx as vendored
   # via submodules.
-  - lmdb==0.9.22
+  - lmdb==0.9.29
   - lmdbxx==0.9.14
   - libarrow
   - libiconv
