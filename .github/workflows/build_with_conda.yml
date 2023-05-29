@@ -32,10 +32,13 @@ jobs:
           submodules: recursive
 
       - name: Install Conda environment from environment_unix.yml
-        uses: mamba-org/provision-with-micromamba@main
+        uses: mamba-org/setup-micromamba@v1
         with:
           environment-file: environment_unix.yml
-          environment-name: arcticdb
+          init-shell: >-
+            bash
+          cache-environment: true
+          post-cleanup: 'all'
 
       - name: Build ArcticDB with conda (ARCTICDB_USING_CONDA=1)
         shell: bash -l {0}
@@ -66,10 +69,14 @@ jobs:
           submodules: recursive
 
       - name: Install Conda environment from environment_unix.yml
-        uses: mamba-org/provision-with-micromamba@main
+        uses: mamba-org/setup-micromamba@v1
         with:
           environment-file: environment_unix.yml
           environment-name: arcticdb
+          init-shell: >-
+            bash
+          cache-environment: true
+          post-cleanup: 'all'
 
       - name: Build ArcticDB with conda (ARCTICDB_USING_CONDA=1)
         shell: bash -l {0}
