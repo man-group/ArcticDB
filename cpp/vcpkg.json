@@ -53,7 +53,10 @@
     "libevent",
     "gtest",
     "rapidcheck",
-    "arrow"
+    {
+      "name": "arrow",
+      "default-features": false
+    }
   ],
   "overrides": [
     {
@@ -61,10 +64,20 @@
       "version-string": "1.1.1l"
     },
     {
+      "name": "aws-sdk-cpp",
+      "version": "1.11.4#0",
+      "$comments": "Version 1.9.220#2 from baseline e82778a does not compile. Using the version from baseline: ca9155913cf8be47cdd5675e4eada33226380689"
+    },
+    { "name": "aws-c-s3",
+      "version": "0.2.3#0",
+      "$comments": "Version 0.1.25#2 from baseline e82778a does not compile. Using the version from baseline: ca9155913cf8be47cdd5675e4eada33226380689"
+    },
+    {
       "$comments": "All below are from the e82778a baseline. We have to use a newer baseline to pick up aws-c-sdkutils",
       "name": "bitmagic",
       "version": "7.12.3"
     },
+    { "name": "arrow", "version": "12.0.0" },
     { "name": "boost-algorithm", "version": "1.80.0#1" },
     { "name": "boost-align", "version": "1.80.0#1" },
     { "name": "boost-any", "version": "1.80.0#1" },
@@ -101,6 +114,7 @@
     { "name": "boost-iterator", "version": "1.80.0#1" },
     { "name": "boost-lexical-cast", "version": "1.80.0#1" },
     { "name": "boost-locale", "version": "1.80.0#1" },
+    { "name": "boost-math", "version": "1.80.0#1" },
     { "name": "boost-modular-build-helper", "version": "1.80.0#4" },
     { "name": "boost-move", "version": "1.80.0#1" },
     { "name": "boost-mp11", "version": "1.80.0#1" },
@@ -115,10 +129,12 @@
     { "name": "boost-preprocessor", "version": "1.80.0#1" },
     { "name": "boost-program-options", "version": "1.80.0#1" },
     { "name": "boost-proto", "version": "1.80.0#1" },
+    { "name": "boost-random", "version": "1.80.0#1" },
     { "name": "boost-range", "version": "1.80.0#1" },
     { "name": "boost-ratio", "version": "1.80.0#1" },
     { "name": "boost-rational", "version": "1.80.0#1" },
     { "name": "boost-regex", "version": "1.80.0#1" },
+    { "name": "boost-scope-exit", "version": "1.80.0#1" },
     { "name": "boost-serialization", "version": "1.80.0#1" },
     { "name": "boost-smart-ptr", "version": "1.80.0#1" },
     { "name": "boost-spirit", "version": "1.80.0#1" },
@@ -149,6 +165,7 @@
     { "name": "gtest", "version": "1.12.1" },
     { "name": "libbson", "version": "1.22.2" },
     { "name": "libevent", "version": "2.1.12#7" },
+    { "name": "libiconv", "version": "1.17#0" },
     { "name": "libsodium", "version": "1.0.18#8" },
     { "name": "lz4", "version": "1.9.3#4" },
     { "name": "mongo-c-driver", "version": "1.22.2" },
