@@ -15,7 +15,11 @@
 #include <arcticdb/pipeline/value_set.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>
 #include <arcticdb/stream/segment_aggregator.hpp>
-
+#ifdef ARCTICDB_USING_CONDA
+    #include <robin_hood.h>
+#else
+    #include <arcticdb/util/third_party/robin_hood.hpp>
+#endif
 namespace arcticdb {
 
 [[nodiscard]] Composite<ProcessingSegment>
@@ -29,8 +33,8 @@ ColumnStatsGenerationClause::process(std::shared_ptr<Store> store, Composite<Pro
         aggregators_data.emplace_back(agg.get_aggregator_data());
     }
 
-    emilib::HashSet<IndexValue> start_indexes;
-    emilib::HashSet<IndexValue> end_indexes;
+    robin_hood::unordered_set<IndexValue> start_indexes;
+    robin_hood::unordered_set<IndexValue> end_indexes;
 
     internal::check<ErrorCode::E_INVALID_ARGUMENT>(
             !procs.empty(),

@@ -9,7 +9,11 @@
 
 #include <arcticdb/column_store/column.hpp>
 #include <arcticdb/column_store/string_pool.hpp>
-#include <arcticdb/util/third_party/robin_hood.hpp>
+#ifdef ARCTICDB_USING_CONDA
+    #include <robin_hood.h>
+#else
+    #include <arcticdb/util/third_party/robin_hood.hpp>
+#endif
 #include <arcticdb/util/configs_map.hpp>
 
 namespace arcticdb {
