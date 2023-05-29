@@ -235,4 +235,4 @@ namespace rc {
     };
 }
 
-rc::Gen<std::string> gen_decimal_string();
+rc::Gen<std::string> gen_arrow_decimal128_string();

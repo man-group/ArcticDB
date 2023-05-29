@@ -13,7 +13,7 @@
 
 RC_GTEST_PROP(Decimal, BinaryCompatibleWithArrow, ()) {
     static_assert(sizeof(arrow::Decimal128) == sizeof(arcticdb::util::Decimal));
-    const std::string &decimal_string = *gen_decimal_string();
+    const std::string &decimal_string = *gen_arrow_decimal128_string();
     const arrow::Decimal128 arrow_decimal(decimal_string);
     const arcticdb::util::Decimal arctic_decimal(decimal_string);
 

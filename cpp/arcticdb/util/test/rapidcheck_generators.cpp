@@ -18,7 +18,7 @@ rc::Gen<arrow::Decimal128>  rc::Arbitrary<arrow::Decimal128>::arbitrary() {
     });
 }
 
-rc::Gen<std::string> gen_decimal_string() {
+rc::Gen<std::string> gen_arrow_decimal128_string() {
     return rc::gen::mapcat(rc::gen::arbitrary<arrow::Decimal128>(), [](arrow::Decimal128 d) {
         const int digit_count = d.IsNegative() ? static_cast<int>(d.ToString(0).length() - 1) : static_cast<int>(d.ToString(0).length());
         const int allowed_scale_abs = arrow::Decimal128::kMaxScale - digit_count;
