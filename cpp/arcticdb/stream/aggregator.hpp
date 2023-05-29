@@ -175,6 +175,8 @@ class Aggregator {
             index().check(segment_.descriptor().fields());
     };
 
+    virtual ~Aggregator() = default;
+
     RowBuilderType &row_builder() {
         return row_builder_;
     }

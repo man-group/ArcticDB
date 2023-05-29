@@ -12,6 +12,7 @@
 #include <arcticdb/version/version_store_api.hpp>
 #include <arcticdb/python/arctic_version.hpp>
 #include <arcticdb/python/python_utils.hpp>
+#include <arcticdb/pipeline/column_stats.hpp>
 #include <arcticdb/pipeline/query.hpp>
 #include <arcticdb/storage/mongo/mongo_instance.hpp>
 #include <arcticdb/processing/operation_types.hpp>
@@ -23,10 +24,8 @@
 
 namespace arcticdb::version_store {
 
-void register_bindings(py::module &m, py::exception<arcticdb::ArcticException>& base_exception) {
-    auto version = m.def_submodule("version_store", "Versioned storage implementation apis");
+void register_bindings(py::module &version, py::exception<arcticdb::ArcticException>& base_exception) {
 
-    py::register_exception<NoSuchVersionException>(version, "NoSuchVersionException", base_exception.ptr());
     py::register_exception<StreamDescriptorMismatch>(version, "StreamDescriptorMismatch", base_exception.ptr());
 
     py::class_<AtomKey, std::shared_ptr<AtomKey>>(version, "AtomKey")
@@ -241,6 +240,10 @@ void register_bindings(py::module &m, py::exception<arcticdb::ArcticException>& 
             .value("ASCENDING", SortedValue::ASCENDING)
             .value("DESCENDING", SortedValue::DESCENDING);
 
+    py::class_<ColumnStats>(version, "ColumnStats")
+            .def(py::init<std::unordered_map<std::string, std::unordered_set<std::string>>>())
+            .def("to_map", &ColumnStats::to_map);
+
     py::class_<ColumnName>(version, "ColumnName")
             .def(py::init([](const std::string& name) {
                 return ColumnName(name);
@@ -321,6 +324,20 @@ void register_bindings(py::module &m, py::exception<arcticdb::ArcticException>& 
          .def("write_metadata",
              &PythonVersionStore::write_metadata,
              "Create a new version with new metadata and data from the last version")
+        .def("create_column_stats_version",
+             &PythonVersionStore::create_column_stats_version,
+             "Create column stats")
+        .def("drop_column_stats_version",
+             &PythonVersionStore::drop_column_stats_version,
+             "Drop column stats")
+        .def("read_column_stats_version",
+             [&](PythonVersionStore& v,  StreamId sid, const VersionQuery& version_query){
+                 return adapt_read_df(v.read_column_stats_version(sid, version_query));
+             },
+             "Read the column stats")
+        .def("get_column_stats_info_version",
+             &PythonVersionStore::get_column_stats_info_version,
+             "Get info about column stats")
          .def("remove_incomplete",
              &PythonVersionStore::remove_incomplete,
              "Delete incomplete segments")
@@ -345,6 +362,12 @@ void register_bindings(py::module &m, py::exception<arcticdb::ArcticException>& 
         .def("compact_library",
              &PythonVersionStore::compact_library,
              "Compact the whole library wherever necessary")
+        .def("is_symbol_fragmented",
+             &PythonVersionStore::is_symbol_fragmented,
+             "Check if there are enough small data segments which can be compacted")
+        .def("defragment_symbol_data",
+             &PythonVersionStore::defragment_symbol_data,
+             "Compact small data segments into larger data segments")
         .def("get_incomplete_symbols",
              &PythonVersionStore::get_incomplete_symbols,
              "Get all the symbols that have incomplete entries")
@@ -550,14 +573,6 @@ void register_bindings(py::module &m, py::exception<arcticdb::ArcticException>& 
              &PythonVersionStore::latest_timestamp,
              "Returns latest timestamp of a symbol")
         ;
-
-    m.def("get_version_string", &get_arcticdb_version_string);
-
-    m.def("read_runtime_config", [](const py::object object) {
-        auto config = RuntimeConfig{};
-         python_util::pb_from_python(object, config);
-         read_runtime_config(config);
-    });
 
     py::class_<LocalVersionedEngine>(version, "VersionedEngine")
       .def(py::init<std::shared_ptr<storage::Library>>())

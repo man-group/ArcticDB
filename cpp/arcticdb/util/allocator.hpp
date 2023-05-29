@@ -22,6 +22,11 @@
 #include <mutex>
 #include <unordered_set>
 
+// for malloc_trim on linux
+#if defined(__linux__) && defined(__GLIBC__) 
+    #include <malloc.h>
+#endif
+
 //#define ARCTICDB_TRACK_ALLOCS
 //#define USE_SLAB_ALLOCATOR
 
@@ -374,7 +379,7 @@ public:
          * that we will end up with a larger memory footprint for not calling it, but
          * there are no windows alternatives.
          */
-#if !defined(_WIN32) && !defined(__APPLE__)
+#if defined(__linux__) && defined(__GLIBC__) 
         malloc_trim(0);
 #endif
     }

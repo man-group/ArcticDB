@@ -224,6 +224,7 @@ void decode_into_frame_static(
     auto index_fieldcount = get_index_field_count(frame);
     data = skip_metadata_field(hdr, data);
     context.set_descriptor(std::move(*hdr.mutable_stream_descriptor()));
+    context.set_compacted(hdr.compacted());
     ARCTICDB_DEBUG(log::version(), "Num fields: {}", seg.header().fields_size());
 
     if (data != end) {

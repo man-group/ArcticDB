@@ -43,22 +43,22 @@ jobs:
       publish_env: ${{inputs.publish_env || env.PUBLISH_ENV || ''}}
       pypi_publish: ${{inputs.pypi_publish || env.PYPI_PUBLISH}}
       cmake_preset_type_resolved: ${{inputs.cmake_preset_type != '-' && inputs.cmake_preset_type || env.CMAKE_PRESET_TYPE}}
-      # Full list CIBW supports: https://cibuildwheel.readthedocs.io/en/stable/options/#build-skip
-      # If adding PyPy, then must rewrite the python_impl_name in build_steps.yaml
-      linux_cibw_formats: '["cp3{0}-manylinux_x86_64"]'
-      windows_cibw_formats: '["cp3{0}-win_amd64"]'
       linux_python_versions: ${{vars.LINUX_PYTHON_VERSIONS || '[6, 7, 8, 9, 10, 11]'}}
       windows_python_versions: ${{vars.WINDOWS_PYTHON_VERSIONS || '[7, 8, 9, 10, 11]'}}
       # Please declare any key you added below in build_steps.yaml:jobs.compile.strategy.matrix to aid the linting tools
       # Please update publish.yml if changing the symbols value!!
       linux_matrix: >-
-        {"os":"linux", "distro":"\"ubuntu-latest\"", "pytest_distro": "${{vars.PYTEST_DISTRO_LINUX}}",
+        {"os":"linux", "distro":"\"ubuntu-latest\"",
           "cmake_preset_prefix":"linux", "build_dir": "/tmp/cpp_build", "symbols": "*.gz",
-          "do_not_archive": ["*.so", "*.[ao]", "vcpkg_installed"]}
+          "do_not_archive": ["*.so", "*.[ao]", "vcpkg_installed"],
+          "test_services": "{\"mongodb\": {\"image\": \"mongo:4.4\"}}"
+        }
       windows_matrix: >-
-        {"os":"windows", "distro":"\"windows-latest\"", "pytest_distro": "${{vars.PYTEST_DISTRO_WINDOWS}}",
+        {"os":"windows", "distro":"\"windows-latest\"",
           "cmake_preset_prefix":"windows-cl", "build_dir": "C:\\cpp_build", "symbols": "*.pdb",
-          "do_not_archive": ["*.lib", "*.ilk", "*.pyd", "*.dll", "CMakeFiles/*.dir", "vcpkg_installed"]}
+          "do_not_archive": ["*.lib", "*.ilk", "*.pyd", "*.dll", "CMakeFiles/*.dir", "vcpkg_installed"],
+          "test_services": "{}"
+        }
 
   cibw_docker_image:
     needs: [common_config]
@@ -99,16 +99,22 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        format: ${{fromJson(needs.common_config.outputs.linux_cibw_formats)}}
         python3: ${{fromJson(needs.common_config.outputs.linux_python_versions)}}
-    name: 3.${{matrix.python3}} Linux
+        python_deps: [""]
+        include:
+          - python3: 6
+            python_deps: "requirements-compatibility-py36.txt"
+          - python3: 8
+            python_deps: "requirements-compatibility-py38.txt"
+    name: 3.${{matrix.python3}} Linux ${{matrix.python_deps}}
     uses: ./.github/workflows/build_steps.yml
     secrets: inherit
     permissions: {packages: write}
     with:
       job_type: follower
       python3: ${{matrix.python3}}
-      cibw_build: ${{format(matrix.format, matrix.python3)}}
+      python_deps: ${{matrix.python_deps}}
+      cibw_build: ${{format('cp3{0}-manylinux_x86_64', matrix.python3)}}
       cibw_image_tag: ${{needs.cibw_docker_image.outputs.tag}}
       cibw_version: ${{needs.common_config.outputs.cibuildwheel_ver}}
       cmake_preset_type: ${{needs.common_config.outputs.cmake_preset_type_resolved}}
@@ -140,7 +146,6 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        format: ${{fromJson(needs.common_config.outputs.windows_cibw_formats)}}
         python3: ${{fromJson(needs.common_config.outputs.windows_python_versions)}}
     name: 3.${{matrix.python3}} Windows
     uses: ./.github/workflows/build_steps.yml
@@ -149,7 +154,7 @@ jobs:
     with:
       job_type: follower
       python3: ${{matrix.python3}}
-      cibw_build: ${{format(matrix.format, matrix.python3)}}
+      cibw_build: ${{format('cp3{0}-win_amd64', matrix.python3)}}
       cibw_version: ${{needs.common_config.outputs.cibuildwheel_ver}}
       cmake_preset_type: ${{needs.common_config.outputs.cmake_preset_type_resolved}}
       matrix: ${{needs.common_config.outputs.windows_matrix}}

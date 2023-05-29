@@ -14,12 +14,11 @@ from numpy import datetime64
 from arcticdb.supported_types import Timestamp
 
 from arcticdb.version_store.processing import QueryBuilder
-from arcticdb.version_store._store import NativeVersionStore, VersionedItem
+from arcticdb.version_store._store import NativeVersionStore, VersionedItem, VersionQueryInput
 from arcticdb_ext.exceptions import ArcticException
 import pandas as pd
 import numpy as np
 import logging
-
 
 logger = logging.getLogger(__name__)
 
@@ -200,6 +199,26 @@ class ReadRequest(NamedTuple):
     columns: Optional[List[str]] = None
     query_builder: Optional[QueryBuilder] = None
 
+
+class ReadInfoRequest(NamedTuple):
+    """ReadInfoRequest is useful for batch methods like read_metadata_batch and get_description_batch, where we
+    only need to specify the symbol and the version information. Therefore, construction of this object is 
+    only required for these batch operations.
+
+    Attributes
+    ----------
+    symbol : str
+        See `read_metadata` method.
+    as_of: Optional[AsOf], default=none
+        See `read_metadata` method.
+
+    See Also
+    --------
+    Library.read: For documentation on the parameters.
+    """
+
+    symbol: str
+    as_of: Optional[AsOf] = None
 
 class StagedDataFinalizeMethod(Enum):
     WRITE = auto()
@@ -848,7 +867,7 @@ class Library:
 
         Parameters
         ----------
-        symbols : List[Union[str, ReadRequest]
+        symbols : List[Union[str, ReadRequest]]
             List of symbols to read.
 
         query_builder: Optional[QueryBuilder], default=None
@@ -940,6 +959,50 @@ class Library:
             will be None.
         """
         return self._nvs.read_metadata(symbol, as_of)
+
+    def read_metadata_batch(
+        self, symbols: List[Union[str, ReadInfoRequest]]
+    ) -> List[VersionedItem]:
+        """
+        Reads the metadata of multiple symbols.
+
+        Parameters
+        ----------
+        symbols : List[Union[str, ReadInfoRequest]]
+            List of symbols to read.
+        
+        Returns
+        -------
+        List[VersionedItem]
+            A list of the read results, whose i-th element corresponds to the i-th element of the ``symbols`` parameter.
+            A VersionedItem object with the metadata field set as None will be returned if the requested version of the 
+                symbol exists but there is no metadata
+            A None object will be returned if the requested version of the symbol does not exist
+        
+        See Also
+        --------
+        read_metadata
+        """
+        symbol_strings = []
+        as_ofs = []
+        def handle_read_request(s_):
+            symbol_strings.append(s_.symbol)
+            as_ofs.append(s_.as_of)
+
+        def handle_symbol(s_):
+            symbol_strings.append(s_)
+            as_ofs.append(None)
+
+        for s in symbols:
+            if isinstance(s, str):
+                handle_symbol(s)
+            elif isinstance(s, ReadInfoRequest):
+                handle_read_request(s)
+            else:
+                raise ArcticInvalidApiUsageException(
+                    f"Invalid symbol type s=[{s}] type(s)=[{type(s)}]. Only [str] and [ReadInfoRequest] are supported."
+                )
+        return self._nvs._batch_read_meta_to_versioned_items(symbol_strings, as_ofs)
 
     def write_metadata(self, symbol: str, metadata: Any) -> VersionedItem:
         """
@@ -1290,16 +1353,16 @@ class Library:
         )
 
     def get_description_batch(
-        self, symbols: List[Union[str, ReadRequest]]
+        self, symbols: List[Union[str, ReadInfoRequest]]
     ) -> List[SymbolDescription]:
         """
         Returns descriptive data for a list of ``symbols``.
 
         Parameters
         ----------
-        symbols : List[Union[str, ReadRequest]
+        symbols : List[Union[str, ReadInfoRequest]]
             List of symbols to read.
-            Params columns, date_range and query_builder from ReadRequest are not used
+            Params columns, date_range and query_builder from ReadInfoRequest are not used
 
         Returns
         -------
@@ -1315,12 +1378,6 @@ class Library:
         as_ofs = []
         def handle_read_request(s):
             symbol_strings.append(s.symbol)
-            if s.date_range is not None:
-                warnings.warn("Read batch metadata does not make use of of the data_range field", SyntaxWarning, stacklevel=2)
-            if s.columns is not None:
-                warnings.warn("Read batch metadata does not make use of the columns field", SyntaxWarning, stacklevel=2)
-            if s.query_builder is not None:
-                warnings.warn("Read batch metadata does not make use of the query field", SyntaxWarning, stacklevel=2)
             as_ofs.append(s.as_of)
 
         def handle_symbol(s):
@@ -1330,11 +1387,11 @@ class Library:
         for s in symbols:
             if isinstance(s, str):
                 handle_symbol(s)
-            elif isinstance(s, ReadRequest):
+            elif isinstance(s, ReadInfoRequest):
                 handle_read_request(s)
             else:
                 raise ArcticInvalidApiUsageException(
-                    f"Unsupported item in the symbols argument s=[{s}] type(s)=[{type(s)}]. Only [str] and [ReadRequest] are supported."
+                    f"Unsupported item in the symbols argument s=[{s}] type(s)=[{type(s)}]. Only [str] and [ReadInfoRequest] are supported."
                 )
 
         infos = self._nvs.batch_get_info(symbol_strings, as_ofs)
@@ -1361,6 +1418,89 @@ class Library:
         Forces the symbol list cache to be reloaded
         """
         self._nvs.version_store.reload_symbol_list()
+
+    def is_symbol_fragmented(self, symbol: str, segment_size: Optional[int] = None) -> bool:
+        """
+        Check whether the number of segments that would be reduced by compaction is more than or equal to the
+        value specified by the configuration option "SymbolDataCompact.SegmentCount" (defaults to 100).
+
+        Parameters
+        ----------
+        symbol: `str`
+            Symbol name.
+        segment_size: `int`
+            Target for maximum no. of rows per segment, after compaction.
+            If parameter is not provided, library option for segments's maximum row size will be used
+
+        Notes
+        ----------
+        Config map setting - SymbolDataCompact.SegmentCount will be replaced by a library setting
+        in the future. This API will allow overriding the setting as well.
+        
+        Returns
+        -------
+        bool
+        """
+        return self._nvs.is_symbol_fragmented(symbol, segment_size)
+
+    def defragment_symbol_data(self, symbol: str, segment_size: Optional[int] = None) -> VersionedItem:
+        """
+        Compacts fragmented segments by merging row-sliced segments (https://docs.arcticdb.io/technical/on_disk_storage/#data-layer).
+        This method calls `is_symbol_fragmented` to determine whether to proceed with the defragmentation operation. 
+
+        CAUTION - Please note that a major restriction of this method at present is that any column slicing present on the data will be
+        removed in the new version created as a result of this method. 
+        As a result, if the impacted symbol has more than 127 columns (default value), the performance of selecting individual columns of 
+        the symbol (by using the `columns` parameter) may be negatively impacted in the defragmented version. 
+        If your symbol has less than 127 columns this caveat does not apply. 
+        For more information, please see `columns_per_segment` here:
+
+        https://docs.arcticdb.io/api/arcticdb/arcticdb.LibraryOptions
+
+        Parameters
+        ----------
+        symbol: `str`
+            Symbol name.
+        segment_size: `int`
+            Target for maximum no. of rows per segment, after compaction.
+            If parameter is not provided, library option - "segment_row_size" will be used
+            Note that no. of rows per segment, after compaction, may exceed the target.
+            It is for achieving smallest no. of segment after compaction. Please refer to below example for further explantion.
+
+        Returns
+        -------
+        VersionedItem
+            Structure containing metadata and version number of the defragmented symbol in the store.
+
+        Raises
+        ------
+        1002 ErrorCategory.INTERNAL:E_ASSERTION_FAILURE
+            If `is_symbol_fragmented` returns false.
+        2001 ErrorCategory.NORMALIZATION:E_UNIMPLEMENTED_INPUT_TYPE
+            If library option - "bucketize_dynamic" is ON
+
+        Examples
+        --------
+        >>> lib.write("symbol", pd.DataFrame({"A": [0]}, index=[pd.Timestamp(0)]))
+        >>> lib.append("symbol", pd.DataFrame({"A": [1, 2]}, index=[pd.Timestamp(1), pd.Timestamp(2)]))
+        >>> lib.append("symbol", pd.DataFrame({"A": [3]}, index=[pd.Timestamp(3)]))
+        >>> lib.read_index(sym)
+                            start_index                     end_index  version_id stream_id          creation_ts          content_hash  index_type  key_type  start_col  end_col  start_row  end_row
+        1970-01-01 00:00:00.000000000 1970-01-01 00:00:00.000000001          20    b'sym'  1678974096622685727   6872717287607530038          84         2          1        2          0        1
+        1970-01-01 00:00:00.000000001 1970-01-01 00:00:00.000000003          21    b'sym'  1678974096931527858  12345256156783683504          84         2          1        2          1        3
+        1970-01-01 00:00:00.000000003 1970-01-01 00:00:00.000000004          22    b'sym'  1678974096970045987   7952936283266921920          84         2          1        2          3        4
+        >>> lib.version_store.defragment_symbol_data("symbol", 2)
+        >>> lib.read_index(sym)  # Returns two segments rather than three as a result of the defragmentation operation
+                            start_index                     end_index  version_id stream_id          creation_ts         content_hash  index_type  key_type  start_col  end_col  start_row  end_row
+        1970-01-01 00:00:00.000000000 1970-01-01 00:00:00.000000003          23    b'sym'  1678974097067271451  5576804837479525884          84         2          1        2          0        3
+        1970-01-01 00:00:00.000000003 1970-01-01 00:00:00.000000004          23    b'sym'  1678974097067427062  7952936283266921920          84         2          1        2          3        4
+
+        Notes
+        ----------
+        Config map setting - SymbolDataCompact.SegmentCount will be replaced by a library setting
+        in the future. This API will allow overriding the setting as well.
+        """
+        return self._nvs.defragment_symbol_data(symbol, segment_size)
 
     @property
     def name(self):

@@ -18,7 +18,12 @@
 #include <cstddef>
 #include <cstdint>
 #include <mutex>
-#include <arcticdb/util/third_party/robin_hood.hpp>
+
+#ifdef ARCTICDB_USING_CONDA
+    #include <robin_hood.h>
+#else
+    #include <arcticdb/util/third_party/robin_hood.hpp>
+#endif
 
 namespace arcticdb {
 class StringPool;

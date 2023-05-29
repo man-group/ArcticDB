@@ -7,7 +7,7 @@
 # xxHash_VERSION_PATCH  - The patch version of xxHash
 
 find_path(xxHash_INCLUDE_DIR NAME xxhash.h PATH_SUFFIXES include)
-find_library(xxHash_LIBRARY NAMES libxxhash.a xxhash xxHash PATH_SUFFIXES lib)
+find_library(xxHash_LIBRARY NAMES xxhash xxHash PATH_SUFFIXES lib)
 
 mark_as_advanced(xxHash_INCLUDE_DIR)
 

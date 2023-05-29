@@ -12,7 +12,12 @@
 #include <arcticdb/util/timer.hpp>
 
 #include <memory>
-#include <Remotery.h>
+
+#ifdef ARCTICDB_USING_CONDA
+    #include <remotery/Remotery.h>
+#else
+    #include <Remotery.h>
+#endif
 
 struct Remotery;
 

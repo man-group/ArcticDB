@@ -13,6 +13,7 @@
 #include <arcticdb/util/optional_defaults.hpp>
 #include <arcticdb/version/snapshot.hpp>
 #include <arcticdb/stream/stream_sink.hpp>
+#include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/util/storage_lock.hpp>
 #include <arcticdb/util/test/generators.hpp>
 #include <arcticdb/entity/metrics.hpp>
@@ -59,6 +60,92 @@ void LocalVersionedEngine::delete_unreferenced_pruned_indexes(
         // Best-effort so deliberately swallow
         log::version().warn("Could not prune previous versions due to: {}", ex.what());
     }
+}
+
+void LocalVersionedEngine::create_column_stats_internal(
+    const VersionedItem& versioned_item,
+    ColumnStats& column_stats,
+    const ReadOptions& read_options) {
+    ARCTICDB_RUNTIME_SAMPLE(CreateColumnStatsInternal, 0)
+    ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: create_column_stats");
+    create_column_stats_impl(store(),
+                             versioned_item,
+                             column_stats,
+                             read_options);
+}
+
+void LocalVersionedEngine::create_column_stats_version_internal(
+    const StreamId& stream_id,
+    ColumnStats& column_stats,
+    const VersionQuery& version_query,
+    const ReadOptions& read_options) {
+    auto versioned_item = get_version_to_read(stream_id, version_query);
+    version::check<ErrorCode::E_NO_SUCH_VERSION>(
+            versioned_item.has_value(),
+            "create_column_stats_version_internal: version not found for stream '{}'",
+            stream_id
+            );
+    create_column_stats_internal(versioned_item.value(),
+                                 column_stats,
+                                 read_options);
+}
+
+void LocalVersionedEngine::drop_column_stats_internal(
+    const VersionedItem& versioned_item,
+    const std::optional<ColumnStats>& column_stats_to_drop) {
+    ARCTICDB_RUNTIME_SAMPLE(DropColumnStatsInternal, 0)
+    ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: drop_column_stats");
+    drop_column_stats_impl(store(),
+                           versioned_item,
+                           column_stats_to_drop);
+}
+
+void LocalVersionedEngine::drop_column_stats_version_internal(
+    const StreamId& stream_id,
+    const std::optional<ColumnStats>& column_stats_to_drop,
+    const VersionQuery& version_query) {
+    auto versioned_item = get_version_to_read(stream_id, version_query);
+    version::check<ErrorCode::E_NO_SUCH_VERSION>(
+            versioned_item.has_value(),
+            "drop_column_stats_version_internal: version not found for stream '{}'",
+            stream_id
+            );
+    drop_column_stats_internal(versioned_item.value(), column_stats_to_drop);
+}
+
+FrameAndDescriptor LocalVersionedEngine::read_column_stats_internal(
+    const VersionedItem& versioned_item) {
+    return read_column_stats_impl(store(), versioned_item);
+}
+
+std::pair<VersionedItem, FrameAndDescriptor> LocalVersionedEngine::read_column_stats_version_internal(
+    const StreamId& stream_id,
+    const VersionQuery& version_query) {
+    auto versioned_item = get_version_to_read(stream_id, version_query);
+    version::check<ErrorCode::E_NO_SUCH_VERSION>(
+            versioned_item.has_value(),
+            "read_column_stats_version_internal: version not found for stream '{}'",
+            stream_id
+            );
+    auto frame_and_descriptor = read_column_stats_internal(versioned_item.value());
+    return std::make_pair(versioned_item.value(), std::move(frame_and_descriptor));
+}
+
+ColumnStats LocalVersionedEngine::get_column_stats_info_internal(
+    const VersionedItem& versioned_item) {
+    return get_column_stats_info_impl(store(), versioned_item);
+}
+
+ColumnStats LocalVersionedEngine::get_column_stats_info_version_internal(
+    const StreamId& stream_id,
+    const VersionQuery& version_query) {
+    auto versioned_item = get_version_to_read(stream_id, version_query);
+    version::check<ErrorCode::E_NO_SUCH_VERSION>(
+            versioned_item.has_value(),
+            "get_column_stats_info_version_internal: version not found for stream '{}'",
+            stream_id
+            );
+    return get_column_stats_info_internal(versioned_item.value());
 }
 
 FrameAndDescriptor LocalVersionedEngine::read_dataframe_internal(
@@ -673,6 +760,18 @@ void LocalVersionedEngine::delete_trees_responsibly(
     remove_opts.ignores_missing_key_ = true;
 
     std::vector<entity::VariantKey> vks;
+    // Delete any associated column stats keys first
+    if (!dry_run) {
+        std::transform(keys_to_delete->begin(),
+                       keys_to_delete->end(),
+                       std::back_inserter(vks),
+                       [](const IndexTypeKey& index_key) {
+            return index_key_to_column_stats_key(index_key);
+        });
+        store()->remove_keys(vks, remove_opts).get();
+    }
+
+    vks.clear();
     if (!dry_run) {
         std::copy(keys_to_delete->begin(), keys_to_delete->end(), std::back_inserter(vks));
         store()->remove_keys(vks, remove_opts).get();
@@ -745,13 +844,40 @@ VersionedItem LocalVersionedEngine::compact_incomplete_dynamic(
     auto update_info = get_latest_undeleted_version_and_next_version_id(store(), version_map(), stream_id, true, false);
     auto versioned_item =  compact_incomplete_impl(
             store_, stream_id, user_meta, update_info,
-            append, convert_int_to_float, via_iteration, sparsify);
+            append, convert_int_to_float, via_iteration, sparsify, get_write_options());
 
     version_map_->write_version(store_, versioned_item.key_);
 
     if(cfg_.symbol_list())
         symbol_list().add_symbol(store_, stream_id);
 
+    return versioned_item;
+}
+
+bool LocalVersionedEngine::is_symbol_fragmented(const StreamId& stream_id, std::optional<size_t> segment_size) {
+    auto update_info = get_latest_undeleted_version_and_next_version_id(
+            store(), version_map(), stream_id, true, false);
+    auto pre_defragmentation_info = get_pre_defragmentation_info(
+        store(), stream_id, update_info, get_write_options(), segment_size.value_or(cfg_.write_options().segment_row_size()));
+    return is_symbol_fragmented_impl(pre_defragmentation_info.segments_need_compaction);
+}
+
+VersionedItem LocalVersionedEngine::defragment_symbol_data(const StreamId& stream_id, std::optional<size_t> segment_size) {
+    log::version().info("Defragmenting data for symbol {}", stream_id);
+
+    // Currently defragmentation only for latest version - is there a use-case to allow compaction for older data?
+    auto update_info = get_latest_undeleted_version_and_next_version_id(
+        store(), version_map(), stream_id, true, false);
+
+    auto versioned_item = defragment_symbol_data_impl(
+            store(), stream_id, update_info, get_write_options(),
+            segment_size.has_value() ? segment_size.value() : cfg_.write_options().segment_row_size());
+
+    version_map_->write_version(store_, versioned_item.key_);
+
+    if(cfg_.symbol_list())
+        symbol_list().add_symbol(store_, stream_id);
+    
     return versioned_item;
 }
 
@@ -1012,7 +1138,7 @@ std::vector<timestamp> LocalVersionedEngine::batch_get_update_times(
     return results;
 }
 
-std::shared_ptr<std::unordered_map<std::pair<StreamId, VersionId>, AtomKey>> LocalVersionedEngine::get_stream_index_map(
+SpecificAndLatestVersionKeys LocalVersionedEngine::get_stream_index_map(
     const std::vector<StreamId>& stream_ids,
     const std::vector<VersionQuery>& version_queries
     ) {
@@ -1026,26 +1152,40 @@ std::shared_ptr<std::unordered_map<std::pair<StreamId, VersionId>, AtomKey>> Loc
             return sym_versions.find(key) == std::end(sym_versions);
         });
         latest_versions = batch_get_latest_version(store(), version_map(), latest_ids, false);
-
     } else {
         specific_versions = std::make_shared<std::unordered_map<std::pair<StreamId, VersionId>, AtomKey>>();
         latest_versions = batch_get_latest_version(store(), version_map(), stream_ids, false);
     }
-    for(const auto& latest_version : *latest_versions)
-        specific_versions->try_emplace(std::make_pair(latest_version.first, latest_version.second.version_id()), latest_version.second);
 
-    return specific_versions;
+    return std::make_pair(specific_versions, latest_versions);
 }
 
-std::vector<std::pair<VariantKey, std::optional<google::protobuf::Any>>> LocalVersionedEngine::batch_read_metadata_internal(
+std::vector<std::pair<std::optional<VariantKey>, std::optional<google::protobuf::Any>>> LocalVersionedEngine::batch_read_metadata_internal(
     const std::vector<StreamId>& stream_ids,
     const std::vector<VersionQuery>& version_queries
     ) {
-    auto stream_index_map = get_stream_index_map(stream_ids, version_queries);
-    std::vector<folly::Future<std::pair<VariantKey, std::optional<google::protobuf::Any>>>> fut_vec;
-    for (const auto &[_, key] : *stream_index_map)
-        fut_vec.push_back(store()->read_metadata(key));
-
+    auto [specific_versions_index_map, latest_versions_index_map] = get_stream_index_map(stream_ids, version_queries);
+    auto version_queries_is_empty = version_queries.empty();
+    std::vector<folly::Future<std::pair<std::optional<VariantKey>, std::optional<google::protobuf::Any>>>> fut_vec;
+    for(const auto& stream_id : folly::enumerate(stream_ids)) {
+        if(!version_queries_is_empty && std::holds_alternative<SpecificVersionQuery>(version_queries[stream_id.index].content_)){
+            const auto& query = version_queries[stream_id.index].content_;
+            auto specific_version_map_key = std::make_pair(*stream_id, std::get<SpecificVersionQuery>(query).version_id_);
+            auto specific_version_it = specific_versions_index_map->find(specific_version_map_key);
+            if (specific_version_it != specific_versions_index_map->end()){
+                fut_vec.push_back(store()->read_metadata(specific_version_it->second));
+            }else{
+                fut_vec.push_back(std::make_pair(std::nullopt, std::nullopt));
+            }
+        }else{
+            auto last_version_it = latest_versions_index_map->find(*stream_id);
+            if(last_version_it != latest_versions_index_map->end()) {
+                fut_vec.push_back(store()->read_metadata(last_version_it->second));
+            }else{
+                fut_vec.push_back(std::make_pair(std::nullopt, std::nullopt));   
+            }
+        }
+    }
     return folly::collect(fut_vec).get();
 }
 

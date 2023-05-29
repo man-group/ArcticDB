@@ -13,7 +13,8 @@ Library API section.
 
 .. autoclass:: arcticdb.Arctic
     :special-members: __init__
+    :members:
 
 .. autoclass:: arcticdb.LibraryOptions
     :special-members: __init__
-
+    :members:

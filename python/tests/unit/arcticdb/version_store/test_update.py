@@ -28,7 +28,7 @@ def test_update_single_dates(lmdb_version_store_dynamic_schema):
     lib.update(sym, df2, upsert=True)
     lib.update(sym, df3, upsert=True)
 
-    expected = df2.append(df3).append(df1)
+    expected = pd.concat((df2, df3, df1))
     assert_frame_equal(lib.read(sym).data, expected)
 
 
@@ -37,17 +37,17 @@ def test_update(version_store_factory):
     symbol = "update_no_daterange"
 
     idx = pd.date_range("1970-01-01", periods=100, freq="D")
-    df = pd.DataFrame({"a": range(len(idx))}, index=idx)
+    df = pd.DataFrame({"a": np.arange(len(idx), dtype="float")}, index=idx)
     lmdb_version_store.write(symbol, df)
 
     idx2 = pd.date_range("1970-01-12", periods=10, freq="D")
-    df2 = pd.DataFrame({"a": range(1000, 1000 + len(idx2))}, index=idx2)
+    df2 = pd.DataFrame({"a": np.arange(1000, 1000 + len(idx2), dtype="float")}, index=idx2)
     lmdb_version_store.update(symbol, df2)
 
     vit = lmdb_version_store.read(symbol)
     df.update(df2)
 
-    assert_frame_equal(vit.data.astype("float"), df)
+    assert_frame_equal(vit.data, df)
 
 
 def test_update_long_strides(lmdb_version_store):
@@ -94,7 +94,7 @@ def test_update_repeatedly_dynamic_schema(
     symbol = "update_dynamic_schema"
 
     idx = pd.date_range("1970-01-01", periods=100, freq="D")
-    df = pd.DataFrame({"a": range(len(idx))}, index=idx)
+    df = pd.DataFrame({"a": np.arange(len(idx), dtype="float")}, index=idx)
     lmdb_version_store.write(symbol, df)
     update_end = update_start + start_dist
 
@@ -107,12 +107,12 @@ def test_update_repeatedly_dynamic_schema(
             continue
 
         idx2 = pd.date_range(update_date, periods=periods, freq="D")
-        df2 = pd.DataFrame({"a": range(1000 + x, 1000 + x + len(idx2))}, index=idx2)
+        df2 = pd.DataFrame({"a": np.arange(1000 + x, 1000 + x + len(idx2), dtype="float")}, index=idx2)
         lmdb_version_store.update(symbol, df2)
 
         vit = lmdb_version_store.read(symbol)
         df.update(df2)
-        assert_frame_equal(vit.data.astype("float"), df)
+        assert_frame_equal(vit.data, df)
 
 
 @pytest.mark.parametrize(
@@ -127,10 +127,13 @@ def test_update_repeatedly_dynamic_schema_hashed(
 
     idx = pd.date_range("1970-01-01", periods=100, freq="D")
     l = len(idx)
-    df = pd.DataFrame(
-        {"a": range(l), "b": range(1, l + 1), "c": range(2, l + 2), "d": range(3, l + 3), "e": range(4, l + 4)},
-        index=idx,
-    )
+    df = pd.DataFrame({
+        "a": np.arange(l, dtype="float"), 
+        "b": np.arange(1, l + 1, dtype="float"),
+        "c": np.arange(2, l + 2, dtype="float"),
+        "d": np.arange(3, l + 3, dtype="float"),
+        "e": np.arange(4, l + 4, dtype="float")
+    }, index=idx)
 
     lmdb_version_store.write(symbol, df)
     update_end = update_start + start_dist
@@ -147,11 +150,11 @@ def test_update_repeatedly_dynamic_schema_hashed(
         l = len(idx2)
         df2 = pd.DataFrame(
             {
-                "a": range(x, l + x),
-                "b": range(1 + x, l + 1 + x),
-                "c": range(2 + x, l + 2 + x),
-                "d": range(3 + x, l + 3 + x),
-                "e": range(4 + x, l + 4 + x),
+                "a": np.arange(x, l + x, dtype="float"),
+                "b": np.arange(1 + x, l + 1 + x, dtype="float"),
+                "c": np.arange(2 + x, l + 2 + x, dtype="float"),
+                "d": np.arange(3 + x, l + 3 + x, dtype="float"),
+                "e": np.arange(4 + x, l + 4 + x, dtype="float"),
             },
             index=idx2,
         )
@@ -160,7 +163,7 @@ def test_update_repeatedly_dynamic_schema_hashed(
 
         vit = lmdb_version_store.read(symbol)
         df.update(df2)
-        assert_frame_equal(vit.data.astype("float"), df)
+        assert_frame_equal(vit.data, df)
 
 
 @pytest.mark.parametrize(
@@ -174,7 +177,7 @@ def test_update_repeatedly(
     symbol = "update_no_daterange"
 
     idx = pd.date_range("1970-01-01", periods=100, freq="D")
-    df = pd.DataFrame({"a": range(len(idx))}, index=idx)
+    df = pd.DataFrame({"a": np.arange(len(idx), dtype="float")}, index=idx)
     lmdb_version_store.write(symbol, df)
     update_end = update_start + start_dist
 
@@ -187,12 +190,12 @@ def test_update_repeatedly(
             continue
 
         idx2 = pd.date_range(update_date, periods=periods, freq="D")
-        df2 = pd.DataFrame({"a": range(1000 + x, 1000 + x + len(idx2))}, index=idx2)
+        df2 = pd.DataFrame({"a": np.arange(1000 + x, 1000 + x + len(idx2), dtype="float")}, index=idx2)
         lmdb_version_store.update(symbol, df2)
 
         vit = lmdb_version_store.read(symbol)
         df.update(df2)
-        assert_frame_equal(vit.data.astype("float"), df)
+        assert_frame_equal(vit.data, df)
 
 
 @pytest.mark.parametrize(
@@ -233,42 +236,42 @@ def test_update_with_snapshot(version_store_factory):
     symbol = "update_no_daterange"
 
     idx = pd.date_range("1970-01-01", periods=100, freq="D")
-    df = pd.DataFrame({"a": range(len(idx))}, index=idx, dtype=np.int64)
+    df = pd.DataFrame({"a": np.arange(len(idx), dtype="float")}, index=idx)
     original_df = df.copy(deep=True)
     lmdb_version_store.write(symbol, df)
 
     lmdb_version_store.snapshot("my_snap")
 
     idx2 = pd.date_range("1970-01-12", periods=10, freq="D")
-    df2 = pd.DataFrame({"a": range(1000, 1000 + len(idx2))}, index=idx2)
+    df2 = pd.DataFrame({"a": np.arange(1000, 1000 + len(idx2), dtype="float")}, index=idx2)
     lmdb_version_store.update(symbol, df2)
 
-    assert_frame_equal(lmdb_version_store.read(symbol, as_of=0).data.astype("int64"), original_df)
-    assert_frame_equal(lmdb_version_store.read(symbol, as_of="my_snap").data.astype("int64"), original_df)
+    assert_frame_equal(lmdb_version_store.read(symbol, as_of=0).data, original_df)
+    assert_frame_equal(lmdb_version_store.read(symbol, as_of="my_snap").data, original_df)
 
     df.update(df2)
 
     vit = lmdb_version_store.read(symbol)
-    assert_frame_equal(vit.data.astype("float"), df)
-    assert_frame_equal(lmdb_version_store.read(symbol, as_of=1).data.astype("float"), df)
-    assert_frame_equal(lmdb_version_store.read(symbol, as_of="my_snap").data.astype("int64"), original_df)
+    assert_frame_equal(vit.data, df)
+    assert_frame_equal(lmdb_version_store.read(symbol, as_of=1).data, df)
+    assert_frame_equal(lmdb_version_store.read(symbol, as_of="my_snap").data, original_df)
 
     lmdb_version_store.delete(symbol)
     assert lmdb_version_store.list_versions() == []
 
-    assert_frame_equal(lmdb_version_store.read(symbol, as_of="my_snap").data.astype("int64"), original_df)
+    assert_frame_equal(lmdb_version_store.read(symbol, as_of="my_snap").data, original_df)
 
 
 def generate_dataframe(columns, dt, num_days, num_rows_per_day):
-    df = pd.DataFrame()
+    dataframes = []
     for _ in range(num_days):
         index = pd.Index([dt + datetime.timedelta(seconds=s) for s in range(num_rows_per_day)])
         vals = {c: random_floats(num_rows_per_day) for c in columns}
         new_df = pd.DataFrame(data=vals, index=index)
-        df = df.append(new_df)
+        dataframes.append(new_df)
         dt = dt + datetime.timedelta(days=1)
 
-    return df
+    return pd.concat(dataframes)
 
 
 def test_update_with_daterange(lmdb_version_store):
@@ -419,13 +422,13 @@ def test_update_pickled_data(lmdb_version_store):
 
 def test_non_cstyle_numpy_update(lmdb_version_store):
     symbol = "test_non_cstyle_numpy_update"
-    non_sorted_arr_1 = [
+    not_sorted_arr_1 = [
         [1673740800, 846373.91],
         [1673654400, 2243057.35],
         [1673568000, 1091657.66],
         [1673481600, 1523618.28],
     ]
-    non_sorted_arr_2 = [
+    not_sorted_arr_2 = [
         [1674000000, 990047.95],
         [1673913600, 873934.74],
         [1673827200, 1602216.77],
@@ -437,8 +440,8 @@ def test_non_cstyle_numpy_update(lmdb_version_store):
         sorted_df = pd.DataFrame(data=arr, index=timestamps, columns=["time_start", "volume"])
         return sorted_df.sort_index()
 
-    sorted_df_1 = _create_product_candles_df(non_sorted_arr_1)
-    sorted_df_2 = _create_product_candles_df(non_sorted_arr_2)
+    sorted_df_1 = _create_product_candles_df(not_sorted_arr_1)
+    sorted_df_2 = _create_product_candles_df(not_sorted_arr_2)
 
     lmdb_version_store.write(symbol, sorted_df_1)
     lmdb_version_store.update(symbol, sorted_df_2)
@@ -447,7 +450,7 @@ def test_non_cstyle_numpy_update(lmdb_version_store):
     assert_frame_equal(after_arctic, before_arctic)
 
 
-def test_update_non_sorted_exception(lmdb_version_store):
+def test_update_input_not_sorted_exception(lmdb_version_store):
     symbol = "bad_update"
 
     num_initial_rows = 20
@@ -469,7 +472,8 @@ def test_update_non_sorted_exception(lmdb_version_store):
     with pytest.raises(SortingException):
         lmdb_version_store.update(symbol, df2)
 
-def test_update_existing_non_sorted_exception(lmdb_version_store):
+
+def test_update_existing_not_sorted_exception(lmdb_version_store):
     symbol = "bad_update"
 
     num_initial_rows = 20
@@ -491,14 +495,62 @@ def test_update_existing_non_sorted_exception(lmdb_version_store):
     with pytest.raises(SortingException):
         lmdb_version_store.update(symbol, df2)
 
-def test_update_non_sorted_multi_index_exception(lmdb_version_store):
+
+def test_update_input_descending_exception(lmdb_version_store):
+    symbol = "bad_update"
+
+    num_initial_rows = 20
+    initial_timestamp = pd.Timestamp("2019-01-01")
+    dtidx = pd.date_range(initial_timestamp, periods=num_initial_rows)
+    df = pd.DataFrame({"c": np.arange(0, num_initial_rows, dtype=np.int64)}, index=dtidx)
+    assert df.index.is_monotonic_increasing == True
+
+    lmdb_version_store.write(symbol, df)
+    info = lmdb_version_store.get_info(symbol)
+    assert info["sorted"] == "ASCENDING"
+
+    num_rows = 20
+    initial_timestamp = pd.Timestamp("2020-01-01")
+    dtidx = reversed(pd.date_range(initial_timestamp, periods=num_rows))
+    df2 = pd.DataFrame({"c": np.arange(0, num_rows, dtype=np.int64)}, index=dtidx)
+    assert df2.index.is_monotonic_increasing == False
+    assert df2.index.is_monotonic_decreasing == True
+
+    with pytest.raises(SortingException):
+        lmdb_version_store.update(symbol, df2)
+
+
+def test_update_existing_descending_exception(lmdb_version_store):
+    symbol = "bad_update"
+
+    num_initial_rows = 20
+    initial_timestamp = pd.Timestamp("2019-01-01")
+    dtidx = reversed(pd.date_range(initial_timestamp, periods=num_initial_rows))
+    df = pd.DataFrame({"c": np.arange(0, num_initial_rows, dtype=np.int64)}, index=dtidx)
+    assert df.index.is_monotonic_increasing == False
+    assert df.index.is_monotonic_decreasing == True
+
+    lmdb_version_store.write(symbol, df)
+    info = lmdb_version_store.get_info(symbol)
+    assert info["sorted"] == "DESCENDING"
+
+    num_rows = 20
+    initial_timestamp = pd.Timestamp("2020-01-01")
+    dtidx = pd.date_range(initial_timestamp, periods=num_rows)
+    df2 = pd.DataFrame({"c": np.arange(0, num_rows, dtype=np.int64)}, index=dtidx)
+    assert df2.index.is_monotonic_increasing == True
+
+    with pytest.raises(SortingException):
+        lmdb_version_store.update(symbol, df2)
+
+
+def test_update_not_sorted_input_multi_index_exception(lmdb_version_store):
     symbol = "bad_write"
     num_initial_rows = 20
     num_rows = 20
     initial_timestamp = pd.Timestamp("2020-01-01")
     dtidx1 = pd.date_range(initial_timestamp, periods=num_initial_rows)
     dtidx2 = np.arange(0, num_initial_rows)
-    dtidx = np.roll(pd.date_range(initial_timestamp, periods=num_initial_rows), 3)
     df = pd.DataFrame(
         {"c": np.arange(0, num_rows, dtype=np.int64)},
         index=pd.MultiIndex.from_arrays([dtidx1, dtidx2], names=["datetime", "level"]),
@@ -511,7 +563,24 @@ def test_update_non_sorted_multi_index_exception(lmdb_version_store):
     initial_timestamp = pd.Timestamp("2020-01-01")
     dtidx1 = np.roll(pd.date_range(initial_timestamp, periods=num_initial_rows), 3)
     dtidx2 = np.arange(0, num_initial_rows)
-    dtidx = np.roll(pd.date_range(initial_timestamp, periods=num_initial_rows), 3)
+    df = pd.DataFrame(
+        {"c": np.arange(0, num_rows, dtype=np.int64)},
+        index=pd.MultiIndex.from_arrays([dtidx1, dtidx2], names=["datetime", "level"]),
+    )
+    assert isinstance(df.index, MultiIndex) == True
+    assert df.index.is_monotonic_increasing == False
+
+    with pytest.raises(SortingException):
+        lmdb_version_store.update(symbol, df)
+
+
+def test_update_not_sorted_existing_multi_index_exception(lmdb_version_store):
+    symbol = "bad_write"
+    num_initial_rows = 20
+    num_rows = 20
+    initial_timestamp = pd.Timestamp("2020-01-01")
+    dtidx1 = np.roll(pd.date_range(initial_timestamp, periods=num_initial_rows), 3)
+    dtidx2 = np.arange(0, num_initial_rows)
     df = pd.DataFrame(
         {"c": np.arange(0, num_rows, dtype=np.int64)},
         index=pd.MultiIndex.from_arrays([dtidx1, dtidx2], names=["datetime", "level"]),
@@ -520,11 +589,22 @@ def test_update_non_sorted_multi_index_exception(lmdb_version_store):
     assert df.index.is_monotonic_increasing == False
     lmdb_version_store.write(symbol, df)
 
+    num_rows = 20
+    initial_timestamp = pd.Timestamp("2020-01-01")
+    dtidx1 = pd.date_range(initial_timestamp, periods=num_initial_rows)
+    dtidx2 = np.arange(0, num_initial_rows)
+    df = pd.DataFrame(
+        {"c": np.arange(0, num_rows, dtype=np.int64)},
+        index=pd.MultiIndex.from_arrays([dtidx1, dtidx2], names=["datetime", "level"]),
+    )
+    assert isinstance(df.index, MultiIndex) == True
+    assert df.index.is_monotonic_increasing == True
+
     with pytest.raises(SortingException):
         lmdb_version_store.update(symbol, df)
 
 
-def test_update_non_sorted_range_index_exception(lmdb_version_store):
+def test_update_not_sorted_range_index_exception(lmdb_version_store):
     symbol = "bad_write"
     num_rows = 20
     dtidx = pd.RangeIndex(0, num_rows, 1)

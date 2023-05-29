@@ -7,6 +7,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 """
 import copy
 import datetime
+from datetime import timedelta
 import math
 
 import numpy as np
@@ -725,10 +726,10 @@ class DataFrameNormalizer(_PandasNormalizer):
                     index_col = index_col.dt.tz_localize(tz)
 
                 levels.append(index_col)
-            if pd.__version__.startswith("1"):
-                index = pd.MultiIndex(levels=levels, codes=[[]] * len(levels), names=index_names)
-            else:
+            if pd.__version__.startswith("0"):
                 index = pd.MultiIndex(levels=levels, labels=[[]] * len(levels), names=index_names)
+            else:
+                index = pd.MultiIndex(levels=levels, codes=[[]] * len(levels), names=index_names)
             df = df.iloc[:, midx.field_count :]
             df.index = index
         else:
@@ -1255,6 +1256,10 @@ def restrict_data_to_date_range_only(data: T, *, start: Timestamp, end: Timestam
         if not data.index.get_level_values(0).tz:
             start, end = _strip_tz(start, end)
         data = data.loc[pd.to_datetime(start) : pd.to_datetime(end)]
+    else:  # non-Pandas, try to slice it anyway
+        if not getattr(data, "timezone", None):
+            start, end = _strip_tz(start, end)
+        data = data[start.to_pydatetime() - timedelta(microseconds=1) : end.to_pydatetime() + timedelta(microseconds=1)]
     return data
 
 

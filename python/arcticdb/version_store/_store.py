@@ -19,7 +19,7 @@ import difflib
 from datetime import datetime
 from numpy import datetime64
 from pandas import Timestamp, to_datetime, Timedelta
-from typing import Any, Optional, Union, List, Mapping, Iterable, Sequence, Tuple, Dict, TYPE_CHECKING
+from typing import Any, Optional, Union, List, Mapping, Iterable, Sequence, Tuple, Dict, Set, TYPE_CHECKING
 from contextlib import contextmanager
 
 from arcticc.pb2.descriptors_pb2 import TypeDescriptor, SortedValue
@@ -45,6 +45,7 @@ from arcticdb_ext.version_store import PythonVersionStoreReadQuery as _PythonVer
 from arcticdb_ext.version_store import PythonVersionStoreUpdateQuery as _PythonVersionStoreUpdateQuery
 from arcticdb_ext.version_store import PythonVersionStoreReadOptions as _PythonVersionStoreReadOptions
 from arcticdb_ext.version_store import PythonVersionStoreVersionQuery as _PythonVersionStoreVersionQuery
+from arcticdb_ext.version_store import ColumnStats as _ColumnStats
 from arcticdb_ext.version_store import StreamDescriptorMismatch
 from arcticdb.authorization.permissions import OpenMode
 from arcticdb.exceptions import ArcticNativeNotYetImplemented, ArcticNativeException
@@ -798,6 +799,116 @@ class NativeVersionStore:
                 host=self.env,
             )
 
+    def create_column_stats(
+            self,
+            symbol: str,
+            column_stats: Dict[str, Set[str]],
+            as_of: VersionQueryInput = None,
+    ) -> None:
+        """
+        Calculates the specified column statistics for each row-slice for the given symbol. In the future, these
+        statistics will be used by `QueryBuilder` filtering operations to reduce the number of data segments read out
+        of storage.
+
+        Parameters
+        ----------
+        symbol: `str`
+            Symbol name.
+        column_stats: `Dict[str, Set[str]]`
+            The column stats to create.
+            Keys are column names.
+            Values are sets of statistic types to build for that column. Options are:
+                "MINMAX" : store the minimum and maximum value for the column in each row-slice
+        as_of : `str` or `int` or `datetime.datetime`
+            Create the column stats for the version as it was as_of the point in time.
+            `int` : specific version number
+            `str` : snapshot name which contains the version
+            `datetime.datetime` : the version of the data that existed as_of the requested point in time
+
+        Returns
+        -------
+        None
+        """
+        column_stats = self._get_column_stats(column_stats)
+        version_query = self._get_version_query(as_of)
+        self.version_store.create_column_stats_version(symbol, column_stats, version_query)
+
+    def drop_column_stats(
+            self,
+            symbol: str,
+            column_stats: Optional[Dict[str, Set[str]]] = None,
+            as_of: VersionQueryInput = None,
+    ) -> None:
+        """
+        Deletes the specified column statistics for the given symbol.
+
+        Parameters
+        ----------
+        symbol: `str`
+            Symbol name.
+        column_stats: `Optional[Dict[str, Set[str]]], default=None`
+            The column stats to drop. If not provided, all column stats will be dropped.
+            See documentation of `create_column_stats` method for more details.
+        as_of : `str` or `int` or `datetime.datetime`
+            Create the column stats for the version as it was as_of the point in time.
+            `int` : specific version number
+            `str` : snapshot name which contains the version
+            `datetime.datetime` : the version of the data that existed as_of the requested point in time
+
+        Returns
+        -------
+        None
+        """
+        column_stats = self._get_column_stats(column_stats)
+        version_query = self._get_version_query(as_of)
+        self.version_store.drop_column_stats_version(symbol, column_stats, version_query)
+
+    def read_column_stats(self, symbol: str, as_of: VersionQueryInput = None, **kwargs) -> pd.DataFrame:
+        """
+        Read all the column statistics data that has been generated for the given symbol.
+
+        Parameters
+        ----------
+        symbol: `str`
+            Symbol name.
+        as_of : `str` or `int` or `datetime.datetime`
+            Create the column stats for the version as it was as_of the point in time.
+            `int` : specific version number
+            `str` : snapshot name which contains the version
+            `datetime.datetime` : the version of the data that existed as_of the requested point in time
+
+        Returns
+        -------
+        `pandas.DataFrame`
+            DataFrame representing the stored column statistics for each row-slice in a human-readable format.
+        """
+        version_query = self._get_version_query(as_of, **kwargs)
+        data = denormalize_dataframe(self.version_store.read_column_stats_version(symbol, version_query))
+        return data
+
+    def get_column_stats_info(self, symbol: str, as_of: VersionQueryInput = None, **kwargs) -> Dict[str, Set[str]]:
+        """
+        Read the column statistics dictionary for the given symbol.
+
+        Parameters
+        ----------
+        symbol: `str`
+            Symbol name.
+        as_of : `str` or `int` or `datetime.datetime`
+            Create the column stats for the version as it was as_of the point in time.
+            `int` : specific version number
+            `str` : snapshot name which contains the version
+            `datetime.datetime` : the version of the data that existed as_of the requested point in time
+
+        Returns
+        -------
+        `Dict[str, Set[str]]`
+            A dict from column names to sets of column stats that have been generated for that column.
+            In the same format as the `column_stats` argument provided to `create_column_stats` and `drop_column_stats`.
+        """
+        version_query = self._get_version_query(as_of, **kwargs)
+        return self.version_store.get_column_stats_info_version(symbol, version_query).to_map()
+
     def _batch_read_keys(self, atom_keys):
         for result in self.version_store.batch_read_keys(atom_keys):
             read_result = ReadResult(*result)
@@ -903,21 +1014,33 @@ class NativeVersionStore:
             Dictionary of symbol mapping with the versioned items. The data attribute will be None.
         """
         _check_batch_kwargs(NativeVersionStore.batch_read_metadata, NativeVersionStore.read_metadata, kwargs)
-        results_dict = {}
-        version_queries = self._get_version_queries(len(symbols), as_ofs, **kwargs)
-        for result in self.version_store.batch_read_metadata(symbols, version_queries):
-            vitem, udm = result
-            meta = denormalize_user_metadata(udm, self._normalizer) if udm else None
-            results_dict[vitem.symbol] = VersionedItem(
-                symbol=vitem.symbol,
-                library=self._library.library_path,
-                data=None,
-                version=vitem.version,
-                metadata=meta,
-                host=self.env,
-            )
+        meta_items = self._batch_read_meta_to_versioned_items(symbols, as_ofs, kwargs)
+        return {v.symbol: v for v in meta_items if v is not None}
 
-        return results_dict
+    def _batch_read_meta_to_versioned_items(self, symbols, as_ofs, kwargs=None):
+        if kwargs is None:
+            kwargs = dict()
+        meta_data_list = []
+        version_queries = self._get_version_queries(len(symbols), as_ofs, **kwargs)
+        result = self.version_store.batch_read_metadata(symbols, version_queries)
+        result_list = list(zip(symbols, result))
+        for original_symbol, result in result_list:
+            vitem, udm = result
+            if original_symbol != vitem.symbol:
+                meta_data_list.append(None)
+            else:
+                meta = denormalize_user_metadata(udm, self._normalizer) if udm else None
+                meta_data_list.append(
+                    VersionedItem(
+                        symbol=vitem.symbol,
+                        library=self._library.library_path,
+                        data=None,
+                        version=vitem.version,
+                        metadata=meta,
+                        host=self.env,
+                    )
+                )
+        return meta_data_list
 
     def batch_read_metadata_multi(
         self, symbols: List[str], as_ofs: Optional[List[VersionQueryInput]] = None, **kwargs
@@ -1350,6 +1473,9 @@ class NativeVersionStore:
         read_options = self._get_read_options(**kwargs)
         read_query = self._get_read_query(date_range, row_range, columns, query_builder)
         return version_query, read_options, read_query
+
+    def _get_column_stats(self, column_stats):
+        return None if column_stats is None else _ColumnStats(column_stats)
 
     def read(
         self,
@@ -2381,6 +2507,103 @@ class NativeVersionStore:
                     key, value[0], format_bytes(value[1]), format_bytes(value[1] / value[0])
                 )
             )
+
+    def is_symbol_fragmented(self, symbol: str, segment_size: Optional[int] = None) -> bool:
+        """
+        Check whether the number of segments that would be reduced by compaction is more than or equal to the
+        value specified by the configuration option "SymbolDataCompact.SegmentCount" (defaults to 100).
+
+        Parameters
+        ----------
+        symbol: `str`
+            Symbol name.
+        segment_size: `int`
+            Target for maximum no. of rows per segment, after compaction.
+            If parameter is not provided, library option for segments's maximum row size will be used
+
+        Notes
+        ----------
+        Config map setting - SymbolDataCompact.SegmentCount will be replaced by a library setting
+        in the future. This API will allow overriding the setting as well.
+        
+        Returns
+        -------
+        bool
+        """
+        return self.version_store.is_symbol_fragmented(symbol, segment_size)
+
+    def defragment_symbol_data(self, symbol: str, segment_size: Optional[int] = None) -> VersionedItem:
+        """
+        Compacts fragmented segments by merging row-sliced segments (https://docs.arcticdb.io/technical/on_disk_storage/#data-layer).
+        This method calls `is_symbol_fragmented` to determine whether to proceed with the defragmentation operation. 
+
+        CAUTION - Please note that a major restriction of this method at present is that any column slicing present on the data will be
+        removed in the new version created as a result of this method. 
+        As a result, if the impacted symbol has more than 127 columns (default value), the performance of selecting individual columns of 
+        the symbol (by using the `columns` parameter) may be negatively impacted in the defragmented version. 
+        If your symbol has less than 127 columns this caveat does not apply. 
+        For more information, please see `columns_per_segment` here:
+
+        https://docs.arcticdb.io/api/arcticdb/arcticdb.LibraryOptions
+
+        Parameters
+        ----------
+        symbol: `str`
+            Symbol name.
+        segment_size: `int`
+            Target for maximum no. of rows per segment, after compaction.
+            If parameter is not provided, library option - "segment_row_size" will be used
+            Note that no. of rows per segment, after compaction, may exceed the target.
+            It is for achieving smallest no. of segment after compaction. Please refer to below example for further explantion.
+
+        Returns
+        -------
+        VersionedItem
+            Structure containing metadata and version number of the defragmented symbol in the store.
+
+        Raises
+        ------
+        1002 ErrorCategory.INTERNAL:E_ASSERTION_FAILURE
+            If `is_symbol_fragmented` returns false.
+        2001 ErrorCategory.NORMALIZATION:E_UNIMPLEMENTED_INPUT_TYPE
+            If library option - "bucketize_dynamic" is ON.
+
+        Examples
+        --------
+        >>> lib.write("symbol", pd.DataFrame({"A": [0]}, index=[pd.Timestamp(0)]))
+        >>> lib.append("symbol", pd.DataFrame({"A": [1, 2]}, index=[pd.Timestamp(1), pd.Timestamp(2)]))
+        >>> lib.append("symbol", pd.DataFrame({"A": [3]}, index=[pd.Timestamp(3)]))
+        >>> lib.read_index(sym)
+                            start_index                     end_index  version_id stream_id          creation_ts          content_hash  index_type  key_type  start_col  end_col  start_row  end_row
+        1970-01-01 00:00:00.000000000 1970-01-01 00:00:00.000000001          20    b'sym'  1678974096622685727   6872717287607530038          84         2          1        2          0        1
+        1970-01-01 00:00:00.000000001 1970-01-01 00:00:00.000000003          21    b'sym'  1678974096931527858  12345256156783683504          84         2          1        2          1        3
+        1970-01-01 00:00:00.000000003 1970-01-01 00:00:00.000000004          22    b'sym'  1678974096970045987   7952936283266921920          84         2          1        2          3        4
+        >>> lib.version_store.defragment_symbol_data("symbol", 2)
+        >>> lib.read_index(sym)  # Returns two segments rather than three as a result of the defragmentation operation
+                            start_index                     end_index  version_id stream_id          creation_ts         content_hash  index_type  key_type  start_col  end_col  start_row  end_row
+        1970-01-01 00:00:00.000000000 1970-01-01 00:00:00.000000003          23    b'sym'  1678974097067271451  5576804837479525884          84         2          1        2          0        3
+        1970-01-01 00:00:00.000000003 1970-01-01 00:00:00.000000004          23    b'sym'  1678974097067427062  7952936283266921920          84         2          1        2          3        4
+
+        Notes
+        ----------
+        Config map setting - SymbolDataCompact.SegmentCount will be replaced by a library setting
+        in the future. This API will allow overriding the setting as well.
+        """
+
+        if self._lib_cfg.lib_desc.version.write_options.bucketize_dynamic:
+            raise ArcticNativeNotYetImplemented(
+                f"Support for library with 'bucketize_dynamic' ON is not implemented yet"
+            )
+
+        result = self.version_store.defragment_symbol_data(symbol, segment_size)
+        return VersionedItem(
+            symbol=result.symbol,
+            library=self._library.library_path,
+            version=result.version,
+            metadata=None,
+            data=None,
+            host=self.env,
+        )
 
     def library(self):
         return self._library

@@ -29,16 +29,16 @@ import random
 from datetime import datetime
 from typing import Optional, Any, Dict
 
+import requests
 from pytest_server_fixtures.base import get_ephemeral_port
 
 from arcticdb.arctic import Arctic
-from arcticdb.version_store.helper import create_test_lmdb_cfg, create_test_s3_cfg
+from arcticdb.version_store.helper import create_test_lmdb_cfg, create_test_s3_cfg, create_test_mongo_cfg
 from arcticdb.config import Defaults
 from arcticdb.util.test import configure_test_logger, apply_lib_cfg
 from arcticdb.version_store.helper import ArcticMemoryConfig
 from arcticdb.version_store import NativeVersionStore
 from arcticdb.version_store._normalization import MsgPackNormalizer
-from arcticdb_ext.storage import KeyType
 
 configure_test_logger()
 
@@ -143,7 +143,7 @@ def sym():
 
 @pytest.fixture()
 def lib_name():
-    return "local.test" + datetime.utcnow().strftime("%Y-%m-%dT%H_%M_%S_%f")
+    return f"local.test_{random.randint(0, 999)}_{datetime.utcnow().strftime('%Y-%m-%dT%H_%M_%S_%f')}"
 
 
 @pytest.fixture
@@ -201,7 +201,7 @@ def version_store_factory(lib_name, tmpdir):
     try:
         yield create_version_store
     except RuntimeError as e:
-        if "mdb_" in str(e): # Dump keys when we get uncaught exception from LMDB:
+        if "mdb_" in str(e):  # Dump keys when we get uncaught exception from LMDB:
             for store in used.values():
                 print(store)
                 lt = store.library_tool()
@@ -235,9 +235,42 @@ def s3_store_factory(lib_name, arcticdb_test_s3_config):
             lib.version_store.clear()
 
 
+@pytest.fixture
+def mongo_store_factory(request, lib_name):
+    """Similar capability to `s3_store_factory`, but uses a mongo store."""
+    # Use MongoDB if it's running (useful in CI), otherwise spin one up with pytest-server-fixtures.
+    mongo_host = os.getenv("CI_MONGO_HOST", "localhost")
+    mongo_port = os.getenv("CI_MONGO_PORT", 27017)
+    mongo_path = f"{mongo_host}:{mongo_port}"
+    try:
+        res = requests.get(f"http://{mongo_path}")
+        have_running_mongo = res.status_code == 200 and "mongodb" in res.text.lower()
+    except requests.exceptions.ConnectionError:
+        have_running_mongo = False
+
+    if have_running_mongo:
+        uri = f"mongodb://{mongo_path}"
+    else:
+        mongo_server_sess = request.getfixturevalue("mongo_server_sess")
+        uri = f"mongodb://{mongo_server_sess.hostname}:{mongo_server_sess.port}"
+
+    cfg_maker = functools.partial(create_test_mongo_cfg, uri=uri)
+    used = {}
+    try:
+        yield functools.partial(_version_store_factory_impl, used, cfg_maker, lib_name)
+    finally:
+        for lib in used.values():
+            lib.version_store.clear()
+
+
 @pytest.fixture(scope="function")
 def s3_version_store(s3_store_factory):
     return s3_store_factory()
+
+
+@pytest.fixture(scope="function")
+def mongo_version_store(mongo_store_factory):
+    return mongo_store_factory()
 
 
 @pytest.fixture(scope="function")

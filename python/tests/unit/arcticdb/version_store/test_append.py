@@ -5,13 +5,15 @@ from itertools import chain, product, combinations
 import pytest
 import sys
 from numpy.testing import assert_array_equal
+from hypothesis import given, assume, settings, strategies as st
 
 from pandas import MultiIndex
 from arcticdb.version_store._common import TimeFrame
 from arcticdb.version_store import NativeVersionStore
 from arcticdb.util.test import random_integers, assert_frame_equal
-from arcticdb.util.hypothesis import InputFactories
+from arcticdb.util.hypothesis import InputFactories, use_of_function_scoped_fixtures_in_hypothesis_checked
 from arcticdb_ext.exceptions import InternalException, NormalizationException, SortingException
+from arcticdb_ext import set_config_int
 
 
 def test_append_simple(lmdb_version_store):
@@ -212,10 +214,11 @@ def test_append_out_of_order_and_sort(lmdb_version_store_ignore_order):
     assert_frame_equal(vit.data, test)
 
 
-def test_upsert_with_delete(lmdb_version_store):
+def test_upsert_with_delete(lmdb_version_store_big_map):
+    lib = lmdb_version_store_big_map
     symbol = "upsert_with_delete"
-    lmdb_version_store.version_store.remove_incomplete(symbol)
-    lmdb_version_store.version_store._set_validate_version_map()
+    lib.version_store.remove_incomplete(symbol)
+    lib.version_store._set_validate_version_map()
 
     num_rows = 1111
     dtidx = pd.date_range("1970-01-01", periods=num_rows)
@@ -227,16 +230,16 @@ def test_upsert_with_delete(lmdb_version_store):
 
     for idx, df in enumerate(list_df):
         if idx % 3 == 0:
-            lmdb_version_store.delete(symbol)
+            lib.delete(symbol)
 
-        lmdb_version_store.append(symbol, df, write_if_missing=True)
+        lib.append(symbol, df, write_if_missing=True)
 
     first = list_df[len(list_df) - 3]
     second = list_df[len(list_df) - 2]
     third = list_df[len(list_df) - 1]
-    print(type(first))
+
     expected = pd.concat([first, second, third])
-    vit = lmdb_version_store.read(symbol)
+    vit = lib.read(symbol)
     assert_frame_equal(vit.data, expected)
 
 
@@ -283,7 +286,7 @@ def test_(initial: InputFactories, append: InputFactories, match, swap, lmdb_ver
         lib.append("s", to_append, match=match)
 
 
-def test_append_non_sorted_exception(lmdb_version_store):
+def test_append_not_sorted_exception(lmdb_version_store):
     symbol = "bad_append"
 
     num_initial_rows = 20
@@ -305,7 +308,7 @@ def test_append_non_sorted_exception(lmdb_version_store):
     with pytest.raises(SortingException):
         lmdb_version_store.append(symbol, df2, validate_index=True)
 
-def test_append_existing_non_sorted_exception(lmdb_version_store):
+def test_append_existing_not_sorted_exception(lmdb_version_store):
     symbol = "bad_append"
 
     num_initial_rows = 20
@@ -327,7 +330,7 @@ def test_append_existing_non_sorted_exception(lmdb_version_store):
     with pytest.raises(SortingException):
         lmdb_version_store.append(symbol, df2, validate_index=True)
 
-def test_append_non_sorted_non_validate_index(lmdb_version_store):
+def test_append_not_sorted_non_validate_index(lmdb_version_store):
     symbol = "bad_append"
 
     num_initial_rows = 20
@@ -348,7 +351,7 @@ def test_append_non_sorted_non_validate_index(lmdb_version_store):
     lmdb_version_store.append(symbol, df2)
 
 
-def test_append_non_sorted_multi_index_exception(lmdb_version_store):
+def test_append_not_sorted_multi_index_exception(lmdb_version_store):
     symbol = "bad_append"
 
     num_initial_rows = 20
@@ -381,7 +384,7 @@ def test_append_non_sorted_multi_index_exception(lmdb_version_store):
         lmdb_version_store.append(symbol, df2, validate_index=True)
 
 
-def test_append_non_sorted_range_index_non_exception(lmdb_version_store):
+def test_append_not_sorted_range_index_non_exception(lmdb_version_store):
     symbol = "bad_append"
 
     num_initial_rows = 20
@@ -401,7 +404,7 @@ def test_append_non_sorted_range_index_non_exception(lmdb_version_store):
         lmdb_version_store.append(symbol, df2)
 
 
-def test_append_mix_sorted_non_sorted(lmdb_version_store):
+def test_append_mix_ascending_not_sorted(lmdb_version_store):
     symbol = "bad_append"
 
     num_initial_rows = 20
@@ -410,7 +413,7 @@ def test_append_mix_sorted_non_sorted(lmdb_version_store):
     df = pd.DataFrame({"c": np.arange(0, num_initial_rows, dtype=np.int64)}, index=dtidx)
     assert df.index.is_monotonic_increasing == True
 
-    lmdb_version_store.write(symbol, df)
+    lmdb_version_store.write(symbol, df, validate_index = True)
     info = lmdb_version_store.get_info(symbol)
     assert info["sorted"] == "ASCENDING"
 
@@ -419,7 +422,7 @@ def test_append_mix_sorted_non_sorted(lmdb_version_store):
     dtidx = pd.date_range(initial_timestamp, periods=num_rows)
     df2 = pd.DataFrame({"c": np.arange(0, num_rows, dtype=np.int64)}, index=dtidx)
     assert df2.index.is_monotonic_increasing == True
-    lmdb_version_store.append(symbol, df2)
+    lmdb_version_store.append(symbol, df2, validate_index = True)
     info = lmdb_version_store.get_info(symbol)
     assert info["sorted"] == "ASCENDING"
 
@@ -440,3 +443,222 @@ def test_append_mix_sorted_non_sorted(lmdb_version_store):
     lmdb_version_store.append(symbol, df2)
     info = lmdb_version_store.get_info(symbol)
     assert info["sorted"] == "UNSORTED"
+
+
+def test_append_mix_descending_not_sorted(lmdb_version_store):
+    symbol = "bad_append"
+
+    num_initial_rows = 20
+    initial_timestamp = pd.Timestamp("2019-01-01")
+    dtidx = pd.date_range(initial_timestamp, periods=num_initial_rows)
+    df = pd.DataFrame({"c": np.arange(0, num_initial_rows, dtype=np.int64)}, index=reversed(dtidx))
+    assert df.index.is_monotonic_decreasing == True
+
+    lmdb_version_store.write(symbol, df)
+    info = lmdb_version_store.get_info(symbol)
+    assert info["sorted"] == "DESCENDING"
+
+    num_rows = 20
+    initial_timestamp = pd.Timestamp("2020-01-01")
+    dtidx = pd.date_range(initial_timestamp, periods=num_rows)
+    df2 = pd.DataFrame({"c": np.arange(0, num_rows, dtype=np.int64)}, index=reversed(dtidx))
+    assert df2.index.is_monotonic_decreasing == True
+    lmdb_version_store.append(symbol, df2)
+    info = lmdb_version_store.get_info(symbol)
+    assert info["sorted"] == "DESCENDING"
+
+    num_rows = 20
+    initial_timestamp = pd.Timestamp("2021-01-01")
+    dtidx = np.roll(pd.date_range(initial_timestamp, periods=num_rows), 3)
+    df2 = pd.DataFrame({"c": np.arange(0, num_rows, dtype=np.int64)}, index=dtidx)
+    assert df2.index.is_monotonic_decreasing == False
+    lmdb_version_store.append(symbol, df2)
+    info = lmdb_version_store.get_info(symbol)
+    assert info["sorted"] == "UNSORTED"
+
+    num_rows = 20
+    initial_timestamp = pd.Timestamp("2022-01-01")
+    dtidx = pd.date_range(initial_timestamp, periods=num_rows)
+    df2 = pd.DataFrame({"c": np.arange(0, num_rows, dtype=np.int64)}, index=reversed(dtidx))
+    assert df2.index.is_monotonic_decreasing == True
+    lmdb_version_store.append(symbol, df2)
+    info = lmdb_version_store.get_info(symbol)
+    assert info["sorted"] == "UNSORTED"
+    
+
+def test_append_mix_ascending_descending(lmdb_version_store):
+    symbol = "bad_append"
+
+    num_initial_rows = 20
+    initial_timestamp = pd.Timestamp("2019-01-01")
+    dtidx = pd.date_range(initial_timestamp, periods=num_initial_rows)
+    df = pd.DataFrame({"c": np.arange(0, num_initial_rows, dtype=np.int64)}, index=reversed(dtidx))
+    assert df.index.is_monotonic_decreasing == True
+
+    lmdb_version_store.write(symbol, df)
+    info = lmdb_version_store.get_info(symbol)
+    assert info["sorted"] == "DESCENDING"
+
+    num_rows = 20
+    initial_timestamp = pd.Timestamp("2020-01-01")
+    dtidx = pd.date_range(initial_timestamp, periods=num_rows)
+    df2 = pd.DataFrame({"c": np.arange(0, num_rows, dtype=np.int64)}, index=dtidx)
+    assert df2.index.is_monotonic_increasing == True
+    lmdb_version_store.append(symbol, df2)
+    info = lmdb_version_store.get_info(symbol)
+    assert info["sorted"] == "UNSORTED"
+
+    num_rows = 20
+    initial_timestamp = pd.Timestamp("2022-01-01")
+    dtidx = pd.date_range(initial_timestamp, periods=num_rows)
+    df2 = pd.DataFrame({"c": np.arange(0, num_rows, dtype=np.int64)}, index=reversed(dtidx))
+    assert df2.index.is_monotonic_decreasing == True
+    lmdb_version_store.append(symbol, df2)
+    info = lmdb_version_store.get_info(symbol)
+    assert info["sorted"] == "UNSORTED"
+
+
+@use_of_function_scoped_fixtures_in_hypothesis_checked
+@settings(deadline=None, max_examples=10)
+@given(
+    col_per_append_df=st.integers(2, 100),
+    col_name_set=st.integers(1, 10000),
+    num_rows_per_test_cycle=st.lists(st.lists(st.integers(1, 20), min_size=1, max_size=10), min_size=1, max_size=10),
+    column_group_size=st.integers(2, 100),
+    segment_row_size=st.integers(2, 100),
+    dynamic_schema=st.booleans(),
+    dynamic_strings=st.booleans(),
+    df_in_str=st.booleans(),
+)
+def test_append_with_defragmentation(
+    sym,
+    col_per_append_df,
+    col_name_set,
+    num_rows_per_test_cycle,
+    get_wide_df,
+    column_group_size,
+    segment_row_size,
+    dynamic_schema,
+    dynamic_strings,
+    df_in_str,
+    version_store_factory,
+):
+    def get_wide_and_long_df(start_idx, end_idx, col_per_append_df, col_name_set, df_in_str):
+        df = pd.DataFrame()
+        for idx in range(start_idx, end_idx):
+            df = pd.concat([df, get_wide_df(idx, col_per_append_df, col_name_set)])
+        if col_per_append_df == col_name_set:  # manually sort them for static schema, for newer version of panda
+            df = df.reindex(sorted(list(df.columns)), axis=1)
+        df = df.astype(str if df_in_str else np.float64)
+        return df
+
+    def get_no_of_segments_after_defragmentation(df, merged_segment_row_size):
+        new_segment_row_size = no_of_segments = 0
+        for start_row, end_row in pd.Series(df.end_row.values, index=df.start_row).to_dict().items():
+            no_of_segments = no_of_segments + 1 if new_segment_row_size == 0 else no_of_segments
+            new_segment_row_size += end_row - start_row
+            if new_segment_row_size >= merged_segment_row_size:
+                new_segment_row_size = 0
+        return no_of_segments
+
+    def get_no_of_column_merged_segments(df):
+        return len(pd.Series(df.end_row.values, index=df.start_row).to_dict().items())
+
+    def run_test(
+        lib,
+        col_per_append_df,
+        col_name_set,
+        merged_segment_row_size,
+        df_in_str,
+        before_compact,
+        index_offset,
+        num_of_rows,
+    ):
+        for num_of_row in num_of_rows:
+            start_index = index_offset
+            index_offset += num_of_row
+            end_index = index_offset
+            df = get_wide_and_long_df(start_index, end_index, col_per_append_df, col_name_set, df_in_str)
+            before_compact = pd.concat([before_compact, df])
+            if start_index == 0:
+                lib.write(sym, df)
+            else:
+                lib.append(sym, df)
+            segment_details = lib.read_index(sym)
+            assert lib.is_symbol_fragmented(sym, None) is (
+                get_no_of_segments_after_defragmentation(segment_details, merged_segment_row_size)
+                != get_no_of_column_merged_segments(segment_details)
+            )
+        if get_no_of_segments_after_defragmentation(
+            segment_details, merged_segment_row_size
+        ) != get_no_of_column_merged_segments(segment_details):
+            seg_details_before_compaction = lib.read_index(sym)
+            lib.defragment_symbol_data(sym, None)
+            res = lib.read(sym).data
+            res = res.reindex(sorted(list(res.columns)), axis=1)
+            res = res.replace("", 0.0)
+            res = res.fillna(0.0)
+            before_compact = before_compact.reindex(sorted(list(before_compact.columns)), axis=1)
+            before_compact = before_compact.fillna(0.0)
+
+            seg_details = lib.read_index(sym)
+
+            assert_frame_equal(before_compact, res)
+
+            assert len(seg_details) == get_no_of_segments_after_defragmentation(
+                seg_details_before_compaction, merged_segment_row_size
+            )
+            indexs = (
+                seg_details["end_index"].astype(str).str.rsplit(" ", n=2).agg(" ".join).reset_index()
+            )  # start_index and end_index got merged into one column
+            assert np.array_equal(indexs.iloc[1:, 0].astype(str).values, indexs.iloc[:-1, 1].astype(str).values)
+        else:
+            with pytest.raises(InternalException):
+                lib.defragment_symbol_data(sym, None)
+        return before_compact, index_offset
+
+    assume(col_per_append_df <= col_name_set)
+    assume(
+        num_of_row % 2 != 0 for num_of_rows in num_rows_per_test_cycle for num_of_row in num_of_rows
+    )  # Make sure at least one successful compaction run per cycle
+
+    set_config_int("SymbolDataCompact.SegmentCount", 1)
+    before_compact = pd.DataFrame()
+    index_offset = 0
+    lib = version_store_factory(
+        column_group_size=column_group_size,
+        segment_row_size=segment_row_size,
+        dynamic_schema=dynamic_schema,
+        dynamic_strings=dynamic_strings,
+        reuse_name=True,
+    )
+    for num_of_rows in num_rows_per_test_cycle:
+        before_compact, index_offset = run_test(
+            lib,
+            col_per_append_df,
+            col_name_set if dynamic_schema else col_per_append_df,
+            segment_row_size,
+            df_in_str,
+            before_compact,
+            index_offset,
+            num_of_rows,
+        )
+
+
+def test_append_with_cont_mem_problem(sym, lmdb_version_store_tiny_segment_dynamic):
+    set_config_int("SymbolDataCompact.SegmentCount", 1)
+    df0 = pd.DataFrame({"0": ["01234567890123456"]}, index=[pd.Timestamp(0)])
+    df1 = pd.DataFrame({"0": ["012345678901234567"]}, index=[pd.Timestamp(1)])
+    df2 = pd.DataFrame({"0": ["0123456789012345678"]}, index=[pd.Timestamp(2)])
+    df3 = pd.DataFrame({"0": ["01234567890123456789"]}, index=[pd.Timestamp(3)])
+    df = pd.concat([df0, df1, df2, df3])
+
+    for _ in range(100):
+        lib = lmdb_version_store_tiny_segment_dynamic
+        lib.write(sym, df0).version
+        lib.append(sym, df1).version
+        lib.append(sym, df2).version
+        lib.append(sym, df3).version
+        lib.version_store.defragment_symbol_data(sym, None)
+        res = lib.read(sym).data
+        assert_frame_equal(df, res)

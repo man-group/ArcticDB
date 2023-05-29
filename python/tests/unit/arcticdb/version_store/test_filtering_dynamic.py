@@ -22,6 +22,8 @@ from arcticdb.util.test import get_wide_dataframe, make_dynamic, regularize_data
 from arcticdb.util.hypothesis import (
     use_of_function_scoped_fixtures_in_hypothesis_checked,
     integral_type_strategies,
+    signed_integral_type_strategies,
+    unsigned_integral_type_strategies,
     numeric_type_strategies,
     string_strategy,
 )
@@ -174,9 +176,9 @@ def test_filter_greater_than_col_val(lmdb_version_store_dynamic_schema, df, val)
         [column("a", elements=integral_type_strategies()), column("b", elements=integral_type_strategies())],
         index=range_indexes(),
     ),
-    vals=st.frozensets(integral_type_strategies(), min_size=1),
+    vals=st.frozensets(signed_integral_type_strategies(), min_size=1),
 )
-def test_filter_numeric_isin(lmdb_version_store_dynamic_schema, df, vals):
+def test_filter_numeric_isin_signed(lmdb_version_store_dynamic_schema, df, vals):
     assume(not df.empty)
     q = QueryBuilder()
     q = q[q["a"].isin(vals)]
@@ -191,9 +193,43 @@ def test_filter_numeric_isin(lmdb_version_store_dynamic_schema, df, vals):
         [column("a", elements=integral_type_strategies()), column("b", elements=integral_type_strategies())],
         index=range_indexes(),
     ),
-    vals=st.frozensets(integral_type_strategies(), min_size=1),
+    vals=st.frozensets(unsigned_integral_type_strategies(), min_size=1),
 )
-def test_filter_numeric_isnotin(lmdb_version_store_dynamic_schema, df, vals):
+def test_filter_numeric_isin_unsigned(lmdb_version_store_dynamic_schema, df, vals):
+    assume(not df.empty)
+    q = QueryBuilder()
+    q = q[q["a"].isin(vals)]
+    pandas_query = "a in {}".format(list(vals))
+    generic_dynamic_filter_test(lmdb_version_store_dynamic_schema, "test_filter_numeric_isin", df, q, pandas_query)
+
+
+@use_of_function_scoped_fixtures_in_hypothesis_checked
+@settings(deadline=None)
+@given(
+    df=data_frames(
+        [column("a", elements=integral_type_strategies()), column("b", elements=integral_type_strategies())],
+        index=range_indexes(),
+    ),
+    vals=st.frozensets(signed_integral_type_strategies(), min_size=1),
+)
+def test_filter_numeric_isnotin_signed(lmdb_version_store_dynamic_schema, df, vals):
+    assume(not df.empty)
+    q = QueryBuilder()
+    q = q[q["a"].isnotin(vals)]
+    pandas_query = "a not in {}".format(list(vals))
+    generic_dynamic_filter_test(lmdb_version_store_dynamic_schema, "test_filter_numeric_isnotin", df, q, pandas_query)
+
+
+@use_of_function_scoped_fixtures_in_hypothesis_checked
+@settings(deadline=None)
+@given(
+    df=data_frames(
+        [column("a", elements=integral_type_strategies()), column("b", elements=integral_type_strategies())],
+        index=range_indexes(),
+    ),
+    vals=st.frozensets(unsigned_integral_type_strategies(), min_size=1),
+)
+def test_filter_numeric_isnotin_unsigned(lmdb_version_store_dynamic_schema, df, vals):
     assume(not df.empty)
     q = QueryBuilder()
     q = q[q["a"].isnotin(vals)]
@@ -294,7 +330,7 @@ def test_filter_column_type_change(lmdb_version_store_dynamic_schema):
     q = QueryBuilder()
     q = q[q["col"] == 1]
     received = lib.read(symbol, query_builder=q).data
-    expected = df1.append(df2).query("col == 1")
+    expected = pd.concat((df1, df2)).query("col == 1")
     assert np.array_equal(expected, received)
 
     # Fixed width strings, width 1
@@ -310,5 +346,5 @@ def test_filter_column_type_change(lmdb_version_store_dynamic_schema):
     q = QueryBuilder()
     q = q[q["col"] == "a"]
     received = lib.read(symbol, query_builder=q).data
-    expected = df1.append(df2).append(df3).query("col == 'a'")
+    expected = pd.concat((df1, df2, df3)).query("col == 'a'")
     assert np.array_equal(expected, received)

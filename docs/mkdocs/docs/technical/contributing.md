@@ -19,6 +19,9 @@ we will arrange for the CLA to be sent to the signing authority within your corp
 Docker Quickstart
 =================
 
+This quickstart builds a release using build dependencies from vcpkg.
+ArcticDB releases on PyPi use vcpkg dependencies in the manner as described below.
+
 Note the below instructions will build a Linux X86_64 release.
 
 #### 1) Start the ArcticDB build docker image
@@ -80,6 +83,42 @@ $MY_PYTHON -m pip install -ve .
 
 Note that as this will copy the binary to your Python installation this will have to be run after each and every change of a C++ file.
 
+mamba and conda-forge Quickstart
+================================
+
+This quickstart uses build dependencies from [conda-forge](https://conda-forge.org/).
+It is a pre-requisite for releasing ArcticDB on conda-forge.
+
+**⚠️ At the time of writing, installing ArcticDB with this setup under Windows is not possible
+since [no distribution of folly for Windows is not available on conda-forge](https://anaconda.org/conda-forge/folly).
+For tracking progress on packaging folly for Windows on conda-forge, see: [`conda-forge/folly-feedstock#98`](https://github.com/conda-forge/folly-feedstock/pull/98)**
+
+ - [Install `mamba`](https://mamba.readthedocs.io/en/latest/installation.html)
+ - Create the `arcticdb` environment from its specification (`environment_unix.yml`):
+
+  ```bash
+  mamba env create -f environment_unix.yml
+  ```
+
+ - Activate the `arcticdb` environment (you will need to do this for every new shell session):
+
+  ```bash
+  mamba activate arcticdb
+  ```
+
+ - Build and install ArcticDB in the `arcticdb` environment using dependencies installed in this environement:
+   We recommend using the [`editable` installation](https://setuptools.pypa.io/en/latest/userguide/development_mode.html) for development:
+
+  ```bash
+  ARCTICDB_USING_CONDA=1 python -m pip install --verbose --editable .
+  ```
+
+ - Use ArcticDB from Python:
+
+  ```python
+  from arcticdb import Arctic
+  ```
+
 FAQ
 ===
 
@@ -124,6 +163,12 @@ GCC 8 (10+ recommended) and CMake 3.12 (these instructions assume 3.21+).
 
 A development install of Python 3.6+ (with `libpython.a` or `.so` and full headers) is also necessary.
 See [pybind11 configuration](#pybind11-configuration).
+
+We require a Mongo executable for a couple of Python tests on Linux. You can check whether you have
+it with `mongod --version`.
+
+Search the internet for "mongo installation Linux" for instructions for your distro if you do not
+already have `mongod` available.
 
 ### Dependencies by distro
 | Distro | Versions reported to work | Packages |

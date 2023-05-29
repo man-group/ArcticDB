@@ -4,8 +4,11 @@
  *
  * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
  */
-
-#include <third_party/semimap/semimap.h>
+#ifdef ARCTICDB_USE_CONDA
+    #include <semimap/semimap.h>
+#else
+    #include <third_party/semimap/semimap.h>
+#endif
 #include <arcticdb/entity/key.hpp>
 
 namespace arcticdb::entity {
@@ -68,6 +71,8 @@ const KeyData& get_key_data(KeyType key_type) {
     STRING_REF(KeyType::BACKUP_SNAPSHOT_REF, bref, 'B')
     STRING_KEY(KeyType::TOMBSTONE_ALL, tall, 'q')
     STRING_REF(KeyType::LIBRARY_CONFIG, cref, 'C')
+    STRING_KEY(KeyType::COLUMN_STATS, cstats, 'S')
+
 
     const auto& data =  KeyMap::get(int(key_type));
     util::check(data.short_name_ != 'u', "Could not get data for key_type {}", static_cast<int>(key_type));

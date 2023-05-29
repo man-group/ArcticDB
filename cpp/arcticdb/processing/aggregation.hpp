@@ -11,6 +11,7 @@
 #include <arcticdb/processing/processing_segment.hpp>
 #include <arcticdb/processing/bucketizer.hpp>
 #include <arcticdb/entity/types.hpp>
+#include <arcticdb/pipeline/value.hpp>
 #include <arcticdb/pipeline/value_set.hpp>
 #include <arcticdb/processing/aggregation_interface.hpp>
 
@@ -44,6 +45,28 @@ struct OutputType<DataTypeTag<DataType::BOOL8>, void> {
 template<>
 struct OutputType<DataTypeTag<DataType::MICROS_UTC64>, void> {
     using type = ScalarTagType<DataTypeTag<DataType::MICROS_UTC64>>;
+};
+
+struct MinMaxAggregatorData {
+    std::optional<Value> min_;
+    std::optional<Value> max_;
+    void aggregate(const ColumnWithStrings& input_column);
+    SegmentInMemory finalize(const std::vector<ColumnName>& output_column_names) const;
+};
+
+struct MinMaxAggregator {
+    ColumnName column_name_;
+    ColumnName output_column_name_min_;
+    ColumnName output_column_name_max_;
+
+    MinMaxAggregator(ColumnName column_name, ColumnName output_column_name_min, ColumnName output_column_name_max) :
+            column_name_(std::move(column_name)),
+            output_column_name_min_(std::move(output_column_name_min)),
+            output_column_name_max_(std::move(output_column_name_max)){
+    }
+    [[nodiscard]] ColumnName get_input_column_name() const { return column_name_; }
+    [[nodiscard]] std::vector<ColumnName> get_output_column_names() const { return {output_column_name_min_, output_column_name_max_}; }
+    [[nodiscard]] ColumnStatsAggregatorData get_aggregator_data() const { return MinMaxAggregatorData(); }
 };
 
 struct Sum {

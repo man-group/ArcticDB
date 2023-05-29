@@ -12,6 +12,7 @@
 #include <arcticdb/version/symbol_list.hpp>
 #include <arcticdb/version/snapshot.hpp>
 #include <arcticdb/entity/protobufs.hpp>
+#include <arcticdb/pipeline/column_stats.hpp>
 #include <arcticdb/pipeline/write_options.hpp>
 #include <arcticdb/entity/versioned_item.hpp>
 #include <arcticdb/pipeline/query.hpp>
@@ -28,6 +29,8 @@ namespace arcticdb::version_store {
  *
  * Requirements for the latter is fluid, so methods here could be lifted.
  */
+using SpecificAndLatestVersionKeys = std::pair<std::shared_ptr<std::unordered_map<std::pair<StreamId, VersionId>, AtomKey>>,
+                                                std::shared_ptr<std::unordered_map<StreamId, AtomKey>>>;
 class LocalVersionedEngine : public VersionedEngine {
 
 public:
@@ -172,6 +175,40 @@ public:
         arcticdb::proto::descriptors::UserDefinedMetadata&& user_meta
     );
 
+    void create_column_stats_internal(
+        const VersionedItem& versioned_item,
+        ColumnStats& column_stats,
+        const ReadOptions& read_options);
+
+    void create_column_stats_version_internal(
+        const StreamId& stream_id,
+        ColumnStats& column_stats,
+        const VersionQuery& version_query,
+        const ReadOptions& read_options);
+
+    void drop_column_stats_internal(
+        const VersionedItem& versioned_item,
+        const std::optional<ColumnStats>& column_stats_to_drop);
+
+    void drop_column_stats_version_internal(
+        const StreamId& stream_id,
+        const std::optional<ColumnStats>& column_stats_to_drop,
+        const VersionQuery& version_query);
+
+    FrameAndDescriptor read_column_stats_internal(
+        const VersionedItem& versioned_item);
+
+    std::pair<VersionedItem, FrameAndDescriptor> read_column_stats_version_internal(
+        const StreamId& stream_id,
+        const VersionQuery& version_query);
+
+    ColumnStats get_column_stats_info_internal(
+        const VersionedItem& versioned_item);
+
+    ColumnStats get_column_stats_info_version_internal(
+        const StreamId& stream_id,
+        const VersionQuery& version_query);
+
     std::pair<VersionedItem, std::vector<AtomKey>> write_individual_segment(
         const StreamId& stream_id,
         SegmentInMemory&& segment,
@@ -236,10 +273,14 @@ public:
             const std::vector<StreamId>& stream_ids,
             const std::vector<VersionQuery>& version_queries);
 
-    std::vector<std::pair<VariantKey, std::optional<google::protobuf::Any>>> batch_read_metadata_internal(
+    std::vector<std::pair<std::optional<VariantKey>, std::optional<google::protobuf::Any>>> batch_read_metadata_internal(
         const std::vector<StreamId>& stream_ids,
         const std::vector<VersionQuery>& version_queries);
 
+    bool is_symbol_fragmented(const StreamId& stream_id, std::optional<size_t> segment_size) override;
+
+    VersionedItem defragment_symbol_data(const StreamId& stream_id, std::optional<size_t> segment_size) override;
+    
     StorageLockWrapper get_storage_lock(const StreamId& stream_id) override;
 
     void delete_storage() override;
@@ -284,7 +325,7 @@ protected:
             bool append,
             bool convert_int_to_float,
             bool via_iteration,
-            bool sparsify);
+            bool sparsify) override;
 
     /**
      * Take tombstoned indexes that have been pruned in the version map and perform the actual deletion
@@ -311,8 +352,11 @@ protected:
      * Get the queried, if specified, otherwise the latest, versions of index keys for each specified stream.
      * @param version_queries Only explicit versions are supported at the moment. The implementation currently
      * accepts deleted versions (e.g. to support reading snapshots) and it's the caller's responsibility to verify.
+     * A pair of std unordered maps are returned. The first one contains all the Atom keys for those queries that we 
+     * have specified a version. The second one contains all the Atom keys of the last undeleted version for those 
+     * queries that we haven't specified any version.
      */
-    std::shared_ptr<std::unordered_map<std::pair<StreamId, VersionId>, AtomKey>> get_stream_index_map(
+    SpecificAndLatestVersionKeys get_stream_index_map(
         const std::vector<StreamId>& stream_ids,
         const std::vector<VersionQuery>& version_queries);
 

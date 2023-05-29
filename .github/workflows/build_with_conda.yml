@@ -1,0 +1,86 @@
+name: Build with conda
+on:
+  push:
+    branches:
+      - master
+  # For Pull-Requests, this runs the CI on merge commit
+  # of HEAD with the target branch instead on HEAD, allowing
+  # testing against potential new states which might have
+  # been introduced in the target branch last commits.
+  # See: https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows#pull_request
+  pull_request:
+
+jobs:
+  linux:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+
+      fail-fast: false
+    runs-on: ${{ matrix.os }}
+
+    services:
+      mongodb:
+        image: mongo:4.4
+        ports:
+          - 27017:27017
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: recursive
+
+      - name: Install Conda environment from environment_unix.yml
+        uses: mamba-org/provision-with-micromamba@main
+        with:
+          environment-file: environment_unix.yml
+          environment-name: arcticdb
+
+      - name: Build ArcticDB with conda (ARCTICDB_USING_CONDA=1)
+        shell: bash -l {0}
+        run: |
+          # Protocol buffers compilation require not using build isolation.
+          python -m pip install --no-build-isolation --no-deps -v -e .
+        env:
+          ARCTICDB_USING_CONDA: 1
+
+      - name: Test with pytest
+        shell: bash -l {0}
+        run: |
+          cd python
+          python -m pytest tests
+
+  macos:
+    strategy:
+      matrix:
+        include:
+          - os: macos-latest
+
+      fail-fast: false
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: recursive
+
+      - name: Install Conda environment from environment_unix.yml
+        uses: mamba-org/provision-with-micromamba@main
+        with:
+          environment-file: environment_unix.yml
+          environment-name: arcticdb
+
+      - name: Build ArcticDB with conda (ARCTICDB_USING_CONDA=1)
+        shell: bash -l {0}
+        run: |
+          # Protocol buffers compilation require not using build isolation.
+          python -m pip install --no-build-isolation --no-deps -v -e .
+        env:
+          ARCTICDB_USING_CONDA: 1
+
+      - name: Test with pytest
+        shell: bash -l {0}
+        run: |
+          cd python
+          python -m pytest tests

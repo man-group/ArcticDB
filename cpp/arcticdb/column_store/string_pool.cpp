@@ -8,7 +8,11 @@
 #include <arcticdb/column_store/string_pool.hpp>
 #include <arcticdb/util/offset_string.hpp>
 #include <arcticdb/column_store/segment_utils.hpp>
-#include <arcticdb/util/third_party/robin_hood.hpp>
+#ifdef ARCTICDB_USING_CONDA
+    #include <robin_hood.h>
+#else
+    #include <arcticdb/util/third_party/robin_hood.hpp>
+#endif
 
 namespace arcticdb {
 py::buffer_info StringPool::as_buffer_info() const {

@@ -9,6 +9,7 @@
 #include <arcticdb/codec/python_bindings.hpp>
 #include <arcticdb/column_store/python_bindings.hpp>
 #include <arcticdb/storage/python_bindings.hpp>
+#include <arcticdb/storage/storage.hpp>
 #include <arcticdb/stream/python_bindings.hpp>
 #include <arcticdb/toolbox/python_bindings.hpp>
 #include <arcticdb/version/python_bindings.hpp>
@@ -16,10 +17,10 @@
 #include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/util/trace.hpp>
 #include <arcticdb/python/python_utils.hpp>
+#include <arcticdb/python/arctic_version.hpp>
 #include <arcticdb/entity/performance_tracing.hpp>
 #include <arcticdb/entity/metrics.hpp>
 #include <arcticdb/entity/protobufs.hpp>
-#include <folly/init/Init.h>
 #include <arcticdb/async/task_scheduler.hpp>
 #include <arcticdb/util/global_lifetimes.hpp>
 #include <arcticdb/util/configs_map.hpp>
@@ -212,13 +213,15 @@ void register_error_code_ecosystem(py::module& m, py::exception<arcticdb::Arctic
         }
     });
 
-    py::register_exception<NormalizationException>(m, "NormalizationException", compat_exception.ptr());
-    py::register_exception<MissingDataException>(m, "MissingDataException", compat_exception.ptr());
     py::register_exception<SchemaException>(m, "SchemaException", compat_exception.ptr());
+    py::register_exception<NormalizationException>(m, "NormalizationException", compat_exception.ptr());
     py::register_exception<StorageException>(m, "StorageException", compat_exception.ptr());
+    py::register_exception<MissingDataException>(m, "MissingDataException", compat_exception.ptr());
     auto sorting_exception =
             py::register_exception<SortingException>(m, "SortingException", compat_exception.ptr());
     py::register_exception<UnsortedDataException>(m, "UnsortedDataException", sorting_exception.ptr());
+    py::register_exception<UserInputException>(m, "UserInputException", compat_exception.ptr());
+    py::register_exception<CompatibilityException>(m, "CompatibilityException", compat_exception.ptr());
 }
 
 void reinit_scheduler() {
@@ -269,10 +272,27 @@ PYBIND11_MODULE(arcticdb_ext, m) {
     arcticdb::async::register_bindings(m);
     arcticdb::codec::register_bindings(m);
     arcticdb::column_store::register_bindings(m);
-    arcticdb::storage::apy::register_bindings(m, base_exception);
+
+    auto storage_submodule = m.def_submodule("storage", "Segment storage implementation apis");
+    auto no_data_found_exception = py::register_exception<arcticdb::storage::NoDataFoundException>(
+            storage_submodule, "NoDataFoundException", base_exception.ptr());
+    arcticdb::storage::apy::register_bindings(storage_submodule, base_exception);
+
     arcticdb::stream::register_bindings(m);
     arcticdb::toolbox::apy::register_bindings(m);
-    arcticdb::version_store::register_bindings(m, base_exception);
+
+    m.def("get_version_string", &arcticdb::get_arcticdb_version_string);
+    m.def("read_runtime_config", [](const py::object object) {
+        auto config = arcticc::pb2::config_pb2::RuntimeConfig{};
+        arcticdb::python_util::pb_from_python(object, config);
+        arcticdb::read_runtime_config(config);
+    });
+
+    auto version_submodule = m.def_submodule("version_store", "Versioned storage implementation apis");
+    arcticdb::version_store::register_bindings(version_submodule, base_exception);
+    py::register_exception<arcticdb::NoSuchVersionException>(
+            version_submodule, "NoSuchVersionException", no_data_found_exception.ptr());
+
     register_configs_map_api(m);
     register_log(m.def_submodule("log"));
     register_instrumentation(m.def_submodule("instrumentation"));

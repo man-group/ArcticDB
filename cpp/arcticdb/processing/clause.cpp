@@ -11,10 +11,76 @@
 #include <folly/Poly.h>
 #include <arcticdb/util/composite.hpp>
 #include <arcticdb/processing/clause.hpp>
+#include <arcticdb/pipeline/column_stats.hpp>
 #include <arcticdb/pipeline/value_set.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>
+#include <arcticdb/stream/segment_aggregator.hpp>
 
 namespace arcticdb {
+
+[[nodiscard]] Composite<ProcessingSegment>
+ColumnStatsGenerationClause::process(std::shared_ptr<Store> store, Composite<ProcessingSegment> &&p) const {
+    auto procs = std::move(p);
+    std::vector<ColumnStatsAggregatorData> aggregators_data;
+    internal::check<ErrorCode::E_INVALID_ARGUMENT>(
+            static_cast<bool>(column_stats_aggregators_),
+            "ColumnStatsGenerationClause::process does not make sense with no aggregators");
+    for (const auto &agg : *column_stats_aggregators_){
+        aggregators_data.emplace_back(agg.get_aggregator_data());
+    }
+
+    emilib::HashSet<IndexValue> start_indexes;
+    emilib::HashSet<IndexValue> end_indexes;
+
+    internal::check<ErrorCode::E_INVALID_ARGUMENT>(
+            !procs.empty(),
+            "ColumnStatsGenerationClause::process does not make sense with no processing segments");
+    procs.broadcast(
+            [&store, &start_indexes, &end_indexes, &aggregators_data, that = this](
+                    auto &proc) {
+                proc.set_execution_context(that->execution_context_);
+                for (const auto& slice_and_key: proc.data_) {
+                    start_indexes.insert(slice_and_key.key_->start_index());
+                    end_indexes.insert(slice_and_key.key_->end_index());
+                }
+                for (auto agg_data : folly::enumerate(aggregators_data)) {
+                    auto input_column_name = that->column_stats_aggregators_->at(agg_data.index).get_input_column_name();
+                    auto input_column = proc.get(input_column_name, store);
+                    if (std::holds_alternative<ColumnWithStrings>(input_column)) {
+                        auto input_column_with_strings = std::get<ColumnWithStrings>(input_column);
+                        agg_data->aggregate(input_column_with_strings);
+                    } else {
+                        if(!that->execution_context_->dynamic_schema())
+                            internal::raise<ErrorCode::E_ASSERTION_FAILURE>(
+                                    "Unable to resolve column denoted by aggregation operator: '{}'",
+                                    input_column_name);
+                    }
+                }
+            });
+
+    internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+            start_indexes.size() == 1 && end_indexes.size() == 1,
+            "Expected all data segments in one processing segment to have same start and end indexes");
+    auto start_index = *start_indexes.begin();
+    auto end_index = *end_indexes.begin();
+    schema::check<ErrorCode::E_UNSUPPORTED_INDEX_TYPE>(
+            std::holds_alternative<NumericIndex>(start_index) && std::holds_alternative<NumericIndex>(end_index),
+            "Cannot build column stats over string-indexed symbol"
+            );
+    auto start_index_col = std::make_shared<Column>(make_scalar_type(DataType::MICROS_UTC64), true);
+    auto end_index_col = std::make_shared<Column>(make_scalar_type(DataType::MICROS_UTC64), true);
+    start_index_col->template push_back<NumericIndex>(std::get<NumericIndex>(start_index));
+    end_index_col->template push_back<NumericIndex>(std::get<NumericIndex>(end_index));
+
+    SegmentInMemory seg;
+    seg.add_column(scalar_field_proto(DataType::MICROS_UTC64, start_index_column_name), start_index_col);
+    seg.add_column(scalar_field_proto(DataType::MICROS_UTC64, end_index_column_name), end_index_col);
+    for (const auto& agg_data: folly::enumerate(aggregators_data)) {
+       seg.concatenate(agg_data->finalize(column_stats_aggregators_->at(agg_data.index).get_output_column_names()));
+    }
+    seg.set_row_id(0);
+    return Composite{ProcessingSegment{std::move(seg)}};
+}
 
 [[nodiscard]] Composite<ProcessingSegment>
 FilterClause::process(std::shared_ptr<Store> store, Composite<ProcessingSegment> &&p) const {
@@ -367,8 +433,8 @@ RemoveColumnPartitioningClause::process(std::shared_ptr<Store> store, Composite<
         util::variant_match(index,
         [&](const stream::TimeseriesIndex &) {
             size_t num_index_columns = stream::TimeseriesIndex::field_count();
-            procs.broadcast([&store, &output, &num_index_columns](ProcessingSegment &proc) {
-                SegmentInMemory new_segment{empty_descriptor()};
+            procs.broadcast([&store, &output, &num_index_columns, this](ProcessingSegment &proc) {
+                SegmentInMemory new_segment{empty_descriptor(descriptor_type_, proc.data()[0].segment_->get_index_col_name())};
                 new_segment.set_row_id(proc.data()[0].segment_->get_row_id());
                 size_t min_start_row = std::numeric_limits<size_t>::max();
                 size_t max_end_row = 0;
@@ -398,6 +464,7 @@ RemoveColumnPartitioningClause::process(std::shared_ptr<Store> store, Composite<
                         }
                         column_idx++;
                     }
+                    stream::merge_string_columns(slice_and_key.segment(store), new_segment.string_pool_ptr(), dedup_rows_);
                 }
                 const RowRange row_range{min_start_row, max_end_row};
                 const ColRange col_range{min_start_col, max_end_col};
@@ -405,11 +472,10 @@ RemoveColumnPartitioningClause::process(std::shared_ptr<Store> store, Composite<
             });
         },
         [&](const auto &) {
-            util::raise_rte("Not supported index type for sort merge implementation");
+            util::raise_rte("Column partition removal only supports datetime indexed data. You data does not have a datetime index.");
         }
         );
         return output;
 }
-    
 
 }

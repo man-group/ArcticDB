@@ -3,10 +3,12 @@ option(SSL_LINK "Link against SSL libraries." ON)
 option(HIDE_LINKED_SYMBOLS "Passed `exclude-libs` through to linker, ensuring linked library symbols are not exported. Shrinks binary size." ON)
 option(STATIC_LINK_STD_LIB "Statically link the C++ standard libraries" ON)
 
-if(${TEST})
 find_package(GTest CONFIG REQUIRED)
 include(CTest)
 include(GoogleTest)
+
+if(${TEST})
+find_package(rapidcheck REQUIRED)
 endif()
 
 include(GenerateExportHeader)
@@ -27,9 +29,7 @@ find_package(Gflags REQUIRED)
 find_package(LZ4 REQUIRED)
 find_package(prometheus-cpp CONFIG REQUIRED)
 find_package(Threads REQUIRED)
-find_package(unofficial-pcre REQUIRED)
 find_package(double-conversion REQUIRED)
-find_package(Libevent CONFIG REQUIRED)
 
 if(NOT WIN32 AND ${SSL_LINK})
     find_package(Kerberos REQUIRED)
@@ -41,10 +41,48 @@ set(Protobuf_LIBRARY protobuf::libprotobuf)
 
 find_package(mongocxx REQUIRED)
 find_package(bsoncxx REQUIRED)
-set(ARCTICDB_MONGO_LIBS mongo::mongocxx_static mongo::bsoncxx_static)
+find_package(zstd CONFIG REQUIRED)  # "CONFIG" bypasses our cpp/CMake/FindZstd.cmake module
 
-find_package(zstd CONFIG REQUIRED)
-set(Zstd_LIBRARY $<IF:$<TARGET_EXISTS:zstd::libzstd_shared>,zstd::libzstd_shared,zstd::libzstd_static>)
+if(NOT ${ARCTICDB_USING_CONDA})
+    find_package(unofficial-pcre REQUIRED)
+    find_package(Libevent CONFIG REQUIRED)
+    set(ARCTICDB_MONGO_LIBS mongo::mongocxx_static mongo::bsoncxx_static)
+    set(Zstd_LIBRARY $<IF:$<TARGET_EXISTS:zstd::libzstd_shared>,zstd::libzstd_shared,zstd::libzstd_static>)
+else()
+
+    # ARCTICDB_USING_CONDA is used in header of the files including vendored
+    # sources to be able to use dependencies via conda at compile time.
+    # TODO: rely on CMake directives instead of `ARCTICDB_USING_CONDA`.
+    add_compile_definitions(ARCTICDB_USING_CONDA)
+    # https://conda-forge.org/docs/maintainer/knowledge_base.html#newer-c-features-with-old-sdk
+    add_compile_definitions(_LIBCPP_DISABLE_AVAILABILITY)
+
+    SET(STATIC_LINK_STD_LIB OFF)
+    SET(HIDE_LINKED_SYMBOLS OFF)
+
+    find_package(pybind11 REQUIRED)
+    find_package(xxHash REQUIRED)
+    find_package(PCRE REQUIRED)
+    find_package(Libevent  REQUIRED)
+    find_package(semimap REQUIRED)
+
+    find_package(recycle REQUIRED)
+    find_package(remotery REQUIRED)
+    find_package(msgpack-c REQUIRED)
+    find_package(robin_hood REQUIRED)
+    find_package(LMDB REQUIRED)
+    find_package(LMDBXX REQUIRED)
+
+    set(ARCTICDB_MONGO_LIBS mongo::mongocxx_shared mongo::bsoncxx_shared)
+
+    set(Zstd_LIBRARY zstd::libzstd_shared)
+
+    get_target_property(NEW_FOLLY_DEPS Folly::folly_deps INTERFACE_INCLUDE_DIRECTORIES)
+    message(STATUS "NEW_FOLLY_DEPS" ${NEW_FOLLY_DEPS})
+    list(REMOVE_ITEM NEW_FOLLY_DEPS "/usr/local/opt/openssl/include" )
+    set_target_properties(Folly::folly_deps PROPERTIES INTERFACE_INCLUDE_DIRECTORIES "${NEW_FOLLY_DEPS}")
+
+endif()
 
 # Libraries baked into the internal and external Linux images are found by searching various paths
 # On Windows, vcpkg will provide a "Config" which takes precedence
@@ -142,6 +180,7 @@ set(arcticdb_srcs
         log/log.hpp
         log/trace.hpp
         pipeline/column_mapping.hpp
+        pipeline/column_stats.hpp
         pipeline/frame_data_wrapper.hpp
         pipeline/frame_slice.hpp
         pipeline/frame_utils.hpp
@@ -229,6 +268,7 @@ set(arcticdb_srcs
         util/container_filter_wrapper.hpp
         util/cursored_buffer.hpp
         util/cursor.hpp
+        util/decimal.hpp
         util/encoding_conversion.hpp
         util/exponential_backoff.hpp
         util/flatten_utils.hpp
@@ -256,7 +296,6 @@ set(arcticdb_srcs
         util/sparse_utils.hpp
         util/storage_lock.hpp
         util/string_utils.hpp
-        util/third_party/robin_hood.hpp
         util/timeouts.hpp
         util/timer.hpp
         util/trace.hpp
@@ -294,6 +333,7 @@ set(arcticdb_srcs
         entity/performance_tracing.cpp
         entity/types.cpp
         log/log.cpp
+        pipeline/column_stats.cpp
         pipeline/frame_slice.cpp
         pipeline/frame_utils.cpp
         pipeline/index_segment_reader.cpp
@@ -337,6 +377,7 @@ set(arcticdb_srcs
         util/allocator.cpp
         util/buffer_pool.cpp
         util/configs_map.cpp
+        util/decimal.cpp
         util/error_code.cpp
         util/global_lifetimes.cpp
         util/offset_string.cpp
@@ -355,6 +396,13 @@ set(arcticdb_srcs
         version/symbol_list.cpp
         version/schema_checks.hpp
         )
+
+# Exclude vendored sources when using conda.
+if(NOT ${ARCTICDB_USING_CONDA})
+    list (APPEND arcticdb_srcs
+        util/third_party/robin_hood.hpp
+    )
+endif()
 
 add_library(arcticdb_core_object OBJECT ${arcticdb_srcs})
 
@@ -394,21 +442,41 @@ set (arcticdb_core_libraries
         arcticdb_proto
         prometheus-cpp::push
         prometheus-cpp::pull
-        msgpackc-cxx
         ${standard_libraries}
         fmt::fmt
         ${Protobuf_lite_LIBRARY}
         ${Protobuf_LIBRARY}
-        xxhash_static
         ${LZ4_LIBRARY}
         ${Zstd_LIBRARY}
-        lmdb
         ${ARCTICDB_MONGO_LIBS}
         spdlog::spdlog
         Folly::folly # Transitively includes: double-conversion, gflags, glog, libevent, libssl, libcrypto, libiberty, libsodium
-        remotery_static
-        unofficial::pcre::pcre
         )
+
+# Dependencies expose different names of their libraries depending
+# on their origin (i.e. vendored source or packages on conda-forge).
+if(${ARCTICDB_USING_CONDA})
+
+    # We must use dynamic libraries.
+    list (APPEND arcticdb_core_libraries
+        xxHash::xxHash
+        pcre
+        ${remotery_LIBRARY}
+        msgpack-c
+        ${LMDB_LIBRARIES}
+    )
+else()
+
+    add_compile_definitions(ARCTICDB_USING_STATIC_XXHASH)
+
+    list (APPEND arcticdb_core_libraries
+        xxhash_static
+        unofficial::pcre::pcre
+        remotery_static
+        msgpackc-cxx
+        lmdb
+    )
+endif()
 
 if (WIN32)
     list (APPEND arcticdb_core_libraries
@@ -471,7 +539,11 @@ target_link_libraries(arcticdb_core PRIVATE
 GENERATE_EXPORT_HEADER(arcticdb_core)
 
 if (NOT WIN32)
-    add_compile_options("-Werror")
+    if(NOT ${ARCTICDB_USING_CONDA})
+        # Compilers on conda-forge are relatively strict.
+        # For now, we do not want to treat warnings as errors for those builds.
+        add_compile_options("-Werror")
+    endif()
     add_compile_options("-ggdb")
     add_compile_options("-fvisibility=hidden")
     add_compile_options("-fno-omit-frame-pointer")
@@ -505,7 +577,11 @@ target_include_directories(arcticdb_python PRIVATE
 
 if (NOT WIN32)
     add_compile_options("-ftemplate-depth=1000")
-    add_compile_options("-Werror")
+    if(NOT ${ARCTICDB_USING_CONDA})
+        # Compilers on conda-forge are relatively strict.
+        # For now, we do not want to treat warnings as errors for those builds.
+        add_compile_options("-Werror")
+    endif()
 endif ()
 
 ## arcticdb_ext python module
@@ -555,7 +631,7 @@ install(TARGETS arcticdb_ext
         RUNTIME DESTINATION . COMPONENT Python_Lib)
 
 # Improves portability (in setup.py) by creating an explicit target that manually installs the library
-if(NOT WIN32 AND "${CMAKE_BUILD_TYPE}" STREQUAL "RelWithDebInfo")
+if(NOT WIN32 AND "${CMAKE_BUILD_TYPE}" STREQUAL "RelWithDebInfo" AND NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     add_custom_command(OUTPUT arcticdb_ext.gz
             COMMAND bash -c "gzip -c $<TARGET_FILE:arcticdb_ext> >arcticdb_ext.gz"
             DEPENDS arcticdb_ext)
@@ -614,6 +690,7 @@ if(${TEST})
             util/test/test_buffer_pool.cpp
             util/test/test_composite.cpp
             util/test/test_cursor.cpp
+            util/test/test_decimal.cpp
             util/test/test_exponential_backoff.cpp
             util/test/test_format_date.cpp
             util/test/test_hash.cpp
@@ -631,6 +708,7 @@ if(${TEST})
             version/test/test_symbol_list.cpp
             version/test/test_version_map.cpp
             version/test/test_version_store.cpp
+            version/test/test_sorting_info_state_machine.cpp
             version/test/version_map_model.hpp
             )
 

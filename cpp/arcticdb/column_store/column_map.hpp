@@ -11,7 +11,12 @@
 #include <arcticdb/util/offset_string.hpp>
 #include <arcticdb/column_store/string_pool.hpp>
 #include <folly/container/Enumerate.h>
-#include <arcticdb/util/third_party/robin_hood.hpp>
+
+#ifdef ARCTICDB_USING_CONDA
+    #include <robin_hood.h>
+#else
+    #include <arcticdb/util/third_party/robin_hood.hpp>
+#endif
 
 #include <string>
 #include <unordered_map>
@@ -37,6 +42,18 @@ public:
         auto off_str = pool_.get(name);
         column_offsets_.insert(robin_hood::pair<std::string_view, size_t>(pool_.get_view(off_str.offset()), index));
         column_offsets_[pool_.get_view(off_str.offset())] = index;
+    }
+
+    void erase(std::string_view name) {
+        auto it = column_offsets_.find(name);
+        internal::check<ErrorCode::E_INVALID_ARGUMENT>(it != column_offsets_.end(), "Cannot drop column with name '{}' as it doesn't exist", name);
+        auto dropped_offset = it->second;
+        column_offsets_.erase(it);
+        for (auto& [_, offset]: column_offsets_) {
+            if (offset > dropped_offset) {
+                offset--;
+            }
+        }
     }
 
     void set_from_descriptor(const StreamDescriptor& descriptor) {

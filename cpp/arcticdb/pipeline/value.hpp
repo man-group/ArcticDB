@@ -38,7 +38,8 @@ struct Value {
     size_t len_ = 0;
 
     template <typename T>
-    Value(T t) {
+    Value(T t, DataType data_type=DataType::UNKNOWN):
+    data_type_(data_type) {
         *reinterpret_cast<T*>(&data_) = t;
     }
 

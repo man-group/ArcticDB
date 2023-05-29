@@ -31,6 +31,7 @@ from arcticdb_ext import set_config_int, get_config_int, unset_config_int
 
 PANDAS_VERSION = version.parse(pd.__version__)
 CHECK_FREQ_VERSION = version.Version("1.1")
+IS_PANDAS_ZERO = PANDAS_VERSION < version.Version("1.0")
 
 
 def maybe_not_check_freq(f):
@@ -185,7 +186,7 @@ def param_dict(fields, cases=None, xfail=None, py2only=None, py3only=None):
 
 
 def configure_test_logger(level="INFO"):
-    level = os.getenv("ARCTICC_TEST_LOG_LEVEL", "INFO")
+    level = os.getenv("ARCTICC_TEST_LOG_LEVEL", level)
     if os.getenv("ARCTICC_TEST_FILE_LOGGING"):
         outputs = ["file", "console"]
     else:
@@ -462,7 +463,6 @@ def make_dynamic(df, num_slices=10):
     rows_per_slice = 1 if rows_per_slice == 0 else rows_per_slice
 
     slices = []
-    expected = pd.DataFrame()
     column_index = 0
 
     for step in range(0, num_rows, rows_per_slice):
@@ -473,8 +473,8 @@ def make_dynamic(df, num_slices=10):
             df_slice = df_slice.drop(columns=[col_to_drop])
         column_index += 1
         slices.append(df_slice)
-        expected = expected.append(df_slice)
-
+    
+    expected = pd.concat(slices)
     return expected, slices
 
 

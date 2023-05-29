@@ -6,8 +6,9 @@
  */
 
 #include <arcticdb/column_store/memory_segment_impl.hpp>
-#include <arcticdb/util/format_date.hpp>
+#include <arcticdb/entity/type_utils.hpp>
 #include <arcticdb/stream/index.hpp>
+#include <arcticdb/util/format_date.hpp>
 
 namespace arcticdb {
 // Append any columns that exist both in this segment and in the 'other' segment onto the
@@ -25,22 +26,47 @@ void SegmentInMemoryImpl::append(const SegmentInMemoryImpl& other) {
     other.init_column_map();
     for(auto col = 0u; col < num_columns(); ++col) {
         auto col_name = descriptor().field(col).name();
-
-        auto col_index = other.column_index(col_name);
-        if(col_index) {
-            ARCTICDB_DEBUG(log::version(), "Appending column {} at index {}", col_name, col_index.value());
+        auto other_col_index = other.column_index(col_name);
+        if(other_col_index.has_value()) {
+            ARCTICDB_DEBUG(log::version(), "Appending column {} at index {}", col_name, *other_col_index);
             auto this_type = column_unchecked(col).type();
-            auto other_type =  other.column_unchecked(col_index.value()).type();
-            util::check(this_type == other_type, "Could not append type {} to type {} for column {}, this index {}, other index {}",
-                        other_type, this_type, col_name, col, col_index.value());
+            auto other_type =  other.column_unchecked(*other_col_index).type();
+            auto opt_common_type = has_valid_common_type(this_type, other_type);
+            internal::check<ErrorCode::E_INVALID_ARGUMENT>(
+                    opt_common_type.has_value(),
+                    "Could not append type {} to type {} for column {}, this index {}, other index {}",
+                    other_type, this_type, col_name, col, *other_col_index);
 
-            column_unchecked(col).append(other.column_unchecked(col_index.value()), row_id_ + 1);
+            if (this_type != *opt_common_type) {
+                column_unchecked(col).change_type(opt_common_type->data_type_);
+            }
+            if (other_type != *opt_common_type) {
+                auto type_promoted_col = other.column_unchecked(*other_col_index).clone();
+                type_promoted_col.change_type(opt_common_type->data_type_);
+                column_unchecked(col).append(type_promoted_col, row_id_ + 1);
+            } else {
+                column_unchecked(col).append(other.column(*other_col_index), row_id_ + 1);
+            }
         } else {
             ARCTICDB_DEBUG(log::version(), "Marking {} absent rows for column {}", other.row_count(), col_name);
-            column_unchecked(col).mark_absent_rows(row_count(), other.row_count());
+            column_unchecked(col).mark_absent_rows(other.row_count());
         }
     }
     set_row_id(row_id_ + other.row_count());
+}
+
+// Combine 2 segments that hold different columns associated with the same rows
+// If unique_column_names is true, any columns from other with names matching those in this are ignored
+void SegmentInMemoryImpl::concatenate(SegmentInMemoryImpl&& other, bool unique_column_names) {
+        internal::check<ErrorCode::E_INVALID_ARGUMENT>(
+                row_count() == other.row_count(),
+                "Cannot concatenate segments with differing row counts: {} {}",
+                row_count(), other.row_count());
+    for (const auto& field: folly::enumerate(other.fields())) {
+        if (!unique_column_names || !column_index(field->name()).has_value()) {
+            add_column(*field, other.column_ptr(field.index));
+        }
+    }
 }
 
 position_t SegmentInMemoryImpl::add_column(const FieldDescriptor::Proto &field, size_t num_rows, bool presize) {

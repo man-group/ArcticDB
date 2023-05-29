@@ -40,6 +40,15 @@ from arcticdb.util.test import (
 from tests.util.date import DateRange
 
 
+if sys.platform == "linux":
+    SMOKE_TEST_VERSION_STORES = ["lmdb_version_store", "s3_version_store", "mongo_version_store"]
+else:
+    # leave out Mongo as spinning up a Mongo instance in Windows CI is fiddly, and Mongo support is only
+    # currently required for Linux for internal use.
+    # We also skip it on Mac as github actions containers don't work with macos
+    SMOKE_TEST_VERSION_STORES = ["lmdb_version_store", "s3_version_store"]  # SKIP_WIN and SKIP_MAC
+
+
 @pytest.fixture()
 def symbol():
     return "sym" + str(random.randint(0, 10000))
@@ -60,26 +69,28 @@ def test_simple_flow(lmdb_version_store_no_symbol_list, symbol):
     assert lmdb_version_store_no_symbol_list.list_symbols() == lmdb_version_store_no_symbol_list.list_versions() == []
 
 
-def test_with_prune(lmdb_version_store, symbol):
+@pytest.mark.parametrize("version_store", SMOKE_TEST_VERSION_STORES)
+def test_with_prune(request, version_store, symbol):
+    version_store = request.getfixturevalue(version_store)
     df = sample_dataframe()
     modified_df = sample_dataframe()
 
-    lmdb_version_store.write(symbol, df, metadata={"something": "something"}, prune_previous_version=True)
-    lmdb_version_store.write(symbol, modified_df, prune_previous_version=True)
+    version_store.write(symbol, df, metadata={"something": "something"}, prune_previous_version=True)
+    version_store.write(symbol, modified_df, prune_previous_version=True)
 
-    assert len(lmdb_version_store.list_versions()) == 1
+    assert len(version_store.list_versions()) == 1
 
-    lmdb_version_store.snapshot("my_snap")
+    version_store.snapshot("my_snap")
 
     final_df = sample_dataframe()
-    lmdb_version_store.write(symbol, final_df, prune_previous_version=True)
-    lmdb_version_store.snapshot("my_snap2")
+    version_store.write(symbol, final_df, prune_previous_version=True)
+    version_store.snapshot("my_snap2")
 
     # previous versions should have been deleted by now.
-    assert len([ver for ver in lmdb_version_store.list_versions() if not ver["deleted"]]) == 1
+    assert len([ver for ver in version_store.list_versions() if not ver["deleted"]]) == 1
     # previous versions should be accessible through snapshot
-    assert_frame_equal(lmdb_version_store.read(symbol, as_of="my_snap").data, modified_df)
-    assert_frame_equal(lmdb_version_store.read(symbol, as_of="my_snap2").data, final_df)
+    assert_frame_equal(version_store.read(symbol, as_of="my_snap").data, modified_df)
+    assert_frame_equal(version_store.read(symbol, as_of="my_snap2").data, final_df)
 
 
 def test_prune_previous_versions_explicit_method(lmdb_version_store, symbol):
@@ -351,25 +362,6 @@ def test_update_times(lmdb_version_store):
     assert update_times_versioned[0] < update_times_versioned[1] < update_times_versioned[2]
 
 
-def test_update_date_range_dataframe(lmdb_version_store):
-    """Restrictive update - when date_range is specified ensure that we only touch values in that range."""
-    # given
-    dtidx = pd.date_range("2022-06-01", "2022-06-05")
-    df = pd.DataFrame(index=dtidx, data={"a": [1, 2, 3, 4, 5]}, dtype=np.int64)
-    lmdb_version_store.write("sym_1", df)
-
-    dtidx = pd.date_range("2022-05-01", "2022-06-10")
-    a = np.arange(dtidx.shape[0])
-    update_df = pd.DataFrame(index=dtidx, data={"a": a}, dtype=np.int64)
-
-    # when
-    lmdb_version_store.update("sym_1", update_df, date_range=(datetime(2022, 6, 2), datetime(2022, 6, 4)))
-
-    # then
-    result = lmdb_version_store.read("sym_1").data
-    np.testing.assert_array_equal(result["a"].values, [1, 32, 33, 34, 5])
-
-
 def test_get_info_multi_index(lmdb_version_store):
     dtidx = pd.date_range(pd.Timestamp("2016-01-01"), periods=3)
     vals = np.arange(3, dtype=np.uint32)
@@ -533,18 +525,20 @@ def test_is_pickled_by_timestamp(lmdb_version_store):
     assert lmdb_version_store.is_symbol_pickled(symbol, pd.Timestamp(np.iinfo(np.int64).max)) is False
 
 
-def test_list_versions(lmdb_version_store):
-    lmdb_version_store.write("a", 1)  # a, v0
-    lmdb_version_store.write("b", 1)  # b, v0
-    lmdb_version_store.write("c", 1)  # c, v0
-    lmdb_version_store.write("a", 2)  # a, v1
-    lmdb_version_store.write("a", 1)  # a, v2
-    lmdb_version_store.snapshot("snap1")
-    lmdb_version_store.write("b", 3)  # b, v1
-    lmdb_version_store.snapshot("snap2")
-    lmdb_version_store.write("c", 3)  # c, v1
-    lmdb_version_store.snapshot("snap3")
-    versions = lmdb_version_store.list_versions()
+@pytest.mark.parametrize("version_store", SMOKE_TEST_VERSION_STORES)
+def test_list_versions(request, version_store):
+    version_store = request.getfixturevalue(version_store)
+    version_store.write("a", 1)  # a, v0
+    version_store.write("b", 1)  # b, v0
+    version_store.write("c", 1)  # c, v0
+    version_store.write("a", 2)  # a, v1
+    version_store.write("a", 1)  # a, v2
+    version_store.snapshot("snap1")
+    version_store.write("b", 3)  # b, v1
+    version_store.snapshot("snap2")
+    version_store.write("c", 3)  # c, v1
+    version_store.snapshot("snap3")
+    versions = version_store.list_versions()
 
     assert len(versions) == 3 + 2 + 2  # a-3, b-2, c-2
     sorted_versions_for_a = sorted([v for v in versions if v["symbol"] == "a"], key=lambda x: x["version"])
@@ -558,17 +552,17 @@ def test_list_versions(lmdb_version_store):
             res.add((v_info["symbol"], v_info["version"]))
         return res
 
-    assert get_tuples_from_version_info(lmdb_version_store.list_versions(snapshot="snap1")) == {
+    assert get_tuples_from_version_info(version_store.list_versions(snapshot="snap1")) == {
         ("a", 2),
         ("b", 0),
         ("c", 0),
     }
-    assert get_tuples_from_version_info(lmdb_version_store.list_versions(snapshot="snap2")) == {
+    assert get_tuples_from_version_info(version_store.list_versions(snapshot="snap2")) == {
         ("a", 2),
         ("b", 1),
         ("c", 0),
     }
-    assert get_tuples_from_version_info(lmdb_version_store.list_versions(snapshot="snap3")) == {
+    assert get_tuples_from_version_info(version_store.list_versions(snapshot="snap3")) == {
         ("a", 2),
         ("b", 1),
         ("c", 1),
@@ -1555,7 +1549,7 @@ def test_batch_append(lmdb_version_store_tombstone, three_col_df):
     assert all(type(v) == VersionedItem for v in append_result)
 
     for sym in multi_data.keys():
-        expected = multi_data[sym].append(multi_append[sym])
+        expected = pd.concat((multi_data[sym], multi_append[sym]))
         vit = lmdb_version_store.read(sym)
         assert_frame_equal(expected, vit.data)
         assert vit.metadata == append_metadata[sym]

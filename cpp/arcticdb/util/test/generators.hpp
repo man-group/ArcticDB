@@ -265,7 +265,7 @@ struct SegmentSinkWrapperImpl {
     SegmentSinkWrapperImpl(StreamId stream_id, const IndexType& index, std::vector<FieldDescriptor>&& fields) :
         sink_(std::make_shared<SegmentsSink>()),
         aggregator_(
-            [](const pipelines::FrameSlice&) {},
+            [](pipelines::FrameSlice&&) {},
             SchemaPolicy{
                  index.create_stream_descriptor(std::move(stream_id), fields_proto_from_range(fields)), index
             },

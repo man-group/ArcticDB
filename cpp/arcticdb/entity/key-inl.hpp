@@ -177,6 +177,10 @@ enum class KeyType : int {
      * Contains multiple LOG keys in its segment (to be used by low-priority replication job)
      */
     LOG_COMPACTED = 24,
+    /*
+     * Contains column stats about the index key with the same stream ID and version number
+     */
+    COLUMN_STATS = 25,
     UNDEFINED
 };
 

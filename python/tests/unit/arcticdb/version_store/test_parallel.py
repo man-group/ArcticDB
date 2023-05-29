@@ -75,7 +75,7 @@ def test_floats_to_nans(lmdb_version_store):
         new_df = pd.DataFrame(data=vals, index=index)
 
         dataframes.append(new_df)
-        df = df.append(new_df)
+        df = pd.concat((df, new_df))
         dt = dt + datetime.timedelta(days=1)
 
     random.shuffle(dataframes)
@@ -186,7 +186,7 @@ def test_datetimes_to_nats(lmdb_version_store):
         new_df = pd.DataFrame(data=vals, index=index)
 
         dataframes.append(new_df)
-        df = df.append(new_df)
+        df = pd.concat((df, new_df))
         dt = dt + datetime.timedelta(days=1)
 
     random.shuffle(dataframes)

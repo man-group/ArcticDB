@@ -256,7 +256,7 @@ def test_segment_without_aggregation_column(lmdb_version_store_dynamic_schema):
     lib.write(sym, write_df)
     append_df = pd.DataFrame({"grouping_column": ["group_1"]})
     lib.append(sym, append_df)
-    df = write_df.append(append_df)
+    df = pd.concat((write_df, append_df))
 
     for aggregation_operation in ["max", "min", "mean", "sum"]:
         expected = df.groupby("grouping_column").agg({"aggregation_column": aggregation_operation})
@@ -294,7 +294,7 @@ def test_minimal_repro_type_change_max(lmdb_version_store_dynamic_schema):
 
     append_df = pd.DataFrame({"grouping_column": ["group_1"], "to_max": [0.5]})
     lib.append(sym, append_df)
-    df = write_df.append(append_df)
+    df = pd.concat((write_df, append_df))
 
     expected = df.groupby("grouping_column").agg({"to_max": "max"})
 

@@ -24,6 +24,7 @@
 #include <arcticdb/version/version_store_api.hpp>
 #include <arcticdb/stream/index.hpp>
 #include <filesystem>
+#include <arcticdb/entity/protobufs.hpp>
 
 
 namespace fg = folly::gen;
@@ -277,7 +278,7 @@ TestTensorFrame get_test_frame(const StreamId &id,
     output.frame_.desc = get_test_descriptor<IndexType>(id, fields);
     output.frame_.index = index_type_from_descriptor(output.frame_.desc);
     output.frame_.num_rows = num_rows;
-    output.frame_.desc.set_sorted(arcticdb::entity::SortedValue::ASCENDING);
+    output.frame_.desc.set_sorted(arcticdb::proto::descriptors::SortedValue::ASCENDING);
 
     fill_test_frame(output.segment_, output.frame_, num_rows, start_val, opt_row_offset);
 
@@ -309,7 +310,7 @@ inline std::pair<storage::LibraryPath, arcticdb::proto::storage::LibraryConfig> 
     auto library_path = storage::LibraryPath::from_delim_path(unique_lib_name);
     auto storage_id = fmt::format("{}_store", unique_lib_name);
     config.mutable_lib_desc()->add_storage_ids(storage_id);
-    config.mutable_storage_by_id()->insert(google::protobuf::MapPair(storage_id, lmdb_config));
+    config.mutable_storage_by_id()->insert(google::protobuf::MapPair<std::decay_t<decltype(storage_id)>, std::decay_t<decltype(lmdb_config)> >(storage_id, lmdb_config));
     return std::make_pair(library_path, config);
 }
 
