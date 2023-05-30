@@ -286,7 +286,7 @@ def test_(initial: InputFactories, append: InputFactories, match, swap, lmdb_ver
         lib.append("s", to_append, match=match)
 
 
-def test_append_non_sorted_exception(lmdb_version_store):
+def test_append_not_sorted_exception(lmdb_version_store):
     symbol = "bad_append"
 
     num_initial_rows = 20
@@ -308,7 +308,7 @@ def test_append_non_sorted_exception(lmdb_version_store):
     with pytest.raises(SortingException):
         lmdb_version_store.append(symbol, df2, validate_index=True)
 
-def test_append_existing_non_sorted_exception(lmdb_version_store):
+def test_append_existing_not_sorted_exception(lmdb_version_store):
     symbol = "bad_append"
 
     num_initial_rows = 20
@@ -330,7 +330,7 @@ def test_append_existing_non_sorted_exception(lmdb_version_store):
     with pytest.raises(SortingException):
         lmdb_version_store.append(symbol, df2, validate_index=True)
 
-def test_append_non_sorted_non_validate_index(lmdb_version_store):
+def test_append_not_sorted_non_validate_index(lmdb_version_store):
     symbol = "bad_append"
 
     num_initial_rows = 20
@@ -351,7 +351,7 @@ def test_append_non_sorted_non_validate_index(lmdb_version_store):
     lmdb_version_store.append(symbol, df2)
 
 
-def test_append_non_sorted_multi_index_exception(lmdb_version_store):
+def test_append_not_sorted_multi_index_exception(lmdb_version_store):
     symbol = "bad_append"
 
     num_initial_rows = 20
@@ -384,7 +384,7 @@ def test_append_non_sorted_multi_index_exception(lmdb_version_store):
         lmdb_version_store.append(symbol, df2, validate_index=True)
 
 
-def test_append_non_sorted_range_index_non_exception(lmdb_version_store):
+def test_append_not_sorted_range_index_non_exception(lmdb_version_store):
     symbol = "bad_append"
 
     num_initial_rows = 20
@@ -404,7 +404,7 @@ def test_append_non_sorted_range_index_non_exception(lmdb_version_store):
         lmdb_version_store.append(symbol, df2)
 
 
-def test_append_mix_sorted_non_sorted(lmdb_version_store):
+def test_append_mix_ascending_not_sorted(lmdb_version_store):
     symbol = "bad_append"
 
     num_initial_rows = 20
@@ -413,7 +413,7 @@ def test_append_mix_sorted_non_sorted(lmdb_version_store):
     df = pd.DataFrame({"c": np.arange(0, num_initial_rows, dtype=np.int64)}, index=dtidx)
     assert df.index.is_monotonic_increasing == True
 
-    lmdb_version_store.write(symbol, df)
+    lmdb_version_store.write(symbol, df, validate_index = True)
     info = lmdb_version_store.get_info(symbol)
     assert info["sorted"] == "ASCENDING"
 
@@ -422,7 +422,7 @@ def test_append_mix_sorted_non_sorted(lmdb_version_store):
     dtidx = pd.date_range(initial_timestamp, periods=num_rows)
     df2 = pd.DataFrame({"c": np.arange(0, num_rows, dtype=np.int64)}, index=dtidx)
     assert df2.index.is_monotonic_increasing == True
-    lmdb_version_store.append(symbol, df2)
+    lmdb_version_store.append(symbol, df2, validate_index = True)
     info = lmdb_version_store.get_info(symbol)
     assert info["sorted"] == "ASCENDING"
 
@@ -440,6 +440,79 @@ def test_append_mix_sorted_non_sorted(lmdb_version_store):
     dtidx = pd.date_range(initial_timestamp, periods=num_rows)
     df2 = pd.DataFrame({"c": np.arange(0, num_rows, dtype=np.int64)}, index=dtidx)
     assert df2.index.is_monotonic_increasing == True
+    lmdb_version_store.append(symbol, df2)
+    info = lmdb_version_store.get_info(symbol)
+    assert info["sorted"] == "UNSORTED"
+
+
+def test_append_mix_descending_not_sorted(lmdb_version_store):
+    symbol = "bad_append"
+
+    num_initial_rows = 20
+    initial_timestamp = pd.Timestamp("2019-01-01")
+    dtidx = pd.date_range(initial_timestamp, periods=num_initial_rows)
+    df = pd.DataFrame({"c": np.arange(0, num_initial_rows, dtype=np.int64)}, index=reversed(dtidx))
+    assert df.index.is_monotonic_decreasing == True
+
+    lmdb_version_store.write(symbol, df)
+    info = lmdb_version_store.get_info(symbol)
+    assert info["sorted"] == "DESCENDING"
+
+    num_rows = 20
+    initial_timestamp = pd.Timestamp("2020-01-01")
+    dtidx = pd.date_range(initial_timestamp, periods=num_rows)
+    df2 = pd.DataFrame({"c": np.arange(0, num_rows, dtype=np.int64)}, index=reversed(dtidx))
+    assert df2.index.is_monotonic_decreasing == True
+    lmdb_version_store.append(symbol, df2)
+    info = lmdb_version_store.get_info(symbol)
+    assert info["sorted"] == "DESCENDING"
+
+    num_rows = 20
+    initial_timestamp = pd.Timestamp("2021-01-01")
+    dtidx = np.roll(pd.date_range(initial_timestamp, periods=num_rows), 3)
+    df2 = pd.DataFrame({"c": np.arange(0, num_rows, dtype=np.int64)}, index=dtidx)
+    assert df2.index.is_monotonic_decreasing == False
+    lmdb_version_store.append(symbol, df2)
+    info = lmdb_version_store.get_info(symbol)
+    assert info["sorted"] == "UNSORTED"
+
+    num_rows = 20
+    initial_timestamp = pd.Timestamp("2022-01-01")
+    dtidx = pd.date_range(initial_timestamp, periods=num_rows)
+    df2 = pd.DataFrame({"c": np.arange(0, num_rows, dtype=np.int64)}, index=reversed(dtidx))
+    assert df2.index.is_monotonic_decreasing == True
+    lmdb_version_store.append(symbol, df2)
+    info = lmdb_version_store.get_info(symbol)
+    assert info["sorted"] == "UNSORTED"
+    
+
+def test_append_mix_ascending_descending(lmdb_version_store):
+    symbol = "bad_append"
+
+    num_initial_rows = 20
+    initial_timestamp = pd.Timestamp("2019-01-01")
+    dtidx = pd.date_range(initial_timestamp, periods=num_initial_rows)
+    df = pd.DataFrame({"c": np.arange(0, num_initial_rows, dtype=np.int64)}, index=reversed(dtidx))
+    assert df.index.is_monotonic_decreasing == True
+
+    lmdb_version_store.write(symbol, df)
+    info = lmdb_version_store.get_info(symbol)
+    assert info["sorted"] == "DESCENDING"
+
+    num_rows = 20
+    initial_timestamp = pd.Timestamp("2020-01-01")
+    dtidx = pd.date_range(initial_timestamp, periods=num_rows)
+    df2 = pd.DataFrame({"c": np.arange(0, num_rows, dtype=np.int64)}, index=dtidx)
+    assert df2.index.is_monotonic_increasing == True
+    lmdb_version_store.append(symbol, df2)
+    info = lmdb_version_store.get_info(symbol)
+    assert info["sorted"] == "UNSORTED"
+
+    num_rows = 20
+    initial_timestamp = pd.Timestamp("2022-01-01")
+    dtidx = pd.date_range(initial_timestamp, periods=num_rows)
+    df2 = pd.DataFrame({"c": np.arange(0, num_rows, dtype=np.int64)}, index=reversed(dtidx))
+    assert df2.index.is_monotonic_decreasing == True
     lmdb_version_store.append(symbol, df2)
     info = lmdb_version_store.get_info(symbol)
     assert info["sorted"] == "UNSORTED"

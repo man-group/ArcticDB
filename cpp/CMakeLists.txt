@@ -6,11 +6,15 @@ project(arcticdb VERSION 0.0.1)
 
 enable_testing()
 
+
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
 option(
     ARCTICDB_USING_CONDA
     "Whether ArcticDB's build system relies on conda for resolving its dependencies."
     OFF
 )
+
 
 if(WIN32)
     add_compile_definitions(NOGDI)
@@ -25,7 +29,11 @@ if(WIN32)
     set(CMAKE_CXX_FLAGS_RELEASE "/MT /DNDEBUG")
     set(CMAKE_CXX_FLAGS_DEBUG "/MTd /RTC1")
 else()
-    set(CMAKE_CXX_FLAGS "-Wall -Wextra")
+    if(${ARCTICDB_USING_CONDA})
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wextra")
+    else()
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra")
+    endif()
     set(CMAKE_CXX_FLAGS_DEBUG "-ggdb")
     set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG")
     set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O3 -ggdb")

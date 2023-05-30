@@ -3,10 +3,12 @@ option(SSL_LINK "Link against SSL libraries." ON)
 option(HIDE_LINKED_SYMBOLS "Passed `exclude-libs` through to linker, ensuring linked library symbols are not exported. Shrinks binary size." ON)
 option(STATIC_LINK_STD_LIB "Statically link the C++ standard libraries" ON)
 
-if(${TEST})
 find_package(GTest CONFIG REQUIRED)
 include(CTest)
 include(GoogleTest)
+
+if(${TEST})
+find_package(rapidcheck REQUIRED)
 endif()
 
 include(GenerateExportHeader)
@@ -48,6 +50,13 @@ if(NOT ${ARCTICDB_USING_CONDA})
     set(Zstd_LIBRARY $<IF:$<TARGET_EXISTS:zstd::libzstd_shared>,zstd::libzstd_shared,zstd::libzstd_static>)
 else()
 
+    # ARCTICDB_USING_CONDA is used in header of the files including vendored
+    # sources to be able to use dependencies via conda at compile time.
+    # TODO: rely on CMake directives instead of `ARCTICDB_USING_CONDA`.
+    add_compile_definitions(ARCTICDB_USING_CONDA)
+    # https://conda-forge.org/docs/maintainer/knowledge_base.html#newer-c-features-with-old-sdk
+    add_compile_definitions(_LIBCPP_DISABLE_AVAILABILITY)
+
     SET(STATIC_LINK_STD_LIB OFF)
     SET(HIDE_LINKED_SYMBOLS OFF)
 
@@ -56,10 +65,10 @@ else()
     find_package(PCRE REQUIRED)
     find_package(Libevent  REQUIRED)
     find_package(semimap REQUIRED)
+
     find_package(recycle REQUIRED)
     find_package(remotery REQUIRED)
     find_package(msgpack-c REQUIRED)
-    find_package(rapidcheck REQUIRED)
     find_package(robin_hood REQUIRED)
     find_package(LMDB REQUIRED)
     find_package(LMDBXX REQUIRED)
@@ -449,9 +458,6 @@ set (arcticdb_core_libraries
 # Dependencies expose different names of their libraries depending
 # on their origin (i.e. vendored source or packages on conda-forge).
 if(${ARCTICDB_USING_CONDA})
-    # ARCTICDB_USING_CONDA is used in header of the files including vendored
-    # sources to be able to use dependencies via conda at compile time.
-    add_compile_definitions(ARCTICDB_USING_CONDA)
 
     # We must use dynamic libraries.
     list (APPEND arcticdb_core_libraries
@@ -535,7 +541,11 @@ target_link_libraries(arcticdb_core PRIVATE
 GENERATE_EXPORT_HEADER(arcticdb_core)
 
 if (NOT WIN32)
-    add_compile_options("-Werror")
+    if(NOT ${ARCTICDB_USING_CONDA})
+        # Compilers on conda-forge are relatively strict.
+        # For now, we do not want to treat warnings as errors for those builds.
+        add_compile_options("-Werror")
+    endif()
     add_compile_options("-ggdb")
     add_compile_options("-fvisibility=hidden")
     add_compile_options("-fno-omit-frame-pointer")
@@ -569,7 +579,11 @@ target_include_directories(arcticdb_python PRIVATE
 
 if (NOT WIN32)
     add_compile_options("-ftemplate-depth=1000")
-    add_compile_options("-Werror")
+    if(NOT ${ARCTICDB_USING_CONDA})
+        # Compilers on conda-forge are relatively strict.
+        # For now, we do not want to treat warnings as errors for those builds.
+        add_compile_options("-Werror")
+    endif()
 endif ()
 
 ## arcticdb_ext python module
@@ -697,6 +711,7 @@ if(${TEST})
             version/test/test_symbol_list.cpp
             version/test/test_version_map.cpp
             version/test/test_version_store.cpp
+            version/test/test_sorting_info_state_machine.cpp
             version/test/version_map_model.hpp
             )
 

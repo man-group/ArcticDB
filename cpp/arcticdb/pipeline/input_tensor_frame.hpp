@@ -45,7 +45,12 @@ struct InputTensorFrame {
     }
 
     void set_sorted(SortedValue sorted) {
-        desc.set_sorted(sorted);
+        switch (sorted) {
+            case SortedValue::UNSORTED:desc.set_sorted(arcticdb::proto::descriptors::SortedValue::UNSORTED);break;
+            case SortedValue::DESCENDING:desc.set_sorted(arcticdb::proto::descriptors::SortedValue::DESCENDING);break;
+            case SortedValue::ASCENDING:desc.set_sorted(arcticdb::proto::descriptors::SortedValue::ASCENDING);break;
+            default:desc.set_sorted(arcticdb::proto::descriptors::SortedValue::UNKNOWN);
+        }
     }
 
     void set_bucketize_dynamic(bool bucketize) const {

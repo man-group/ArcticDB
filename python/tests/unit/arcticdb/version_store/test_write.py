@@ -69,7 +69,7 @@ def test_write_unknown_sorted_dataframe(lmdb_version_store):
     assert info["sorted"] == "UNKNOWN"
 
 
-def test_write_non_sorted_exception(lmdb_version_store):
+def test_write_not_sorted_exception(lmdb_version_store):
     symbol = "bad_write"
     num_initial_rows = 20
     num_rows = 20
@@ -82,7 +82,7 @@ def test_write_non_sorted_exception(lmdb_version_store):
         lmdb_version_store.write(symbol, df, validate_index=True)
 
 
-def test_write_non_sorted_non_validate_index(lmdb_version_store):
+def test_write_not_sorted_non_validate_index(lmdb_version_store):
     symbol = "bad_write"
     num_initial_rows = 20
     num_rows = 20
@@ -94,7 +94,7 @@ def test_write_non_sorted_non_validate_index(lmdb_version_store):
     lmdb_version_store.write(symbol, df)
 
 
-def test_write_non_sorted_multi_index_exception(lmdb_version_store):
+def test_write_not_sorted_multi_index_exception(lmdb_version_store):
     symbol = "bad_write"
     num_initial_rows = 20
     num_rows = 20
@@ -113,7 +113,7 @@ def test_write_non_sorted_multi_index_exception(lmdb_version_store):
         lmdb_version_store.write(symbol, df, validate_index=True)
 
 
-def test_write_non_sorted_range_index_exception(lmdb_version_store):
+def test_write_not_sorted_range_index_exception(lmdb_version_store):
     symbol = "bad_write"
     num_rows = 20
     dtidx = np.roll(pd.RangeIndex(0, num_rows, 1), 3)
