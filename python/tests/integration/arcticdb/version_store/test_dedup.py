@@ -239,7 +239,9 @@ def test_de_dup_with_tombstones(version_store_factory):
 
 
 def test_snapshot_dedup_basic(version_store_factory):
-    lib = version_store_factory(column_group_size=2, segment_row_size=2, de_duplication=True, use_tombstones=True, snapshot_dedup=True)
+    lib = version_store_factory(
+        column_group_size=2, segment_row_size=2, de_duplication=True, use_tombstones=True, snapshot_dedup=True
+    )
     symbol = "test_snapshot_dedup_basic"
 
     num_elements = 100
@@ -279,7 +281,9 @@ def test_snapshot_dedup_basic(version_store_factory):
 
 
 def test_snapshot_dedup_multiple1(version_store_factory):
-    lib = version_store_factory(column_group_size=2, segment_row_size=2, de_duplication=True, use_tombstones=True, snapshot_dedup=True)
+    lib = version_store_factory(
+        column_group_size=2, segment_row_size=2, de_duplication=True, use_tombstones=True, snapshot_dedup=True
+    )
     symbol = "test_snapshot_dedup_multiple1"
 
     num_elements = 100
@@ -345,7 +349,9 @@ def test_snapshot_dedup_multiple1(version_store_factory):
 
 
 def test_snapshot_dedup_multiple2(version_store_factory):
-    lib = version_store_factory(column_group_size=2, segment_row_size=2, de_duplication=True, use_tombstones=True, snapshot_dedup=True)
+    lib = version_store_factory(
+        column_group_size=2, segment_row_size=2, de_duplication=True, use_tombstones=True, snapshot_dedup=True
+    )
     symbol = "test_snapshot_dedup_multiple2"
 
     num_elements = 100
@@ -399,7 +405,9 @@ def test_snapshot_dedup_multiple2(version_store_factory):
 
 
 def test_dedup_multi_keys(version_store_factory):
-    lib = version_store_factory(column_group_size=2, segment_row_size=2, de_duplication=True, use_tombstones=True, snapshot_dedup=True)
+    lib = version_store_factory(
+        column_group_size=2, segment_row_size=2, de_duplication=True, use_tombstones=True, snapshot_dedup=True
+    )
     symbol = "test_dedup_multi_keys"
     num_elements = 100
 
@@ -445,7 +453,9 @@ def test_dedup_multi_keys(version_store_factory):
 
 
 def test_dedup_multi_keys_snapshot(version_store_factory):
-    lib = version_store_factory(column_group_size=2, segment_row_size=2, de_duplication=True, use_tombstones=True, snapshot_dedup=True)
+    lib = version_store_factory(
+        column_group_size=2, segment_row_size=2, de_duplication=True, use_tombstones=True, snapshot_dedup=True
+    )
     symbol = "test_dedup_multi_keys"
     num_elements = 100
 

@@ -63,7 +63,7 @@ class CustomTimeseries:
             return CustomTimeseries(
                 self.wrapped[item],
                 with_timezone_attr=self.with_timezone_attr,
-                timezone_=getattr(self, "timezone", None)
+                timezone_=getattr(self, "timezone", None),
             )
 
     def __getattr__(self, name):
@@ -96,9 +96,7 @@ def lmdb_version_store_custom_norm(version_store_factory):
         clear_registered_normalizers()
 
 
-@pytest.mark.parametrize(
-    "with_timezone_attr,timezone_", [(True, None), (True, timezone.utc), (False, None)]
-)
+@pytest.mark.parametrize("with_timezone_attr,timezone_", [(True, None), (True, timezone.utc), (False, None)])
 def test_update_date_range_non_pandas_dataframe(lmdb_version_store_custom_norm, with_timezone_attr, timezone_):
     """Check that updates with a daterange work for a simple non-Pandas timeseries.
 

@@ -308,6 +308,7 @@ def test_append_not_sorted_exception(lmdb_version_store):
     with pytest.raises(SortingException):
         lmdb_version_store.append(symbol, df2, validate_index=True)
 
+
 def test_append_existing_not_sorted_exception(lmdb_version_store):
     symbol = "bad_append"
 
@@ -329,6 +330,7 @@ def test_append_existing_not_sorted_exception(lmdb_version_store):
 
     with pytest.raises(SortingException):
         lmdb_version_store.append(symbol, df2, validate_index=True)
+
 
 def test_append_not_sorted_non_validate_index(lmdb_version_store):
     symbol = "bad_append"
@@ -413,7 +415,7 @@ def test_append_mix_ascending_not_sorted(lmdb_version_store):
     df = pd.DataFrame({"c": np.arange(0, num_initial_rows, dtype=np.int64)}, index=dtidx)
     assert df.index.is_monotonic_increasing == True
 
-    lmdb_version_store.write(symbol, df, validate_index = True)
+    lmdb_version_store.write(symbol, df, validate_index=True)
     info = lmdb_version_store.get_info(symbol)
     assert info["sorted"] == "ASCENDING"
 
@@ -422,7 +424,7 @@ def test_append_mix_ascending_not_sorted(lmdb_version_store):
     dtidx = pd.date_range(initial_timestamp, periods=num_rows)
     df2 = pd.DataFrame({"c": np.arange(0, num_rows, dtype=np.int64)}, index=dtidx)
     assert df2.index.is_monotonic_increasing == True
-    lmdb_version_store.append(symbol, df2, validate_index = True)
+    lmdb_version_store.append(symbol, df2, validate_index=True)
     info = lmdb_version_store.get_info(symbol)
     assert info["sorted"] == "ASCENDING"
 
@@ -484,7 +486,7 @@ def test_append_mix_descending_not_sorted(lmdb_version_store):
     lmdb_version_store.append(symbol, df2)
     info = lmdb_version_store.get_info(symbol)
     assert info["sorted"] == "UNSORTED"
-    
+
 
 def test_append_mix_ascending_descending(lmdb_version_store):
     symbol = "bad_append"

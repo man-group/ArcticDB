@@ -24,6 +24,12 @@ namespace arcticdb {
         class Decimal {
         public:
             Decimal();
+            /**
+             * Construct decimal from a string
+             * @param number String representation of a decimal number
+             * @note Zeros after the decimal point in \p number matter.
+             * @see Decimal::operator==()
+             */
             explicit Decimal(std::string_view number);
             ARCTICDB_MOVE_COPY_DEFAULT(Decimal);
 
@@ -39,6 +45,14 @@ namespace arcticdb {
             [[nodiscard]] std::string to_string(int scale) const;
             [[nodiscard]] bool is_negative() const;
             [[nodiscard]] Decimal operator-() const;
+            /**
+             * Compare two decimals. Since the format does not keep decimal point position, the comparison is byte-wise.
+             * @example
+             *  Decimal("1") == Decimal("1.0") -> false
+             *  Decimal("100") == Decimal("1.00") -> true
+             *  Decimal("1.000E6") == Decimal("1000000") -> true
+             *  Decimal("1.000E-6") == Decimal("1000") -> true
+             */
             [[nodiscard]] bool operator==(const Decimal&) const;
             void negate();
 
