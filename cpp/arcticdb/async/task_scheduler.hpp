@@ -68,11 +68,12 @@ public:
             });
     
   }
-    // we do **not** use the override keyword here, as for older
-    // folly versions, this is not an override.
-    virtual const std::string& getNamePrefix() const /*override*/ {
+    
+    #ifdef FOLLY_VERSION_GEQ_2023_02_13
+    virtual const std::string& getNamePrefix() const override {
         return named_factory_.getNamePrefix();
     }
+    #endif
 
 
 private:

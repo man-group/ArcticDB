@@ -25,6 +25,7 @@ find_package(Boost REQUIRED)
 find_package(fmt REQUIRED)
 find_package(spdlog REQUIRED)
 find_package(Folly REQUIRED)
+include(FollyVersionUtils)
 find_package(Gflags REQUIRED)
 find_package(LZ4 REQUIRED)
 find_package(prometheus-cpp CONFIG REQUIRED)
@@ -83,7 +84,6 @@ else()
     set_target_properties(Folly::folly_deps PROPERTIES INTERFACE_INCLUDE_DIRECTORIES "${NEW_FOLLY_DEPS}")
 
 endif()
-
 # Libraries baked into the internal and external Linux images are found by searching various paths
 # On Windows, vcpkg will provide a "Config" which takes precedence
 find_library(Pcre_LIBRARY NAMES pcre PATHS /usr/local/lib/libpcre.a REQUIRED)
