@@ -16,7 +16,7 @@ jobs:
       matrix:
           os: [ubuntu-latest]
           python_version:  ["3.8", "3.9", "3.10"]
-          compiler: ["gcc", "clang"]
+          compiler: ["gcc", "clang", "system_compiler"]
 
       fail-fast: false
     runs-on: ${{ matrix.os }}
@@ -36,7 +36,12 @@ jobs:
         shell: bash -l {0}
         run: |
           echo "  - python ==${{ matrix.python_version }}" >> environment_unix.yml
-          echo "  - ${{ matrix.compiler }}" >> environment_unix.yml
+          if [[ "${{ matrix.compiler }}" == "system_compiler" ]]; then
+            echo "using system compiler"
+          else
+            echo "  - ${{ matrix.compiler }}" >> environment_unix.yml
+          fi
+
 
       - name: Install Conda environment from environment_unix.yml
         uses: mamba-org/setup-micromamba@v1
@@ -66,7 +71,7 @@ jobs:
       matrix:
         os: [macos-latest]
         python_version:  ["3.8", "3.9", "3.10"]
-        compiler: ["clang"]
+        compiler: ["clang", "system_compiler"]
 
       fail-fast: false
     runs-on: ${{ matrix.os }}
@@ -80,7 +85,11 @@ jobs:
         shell: bash -l {0}
         run: |
           echo "  - python ==${{ matrix.python_version }}" >> environment_unix.yml
-          echo "  - ${{ matrix.compiler }}" >> environment_unix.yml
+          if [[ "${{ matrix.compiler }}" == "system_compiler" ]]; then
+            echo "using system compiler"
+          else
+            echo "  - ${{ matrix.compiler }}" >> environment_unix.yml
+          fi
 
       - name: Install Conda environment from environment_unix.yml
         uses: mamba-org/setup-micromamba@v1
