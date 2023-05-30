@@ -840,7 +840,7 @@ def test_filter_isin_clashing_sets(lmdb_version_store):
 def numeric_isin_asumptions(df, vals):
     assume(not df.empty)
     # If df values need a uint64 to hold them then we only support unsigned vals
-    assume(df["a"].between(-2 ** 63, 2 ** 63 - 1).all() or all(v >= 0 for v in vals))
+    assume(df["a"].between(-(2**63), 2**63 - 1).all() or all(v >= 0 for v in vals))
 
 
 @use_of_function_scoped_fixtures_in_hypothesis_checked
@@ -874,10 +874,10 @@ def test_filter_numeric_isin_unsigned(lmdb_version_store, df, vals):
 @pytest.mark.parametrize(
     "df_col,isin_vals,expected_col",
     [
-        ([0, 1, 2 ** 62], [0, 1, -1], [0, 1]),
-        ([0, 1, 2 ** 63 - 1], [0, 1, -1], [0, 1]),
-        ([0, 1, 2 ** 62], [0, 1, -1], [0, 1]),
-        ([-1, 0, 1], [0, 1, 2 ** 62], [0, 1]),
+        ([0, 1, 2**62], [0, 1, -1], [0, 1]),
+        ([0, 1, 2**63 - 1], [0, 1, -1], [0, 1]),
+        ([0, 1, 2**62], [0, 1, -1], [0, 1]),
+        ([-1, 0, 1], [0, 1, 2**62], [0, 1]),
     ],
 )
 def test_filter_numeric_isin_hashing_overflows(lmdb_version_store, df_col, isin_vals, expected_col):
@@ -892,8 +892,8 @@ def test_filter_numeric_isin_hashing_overflows(lmdb_version_store, df_col, isin_
     assert_frame_equal(expected, result)
 
 
-def test_filter_numeric_isin_unsigned_max_uint64(lmdb_version_store):
-    df = pd.DataFrame({"a": [0, 1, 2 ** 64 - 1]})
+def test_filter_numeric_isin_unsigned(lmdb_version_store):
+    df = pd.DataFrame({"a": [0, 1, 2**64 - 1]})
     lmdb_version_store.write("test_filter_numeric_isin_unsigned", df)
 
     q = QueryBuilder()
@@ -918,6 +918,7 @@ def test_filter_numeric_isnotin_unsigned(lmdb_version_store, df, vals):
     pandas_query = "a not in {}".format(list(vals))
     generic_filter_test(lmdb_version_store, "test_filter_numeric_isnotin", df, q, pandas_query)
 
+
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
@@ -933,10 +934,11 @@ def test_filter_numeric_isnotin_signed(lmdb_version_store, df, vals):
 
 
 def test_filter_numeric_isnotin_mixed_types_exception():
-    vals=[np.int64(-1), np.uint64(4294967296)]
+    vals = [np.int64(-1), np.uint64(4294967296)]
     q = QueryBuilder()
     with pytest.raises(UserInputException) as e_info:
         q = q[q["a"].isnotin(vals)]
+
 
 def test_filter_numeric_isnotin_hashing_overflow(lmdb_version_store):
     df = pd.DataFrame({"a": [256]})
@@ -986,6 +988,7 @@ def test_filter_fixed_width_string_isin_truncation(lmdb_version_store):
     generic_filter_test(
         lmdb_version_store, "test_filter_fixed_width_string_isin_truncation", df, q, pandas_query, dynamic_strings=False
     )
+
 
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)

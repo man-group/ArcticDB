@@ -295,7 +295,7 @@ def lmdb_version_store_prune_previous(version_store_factory):
 
 @pytest.fixture
 def lmdb_version_store_big_map(version_store_factory):
-    return version_store_factory(lmdb_config={"map_size": 2 ** 30})
+    return version_store_factory(lmdb_config={"map_size": 2**30})
 
 
 @pytest.fixture
@@ -350,12 +350,12 @@ def lmdb_version_store_ignore_order(version_store_factory):
 
 @pytest.fixture
 def lmdb_version_store_small_segment(version_store_factory):
-    return version_store_factory(column_group_size=1000, segment_row_size=1000, lmdb_config={"map_size": 2 ** 30})
+    return version_store_factory(column_group_size=1000, segment_row_size=1000, lmdb_config={"map_size": 2**30})
 
 
 @pytest.fixture
 def lmdb_version_store_tiny_segment(version_store_factory):
-    return version_store_factory(column_group_size=2, segment_row_size=2, lmdb_config={"map_size": 2 ** 30})
+    return version_store_factory(column_group_size=2, segment_row_size=2, lmdb_config={"map_size": 2**30})
 
 
 @pytest.fixture
