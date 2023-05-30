@@ -317,7 +317,7 @@ def s3_version_store_prune_previous(s3_store_factory):
 
 
 @pytest.fixture(scope="function")
-def azure_version_store(azure_store_factory):
+def azure_version_store(spawn_azurite, azure_store_factory):
     return azure_store_factory()
 
 
@@ -465,15 +465,17 @@ def spawn_azurite():
         Path("azurite").mkdir(exist_ok=True)
         p = subprocess.Popen(["azurite", "--silent", "--blobPort", "10000", "--blobHost", "0.0.0.0"], cwd="azurite")
 
-        time.sleep(1)
+        time.sleep(2)
         yield
         print("Killing Azurite")
         p.kill()
+    else:
+        yield
 
 
 @pytest.fixture(
     scope="function",
     params=["s3_version_store", "azure_version_store"] if sys.platform == "linux" else ["s3_version_store"]
 )
-def object_version_store(spawn_azurite, request):
+def object_version_store(request):
     yield request.getfixturevalue(request.param)

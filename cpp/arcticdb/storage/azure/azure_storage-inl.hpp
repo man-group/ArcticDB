@@ -175,20 +175,17 @@ void do_remove_impl(Composite<VariantKey>&& ks,
                     auto blob_name = object_store_utils::object_path(b.bucketize(key_type_folder, k), k);
                     ARCTICDB_RUNTIME_DEBUG(log::storage(), "Removing azure object with key {}", blob_name);
                     ARCTICDB_SUBSAMPLE(AzureStorageDeleteObjects, 0)
-                    bool deleted = false;
                     try{
                         auto blob_client = container_client.GetBlockBlobClient(blob_name);
                         auto response = blob_client.Delete(Azure::Storage::Blobs::DeleteBlobOptions{}, get_context(request_timeout));
-                        deleted = response.Value.Deleted;
                     }
                     catch (const Azure::Core::RequestFailedException& e){
-                        util::raise_rte("Failed to process azure segment remove request {}: {}",
-                                            static_cast<int>(e.StatusCode),
-                                            e.ReasonPhrase);
-                        deleted = false;
+                        if (e.ErrorCode != "BlobNotFound") { //To align with s3 behaviour, deleting non-exist objects is not an error, so not handling response
+                            util::raise_rte("Failed to process azure segment remove request {}: {}",
+                                                static_cast<int>(e.StatusCode),
+                                                e.ReasonPhrase);
+                        }
                     }
-                    if (!deleted)
-                        failed_deletes.push_back(k);
                 }
             }
         );
