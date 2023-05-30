@@ -1,4 +1,8 @@
-# detect if foll version >= 2023.02.13
+# Detect if foll version >= 2023.02.13:
+# For folly >= 2023.02.13, ThreadFactory::getNamePrefix() is virtual a virtual function.
+# we detect this by searching for "virtual const std::string& getNamePrefix()"
+# in folly/executors/thread_factory/ThreadFactory.h
+
 find_file(FOLLY_THREAD_FACTORY_H "folly/executors/thread_factory/ThreadFactory.h" 
     HINTS
     ${FOLLY_INCLUDE_DIR}
