@@ -39,7 +39,10 @@ def get_map_timeouts():
 
 
 def gen_params_store_and_timeout():
-    p = [["s3_version_store", "s3_version_store", "azure_version_store", "azure_version_store"], get_map_timeouts()]
+    if sys.platform == "linux":
+        p = [["s3_version_store", "s3_version_store", "azure_version_store", "azure_version_store"], get_map_timeouts()]
+    else:
+        p = [["s3_version_store", "s3_version_store"], get_map_timeouts()]
     return list(product(*p))
 
 

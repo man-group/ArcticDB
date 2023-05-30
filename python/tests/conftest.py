@@ -462,7 +462,7 @@ def get_wide_df():
 def spawn_azurite():
     if sys.platform == "linux":
         print("Spawning Azurite")
-        Path("azurite").mkdir(exist_ok=True)
+        Path("azurite").mkdir(exist_ok=True) #For azurite temp files
         p = subprocess.Popen(["azurite", "--silent", "--blobPort", "10000", "--blobHost", "0.0.0.0"], cwd="azurite")
 
         time.sleep(2)
@@ -478,4 +478,12 @@ def spawn_azurite():
     params=["s3_version_store", "azure_version_store"] if sys.platform == "linux" else ["s3_version_store"]
 )
 def object_version_store(request):
+    yield request.getfixturevalue(request.param)
+
+
+@pytest.fixture(
+    scope="function",
+    params=["lmdb_version_store", "s3_version_store", "azure_version_store"] if sys.platform == "linux" else ["lmdb_version_store", "s3_version_store"]
+)
+def object_and_lmdb_version_store(request):
     yield request.getfixturevalue(request.param)

@@ -26,12 +26,10 @@ def get_log_types():
     return [KeyType.LOG, KeyType.LOG_COMPACTED]
 
 
-@pytest.mark.parametrize("lib_type", ["lmdb_version_store", "s3_version_store", "azure_version_store"])
-def test_get_types(lib_type, request):
+def test_get_types(object_and_lmdb_version_store):
     df = sample_dataframe()
-    lib = request.getfixturevalue(lib_type)
-    lib.write("symbol1", df)
-    lib_tool = lib.library_tool()
+    object_and_lmdb_version_store.write("symbol1", df)
+    lib_tool = object_and_lmdb_version_store.library_tool()
     version_keys = lib_tool.find_keys_for_id(KeyType.VERSION, "symbol1")
     assert len(version_keys) == 1
     key = version_keys[0]
@@ -44,11 +42,9 @@ def test_get_types(lib_type, request):
     assert index_df.at[0, "version_id"] == 0
 
 
-@pytest.mark.parametrize("lib_type", ["lmdb_version_store", "s3_version_store", "azure_version_store"])
-def test_read_keys(lib_type, request):
-    lib = request.getfixturevalue(lib_type)
-    populate_db(lib)
-    lib_tool = lib.library_tool()
+def test_read_keys(object_and_lmdb_version_store):
+    populate_db(object_and_lmdb_version_store)
+    lib_tool = object_and_lmdb_version_store.library_tool()
     all_key_types = lib_tool.key_types()
     all_keys = []
     for key_type in all_key_types:
@@ -60,11 +56,9 @@ def test_read_keys(lib_type, request):
         assert len(lib_tool.find_keys(key_type)) == 0
 
 
-@pytest.mark.parametrize("lib_type", ["lmdb_version_store", "s3_version_store", "azure_version_store"])
-def test_write_keys(lib_type, request):
-    lib = request.getfixturevalue(lib_type)
-    populate_db(lib)
-    lib_tool = lib.library_tool()
+def test_write_keys(object_and_lmdb_version_store):
+    populate_db(object_and_lmdb_version_store)
+    lib_tool = object_and_lmdb_version_store.library_tool()
     all_key_types = lib_tool.key_types()
     all_keys = []
     for key_type in all_key_types:
@@ -82,18 +76,16 @@ def test_write_keys(lib_type, request):
     assert len(new_keys) == len(all_keys)
 
 
-@pytest.mark.parametrize("lib_type", ["lmdb_version_store", "s3_version_store", "azure_version_store"])
-def test_count_keys(lib_type, request):
+def test_count_keys(object_and_lmdb_version_store):
     df = sample_dataframe()
-    lib = request.getfixturevalue(lib_type)
-    lib.write("symbol", df)
-    lib.write("pickled", data={"a": 1}, pickle_on_failure=True)
-    lib.snapshot("mysnap")
-    lib.write("rec_norm", data={"a": np.arange(5), "b": np.arange(8), "c": None}, recursive_normalizers=True)
-    lib_tool = lib.library_tool()
-    assert lib.is_symbol_pickled("pickled")
-    assert not lib.is_symbol_pickled("rec_norm")
-    assert len(lib.list_symbols()) == 3
+    object_and_lmdb_version_store.write("symbol", df)
+    object_and_lmdb_version_store.write("pickled", data={"a": 1}, pickle_on_failure=True)
+    object_and_lmdb_version_store.snapshot("mysnap")
+    object_and_lmdb_version_store.write("rec_norm", data={"a": np.arange(5), "b": np.arange(8), "c": None}, recursive_normalizers=True)
+    lib_tool = object_and_lmdb_version_store.library_tool()
+    assert object_and_lmdb_version_store.is_symbol_pickled("pickled")
+    assert not object_and_lmdb_version_store.is_symbol_pickled("rec_norm")
+    assert len(object_and_lmdb_version_store.list_symbols()) == 3
     assert lib_tool.count_keys(KeyType.VERSION) == 3
     assert lib_tool.count_keys(KeyType.SNAPSHOT_REF) == 1
     assert lib_tool.count_keys(KeyType.MULTI_KEY) == 1

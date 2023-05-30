@@ -10,6 +10,7 @@ import string
 import pandas as pd
 from pandas.tseries.offsets import MonthBegin
 import pytest
+import sys
 
 from arcticdb.util.test import assert_frame_equal
 
@@ -44,8 +45,8 @@ def make_periods(start_date, end_date, freq, range_type="b"):
         "lmdb_version_store_big_map",
         "s3_version_store",
         "s3_version_store",
-        "azure_version_store",
-        "azure_version_store",
+        pytest.param("azure_version_store", marks=pytest.mark.skipif(sys.platform != "linux", reason="Pending Azure Storge Windows support")),
+        pytest.param("azure_version_store", marks=pytest.mark.skipif(sys.platform != "linux", reason="Pending Azure Storge Windows support")),
     ],
 )
 def test_stress_multicolumn(lib_type, request):
