@@ -42,7 +42,7 @@ namespace arcticdb {
         };
 
         constexpr static auto check_valid_decimal =
-                arcticdb::util::detail::Check<ErrorCode::E_INVALID_USER_ARGUMENT, ErrorCategory::USER_INPUT>{};
+                arcticdb::util::detail::Check<ErrorCode::E_INVALID_DECIMAL_STRING, ErrorCategory::USER_INPUT>{};
 
         [[nodiscard]] static inline bool is_digit(const char c) {
             return c >= '0' && c <= '9';
