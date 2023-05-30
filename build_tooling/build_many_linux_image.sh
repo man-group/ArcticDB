@@ -45,7 +45,7 @@ RUN rpmkeys --import 'https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x3F
 ADD sccache /usr/local/bin/
 RUN yum update -y && \
     yum install -y zip jq less devtoolset-11-gdb \
-      openssl-devel cyrus-sasl-devel devtoolset-10-libatomic-devel libcurl-devel python3-devel && \
+      openssl-devel cyrus-sasl-devel devtoolset-10-libatomic-devel libcurl-devel python3-devel flex && \
     rpm -Uvh --nodeps \$(repoquery --location mono-{core,web,devel,data,wcf,winfx}) && \
     yum clean all && touch /etc/arcticdb_deps_installed
 LABEL io.arcticdb.cibw_ver=\"${cibuildwheel_ver}\" io.arcticdb.base=\"${manylinux_image}\"

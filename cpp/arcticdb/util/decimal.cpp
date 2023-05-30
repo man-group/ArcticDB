@@ -41,20 +41,15 @@ namespace arcticdb {
                 10000000000000000000ULL
         };
 
+        constexpr static auto check_valid_decimal =
+                arcticdb::util::detail::Check<ErrorCode::E_INVALID_DECIMAL_STRING, ErrorCategory::USER_INPUT>{};
+
         [[nodiscard]] static inline bool is_digit(const char c) {
             return c >= '0' && c <= '9';
         }
 
         [[nodiscard]] static inline bool is_exponent_symbol(const char c) {
             return c == 'E' || c == 'e';
-        }
-
-        static inline void trim_trailing_zeroes(std::string_view& str) {
-            const size_t last_non_zero = str.find_last_not_of('0');
-            if(last_non_zero != std::string::npos) {
-                const size_t zeros_to_remove = str.length() - last_non_zero - 1;
-                str.remove_suffix(zeros_to_remove);
-            }
         }
 
         static inline void trim_leading_zeroes(std::string_view& str) {
@@ -72,6 +67,9 @@ namespace arcticdb {
             return number;
         }
 
+        // Used instead of std::strtoull to parse chuncks of strings which can contain numbers larger than what ull
+        // can hold. std::strtoull would try to parse the whole underlying string (and potentially overflow) while this
+        // stops when the string_view length is reached.
         [[nodiscard]] static inline uint64_t to_uint64_t(std::string_view str) {
             assert(str.size() < powers_of_10.size());
             uint64_t result = 0;
@@ -111,10 +109,9 @@ namespace arcticdb {
 
             void handle_sign(std::string_view& input);
             void handle_exponent(std::string_view& input, int exponent_position);
-            void handle_insignificant_zeros(std::string_view& input) const;
             SpecialSymbols scan_for_special_symbols(std::string_view input);
             void expand_exponent(int decimal_point_position);
-            void parse_significant_digits(std::string_view input);
+            void parse_digits(std::string_view input);
 
             std::array<char, max_digits + 1> digits_;
             int exponent_;
@@ -129,8 +126,7 @@ namespace arcticdb {
             trim_leading_zeroes(input);
             const SpecialSymbols special_symbols = scan_for_special_symbols(input);
             handle_exponent(input, special_symbols.exponent_position);
-            handle_insignificant_zeros(input);
-            parse_significant_digits(input);
+            parse_digits(input);
             expand_exponent(special_symbols.decimal_point_position);
         }
 
@@ -145,9 +141,9 @@ namespace arcticdb {
             if(exponent_position != -1) {
                 size_t processed_digits_count;
                 exponent_ = std::stoi(input.data() + exponent_position + 1, &processed_digits_count);
-                arcticdb::util::check_arg(
-                        exponent_position + processed_digits_count == input.length() - 1,
-                        "Cannot parse decimal from string. Cannot parse exponent.");
+                check_valid_decimal(
+                    exponent_position + processed_digits_count == input.length() - 1,
+                    "Cannot parse decimal from string. Cannot parse exponent.");
                 input = input.substr(0, exponent_position);
             }
         }
@@ -157,38 +153,32 @@ namespace arcticdb {
             for(size_t i = 0; i < input.length(); ++i) {
                 const char current_symbol = input[i];
                 if(current_symbol == '.') {
-                    arcticdb::util::check_arg(
-                            !is_decimal(),
-                            "Cannot parse decimal from string. "
-                            "Invalid character '{}'. More than one decimal points are not allowed.",
-                            current_symbol);
+                    check_valid_decimal(
+                        !is_decimal(),
+                        "Cannot parse decimal from string. "
+                        "Invalid character '{}'. More than one decimal points are not allowed.",
+                        current_symbol);
                     flags_ |= NumberComponentsFlags::DECIMAL;
                     result.decimal_point_position = i;
                 } else if(is_exponent_symbol(current_symbol)) {
                     result.exponent_position = i;
                     break;
                 } else  {
-                    arcticdb::util::check_arg(
-                            is_digit(current_symbol),
-                            "Cannot parse decimal from string. Invalid character '{}'.",
-                            current_symbol);
+                    check_valid_decimal(
+                        is_digit(current_symbol),
+                        "Cannot parse decimal from string. Invalid character '{}'.",
+                        current_symbol);
                 }
             }
             return result;
         }
 
-        void NumberComponents::handle_insignificant_zeros(std::string_view &input) const {
-            if(is_decimal()) {
-                trim_trailing_zeroes(input);
-            }
-        }
-
-        void NumberComponents::parse_significant_digits(std::string_view input) {
+        void NumberComponents::parse_digits(std::string_view input) {
             for(const char symbol : input) {
-                arcticdb::util::check_arg(size_ < max_digits,
-                                          "Cannot parse decimal from string. "
-                                          "Overflow. Input has more than {} significant digits.",
-                                          max_digits);
+                check_valid_decimal(size_ < max_digits,
+                    "Cannot parse decimal from string. "
+                    "Overflow. Input has more than {} significant digits.",
+                    max_digits);
                 if(ARCTICDB_LIKELY(is_digit(symbol))) {
                     digits_[size_++] = symbol;
                 } else if(ARCTICDB_UNLIKELY(symbol == '.')) {
@@ -198,17 +188,17 @@ namespace arcticdb {
         }
 
         void NumberComponents::expand_exponent(int decimal_point_position) {
-            arcticdb::util::check_arg(
-                    size_ > 0 || exponent_ == 0,
-                    "Cannot parse decimal from string. "
-                    "There must be at least one digit before the exponent.");
+            if(size_ == 0) {
+                digits_[size_++] = '0';
+            }
+
             const int digits_after_decimal_point = is_decimal() ? size_ - decimal_point_position : 0;
             const int zeros_to_append = std::max(0, exponent_ - digits_after_decimal_point);
-            arcticdb::util::check_arg(
-                    size_ + zeros_to_append <= max_digits,
-                    "Cannot parse decimal from string. "
-                    "Overflow. Input has more than {} significant digits.",
-                    max_digits);
+            check_valid_decimal(
+                size_ + zeros_to_append <= max_digits,
+                "Cannot parse decimal from string. "
+                "Overflow. Input has more than {} significant digits.",
+                max_digits);
             for(int i = 0; i < zeros_to_append; ++i) {
                 digits_[size_++] = '0';
             }

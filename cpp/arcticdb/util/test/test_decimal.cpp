@@ -10,8 +10,23 @@ TEST(DecimalConstructor, FromDecimalString) {
     EXPECT_EQ(arcticdb::util::Decimal("1.23").to_string(0), "123");
     EXPECT_EQ(arcticdb::util::Decimal("0.00123").to_string(0), "123");
     EXPECT_EQ(arcticdb::util::Decimal("100.0023").to_string(0), "1000023");
-    EXPECT_EQ(arcticdb::util::Decimal("123.40000").to_string(0), "1234");
     EXPECT_EQ(arcticdb::util::Decimal(".123").to_string(0), "123");
+}
+
+TEST(DecimalConstructor, ZerosAfterDecimalPointNoExponent) {
+    EXPECT_EQ(arcticdb::util::Decimal("1.000").to_string(0), "1000");
+    EXPECT_EQ(arcticdb::util::Decimal("10.00").to_string(0), "1000");
+    EXPECT_EQ(arcticdb::util::Decimal("1.20").to_string(0), "120");
+}
+
+TEST(DecimalCOnstructor, ZerosAfterDecimalPointPositiveExponent) {
+    EXPECT_EQ(arcticdb::util::Decimal("1.000E6").to_string(0), "1000000");
+    EXPECT_EQ(arcticdb::util::Decimal("1.2000E6").to_string(0), "1200000");
+}
+
+TEST(DecimalCOnstructor, ZerosAfterDecimalPointNegativeExponent) {
+    EXPECT_EQ(arcticdb::util::Decimal("1.000E-6").to_string(0), "1000");
+    EXPECT_EQ(arcticdb::util::Decimal("1.2000E-6").to_string(0), "12000");
 }
 
 TEST(DecimalConstructor, ScientificNotationPositiveExponent) {
@@ -19,13 +34,19 @@ TEST(DecimalConstructor, ScientificNotationPositiveExponent) {
     EXPECT_EQ(arcticdb::util::Decimal("12.3456E2").to_string(0), "123456");
     EXPECT_EQ(arcticdb::util::Decimal("12.3456E4").to_string(0), "123456");
     EXPECT_EQ(arcticdb::util::Decimal("12.3456E5").to_string(0), "1234560");
-    EXPECT_EQ(arcticdb::util::Decimal("123.40000E2").to_string(0), "12340");
     EXPECT_EQ(arcticdb::util::Decimal("-123.456E2").to_string(0), "-123456");
+    EXPECT_EQ(arcticdb::util::Decimal("0.0E20").to_string(0), "0");
+    EXPECT_EQ(arcticdb::util::Decimal("0.E20").to_string(0), "0");
+    EXPECT_EQ(arcticdb::util::Decimal(".0E20").to_string(0), "0");
 }
 
 TEST(DecimalConstructor, ScientificNotationNegativeExponent) {
     EXPECT_EQ(arcticdb::util::Decimal("12.345E-1").to_string(0), "12345");
     EXPECT_EQ(arcticdb::util::Decimal("12.345E-10").to_string(0), "12345");
+    EXPECT_EQ(arcticdb::util::Decimal("1E-6").to_string(0), "1");
+    EXPECT_EQ(arcticdb::util::Decimal("0.0E-20").to_string(0), "0");
+    EXPECT_EQ(arcticdb::util::Decimal("0.E-20").to_string(0), "0");
+    EXPECT_EQ(arcticdb::util::Decimal(".0E-20").to_string(0), "0");
 }
 
 TEST(DecimalConstructor, Zero) {
@@ -76,19 +97,38 @@ TEST(Decimal, InvalidInput) {
     EXPECT_ANY_THROW(arcticdb::util::Decimal("123a3"));
     EXPECT_ANY_THROW(arcticdb::util::Decimal("0.123E1E2"));
     EXPECT_ANY_THROW(arcticdb::util::Decimal("123.123.3"));
-    EXPECT_ANY_THROW(arcticdb::util::Decimal("E123"));
     EXPECT_ANY_THROW(arcticdb::util::Decimal("111111111111111111111111111111111111111"));
     EXPECT_ANY_THROW(arcticdb::util::Decimal("1E38"));
     EXPECT_ANY_THROW(arcticdb::util::Decimal("12.43E1a"));
 }
 
-TEST(Decimal, Compare) {
+TEST(DecimalComparison, OneWordedPositive) {
     EXPECT_EQ(arcticdb::util::Decimal("123"), arcticdb::util::Decimal("123"));
+}
+
+TEST(DecimalComparison, TwoWordedPositive) {
     EXPECT_EQ(arcticdb::util::Decimal("123456789101112131415"), arcticdb::util::Decimal("123456789101112131415"));
+}
 
+TEST(DecimalComparison, OneWordedNegative) {
     EXPECT_EQ(arcticdb::util::Decimal("-123"), arcticdb::util::Decimal("-123"));
-    EXPECT_EQ(arcticdb::util::Decimal("-123456789101112131415"), arcticdb::util::Decimal("-123456789101112131415"));
+}
 
+TEST(DecimalComparison, TwoWordedNegative) {
+    EXPECT_EQ(arcticdb::util::Decimal("-123456789101112131415"), arcticdb::util::Decimal("-123456789101112131415"));
+}
+
+TEST(DecimalComparison, ZerosAfterDecimalPointMatter) {
+    EXPECT_FALSE(arcticdb::util::Decimal("1.0") == arcticdb::util::Decimal("1"));
+    EXPECT_EQ(arcticdb::util::Decimal("1.0"), arcticdb::util::Decimal("10"));
+}
+
+TEST(DecimalComparison, ZerosAfterDecimalPointMatterForExponents) {
+    EXPECT_EQ(arcticdb::util::Decimal("1.000E6"), arcticdb::util::Decimal("1000000"));
+    EXPECT_EQ(arcticdb::util::Decimal("1.000E-6"), arcticdb::util::Decimal("1000"));
+}
+
+TEST(DecimalComparison, BasicNotEqual) {
     EXPECT_FALSE(arcticdb::util::Decimal("123") == arcticdb::util::Decimal("1230"));
     EXPECT_FALSE(arcticdb::util::Decimal("123456789101112131415") == arcticdb::util::Decimal("12345678910111213141"));
 }
