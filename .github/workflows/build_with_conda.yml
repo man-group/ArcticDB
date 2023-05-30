@@ -64,8 +64,9 @@ jobs:
   macos:
     strategy:
       matrix:
-        include:
-          - os: macos-latest
+        os: [macos-latest]
+        python_version:  ["3.8", "3.9", "3.10"]
+        compiler: ["clang"]
 
       fail-fast: false
     runs-on: ${{ matrix.os }}
@@ -74,6 +75,12 @@ jobs:
       - uses: actions/checkout@v3
         with:
           submodules: recursive
+
+      - name: Append to environment_unix.yml
+        shell: bash -l {0}
+        run: |
+          echo "  - python ==${{ matrix.python_version }}" >> environment_unix.yml
+          echo "  - ${{ matrix.compiler }}" >> environment_unix.yml
 
       - name: Install Conda environment from environment_unix.yml
         uses: mamba-org/setup-micromamba@v1
