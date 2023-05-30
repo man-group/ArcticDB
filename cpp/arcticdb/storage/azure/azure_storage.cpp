@@ -21,7 +21,7 @@ AzureStorage::AzureStorage(const LibraryPath &library_path, OpenMode mode, const
     container_client_(BlobContainerClient(blob_container_url_, get_azure_credentials(conf))),
     root_folder_(object_store_utils::get_root_folder(library_path)),
     connect_to_azurite_(conf.connect_to_azurite()),
-    request_timeout_(conf.request_timeout() == 0 ? 30000 : conf.request_timeout()){
+    request_timeout_(conf.request_timeout() == 0 ? 60000 : conf.request_timeout()){
         log::version().info("Connecting to Azure Blob Storage: {}", blob_container_url_);
         container_client_.CreateIfNotExists();//need to be removed before PR
 
