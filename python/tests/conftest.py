@@ -473,7 +473,7 @@ def spawn_azurite():
 
 @pytest.fixture(
     scope="function",
-    params=("s3_version_store", "azure_version_store") if sys.platform == "linux" else ("s3_version_store"),
+    params=["s3_version_store", "azure_version_store"] if sys.platform == "linux" else ["s3_version_store"]
 )
 def object_version_store(spawn_azurite, request):
     yield request.getfixturevalue(request.param)
