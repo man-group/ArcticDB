@@ -28,6 +28,8 @@ import pandas as pd
 import random
 from datetime import datetime
 from typing import Optional, Any, Dict
+import subprocess
+from pathlib import Path
 
 import requests
 from pytest_server_fixtures.base import get_ephemeral_port
@@ -456,9 +458,22 @@ def get_wide_df():
     return get_df
 
 
+@pytest.fixture(scope="session")
+def spawn_azurite():
+    if sys.platform == "linux":
+        print("Spawning Azurite")
+        Path("azurite").mkdir(exist_ok=True)
+        p = subprocess.Popen(["azurite", "--silent", "--blobPort", "10000", "--blobHost", "0.0.0.0"], cwd="azurite")
+
+        time.sleep(1)
+        yield
+        print("Killing Azurite")
+        p.kill()
+
+
 @pytest.fixture(
     scope="function",
     params=("s3_version_store", "azure_version_store") if sys.platform == "linux" else ("s3_version_store"),
 )
-def object_version_store(request):
+def object_version_store(spawn_azurite, request):
     yield request.getfixturevalue(request.param)

@@ -36,3 +36,4 @@ CMakeUserPresets.json
 
 *_pb2.py
 *.mdb
+azurite/

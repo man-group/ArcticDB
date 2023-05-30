@@ -365,7 +365,7 @@ def add_azure_library_to_env(
     azure.container_name = "streamab"
     azure.credential_name = "devstoreaccount1"
     azure.credential_key = "Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw=="
-    azure.endpoint = "172.17.0.3:10000"
+    azure.endpoint = "0.0.0.0:10000"
     azure.https = False
     azure.connect_to_azurite = True
 
@@ -374,6 +374,7 @@ def add_azure_library_to_env(
     _add_lib_desc_to_env(env, lib_name, sid, description)
 
     return cfg
+
 
 # see https://regex101.com/r/mBCS80/1
 _LIB_PATH_REGEX = re.compile(
