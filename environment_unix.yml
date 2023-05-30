@@ -27,7 +27,7 @@ dependencies:
   - bitmagic
   - spdlog
   - fmt
-  - folly > 2023.02.13 # first version that Expose name prefix in ThreadFactory
+  - folly
  # latest version published on vcpkg
   # Vendored build dependencies (see `cpp/thirdparty`)
   # Versions must be kept in sync
