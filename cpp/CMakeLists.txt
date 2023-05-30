@@ -61,14 +61,19 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 set(FIND_LIBRARY_USE_LIB64_PATHS ON)
-include(PythonUtils) # Must be called before Pybind (third_party) to override its finding mechanism
+
+if(${ARCTICDB_BUILD_PYTHON_EXTENSION})
+    include(PythonUtils) # Must be called before Pybind (third_party) to override its finding mechanism
+endif()
 
 add_subdirectory(third_party)
 add_subdirectory(proto)
 
-python_utils_dump_vars_if_enabled("After Pybind")
-python_utils_check_include_dirs("accepted by pybind")
-python_utils_check_version_is_as_expected()
+if(${ARCTICDB_BUILD_PYTHON_EXTENSION})
+    python_utils_dump_vars_if_enabled("After Pybind")
+    python_utils_check_include_dirs("accepted by pybind")
+    python_utils_check_version_is_as_expected()
+endif()
 
 #proto files are generated there so it's necessary to include them
 include_directories(${CMAKE_CURRENT_BINARY_DIR})
@@ -76,8 +81,10 @@ include_directories(${CMAKE_CURRENT_BINARY_DIR}/proto/arcticc/pb2/proto/)
 # for IDE resolution otherwise it is lost
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 
-if("${BUILD_CYTHON}")
-    add_subdirectory(${BUILD_CYTHON_PATH})
+if(${ARCTICDB_BUILD_PYTHON_EXTENSION})
+    if("${BUILD_CYTHON}")
+        add_subdirectory(${BUILD_CYTHON_PATH})
+    endif()
 endif()
 
 add_subdirectory(arcticdb)

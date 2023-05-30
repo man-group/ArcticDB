@@ -1,14 +1,31 @@
 if(${CMAKE_SOURCE_DIR} STREQUAL ${CMAKE_CURRENT_SOURCE_DIR})    
+    cmake_minimum_required(VERSION 3.12) 
+    set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/../../CMake" ${CMAKE_MODULE_PATH})
+    cmake_policy(SET CMP0048 NEW)
+    project(arcticdb-python VERSION 1.2.1)
+
+    set(CMAKE_CXX_STANDARD 17)
+    set(CMAKE_CXX_STANDARD_REQUIRED ON)
+    set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+    set(FIND_LIBRARY_USE_LIB64_PATHS ON)
+
+    option(ARCTICDB_USING_CONDA "Are we building with conda?" OFF)
     find_package(arcticdb REQUIRED)
-    if(${ARCTICDB_USING_CONDA})
-    SET(ARCTICDB_CORE_LIBRARY arcticdb::arcticdb_core_shared)
+    if(ARCTICDB_USING_CONDA)
+    SET(ARCTICDB_CORE_LIBRARY arcticdb::arcticdb_core)
     else()
         SET(ARCTICDB_CORE_LIBRARY arcticdb::arcticdb_core_static)
     endif()
+
+
+    
+
+
 else()
     SET(ARCTICDB_CORE_LIBRARY arcticdb_core_static)
 endif()
 
+find_package(pybind11 REQUIRED)
     
 ## Core python bindings, private only ##
 set(arcticdb_python_srcs
@@ -27,18 +44,20 @@ target_link_libraries(arcticdb_python
         #tsan
         ${ARCTICDB_CORE_LIBRARY}
         ${AWSSDK_LINK_LIBRARIES}
+        pybind11::module
         )
 
 target_include_directories(arcticdb_python PRIVATE
         ${LIBMONGOCXX_STATIC_INCLUDE_DIRS}
         ${LIBBSONCXX_STATIC_INCLUDE_DIRS}
         ${BITMAGIC_INCLUDE_DIRS}
+        ${CMAKE_CURRENT_SOURCE_DIR}/../..
         )
 
 
 if (NOT WIN32)
     add_compile_options("-ftemplate-depth=1000")
-    if(NOT ${ARCTICDB_USING_CONDA})
+    if(ARCTICDB_USING_CONDA)
         # Compilers on conda-forge are relatively strict.
         # For now, we do not want to treat warnings as errors for those builds.
         add_compile_options("-Werror")

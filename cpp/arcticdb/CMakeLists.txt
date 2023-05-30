@@ -567,12 +567,12 @@ endif()
 
 message("INSTALL" ${CMAKE_INSTALL_PREFIX})
 
+include(GNUInstallDirs)
+
 # Set standard installation directories
 set(RUNTIME_DESTINATION ${CMAKE_INSTALL_PREFIX}/bin) #DLL
-set(LIBRARY_DESTINATION ${CMAKE_INSTALL_PREFIX}/lib) # Libraries (.so, .lib, .dylib)
-set(ARCHIVE_DESTINATION ${CMAKE_INSTALL_PREFIX}/lib) # Archives files (if needed)
-set(INCLUDES_DESTINATION ${CMAKE_INSTALL_PREFIX}/include) # Install headers in a headers directory
-set(INCLUDES_INSTALL_DIR ${INCLUDES_DESTINATION}/arcticdb) #Add a ModernCmake directory after headers/
+
+
 
 # Generate cmake configuration scripts (MC = ModernCMake)
 # Where to generate cmake files (build dir)
@@ -596,20 +596,13 @@ install(DIRECTORY ${CMAKE_SOURCE_DIR}/
 
 # Install A library, the EXPORT is required to export your library as a COMPONENTS (ModernCMake::A)
 install(TARGETS arcticdb_proto arcticdb_core  arcticdb_core_static
-  EXPORT ${MC_TARGETS_EXPORT_NAME}
+  EXPORT arcticdb-targets
   RUNTIME DESTINATION ${RUNTIME_DESTINATION}
-  LIBRARY DESTINATION ${LIBRARY_DESTINATION}
-  ARCHIVE DESTINATION ${ARCHIVE_DESTINATION}
+  LIBRARY DESTINATION  ${CMAKE_INSTALL_LIBDIR}
+  ARCHIVE DESTINATION  ${CMAKE_INSTALL_LIBDIR}
 )
 
 
-install(TARGETS arcticdb_core_static
-        EXPORT arcticdb_core_static
-        LIBRARY DESTINATION lib
-        ARCHIVE DESTINATION lib
-        RUNTIME DESTINATION bin
-        INCLUDES DESTINATION include
-        )
 
 
 #Generate basic config version files
@@ -624,14 +617,16 @@ configure_file("${CMAKE_SOURCE_DIR}/arcticdbConfig.cmake.in" "${ARCTICDB_PROJECT
 # Install cmake config files
 install(
     FILES "${ARCTICDB_PROJECT_CONFIG}" "${ARCTICDB_VERSION_CONFIG}"
-    DESTINATION "${ARCTICDB_CONFIG_INSTALL_DIR}")
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/arcticdb
+)
 
 # Install cmake targets files
 install(
-    EXPORT "${MC_TARGETS_EXPORT_NAME}"
-    NAMESPACE "${MC_NAMESPACE}"
-    DESTINATION "${ARCTICDB_CONFIG_INSTALL_DIR}")
-
+    EXPORT arcticdb-targets
+    FILE arcticdbTargets.cmake
+    NAMESPACE arcticdb::
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/arcticdb
+)
 
 
 ## Unit Tests ##

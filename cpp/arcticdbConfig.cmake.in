@@ -1,1 +1,7 @@
-@PACKAGE_INIT@
+get_filename_component(ARCTICDB_CMAKE_DIR "${CMAKE_CURRENT_LIST_FILE}" PATH)
+include(CMakeFindDependencyMacro)
+
+
+if(NOT TARGET arcticdb::arcticdb_core)
+    include("${ARCTICDB_CMAKE_DIR}/arcticdbTargets.cmake")
+endif()
