@@ -35,8 +35,8 @@ jobs:
       - name: Append to environment_unix.yml
         shell: bash -l {0}
         run: |
-          echo "  - python ==${{ matrix.python_version }}\n" >> environment_unix.yml
-          echo "  - ${{ matrix.compiler }}\n" >> environment_unix.yml
+          echo "  - python ==${{ matrix.python_version }}" >> environment_unix.yml
+          echo "  - ${{ matrix.compiler }}" >> environment_unix.yml
 
       - name: Install Conda environment from environment_unix.yml
         uses: mamba-org/setup-micromamba@v1
