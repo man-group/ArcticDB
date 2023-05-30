@@ -28,7 +28,6 @@ dependencies:
   - spdlog
   - fmt
   - folly
- # latest version published on vcpkg
   # Vendored build dependencies (see `cpp/thirdparty`)
   # Versions must be kept in sync
   - xxhash
