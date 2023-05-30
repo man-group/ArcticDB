@@ -68,12 +68,12 @@ public:
             });
     
   }
-// we use a modern version of folly when consuming dependencies from conda
-#ifdef ARCTICDB_USING_CONDA
-    virtual const std::string& getNamePrefix() const override{
+    // we do **not** use the override keyword here, as for older
+    // folly versions, this is not an override.
+    virtual const std::string& getNamePrefix() const /*override*/ {
         return named_factory_.getNamePrefix();
     }
-#endif
+
 
 private:
     folly::NamedThreadFactory named_factory_;
