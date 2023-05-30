@@ -71,7 +71,7 @@ jobs:
       matrix:
         os: [macos-latest]
         python_version:  ["3.8", "3.9", "3.10"]
-        compiler: ["clang", "system_compiler", "clang =14", "clang =15", "clang =16", "compiler-cxx"]
+        compiler: ["clang", "system_compiler", "clang =14", "clang =15", "clang =16", "cxx-compiler"]
 
       fail-fast: false
     runs-on: ${{ matrix.os }}
