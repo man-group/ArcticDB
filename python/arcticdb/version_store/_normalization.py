@@ -1153,10 +1153,13 @@ class CompositeNormalizer(Normalizer):
                 log.debug("pickle_on_failure flag set, normalizing the item with MsgPackNormalizer", type(item), ex)
                 return self.fallback_normalizer.normalize(item)
             # Could not normalize with the default handler, pickle_on_failure
-            log.error(
+            error_message = (
                 "Could not normalize item of type: {} with any normalizer."
                 "You can set pickle_on_failure param to force pickling of this object instead."
-                "(Note: Pickling has worse performance and stricter memory limitations)",
+                "(Note: Pickling has worse performance and stricter memory limitations)"
+            )
+            log.error(
+                error_message,
                 type(item),
                 ex,
             )
