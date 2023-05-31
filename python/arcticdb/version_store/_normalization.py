@@ -179,9 +179,8 @@ def _to_primitive(arr, arr_name, dynamic_strings, string_max_len=None, coerce_co
     if len(arr) == 0:
         if coerce_column_type is None:
             raise ArcticNativeNotYetImplemented(
-                "coercing column type is required when empty column of object type, Column type={} for column={}".format(
-                    arr.dtype, arr_name
-                )
+                "coercing column type is required when empty column of object type, Column type={} for column={}"
+                .format(arr.dtype, arr_name)
             )
         else:
             return arr.astype(coerce_column_type)
@@ -1279,8 +1278,7 @@ def normalize_dt_range_to_ts(dtr: "DateRangeInput") -> Tuple[Timestamp, Timestam
 
         if v.tzinfo is None:
             log.debug(
-                "DateRange bounds do not have timestamps, will default to UTC for the query,"
-                f"DateRange.{bound_name}={v}"
+                f"DateRange bounds do not have timestamps, will default to UTC for the query,DateRange.{bound_name}={v}"
             )
             v = v.tz_localize("UTC")
 

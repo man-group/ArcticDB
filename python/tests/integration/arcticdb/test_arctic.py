@@ -488,7 +488,8 @@ def test_repr(moto_s3_uri_incl_bucket):
     s3_endpoint += f":{port}"
     bucket = moto_s3_uri_incl_bucket.split(":")[-1].split("?")[0]
     assert (
-        repr(lib) == "Library("
+        repr(lib)
+        == "Library("
         "Arctic("
         "config=S3("
         f"endpoint={s3_endpoint}, bucket={bucket})), path=pytest_test_lib, storage=s3_storage)"
@@ -542,7 +543,8 @@ def test_write_object_in_batch_without_pickle_mode(arctic_library):
         lib.write_batch([WritePayload("test_1", A("id_1"))])
     # omit the part with the full class path as that will change in arcticdb
     assert e.value.args[0].startswith(
-        "payload contains some data of types that cannot be normalized. Consider using write_batch_pickle instead. symbols with bad datatypes"
+        "payload contains some data of types that cannot be normalized. Consider using write_batch_pickle instead."
+        " symbols with bad datatypes"
     )
 
 

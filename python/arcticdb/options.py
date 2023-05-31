@@ -110,4 +110,7 @@ class LibraryOptions:
         self.columns_per_segment = columns_per_segment
 
     def __repr__(self):
-        return f"LibraryOptions(dynamic_schema={self.dynamic_schema}, dedup={self.dedup}, rows_per_segment={self.rows_per_segment}, columns_per_segment={self.columns_per_segment})"
+        return (
+            f"LibraryOptions(dynamic_schema={self.dynamic_schema}, dedup={self.dedup},"
+            f" rows_per_segment={self.rows_per_segment}, columns_per_segment={self.columns_per_segment})"
+        )

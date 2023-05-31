@@ -157,8 +157,9 @@ def _handle_categorical_columns(symbol, data, throw=True):
             if data.dtype.name == "category":
                 categorical_columns.append(data.name)
         if len(categorical_columns) > 0:
-            message = "Symbol: {}\nDataFrame/Series contains categorical data, cannot append or update\nCategorical columns: {}".format(
-                symbol, categorical_columns
+            message = (
+                "Symbol: {}\nDataFrame/Series contains categorical data, cannot append or update\nCategorical"
+                " columns: {}".format(symbol, categorical_columns)
             )
             if throw:
                 raise ArcticNativeNotYetImplemented(message)
