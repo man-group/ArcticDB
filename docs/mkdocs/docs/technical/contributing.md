@@ -192,7 +192,7 @@ We use [pre-commit](https://pre-commit.com/) to run some checks on the codebase 
 To install the pre-commit hooks, run:
 
 ```bash
-pip install pre-commit -y
+pip install pre-commit
 pre-commit install
 ```
 
