@@ -46,7 +46,6 @@ def make_periods(start_date, end_date, freq, range_type="b"):
         "s3_version_store",
         "s3_version_store",
         pytest.param("azure_version_store", marks=pytest.mark.skipif(sys.platform != "linux", reason="Pending Azure Storge Windows support")),
-        pytest.param("azure_version_store", marks=pytest.mark.skipif(sys.platform != "linux", reason="Pending Azure Storge Windows support")),
     ],
 )
 def test_stress_multicolumn(lib_type, request):
