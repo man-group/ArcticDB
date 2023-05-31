@@ -27,7 +27,7 @@ before-build = "set"
 
 [tool.black]
 line-length = 120
-target_version = ['py36', 'py37', 'py38', 'py39', 'py310', 'py310']
+target_version = ['py36', 'py37', 'py38', 'py39', 'py310', 'py311']
 preview = true
 # This must be kept in sync with the version in setup.cfg.
 exclude = '''
