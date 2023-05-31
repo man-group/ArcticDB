@@ -24,3 +24,21 @@ manylinux-x86_64-image = "ghcr.io/man-group/cibuildwheel_manylinux:latest"
 build = "cp*-win_amd64"
 before-all = "bash {project}/build_tooling/prep_cpp_build.sh"
 before-build = "set"
+
+[tool.black]
+line-length = 120
+target_version = ['py36', 'py37', 'py38', 'py39', 'py310', 'py310']
+preview = true
+exclude = '''
+/(
+  | \.git
+  | \.github
+  | \.mypy_cache
+  | \.vscode
+  | \.idea
+  | build_tooling
+  | cpp
+  | docs
+  | static
+)/
+'''
