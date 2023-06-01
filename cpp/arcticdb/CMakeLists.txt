@@ -747,8 +747,8 @@ if(${TEST})
                 util # TODO: find out where we lost the transitive link to it
                 msgpack-c
                 )
-            
-        if(NOT ARCTICDB_USING_CONDA)
+    
+        if(NOT APPLE)
             list(APPEND COMMON_PUBLIC_TEST_LIBRARIES
                 libatomic.a  # Otherwise gtest_discover_tests cannot run the test if libatomic is not in a standard location
                 )
