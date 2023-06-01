@@ -30,6 +30,7 @@ from datetime import datetime
 from typing import Optional, Any, Dict
 import subprocess
 from pathlib import Path
+import socket
 
 import requests
 from pytest_server_fixtures.base import get_ephemeral_port
@@ -165,9 +166,9 @@ def arcticdb_test_s3_config(moto_s3_endpoint_and_credentials):
 
 
 @pytest.fixture
-def arcticdb_test_azure_config():
+def arcticdb_test_azure_config(azurite_port):
     def create(lib_name):
-        return create_test_azure_cfg(lib_name)
+        return create_test_azure_cfg(lib_name=lib_name, credential_name="devstoreaccount1", credential_key="Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==", container_name="stream", endpoint="0.0.0.0:"+str(azurite_port), is_https=False, connect_to_azurite=True)
 
     return create
 
@@ -458,12 +459,27 @@ def get_wide_df():
     return get_df
 
 
-@pytest.fixture(scope="session")
-def spawn_azurite():
+@pytest.fixture(scope="module")
+def azurite_port():
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    port=10000
+    max_port=65535
+    while port <= max_port:
+        try:
+            sock.bind(('', port))
+            sock.close()
+            return port
+        except OSError:
+            port += 1
+    raise IOError('no free ports')
+
+@pytest.fixture(scope="module")
+def spawn_azurite(azurite_port):
     if sys.platform == "linux":
         print("Spawning Azurite")
         Path("azurite").mkdir(exist_ok=True) #For azurite temp files
-        p = subprocess.Popen(["azurite", "--silent", "--blobPort", "10000", "--blobHost", "0.0.0.0"], cwd="azurite")
+        port = azurite_port
+        p = subprocess.Popen(["azurite", "--silent", "--blobPort", str(port), "--blobHost", "0.0.0.0", "--queuePort", "0", "--tablePort", "0"], cwd="azurite")
 
         time.sleep(2)
         yield

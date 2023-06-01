@@ -298,12 +298,19 @@ def create_test_s3_cfg(
     )
     return cfg
 
-def create_test_azure_cfg(lib_name):
+
+def create_test_azure_cfg(lib_name, credential_name, credential_key, container_name, endpoint, is_https, connect_to_azurite):
     cfg = EnvironmentConfigsMap()
     add_azure_library_to_env(
-        cfg,
+        cfg=cfg,
         lib_name=lib_name,
-        env_name=Defaults.ENV
+        env_name=Defaults.ENV,
+        credential_name=credential_name, 
+        credential_key=credential_key,
+        container_name=container_name,
+        endpoint=endpoint,
+        is_https=is_https,
+        connect_to_azurite=connect_to_azurite
     )
     return cfg
 
@@ -329,8 +336,7 @@ def get_azure_proto(
     endpoint,
     with_prefix=True,
     is_https=False,
-    region=None,
-    use_virtual_addressing=False,
+    connect_to_azurite=False
 ):
     env = cfg.env_by_id[env_name]
     azure = AzureConfig()
@@ -339,7 +345,7 @@ def get_azure_proto(
     azure.credential_key = credential_key
     azure.endpoint = endpoint
     azure.https = is_https
-    # adding time to prefix - so that the s3 root folder is unique and we can delete and recreate fast
+    azure.connect_to_azurite = connect_to_azurite
     if with_prefix:
         if isinstance(with_prefix, str):
             azure.prefix = with_prefix
@@ -348,32 +354,29 @@ def get_azure_proto(
     else:
         azure.prefix = lib_name
 
-    if region:
-        azure.region = region
 
-    azure.use_virtual_addressing = use_virtual_addressing
     sid, storage = get_storage_for_lib_name(azure.prefix, env)
     storage.config.Pack(azure, type_url_prefix="cxx.arctic.org")
     return sid, storage
 
 def add_azure_library_to_env(
-        cfg, lib_name, env_name, description=None
+        cfg, lib_name, env_name, credential_name, credential_key, container_name, endpoint, description=None, with_prefix=True, is_https=True, connect_to_azurite=False
 ):
     env = cfg.env_by_id[env_name]
-    azure = AzureConfig()
-    
-    azure.container_name = "streamab"
-    azure.credential_name = "devstoreaccount1"
-    azure.credential_key = "Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw=="
-    azure.endpoint = "0.0.0.0:10000"
-    azure.https = False
-    azure.connect_to_azurite = True
+    sid, storage = get_azure_proto(
+        cfg=cfg,
+        lib_name=lib_name,
+        env_name=env_name,
+        credential_name=credential_name,
+        credential_key=credential_key,
+        container_name=container_name,
+        endpoint=endpoint,
+        with_prefix=with_prefix,
+        is_https=is_https,
+        connect_to_azurite=connect_to_azurite
+    )
 
-    sid, storage = get_storage_for_lib_name(lib_name, env)
-    storage.config.Pack(azure, type_url_prefix="cxx.arctic.org")
     _add_lib_desc_to_env(env, lib_name, sid, description)
-
-    return cfg
 
 
 # see https://regex101.com/r/mBCS80/1
