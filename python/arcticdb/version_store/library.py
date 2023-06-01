@@ -367,7 +367,7 @@ class Library:
         """
         if not isinstance(data, NORMALIZABLE_TYPES):
             raise ArcticUnsupportedDataTypeException(
-                f"data is of a type that cannot be normalized. Consider using "
+                "data is of a type that cannot be normalized. Consider using "
                 f"write_pickle instead. type(data)=[{type(data)}]"
             )
 
@@ -932,7 +932,8 @@ class Library:
                 handle_read_request(s)
             else:
                 raise ArcticInvalidApiUsageException(
-                    f"Unsupported item in the symbols argument s=[{s}] type(s)=[{type(s)}]. Only [str] and [ReadRequest] are supported."
+                    f"Unsupported item in the symbols argument s=[{s}] type(s)=[{type(s)}]. Only [str] and"
+                    " [ReadRequest] are supported."
                 )
 
         return self._nvs._batch_read_to_versioned_items(
@@ -1389,7 +1390,8 @@ class Library:
                 handle_read_request(s)
             else:
                 raise ArcticInvalidApiUsageException(
-                    f"Unsupported item in the symbols argument s=[{s}] type(s)=[{type(s)}]. Only [str] and [ReadInfoRequest] are supported."
+                    f"Unsupported item in the symbols argument s=[{s}] type(s)=[{type(s)}]. Only [str] and"
+                    " [ReadInfoRequest] are supported."
                 )
 
         infos = self._nvs.batch_get_info(symbol_strings, as_ofs)
