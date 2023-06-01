@@ -74,7 +74,7 @@ jobs:
         shell: bash -l {0}
         run: |
           cd python
-          python -m pytest tests -vvv -s
+          python -m pytest tests -v
 
   macos:
     strategy:
@@ -133,4 +133,4 @@ jobs:
         shell: bash -l {0}
         run: |
           cd python
-          python -m pytest tests -vvv -s
+          python -m pytest tests -v
