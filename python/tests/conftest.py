@@ -168,7 +168,11 @@ def arcticdb_test_s3_config(moto_s3_endpoint_and_credentials):
 @pytest.fixture
 def arcticdb_test_azure_config(azurite_port):
     def create(lib_name):
-        return create_test_azure_cfg(lib_name=lib_name, credential_name="devstoreaccount1", credential_key="Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==", container_name="stream", endpoint="0.0.0.0:"+str(azurite_port), is_https=False, connect_to_azurite=True)
+        global BUCKET_ID
+        bucket = f"testbucket{BUCKET_ID}"
+        BUCKET_ID = BUCKET_ID + 1
+        print(bucket)
+        return create_test_azure_cfg(lib_name=lib_name, credential_name="devstoreaccount1", credential_key="Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==", container_name=bucket, endpoint="0.0.0.0:"+str(azurite_port), is_https=False, connect_to_azurite=True)
 
     return create
 
@@ -473,18 +477,22 @@ def azurite_port():
             port += 1
     raise IOError('no free ports')
 
+
 @pytest.fixture(scope="module")
 def spawn_azurite(azurite_port):
     if sys.platform == "linux":
         print("Spawning Azurite")
-        Path("azurite").mkdir(exist_ok=True) #For azurite temp files
-        port = azurite_port
-        p = subprocess.Popen(["azurite", "--silent", "--blobPort", str(port), "--blobHost", "0.0.0.0", "--queuePort", "0", "--tablePort", "0"], cwd="azurite")
+        port = str(azurite_port)
+        temp_folder = "azurite" + port
+        shutil.rmtree(temp_folder, ignore_errors=True)
+        os.mkdir(temp_folder)
+        p = subprocess.Popen(["azurite", "--silent", "--blobPort", port, "--blobHost", "0.0.0.0", "--queuePort", "0", "--tablePort", "0"], cwd=temp_folder)
 
         time.sleep(2)
         yield
         print("Killing Azurite")
         p.kill()
+        shutil.rmtree(temp_folder, ignore_errors=True)
     else:
         yield
 
