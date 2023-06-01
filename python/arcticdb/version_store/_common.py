@@ -47,9 +47,8 @@ class TimeFrame(
         if not all(times.shape[0] == cv.shape[0] for cv in columns_values):
             s = np.array([cv.shape[0] for cv in columns_values])
             raise ValueError(
-                "Inconsistent size of column values. times.shape[0]={} must match cv.shape[0] for all column values. actual={}".format(
-                    times.shape[0], s
-                )
+                "Inconsistent size of column values. times.shape[0]={} must match cv.shape[0] for all column values."
+                " actual={}".format(times.shape[0], s)
             )
         return tuple.__new__(cls, (times, columns_names, columns_values))
 
@@ -68,7 +67,8 @@ class TimeFrame(
         if isinstance(item, tuple):
             if len(item) != 2:
                 raise ValueError(
-                    "Only support 2 dimensional indexing where dimension 0 is the row indexing and dimension 1 is column one"
+                    "Only support 2 dimensional indexing where dimension 0 is the row indexing and dimension 1 is"
+                    " column one"
                 )
             col_filter = item[1]
             item = item[0]

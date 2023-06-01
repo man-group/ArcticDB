@@ -109,7 +109,7 @@ class S3LibraryAdapter(ArcticLibraryAdapter):
                 raise ValueError(
                     "Invalid S3 URI. "
                     f"Invalid query parameter '{key}' passed in. "
-                    f"Value query parameters: "
+                    "Value query parameters: "
                     f"{list(field_dict.keys())}"
                 )
 

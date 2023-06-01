@@ -586,7 +586,10 @@ def test_column_stats_object_deleted_with_index_key(lmdb_version_store):
 
 
 @pytest.mark.xfail(
-    reason="ArcticDB/issues/230 This test can be folded in with test_column_stats_object_deleted_with_index_key once the issue is resolved"
+    reason=(
+        "ArcticDB/issues/230 This test can be folded in with test_column_stats_object_deleted_with_index_key once the"
+        " issue is resolved"
+    )
 )
 def test_column_stats_object_deleted_with_index_key_batch_methods(lmdb_version_store):
     def clear():
