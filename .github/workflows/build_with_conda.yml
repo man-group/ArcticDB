@@ -20,6 +20,8 @@ jobs:
       fail-fast: false
     runs-on: ${{ matrix.os }}
 
+    # The requirement of this service for Linux is the reason duplicating steps of this
+    # under another job for macOS and Windows.
     services:
       mongodb:
         image: mongo:4.4
@@ -54,11 +56,12 @@ jobs:
           cd python
           python -m pytest tests
 
-  macos:
+  macos_and_windows:
     strategy:
       matrix:
         include:
           - os: macos-latest
+          - os: windows-latest
 
       fail-fast: false
     runs-on: ${{ matrix.os }}
