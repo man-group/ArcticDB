@@ -22,10 +22,36 @@ on:
         type: choice
         options: ["-", debug, release]
 run-name: Building ${{github.ref_name}} on ${{github.event_name}} by ${{github.actor}}
+concurrency:
+  group: ${{github.ref}}
+  cancel-in-progress: true
 jobs:
   common_config:
-    # Hacky way to supply common variables (as the env context is not available in jobs.*.with)
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          # Use a matrix to build the common hierarchical structure used by multiple matrix jobs in build_steps.yaml
+          # Please declare any key you added below in build_steps.yaml's dummy matrix as well to aid the linting tools
+          - linux_matrix:
+              - os: linux
+                distro: ubuntu-latest
+                cmake_preset_prefix: linux
+                cibw_build_suffix: manylinux_x86_64
+                build_dir: /tmp/cpp_build
+                symbols: "*.gz" # Please update publish.yml when changing this!!
+                do_not_archive: ["*.so", "*.[ao]", "vcpkg_installed"]
+                test_services:
+                  mongodb: { image: "mongo:4.4" }
+            windows_matrix:
+              - os: windows
+                distro: windows-latest
+                cmake_preset_prefix: windows-cl
+                cibw_build_suffix: win_amd64
+                build_dir: C:\cpp_build
+                symbols: "*.pdb" # Please update publish.yml when changing this!!
+                do_not_archive: ["*.lib", "*.ilk", "*.pyd", "*.dll", "CMakeFiles/*.dir", "vcpkg_installed"]
+                test_services: {}
     steps:
       - run: |
           if ${{startsWith(github.ref, 'refs/tags/v')}}; then
@@ -43,22 +69,8 @@ jobs:
       publish_env: ${{inputs.publish_env || env.PUBLISH_ENV || ''}}
       pypi_publish: ${{inputs.pypi_publish || env.PYPI_PUBLISH}}
       cmake_preset_type_resolved: ${{inputs.cmake_preset_type != '-' && inputs.cmake_preset_type || env.CMAKE_PRESET_TYPE}}
-      linux_python_versions: ${{vars.LINUX_PYTHON_VERSIONS || '[6, 7, 8, 9, 10, 11]'}}
-      windows_python_versions: ${{vars.WINDOWS_PYTHON_VERSIONS || '[7, 8, 9, 10, 11]'}}
-      # Please declare any key you added below in build_steps.yaml:jobs.compile.strategy.matrix to aid the linting tools
-      # Please update publish.yml if changing the symbols value!!
-      linux_matrix: >-
-        {"os":"linux", "distro":"\"ubuntu-latest\"",
-          "cmake_preset_prefix":"linux", "build_dir": "/tmp/cpp_build", "symbols": "*.gz",
-          "do_not_archive": ["*.so", "*.[ao]", "vcpkg_installed"],
-          "test_services": "{\"mongodb\": {\"image\": \"mongo:4.4\"}}"
-        }
-      windows_matrix: >-
-        {"os":"windows", "distro":"\"windows-latest\"",
-          "cmake_preset_prefix":"windows-cl", "build_dir": "C:\\cpp_build", "symbols": "*.pdb",
-          "do_not_archive": ["*.lib", "*.ilk", "*.pyd", "*.dll", "CMakeFiles/*.dir", "vcpkg_installed"],
-          "test_services": "{}"
-        }
+      linux_matrix: ${{toJson(matrix.linux_matrix)}}
+      windows_matrix: ${{toJson(matrix.windows_matrix)}}
 
   cibw_docker_image:
     needs: [common_config]
@@ -99,26 +111,34 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python3: ${{fromJson(needs.common_config.outputs.linux_python_versions)}}
-        python_deps: [""]
+        python3: ${{fromJson(vars.LINUX_PYTHON_VERSIONS || '[6, 7, 8, 9, 10, 11]')}}
         include:
+          - python_deps_ids: [""]
+            matrix_override: ${{fromJson(needs.common_config.outputs.linux_matrix)}}
           - python3: 6
-            python_deps: "requirements-compatibility-py36.txt"
+            python_deps_ids: ["", -compat36]
+            matrix_override:
+              - ${{fromJson(needs.common_config.outputs.linux_matrix)[0]}}
+              - python_deps_id: -compat36
+                python_deps: requirements-compatibility-py36.txt
           - python3: 8
-            python_deps: "requirements-compatibility-py38.txt"
-    name: 3.${{matrix.python3}} Linux ${{matrix.python_deps}}
+            python_deps_ids: ["", -compat38]
+            matrix_override:
+              - ${{fromJson(needs.common_config.outputs.linux_matrix)[0]}}
+              - python_deps_id: -compat38
+                python_deps: requirements-compatibility-py38.txt
+    name: 3.${{matrix.python3}} Linux
     uses: ./.github/workflows/build_steps.yml
     secrets: inherit
     permissions: {packages: write}
     with:
       job_type: follower
       python3: ${{matrix.python3}}
-      python_deps: ${{matrix.python_deps}}
-      cibw_build: ${{format('cp3{0}-manylinux_x86_64', matrix.python3)}}
       cibw_image_tag: ${{needs.cibw_docker_image.outputs.tag}}
       cibw_version: ${{needs.common_config.outputs.cibuildwheel_ver}}
       cmake_preset_type: ${{needs.common_config.outputs.cmake_preset_type_resolved}}
-      matrix: ${{needs.common_config.outputs.linux_matrix}}
+      matrix: ${{toJson(matrix.matrix_override)}}
+      python_deps_ids: ${{toJson(matrix.python_deps_ids)}}
 
   leader-compile-windows:
     needs: [common_config]
@@ -146,7 +166,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python3: ${{fromJson(needs.common_config.outputs.windows_python_versions)}}
+        python3: ${{fromJson(vars.WINDOWS_PYTHON_VERSIONS || '[7, 8, 9, 10, 11]')}}
     name: 3.${{matrix.python3}} Windows
     uses: ./.github/workflows/build_steps.yml
     secrets: inherit
@@ -154,7 +174,6 @@ jobs:
     with:
       job_type: follower
       python3: ${{matrix.python3}}
-      cibw_build: ${{format('cp3{0}-win_amd64', matrix.python3)}}
       cibw_version: ${{needs.common_config.outputs.cibuildwheel_ver}}
       cmake_preset_type: ${{needs.common_config.outputs.cmake_preset_type_resolved}}
       matrix: ${{needs.common_config.outputs.windows_matrix}}

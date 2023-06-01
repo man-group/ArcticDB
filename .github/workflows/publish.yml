@@ -73,6 +73,8 @@ jobs:
         uses: mikepenz/release-changelog-builder-action@v3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          configuration: build_tooling/change_log.json
 
       - name: Release
         uses: softprops/action-gh-release@v1
@@ -83,7 +85,8 @@ jobs:
           body: |
             ${{steps.changelog.outputs.changelog}}
 
-            The wheels are on [Pypi](https://pypi.org/project/arcticdb/). Below are for debugging:
+            ---
+            > The wheels are on [Pypi](https://pypi.org/project/arcticdb/). Below are for debugging:
           files: ${{steps.compress.outcome == 'success' && env.SYMBOLS_ARTIFACT || ''}}
 
 
