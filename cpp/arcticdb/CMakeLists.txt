@@ -738,7 +738,6 @@ if(${TEST})
     else()
         set(COMMON_PUBLIC_TEST_LIBRARIES
                 arcticdb_core_static
-                libatomic.a  # Otherwise gtest_discover_tests cannot run the test if libatomic is not in a standard location
                 GTest::gtest
                 GTest::gmock
                 Python::Python # + pybind11::pybind11 (transitively included) = pybind11::embed, but latter is sometimes not found...
@@ -746,7 +745,16 @@ if(${TEST})
                 krb5support
                 k5crypto
                 util # TODO: find out where we lost the transitive link to it
+                msgpack-c
                 )
+            
+        if(NOT ARCTICDB_USING_CONDA)
+            list(APPEND COMMON_PUBLIC_TEST_LIBRARIES
+                libatomic.a  # Otherwise gtest_discover_tests cannot run the test if libatomic is not in a standard location
+                )
+        endif()
+        
+        
 
         find_library(Gcov_LIBRARY gcov)
         if (NOT(${Gcov_LIBRARY} EQUAL "Gcov_LIBRARY-NOTFOUND"))
@@ -787,8 +795,11 @@ if(${TEST})
                 DESTINATION .
                 PERMISSIONS ${EXECUTABLE_PERMS}
                 COMPONENT Tests)
-
-    set(RAPIDCHECK_PRIVATE_LIBRARIES ${AWSSDK_LINK_LIBRARIES} arrow_static)
+    if(ARCTICDB_USING_CONDA)
+        set(RAPIDCHECK_PRIVATE_LIBRARIES ${AWSSDK_LINK_LIBRARIES} Arrow::arrow_shared)
+    else()
+        set(RAPIDCHECK_PRIVATE_LIBRARIES ${AWSSDK_LINK_LIBRARIES} arrow_static)
+    endif()
     if(WIN32)
         target_link_libraries(arcticdb_rapidcheck_tests PUBLIC
                 arcticdb_core_static

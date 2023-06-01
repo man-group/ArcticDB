@@ -31,14 +31,16 @@ jobs:
       - uses: actions/checkout@v3
         with:
           submodules: recursive
-      
+  
+      - name: Get number of CPU cores
+        uses: SimenB/github-actions-cpu-cores@v1
+        id: cpu-cores
+
       - name: Append to environment_unix.yml
         shell: bash -l {0}
         run: |
           echo "  - python ==${{ matrix.python_version }}" >> environment_unix.yml
-          if [[ "${{ matrix.compiler }}" == "system_compiler" ]]; then
-            echo "using system compiler"
-          else
+          if [[ "${{ matrix.compiler }}" != "system_compiler" ]]; then
             echo "  - ${{ matrix.compiler }}" >> environment_unix.yml
           fi
 
@@ -59,6 +61,14 @@ jobs:
           python -m pip install --no-build-isolation --no-deps -v -e .
         env:
           ARCTICDB_USING_CONDA: 1
+        
+      - name: Build C++ Tests
+        shell: bash -l {0}
+        run: |
+          cd cpp/linux-conda-release-build/
+          make -j ${{ steps.cpu-cores.outputs.count }} arcticdb_rapidcheck_tests
+          make -j ${{ steps.cpu-cores.outputs.count }} test_unit_arcticdb
+          make test
 
       - name: Test with pytest
         shell: bash -l {0}
@@ -71,7 +81,7 @@ jobs:
       matrix:
         os: [macos-latest]
         python_version:  ["3.8", "3.9", "3.10"]
-        compiler: ["clang", "system_compiler", "clang =14", "clang =15", "clang =16", "cxx-compiler"]
+        compiler: ["clang", "system_compiler"]
 
       fail-fast: false
     runs-on: ${{ matrix.os }}
@@ -81,13 +91,15 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Get number of CPU cores
+        uses: SimenB/github-actions-cpu-cores@v1
+        id: cpu-cores
+
       - name: Append to environment_unix.yml
         shell: bash -l {0}
         run: |
           echo "  - python ==${{ matrix.python_version }}" >> environment_unix.yml
-          if [[ "${{ matrix.compiler }}" == "system_compiler" ]]; then
-            echo "using system compiler"
-          else
+          if [[ "${{ matrix.compiler }}" != "system_compiler" ]]; then
             echo "  - ${{ matrix.compiler }}" >> environment_unix.yml
           fi
 
@@ -108,6 +120,14 @@ jobs:
           python -m pip install --no-build-isolation --no-deps -v -e .
         env:
           ARCTICDB_USING_CONDA: 1
+
+      - name: Build C++ Tests
+        shell: bash -l {0}
+        run: |
+          cd cpp/linux-conda-release-build/
+          make -j ${{ steps.cpu-cores.outputs.count }} arcticdb_rapidcheck_tests
+          make -j ${{ steps.cpu-cores.outputs.count }} test_unit_arcticdb
+          make test
 
       - name: Test with pytest
         shell: bash -l {0}

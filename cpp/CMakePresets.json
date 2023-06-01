@@ -5,16 +5,23 @@
       "name": "common",
       "hidden": true,
       "description": "OS-agnostic config",
-      "toolchainFile": "vcpkg/scripts/buildsystems/vcpkg.cmake",
       "binaryDir": "${sourceDir}/out/${presetName}-build",
-      "installDir": "${sourceDir}/out/install"
+      "installDir": "${sourceDir}/out/install",
+      "cacheVariables": {
+        "TEST": "OFF"
+      }
+    },
+    {
+      "name": "common_vcpkg",
+      "inherits": "common",
+      "toolchainFile": "vcpkg/scripts/buildsystems/vcpkg.cmake",
+      "cacheVariables": {
+        "ARCTICDB_USING_CONDA": "OFF"
+      }
     },
     {
       "name": "common_conda",
-      "hidden": true,
-      "description": "OS-agnostic config",
-      "binaryDir": "${sourceDir}/out/${presetName}-build",
-      "installDir": "${sourceDir}/out/install",
+      "inherits": "common",
       "cacheVariables": {
         "ARCTICDB_USING_CONDA": "ON"
       }
@@ -23,7 +30,7 @@
       "name": "windows-cl-release",
       "displayName": "Windows x64 Release Cl",
       "description": "Target Windows with the Visual Studio development environment.",
-      "inherits": "common",
+      "inherits": "common_vcpkg",
       "generator": "Ninja",
       "architecture": {
         "value": "x64",
@@ -112,7 +119,7 @@
     {
       "name": "linux-debug",
       "displayName": "Linux x64 Debug",
-      "inherits": "common",
+      "inherits": "common_vcpkg",
       "generator": "Unix Makefiles",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
@@ -170,7 +177,16 @@
       "name": "linux-conda-release",
       "inherits": "linux-conda-debug",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "RelWithDebInfo"
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "TEST": "ON"
+      }
+    },
+    {
+      "name": "linux-conda-forge-release",
+      "inherits": "linux-conda-debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "TEST": "ON"
       }
     },
     {
@@ -205,7 +221,16 @@
       "name": "darwin-conda-release",
       "inherits": "darwin-conda-debug",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "RelWithDebInfo"
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "TEST": "ON"
+      }
+    },
+    {
+      "name": "darwin-conda-forge-release",
+      "inherits": "darwin-conda-debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "TEST": "OFF"
       }
     }
   ],
@@ -219,6 +244,6 @@
     {"name": "linux-conda-debug",         "configurePreset": "linux-conda-debug",         "targets": "arcticdb_ext" },
     {"name": "linux-conda-release",       "configurePreset": "linux-conda-release",       "targets": "arcticdb_ext" },
     {"name": "darwin-conda-debug",        "configurePreset": "darwin-conda-debug",        "targets": "arcticdb_ext" },
-    {"name": "darwin-codda-release",      "configurePreset": "darwin-conda-release",      "targets": "arcticdb_ext" }
+    {"name": "darwin-conda-release",      "configurePreset": "darwin-conda-release",      "targets": "arcticdb_ext" }
   ]
 }
