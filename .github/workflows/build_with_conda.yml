@@ -51,7 +51,7 @@ jobs:
           environment-file: environment_unix.yml
           init-shell: >-
             bash
-          cache-environment: true
+          cache-environment: false
           post-cleanup: 'all'
 
       - name: Build ArcticDB with conda (ARCTICDB_USING_CONDA=1)
@@ -110,7 +110,7 @@ jobs:
           environment-name: arcticdb
           init-shell: >-
             bash
-          cache-environment: true
+          cache-environment: false
           post-cleanup: 'all'
 
       - name: Build ArcticDB with conda (ARCTICDB_USING_CONDA=1)
