@@ -69,7 +69,7 @@ jobs:
           make -j ${{ steps.cpu-cores.outputs.count }} arcticdb_rapidcheck_tests
           make -j ${{ steps.cpu-cores.outputs.count }} test_unit_arcticdb
 
-          - name: Run C++ Tests
+      - name: Run C++ Tests
         shell: bash -l {0}
         run: |
           cd cpp/out/linux-conda-release-build/
