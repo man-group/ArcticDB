@@ -53,6 +53,8 @@ jobs:
         run: |
           cd python
           python -m pytest tests
+        env:
+          ARCTICDB_USING_CONDA: 1
 
   macos:
     strategy:
@@ -91,3 +93,5 @@ jobs:
         run: |
           cd python
           python -m pytest tests
+        env:
+          ARCTICDB_USING_CONDA: 1

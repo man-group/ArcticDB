@@ -8,6 +8,10 @@ from pandas.testing import assert_frame_equal
 
 from arcticdb.util.test import sample_dataframe
 from arcticdb_ext.storage import KeyType
+from arcticdb_ext.tools import AZURE_SUPPORT
+
+import pytest
+import sys
 
 
 def py_enum_to_dict(enum):
@@ -22,9 +26,20 @@ def check_no_keys(library):
         assert len(lib_tool.find_keys(key_type)) == 0
 
 
-def test_stress_delete(s3_store_factory):
-    lib1 = s3_store_factory(name=f"delete_me_{datetime.utcnow().isoformat()}")
-    lib2 = s3_store_factory(name=f"leave_me_{datetime.utcnow().isoformat()}")
+@pytest.mark.parametrize(
+    "store_factory",
+    [
+        "s3_store_factory",
+        pytest.param(
+            "azure_store_factory",
+            marks=pytest.mark.skipif(not AZURE_SUPPORT, reason="Pending Azure Storge Conda support"),
+        ),
+    ],
+)
+def test_stress_delete(store_factory, request):
+    store_factory = request.getfixturevalue(store_factory)
+    lib1 = store_factory(name=f"delete_me_{datetime.utcnow().isoformat()}")
+    lib2 = store_factory(name=f"leave_me_{datetime.utcnow().isoformat()}")
     num_tests = 100
     dataframe_size = 1000
 

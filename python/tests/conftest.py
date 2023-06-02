@@ -31,6 +31,7 @@ from typing import Optional, Any, Dict
 import subprocess
 from pathlib import Path
 import socket
+import tempfile
 
 import requests
 from pytest_server_fixtures.base import get_ephemeral_port
@@ -47,11 +48,14 @@ from arcticdb.util.test import configure_test_logger, apply_lib_cfg
 from arcticdb.version_store.helper import ArcticMemoryConfig
 from arcticdb.version_store import NativeVersionStore
 from arcticdb.version_store._normalization import MsgPackNormalizer
+from arcticdb_ext.tools import AZURE_SUPPORT
 
+if AZURE_SUPPORT:
+    from azure.storage.blob import BlobServiceClient
 
 configure_test_logger()
 
-BUCKET_ID = 0
+bucket_id = 0
 # Use a smaller memory mapped limit for all tests
 MsgPackNormalizer.MMAP_DEFAULT_SIZE = 20 * (1 << 20)
 
@@ -83,6 +87,27 @@ def _moto_s3_uri_module():
 
 
 @pytest.fixture(scope="function")
+def azure_client(azurite_azure_test_connection_setting):
+    (
+        endpoint,
+        container,
+        credential_name,
+        credential_key,
+        is_https,
+        connect_to_azurite,
+        ca_cert_path,
+    ) = azurite_azure_test_connection_setting
+    credential = {"account_name": credential_name, "account_key": credential_key}
+    account_url = "https://" if is_https else "http://"
+    account_url += f"{endpoint}/{credential_name}" if connect_to_azurite else f"{credential_name}.{endpoint}"
+    client = BlobServiceClient(
+        account_url=account_url, credential=credential, connection_verify=False
+    )  # add connection_verify=False to bypass ssl checking
+
+    yield client
+
+
+@pytest.fixture(scope="function")
 def boto_client(_moto_s3_uri_module):
     endpoint = _moto_s3_uri_module
     client = boto3.client(
@@ -104,7 +129,7 @@ def aws_secret_key():
 
 @pytest.fixture(scope="function")
 def moto_s3_endpoint_and_credentials(_moto_s3_uri_module, aws_access_key, aws_secret_key):
-    global BUCKET_ID
+    global bucket_id
 
     endpoint = _moto_s3_uri_module
     port = endpoint.rsplit(":", 1)[1]
@@ -112,9 +137,9 @@ def moto_s3_endpoint_and_credentials(_moto_s3_uri_module, aws_access_key, aws_se
         service_name="s3", endpoint_url=endpoint, aws_access_key_id=aws_access_key, aws_secret_access_key=aws_secret_key
     )
 
-    bucket = f"test_bucket_{BUCKET_ID}"
+    bucket = f"test_bucket_{bucket_id}"
     client.create_bucket(Bucket=bucket)
-    BUCKET_ID = BUCKET_ID + 1
+    bucket_id = bucket_id + 1
     yield endpoint, port, bucket, aws_access_key, aws_secret_key
 
 
@@ -126,10 +151,61 @@ def moto_s3_uri_incl_bucket(moto_s3_endpoint_and_credentials):
     ] + ":" + bucket + "?access=" + aws_access_key + "&secret=" + aws_secret_key + "&port=" + port
 
 
-@pytest.fixture(scope="function", params=("S3", "LMDB"))
-def arctic_client(request, moto_s3_uri_incl_bucket, tmpdir):
+@pytest.fixture
+def azurite_azure_test_connection_setting(azurite_port, spawn_azurite):
+    global bucket_id
+
+    container = f"testbucket{bucket_id}"
+    bucket_id = bucket_id + 1
+
+    credential_name = "devstoreaccount1"
+    credential_key = "Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw=="
+    endpoint = f"127.0.0.1:{azurite_port}"
+    is_https = False
+    connect_to_azurite = True
+    # Default cert path is used; May run into problem on Linux's non RHEL distribution; See more on https://github.com/man-group/ArcticDB/issues/514
+    ca_cert_path = ""
+
+    return endpoint, container, credential_name, credential_key, is_https, connect_to_azurite, ca_cert_path
+
+
+@pytest.fixture
+def azurite_azure_endpoint_and_credentials(azurite_azure_test_connection_setting, azure_client):
+    (
+        endpoint,
+        container,
+        credential_name,
+        credential_key,
+        is_https,
+        connect_to_azurite,
+        ca_cert_path,
+    ) = azurite_azure_test_connection_setting
+    container_client = azure_client.get_container_client(container=container)
+    if not container_client.exists():
+        azure_client.create_container(name=container)
+    return endpoint, container, credential_name, credential_key, is_https, connect_to_azurite, ca_cert_path
+
+
+@pytest.fixture
+def azurite_azure_uri_incl_bucket(azurite_azure_endpoint_and_credentials):
+    (
+        endpoint,
+        container,
+        credential_name,
+        credential_key,
+        is_https,
+        connect_to_azurite,
+        ca_cert_path,
+    ) = azurite_azure_endpoint_and_credentials
+    return f"azure://{endpoint}/{container}?access={credential_name}&secret={credential_key}&https={is_https}&connect_to_azurite={connect_to_azurite}&ca_cert_path={ca_cert_path}"
+
+
+@pytest.fixture(scope="function", params=["S3", "LMDB", "Azure"] if AZURE_SUPPORT else ["S3", "LMDB"])
+def arctic_client(request, tmpdir):
     if request.param == "S3":
-        ac = Arctic(moto_s3_uri_incl_bucket)
+        ac = Arctic(request.getfixturevalue("moto_s3_uri_incl_bucket"))
+    elif request.param == "Azure":
+        ac = Arctic(request.getfixturevalue("azurite_azure_uri_incl_bucket"))
     elif request.param == "LMDB":
         ac = Arctic(f"lmdb://{tmpdir}")
     else:
@@ -166,13 +242,29 @@ def arcticdb_test_s3_config(moto_s3_endpoint_and_credentials):
 
 
 @pytest.fixture
-def arcticdb_test_azure_config(azurite_port):
+def arcticdb_test_azure_config(
+    azurite_azure_endpoint_and_credentials,
+):
     def create(lib_name):
-        global BUCKET_ID
-        bucket = f"testbucket{BUCKET_ID}"
-        BUCKET_ID = BUCKET_ID + 1
-        print(bucket)
-        return create_test_azure_cfg(lib_name=lib_name, credential_name="devstoreaccount1", credential_key="Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==", container_name=bucket, endpoint="0.0.0.0:"+str(azurite_port), is_https=False, connect_to_azurite=True)
+        (
+            endpoint,
+            container,
+            credential_name,
+            credential_key,
+            is_https,
+            connect_to_azurite,
+            ca_cert_path,
+        ) = azurite_azure_endpoint_and_credentials
+        return create_test_azure_cfg(
+            lib_name=lib_name,
+            credential_name=credential_name,
+            credential_key=credential_key,
+            container_name=container,
+            endpoint=endpoint,
+            is_https=is_https,
+            connect_to_azurite=connect_to_azurite,
+            ca_cert_path=ca_cert_path,
+        )
 
     return create
 
@@ -265,7 +357,7 @@ def s3_store_factory(lib_name, moto_s3_endpoint_and_credentials):
 
 @pytest.fixture
 def azure_store_factory(lib_name, arcticdb_test_azure_config):
-    """Factory to create any number of S3 libs with the given WriteOptions or VersionStoreConfig.
+    """Factory to create any number of Azure libs with the given WriteOptions or VersionStoreConfig.
 
     `name` can be a magical value "_unique_" which will create libs with unique names.
     This factory will clean up any libraries requested
@@ -316,13 +408,17 @@ def mongo_version_store(mongo_store_factory):
     return mongo_store_factory()
 
 
-@pytest.fixture(scope="function")
-def s3_version_store_prune_previous(s3_store_factory):
-    return s3_store_factory(prune_previous_version=True)
+@pytest.fixture(
+    scope="function",
+    params=["s3_store_factory", "azure_store_factory"] if AZURE_SUPPORT else ["s3_store_factory"],
+)
+def object_version_store_prune_previous(request):
+    store_factory = request.getfixturevalue(request.param)
+    return store_factory(prune_previous_version=True)
 
 
-@pytest.fixture(scope="function")
-def azure_version_store(spawn_azurite, azure_store_factory):
+@pytest.fixture
+def azure_version_store(azure_store_factory):
     return azure_store_factory()
 
 
@@ -465,41 +561,44 @@ def get_wide_df():
 
 @pytest.fixture(scope="module")
 def azurite_port():
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    port=10000
-    max_port=65535
-    while port <= max_port:
-        try:
-            sock.bind(('', port))
-            sock.close()
-            return port
-        except OSError:
-            port += 1
-    raise IOError('no free ports')
+    return get_ephemeral_port()
 
 
 @pytest.fixture(scope="module")
 def spawn_azurite(azurite_port):
-    if sys.platform == "linux":
+    if AZURE_SUPPORT:
         print("Spawning Azurite")
         port = str(azurite_port)
-        temp_folder = "azurite" + port
-        shutil.rmtree(temp_folder, ignore_errors=True)
+        temp_folder = tempfile.TemporaryDirectory().name
         os.mkdir(temp_folder)
-        p = subprocess.Popen(["azurite", "--silent", "--blobPort", port, "--blobHost", "0.0.0.0", "--queuePort", "0", "--tablePort", "0"], cwd=temp_folder)
-
-        time.sleep(2)
-        yield
-        print("Killing Azurite")
-        p.kill()
-        shutil.rmtree(temp_folder, ignore_errors=True)
+        try:
+            p = subprocess.Popen(
+                f"azurite --silent --blobPort {port} --blobHost 127.0.0.1 --queuePort 0 --tablePort 0",
+                cwd=temp_folder,
+                shell=True,
+            )
+            time.sleep(2)
+            yield
+        finally:
+            print("Killing Azurite")
+            p.kill()
     else:
         yield
 
 
 @pytest.fixture(
     scope="function",
-    params=["s3_version_store", "azure_version_store"] if sys.platform == "linux" else ["s3_version_store"]
+    params=["moto_s3_uri_incl_bucket", "azurite_azure_uri_incl_bucket"]
+    if AZURE_SUPPORT
+    else ["moto_s3_uri_incl_bucket"],
+)
+def object_storage_uri_incl_bucket(request):
+    yield request.getfixturevalue(request.param)
+
+
+@pytest.fixture(
+    scope="function",
+    params=["s3_version_store", "azure_version_store"] if AZURE_SUPPORT else ["s3_version_store"],
 )
 def object_version_store(request):
     yield request.getfixturevalue(request.param)
@@ -507,7 +606,11 @@ def object_version_store(request):
 
 @pytest.fixture(
     scope="function",
-    params=["lmdb_version_store", "s3_version_store", "azure_version_store"] if sys.platform == "linux" else ["lmdb_version_store", "s3_version_store"]
+    params=(
+        ["lmdb_version_store", "s3_version_store", "azure_version_store"]
+        if AZURE_SUPPORT
+        else ["lmdb_version_store", "s3_version_store"]
+    ),
 )
 def object_and_lmdb_version_store(request):
     yield request.getfixturevalue(request.param)

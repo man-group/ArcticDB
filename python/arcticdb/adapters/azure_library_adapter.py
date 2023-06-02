@@ -21,21 +21,20 @@ from dataclasses import dataclass, fields
 from distutils.util import strtobool
 
 PARSED_QUERY = namedtuple("PARSED_QUERY", ["region"])
-USE_AWS_CRED_PROVIDERS_TOKEN = "_RBAC_"
 
 
 @dataclass
 class ParsedQuery:
     access: Optional[str] = None
     secret: Optional[str] = None
-
     path_prefix: Optional[str] = None
     https: bool = False
     connect_to_azurite: bool = False
+    ca_cert_path: Optional[str] = None
 
 
 class AzureLibraryAdapter(ArcticLibraryAdapter):
-    REGEX = r"azure://(?P<endpoint>.*):(?P<container>[-_a-zA-Z0-9.]+)(?P<query>\?.*)?"
+    REGEX = r"azure://(?P<endpoint>[^/]+)/(?P<container>[a-zA-Z0-9][-a-zA-Z0-9]+)(?P<query>\?.*)?"
 
     @staticmethod
     def supports_uri(uri: str) -> bool:
@@ -46,17 +45,18 @@ class AzureLibraryAdapter(ArcticLibraryAdapter):
         match_groups = match.groupdict()
 
         self._endpoint = match_groups["endpoint"]
-        self._bucket = match_groups["bucket"]
+        self._bucket = match_groups["container"]
 
         self._query_params: ParsedQuery = self._parse_query(match["query"])
 
         self._https = self._query_params.https
-        self._connect_to_azurite = self._query_params._connect_to_azurite
+        self._connect_to_azurite = self._query_params.connect_to_azurite
+        self._ca_cert_path = self._query_params.ca_cert_path
 
         super().__init__(uri)
 
     def __repr__(self):
-        return "azure(endpoint=%s, bucket=%s)" % (self._endpoint, self._bucket)
+        return "azure(endpoint=%s, container=%s)" % (self._endpoint, self._bucket)
 
     @property
     def config_library(self) -> Library:
@@ -71,13 +71,14 @@ class AzureLibraryAdapter(ArcticLibraryAdapter):
             cfg=env_cfg,
             lib_name=self.CONFIG_LIBRARY_NAME,
             env_name=_DEFAULT_ENV,
-            credential_name=_name, 
+            credential_name=_name,
             credential_key=_key,
             container_name=self._bucket,
             endpoint=self._endpoint,
             with_prefix=with_prefix,
             is_https=self._https,
-            connect_to_azurite=self._connect_to_azurite
+            connect_to_azurite=self._connect_to_azurite,
+            ca_cert_path=self._ca_cert_path,
         )
 
         lib = NativeVersionStore.create_store_from_config(env_cfg, _DEFAULT_ENV, self.CONFIG_LIBRARY_NAME)._library
@@ -88,7 +89,7 @@ class AzureLibraryAdapter(ArcticLibraryAdapter):
         if query and query.startswith("?"):
             query = query.strip("?")
         elif not query:
-            return ParsedQuery(aws_auth=True)
+            raise ValueError(f"Invalid Azure URI. Missing query parameter")
 
         parsed_query = re.split("[;&]", query)
         parsed_query = {t.split("=", 1)[0]: t.split("=", 1)[1] for t in parsed_query}
@@ -99,7 +100,7 @@ class AzureLibraryAdapter(ArcticLibraryAdapter):
                 raise ValueError(
                     "Invalid Azure URI. "
                     f"Invalid query parameter '{key}' passed in. "
-                    f"Value query parameters: "
+                    "Value query parameters: "
                     f"{list(field_dict.keys())}"
                 )
 
@@ -128,13 +129,14 @@ class AzureLibraryAdapter(ArcticLibraryAdapter):
             cfg=env_cfg,
             lib_name=name,
             env_name=_DEFAULT_ENV,
-            credential_name=_name, 
+            credential_name=_name,
             credential_key=_key,
             container_name=self._bucket,
             endpoint=self._endpoint,
             with_prefix=with_prefix,
             is_https=self._https,
-            connect_to_azurite=self._connect_to_azurite
+            connect_to_azurite=self._connect_to_azurite,
+            ca_cert_path=self._ca_cert_path,
         )
 
         set_library_options(env_cfg.env_by_id[_DEFAULT_ENV].lib_by_path[name], library_options)

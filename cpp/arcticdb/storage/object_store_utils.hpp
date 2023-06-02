@@ -43,4 +43,4 @@ inline auto key_type_folder(const std::string& root_folder, KeyType key_type) {
     return fmt::format("{}/{}", root_folder, key_type_long_name(key_type));
 }
 
-} // namespace arcticdb::storage::s3
+} // namespace arcticdb::storage::object_store_utils

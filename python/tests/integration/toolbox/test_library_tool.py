@@ -28,8 +28,9 @@ def get_log_types():
 
 def test_get_types(object_and_lmdb_version_store):
     df = sample_dataframe()
-    object_and_lmdb_version_store.write("symbol1", df)
-    lib_tool = object_and_lmdb_version_store.library_tool()
+    lib = object_and_lmdb_version_store
+    lib.write("symbol1", df)
+    lib_tool = lib.library_tool()
     version_keys = lib_tool.find_keys_for_id(KeyType.VERSION, "symbol1")
     assert len(version_keys) == 1
     key = version_keys[0]
@@ -78,14 +79,15 @@ def test_write_keys(object_and_lmdb_version_store):
 
 def test_count_keys(object_and_lmdb_version_store):
     df = sample_dataframe()
-    object_and_lmdb_version_store.write("symbol", df)
-    object_and_lmdb_version_store.write("pickled", data={"a": 1}, pickle_on_failure=True)
-    object_and_lmdb_version_store.snapshot("mysnap")
-    object_and_lmdb_version_store.write("rec_norm", data={"a": np.arange(5), "b": np.arange(8), "c": None}, recursive_normalizers=True)
-    lib_tool = object_and_lmdb_version_store.library_tool()
-    assert object_and_lmdb_version_store.is_symbol_pickled("pickled")
-    assert not object_and_lmdb_version_store.is_symbol_pickled("rec_norm")
-    assert len(object_and_lmdb_version_store.list_symbols()) == 3
+    lib = object_and_lmdb_version_store
+    lib.write("symbol", df)
+    lib.write("pickled", data={"a": 1}, pickle_on_failure=True)
+    lib.snapshot("mysnap")
+    lib.write("rec_norm", data={"a": np.arange(5), "b": np.arange(8), "c": None}, recursive_normalizers=True)
+    lib_tool = lib.library_tool()
+    assert lib.is_symbol_pickled("pickled")
+    assert not lib.is_symbol_pickled("rec_norm")
+    assert len(lib.list_symbols()) == 3
     assert lib_tool.count_keys(KeyType.VERSION) == 3
     assert lib_tool.count_keys(KeyType.SNAPSHOT_REF) == 1
     assert lib_tool.count_keys(KeyType.MULTI_KEY) == 1

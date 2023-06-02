@@ -178,9 +178,7 @@
     { "name": "spdlog", "version": "1.11.0" },
     { "name": "wangle", "version-string": "2022.03.21.00" },
     { "name": "zlib", "version": "1.2.13" },
-    { "name": "zstd", "version": "1.5.2" },
-    { "name": "azure-identity-cpp", "version": "1.3.0" },
-    { "name": "azure-storage-blobs-cpp", "version": "12.6.2" }
+    { "name": "zstd", "version": "1.5.2" }
   ],
   "vcpkg-configuration": {
     "overlay-ports": ["third_party/vcpkg_overlays"]

@@ -1,3 +1,11 @@
+/*
+Copyright 2023 Man Group Operations Limited
+
+Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
+
+As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+*/
+
 syntax = "proto3";
 
 package arcticc.pb2.azure_storage_pb2;
@@ -11,5 +19,6 @@ message Config {
     uint32 request_timeout = 6;
     string prefix = 7;
     bool https = 8;
-    bool connect_to_azurite = 9;
+    string ca_cert_path= 9;
+    bool connect_to_azurite = 10;
 }

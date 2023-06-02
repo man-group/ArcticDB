@@ -70,6 +70,8 @@ class AzureStorage final : public Storage<AzureStorage> {
     unsigned int request_timeout_;
     Azure::Storage::Blobs::UploadBlockBlobFromOptions upload_option_;
     Azure::Storage::Blobs::DownloadBlobToOptions download_option_;
+
+    Azure::Storage::Blobs::BlobClientOptions get_client_options(const Config &conf);
 };
 
 

@@ -42,16 +42,18 @@ from arcticdb.util.test import (
     assert_frame_equal,
     assert_series_equal,
 )
+from arcticdb_ext.tools import AZURE_SUPPORT
 from tests.util.date import DateRange
 
 
-if sys.platform == "linux":
-    SMOKE_TEST_VERSION_STORES = ["lmdb_version_store", "s3_version_store", "mongo_version_store", "azure_version_store"]
-else:
-    # leave out Mongo as spinning up a Mongo instance in Windows CI is fiddly, and Mongo support is only
-    # currently required for Linux for internal use.
-    # We also skip it on Mac as github actions containers don't work with macos
-    SMOKE_TEST_VERSION_STORES = ["lmdb_version_store", "s3_version_store"]  # SKIP_WIN and SKIP_MAC
+# leave out Mongo as spinning up a Mongo instance in Windows CI is fiddly, and Mongo support is only
+# currently required for Linux for internal use.
+# We also skip it on Mac as github actions containers don't work with macos
+SMOKE_TEST_VERSION_STORES = ["lmdb_version_store", "s3_version_store"]
+if sys.platform == "linux":  # SKIP_WIN and SKIP_MAC
+    SMOKE_TEST_VERSION_STORES.append("mongo_version_store")
+if AZURE_SUPPORT:
+    SMOKE_TEST_VERSION_STORES.append("azure_version_store")
 
 
 @pytest.fixture()
@@ -233,14 +235,14 @@ def test_list_symbols_regex(request, lib_type):
     assert list(sorted(lib.list_symbols())) == sorted(["asdf", "furble"])
 
 
-def test_list_symbols_prefix(s3_version_store):
+def test_list_symbols_prefix(object_version_store):
     blahs = ["blah_asdf201901", "blah_asdf201802", "blah_asdf201803", "blah_asdf201903"]
     nahs = ["nah_asdf201801", "nah_asdf201802", "nah_asdf201803"]
 
     for sym in itertools.chain(blahs, nahs):
-        s3_version_store.write(sym, sample_dataframe(10))
-    assert set(s3_version_store.list_symbols(prefix="blah_")) == set(blahs)
-    assert set(s3_version_store.list_symbols(prefix="nah_")) == set(nahs)
+        object_version_store.write(sym, sample_dataframe(10))
+    assert set(object_version_store.list_symbols(prefix="blah_")) == set(blahs)
+    assert set(object_version_store.list_symbols(prefix="nah_")) == set(nahs)
 
 
 def test_mixed_df_without_pickling_enabled(lmdb_version_store):
@@ -983,13 +985,12 @@ def test_nested_custom_types(lmdb_version_store):
     assert got_back[0] == 1
 
 
-def test_batch_operations(s3_version_store_prune_previous):
-    lmdb_version_store = s3_version_store_prune_previous
+def test_batch_operations(object_version_store_prune_previous):
     multi_data = {"sym1": np.arange(8), "sym2": np.arange(9), "sym3": np.arange(10)}
 
     for _ in range(10):
-        lmdb_version_store.batch_write(list(multi_data.keys()), list(multi_data.values()))
-        result = lmdb_version_store.batch_read(list(multi_data.keys()))
+        object_version_store_prune_previous.batch_write(list(multi_data.keys()), list(multi_data.values()))
+        result = object_version_store_prune_previous.batch_read(list(multi_data.keys()))
         assert len(result) == 3
         equals(result["sym1"].data, np.arange(8))
         equals(result["sym2"].data, np.arange(9))
@@ -1353,8 +1354,8 @@ def test_batch_read_meta_with_pruning(version_store_factory):
     assert lib.read_metadata("sym1").metadata == results_dict["sym1"].metadata
 
 
-def test_batch_read_meta_multiple_versions(s3_version_store):
-    lib = s3_version_store
+def test_batch_read_meta_multiple_versions(object_version_store):
+    lib = object_version_store
     lib.write("sym1", 1, {"meta1": 1})
     lib.write("sym1", 2, {"meta1": 2})
     lib.write("sym1", 3, {"meta1": 3})
@@ -1386,8 +1387,8 @@ def test_list_symbols(lmdb_version_store):
     assert set(lib.list_symbols(regex="a")) == set(lib.list_symbols(regex="a", use_symbol_list=False))
 
 
-def test_get_index(s3_version_store):
-    lib = s3_version_store
+def test_get_index(object_version_store):
+    lib = object_version_store
 
     symbol = "thing"
     lib.write(symbol, 1)
@@ -1445,8 +1446,8 @@ def test_columns_as_nparrary(lmdb_version_store, sym):
     assert all(vit.data["col2"] == [3, 4])
 
 
-def test_simple_recursive_normalizer(s3_version_store):
-    s3_version_store.write(
+def test_simple_recursive_normalizer(object_version_store):
+    object_version_store.write(
         "rec_norm", data={"a": np.arange(5), "b": np.arange(8), "c": None}, recursive_normalizers=True
     )
 

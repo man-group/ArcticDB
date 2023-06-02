@@ -16,6 +16,7 @@ from arcticdb.config import Defaults
 from arcticdb.version_store.helper import ArcticMemoryConfig
 from arcticdb_ext.storage import KeyType, NoDataFoundException
 from arcticdb.util.test import config_context, random_string, assert_frame_equal
+from arcticdb_ext.tools import AZURE_SUPPORT
 
 
 def eprint(*args, **kwargs):
@@ -39,10 +40,10 @@ def get_map_timeouts():
 
 
 def gen_params_store_and_timeout():
-    if sys.platform == "linux":
-        p = [["s3_version_store", "s3_version_store", "azure_version_store", "azure_version_store"], get_map_timeouts()]
+    if AZURE_SUPPORT:
+        p = [["s3_version_store", "azure_version_store"], get_map_timeouts()]
     else:
-        p = [["s3_version_store", "s3_version_store"], get_map_timeouts()]
+        p = [["s3_version_store"], get_map_timeouts()]
     return list(product(*p))
 
 

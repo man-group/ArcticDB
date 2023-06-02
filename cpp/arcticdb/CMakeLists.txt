@@ -101,6 +101,7 @@ else ()
     find_library(Sasl2_LIBRARY NAMES sasl2 libsasl2 PATHS /usr/local/lib/libsasl2.a REQUIRED)
 endif ()
 
+
 find_path(BITMAGIC_INCLUDE_DIRS "bitmagic/bm.h")
 
 set(FIND_LIBRARY_USE_LIB64_PATHS ON)
@@ -226,7 +227,6 @@ set(arcticdb_srcs
         storage/common.hpp
         storage/config_resolvers.hpp
         storage/failure_simulation.hpp
-        storage/object_store_utils.hpp
         storage/library.hpp
         storage/library_index.hpp
         storage/library_manager.hpp
@@ -237,14 +237,13 @@ set(arcticdb_srcs
         storage/mongo/mongo_client.hpp
         storage/mongo/mongo_instance.hpp
         storage/mongo/mongo_storage.hpp
+        storage/object_store_utils.hpp
         storage/s3/nfs_backed_storage.hpp
         storage/s3/nfs_backed_storage-inl.hpp
         storage/s3/s3_client_accessor.hpp
         storage/s3/s3_storage-inl.hpp
         storage/s3/s3_storage_tool.hpp
         storage/s3/s3_storage_tool-inl.hpp
-        storage/azure/azure_storage-inl.hpp
-        storage/azure/azure_storage.hpp
         storage/storage_factory.hpp
         storage/storage_options.hpp
         storage/storage.hpp
@@ -385,7 +384,6 @@ set(arcticdb_srcs
         storage/s3/s3_api.cpp
         storage/s3/s3_storage.cpp
         storage/s3/s3_storage_tool.cpp
-        storage/azure/azure_storage.cpp
         storage/storage_factory.cpp
         stream/aggregator.cpp
         stream/append_map.cpp
@@ -412,9 +410,12 @@ set(arcticdb_srcs
         version/symbol_list.cpp)
 
 # Exclude vendored sources when using conda.
-if(NOT ${ARCTICDB_USING_CONDA})
+if(NOT ${ARCTICDB_USING_CONDA}) #Awaiting Azure sdk support in conda https://github.com/man-group/ArcticDB/issues/519
     list (APPEND arcticdb_srcs
         util/third_party/robin_hood.hpp
+        storage/azure/azure_storage-inl.hpp
+        storage/azure/azure_storage.hpp
+        storage/azure/azure_storage.cpp
     )
 endif()
 
@@ -473,6 +474,15 @@ set (arcticdb_core_libraries
         spdlog::spdlog
         Folly::folly # Transitively includes: double-conversion, gflags, glog, libevent, libssl, libcrypto, libiberty, libsodium
         )
+
+if(NOT ${ARCTICDB_USING_CONDA})  #Awaiting Azure sdk support in conda https://github.com/man-group/ArcticDB/issues/519
+    find_package(azure-identity-cpp CONFIG REQUIRED)
+    find_package(azure-storage-blobs-cpp CONFIG REQUIRED)
+    list (APPEND arcticdb_core_libraries
+        Azure::azure-identity
+        Azure::azure-storage-blobs
+    )
+endif()
 
 # Dependencies expose different names of their libraries depending
 # on their origin (i.e. vendored source or packages on conda-forge).
@@ -539,21 +549,8 @@ if (SSL_LINK)
         list(APPEND arcticdb_core_includes  ${KERBEROS_INCLUDE_DIR})
     endif()
 endif ()
-
 target_link_libraries(arcticdb_core_object PUBLIC ${arcticdb_core_libraries})
 
-set (azure_package
-        Azure::azure-identity
-        Azure::azure-storage-blobs
-        )
-
-list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake-modules")
-include(AzureVcpkg)
-az_vcpkg_integrate()
-
-find_package(azure-identity-cpp CONFIG REQUIRED)
-find_package(azure-storage-blobs-cpp CONFIG REQUIRED)
-target_link_libraries(arcticdb_core_object PRIVATE ${azure_package})
 
 target_include_directories(arcticdb_core_object
         PRIVATE
@@ -576,7 +573,6 @@ add_library(arcticdb_core SHARED $<TARGET_OBJECTS:arcticdb_core_object>)
 target_link_libraries(arcticdb_core PRIVATE
         ${arcticdb_core_libraries}
         ${AWSSDK_LINK_LIBRARIES}
-        ${azure_package}
         )
 
 GENERATE_EXPORT_HEADER(arcticdb_core)
@@ -609,7 +605,6 @@ target_link_libraries(arcticdb_python
         #tsan
         arcticdb_core_static
         ${AWSSDK_LINK_LIBRARIES}
-        ${azure_package}
         )
 
 target_include_directories(arcticdb_python PRIVATE
@@ -775,7 +770,6 @@ if(${TEST})
                 GTest::gmock
                 PRIVATE
                 ${AWSSDK_LINK_LIBRARIES}
-                ${azure_package}
                 )
 
         # Fix gtest/folly unistd conflict until one of them fixes it. There's another copy for rapidtest
@@ -803,7 +797,6 @@ if(${TEST})
             ${COMMON_PUBLIC_TEST_LIBRARIES}
             PRIVATE
             ${AWSSDK_LINK_LIBRARIES}
-            ${azure_package}
             )
 
         target_include_directories(test_unit_arcticdb PRIVATE
@@ -844,8 +837,6 @@ if(${TEST})
                 rapidcheck_gtest
                 PRIVATE
                 ${RAPIDCHECK_PRIVATE_LIBRARIES}
-                ${AWSSDK_LINK_LIBRARIES}
-                ${azure_package}
                 )
 
         target_compile_options(arcticdb_rapidcheck_tests PRIVATE /FI "util/test/gtest.hpp")
@@ -857,8 +848,6 @@ if(${TEST})
             rapidcheck_gtest
             PRIVATE
             ${RAPIDCHECK_PRIVATE_LIBRARIES}
-            ${AWSSDK_LINK_LIBRARIES}
-            ${azure_package}
             )
     endif()
 

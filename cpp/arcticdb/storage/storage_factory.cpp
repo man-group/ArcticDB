@@ -11,7 +11,9 @@
 #include <arcticdb/storage/memory/memory_storage.hpp>
 #include <arcticdb/storage/mongo/mongo_storage.hpp>
 #include <arcticdb/storage/s3/s3_storage.hpp>
+#ifndef ARCTICDB_USING_CONDA //Awaiting Azure sdk support in conda https://github.com/man-group/ArcticDB/issues/519
 #include <arcticdb/storage/azure/azure_storage.hpp>
+#endif
 #include <arcticdb/storage/variant_storage_factory.hpp>
 #include <arcticdb/util/pb_util.hpp>
 
@@ -45,8 +47,8 @@ std::shared_ptr<VariantStorageFactory> create_storage_factory(
         );
     } else if (type_name == memory::MemoryStorage::Config::descriptor()->full_name()) {
         memory::MemoryStorage::Config memory_config;
-    storage.config().UnpackTo(&memory_config);
-    res = std::make_shared<VariantStorageFactory>(
+        storage.config().UnpackTo(&memory_config);
+        res = std::make_shared<VariantStorageFactory>(
             memory::MemoryStorageFactory(memory_config)
         );
     } else if (type_name == nfs_backed::NfsBackedStorage::Config::descriptor()->full_name()) {
@@ -55,12 +57,14 @@ std::shared_ptr<VariantStorageFactory> create_storage_factory(
         res = std::make_shared<VariantStorageFactory>(
             nfs_backed::NfsBackedStorageFactory(nfs_backed_config)
         );
+#ifndef ARCTICDB_USING_CONDA //Awaiting Azure sdk support in conda https://github.com/man-group/ArcticDB/issues/519
     } else if (type_name == azure::AzureStorage::Config::descriptor()->full_name()) {
         azure::AzureStorage::Config azure_config;
         storage.config().UnpackTo(&azure_config);
         res = std::make_shared<VariantStorageFactory>(
             azure::AzureStorageFactory(azure_config)
         );
+#endif
     } else
         throw std::runtime_error(fmt::format("Unknown config type {}", type_name));
 

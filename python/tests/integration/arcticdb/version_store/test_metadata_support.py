@@ -22,11 +22,12 @@ from arcticdb.util.test import assert_frame_equal
 
 
 def test_rt_df_with_small_meta(object_and_lmdb_version_store):
+    lib = object_and_lmdb_version_store
     #  type: (NativeVersionStore)->None
     df = DataFrame(data=["A", "B", "C"])
     meta = {"abc": "def", "xxx": "yyy"}
-    object_and_lmdb_version_store.write("pandas", df, metadata=meta)
-    vit = object_and_lmdb_version_store.read("pandas")
+    lib.write("pandas", df, metadata=meta)
+    vit = lib.read("pandas")
     assert_frame_equal(df, vit.data)
     assert meta == vit.metadata
 
@@ -44,12 +45,8 @@ def test_rt_df_with_humonguous_meta(object_and_lmdb_version_store):
         assert meta == vit.metadata
 
 
-@pytest.mark.parametrize(
-    "lib_type",
-    ["s3_version_store", "lmdb_version_store", "s3_version_store", pytest.param("azure_version_store", marks=pytest.mark.skipif(sys.platform != "linux", reason="Pending Azure Storge Windows support"))],
-)
-def test_read_metadata(lib_type, request):
-    lib = request.getfixturevalue(lib_type)
+def test_read_metadata(object_and_lmdb_version_store):
+    lib = object_and_lmdb_version_store
     original_data = [1, 2, 3]
     snap_name = "metadata_snap_1"
     symbol = "test_symbol"

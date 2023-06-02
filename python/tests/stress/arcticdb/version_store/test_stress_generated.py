@@ -39,6 +39,15 @@ def generate_data(total_size, ncols, pct_null=0.1, repeats=1, dtype="float"):
     return pd.DataFrame(data)
 
 
+def generate_perf_data(nrows, ncols, pct_null=0.1, repeats=1, dtype="float"):
+    type_ = np.dtype(float)
+
+    datagen_func = DATA_GENERATORS[dtype]
+
+    data = {"c" + str(i): datagen_func(nrows, pct_null, repeats) for i in range(ncols)}
+    return pd.DataFrame(data)
+
+
 def write_to_arctic(df, symbol, version_store):
     start = time.time()
     vit = version_store.write(symbol, df)
