@@ -34,3 +34,4 @@ MAKE_GTEST_FMT(arcticdb::entity::VariantId, "VariantId({})")
 #define SKIP_MAC(REASON) GTEST_SKIP() << "Skipping test on Mac, reason: " << '[' << #REASON << ']'
 #else
 #define SKIP_MAC(REASON) (void)0
+#endif
