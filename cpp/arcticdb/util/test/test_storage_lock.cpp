@@ -185,6 +185,7 @@ struct ForceReleaseLockTask {
 
 TEST(StorageLock, Wait) {
     SKIP_WIN("StorageLock is not supported");
+    SKIP_MAC("StorageLock is not supported");
     using namespace arcticdb;
 
     auto lock_data = std::make_shared<LockData>(4);
@@ -202,6 +203,7 @@ TEST(StorageLock, Wait) {
 
 TEST(StorageLock, Timeouts) {
     SKIP_WIN("StorageLock is not supported");
+    SKIP_MAC("StorageLock is not supported");
     using namespace arcticdb;
     std::unordered_map<std::string, spdlog::level::level_enum> log_levels{ {"lock", spdlog::level::debug}};
 
