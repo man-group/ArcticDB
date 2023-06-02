@@ -299,18 +299,20 @@ def create_test_s3_cfg(
     return cfg
 
 
-def create_test_azure_cfg(lib_name, credential_name, credential_key, container_name, endpoint, is_https, connect_to_azurite):
+def create_test_azure_cfg(
+    lib_name, credential_name, credential_key, container_name, endpoint, is_https, connect_to_azurite
+):
     cfg = EnvironmentConfigsMap()
     add_azure_library_to_env(
         cfg=cfg,
         lib_name=lib_name,
         env_name=Defaults.ENV,
-        credential_name=credential_name, 
+        credential_name=credential_name,
         credential_key=credential_key,
         container_name=container_name,
         endpoint=endpoint,
         is_https=is_https,
-        connect_to_azurite=connect_to_azurite
+        connect_to_azurite=connect_to_azurite,
     )
     return cfg
 
@@ -326,6 +328,7 @@ def create_test_mongo_cfg(lib_name=Defaults.LIB, uri="mongodb://localhost:27017"
     add_mongo_library_to_env(cfg, lib_name=lib_name, env_name=Defaults.ENV, uri=uri, description=description)
     return cfg
 
+
 def get_azure_proto(
     cfg,
     lib_name,
@@ -336,7 +339,7 @@ def get_azure_proto(
     endpoint,
     with_prefix=True,
     is_https=False,
-    connect_to_azurite=False
+    connect_to_azurite=False,
 ):
     env = cfg.env_by_id[env_name]
     azure = AzureConfig()
@@ -354,13 +357,23 @@ def get_azure_proto(
     else:
         azure.prefix = lib_name
 
-
     sid, storage = get_storage_for_lib_name(azure.prefix, env)
     storage.config.Pack(azure, type_url_prefix="cxx.arctic.org")
     return sid, storage
 
+
 def add_azure_library_to_env(
-        cfg, lib_name, env_name, credential_name, credential_key, container_name, endpoint, description=None, with_prefix=True, is_https=True, connect_to_azurite=False
+    cfg,
+    lib_name,
+    env_name,
+    credential_name,
+    credential_key,
+    container_name,
+    endpoint,
+    description=None,
+    with_prefix=True,
+    is_https=True,
+    connect_to_azurite=False,
 ):
     env = cfg.env_by_id[env_name]
     sid, storage = get_azure_proto(
@@ -373,7 +386,7 @@ def add_azure_library_to_env(
         endpoint=endpoint,
         with_prefix=with_prefix,
         is_https=is_https,
-        connect_to_azurite=connect_to_azurite
+        connect_to_azurite=connect_to_azurite,
     )
 
     _add_lib_desc_to_env(env, lib_name, sid, description)

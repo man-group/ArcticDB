@@ -133,18 +133,30 @@ def moto_azure_endpoint_and_credentials(azurite_port, spawn_azurite):
     container = f"testbucket{BUCKET_ID}"
     BUCKET_ID = BUCKET_ID + 1
 
-    credential_name="devstoreaccount1"
-    credential_key="Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw=="
-    endpoint="0.0.0.0:"+str(azurite_port)
-    is_https=False
-    connect_to_azurite=True
+    credential_name = "devstoreaccount1"
+    credential_key = "Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw=="
+    endpoint = "0.0.0.0:" + str(azurite_port)
+    is_https = False
+    connect_to_azurite = True
     yield endpoint, container, credential_name, credential_key, is_https, connect_to_azurite
 
 
 @pytest.fixture
 def moto_azure_uri_incl_bucket(moto_azure_endpoint_and_credentials):
-    endpoint, container, credential_name, credential_key, is_https, connect_to_azurite = moto_azure_endpoint_and_credentials
-    yield "azure://" + endpoint + ":" + container + "?access=" + credential_name + "&secret=" + credential_key + "&https=" + str(is_https) + "&connect_to_azurite=" + str(connect_to_azurite)
+    (
+        endpoint,
+        container,
+        credential_name,
+        credential_key,
+        is_https,
+        connect_to_azurite,
+    ) = moto_azure_endpoint_and_credentials
+    yield "azure://" + endpoint + ":" + container + "?access=" + credential_name + "&secret=" + credential_key + "&https=" + str(
+        is_https
+    ) + "&connect_to_azurite=" + str(
+        connect_to_azurite
+    )
+
 
 @pytest.fixture(scope="function", params=("S3", "LMDB"))
 def arctic_client(request, moto_s3_uri_incl_bucket, tmpdir):
@@ -186,10 +198,27 @@ def arcticdb_test_s3_config(moto_s3_endpoint_and_credentials):
 
 
 @pytest.fixture
-def arcticdb_test_azure_config(moto_azure_endpoint_and_credentials, ):
+def arcticdb_test_azure_config(
+    moto_azure_endpoint_and_credentials,
+):
     def create(lib_name):
-        endpoint, container, credential_name, credential_key, is_https, connect_to_azurite = moto_azure_endpoint_and_credentials
-        return create_test_azure_cfg(lib_name=lib_name, credential_name=credential_name, credential_key=credential_key, container_name=container, endpoint=endpoint, is_https=is_https, connect_to_azurite=connect_to_azurite)
+        (
+            endpoint,
+            container,
+            credential_name,
+            credential_key,
+            is_https,
+            connect_to_azurite,
+        ) = moto_azure_endpoint_and_credentials
+        return create_test_azure_cfg(
+            lib_name=lib_name,
+            credential_name=credential_name,
+            credential_key=credential_key,
+            container_name=container,
+            endpoint=endpoint,
+            is_https=is_https,
+            connect_to_azurite=connect_to_azurite,
+        )
 
     return create
 
@@ -483,16 +512,16 @@ def get_wide_df():
 @pytest.fixture(scope="module")
 def azurite_port():
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    port=10000
-    max_port=65535
+    port = 10000
+    max_port = 65535
     while port <= max_port:
         try:
-            sock.bind(('', port))
+            sock.bind(("", port))
             sock.close()
             return port
         except OSError:
             port += 1
-    raise IOError('no free ports')
+    raise IOError("no free ports")
 
 
 @pytest.fixture(scope="module")
@@ -503,7 +532,21 @@ def spawn_azurite(azurite_port):
         temp_folder = "azurite" + port
         shutil.rmtree(temp_folder, ignore_errors=True)
         os.mkdir(temp_folder)
-        p = subprocess.Popen(["azurite", "--silent", "--blobPort", port, "--blobHost", "0.0.0.0", "--queuePort", "0", "--tablePort", "0"], cwd=temp_folder)
+        p = subprocess.Popen(
+            [
+                "azurite",
+                "--silent",
+                "--blobPort",
+                port,
+                "--blobHost",
+                "0.0.0.0",
+                "--queuePort",
+                "0",
+                "--tablePort",
+                "0",
+            ],
+            cwd=temp_folder,
+        )
 
         time.sleep(2)
         yield
@@ -521,9 +564,10 @@ def spawn_azurite(azurite_port):
 def moto_uri_incl_bucket(request):
     yield request.getfixturevalue(request.param)
 
+
 @pytest.fixture(
     scope="function",
-    params=["s3_version_store", "azure_version_store"] if sys.platform == "linux" else ["s3_version_store"]
+    params=["s3_version_store", "azure_version_store"] if sys.platform == "linux" else ["s3_version_store"],
 )
 def object_version_store(request):
     yield request.getfixturevalue(request.param)
@@ -531,7 +575,11 @@ def object_version_store(request):
 
 @pytest.fixture(
     scope="function",
-    params=["lmdb_version_store", "s3_version_store", "azure_version_store"] if sys.platform == "linux" else ["lmdb_version_store", "s3_version_store"]
+    params=(
+        ["lmdb_version_store", "s3_version_store", "azure_version_store"]
+        if sys.platform == "linux"
+        else ["lmdb_version_store", "s3_version_store"]
+    ),
 )
 def object_and_lmdb_version_store(request):
     yield request.getfixturevalue(request.param)

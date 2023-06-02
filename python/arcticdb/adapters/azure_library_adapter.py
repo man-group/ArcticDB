@@ -71,13 +71,13 @@ class AzureLibraryAdapter(ArcticLibraryAdapter):
             cfg=env_cfg,
             lib_name=self.CONFIG_LIBRARY_NAME,
             env_name=_DEFAULT_ENV,
-            credential_name=_name, 
+            credential_name=_name,
             credential_key=_key,
             container_name=self._bucket,
             endpoint=self._endpoint,
             with_prefix=with_prefix,
             is_https=self._https,
-            connect_to_azurite=self._connect_to_azurite
+            connect_to_azurite=self._connect_to_azurite,
         )
 
         lib = NativeVersionStore.create_store_from_config(env_cfg, _DEFAULT_ENV, self.CONFIG_LIBRARY_NAME)._library
@@ -99,7 +99,7 @@ class AzureLibraryAdapter(ArcticLibraryAdapter):
                 raise ValueError(
                     "Invalid Azure URI. "
                     f"Invalid query parameter '{key}' passed in. "
-                    f"Value query parameters: "
+                    "Value query parameters: "
                     f"{list(field_dict.keys())}"
                 )
 
@@ -128,13 +128,13 @@ class AzureLibraryAdapter(ArcticLibraryAdapter):
             cfg=env_cfg,
             lib_name=name,
             env_name=_DEFAULT_ENV,
-            credential_name=_name, 
+            credential_name=_name,
             credential_key=_key,
             container_name=self._bucket,
             endpoint=self._endpoint,
             with_prefix=with_prefix,
             is_https=self._https,
-            connect_to_azurite=self._connect_to_azurite
+            connect_to_azurite=self._connect_to_azurite,
         )
 
         set_library_options(env_cfg.env_by_id[_DEFAULT_ENV].lib_by_path[name], library_options)

@@ -46,7 +46,15 @@ def test_rt_df_with_humonguous_meta(object_and_lmdb_version_store):
 
 @pytest.mark.parametrize(
     "lib_type",
-    ["s3_version_store", "lmdb_version_store", "s3_version_store", pytest.param("azure_version_store", marks=pytest.mark.skipif(sys.platform != "linux", reason="Pending Azure Storge Windows support"))],
+    [
+        "s3_version_store",
+        "lmdb_version_store",
+        "s3_version_store",
+        pytest.param(
+            "azure_version_store",
+            marks=pytest.mark.skipif(sys.platform != "linux", reason="Pending Azure Storge Windows support"),
+        ),
+    ],
 )
 def test_read_metadata(lib_type, request):
     lib = request.getfixturevalue(lib_type)

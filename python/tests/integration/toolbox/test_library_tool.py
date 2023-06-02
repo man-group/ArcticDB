@@ -81,7 +81,9 @@ def test_count_keys(object_and_lmdb_version_store):
     object_and_lmdb_version_store.write("symbol", df)
     object_and_lmdb_version_store.write("pickled", data={"a": 1}, pickle_on_failure=True)
     object_and_lmdb_version_store.snapshot("mysnap")
-    object_and_lmdb_version_store.write("rec_norm", data={"a": np.arange(5), "b": np.arange(8), "c": None}, recursive_normalizers=True)
+    object_and_lmdb_version_store.write(
+        "rec_norm", data={"a": np.arange(5), "b": np.arange(8), "c": None}, recursive_normalizers=True
+    )
     lib_tool = object_and_lmdb_version_store.library_tool()
     assert object_and_lmdb_version_store.is_symbol_pickled("pickled")
     assert not object_and_lmdb_version_store.is_symbol_pickled("rec_norm")
