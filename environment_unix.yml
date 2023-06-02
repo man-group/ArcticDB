@@ -27,7 +27,7 @@ dependencies:
   - bitmagic
   - spdlog
   - fmt
-  - folly >2023.05.22
+  - folly >=2023.05.22
   # Vendored build dependencies (see `cpp/thirdparty`)
   # Versions must be kept in sync
   - xxhash
