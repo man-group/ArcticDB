@@ -99,6 +99,7 @@ jobs:
   win:
     strategy:
       matrix:
+        include:
          - os: windows-latest
 
       fail-fast: false
