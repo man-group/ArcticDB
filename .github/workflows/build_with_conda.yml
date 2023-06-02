@@ -56,12 +56,11 @@ jobs:
           cd python
           python -m pytest tests
 
-  macos_and_windows:
+  macos:
     strategy:
       matrix:
         include:
           - os: macos-latest
-          - os: windows-latest
 
       fail-fast: false
     runs-on: ${{ matrix.os }}
@@ -94,5 +93,50 @@ jobs:
       - name: Test with pytest
         shell: bash -l {0}
         run: |
+          cd python
+          python -m pytest tests
+
+  win:
+    strategy:
+      matrix:
+         - os: windows-latest
+
+      fail-fast: false
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: recursive
+
+      - name: Install Conda environment from environment_unix.yml
+        uses: mamba-org/provision-with-micromamba@main
+        with:
+          environment-file: environment-dev.yml
+          environment-name: arcticdb
+
+      - name: micromamba shell hook
+        shell: powershell
+        run: |
+          micromamba shell hook -s cmd.exe -p C:\Users\runneradmin\micromamba-root
+
+      - name: Make build directory
+        run: mkdir build
+
+      - name: cmake configure
+        shell: cmd
+        run: |
+          call C:\Users\runneradmin\micromamba-root\condabin\micromamba.bat activate arcticdb
+          # Protocol buffers compilation require not using build isolation.
+          python -m pip install --no-build-isolation --no-deps -v -e .
+        env:
+          ARCTICDB_USING_CONDA: 1
+          # Makes 'cl' usable by Ninja
+          CL: "/MP"
+
+      - name: Test with pytest
+        shell: cmd
+        run: |
+          call C:\Users\runneradmin\micromamba-root\condabin\micromamba.bat activate arcticdb
           cd python
           python -m pytest tests
