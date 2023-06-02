@@ -222,6 +222,7 @@ TEST(StorageLock, Timeouts) {
 }
 
 TEST(StorageLock, ForceReleaseLock) {
+    SKIP_MAC("StorageLock is not supported");
     using namespace arcticdb;
     std::unordered_map<std::string, spdlog::level::level_enum> log_levels{ {"lock", spdlog::level::debug}};
 
