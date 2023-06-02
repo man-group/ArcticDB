@@ -188,7 +188,7 @@ TEST(StorageLock, Wait) {
     using namespace arcticdb;
 
     auto lock_data = std::make_shared<LockData>(4);
-    folly::FutureExecutor<folly::CPUThreadPoolExecutor> exec{4};
+    folly::FutureExecutor<folly::CPUThreadPoolExecutor> exec{2};
 
     std::vector<Future<Unit>> futures;
     for(auto i = size_t{0}; i < 4; ++i) {
@@ -206,7 +206,7 @@ TEST(StorageLock, Timeouts) {
     std::unordered_map<std::string, spdlog::level::level_enum> log_levels{ {"lock", spdlog::level::debug}};
 
     auto lock_data = std::make_shared<LockData>(4);
-    folly::FutureExecutor<folly::CPUThreadPoolExecutor> exec{4};
+    folly::FutureExecutor<folly::CPUThreadPoolExecutor> exec{2};
 
     std::vector<Future<Unit>> futures;
     for(auto i = size_t{0}; i < 4; ++i) {
