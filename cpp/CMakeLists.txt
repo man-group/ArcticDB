@@ -16,7 +16,7 @@ option(
 )
 
 
-set(CMAKE_VERBOSE_MAKEFILE ON)
+set(CMAKE_VERBOSE_MAKEFILE ON CACHE BOOL "ON" FORCE)
 
 if(WIN32)
     add_compile_definitions(NOGDI)
