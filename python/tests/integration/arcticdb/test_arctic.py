@@ -70,8 +70,8 @@ def test_library_creation_deletion(arctic_client):
         _lib = ac["pytest_test_lib"]
 
 
-def test_library_options(moto_s3_uri_incl_bucket):
-    ac = Arctic(moto_s3_uri_incl_bucket)
+def test_library_options(moto_uri_incl_bucket):
+    ac = Arctic(moto_uri_incl_bucket)
     assert ac.list_libraries() == []
     ac.create_library("pytest_default_options")
     lib = ac["pytest_default_options"]
@@ -94,9 +94,9 @@ def test_library_options(moto_s3_uri_incl_bucket):
     assert write_options.dynamic_strings
 
 
-def test_separation_between_libraries(moto_s3_uri_incl_bucket):
+def test_separation_between_libraries(moto_uri_incl_bucket):
     """Validate that symbols in one library are not exposed in another."""
-    ac = Arctic(moto_s3_uri_incl_bucket)
+    ac = Arctic(moto_uri_incl_bucket)
     assert ac.list_libraries() == []
 
     ac.create_library("pytest_test_lib")
@@ -110,18 +110,18 @@ def test_separation_between_libraries(moto_s3_uri_incl_bucket):
     assert ac["pytest_test_lib_2"].list_symbols() == ["test_2"]
 
 
-def test_separation_between_libraries_with_prefixes(moto_s3_uri_incl_bucket):
+def test_separation_between_libraries_with_prefixes(moto_uri_incl_bucket):
     """The motivation for the prefix feature is that separate users want to be able to create libraries
     with the same name in the same bucket without over-writing each other's work. This can be useful when
     creating a new bucket is time-consuming, for example due to organisational issues.
 
     See AN-566.
     """
-    mercury_uri = moto_s3_uri_incl_bucket + "&path_prefix=/planet/mercury"
+    mercury_uri = moto_uri_incl_bucket + "&path_prefix=/planet/mercury"
     ac_mercury = Arctic(mercury_uri)
     assert ac_mercury.list_libraries() == []
 
-    mars_uri = moto_s3_uri_incl_bucket + "&path_prefix=/planet/mars"
+    mars_uri = moto_uri_incl_bucket + "&path_prefix=/planet/mars"
     ac_mars = Arctic(mars_uri)
     assert ac_mars.list_libraries() == []
 
@@ -1253,8 +1253,8 @@ def test_tail(arctic_library):
 
 
 @pytest.mark.parametrize("dedup", [True, False])
-def test_dedup(moto_s3_uri_incl_bucket, dedup):
-    ac = Arctic(moto_s3_uri_incl_bucket)
+def test_dedup(moto_uri_incl_bucket, dedup):
+    ac = Arctic(moto_uri_incl_bucket)
     assert ac.list_libraries() == []
     ac.create_library("pytest_test_library", LibraryOptions(dedup=dedup))
     lib = ac["pytest_test_library"]
@@ -1265,8 +1265,8 @@ def test_dedup(moto_s3_uri_incl_bucket, dedup):
     assert data_key_version == 0 if dedup else 1
 
 
-def test_segment_slicing(moto_s3_uri_incl_bucket):
-    ac = Arctic(moto_s3_uri_incl_bucket)
+def test_segment_slicing(moto_uri_incl_bucket):
+    ac = Arctic(moto_uri_incl_bucket)
     assert ac.list_libraries() == []
     rows_per_segment = 5
     columns_per_segment = 2

@@ -46,12 +46,12 @@ class AzureLibraryAdapter(ArcticLibraryAdapter):
         match_groups = match.groupdict()
 
         self._endpoint = match_groups["endpoint"]
-        self._bucket = match_groups["bucket"]
+        self._bucket = match_groups["container"]
 
         self._query_params: ParsedQuery = self._parse_query(match["query"])
 
         self._https = self._query_params.https
-        self._connect_to_azurite = self._query_params._connect_to_azurite
+        self._connect_to_azurite = self._query_params.connect_to_azurite
 
         super().__init__(uri)
 

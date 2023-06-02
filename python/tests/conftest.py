@@ -126,6 +126,26 @@ def moto_s3_uri_incl_bucket(moto_s3_endpoint_and_credentials):
     ] + ":" + bucket + "?access=" + aws_access_key + "&secret=" + aws_secret_key + "&port=" + port
 
 
+@pytest.fixture
+def moto_azure_endpoint_and_credentials(azurite_port, spawn_azurite):
+    global BUCKET_ID
+
+    container = f"testbucket{BUCKET_ID}"
+    BUCKET_ID = BUCKET_ID + 1
+
+    credential_name="devstoreaccount1"
+    credential_key="Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw=="
+    endpoint="0.0.0.0:"+str(azurite_port)
+    is_https=False
+    connect_to_azurite=True
+    yield endpoint, container, credential_name, credential_key, is_https, connect_to_azurite
+
+
+@pytest.fixture
+def moto_azure_uri_incl_bucket(moto_azure_endpoint_and_credentials):
+    endpoint, container, credential_name, credential_key, is_https, connect_to_azurite = moto_azure_endpoint_and_credentials
+    yield "azure://" + endpoint + ":" + container + "?access=" + credential_name + "&secret=" + credential_key + "&https=" + str(is_https) + "&connect_to_azurite=" + str(connect_to_azurite)
+
 @pytest.fixture(scope="function", params=("S3", "LMDB"))
 def arctic_client(request, moto_s3_uri_incl_bucket, tmpdir):
     if request.param == "S3":
@@ -166,13 +186,10 @@ def arcticdb_test_s3_config(moto_s3_endpoint_and_credentials):
 
 
 @pytest.fixture
-def arcticdb_test_azure_config(azurite_port):
+def arcticdb_test_azure_config(moto_azure_endpoint_and_credentials, ):
     def create(lib_name):
-        global BUCKET_ID
-        bucket = f"testbucket{BUCKET_ID}"
-        BUCKET_ID = BUCKET_ID + 1
-        print(bucket)
-        return create_test_azure_cfg(lib_name=lib_name, credential_name="devstoreaccount1", credential_key="Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==", container_name=bucket, endpoint="0.0.0.0:"+str(azurite_port), is_https=False, connect_to_azurite=True)
+        endpoint, container, credential_name, credential_key, is_https, connect_to_azurite = moto_azure_endpoint_and_credentials
+        return create_test_azure_cfg(lib_name=lib_name, credential_name=credential_name, credential_key=credential_key, container_name=container, endpoint=endpoint, is_https=is_https, connect_to_azurite=connect_to_azurite)
 
     return create
 
@@ -322,7 +339,7 @@ def s3_version_store_prune_previous(s3_store_factory):
 
 
 @pytest.fixture(scope="function")
-def azure_version_store(spawn_azurite, azure_store_factory):
+def azure_version_store(azure_store_factory):
     return azure_store_factory()
 
 
@@ -496,6 +513,13 @@ def spawn_azurite(azurite_port):
     else:
         yield
 
+
+@pytest.fixture(
+    scope="function",
+    params=["moto_s3_uri_incl_bucket", "moto_azure_uri_incl_bucket"],
+)
+def moto_uri_incl_bucket(request):
+    yield request.getfixturevalue(request.param)
 
 @pytest.fixture(
     scope="function",
