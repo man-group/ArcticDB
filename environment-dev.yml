@@ -2,16 +2,19 @@ name: arcticdb
 channels:
   - conda-forge
 dependencies:
-  # Build tools
+  # Build dependencies
   - cmake
+  - cxx-compiler
+  - ninja
+  - pkg-config
   - gtest
   - gflags
   - doxygen
-  - boost-cpp
   - grpcio
   - grpcio-tools
   - protobuf
-  # Build dependencies
+  # Host dependencies
+  - boost-cpp
   - krb5
   - lz4-c
   - double-conversion
