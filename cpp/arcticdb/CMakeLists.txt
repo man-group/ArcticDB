@@ -86,7 +86,10 @@ endif()
 
 # Libraries baked into the internal and external Linux images are found by searching various paths
 # On Windows, vcpkg will provide a "Config" which takes precedence
-find_library(Pcre_LIBRARY NAMES pcre PATHS /usr/local/lib/libpcre.a REQUIRED)
+if(NOT ${ARCTICDB_USING_CONDA} OR NOT WIN32)
+    find_library(Pcre_LIBRARY NAMES pcre PATHS /usr/local/lib/libpcre.a REQUIRED)
+endif()
+
 if (WIN32)
     find_package(Iconv)
 else ()
