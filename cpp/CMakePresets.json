@@ -74,10 +74,6 @@
         "value": "x64",
         "strategy": "external"
       },
-      "toolset": {
-        "value": "host=x64",
-        "strategy": "external"
-      },
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release"
       },
