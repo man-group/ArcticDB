@@ -150,25 +150,23 @@ namespace arcticdb {
 
         std::vector<std::optional<size_t>> output;
         output.reserve(col.column_->row_count());
-        col.column_->type().visit_tag([&input_data, &grouper, &bucketizer, &col, &output] (auto type_desc_tag) {
-            using TypeDescriptorTag =  decltype(type_desc_tag);
-            using RawType = typename TypeDescriptorTag::DataTypeTag::raw_type;
+        using TypeDescriptorTag = typename Grouper::GrouperDescriptor;
+        using RawType = typename TypeDescriptorTag::DataTypeTag::raw_type;
 
-            while (auto block = input_data.next<TypeDescriptorTag>()) {
-                const auto row_count = block->row_count();
-                auto ptr = reinterpret_cast<const RawType*>(block->data());
-                for(auto i = 0u; i < row_count; ++i, ++ptr){
-                    if constexpr(std::is_same_v<typename Grouper::GrouperDescriptor, TypeDescriptorTag>) {
-                        auto opt_group = grouper->group(*ptr, col.string_pool_);
-                        if (opt_group.has_value()) {
-                            output.emplace_back(bucketizer->bucket(*opt_group));
-                        } else {
-                            output.emplace_back(std::nullopt);
-                        }
+        while (auto block = input_data.next<TypeDescriptorTag>()) {
+            const auto row_count = block->row_count();
+            auto ptr = reinterpret_cast<const RawType*>(block->data());
+            for(auto i = 0u; i < row_count; ++i, ++ptr){
+                if constexpr(std::is_same_v<typename Grouper::GrouperDescriptor, TypeDescriptorTag>) {
+                    auto opt_group = grouper->group(*ptr, col.string_pool_);
+                    if (opt_group.has_value()) {
+                        output.emplace_back(bucketizer->bucket(*opt_group));
+                    } else {
+                        output.emplace_back(std::nullopt);
                     }
                 }
             }
-        });
+        }
         return output;
     }
 
