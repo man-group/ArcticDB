@@ -72,7 +72,7 @@ class Storages {
             auto visitor = std::forward<Visitor>(v);
             try {
                 return storage->read(std::move(ks), Visitor{visitor}, opts);
-            } catch (storage::KeyNotFoundException& ex) {
+            } catch (typename storage::KeyNotFoundException& ex) {
                 ARCTICDB_DEBUG(log::version(), "Keys not found in storage, continuing to next storage");
                 ks = std::move(ex.keys());
             }
