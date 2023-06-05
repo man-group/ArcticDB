@@ -145,10 +145,10 @@ namespace arcticdb {
     }
 
     template<typename Grouper, typename Bucketizer>
-    std::vector<size_t> get_buckets(const ColumnWithStrings& col, std::shared_ptr<Grouper> grouper, std::shared_ptr<Bucketizer> bucketizer) {
+    std::vector<std::optional<size_t>> get_buckets(const ColumnWithStrings& col, std::shared_ptr<Grouper> grouper, std::shared_ptr<Bucketizer> bucketizer) {
         auto input_data = col.column_->data();
 
-        std::vector<size_t> output;
+        std::vector<std::optional<size_t>> output;
         output.reserve(col.column_->row_count());
         col.column_->type().visit_tag([&input_data, &grouper, &bucketizer, &col, &output] (auto type_desc_tag) {
             using TypeDescriptorTag =  decltype(type_desc_tag);
@@ -162,6 +162,8 @@ namespace arcticdb {
                         auto opt_group = grouper->group(*ptr, col.string_pool_);
                         if (opt_group.has_value()) {
                             output.emplace_back(bucketizer->bucket(*opt_group));
+                        } else {
+                            output.emplace_back(std::nullopt);
                         }
                     }
                 }
@@ -197,7 +199,8 @@ namespace arcticdb {
                     iterators.emplace_back(util::BitSet::bulk_insert_iterator(bitset));
 
                 for(auto val : folly::enumerate(bucket_vec))
-                    iterators[*val] = val.index;
+                    if (val->has_value())
+                        iterators[val->value()] = val.index;
 
                 for(auto& iterator : iterators)
                     iterator.flush();
