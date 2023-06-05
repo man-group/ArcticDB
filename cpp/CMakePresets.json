@@ -70,10 +70,6 @@
       "description": "Target Windows with the Visual Studio development environment.",
       "inherits": "common_conda",
       "generator": "Ninja",
-      "architecture": {
-        "value": "x64",
-        "strategy": "external"
-      },
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release"
       },
