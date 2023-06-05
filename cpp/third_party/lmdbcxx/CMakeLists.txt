@@ -14,4 +14,3 @@ endif ()
 add_library(lmdb STATIC mdb.c midl.c)
 
 target_include_directories(lmdb PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>)
-

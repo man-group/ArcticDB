@@ -54,6 +54,7 @@ except ImportError:
     def check_is_utc_if_newer_pandas(*args, **kwargs):
         return False  # the UTC specific issue is not present in old Pandas so no need to go down special case
 
+
 log = version
 
 from msgpack import packb, unpackb, pack, ExtType
@@ -178,9 +179,8 @@ def _to_primitive(arr, arr_name, dynamic_strings, string_max_len=None, coerce_co
     if len(arr) == 0:
         if coerce_column_type is None:
             raise ArcticNativeNotYetImplemented(
-                "coercing column type is required when empty column of object type, Column type={} for column={}".format(
-                    arr.dtype, arr_name
-                )
+                "coercing column type is required when empty column of object type, Column type={} for column={}"
+                .format(arr.dtype, arr_name)
             )
         else:
             return arr.astype(coerce_column_type)
@@ -840,7 +840,9 @@ class MsgPackNormalizer(Normalizer):
     """
 
     MSG_PACK_MAX_SIZE = (1 << 32) + 1024
-    MMAP_DEFAULT_SIZE = MSG_PACK_MAX_SIZE  # Allow up to 4 gib pickles in msgpack by default, most of these compress fairly well.
+    MMAP_DEFAULT_SIZE = (
+        MSG_PACK_MAX_SIZE  # Allow up to 4 gib pickles in msgpack by default, most of these compress fairly well.
+    )
     # msgpack checks whether the size of pickled data within 1 << 32 - 1 byte only
     # Extra memory is needed in mmap for msgpack's overhead
 
@@ -1151,10 +1153,13 @@ class CompositeNormalizer(Normalizer):
                 log.debug("pickle_on_failure flag set, normalizing the item with MsgPackNormalizer", type(item), ex)
                 return self.fallback_normalizer.normalize(item)
             # Could not normalize with the default handler, pickle_on_failure
-            log.error(
+            error_message = (
                 "Could not normalize item of type: {} with any normalizer."
                 "You can set pickle_on_failure param to force pickling of this object instead."
-                "(Note: Pickling has worse performance and stricter memory limitations)",
+                "(Note: Pickling has worse performance and stricter memory limitations)"
+            )
+            log.error(
+                error_message,
                 type(item),
                 ex,
             )
@@ -1276,8 +1281,7 @@ def normalize_dt_range_to_ts(dtr: "DateRangeInput") -> Tuple[Timestamp, Timestam
 
         if v.tzinfo is None:
             log.debug(
-                "DateRange bounds do not have timestamps, will default to UTC for the query,"
-                f"DateRange.{bound_name}={v}"
+                f"DateRange bounds do not have timestamps, will default to UTC for the query,DateRange.{bound_name}={v}"
             )
             v = v.tz_localize("UTC")
 

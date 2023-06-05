@@ -70,7 +70,8 @@ inline std::unordered_map<ErrorCategory, const char*> get_error_category_names()
     ERROR_CODE(5000, E_KEY_NOT_FOUND) \
     ERROR_CODE(5001, E_DUPLICATE_KEY) \
     ERROR_CODE(6000, E_UNSORTED_DATA) \
-    ERROR_CODE(7000, E_INVALID_USER_ARGUMENT)\
+    ERROR_CODE(7000, E_INVALID_USER_ARGUMENT) \
+    ERROR_CODE(7001, E_INVALID_DECIMAL_STRING) \
     ERROR_CODE(8000, E_UNRECOGNISED_COLUMN_STATS_VERSION) \
 
 enum class ErrorCode : BaseType {

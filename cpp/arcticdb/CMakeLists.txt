@@ -648,6 +648,7 @@ endif()
 if(${TEST})
     unset(Python_USE_STATIC_LIBS)
     find_package(Python 3 COMPONENTS Interpreter Development REQUIRED)
+    find_package(Arrow REQUIRED)
     python_utils_dump_vars_if_enabled("Python for test compilation")
 
     set(unit_test_srcs
@@ -773,6 +774,8 @@ if(${TEST})
             column_store/test/rapidcheck_column_map.cpp
             column_store/test/test_chunked_buffer.cpp
             stream/test/stream_test_common.cpp
+            util/test/rapidcheck_decimal.cpp
+            util/test/rapidcheck_generators.cpp
             util/test/rapidcheck_string_pool.cpp
             util/test/rapidcheck_main.cpp
             version/test/rapidcheck_version_map.cpp)
@@ -783,6 +786,7 @@ if(${TEST})
                 PERMISSIONS ${EXECUTABLE_PERMS}
                 COMPONENT Tests)
 
+    set(RAPIDCHECK_PRIVATE_LIBRARIES ${AWSSDK_LINK_LIBRARIES} arrow_static)
     if(WIN32)
         target_link_libraries(arcticdb_rapidcheck_tests PUBLIC
                 arcticdb_core_static
@@ -791,7 +795,7 @@ if(${TEST})
                 rapidcheck
                 rapidcheck_gtest
                 PRIVATE
-                ${AWSSDK_LINK_LIBRARIES}
+                ${RAPIDCHECK_PRIVATE_LIBRARIES}
                 )
 
         target_compile_options(arcticdb_rapidcheck_tests PRIVATE /FI "util/test/gtest.hpp")
@@ -802,7 +806,7 @@ if(${TEST})
             rapidcheck
             rapidcheck_gtest
             PRIVATE
-            ${AWSSDK_LINK_LIBRARIES}
+            ${RAPIDCHECK_PRIVATE_LIBRARIES}
             )
     endif()
 

@@ -7,8 +7,12 @@ from arcticdb_ext.storage import KeyType, NoDataFoundException
 from arcticdb_ext.version_store import NoSuchVersionException
 
 
-df0 = pd.DataFrame({"col_0": ["a", "b"], "col_1": [1, 2], "col_2": [6, 5]}, index=pd.date_range("2000-01-01", periods=2))
-df1 = pd.DataFrame({"col_0": ["c", "d"], "col_1": [3, 4], "col_2": [8, 7]}, index=pd.date_range("2000-01-03", periods=2))
+df0 = pd.DataFrame(
+    {"col_0": ["a", "b"], "col_1": [1, 2], "col_2": [6, 5]}, index=pd.date_range("2000-01-01", periods=2)
+)
+df1 = pd.DataFrame(
+    {"col_0": ["c", "d"], "col_1": [3, 4], "col_2": [8, 7]}, index=pd.date_range("2000-01-03", periods=2)
+)
 
 
 def generate_symbol(lib, sym):
@@ -35,7 +39,11 @@ def test_column_stats_basic_flow(lmdb_version_store_tiny_segment):
     lib = lmdb_version_store_tiny_segment
     sym = "test_column_stats_basic_flow"
     expected_column_stats = generate_symbol(lib, sym)
-    expected_column_stats.drop(expected_column_stats.columns.difference(["start_index", "end_index", "v1.0_MIN(col_1)", "v1.0_MAX(col_1)"]), 1, inplace=True)
+    expected_column_stats.drop(
+        expected_column_stats.columns.difference(["start_index", "end_index", "v1.0_MIN(col_1)", "v1.0_MAX(col_1)"]),
+        1,
+        inplace=True,
+    )
 
     column_stats_dict = {"col_1": {"MINMAX"}}
 
@@ -84,7 +92,11 @@ def test_column_stats_as_of(lmdb_version_store_tiny_segment):
     sym = "test_column_stats_as_of"
     expected_column_stats = generate_symbol(lib, sym)
     expected_column_stats = expected_column_stats.iloc[[0]]
-    expected_column_stats.drop(expected_column_stats.columns.difference(["start_index", "end_index", "v1.0_MIN(col_1)", "v1.0_MAX(col_1)"]), 1, inplace=True)
+    expected_column_stats.drop(
+        expected_column_stats.columns.difference(["start_index", "end_index", "v1.0_MIN(col_1)", "v1.0_MAX(col_1)"]),
+        1,
+        inplace=True,
+    )
 
     column_stats_dict = {"col_1": {"MINMAX"}}
     lib.create_column_stats(sym, column_stats_dict, as_of=0)
@@ -136,7 +148,11 @@ def test_column_stats_multiple_indexes_different_columns(lmdb_version_store_tiny
     lib.drop_column_stats(sym, {"col_2": {"MINMAX"}})
     assert lib.get_column_stats_info(sym) == {"col_1": {"MINMAX"}}
 
-    expected_column_stats.drop(expected_column_stats.columns.difference(["start_index", "end_index", "v1.0_MIN(col_1)", "v1.0_MAX(col_1)"]), 1, inplace=True)
+    expected_column_stats.drop(
+        expected_column_stats.columns.difference(["start_index", "end_index", "v1.0_MIN(col_1)", "v1.0_MAX(col_1)"]),
+        1,
+        inplace=True,
+    )
     column_stats = lib.read_column_stats(sym)
     assert_stats_equal(column_stats, expected_column_stats)
 
@@ -233,7 +249,11 @@ def test_column_stats_multiple_creates(lmdb_version_store_tiny_segment):
     assert lib.get_column_stats_info(sym) == column_stats_dict_1
 
     expected_column_stats = base_expected_column_stats.copy()
-    expected_column_stats.drop(expected_column_stats.columns.difference(["start_index", "end_index", "v1.0_MIN(col_1)", "v1.0_MAX(col_1)"]), 1, inplace=True)
+    expected_column_stats.drop(
+        expected_column_stats.columns.difference(["start_index", "end_index", "v1.0_MIN(col_1)", "v1.0_MAX(col_1)"]),
+        1,
+        inplace=True,
+    )
     column_stats = lib.read_column_stats(sym)
     assert_stats_equal(column_stats, expected_column_stats)
 
@@ -291,7 +311,9 @@ def test_column_stats_dynamic_schema_missing_data(lmdb_version_store_tiny_segmen
     df1 = pd.DataFrame({"col_2": [0.5, 0.6]}, index=pd.date_range("2000-01-03", periods=2))
     df2 = pd.DataFrame({"col_1": [0.7, 0.8]}, index=pd.date_range("2000-01-05", periods=2))
     df3 = pd.DataFrame({"col_0": ["a", "b"]}, index=pd.date_range("2000-01-07", periods=2))
-    df4 = pd.DataFrame({"col_1": [0.9, np.nan], "col_2": [np.nan, np.nan]}, index=pd.date_range("2000-01-09", periods=2))
+    df4 = pd.DataFrame(
+        {"col_1": [0.9, np.nan], "col_2": [np.nan, np.nan]}, index=pd.date_range("2000-01-09", periods=2)
+    )
 
     lib.write(sym, df0)
     lib.append(sym, df1)
@@ -304,10 +326,34 @@ def test_column_stats_dynamic_schema_missing_data(lmdb_version_store_tiny_segmen
     expected_column_stats = lib.read_index(sym)
     expected_column_stats.drop(expected_column_stats.columns.difference(["start_index", "end_index"]), 1, inplace=True)
     expected_column_stats = expected_column_stats.iloc[[0, 1, 2, 3, 4]]
-    expected_column_stats["v1.0_MIN(col_1)"] = [df0["col_1"].min(), np.nan, df2["col_1"].min(), np.nan, df4["col_1"].min()]
-    expected_column_stats["v1.0_MAX(col_1)"] = [df0["col_1"].max(), np.nan, df2["col_1"].max(), np.nan, df4["col_1"].max()]
-    expected_column_stats["v1.0_MIN(col_2)"] = [df0["col_2"].min(), df1["col_2"].min(), np.nan, np.nan, df4["col_2"].min()]
-    expected_column_stats["v1.0_MAX(col_2)"] = [df0["col_2"].max(), df1["col_2"].max(), np.nan, np.nan, df4["col_2"].max()]
+    expected_column_stats["v1.0_MIN(col_1)"] = [
+        df0["col_1"].min(),
+        np.nan,
+        df2["col_1"].min(),
+        np.nan,
+        df4["col_1"].min(),
+    ]
+    expected_column_stats["v1.0_MAX(col_1)"] = [
+        df0["col_1"].max(),
+        np.nan,
+        df2["col_1"].max(),
+        np.nan,
+        df4["col_1"].max(),
+    ]
+    expected_column_stats["v1.0_MIN(col_2)"] = [
+        df0["col_2"].min(),
+        df1["col_2"].min(),
+        np.nan,
+        np.nan,
+        df4["col_2"].min(),
+    ]
+    expected_column_stats["v1.0_MAX(col_2)"] = [
+        df0["col_2"].max(),
+        df1["col_2"].max(),
+        np.nan,
+        np.nan,
+        df4["col_2"].max(),
+    ]
 
     column_stats_dict = {"col_1": {"MINMAX"}, "col_2": {"MINMAX"}}
     lib.create_column_stats(sym, column_stats_dict)
@@ -330,7 +376,8 @@ def test_column_stats_dynamic_schema_types_changing(lmdb_version_store_tiny_segm
             "int_to_float": np.arange(1000, 1002, dtype=np.uint16),
             "float_to_int": [1.5, 2.5],
         },
-        index=pd.date_range("2000-01-01", periods=2))
+        index=pd.date_range("2000-01-01", periods=2),
+    )
 
     df1 = pd.DataFrame(
         {
@@ -341,7 +388,8 @@ def test_column_stats_dynamic_schema_types_changing(lmdb_version_store_tiny_segm
             "int_to_float": [1.5, 2.5],
             "float_to_int": np.arange(1000, 1002, dtype=np.uint16),
         },
-        index=pd.date_range("2000-01-03", periods=2))
+        index=pd.date_range("2000-01-03", periods=2),
+    )
 
     lib.write(sym, df0)
     lib.append(sym, df1)
@@ -355,11 +403,23 @@ def test_column_stats_dynamic_schema_types_changing(lmdb_version_store_tiny_segm
     expected_column_stats["v1.0_MIN(int_narrowing)"] = [df0["int_narrowing"].min(), df1["int_narrowing"].min()]
     expected_column_stats["v1.0_MAX(int_narrowing)"] = [df0["int_narrowing"].max(), df1["int_narrowing"].max()]
 
-    expected_column_stats["v1.0_MIN(unsigned_to_signed_int)"] = [df0["unsigned_to_signed_int"].min(), df1["unsigned_to_signed_int"].min()]
-    expected_column_stats["v1.0_MAX(unsigned_to_signed_int)"] = [df0["unsigned_to_signed_int"].max(), df1["unsigned_to_signed_int"].max()]
+    expected_column_stats["v1.0_MIN(unsigned_to_signed_int)"] = [
+        df0["unsigned_to_signed_int"].min(),
+        df1["unsigned_to_signed_int"].min(),
+    ]
+    expected_column_stats["v1.0_MAX(unsigned_to_signed_int)"] = [
+        df0["unsigned_to_signed_int"].max(),
+        df1["unsigned_to_signed_int"].max(),
+    ]
 
-    expected_column_stats["v1.0_MIN(signed_to_unsigned_int)"] = [df0["signed_to_unsigned_int"].min(), df1["signed_to_unsigned_int"].min()]
-    expected_column_stats["v1.0_MAX(signed_to_unsigned_int)"] = [df0["signed_to_unsigned_int"].max(), df1["signed_to_unsigned_int"].max()]
+    expected_column_stats["v1.0_MIN(signed_to_unsigned_int)"] = [
+        df0["signed_to_unsigned_int"].min(),
+        df1["signed_to_unsigned_int"].min(),
+    ]
+    expected_column_stats["v1.0_MAX(signed_to_unsigned_int)"] = [
+        df0["signed_to_unsigned_int"].max(),
+        df1["signed_to_unsigned_int"].max(),
+    ]
 
     expected_column_stats["v1.0_MIN(int_to_float)"] = [df0["int_to_float"].min(), df1["int_to_float"].min()]
     expected_column_stats["v1.0_MAX(int_to_float)"] = [df0["int_to_float"].max(), df1["int_to_float"].max()]
@@ -519,13 +579,18 @@ def test_column_stats_object_deleted_with_index_key(lmdb_version_store):
         test_add_to_snapshot,
         test_remove_from_snapshot,
         test_prune_previous_kwarg,
-        test_prune_previous_api
+        test_prune_previous_api,
     ]:
         test()
         clear()
 
 
-@pytest.mark.xfail(reason="ArcticDB/issues/230 This test can be folded in with test_column_stats_object_deleted_with_index_key once the issue is resolved")
+@pytest.mark.xfail(
+    reason=(
+        "ArcticDB/issues/230 This test can be folded in with test_column_stats_object_deleted_with_index_key once the"
+        " issue is resolved"
+    )
+)
 def test_column_stats_object_deleted_with_index_key_batch_methods(lmdb_version_store):
     def clear():
         nonlocal expected_count
@@ -557,8 +622,6 @@ def test_column_stats_object_deleted_with_index_key_batch_methods(lmdb_version_s
     column_stats_dict = {"col_1": {"MINMAX"}}
     expected_count = 0
 
-    for test in [
-        test_prune_previous_kwarg_batch_methods,
-    ]:
+    for test in [test_prune_previous_kwarg_batch_methods]:
         test()
         clear()

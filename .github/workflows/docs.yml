@@ -8,7 +8,7 @@ on:
       environment: { type: environment, required: false }
       api_wheel: { type: string, description: Override the wheel to generate API docs from }
 jobs:
-  docs:
+  can_merge:
     runs-on: ubuntu-latest
     environment: ${{inputs.environment}}
     steps:

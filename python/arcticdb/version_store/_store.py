@@ -80,7 +80,7 @@ if TYPE_CHECKING:
 
 # These chars are encoded by S3 and on doing a list_symbols they will show up as the encoded form eg. &amp
 UNSUPPORTED_S3_CHARS = {"*", "&", "<", ">"}
-MAX_SYMBOL_SIZE = (2 ** 8) - 1
+MAX_SYMBOL_SIZE = (2**8) - 1
 
 
 TimeSeriesType = Union[pd.DataFrame, pd.Series]
@@ -157,8 +157,9 @@ def _handle_categorical_columns(symbol, data, throw=True):
             if data.dtype.name == "category":
                 categorical_columns.append(data.name)
         if len(categorical_columns) > 0:
-            message = "Symbol: {}\nDataFrame/Series contains categorical data, cannot append or update\nCategorical columns: {}".format(
-                symbol, categorical_columns
+            message = (
+                "Symbol: {}\nDataFrame/Series contains categorical data, cannot append or update\nCategorical"
+                " columns: {}".format(symbol, categorical_columns)
             )
             if throw:
                 raise ArcticNativeNotYetImplemented(message)
@@ -486,8 +487,8 @@ class NativeVersionStore:
         pickle_on_failure: `bool`, default=False
             Pickle `data` if it can't be normalized.
         validate_index: bool, default=False
-            If True, will verify that the index of `data` supports date range searches and update operations. This in effect tests that the data is sorted in ascending order. 
-            ArcticDB relies on Pandas to detect if data is sorted - you can call DataFrame.index.is_monotonic_increasing on your input DataFrame to see if Pandas believes the 
+            If True, will verify that the index of `data` supports date range searches and update operations. This in effect tests that the data is sorted in ascending order.
+            ArcticDB relies on Pandas to detect if data is sorted - you can call DataFrame.index.is_monotonic_increasing on your input DataFrame to see if Pandas believes the
             data to be sorted
         kwargs :
             passed through to the write handler
@@ -627,8 +628,8 @@ class NativeVersionStore:
         prune_previous_version
             Removes previous (non-snapshotted) versions from the database.
         validate_index: bool, default=False
-            If True, will verify that resulting symbol will support date range searches and update operations. This in effect tests that the previous version of the 
-            data and `data` are both sorted in ascending order. ArcticDB relies on Pandas to detect if data is sorted - you can call DataFrame.index.is_monotonic_increasing 
+            If True, will verify that resulting symbol will support date range searches and update operations. This in effect tests that the previous version of the
+            data and `data` are both sorted in ascending order. ArcticDB relies on Pandas to detect if data is sorted - you can call DataFrame.index.is_monotonic_increasing
             on your input DataFrame to see if Pandas believes the data to be sorted
         kwargs :
             passed through to the write handler
@@ -800,10 +801,7 @@ class NativeVersionStore:
             )
 
     def create_column_stats(
-            self,
-            symbol: str,
-            column_stats: Dict[str, Set[str]],
-            as_of: VersionQueryInput = None,
+        self, symbol: str, column_stats: Dict[str, Set[str]], as_of: VersionQueryInput = None
     ) -> None:
         """
         Calculates the specified column statistics for each row-slice for the given symbol. In the future, these
@@ -834,10 +832,7 @@ class NativeVersionStore:
         self.version_store.create_column_stats_version(symbol, column_stats, version_query)
 
     def drop_column_stats(
-            self,
-            symbol: str,
-            column_stats: Optional[Dict[str, Set[str]]] = None,
-            as_of: VersionQueryInput = None,
+        self, symbol: str, column_stats: Optional[Dict[str, Set[str]]] = None, as_of: VersionQueryInput = None
     ) -> None:
         """
         Deletes the specified column statistics for the given symbol.
@@ -1138,8 +1133,8 @@ class NativeVersionStore:
         pickle_on_failure : `Optional[bool]`, default=None
             Pickle results if normalization fails. Uses library default if left as None.
         validate_index: bool, default=False
-            If True, will verify for each entry in the batch hat the index of `data` supports date range searches and update operations. 
-            This in effect tests that the data is sorted in ascending order. ArcticDB relies on Pandas to detect if data is sorted - 
+            If True, will verify for each entry in the batch hat the index of `data` supports date range searches and update operations.
+            This in effect tests that the data is sorted in ascending order. ArcticDB relies on Pandas to detect if data is sorted -
             you can call DataFrame.index.is_monotonic_increasing on your input DataFrame to see if Pandas believes the data to be sorted
         kwargs :
             passed through to the write handler
@@ -1157,7 +1152,7 @@ class NativeVersionStore:
         List
             List of versioned items. The data attribute will be None for each versioned item.
             i-th entry corresponds to i-th element of `symbols`.
-            
+
         Raises
         ------
         UnsortedDataException
@@ -1270,8 +1265,8 @@ class NativeVersionStore:
         prune_previous_version : `Optional[bool]`, default=None
             Remove previous versions from version list. Uses library default if left as None.
         validate_index: bool, default=False
-            If True, will verify for each entry in the batch hat the index of `data` supports date range searches and update operations. 
-            This in effect tests that the data is sorted in ascending order. ArcticDB relies on Pandas to detect if data is sorted - 
+            If True, will verify for each entry in the batch hat the index of `data` supports date range searches and update operations.
+            This in effect tests that the data is sorted in ascending order. ArcticDB relies on Pandas to detect if data is sorted -
             you can call DataFrame.index.is_monotonic_increasing on your input DataFrame to see if Pandas believes the data to be sorted
         kwargs :
             passed through to the write handler
@@ -1748,7 +1743,6 @@ class NativeVersionStore:
         return index_columns
 
     def _adapt_read_res(self, read_result: ReadResult) -> VersionedItem:
-
         frame_data = FrameData.from_cpp(read_result.frame_data)
 
         meta = denormalize_user_metadata(read_result.udm, self._normalizer)
@@ -2525,7 +2519,7 @@ class NativeVersionStore:
         ----------
         Config map setting - SymbolDataCompact.SegmentCount will be replaced by a library setting
         in the future. This API will allow overriding the setting as well.
-        
+
         Returns
         -------
         bool
@@ -2535,13 +2529,13 @@ class NativeVersionStore:
     def defragment_symbol_data(self, symbol: str, segment_size: Optional[int] = None) -> VersionedItem:
         """
         Compacts fragmented segments by merging row-sliced segments (https://docs.arcticdb.io/technical/on_disk_storage/#data-layer).
-        This method calls `is_symbol_fragmented` to determine whether to proceed with the defragmentation operation. 
+        This method calls `is_symbol_fragmented` to determine whether to proceed with the defragmentation operation.
 
         CAUTION - Please note that a major restriction of this method at present is that any column slicing present on the data will be
-        removed in the new version created as a result of this method. 
-        As a result, if the impacted symbol has more than 127 columns (default value), the performance of selecting individual columns of 
-        the symbol (by using the `columns` parameter) may be negatively impacted in the defragmented version. 
-        If your symbol has less than 127 columns this caveat does not apply. 
+        removed in the new version created as a result of this method.
+        As a result, if the impacted symbol has more than 127 columns (default value), the performance of selecting individual columns of
+        the symbol (by using the `columns` parameter) may be negatively impacted in the defragmented version.
+        If your symbol has less than 127 columns this caveat does not apply.
         For more information, please see `columns_per_segment` here:
 
         https://docs.arcticdb.io/api/arcticdb/arcticdb.LibraryOptions

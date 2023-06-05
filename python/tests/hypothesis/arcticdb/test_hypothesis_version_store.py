@@ -54,8 +54,7 @@ class Version:
 
     def __str__(self):
         return (
-            f"{self.data and self.data.iloc[0, 0]}[{'M' if self.metadata else ''}{self.state.value}]"
-            f"{self.snaps or ''}"
+            f"{self.data and self.data.iloc[0, 0]}[{'M' if self.metadata else ''}{self.state.value}]{self.snaps or ''}"
         )
 
     def can_delete(self):
@@ -77,7 +76,6 @@ class WriteMode(IntFlag):
 
 
 class VersionStoreComparison(RuleBasedStateMachine):
-
     _lib: NativeVersionStore
     _visible_symbols: Set[str]
     _versions: Dict[str, List[Version]]  # Symbol -> List of Versions
