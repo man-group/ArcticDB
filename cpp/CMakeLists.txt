@@ -28,6 +28,11 @@ if(WIN32)
     # sccache needs the /Z7 format, but the linker will still produce .pdb files.
     # Guide to MSVC compilation warnings https://learn.microsoft.com/en-us/cpp/error-messages/compiler-warnings/compiler-warnings-c4000-through-c4199?view=msvc-170
     set(CMAKE_CXX_FLAGS "/DWIN32 /D_WINDOWS /GR /EHsc /bigobj /Z7 /w /wd4244 /wd4267")
+
+    # C++17 supprot for MSVC
+    # /Zc:__cplusplus is needed to get the correct __cplusplus macro value
+    # See: https://developercommunity.visualstudio.com/t/msvc-incorrectly-defines-cplusplus/139261#T-N223868
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /std:c++17 /Zc:__cplusplus")
     set(CMAKE_CXX_FLAGS_RELEASE "/MT /DNDEBUG")
     set(CMAKE_CXX_FLAGS_DEBUG "/MTd /RTC1")
 else()
