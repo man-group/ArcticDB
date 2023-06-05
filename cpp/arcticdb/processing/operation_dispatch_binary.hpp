@@ -139,7 +139,7 @@ VariantData visit_binary_membership(const VariantData &left, const VariantData &
 
     return std::visit(util::overload {
         [&] (const ColumnWithStrings& l, const std::shared_ptr<ValueSet>& r) ->VariantData  {
-            return transform_to_placeholder(binary_membership<decltype(func)>(l, *r, std::forward<Func>(func)));
+            return transform_to_placeholder(binary_membership<decltype(func)>(l, *r, std::forward<decltype(func)>(func)));
             },
             [](const auto &, const auto&) -> VariantData {
             util::raise_rte("Binary membership operations must be Column/ValueSet");
@@ -353,15 +353,15 @@ VariantData visit_binary_comparator(const VariantData& left, const VariantData& 
 
     return std::visit(util::overload {
      [&func] (const ColumnWithStrings& l, const std::shared_ptr<Value>& r) ->VariantData  {
-        auto result = binary_comparator<decltype(func)>(l, *r, std::forward<Func>(func));
+        auto result = binary_comparator<decltype(func)>(l, *r, std::forward<decltype(func)>(func));
          return transform_to_placeholder(result);
         },
         [&] (const ColumnWithStrings& l, const ColumnWithStrings& r)  ->VariantData {
-        auto result = binary_comparator<decltype(func)>(l, r, std::forward<Func>(func));
+        auto result = binary_comparator<decltype(func)>(l, r, std::forward<decltype(func)>(func));
         return transform_to_placeholder(result);
         },
         [&](const std::shared_ptr<Value>& l, const ColumnWithStrings& r) ->VariantData {
-        auto result = binary_comparator<decltype(func)>(*l, r, std::forward<Func>(func));
+        auto result = binary_comparator<decltype(func)>(*l, r, std::forward<decltype(func)>(func));
             return transform_to_placeholder(result);
         },
         [&] ([[maybe_unused]] const std::shared_ptr<Value>& l, [[maybe_unused]] const std::shared_ptr<Value>& r) ->VariantData  {
@@ -420,7 +420,7 @@ VariantData binary_operator(const Value& val, const Column& col, Func&& func) {
                 util::raise_rte("Non-numeric type provided to binary operation: {}", val.type());
             }
             auto left_value = *reinterpret_cast<const LeftRawType*>(val.data_);
-            using TargetType = typename type_arithmetic_promoted_type<LeftRawType, RightRawType, std::remove_reference_t<Func>>::type;
+            using TargetType = typename type_arithmetic_promoted_type<LeftRawType, RightRawType, std::remove_reference_t<decltype(func)>>::type;
             auto output_data_type = data_type_from_raw_type<TargetType>();
             output = std::make_unique<Column>(make_scalar_type(output_data_type), col.is_sparse());
 
@@ -462,7 +462,7 @@ VariantData binary_operator(const Column& left, const Column& right, Func&& func
             if constexpr(!is_numeric_type(RTDT::DataTypeTag::data_type)) {
                 util::raise_rte("Non-numeric type provided to binary operation: {}", right.type());
             }
-            using TargetType = typename type_arithmetic_promoted_type<LeftRawType, RightRawType, std::remove_reference_t<Func>>::type;
+            using TargetType = typename type_arithmetic_promoted_type<LeftRawType, RightRawType, std::remove_reference_t<decltype(func)>>::type;
             auto output_data_type = data_type_from_raw_type<TargetType>();
             output = std::make_unique<Column>(make_scalar_type(output_data_type), left.is_sparse() || right.is_sparse());
             auto right_data = right.data();
@@ -507,7 +507,7 @@ VariantData binary_operator(const Column& col, const Value& val, Func&& func) {
                 util::raise_rte("Non-numeric type provided to binary operation: {}", val.type());
             }
             auto right_value = *reinterpret_cast<const RightRawType*>(val.data_);
-            using TargetType = typename type_arithmetic_promoted_type<LeftRawType, RightRawType, std::remove_reference_t<Func>>::type;
+            using TargetType = typename type_arithmetic_promoted_type<LeftRawType, RightRawType, std::remove_reference_t<decltype(func)>>::type;
             auto output_data_type = data_type_from_raw_type<TargetType>();
             output = std::make_unique<Column>(make_scalar_type(output_data_type), col.is_sparse());
 
@@ -536,16 +536,16 @@ VariantData visit_binary_operator(const VariantData& left, const VariantData& ri
 
     return std::visit(util::overload {
         [&] (const ColumnWithStrings& l, const std::shared_ptr<Value>& r) ->VariantData  {
-            return binary_operator<decltype(func)>(*(l.column_), *r, std::forward<Func>(func));
+            return binary_operator<decltype(func)>(*(l.column_), *r, std::forward<decltype(func)>(func));
             },
             [&] (const ColumnWithStrings& l, const ColumnWithStrings& r)  ->VariantData {
-            return binary_operator<decltype(func)>(*(l.column_), *(r.column_), std::forward<Func>(func));
+            return binary_operator<decltype(func)>(*(l.column_), *(r.column_), std::forward<decltype(func)>(func));
             },
             [&](const std::shared_ptr<Value>& l, const ColumnWithStrings& r) ->VariantData {
-            return binary_operator<decltype(func)>(*l, *(r.column_), std::forward<Func>(func));
+            return binary_operator<decltype(func)>(*l, *(r.column_), std::forward<decltype(func)>(func));
             },
             [&] (const std::shared_ptr<Value>& l, const std::shared_ptr<Value>& r) -> VariantData {
-            return binary_operator<decltype(func)>(*l, *r, std::forward<Func>(func));
+            return binary_operator<decltype(func)>(*l, *r, std::forward<decltype(func)>(func));
             },
             [](const auto &, const auto&) -> VariantData {
             util::raise_rte("Bitset/ValueSet inputs not accepted to binary operators");
