@@ -139,7 +139,7 @@ TEST(Async, CollectWithThrow) {
    std::vector<folly::Future<folly::Unit>> stuff;
    using namespace arcticdb;
 
-   async::TaskScheduler sched{2};
+   async::TaskScheduler sched{1,1};
    try {
        for(auto i = 0u; i < 1000; ++i) {
            stuff.push_back(sched.submit_io_task(MaybeThrowTask(i, i==3)));
