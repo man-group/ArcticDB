@@ -209,7 +209,6 @@ struct PartitionClause {
         internal::check<ErrorCode::E_ASSERTION_FAILURE>(
                 dynamic_schema.has_value(),
                 "Cannot proceed with processing pipeline without knowing dynamic schema value");
-        schema::check<ErrorCode::E_COLUMN_DOESNT_EXIST>(*dynamic_schema || output.size() != 0, "GroupBy called with non-existent grouping column {}", grouping_column_);
         return output;
     }
 

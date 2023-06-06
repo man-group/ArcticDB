@@ -114,7 +114,7 @@ def test_hypothesis_max_min_agg(lmdb_version_store, df):
     assert_frame_equal(expected, vit.data)
 
 
-def test_sum_aggregation(s3_version_store):
+def test_sum_aggregation(lmdb_version_store):
     df = DataFrame(
         {"grouping_column": ["group_1", "group_1", "group_1", "group_2", "group_2"], "to_sum": [1, 1, 2, 2, 2]},
         index=np.arange(5),
@@ -122,9 +122,9 @@ def test_sum_aggregation(s3_version_store):
     q = QueryBuilder()
     q = q.groupby("grouping_column").agg({"to_sum": "sum"})
     symbol = "test_sum_aggregation"
-    s3_version_store.write(symbol, df)
+    lmdb_version_store.write(symbol, df)
 
-    res = s3_version_store.read(symbol, query_builder=q)
+    res = lmdb_version_store.read(symbol, query_builder=q)
     res.data.sort_index(inplace=True)
 
     df = pd.DataFrame({"to_sum": [4, 4]}, index=["group_1", "group_2"])
@@ -133,7 +133,7 @@ def test_sum_aggregation(s3_version_store):
     assert_frame_equal(res.data, df)
 
 
-def test_mean_aggregation(s3_version_store):
+def test_mean_aggregation(lmdb_version_store):
     df = DataFrame(
         {"grouping_column": ["group_1", "group_1", "group_1", "group_2", "group_2"], "to_mean": [1, 1, 2, 2, 2]},
         index=np.arange(5),
@@ -141,9 +141,9 @@ def test_mean_aggregation(s3_version_store):
     q = QueryBuilder()
     q = q.groupby("grouping_column").agg({"to_mean": "mean"})
     symbol = "test_aggregation"
-    s3_version_store.write(symbol, df)
+    lmdb_version_store.write(symbol, df)
 
-    res = s3_version_store.read(symbol, query_builder=q)
+    res = lmdb_version_store.read(symbol, query_builder=q)
     res.data.sort_index(inplace=True)
 
     df = pd.DataFrame({"to_mean": [4 / 3, 2]}, index=["group_1", "group_2"])
@@ -152,7 +152,7 @@ def test_mean_aggregation(s3_version_store):
     assert_frame_equal(res.data, df)
 
 
-def test_mean_aggregation_float(s3_version_store):
+def test_mean_aggregation_float(lmdb_version_store):
     df = DataFrame(
         {
             "grouping_column": ["group_1", "group_1", "group_1", "group_2", "group_2"],
@@ -163,9 +163,9 @@ def test_mean_aggregation_float(s3_version_store):
     q = QueryBuilder()
     q = q.groupby("grouping_column").agg({"to_mean": "mean"})
     symbol = "test_aggregation"
-    s3_version_store.write(symbol, df)
+    lmdb_version_store.write(symbol, df)
 
-    res = s3_version_store.read(symbol, query_builder=q)
+    res = lmdb_version_store.read(symbol, query_builder=q)
     res.data.sort_index(inplace=True)
 
     df = pd.DataFrame({"to_mean": [(1.1 + 1.4 + 2.5) / 3, 2.2]}, index=["group_1", "group_2"])
@@ -294,7 +294,7 @@ def test_group_column_splitting_strings(lmdb_version_store_tiny_segment):
 
 
 def test_aggregation_with_nones_and_nans_in_string_grouping_column(version_store_factory):
-    lib = version_store_factory(column_group_size=2, segment_row_size=2, dynamic_schema=True, dynamic_strings=True)
+    lib = version_store_factory(column_group_size=2, segment_row_size=2, dynamic_strings=True)
     symbol = "test_aggregation_with_nones_and_nans_in_string_grouping_column"
     # Structured so that the row-slices of the grouping column contain:
     # 1 - All strings
