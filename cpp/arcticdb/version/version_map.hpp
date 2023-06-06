@@ -147,17 +147,21 @@ public:
         auto next_key = ref_entry.head_;
         entry->head_ = ref_entry.head_;
         auto loaded_until = std::numeric_limits<VersionId>::max();
+        VersionId oldest_loaded_index_version = std::numeric_limits<VersionId>::max();
 
-        if ((load_params.load_type_ == LoadType::LOAD_LATEST || load_params.load_type_ == LoadType::LOAD_LATEST_UNDELETED ) && is_index_key_type(ref_entry.keys_[0].type())) {
+        if ((load_params.load_type_ == LoadType::LOAD_LATEST || load_params.load_type_ == LoadType::LOAD_LATEST_UNDELETED)
+            && is_index_key_type(ref_entry.keys_[0].type()))
+        {
             entry->keys_.push_back(ref_entry.keys_[0]);
         } else {
             do {
                 auto [key, seg] = store->read_sync(next_key.value());
                 std::tie(next_key, loaded_until) = read_segment_with_keys(seg, entry);
+                oldest_loaded_index_version = std::min(oldest_loaded_index_version, loaded_until);
             } while (next_key
             && need_to_load_further(load_params, loaded_until)
             && load_latest_ongoing(load_params, entry)
-            && looking_for_undeleted(load_params, entry));
+            && looking_for_undeleted(load_params, entry, oldest_loaded_index_version));
 
             if(load_params.load_type_ == LoadType::LOAD_DOWNTO)
                 entry->loaded_until_ = loaded_until;

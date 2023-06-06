@@ -73,13 +73,13 @@ inline std::pair<std::optional<AtomKey>, VersionId> read_segment_with_keys(
     VersionMapEntry& entry) {
     ssize_t row = 0;
     std::optional<AtomKey> next;
-    VersionId oldest_loaded = std::numeric_limits<VersionId>::max();
+    VersionId oldest_loaded_index = std::numeric_limits<VersionId>::max();
     for (; row < ssize_t(seg.row_count()); ++row) {
         auto key = read_key_row(seg, row);
         ARCTICDB_TRACE(log::version(), "Reading key {}", key);
         if (is_index_key_type(key.type())) {
             entry.keys_.push_back(key);
-            oldest_loaded = std::min(oldest_loaded, key.version_id());
+            oldest_loaded_index = std::min(oldest_loaded_index, key.version_id());
         } else if (key.type() == KeyType::TOMBSTONE) {
             entry.tombstones_.try_emplace(key.version_id(), key);
             entry.keys_.push_back(key);
@@ -96,7 +96,7 @@ inline std::pair<std::optional<AtomKey>, VersionId> read_segment_with_keys(
         }
     }
     util::check(row == ssize_t(seg.row_count()), "Unexpected ordering in journal segment");
-    return std::make_pair(next, oldest_loaded);
+    return std::make_pair(next, oldest_loaded_index);
 }
 
 inline std::pair<std::optional<AtomKey>, VersionId> read_segment_with_keys(
@@ -217,12 +217,22 @@ inline bool load_latest_ongoing(const LoadParameter& load_params, const std::sha
     return false;
 }
 
-inline bool looking_for_undeleted(const LoadParameter& load_params, const std::shared_ptr<VersionMapEntry>& entry) {
-    if(!(load_params.load_type_ == LoadType::LOAD_UNDELETED && entry->tombstone_all_))
+inline bool looking_for_undeleted(const LoadParameter& load_params, const std::shared_ptr<VersionMapEntry>& entry, const VersionId& oldest_loaded_index) {
+    if(load_params.load_type_ != LoadType::LOAD_UNDELETED) {
         return true;
+    }
 
-    ARCTICDB_DEBUG(log::version(), "Exiting because we have found an undeleted version");
-    return false;
+    if(entry->tombstone_all_) {
+        const bool is_deleted_by_tombstone_all = entry->tombstone_all_->version_id() >= oldest_loaded_index;
+        if(is_deleted_by_tombstone_all) {
+            ARCTICDB_DEBUG(log::version(), "Exiting because we have found an undeleted version");
+            return false;
+        } else {
+            return true;
+        }
+    } else {
+        return true;
+    }
 }
 
 void fix_stream_ids_of_index_keys(
