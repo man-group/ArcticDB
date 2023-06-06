@@ -13,6 +13,8 @@
 
 #include <memory>
 
+#ifdef USE_REMOTERY
+
 #ifdef ARCTICDB_USING_CONDA
     #include <remotery/Remotery.h>
 #else
@@ -60,10 +62,6 @@ arcticdb::ScopedTimer runtime_sub_timer_##name = !_scoped_subtimer_##name_active
     log::timings().debug(msg); \
 });
 
-//#define USE_REMOTERY
-//#define ARCTICDB_LOG_PERFORMANCE
-
-#if defined(USE_REMOTERY)
 
 #define ARCTICDB_SAMPLE(name, flags) \
         auto instance = RemoteryInstance::instance();  \
@@ -119,6 +117,10 @@ inline void set_remotery_thread_name(const char* ) { }
 
 #else
 
+#define ARCTICDB_RUNTIME_SAMPLE(name, flags)
+
+#define ARCTICDB_RUNTIME_SUBSAMPLE(name, flags)
+
 #define ARCTICDB_SAMPLE(name, flags)
 
 #define ARCTICDB_SUBSAMPLE(name, flags)
@@ -135,4 +137,4 @@ inline void set_remotery_thread_name(const char* ) { }
 
 #define ARCTICDB_SAMPLE_LOG(task_name)
 
-#endif
+#endif // USE_REMOTERY
