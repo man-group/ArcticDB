@@ -36,6 +36,7 @@ namespace arcticdb {
 
 using NormMetaDescriptor = std::shared_ptr<arcticdb::proto::descriptors::NormalizationMetadata>;
 
+// Contains constant data about the clause identifiable at construction time
 struct ClauseInfo {
     // Whether processing segments need to be split into new processing segments after this clause's process method has finished
     bool requires_repartition_{false};
@@ -48,6 +49,7 @@ struct ClauseInfo {
     std::optional<std::string> new_index_{std::nullopt};
 };
 
+// Changes how the clause behaves based on information only available after it is constructed
 struct ProcessingConfig {
     bool dynamic_schema_{false};
 };
@@ -246,7 +248,9 @@ struct PartitionClause {
         return clause_info_;
     }
 
-    void set_processing_config(ARCTICDB_UNUSED const ProcessingConfig& processing_config) {}
+    void set_processing_config(const ProcessingConfig& processing_config) {
+        processing_config_ = processing_config;
+    }
 
     [[nodiscard]] std::string to_string() const {
         return fmt::format("GROUPBY Column[\"{}\"]", grouping_column_);

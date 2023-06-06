@@ -52,13 +52,13 @@ VariantData ProcessingSegment::get(const VariantNode &name, const std::shared_pt
                         slice_and_key.segment(store).string_pool_ptr()));
             }
         }
-        if (expression_context_->dynamic_schema_) {
-            log::version().debug("Column {} not found in {}", column_name, data_[0].segment(store).descriptor());
-            return VariantData{EmptyResult{}};
-        } else {
+        if (expression_context_ && !expression_context_->dynamic_schema_) {
             internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Column {} not found in {}",
                                                             column_name,
                                                             data_[0].segment(store).descriptor());
+        } else {
+            log::version().debug("Column {} not found in {}", column_name, data_[0].segment(store).descriptor());
+            return VariantData{EmptyResult{}};
         }
         },
         [&](const ValueName &value_name) {
