@@ -31,7 +31,7 @@ LocalVersionedEngine::LocalVersionedEngine(
     configure(library->config());
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Created versioned engine at {} for library path {}  with config {}", uintptr_t(this),
                          library->library_path(), [&cfg=cfg_]{  return util::format(cfg); });
-#ifdef USE_REMOTERY
+#if defined(USE_REMOTERY)
     auto temp = RemoteryInstance::instance();
 #endif
     ARCTICDB_SAMPLE_THREAD();
@@ -877,7 +877,7 @@ VersionedItem LocalVersionedEngine::defragment_symbol_data(const StreamId& strea
 
     if(cfg_.symbol_list())
         symbol_list().add_symbol(store_, stream_id);
-    
+
     return versioned_item;
 }
 
@@ -1182,7 +1182,7 @@ std::vector<std::pair<std::optional<VariantKey>, std::optional<google::protobuf:
             if(last_version_it != latest_versions_index_map->end()) {
                 fut_vec.push_back(store()->read_metadata(last_version_it->second));
             }else{
-                fut_vec.push_back(std::make_pair(std::nullopt, std::nullopt));   
+                fut_vec.push_back(std::make_pair(std::nullopt, std::nullopt));
             }
         }
     }

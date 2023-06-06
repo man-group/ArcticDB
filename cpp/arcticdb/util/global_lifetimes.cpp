@@ -27,7 +27,9 @@ ModuleData::~ModuleData() {
     SharedMemoryAllocator::destroy_instance();
     Allocator::destroy_instance();
     PrometheusInstance::destroy_instance();
+#if defined(USE_REMOTERY)
     RemoteryInstance::destroy_instance();
+#endif
     ARCTICDB_DEBUG(log::version(), "Destroying AWS instance");
     storage::s3::S3ApiInstance::destroy_instance();
     log::Loggers::destroy_instance();
