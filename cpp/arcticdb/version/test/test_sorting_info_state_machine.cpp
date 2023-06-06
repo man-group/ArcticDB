@@ -12,7 +12,6 @@
 #include <arcticdb/util/buffer.hpp>
 #include <arcticdb/util/bitset.hpp>
 
-#include <msgpack.hpp>
 #include <arcticdb/util/test/generators.hpp>
 #include <arcticdb/version/version_store_api.hpp>
 

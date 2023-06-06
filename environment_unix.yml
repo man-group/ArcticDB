@@ -27,7 +27,7 @@ dependencies:
   - bitmagic
   - spdlog
   - fmt
-  - folly >2022.10.31 # latest version published on vcpkg
+  - folly
   # Vendored build dependencies (see `cpp/thirdparty`)
   # Versions must be kept in sync
   - xxhash
@@ -45,7 +45,7 @@ dependencies:
   - libiconv
   - aws-c-s3
   # Python dependences
-  - python =3.10 # Python 3.11 requires protobuf>=4
+  - python <=3.10 # Python 3.11 requires protobuf>=4
   - numpy
   - pandas < 2
   - pytest

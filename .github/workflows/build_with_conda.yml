@@ -14,8 +14,9 @@ jobs:
   linux:
     strategy:
       matrix:
-        include:
-          - os: ubuntu-latest
+          os: [ubuntu-latest]
+          python_version:  ["3.8", "3.9", "3.10"]
+          compiler: ["gcc", "clang", "system_compiler"]
 
       fail-fast: false
     runs-on: ${{ matrix.os }}
@@ -30,6 +31,19 @@ jobs:
       - uses: actions/checkout@v3
         with:
           submodules: recursive
+  
+      - name: Get number of CPU cores
+        uses: SimenB/github-actions-cpu-cores@v1
+        id: cpu-cores
+
+      - name: Append to environment_unix.yml
+        shell: bash -l {0}
+        run: |
+          echo "  - python ==${{ matrix.python_version }}" >> environment_unix.yml
+          if [[ "${{ matrix.compiler }}" != "system_compiler" ]]; then
+            echo "  - ${{ matrix.compiler }}" >> environment_unix.yml
+          fi
+
 
       - name: Install Conda environment from environment_unix.yml
         uses: mamba-org/setup-micromamba@v1
@@ -37,7 +51,7 @@ jobs:
           environment-file: environment_unix.yml
           init-shell: >-
             bash
-          cache-environment: true
+          cache-environment: false
           post-cleanup: 'all'
 
       - name: Build ArcticDB with conda (ARCTICDB_USING_CONDA=1)
@@ -47,18 +61,32 @@ jobs:
           python -m pip install --no-build-isolation --no-deps -v -e .
         env:
           ARCTICDB_USING_CONDA: 1
+        
+      - name: Build C++ Tests
+        shell: bash -l {0}
+        run: |
+          cd cpp/out/linux-conda-release-build/
+          make -j ${{ steps.cpu-cores.outputs.count }} arcticdb_rapidcheck_tests
+          make -j ${{ steps.cpu-cores.outputs.count }} test_unit_arcticdb
+
+      - name: Run C++ Tests
+        shell: bash -l {0}
+        run: |
+          cd cpp/out/linux-conda-release-build/
+          make test
 
       - name: Test with pytest
         shell: bash -l {0}
         run: |
           cd python
-          python -m pytest tests
+          python -m pytest tests -v
 
   macos:
     strategy:
       matrix:
-        include:
-          - os: macos-latest
+        os: [macos-latest]
+        python_version:  ["3.8", "3.9", "3.10"]
+        compiler: ["clang", "system_compiler"]
 
       fail-fast: false
     runs-on: ${{ matrix.os }}
@@ -68,6 +96,18 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Get number of CPU cores
+        uses: SimenB/github-actions-cpu-cores@v1
+        id: cpu-cores
+
+      - name: Append to environment_unix.yml
+        shell: bash -l {0}
+        run: |
+          echo "  - python ==${{ matrix.python_version }}" >> environment_unix.yml
+          if [[ "${{ matrix.compiler }}" != "system_compiler" ]]; then
+            echo "  - ${{ matrix.compiler }}" >> environment_unix.yml
+          fi
+
       - name: Install Conda environment from environment_unix.yml
         uses: mamba-org/setup-micromamba@v1
         with:
@@ -75,7 +115,7 @@ jobs:
           environment-name: arcticdb
           init-shell: >-
             bash
-          cache-environment: true
+          cache-environment: false
           post-cleanup: 'all'
 
       - name: Build ArcticDB with conda (ARCTICDB_USING_CONDA=1)
@@ -86,8 +126,21 @@ jobs:
         env:
           ARCTICDB_USING_CONDA: 1
 
+      - name: Build C++ Tests
+        shell: bash -l {0}
+        run: |
+          cd cpp/out/darwin-conda-release-build/
+          make -j ${{ steps.cpu-cores.outputs.count }} arcticdb_rapidcheck_tests
+          make -j ${{ steps.cpu-cores.outputs.count }} test_unit_arcticdb
+
+      - name: Run C++ Tests
+        shell: bash -l {0}
+        run: |
+          cd cpp/out/darwin-conda-release-build/
+          make test
+
       - name: Test with pytest
         shell: bash -l {0}
         run: |
           cd python
-          python -m pytest tests
+          python -m pytest tests -v
