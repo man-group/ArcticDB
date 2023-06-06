@@ -12,6 +12,7 @@
 
 #include <fmt/core.h>
 
+#include <arcticdb/async/task_scheduler.hpp>
 #include <arcticdb/column_store/memory_segment.hpp>
 #include <arcticdb/processing/expression_context.hpp>
 #include <arcticdb/processing/expression_node.hpp>
@@ -184,10 +185,7 @@ namespace arcticdb {
                 using ResolvedGrouperType = typename GrouperType::template Grouper<TypeDescriptorTag>;
 
                 auto grouper = std::make_shared<ResolvedGrouperType>(ResolvedGrouperType());
-                // TODO (AN-469): We should put some thought into how to pick an appropriate value for num_buckets
-                auto num_cores =
-                        std::thread::hardware_concurrency() == 0 ? 16 : std::thread::hardware_concurrency();
-                auto num_buckets = ConfigsMap::instance()->get_int("Partition.NumBuckets", num_cores);
+                auto num_buckets = ConfigsMap::instance()->get_int("Partition.NumBuckets", async::TaskScheduler::instance()->cpu_thread_count());
                 auto bucketizer = std::make_shared<BucketizerType>(num_buckets);
                 auto bucket_vec = get_buckets(partitioning_column, grouper, bucketizer);
                 std::vector<util::BitSet> bitsets;

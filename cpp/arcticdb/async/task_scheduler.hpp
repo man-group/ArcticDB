@@ -228,6 +228,14 @@ class TaskScheduler {
         cpu_exec_.setNumThreads(cpu_thread_count_);
     }
 
+    size_t cpu_thread_count() const {
+        return cpu_thread_count_;
+    }
+
+    size_t io_thread_count() const {
+        return io_thread_count_;
+    }
+
 private:
     size_t cpu_thread_count_;
     size_t io_thread_count_;
