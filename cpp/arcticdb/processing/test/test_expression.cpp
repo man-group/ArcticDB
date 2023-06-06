@@ -28,7 +28,7 @@ TEST(ExpressionNode, AddBasic) {
 
     wrapper.aggregator_.commit();
     auto& seg = wrapper.segment();
-    ProcessingSegment proc(std::move(seg), false);
+    ProcessingSegment proc(std::move(seg));
     auto node = std::make_shared<ExpressionNode>(ColumnName("thing1"), ColumnName("thing2"), OperationType::ADD);
     auto expression_context = std::make_shared<ExpressionContext>();
     expression_context->root_node_name_ = ExpressionName("new_thing");

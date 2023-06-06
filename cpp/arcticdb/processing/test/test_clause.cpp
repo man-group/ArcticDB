@@ -61,7 +61,7 @@ TEST(Clause, Partition) {
 
     ScopedConfig num_buckets("Partition.NumBuckets", 16);
     std::shared_ptr<Store> empty;
-    auto proc_seg = ProcessingSegment{std::move(seg), pipelines::FrameSlice{}, false};
+    auto proc_seg = ProcessingSegment{std::move(seg), pipelines::FrameSlice{}};
     auto col = std::get<ColumnWithStrings>(proc_seg.get(ColumnName("int8"), empty));
     proc_seg.computed_data_.try_emplace("int8", col);
     Composite<ProcessingSegment> comp;
@@ -85,7 +85,7 @@ TEST(Clause, PartitionString) {
     auto seg = get_groupable_timeseries_segment("groupable", 30, {1,1,3,3,1,1});
     ScopedConfig num_buckets("Partition.NumBuckets", 16);
     std::shared_ptr<Store> empty;
-    auto proc_seg = ProcessingSegment{std::move(seg), pipelines::FrameSlice{}, false};
+    auto proc_seg = ProcessingSegment{std::move(seg), pipelines::FrameSlice{}};
     auto col = std::get<ColumnWithStrings>(proc_seg.get(ColumnName("strings"), empty));
     proc_seg.computed_data_.try_emplace("strings", col);
     Composite<ProcessingSegment> comp;
@@ -109,7 +109,7 @@ TEST(Clause, Passthrough) {
     auto seg = get_standard_timeseries_segment("passthrough");
 
     PassthroughClause passthrough;
-    auto proc_seg = ProcessingSegment{std::move(seg), pipelines::FrameSlice{}, false};
+    auto proc_seg = ProcessingSegment{std::move(seg), pipelines::FrameSlice{}};
     Composite<ProcessingSegment> comp;
     comp.push_back(std::move(proc_seg));
     std::shared_ptr<Store> empty;
@@ -125,7 +125,7 @@ TEST(Clause, Sort) {
     std::shuffle(seg.begin(), seg.end(), urng);
     std::shared_ptr<Store> empty;
     SortClause sort_clause("time");
-    auto proc_seg = ProcessingSegment{std::move(seg), pipelines::FrameSlice{}, false};
+    auto proc_seg = ProcessingSegment{std::move(seg), pipelines::FrameSlice{}};
     Composite<ProcessingSegment> comp;
     comp.push_back(std::move(proc_seg));
     auto res = sort_clause.process(empty, std::move(comp));
@@ -140,7 +140,7 @@ TEST(Clause, Split) {
     auto seg = get_standard_timeseries_segment(symbol, 100);
     auto copied = seg.clone();
     SplitClause split_clause(10);
-    auto proc_seg = ProcessingSegment{std::move(seg), false};
+    auto proc_seg = ProcessingSegment{std::move(seg)};
     Composite<ProcessingSegment> comp;
     comp.push_back(std::move(proc_seg));
     std::shared_ptr<Store> empty;
@@ -184,7 +184,7 @@ TEST(Clause, Merge) {
         auto symbol = fmt::format("merge_{}", x);
         auto seg = get_standard_timeseries_segment(symbol, 10);
         copies.emplace_back(seg.clone());
-        auto proc_seg = ProcessingSegment{std::move(seg), false};
+        auto proc_seg = ProcessingSegment{std::move(seg)};
         comp.push_back(std::move(proc_seg));
     }
 

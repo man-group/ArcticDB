@@ -413,8 +413,7 @@ FrameAndDescriptor read_multi_key(
 Composite<ProcessingSegment> process_remaining_clauses(
         const std::shared_ptr<Store>& store,
         std::vector<Composite<ProcessingSegment>>&& procs,
-        std::vector<std::shared_ptr<Clause>> clauses, // pass by copy deliberately as we don't want to modify read_query
-        bool dynamic_schema) {
+        std::vector<std::shared_ptr<Clause>> clauses ) { // pass by copy deliberately as we don't want to modify read_query
     while (!clauses.empty()) {
         if (clauses[0]->clause_info().requires_repartition_) {
             std::vector<Composite<ProcessingSegment>> repartitioned_procs = clauses[0]->repartition(std::move(procs)).value();
@@ -426,7 +425,6 @@ Composite<ProcessingSegment> process_remaining_clauses(
                         async::submit_cpu_task(
                                 async::MemSegmentProcessingTask(store,
                                                                 clauses,
-                                                                dynamic_schema,
                                                                 std::move(proc))
                         )
                 );
@@ -550,7 +548,10 @@ std::vector<SliceAndKey> read_and_process(
         }
     }
 
-    bool dynamic_schema = opt_false(read_options.dynamic_schema_);
+    ProcessingConfig processing_config{opt_false(read_options.dynamic_schema_)};
+    for (auto& clause: read_query.clauses_) {
+        clause->set_processing_config(processing_config);
+    }
 
     // At this stage, each Composite contains a single ProcessingSegment, which holds a row-slice
     // Different row-slices are held in different elements of the vector
@@ -561,11 +562,10 @@ std::vector<SliceAndKey> read_and_process(
             read_query.clauses_,
             pipeline_context->descriptor(),
             filter_columns,
-            BatchReadArgs{},
-            dynamic_schema
+            BatchReadArgs{}
             );
 
-    auto merged_procs = process_remaining_clauses(store, std::move(procs), read_query.clauses_, dynamic_schema);
+    auto merged_procs = process_remaining_clauses(store, std::move(procs), read_query.clauses_);
     //TODO split pipeline context into load_context and output_context
     set_output_descriptors(merged_procs, read_query.clauses_, pipeline_context);
     return collect_segments(std::move(merged_procs));

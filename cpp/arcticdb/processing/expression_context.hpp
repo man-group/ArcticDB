@@ -59,6 +59,7 @@ struct ExpressionContext {
     ConstantMap<Value> values_;
     ConstantMap<ValueSet> value_sets_;
     ExpressionName root_node_name_;
+    bool dynamic_schema_{false};
 };
 
 }//namespace arcticdb

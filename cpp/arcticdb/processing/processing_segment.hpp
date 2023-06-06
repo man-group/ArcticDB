@@ -56,7 +56,6 @@ namespace arcticdb {
         std::vector<pipelines::SliceAndKey> data_;
         std::shared_ptr<ExpressionContext> expression_context_;
         std::unordered_map<std::string, VariantData> computed_data_;
-        bool dynamic_schema_;
 
         // Set by PartitioningClause
         std::optional<size_t> bucket_;
@@ -65,33 +64,25 @@ namespace arcticdb {
 
         ProcessingSegment(SegmentInMemory &&seg,
                           pipelines::FrameSlice&& slice,
-                          bool dynamic_schema,
                           std::optional<size_t> bucket = std::nullopt) :
-                dynamic_schema_(dynamic_schema),
                 bucket_(bucket) {
             data_.emplace_back(pipelines::SliceAndKey{std::move(seg), std::move(slice)});
         }
 
         explicit ProcessingSegment(pipelines::SliceAndKey &&sk,
-                                   bool dynamic_schema,
                                    std::optional<size_t> bucket = std::nullopt) :
-                dynamic_schema_(dynamic_schema),
                 bucket_(bucket) {
             data_.emplace_back(pipelines::SliceAndKey{std::move(sk)});
         }
 
         explicit ProcessingSegment(std::vector<pipelines::SliceAndKey> &&sk,
-                                   bool dynamic_schema,
                                    std::optional<size_t> bucket = std::nullopt) :
-                dynamic_schema_(dynamic_schema),
                 bucket_(bucket) {
             data_ = std::move(sk);
         }
 
         explicit ProcessingSegment(SegmentInMemory &&seg,
-                                   bool dynamic_schema,
                                    std::optional<size_t> bucket = std::nullopt) :
-                dynamic_schema_(dynamic_schema),
                 bucket_(bucket) {
             data_.emplace_back(pipelines::SliceAndKey{std::move(seg)});
         }
@@ -175,7 +166,8 @@ namespace arcticdb {
     Composite<ProcessingSegment> partition_processing_segment(
             const std::shared_ptr<Store>& store,
             ProcessingSegment& input,
-            const ColumnName& grouping_column_name) {
+            const ColumnName& grouping_column_name,
+            bool dynamic_schema) {
         Composite<ProcessingSegment> output;
         auto get_result = input.get(ColumnName(grouping_column_name), store);
         if (std::holds_alternative<ColumnWithStrings>(get_result)) {
@@ -204,7 +196,6 @@ namespace arcticdb {
                 for(auto bitset : folly::enumerate(bitsets)) {
                     if(bitset->count() != 0) {
                         ProcessingSegment proc;
-                        proc.dynamic_schema_ = input.dynamic_schema_;
                         proc.set_bucket(bitset.index);
                         for (auto& seg_slice_and_key : input.data()) {
                             const SegmentInMemory& seg = seg_slice_and_key.segment(store);
@@ -221,7 +212,7 @@ namespace arcticdb {
             });
         } else {
             internal::check<ErrorCode::E_ASSERTION_FAILURE>(
-                    input.dynamic_schema_,
+                    dynamic_schema,
                     "Grouping column missing from row-slice in static schema symbol"
             );
         }

@@ -48,6 +48,10 @@ struct ClauseInfo {
     std::optional<std::string> new_index_{std::nullopt};
 };
 
+struct ProcessingConfig {
+    bool dynamic_schema_{false};
+};
+
 
 struct IClause {
     template<class Base>
@@ -63,13 +67,18 @@ struct IClause {
         }
 
         [[nodiscard]] ClauseInfo clause_info() const { return folly::poly_call<2>(*this); };
+
+        void set_processing_config(const ProcessingConfig& processing_config) {
+            folly::poly_call<3>(*this, processing_config);
+        }
     };
 
     template<class T>
     using Members = folly::PolyMembers<
             &T::process,
             &T::repartition,
-            &T::clause_info>;
+            &T::clause_info,
+            &T::set_processing_config>;
 };
 
 using Clause = folly::Poly<IClause>;
@@ -89,7 +98,11 @@ struct PassthroughClause {
         return std::nullopt;
     }
 
-    [[nodiscard]] ClauseInfo clause_info() const {return clause_info_;}
+    [[nodiscard]] ClauseInfo clause_info() const {
+        return clause_info_;
+    }
+
+    void set_processing_config(ARCTICDB_UNUSED const ProcessingConfig& processing_config) {}
 };
 
 struct FilterClause {
@@ -119,7 +132,13 @@ struct FilterClause {
         return std::nullopt;
     }
 
-    [[nodiscard]] ClauseInfo clause_info() const {return clause_info_;}
+    [[nodiscard]] ClauseInfo clause_info() const {
+        return clause_info_;
+    }
+
+    void set_processing_config(const ProcessingConfig& processing_config) {
+        expression_context_->dynamic_schema_ = processing_config.dynamic_schema_;
+    }
 
     [[nodiscard]] std::string to_string() const;
 
@@ -153,7 +172,13 @@ struct ProjectClause {
         return std::nullopt;
     }
 
-    [[nodiscard]] ClauseInfo clause_info() const {return clause_info_;}
+    [[nodiscard]] ClauseInfo clause_info() const {
+        return clause_info_;
+    }
+
+    void set_processing_config(const ProcessingConfig& processing_config) {
+        expression_context_->dynamic_schema_ = processing_config.dynamic_schema_;
+    }
 
     [[nodiscard]] std::string to_string() const;
 };
@@ -161,6 +186,7 @@ struct ProjectClause {
 template<typename GrouperType, typename BucketizerType>
 struct PartitionClause {
     ClauseInfo clause_info_;
+    ProcessingConfig processing_config_;
     std::string grouping_column_;
 
     explicit PartitionClause(const std::string& grouping_column) :
@@ -176,20 +202,12 @@ struct PartitionClause {
                                                        Composite<ProcessingSegment> &&p) const {
         Composite<ProcessingSegment> output;
         auto procs = std::move(p);
-        std::optional<bool> dynamic_schema;
-        procs.broadcast([&output, &store, &dynamic_schema, &grouping_column = grouping_column_](auto &proc) {
-            if (dynamic_schema.has_value()) {
-                internal::check<ErrorCode::E_ASSERTION_FAILURE>(
-                        *dynamic_schema == proc.dynamic_schema_,
-                        "All ProcessingSegments should agree on whether dynamic schema is true or false");
-            } else {
-                dynamic_schema = proc.dynamic_schema_;
-            }
-            output.push_back(partition_processing_segment<GrouperType, BucketizerType>(store, proc, ColumnName(grouping_column)));
+        procs.broadcast([&output, &store, that=this](auto &proc) {
+            output.push_back(partition_processing_segment<GrouperType, BucketizerType>(store,
+                                                                                       proc,
+                                                                                       ColumnName(that->grouping_column_),
+                                                                                       that->processing_config_.dynamic_schema_));
         });
-        internal::check<ErrorCode::E_ASSERTION_FAILURE>(
-                dynamic_schema.has_value(),
-                "Cannot proceed with processing pipeline without knowing dynamic schema value");
         return output;
     }
 
@@ -228,6 +246,8 @@ struct PartitionClause {
         return clause_info_;
     }
 
+    void set_processing_config(ARCTICDB_UNUSED const ProcessingConfig& processing_config) {}
+
     [[nodiscard]] std::string to_string() const {
         return fmt::format("GROUPBY Column[\"{}\"]", grouping_column_);
     }
@@ -235,6 +255,7 @@ struct PartitionClause {
 
 struct AggregationClause {
     ClauseInfo clause_info_;
+    ProcessingConfig processing_config_;
     std::string grouping_column_;
     std::unordered_map<std::string, std::string> aggregation_map_;
     std::vector<GroupingAggregator> aggregators_;
@@ -260,6 +281,10 @@ struct AggregationClause {
         return clause_info_;
     }
 
+    void set_processing_config(const ProcessingConfig& processing_config) {
+        processing_config_ = processing_config;
+    }
+
     [[nodiscard]] std::string to_string() const;
 };
 
@@ -283,6 +308,9 @@ struct RemoveColumnPartitioningClause {
     [[nodiscard]] ClauseInfo clause_info() const {
         return clause_info_;
     }
+
+    void set_processing_config(ARCTICDB_UNUSED const ProcessingConfig& processing_config) {
+    }
 };
 
 struct SplitClause {
@@ -304,6 +332,8 @@ struct SplitClause {
     [[nodiscard]] ClauseInfo clause_info() const {
         return clause_info_;
     }
+
+    void set_processing_config(ARCTICDB_UNUSED const ProcessingConfig& processing_config) {}
 };
 
 struct SortClause {
@@ -325,6 +355,8 @@ struct SortClause {
     [[nodiscard]] ClauseInfo clause_info() const {
         return clause_info_;
     }
+
+    void set_processing_config(ARCTICDB_UNUSED const ProcessingConfig& processing_config) {}
 };
 
 struct MergeClause {
@@ -357,10 +389,14 @@ struct MergeClause {
     [[nodiscard]] ClauseInfo clause_info() const {
         return clause_info_;
     }
+
+    void set_processing_config(ARCTICDB_UNUSED const ProcessingConfig& processing_config) {
+    }
 };
 
 struct ColumnStatsGenerationClause {
     ClauseInfo clause_info_;
+    ProcessingConfig processing_config_;
     std::shared_ptr<std::vector<ColumnStatsAggregator>> column_stats_aggregators_;
 
     explicit ColumnStatsGenerationClause(std::unordered_set<std::string>&& input_columns,
@@ -382,6 +418,10 @@ struct ColumnStatsGenerationClause {
 
     [[nodiscard]] ClauseInfo clause_info() const {
         return clause_info_;
+    }
+
+    void set_processing_config(const ProcessingConfig& processing_config) {
+        processing_config_ = processing_config;
     }
 };
 
@@ -412,6 +452,8 @@ struct RowNumberLimitClause {
     [[nodiscard]] ClauseInfo clause_info() const {
         return clause_info_;
     }
+
+    void set_processing_config(ARCTICDB_UNUSED const ProcessingConfig& processing_config) {}
 };
 
 }//namespace arcticdb

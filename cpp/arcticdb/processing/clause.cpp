@@ -152,8 +152,8 @@ Composite<ProcessingSegment> ProjectClause::process(std::shared_ptr<Store> store
                                 ++last.slice().col_range.second;
                                 output.push_back(std::move(proc));
                             },
-                            [&proc, &output](const EmptyResult&) {
-                                if(proc.dynamic_schema_)
+                            [&proc, &output, &expression_context](const EmptyResult&) {
+                                if(expression_context->dynamic_schema_)
                                     output.push_back(std::move(proc));
                                 else
                                     util::raise_rte("Cannot project from empty column with static schema");
@@ -225,18 +225,10 @@ Composite<ProcessingSegment> AggregationClause::process(std::shared_ptr<Store> s
     auto string_pool = std::make_shared<StringPool>();
     DataType grouping_data_type;
     GroupingMap grouping_map;
-    std::optional<bool> dynamic_schema;
     procs.broadcast(
-        [&store, &num_unique, &dynamic_schema,
+        [&store, &num_unique,
         &grouping_data_type, &grouping_map, &next_group_id, &aggregators_data, &string_pool, that=this](
             auto &proc) {
-            if (dynamic_schema.has_value()) {
-                internal::check<ErrorCode::E_ASSERTION_FAILURE>(
-                        *dynamic_schema == proc.dynamic_schema_,
-                        "All ProcessingSegments should agree on whether dynamic schema is true or false");
-            } else {
-                dynamic_schema = proc.dynamic_schema_;
-            }
             auto partitioning_column = proc.get(ColumnName(that->grouping_column_), store);
             if (std::holds_alternative<ColumnWithStrings>(partitioning_column)) {
                 ColumnWithStrings col = std::get<ColumnWithStrings>(partitioning_column);
@@ -292,10 +284,6 @@ Composite<ProcessingSegment> AggregationClause::process(std::shared_ptr<Store> s
             }
         });
 
-    internal::check<ErrorCode::E_ASSERTION_FAILURE>(
-            dynamic_schema.has_value(),
-            "Cannot proceed with processing pipeline without knowing dynamic schema value");
-
     SegmentInMemory seg;
     auto index_col = std::make_shared<Column>(make_scalar_type(grouping_data_type), grouping_map.size(), true, false);
     auto index_pos = seg.add_column(scalar_field_proto(grouping_data_type, grouping_column_), index_col);
@@ -322,12 +310,12 @@ Composite<ProcessingSegment> AggregationClause::process(std::shared_ptr<Store> s
     index_col->set_row_data(grouping_map.size() - 1);
 
     for (auto agg_data: folly::enumerate(aggregators_data)) {
-        seg.concatenate(agg_data->finalize(aggregators_.at(agg_data.index).get_output_column_name(), *dynamic_schema, num_unique));
+        seg.concatenate(agg_data->finalize(aggregators_.at(agg_data.index).get_output_column_name(), processing_config_.dynamic_schema_, num_unique));
     }
 
     seg.set_string_pool(string_pool);
     seg.set_row_id(num_unique - 1);
-    return Composite{ProcessingSegment{std::move(seg), *dynamic_schema}};
+    return Composite{ProcessingSegment{std::move(seg)}};
 }
 
 [[nodiscard]] std::string AggregationClause::to_string() const {
@@ -361,7 +349,7 @@ Composite<ProcessingSegment> AggregationClause::process(std::shared_ptr<Store> s
         if (output_seg.has_value()) {
             const RowRange row_range{min_start_row, max_end_row};
             const ColRange col_range{min_start_col, max_end_col};
-            output.push_back(ProcessingSegment{std::move(*output_seg), FrameSlice{col_range, row_range}, proc.dynamic_schema_});
+            output.push_back(ProcessingSegment{std::move(*output_seg), FrameSlice{col_range, row_range}});
         }
     });
     return output;
@@ -384,7 +372,7 @@ Composite<ProcessingSegment> SplitClause::process(std::shared_ptr<Store> store,
             for (auto &item : split_segs) {
                 end_row = start_row + item.row_count();
                 const RowRange row_range{start_row, end_row};
-                ret.push_back(ProcessingSegment{std::move(item), FrameSlice{col_range, row_range}, proc.dynamic_schema_});
+                ret.push_back(ProcessingSegment{std::move(item), FrameSlice{col_range, row_range}});
                 start_row = end_row;
             }
         }
@@ -413,16 +401,14 @@ void merge_impl(
         const arcticdb::pipelines::RowRange row_range,
         const arcticdb::pipelines::ColRange col_range,
         IndexType index,
-        const StreamDescriptor& stream_descriptor,
-        bool dynamic_schema
-) {
+        const StreamDescriptor& stream_descriptor) {
     using namespace arcticdb::pipelines;
     auto num_segment_rows = ConfigsMap::instance()->get_int("Merge.SegmentSize", 100000);
     using SegmentationPolicy = stream::RowCountSegmentPolicy;
     SegmentationPolicy segmentation_policy{static_cast<size_t>(num_segment_rows)};
 
-    auto func = [&ret, &row_range, &col_range, dynamic_schema](auto &&segment) {
-        ret.push_back(ProcessingSegment{std::forward<SegmentInMemory>(segment), FrameSlice{col_range, row_range}, dynamic_schema});
+    auto func = [&ret, &row_range, &col_range](auto &&segment) {
+        ret.push_back(ProcessingSegment{std::forward<SegmentInMemory>(segment), FrameSlice{col_range, row_range}});
     };
     
     using AggregatorType = stream::Aggregator<IndexType, stream::DynamicSchema, SegmentationPolicy, DensityPolicy>;
@@ -470,15 +456,7 @@ Composite<ProcessingSegment> MergeClause::process(std::shared_ptr<Store> store,
     size_t max_end_row = 0;
     size_t min_start_col = std::numeric_limits<size_t>::max();
     size_t max_end_col = 0;
-    std::optional<bool> dynamic_schema;
-    procs.broadcast([&input_streams, &store, &min_start_row, &max_end_row, &min_start_col, &max_end_col, &dynamic_schema](auto &&proc) {
-        if (dynamic_schema.has_value()) {
-            internal::check<ErrorCode::E_ASSERTION_FAILURE>(
-                    *dynamic_schema == proc.dynamic_schema_,
-                    "All ProcessingSegments should agree on whether dynamic schema is true or false");
-        } else {
-            dynamic_schema = proc.dynamic_schema_;
-        }
+    procs.broadcast([&input_streams, &store, &min_start_row, &max_end_row, &min_start_col, &max_end_col](auto &&proc) {
         auto slice_and_keys = proc.release_data();
         for (auto &&slice_and_key: slice_and_keys) {
             size_t start_row = slice_and_key.slice().row_range.start();
@@ -494,14 +472,11 @@ Composite<ProcessingSegment> MergeClause::process(std::shared_ptr<Store> store,
                                                          store));
         }
     });
-    internal::check<ErrorCode::E_ASSERTION_FAILURE>(
-            dynamic_schema.has_value(),
-            "Cannot proceed with processing pipeline without knowing dynamic schema value");
     const RowRange row_range{min_start_row, max_end_row};
     const ColRange col_range{min_start_col, max_end_col};
     Composite<ProcessingSegment> ret;
     std::visit(
-            [&ret, &input_streams, add_symbol_column = add_symbol_column_, &comp = compare, stream_id = stream_id_, &row_range, &col_range, &stream_descriptor = stream_descriptor_, &dynamic_schema](auto idx,
+            [&ret, &input_streams, add_symbol_column = add_symbol_column_, &comp = compare, stream_id = stream_id_, &row_range, &col_range, &stream_descriptor = stream_descriptor_](auto idx,
                                                                                             auto density) {
                 merge_impl<decltype(idx), decltype(density), decltype(input_streams), decltype(comp), decltype(stream_id)>(ret,
                                                                                                       input_streams,
@@ -510,8 +485,7 @@ Composite<ProcessingSegment> MergeClause::process(std::shared_ptr<Store> store,
                                                                                                       row_range,
                                                                                                       col_range,
                                                                                                       idx,
-                                                                                                      stream_descriptor,
-                                                                                                      *dynamic_schema);
+                                                                                                      stream_descriptor);
             }, index_, density_policy_);
 
     return ret;
@@ -541,15 +515,9 @@ Composite<ProcessingSegment> ColumnStatsGenerationClause::process(std::shared_pt
     internal::check<ErrorCode::E_INVALID_ARGUMENT>(
             !procs.empty(),
             "ColumnStatsGenerationClause::process does not make sense with no processing segments");
-    std::optional<bool> dynamic_schema;
     procs.broadcast(
-            [&store, &start_indexes, &end_indexes, &dynamic_schema, &aggregators_data, that=this](
+            [&store, &start_indexes, &end_indexes, &aggregators_data, that=this](
                     auto &proc) {
-                if (dynamic_schema.has_value()) {
-                    util::check(*dynamic_schema == proc.dynamic_schema_, "All ProcessingSegments should agree on whether dynamic schema is true or false");
-                } else {
-                    dynamic_schema = proc.dynamic_schema_;
-                }
                 for (const auto& slice_and_key: proc.data_) {
                     start_indexes.insert(slice_and_key.key_->start_index());
                     end_indexes.insert(slice_and_key.key_->end_index());
@@ -561,7 +529,7 @@ Composite<ProcessingSegment> ColumnStatsGenerationClause::process(std::shared_pt
                         auto input_column_with_strings = std::get<ColumnWithStrings>(input_column);
                         agg_data->aggregate(input_column_with_strings);
                     } else {
-                        if(!proc.dynamic_schema_)
+                        if(!that->processing_config_.dynamic_schema_)
                             internal::raise<ErrorCode::E_ASSERTION_FAILURE>(
                                     "Unable to resolve column denoted by aggregation operator: '{}'",
                                     input_column_name);
@@ -593,8 +561,7 @@ Composite<ProcessingSegment> ColumnStatsGenerationClause::process(std::shared_pt
         seg.concatenate(agg_data->finalize(column_stats_aggregators_->at(agg_data.index).get_output_column_names()));
     }
     seg.set_row_id(0);
-    util::check(dynamic_schema.has_value(), "Cannot proceed with processing pipeline without knowing dynamic schema value");
-    return Composite{ProcessingSegment{std::move(seg), *dynamic_schema}};
+    return Composite{ProcessingSegment{std::move(seg)}};
 }
 
 Composite<ProcessingSegment> RowNumberLimitClause::process(std::shared_ptr<Store> store,

@@ -345,23 +345,20 @@ struct SegmentFunctionTask : BaseTask {
 struct MemSegmentProcessingTask : BaseTask {
     std::shared_ptr<Store> store_;
     std::vector<std::shared_ptr<Clause>> clauses_;
-    bool dynamic_schema_;
     std::optional<Composite<ProcessingSegment>> procs_;
 
     explicit MemSegmentProcessingTask(
            const std::shared_ptr<Store> store,
            std::vector<std::shared_ptr<Clause>> clauses,
-           bool dynamic_schema,
            std::optional<Composite<ProcessingSegment>>&& procs = std::nullopt) :
         store_(store),
         clauses_(std::move(clauses)),
-        dynamic_schema_(dynamic_schema),
         procs_(std::move(procs)) {
     }
 
     ProcessingSegment slice_to_segment(Composite<pipelines::SliceAndKey>&& is) {
         auto inputs = std::move(is);
-        return ProcessingSegment(inputs.as_range(), dynamic_schema_);
+        return ProcessingSegment(inputs.as_range());
     }
 
     [[nodiscard]]

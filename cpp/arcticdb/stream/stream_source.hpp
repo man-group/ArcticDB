@@ -75,8 +75,7 @@ struct StreamSource {
         const std::vector<std::shared_ptr<Clause>>& clauses,
         const StreamDescriptor& desc,
         const std::shared_ptr<std::unordered_set<std::string>>& filter_columns,
-        const BatchReadArgs &args,
-        bool dynamic_schema) = 0;
+        const BatchReadArgs &args) = 0;
 
     virtual folly::Future<std::pair<std::optional<VariantKey>, std::optional<google::protobuf::Any>>> read_metadata(
         const entity::VariantKey &key,

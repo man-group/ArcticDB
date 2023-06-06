@@ -43,8 +43,7 @@ namespace arcticdb {
                 const std::vector<std::shared_ptr<Clause>>&,
                 const StreamDescriptor&,
                 const std::shared_ptr<std::unordered_set<std::string>>&,
-                const BatchReadArgs &,
-                bool) override {
+                const BatchReadArgs &) override {
             throw std::runtime_error("Not implemented for tests");
         }
 
