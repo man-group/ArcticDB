@@ -35,7 +35,7 @@ class ParsedQuery:
 
 
 class AzureLibraryAdapter(ArcticLibraryAdapter):
-    REGEX = r"azure://(?P<endpoint>.*):(?P<container>[-_a-zA-Z0-9.]+)(?P<query>\?.*)?"
+    REGEX = r"azure://(?P<endpoint>.*?)/(?P<container>[-_a-zA-Z0-9.]+)(?P<query>\?.*)?"
 
     @staticmethod
     def supports_uri(uri: str) -> bool:
@@ -56,7 +56,7 @@ class AzureLibraryAdapter(ArcticLibraryAdapter):
         super().__init__(uri)
 
     def __repr__(self):
-        return "azure(endpoint=%s, bucket=%s)" % (self._endpoint, self._bucket)
+        return "azure(endpoint=%s, container=%s)" % (self._endpoint, self._bucket)
 
     @property
     def config_library(self) -> Library:
@@ -88,7 +88,10 @@ class AzureLibraryAdapter(ArcticLibraryAdapter):
         if query and query.startswith("?"):
             query = query.strip("?")
         elif not query:
-            return ParsedQuery(aws_auth=True)
+            raise ValueError(
+                    "Invalid Azure URI. "
+                    f"Missing query parameter"
+                )
 
         parsed_query = re.split("[;&]", query)
         parsed_query = {t.split("=", 1)[0]: t.split("=", 1)[1] for t in parsed_query}

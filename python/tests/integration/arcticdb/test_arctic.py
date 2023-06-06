@@ -503,7 +503,7 @@ def test_delete_date_range(arctic_library):
     assert lib["symbol"].version == 1
 
 
-def test_repr(moto_s3_uri_incl_bucket):
+def test_s3_repr(moto_s3_uri_incl_bucket):
     ac = Arctic(moto_s3_uri_incl_bucket)
 
     assert ac.list_libraries() == []
@@ -524,8 +524,29 @@ def test_repr(moto_s3_uri_incl_bucket):
 
     df = pd.DataFrame({"col1": [1, 2, 3], "col2": [4, 5, 6]})
     written_vi = lib.write("my_symbol", df)
+    print(written_vi.host)
     assert re.match(r"S3\(endpoint=localhost:\d+, bucket=test_bucket_\d+\)", written_vi.host)
 
+def test_azure_repr(moto_azure_uri_incl_bucket):
+    ac = Arctic(moto_azure_uri_incl_bucket)
+
+    assert ac.list_libraries() == []
+    ac.create_library("pytest_test_lib")
+
+    lib = ac["pytest_test_lib"]
+    endpoint = moto_azure_uri_incl_bucket.split("//")[1].split("/")[0]
+    container = moto_azure_uri_incl_bucket.split("//")[-1].split("?")[0].split("/")[1]
+    assert (
+        repr(lib)
+        == "Library("
+        "Arctic("
+        "config=azure("
+        f"endpoint={endpoint}, container={container})), path=pytest_test_lib, storage=azure_storage)"
+    )
+
+    df = pd.DataFrame({"col1": [1, 2, 3], "col2": [4, 5, 6]})
+    written_vi = lib.write("my_symbol", df)
+    assert re.match(r"azure\(endpoint=\d\.\d\.\d\.\d:\d+, container=testbucket\d+\)", written_vi.host)
 
 class A:
     """A dummy user defined type that requires pickling to serialize."""
@@ -1286,7 +1307,7 @@ def test_segment_slicing(moto_uri_incl_bucket):
     assert num_data_segments == math.ceil(rows / rows_per_segment) * math.ceil(columns / columns_per_segment)
 
 
-def test_reload_symbol_list(moto_s3_uri_incl_bucket, boto_client):
+def test_reload_symbol_list(moto_s3_uri_incl_bucket, boto_client): #TODO
     def get_symbol_list_keys():
         keys = [
             d["Key"] for d in boto_client.list_objects(Bucket=test_bucket)["Contents"] if d["Key"].startswith(lib_name)
@@ -1322,6 +1343,6 @@ def test_reload_symbol_list(moto_s3_uri_incl_bucket, boto_client):
     assert len(get_symbol_list_keys()) == 1
 
 
-def test_get_uri(moto_s3_uri_incl_bucket):
-    ac = Arctic(moto_s3_uri_incl_bucket)
-    assert ac.get_uri() == moto_s3_uri_incl_bucket
+def test_get_uri(moto_uri_incl_bucket):
+    ac = Arctic(moto_uri_incl_bucket)
+    assert ac.get_uri() == moto_uri_incl_bucket
