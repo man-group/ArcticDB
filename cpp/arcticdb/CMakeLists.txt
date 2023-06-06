@@ -465,7 +465,7 @@ if(${ARCTICDB_USING_CONDA})
     # We must use dynamic libraries.
     list (APPEND arcticdb_core_libraries
         xxHash::xxHash
-        pcre
+        ${PCRE_LIBRARIES}
         ${remotery_LIBRARY}
         msgpack-c
         ${LMDB_LIBRARIES}
