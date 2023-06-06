@@ -416,7 +416,7 @@ Composite<ProcessingSegment> process_remaining_clauses(
         std::vector<std::shared_ptr<Clause>> clauses, // pass by copy deliberately as we don't want to modify read_query
         bool dynamic_schema) {
     while (!clauses.empty()) {
-        if (clauses[0]->requires_repartition()) {
+        if (clauses[0]->clause_info().requires_repartition_) {
             std::vector<Composite<ProcessingSegment>> repartitioned_procs = clauses[0]->repartition(std::move(procs)).value();
             // Erasing from front of vector not ideal, but they're just shared_ptr and there shouldn't be loads of clauses
             clauses.erase(clauses.begin());
@@ -446,7 +446,7 @@ void set_output_descriptors(
         const std::shared_ptr<PipelineContext>& pipeline_context) {
     std::optional<std::string> index_column;
     for (auto clause = clauses.rbegin(); clause != clauses.rend(); ++clause) {
-        if (auto new_index = (*clause)->new_index(); new_index.has_value()) {
+        if (auto new_index = (*clause)->clause_info().new_index_; new_index.has_value()) {
             index_column = new_index;
             pipeline_context->norm_meta_->mutable_df()->mutable_common()->mutable_index()->set_name(*new_index);
             pipeline_context->norm_meta_->mutable_df()->mutable_common()->mutable_index()->clear_fake_name();

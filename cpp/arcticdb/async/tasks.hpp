@@ -370,7 +370,7 @@ struct MemSegmentProcessingTask : BaseTask {
         for(const auto& clause : clauses_) {
             procs = clause->process(store_, std::move(procs));
 
-            if(clause->requires_repartition())
+            if(clause->clause_info().requires_repartition_)
                 break;
         }
         return procs;

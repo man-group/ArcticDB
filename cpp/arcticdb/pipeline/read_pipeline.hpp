@@ -131,7 +131,7 @@ inline std::optional<util::BitSet> clause_column_bitset(const StreamDescriptor::
                                                         const std::vector<std::shared_ptr<Clause>>& clauses) {
     folly::F14FastSet<std::string_view> column_set;
     for (const auto& clause: clauses) {
-        auto opt_columns = clause->input_columns();
+        auto opt_columns = clause->clause_info().input_columns_;
         if (opt_columns.has_value()) {
             for (const auto& column: *opt_columns) {
                 column_set.insert(std::string_view(column));
@@ -154,7 +154,7 @@ inline std::optional<util::BitSet> overall_column_bitset(const StreamDescriptor:
     // std::all_of returns true if the range is empty
     auto clauses_can_combine_with_column_selection = std::all_of(clauses.begin(), clauses.end(),
                                                                  [](const std::shared_ptr<Clause>& clause){
-        return clause->can_combine_with_column_selection();
+        return clause->clause_info().can_combine_with_column_selection_;
     });
     user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
             !requested_columns.has_value() || clauses_can_combine_with_column_selection,
