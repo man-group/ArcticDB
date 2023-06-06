@@ -130,7 +130,7 @@ TEST_F(VersionMapBatchStore, MultipleVersionsSameSymbolVersionIdQueries) {
     auto version_map = std::make_shared<VersionMap>();
 
     auto stream = fmt::format("stream_{}", 0);
-    uint64_t num_versions = 50;
+    uint64_t num_versions = 500;
 
     // Add versions
     add_versions_for_stream(version_map, store, stream, num_versions);
@@ -200,8 +200,8 @@ TEST_F(VersionMapBatchStore, CombinedQueries) {
     auto store = test_store_->_test_get_store();
     auto version_map = std::make_shared<VersionMap>();
 
-    uint64_t num_streams = 10;
-    uint64_t num_versions_per_stream = 5;
+    uint64_t num_streams = 1000;
+    uint64_t num_versions_per_stream = 5000;
 
     for(uint64_t i = 0; i < num_streams; ++i) {
         auto stream = fmt::format("stream_{}", i);
