@@ -10,6 +10,20 @@
 
 namespace arcticdb {
 
+void add_data_type_impl(DataType data_type, std::optional<DataType>& current_data_type) {
+    if (current_data_type.has_value()) {
+        auto common_type = has_valid_common_type(entity::TypeDescriptor(*current_data_type, 0),
+                                                 entity::TypeDescriptor(data_type, 0));
+        schema::check<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>(
+                common_type.has_value(),
+                "Cannot perform aggregation on column, incompatible types present: {} and {}",
+                entity::TypeDescriptor(*current_data_type, 0), entity::TypeDescriptor(data_type, 0));
+        current_data_type = common_type->data_type();
+    } else {
+        current_data_type = data_type;
+    }
+}
+
 void MinMaxAggregatorData::aggregate(const ColumnWithStrings& input_column) {
     entity::details::visit_type(input_column.column_->type().data_type(), [&input_column, that=this] (auto type_desc_tag) {
         using InputType = decltype(type_desc_tag);

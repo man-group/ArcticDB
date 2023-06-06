@@ -48,6 +48,8 @@ struct OutputType<DataTypeTag<DataType::MICROS_UTC64>, void> {
     using type = ScalarTagType<DataTypeTag<DataType::MICROS_UTC64>>;
 };
 
+void add_data_type_impl(DataType data_type, std::optional<DataType>& current_data_type);
+
 struct MinMaxAggregatorData {
     std::optional<Value> min_;
     std::optional<Value> max_;
@@ -76,17 +78,7 @@ struct SumAggregatorData {
     std::vector<uint8_t> aggregated_;
     std::optional<DataType> data_type_;
     void add_data_type(DataType data_type) {
-        if (data_type_.has_value()) {
-            auto common_type = has_valid_common_type(entity::TypeDescriptor(*data_type_, 0),
-                                                     entity::TypeDescriptor(data_type, 0));
-            schema::check<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>(
-                    common_type.has_value(),
-                    "Cannot perform sum aggregation on column, incompatible types present: {} and {}",
-                    entity::TypeDescriptor(*data_type_, 0), entity::TypeDescriptor(data_type, 0));
-            data_type_ = common_type->data_type();
-        } else {
-            data_type_ = data_type;
-        }
+        add_data_type_impl(data_type, data_type_);
     }
     void aggregate(const std::optional<ColumnWithStrings>& input_column, const std::vector<size_t>& groups, size_t unique_values);
     SegmentInMemory finalize(const ColumnName& output_column_name,  bool dynamic_schema, size_t unique_values);
@@ -123,17 +115,7 @@ struct MaxOrMinAggregatorData {
     std::vector<uint8_t> aggregated_;
     std::optional<DataType> data_type_;
     void add_data_type(DataType data_type) {
-        if (data_type_.has_value()) {
-            auto common_type = has_valid_common_type(entity::TypeDescriptor(*data_type_, 0),
-                                                     entity::TypeDescriptor(data_type, 0));
-            schema::check<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>(
-                    common_type.has_value(),
-                    "Cannot perform sum aggregation on column, incompatible types present: {} and {}",
-                    entity::TypeDescriptor(*data_type_, 0), entity::TypeDescriptor(data_type, 0));
-            data_type_ = common_type->data_type();
-        } else {
-            data_type_ = data_type;
-        }
+        add_data_type_impl(data_type, data_type_);
     }
     void aggregate(const std::optional<ColumnWithStrings>& input_column, const std::vector<size_t>& groups, size_t unique_values) {
         if(data_type_.has_value() && input_column.has_value()) {
