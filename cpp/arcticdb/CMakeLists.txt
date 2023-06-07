@@ -436,6 +436,11 @@ if (NOT WIN32)
             message(FATAL_ERROR "Unknown compiler: ${CMAKE_CXX_COMPILER_ID}")
         endif()
     endif()
+else() # WIN32
+    # C++17 support for MSVC
+    # /Zc:__cplusplus is needed to get the correct __cplusplus macro value
+    # See: https://developercommunity.visualstudio.com/t/msvc-incorrectly-defines-cplusplus/139261#T-N223868
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /std:c++17 /Zc:__cplusplus")
 endif()
 
 
