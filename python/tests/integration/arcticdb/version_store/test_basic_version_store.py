@@ -223,14 +223,14 @@ def test_list_symbols_regex(request, lib_type):
     assert list(sorted(lib.list_symbols())) == sorted(["asdf", "furble"])
 
 
-def test_list_symbols_prefix(s3_version_store):
+def test_list_symbols_prefix(object_version_store):
     blahs = ["blah_asdf201901", "blah_asdf201802", "blah_asdf201803", "blah_asdf201903"]
     nahs = ["nah_asdf201801", "nah_asdf201802", "nah_asdf201803"]
 
     for sym in itertools.chain(blahs, nahs):
-        s3_version_store.write(sym, sample_dataframe(10))
-    assert set(s3_version_store.list_symbols(prefix="blah_")) == set(blahs)
-    assert set(s3_version_store.list_symbols(prefix="nah_")) == set(nahs)
+        object_version_store.write(sym, sample_dataframe(10))
+    assert set(object_version_store.list_symbols(prefix="blah_")) == set(blahs)
+    assert set(object_version_store.list_symbols(prefix="nah_")) == set(nahs)
 
 
 def test_mixed_df_without_pickling_enabled(lmdb_version_store):
