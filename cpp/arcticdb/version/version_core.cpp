@@ -1291,7 +1291,11 @@ VersionedItem defragment_symbol_data_impl(
     util::variant_match(std::move(policies), [
         &fut_vec, &slices, &store, &options, &pre_defragmentation_info, segment_size=segment_size] (auto &&idx, auto &&schema) {
         pre_defragmentation_info.read_query.clauses_.emplace_back(std::make_shared<Clause>(RemoveColumnPartitioningClause{}));
+        // read_and_process modifies the pipeline context descrptor, but it doesn't know about the row-slices we are not
+        // compacting here, so just reset the descriptor to its original value after read_and_process finishes
+        pre_defragmentation_info.pipeline_context->orig_desc_ = pre_defragmentation_info.pipeline_context->descriptor().clone();
         auto segments = read_and_process(store, pre_defragmentation_info.pipeline_context, pre_defragmentation_info.read_query, defragmentation_read_options_generator(options), pre_defragmentation_info.append_after.value());
+        pre_defragmentation_info.pipeline_context->set_descriptor(*pre_defragmentation_info.pipeline_context->orig_desc_);
         using IndexType = std::remove_reference_t<decltype(idx)>;
         using SchemaType = std::remove_reference_t<decltype(schema)>;
         do_compact<IndexType, SchemaType, RowCountSegmentPolicy, DenseColumnPolicy>(
