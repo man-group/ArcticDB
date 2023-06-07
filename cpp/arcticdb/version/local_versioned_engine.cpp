@@ -21,6 +21,7 @@
 #include <arcticdb/pipeline/index_utils.hpp>
 #include <arcticdb/version/version_map_batch_methods.hpp>
 #include <arcticdb/util/container_filter_wrapper.hpp>
+#include <arcticdb/python/gil_lock.hpp>
 
 namespace arcticdb::version_store {
 
@@ -889,6 +890,7 @@ folly::Future<std::pair<VersionedItem, FrameAndDescriptor>> async_read_direct(
     std::shared_ptr<BufferHolder> buffers,
     const ReadOptions& read_options) {
     auto index_segment_reader = std::make_shared<index::IndexSegmentReader>(std::move(index_segment));
+    check_column_and_date_range_filterable(*index_segment_reader, read_query);
     auto pipeline_context = std::make_shared<PipelineContext>(StreamDescriptor{*index_segment_reader->mutable_tsd().mutable_stream_descriptor()});
     pipeline_context->set_selected_columns(read_query.columns);
     const bool dynamic_schema = opt_false(read_options.dynamic_schema_);
@@ -908,6 +910,7 @@ folly::Future<std::pair<VersionedItem, FrameAndDescriptor>> async_read_direct(
 
     return fetch_data(frame, pipeline_context, store, dynamic_schema, buffers).thenValue(
         [pipeline_context, frame, &read_options](auto &&) mutable {
+            ScopedGILLock gil_lock;
             reduce_and_fix_columns(pipeline_context, frame, read_options);
         }).thenValue(
         [index_segment_reader, frame, index_key, buffers](auto &&) {
@@ -920,7 +923,7 @@ std::vector<std::pair<VersionedItem, FrameAndDescriptor>> LocalVersionedEngine::
     const std::vector<AtomKey> &keys,
     const std::vector<ReadQuery> &read_queries,
     const ReadOptions& read_options) {
-
+    py::gil_scoped_release release_gil;
     std::vector<folly::Future<std::pair<entity::VariantKey, SegmentInMemory>>> index_futures;
     for (auto &index_key: keys) {
         index_futures.push_back(store()->read(index_key));
@@ -943,6 +946,7 @@ std::vector<std::pair<VersionedItem, FrameAndDescriptor>> LocalVersionedEngine::
     const std::vector<VersionQuery> &version_queries,
     std::vector<ReadQuery> &read_queries,
     const ReadOptions &read_options) {
+    py::gil_scoped_release release_gil;
     auto versions = batch_get_versions(store(), version_map(), stream_ids, version_queries);
     std::vector<folly::Future<std::pair<VersionedItem, FrameAndDescriptor>>> output;
     for (auto &&version : folly::enumerate(versions)) {

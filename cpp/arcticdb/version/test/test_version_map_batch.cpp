@@ -71,11 +71,13 @@ TEST_F(VersionMapBatchStore, SimpleVersionIdQueries) {
 }
 
 TEST_F(VersionMapBatchStore, SimpleTimestampQueries) {
+    ScopedConfig cpu_threads("VersionStore.NumCPUThreads", 1);
+    ScopedConfig io_threads("VersionStore.NumIOThreads", 1);
     auto store = test_store_->_test_get_store();
     auto version_map = std::make_shared<VersionMap>();
 
-    uint64_t num_streams = 10;
-    uint64_t num_versions_per_stream = 5;
+    uint64_t num_streams = 1000;
+    uint64_t num_versions_per_stream = 500;
 
     for(uint64_t i = 0; i < num_streams; ++i) {
         auto stream = fmt::format("stream_{}", i);
