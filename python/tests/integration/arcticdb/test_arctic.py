@@ -530,7 +530,8 @@ def test_s3_repr(moto_s3_uri_incl_bucket):
     s3_endpoint += f":{port}"
     bucket = moto_s3_uri_incl_bucket.split(":")[-1].split("?")[0]
     assert (
-        repr(lib) == "Library("
+        repr(lib)
+        == "Library("
         "Arctic("
         "config=S3("
         f"endpoint={s3_endpoint}, bucket={bucket})), path=pytest_test_lib, storage=s3_storage)"
@@ -552,7 +553,8 @@ def test_azure_repr(moto_azure_uri_incl_bucket):
     endpoint = moto_azure_uri_incl_bucket.split("//")[1].split("/")[0]
     container = moto_azure_uri_incl_bucket.split("//")[-1].split("?")[0].split("/")[1]
     assert (
-        repr(lib) == "Library("
+        repr(lib)
+        == "Library("
         "Arctic("
         "config=azure("
         f"endpoint={endpoint}, container={container})), path=pytest_test_lib, storage=azure_storage)"
