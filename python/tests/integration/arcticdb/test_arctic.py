@@ -26,6 +26,7 @@ import pandas as pd
 from datetime import datetime, date
 import numpy as np
 from arcticdb.util.test import assert_frame_equal
+from azure.storage.blob import BlobServiceClient
 
 
 try:
@@ -137,12 +138,23 @@ def test_separation_between_libraries_with_prefixes(moto_uri_incl_bucket):
     assert ac_mars["pytest_test_lib"].list_symbols() == ["test_2"]
 
 
-def test_library_management_path_prefix(moto_s3_uri_incl_bucket, boto_client):
-    test_bucket = sorted(boto_client.list_buckets()["Buckets"], key=lambda bucket_meta: bucket_meta["CreationDate"])[
-        -1
-    ]["Name"]
+@pytest.mark.parametrize(
+    "connection_string, client",
+    [("moto_s3_uri_incl_bucket", "boto_client"), ("moto_azure_uri_incl_bucket", "azure_client")],
+)
+def test_library_management_path_prefix(connection_string, client, request):
+    connection_string = request.getfixturevalue(request.getfixturevalue("connection_string"))
+    client = request.getfixturevalue(request.getfixturevalue("client"))
 
-    URI = moto_s3_uri_incl_bucket + "&path_prefix=hello/world"
+    if isinstance(client, BlobServiceClient):
+        test_bucket = list(client.list_containers())
+        assert len(test_bucket) == 1
+    else:
+        test_bucket = sorted(client.list_buckets()["Buckets"], key=lambda bucket_meta: bucket_meta["CreationDate"])[-1][
+            "Name"
+        ]
+
+    URI = connection_string + "&path_prefix=hello/world"
     ac = Arctic(URI)
     assert ac.list_libraries() == []
 
@@ -156,7 +168,10 @@ def test_library_management_path_prefix(moto_s3_uri_incl_bucket, boto_client):
     ac["pytest_test_lib"].snapshot("test_snapshot")
     assert ac["pytest_test_lib"].list_snapshots() == {"test_snapshot": None}
 
-    keys = [d["Key"] for d in boto_client.list_objects(Bucket=test_bucket)["Contents"]]
+    if isinstance(client, BlobServiceClient):
+        keys = [blob["name"] for blob in client.get_container_client(test_bucket[0]).list_blobs()]
+    else:
+        keys = [d["Key"] for d in client.list_objects(Bucket=test_bucket)["Contents"]]
     assert all(k.startswith("hello/world") for k in keys)
     assert any(k.startswith("hello/world/_arctic_cfg") for k in keys)
     assert any(k.startswith("hello/world/pytest_test_lib") for k in keys)
@@ -515,8 +530,7 @@ def test_s3_repr(moto_s3_uri_incl_bucket):
     s3_endpoint += f":{port}"
     bucket = moto_s3_uri_incl_bucket.split(":")[-1].split("?")[0]
     assert (
-        repr(lib)
-        == "Library("
+        repr(lib) == "Library("
         "Arctic("
         "config=S3("
         f"endpoint={s3_endpoint}, bucket={bucket})), path=pytest_test_lib, storage=s3_storage)"
@@ -526,6 +540,7 @@ def test_s3_repr(moto_s3_uri_incl_bucket):
     written_vi = lib.write("my_symbol", df)
     print(written_vi.host)
     assert re.match(r"S3\(endpoint=localhost:\d+, bucket=test_bucket_\d+\)", written_vi.host)
+
 
 def test_azure_repr(moto_azure_uri_incl_bucket):
     ac = Arctic(moto_azure_uri_incl_bucket)
@@ -537,8 +552,7 @@ def test_azure_repr(moto_azure_uri_incl_bucket):
     endpoint = moto_azure_uri_incl_bucket.split("//")[1].split("/")[0]
     container = moto_azure_uri_incl_bucket.split("//")[-1].split("?")[0].split("/")[1]
     assert (
-        repr(lib)
-        == "Library("
+        repr(lib) == "Library("
         "Arctic("
         "config=azure("
         f"endpoint={endpoint}, container={container})), path=pytest_test_lib, storage=azure_storage)"
@@ -547,6 +561,7 @@ def test_azure_repr(moto_azure_uri_incl_bucket):
     df = pd.DataFrame({"col1": [1, 2, 3], "col2": [4, 5, 6]})
     written_vi = lib.write("my_symbol", df)
     assert re.match(r"azure\(endpoint=\d\.\d\.\d\.\d:\d+, container=testbucket\d+\)", written_vi.host)
+
 
 class A:
     """A dummy user defined type that requires pickling to serialize."""
@@ -1307,11 +1322,25 @@ def test_segment_slicing(moto_uri_incl_bucket):
     assert num_data_segments == math.ceil(rows / rows_per_segment) * math.ceil(columns / columns_per_segment)
 
 
-def test_reload_symbol_list(moto_s3_uri_incl_bucket, boto_client): #TODO
+@pytest.mark.parametrize(
+    "connection_string, client",
+    [("moto_s3_uri_incl_bucket", "boto_client"), ("moto_azure_uri_incl_bucket", "azure_client")],
+)
+def test_reload_symbol_list(connection_string, client, request):
+    connection_string = request.getfixturevalue(request.getfixturevalue("connection_string"))
+    client = request.getfixturevalue(request.getfixturevalue("client"))
+
     def get_symbol_list_keys():
-        keys = [
-            d["Key"] for d in boto_client.list_objects(Bucket=test_bucket)["Contents"] if d["Key"].startswith(lib_name)
-        ]
+        if isinstance(client, BlobServiceClient):
+            keys = [
+                blob["name"]
+                for blob in client.get_container_client(test_bucket[0]).list_blobs()
+                if blob["name"].startswith(lib_name)
+            ]
+        else:
+            keys = [
+                d["Key"] for d in client.list_objects(Bucket=test_bucket)["Contents"] if d["Key"].startswith(lib_name)
+            ]
         symbol_list_keys = []
         for key in keys:
             path_components = key.split("/")
@@ -1319,10 +1348,15 @@ def test_reload_symbol_list(moto_s3_uri_incl_bucket, boto_client): #TODO
                 symbol_list_keys.append(path_components[2])
         return symbol_list_keys
 
-    test_bucket = sorted(boto_client.list_buckets()["Buckets"], key=lambda bucket_meta: bucket_meta["CreationDate"])[
-        -1
-    ]["Name"]
-    ac = Arctic(moto_s3_uri_incl_bucket)
+    if isinstance(client, BlobServiceClient):
+        test_bucket = list(client.list_containers())
+        assert len(test_bucket) == 1
+    else:
+        test_bucket = sorted(client.list_buckets()["Buckets"], key=lambda bucket_meta: bucket_meta["CreationDate"])[-1][
+            "Name"
+        ]
+
+    ac = Arctic(connection_string)
     assert ac.list_libraries() == []
 
     lib_name = "pytest_test_lib"

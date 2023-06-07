@@ -34,6 +34,7 @@ import socket
 
 import requests
 from pytest_server_fixtures.base import get_ephemeral_port
+from azure.storage.blob import BlobServiceClient
 
 from arcticdb.arctic import Arctic
 from arcticdb.version_store.helper import (
@@ -83,6 +84,24 @@ def _moto_s3_uri_module():
 
 
 @pytest.fixture(scope="function")
+def azure_client(azure_test_connection_setting):
+    (
+        endpoint,
+        container,
+        credential_name,
+        credential_key,
+        is_https,
+        connect_to_azurite,
+    ) = azure_test_connection_setting
+    credential = {"account_name": credential_name, "account_key": credential_key}
+    account_url = "https://" if is_https else "http://"
+    account_url += endpoint + "/" + credential_name if connect_to_azurite else credential_name + "." + endpoint
+    client = BlobServiceClient(account_url=account_url, credential=credential)
+
+    yield client
+
+
+@pytest.fixture(scope="function")
 def boto_client(_moto_s3_uri_module):
     endpoint = _moto_s3_uri_module
     client = boto3.client(
@@ -127,7 +146,7 @@ def moto_s3_uri_incl_bucket(moto_s3_endpoint_and_credentials):
 
 
 @pytest.fixture
-def moto_azure_endpoint_and_credentials(azurite_port, spawn_azurite):
+def azure_test_connection_setting(azurite_port, spawn_azurite):
     global BUCKET_ID
 
     container = f"testbucket{BUCKET_ID}"
@@ -138,6 +157,21 @@ def moto_azure_endpoint_and_credentials(azurite_port, spawn_azurite):
     endpoint = "0.0.0.0:" + str(azurite_port)
     is_https = False
     connect_to_azurite = True
+
+    yield endpoint, container, credential_name, credential_key, is_https, connect_to_azurite
+
+
+@pytest.fixture
+def moto_azure_endpoint_and_credentials(azure_test_connection_setting, azure_client):
+    (
+        endpoint,
+        container,
+        credential_name,
+        credential_key,
+        is_https,
+        connect_to_azurite,
+    ) = azure_test_connection_setting
+    azure_client.create_container(name=container)
     yield endpoint, container, credential_name, credential_key, is_https, connect_to_azurite
 
 
@@ -151,17 +185,19 @@ def moto_azure_uri_incl_bucket(moto_azure_endpoint_and_credentials):
         is_https,
         connect_to_azurite,
     ) = moto_azure_endpoint_and_credentials
-    yield "azure://" + endpoint + ":" + container + "?access=" + credential_name + "&secret=" + credential_key + "&https=" + str(
+    yield "azure://" + endpoint + "/" + container + "?access=" + credential_name + "&secret=" + credential_key + "&https=" + str(
         is_https
     ) + "&connect_to_azurite=" + str(
         connect_to_azurite
     )
 
 
-@pytest.fixture(scope="function", params=("S3", "LMDB"))
-def arctic_client(request, moto_s3_uri_incl_bucket, tmpdir):
+@pytest.fixture(scope="function", params=("S3", "LMDB", "Azure"))
+def arctic_client(request, moto_s3_uri_incl_bucket, moto_azure_uri_incl_bucket, tmpdir):
     if request.param == "S3":
         ac = Arctic(moto_s3_uri_incl_bucket)
+    elif request.param == "Azure":
+        ac = Arctic(moto_azure_uri_incl_bucket)
     elif request.param == "LMDB":
         ac = Arctic(f"lmdb://{tmpdir}")
     else:

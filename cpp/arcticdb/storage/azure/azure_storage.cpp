@@ -23,8 +23,6 @@ AzureStorage::AzureStorage(const LibraryPath &library_path, OpenMode mode, const
     connect_to_azurite_(conf.connect_to_azurite()),
     request_timeout_(conf.request_timeout() == 0 ? 60000 : conf.request_timeout()){
         log::version().info("Connecting to Azure Blob Storage: {}", blob_container_url_);
-        if (conf.connect_to_azurite())
-            container_client_.CreateIfNotExists(); //TODO: import python Azure SDK to creat the container in pytest fixture instead
 
         if (!conf.prefix().empty()) {
             ARCTICDB_RUNTIME_DEBUG(log::storage(), "Azure prefix found, using: {}", conf.prefix());
