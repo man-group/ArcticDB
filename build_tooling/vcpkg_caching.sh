@@ -1,9 +1,12 @@
 #!/bin/bash
 
-pushd $(realpath $(dirname $BASH_SOURCE))/../cpp/vcpkg
+export VCPKG_ROOT=`realpath $(dirname $BASH_SOURCE)/../cpp/vcpkg`
+
+pushd $VCPKG_ROOT
+PLATFORM_VCPKG_ROOT=`cygpath -wa . 2>/dev/null || pwd`
 
 [[ -x vcpkg ]] || ./bootstrap-vcpkg.sh -disableMetrics
-nuget="`which mono` `./vcpkg fetch nuget | tail -n 1`"  # which mono will return empty on windows
+nuget="`which mono 2>/dev/null` `./vcpkg fetch nuget | tail -n 1`"  # which mono will return empty on windows
 echo "Using nuget=$nuget"
 
 VCPKG_BINARY_SOURCES="clear;nuget,github,readwrite"
