@@ -27,8 +27,6 @@ from arcticdb.util.hypothesis import (
     string_strategy,
 )
 
-pytestmark = pytest.mark.processing
-
 
 def assert_equal_value(data, expected):
     received = data.reindex(sorted(data.columns), axis=1)

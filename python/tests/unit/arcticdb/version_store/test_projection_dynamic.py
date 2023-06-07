@@ -18,8 +18,6 @@ from arcticdb.util.hypothesis import (
     string_strategy,
 )
 
-import pytest
-pytestmark = pytest.mark.processing
 
 def test_project_dynamic(lmdb_version_store_dynamic_schema):
     lib = lmdb_version_store_dynamic_schema

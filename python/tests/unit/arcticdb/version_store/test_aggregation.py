@@ -22,8 +22,6 @@ from arcticdb.util.hypothesis import (
 from hypothesis import assume, given, settings
 from hypothesis.extra.pandas import column, data_frames, range_indexes
 
-pytestmark = pytest.mark.processing
-
 
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)

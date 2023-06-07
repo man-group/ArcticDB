@@ -18,9 +18,6 @@ from arcticdb.util.hypothesis import (
     string_strategy,
 )
 
-import pytest
-pytestmark = pytest.mark.processing
-
 
 def test_project(s3_version_store):
     lib = s3_version_store

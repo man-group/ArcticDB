@@ -11,9 +11,6 @@ import pandas as pd
 from arcticdb.version_store.processing import QueryBuilder
 from arcticdb.util.test import assert_frame_equal
 
-import pytest
-pytestmark = pytest.mark.processing
-
 
 def test_reuse_querybuilder(lmdb_version_store_tiny_segment):
     lib = lmdb_version_store_tiny_segment
