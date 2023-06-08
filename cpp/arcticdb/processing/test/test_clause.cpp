@@ -6,6 +6,7 @@
  */
 
 #include <gtest/gtest.h>
+#include <gmock/gmock-matchers.h>
 #include <arcticdb/processing/clause.hpp>
 #include <arcticdb/util/test/generators.hpp>
 #include <folly/futures/Future.h>
@@ -18,14 +19,11 @@ void segment_scalar_assert_all_values_equal(const arcticdb::ProcessingSegment& s
     slice_and_key.ensure_segment(empty);
     const arcticdb::SegmentInMemory& segment_memory = slice_and_key.segment(empty);
     segment_memory.init_column_map();
+    auto column_index = segment_memory.column_index(name.value).value();
     size_t row_counter = 0;
-    for (auto row : segment_memory) {
-        auto column_index = segment_memory.column_index(name.value).value();
-        if (row.scalar_at<T>(column_index)){
-            row.visit_scalar(size_t{ column_index }, [&expected](auto val) {
-                ASSERT_NE(expected.find(val.value()), expected.end());
-            });
-
+    for (const auto& row : segment_memory) {
+        if (auto maybe_val = row.scalar_at<T>(column_index); maybe_val){
+            ASSERT_THAT(expected, testing::Contains(maybe_val.value()));
             row_counter++;
         }
     }
@@ -39,14 +37,11 @@ void segment_string_assert_all_values_equal(const arcticdb::ProcessingSegment& s
     slice_and_key.ensure_segment(empty);
     const arcticdb::SegmentInMemory& segment_memory = slice_and_key.segment(empty);
     segment_memory.init_column_map();
+    auto column_index = segment_memory.column_index(name.value).value();
     size_t row_counter = 0;
     for (auto row : segment_memory) {
-        auto column_index = segment_memory.column_index(name.value).value();
-        if (row.string_at(column_index)){
-            row.visit_string(size_t{column_index}, [&expected](auto val) {
-                ASSERT_EQ(val.value(), expected);
-            });
-
+        if (auto maybe_val = row.string_at(column_index); maybe_val){
+            ASSERT_EQ(maybe_val.value(), expected);
             row_counter++;
         }
     }
