@@ -46,7 +46,7 @@ from tests.util.date import DateRange
 
 
 if sys.platform == "linux":
-    SMOKE_TEST_VERSION_STORES = ["lmdb_version_store", "s3_version_store", "mongo_version_store"]
+    SMOKE_TEST_VERSION_STORES = ["lmdb_version_store", "s3_version_store", "mongo_version_store", "azure_version_store"]
 else:
     # leave out Mongo as spinning up a Mongo instance in Windows CI is fiddly, and Mongo support is only
     # currently required for Linux for internal use.

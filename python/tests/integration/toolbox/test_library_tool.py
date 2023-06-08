@@ -26,7 +26,7 @@ def get_log_types():
     return [KeyType.LOG, KeyType.LOG_COMPACTED]
 
 
-@pytest.mark.parametrize("lib_type", ["lmdb_version_store", "s3_version_store"])
+@pytest.mark.parametrize("lib_type", ["lmdb_version_store", "s3_version_store", "azure_version_store"])
 def test_get_types(lib_type, request):
     df = sample_dataframe()
     lib = request.getfixturevalue(lib_type)
@@ -44,7 +44,7 @@ def test_get_types(lib_type, request):
     assert index_df.at[0, "version_id"] == 0
 
 
-@pytest.mark.parametrize("lib_type", ["lmdb_version_store", "s3_version_store"])
+@pytest.mark.parametrize("lib_type", ["lmdb_version_store", "s3_version_store", "azure_version_store"])
 def test_read_keys(lib_type, request):
     lib = request.getfixturevalue(lib_type)
     populate_db(lib)
@@ -60,7 +60,7 @@ def test_read_keys(lib_type, request):
         assert len(lib_tool.find_keys(key_type)) == 0
 
 
-@pytest.mark.parametrize("lib_type", ["lmdb_version_store", "s3_version_store"])
+@pytest.mark.parametrize("lib_type", ["lmdb_version_store", "s3_version_store", "azure_version_store"])
 def test_write_keys(lib_type, request):
     lib = request.getfixturevalue(lib_type)
     populate_db(lib)
@@ -82,7 +82,7 @@ def test_write_keys(lib_type, request):
     assert len(new_keys) == len(all_keys)
 
 
-@pytest.mark.parametrize("lib_type", ["lmdb_version_store", "s3_version_store"])
+@pytest.mark.parametrize("lib_type", ["lmdb_version_store", "s3_version_store", "azure_version_store"])
 def test_count_keys(lib_type, request):
     df = sample_dataframe()
     lib = request.getfixturevalue(lib_type)

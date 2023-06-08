@@ -454,3 +454,11 @@ def get_wide_df():
         return pd.DataFrame(index=[pd.Timestamp(ts)], data={str(col): get_val(col) for col in cols})
 
     return get_df
+
+
+@pytest.fixture(
+    scope="function",
+    params=("s3_version_store", "azure_version_store") if sys.platform == "linux" else ("s3_version_store"),
+)
+def object_version_store(request):
+    yield request.getfixturevalue(request.param)

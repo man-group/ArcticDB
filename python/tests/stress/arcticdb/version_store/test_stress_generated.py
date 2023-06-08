@@ -59,13 +59,13 @@ def param_dict(*fields, **cases):
 
 
 @param_dict("pct_null", "repeats", "symbol", high_entropy=(0.0, 1), low_entropy=(0.0, 1000))
-def test_stress(pct_null, repeats, symbol, s3_version_store):
+def test_stress(pct_null, repeats, symbol, object_version_store):
     print("Testing symbol " + symbol)
     df = generate_data(DATA_SIZE, NCOLS, pct_null, repeats)
     print("Generated data, starting write")
-    write_to_arctic(df, symbol, s3_version_store)
+    write_to_arctic(df, symbol, object_version_store)
     start = time.time()
-    test_df = s3_version_store.read(symbol).data
+    test_df = object_version_store.read(symbol).data
     elapsed = time.time() - start
     print("arctic read time: " + str(elapsed))
     assert_frame_equal(test_df, df)
