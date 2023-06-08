@@ -13,6 +13,19 @@
 
 #include <memory>
 
+#define ARCTICDB_RUNTIME_SAMPLE(name, flags) \
+bool _scoped_timer_active_ = ConfigsMap::instance()->get_int("Logging.timings", 0) == 1 || ConfigsMap::instance()->get_int("Logging.ALL", 0) == 1; \
+arcticdb::ScopedTimer runtime_timer = !_scoped_timer_active_ ? arcticdb::ScopedTimer() : arcticdb::ScopedTimer(#name, [](auto msg) { \
+    log::timings().debug(msg); \
+});
+
+#define ARCTICDB_RUNTIME_SUBSAMPLE(name, flags) \
+bool _scoped_subtimer_##name_active_ = ConfigsMap::instance()->get_int("Logging.timer", 0) == 1; \
+arcticdb::ScopedTimer runtime_sub_timer_##name = !_scoped_subtimer_##name_active_ ? arcticdb::ScopedTimer() : arcticdb::ScopedTimer(#name, [](auto msg) { \
+    log::timings().debug(msg); \
+});
+
+
 #ifdef USE_REMOTERY
 
 #ifdef ARCTICDB_USING_CONDA
@@ -20,8 +33,6 @@
 #else
     #include <Remotery.h>
 #endif
-
-struct Remotery;
 
 class RemoteryInstance {
   public:
@@ -49,19 +60,6 @@ class RemoteryConfigInstance {
         instance_ = std::make_shared<RemoteryConfigInstance>();
     }
 };
-
-#define ARCTICDB_RUNTIME_SAMPLE(name, flags) \
-bool _scoped_timer_active_ = ConfigsMap::instance()->get_int("Logging.timings", 0) == 1 || ConfigsMap::instance()->get_int("Logging.ALL", 0) == 1; \
-arcticdb::ScopedTimer runtime_timer = !_scoped_timer_active_ ? arcticdb::ScopedTimer() : arcticdb::ScopedTimer(#name, [](auto msg) { \
-    log::timings().debug(msg); \
-});
-
-#define ARCTICDB_RUNTIME_SUBSAMPLE(name, flags) \
-bool _scoped_subtimer_##name_active_ = ConfigsMap::instance()->get_int("Logging.timer", 0) == 1; \
-arcticdb::ScopedTimer runtime_sub_timer_##name = !_scoped_subtimer_##name_active_ ? arcticdb::ScopedTimer() : arcticdb::ScopedTimer(#name, [](auto msg) { \
-    log::timings().debug(msg); \
-});
-
 
 #define ARCTICDB_SAMPLE(name, flags) \
         auto instance = RemoteryInstance::instance();  \
@@ -117,10 +115,6 @@ inline void set_remotery_thread_name(const char* ) { }
 
 #else
 
-#define ARCTICDB_RUNTIME_SAMPLE(name, flags)
-
-#define ARCTICDB_RUNTIME_SUBSAMPLE(name, flags)
-
 #define ARCTICDB_SAMPLE(name, flags)
 
 #define ARCTICDB_SUBSAMPLE(name, flags)
@@ -138,3 +132,4 @@ inline void set_remotery_thread_name(const char* ) { }
 #define ARCTICDB_SAMPLE_LOG(task_name)
 
 #endif // USE_REMOTERY
+
