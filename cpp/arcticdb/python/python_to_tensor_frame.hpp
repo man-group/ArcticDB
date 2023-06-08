@@ -48,4 +48,6 @@ pipelines::InputTensorFrame py_ndf_to_frame(
     const py::object &norm_meta,
     const py::object &user_meta);
 
+pipelines::InputTensorFrame py_none_to_frame();
+
 } // namespace arcticdb::convert

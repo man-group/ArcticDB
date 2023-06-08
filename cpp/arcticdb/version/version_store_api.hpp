@@ -269,8 +269,8 @@ class PythonVersionStore : public LocalVersionedEngine {
         bool prune_previous_versions,
         bool validate_index);
 
-    std::vector<VersionedItem> batch_write_metadata(
-        std::vector<StreamId> stream_ids,
+    std::vector<std::variant<VersionedItem, DataError>> batch_write_metadata(
+        const std::vector<StreamId>& stream_ids,
         const std::vector<py::object>& user_meta,
         bool prune_previous_versions);
 
