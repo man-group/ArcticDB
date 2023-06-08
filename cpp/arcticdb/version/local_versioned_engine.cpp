@@ -909,7 +909,7 @@ folly::Future<std::pair<VersionedItem, FrameAndDescriptor>> async_read_direct(
     auto frame = allocate_frame(pipeline_context);
 
     return fetch_data(frame, pipeline_context, store, dynamic_schema, buffers).thenValue(
-        [pipeline_context, frame, &read_options](auto &&) mutable {
+        [pipeline_context, frame, read_options=std::move(read_options)](auto &&) mutable {
             ScopedGILLock gil_lock;
             reduce_and_fix_columns(pipeline_context, frame, read_options);
         }).thenValue(

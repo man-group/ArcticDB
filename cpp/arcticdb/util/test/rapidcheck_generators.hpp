@@ -172,7 +172,7 @@ bool check_read_frame(const TestDataFrame &data_frame, ReaderType &reader, std::
     bool success = true;
     auto timestamp = data_frame.start_ts_;
     auto row = 0u;
-    reader.foreach_row([&](auto &&row_ref) {
+    reader.foreach_row([&row, &timestamp, &success, &data_frame, &reader, &errors](auto &&row_ref) {
         timestamp += data_frame.timestamp_increments_[row];
         for (size_t col = 0; col < data_frame.num_columns_; ++col) {
             data_frame.types_[col].visit_tag([&](auto type_desc_tag) {
