@@ -1002,35 +1002,18 @@ std::pair<VersionedItem, py::object> PythonVersionStore::read_metadata(
     return std::pair{version, pyobj};
 }
 
-std::vector<VersionedItem> PythonVersionStore::batch_write_metadata(
-    std::vector<StreamId> stream_ids,
+std::vector<std::variant<VersionedItem, DataError>> PythonVersionStore::batch_write_metadata(
+    const std::vector<StreamId>& stream_ids,
     const std::vector<py::object>& user_meta,
     bool prune_previous_versions) {
-    std::vector<std::pair<VersionedItem, py::object>> results;
-    std::vector<AtomKey> keys_to_read;
-    auto stream_update_info_vector_fut = batch_get_latest_undeleted_version_and_next_version_id_async(store(),
-                                                                                                      version_map(),
-                                                                                                      stream_ids);
-    auto stream_update_info_vector = folly::collect(stream_update_info_vector_fut).via(&async::io_executor()).get();
-    std::vector<folly::Future<AtomKey>> fut_vec;
-    for(const auto& stream_id : folly::enumerate(stream_ids)) {
+    std::vector<arcticdb::proto::descriptors::UserDefinedMetadata> user_meta_protos;
+    user_meta_protos.reserve(user_meta.size());
+    for(const auto& user_meta_item : user_meta) {
         arcticdb::proto::descriptors::UserDefinedMetadata user_meta_proto;
-        python_util::pb_from_python(user_meta[stream_id.index], user_meta_proto);
-        const auto& update_info = stream_update_info_vector[stream_id.index];
-        util::check(update_info.previous_index_key_.has_value(),
-                    "Failed to find latest version to write metadata to for symbol {}",
-                    *stream_id);
-        fut_vec.push_back(async::submit_io_task(UpdateMetadataTask{store(),
-                                                                   update_info,
-                                                                   std::move(user_meta_proto)}));
+        python_util::pb_from_python(user_meta_item, user_meta_proto);
+        user_meta_protos.emplace_back(std::move(user_meta_proto));
     }
-    auto index_keys = folly::collect(fut_vec).get();
-    folly::collect(batch_write_version_and_prune_if_needed(index_keys, stream_update_info_vector, prune_previous_versions)).get();
-    std::vector<VersionedItem> output(index_keys.size());
-    for(auto key : folly::enumerate(index_keys))
-        output[key.index] = std::move(*key);
-
-    return output;
+    return batch_write_versioned_metadata_internal(stream_ids, prune_previous_versions, std::move(user_meta_protos));
 }
 
 std::vector<std::pair<VersionedItem, TimeseriesDescriptor>> PythonVersionStore::batch_restore_version(
