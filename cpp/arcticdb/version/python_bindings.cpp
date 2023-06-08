@@ -237,8 +237,6 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
         .def_property_readonly("end", &pipelines::ColRange::end)
         .def_property_readonly("diff", &pipelines::ColRange::diff);
 
-
-
     auto adapt_read_dfs = [](std::vector<std::variant<ReadResult, DataError>> && ret) -> py::list {
         py::list lst;
         for (auto &res: ret) {

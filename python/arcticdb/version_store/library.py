@@ -169,13 +169,46 @@ class WritePayload:
         self.metadata = metadata
 
     def __repr__(self):
-        return f"WriteArgs(symbol={self.symbol}, data_id={id(self.data)}, metadata={self.metadata})"
+        return f"WritePayload(symbol={self.symbol}, data_id={id(self.data)}, metadata={self.metadata})"
 
     def __iter__(self):
         yield self.symbol
         yield self.data
         if self.metadata is not None:
             yield self.metadata
+
+
+class WriteMetadataPayload:
+    """
+    WriteMetadataPayload is designed to enable batching of multiple operations with an API that mirrors the singular
+    ``write_metadata`` API.
+
+    Construction of ``WriteMetadataPayload`` objects is only required for batch write metadata operations.
+
+    One instance of ``WriteMetadataPayload`` refers to one unit that can be written through to ArcticDB.
+    """
+
+    def __init__(self, symbol: str, metadata: Any):
+        """
+        Constructor.
+
+        Parameters
+        ----------
+        symbol : str
+            Symbol name. Limited to 255 characters. The following characters are not supported in symbols:
+            ``"*", "&", "<", ">"``
+        metadata : Any
+            metadata to persist along with the symbol.
+        """
+        self.symbol = symbol
+        self.metadata = metadata
+
+    def __repr__(self):
+        return f"WriteMetadataPayload(symbol={self.symbol}, metadata={self.metadata})"
+
+    def __iter__(self):
+        yield self.symbol
+        yield self.metadata
 
 
 class ReadRequest(NamedTuple):
@@ -1197,6 +1230,57 @@ class Library:
             Structure containing metadata and version number of the affected symbol in the store.
         """
         return self._nvs.write_metadata(symbol, metadata, prune_previous_version=False)
+
+    def write_metadata_batch(
+        self, write_metadata_payloads: List[WriteMetadataPayload], prune_previous_versions=None
+    ) -> List[Union[VersionedItem, DataError]]:
+        """
+        Write metadata to multiple symbols in a batch fashion. This is more efficient than making multiple `write_metadata` calls
+        in succession as some constant-time operations can be executed only once rather than once for each element of
+        `write_metadata_payloads`.
+        Note that this isn't an atomic operation - it's possible for the metadata for one symbol to be fully written and
+        readable before another symbol.
+        Parameters
+        ----------
+        write_metadata_payloads : `List[WriteMetadataPayload]`
+            Symbols and their corresponding metadata. There must not be any duplicate symbols in `payload`.
+        prune_previous_version : `Optional[bool]`, default=None
+            Remove previous versions from version list. Uses library default if left as None.
+
+        Returns
+        -------
+        List[Union[VersionedItem, DataError]]
+            List of versioned items. The data attribute will be None for each versioned item.
+            i-th entry corresponds to i-th element of `write_metadata_payloads`. Each result correspond to
+            a structure containing metadata and version number of the affected symbol in the store.
+            If any internal exception is raised, a DataError object is returned, with symbol,
+            error_code, error_category, and exception_string properties.
+
+        Raises
+        ------
+        ArcticDuplicateSymbolsInBatchException
+            When duplicate symbols appear in write_metadata_payloads.
+
+        Examples
+        --------
+
+        Writing a simple batch:
+
+        >>> payload_1 = WriteMetadataPayload("symbol_1", {'the': 'metadata_1'})
+        >>> payload_2 = WriteMetadataPayload("symbol_2", {'the': 'metadata_2'})
+        >>> items = lib.write_metadata_batch([payload_1, payload_2])
+        >>> lib.read_metadata("symbol_1")
+        {'the': 'metadata_1'}
+        >>> lib.read_metadata("symbol_2")
+        {'the': 'metadata_2'}
+        """
+
+        self._raise_if_duplicate_symbols_in_batch(write_metadata_payloads)
+        return self._nvs._batch_write_metadata_to_versioned_items(
+            [p.symbol for p in write_metadata_payloads],
+            [p.metadata for p in write_metadata_payloads],
+            prune_previous_version=prune_previous_versions,
+        )
 
     def snapshot(
         self,
