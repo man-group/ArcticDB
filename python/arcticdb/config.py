@@ -22,7 +22,7 @@ from arcticc.pb2.config_pb2 import RuntimeConfig
 from arcticc.pb2.storage_pb2 import EnvironmentConfigsMap, EnvironmentConfig, LibraryConfig, LibraryDescriptor
 from google.protobuf.json_format import MessageToJson, Parse as JsonToMessage
 from google.protobuf.message import Message
-from typing import AnyStr, Optional
+from typing import AnyStr, Optional, Dict
 
 from arcticdb.exceptions import ArcticNativeException
 from arcticdb.log import logger_by_name, configure
@@ -171,56 +171,46 @@ def save_runtime_config(config=None, path=Defaults.RUNTIME_CONF_FILE_PATH):
     _save_config(config, path, RuntimeConfig)
 
 
-def set_log_level(default_level=Defaults.DEFAULT_LOG_LEVEL, specific_log_levels=None):
+def make_loggers_config(default_level=Defaults.DEFAULT_LOG_LEVEL, specific_log_levels: Optional[Dict[str, str]] = None):
     """
-    The possible lognames are:
-    codec, inmem, root, storage, version, memory, timings
+    Generate a ``LoggersConfig`` object with sink set to stderr and the given log levels.
 
-    :param default_level: Default loglevel for all the lognames.
-    :param specific_log_levels: can be used to override the default loglevel for a specific logname.
-    eg. set_log_level("INFO", {'version': "DEBUG", 'storage': "DEBUG"})
-    :return:
+    Parameters
+    ----------
+    default_level
+        Default log level for all the loggers unless overriden with specific_log_levels.
+        Valid values are "DEBUG", "INFO", "WARN", "ERROR".
+    specific_log_levels
+        Optional overrides for specific logger(s). The possible logger names can be found in log.py.
+
+    Examples
+    --------
+    >>> make_loggers_config("INFO", {'version': "DEBUG", 'storage': "DEBUG"})
     """
     log_cfgs = LoggersConfig()
     specific_log_levels = {} if not specific_log_levels else specific_log_levels
 
-    sink = log_cfgs.sink_by_id["file"]
-    sink.daily_file.path = osp.join(Defaults.LOG_DIR, "arcticc.daily.log")
     sink = log_cfgs.sink_by_id["console"]
     sink.console.std_err = True
 
-    for logger_name in logger_by_name.keys():
+    for logger_name in logger_by_name:
         level_to_set = specific_log_levels.get(logger_name, default_level)
         logger = log_cfgs.logger_by_id[logger_name]
-        logger.sink_ids.append("file")
-        logger.sink_ids.append("console")
         logger.sink_ids.append("console")
         logger.level = getattr(LoggerConfig, level_to_set)
-        logger.pattern = "%Y%m%d_%H%M%S.%f %t %L %n %P | %v".format(
-            "arcticc.{}".format(logger_name) if logger_name != "root" else "arcticc"
-        )
 
-    return configure(log_cfgs, force=True)
+    return log_cfgs
+
+
+def set_log_level(default_level=Defaults.DEFAULT_LOG_LEVEL, specific_log_levels=None):
+    """
+    Passes the arguments to ``make_loggers_config`` and then configures the loggers, overwriting any existing config.
+    """
+    return configure(make_loggers_config(default_level, specific_log_levels), force=True)
 
 
 def default_loggers_config():
-    # type: ()->LoggersConfig
-    log_cfgs = LoggersConfig()
-
-    sink = log_cfgs.sink_by_id["file"]
-    sink.daily_file.path = osp.join(Defaults.LOG_DIR, "arcticc.daily.log")
-    sink = log_cfgs.sink_by_id["console"]
-    sink.console.std_err = True
-
-    for n in logger_by_name.keys():
-        logger = log_cfgs.logger_by_id[n]
-        logger.sink_ids.append("file")
-        logger.sink_ids.append("console")
-        logger.level = LoggerConfig.INFO
-        logger.pattern = "%Y%m%d_%H%M%S.%f %t %L %n %P | %v".format(
-            "arcticc.{}".format(n) if n != "root" else "arcticc"
-        )
-    return log_cfgs
+    return make_loggers_config("INFO")
 
 
 def default_runtime_config():
