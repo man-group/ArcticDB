@@ -11,6 +11,7 @@ from typing import Iterable, Dict, Any, Union
 
 from arcticc.pb2.lmdb_storage_pb2 import Config as LmdbConfig
 from arcticc.pb2.s3_storage_pb2 import Config as S3Config
+from arcticc.pb2.azure_storage_pb2 import Config as AzureConfig
 from arcticc.pb2.in_memory_storage_pb2 import Config as MemoryConfig
 from arcticc.pb2.mongo_storage_pb2 import Config as MongoConfig
 from arcticc.pb2.storage_pb2 import (
@@ -297,6 +298,15 @@ def create_test_s3_cfg(
     )
     return cfg
 
+def create_test_azure_cfg(lib_name):
+    cfg = EnvironmentConfigsMap()
+    add_azure_library_to_env(
+        cfg,
+        lib_name=lib_name,
+        env_name=Defaults.ENV
+    )
+    return cfg
+
 
 def create_test_memory_cfg(lib_name=Defaults.LIB, description=None):
     cfg = EnvironmentConfigsMap()
@@ -309,6 +319,61 @@ def create_test_mongo_cfg(lib_name=Defaults.LIB, uri="mongodb://localhost:27017"
     add_mongo_library_to_env(cfg, lib_name=lib_name, env_name=Defaults.ENV, uri=uri, description=description)
     return cfg
 
+def get_azure_proto(
+    cfg,
+    lib_name,
+    env_name,
+    credential_name,
+    credential_key,
+    container_name,
+    endpoint,
+    with_prefix=True,
+    is_https=False,
+    region=None,
+    use_virtual_addressing=False,
+):
+    env = cfg.env_by_id[env_name]
+    azure = AzureConfig()
+    azure.container_name = container_name
+    azure.credential_name = credential_name
+    azure.credential_key = credential_key
+    azure.endpoint = endpoint
+    azure.https = is_https
+    # adding time to prefix - so that the s3 root folder is unique and we can delete and recreate fast
+    if with_prefix:
+        if isinstance(with_prefix, str):
+            azure.prefix = with_prefix
+        else:
+            azure.prefix = f"{lib_name}{time.time() * 1e9:.0f}"
+    else:
+        azure.prefix = lib_name
+
+    if region:
+        azure.region = region
+
+    azure.use_virtual_addressing = use_virtual_addressing
+    sid, storage = get_storage_for_lib_name(azure.prefix, env)
+    storage.config.Pack(azure, type_url_prefix="cxx.arctic.org")
+    return sid, storage
+
+def add_azure_library_to_env(
+        cfg, lib_name, env_name, description=None
+):
+    env = cfg.env_by_id[env_name]
+    azure = AzureConfig()
+    
+    azure.container_name = "streamab"
+    azure.credential_name = "devstoreaccount1"
+    azure.credential_key = "Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw=="
+    azure.endpoint = "172.17.0.3:10000"
+    azure.https = False
+    azure.connect_to_azurite = True
+
+    sid, storage = get_storage_for_lib_name(lib_name, env)
+    storage.config.Pack(azure, type_url_prefix="cxx.arctic.org")
+    _add_lib_desc_to_env(env, lib_name, sid, description)
+
+    return cfg
 
 # see https://regex101.com/r/mBCS80/1
 _LIB_PATH_REGEX = re.compile(

@@ -234,6 +234,8 @@ set(arcticdb_srcs
         storage/s3/s3_storage_tool.hpp
         storage/s3/s3_storage_tool-inl.hpp
         storage/s3/s3_utils.hpp
+        storage/azure/azure_storage-inl.hpp
+        storage/azure/azure_storage.hpp
         storage/storage_factory.hpp
         storage/storage_options.hpp
         storage/storage.hpp
@@ -372,6 +374,7 @@ set(arcticdb_srcs
         storage/s3/s3_api.cpp
         storage/s3/s3_storage.cpp
         storage/s3/s3_storage_tool.cpp
+        storage/azure/azure_storage.cpp
         storage/storage_factory.cpp
         stream/aggregator.cpp
         stream/append_map.cpp

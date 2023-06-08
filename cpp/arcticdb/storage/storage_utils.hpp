@@ -11,6 +11,21 @@
 #include <arcticdb/storage/store.hpp>
 
 namespace arcticdb {
+namespace storage::s3::detail {
+    
+template<class It>
+using Range = folly::Range<It>;
+
+struct FlatBucketizer {
+    static std::string bucketize(const std::string& root_folder, const VariantKey&) {
+        return root_folder;
+    }
+
+    static size_t bucketize_length(KeyType) {
+        return 0;
+    }
+};
+}//namespace storage::s3::detail
 
 inline auto stream_id_prefix_matcher(const std::string &prefix) {
     return [&prefix](const StreamId& id) {

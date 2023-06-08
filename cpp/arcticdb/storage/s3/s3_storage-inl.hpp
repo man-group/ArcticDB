@@ -18,6 +18,7 @@
 #include <folly/gen/Base.h>
 #include <arcticdb/storage/s3/s3_utils.hpp>
 #include <arcticdb/storage/storage_options.hpp>
+#include <arcticdb/storage/storage_utils.hpp>
 #include <arcticdb/entity/serialized_key.hpp>
 #include <arcticdb/util/exponential_backoff.hpp>
 #include <arcticdb/util/configs_map.hpp>
@@ -45,19 +46,6 @@ namespace fg = folly::gen;
 namespace detail {
 
 static const size_t DELETE_OBJECTS_LIMIT = 1000;
-
-template<class It>
-using Range = folly::Range<It>;
-
-struct FlatBucketizer {
-    static std::string bucketize(const std::string& root_folder, const VariantKey&) {
-        return root_folder;
-    }
-
-    static size_t bucketize_length(KeyType) {
-        return 0;
-    }
-};
 
 template<class S3ClientType, class KeyBucketizer>
 void do_write_impl(

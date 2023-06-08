@@ -12,6 +12,7 @@
 #include <arcticdb/storage/lmdb/lmdb_storage.hpp>
 #include <arcticdb/storage/s3/s3_storage.hpp>
 #include <arcticdb/storage/s3/nfs_backed_storage.hpp>
+#include <arcticdb/storage/azure/azure_storage.hpp>
 #include <arcticdb/storage/memory/memory_storage.hpp>
 #include <arcticdb/storage/library_path.hpp>
 #include <arcticdb/storage/open_mode.hpp>
@@ -25,7 +26,7 @@
 
 namespace arcticdb::storage {
 
-using VariantStorageTypes = std::variant<lmdb::LmdbStorage, mongo::MongoStorage, s3::S3Storage, memory::MemoryStorage, nfs_backed::NfsBackedStorage>;
+using VariantStorageTypes = std::variant<lmdb::LmdbStorage, mongo::MongoStorage, s3::S3Storage, memory::MemoryStorage, nfs_backed::NfsBackedStorage, azure::AzureStorage>;
 using VariantStorage = variant::VariantStorage<VariantStorageTypes>;
 
 class VariantStorageFactory final : public StorageFactory<VariantStorageFactory> {
@@ -46,7 +47,7 @@ public:
         }, factory_variant_);
     }
   private:
-    std::variant<lmdb::LmdbStorageFactory, mongo::MongoStorageFactory, s3::S3StorageFactory, memory::MemoryStorageFactory, nfs_backed::NfsBackedStorageFactory> factory_variant_;
+    std::variant<lmdb::LmdbStorageFactory, mongo::MongoStorageFactory, s3::S3StorageFactory, memory::MemoryStorageFactory, nfs_backed::NfsBackedStorageFactory, azure::AzureStorageFactory> factory_variant_;
 };
 
 std::shared_ptr<VariantStorageFactory> create_storage_factory(
