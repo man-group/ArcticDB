@@ -7,15 +7,8 @@ As of the Change Date specified in that file, in accordance with the Business So
 """
 import traceback
 
-from arcticc.pb2.logger_pb2 import LoggersConfig
-from arcticdb_ext.log import configure as _configure
+from arcticdb_ext.log import configure
 from arcticdb_ext.log import log as _log, LogLevel as _Lvl, LoggerId as _LoggerId, is_active as _is_active
-
-
-def configure(pb_conf, force=False):
-    # type: (LoggersConfig, Optional[bool])->None
-    # necessary since default param are not supported by binding
-    return _configure(pb_conf, force)
 
 
 class _Logger(object):
