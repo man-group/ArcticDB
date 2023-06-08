@@ -1207,9 +1207,29 @@ class NativeVersionStore:
         )
         return [self._convert_thin_cxx_item_to_python(v) for v in cxx_versioned_items]
 
+    def _batch_write_metadata_to_versioned_items(
+        self, symbols: List[str], metadata_vector: List[Any], prune_previous_version
+    ):
+        for symbol in symbols:
+            self.check_symbol_validity(symbol)
+
+        proto_cfg = self._lib_cfg.lib_desc.version.write_options
+        prune_previous_version = self.resolve_defaults(
+            "prune_previous_version", proto_cfg, global_default=False, existing_value=prune_previous_version
+        )
+        normalized_meta = [normalize_metadata(metadata_vector[idx]) for idx in range(len(symbols))]
+        cxx_versioned_items = self.version_store.batch_write_metadata(symbols, normalized_meta, prune_previous_version)
+        write_metadata_results = []
+        for result in cxx_versioned_items:
+            if isinstance(result, DataError):
+                write_metadata_results.append(result)
+            else:
+                write_metadata_results.append(self._convert_thin_cxx_item_to_python(result))
+        return write_metadata_results
+
     def batch_write_metadata(
         self, symbols: List[str], metadata_vector: List[Any], prune_previous_version=None
-    ) -> List[VersionedItem]:
+    ) -> List[Union[VersionedItem, DataError]]:
         """
         Write metadata to multiple symbols in a batch fashion. This is more efficient than making multiple `write` calls
         in succession as some constant-time operations can be executed only once rather than once for each element of
@@ -1228,21 +1248,14 @@ class NativeVersionStore:
 
         Returns
         -------
-        List
+        List[Union[VersionedItem, DataError]]
             List of versioned items. The data attribute will be None for each versioned item.
-            i-th entry corresponds to i-th element of `symbols`.
+            i-th entry corresponds to i-th element of `symbols`. Each result correspond to
+            a structure containing metadata and version number of the affected symbol in the store.
+            If any internal exception is raised, a DataError object is returned, with symbol,
+            error_code, error_category, and exception_string properties.
         """
-        for symbol in symbols:
-            self.check_symbol_validity(symbol)
-
-        proto_cfg = self._lib_cfg.lib_desc.version.write_options
-        prune_previous_version = self.resolve_defaults(
-            "prune_previous_version", proto_cfg, global_default=False, existing_value=prune_previous_version
-        )
-        normalized_meta = [normalize_metadata(metadata_vector[idx]) for idx in range(len(symbols))]
-
-        cxx_versioned_items = self.version_store.batch_write_metadata(symbols, normalized_meta, prune_previous_version)
-        return [self._convert_thin_cxx_item_to_python(v) for v in cxx_versioned_items]
+        return self._batch_write_metadata_to_versioned_items(symbols, metadata_vector, prune_previous_version)
 
     def batch_append(
         self,
@@ -2501,10 +2514,6 @@ class NativeVersionStore:
             "prune_previous_version", proto_cfg, global_default=False, existing_value=prune_previous_version
         )
         udm = normalize_metadata(metadata) if metadata is not None else None
-        if not self.has_symbol(symbol):
-            # Handle this here so write_metadata in C++ always has a symbol to work with
-            return self.write(symbol, None, metadata=metadata, prune_previous_version=prune_previous_version)
-
         v = self.version_store.write_metadata(symbol, udm, prune_previous_version)
         return self._convert_thin_cxx_item_to_python(v)
 

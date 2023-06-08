@@ -41,6 +41,7 @@ import time
 
 from arcticdb.version_store.library import (
     WritePayload,
+    WriteMetadataPayload,
     ArcticDuplicateSymbolsInBatchException,
     ArcticUnsupportedDataTypeException,
     ReadRequest,
@@ -103,7 +104,7 @@ def test_read_meta_batch_with_tombstones(arctic_library):
     assert lib.read_metadata("sym_no_meta").metadata == results_list[4].metadata
 
 
-def test_read_meta_batch_with_as_ofs(arctic_library):
+def test_read_meta_batch_with_as_ofs_and_non_existent_version(arctic_library):
     lib = arctic_library
     lib.write_pickle("sym1", 1, {"meta1": 1}, prune_previous_versions=False)
     lib.write_pickle("sym2", 2, {"meta2": 2}, prune_previous_versions=False)
@@ -163,7 +164,7 @@ def test_read_meta_batch_with_as_ofs(arctic_library):
     assert results_list[4].metadata == {"meta2": 8}
 
 
-def test_read_meta_batch_with_as_ofs_high_amount(arctic_library):
+def test_read_meta_batch_with_as_ofs(arctic_library):
     lib = arctic_library
     num_symbols = 10
     num_versions = 4
@@ -183,6 +184,61 @@ def test_read_meta_batch_with_as_ofs_high_amount(arctic_library):
         for version in range(num_versions):
             idx = sym * num_versions + version
             assert results_list[idx].metadata == {"meta_" + str(sym): version}
+
+
+def test_write_meta_batch_with_as_ofs(arctic_library):
+    lib = arctic_library
+    num_symbols = 2
+    num_versions = 5
+
+    for sym in range(num_symbols):
+        df = pd.DataFrame({"col1": [1, 2, 3], "col2": [4, 5, 6]})
+        lib.write("sym_" + str(sym), df, metadata={"meta_" + str(sym): 0})
+
+    for version in range(1, num_versions):
+        write_requests = []
+        for sym in range(num_symbols):
+            write_requests.append(WriteMetadataPayload("sym_" + str(sym), {"meta_" + str(sym): version}))
+        lib.write_metadata_batch(write_requests)
+
+    read_requests = [
+        ReadInfoRequest("sym_" + str(sym), as_of=version)
+        for sym in range(num_symbols)
+        for version in range(num_versions)
+    ]
+    results_list = lib.read_metadata_batch(read_requests)
+    for sym in range(num_symbols):
+        for version in range(num_versions):
+            idx = sym * num_versions + version
+            assert results_list[idx].metadata == {"meta_" + str(sym): version}
+
+
+def test_write_metadata_batch_with_none(arctic_library):
+    lib = arctic_library
+    symbol = "symbol_"
+    num_symbols = 2
+
+    write_requests = []
+    for sym in range(num_symbols):
+        meta = {"meta_" + str(sym): sym}
+        write_requests.append(WriteMetadataPayload(symbol + str(sym), meta))
+    results_write = lib.write_metadata_batch(write_requests)
+    for sym in range(num_symbols):
+        assert results_write[sym].version == 0
+
+    read_requests = [ReadInfoRequest(symbol + str(sym)) for sym in range(num_symbols)]
+    results_meta_read = lib.read_metadata_batch(read_requests)
+    for sym in range(num_symbols):
+        assert results_meta_read[sym].data is None
+        assert results_meta_read[sym].metadata == {"meta_" + str(sym): sym}
+        assert results_meta_read[sym].version == 0
+
+    read_requests = [ReadRequest(symbol + str(sym)) for sym in range(num_symbols)]
+    results_read = lib.read_batch(read_requests)
+    for sym in range(num_symbols):
+        assert results_read[sym].data is None
+        assert results_read[sym].metadata == {"meta_" + str(sym): sym}
+        assert results_read[sym].version == 0
 
 
 class A:
@@ -615,6 +671,40 @@ def test_read_batch_missing_keys(arctic_library):
     assert batch[2].version_request_data == 0
     assert batch[2].error_code == ErrorCode.E_KEY_NOT_FOUND
     assert batch[2].error_category == ErrorCategory.STORAGE
+
+
+def test_write_metadata_batch_missing_keys(arctic_library):
+    lib = arctic_library
+
+    # Given
+    df1 = pd.DataFrame({"a": [3, 5, 7]})
+    df2 = pd.DataFrame({"a": [4, 6, 8]})
+    lib.write("s1", df1)
+    lib.write("s2", df2)
+
+    lib_tool = lib._nvs.library_tool()
+    s1_index_key = lib_tool.find_keys_for_id(KeyType.TABLE_INDEX, "s1")[0]
+    s2_index_key = lib_tool.find_keys_for_id(KeyType.TABLE_INDEX, "s2")[0]
+    lib_tool.remove(s1_index_key)
+    lib_tool.remove(s2_index_key)
+    # When
+    batch = lib.write_metadata_batch(
+        [WriteMetadataPayload("s1", {"s1_meta": 1}), WriteMetadataPayload("s2", {"s2_meta": 1})]
+    )
+    # Then
+    assert isinstance(batch[0], DataError)
+    assert batch[0].symbol == "s1"
+    assert batch[0].version_request_type is None
+    assert batch[0].version_request_data is None
+    assert batch[0].error_code == ErrorCode.E_KEY_NOT_FOUND
+    assert batch[0].error_category == ErrorCategory.STORAGE
+
+    assert isinstance(batch[1], DataError)
+    assert batch[1].symbol == "s2"
+    assert batch[1].version_request_type is None
+    assert batch[1].version_request_data is None
+    assert batch[1].error_code == ErrorCode.E_KEY_NOT_FOUND
+    assert batch[1].error_category == ErrorCategory.STORAGE
 
 
 def test_read_batch_query_builder_missing_keys(arctic_library):
