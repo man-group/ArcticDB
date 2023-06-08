@@ -8,6 +8,7 @@
 #pragma once
 
 #include <arcticdb/storage/store.hpp>
+#include <arcticdb/storage/storage_utils.hpp>
 #include <arcticdb/entity/key.hpp>
 #include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/util/variant.hpp>
@@ -161,11 +162,11 @@ namespace arcticdb {
         }
 
         std::pair<VariantKey, SegmentInMemory> read_sync(const VariantKey& key, storage::ReadKeyOpts) override {
+            StorageFailureSimulator::instance()->go(FailureType::READ);
             std::lock_guard lock{mutex_};
             return util::variant_match(key,
                                        [&] (const RefKey& ref_key) {
                                            auto it = seg_by_ref_key_.find(ref_key);
-//                                           util::check_rte(it != seg_by_ref_key_.end(), "ref key {} not found", ref_key);
                                            if (it == seg_by_ref_key_.end())
                                                throw storage::KeyNotFoundException(Composite<VariantKey>(ref_key));
                                            ARCTICDB_DEBUG(log::storage(), "Mock store returning ref key {}", ref_key);
@@ -174,7 +175,6 @@ namespace arcticdb {
                                        },
                                        [&] (const AtomKey& atom_key) {
                                            auto it = seg_by_atom_key_.find(atom_key);
-//                                           util::check_rte(it != seg_by_atom_key_.end(), "atom key {} not found", atom_key);
                                            if (it == seg_by_atom_key_.end())
                                                throw storage::KeyNotFoundException(Composite<VariantKey>(atom_key));
                                            ARCTICDB_DEBUG(log::storage(), "Mock store returning atom key {}", atom_key);
@@ -202,6 +202,7 @@ namespace arcticdb {
         }
 
         RemoveKeyResultType remove_key_sync(const entity::VariantKey &key, RemoveOpts opts) override {
+            StorageFailureSimulator::instance()->go(FailureType::DELETE);
             std::lock_guard lock{mutex_};
             size_t removed = util::variant_match(key,
                 [&](const AtomKey &ak) { return seg_by_atom_key_.erase(ak); },
@@ -225,21 +226,25 @@ namespace arcticdb {
         void iterate_type(KeyType kt, std::function<void(entity::VariantKey &&)> func, const std::string& prefix = "")
         override {
             auto prefix_matcher = stream_id_prefix_matcher(prefix);
+            auto failure_sim = StorageFailureSimulator::instance();
 
+            std::lock_guard lock{mutex_};
             for (auto it = seg_by_atom_key_.cbegin(), next_it = it; it != seg_by_atom_key_.cend(); it = next_it) {
                 ++next_it;
-                auto key = it->first;
+                const auto& key = it->first;
                 if (key.type() == kt && prefix_matcher(key.id())) {
                     ARCTICDB_DEBUG(log::version(), "Iterate type {}", key);
-                    func(std::move(key));
+                    failure_sim->go(FailureType::ITERATE);
+                    func(VariantKey{key});
                 }
             }
 
             for (auto it = seg_by_ref_key_.cbegin(), next_it = it; it != seg_by_ref_key_.cend(); it = next_it) {
                 ++next_it;
-                auto key = it->first;
+                const auto& key = it->first;
                 if (key.type() == kt && prefix_matcher(key.id())) {
-                    func(std::move(key));
+                    failure_sim->go(FailureType::ITERATE);
+                    func(VariantKey{key});
                 }
             }
         }
@@ -370,12 +375,14 @@ namespace arcticdb {
         void set_failure_sim(const arcticdb::proto::storage::VersionStoreConfig::StorageFailureSimulator &) override {}
 
         void add_segment(const AtomKey &key, SegmentInMemory &&seg) {
+            StorageFailureSimulator::instance()->go(FailureType::WRITE);
             std::lock_guard lock{mutex_};
             ARCTICDB_DEBUG(log::storage(), "Adding segment with key {}", key);
             seg_by_atom_key_[key] = std::make_unique<SegmentInMemory>(std::move(seg));
         }
 
         void add_segment(const RefKey &key, SegmentInMemory &&seg) {
+            StorageFailureSimulator::instance()->go(FailureType::WRITE);
             std::lock_guard lock{mutex_};
             ARCTICDB_DEBUG(log::storage(), "Adding segment with key {}", key);
             seg_by_ref_key_[key] = std::make_unique<SegmentInMemory>(std::move(seg));
@@ -383,7 +390,7 @@ namespace arcticdb {
 
 
     protected:
-        std::mutex mutex_;
+        std::recursive_mutex mutex_; // Allow iterate_type() to be re-entrant
         std::unordered_map<AtomKey, std::unique_ptr<SegmentInMemory>> seg_by_atom_key_;
         std::unordered_map<RefKey, std::unique_ptr<SegmentInMemory>> seg_by_ref_key_;
     };

@@ -715,8 +715,10 @@ if(${TEST})
             version/test/test_append.cpp
             version/test/test_merge.cpp
             version/test/test_sparse.cpp
+            version/test/test_stream_version_data.cpp
             version/test/test_symbol_list.cpp
             version/test/test_version_map.cpp
+            version/test/test_version_map_batch.cpp
             version/test/test_version_store.cpp
             version/test/test_sorting_info_state_machine.cpp
             version/test/version_map_model.hpp

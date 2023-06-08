@@ -1415,7 +1415,10 @@ class Library:
 
     def reload_symbol_list(self):
         """
-        Forces the symbol list cache to be reloaded
+        Forces the symbol list cache to be reloaded.
+
+        This can take a long time on large libraries or certain S3 implementations, and once started, it cannot be
+        safely interrupted. If the call is interrupted somehow (exception/process killed), please call this again ASAP.
         """
         self._nvs.version_store.reload_symbol_list()
 

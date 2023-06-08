@@ -15,6 +15,8 @@ template<> inline void PrintTo(const our_type&val, ::std::ostream* os) { fmt::pr
 }
 
 // For the most common types, format them by default:
+MAKE_GTEST_FMT(arcticdb::entity::RefKey, "{}")
+MAKE_GTEST_FMT(arcticdb::entity::AtomKeyImpl, "{}")
 MAKE_GTEST_FMT(arcticdb::entity::VariantKey, "VariantKey({})")
 MAKE_GTEST_FMT(arcticdb::entity::VariantId, "VariantId({})")
 
