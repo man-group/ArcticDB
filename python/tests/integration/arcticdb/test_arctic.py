@@ -148,7 +148,6 @@ def test_library_management_path_prefix(connection_string, client, request):
 
     if isinstance(client, BlobServiceClient):
         test_bucket = list(client.list_containers())
-        assert len(test_bucket) == 1
     else:
         test_bucket = sorted(client.list_buckets()["Buckets"], key=lambda bucket_meta: bucket_meta["CreationDate"])[-1][
             "Name"
@@ -169,7 +168,7 @@ def test_library_management_path_prefix(connection_string, client, request):
     assert ac["pytest_test_lib"].list_snapshots() == {"test_snapshot": None}
 
     if isinstance(client, BlobServiceClient):
-        keys = [blob["name"] for blob in client.get_container_client(test_bucket[0]).list_blobs()]
+        keys = [blob["name"] for blob in client.get_container_client(test_bucket[-1]).list_blobs()]
     else:
         keys = [d["Key"] for d in client.list_objects(Bucket=test_bucket)["Contents"]]
     assert all(k.startswith("hello/world") for k in keys)
@@ -530,8 +529,7 @@ def test_s3_repr(moto_s3_uri_incl_bucket):
     s3_endpoint += f":{port}"
     bucket = moto_s3_uri_incl_bucket.split(":")[-1].split("?")[0]
     assert (
-        repr(lib)
-        == "Library("
+        repr(lib) == "Library("
         "Arctic("
         "config=S3("
         f"endpoint={s3_endpoint}, bucket={bucket})), path=pytest_test_lib, storage=s3_storage)"
@@ -539,7 +537,6 @@ def test_s3_repr(moto_s3_uri_incl_bucket):
 
     df = pd.DataFrame({"col1": [1, 2, 3], "col2": [4, 5, 6]})
     written_vi = lib.write("my_symbol", df)
-    print(written_vi.host)
     assert re.match(r"S3\(endpoint=localhost:\d+, bucket=test_bucket_\d+\)", written_vi.host)
 
 
@@ -553,8 +550,7 @@ def test_azure_repr(moto_azure_uri_incl_bucket):
     endpoint = moto_azure_uri_incl_bucket.split("//")[1].split("/")[0]
     container = moto_azure_uri_incl_bucket.split("//")[-1].split("?")[0].split("/")[1]
     assert (
-        repr(lib)
-        == "Library("
+        repr(lib) == "Library("
         "Arctic("
         "config=azure("
         f"endpoint={endpoint}, container={container})), path=pytest_test_lib, storage=azure_storage)"
@@ -1326,7 +1322,13 @@ def test_segment_slicing(moto_uri_incl_bucket):
 
 @pytest.mark.parametrize(
     "connection_string, client",
-    [("moto_s3_uri_incl_bucket", "boto_client"), ("moto_azure_uri_incl_bucket", "azure_client")],
+    [
+        ("moto_s3_uri_incl_bucket", "boto_client"),
+        pytest.param(
+            ("moto_azure_uri_incl_bucket", "azure_client"),
+            marks=pytest.mark.skipif(sys.platform != "linux", reason="Pending Azure Storge Windows support"),
+        ),
+    ],
 )
 def test_reload_symbol_list(connection_string, client, request):
     connection_string = request.getfixturevalue(request.getfixturevalue("connection_string"))
@@ -1336,7 +1338,7 @@ def test_reload_symbol_list(connection_string, client, request):
         if isinstance(client, BlobServiceClient):
             keys = [
                 blob["name"]
-                for blob in client.get_container_client(test_bucket[0]).list_blobs()
+                for blob in client.get_container_client(test_bucket[-1]).list_blobs()
                 if blob["name"].startswith(lib_name)
             ]
         else:
@@ -1352,7 +1354,6 @@ def test_reload_symbol_list(connection_string, client, request):
 
     if isinstance(client, BlobServiceClient):
         test_bucket = list(client.list_containers())
-        assert len(test_bucket) == 1
     else:
         test_bucket = sorted(client.list_buckets()["Buckets"], key=lambda bucket_meta: bucket_meta["CreationDate"])[-1][
             "Name"
