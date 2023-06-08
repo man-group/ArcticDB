@@ -13,6 +13,8 @@
 #include <arcticdb/util/preprocess.hpp>
 #include <arcticdb/util/pb_util.hpp>
 
+#if defined(USE_REMOTERY)
+
 std::shared_ptr<RemoteryInstance> RemoteryInstance::instance(){
     std::call_once(RemoteryInstance::init_flag_, &RemoteryInstance::init);
     return RemoteryInstance::instance_;
@@ -58,6 +60,8 @@ RemoteryInstance::~RemoteryInstance() {
         rmt_ = nullptr;
     }
 }
+
+#endif
 
 namespace arcticdb::detail {
     struct ThreadNameCache {
