@@ -225,7 +225,11 @@ inline bool looking_for_undeleted(const LoadParameter& load_params, const std::s
     if(entry->tombstone_all_) {
         const bool is_deleted_by_tombstone_all = entry->tombstone_all_->version_id() >= oldest_loaded_index;
         if(is_deleted_by_tombstone_all) {
-            ARCTICDB_DEBUG(log::version(), "Exiting because we have found an undeleted version");
+            ARCTICDB_DEBUG(
+                log::version(),
+                "Exiting because tombstone all key deletes all versions beyond: {} and the oldest loaded index has version: {}",
+                entry->tombstone_all_->version_id(),
+                oldest_loaded_index);
             return false;
         } else {
             return true;
