@@ -279,9 +279,9 @@ inline void submit_tasks_for_range(const Inputs& inputs, TaskSubmitter submitter
 
     auto fut_itr = futs.begin();
     try {
-        for(auto input_itr = inputs.cbegin(); input_itr != inputs.cend(); ++input_itr, ++fut_itr) {
-            auto&& resolved = std::move(*fut_itr).get();
-            result_handler(*input_itr, std::move(resolved));
+        for(const auto& input : inputs) {
+            auto&& resolved = std::move(*(fut_itr++)).get();
+            result_handler(input, std::move(resolved));
         }
     } catch(...) {
         folly::collectAll(fut_itr, futs.end()).wait();

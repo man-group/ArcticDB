@@ -535,7 +535,7 @@ TEST(VersionMap, RecoverDeleted) {
 
     deleted = version_map->find_deleted_version_keys(store, id);
     ASSERT_EQ(deleted.size(), 3);
-    ASSERT_EQ(get_all_versions(store, version_map, id, true, false).size(), 0);
+    EXPECT_THROW({ get_all_versions(store, version_map, id, true, false); }, std::runtime_error);
     version_map->recover_deleted(store, id);
 
     std::vector<AtomKey> expected{ key3, key2, key1};
