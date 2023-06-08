@@ -96,7 +96,9 @@ def azure_client(azure_test_connection_setting):
     credential = {"account_name": credential_name, "account_key": credential_key}
     account_url = "https://" if is_https else "http://"
     account_url += endpoint + "/" + credential_name if connect_to_azurite else credential_name + "." + endpoint
-    client = BlobServiceClient(account_url=account_url, credential=credential)
+    client = BlobServiceClient(
+        account_url=account_url, credential=credential, connection_verify=False
+    )  # add connection_verify=False to bypass ssl checking
 
     yield client
 
@@ -152,11 +154,17 @@ def azure_test_connection_setting(azurite_port, spawn_azurite):
     container = f"testbucket{BUCKET_ID}"
     BUCKET_ID = BUCKET_ID + 1
 
-    credential_name = "devstoreaccount1"
-    credential_key = "Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw=="
-    endpoint = "0.0.0.0:" + str(azurite_port)
-    is_https = False
-    connect_to_azurite = True
+    # credential_name = "devstoreaccount1"
+    # credential_key = "Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw=="
+    # endpoint = "0.0.0.0:" + str(azurite_port)
+    # is_https = False
+    # connect_to_azurite = True
+
+    credential_name = "ze1devbrcarcticdb01"
+    credential_key = "5i/Ae1hdrglw6K0QYzeCxZyHVlWrntPm+FpsH540pOAT9geuaMfLut3l1Ix2SGa66H2hd7yn/zJe+AStHDRUZA=="
+    endpoint = "blob.core.windows.net"
+    is_https = True
+    connect_to_azurite = False
 
     yield endpoint, container, credential_name, credential_key, is_https, connect_to_azurite
 
@@ -171,7 +179,21 @@ def moto_azure_endpoint_and_credentials(azure_test_connection_setting, azure_cli
         is_https,
         connect_to_azurite,
     ) = azure_test_connection_setting
-    azure_client.create_container(name=container)
+    container_client = azure_client.get_container_client(container=container)
+    if (
+        container_client.exists()
+    ):  # name of container will be reused; Not clearing the files will fill up the storage while testing against Azure Blob Storage
+        blobs = list(container_client.list_blobs())  # delete container is slow, even with little amount of blobs
+        index = 0
+        max_batch_size = 256  # SDK limit
+        while len(blobs) > 0 and index < len(
+            blobs
+        ):  # delete container is slow and async; No api available to check whether the container delete operation is complete
+            batch_of_blobs = blobs[index : index + max_batch_size]
+            container_client.delete_blobs(*batch_of_blobs)
+            index += max_batch_size
+    else:
+        azure_client.create_container(name=container)
     yield endpoint, container, credential_name, credential_key, is_https, connect_to_azurite
 
 

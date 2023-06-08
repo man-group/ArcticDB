@@ -192,32 +192,41 @@ void do_remove_impl(Composite<VariantKey>&& ks,
     }
     else {
         static const size_t delete_object_limit =
-            std::min(BATCH_SUBREQUEST_LIMIT,
-                    static_cast<size_t>(ConfigsMap::instance()->get_int("AzureStorage.DeleteBatchSize", BATCH_SUBREQUEST_LIMIT)));
+            std::min(BATCH_SUBREQUEST_LIMIT, static_cast<size_t>(ConfigsMap::instance()->get_int("AzureStorage.DeleteBatchSize", BATCH_SUBREQUEST_LIMIT)));
         auto batch = container_client.CreateBatch();
+        unsigned int batch_counter = 0u; 
+        auto submit_batch = [&container_client, &request_timeout, &batch_counter](auto &batch) {
+            ARCTICDB_SUBSAMPLE(AzureStorageDeleteObjects, 0)
+            try{
+                container_client.SubmitBatch(batch, Azure::Storage::Blobs::SubmitBlobBatchOptions(), get_context(request_timeout));//To align with s3 behaviour, deleting non-exist objects is not an error, so not handling response
+            }
+            catch (const Azure::Core::RequestFailedException& e){
+                util::raise_rte("Failed to create azure segment batch remove request {}: {}",
+                                    static_cast<int>(e.StatusCode),
+                                    e.ReasonPhrase);
+            }
+            batch = container_client.CreateBatch();
+            batch_counter = 0u;
+        };
 
         (fg::from(ks.as_range()) | fg::move | fg::groupBy(fmt_db)).foreach(
-            [&container_client, &root_folder, b=std::move(bucketizer), &failed_deletes, &batch, &ks, delete_object_limit=delete_object_limit, &request_timeout] (auto&& group) {//bypass incorrect 'set but no used" error for delete_object_limit
+            [&root_folder, b=std::move(bucketizer), &failed_deletes, &batch, delete_object_limit=delete_object_limit, &batch_counter, &submit_batch] (auto&& group) {//bypass incorrect 'set but no used" error for delete_object_limit
                 auto key_type_folder = object_store_utils::key_type_folder(root_folder, group.key());
-                std::vector<Azure::Storage::DeferredResponse<Azure::Storage::Blobs::Models::DeleteBlobResult>> subrequest_responses;
                 for (auto k : folly::enumerate(group.values())) {
                     auto blob_name = object_store_utils::object_path(b.bucketize(key_type_folder, *k), *k);
                     ARCTICDB_RUNTIME_DEBUG(log::storage(), "Removing azure object with key {}", blob_name);
-                    subrequest_responses.push_back(batch.DeleteBlob(blob_name));
-                    if (k.index + 1 == delete_object_limit || k.index + 1 == group.size()) {
-                        ARCTICDB_SUBSAMPLE(AzureStorageDeleteObjects, 0)
-                        try{
-                            container_client.SubmitBatch(batch, Azure::Storage::Blobs::SubmitBlobBatchOptions(), get_context(request_timeout));//To align with s3 behaviour, deleting non-exist objects is not an error, so not handling response
-                        }
-                        catch (const Azure::Core::RequestFailedException& e){
-                            util::raise_rte("Failed to create azure segment batch remove request {}: {}",
-                                                static_cast<int>(e.StatusCode),
-                                                e.ReasonPhrase);
-                        }
+                    batch.DeleteBlob(blob_name);
+                    if (++batch_counter == delete_object_limit) {
+                        submit_batch(batch);
                     }
                 }
             }
         );
+
+        if (batch_counter) {
+            submit_batch(batch);
+        }
+
     }
 
     util::check(failed_deletes.empty(), "Have {} segment that have not been removed", failed_deletes.size());
