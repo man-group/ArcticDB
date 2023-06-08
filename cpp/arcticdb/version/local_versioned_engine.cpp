@@ -80,7 +80,7 @@ void LocalVersionedEngine::create_column_stats_version_internal(
     const VersionQuery& version_query,
     const ReadOptions& read_options) {
     auto versioned_item = get_version_to_read(stream_id, version_query);
-    version::check<ErrorCode::E_NO_SUCH_VERSION>(
+    missing_data::check<ErrorCode::E_NO_SUCH_VERSION>(
             versioned_item.has_value(),
             "create_column_stats_version_internal: version not found for stream '{}'",
             stream_id
@@ -105,7 +105,7 @@ void LocalVersionedEngine::drop_column_stats_version_internal(
     const std::optional<ColumnStats>& column_stats_to_drop,
     const VersionQuery& version_query) {
     auto versioned_item = get_version_to_read(stream_id, version_query);
-    version::check<ErrorCode::E_NO_SUCH_VERSION>(
+    missing_data::check<ErrorCode::E_NO_SUCH_VERSION>(
             versioned_item.has_value(),
             "drop_column_stats_version_internal: version not found for stream '{}'",
             stream_id
@@ -122,7 +122,7 @@ std::pair<VersionedItem, FrameAndDescriptor> LocalVersionedEngine::read_column_s
     const StreamId& stream_id,
     const VersionQuery& version_query) {
     auto versioned_item = get_version_to_read(stream_id, version_query);
-    version::check<ErrorCode::E_NO_SUCH_VERSION>(
+    missing_data::check<ErrorCode::E_NO_SUCH_VERSION>(
             versioned_item.has_value(),
             "read_column_stats_version_internal: version not found for stream '{}'",
             stream_id
@@ -140,7 +140,7 @@ ColumnStats LocalVersionedEngine::get_column_stats_info_version_internal(
     const StreamId& stream_id,
     const VersionQuery& version_query) {
     auto versioned_item = get_version_to_read(stream_id, version_query);
-    version::check<ErrorCode::E_NO_SUCH_VERSION>(
+    missing_data::check<ErrorCode::E_NO_SUCH_VERSION>(
             versioned_item.has_value(),
             "get_column_stats_info_version_internal: version not found for stream '{}'",
             stream_id
@@ -343,8 +343,8 @@ std::pair<VersionedItem, std::optional<google::protobuf::Any>> LocalVersionedEng
     ARCTICDB_SAMPLE(ReadDescriptor, 0)
 
     auto version = get_version_to_read(stream_id, version_query);
-    version::check<ErrorCode::E_NO_SUCH_VERSION>(static_cast<bool>(version),
-                                                 "Unable to retrieve descriptor data. {}@{}: version not found", stream_id, version_query);
+    missing_data::check<ErrorCode::E_NO_SUCH_VERSION>(static_cast<bool>(version),
+        "Unable to retrieve descriptor data. {}@{}: version not found", stream_id, version_query);
 
     auto metadata_proto = store()->read_metadata(version->key_).get().second;
     return std::pair{version.value(), metadata_proto};
@@ -567,7 +567,7 @@ std::pair<VersionedItem, arcticdb::proto::descriptors::TimeSeriesDescriptor> Loc
     ) {
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: res    tore_version");
     auto version_to_restore = get_version_to_read(stream_id, version_query);
-    version::check<ErrorCode::E_NO_SUCH_VERSION>(static_cast<bool>(version_to_restore),
+    missing_data::check<ErrorCode::E_NO_SUCH_VERSION>(static_cast<bool>(version_to_restore),
                                                  "Unable to restore {}@{}: version not found", stream_id, version_query);
     auto maybe_prev = ::arcticdb::get_latest_version(store(), version_map(), stream_id, true, false);
     ARCTICDB_DEBUG(log::version(), "restore for stream_id: {} , version_id = {}", stream_id, version_to_restore->key_.version_id());

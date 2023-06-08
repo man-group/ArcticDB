@@ -40,6 +40,7 @@ from arcticdb.version_store.helper import ArcticMemoryConfig
 from arcticdb.version_store import NativeVersionStore
 from arcticdb.version_store._normalization import MsgPackNormalizer
 
+
 configure_test_logger()
 
 BUCKET_ID = 0
@@ -146,16 +147,6 @@ def lib_name():
     return f"local.test_{random.randint(0, 999)}_{datetime.utcnow().strftime('%Y-%m-%dT%H_%M_%S_%f')}"
 
 
-@pytest.fixture
-def arcticdb_test_s3_config(moto_s3_endpoint_and_credentials):
-    endpoint, port, bucket, aws_access_key, aws_secret_key = moto_s3_endpoint_and_credentials
-
-    def create(lib_name):
-        return create_test_s3_cfg(lib_name, aws_access_key, aws_secret_key, bucket, endpoint)
-
-    return create
-
-
 def _version_store_factory_impl(
     used, make_cfg, default_name, *, name: str = None, reuse_name=False, **kwargs
 ) -> NativeVersionStore:
@@ -221,15 +212,22 @@ def version_store_factory(lib_name, tmpdir):
 
 
 @pytest.fixture
-def s3_store_factory(lib_name, arcticdb_test_s3_config):
+def s3_store_factory(lib_name, moto_s3_endpoint_and_credentials):
     """Factory to create any number of S3 libs with the given WriteOptions or VersionStoreConfig.
 
     `name` can be a magical value "_unique_" which will create libs with unique names.
     This factory will clean up any libraries requested
     """
+    endpoint, port, bucket, aws_access_key, aws_secret_key = moto_s3_endpoint_and_credentials
+
+    # Not exposing the config factory to discourage people from creating libs that won't get cleaned up
+    def make_cfg(name):
+        # with_prefix=False to allow reuse_name to work correctly
+        return create_test_s3_cfg(name, aws_access_key, aws_secret_key, bucket, endpoint, with_prefix=False)
+
     used = {}
     try:
-        yield functools.partial(_version_store_factory_impl, used, arcticdb_test_s3_config, lib_name)
+        yield functools.partial(_version_store_factory_impl, used, make_cfg, lib_name)
     finally:
         for lib in used.values():
             lib.version_store.clear()

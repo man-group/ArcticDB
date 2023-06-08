@@ -57,13 +57,13 @@ template<ErrorCode code>
 constexpr auto raise = check<code>.raise;
 }
 
-namespace version {
+namespace missing_data {
 
-    template<ErrorCode code>
-    constexpr auto check = util::detail::Check<code, ErrorCategory::MISSING_DATA>{};
+template<ErrorCode code>
+constexpr auto check = util::detail::Check<code, ErrorCategory::MISSING_DATA>{};
 
-    template<ErrorCode code>
-    constexpr auto raise = check<code>.raise;
+template<ErrorCode code>
+constexpr auto raise = check<code>.raise;
 }
 
 namespace schema {

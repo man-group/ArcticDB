@@ -62,14 +62,6 @@ jobs:
           version: "~= 22.8"
           src: "./python"
 
-      - name: Extra envs
-        run: |
-          . build_tooling/vcpkg_caching.sh # Linux follower needs another call in CIBW
-          echo -e "VCPKG_BINARY_SOURCES=$VCPKG_BINARY_SOURCES\n${{matrix.envs || ''}}" | tee -a $GITHUB_ENV
-          cmake -P cpp/CMake/CpuCount.cmake | sed 's/^-- //' | tee -a $GITHUB_ENV
-        env:
-          CMAKE_BUILD_PARALLEL_LEVEL: ${{vars.CMAKE_BUILD_PARALLEL_LEVEL}}
-
       - name: Configure sccache
         uses: mozilla-actions/sccache-action@v0.0.3
         with:
@@ -87,6 +79,17 @@ jobs:
       - name: Enable Windows compiler commands
         if: matrix.os == 'windows'
         uses: ilammy/msvc-dev-cmd@v1.12.1
+
+      - name: Extra envs
+        # This has to come after msvc-dev-cmd to overwrite the bad VCPKG_ROOT it sets
+        run: |
+          . build_tooling/vcpkg_caching.sh # Linux follower needs another call in CIBW
+          echo -e "VCPKG_BINARY_SOURCES=$VCPKG_BINARY_SOURCES
+          VCPKG_ROOT=$PLATFORM_VCPKG_ROOT
+          ${{matrix.envs || ''}}" | tee -a $GITHUB_ENV
+          cmake -P cpp/CMake/CpuCount.cmake | sed 's/^-- //' | tee -a $GITHUB_ENV
+        env:
+          CMAKE_BUILD_PARALLEL_LEVEL: ${{vars.CMAKE_BUILD_PARALLEL_LEVEL}}
 
       # ========================= Leader steps =========================
       - name: Prepare C++ compilation env

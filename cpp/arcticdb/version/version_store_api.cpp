@@ -174,7 +174,8 @@ void PythonVersionStore::_clear_symbol_list_keys() {
 }
 
 void PythonVersionStore::reload_symbol_list() {
-    symbol_list().reload(store());
+    symbol_list().clear(store());
+    symbol_list().load(store(), false);
 }
 
 // To be sorted on timestamp
