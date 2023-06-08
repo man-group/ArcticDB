@@ -935,13 +935,12 @@ def test_nested_custom_types(lmdb_version_store):
     assert got_back[0] == 1
 
 
-def test_batch_operations(s3_version_store_prune_previous):
-    lmdb_version_store = s3_version_store_prune_previous
+def test_batch_operations(object_version_store_prune_previous):
     multi_data = {"sym1": np.arange(8), "sym2": np.arange(9), "sym3": np.arange(10)}
 
     for _ in range(10):
-        lmdb_version_store.batch_write(list(multi_data.keys()), list(multi_data.values()))
-        result = lmdb_version_store.batch_read(list(multi_data.keys()))
+        object_version_store_prune_previous.batch_write(list(multi_data.keys()), list(multi_data.values()))
+        result = object_version_store_prune_previous.batch_read(list(multi_data.keys()))
         assert len(result) == 3
         equals(result["sym1"].data, np.arange(8))
         equals(result["sym2"].data, np.arange(9))
@@ -1305,8 +1304,8 @@ def test_batch_read_meta_with_pruning(version_store_factory):
     assert lib.read_metadata("sym1").metadata == results_dict["sym1"].metadata
 
 
-def test_batch_read_meta_multiple_versions(s3_version_store):
-    lib = s3_version_store
+def test_batch_read_meta_multiple_versions(object_version_store):
+    lib = object_version_store
     lib.write("sym1", 1, {"meta1": 1})
     lib.write("sym1", 2, {"meta1": 2})
     lib.write("sym1", 3, {"meta1": 3})
@@ -1338,8 +1337,8 @@ def test_list_symbols(lmdb_version_store):
     assert set(lib.list_symbols(regex="a")) == set(lib.list_symbols(regex="a", use_symbol_list=False))
 
 
-def test_get_index(s3_version_store):
-    lib = s3_version_store
+def test_get_index(object_version_store):
+    lib = object_version_store
 
     symbol = "thing"
     lib.write(symbol, 1)
@@ -1397,8 +1396,8 @@ def test_columns_as_nparrary(lmdb_version_store, sym):
     assert all(vit.data["col2"] == [3, 4])
 
 
-def test_simple_recursive_normalizer(s3_version_store):
-    s3_version_store.write(
+def test_simple_recursive_normalizer(object_version_store):
+    object_version_store.write(
         "rec_norm", data={"a": np.arange(5), "b": np.arange(8), "c": None}, recursive_normalizers=True
     )
 

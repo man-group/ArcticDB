@@ -154,17 +154,11 @@ def azure_test_connection_setting(azurite_port, spawn_azurite):
     container = f"testbucket{BUCKET_ID}"
     BUCKET_ID = BUCKET_ID + 1
 
-    # credential_name = "devstoreaccount1"
-    # credential_key = "Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw=="
-    # endpoint = "0.0.0.0:" + str(azurite_port)
-    # is_https = False
-    # connect_to_azurite = True
-
-    credential_name = "ze1devbrcarcticdb01"
-    credential_key = "5i/Ae1hdrglw6K0QYzeCxZyHVlWrntPm+FpsH540pOAT9geuaMfLut3l1Ix2SGa66H2hd7yn/zJe+AStHDRUZA=="
-    endpoint = "blob.core.windows.net"
-    is_https = True
-    connect_to_azurite = False
+    credential_name = "devstoreaccount1"
+    credential_key = "Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw=="
+    endpoint = "0.0.0.0:" + str(azurite_port)
+    is_https = False
+    connect_to_azurite = True
 
     yield endpoint, container, credential_name, credential_key, is_https, connect_to_azurite
 
@@ -420,9 +414,13 @@ def mongo_version_store(mongo_store_factory):
     return mongo_store_factory()
 
 
-@pytest.fixture(scope="function")
-def s3_version_store_prune_previous(s3_store_factory):
-    return s3_store_factory(prune_previous_version=True)
+@pytest.fixture(
+    scope="function",
+    params=["s3_store_factory", "azure_store_factory"] if sys.platform == "linux" else ["s3_store_factory"],
+)
+def object_version_store_prune_previous(request):
+    store_factory = request.getfixturevalue(request.param)
+    return store_factory(prune_previous_version=True)
 
 
 @pytest.fixture(scope="function")
