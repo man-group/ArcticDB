@@ -231,6 +231,7 @@ void reinit_scheduler() {
 
 void register_instrumentation(py::module && m){
     auto remotery = m.def_submodule("remotery");
+#if defined(USE_REMOTERY)
     py::class_<RemoteryInstance, std::shared_ptr<RemoteryInstance>>(remotery, "Instance");
     remotery.def("configure", [](const py::object & py_config){
         arcticdb::proto::utils::RemoteryConfig config;
@@ -240,6 +241,7 @@ void register_instrumentation(py::module && m){
     remotery.def("log", [](std::string s ARCTICDB_UNUSED){
        ARCTICDB_SAMPLE_LOG(s.c_str())
     });
+#endif
 }
 
 void register_metrics(py::module && m){
