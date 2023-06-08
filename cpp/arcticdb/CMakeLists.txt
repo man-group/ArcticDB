@@ -524,6 +524,8 @@ set (azure_package
         )
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake-modules")
+include(CMakePrintHelpers)
+cmake_print_variables(CMAKE_MODULE_PATH)
 include(AzureVcpkg)
 az_vcpkg_integrate()
 
