@@ -46,10 +46,11 @@ class TimeFrame(
             )
         if not all(times.shape[0] == cv.shape[0] for cv in columns_values):
             s = np.array([cv.shape[0] for cv in columns_values])
-            raise ValueError(
+            error_message = (
                 "Inconsistent size of column values. times.shape[0]={} must match cv.shape[0] for all column values."
-                " actual={}".format(times.shape[0], s)
-            )
+                " actual={}"
+            ).format(times.shape[0], s)
+            raise ValueError(error_message)
         return tuple.__new__(cls, (times, columns_names, columns_values))
 
     class _IlocProxy(object):
