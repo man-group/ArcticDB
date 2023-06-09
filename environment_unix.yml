@@ -36,7 +36,6 @@ dependencies:
   - rapidcheck
   - msgpack-c
   - recycle
-  - remotery
   # Matches the version of lmdb and lmdbxx as vendored
   # via submodules.
   - lmdb==0.9.22

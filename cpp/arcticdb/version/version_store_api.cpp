@@ -1011,13 +1011,14 @@ std::pair<VersionedItem, py::object> PythonVersionStore::read_metadata(
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: read_metadata");
     ARCTICDB_SAMPLE(ReadMetadata, 0)
 
-    auto version = get_version_to_read(stream_id, version_query);
-    if(!version)
+    auto metadata = read_metadata_internal(stream_id, version_query);
+    if(!metadata.first.has_value())
         throw NoDataFoundException(fmt::format("read_metadata: version not found for symbol", stream_id));
 
-    auto metadata_proto = store()->read_metadata(version.value().key_).get().second;
+    auto metadata_proto = metadata.second;
     py::object pyobj = metadata_protobuf_to_pyobject(metadata_proto);
-    return std::pair{version.value(), pyobj};
+    VersionedItem version{std::move(to_atom(*metadata.first))};
+    return std::pair{version, pyobj};
 }
 
 std::vector<VersionedItem> PythonVersionStore::batch_write_metadata(

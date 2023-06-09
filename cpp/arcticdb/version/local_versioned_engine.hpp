@@ -175,6 +175,12 @@ public:
         arcticdb::proto::descriptors::UserDefinedMetadata&& user_meta
     );
 
+    folly::Future<std::pair<std::optional<VariantKey>, std::optional<google::protobuf::Any>>> get_metadata(
+        std::optional<AtomKey> key);
+
+    folly::Future<std::pair<std::optional<VariantKey>, std::optional<google::protobuf::Any>>> get_metadata_async(
+        folly::Future<std::optional<AtomKey>>&& version_fut);
+
     void create_column_stats_internal(
         const VersionedItem& versioned_item,
         ColumnStats& column_stats,
@@ -276,6 +282,10 @@ public:
     std::vector<std::pair<std::optional<VariantKey>, std::optional<google::protobuf::Any>>> batch_read_metadata_internal(
         const std::vector<StreamId>& stream_ids,
         const std::vector<VersionQuery>& version_queries);
+
+    std::pair<std::optional<VariantKey>, std::optional<google::protobuf::Any>> read_metadata_internal(
+        const StreamId& stream_id,
+        const VersionQuery& version_query);
 
     bool is_symbol_fragmented(const StreamId& stream_id, std::optional<size_t> segment_size) override;
 
