@@ -44,6 +44,7 @@ dependencies:
   - libarrow
   - libiconv
   - aws-c-s3
+  - azure-identity
   # Python dependences
   - python =3.10 # Python 3.11 requires protobuf>=4
   - numpy
