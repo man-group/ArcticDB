@@ -515,7 +515,7 @@ if (SSL_LINK)
         list(APPEND arcticdb_core_includes  ${KERBEROS_INCLUDE_DIR})
     endif()
 endif ()
-
+set(AZURE_SDK_DISABLE_AUTO_VCPKG TRUE)
 target_link_libraries(arcticdb_core_object PUBLIC ${arcticdb_core_libraries})
 
 set (azure_package
