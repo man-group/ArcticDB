@@ -27,7 +27,7 @@ from datetime import datetime, date
 import numpy as np
 from arcticdb.util.test import assert_frame_equal
 from azure.storage.blob import BlobServiceClient
-
+import time
 
 try:
     from arcticdb.version_store.library import (
@@ -140,13 +140,21 @@ def test_separation_between_libraries_with_prefixes(moto_uri_incl_bucket):
 
 @pytest.mark.parametrize(
     "connection_string, client",
-    [("moto_s3_uri_incl_bucket", "boto_client"), ("moto_azure_uri_incl_bucket", "azure_client")],
+    [
+        ("moto_s3_uri_incl_bucket", "boto_client"),
+        pytest.param(
+            "moto_azure_uri_incl_bucket",
+            "azure_client",
+            marks=pytest.mark.skipif(sys.platform != "linux", reason="Pending Azure Storge Windows support"),
+        ),
+    ],
 )
 def test_library_management_path_prefix(connection_string, client, request):
     connection_string = request.getfixturevalue(request.getfixturevalue("connection_string"))
     client = request.getfixturevalue(request.getfixturevalue("client"))
 
     if isinstance(client, BlobServiceClient):
+        time.sleep(1)  # Azurite is slow....
         test_bucket = list(client.list_containers())
     else:
         test_bucket = sorted(client.list_buckets()["Buckets"], key=lambda bucket_meta: bucket_meta["CreationDate"])[-1][
@@ -529,8 +537,7 @@ def test_s3_repr(moto_s3_uri_incl_bucket):
     s3_endpoint += f":{port}"
     bucket = moto_s3_uri_incl_bucket.split(":")[-1].split("?")[0]
     assert (
-        repr(lib)
-        == "Library("
+        repr(lib) == "Library("
         "Arctic("
         "config=S3("
         f"endpoint={s3_endpoint}, bucket={bucket})), path=pytest_test_lib, storage=s3_storage)"
@@ -551,8 +558,7 @@ def test_azure_repr(moto_azure_uri_incl_bucket):
     endpoint = moto_azure_uri_incl_bucket.split("//")[1].split("/")[0]
     container = moto_azure_uri_incl_bucket.split("//")[-1].split("?")[0].split("/")[1]
     assert (
-        repr(lib)
-        == "Library("
+        repr(lib) == "Library("
         "Arctic("
         "config=azure("
         f"endpoint={endpoint}, container={container})), path=pytest_test_lib, storage=azure_storage)"
@@ -1339,6 +1345,7 @@ def test_reload_symbol_list(connection_string, client, request):
 
     def get_symbol_list_keys():
         if isinstance(client, BlobServiceClient):
+            time.sleep(1)  # Azurite is slow....
             keys = [
                 blob["name"]
                 for blob in client.get_container_client(test_bucket[-1]).list_blobs()
