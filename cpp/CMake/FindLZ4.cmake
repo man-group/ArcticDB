@@ -1,27 +1,47 @@
-# Finds liblz4.
+# Find LZ4 library and headers
 #
 # This module defines:
-# LZ4_FOUND
-# LZ4_INCLUDE_DIR
-# LZ4_LIBRARY
+#  LZ4_FOUND         - system has LZ4
+#  LZ4_INCLUDE_DIR   - LZ4 include directory
+#  LZ4_LIBRARY       - Libraries needed to use LZ4
+#  LZ4_VERSION       - LZ4 version number
 #
 
-find_path(LZ4_INCLUDE_DIR NAMES lz4.h)
+find_path(LZ4_INCLUDE_DIR
+  NAMES lz4.h
+  DOC "lz4 include directory")
+mark_as_advanced(LZ4_INCLUDE_DIR)
+find_library(LZ4_LIBRARY
+  NAMES lz4 liblz4
+  DOC "lz4 library")
+mark_as_advanced(LZ4_LIBRARY)
 
-find_library(LZ4_LIBRARY_DEBUG NAMES lz4d)
-find_library(LZ4_LIBRARY_RELEASE NAMES lz4)
-
-include(SelectLibraryConfigurations)
-SELECT_LIBRARY_CONFIGURATIONS(LZ4)
+if (LZ4_INCLUDE_DIR)
+  file(STRINGS "${LZ4_INCLUDE_DIR}/lz4.h" _lz4_version_lines
+    REGEX "#define[ \t]+LZ4_VERSION_(MAJOR|MINOR|RELEASE)")
+  string(REGEX REPLACE ".*LZ4_VERSION_MAJOR *\([0-9]*\).*" "\\1" _lz4_version_major "${_lz4_version_lines}")
+  string(REGEX REPLACE ".*LZ4_VERSION_MINOR *\([0-9]*\).*" "\\1" _lz4_version_minor "${_lz4_version_lines}")
+  string(REGEX REPLACE ".*LZ4_VERSION_RELEASE *\([0-9]*\).*" "\\1" _lz4_version_release "${_lz4_version_lines}")
+  set(LZ4_VERSION "${_lz4_version_major}.${_lz4_version_minor}.${_lz4_version_release}")
+  unset(_lz4_version_major)
+  unset(_lz4_version_minor)
+  unset(_lz4_version_release)
+  unset(_lz4_version_lines)
+endif ()
 
 include(FindPackageHandleStandardArgs)
-FIND_PACKAGE_HANDLE_STANDARD_ARGS(
-    LZ4 DEFAULT_MSG
-    LZ4_LIBRARY LZ4_INCLUDE_DIR
-)
+find_package_handle_standard_args(LZ4
+  REQUIRED_VARS LZ4_LIBRARY LZ4_INCLUDE_DIR
+  VERSION_VAR LZ4_VERSION)
 
 if (LZ4_FOUND)
-    message(STATUS "Found LZ4: ${LZ4_LIBRARY}")
-endif()
+  set(LZ4_INCLUDE_DIRS "${LZ4_INCLUDE_DIR}")
+  set(LZ4_LIBRARIES "${LZ4_LIBRARY}")
 
-mark_as_advanced(LZ4_INCLUDE_DIR LZ4_LIBRARY)
+  if (NOT TARGET LZ4::LZ4)
+    add_library(LZ4::LZ4 UNKNOWN IMPORTED)
+    set_target_properties(LZ4::LZ4 PROPERTIES
+      IMPORTED_LOCATION "${LZ4_LIBRARY}"
+      INTERFACE_INCLUDE_DIRECTORIES "${LZ4_INCLUDE_DIR}")
+  endif ()
+endif ()
