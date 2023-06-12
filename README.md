@@ -133,6 +133,8 @@ page and feel free to open issues on GitHub.
 
 We are also always looking for feedback from our dedicated community! If you have used ArcticDB please let us know, we would love to hear about your experience!
 
+Our release process is [documented here](https://github.com/man-group/ArcticDB/blob/master/docs/mkdocs/docs/technical/releasing.md).
+
 ## Community
 
 We would love to hear how your ArcticDB journey evolves, email us at [arcticdb@man.com](mailto:ArcticDB@man.com) or come chat to us on [Twitter](https://www.twitter.com/arcticdb)!
