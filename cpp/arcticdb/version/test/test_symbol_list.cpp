@@ -22,19 +22,48 @@
 using namespace arcticdb;
 using namespace folly;
 using namespace arcticdb::entity;
+using namespace arcticdb::action_factories;
 using namespace ::testing;
 
-class SymbolListSuite : public Test {
-protected:
-    static void SetUpTestCase() {
-        Test::SetUpTestCase(); // Fail compilation when the name changes in a later version
+MAKE_GTEST_FMT(FailureType, "{}")
 
-        ConfigsMap::instance()->set_int("Logging.ALL", 1);
+static const StorageFailureSimulator::ParamActionSequence RAISE_ONCE = {fault(), no_op};
+static const StorageFailureSimulator::ParamActionSequence RAISE_ON_2ND_CALL = {no_op, fault(), no_op};
+
+/* === Tests overview ===
+ * Test each below for both the symbol list source and the version map source:
+ * 1. load_internal_with_retry (SymbolListWithReadFailures suite)
+ * 2. no_compaction (after we ported the permissions)
+ * 3. Step 2 (Need to update the stored symbol list?) condition (implicit in most tests)
+ * 4. Step 3 (Get the compaction lock) failures (SymbolListWith*Failures where the sequence affected locks)
+ * 5. Step 4 Compaction keys after lock (SymbolListRace)
+ * 6. Step 5 (SymbolListWithWriteFailures)
+ * 7. Return value (checked in most tests)
+ */
+
+struct SymbolListSuite : Test {
+    static inline spdlog::level::level_enum saved = log::version().level();
+
+    static void SetUpTestSuite() {
+        Test::SetUpTestSuite(); // Fail compilation when the name changes in a later version
+
+        saved = log::version().level();
+        log::version().set_level(spdlog::level::debug);
     }
-    
-    static void TearDownTestCase() {
-        Test::TearDownTestCase();
-        ConfigsMap::instance()->unset_int("Logging.ALL");
+
+    static void TearDownTestSuite() {
+        Test::TearDownTestSuite();
+        log::version().set_level(saved);
+        StorageFailureSimulator::reset();
+    }
+
+    void SetUp() override {
+        if (StorageFailureSimulator::instance()->configured()) {
+            StorageFailureSimulator::reset();
+        }
+    }
+
+    void TearDown() override {
         ConfigsMap::instance()->unset_int("SymbolList.MaxDelta");
     }
 
@@ -48,15 +77,37 @@ protected:
 
     // Need at least one compaction key to avoid using the version keys as source
     void write_initial_compaction_key() {
+        log::version().set_level(spdlog::level::warn);
         symbol_list.load(store, false);
+        log::version().set_level(spdlog::level::debug);
+    }
+
+    // The max_delta_ can be set at construction time only, so to change requires a new instance:
+    void override_max_delta(int size) {
+        ConfigsMap::instance()->set_int("SymbolList.MaxDelta", size);
+        symbol_list.~SymbolList();
+        new(&symbol_list) SymbolList(version_map);
+    }
+
+    auto get_symbol_list_keys(const std::string& prefix = "") {
+        std::vector<VariantKey> keys;
+        store->iterate_type(entity::KeyType::SYMBOL_LIST, [&keys](auto&& k){keys.push_back(k);}, prefix);
+        return keys;
     }
 };
 
-#undef TEST
-#define TEST(suite, ...) TEST_F(suite ## Suite, __VA_ARGS__)
+using FailSimParam = StorageFailureSimulator::Params;
 
-TEST(SymbolList, InMemory) {
+/** Adds storage failure cases to some tests. */
+struct SymbolListWithReadFailures : SymbolListSuite, testing::WithParamInterface<FailSimParam> {
+    void setup_failure_sim_if_any() {
+        StorageFailureSimulator::instance()->configure(GetParam());
+    }
+};
+
+TEST_P(SymbolListWithReadFailures, FromSymbolListSource) {
     write_initial_compaction_key();
+    setup_failure_sim_if_any();
 
     symbol_list.add_symbol(store, symbol_1);
     symbol_list.add_symbol(store, symbol_2);
@@ -68,7 +119,7 @@ TEST(SymbolList, InMemory) {
     ASSERT_EQ(copy[1], StreamId{"bbb"});
 }
 
-TEST(SymbolList, Persistence) {
+TEST_F(SymbolListSuite, Persistence) {
     write_initial_compaction_key();
 
     symbol_list.add_symbol(store, symbol_1);
@@ -82,7 +133,7 @@ TEST(SymbolList, Persistence) {
     ASSERT_EQ(symbols[1], StreamId{symbol_2});
 }
 
-TEST(SymbolList, CreateMissing) {
+TEST_P(SymbolListWithReadFailures, VersionMapSource) {
 
     auto key1 = atom_key_builder().version_id(1).creation_ts(2).content_hash(3).start_index(
             4).end_index(5).build(symbol_3, KeyType::TABLE_INDEX);
@@ -97,11 +148,21 @@ TEST(SymbolList, CreateMissing) {
     version_map->write_version(store, key2);
     version_map->write_version(store, key3);
 
+    setup_failure_sim_if_any();
     std::vector<StreamId> symbols = symbol_list.get_symbols(store);
     ASSERT_THAT(symbols, UnorderedElementsAre(symbol_1, symbol_2, symbol_3));
 }
 
-TEST(SymbolList, MultipleWrites) {
+INSTANTIATE_TEST_SUITE_P(, SymbolListWithReadFailures, Values(
+        FailSimParam{}, // No failure
+        FailSimParam{{FailureType::ITERATE, RAISE_ONCE}},
+        FailSimParam{{FailureType::READ, RAISE_ONCE}},
+        FailSimParam{{FailureType::READ, {fault(), fault(), fault(), fault(), no_op}}},
+        FailSimParam{{FailureType::READ, {fault(0.4), no_op}}}, // 40% chance of exception
+        FailSimParam{{FailureType::ITERATE, RAISE_ONCE}, {FailureType::READ, {no_op, fault(), no_op}}}
+));
+
+TEST_F(SymbolListSuite, MultipleWrites) {
     write_initial_compaction_key();
 
     symbol_list.add_symbol(store, symbol_1);
@@ -117,7 +178,27 @@ TEST(SymbolList, MultipleWrites) {
     ASSERT_THAT(symbols, UnorderedElementsAre(symbol_1, symbol_2, symbol_3));
 }
 
-TEST(SymbolList, WriteWithCompaction) {
+enum CompactOutcome: size_t {
+    NOT_WRITTEN = 0, WRITTEN, NOT_CLEANED_UP
+};
+
+using WriteFailuresParams = std::tuple<FailSimParam, CompactOutcome>;
+
+struct SymbolListWithWriteFailures : SymbolListSuite, testing::WithParamInterface<WriteFailuresParams> {
+    CompactOutcome expected_outcome;
+
+    void setup_failure_sim_if_any() {
+        StorageFailureSimulator::instance()->configure(std::get<0>(GetParam()));
+        expected_outcome = std::get<1>(GetParam());
+    }
+
+    void check_num_symbol_list_keys_match_expectation(std::map<CompactOutcome, size_t> size_by_outcome) {
+        auto keys = get_symbol_list_keys();
+        ASSERT_THAT(keys, SizeIs(size_by_outcome.at(expected_outcome)));
+    }
+};
+
+TEST_P(SymbolListWithWriteFailures, SubsequentCompaction) {
     write_initial_compaction_key();
 
     std::vector<StreamId> expected;
@@ -127,13 +208,26 @@ TEST(SymbolList, WriteWithCompaction) {
         expected.emplace_back(symbol);
     }
 
-    std::vector<StreamId> symbols = symbol_list.get_symbols(store, true);
+    setup_failure_sim_if_any();
+    std::vector<StreamId> symbols = symbol_list.get_symbols(store, false);
     ASSERT_THAT(symbols, UnorderedElementsAreArray(expected));
+
+    // Extra 1 in 501 is the initial compaction key
+    // NOT_CLEANED_UP case checks that deletion happens after the compaction key is written
+    check_num_symbol_list_keys_match_expectation({{{NOT_WRITTEN, 501}, {WRITTEN, 1}, {NOT_CLEANED_UP, 502}}});
+
+    // Retry:
+    if (expected_outcome != WRITTEN) {
+        symbols = symbol_list.get_symbols(store, false);
+        ASSERT_THAT(symbols, UnorderedElementsAreArray(expected));
+
+        check_num_symbol_list_keys_match_expectation({{{NOT_WRITTEN, 1}, {NOT_CLEANED_UP, 1}}});
+    }
 }
 
-TEST(SymbolList, InitialCompact) {
-    int64_t n = 500;
-    ConfigsMap::instance()->set_int("SymbolList.MaxDelta", n);
+TEST_P(SymbolListWithWriteFailures, InitialCompact) {
+    int64_t n = 20;
+    override_max_delta(n);
 
     std::vector<StreamId> expected;
     for(int64_t i = 0; i < n + 1; ++i) {
@@ -144,13 +238,19 @@ TEST(SymbolList, InitialCompact) {
         expected.emplace_back(symbol);
     }
 
+    setup_failure_sim_if_any();
     std::vector<StreamId> symbols = symbol_list.get_symbols(store);
     ASSERT_THAT(symbols, UnorderedElementsAreArray(expected));
 
-    std::vector<entity::AtomKey> remaining_keys;
-    store->iterate_type(entity::KeyType::SYMBOL_LIST, [&remaining_keys](const auto& k){remaining_keys.push_back(to_atom(k));}, "");
-    ASSERT_EQ(1u, remaining_keys.size());
+    check_num_symbol_list_keys_match_expectation({{{NOT_WRITTEN, 0}, {WRITTEN, 1}, {NOT_CLEANED_UP, 1}}});
 }
+
+INSTANTIATE_TEST_SUITE_P(, SymbolListWithWriteFailures, Values(
+        WriteFailuresParams{{}, CompactOutcome::WRITTEN}, // No failures
+        WriteFailuresParams{{{FailureType::WRITE, RAISE_ONCE}}, CompactOutcome::NOT_WRITTEN}, // Interferes with locking
+        WriteFailuresParams{{{FailureType::WRITE, RAISE_ON_2ND_CALL}}, CompactOutcome::NOT_WRITTEN},
+        WriteFailuresParams{{{FailureType::DELETE, RAISE_ONCE}}, CompactOutcome::NOT_CLEANED_UP}
+));
 
 template <typename T, typename U>
 std::optional<T> random_choice(const std::set<T>& set, U& gen) {
@@ -167,8 +267,8 @@ std::optional<T> random_choice(const std::set<T>& set, U& gen) {
 class SymbolListState {
 public:
     SymbolListState(std::shared_ptr<Store> store) :
-    store_(std::move(store)),
-    gen_(42) {}
+            store_(std::move(store)),
+            gen_(42) {}
 
     void do_action(std::shared_ptr<SymbolList> symbol_list) {
         std::scoped_lock<std::mutex> lock{mutex_};
@@ -241,7 +341,7 @@ private:
     std::mutex mutex_;
 };
 
-TEST(SymbolList, AddDeleteReadd) {
+TEST_F(SymbolListSuite, AddDeleteReadd) {
     auto symbol_list = std::make_shared<SymbolList>(version_map);
     write_initial_compaction_key();
 
@@ -258,11 +358,11 @@ struct TestSymbolListTask {
     std::shared_ptr<SymbolList> symbol_list_;
 
     TestSymbolListTask(const std::shared_ptr<SymbolListState> state,
-                       const std::shared_ptr<Store>& store,
-                       const std::shared_ptr<SymbolList> symbol_list) :
-        state_(state),
-        store_(store),
-        symbol_list_(symbol_list) {}
+            const std::shared_ptr<Store>& store,
+            const std::shared_ptr<SymbolList> symbol_list) :
+            state_(state),
+            store_(store),
+            symbol_list_(symbol_list) {}
 
     Future<Unit> operator()() {
         for (size_t i = 0; i < 10; ++i) {
@@ -272,7 +372,7 @@ struct TestSymbolListTask {
     }
 };
 
-TEST(SymbolList, MultiThreadStress) {
+TEST_F(SymbolListSuite, MultiThreadStress) {
     ConfigsMap::instance()->set_int("SymbolList.MaxDelta", 10);
     log::version().set_pattern("%Y%m%d %H:%M:%S.%f %t %L %n | %v");
     std::vector<Future<Unit>> futures;
@@ -286,7 +386,7 @@ TEST(SymbolList, MultiThreadStress) {
     collect(futures).get();
 }
 
-TEST(SymbolList, KeyHashIsDifferent) {
+TEST_F(SymbolListSuite, KeyHashIsDifferent) {
     auto version_store = get_test_engine();
     auto& store = version_store._test_get_store();
 
@@ -309,9 +409,9 @@ struct WriteSymbolsTask {
     size_t offset_;
 
     WriteSymbolsTask(const std::shared_ptr<Store>& store, size_t offset) :
-        store_(store),
-        symbol_list_(std::make_shared<SymbolList>(version_map_)),
-    offset_(offset) {}
+            store_(store),
+            symbol_list_(std::make_shared<SymbolList>(version_map_)),
+            offset_(offset) {}
 
     Future<Unit> operator()() {
         for(auto x = 0; x < 5000; ++x) {
@@ -328,8 +428,8 @@ struct CheckSymbolsTask {
     std::shared_ptr<SymbolList> symbol_list_;
 
     CheckSymbolsTask(const std::shared_ptr<Store>& store) :
-        store_(store),
-        symbol_list_(std::make_shared<SymbolList>(version_map_)){}
+            store_(store),
+            symbol_list_(std::make_shared<SymbolList>(version_map_)){}
 
     void body() { // gtest macros must be used in a function that returns void....
         for(auto x = 0; x < 100; ++x) {
@@ -344,7 +444,7 @@ struct CheckSymbolsTask {
     }
 };
 
-TEST(SymbolList, AddAndCompact) {
+TEST_F(SymbolListSuite, AddAndCompact) {
     log::version().set_pattern("%Y%m%d %H:%M:%S.%f %t %L %n | %v");
     std::vector<Future<Unit>> futures;
     for(auto x = 0; x < 1000; ++x) {
@@ -356,6 +456,90 @@ TEST(SymbolList, AddAndCompact) {
     futures.emplace_back(exec.addFuture(WriteSymbolsTask{store, 0}));
     futures.emplace_back(exec.addFuture(WriteSymbolsTask{store, 500}));
     futures.emplace_back(exec.addFuture(CheckSymbolsTask{store}));
-    // futures.emplace_back(exec.addFuture(CheckSymbolsTask{store}));
+    futures.emplace_back(exec.addFuture(CheckSymbolsTask{store}));
     collect(futures).get();
 }
+
+TEST_F(SymbolListSuite, KeySortingAndLatestTimestampPreservation) {
+    write_initial_compaction_key();
+    override_max_delta(2);
+
+    symbol_list.add_symbol(store, symbol_1);
+    symbol_list.add_symbol(store, symbol_2);
+
+    timestamp saved = PilotedClock::time_;
+    symbol_list.remove_symbol(store, symbol_1);
+
+    auto symbols = symbol_list.load(store, false);
+    ASSERT_THAT(symbols, ElementsAre(symbol_2));
+
+    // Even though symbol_1 don't even appear in the result, its timestamp should be used:
+    size_t count = 0;
+    store->iterate_type(entity::KeyType::SYMBOL_LIST, [saved=saved, &count](const auto& k){
+        ASSERT_EQ(to_atom(k).creation_ts(), saved);
+        count++;
+    }, "");
+    ASSERT_EQ(count, 1);
+}
+
+struct SymbolListRace: SymbolListSuite, testing::WithParamInterface<std::tuple<char, bool, bool, bool>> {};
+
+TEST_P(SymbolListRace, Run) {
+    override_max_delta(1);
+    auto [source, remove_old, add_new, add_other] = GetParam();
+    timestamp expected_ts;
+
+    // Set up source
+    if (source == 'S') {
+        write_initial_compaction_key();
+        symbol_list.add_symbol(store, symbol_1);
+        // Compaction keys should use the highest timestamp of the keys it contains (the one we just added):
+        expected_ts = PilotedClock::time_ - 1;
+    } else {
+        auto key1 = atom_key_builder().version_id(1).creation_ts(2).content_hash(3).start_index(
+                4).end_index(5).build(symbol_1, KeyType::TABLE_INDEX);
+        version_map->write_version(store, key1);
+        expected_ts = PilotedClock::time_;
+    }
+
+    // Variables for capturing the symbol list state before compaction:
+    std::vector<VariantKey> before;
+
+    // Emulate concurrent actions by intercepting try_lock
+    StorageFailureSimulator::instance()->configure({{FailureType::WRITE,
+        { FailureAction("concurrent", [&before, this](auto) {
+            //FUTURE(C++20): structured binding cannot be captured prior to 20
+            auto [unused, remove_old2, add_new2, add_other2] = GetParam();
+            if (remove_old2) {
+                store->remove_keys(get_symbol_list_keys(), {});
+            }
+            if (add_new2) {
+                store->write(KeyType::SYMBOL_LIST, 0, CompactionId, PilotedClock::nanos_since_epoch(), 0, 0,
+                        SegmentInMemory{});
+            }
+            if (add_other2) {
+                symbol_list.add_symbol(store, symbol_2);
+            }
+
+            before = get_symbol_list_keys();
+        }),
+        no_op}}});
+
+    // Check compaction
+    std::vector<StreamId> symbols = symbol_list.get_symbols(store);
+    ASSERT_THAT(symbols, ElementsAre(symbol_1));
+
+    if (!remove_old && !add_new) { // A normal compaction should have happened
+        auto keys = get_symbol_list_keys(CompactionId);
+        ASSERT_THAT(keys, SizeIs(1));
+        ASSERT_THAT(to_atom(keys.at(0)).creation_ts(), Eq(expected_ts));
+    } else {
+        // Should not have changed any keys
+        ASSERT_THAT(get_symbol_list_keys(), UnorderedElementsAreArray(before));
+    }
+}
+
+// For symbol list source (which is used for subsequent compactions), all flag combinations are valid:
+INSTANTIATE_TEST_SUITE_P(SymbolListSource, SymbolListRace, Combine(Values('S'), Bool(), Bool(), Bool()));
+// For version keys source (initial compaction), there's no old compaction key to remove:
+INSTANTIATE_TEST_SUITE_P(VersionKeysSource, SymbolListRace, Combine(Values('V'), Values(false), Bool(), Bool()));

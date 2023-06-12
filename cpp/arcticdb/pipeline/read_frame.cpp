@@ -217,7 +217,7 @@ void decode_into_frame_static(
     SegmentInMemory &frame,
     PipelineContextRow &context,
     Segment &&s,
-    const std::shared_ptr<BufferHolder>& buffers) {
+    const std::shared_ptr<BufferHolder> buffers) {
     auto seg = std::move(s);
     ARCTICDB_SAMPLE_DEFAULT(DecodeIntoFrame)
     const uint8_t *data = seg.buffer().data();
@@ -1022,12 +1022,12 @@ folly::Future<std::vector<VariantKey>> fetch_data(
     {
         ARCTICDB_SUBSAMPLE_DEFAULT(QueueReadContinuations)
         for ( auto& row : *context) {
-            keys.emplace_back(row.slice_and_key().key());
+            keys.push_back(row.slice_and_key().key());
             continuations.emplace_back([
                 row = row,
                 frame = frame,
                 dynamic_schema=dynamic_schema,
-                &buffers](auto &&ks) mutable {
+                buffers](auto &&ks) mutable {
                 auto key_seg = std::forward<storage::KeySegmentPair>(ks);
                 if(dynamic_schema)
                     decode_into_frame_dynamic(frame, row, std::move(key_seg.segment()), buffers);

@@ -1,4 +1,5 @@
 option(TEST "Build all tests." ON)
+option(BUILD_WITH_REMOTERY "Build ArcticDB with Remotery (used for performance analysis)" OFF)
 option(SSL_LINK "Link against SSL libraries." ON)
 option(HIDE_LINKED_SYMBOLS "Passed `exclude-libs` through to linker, ensuring linked library symbols are not exported. Shrinks binary size." ON)
 option(STATIC_LINK_STD_LIB "Statically link the C++ standard libraries" ON)
@@ -43,6 +44,10 @@ find_package(mongocxx REQUIRED)
 find_package(bsoncxx REQUIRED)
 find_package(zstd CONFIG REQUIRED)  # "CONFIG" bypasses our cpp/CMake/FindZstd.cmake module
 
+if(${BUILD_WITH_REMOTERY})
+    add_compile_definitions(USE_REMOTERY)
+endif()
+
 if(NOT ${ARCTICDB_USING_CONDA})
     find_package(unofficial-pcre REQUIRED)
     find_package(Libevent CONFIG REQUIRED)
@@ -67,11 +72,14 @@ else()
     find_package(semimap REQUIRED)
 
     find_package(recycle REQUIRED)
-    find_package(remotery REQUIRED)
     find_package(msgpack-c REQUIRED)
     find_package(robin_hood REQUIRED)
     find_package(LMDB REQUIRED)
     find_package(LMDBXX REQUIRED)
+
+    if(${BUILD_WITH_REMOTERY})
+        find_package(Remotery REQUIRED)
+    endif()
 
     set(ARCTICDB_MONGO_LIBS mongo::mongocxx_shared mongo::bsoncxx_shared)
 
@@ -406,7 +414,14 @@ endif()
 
 add_library(arcticdb_core_object OBJECT ${arcticdb_srcs})
 
-if (NOT WIN32)
+if (WIN32)
+    # C++17 support for MSVC
+    # lmdbxx requires __cplusplus to be set for C++11 or later.
+    # See: https://github.com/drycpp/lmdbxx/blob/0b43ca87d8cfabba392dfe884eb1edb83874de02/lmdb%2B%2B.h#L17-L21
+    # /Zc:__cplusplus is needed to get the correct __cplusplus macro value
+    # See: https://developercommunity.visualstudio.com/t/msvc-incorrectly-defines-cplusplus/139261#T-N223868
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /std:c++17 /Zc:__cplusplus")
+else()
     if (STATIC_LINK_STD_LIB)
         message("Statically linking standard libraries")
         if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
@@ -461,10 +476,14 @@ if(${ARCTICDB_USING_CONDA})
     list (APPEND arcticdb_core_libraries
         xxHash::xxHash
         pcre
-        ${remotery_LIBRARY}
         msgpack-c
         ${LMDB_LIBRARIES}
     )
+    if(${BUILD_WITH_REMOTERY})
+        list (APPEND arcticdb_core_libraries
+            ${remotery_LIBRARY}
+        )
+    endif()
 else()
 
     add_compile_definitions(ARCTICDB_USING_STATIC_XXHASH)
@@ -472,10 +491,14 @@ else()
     list (APPEND arcticdb_core_libraries
         xxhash_static
         unofficial::pcre::pcre
-        remotery_static
         msgpackc-cxx
         lmdb
     )
+    if(${BUILD_WITH_REMOTERY})
+        list (APPEND arcticdb_core_libraries
+            remotery_static
+        )
+    endif()
 endif()
 
 if (WIN32)

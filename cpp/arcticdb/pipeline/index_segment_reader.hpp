@@ -17,7 +17,11 @@
 #include <cstdint>
 
 namespace arcticdb {
-    class Store;
+class Store;
+}
+
+namespace arcticdb::pipelines {
+struct ReadQuery;
 }
 
 namespace arcticdb::pipelines::index {
@@ -133,5 +137,8 @@ index::IndexSegmentReader get_index_reader(
 IndexRange get_index_segment_range(
     const AtomKey &prev_index,
     const std::shared_ptr<Store> &store);
+
+
+void check_column_and_date_range_filterable(const IndexSegmentReader& index_segment_reader, const ReadQuery& read_query);
 
 } // namespace arcticdb::pipelines::index

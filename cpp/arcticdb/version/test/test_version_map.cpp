@@ -316,25 +316,6 @@ TEST(VersionMap, TombstoneAllTwice) {
     // Don't need a check condition, checking validation
 }
 
-TEST(VersionMap, TombstoneAllRemoveFastTombstone) {
-    auto store = std::make_shared<InMemoryStore>();
-    StreamId id{"test1"};
-    THREE_SIMPLE_KEYS
-
-    auto version_map = std::make_shared<VersionMap>();
-    version_map->set_fast_tombstone_all(true);
-    version_map->set_validate(true);
-    version_map->write_and_prune_previous(store, key1, std::nullopt);
-    auto maybe_prev = get_latest_version(store, version_map,  id, true, false);
-    version_map->write_and_prune_previous(store, key2, maybe_prev.value());
-    version_map->set_fast_tombstone_all(false);
-    maybe_prev = get_latest_version(store, version_map,  id, true, false);
-    version_map->write_and_prune_previous(store, key3, maybe_prev.value());
-    auto versions = get_all_versions(store, version_map, id, true, false);
-    ASSERT_EQ(versions.size(), 1);
-    ASSERT_EQ(versions[0], key3);
-}
-
 void write_old_style_journal_entry(const AtomKey &key, std::shared_ptr<StreamSink> store) {
     IndexAggregator<RowCountIndex> journal_agg(key.id(), [&](auto &&segment) {
         store->write(KeyType::VERSION_JOURNAL,
@@ -535,7 +516,7 @@ TEST(VersionMap, RecoverDeleted) {
 
     deleted = version_map->find_deleted_version_keys(store, id);
     ASSERT_EQ(deleted.size(), 3);
-    ASSERT_EQ(get_all_versions(store, version_map, id, true, false).size(), 0);
+    EXPECT_THROW({ get_all_versions(store, version_map, id, true, false); }, std::runtime_error);
     version_map->recover_deleted(store, id);
 
     std::vector<AtomKey> expected{ key3, key2, key1};
