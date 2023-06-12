@@ -176,10 +176,20 @@ public:
     );
 
     folly::Future<std::pair<std::optional<VariantKey>, std::optional<google::protobuf::Any>>> get_metadata(
-        std::optional<AtomKey> key);
+        std::optional<AtomKey>&& key);
 
     folly::Future<std::pair<std::optional<VariantKey>, std::optional<google::protobuf::Any>>> get_metadata_async(
         folly::Future<std::optional<AtomKey>>&& version_fut);
+
+    folly::Future<std::pair<VersionedItem, std::optional<google::protobuf::Any>>> get_descriptor(
+        std::optional<AtomKey>&& key,
+        const StreamId& stream_id,
+        const VersionQuery& version_query);
+
+    folly::Future<std::pair<VersionedItem, std::optional<google::protobuf::Any>>> get_descriptor_async(
+        folly::Future<std::optional<AtomKey>>&& version_fut,
+        const StreamId& stream_id,
+        const VersionQuery& version_query);
 
     void create_column_stats_internal(
         const VersionedItem& versioned_item,

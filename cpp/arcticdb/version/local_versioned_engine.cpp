@@ -337,28 +337,47 @@ std::pair<VersionedItem, FrameAndDescriptor> LocalVersionedEngine::read_datafram
     return std::make_pair(version.value_or(VersionedItem{}), std::move(frame_and_descriptor));
 }
 
+folly::Future<std::pair<VersionedItem, std::optional<google::protobuf::Any>>> LocalVersionedEngine::get_descriptor(
+    std::optional<AtomKey>&& key,
+    const StreamId& stream_id,
+    const VersionQuery& version_query){
+    missing_data::check<ErrorCode::E_NO_SUCH_VERSION>(static_cast<bool>(key.has_value()),
+        "Unable to retrieve descriptor data. {}@{}: version not found", stream_id, version_query);
+    return store()->read_metadata(key.value())
+    .thenValue([](auto&& key_meta_pair){
+        auto [key_seg, meta] = std::move(key_meta_pair);
+        VersionedItem version{std::move(to_atom(*key_seg))};
+        return std::pair{std::move(version), std::move(meta)};
+    });
+}
+
+folly::Future<std::pair<VersionedItem, std::optional<google::protobuf::Any>>> LocalVersionedEngine::get_descriptor_async(
+    folly::Future<std::optional<AtomKey>>&& version_fut,
+    const StreamId& stream_id,
+    const VersionQuery& version_query){
+    return  std::move(version_fut)
+    .thenValue([this, &stream_id, &version_query](std::optional<AtomKey>&& key){
+        return get_descriptor(std::move(key), stream_id, version_query);
+    });
+}
+
 std::pair<VersionedItem, std::optional<google::protobuf::Any>> LocalVersionedEngine::read_descriptor_internal(
-        const StreamId& stream_id,
-        const VersionQuery& version_query
+    const StreamId& stream_id,
+    const VersionQuery& version_query
     ) {
     ARCTICDB_SAMPLE(ReadDescriptor, 0)
-    auto metadata = read_metadata_internal(stream_id, version_query);
-    missing_data::check<ErrorCode::E_NO_SUCH_VERSION>(static_cast<bool>(metadata.first.has_value()),
-        "Unable to retrieve descriptor data. {}@{}: version not found", stream_id, version_query);
-    VersionedItem version{std::move(to_atom(*metadata.first))};
-    return std::pair{version, metadata.second};
+    auto version = get_version_to_read(stream_id, version_query);
+    std::optional<AtomKey> key = version.has_value() ? std::make_optional<AtomKey>(version->key_) : std::nullopt;
+    return get_descriptor(std::move(key), stream_id, version_query).get();
 }
 
 std::vector<std::pair<VersionedItem, std::optional<google::protobuf::Any>>> LocalVersionedEngine::batch_read_descriptor_internal(
-        const std::vector<StreamId>& stream_ids,
-        const std::vector<VersionQuery>& version_queries) {
+    const std::vector<StreamId>& stream_ids,
+    const std::vector<VersionQuery>& version_queries) {
     auto versions_fut = batch_get_versions(store(), version_map(), stream_ids, version_queries);
     std::vector<folly::Future<std::pair<VersionedItem, std::optional<google::protobuf::Any>>>> fut_vec;
-    for (auto& version: versions_fut){
-        fut_vec.push_back(get_metadata_async(std::move(version))
-        .thenValue([](auto&& meta){
-            return std::make_pair(VersionedItem{std::move(to_atom(meta.first.value()))}, std::move(meta.second));
-        }));
+    for(const auto& stream_id : folly::enumerate(stream_ids)) {
+        fut_vec.push_back(get_descriptor_async(std::move(versions_fut[stream_id.index]), *stream_id, version_queries[stream_id.index]));
     }
     return folly::collect(fut_vec).get();
 }
@@ -1199,7 +1218,7 @@ SpecificAndLatestVersionKeys LocalVersionedEngine::get_stream_index_map(
 }
 
 folly::Future<std::pair<std::optional<VariantKey>, std::optional<google::protobuf::Any>>> LocalVersionedEngine::get_metadata(
-    std::optional<AtomKey> key){
+    std::optional<AtomKey>&& key){
     if (key.has_value()){
         return store()->read_metadata(key.value());
     }else{
@@ -1210,8 +1229,8 @@ folly::Future<std::pair<std::optional<VariantKey>, std::optional<google::protobu
 folly::Future<std::pair<std::optional<VariantKey>, std::optional<google::protobuf::Any>>> LocalVersionedEngine::get_metadata_async(
     folly::Future<std::optional<AtomKey>>&& version_fut){
     return  std::move(version_fut)
-    .thenValue([this](std::optional<AtomKey> key){
-        return get_metadata(key);
+    .thenValue([this](std::optional<AtomKey>&& key){
+        return get_metadata(std::move(key));
     });
 }
 
@@ -1233,7 +1252,7 @@ std::pair<std::optional<VariantKey>, std::optional<google::protobuf::Any>> Local
     ) {
     auto version = get_version_to_read(stream_id, version_query);
     std::optional<AtomKey> key = version.has_value() ? std::make_optional<AtomKey>(version->key_) : std::nullopt;
-    return get_metadata(key).get();
+    return get_metadata(std::move(key)).get();
 }
 
 
