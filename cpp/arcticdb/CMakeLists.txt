@@ -214,6 +214,7 @@ set(arcticdb_srcs
         processing/clause.hpp
         processing/execution_context.hpp
         processing/expression_node.hpp
+        python/python_handlers.hpp
         storage/common.hpp
         storage/config_resolvers.hpp
         storage/failure_simulation.hpp
@@ -364,6 +365,7 @@ set(arcticdb_srcs
         processing/operation_dispatch_binary_lt.cpp
         processing/operation_dispatch_binary_operator.cpp
         python/python_to_tensor_frame.cpp
+        python/python_handlers.cpp
         storage/config_resolvers.cpp
         storage/failure_simulation.cpp
         storage/lmdb/lmdb_storage.cpp

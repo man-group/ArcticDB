@@ -252,6 +252,13 @@ void register_metrics(py::module && m){
     });
 }
 
+void register_type_handlers() {
+    auto mutex = std::make_shared<std::mutex>();
+    arcticdb::TypeHandlerRegistry::instance()->register_handler(arcticc::DataType::DECIMAL128, arcticc::DecimalHandler{mutex});
+    arcticdb::TypeHandlerRegistry::instance()->register_handler(arcticc::DataType::ARRAY64, arcticc::ArrayHandler{mutex});
+    arcticdb::TypeHandlerRegistry::instance()->register_handler(arcticc::DataType::PYBOOL8, arcticc::BoolHandler{mutex});
+}
+
 PYBIND11_MODULE(arcticdb_ext, m) {
     m.doc() = R"pbdoc(
         ArcticDB Extension plugin
@@ -297,6 +304,7 @@ PYBIND11_MODULE(arcticdb_ext, m) {
     register_log(m.def_submodule("log"));
     register_instrumentation(m.def_submodule("instrumentation"));
     register_metrics(m.def_submodule("metrics"));
+    register_type_handlers();
 
     auto cleanup_callback = []() {
         using namespace arcticdb;
