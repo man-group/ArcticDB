@@ -6,6 +6,8 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 import sys
+
+import pytz
 from arcticdb_ext.exceptions import InternalException
 from arcticdb.exceptions import ArcticNativeNotYetImplemented
 
@@ -23,7 +25,7 @@ import math
 import re
 import pytest
 import pandas as pd
-from datetime import datetime, date
+from datetime import datetime, date, timezone
 import numpy as np
 from arcticdb.util.test import assert_frame_equal
 
@@ -1106,12 +1108,13 @@ def test_get_description(arctic_library):
     original_info = lib.get_description("symbol", as_of=0)
     # then
     assert [c[0] for c in info.columns] == ["column"]
-    assert info.date_range == (datetime(2018, 1, 1), datetime(2018, 1, 6))
+    assert info.date_range == (datetime(2018, 1, 1, tzinfo=timezone.utc), datetime(2018, 1, 6, tzinfo=timezone.utc))
     assert info.index[0] == ["named_index"]
     assert info.index_type == "index"
     assert info.row_count == 6
     assert original_info.row_count == 4
     assert info.last_update_time > original_info.last_update_time
+    assert info.last_update_time.tz == pytz.UTC
 
 
 def test_get_description_batch(arctic_library):
