@@ -1,7 +1,7 @@
 # Release Tooling
 
 This document details the release process for ArcticDB. 
-ArcticDB is released onto [PyPi](https://pypi.org/project/arcticdb/) and [Conda](https://anaconda.org/conda-forge/arcticdb).
+ArcticDB is released onto [PyPi](https://pypi.org/project/arcticdb/) and [conda-forge](https://anaconda.org/conda-forge/arcticdb).
 
 ## 1. Create a new tag
 
@@ -40,23 +40,36 @@ The [build will now be running for the tag.](https://github.com/man-group/Arctic
 
 ## 3. Update conda-forge recipe
 
-Create a new PR to update the Conda recipe. [Here's an example.](https://github.com/conda-forge/arcticdb-feedstock/pull/10)
+[`regro-cf-autotick-bot`](https://github.com/regro-cf-autotick-bot) generally opens a PR
+on [ArcticDB's feedstock](https://github.com/conda-forge/arcticdb-feedstock)
+for each new release of ArcticDB upstream.
+
+You can update such a PR or create a new one to release a version, updating the
+conda recipe. [Here's an example.](https://github.com/conda-forge/arcticdb-feedstock/pull/10)
 
 You will need to update:
 
 1. The version, pointing to the tag created in step 1. 
-2. The sha of the source tarball
-3. Dependencies (if they need to be changed)
+2. The `sha256sum` of the source tarball
+3. The build number (i.e. `number` under the `build` section) to 0
+4. Dependencies (if they have changed since the last version)
+5. Rerender the feedstock's recipe to create Azure CI jobs' specification for all variants of the package
 
-Don't forget to re-render!
+A PR is generally open with a todo-list summarizing all the required steps to perform,
+before an update to the feedstock.
 
 ## 4. Release to PyPi
 
-After building, GitHub Actions job you kicked off in step 2 after comitting the tag will be waiting on approval to deploy to PyPi. 
+After building, GitHub Actions job you kicked off in step 2 after comitting
+the tag will be waiting on approval to deploy to PyPi. 
 Find the job and click approve to deploy.
 
 ## 5. Release to Conda
 
 Merge the PR created in step 3. 
 
-It will build and push to conda-forge.
+It will build packages, [pushing them to the `cf-staging` channel before publishing them
+on the `conda-forge` channel for validation](https://conda-forge.org/docs/maintainer/infrastructure.html#output-validation-and-feedstock-tokens).
+
+Packages are generally available a few dozen minutes after the CI runs' completion
+on `main`.
