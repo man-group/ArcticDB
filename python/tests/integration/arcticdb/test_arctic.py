@@ -421,6 +421,17 @@ def test_prune_previous_versions(arctic_library):
     assert lib["symbol"].metadata == {"tres": "interessant"}
 
 
+def test_non_prune_previous_versions_by_default(arctic_library):
+    lib = arctic_library
+    df = pd.DataFrame({"col1": [1, 2, 3], "col2": [4, 5, 6]})
+    lib.write("symbol", df)
+    lib.write("symbol", df)
+    lib.write("symbol", df)
+    lib.write("symbol", df)
+    lib.write("symbol", df)
+    assert len(lib.list_versions("symbol")) == 5
+
+
 def test_delete_version(arctic_library):
     lib = arctic_library
     df = pd.DataFrame({"col1": [1, 2, 3], "col2": [4, 5, 6]})
@@ -676,8 +687,8 @@ def test_write_with_unpacking(arctic_library):
 def test_prune_previous_versions_with_write(arctic_library):
     lib = arctic_library
     # When
-    lib.write("sym", pd.DataFrame())
-    lib.write("sym", pd.DataFrame({"col": [1, 2, 3]}), prune_previous_versions=False)
+    lib.write("sym", pd.DataFrame(), prune_previous_versions=True)
+    lib.write("sym", pd.DataFrame({"col": [1, 2, 3]}))
 
     # Then
     v0 = lib.read("sym", as_of=0).data
@@ -687,7 +698,7 @@ def test_prune_previous_versions_with_write(arctic_library):
     assert not v1.empty
 
     # We prune by default
-    lib.write("sym", pd.DataFrame())
+    lib.write("sym", pd.DataFrame(), prune_previous_versions=True)
     with pytest.raises(NoDataFoundException):
         lib.read("sym", as_of=0)
     with pytest.raises(NoDataFoundException):
