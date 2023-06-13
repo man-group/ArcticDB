@@ -21,6 +21,7 @@
 #include <arcticdb/pipeline/index_utils.hpp>
 #include <arcticdb/version/version_map_batch_methods.hpp>
 #include <arcticdb/util/container_filter_wrapper.hpp>
+#include <arcticdb/python/gil_lock.hpp>
 
 namespace arcticdb::version_store {
 
@@ -31,7 +32,7 @@ LocalVersionedEngine::LocalVersionedEngine(
     configure(library->config());
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Created versioned engine at {} for library path {}  with config {}", uintptr_t(this),
                          library->library_path(), [&cfg=cfg_]{  return util::format(cfg); });
-#if defined(USE_REMOTERY)
+#ifdef USE_REMOTERY
     auto temp = RemoteryInstance::instance();
 #endif
     ARCTICDB_SAMPLE_THREAD();
@@ -877,17 +878,19 @@ VersionedItem LocalVersionedEngine::defragment_symbol_data(const StreamId& strea
 
     if(cfg_.symbol_list())
         symbol_list().add_symbol(store_, stream_id);
-
+    
     return versioned_item;
 }
 
-folly::Future<FrameAndDescriptor> async_read_direct(
+folly::Future<std::pair<VersionedItem, FrameAndDescriptor>> async_read_direct(
     const std::shared_ptr<Store>& store,
+    const VariantKey& index_key,
     SegmentInMemory&& index_segment,
     const ReadQuery& read_query,
     std::shared_ptr<BufferHolder> buffers,
     const ReadOptions& read_options) {
     auto index_segment_reader = std::make_shared<index::IndexSegmentReader>(std::move(index_segment));
+    check_column_and_date_range_filterable(*index_segment_reader, read_query);
     auto pipeline_context = std::make_shared<PipelineContext>(StreamDescriptor{*index_segment_reader->mutable_tsd().mutable_stream_descriptor()});
     pipeline_context->set_selected_columns(read_query.columns);
     const bool dynamic_schema = opt_false(read_options.dynamic_schema_);
@@ -905,34 +908,63 @@ folly::Future<FrameAndDescriptor> async_read_direct(
     mark_index_slices(pipeline_context, dynamic_schema, bucketize_dynamic);
     auto frame = allocate_frame(pipeline_context);
 
-    return fetch_data(frame, pipeline_context, store, dynamic_schema, buffers).then(
-        [pipeline_context, frame, &read_options] (auto&&) mutable {
+    return fetch_data(frame, pipeline_context, store, dynamic_schema, buffers).thenValue(
+        [pipeline_context, frame, read_options](auto &&) mutable {
+            ScopedGILLock gil_lock;
             reduce_and_fix_columns(pipeline_context, frame, read_options);
-        }).then(
-            [index_segment_reader, frame] (auto&&) {
-                return FrameAndDescriptor{frame, std::move(index_segment_reader->mutable_tsd()), {}, {}};
-            });
+        }).thenValue(
+        [index_segment_reader, frame, index_key, buffers](auto &&) {
+            return std::make_pair(VersionedItem{to_atom(index_key)},
+                                  FrameAndDescriptor{frame, std::move(index_segment_reader->mutable_tsd()), {}, buffers});
+        });
 }
 
-std::pair<std::vector<AtomKey>, std::vector<FrameAndDescriptor>> LocalVersionedEngine::batch_read_keys(
+std::vector<std::pair<VersionedItem, FrameAndDescriptor>> LocalVersionedEngine::batch_read_keys(
     const std::vector<AtomKey> &keys,
     const std::vector<ReadQuery> &read_queries,
     const ReadOptions& read_options) {
-
+    py::gil_scoped_release release_gil;
     std::vector<folly::Future<std::pair<entity::VariantKey, SegmentInMemory>>> index_futures;
     for (auto &index_key: keys) {
         index_futures.push_back(store()->read(index_key));
     }
     auto indexes = folly::collect(index_futures).get();
 
-    std::vector<folly::Future<FrameAndDescriptor>> results_fut;
+    std::vector<folly::Future<std::pair<VersionedItem, FrameAndDescriptor>>> results_fut;
     auto i = 0u;
     util::check(read_queries.empty() || read_queries.size() == keys.size(), "Expected read queries to either be empty or equal to size of keys");
-    for (auto&& [index_key, index_segment]: indexes) {
-        results_fut.push_back(async_read_direct(store(), std::move(index_segment), read_queries.empty() ? ReadQuery{} : read_queries[i++], std::make_shared<BufferHolder>(), read_options));
+    for (auto&& [index_key, index_segment] : indexes) {
+        results_fut.push_back(async_read_direct(store(), keys[i], std::move(index_segment), read_queries.empty() ? ReadQuery{} : read_queries[i], std::make_shared<BufferHolder>(), read_options));
+        ++i;
     }
     Allocator::instance()->trim();
-    return std::make_pair(keys, folly::collect(results_fut).get());
+    return folly::collect(results_fut).get();
+}
+
+std::vector<std::pair<VersionedItem, FrameAndDescriptor>> LocalVersionedEngine::temp_batch_read_internal_direct(
+    const std::vector<StreamId> &stream_ids,
+    const std::vector<VersionQuery> &version_queries,
+    std::vector<ReadQuery> &read_queries,
+    const ReadOptions &read_options) {
+    py::gil_scoped_release release_gil;
+    auto versions = batch_get_versions(store(), version_map(), stream_ids, version_queries);
+    std::vector<folly::Future<std::pair<VersionedItem, FrameAndDescriptor>>> output;
+    for (auto &&version : folly::enumerate(versions)) {
+        auto read_query = read_queries.empty() ? ReadQuery{} : read_queries[version.index];
+        output.emplace_back(std::move(*version).thenValue([store = store()](auto maybe_index_key) -> ReadKeyOutput {
+            util::check(static_cast<bool>(maybe_index_key), "Version not found for stream");
+            return store->read_sync(maybe_index_key.value());
+        }).thenValue([store = store(), read_query = std::move(read_query), read_options](auto &&key_segment_pair) {
+            auto [index_key, index_segment] = std::move(key_segment_pair);
+            return async_read_direct(store,
+                                     std::move(index_key),
+                                     std::move(index_segment),
+                                     read_query,
+                                     std::make_shared<BufferHolder>(),
+                                     read_options);
+        }));
+    }
+    return folly::collect(output).get();
 }
 
 std::vector<std::pair<VersionedItem, FrameAndDescriptor>> LocalVersionedEngine::batch_read_internal(
@@ -940,6 +972,12 @@ std::vector<std::pair<VersionedItem, FrameAndDescriptor>> LocalVersionedEngine::
     const std::vector<VersionQuery>& version_queries,
     std::vector<ReadQuery>& read_queries,
     const ReadOptions& read_options) {
+
+    if(std::none_of(std::begin(read_queries), std::end(read_queries), [] (const auto& read_query) {
+        return !read_query.query_->empty();
+    })) {
+        return temp_batch_read_internal_direct(stream_ids, version_queries, read_queries, read_options);
+    }
 
     std::vector<folly::Future<std::pair<VersionedItem, FrameAndDescriptor>>> results_fut;
     for (size_t idx=0; idx < stream_ids.size(); idx++) {
@@ -1160,34 +1198,44 @@ SpecificAndLatestVersionKeys LocalVersionedEngine::get_stream_index_map(
     return std::make_pair(specific_versions, latest_versions);
 }
 
+folly::Future<std::pair<std::optional<VariantKey>, std::optional<google::protobuf::Any>>> LocalVersionedEngine::get_metadata(
+    std::optional<AtomKey> key){
+    if (key.has_value()){
+        return store()->read_metadata(key.value());
+    }else{
+        return folly::makeFuture(std::make_pair(std::nullopt, std::nullopt));
+    }
+}
+
+folly::Future<std::pair<std::optional<VariantKey>, std::optional<google::protobuf::Any>>> LocalVersionedEngine::get_metadata_async(
+    folly::Future<std::optional<AtomKey>>&& version_fut){
+    return  std::move(version_fut)
+    .thenValue([this](std::optional<AtomKey> key){
+        return get_metadata(key);
+    });
+}
+
 std::vector<std::pair<std::optional<VariantKey>, std::optional<google::protobuf::Any>>> LocalVersionedEngine::batch_read_metadata_internal(
     const std::vector<StreamId>& stream_ids,
     const std::vector<VersionQuery>& version_queries
     ) {
-    auto [specific_versions_index_map, latest_versions_index_map] = get_stream_index_map(stream_ids, version_queries);
-    auto version_queries_is_empty = version_queries.empty();
+    auto versions_fut = batch_get_versions(store(), version_map(), stream_ids, version_queries);
     std::vector<folly::Future<std::pair<std::optional<VariantKey>, std::optional<google::protobuf::Any>>>> fut_vec;
-    for(const auto& stream_id : folly::enumerate(stream_ids)) {
-        if(!version_queries_is_empty && std::holds_alternative<SpecificVersionQuery>(version_queries[stream_id.index].content_)){
-            const auto& query = version_queries[stream_id.index].content_;
-            auto specific_version_map_key = std::make_pair(*stream_id, std::get<SpecificVersionQuery>(query).version_id_);
-            auto specific_version_it = specific_versions_index_map->find(specific_version_map_key);
-            if (specific_version_it != specific_versions_index_map->end()){
-                fut_vec.push_back(store()->read_metadata(specific_version_it->second));
-            }else{
-                fut_vec.push_back(std::make_pair(std::nullopt, std::nullopt));
-            }
-        }else{
-            auto last_version_it = latest_versions_index_map->find(*stream_id);
-            if(last_version_it != latest_versions_index_map->end()) {
-                fut_vec.push_back(store()->read_metadata(last_version_it->second));
-            }else{
-                fut_vec.push_back(std::make_pair(std::nullopt, std::nullopt));
-            }
-        }
+    for (auto&& version: versions_fut){
+        fut_vec.push_back(get_metadata_async(std::move(version)));
     }
     return folly::collect(fut_vec).get();
 }
+
+std::pair<std::optional<VariantKey>, std::optional<google::protobuf::Any>> LocalVersionedEngine::read_metadata_internal(
+    const StreamId& stream_id,
+    const VersionQuery& version_query
+    ) {
+    auto version = get_version_to_read(stream_id, version_query);
+    std::optional<AtomKey> key = version.has_value() ? std::make_optional<AtomKey>(version->key_) : std::nullopt;
+    return get_metadata(key).get();
+}
+
 
 VersionedItem LocalVersionedEngine::sort_merge_internal(
     const StreamId& stream_id,
@@ -1225,9 +1273,6 @@ void LocalVersionedEngine::configure(const storage::LibraryDescriptor::VariantSt
         if(cfg.has_failure_sim()) {
             store->set_failure_sim(cfg.failure_sim());
         }
-        if(cfg.write_options().descriptor()->FindFieldByLowercaseName("fast_tombstone_all")) {
-          version_map->set_fast_tombstone_all(cfg.write_options().fast_tombstone_all());
-        }
         if(cfg.write_options().has_sync_passive()) {
             version_map->set_log_changes(cfg.write_options().sync_passive().enabled());
         }
@@ -1264,16 +1309,15 @@ std::unordered_map<KeyType, std::pair<size_t, size_t>> LocalVersionedEngine::sca
         auto& pair = sizes[key_type];
         pair.first = keys.size();
         std::vector<stream::StreamSource::ReadContinuation> continuations;
-        continuations.reserve(keys.size());
         std::atomic<size_t> key_size{0};
-        for(auto i = 0u; i < keys.size(); ++i) {
+        for(auto&& key : keys) {
             continuations.emplace_back([&key_size] (auto&& ks) {
                 auto key_seg = std::move(ks);
                 key_size += key_seg.segment().total_segment_size();
                 return key_seg.variant_key();
             });
         }
-        store->batch_read_compressed(std::move(keys), std::move(continuations), BatchReadArgs{});
+        store->batch_read_compressed(std::move(keys), std::move(continuations),BatchReadArgs{});
         pair.second = key_size;
     });
     return sizes;

@@ -280,9 +280,9 @@ namespace arcticdb {
             throw std::runtime_error("Not implemented");
         }
 
-        std::vector<VariantKey> batch_read_compressed(
-                std::vector<entity::VariantKey> &&keys,
-                std::vector<ReadContinuation> &&,
+        folly::Future<std::vector<VariantKey>> batch_read_compressed(
+                std::vector<entity::VariantKey>&& keys,
+                std::vector<ReadContinuation>&&,
                 const BatchReadArgs &
         ) override {
             std::lock_guard lock{mutex_};

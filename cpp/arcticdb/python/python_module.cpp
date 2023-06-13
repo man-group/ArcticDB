@@ -55,7 +55,7 @@ void register_log(py::module && log) {
         arcticdb::proto::logger::LoggersConfig config;
         arcticdb::python_util::pb_from_python(py_log_conf, config);
         return arcticdb::log::Loggers::instance()->configure(config, force);
-    });
+    }, py::arg("py_log_conf"), py::arg("force")=false);
 
      py::enum_<spdlog::level::level_enum>(log, "LogLevel")
              .value("DEBUG", spdlog::level::level_enum::debug)

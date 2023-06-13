@@ -419,7 +419,14 @@ endif()
 
 add_library(arcticdb_core_object OBJECT ${arcticdb_srcs})
 
-if (NOT WIN32)
+if (WIN32)
+    # C++17 support for MSVC
+    # lmdbxx requires __cplusplus to be set for C++11 or later.
+    # See: https://github.com/drycpp/lmdbxx/blob/0b43ca87d8cfabba392dfe884eb1edb83874de02/lmdb%2B%2B.h#L17-L21
+    # /Zc:__cplusplus is needed to get the correct __cplusplus macro value
+    # See: https://developercommunity.visualstudio.com/t/msvc-incorrectly-defines-cplusplus/139261#T-N223868
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /std:c++17 /Zc:__cplusplus")
+else()
     if (STATIC_LINK_STD_LIB)
         message("Statically linking standard libraries")
         if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
@@ -473,6 +480,7 @@ if(${ARCTICDB_USING_CONDA})
     # We must use dynamic libraries.
     list (APPEND arcticdb_core_libraries
         xxHash::xxHash
+        ${PCRE_LIBRARIES}
         msgpack-c
         ${LMDB_LIBRARIES}
     )

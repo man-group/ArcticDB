@@ -62,25 +62,6 @@ struct WriteVersion : rc::state::Command<Model, MapStorePair> {
 };
 
 template <typename Model>
-struct SetUseFastTombstoneAll : rc::state::Command<Model, MapStorePair> {
-    bool value_;
-
-    explicit SetUseFastTombstoneAll(const Model&) ARCTICDB_UNUSED:
-        value_(*rc::gen::arbitrary<bool>()) {}
-
-    void apply(Model &) const override {
-    }
-
-    void run(const Model& , MapStorePair & sut) const override {
-        sut.map_->set_fast_tombstone_all(value_);
-    }
-
-    void show(std::ostream &os) const override {
-        os << "SetUseFastTombstoneAll(" << value_ << ")";
-    }
-};
-
-template <typename Model>
 struct DeleteAllVersions : rc::state::Command<Model, MapStorePair> {
     std::string symbol_;
 
@@ -289,9 +270,6 @@ RC_GTEST_PROP(VersionMap, RapidcheckTombstones, ()) {
                          GetLatestVersion<VersionMapTombstonesModel>,
                          GetAllVersions<VersionMapTombstonesModel>,
                          DeleteAllVersions<VersionMapTombstonesModel>,
-                         Compact<VersionMapTombstonesModel>,
-                         SetUseFastTombstoneAll<VersionMapTombstonesModel>>()
-                         //CompactAndRemoveDeleted<VersionMapTombstonesModel>>()
-
+                         Compact<VersionMapTombstonesModel>>()
     );
 }

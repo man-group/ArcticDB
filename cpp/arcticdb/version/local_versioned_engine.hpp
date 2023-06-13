@@ -175,6 +175,12 @@ public:
         arcticdb::proto::descriptors::UserDefinedMetadata&& user_meta
     );
 
+    folly::Future<std::pair<std::optional<VariantKey>, std::optional<google::protobuf::Any>>> get_metadata(
+        std::optional<AtomKey> key);
+
+    folly::Future<std::pair<std::optional<VariantKey>, std::optional<google::protobuf::Any>>> get_metadata_async(
+        folly::Future<std::optional<AtomKey>>&& version_fut);
+
     void create_column_stats_internal(
         const VersionedItem& versioned_item,
         ColumnStats& column_stats,
@@ -248,12 +254,18 @@ public:
         const WriteOptions& write_options,
         bool validate_index);
 
-    std::pair<std::vector<AtomKey>, std::vector<FrameAndDescriptor>> batch_read_keys(
+    std::vector<std::pair<VersionedItem, FrameAndDescriptor>> batch_read_keys(
         const std::vector<AtomKey> &keys,
         const std::vector<ReadQuery> &read_queries,
         const ReadOptions& read_options);
 
     std::vector<std::pair<VersionedItem, FrameAndDescriptor>> batch_read_internal(
+        const std::vector<StreamId>& stream_ids,
+        const std::vector<VersionQuery>& version_queries,
+        std::vector<ReadQuery>& read_queries,
+        const ReadOptions& read_options);
+
+    std::vector<std::pair<VersionedItem, FrameAndDescriptor>> temp_batch_read_internal_direct(
         const std::vector<StreamId>& stream_ids,
         const std::vector<VersionQuery>& version_queries,
         std::vector<ReadQuery>& read_queries,
@@ -276,6 +288,10 @@ public:
     std::vector<std::pair<std::optional<VariantKey>, std::optional<google::protobuf::Any>>> batch_read_metadata_internal(
         const std::vector<StreamId>& stream_ids,
         const std::vector<VersionQuery>& version_queries);
+
+    std::pair<std::optional<VariantKey>, std::optional<google::protobuf::Any>> read_metadata_internal(
+        const StreamId& stream_id,
+        const VersionQuery& version_query);
 
     bool is_symbol_fragmented(const StreamId& stream_id, std::optional<size_t> segment_size) override;
 

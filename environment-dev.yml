@@ -29,7 +29,8 @@ dependencies:
   - libprotobuf < 4
   - bitmagic
   - spdlog
-  - fmt
+  # Incompatibility with fmt last version
+  - fmt < 10
   - folly >2022.10.31 # latest version published on vcpkg
   # Vendored build dependencies (see `cpp/thirdparty`)
   # Versions must be kept in sync

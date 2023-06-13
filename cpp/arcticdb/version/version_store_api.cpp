@@ -934,10 +934,15 @@ void PythonVersionStore::fix_symbol_trees(const std::vector<StreamId>& symbols) 
 
 void PythonVersionStore::prune_previous_versions(const StreamId& stream_id) {
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: prune_previous_versions stream_id={}", stream_id);
-    const auto entry = version_map()->check_reload(store(), stream_id, LoadParameter{LoadType::LOAD_UNDELETED},
-                                                 true, false, __FUNCTION__);
+    const std::shared_ptr<VersionMapEntry>& entry = version_map()->check_reload(
+            store(),
+            stream_id,
+            LoadParameter{LoadType::LOAD_UNDELETED},
+            true,
+            false,
+            __FUNCTION__);
+    storage::check<ErrorCode::E_SYMBOL_NOT_FOUND>(!entry->empty(), "Symbol {} is not found", stream_id);
     auto latest = entry->get_first_index(false);
-    util::check(latest.has_value(), "Cannot prune previous versions for non-existent symbol {}", stream_id);
 
     auto prev_id = get_prev_version_in_entry(entry, latest->version_id());
     if (!prev_id) {
@@ -1006,13 +1011,14 @@ std::pair<VersionedItem, py::object> PythonVersionStore::read_metadata(
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: read_metadata");
     ARCTICDB_SAMPLE(ReadMetadata, 0)
 
-    auto version = get_version_to_read(stream_id, version_query);
-    if(!version)
+    auto metadata = read_metadata_internal(stream_id, version_query);
+    if(!metadata.first.has_value())
         throw NoDataFoundException(fmt::format("read_metadata: version not found for symbol", stream_id));
 
-    auto metadata_proto = store()->read_metadata(version.value().key_).get().second;
+    auto metadata_proto = metadata.second;
     py::object pyobj = metadata_protobuf_to_pyobject(metadata_proto);
-    return std::pair{version.value(), pyobj};
+    VersionedItem version{std::move(to_atom(*metadata.first))};
+    return std::pair{version, pyobj};
 }
 
 std::vector<VersionedItem> PythonVersionStore::batch_write_metadata(
