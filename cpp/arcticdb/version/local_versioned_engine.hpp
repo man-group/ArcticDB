@@ -182,9 +182,7 @@ public:
         folly::Future<std::optional<AtomKey>>&& version_fut);
 
     folly::Future<std::pair<VersionedItem, std::optional<google::protobuf::Any>>> get_descriptor(
-        std::optional<AtomKey>&& key,
-        const StreamId& stream_id,
-        const VersionQuery& version_query);
+        AtomKey&& key);
 
     folly::Future<std::pair<VersionedItem, std::optional<google::protobuf::Any>>> get_descriptor_async(
         folly::Future<std::optional<AtomKey>>&& version_fut,

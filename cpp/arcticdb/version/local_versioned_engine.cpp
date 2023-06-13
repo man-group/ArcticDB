@@ -338,12 +338,8 @@ std::pair<VersionedItem, FrameAndDescriptor> LocalVersionedEngine::read_datafram
 }
 
 folly::Future<std::pair<VersionedItem, std::optional<google::protobuf::Any>>> LocalVersionedEngine::get_descriptor(
-    std::optional<AtomKey>&& key,
-    const StreamId& stream_id,
-    const VersionQuery& version_query){
-    missing_data::check<ErrorCode::E_NO_SUCH_VERSION>(static_cast<bool>(key.has_value()),
-        "Unable to retrieve descriptor data. {}@{}: version not found", stream_id, version_query);
-    return store()->read_metadata(key.value())
+    AtomKey&& key){
+    return store()->read_metadata(key)
     .thenValue([](auto&& key_meta_pair){
         auto [key_seg, meta] = std::move(key_meta_pair);
         VersionedItem version{std::move(to_atom(*key_seg))};
@@ -357,7 +353,9 @@ folly::Future<std::pair<VersionedItem, std::optional<google::protobuf::Any>>> Lo
     const VersionQuery& version_query){
     return  std::move(version_fut)
     .thenValue([this, &stream_id, &version_query](std::optional<AtomKey>&& key){
-        return get_descriptor(std::move(key), stream_id, version_query);
+        missing_data::check<ErrorCode::E_NO_SUCH_VERSION>(static_cast<bool>(key.has_value()),
+        "Unable to retrieve descriptor data. {}@{}: version not found", stream_id, version_query);
+        return get_descriptor(std::move(key.value()));
     });
 }
 
@@ -367,8 +365,9 @@ std::pair<VersionedItem, std::optional<google::protobuf::Any>> LocalVersionedEng
     ) {
     ARCTICDB_SAMPLE(ReadDescriptor, 0)
     auto version = get_version_to_read(stream_id, version_query);
-    std::optional<AtomKey> key = version.has_value() ? std::make_optional<AtomKey>(version->key_) : std::nullopt;
-    return get_descriptor(std::move(key), stream_id, version_query).get();
+    missing_data::check<ErrorCode::E_NO_SUCH_VERSION>(static_cast<bool>(version.has_value()),
+        "Unable to retrieve descriptor data. {}@{}: version not found", stream_id, version_query);
+    return get_descriptor(std::move(version->key_)).get();
 }
 
 std::vector<std::pair<VersionedItem, std::optional<google::protobuf::Any>>> LocalVersionedEngine::batch_read_descriptor_internal(
@@ -377,7 +376,8 @@ std::vector<std::pair<VersionedItem, std::optional<google::protobuf::Any>>> Loca
     auto versions_fut = batch_get_versions(store(), version_map(), stream_ids, version_queries);
     std::vector<folly::Future<std::pair<VersionedItem, std::optional<google::protobuf::Any>>>> fut_vec;
     for(const auto& stream_id : folly::enumerate(stream_ids)) {
-        fut_vec.push_back(get_descriptor_async(std::move(versions_fut[stream_id.index]), *stream_id, version_queries[stream_id.index]));
+        fut_vec.push_back(
+            get_descriptor_async(std::move(versions_fut[stream_id.index]), *stream_id, version_queries[stream_id.index]));
     }
     return folly::collect(fut_vec).get();
 }
