@@ -1,6 +1,7 @@
 # Release Tooling
 
-This document details the release process for ArcticDB. ArcticDB is released onto [PyPi](https://pypi.org/project/arcticdb/) and [Conda](https://anaconda.org/conda-forge/arcticdb).
+This document details the release process for ArcticDB. 
+ArcticDB is released onto [PyPi](https://pypi.org/project/arcticdb/) and [Conda](https://anaconda.org/conda-forge/arcticdb).
 
 ## 1. Create a new tag
 
@@ -10,13 +11,16 @@ Click `Run Workflow` on the right hand side:
 1. Type in the new version number
 2. Click `Run workflow`.
 
-Leave `Bump branch to the next version` as `No`. This will create a branch off of `master` incrementing the version in `setup.cfg` but, as of the time of writing, we are leaving that unchanged.
+Leave `Bump branch to the next version` as `No`. 
+This will create a branch off of `master` incrementing the version in `setup.cfg` but, 
+as of the time of writing, we are leaving that unchanged.
 
 ## 2. Update the version number in the tag
 
 **This should not be a manual process - but is required for now!**
 
-We need to update the version for [`arcticdb.__version__`](https://github.com/man-group/ArcticDB/blob/master/python/arcticdb/\_\_init\_\_.py#LL14C1-L14C1).
+We need to update the version for 
+[`arcticdb.__version__`](https://github.com/man-group/ArcticDB/blob/master/python/arcticdb/\_\_init\_\_.py#LL14C1-L14C1).
 
 To do this, force push a new commit to the tag:
 
@@ -48,7 +52,8 @@ Don't forget to re-render!
 
 ## 4. Release to PyPi
 
-After building, GitHub Actions job you kicked off in step 2 after comitting the tag will be waiting on approval to deploy to PyPi. Find the job and click approve to deploy.
+After building, GitHub Actions job you kicked off in step 2 after comitting the tag will be waiting on approval to deploy to PyPi. 
+Find the job and click approve to deploy.
 
 ## 5. Release to Conda
 
