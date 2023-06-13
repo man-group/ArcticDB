@@ -19,19 +19,25 @@ struct BatchReadArgs {
         CPU
     };
 
-    BatchReadArgs() :
-        batch_size_(ConfigsMap::instance()->get_int("BatchRead.BatchSize", 100)),
-        scheduler_(Scheduler::CPU) {}
+    BatchReadArgs()
+        : batch_size_(ConfigsMap::instance()->get_int("BatchRead.BatchSize", 100)),
+          scheduler_(Scheduler::CPU)
+    {
+    }
 
-    explicit BatchReadArgs(size_t batch_size) :
-        batch_size_(batch_size),
-        scheduler_(Scheduler::CPU) {}
+    explicit BatchReadArgs(size_t batch_size)
+        : batch_size_(batch_size),
+          scheduler_(Scheduler::CPU)
+    {
+    }
 
-    explicit BatchReadArgs(Scheduler scheduler) :
-        batch_size_(ConfigsMap::instance()->get_int("BatchRead.BatchSize", 100)),
-        scheduler_(scheduler) { }
+    explicit BatchReadArgs(Scheduler scheduler)
+        : batch_size_(ConfigsMap::instance()->get_int("BatchRead.BatchSize", 100)),
+          scheduler_(scheduler)
+    {
+    }
 
     size_t batch_size_;
     Scheduler scheduler_;
 };
-}
+} // namespace arcticdb

@@ -15,7 +15,8 @@
 using namespace arcticdb::utils;
 using namespace testing;
 
-TEST(RangesFromFuture, keys_and_values) {
+TEST(RangesFromFuture, keys_and_values)
+{
     std::unordered_map<int, char> m;
     ASSERT_THAT(keys(m), IsEmpty());
     ASSERT_THAT(values(m), IsEmpty());

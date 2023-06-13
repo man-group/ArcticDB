@@ -15,7 +15,8 @@
 
 namespace arcticdb::util {
 
-inline int64_t num_from_strv(std::string_view strv) {
+inline int64_t num_from_strv(std::string_view strv)
+{
     uint64_t val = 0;
     for (auto c : strv)
         val = val * 10 + (c - '0');
@@ -23,17 +24,20 @@ inline int64_t num_from_strv(std::string_view strv) {
     return *reinterpret_cast<int64_t*>(&val);
 };
 
-inline bool string_starts_with(const std::string& prefix, const std::string& str) {
+inline bool string_starts_with(const std::string& prefix, const std::string& str)
+{
     return std::equal(prefix.begin(), prefix.end(), str.begin());
 }
 
-inline std::string&& to_lower(std::string&& str) {
+inline std::string&& to_lower(std::string&& str)
+{
     std::transform(str.begin(), str.end(), str.begin(), ::tolower);
     return std::move(str);
 }
 
 template<uint32_t expected_size>
-std::array<std::string_view, expected_size> split_to_array(std::string_view strv, char delim) {
+std::array<std::string_view, expected_size> split_to_array(std::string_view strv, char delim)
+{
     std::array<std::string_view, expected_size> output;
     auto first = strv.begin();
     auto last = strv.cend();
@@ -52,7 +56,8 @@ std::array<std::string_view, expected_size> split_to_array(std::string_view strv
     return output;
 }
 
-inline std::vector<std::string_view> split_to_vector(std::string_view strv, char delim) {
+inline std::vector<std::string_view> split_to_vector(std::string_view strv, char delim)
+{
     std::vector<std::string_view> output;
     auto first = strv.begin();
     auto last = strv.cend();
@@ -72,12 +77,12 @@ inline std::vector<std::string_view> split_to_vector(std::string_view strv, char
 
 constexpr char escape_char = '~';
 
-inline std::string_view strv_from_pos(const std::string& str, size_t start, size_t length) {
+inline std::string_view strv_from_pos(const std::string& str, size_t start, size_t length)
+{
     return std::string_view{str.data() + start, length};
 }
 
-
-std::string safe_encode(const std::string &value);
+std::string safe_encode(const std::string& value);
 
 std::string safe_decode(const std::string& value);
 

@@ -14,25 +14,26 @@
 #include <arcticdb/util/test/rapidcheck_generators.hpp>
 #include <arcticdb/storage/test/in_memory_store.hpp>
 
-RC_GTEST_PROP(ColumnStore, RapidCheck, (std::map<std::string, TestDataFrame>
-    data_frames)) {
+RC_GTEST_PROP(ColumnStore, RapidCheck, (std::map<std::string, TestDataFrame> data_frames))
+{
     using namespace arcticdb;
 
     auto store = std::make_shared<InMemoryStore>();
     std::vector<folly::Future<AtomKey>> futs;
-    for (auto &data_frame : data_frames) {
-        auto fut = write_test_frame(StringId(data_frame.first), data_frame.second, store)
-                        .thenValue([](VariantKey key) { return to_atom(key); });
+    for (auto& data_frame : data_frames) {
+        auto fut = write_test_frame(StringId(data_frame.first), data_frame.second, store).thenValue([](VariantKey key) {
+            return to_atom(key);
+        });
         futs.push_back(std::move(fut));
     }
 
     auto keys = folly::collectAll(futs.begin(), futs.end()).get();
 
     size_t count = 0;
-    for (auto &data_frame : data_frames) {
+    for (auto& data_frame : data_frames) {
         std::vector<std::string> errors;
         auto result = check_test_frame(data_frame.second, keys[count++].value(), store, errors);
-        for (auto &err : errors)
+        for (auto& err : errors)
             log::root().warn(err);
         RC_ASSERT(result);
     }

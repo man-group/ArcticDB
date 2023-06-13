@@ -21,15 +21,15 @@ namespace arcticdb {
 struct ITypeHandler {
     template<class Base>
     struct Interface : Base {
-        void handle_type(
-            const uint8_t*& data,
+        void handle_type(const uint8_t*& data,
             uint8_t* dest,
             const arcticdb::proto::encoding::EncodedField& encoded_field_info,
             const entity::TypeDescriptor& type_descriptor,
             size_t dest_bytes,
-            std::shared_ptr<BufferHolder> buffers
-            ) { folly::poly_call<0>(*this, data, dest, encoded_field_info, type_descriptor, dest_bytes, buffers); }
-
+            std::shared_ptr<BufferHolder> buffers)
+        {
+            folly::poly_call<0>(*this, data, dest, encoded_field_info, type_descriptor, dest_bytes, buffers);
+        }
     };
 
     template<class T>
@@ -48,8 +48,9 @@ public:
 
     std::shared_ptr<TypeHandler> get_handler(entity::DataType data_type) const;
     void register_handler(entity::DataType data_type, TypeHandler&& handler);
+
 private:
     std::unordered_map<entity::DataType, std::shared_ptr<TypeHandler>> handlers_;
 };
 
-}
+} // namespace arcticdb

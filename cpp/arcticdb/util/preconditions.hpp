@@ -19,8 +19,9 @@ template<ErrorCode code, ErrorCategory error_category>
 struct Raise {
     static_assert(get_error_category(code) == error_category);
 
-    template<typename...Args>
-    [[noreturn]] void operator()(fmt::format_string<Args...> format, Args&&...args) const {
+    template<typename... Args>
+    [[noreturn]] void operator()(fmt::format_string<Args...> format, Args&&... args) const
+    {
         std::string combo_format = fmt::format("{} {}", error_code_data<code>.name_, format);
         std::string msg = fmt::format(combo_format, std::forward<Args>(args)...);
         log::root().error(msg);
@@ -32,8 +33,9 @@ template<ErrorCode code, ErrorCategory error_category>
 struct Check {
     static constexpr Raise<code, error_category> raise{};
 
-    template<typename...Args>
-    void operator()(bool cond, fmt::format_string<Args...> format, Args&&...args) const {
+    template<typename... Args>
+    void operator()(bool cond, fmt::format_string<Args...> format, Args&&... args) const
+    {
         if (ARCTICDB_UNLIKELY(!cond)) {
             raise(format, std::forward<Args>(args)...);
         }
@@ -47,7 +49,7 @@ constexpr auto check = util::detail::Check<code, ErrorCategory::NORMALIZATION>{}
 
 template<ErrorCode code>
 constexpr auto raise = check<code>.raise;
-}
+} // namespace normalization
 
 namespace version {
 
@@ -56,29 +58,30 @@ constexpr auto check = util::detail::Check<code, ErrorCategory::MISSING_DATA>{};
 
 template<ErrorCode code>
 constexpr auto raise = check<code>.raise;
-}
+} // namespace version
 
 namespace sorting {
-    template<ErrorCode code>
-    constexpr auto check = util::detail::Check<code, ErrorCategory::SORTING>{};
+template<ErrorCode code>
+constexpr auto check = util::detail::Check<code, ErrorCategory::SORTING>{};
 
-    template<ErrorCode code>
-    constexpr auto raise = check<code>.raise;
-}
+template<ErrorCode code>
+constexpr auto raise = check<code>.raise;
+} // namespace sorting
 
 // TODO Change legacy codes to internal::
 namespace util {
 
-    constexpr auto check = util::detail::Check<ErrorCode::E_ASSERTION_FAILURE, ErrorCategory::INTERNAL>{};
+constexpr auto check = util::detail::Check<ErrorCode::E_ASSERTION_FAILURE, ErrorCategory::INTERNAL>{};
 
-    constexpr auto check_range_impl =  util::detail::Check<ErrorCode::E_INVALID_RANGE, ErrorCategory::INTERNAL>{};
+constexpr auto check_range_impl = util::detail::Check<ErrorCode::E_INVALID_RANGE, ErrorCategory::INTERNAL>{};
 
-template<typename...Args>
-void check_range(size_t idx, size_t size, const char *msg) {
+template<typename... Args>
+void check_range(size_t idx, size_t size, const char* msg)
+{
     check_range_impl(idx < size, "{} expected  0 <= idx < size, actual idx={}, size={}", msg, idx, size);
 }
 
-constexpr auto check_arg =  util::detail::Check<ErrorCode::E_INVALID_ARGUMENT, ErrorCategory::INTERNAL>{};
+constexpr auto check_arg = util::detail::Check<ErrorCode::E_INVALID_ARGUMENT, ErrorCategory::INTERNAL>{};
 
 // TODO Replace occurrences with specific error code
 constexpr auto check_rte = util::detail::Check<ErrorCode::E_RUNTIME_ERROR, ErrorCategory::INTERNAL>{};
@@ -86,10 +89,11 @@ constexpr auto check_rte = util::detail::Check<ErrorCode::E_RUNTIME_ERROR, Error
 // TODO Replace occurrences with specific error code
 constexpr auto raise_rte = check.raise;
 
-template<typename...Args>
-void warn(bool cond, const char *format, const Args &...args) {
+template<typename... Args>
+void warn(bool cond, const char* format, const Args&... args)
+{
     if (ARCTICDB_UNLIKELY(!cond)) {
-        std::string err = fmt::vformat(format,  fmt::make_format_args(args...));
+        std::string err = fmt::vformat(format, fmt::make_format_args(args...));
         log::root().warn("ASSERTION WARNING: {}", err);
     }
 }
@@ -97,8 +101,9 @@ void warn(bool cond, const char *format, const Args &...args) {
 struct WarnOnce {
     bool warned_ = false;
 
-    template<typename...Args>
-    void check(bool cond, const char *format, const Args &...args) {
+    template<typename... Args>
+    void check(bool cond, const char* format, const Args&... args)
+    {
         if (!warned_) {
             warn(cond, format, std::forward<const Args&>(args)...);
             warned_ = true;
@@ -112,14 +117,18 @@ struct WarnOnce {
 
 // useful to enable deferred formatting using lambda
 namespace fmt {
-template <typename A>
-struct formatter<A, std::enable_if_t<std::is_invocable_v<A>,char>> {
-    template <typename ParseContext>
-    constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
+template<typename A>
+struct formatter<A, std::enable_if_t<std::is_invocable_v<A>, char>> {
+    template<typename ParseContext>
+    constexpr auto parse(ParseContext& ctx)
+    {
+        return ctx.begin();
+    }
 
-    template <typename FormatContext>
-    auto format(const A &a, FormatContext &ctx) const {
+    template<typename FormatContext>
+    auto format(const A& a, FormatContext& ctx) const
+    {
         return format_to(ctx.out(), "~({})", a());
     }
 };
-}
+} // namespace fmt

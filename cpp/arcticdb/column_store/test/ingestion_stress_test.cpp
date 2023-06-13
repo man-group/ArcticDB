@@ -25,12 +25,14 @@ namespace as = arcticdb::stream;
 
 struct IngestionStressStore : TestStore {
 protected:
-    std::string get_name() override {
+    std::string get_name() override
+    {
         return "ingestion_stress";
     }
 };
 
-TEST(IngestionStress, ScalarInt) {
+TEST(IngestionStress, ScalarInt)
+{
     const int64_t NumColumns = 20;
     const int64_t NumRows = 10000;
     const uint64_t SegmentPolicyRows = 1000;
@@ -40,20 +42,19 @@ TEST(IngestionStress, ScalarInt) {
         columns.push_back(FieldDescriptor(scalar_field_proto(DataType::UINT64, "uint64")));
 
     const auto index = as::TimeseriesIndex::default_index();
-    as::FixedSchema schema{
-        index.create_stream_descriptor(123, fields_proto_from_range(columns)), index
-    };
+    as::FixedSchema schema{index.create_stream_descriptor(123, fields_proto_from_range(columns)), index};
 
     SegmentsSink sink;
-    as::FixedTimestampAggregator agg(std::move(schema), [&](SegmentInMemory &&mem) {
-        sink.segments_.push_back(std::move(mem));
-    }, as::RowCountSegmentPolicy{SegmentPolicyRows});
+    as::FixedTimestampAggregator agg(
+        std::move(schema),
+        [&](SegmentInMemory&& mem) { sink.segments_.push_back(std::move(mem)); },
+        as::RowCountSegmentPolicy{SegmentPolicyRows});
 
     std::string timer_name("ingestion_stress");
     interval_timer timer(timer_name);
     size_t x = 0;
     for (auto i = 0; i < NumRows; ++i) {
-        agg.start_row(timestamp{i})([&](auto &rb) {
+        agg.start_row(timestamp{i})([&](auto& rb) {
             for (timestamp j = 1u; j <= timestamp(NumColumns); ++j)
                 rb.set_scalar(j, uint64_t(i + j));
         });
@@ -62,7 +63,8 @@ TEST(IngestionStress, ScalarInt) {
     GTEST_COUT << x << " " << timer.display_all() << std::endl;
 }
 
-TEST_F(IngestionStressStore, ScalarIntAppend) {
+TEST_F(IngestionStressStore, ScalarIntAppend)
+{
     using namespace arcticdb;
     const uint64_t NumColumns = 1;
     const uint64_t NumRows = 2;
@@ -81,23 +83,22 @@ TEST_F(IngestionStressStore, ScalarIntAppend) {
     as::DynamicSchema schema{desc, index};
 
     SegmentsSink sink;
-    as::DynamicTimestampAggregator agg(std::move(schema), [&](SegmentInMemory &&mem) {
-        sink.segments_.push_back(std::move(mem));
-    }, as::RowCountSegmentPolicy{SegmentPolicyRows});
-
+    as::DynamicTimestampAggregator agg(
+        std::move(schema),
+        [&](SegmentInMemory&& mem) { sink.segments_.push_back(std::move(mem)); },
+        as::RowCountSegmentPolicy{SegmentPolicyRows});
 
     std::string timer_name("ingestion_stress");
     interval_timer timer(timer_name);
     size_t x = 0;
     for (timestamp i = 0; i < timestamp(NumRows); ++i) {
-        agg.start_row(timestamp{i})([&](auto &rb) {
+        agg.start_row(timestamp{i})([&](auto& rb) {
             for (timestamp j = 1u; j <= timestamp(NumColumns); ++j)
-                rb.set_scalar_by_name(columns[j-1].name(), uint64_t(i + j), columns[j-1].type_desc());
+                rb.set_scalar_by_name(columns[j - 1].name(), uint64_t(i + j), columns[j - 1].type_desc());
         });
     }
     timer.stop_timer(timer_name);
     GTEST_COUT << x << " " << timer.display_all() << std::endl;
-
 
     std::vector<FieldDescriptor> columns_second;
     for (auto i = 0; i < 2; ++i) {
@@ -107,16 +108,16 @@ TEST_F(IngestionStressStore, ScalarIntAppend) {
     auto new_descriptor = index.create_stream_descriptor(symbol, fields_proto_from_range(columns_second));
 
     for (timestamp i = 0u; i < timestamp(NumRows); ++i) {
-        agg.start_row(timestamp(i + NumRows))([&](auto &rb) {
+        agg.start_row(timestamp(i + NumRows))([&](auto& rb) {
             for (uint64_t j = 1u; j <= 2; ++j)
-                rb.set_scalar_by_name(columns_second[j-1].name(), uint64_t(i + j), columns_second[j-1].type_desc());
+                rb.set_scalar_by_name(columns_second[j - 1].name(), uint64_t(i + j), columns_second[j - 1].type_desc());
         });
     }
     GTEST_COUT << " 2 done";
 
     agg.commit();
 
-    for(auto &seg : sink.segments_) {
+    for (auto& seg : sink.segments_) {
         arcticdb::stream::append_incomplete_segment(test_store_->_test_get_store(), symbol, std::move(seg));
     }
 
@@ -132,7 +133,8 @@ TEST_F(IngestionStressStore, ScalarIntAppend) {
     GTEST_COUT << "columns in res: " << read_result.frame_data.index_columns().size();
 }
 
-TEST_F(IngestionStressStore, ScalarIntDynamicSchema) {
+TEST_F(IngestionStressStore, ScalarIntDynamicSchema)
+{
     const uint64_t NumColumnsFirstWrite = 5;
     const uint64_t NumColumnsSecondWrite = 10;
     const int64_t NumRows = 10;
@@ -145,23 +147,24 @@ TEST_F(IngestionStressStore, ScalarIntDynamicSchema) {
     std::vector<FieldDescriptor> columns_first;
     std::vector<FieldDescriptor::Proto> columns_second;
     for (timestamp i = 0; i < timestamp(NumColumnsFirstWrite); ++i) {
-        columns_first.emplace_back(scalar_field_proto(DataType::UINT64,  fmt::format("col_{}", i)));
+        columns_first.emplace_back(scalar_field_proto(DataType::UINT64, fmt::format("col_{}", i)));
     }
 
     const auto index = as::TimeseriesIndex::default_index();
     as::DynamicSchema schema{index.create_stream_descriptor(symbol, {}), index};
 
     SegmentsSink sink;
-    as::DynamicTimestampAggregator agg(std::move(schema), [&](SegmentInMemory &&mem) {
-        sink.segments_.push_back(std::move(mem));
-    }, as::RowCountSegmentPolicy{SegmentPolicyRows});
+    as::DynamicTimestampAggregator agg(
+        std::move(schema),
+        [&](SegmentInMemory&& mem) { sink.segments_.push_back(std::move(mem)); },
+        as::RowCountSegmentPolicy{SegmentPolicyRows});
 
     std::string timer_name("ingestion_stress");
     interval_timer timer(timer_name);
     for (timestamp i = 0; i < timestamp(NumRows); ++i) {
-        agg.start_row(timestamp{i})([&](auto &rb) {
+        agg.start_row(timestamp{i})([&](auto& rb) {
             for (uint64_t j = 1u; j < NumColumnsFirstWrite; ++j)
-                rb.set_scalar_by_name(columns_first[j-1].name(), uint64_t(i + j), columns_first[j-1].type_desc());
+                rb.set_scalar_by_name(columns_first[j - 1].name(), uint64_t(i + j), columns_first[j - 1].type_desc());
         });
     }
     timer.stop_timer(timer_name);
@@ -169,24 +172,23 @@ TEST_F(IngestionStressStore, ScalarIntDynamicSchema) {
 
     // Now try and write rows with more columns
     for (timestamp i = 0; i < timestamp(NumColumnsSecondWrite); ++i) {
-        columns_second.emplace_back(scalar_field_proto(DataType::UINT64,  fmt::format("col_{}", i)));
+        columns_second.emplace_back(scalar_field_proto(DataType::UINT64, fmt::format("col_{}", i)));
     }
     auto new_descriptor = index.create_stream_descriptor(symbol, columns_second);
 
     // Now write again.
 
     for (timestamp i = 0; i < NumRows; ++i) {
-        agg.start_row(timestamp{i + NumRows})([&](auto &rb) {
+        agg.start_row(timestamp{i + NumRows})([&](auto& rb) {
             for (uint64_t j = 1u; j < NumColumnsSecondWrite; ++j)
-                rb.set_scalar_by_name(columns_second[j-1].name(), uint64_t(i + j), columns_second[j-1].type_desc());
+                rb.set_scalar_by_name(columns_second[j - 1].name(), uint64_t(i + j), columns_second[j - 1].type_desc());
         });
     }
     GTEST_COUT << " 2 done";
 
-
     // now write 5 columns
     for (auto i = 0u; i < NumRows; ++i) {
-        agg.start_row(timestamp{i + NumRows * 2})([&](auto &rb) {
+        agg.start_row(timestamp{i + NumRows * 2})([&](auto& rb) {
             for (uint64_t j = 1u; j < NumColumnsFirstWrite; ++j)
                 rb.set_scalar_by_name(columns_first[j].name(), uint64_t(i + j), columns_first[j].type_desc());
         });
@@ -195,17 +197,15 @@ TEST_F(IngestionStressStore, ScalarIntDynamicSchema) {
 
     // now write 10
     for (auto i = 0u; i < NumRows; ++i) {
-        agg.start_row(timestamp{i + NumRows * 3})([&](auto &rb) {
+        agg.start_row(timestamp{i + NumRows * 3})([&](auto& rb) {
             for (uint64_t j = 1u; j < NumColumnsSecondWrite; ++j)
                 rb.set_scalar_by_name(columns_second[j].name(), uint64_t(i + j), columns_second[j].type_desc());
         });
     }
 
-
     agg.commit();
 
-
-    for(auto &seg : sink.segments_) {
+    for (auto& seg : sink.segments_) {
         log::version().info("Writing to symbol: {}", symbol);
         arcticdb::stream::append_incomplete_segment(test_store_->_test_get_store(), symbol, std::move(seg));
     }
@@ -221,7 +221,8 @@ TEST_F(IngestionStressStore, ScalarIntDynamicSchema) {
     auto read_result = test_store_->read_dataframe_internal(symbol, read_query, read_options);
 }
 
-TEST_F(IngestionStressStore, DynamicSchemaWithStrings) {
+TEST_F(IngestionStressStore, DynamicSchemaWithStrings)
+{
     const uint64_t NumRows = 10;
     const uint64_t SegmentPolicyRows = 100;
     StreamId symbol{"blah_string"};
@@ -229,23 +230,24 @@ TEST_F(IngestionStressStore, DynamicSchemaWithStrings) {
     std::vector<SegmentToInputFrameAdapter> data;
 
     const auto index = as::TimeseriesIndex::default_index();
-    as::DynamicSchema schema{
-           index.create_stream_descriptor(symbol, {
-                    scalar_field_proto(DataType::INT64, "INT64"),
-                    scalar_field_proto(DataType::ASCII_FIXED64, "ASCII"),
-                    }), index
-    };
+    as::DynamicSchema schema{index.create_stream_descriptor(symbol,
+                                 {
+                                     scalar_field_proto(DataType::INT64, "INT64"),
+                                     scalar_field_proto(DataType::ASCII_FIXED64, "ASCII"),
+                                 }),
+        index};
 
     SegmentsSink sink;
-    as::DynamicTimestampAggregator agg(std::move(schema), [&](SegmentInMemory &&mem) {
-        sink.segments_.push_back(std::move(mem));
-    }, as::RowCountSegmentPolicy{SegmentPolicyRows});
+    as::DynamicTimestampAggregator agg(
+        std::move(schema),
+        [&](SegmentInMemory&& mem) { sink.segments_.push_back(std::move(mem)); },
+        as::RowCountSegmentPolicy{SegmentPolicyRows});
 
     std::string timer_name("ingestion_stress");
     interval_timer timer(timer_name);
 
     for (auto i = 0u; i < NumRows; ++i) {
-        agg.start_row(timestamp{i})([&](auto &rb) {
+        agg.start_row(timestamp{i})([&](auto& rb) {
             rb.set_scalar_by_name("INT64", uint64_t(i), make_scalar_type(DataType::INT64));
             auto val = fmt::format("hi_{}", i);
             rb.set_scalar_by_name("ASCII", std::string_view{val}, make_scalar_type(DataType::ASCII_FIXED64));
@@ -256,7 +258,7 @@ TEST_F(IngestionStressStore, DynamicSchemaWithStrings) {
 
     agg.commit();
 
-    for(auto &seg : sink.segments_) {
+    for (auto& seg : sink.segments_) {
         log::version().info("Writing to symbol: {}", symbol);
         arcticdb::stream::append_incomplete_segment(test_store_->_test_get_store(), symbol, std::move(seg));
     }

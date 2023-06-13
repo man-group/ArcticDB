@@ -9,7 +9,8 @@
 #include <arcticdb/processing/signed_unsigned_comparison.hpp>
 #include <limits>
 
-TEST(CompareSignedUnsigned, LessThan) {
+TEST(CompareSignedUnsigned, LessThan)
+{
     using namespace arcticdb::comparison;
 
     auto uint64_max = std::numeric_limits<uint64_t>::max();
@@ -25,7 +26,8 @@ TEST(CompareSignedUnsigned, LessThan) {
     ASSERT_EQ(less_than(int64_t{3}, uint64_t{3}), false);
 }
 
-TEST(CompareSignedUnsigned, GreaterThan) {
+TEST(CompareSignedUnsigned, GreaterThan)
+{
     using namespace arcticdb::comparison;
 
     auto uint64_max = std::numeric_limits<uint64_t>::max();
@@ -41,7 +43,8 @@ TEST(CompareSignedUnsigned, GreaterThan) {
     ASSERT_EQ(greater_than(int64_t{3}, uint64_t{3}), false);
 }
 
-TEST(CompareSignedUnsigned, LessthanEquals) {
+TEST(CompareSignedUnsigned, LessthanEquals)
+{
     using namespace arcticdb::comparison;
 
     auto uint64_max = std::numeric_limits<uint64_t>::max();
@@ -57,7 +60,8 @@ TEST(CompareSignedUnsigned, LessthanEquals) {
     ASSERT_EQ(less_than_equals(int64_t{3}, uint64_t{3}), true);
 }
 
-TEST(CompareSignedUnsigned, GreaterThanEquals) {
+TEST(CompareSignedUnsigned, GreaterThanEquals)
+{
     using namespace arcticdb::comparison;
 
     auto uint64_max = std::numeric_limits<uint64_t>::max();

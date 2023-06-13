@@ -23,33 +23,34 @@ class MongoStorage final : public Storage<MongoStorage> {
     using Parent = Storage<MongoStorage>;
     friend Parent;
 
-  public:
+public:
     using Config = arcticdb::proto::mongo_storage::Config;
 
-    MongoStorage(const LibraryPath &lib, OpenMode mode, const Config &conf);
+    MongoStorage(const LibraryPath& lib, OpenMode mode, const Config& conf);
 
-  protected:
+protected:
     void do_write(Composite<KeySegmentPair>&& kvs);
 
     void do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts opts);
 
     template<class Visitor>
-    void do_read(Composite<VariantKey>&& ks, Visitor &&visitor, ReadKeyOpts opts);
+    void do_read(Composite<VariantKey>&& ks, Visitor&& visitor, ReadKeyOpts opts);
 
     void do_remove(Composite<VariantKey>&& ks, RemoveOpts opts);
 
     bool do_key_exists(const VariantKey& key);
 
-    bool do_supports_prefix_matching() {
+    bool do_supports_prefix_matching()
+    {
         return false;
     }
 
     inline bool do_fast_delete();
 
     template<class Visitor>
-    void do_iterate_type(KeyType key_type, Visitor &&visitor, const std::string &prefix);
+    void do_iterate_type(KeyType key_type, Visitor&& visitor, const std::string& prefix);
 
-  private:
+private:
     std::string collection_name(KeyType k);
 
     std::shared_ptr<MongoInstance> instance_;
@@ -64,22 +65,26 @@ class MongoStorageFactory final : public StorageFactory<MongoStorageFactory> {
     using Parent = StorageFactory<MongoStorageFactory>;
     friend Parent;
 
-  public:
+public:
     using Config = arcticdb::proto::mongo_storage::Config;
     using StorageType = MongoStorage;
 
-    MongoStorageFactory(Config conf) :
-        conf_(std::move(conf)) {}
+    MongoStorageFactory(Config conf)
+        : conf_(std::move(conf))
+    {
+    }
 
-  private:
-    auto do_create_storage(LibraryPath lib, OpenMode mode) {
+private:
+    auto do_create_storage(LibraryPath lib, OpenMode mode)
+    {
         return MongoStorage(std::move(lib), mode, conf_);
     }
 
     Config conf_;
 };
 
-inline arcticdb::proto::storage::VariantStorage pack_config(InstanceUri uri) {
+inline arcticdb::proto::storage::VariantStorage pack_config(InstanceUri uri)
+{
     arcticdb::proto::storage::VariantStorage output;
     arcticdb::proto::mongo_storage::Config cfg;
     cfg.set_uri(uri.value);
@@ -87,7 +92,7 @@ inline arcticdb::proto::storage::VariantStorage pack_config(InstanceUri uri) {
     return output;
 }
 
-}
+} // namespace arcticdb::storage::mongo
 
 #define ARCTICDB_MONGO_STORAGE_H_
 #include <arcticdb/storage/mongo/mongo_storage-inl.hpp>

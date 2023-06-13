@@ -19,45 +19,47 @@
 #include <algorithm>
 #include <variant>
 
-
 namespace arcticdb::entity {
 
 struct DefaultAtomKeyFormat {
     static constexpr char format[] = "{}:{}:{:d}:0x{:x}@{:d}[{},{}]";
 };
 
-template<class T, class FormattingTag=DefaultAtomKeyFormat>
+template<class T, class FormattingTag = DefaultAtomKeyFormat>
 struct FormattableRef {
-    const T &ref;
+    const T& ref;
 
-    explicit FormattableRef(const T &k) : ref(k) {}
+    explicit FormattableRef(const T& k)
+        : ref(k)
+    {
+    }
 
-    FormattableRef(const FormattableRef &) = delete;
+    FormattableRef(const FormattableRef&) = delete;
 
-    FormattableRef(FormattableRef &&) = delete;
-
+    FormattableRef(FormattableRef&&) = delete;
 };
 
 template<class T, class FormattingTag = DefaultAtomKeyFormat>
-auto formattable(const T &ref) {
+auto formattable(const T& ref)
+{
     return FormattableRef<T, FormattingTag>(ref);
 }
 
 using ContentHash = std::uint64_t;
 
- enum class KeyClass : int {
-     /*
+enum class KeyClass : int {
+    /*
       * ATOM_KEY is a KeyType containing a segment with either data or other keys in it and the client needs to
       * have the entire key in memory with all fields populated to read it out.
       */
-     ATOM_KEY,
-     /*
+    ATOM_KEY,
+    /*
       * REF_KEY is the KeyType containing other keys in it, and can be easily read by the client using just the
       * id() field in the key as it is unique for a given (id, KeyType) combination
       */
-     REF_KEY,
-     UNKNOWN_CLASS
- };
+    REF_KEY,
+    UNKNOWN_CLASS
+};
 
 enum class KeyType : int {
     /*
@@ -180,11 +182,11 @@ enum class KeyType : int {
     UNDEFINED
 };
 
-inline std::vector<KeyType> key_types_write_precedence() {
+inline std::vector<KeyType> key_types_write_precedence()
+{
     // TOMBSTONE[_ALL] keys are not included because they're not written to the storage,
     // they just exist inside version keys
-    return {
-        KeyType::LIBRARY_CONFIG,
+    return {KeyType::LIBRARY_CONFIG,
         KeyType::TABLE_DATA,
         KeyType::TABLE_INDEX,
         KeyType::MULTI_KEY,
@@ -198,26 +200,27 @@ inline std::vector<KeyType> key_types_write_precedence() {
         KeyType::APPEND_REF,
         KeyType::APPEND_DATA,
         KeyType::PARTITION,
-        KeyType::OFFSET
-    };
+        KeyType::OFFSET};
 }
 
-inline std::vector<KeyType> key_types_read_precedence() {
+inline std::vector<KeyType> key_types_read_precedence()
+{
     auto output = key_types_write_precedence();
     std::reverse(std::begin(output), std::end(output));
     return output;
 }
 
- } //namespace arcticdb::entity
+} //namespace arcticdb::entity
 
 namespace std {
-    template <> struct hash<arcticdb::entity::KeyType >
+template<>
+struct hash<arcticdb::entity::KeyType> {
+    size_t operator()(const arcticdb::entity::KeyType& kt) const
     {
-        size_t operator()(const arcticdb::entity::KeyType & kt) const {
-            return std::hash<int>{}(static_cast<int>(kt));
-        }
-    };
-}
+        return std::hash<int>{}(static_cast<int>(kt));
+    }
+};
+} // namespace std
 
 namespace arcticdb::entity {
 
@@ -235,7 +238,8 @@ enum class VariantType : char {
 
 VariantType variant_type_from_key_type(KeyType key_type);
 
-inline bool is_index_key_type(KeyType key_type) {
+inline bool is_index_key_type(KeyType key_type)
+{
     // TODO: Change name probably.
     return (key_type == KeyType::TABLE_INDEX) || (key_type == KeyType::MULTI_KEY);
 }
@@ -244,37 +248,41 @@ bool is_string_key_type(KeyType k);
 
 bool is_ref_key_class(KeyType k);
 
-inline KeyType get_key_type_for_data_stream(const StreamId &) {
+inline KeyType get_key_type_for_data_stream(const StreamId&)
+{
     return KeyType::TABLE_DATA;
 }
 
-inline KeyType get_key_type_for_index_stream(const StreamId &) {
+inline KeyType get_key_type_for_index_stream(const StreamId&)
+{
     return KeyType::TABLE_INDEX;
 }
 
-template <typename Function>
-auto foreach_key_type(Function&& func) {
-    for(int k = 0; k < int(KeyType::UNDEFINED); ++k) {
+template<typename Function>
+auto foreach_key_type(Function&& func)
+{
+    for (int k = 0; k < int(KeyType::UNDEFINED); ++k) {
         func(KeyType(k));
     }
 }
 
-template <typename Function>
-auto foreach_key_type_read_precedence(Function&& func) {
+template<typename Function>
+auto foreach_key_type_read_precedence(Function&& func)
+{
     auto types = key_types_read_precedence();
-    for(auto type : types) {
+    for (auto type : types) {
         func(KeyType(type));
     }
 }
 
-template <typename Function>
-auto foreach_key_type_write_precedence(Function&& func) {
+template<typename Function>
+auto foreach_key_type_write_precedence(Function&& func)
+{
     auto types = key_types_write_precedence();
-    for(auto type : types) {
+    for (auto type : types) {
         func(KeyType(type));
     }
 }
-
 
 } // namespace arcticdb::entity
 
@@ -286,13 +294,16 @@ template<>
 struct formatter<KeyType> {
 
     template<typename ParseContext>
-    constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
+    constexpr auto parse(ParseContext& ctx)
+    {
+        return ctx.begin();
+    }
 
     template<typename FormatContext>
-    auto format(const KeyType k, FormatContext &ctx) const -> decltype(ctx.out()) {
-        return  fmt::format_to(ctx.out(), "{}", key_type_short_name(k));
+    auto format(const KeyType k, FormatContext& ctx) const -> decltype(ctx.out())
+    {
+        return fmt::format_to(ctx.out(), "{}", key_type_short_name(k));
     }
 };
 
-}
-
+} // namespace fmt

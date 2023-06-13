@@ -16,8 +16,8 @@
 using namespace arcticdb;
 #define GTEST_COUT std::cerr << "[          ] [ INFO ]"
 
-
-TEST(StringPool, MultipleReadWrite) {
+TEST(StringPool, MultipleReadWrite)
+{
     StringPool pool;
 
     const size_t VectorSize = 0x100;
@@ -26,7 +26,7 @@ TEST(StringPool, MultipleReadWrite) {
     using map_t = std::unordered_map<std::string, position_t>;
     map_t positions;
 
-    for (auto &s : strings) {
+    for (auto& s : strings) {
         OffsetString str = pool.get(std::string_view(s));
         map_t::const_iterator it;
         if ((it = positions.find(s)) != positions.end())
@@ -37,7 +37,7 @@ TEST(StringPool, MultipleReadWrite) {
 
     const size_t NumTests = 100;
     for (size_t i = 0; i < NumTests; ++i) {
-        auto &s = strings[random_int() & (VectorSize - 1)];
+        auto& s = strings[random_int() & (VectorSize - 1)];
         StringPool::StringType comp_fs(s.data(), s.size());
         OffsetString str = pool.get(s.data(), s.size());
         ASSERT_EQ(str.offset(), positions[s]);
@@ -47,7 +47,8 @@ TEST(StringPool, MultipleReadWrite) {
     }
 }
 
-TEST(StringPool, StressTest) {
+TEST(StringPool, StressTest)
+{
     StringPool pool;
 
     const size_t VectorSize = 0x10000;
@@ -57,7 +58,7 @@ TEST(StringPool, StressTest) {
     auto temp = 0;
     std::string timer_name("ingestion_stress");
     interval_timer timer(timer_name);
-    for (auto &s : strings) {
+    for (auto& s : strings) {
         OffsetString str = pool.get(std::string_view(s));
         temp += str.offset();
     }

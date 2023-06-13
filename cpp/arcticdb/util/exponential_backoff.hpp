@@ -15,19 +15,22 @@
 
 namespace arcticdb {
 
-template <typename HandledExceptionType>
+template<typename HandledExceptionType>
 struct ExponentialBackoff {
 
     size_t min_wait_ms_;
     size_t max_wait_ms_;
     size_t curr_wait_ms_;
 
-    ExponentialBackoff(size_t min_wait_ms, size_t max_wait_ms) :
-        min_wait_ms_(min_wait_ms),
-        max_wait_ms_(max_wait_ms),
-        curr_wait_ms_(min_wait_ms_){}
+    ExponentialBackoff(size_t min_wait_ms, size_t max_wait_ms)
+        : min_wait_ms_(min_wait_ms),
+          max_wait_ms_(max_wait_ms),
+          curr_wait_ms_(min_wait_ms_)
+    {
+    }
 
-    void sleep_ms(size_t ms) {
+    void sleep_ms(size_t ms)
+    {
         std::this_thread::sleep_for(std::chrono::milliseconds(ms));
     }
 
@@ -41,21 +44,22 @@ struct ExponentialBackoff {
         return curr_wait_ms_ != max_wait_ms_;
     }
 
-    template <typename Callable>
-    auto go(Callable&& callable) {
-        return go(std::forward<Callable>(callable), [](){ util::raise_rte("Exhausted retry attempts"); });
+    template<typename Callable>
+    auto go(Callable&& callable)
+    {
+        return go(std::forward<Callable>(callable), []() { util::raise_rte("Exhausted retry attempts"); });
     }
 
     template<typename Callable, typename FailurePolicy>
-    auto go(Callable&& c, FailurePolicy&& failure_policy) {
+    auto go(Callable&& c, FailurePolicy&& failure_policy)
+    {
         do {
             try {
                 return c();
-            }
-            catch (HandledExceptionType&) {
+            } catch (HandledExceptionType&) {
                 log::storage().info("Caught error in backoff, retrying");
             }
-        } while(wait());
+        } while (wait());
 
         failure_policy();
         ARCTICDB_UNREACHABLE

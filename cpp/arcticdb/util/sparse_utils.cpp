@@ -10,17 +10,15 @@
 
 namespace arcticdb::util {
 
-void scan_object_type_to_sparse(
-    const PyObject* const* ptr,
-    size_t rows_to_write,
-    util::BitMagic& bitset) {
+void scan_object_type_to_sparse(const PyObject* const* ptr, size_t rows_to_write, util::BitMagic& bitset)
+{
 
     namespace py = pybind11;
     auto scan_ptr = ptr;
     py::none none;
     util::BitSet::bulk_insert_iterator inserter(bitset);
     for (size_t idx = 0; idx < rows_to_write; ++idx, ++scan_ptr) {
-        if(*scan_ptr != none.ptr())
+        if (*scan_ptr != none.ptr())
             inserter = bv_size(idx);
     }
     inserter.flush();
@@ -28,4 +26,3 @@ void scan_object_type_to_sparse(
 }
 
 } //namespace arcticdb::util
-

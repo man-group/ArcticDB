@@ -10,69 +10,69 @@
 
 namespace arcticdb {
 
-VariantData unary_boolean(const std::shared_ptr<util::BitSet>& bitset, OperationType operation) {
-    switch(operation) {
-        case OperationType::IDENTITY:
-            return bitset;
-        case OperationType::NOT:
-            return std::make_shared<util::BitSet>(~(*bitset));
-        default:
-            util::raise_rte("Unexpected operator in unary_boolean {}", int(operation));
+VariantData unary_boolean(const std::shared_ptr<util::BitSet>& bitset, OperationType operation)
+{
+    switch (operation) {
+    case OperationType::IDENTITY:
+        return bitset;
+    case OperationType::NOT:
+        return std::make_shared<util::BitSet>(~(*bitset));
+    default:
+        util::raise_rte("Unexpected operator in unary_boolean {}", int(operation));
     }
 }
 
-VariantData unary_boolean(EmptyResult, OperationType operation) {
-    switch(operation) {
-        case OperationType::IDENTITY:
-            return EmptyResult{};
-        case OperationType::NOT:
-            return FullResult{};
-        default:
-            util::raise_rte("Unexpected operator in unary_boolean {}", int(operation));
+VariantData unary_boolean(EmptyResult, OperationType operation)
+{
+    switch (operation) {
+    case OperationType::IDENTITY:
+        return EmptyResult{};
+    case OperationType::NOT:
+        return FullResult{};
+    default:
+        util::raise_rte("Unexpected operator in unary_boolean {}", int(operation));
     }
 }
 
-VariantData unary_boolean(FullResult, OperationType operation) {
-    switch(operation) {
-        case OperationType::IDENTITY:
-            return FullResult{};
-        case OperationType::NOT:
-            return EmptyResult{};
-        default:
-            util::raise_rte("Unexpected operator in unary_boolean {}", int(operation));
+VariantData unary_boolean(FullResult, OperationType operation)
+{
+    switch (operation) {
+    case OperationType::IDENTITY:
+        return FullResult{};
+    case OperationType::NOT:
+        return EmptyResult{};
+    default:
+        util::raise_rte("Unexpected operator in unary_boolean {}", int(operation));
     }
 }
 
-VariantData visit_unary_boolean(const VariantData& left, OperationType operation) {
+VariantData visit_unary_boolean(const VariantData& left, OperationType operation)
+{
     auto data = transform_to_bitset(left);
-    return std::visit(util::overload{
-            [operation] (const std::shared_ptr<util::BitSet>& d) -> VariantData {
-                return transform_to_placeholder(unary_boolean(d, operation));
-            },
-            [operation](EmptyResult d) {
-                return transform_to_placeholder(unary_boolean(d, operation));
-            },
-            [operation](FullResult d) {
-                return transform_to_placeholder(unary_boolean(d, operation));
-            },
-            [](const auto &) -> VariantData {
-                util::raise_rte("Value/ValueSet/non-bool column inputs not accepted to unary boolean");
-            }
-    }, data);
+    return std::visit(util::overload{[operation](const std::shared_ptr<util::BitSet>& d) -> VariantData {
+                                         return transform_to_placeholder(unary_boolean(d, operation));
+                                     },
+                          [operation](EmptyResult d) { return transform_to_placeholder(unary_boolean(d, operation)); },
+                          [operation](FullResult d) { return transform_to_placeholder(unary_boolean(d, operation)); },
+                          [](const auto&) -> VariantData {
+                              util::raise_rte("Value/ValueSet/non-bool column inputs not accepted to unary boolean");
+                          }},
+        data);
 }
 
-VariantData dispatch_unary(const VariantData& left, OperationType operation) {
-    switch(operation) {
-        case OperationType::ABS:
-            return visit_unary_operator(left, AbsOperator());
-        case OperationType::NEG:
-            return visit_unary_operator(left, NegOperator());
-        case OperationType::IDENTITY:
-        case OperationType::NOT:
-            return visit_unary_boolean(left, operation);
-        default:
-            util::raise_rte("Unknown operation {}", int(operation));
+VariantData dispatch_unary(const VariantData& left, OperationType operation)
+{
+    switch (operation) {
+    case OperationType::ABS:
+        return visit_unary_operator(left, AbsOperator());
+    case OperationType::NEG:
+        return visit_unary_operator(left, NegOperator());
+    case OperationType::IDENTITY:
+    case OperationType::NOT:
+        return visit_unary_boolean(left, operation);
+    default:
+        util::raise_rte("Unknown operation {}", int(operation));
     }
 }
 
-}
+} // namespace arcticdb

@@ -9,5 +9,8 @@
 #include <arcticdb/column_store/string_pool.hpp>
 
 namespace arcticdb {
-OffsetString::operator std::string_view() const { return pool_->get_view(offset()); }
+OffsetString::operator std::string_view() const
+{
+    return pool_->get_view(offset());
+}
 } //namespace arcticdb

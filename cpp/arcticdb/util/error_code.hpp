@@ -21,7 +21,7 @@ namespace arcticdb {
 namespace {
 using BaseType = std::uint32_t;
 constexpr BaseType error_category_scale = 1000u;
-}
+} // namespace
 
 enum class ErrorCategory : BaseType {
     INTERNAL = 1,
@@ -34,33 +34,32 @@ enum class ErrorCategory : BaseType {
 };
 
 // FUTURE(GCC9): use magic_enum
-inline std::unordered_map<ErrorCategory, const char*> get_error_category_names() {
-    return {
-        {ErrorCategory::INTERNAL, "INTERNAL"},
+inline std::unordered_map<ErrorCategory, const char*> get_error_category_names()
+{
+    return {{ErrorCategory::INTERNAL, "INTERNAL"},
         {ErrorCategory::NORMALIZATION, "NORMALIZATION"},
         {ErrorCategory::MISSING_DATA, "MISSING_DATA"},
         {ErrorCategory::SCHEMA, "SCHEMA"},
         {ErrorCategory::STORAGE, "STORAGE"},
-        {ErrorCategory::SORTING, "SORTING"}
-    };
+        {ErrorCategory::SORTING, "SORTING"}};
 }
 
 // A macro that will be expanded in different ways by redefining ERROR_CODE():
 // FUTURE(GCC9): use magic_enum
-#define ARCTIC_ERROR_CODES \
-    ERROR_CODE(1000, E_INVALID_RANGE) \
-    ERROR_CODE(1001, E_INVALID_ARGUMENT) \
-    ERROR_CODE(1002, E_ASSERTION_FAILURE) \
-    ERROR_CODE(1003, E_RUNTIME_ERROR) \
-    ERROR_CODE(2000, E_INCOMPATIBLE_OBJECTS) \
-    ERROR_CODE(2001, E_UNIMPLEMENTED_INPUT_TYPE) \
-    ERROR_CODE(2002, E_UPDATE_NOT_SUPPORTED) \
-    ERROR_CODE(2003, E_INCOMPATIBLE_INDEX)  \
-    ERROR_CODE(2004, E_WRONG_SHAPE) \
-    ERROR_CODE(3000, E_NO_SUCH_VERSION)  \
-    ERROR_CODE(4000, E_DESCRIPTOR_MISMATCH)  \
-    ERROR_CODE(5000, E_KEY_NOT_FOUND) \
-    ERROR_CODE(5001, E_DUPLICATE_KEY) \
+#define ARCTIC_ERROR_CODES                                                                                             \
+    ERROR_CODE(1000, E_INVALID_RANGE)                                                                                  \
+    ERROR_CODE(1001, E_INVALID_ARGUMENT)                                                                               \
+    ERROR_CODE(1002, E_ASSERTION_FAILURE)                                                                              \
+    ERROR_CODE(1003, E_RUNTIME_ERROR)                                                                                  \
+    ERROR_CODE(2000, E_INCOMPATIBLE_OBJECTS)                                                                           \
+    ERROR_CODE(2001, E_UNIMPLEMENTED_INPUT_TYPE)                                                                       \
+    ERROR_CODE(2002, E_UPDATE_NOT_SUPPORTED)                                                                           \
+    ERROR_CODE(2003, E_INCOMPATIBLE_INDEX)                                                                             \
+    ERROR_CODE(2004, E_WRONG_SHAPE)                                                                                    \
+    ERROR_CODE(3000, E_NO_SUCH_VERSION)                                                                                \
+    ERROR_CODE(4000, E_DESCRIPTOR_MISMATCH)                                                                            \
+    ERROR_CODE(5000, E_KEY_NOT_FOUND)                                                                                  \
+    ERROR_CODE(5001, E_DUPLICATE_KEY)                                                                                  \
     ERROR_CODE(6000, E_UNSORTED_DATA)
 
 enum class ErrorCode : BaseType {
@@ -77,12 +76,14 @@ struct ErrorCodeData {
 template<ErrorCode code>
 inline constexpr ErrorCodeData error_code_data{};
 
-#define ERROR_CODE(code, Name, ...) template<> inline constexpr ErrorCodeData error_code_data<ErrorCode::Name> \
-    { #Name, "E" #code };
+#define ERROR_CODE(code, Name, ...)                                                                                    \
+    template<>                                                                                                         \
+    inline constexpr ErrorCodeData error_code_data<ErrorCode::Name>{#Name, "E" #code};
 ARCTIC_ERROR_CODES
 #undef ERROR_CODE
 
-inline std::vector<ErrorCode> get_error_codes() {
+inline std::vector<ErrorCode> get_error_codes()
+{
     static std::vector<ErrorCode> error_codes{
 #define ERROR_CODE(code, Name) ErrorCode::Name,
         ARCTIC_ERROR_CODES
@@ -93,13 +94,15 @@ inline std::vector<ErrorCode> get_error_codes() {
 
 ErrorCodeData get_error_code_data(ErrorCode code);
 
-constexpr ErrorCategory get_error_category(ErrorCode code) {
+constexpr ErrorCategory get_error_category(ErrorCode code)
+{
     return static_cast<ErrorCategory>(static_cast<BaseType>(code) / error_category_scale);
 }
 
 struct ArcticException : public std::runtime_error {
-    explicit ArcticException(const std::string& msg_with_error_code):
-            std::runtime_error(msg_with_error_code) {
+    explicit ArcticException(const std::string& msg_with_error_code)
+        : std::runtime_error(msg_with_error_code)
+    {
     }
 };
 
@@ -112,8 +115,9 @@ template<ErrorCode specific_code>
 struct ArcticSpecificException : public ArcticCategorizedException<get_error_category(specific_code)> {
     static constexpr ErrorCategory category = get_error_category(specific_code);
 
-    explicit ArcticSpecificException(const std::string& msg_with_error_code) :
-            ArcticCategorizedException<category>(msg_with_error_code) {
+    explicit ArcticSpecificException(const std::string& msg_with_error_code)
+        : ArcticCategorizedException<category>(msg_with_error_code)
+    {
         static_assert(get_error_category(specific_code) == category);
     }
 };
@@ -128,33 +132,40 @@ using SortingException = ArcticCategorizedException<ErrorCategory::SORTING>;
 using UnsortedDataException = ArcticSpecificException<ErrorCode::E_UNSORTED_DATA>;
 
 template<ErrorCode error_code>
-[[noreturn]] void throw_error(const std::string& msg) {
+[[noreturn]] void throw_error(const std::string& msg)
+{
     throw ArcticCategorizedException<get_error_category(error_code)>(msg);
 }
 
 template<>
-[[noreturn]] inline void throw_error<ErrorCode::E_NO_SUCH_VERSION>(const std::string& msg) {
+[[noreturn]] inline void throw_error<ErrorCode::E_NO_SUCH_VERSION>(const std::string& msg)
+{
     throw ArcticSpecificException<ErrorCode::E_NO_SUCH_VERSION>(msg);
 }
 
 template<>
-[[noreturn]] inline void throw_error<ErrorCode::E_UNSORTED_DATA>(const std::string& msg) {
+[[noreturn]] inline void throw_error<ErrorCode::E_UNSORTED_DATA>(const std::string& msg)
+{
     throw ArcticSpecificException<ErrorCode::E_UNSORTED_DATA>(msg);
 }
 
-}
+} // namespace arcticdb
 
 namespace fmt {
 template<>
 struct formatter<arcticdb::ErrorCode> {
     template<typename ParseContext>
-    constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
+    constexpr auto parse(ParseContext& ctx)
+    {
+        return ctx.begin();
+    }
 
     template<typename FormatContext>
-    auto format(arcticdb::ErrorCode code, FormatContext &ctx) const {
+    auto format(arcticdb::ErrorCode code, FormatContext& ctx) const
+    {
         std::string_view str = arcticdb::get_error_code_data(code).as_string_;
         std::copy(str.begin(), str.end(), ctx.out());
         return ctx.out();
     }
 };
-}
+} // namespace fmt

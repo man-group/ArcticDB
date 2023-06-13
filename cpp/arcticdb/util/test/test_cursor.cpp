@@ -14,7 +14,8 @@
 #include <arcticdb/util/cursored_buffer.hpp>
 #include <arcticdb/util/error_code.hpp>
 
-TEST(Cursor, Behaviour) {
+TEST(Cursor, Behaviour)
+{
     using namespace arcticdb;
     CursoredBuffer<Buffer> b;
     ASSERT_EQ(b.buffer().bytes(), 0);
@@ -28,14 +29,16 @@ TEST(Cursor, Behaviour) {
     ASSERT_EQ(b.size<uint8_t>(), 100);
     ASSERT_NO_THROW(b.ptr_cast<uint64_t>(5, sizeof(uint64_t)));
     ASSERT_NO_THROW(b.ptr_cast<uint64_t>(11, sizeof(uint64_t)));
-    ASSERT_THROW(b.ptr_cast<uint64_t>(13, sizeof(uint64_t)), ArcticCategorizedException<ErrorCategory::INTERNAL>); // Cursor overflow
+    ASSERT_THROW(b.ptr_cast<uint64_t>(13, sizeof(uint64_t)),
+        ArcticCategorizedException<ErrorCategory::INTERNAL>); // Cursor overflow
     ASSERT_NO_THROW(b.ensure_bytes(20));
     ASSERT_NO_THROW(b.commit());
     ASSERT_EQ(b.size<uint8_t>(), 120);
 }
 
 template<typename BufferType>
-void test_cursor_backing() {
+void test_cursor_backing()
+{
     using namespace arcticdb;
     CursoredBuffer<BufferType> b;
     std::vector<uint64_t> v(100);
@@ -43,7 +46,7 @@ void test_cursor_backing() {
     b.ensure_bytes(400);
     memcpy(b.cursor(), v.data(), 400);
     b.commit();
-    ASSERT_EQ(*b.buffer().template ptr_cast<uint64_t>(0,  sizeof(uint64_t)), 0);
+    ASSERT_EQ(*b.buffer().template ptr_cast<uint64_t>(0, sizeof(uint64_t)), 0);
     ASSERT_EQ(*b.buffer().template ptr_cast<uint64_t>(40 * sizeof(uint64_t), sizeof(uint64_t)), 40);
     ASSERT_EQ(*b.buffer().template ptr_cast<uint64_t>(49 * sizeof(uint64_t), sizeof(uint64_t)), 49);
     b.ensure_bytes(400);
@@ -57,7 +60,8 @@ void test_cursor_backing() {
     ASSERT_EQ(*b.buffer().template ptr_cast<uint64_t>(99 * sizeof(uint64_t), sizeof(uint64_t)), 99);
 }
 
-TEST(Cursor, Values) {
+TEST(Cursor, Values)
+{
     using namespace arcticdb;
     //test_cursor_backing< std::vector<uint8_t>>();
     //test_cursor_backing<Buffer>();

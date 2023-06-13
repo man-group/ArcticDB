@@ -13,15 +13,16 @@
 #include <map>
 #include <string>
 
-RC_GTEST_PROP(StringPool, WriteAndRead, (const std::map<size_t, std::string> &input)) {
+RC_GTEST_PROP(StringPool, WriteAndRead, (const std::map<size_t, std::string>& input))
+{
     using namespace arcticdb;
     StringPool pool;
     std::unordered_map<size_t, OffsetString> strings;
-    for (auto &item : input) {
+    for (auto& item : input) {
         strings.insert(std::make_pair(item.first, pool.get(item.second)));
     }
 
-    for (auto &stored : strings) {
+    for (auto& stored : strings) {
         const std::string_view view(stored.second);
         auto it = input.find(stored.first);
         RC_ASSERT(view == it->second);

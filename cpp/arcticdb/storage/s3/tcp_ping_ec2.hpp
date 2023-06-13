@@ -10,33 +10,42 @@ struct RaiiSocket {
     static constexpr folly::NetworkSocket invalid{};
     folly::NetworkSocket fd;
 
-    RaiiSocket() : fd(folly::netops::socket(AF_INET, SOCK_STREAM, 0)) {}
+    RaiiSocket()
+        : fd(folly::netops::socket(AF_INET, SOCK_STREAM, 0))
+    {
+    }
 
     template<typename Fun>
-    int attempt([[maybe_unused]] const char* step, Fun&& fun) {
+    int attempt([[maybe_unused]] const char* step, Fun&& fun)
+    {
         if (fd != invalid) {
             int out = fun(fd);
             if (out < 0) {
                 close(fd);
                 fd = invalid;
                 ARCTICDB_DEBUG(arcticdb::log::Loggers::instance()->storage(),
-                    "ec2_metadata step {} failed with {}. errno={}", step, out, errno);
+                    "ec2_metadata step {} failed with {}. errno={}",
+                    step,
+                    out,
+                    errno);
             }
             return out;
         }
         return -1;
     }
 
-    ~RaiiSocket() {
+    ~RaiiSocket()
+    {
         if (fd != invalid) {
             close(fd);
         }
     }
 };
-}
+} // namespace
 
 /* Quick check without incurring the default, hard-coded long wait time in the AWS SDK. */
-bool ec2_metadata_endpoint_reachable() {
+bool ec2_metadata_endpoint_reachable()
+{
     using namespace folly::netops;
 
     RaiiSocket s;
@@ -48,7 +57,7 @@ bool ec2_metadata_endpoint_reachable() {
         addr.sin_port = htons(80);
         addr.sin_addr.s_addr = inet_addr("169.254.169.254"); // EC2 Metadata endpoint
 
-        connect(fd, (const sockaddr*) &addr, sizeof addr);
+        connect(fd, (const sockaddr*)&addr, sizeof addr);
         return errno == EINPROGRESS ? 0 : -1;
     });
 
@@ -65,4 +74,4 @@ bool ec2_metadata_endpoint_reachable() {
 
     return num_ready > 0;
 }
-}
+} // namespace arcticdb::storage::s3

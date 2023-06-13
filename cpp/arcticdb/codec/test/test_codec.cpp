@@ -18,16 +18,14 @@
 
 using namespace arcticdb;
 
-TEST(FieldEncoderTest, PassthroughDim0) {
+TEST(FieldEncoderTest, PassthroughDim0)
+{
 
-    using TD = TypeDescriptorTag<
-        DataTypeTag<DataType::FLOAT64>,
-        DimensionTag<Dimension::Dim0>
-    >;
+    using TD = TypeDescriptorTag<DataTypeTag<DataType::FLOAT64>, DimensionTag<Dimension::Dim0>>;
     using Encoder = BlockEncoder<TD>;
 
     std::vector<double> v{0.1, 0.2, 0.3};
-    const shape_t *shape = nullptr;
+    const shape_t* shape = nullptr;
     using Field = Encoder::FieldType;
 
     Field f(v.data(), shape, v.size() * sizeof(double), v.size(), nullptr);
@@ -40,19 +38,20 @@ TEST(FieldEncoderTest, PassthroughDim0) {
 
     Encoder::encode(opt, f, field, out, pos);
 
-    auto &nd = field.ndarray();
+    auto& nd = field.ndarray();
     ASSERT_EQ(nd.items_count(), 3);
     ASSERT_FALSE(nd.shapes_size() > 0);
-    auto &vals = nd.values();
+    auto& vals = nd.values();
 
     auto expected_bytes = v.size() * sizeof(TD::DataTypeTag::raw_type);
     ASSERT_EQ(vals[0].in_bytes(), expected_bytes);
     ASSERT_EQ(vals[0].out_bytes(), expected_bytes);
     ASSERT_NE(0, vals[0].hash());
-    ASSERT_EQ(pos , expected_bytes);
+    ASSERT_EQ(pos, expected_bytes);
 }
 
-TEST(FieldEncoderTest, PassthroughDim0_Dynamic) {
+TEST(FieldEncoderTest, PassthroughDim0_Dynamic)
+{
     TypeDescriptor td{DataType::FLOAT64, Dimension::Dim0};
     std::vector<double> v{0.1};
     ChunkedBuffer cbuf;
@@ -72,10 +71,10 @@ TEST(FieldEncoderTest, PassthroughDim0_Dynamic) {
     f.reset();
     enc.encode(opt, f, field, out, pos);
 
-    auto &nd = field.ndarray();
+    auto& nd = field.ndarray();
     ASSERT_EQ(nd.items_count(), 1);
     ASSERT_FALSE(nd.shapes_size() > 0);
-    auto &vals = nd.values();
+    auto& vals = nd.values();
 
     auto expected_bytes = v.size() * sizeof(v[0]);
     ASSERT_EQ(vals[0].in_bytes(), expected_bytes);
@@ -84,11 +83,9 @@ TEST(FieldEncoderTest, PassthroughDim0_Dynamic) {
     ASSERT_EQ(pos, expected_bytes);
 }
 
-TEST(FieldEncoderTest, PassthroughDim1) {
-    using TD = TypeDescriptorTag<
-        DataTypeTag<DataType::FLOAT64>,
-        DimensionTag<Dimension::Dim1>
-    >;
+TEST(FieldEncoderTest, PassthroughDim1)
+{
+    using TD = TypeDescriptorTag<DataTypeTag<DataType::FLOAT64>, DimensionTag<Dimension::Dim1>>;
 
     using Encoder = BlockEncoder<TD>;
     using Field = Encoder::FieldType;
@@ -105,16 +102,16 @@ TEST(FieldEncoderTest, PassthroughDim1) {
 
     Encoder::encode(opt, f, field, out, pos);
 
-    auto &nd = field.ndarray();
+    auto& nd = field.ndarray();
     ASSERT_EQ(nd.items_count(), 2);
-    auto &shapes = nd.shapes();
+    auto& shapes = nd.shapes();
     auto shapes_bytes = 2 * sizeof(shape_t);
 
     ASSERT_EQ(shapes[0].in_bytes(), shapes_bytes);
     ASSERT_EQ(shapes[0].out_bytes(), shapes_bytes);
     ASSERT_NE(0, shapes[0].hash());
 
-    auto &vals = nd.values();
+    auto& vals = nd.values();
     auto expected_bytes = v.size() * sizeof(TD::DataTypeTag::raw_type);
     ASSERT_EQ(vals[0].in_bytes(), expected_bytes);
     ASSERT_EQ(vals[0].out_bytes(), expected_bytes);
@@ -122,7 +119,8 @@ TEST(FieldEncoderTest, PassthroughDim1) {
     ASSERT_EQ(pos, expected_bytes + shapes_bytes);
 }
 
-TEST(SegmentencoderTest, EncodeStringsBasic) {
+TEST(SegmentencoderTest, EncodeStringsBasic)
+{
     const auto tsd = create_tsd<DataTypeTag<DataType::ASCII_DYNAMIC64>, Dimension::Dim0>();
     SegmentInMemory s(StreamDescriptor{tsd});
     s.set_scalar(0, timestamp(123));
@@ -153,7 +151,8 @@ TEST(SegmentencoderTest, EncodeStringsBasic) {
 using namespace arcticdb;
 namespace as = arcticdb::stream;
 
-TEST(SegmentEncoderTest, StressTestString) {
+TEST(SegmentEncoderTest, StressTestString)
+{
     const size_t NumTests = 100000;
     const size_t VectorSize = 0x1000;
     const size_t NumColumns = 7;
@@ -162,23 +161,24 @@ TEST(SegmentEncoderTest, StressTestString) {
 
     SegmentsSink sink;
     auto index = as::TimeseriesIndex::default_index();
-    as::FixedSchema schema{
-        index.create_stream_descriptor(123, {
-            scalar_field_proto(DataType::ASCII_DYNAMIC64, "col_1"),
-            scalar_field_proto(DataType::ASCII_DYNAMIC64, "col_2"),
-            scalar_field_proto(DataType::ASCII_DYNAMIC64, "col_3"),
-            scalar_field_proto(DataType::ASCII_DYNAMIC64, "col_4"),
-            scalar_field_proto(DataType::ASCII_DYNAMIC64, "col_5"),
-            scalar_field_proto(DataType::ASCII_DYNAMIC64, "col_6"),
-            }), index
-    };
+    as::FixedSchema schema{index.create_stream_descriptor(123,
+                               {
+                                   scalar_field_proto(DataType::ASCII_DYNAMIC64, "col_1"),
+                                   scalar_field_proto(DataType::ASCII_DYNAMIC64, "col_2"),
+                                   scalar_field_proto(DataType::ASCII_DYNAMIC64, "col_3"),
+                                   scalar_field_proto(DataType::ASCII_DYNAMIC64, "col_4"),
+                                   scalar_field_proto(DataType::ASCII_DYNAMIC64, "col_5"),
+                                   scalar_field_proto(DataType::ASCII_DYNAMIC64, "col_6"),
+                               }),
+        index};
 
-    TestAggregator agg(std::move(schema), [&](SegmentInMemory &&mem) {
-        sink.segments_.push_back(std::move(mem));
-    }, as::NeverSegmentPolicy{});
+    TestAggregator agg(
+        std::move(schema),
+        [&](SegmentInMemory&& mem) { sink.segments_.push_back(std::move(mem)); },
+        as::NeverSegmentPolicy{});
 
     for (size_t i = 0; i < NumTests; ++i) {
-        agg.start_row(timestamp(i))([&](auto &rb) {
+        agg.start_row(timestamp(i))([&](auto& rb) {
             for (size_t j = 1; j < NumColumns; ++j)
                 rb.set_string(timestamp(j), strings[(i + j) & (VectorSize - 1)]);
         });

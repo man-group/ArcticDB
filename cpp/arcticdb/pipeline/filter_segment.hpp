@@ -15,9 +15,10 @@
 namespace arcticdb {
 
 inline SegmentInMemory filter_segment(const SegmentInMemory& input,
-                                      const util::BitSet& filter_bitset,
-                                      bool filter_down_stringpool=false,
-                                      bool validate=false) {
+    const util::BitSet& filter_bitset,
+    bool filter_down_stringpool = false,
+    bool validate = false)
+{
     return input.filter(filter_bitset, filter_down_stringpool, validate);
 }
 

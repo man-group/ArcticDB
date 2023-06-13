@@ -11,20 +11,20 @@
 
 namespace arcticdb {
 struct WriteOptions {
-    static WriteOptions from_proto(const arcticdb::proto::storage::VersionStoreConfig::WriteOptions & opt){
+    static WriteOptions from_proto(const arcticdb::proto::storage::VersionStoreConfig::WriteOptions& opt)
+    {
         WriteOptions def;
-        return {
-                opt.dynamic_schema() && !opt.bucketize_dynamic() ? std::numeric_limits<size_t>::max() :
-                    (opt.column_group_size() > 0 ? size_t(opt.column_group_size()) : def.column_group_size),
-                opt.segment_row_size() > 0 ? size_t(opt.segment_row_size()): def.segment_row_size,
-                opt.prune_previous_version(),
-                opt.de_duplication(),
-                opt.snapshot_dedup(),
-                opt.dynamic_schema(),
-                opt.ignore_sort_order(),
-                opt.bucketize_dynamic(),
-                opt.max_num_buckets() > 0 ? size_t(opt.max_num_buckets()) : def.max_num_buckets
-        };
+        return {opt.dynamic_schema() && !opt.bucketize_dynamic()
+                    ? std::numeric_limits<size_t>::max()
+                    : (opt.column_group_size() > 0 ? size_t(opt.column_group_size()) : def.column_group_size),
+            opt.segment_row_size() > 0 ? size_t(opt.segment_row_size()) : def.segment_row_size,
+            opt.prune_previous_version(),
+            opt.de_duplication(),
+            opt.snapshot_dedup(),
+            opt.dynamic_schema(),
+            opt.ignore_sort_order(),
+            opt.bucketize_dynamic(),
+            opt.max_num_buckets() > 0 ? size_t(opt.max_num_buckets()) : def.max_num_buckets};
     }
 
     size_t column_group_size = 127;

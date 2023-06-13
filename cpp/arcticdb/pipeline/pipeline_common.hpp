@@ -17,4 +17,4 @@ struct IndexPartialKey {
     StreamId id;
     VersionId version_id;
 };
-}
+} // namespace arcticdb::pipelines

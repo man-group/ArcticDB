@@ -10,19 +10,23 @@
 #include <boost/process.hpp>
 #include <gtest/gtest.h>
 
-static const char *TestMongod = "/opt/mongo/bin/mongod";
+static const char* TestMongod = "/opt/mongo/bin/mongod";
 
 class TestMongoStorage : public ::testing::Test {
-  protected:
-    TestMongoServer() :
-        mongod_(TestMongod) {
+protected:
+    TestMongoServer()
+        : mongod_(TestMongod)
+    {
     }
 
-    ~TestMongoServer() {
+    ~TestMongoServer()
+    {
         terminate();
     }
-  private:
-    void terminate() {
+
+private:
+    void terminate()
+    {
         mongod_.terminate();
     }
 

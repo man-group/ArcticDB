@@ -16,13 +16,15 @@
 
 namespace arcticdb {
 
-static const double slab_activate_cb_cutoff = ConfigsMap::instance()->get_double("Allocator.SlabActivateCallbackCutoff", 0.1);
-static const double slab_deactivate_cb_cutoff = ConfigsMap::instance()->get_double("Allocator.SlabDeactivateCallbackCutoff", 0.2);
+static const double slab_activate_cb_cutoff =
+    ConfigsMap::instance()->get_double("Allocator.SlabActivateCallbackCutoff", 0.1);
+static const double slab_deactivate_cb_cutoff =
+    ConfigsMap::instance()->get_double("Allocator.SlabDeactivateCallbackCutoff", 0.2);
 
-template <typename T, std::size_t cache_line_size = 128>
+template<typename T, std::size_t cache_line_size = 128>
 class SlabAllocator {
 private:
-    template <typename Value, typename Tag>
+    template<typename Value, typename Tag>
     struct tagged_value {
         // We have tag for every value to counter https://en.wikipedia.org/wiki/ABA_problem of lock free implementation
         Value value;
@@ -33,29 +35,35 @@ public:
     using value_type = T;
     using pointer = value_type*;
     using size_type = std::size_t;
-private:
-// We store the offset of the next free block inside the blocks itself
-// Block size should be max of the value_type (used for actual storing the value) and size_type (storing offset)
-using block_t = std::conditional_t<sizeof(value_type) < sizeof(size_type), size_type, value_type>;
 
-using tagged_value_t = tagged_value<size_type, size_type>;
+private:
+    // We store the offset of the next free block inside the blocks itself
+    // Block size should be max of the value_type (used for actual storing the value) and size_type (storing offset)
+    using block_t = std::conditional_t<sizeof(value_type) < sizeof(size_type), size_type, value_type>;
+
+    using tagged_value_t = tagged_value<size_type, size_type>;
 
 public:
-    explicit SlabAllocator(size_type capacity):
-            capacity_(capacity),
-            main_memory_(new block_t[capacity_]),
-            num_free_blocks_(capacity),
-            next_free_offset_({0, 0}),
-            cb_activated_(false){
+    explicit SlabAllocator(size_type capacity)
+        : capacity_(capacity),
+          main_memory_(new block_t[capacity_]),
+          num_free_blocks_(capacity),
+          next_free_offset_({0, 0}),
+          cb_activated_(false)
+    {
         size_type i = 0;
-        for(block_t* p = main_memory_; i < capacity; ++p) {
+        for (block_t* p = main_memory_; i < capacity; ++p) {
             // We init each block with the value pointing to next block as the free block
             *reinterpret_cast<size_type*>(p) = ++i;
         }
     };
-    ~SlabAllocator() {delete[] main_memory_;};
+    ~SlabAllocator()
+    {
+        delete[] main_memory_;
+    };
 
-    pointer allocate() noexcept {
+    pointer allocate() noexcept
+    {
         manage_slab_capacity();
         pointer p_block = nullptr;
         tagged_value_t curr_next_free_offset;
@@ -69,13 +77,13 @@ public:
 
             // the next free block is written in the first size_type bytes of p block
             new_next_free_offset.value = *reinterpret_cast<size_type*>(p_block);
-        } while (!next_free_offset_.compare_exchange_strong(
-                curr_next_free_offset, new_next_free_offset));
+        } while (!next_free_offset_.compare_exchange_strong(curr_next_free_offset, new_next_free_offset));
 
         return p_block;
     };
 
-    void deallocate(pointer p) noexcept {
+    void deallocate(pointer p) noexcept
+    {
         util::check(p != nullptr, "Received nullptr in SlabAllocator::deallocate");
         if (!is_addr_in_slab(p))
             return;
@@ -91,39 +99,44 @@ public:
 
             // set the next free offset inside p from the current next_free_offset_
             *reinterpret_cast<size_type*>(p) = curr_next_free_offset.value;
-        } while (!next_free_offset_.compare_exchange_strong(
-                curr_next_free_offset, new_next_free_offset));
+        } while (!next_free_offset_.compare_exchange_strong(curr_next_free_offset, new_next_free_offset));
 
         num_free_blocks_.fetch_add(1);
     };
 
-    bool is_addr_in_slab(pointer p) noexcept {
+    bool is_addr_in_slab(pointer p) noexcept
+    {
         auto min_ptr = reinterpret_cast<pointer>(main_memory_);
         auto max_ptr = reinterpret_cast<pointer>(main_memory_ + capacity_ - 1);
         return min_ptr <= p && p <= max_ptr;
     }
 
-    size_t add_cb_when_full(folly::Function<void()>&& func) {
+    size_t add_cb_when_full(folly::Function<void()>&& func)
+    {
         std::scoped_lock<std::mutex> lock(mutex_);
         memory_full_cbs_.emplace_back(std::move(func), true);
         return memory_full_cbs_.size() - 1;
     }
 
-    void remove_cb_when_full(size_t id) {
+    void remove_cb_when_full(size_t id)
+    {
         std::scoped_lock<std::mutex> lock(mutex_);
         memory_full_cbs_[id].second = false;
     }
 
-    size_t get_approx_free_blocks() {
+    size_t get_approx_free_blocks()
+    {
         return num_free_blocks_.load();
     }
 
-    bool _get_cb_activated() {
+    bool _get_cb_activated()
+    {
         return cb_activated_.load();
     }
 
 private:
-    size_type try_decrease_available_blocks() noexcept {
+    size_type try_decrease_available_blocks() noexcept
+    {
         size_type n;
         do {
             n = num_free_blocks_.load();
@@ -136,27 +149,30 @@ private:
         return n;
     }
 
-    void manage_slab_capacity() {
+    void manage_slab_capacity()
+    {
         size_type n = try_decrease_available_blocks();
         if (!n) {
             util::raise_rte("Out of memory in slab allocator, callbacks not freeing memory?");
         }
-        if (n/(float)capacity_ <= slab_activate_cb_cutoff) {
+        if (n / (float)capacity_ <= slab_activate_cb_cutoff) {
             // trigger callbacks to free space
             if (try_changing_cb(true)) {
-                ARCTICDB_TRACE(log::inmem(), "Memory reached cutoff, calling callbacks in slab allocator to free up memory");
+                ARCTICDB_TRACE(log::inmem(),
+                    "Memory reached cutoff, calling callbacks in slab allocator to free up memory");
                 std::scoped_lock<std::mutex> lock(mutex_);
-                for(auto& cb: memory_full_cbs_) {
+                for (auto& cb : memory_full_cbs_) {
                     if (cb.second)
                         (cb.first)();
                 }
             }
         }
-        if (n/(float)capacity_ >= slab_deactivate_cb_cutoff)
+        if (n / (float)capacity_ >= slab_deactivate_cb_cutoff)
             try_changing_cb(false);
     }
 
-    bool try_changing_cb(bool activate) {
+    bool try_changing_cb(bool activate)
+    {
         bool curr;
         do {
             curr = cb_activated_.load();
@@ -165,7 +181,7 @@ private:
                 return false;
             }
 
-        } while(!cb_activated_.compare_exchange_strong(curr, activate));
+        } while (!cb_activated_.compare_exchange_strong(curr, activate));
         return true;
     }
 
@@ -179,4 +195,4 @@ private:
     alignas(cache_line_size) std::atomic<tagged_value_t> next_free_offset_;
     alignas(cache_line_size) std::atomic<bool> cb_activated_;
 };
-}
+} // namespace arcticdb

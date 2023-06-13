@@ -12,7 +12,7 @@
 #include <arcticdb/column_store/memory_segment.hpp>
 
 namespace arcticdb {
-    class Store;
+class Store;
 }
 
 namespace arcticdb::pipelines {
@@ -20,26 +20,30 @@ namespace arcticdb::pipelines {
 struct AxisRange : std::pair<std::size_t, std::size_t> {
     using std::pair<std::size_t, std::size_t>::pair;
 
-    [[nodiscard]] auto diff() const {
+    [[nodiscard]] auto diff() const
+    {
         return second - first;
     }
 
-    [[nodiscard]] bool contains(std::size_t v) const {
+    [[nodiscard]] bool contains(std::size_t v) const
+    {
         return first <= v && v < second;
     }
 
-    [[nodiscard]] auto start() const {
+    [[nodiscard]] auto start() const
+    {
         return first;
     }
 
-    [[nodiscard]] auto end() const {
+    [[nodiscard]] auto end() const
+    {
         return second;
     }
 
     struct Hasher {
         template<class T>
-        std::enable_if_t<std::is_base_of_v<AxisRange, std::decay_t<T>>, std::size_t>
-        operator()(const T &r) const {
+        std::enable_if_t<std::is_base_of_v<AxisRange, std::decay_t<T>>, std::size_t> operator()(const T& r) const
+        {
             // try to make better use of msb lsb given how F14 is implemented
 #ifdef _WIN32
             return r.first ^ _byteswap_uint64(r.second);
@@ -66,93 +70,113 @@ struct RowRange : AxisRange {
 struct FrameSlice {
     FrameSlice() = default;
 
-    FrameSlice(
-        std::shared_ptr<entity::StreamDescriptor> desc,
+    FrameSlice(std::shared_ptr<entity::StreamDescriptor> desc,
         const ColRange& col_range,
         const RowRange& row_range,
         std::optional<uint64_t> hash = std::nullopt,
         std::optional<uint64_t> num_buckets = std::nullopt,
-        std::optional<std::vector<size_t>> indices = std::nullopt) :
-            col_range(col_range),
-            row_range(row_range),
-            desc_(std::move(desc)),
-            hash_bucket_(hash),
-            num_buckets_(num_buckets),
-            indices_(std::move(indices)) {
+        std::optional<std::vector<size_t>> indices = std::nullopt)
+        : col_range(col_range),
+          row_range(row_range),
+          desc_(std::move(desc)),
+          hash_bucket_(hash),
+          num_buckets_(num_buckets),
+          indices_(std::move(indices))
+    {
         util::check(col_range.diff() > 0 || row_range.diff() > 0, "Expected non-zero column or row range");
     }
 
-    FrameSlice(const ColRange& col_range, const RowRange& row_range,
-               std::optional<size_t> hash_bucket = std::nullopt,
-               std::optional<uint64_t> num_buckets = std::nullopt) :
-        col_range(col_range),
-        row_range(row_range),
-        hash_bucket_(hash_bucket),
-        num_buckets_(num_buckets) {
+    FrameSlice(const ColRange& col_range,
+        const RowRange& row_range,
+        std::optional<size_t> hash_bucket = std::nullopt,
+        std::optional<uint64_t> num_buckets = std::nullopt)
+        : col_range(col_range),
+          row_range(row_range),
+          hash_bucket_(hash_bucket),
+          num_buckets_(num_buckets)
+    {
         util::check(col_range.diff() > 0 || row_range.diff() > 0, "Expected non-zero column or row range");
     }
 
     explicit FrameSlice(const SegmentInMemory& seg);
 
-    [[nodiscard]] const std::shared_ptr<entity::StreamDescriptor>& desc() const {
+    [[nodiscard]] const std::shared_ptr<entity::StreamDescriptor>& desc() const
+    {
         util::check(static_cast<bool>(desc_), "Got null descriptor in frame slice");
         return desc_;
     }
 
-    std::shared_ptr<entity::StreamDescriptor>& desc() {
+    std::shared_ptr<entity::StreamDescriptor>& desc()
+    {
         util::check(static_cast<bool>(desc_), "Got null descriptor in frame slice");
         return desc_;
     }
 
-    [[nodiscard]] std::optional<size_t> hash_bucket() const {
+    [[nodiscard]] std::optional<size_t> hash_bucket() const
+    {
         return hash_bucket_;
     }
 
-    [[nodiscard]] std::optional<size_t> num_buckets() const {
+    [[nodiscard]] std::optional<size_t> num_buckets() const
+    {
         return num_buckets_;
     }
 
-   void set_desc( const std::shared_ptr<entity::StreamDescriptor>& desc) {
+    void set_desc(const std::shared_ptr<entity::StreamDescriptor>& desc)
+    {
         desc_ = desc;
     }
 
-    [[nodiscard]] const ColRange& columns() const { return col_range;  }
-    [[nodiscard]] const RowRange& rows() const { return row_range; }
+    [[nodiscard]] const ColRange& columns() const
+    {
+        return col_range;
+    }
+    [[nodiscard]] const RowRange& rows() const
+    {
+        return row_range;
+    }
 
     ColRange col_range;
     RowRange row_range;
 
-    [[nodiscard]] std::size_t absolute_field_col(std::size_t col) const {
-        if(indices_)
+    [[nodiscard]] std::size_t absolute_field_col(std::size_t col) const
+    {
+        if (indices_)
             return indices_->at(col) - desc()->index().field_count();
         else
             return col + col_range.first - desc()->index().field_count();
     }
 
-    [[nodiscard]] const auto& non_index_field(std::size_t pos) const {
+    [[nodiscard]] const auto& non_index_field(std::size_t pos) const
+    {
         return desc()->field(pos + desc()->index().field_count());
     }
 
-    void adjust_rows(size_t row_count) {
+    void adjust_rows(size_t row_count)
+    {
         row_range.second = row_range.first + row_count;
     }
 
-    void adjust_columns(size_t column_count) {
+    void adjust_columns(size_t column_count)
+    {
         col_range.second = col_range.first + column_count;
     }
 
-    ssize_t fix_row_count(ssize_t rows) {
+    ssize_t fix_row_count(ssize_t rows)
+    {
         const auto diff = row_range.diff();
         row_range.first = rows;
         row_range.second = rows + diff;
         return static_cast<ssize_t>(row_range.second);
     }
 
-    friend bool operator< (const FrameSlice& a, const FrameSlice& b) {
+    friend bool operator<(const FrameSlice& a, const FrameSlice& b)
+    {
         return std::tie(a.col_range.first, a.row_range.first) < std::tie(b.col_range.first, b.row_range.first);
     }
 
-    friend bool operator==(const FrameSlice& a, const FrameSlice& b) {
+    friend bool operator==(const FrameSlice& a, const FrameSlice& b)
+    {
         return a.row_range == b.row_range && a.col_range == b.col_range;
     }
 
@@ -178,29 +202,33 @@ private:
 struct SliceAndKey {
     SliceAndKey() = default;
 
-    SliceAndKey(FrameSlice slice, entity::AtomKey key) :
-        slice_(std::move(slice)),
-        key_(std::move(key)) {
+    SliceAndKey(FrameSlice slice, entity::AtomKey key)
+        : slice_(std::move(slice)),
+          key_(std::move(key))
+    {
     }
 
-    SliceAndKey(FrameSlice slice, entity::AtomKey key, std::optional<SegmentInMemory> segment) :
-        segment_(std::move(segment)),
-        slice_(std::move(slice)),
-        key_(std::move(key))
-        {
+    SliceAndKey(FrameSlice slice, entity::AtomKey key, std::optional<SegmentInMemory> segment)
+        : segment_(std::move(segment)),
+          slice_(std::move(slice)),
+          key_(std::move(key))
+    {
     }
 
-    SliceAndKey(SegmentInMemory&& seg, FrameSlice&& slice) :
-        segment_(std::move(seg)),
-        slice_(std::move(slice)) {
+    SliceAndKey(SegmentInMemory&& seg, FrameSlice&& slice)
+        : segment_(std::move(seg)),
+          slice_(std::move(slice))
+    {
     }
 
-    explicit SliceAndKey(SegmentInMemory&& seg) :
-        segment_(std::move(seg)),
-        slice_(*segment_) {
+    explicit SliceAndKey(SegmentInMemory&& seg)
+        : segment_(std::move(seg)),
+          slice_(*segment_)
+    {
     }
 
-    friend bool operator==(const SliceAndKey& left, const SliceAndKey& right) {
+    friend bool operator==(const SliceAndKey& left, const SliceAndKey& right)
+    {
         return left.key_ == right.key_ && left.slice_ == right.slice_;
     }
 
@@ -213,33 +241,40 @@ struct SliceAndKey {
     const SegmentInMemory& segment(const std::shared_ptr<Store>& store) const;
 
     template<typename Callable>
-    auto apply(const std::shared_ptr<Store>& store, Callable&& c)  {
+    auto apply(const std::shared_ptr<Store>& store, Callable&& c)
+    {
         ensure_segment(store);
         return c(*segment_, slice_, key_);
     }
 
-    const FrameSlice& slice() const {
+    const FrameSlice& slice() const
+    {
         return slice_;
     }
 
-    FrameSlice& slice() {
+    FrameSlice& slice()
+    {
         return slice_;
     }
 
-    bool invalid() const {
+    bool invalid() const
+    {
         return (!segment_ && !key_) || segment_->is_null();
     }
 
-    const AtomKey& key() const {
+    const AtomKey& key() const
+    {
         util::check(static_cast<bool>(key_), "No key found");
         return *key_;
     }
 
-    void unset_segment() {
+    void unset_segment()
+    {
         segment_ = std::nullopt;
     }
 
-    void set_segment(SegmentInMemory&& seg) {
+    void set_segment(SegmentInMemory&& seg)
+    {
         segment_ = std::move(seg);
     }
 
@@ -248,31 +283,40 @@ struct SliceAndKey {
     std::optional<entity::AtomKey> key_;
 };
 
-inline bool operator<(const SliceAndKey& a, const SliceAndKey& b) {
+inline bool operator<(const SliceAndKey& a, const SliceAndKey& b)
+{
     return a.slice_ < b.slice_;
 }
 
 } //namespace arcticdb::pipelines
 
 namespace fmt {
-template <class T>
-struct formatter<T, std::enable_if_t<std::is_base_of_v<arcticdb::pipelines::AxisRange, T>,char>> {
-    template <typename ParseContext>
-    constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
+template<class T>
+struct formatter<T, std::enable_if_t<std::is_base_of_v<arcticdb::pipelines::AxisRange, T>, char>> {
+    template<typename ParseContext>
+    constexpr auto parse(ParseContext& ctx)
+    {
+        return ctx.begin();
+    }
 
-    template <typename FormatContext>
-    auto format(const T &rg, FormatContext &ctx) const {
+    template<typename FormatContext>
+    auto format(const T& rg, FormatContext& ctx) const
+    {
         return format_to(ctx.out(), "Range[{:d}, {:d}]", rg.first, rg.second);
     }
 };
 
-template <class T>
-struct formatter<T, std::enable_if_t<std::is_base_of_v<arcticdb::pipelines::FrameSlice, T>,char>> {
-    template <typename ParseContext>
-    constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
+template<class T>
+struct formatter<T, std::enable_if_t<std::is_base_of_v<arcticdb::pipelines::FrameSlice, T>, char>> {
+    template<typename ParseContext>
+    constexpr auto parse(ParseContext& ctx)
+    {
+        return ctx.begin();
+    }
 
-    template <typename FormatContext>
-    auto format(const T &slice, FormatContext &ctx) const {
+    template<typename FormatContext>
+    auto format(const T& slice, FormatContext& ctx) const
+    {
         return format_to(ctx.out(), "Rows: {}\tColumns: {}", slice.row_range, slice.col_range);
     }
 };
@@ -280,12 +324,16 @@ struct formatter<T, std::enable_if_t<std::is_base_of_v<arcticdb::pipelines::Fram
 template<>
 struct formatter<arcticdb::pipelines::SliceAndKey> {
     template<typename ParseContext>
-    constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
+    constexpr auto parse(ParseContext& ctx)
+    {
+        return ctx.begin();
+    }
 
     template<typename FormatContext>
-    auto format(arcticdb::pipelines::SliceAndKey sk, FormatContext &ctx) const {
+    auto format(arcticdb::pipelines::SliceAndKey sk, FormatContext& ctx) const
+    {
         return format_to(ctx.out(), "{}{}", sk.slice(), sk.key());
     }
 };
 
-}
+} // namespace fmt

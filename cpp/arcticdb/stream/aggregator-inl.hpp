@@ -12,7 +12,8 @@
 namespace arcticdb::stream {
 
 template<class Index, class Schema, class SegmentingPolicy, class DensityPolicy>
-void Aggregator<Index, Schema, SegmentingPolicy, DensityPolicy>::end_row() {
+void Aggregator<Index, Schema, SegmentingPolicy, DensityPolicy>::end_row()
+{
     segment_.end_row();
     stats_.update(row_builder_.nbytes());
     if (segmenting_policy_(stats_)) {
@@ -21,26 +22,32 @@ void Aggregator<Index, Schema, SegmentingPolicy, DensityPolicy>::end_row() {
 }
 
 template<class Index, class Schema, class SegmentingPolicy, class DensityPolicy>
-inline void Aggregator<Index, Schema, SegmentingPolicy, DensityPolicy>::commit_impl() {
+inline void Aggregator<Index, Schema, SegmentingPolicy, DensityPolicy>::commit_impl()
+{
     // TODO critical section here in async scenario
     callback_(std::move(segment_));
     commits_count_++;
-    segment_ = SegmentInMemory(schema_policy_.default_descriptor(), segmenting_policy_.expected_row_size(), false, SparsePolicy::allow_sparse);
+    segment_ = SegmentInMemory(schema_policy_.default_descriptor(),
+        segmenting_policy_.expected_row_size(),
+        false,
+        SparsePolicy::allow_sparse);
     segment_.init_column_map();
     stats_.reset();
 }
 
 template<class Index, class Schema, class SegmentingPolicy, class DensityPolicy>
-inline void Aggregator<Index, Schema, SegmentingPolicy, DensityPolicy>::commit() {
+inline void Aggregator<Index, Schema, SegmentingPolicy, DensityPolicy>::commit()
+{
     if (ARCTICDB_LIKELY(segment_.row_count() > 0 || segment_.metadata())) { // LIKELY
-//        segment_.end_sparse_columns();
+                                                                            //        segment_.end_sparse_columns();
         commit_impl();
     }
 }
 
 template<class Index, class Schema, class SegmentingPolicy, class DensityPolicy>
-inline void Aggregator<Index, Schema, SegmentingPolicy, DensityPolicy>::clear() {
+inline void Aggregator<Index, Schema, SegmentingPolicy, DensityPolicy>::clear()
+{
     segment_.clear();
 }
 
-} // namespace arcticdb
+} // namespace arcticdb::stream

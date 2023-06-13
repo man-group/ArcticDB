@@ -11,22 +11,29 @@
 #include <fmt/format.h>
 #include <string>
 
-
 namespace arcticdb {
 struct VersionedItem {
-    VersionedItem(entity::AtomKey &&key) :
-        key_(std::move(key)) {
+    VersionedItem(entity::AtomKey&& key)
+        : key_(std::move(key))
+    {
     }
 
-    VersionedItem(const entity::AtomKey& key) :
-        key_(key) {
+    VersionedItem(const entity::AtomKey& key)
+        : key_(key)
+    {
     }
 
     VersionedItem() = default;
 
     entity::AtomKey key_;
 
-    std::string symbol() const { return fmt::format("{}", key_.id()); }
-    uint64_t version() const { return key_.version_id(); }
+    std::string symbol() const
+    {
+        return fmt::format("{}", key_.id());
+    }
+    uint64_t version() const
+    {
+        return key_.version_id();
+    }
 };
-}
+} // namespace arcticdb

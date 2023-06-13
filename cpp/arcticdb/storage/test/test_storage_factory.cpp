@@ -24,7 +24,8 @@ namespace ac = arcticdb;
 namespace as = arcticdb::storage;
 namespace asl = arcticdb::storage::lmdb;
 
-TEST(TestStorageFactory, LmdbLookup) {
+TEST(TestStorageFactory, LmdbLookup)
+{
     namespace pbs = arcticdb::proto::storage;
     as::EnvironmentName environment_name{"research"};
     as::StorageName storage_name("lmdb_local");
@@ -51,7 +52,8 @@ TEST(TestStorageFactory, LmdbLookup) {
     ASSERT_EQ(config.path(), "./"); //bit non-standard
 }
 
-TEST(TestStorageFactory, LibraryIndex) {
+TEST(TestStorageFactory, LibraryIndex)
+{
     as::EnvironmentName environment_name{"research"};
     as::StorageName storage_name("lmdb_local");
     as::LibraryPath library_path{"a", "b"};
@@ -70,4 +72,3 @@ TEST(TestStorageFactory, LibraryIndex) {
     ASSERT_EQ(l, lib->library_path());
     ASSERT_EQ(as::OpenMode::WRITE, lib->open_mode());
 }
-

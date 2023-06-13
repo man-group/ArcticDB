@@ -35,10 +35,13 @@ public:
         using DataTypeTag = typename GrouperDescriptor::DataTypeTag;
         using RawType = typename DataTypeTag::raw_type;
 
-        size_t group(RawType key, std::shared_ptr<StringPool> sp) const {
+        size_t group(RawType key, std::shared_ptr<StringPool> sp) const
+        {
             constexpr DataType dt = DataTypeTag::data_type;
             HashedValue hash_result;
-            if constexpr(dt == DataType::ASCII_FIXED64 || dt == DataType::ASCII_DYNAMIC64 || dt == DataType::UTF_FIXED64 || dt == DataType::UTF_DYNAMIC64) {
+            if constexpr (dt == DataType::ASCII_FIXED64 || dt == DataType::ASCII_DYNAMIC64 ||
+                          dt == DataType::UTF_FIXED64 || dt == DataType::UTF_DYNAMIC64)
+            {
                 // TODO (AN-468): This will throw on Nones/NaNs
                 hash_result = hash(sp->get_view(key));
             } else {
@@ -51,28 +54,32 @@ public:
 };
 
 class Bucketizer {
-    public:
+public:
     virtual size_t bucket(size_t group) const = 0;
 
     virtual size_t num_buckets() const = 0;
 
-    virtual ~Bucketizer() {};
+    virtual ~Bucketizer(){};
 };
 
 class ModuloBucketizer : Bucketizer {
     size_t mod_;
+
 public:
-    ModuloBucketizer(size_t mod) :
-        mod_(mod) {
+    ModuloBucketizer(size_t mod)
+        : mod_(mod)
+    {
     }
 
     ARCTICDB_MOVE_COPY_DEFAULT(ModuloBucketizer)
 
-    size_t bucket(size_t group) const {
+    size_t bucket(size_t group) const
+    {
         return group % mod_;
     }
 
-    virtual size_t num_buckets() const {
+    virtual size_t num_buckets() const
+    {
         return mod_;
     }
 
@@ -81,12 +88,14 @@ public:
 
 class IdentityBucketizer : Bucketizer {
 public:
-    size_t bucket(size_t group) const {
+    size_t bucket(size_t group) const
+    {
         return group;
     }
 
-    virtual size_t num_buckets() const {
+    virtual size_t num_buckets() const
+    {
         return 0;
     }
 };
-}
+} // namespace arcticdb::grouping

@@ -36,13 +36,14 @@ VariantData unary_boolean(FullResult, OperationType operation);
 
 VariantData visit_unary_boolean(const VariantData& left, OperationType operation);
 
-template <typename Func>
-VariantData unary_operator(const Value& val, Func&& func) {
+template<typename Func>
+VariantData unary_operator(const Value& val, Func&& func)
+{
     auto output = std::make_unique<Value>();
     output->data_type_ = val.data_type_;
 
     details::visit_type(val.type().data_type(), [&](auto val_desc_tag) {
-        using DataTagType =  decltype(val_desc_tag);
+        using DataTagType = decltype(val_desc_tag);
         if constexpr (!is_numeric_type(DataTagType::data_type)) {
             util::raise_rte("Cannot perform arithmetic on {}", val.type());
         }
@@ -57,12 +58,13 @@ VariantData unary_operator(const Value& val, Func&& func) {
     return {std::move(output)};
 }
 
-template <typename Func>
-VariantData unary_operator(const Column& col, Func&& func) {
+template<typename Func>
+VariantData unary_operator(const Column& col, Func&& func)
+{
     std::unique_ptr<Column> output;
 
     details::visit_type(col.type().data_type(), [&](auto col_desc_tag) {
-        using ColumnTagType =  decltype(col_desc_tag);
+        using ColumnTagType = decltype(col_desc_tag);
         if constexpr (!is_numeric_type(ColumnTagType::data_type)) {
             util::raise_rte("Cannot perform arithmetic on {}", col.type());
         }
@@ -72,11 +74,11 @@ VariantData unary_operator(const Column& col, Func&& func) {
         auto output_data_type = data_type_from_raw_type<TargetType>();
         output = std::make_unique<Column>(make_scalar_type(output_data_type), col.is_sparse());
         auto data = col.data();
-        while(auto opt_block = data.next<DT>()) {
+        while (auto opt_block = data.next<DT>()) {
             auto block = opt_block.value();
             const auto nbytes = sizeof(TargetType) * block.row_count();
             auto ptr = reinterpret_cast<TargetType*>(output->allocate_data(nbytes));
-            for(auto idx = 0u; idx < block.row_count(); ++idx)
+            for (auto idx = 0u; idx < block.row_count(); ++idx)
                 *ptr++ = func.apply(block[idx]);
 
             output->advance_data(nbytes);
@@ -87,23 +89,21 @@ VariantData unary_operator(const Column& col, Func&& func) {
 }
 
 template<typename Func>
-VariantData visit_unary_operator(const VariantData& left, Func&& func) {
-    return std::visit(util::overload{
-        [&] (const ColumnWithStrings& l) -> VariantData {
-            return unary_operator(*(l.column_), std::forward<Func>(func));
-            },
-        [&] (const std::shared_ptr<Value>& l) -> VariantData {
-            return unary_operator(*l, std::forward<Func>(func));
-        },
-        [] (EmptyResult l) -> VariantData {
-            return l;
-        },
-        [](const auto&) -> VariantData {
-            util::raise_rte("Bitset/ValueSet inputs not accepted to unary operators");
-        }
-    }, left);
+VariantData visit_unary_operator(const VariantData& left, Func&& func)
+{
+    return std::visit(util::overload{[&](const ColumnWithStrings& l) -> VariantData {
+                                         return unary_operator(*(l.column_), std::forward<Func>(func));
+                                     },
+                          [&](const std::shared_ptr<Value>& l) -> VariantData {
+                              return unary_operator(*l, std::forward<Func>(func));
+                          },
+                          [](EmptyResult l) -> VariantData { return l; },
+                          [](const auto&) -> VariantData {
+                              util::raise_rte("Bitset/ValueSet inputs not accepted to unary operators");
+                          }},
+        left);
 }
 
 VariantData dispatch_unary(const VariantData& left, OperationType operation);
 
-}
+} // namespace arcticdb

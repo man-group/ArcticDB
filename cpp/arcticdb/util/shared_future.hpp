@@ -18,16 +18,20 @@ namespace arcticdb {
 template<typename T>
 class SharedFuture {
 public:
-    SharedFuture() : promise_(std::make_shared<folly::SharedPromise<T>>()) {
+    SharedFuture()
+        : promise_(std::make_shared<folly::SharedPromise<T>>())
+    {
     }
 
     ARCTICDB_MOVE_COPY_DEFAULT(SharedFuture)
 
-    void setValue(T&& val) {
+    void setValue(T&& val)
+    {
         promise_->setValue(std::move(val));
     }
 
-    const T get(folly::FutureExecutor<folly::IOThreadPoolExecutor>& exec) {
+    const T get(folly::FutureExecutor<folly::IOThreadPoolExecutor>& exec)
+    {
         auto f = promise_->getSemiFuture().via(&exec);
         const auto val = std::move(f).get();
         return val;

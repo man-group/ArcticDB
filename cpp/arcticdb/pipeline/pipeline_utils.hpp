@@ -15,9 +15,10 @@
 
 namespace arcticdb::pipelines {
 
-inline ReadResult make_read_result_from_frame(FrameAndDescriptor& frame_and_desc, const AtomKey& key) {
+inline ReadResult make_read_result_from_frame(FrameAndDescriptor& frame_and_desc, const AtomKey& key)
+{
     auto pipeline_context = std::make_shared<PipelineContext>(frame_and_desc.frame_.descriptor());
-    SliceAndKey sk{FrameSlice{frame_and_desc.frame_},key};
+    SliceAndKey sk{FrameSlice{frame_and_desc.frame_}, key};
     pipeline_context->slice_and_keys_.emplace_back(std::move(sk));
     util::BitSet bitset(1);
     bitset.flip();
@@ -33,4 +34,4 @@ inline ReadResult make_read_result_from_frame(FrameAndDescriptor& frame_and_desc
     return create_python_read_result(VersionedItem{key}, std::move(frame_and_desc));
 }
 
-}
+} // namespace arcticdb::pipelines

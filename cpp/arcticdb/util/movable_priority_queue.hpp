@@ -11,18 +11,22 @@
 
 namespace arcticdb {
 
-template<typename _Tp, typename _Sequence = std::vector<_Tp>, typename _Compare = std::less<typename _Sequence::value_type> >
-class movable_priority_queue: std::priority_queue<_Tp, _Sequence, _Compare> {
+template<typename _Tp,
+    typename _Sequence = std::vector<_Tp>,
+    typename _Compare = std::less<typename _Sequence::value_type>>
+class movable_priority_queue : std::priority_queue<_Tp, _Sequence, _Compare> {
 public:
     typedef typename _Sequence::value_type value_type;
 
-    explicit movable_priority_queue(const _Compare& __x, const _Sequence& __s) :
-        std::priority_queue<_Tp, _Sequence, _Compare>(__x, __s) {}
+    explicit movable_priority_queue(const _Compare& __x, const _Sequence& __s)
+        : std::priority_queue<_Tp, _Sequence, _Compare>(__x, __s)
+    {
+    }
 
-    explicit movable_priority_queue(const _Compare& __x = _Compare(), _Sequence&& __s =
-    _Sequence()) :
-        std::priority_queue<_Tp, _Sequence, _Compare>(__x, std::move(__s)) {}
-
+    explicit movable_priority_queue(const _Compare& __x = _Compare(), _Sequence&& __s = _Sequence())
+        : std::priority_queue<_Tp, _Sequence, _Compare>(__x, std::move(__s))
+    {
+    }
 
     using std::priority_queue<_Tp, _Sequence, _Compare>::empty;
     using std::priority_queue<_Tp, _Sequence, _Compare>::size;
@@ -32,7 +36,8 @@ public:
     using std::priority_queue<_Tp, _Sequence, _Compare>::emplace;
     using std::priority_queue<_Tp, _Sequence, _Compare>::swap;
 
-    value_type pop_top() {
+    value_type pop_top()
+    {
 #ifdef __glibcxx_requires_nonempty
         __glibcxx_requires_nonempty();
 #endif
@@ -43,7 +48,6 @@ public:
         this->c.pop_back();
         return top;
     }
-
 };
 
 } //namespace arcticdb

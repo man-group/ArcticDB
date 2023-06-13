@@ -8,7 +8,8 @@
 #include <gtest/gtest.h>
 #include <arcticdb/entity/type_conversion.hpp>
 
-TEST(Comparisons, Simple) {
+TEST(Comparisons, Simple)
+{
     using namespace arcticdb;
 
     // double/T and T/double always become double/double

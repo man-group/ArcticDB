@@ -18,38 +18,45 @@ class SegmentMap {
     std::atomic<uint64_t> id_;
     std::shared_ptr<Store> store_;
     std::mutex mutex_;
+
 public:
     using const_iterator = ContainerType::const_iterator;
 
-    SegmentMap(const std::shared_ptr<Store>& store) :
-        store_(store) {
+    SegmentMap(const std::shared_ptr<Store>& store)
+        : store_(store)
+    {
     }
 
-    uint64_t insert(std::shared_ptr<SegmentInMemoryImpl>&& seg) {
+    uint64_t insert(std::shared_ptr<SegmentInMemoryImpl>&& seg)
+    {
         const auto id = id_++;
         std::shared_ptr<ValueType> value(
             std::move(seg),
             [this, id](ValueType* v)
                 map_.erase(id);
                 delete v;
-            }
+    }
             );
-        map_.emplace(id, value);
-        return id;
-    }
+            map_.emplace(id, value);
+            return id;
+}
 
-    int size() const {
-        return map_.size();
-    }
+    int size() const
+{
+            return map_.size();
+}
 
-    const_iterator begin() const {
-        return map_.begin();
-    }
+const_iterator begin() const
+{
+            return map_.begin();
+}
 
-    const_iterator end() const {
-        return map_.end();
-    }
+const_iterator end() const
+{
+            return map_.end();
+}
+
 private:
-    container_type map_;
+container_type map_;
 };
 }

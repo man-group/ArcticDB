@@ -30,4 +30,4 @@ namespace arcticdb {
 VariantData transform_to_placeholder(VariantData data);
 
 VariantData transform_to_bitset(const VariantData& data);
-}
+} // namespace arcticdb

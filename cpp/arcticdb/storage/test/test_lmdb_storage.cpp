@@ -26,7 +26,8 @@ namespace ac = arcticdb;
 namespace as = arcticdb::storage;
 namespace asl = arcticdb::storage::lmdb;
 
-TEST(TestLmdbStorage, Example) {
+TEST(TestLmdbStorage, Example)
+{
     auto environment_name = as::EnvironmentName{"res"};
     auto storage_name = as::StorageName{"lmdb_01"};
 
@@ -46,22 +47,24 @@ TEST(TestLmdbStorage, Example) {
     storage.write(std::move(kv));
 
     as::KeySegmentPair res;
-    storage.read(k, [&](auto &&k, auto &&seg) {
-        res.atom_key() = std::get<AtomKey>(k);
-        res.segment() = std::move(seg);
-        res.segment().force_own_buffer(); // necessary since the non-owning buffer won't survive the visit
-    }, storage::ReadKeyOpts{});
+    storage.read(
+        k,
+        [&](auto&& k, auto&& seg) {
+            res.atom_key() = std::get<AtomKey>(k);
+            res.segment() = std::move(seg);
+            res.segment().force_own_buffer(); // necessary since the non-owning buffer won't survive the visit
+        },
+        storage::ReadKeyOpts{});
     ASSERT_EQ(res.segment().header().start_ts(), 1234);
 
     res = storage.read(k, as::ReadKeyOpts{});
     ASSERT_EQ(res.segment().header().start_ts(), 1234);
 
     bool executed = false;
-    storage.iterate_type(arcticdb::entity::KeyType::TABLE_DATA,
-                         [&](auto &&found_key) {
-                             ASSERT_EQ(to_atom(found_key), k);
-                             executed = true;
-                         });
+    storage.iterate_type(arcticdb::entity::KeyType::TABLE_DATA, [&](auto&& found_key) {
+        ASSERT_EQ(to_atom(found_key), k);
+        executed = true;
+    });
     ASSERT_TRUE(executed);
 
     as::KeySegmentPair update_kv(k);
@@ -71,26 +74,29 @@ TEST(TestLmdbStorage, Example) {
     storage.update(std::move(update_kv), as::UpdateOpts{});
 
     as::KeySegmentPair update_res;
-    storage.read(k, [&](auto &&k, auto &&seg) {
-        update_res.atom_key() = std::get<AtomKey>(k);
-        update_res.segment() = std::move(seg);
-        update_res.segment().force_own_buffer(); // necessary since the non-owning buffer won't survive the visit
-    }, as::ReadKeyOpts{});
+    storage.read(
+        k,
+        [&](auto&& k, auto&& seg) {
+            update_res.atom_key() = std::get<AtomKey>(k);
+            update_res.segment() = std::move(seg);
+            update_res.segment().force_own_buffer(); // necessary since the non-owning buffer won't survive the visit
+        },
+        as::ReadKeyOpts{});
     ASSERT_EQ(update_res.segment().header().start_ts(), 4321);
 
     update_res = storage.read(k, as::ReadKeyOpts{});
     ASSERT_EQ(update_res.segment().header().start_ts(), 4321);
 
     executed = false;
-    storage.iterate_type(arcticdb::entity::KeyType::TABLE_DATA,
-                         [&](auto &&found_key) {
-                             ASSERT_EQ(to_atom(found_key), k);
-                             executed = true;
-                         });
+    storage.iterate_type(arcticdb::entity::KeyType::TABLE_DATA, [&](auto&& found_key) {
+        ASSERT_EQ(to_atom(found_key), k);
+        executed = true;
+    });
     ASSERT_TRUE(executed);
 }
 
-TEST(TestLmdbStorage, Strings) {
+TEST(TestLmdbStorage, Strings)
+{
     const auto tsd = create_tsd<DataTypeTag<DataType::ASCII_DYNAMIC64>, Dimension::Dim0>();
     SegmentInMemory s{StreamDescriptor{std::move(tsd)}};
     s.set_scalar(0, timestamp(123));
@@ -134,11 +140,14 @@ TEST(TestLmdbStorage, Strings) {
     storage.write(std::move(kv));
 
     as::KeySegmentPair res;
-    storage.read(save_k, [&](auto &&k, auto &&seg) {
-        res.atom_key() = std::get<AtomKey>(k);
-        res.segment() = std::move(seg);
-        res.segment().force_own_buffer(); // necessary since the non-owning buffer won't survive the visit
-    }, as::ReadKeyOpts{});
+    storage.read(
+        save_k,
+        [&](auto&& k, auto&& seg) {
+            res.atom_key() = std::get<AtomKey>(k);
+            res.segment() = std::move(seg);
+            res.segment().force_own_buffer(); // necessary since the non-owning buffer won't survive the visit
+        },
+        as::ReadKeyOpts{});
     ASSERT_EQ(res.segment().header().start_ts(), 1234);
 
     SegmentInMemory res_mem = decode(std::move(res.segment()));
@@ -147,4 +156,3 @@ TEST(TestLmdbStorage, Strings) {
     ASSERT_EQ(s.string_at(1, 3), res_mem.string_at(1, 3));
     ASSERT_EQ(std::string("baggy"), res_mem.string_at(1, 3));
 }
-

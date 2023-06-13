@@ -17,14 +17,13 @@ namespace pipelines {
 struct InputTensorFrame;
 namespace index {
 struct IndexSegmentReader;
-} //namespace pipelines::index
+} // namespace index
 } // namespace pipelines
 
 /**
  * The new frame for append/update is compatible with the existing index. Throws various exceptions if not.
  */
-void fix_normalization_or_throw(
-    bool is_append,
-    const pipelines::index::IndexSegmentReader &existing_isr,
-    const pipelines::InputTensorFrame &new_frame);
+void fix_normalization_or_throw(bool is_append,
+    const pipelines::index::IndexSegmentReader& existing_isr,
+    const pipelines::InputTensorFrame& new_frame);
 } // namespace arcticdb

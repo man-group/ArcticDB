@@ -14,10 +14,10 @@ namespace arcticdb::storage::s3 {
 class S3StorageTool {
 public:
     using Config = arcticdb::proto::s3_storage::Config;
-    S3StorageTool(const Config &conf);
+    S3StorageTool(const Config& conf);
 
     template<class Visitor>
-    void iterate_bucket(Visitor &&visitor, const std::string& prefix = std::string());
+    void iterate_bucket(Visitor&& visitor, const std::string& prefix = std::string());
 
     void delete_bucket(const std::string& prefix = std::string());
 

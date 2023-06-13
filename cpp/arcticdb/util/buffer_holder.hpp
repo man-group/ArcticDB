@@ -15,11 +15,12 @@ struct BufferHolder {
     std::vector<std::shared_ptr<Column>> columns_;
     std::mutex mutex_;
 
-    std::shared_ptr<Column> get_buffer(const TypeDescriptor& td, bool allow_sparse) {
+    std::shared_ptr<Column> get_buffer(const TypeDescriptor& td, bool allow_sparse)
+    {
         std::lock_guard lock(mutex_);
         auto column = std::make_shared<Column>(td, allow_sparse);
         columns_.emplace_back(column);
         return column;
     }
 };
-}
+} // namespace arcticdb

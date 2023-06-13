@@ -15,21 +15,21 @@
 
 namespace arcticdb::detail {
 
-inline py::array array_at(const SegmentInMemory& frame, std::size_t col_pos, py::object &anchor) {
+inline py::array array_at(const SegmentInMemory& frame, std::size_t col_pos, py::object& anchor)
+{
     ARCTICDB_SAMPLE_DEFAULT(PythonOutputFrameArrayAt)
     if (frame.empty()) {
-        return visit_field(frame.field(col_pos), [] (auto &&tag) {
+        return visit_field(frame.field(col_pos), [](auto&& tag) {
             using TypeTag = std::decay_t<decltype(tag)>;
             constexpr auto data_type = TypeTag::DataTypeTag::data_type;
             std::string dtype;
             py::array::ShapeContainer shapes{0};
             ssize_t esize = get_type_size(data_type);
             if constexpr (is_sequence_type(data_type)) {
-                if(is_fixed_string_type(data_type)) {
+                if (is_fixed_string_type(data_type)) {
                     dtype = data_type == DataType::ASCII_FIXED64 ? "<S0" : "<U0";
                     esize = 1;
-                }
-                else {
+                } else {
                     dtype = "O";
                 }
             } else {
@@ -45,10 +45,10 @@ inline py::array array_at(const SegmentInMemory& frame, std::size_t col_pos, py:
             return py::array{py::dtype{dtype}, std::move(shapes), std::move(strides)};
         });
     }
-    return visit_field(frame.field(col_pos), [&, frame=frame, col_pos=col_pos] (auto &&tag) {
+    return visit_field(frame.field(col_pos), [&, frame = frame, col_pos = col_pos](auto&& tag) {
         using TypeTag = std::decay_t<decltype(tag)>;
         constexpr auto dt = TypeTag::DataTypeTag::data_type;
-        auto &buffer = frame.column(col_pos).data().buffer();
+        auto& buffer = frame.column(col_pos).data().buffer();
         std::string dtype;
         std::vector<shape_t> shapes;
         shapes.push_back(frame.row_count());
@@ -82,7 +82,8 @@ inline py::array array_at(const SegmentInMemory& frame, std::size_t col_pos, py:
     });
 }
 
-inline std::shared_ptr<pipelines::FrameDataWrapper> initialize_array(const SegmentInMemory& frame, py::object &ref) {
+inline std::shared_ptr<pipelines::FrameDataWrapper> initialize_array(const SegmentInMemory& frame, py::object& ref)
+{
     auto output = std::make_shared<pipelines::FrameDataWrapper>(frame.fields().size());
     ARCTICDB_SAMPLE(InitializeArrays, 0);
     ARCTICDB_DEBUG(log::memory(), "Initializing arrays");
@@ -94,4 +95,4 @@ inline std::shared_ptr<pipelines::FrameDataWrapper> initialize_array(const Segme
     return output;
 }
 
-}
+} // namespace arcticdb::detail

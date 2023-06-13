@@ -9,9 +9,9 @@
 
 namespace arcticdb::storage::s3 {
 
-    class MyAWSCredentialsProviderChain : public Aws::Auth::AWSCredentialsProviderChain {
-    public:
-        MyAWSCredentialsProviderChain();
-    };
+class MyAWSCredentialsProviderChain : public Aws::Auth::AWSCredentialsProviderChain {
+public:
+    MyAWSCredentialsProviderChain();
+};
 
-}
+} // namespace arcticdb::storage::s3

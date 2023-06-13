@@ -34,370 +34,474 @@ public:
     using iterator = SegmentInMemoryImpl::iterator;
     using const_iterator = SegmentInMemoryImpl::const_iterator;
 
-    SegmentInMemory() :
-            impl_(std::make_shared<SegmentInMemoryImpl>()) {
+    SegmentInMemory()
+        : impl_(std::make_shared<SegmentInMemoryImpl>())
+    {
     }
 
-    explicit SegmentInMemory(
-        const StreamDescriptor &tsd,
+    explicit SegmentInMemory(const StreamDescriptor& tsd,
         size_t expected_column_size = 0,
         bool presize = false,
-        bool allow_sparse = false) :
-            impl_(std::make_shared<SegmentInMemoryImpl>(tsd, expected_column_size, presize, allow_sparse)){
+        bool allow_sparse = false)
+        : impl_(std::make_shared<SegmentInMemoryImpl>(tsd, expected_column_size, presize, allow_sparse))
+    {
     }
 
-    explicit SegmentInMemory(
-        const StreamDescriptor&& tsd,
+    explicit SegmentInMemory(const StreamDescriptor&& tsd,
         size_t expected_column_size = 0,
         bool presize = false,
-        bool allow_sparse = false) :
-        impl_(std::make_shared<SegmentInMemoryImpl>(std::move(tsd), expected_column_size, presize, allow_sparse)){
+        bool allow_sparse = false)
+        : impl_(std::make_shared<SegmentInMemoryImpl>(std::move(tsd), expected_column_size, presize, allow_sparse))
+    {
     }
 
-    friend void swap(SegmentInMemory& left, SegmentInMemory& right) {
+    friend void swap(SegmentInMemory& left, SegmentInMemory& right)
+    {
         std::swap(left.impl_, right.impl_);
     }
 
     ARCTICDB_MOVE_COPY_DEFAULT(SegmentInMemory)
 
-    auto begin() { return impl_->begin(); }
+    auto begin()
+    {
+        return impl_->begin();
+    }
 
-    auto end() { return impl_->end(); }
+    auto end()
+    {
+        return impl_->end();
+    }
 
-    auto begin() const { return impl_->begin(); }
+    auto begin() const
+    {
+        return impl_->begin();
+    }
 
-    auto end() const { return impl_->end(); }
+    auto end() const
+    {
+        return impl_->end();
+    }
 
-    void push_back(const Row& row) {
+    void push_back(const Row& row)
+    {
         impl_->push_back(row);
     }
 
-    auto column_descriptor(size_t col) const {
+    auto column_descriptor(size_t col) const
+    {
         return impl_->column_descriptor(col);
     }
 
-    void end_row() const {
+    void end_row() const
+    {
         impl_->end_row();
     }
 
     template<class T, std::enable_if_t<std::is_integral_v<T> || std::is_floating_point_v<T>, int> = 0>
-    void set_scalar(position_t idx, T val) {
+    void set_scalar(position_t idx, T val)
+    {
         impl_->set_scalar(idx, val);
     }
 
     template<class T, std::enable_if_t<std::is_same_v<std::decay_t<T>, std::string>, int> = 0>
-    void set_scalar(position_t idx, T val) {
+    void set_scalar(position_t idx, T val)
+    {
         impl_->set_string(idx, val);
     }
 
-    friend bool operator==(const SegmentInMemory& left, const SegmentInMemory& right) {
+    friend bool operator==(const SegmentInMemory& left, const SegmentInMemory& right)
+    {
         return *left.impl_ == *right.impl_;
     }
 
-    const auto& fields() const {
+    const auto& fields() const
+    {
         return impl_->fields();
     }
 
-    const auto& field(size_t index) const {
+    const auto& field(size_t index) const
+    {
         return impl_->field(index);
     }
 
-    std::optional<std::size_t> column_index(std::string_view name) const {
+    std::optional<std::size_t> column_index(std::string_view name) const
+    {
         return impl_->column_index(name);
     }
 
-    void init_column_map() const  {
+    void init_column_map() const
+    {
         impl_->init_column_map();
     }
 
-    template<class T, template<class> class Tensor, std::enable_if_t<
-            std::is_integral_v<T> || std::is_floating_point_v<T>,
-            int> = 0>
-    void set_array(position_t pos, Tensor<T> &val) {
+    template<class T,
+        template<class>
+        class Tensor,
+        std::enable_if_t<std::is_integral_v<T> || std::is_floating_point_v<T>, int> = 0>
+    void set_array(position_t pos, Tensor<T>& val)
+    {
         impl_->set_array(pos, val);
     }
 
-    template<class T, std::enable_if_t<
-        std::is_integral_v<T> || std::is_floating_point_v<T>,
-        int> = 0>
-    void set_array(position_t pos, py::array_t<T>& val) {
+    template<class T, std::enable_if_t<std::is_integral_v<T> || std::is_floating_point_v<T>, int> = 0>
+    void set_array(position_t pos, py::array_t<T>& val)
+    {
         impl_->set_array(pos, val);
     }
 
-    void set_string(position_t pos, std::string_view str) {
+    void set_string(position_t pos, std::string_view str)
+    {
         impl_->set_string(pos, str);
     }
 
-    void set_string_at(position_t col, position_t row, const char* str, size_t size) {
+    void set_string_at(position_t col, position_t row, const char* str, size_t size)
+    {
         impl_->set_string_at(col, row, str, size);
     }
 
-    void set_no_string_at(position_t col, position_t row, OffsetString::offset_t placeholder) {
+    void set_no_string_at(position_t col, position_t row, OffsetString::offset_t placeholder)
+    {
         impl_->set_no_string_at(col, row, placeholder);
     }
 
-    void set_string_array(position_t idx, size_t string_size, size_t num_strings, char *data) {
+    void set_string_array(position_t idx, size_t string_size, size_t num_strings, char* data)
+    {
         impl_->set_string_array(idx, string_size, num_strings, data);
     }
 
-    void set_string_list(position_t idx, const std::vector<std::string> &input) {
+    void set_string_list(position_t idx, const std::vector<std::string>& input)
+    {
         impl_->set_string_list(idx, input);
     }
 
-    void set_value(position_t idx, const SegmentInMemoryImpl::Location& loc) {
+    void set_value(position_t idx, const SegmentInMemoryImpl::Location& loc)
+    {
         impl_->set_value(idx, loc);
     }
 
     //pybind11 can't resolve const and non-const version of column()
-    Column &column_ref(position_t idx) {
+    Column& column_ref(position_t idx)
+    {
         return impl_->column_ref(idx);
     }
 
-    Column &column(position_t idx) {
+    Column& column(position_t idx)
+    {
         return impl_->column(idx);
     }
 
-    const Column &column(position_t idx) const {
+    const Column& column(position_t idx) const
+    {
         return impl_->column(idx);
     }
 
-    std::vector<std::shared_ptr<Column>>& columns() {
+    std::vector<std::shared_ptr<Column>>& columns()
+    {
         return impl_->columns();
     }
 
-    const std::vector<std::shared_ptr<Column>>& columns() const {
+    const std::vector<std::shared_ptr<Column>>& columns() const
+    {
         return impl_->columns();
     }
 
-    position_t add_column(const FieldDescriptor::Proto &field, size_t num_rows, bool presize) {
+    position_t add_column(const FieldDescriptor::Proto& field, size_t num_rows, bool presize)
+    {
         return impl_->add_column(field, num_rows, presize);
     }
 
-    position_t add_column(const FieldDescriptor::Proto &field, const std::shared_ptr<Column>& column) {
+    position_t add_column(const FieldDescriptor::Proto& field, const std::shared_ptr<Column>& column)
+    {
         return impl_->add_column(field, column);
     }
 
-    size_t num_blocks() const {
+    size_t num_blocks() const
+    {
         return impl_->num_blocks();
     }
 
-    void append(const SegmentInMemory& other) {
+    void append(const SegmentInMemory& other)
+    {
         impl_->append(*other.impl_);
     }
 
-    util::BitSet get_duplicates_bitset(SegmentInMemory& other) {
+    util::BitSet get_duplicates_bitset(SegmentInMemory& other)
+    {
         return impl_->get_duplicates_bitset(*other.impl_);
     }
 
-    void drop_column(position_t column) {
+    void drop_column(position_t column)
+    {
         impl_->drop_column(column);
     }
 
     template<typename T>
-    std::optional<T> scalar_at(position_t row, position_t col) const {
+    std::optional<T> scalar_at(position_t row, position_t col) const
+    {
         return impl_->scalar_at<T>(row, col);
     }
 
     template<typename T>
-    std::optional<TensorType<T>> tensor_at(position_t row, position_t col) const {
+    std::optional<TensorType<T>> tensor_at(position_t row, position_t col) const
+    {
         return impl_->tensor_at<T>(row, col);
     }
 
-    std::optional<std::string_view> string_at(position_t row, position_t col) const {
+    std::optional<std::string_view> string_at(position_t row, position_t col) const
+    {
         return impl_->string_at(row, col);
     }
 
-    std::optional<Column::StringArrayData> string_array_at(position_t row, position_t col) {
+    std::optional<Column::StringArrayData> string_array_at(position_t row, position_t col)
+    {
         return impl_->string_array_at(row, col);
     }
 
-    size_t num_columns() const { return impl_->num_columns(); }
+    size_t num_columns() const
+    {
+        return impl_->num_columns();
+    }
 
-    size_t num_fields() const { return impl_->num_fields(); }
+    size_t num_fields() const
+    {
+        return impl_->num_fields();
+    }
 
-    size_t row_count() const { return impl_->row_count(); }
+    size_t row_count() const
+    {
+        return impl_->row_count();
+    }
 
-    void unsparsify() {
+    void unsparsify()
+    {
         impl_->unsparsify();
     }
 
-    void sparsify() {
+    void sparsify()
+    {
         impl_->sparsify();
     }
 
     template<class T, std::enable_if_t<std::is_integral_v<T> || std::is_floating_point_v<T>, int> = 0>
-    void set_external_block(position_t idx, T *val, size_t size) {
+    void set_external_block(position_t idx, T* val, size_t size)
+    {
         impl_->set_external_block(idx, val, size);
     }
 
     template<class T, std::enable_if_t<std::is_integral_v<T> || std::is_floating_point_v<T>, int> = 0>
-    void set_sparse_block(position_t idx, T *val, size_t rows_to_write) {
+    void set_sparse_block(position_t idx, T* val, size_t rows_to_write)
+    {
         impl_->set_sparse_block(idx, val, rows_to_write);
     }
 
-    void set_sparse_block(position_t idx, ChunkedBuffer&& buffer, Buffer&& shapes, util::BitSet&& bitset) {
+    void set_sparse_block(position_t idx, ChunkedBuffer&& buffer, Buffer&& shapes, util::BitSet&& bitset)
+    {
         impl_->set_sparse_block(idx, std::move(buffer), std::move(shapes), std::move(bitset));
     }
 
-    void set_sparse_block(position_t idx, ChunkedBuffer&& buffer, util::BitSet&& bitset) {
+    void set_sparse_block(position_t idx, ChunkedBuffer&& buffer, util::BitSet&& bitset)
+    {
         impl_->set_sparse_block(idx, std::move(buffer), std::move(bitset));
     }
 
-    void set_secondary_type(position_t idx, TypeDescriptor type) {
+    void set_secondary_type(position_t idx, TypeDescriptor type)
+    {
         impl_->set_secondary_type(idx, type);
     }
 
-    void set_offset(ssize_t offset) {
+    void set_offset(ssize_t offset)
+    {
         impl_->set_offset(offset);
     }
 
-    ssize_t offset() const {
+    ssize_t offset() const
+    {
         return impl_->offset();
     }
 
-    void clear() {
+    void clear()
+    {
         impl_->clear();
     }
 
-    void end_block_write(size_t size) {
+    void end_block_write(size_t size)
+    {
         impl_->end_block_write(size);
     }
 
-    size_t string_pool_size() const { return impl_->string_pool_size(); }
+    size_t string_pool_size() const
+    {
+        return impl_->string_pool_size();
+    }
 
-    bool has_string_pool() const { return impl_->has_string_pool(); }
+    bool has_string_pool() const
+    {
+        return impl_->has_string_pool();
+    }
 
-    static FieldDescriptor string_pool_descriptor() {
+    static FieldDescriptor string_pool_descriptor()
+    {
         return SegmentInMemoryImpl::string_pool_descriptor();
     }
 
-    ColumnData string_pool_data() const {
+    ColumnData string_pool_data() const
+    {
         return impl_->string_pool_data();
     }
 
-    ColumnData column_data(size_t col) const {
+    ColumnData column_data(size_t col) const
+    {
         return impl_->column_data(col);
     }
 
-    const StreamDescriptor &descriptor() const {
+    const StreamDescriptor& descriptor() const
+    {
         return impl_->descriptor();
     }
 
-    StreamDescriptor &descriptor() {
+    StreamDescriptor& descriptor()
+    {
         return impl_->descriptor();
     }
 
-    const std::shared_ptr<StreamDescriptor>& descriptor_ptr() const {
+    const std::shared_ptr<StreamDescriptor>& descriptor_ptr() const
+    {
         return impl_->descriptor_ptr();
     }
-    StringPool &string_pool() {
+    StringPool& string_pool()
+    {
         return impl_->string_pool();
     }
 
-    void string_pool_assign(const SegmentInMemory& other) {
+    void string_pool_assign(const SegmentInMemory& other)
+    {
         impl_->string_pool_assign(*other.impl_);
     }
 
-    const StringPool &const_string_pool() const {
+    const StringPool& const_string_pool() const
+    {
         return impl_->string_pool();
     }
 
-    const std::shared_ptr<StringPool>& string_pool_ptr() const {
+    const std::shared_ptr<StringPool>& string_pool_ptr() const
+    {
         return impl_->string_pool_ptr();
     }
 
-    void set_metadata(google::protobuf::Any &&meta) {
+    void set_metadata(google::protobuf::Any&& meta)
+    {
         impl_->set_metadata(std::move(meta));
     }
 
-    void override_metadata(google::protobuf::Any &&meta) {
+    void override_metadata(google::protobuf::Any&& meta)
+    {
         impl_->override_metadata(std::move(meta));
     }
 
-    ssize_t get_row_id() {
+    ssize_t get_row_id()
+    {
         return impl_->get_row_id();
     }
 
-    void set_row_id(ssize_t rid) {
+    void set_row_id(ssize_t rid)
+    {
         impl_->set_row_id(rid);
     }
 
-    void set_row_data(ssize_t rid) {
+    void set_row_data(ssize_t rid)
+    {
         impl_->set_row_data(rid);
     }
 
-    const google::protobuf::Any *metadata() const {
+    const google::protobuf::Any* metadata() const
+    {
         return impl_->metadata();
     }
 
-    bool is_index_sorted() const {
+    bool is_index_sorted() const
+    {
         return impl_->is_index_sorted();
     }
 
-    void sort(const std::string& column) {
+    void sort(const std::string& column)
+    {
         impl_->sort(column);
     }
 
-    void sort(position_t column) {
+    void sort(position_t column)
+    {
         impl_->sort(column);
     }
 
-    SegmentInMemory clone() {
+    SegmentInMemory clone()
+    {
         return SegmentInMemory(std::make_shared<SegmentInMemoryImpl>(impl_->clone()));
     }
 
-    void set_string_pool(const std::shared_ptr<StringPool>& string_pool) {
+    void set_string_pool(const std::shared_ptr<StringPool>& string_pool)
+    {
         impl_->set_string_pool(string_pool);
     }
 
-    SegmentInMemory filter(const util::BitSet& filter_bitset,
-                           bool filter_down_stringpool=false,
-                           bool validate=false) const{
+    SegmentInMemory
+    filter(const util::BitSet& filter_bitset, bool filter_down_stringpool = false, bool validate = false) const
+    {
         return SegmentInMemory(impl_->filter(filter_bitset, filter_down_stringpool, validate));
     }
 
-    bool empty() const {
+    bool empty() const
+    {
         return is_null() || impl_->empty();
     }
 
-    bool is_null() const {
+    bool is_null() const
+    {
         return !static_cast<bool>(impl_);
     }
 
-    size_t num_bytes() const {
+    size_t num_bytes() const
+    {
         return impl_->num_bytes();
     }
 
-    bool compacted() const  {
+    bool compacted() const
+    {
         return impl_->compacted();
     }
 
-    void set_compacted(bool val) {
+    void set_compacted(bool val)
+    {
         impl_->set_compacted(val);
     }
 
-    void change_schema(const StreamDescriptor& descriptor) {
+    void change_schema(const StreamDescriptor& descriptor)
+    {
         return impl_->change_schema(descriptor);
     }
 
-    SegmentInMemoryImpl* impl() {
+    SegmentInMemoryImpl* impl()
+    {
         return impl_.get();
     }
 
-    void check_magic() const {
+    void check_magic() const
+    {
         impl_->check_magic();
     }
 
-    void compact_blocks() {
+    void compact_blocks()
+    {
         impl_->compact_blocks();
     }
 
-    std::shared_ptr<Column> column_ptr(position_t idx) {
+    std::shared_ptr<Column> column_ptr(position_t idx)
+    {
         return impl_->column_ptr(idx);
     }
 
-    template <typename RowType>
-    RowType make_row_ref(std::size_t row_id) {
+    template<typename RowType>
+    RowType make_row_ref(std::size_t row_id)
+    {
         if constexpr (std::is_same_v<RowType, Row>) {
             return RowType(impl(), row_id);
         } else {
@@ -405,29 +509,33 @@ public:
         }
     }
 
-    bool allow_sparse() const {
+    bool allow_sparse() const
+    {
         return impl_->allow_sparse();
     }
 
-
-    bool is_sparse() const {
+    bool is_sparse() const
+    {
         return impl_->is_sparse();
     }
 
-    [[nodiscard]] std::vector<SegmentInMemory> split(size_t rows) const {
+    [[nodiscard]] std::vector<SegmentInMemory> split(size_t rows) const
+    {
         std::vector<SegmentInMemory> output;
         auto new_impls = impl_->split(rows);
-        for(const auto& impl : new_impls)
+        for (const auto& impl : new_impls)
             output.push_back(SegmentInMemory{impl});
 
         return output;
     }
 
 private:
-    explicit SegmentInMemory(std::shared_ptr<SegmentInMemoryImpl> impl) :
-            impl_(std::move(impl)) {}
+    explicit SegmentInMemory(std::shared_ptr<SegmentInMemoryImpl> impl)
+        : impl_(std::move(impl))
+    {
+    }
 
     std::shared_ptr<SegmentInMemoryImpl> impl_;
 };
 
-}
+} // namespace arcticdb

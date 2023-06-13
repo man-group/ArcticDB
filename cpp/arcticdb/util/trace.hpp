@@ -16,6 +16,6 @@
 
 namespace arcticdb {
 
-std::string get_type_name(const std::type_info & );
+std::string get_type_name(const std::type_info&);
 
 }

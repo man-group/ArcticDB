@@ -22,22 +22,27 @@ class VariantStorage final : public Storage<VariantStorage<VariantStorageType>> 
     using Parent = Storage<VariantStorage>;
     friend Parent;
 
-  public:
-
+public:
     template<class T, std::enable_if_t<!std::is_same_v<std::decay_t<T>, VariantStorage>, int> = 0>
-    explicit VariantStorage(T &&v) :
-        Parent(v.library_path(), v.open_mode()), variant_(std::move(v)){}
+    explicit VariantStorage(T&& v)
+        : Parent(v.library_path(), v.open_mode()),
+          variant_(std::move(v))
+    {
+    }
 
     template<class Lambda>
-    auto delegate(Lambda &&l) {
-        return std::visit([&](auto &&impl) {
-            using Impl = std::decay_t<decltype(impl)>;
-            if constexpr (std::is_same_v<Impl, std::monostate>) {
-                throw std::runtime_error("Cannot call method on monostate");
-            } else {
-                return l(impl);
-            }
-        }, variant_);
+    auto delegate(Lambda&& l)
+    {
+        return std::visit(
+            [&](auto&& impl) {
+                using Impl = std::decay_t<decltype(impl)>;
+                if constexpr (std::is_same_v<Impl, std::monostate>) {
+                    throw std::runtime_error("Cannot call method on monostate");
+                } else {
+                    return l(impl);
+                }
+            },
+            variant_);
     }
 
     /**
@@ -50,65 +55,58 @@ class VariantStorage final : public Storage<VariantStorage<VariantStorageType>> 
      * The visitor cannot return anything to simplify templating.
      */
     template<class Visitor>
-    void storage_specific(Visitor&& visitor) {
+    void storage_specific(Visitor&& visitor)
+    {
         util::variant_match(variant_,
-                std::forward<Visitor>(visitor),
-                [](const StorageBase&) { /* Do nothing if the visitor's type didn't match. */});
+            std::forward<Visitor>(visitor),
+            [](const StorageBase&) { /* Do nothing if the visitor's type didn't match. */ });
     }
 
-  protected:
-    void do_write(Composite<KeySegmentPair>&& kvs) {
-        return delegate([&](auto &&impl) {
-            return impl.write(std::move(kvs));
-        });
+protected:
+    void do_write(Composite<KeySegmentPair>&& kvs)
+    {
+        return delegate([&](auto&& impl) { return impl.write(std::move(kvs)); });
     }
 
-    void do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts opts) {
-        return delegate([&](auto &&impl) {
-            return impl.update(std::move(kvs), opts);
-        });
-    }
-
-    template<class Visitor>
-    void do_read(Composite<VariantKey>&& ks, Visitor &&visitor, ReadKeyOpts opts) {
-        return delegate([&](auto &&impl) {
-            return impl.read(std::move(ks), std::move(visitor), opts);
-        });
-    }
-
-    void do_remove(Composite<VariantKey> ks, RemoveOpts opts) {
-         delegate([&](auto &&impl) {
-             impl.remove(std::move(ks), opts);
-        });
+    void do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts opts)
+    {
+        return delegate([&](auto&& impl) { return impl.update(std::move(kvs), opts); });
     }
 
     template<class Visitor>
-    void do_iterate_type(KeyType key_type, Visitor &&visitor, const std::string &prefix) {
-         delegate([&](auto &&impl) {
-             impl.iterate_type(key_type, visitor, prefix);
-        });
+    void do_read(Composite<VariantKey>&& ks, Visitor&& visitor, ReadKeyOpts opts)
+    {
+        return delegate([&](auto&& impl) { return impl.read(std::move(ks), std::move(visitor), opts); });
     }
 
-    bool do_supports_prefix_matching() {
-        return delegate([&](auto &&impl) {
-            return impl.supports_prefix_matching();
-        });
+    void do_remove(Composite<VariantKey> ks, RemoveOpts opts)
+    {
+        delegate([&](auto&& impl) { impl.remove(std::move(ks), opts); });
     }
 
-    bool do_fast_delete() {
-        return delegate([&](auto &&impl) {
-            return impl.fast_delete();
-        });
+    template<class Visitor>
+    void do_iterate_type(KeyType key_type, Visitor&& visitor, const std::string& prefix)
+    {
+        delegate([&](auto&& impl) { impl.iterate_type(key_type, visitor, prefix); });
     }
 
-    bool do_key_exists(const VariantKey& key ) {
-        return delegate([&](auto &&impl) {
-            return impl.key_exists(key);
-        });
+    bool do_supports_prefix_matching()
+    {
+        return delegate([&](auto&& impl) { return impl.supports_prefix_matching(); });
     }
 
-  private:
+    bool do_fast_delete()
+    {
+        return delegate([&](auto&& impl) { return impl.fast_delete(); });
+    }
+
+    bool do_key_exists(const VariantKey& key)
+    {
+        return delegate([&](auto&& impl) { return impl.key_exists(key); });
+    }
+
+private:
     VariantStorageType variant_;
 };
 
-} //namespace arcticdb::storage
+} // namespace arcticdb::storage::variant

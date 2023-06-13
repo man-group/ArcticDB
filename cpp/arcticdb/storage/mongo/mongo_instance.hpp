@@ -16,7 +16,8 @@ namespace arcticdb::storage::mongo {
 
 class MongoInstance {
     mongocxx::instance api_instance_;
-  public:
+
+public:
     static std::shared_ptr<MongoInstance> instance_;
     static std::once_flag init_flag_;
 
@@ -25,4 +26,4 @@ class MongoInstance {
     static void destroy_instance();
 };
 
-}
+} // namespace arcticdb::storage::mongo

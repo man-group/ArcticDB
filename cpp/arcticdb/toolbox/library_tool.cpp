@@ -21,67 +21,73 @@ namespace arcticdb::toolbox::apy {
 
 using namespace arcticdb::entity;
 
-Segment LibraryTool::read_to_segment(const VariantKey& key) {
-    auto kv = std::visit([lib=lib_](const auto &k) { return lib->read(k); }, key);
+Segment LibraryTool::read_to_segment(const VariantKey& key)
+{
+    auto kv = std::visit([lib = lib_](const auto& k) { return lib->read(k); }, key);
     util::check(kv.has_segment(), "Failed to read key: {}", key);
     return kv.segment();
 }
 
-void LibraryTool::write(VariantKey key, Segment segment) {
+void LibraryTool::write(VariantKey key, Segment segment)
+{
     storage::KeySegmentPair kv{std::move(key), std::move(segment)};
     lib_->write(Composite<storage::KeySegmentPair>{std::move(kv)});
 }
 
-void LibraryTool::remove(VariantKey key) {
+void LibraryTool::remove(VariantKey key)
+{
     lib_->remove(Composite<VariantKey>{std::move(key)}, storage::RemoveOpts{});
 }
 
-void LibraryTool::clear_ref_keys() {
+void LibraryTool::clear_ref_keys()
+{
     auto store = std::make_shared<arcticdb::async::AsyncStore<util::SysClock>>(lib_, codec::default_lz4_codec());
     delete_all_keys_of_type(KeyType::SNAPSHOT_REF, store, false);
 }
 
-std::vector<VariantKey> LibraryTool::find_keys(entity::KeyType kt) {
+std::vector<VariantKey> LibraryTool::find_keys(entity::KeyType kt)
+{
     std::vector<VariantKey> res;
-    lib_->iterate_type(kt, [&](auto &&found_key) {
-        res.emplace_back(found_key);
-    });
+    lib_->iterate_type(kt, [&](auto&& found_key) { res.emplace_back(found_key); });
     return res;
 }
 
-int LibraryTool::count_keys(entity::KeyType kt) {
+int LibraryTool::count_keys(entity::KeyType kt)
+{
     int count = 0;
-    lib_->iterate_type(kt, [&](auto &&found_key ARCTICDB_UNUSED) {
-        count++;
-    });
+    lib_->iterate_type(kt, [&](auto&& found_key ARCTICDB_UNUSED) { count++; });
     return count;
 }
 
-std::vector<bool> LibraryTool::batch_key_exists(const std::vector<VariantKey>& keys) {
+std::vector<bool> LibraryTool::batch_key_exists(const std::vector<VariantKey>& keys)
+{
     auto store = std::make_shared<arcticdb::async::AsyncStore<util::SysClock>>(lib_, codec::default_lz4_codec());
     auto key_exists_fut = store->batch_key_exists(keys);
     return folly::collect(key_exists_fut).get();
 }
 
-std::vector<VariantKey> LibraryTool::find_keys_for_id(entity::KeyType kt, const StreamId &stream_id) {
+std::vector<VariantKey> LibraryTool::find_keys_for_id(entity::KeyType kt, const StreamId& stream_id)
+{
     util::check(std::holds_alternative<StringId>(stream_id), "keys for id only implemented for string ids");
 
     std::vector<VariantKey> res;
-    const auto &string_id = std::get<StringId>(stream_id);
-    lib_->iterate_type(kt, [&](auto &&found_key) {
-        // Only S3 handles the prefix in iterate_type, the others just return everything, thus the additional check.
-        if (variant_key_id(found_key) == stream_id) {
-            res.emplace_back(found_key);
-        }
-    }, string_id);
+    const auto& string_id = std::get<StringId>(stream_id);
+    lib_->iterate_type(
+        kt,
+        [&](auto&& found_key) {
+            // Only S3 handles the prefix in iterate_type, the others just return everything, thus the additional check.
+            if (variant_key_id(found_key) == stream_id) {
+                res.emplace_back(found_key);
+            }
+        },
+        string_id);
     return res;
 }
 
-std::string LibraryTool::get_key_path(const VariantKey& key) {
+std::string LibraryTool::get_key_path(const VariantKey& key)
+{
     std::string out = "";
-    lib_->storage_specific([&out, &key](const storage::s3::S3Storage& s3) {
-        out = s3.get_key_path(key);
-    });
+    lib_->storage_specific([&out, &key](const storage::s3::S3Storage& s3) { out = s3.get_key_path(key); });
     return out;
 }
 

@@ -22,7 +22,7 @@
 namespace arcticdb::storage {
 
 class Storages {
-  public:
+public:
     Storages(const Storages&) = delete;
     Storages(Storages&&) = default;
     Storages& operator=(const Storages&) = delete;
@@ -30,45 +30,54 @@ class Storages {
 
     using StorageVector = std::vector<std::unique_ptr<VariantStorage>>;
 
-    Storages(StorageVector&& variant_storages, OpenMode mode) :
-        variant_storages_(std::move(variant_storages)), mode_(mode) {
+    Storages(StorageVector&& variant_storages, OpenMode mode)
+        : variant_storages_(std::move(variant_storages)),
+          mode_(mode)
+    {
     }
 
-    void write(Composite<KeySegmentPair>&& kvs) {
+    void write(Composite<KeySegmentPair>&& kvs)
+    {
         ARCTICDB_SAMPLE(StorageWrite, 0)
         primary().write(std::move(kvs));
     }
 
-    void update(Composite<KeySegmentPair>&& kvs, storage::UpdateOpts opts) {
+    void update(Composite<KeySegmentPair>&& kvs, storage::UpdateOpts opts)
+    {
         ARCTICDB_SAMPLE(StorageUpdate, 0)
         primary().update(std::move(kvs), opts);
     }
 
-    bool supports_prefix_matching() {
+    bool supports_prefix_matching()
+    {
         return primary().supports_prefix_matching();
     }
 
-    bool fast_delete() {
+    bool fast_delete()
+    {
         return primary().fast_delete();
     }
 
-    bool key_exists(const VariantKey& key) {
+    bool key_exists(const VariantKey& key)
+    {
         return primary().key_exists(key);
     }
 
     template<class Visitor>
-    auto read(Composite<VariantKey>&& ks, Visitor &&v, ReadKeyOpts opts, bool primary_only=true) {
+    auto read(Composite<VariantKey>&& ks, Visitor&& v, ReadKeyOpts opts, bool primary_only = true)
+    {
         ARCTICDB_RUNTIME_SAMPLE(StorageRead, 0)
-        if(primary_only)
+        if (primary_only)
             return primary().read(std::move(ks), std::forward<Visitor>(v), opts);
 
-        if(auto rg = ks.as_range(); !std::all_of(std::begin(rg), std::end(rg), [] (const auto& vk) {
-            return variant_key_type(vk) == KeyType::TABLE_DATA;
-        })) {
+        if (auto rg = ks.as_range(); !std::all_of(std::begin(rg), std::end(rg), [](const auto& vk) {
+                return variant_key_type(vk) == KeyType::TABLE_DATA;
+            }))
+        {
             return primary().read(std::move(ks), std::forward<Visitor>(v), opts);
         }
 
-        for(const auto& storage : variant_storages_) {
+        for (const auto& storage : variant_storages_) {
             auto visitor = std::forward<Visitor>(v);
             try {
                 return storage->read(std::move(ks), Visitor{visitor}, opts);
@@ -81,13 +90,15 @@ class Storages {
     }
 
     template<class Visitor>
-    void iterate_type(KeyType key_type, Visitor &&v, const std::string &prefix=std::string{}, bool primary_only=true) {
+    void
+    iterate_type(KeyType key_type, Visitor&& v, const std::string& prefix = std::string{}, bool primary_only = true)
+    {
         ARCTICDB_SAMPLE(StorageIterateType, RMTSF_Aggregate)
-        if(primary_only) {
+        if (primary_only) {
             primary().iterate_type(key_type, std::forward<Visitor>(v), prefix);
         } else {
             auto visitor = std::forward<Visitor>(v);
-            for(const auto& storage : variant_storages_) {
+            for (const auto& storage : variant_storages_) {
                 storage->iterate_type(key_type, std::decay_t<Visitor>{visitor}, prefix);
             }
         }
@@ -95,22 +106,29 @@ class Storages {
 
     /** Calls VariantStorage::do_storage_specific on the primary storage. Remember to check the open mode. */
     template<class Visitor>
-    void storage_specific(Visitor&& visitor) {
+    void storage_specific(Visitor&& visitor)
+    {
         primary().storage_specific(std::forward<Visitor>(visitor));
     }
 
-    void remove(Composite<VariantKey>&& ks, storage::RemoveOpts opts) {
+    void remove(Composite<VariantKey>&& ks, storage::RemoveOpts opts)
+    {
         primary().remove(std::move(ks), opts);
     }
 
-    [[nodiscard]] OpenMode open_mode() const { return mode_; }
+    [[nodiscard]] OpenMode open_mode() const
+    {
+        return mode_;
+    }
 
-    void move_storage(KeyType key_type, timestamp horizon, size_t storage_index = 0) {
-        util::check(storage_index + 1 < variant_storages_.size(), "Cannot move from storage {} to storage {} as only {} storages defined");
+    void move_storage(KeyType key_type, timestamp horizon, size_t storage_index = 0)
+    {
+        util::check(storage_index + 1 < variant_storages_.size(),
+            "Cannot move from storage {} to storage {} as only {} storages defined");
         auto& source = *variant_storages_[storage_index];
         auto& target = *variant_storages_[storage_index + 1];
 
-        source.iterate_type(key_type, [&source, &target, horizon] (auto&& vk) {
+        source.iterate_type(key_type, [&source, &target, horizon](auto&& vk) {
             auto key = std::forward<VariantKey>(vk);
             if (to_atom(key).creation_ts() < horizon) {
                 try {
@@ -124,10 +142,11 @@ class Storages {
                 ARCTICDB_DEBUG(log::storage(), "Not moving key {} as it is too recent", key);
             }
         });
-   }
+    }
 
-  private:
-    VariantStorage& primary() {
+private:
+    VariantStorage& primary()
+    {
         util::check(!variant_storages_.empty(), "No storages configured");
         return *variant_storages_[0];
     }
@@ -136,7 +155,10 @@ class Storages {
     OpenMode mode_;
 };
 
-inline std::shared_ptr<Storages> create_storages(const LibraryPath& library_path, OpenMode mode, const arcticdb::proto::storage::VariantStorage &storage_config) {
+inline std::shared_ptr<Storages> create_storages(const LibraryPath& library_path,
+    OpenMode mode,
+    const arcticdb::proto::storage::VariantStorage& storage_config)
+{
     using VariantVec = std::vector<std::unique_ptr<VariantStorage>>;
     VariantVec variants;
     variants.push_back(create_storage(library_path, mode, storage_config));
@@ -144,10 +166,13 @@ inline std::shared_ptr<Storages> create_storages(const LibraryPath& library_path
     return std::make_shared<Storages>(std::move(variants), mode);
 }
 
-inline std::shared_ptr<Storages> create_storages(const LibraryPath& library_path, OpenMode mode, const std::vector<arcticdb::proto::storage::VariantStorage> &storage_configs) {
+inline std::shared_ptr<Storages> create_storages(const LibraryPath& library_path,
+    OpenMode mode,
+    const std::vector<arcticdb::proto::storage::VariantStorage>& storage_configs)
+{
     using VariantVec = std::vector<std::unique_ptr<VariantStorage>>;
     VariantVec variants;
-    for (const auto& storage_config: storage_configs) {
+    for (const auto& storage_config : storage_configs) {
         variants.push_back(create_storage(library_path, mode, storage_config));
     }
     return std::make_shared<Storages>(std::move(variants), mode);

@@ -11,11 +11,13 @@
 
 namespace arcticdb {
 
-inline bool opt_true(const std::optional<bool> &opt) {
+inline bool opt_true(const std::optional<bool>& opt)
+{
     return !opt || opt.value();
 }
 
-inline bool opt_false(const std::optional<bool> &opt) {
+inline bool opt_false(const std::optional<bool>& opt)
+{
     return opt && opt.value();
 }
-} //namespace
+} // namespace arcticdb

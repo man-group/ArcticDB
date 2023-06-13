@@ -13,8 +13,6 @@ namespace py = pybind11;
 
 namespace arcticdb::async {
 
-void register_bindings(py::module &m);
+void register_bindings(py::module& m);
 
 } // namespace arcticdb::async
-
-

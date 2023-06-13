@@ -48,233 +48,186 @@ namespace as = arcticdb::stream;
  */
 class PythonVersionStore : public LocalVersionedEngine {
 
-  public:
-    explicit PythonVersionStore(
-        const std::shared_ptr<storage::Library>& library);
+public:
+    explicit PythonVersionStore(const std::shared_ptr<storage::Library>& library);
 
-    VersionedItem write_dataframe_specific_version(
-        const StreamId& stream_id,
+    VersionedItem write_dataframe_specific_version(const StreamId& stream_id,
         const py::tuple& item,
         const py::object& norm,
         const py::object& user_meta,
         VersionId version_id);
 
-    VersionedItem write_versioned_dataframe(
-        const StreamId& stream_id,
-        const py::tuple &item,
-        const py::object &norm,
-        const py::object & user_meta,
+    VersionedItem write_versioned_dataframe(const StreamId& stream_id,
+        const py::tuple& item,
+        const py::object& norm,
+        const py::object& user_meta,
         bool prune_previous_versions,
         bool allow_sparse,
         bool validate_index);
 
-    VersionedItem write_versioned_composite_data(
-        const StreamId& stream_id,
-        const py::object &metastruct,
-        const std::vector<StreamId> &sub_keys,  // TODO: make this optional?
-        const std::vector<py::tuple> &items,
-        const std::vector<py::object> &norm_metas,
-        const py::object &user_meta);
+    VersionedItem write_versioned_composite_data(const StreamId& stream_id,
+        const py::object& metastruct,
+        const std::vector<StreamId>& sub_keys, // TODO: make this optional?
+        const std::vector<py::tuple>& items,
+        const std::vector<py::object>& norm_metas,
+        const py::object& user_meta);
 
-    VersionedItem write_partitioned_dataframe(
-        const StreamId& stream_id,
-        const py::tuple &item,
-        const py::object &norm_meta,
+    VersionedItem write_partitioned_dataframe(const StreamId& stream_id,
+        const py::tuple& item,
+        const py::object& norm_meta,
         const std::vector<std::string>& partition_cols);
 
-    ReadResult read_partitioned_dataframe(
-        const StreamId& stream_id,
-        const ReadQuery& query,
-        const ReadOptions& read_options);
+    ReadResult
+    read_partitioned_dataframe(const StreamId& stream_id, const ReadQuery& query, const ReadOptions& read_options);
 
-    VersionedItem append(
-        const StreamId& stream_id,
-        const py::tuple &item,
-        const py::object &norm,
-        const py::object & user_meta,
+    VersionedItem append(const StreamId& stream_id,
+        const py::tuple& item,
+        const py::object& norm,
+        const py::object& user_meta,
         bool upsert,
         bool prune_previous_versions,
         bool validate_index);
 
-    VersionedItem update(
-        const StreamId& stream_id,
-        const UpdateQuery & query,
-        const py::tuple &item,
-        const py::object &norm,
-        const py::object & user_meta,
+    VersionedItem update(const StreamId& stream_id,
+        const UpdateQuery& query,
+        const py::tuple& item,
+        const py::object& norm,
+        const py::object& user_meta,
         bool upsert,
         bool dynamic_schema,
         bool prune_previous_versions);
 
-    VersionedItem delete_range(
-        const StreamId& stream_id,
-        const UpdateQuery& query,
-        bool dynamic_schema);
+    VersionedItem delete_range(const StreamId& stream_id, const UpdateQuery& query, bool dynamic_schema);
 
-    void append_incomplete(
-        const StreamId& stream_id,
-        const py::tuple &item,
-        const py::object &norm,
-        const py::object & user_meta) const;
+    void append_incomplete(const StreamId& stream_id,
+        const py::tuple& item,
+        const py::object& norm,
+        const py::object& user_meta) const;
 
-    VersionedItem compact_incomplete(
-            const StreamId& stream_id,
-            bool append,
-            bool convert_int_to_float,
-            bool via_iteration = true,
-            bool sparsify = false,
-            const std::optional<py::object>& user_meta = std::nullopt);
+    VersionedItem compact_incomplete(const StreamId& stream_id,
+        bool append,
+        bool convert_int_to_float,
+        bool via_iteration = true,
+        bool sparsify = false,
+        const std::optional<py::object>& user_meta = std::nullopt);
 
-    void write_parallel(
-        const StreamId& stream_id,
-        const py::tuple &item,
-        const py::object &norm,
-        const py::object & user_meta) const;
+    void write_parallel(const StreamId& stream_id,
+        const py::tuple& item,
+        const py::object& norm,
+        const py::object& user_meta) const;
 
-    VersionedItem write_metadata(
-        const StreamId& stream_id,
-        const py::object & user_meta,
-        bool prune_previous_versions);
+    VersionedItem write_metadata(const StreamId& stream_id, const py::object& user_meta, bool prune_previous_versions);
 
-    ReadResult read_dataframe_version(
-        const StreamId &stream_id,
+    ReadResult read_dataframe_version(const StreamId& stream_id,
         const VersionQuery& version_query,
         ReadQuery& read_query,
         const ReadOptions& read_options);
 
-    VersionedItem sort_merge(
-            const StreamId& stream_id,
-            const py::object& user_meta,
-            bool append,
-            bool convert_int_to_float,
-            bool via_iteration,
-            bool sparsify
-            );
+    VersionedItem sort_merge(const StreamId& stream_id,
+        const py::object& user_meta,
+        bool append,
+        bool convert_int_to_float,
+        bool via_iteration,
+        bool sparsify);
 
-    ReadResult read_dataframe_merged(
-        const StreamId& target_id,
-        const std::vector<StreamId> &stream_ids,
+    ReadResult read_dataframe_merged(const StreamId& target_id,
+        const std::vector<StreamId>& stream_ids,
         const VersionQuery& version_query,
-        const ReadQuery &query,
+        const ReadQuery& query,
         const ReadOptions& read_options);
 
-    std::pair<VersionedItem, py::object> read_metadata(
-        const StreamId& stream_id,
-        const VersionQuery& version_query
-    );
+    std::pair<VersionedItem, py::object> read_metadata(const StreamId& stream_id, const VersionQuery& version_query);
 
-    std::vector<std::pair<VersionedItem, py::object>> batch_read_descriptor(
-        const std::vector<StreamId>& stream_ids,
+    std::vector<std::pair<VersionedItem, py::object>> batch_read_descriptor(const std::vector<StreamId>& stream_ids,
         const std::vector<VersionQuery>& version_queries);
 
-    std::pair<VersionedItem, py::object> read_descriptor(
-        const StreamId& stream_id,
-        const VersionQuery& version_query);
+    std::pair<VersionedItem, py::object> read_descriptor(const StreamId& stream_id, const VersionQuery& version_query);
 
-    ReadResult read_index(
-        const StreamId& stream_id,
-        const VersionQuery& version_query);
+    ReadResult read_index(const StreamId& stream_id, const VersionQuery& version_query);
 
-    void delete_snapshot(
-        const SnapshotId& snap_name);
+    void delete_snapshot(const SnapshotId& snap_name);
 
-    void delete_version(
-        const StreamId& stream_id,
-        const VersionId& version_id);
+    void delete_version(const StreamId& stream_id, const VersionId& version_id);
 
-    void prune_previous_versions(
-        const StreamId& stream_id);
+    void prune_previous_versions(const StreamId& stream_id);
 
-    void delete_all_versions(
-        const StreamId& stream_id);
+    void delete_all_versions(const StreamId& stream_id);
 
-    std::vector<timestamp> get_update_times(
-        const std::vector<StreamId>& stream_ids,
+    std::vector<timestamp> get_update_times(const std::vector<StreamId>& stream_ids,
         const std::vector<VersionQuery>& version_queries);
 
-    timestamp get_update_time(
-        const StreamId& stream_id,
-        const VersionQuery& version_query);
+    timestamp get_update_time(const StreamId& stream_id, const VersionQuery& version_query);
 
-    inline void fix_ref_key(StreamId stream_id) {
+    inline void fix_ref_key(StreamId stream_id)
+    {
         version_map()->fix_ref_key(store(), std::move(stream_id));
     }
 
-    inline void remove_and_rewrite_version_keys(StreamId stream_id) {
+    inline void remove_and_rewrite_version_keys(StreamId stream_id)
+    {
         version_map()->remove_and_rewrite_version_keys(store(), std::move(stream_id));
     }
 
-    inline bool check_ref_key(StreamId stream_id) {
+    inline bool check_ref_key(StreamId stream_id)
+    {
         return version_map()->check_ref_key(store(), std::move(stream_id));
     }
 
-    void snapshot(
-        const SnapshotId &snap_name,
-        const py::object &user_meta,
-        const std::vector<StreamId> &skip_symbols,
-        std::map<StreamId, VersionId> &versions);
+    void snapshot(const SnapshotId& snap_name,
+        const py::object& user_meta,
+        const std::vector<StreamId>& skip_symbols,
+        std::map<StreamId, VersionId>& versions);
 
     std::vector<std::pair<SnapshotId, py::object>> list_snapshots(const std::optional<bool> load_metadata);
 
-    void add_to_snapshot(
-        const SnapshotId& snap_name,
+    void add_to_snapshot(const SnapshotId& snap_name,
         const std::vector<StreamId>& stream_ids,
-        const std::vector<VersionQuery>& version_queries
-        );
+        const std::vector<VersionQuery>& version_queries);
 
-    void remove_from_snapshot(
-        const SnapshotId& snap_name,
+    void remove_from_snapshot(const SnapshotId& snap_name,
         const std::vector<StreamId>& stream_ids,
-        const std::vector<VersionId>& version_ids
-        );
+        const std::vector<VersionId>& version_ids);
 
     std::vector<std::tuple<StreamId, VersionId, timestamp, std::vector<SnapshotId>, bool>> list_versions(
-        const std::optional<StreamId> &stream_id,
+        const std::optional<StreamId>& stream_id,
         const std::optional<SnapshotId>& snap_name,
-        const std::optional<bool> &latest_only,
+        const std::optional<bool>& latest_only,
         const std::optional<bool>& iterate_on_failure,
         const std::optional<bool>& skip_snapshots);
 
     // Batch methods
-    std::vector<VersionedItem> batch_write(
-        const std::vector<StreamId> &stream_ids,
-        const std::vector<py::tuple> &items,
-        const std::vector<py::object> &norms,
-        const std::vector<py::object> &user_metas,
+    std::vector<VersionedItem> batch_write(const std::vector<StreamId>& stream_ids,
+        const std::vector<py::tuple>& items,
+        const std::vector<py::object>& norms,
+        const std::vector<py::object>& user_metas,
         bool prune_previous_versions,
         bool validate_index);
 
-    std::vector<VersionedItem> batch_write_metadata(
-        std::vector<StreamId> stream_ids,
+    std::vector<VersionedItem> batch_write_metadata(std::vector<StreamId> stream_ids,
         const std::vector<py::object>& user_meta,
         bool prune_previous_versions);
 
-    std::vector<VersionedItem> batch_append(
-        const std::vector<StreamId> &stream_ids,
-        const std::vector<py::tuple> &items,
-        const std::vector<py::object> &norms,
-        const std::vector<py::object> &user_metas,
+    std::vector<VersionedItem> batch_append(const std::vector<StreamId>& stream_ids,
+        const std::vector<py::tuple>& items,
+        const std::vector<py::object>& norms,
+        const std::vector<py::object>& user_metas,
         bool prune_previous_versions,
         bool ensre_sorted);
 
-    std::vector<std::pair<VersionedItem, arcticdb::proto::descriptors::TimeSeriesDescriptor>> batch_restore_version(
-        const std::vector<StreamId>& id,
-        const std::vector<VersionQuery>& version_query);
+    std::vector<std::pair<VersionedItem, arcticdb::proto::descriptors::TimeSeriesDescriptor>>
+    batch_restore_version(const std::vector<StreamId>& id, const std::vector<VersionQuery>& version_query);
 
-    std::vector<ReadResult> batch_read(
-        const std::vector<StreamId>& stream_ids,
+    std::vector<ReadResult> batch_read(const std::vector<StreamId>& stream_ids,
         const std::vector<VersionQuery>& version_queries,
         std::vector<ReadQuery>& read_queries,
         const ReadOptions& read_options);
 
-    std::vector<std::pair<VersionedItem, py::object>> batch_read_metadata(
-        const std::vector<StreamId>& stream_ids,
+    std::vector<std::pair<VersionedItem, py::object>> batch_read_metadata(const std::vector<StreamId>& stream_ids,
         const std::vector<VersionQuery>& version_queries);
 
-    std::set<StreamId> list_streams(
-        const std::optional<SnapshotId>& snap_name = std::nullopt,
-        const std::optional<std::string> &regex = std::nullopt,
-        const std::optional<std::string> &prefix = std::nullopt,
+    std::set<StreamId> list_streams(const std::optional<SnapshotId>& snap_name = std::nullopt,
+        const std::optional<std::string>& regex = std::nullopt,
+        const std::optional<std::string>& prefix = std::nullopt,
         const std::optional<bool>& use_symbol_list = std::nullopt,
         const std::optional<bool>& all_symbols = std::nullopt);
 
@@ -289,31 +242,30 @@ class PythonVersionStore : public LocalVersionedEngine {
 
     void fix_symbol_trees(const std::vector<StreamId>& symbols);
 
-    std::unordered_map<VersionId, bool> get_all_tombstoned_versions(const StreamId &stream_id);
+    std::unordered_map<VersionId, bool> get_all_tombstoned_versions(const StreamId& stream_id);
 
     std::vector<SliceAndKey> list_incompletes(const StreamId& stream_id);
 
     std::vector<AtomKey> get_version_history(const StreamId& stream_id);
 
 private:
-
-    std::vector<VersionedItem> batch_write_index_keys_to_version_map(
-        const std::vector<AtomKey>& index_keys,
+    std::vector<VersionedItem> batch_write_index_keys_to_version_map(const std::vector<AtomKey>& index_keys,
         const std::unordered_map<StreamId, UpdateInfo>& stream_update_info_map,
         bool prune_previous_versions);
 
     void delete_snapshot_sync(const SnapshotId& snap_name, const VariantKey& snap_key);
 };
 
-inline std::vector<ReadResult> frame_to_read_result(std::pair<std::vector<AtomKey>, std::vector<FrameAndDescriptor>>&& keys_frame_and_descriptors) {
+inline std::vector<ReadResult> frame_to_read_result(
+    std::pair<std::vector<AtomKey>, std::vector<FrameAndDescriptor>>&& keys_frame_and_descriptors)
+{
     auto& keys = keys_frame_and_descriptors.first;
     auto& frame_and_descriptors = keys_frame_and_descriptors.second;
 
     std::vector<ReadResult> read_results;
     read_results.reserve(keys.size());
     for (auto fd : folly::enumerate(frame_and_descriptors)) {
-        read_results.emplace_back(ReadResult(
-            VersionedItem{std::move(keys[fd.index])},
+        read_results.emplace_back(ReadResult(VersionedItem{std::move(keys[fd.index])},
             PythonOutputFrame{fd->frame_, fd->buffers_},
             fd->desc_.normalization(),
             fd->desc_.user_meta(),

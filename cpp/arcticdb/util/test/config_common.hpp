@@ -14,10 +14,10 @@
 
 namespace arcticdb {
 
-inline auto get_test_environment_config(
-    const arcticdb::storage::LibraryPath& path,
+inline auto get_test_environment_config(const arcticdb::storage::LibraryPath& path,
     const arcticdb::storage::StorageName& storage_name,
-    const arcticdb::storage::EnvironmentName& environment_name) {
+    const arcticdb::storage::EnvironmentName& environment_name)
+{
 
     using namespace arcticdb::storage;
     using MemoryConfig = storage::details::InMemoryConfigResolver::MemoryConfig;
@@ -34,8 +34,8 @@ inline auto get_test_environment_config(
     library_descriptor.add_storage_ids(storage_name.value);
     mem_config.libraries_.insert(std::make_pair(path, library_descriptor));
 
-    std::vector <std::pair<std::string, MemoryConfig>> output;
+    std::vector<std::pair<std::string, MemoryConfig>> output;
     output.emplace_back(environment_name.value, mem_config);
     return output;
 }
-}
+} // namespace arcticdb

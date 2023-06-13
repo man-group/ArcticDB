@@ -15,19 +15,18 @@
 
 struct MergeReadsTestStore : arcticdb::TestStore {
 protected:
-    std::string get_name() override {
+    std::string get_name() override
+    {
         return "test.merge_streams";
     }
 };
 
-TEST_F(MergeReadsTestStore, SimpleStaticSchema) {
+TEST_F(MergeReadsTestStore, SimpleStaticSchema)
+{
     using namespace arcticdb;
     using namespace arcticdb::stream;
-    using MergeAggregator =  Aggregator<TimeseriesIndex,
-                                          FixedSchema,
-                                          stream::RowCountSegmentPolicy,
-                                          stream::SparseColumnPolicy>;
-
+    using MergeAggregator =
+        Aggregator<TimeseriesIndex, FixedSchema, stream::RowCountSegmentPolicy, stream::SparseColumnPolicy>;
 
     using MergeSinkWrapper = SinkWrapperImpl<MergeAggregator>;
     const auto NumTests = 10;
@@ -35,27 +34,23 @@ TEST_F(MergeReadsTestStore, SimpleStaticSchema) {
     const std::string stream_id1("test_merge_1");
     const std::string stream_id2("test_merge_2");
 
-    MergeSinkWrapper wrapper1(stream_id1, {
-        scalar_field_proto(DataType::UINT64, "thing1"),
-        scalar_field_proto(DataType::UINT64, "thing2")}
-        );
+    MergeSinkWrapper wrapper1(stream_id1,
+        {scalar_field_proto(DataType::UINT64, "thing1"), scalar_field_proto(DataType::UINT64, "thing2")});
 
     auto& aggregator1 = wrapper1.aggregator_;
 
-    MergeSinkWrapper wrapper2(stream_id2, {
-        scalar_field_proto(DataType::UINT64, "thing1"),
-        scalar_field_proto(DataType::UINT64, "thing2")}
-    );
+    MergeSinkWrapper wrapper2(stream_id2,
+        {scalar_field_proto(DataType::UINT64, "thing1"), scalar_field_proto(DataType::UINT64, "thing2")});
 
     auto& aggregator2 = wrapper2.aggregator_;
 
-    for(timestamp i = 0; i < NumTests; i += 2) {
-        aggregator1.start_row(i)([&] (auto&& rb) {
+    for (timestamp i = 0; i < NumTests; i += 2) {
+        aggregator1.start_row(i)([&](auto&& rb) {
             rb.set_scalar(1, i);
             rb.set_scalar(2, i + 1);
         });
 
-        aggregator2.start_row(i + 1)([&] (auto&& rb) {
+        aggregator2.start_row(i + 1)([&](auto&& rb) {
             rb.set_scalar(1, i + 1);
             rb.set_scalar(2, i + 2);
         });
@@ -69,10 +64,14 @@ TEST_F(MergeReadsTestStore, SimpleStaticSchema) {
 
     const std::string target_id("some_merged_stuff");
     pipelines::ReadQuery read_query;
-    auto read_result = test_store_->read_dataframe_merged(target_id, {stream_id1, stream_id2}, pipelines::VersionQuery{}, read_query, ReadOptions{});
+    auto read_result = test_store_->read_dataframe_merged(target_id,
+        {stream_id1, stream_id2},
+        pipelines::VersionQuery{},
+        read_query,
+        ReadOptions{});
     const auto& frame = read_result.frame_data.frame();
 
-    for(timestamp i = 0; i < NumTests; i += 2) {
+    for (timestamp i = 0; i < NumTests; i += 2) {
         check_value(frame.scalar_at<uint64_t>(i, 2).value(), uint64_t(i));
         check_value(frame.scalar_at<uint64_t>(i, 3).value(), uint64_t(i + 1));
         check_value(frame.scalar_at<uint64_t>(i + 1, 2).value(), uint64_t(i + 1));
@@ -80,14 +79,12 @@ TEST_F(MergeReadsTestStore, SimpleStaticSchema) {
     }
 }
 
-TEST_F(MergeReadsTestStore, SparseTarget) {
+TEST_F(MergeReadsTestStore, SparseTarget)
+{
     using namespace arcticdb;
     using namespace arcticdb::stream;
-    using MergeAggregator =  Aggregator<TimeseriesIndex,
-                                        FixedSchema,
-                                        stream::RowCountSegmentPolicy,
-                                        stream::SparseColumnPolicy>;
-
+    using MergeAggregator =
+        Aggregator<TimeseriesIndex, FixedSchema, stream::RowCountSegmentPolicy, stream::SparseColumnPolicy>;
 
     using MergeSinkWrapper = SinkWrapperImpl<MergeAggregator>;
     const auto NumTests = 10;
@@ -95,27 +92,23 @@ TEST_F(MergeReadsTestStore, SparseTarget) {
     const std::string stream_id1("test_merge_1");
     const std::string stream_id2("test_merge_2");
 
-    MergeSinkWrapper wrapper1(stream_id1, {
-        scalar_field_proto(DataType::UINT64, "thing1"),
-        scalar_field_proto(DataType::UINT64, "thing2")}
-    );
+    MergeSinkWrapper wrapper1(stream_id1,
+        {scalar_field_proto(DataType::UINT64, "thing1"), scalar_field_proto(DataType::UINT64, "thing2")});
 
     auto& aggregator1 = wrapper1.aggregator_;
 
-    MergeSinkWrapper wrapper2(stream_id2, {
-        scalar_field_proto(DataType::UINT64, "thing1"),
-        scalar_field_proto(DataType::UINT64, "thing3")}
-    );
+    MergeSinkWrapper wrapper2(stream_id2,
+        {scalar_field_proto(DataType::UINT64, "thing1"), scalar_field_proto(DataType::UINT64, "thing3")});
 
     auto& aggregator2 = wrapper2.aggregator_;
 
-    for(timestamp i = 0; i < NumTests; i += 2) {
-        aggregator1.start_row(i)([&] (auto&& rb) {
+    for (timestamp i = 0; i < NumTests; i += 2) {
+        aggregator1.start_row(i)([&](auto&& rb) {
             rb.set_scalar(1, i);
             rb.set_scalar(2, i + 1);
         });
 
-        aggregator2.start_row(i + 1)([&] (auto&& rb) {
+        aggregator2.start_row(i + 1)([&](auto&& rb) {
             rb.set_scalar(1, i + 1);
             rb.set_scalar(2, i + 2);
         });
@@ -131,10 +124,14 @@ TEST_F(MergeReadsTestStore, SparseTarget) {
     ReadOptions read_options;
     read_options.set_allow_sparse(true);
     pipelines::ReadQuery read_query;
-    auto read_result = test_store_->read_dataframe_merged(target_id, {stream_id1, stream_id2}, pipelines::VersionQuery{}, read_query, read_options);
+    auto read_result = test_store_->read_dataframe_merged(target_id,
+        {stream_id1, stream_id2},
+        pipelines::VersionQuery{},
+        read_query,
+        read_options);
     const auto& frame = read_result.frame_data.frame();
 
-    for(timestamp i = 0; i < NumTests; i += 2) {
+    for (timestamp i = 0; i < NumTests; i += 2) {
         check_value(frame.scalar_at<uint64_t>(i, 2).value(), uint64_t(i));
         check_value(frame.scalar_at<uint64_t>(i, 3).value(), uint64_t(i + 1));
         check_value(frame.scalar_at<uint64_t>(i, 4).value(), uint64_t(0));
@@ -144,10 +141,12 @@ TEST_F(MergeReadsTestStore, SparseTarget) {
     }
 }
 
-TEST_F(MergeReadsTestStore, SparseSource) {
+TEST_F(MergeReadsTestStore, SparseSource)
+{
     using namespace arcticdb;
     using namespace arcticdb::stream;
-    using DynamicAggregator =  Aggregator<TimeseriesIndex, DynamicSchema, stream::NeverSegmentPolicy, stream::SparseColumnPolicy>;
+    using DynamicAggregator =
+        Aggregator<TimeseriesIndex, DynamicSchema, stream::NeverSegmentPolicy, stream::SparseColumnPolicy>;
     using DynamicSinkWrapper = SinkWrapperImpl<DynamicAggregator>;
     const auto NumTests = 12;
 
@@ -159,23 +158,23 @@ TEST_F(MergeReadsTestStore, SparseSource) {
     DynamicSinkWrapper wrapper2(stream_id2, {});
     auto& aggregator2 = wrapper2.aggregator_;
 
-    for(timestamp i = 0; i < NumTests; i += 4) {
-        aggregator1.start_row(i)([&] (auto&& rb) {
+    for (timestamp i = 0; i < NumTests; i += 4) {
+        aggregator1.start_row(i)([&](auto&& rb) {
             rb.set_scalar_by_name("first", int64_t(i), make_scalar_type(DataType::INT64));
             rb.set_scalar_by_name("second", int64_t(i + 1), make_scalar_type(DataType::INT64));
         });
 
-        aggregator2.start_row(i + 1)([&] (auto&& rb) {
+        aggregator2.start_row(i + 1)([&](auto&& rb) {
             rb.set_scalar_by_name("first", int64_t(i + 1), make_scalar_type(DataType::INT64));
             rb.set_scalar_by_name("third", int64_t(i + 2), make_scalar_type(DataType::INT64));
         });
 
-        aggregator1.start_row(i + 2)([&] (auto&& rb) {
+        aggregator1.start_row(i + 2)([&](auto&& rb) {
             rb.set_scalar_by_name("first", int64_t(i + 2), make_scalar_type(DataType::INT64));
             rb.set_scalar_by_name("third", int64_t(i + 3), make_scalar_type(DataType::INT64));
         });
 
-        aggregator2.start_row(i + 3)([&] (auto&& rb) {
+        aggregator2.start_row(i + 3)([&](auto&& rb) {
             rb.set_scalar_by_name("first", int64_t(i + 3), make_scalar_type(DataType::INT64));
             rb.set_scalar_by_name("fourth", int64_t(i + 4), make_scalar_type(DataType::INT64));
         });
@@ -191,10 +190,14 @@ TEST_F(MergeReadsTestStore, SparseSource) {
     ReadOptions read_options;
     read_options.set_allow_sparse(true);
     pipelines::ReadQuery read_query;
-    auto read_result = test_store_->read_dataframe_merged(target_id, {stream_id1, stream_id2}, pipelines::VersionQuery{}, read_query, read_options);
+    auto read_result = test_store_->read_dataframe_merged(target_id,
+        {stream_id1, stream_id2},
+        pipelines::VersionQuery{},
+        read_query,
+        read_options);
     const auto& frame = read_result.frame_data.frame();
 
-    for(timestamp i = 0; i < NumTests; i += 4) {
+    for (timestamp i = 0; i < NumTests; i += 4) {
         check_value(frame.scalar_at<uint64_t>(i, 2).value(), uint64_t(i));
         check_value(frame.scalar_at<uint64_t>(i, 3).value(), uint64_t(i + 1));
         check_value(frame.scalar_at<uint64_t>(i, 4).value(), uint64_t(0));

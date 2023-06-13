@@ -13,7 +13,8 @@
 
 #include <arcticdb/processing/operation_types.hpp>
 
-TEST(SetMembership, uint64_isin_int64) {
+TEST(SetMembership, uint64_isin_int64)
+{
     using namespace arcticdb;
     uint64_t u = std::numeric_limits<uint64_t>::max();
     std::unordered_set<int64_t> iset{-1};
@@ -21,7 +22,8 @@ TEST(SetMembership, uint64_isin_int64) {
     ASSERT_FALSE(IsInOperator{}(u, iset));
 }
 
-TEST(SetMembership, int64_isin_uint64) {
+TEST(SetMembership, int64_isin_uint64)
+{
     using namespace arcticdb;
     int64_t i = -1;
     std::unordered_set<uint64_t> uset{std::numeric_limits<uint64_t>::max()};
@@ -29,7 +31,8 @@ TEST(SetMembership, int64_isin_uint64) {
     ASSERT_FALSE(IsInOperator{}(i, uset));
 }
 
-TEST(SetMembership, uint64_isnotin_int64) {
+TEST(SetMembership, uint64_isnotin_int64)
+{
     using namespace arcticdb;
     uint64_t u = std::numeric_limits<uint64_t>::max();
     std::unordered_set<int64_t> iset{-1};
@@ -37,7 +40,8 @@ TEST(SetMembership, uint64_isnotin_int64) {
     ASSERT_TRUE(IsNotInOperator{}(u, iset));
 }
 
-TEST(SetMembership, int64_isnotin_uint64) {
+TEST(SetMembership, int64_isnotin_uint64)
+{
     using namespace arcticdb;
     int64_t i = -1;
     std::unordered_set<uint64_t> uset{std::numeric_limits<uint64_t>::max()};

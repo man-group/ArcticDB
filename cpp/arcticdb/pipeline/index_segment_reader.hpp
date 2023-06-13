@@ -17,7 +17,7 @@
 #include <cstdint>
 
 namespace arcticdb {
-    class Store;
+class Store;
 }
 
 namespace arcticdb::pipelines::index {
@@ -25,11 +25,13 @@ namespace arcticdb::pipelines::index {
 struct IndexSegmentIterator;
 
 struct IndexSegmentReader {
-    const SegmentInMemory& seg() const {
+    const SegmentInMemory& seg() const
+    {
         return seg_;
     }
 
-    friend void swap(IndexSegmentReader& left, IndexSegmentReader& right) noexcept {
+    friend void swap(IndexSegmentReader& left, IndexSegmentReader& right) noexcept
+    {
         using std::swap;
 
         swap(left.seg_, right.seg_);
@@ -40,7 +42,7 @@ struct IndexSegmentReader {
 
     explicit IndexSegmentReader(SegmentInMemory&& s);
 
-    const Column &column(Fields field) const;
+    const Column& column(Fields field) const;
 
     SliceAndKey row(std::size_t i) const;
 
@@ -60,11 +62,13 @@ struct IndexSegmentReader {
 
     bool bucketize_dynamic() const;
 
-    const arcticdb::proto::descriptors::TimeSeriesDescriptor& tsd() const {
+    const arcticdb::proto::descriptors::TimeSeriesDescriptor& tsd() const
+    {
         return tsd_;
     }
 
-    arcticdb::proto::descriptors::TimeSeriesDescriptor& mutable_tsd() {
+    arcticdb::proto::descriptors::TimeSeriesDescriptor& mutable_tsd()
+    {
         return tsd_;
     }
 
@@ -84,54 +88,63 @@ public:
     using iterator_category = std::bidirectional_iterator_tag;
     using value_type = SliceAndKey;
     using difference_type = std::ptrdiff_t;
-    using pointer = SliceAndKey *;
-    using reference = SliceAndKey &;
+    using pointer = SliceAndKey*;
+    using reference = SliceAndKey&;
 
-    explicit IndexSegmentIterator(const IndexSegmentReader *reader) : reader_(reader) {}
+    explicit IndexSegmentIterator(const IndexSegmentReader* reader)
+        : reader_(reader)
+    {
+    }
 
-    IndexSegmentIterator(const IndexSegmentReader *reader, difference_type diff) : reader_(reader), diff_(diff) {}
+    IndexSegmentIterator(const IndexSegmentReader* reader, difference_type diff)
+        : reader_(reader),
+          diff_(diff)
+    {
+    }
 
-    IndexSegmentIterator &operator++() {
+    IndexSegmentIterator& operator++()
+    {
         ++diff_;
         return *this;
     }
 
-    IndexSegmentIterator operator++(int) {
+    IndexSegmentIterator operator++(int)
+    {
         IndexSegmentIterator tmp(reader_, diff_);
         ++*this;
         return tmp;
     }
 
-    reference operator*() {
+    reference operator*()
+    {
         value_ = reader_->row(diff_);
         return value_;
     }
 
-    pointer operator->() {
+    pointer operator->()
+    {
         value_ = reader_->row(diff_);
         return &value_;
     }
 
-    friend bool operator==(const IndexSegmentIterator &left, const IndexSegmentIterator &right) {
+    friend bool operator==(const IndexSegmentIterator& left, const IndexSegmentIterator& right)
+    {
         return left.diff_ == right.diff_;
     }
 
-    friend bool operator!=(const IndexSegmentIterator &left, const IndexSegmentIterator &right) {
+    friend bool operator!=(const IndexSegmentIterator& left, const IndexSegmentIterator& right)
+    {
         return !(left == right);
     }
 
 private:
-    const IndexSegmentReader *reader_;
+    const IndexSegmentReader* reader_;
     difference_type diff_ = 0;
     SliceAndKey value_;
 };
 
-index::IndexSegmentReader get_index_reader(
-    const AtomKey &prev_index,
-    const std::shared_ptr<Store> &store);
+index::IndexSegmentReader get_index_reader(const AtomKey& prev_index, const std::shared_ptr<Store>& store);
 
-IndexRange get_index_segment_range(
-    const AtomKey &prev_index,
-    const std::shared_ptr<Store> &store);
+IndexRange get_index_segment_range(const AtomKey& prev_index, const std::shared_ptr<Store>& store);
 
 } // namespace arcticdb::pipelines::index

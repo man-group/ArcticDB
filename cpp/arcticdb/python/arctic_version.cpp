@@ -8,7 +8,8 @@
 #include <arcticdb/python/arctic_version.hpp>
 
 namespace arcticdb {
-std::string get_arcticdb_version_string() {
+std::string get_arcticdb_version_string()
+{
     return std::string("Arctic Native v0.999");
 }
-}
+} // namespace arcticdb

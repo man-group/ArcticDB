@@ -31,40 +31,33 @@ struct StreamSink {
 
     virtual ~StreamSink() = default;
 
-    [[nodiscard]] virtual folly::Future<entity::VariantKey> write(
-        KeyType key_type,
+    [[nodiscard]] virtual folly::Future<entity::VariantKey> write(KeyType key_type,
         VersionId version_id,
-        const StreamId &stream_id,
+        const StreamId& stream_id,
         IndexValue start_index,
         IndexValue end_index,
-        SegmentInMemory &&segment) = 0;
+        SegmentInMemory&& segment) = 0;
 
-    [[nodiscard]] virtual folly::Future<entity::VariantKey> write(
-            stream::KeyType key_type,
-            VersionId version_id,
-            const StreamId& stream_id,
-            timestamp creation_ts,
-            IndexValue start_index,
-            IndexValue end_index,
-            SegmentInMemory &&segment) = 0;
-
-    [[nodiscard]] virtual folly::Future<entity::VariantKey> write(
-        KeyType key_type,
-        const StreamId &stream_id,
-        SegmentInMemory &&segment) = 0;
-
-    virtual entity::VariantKey write_sync(
-        stream::KeyType key_type,
+    [[nodiscard]] virtual folly::Future<entity::VariantKey> write(stream::KeyType key_type,
         VersionId version_id,
-        const StreamId &stream_id,
+        const StreamId& stream_id,
+        timestamp creation_ts,
         IndexValue start_index,
         IndexValue end_index,
-        SegmentInMemory &&segment) = 0;
+        SegmentInMemory&& segment) = 0;
 
-    [[nodiscard]] virtual folly::Future<entity::VariantKey> update(
-        const VariantKey &key,
-        SegmentInMemory &&segment,
-        storage::UpdateOpts = storage::UpdateOpts{}) = 0;
+    [[nodiscard]] virtual folly::Future<entity::VariantKey>
+    write(KeyType key_type, const StreamId& stream_id, SegmentInMemory&& segment) = 0;
+
+    virtual entity::VariantKey write_sync(stream::KeyType key_type,
+        VersionId version_id,
+        const StreamId& stream_id,
+        IndexValue start_index,
+        IndexValue end_index,
+        SegmentInMemory&& segment) = 0;
+
+    [[nodiscard]] virtual folly::Future<entity::VariantKey>
+    update(const VariantKey& key, SegmentInMemory&& segment, storage::UpdateOpts = storage::UpdateOpts{}) = 0;
 
     struct PartialKey {
         KeyType key_type;
@@ -73,53 +66,52 @@ struct StreamSink {
         IndexValue start_index;
         IndexValue end_index;
 
-        [[nodiscard]] AtomKey build_key(
-            timestamp creation_ts,
-            ContentHash content_hash) const {
-            return entity::atom_key_builder().gen_id(version_id).start_index(start_index).end_index(end_index)
-                .content_hash(content_hash).creation_ts(creation_ts).build(stream_id, key_type);
+        [[nodiscard]] AtomKey build_key(timestamp creation_ts, ContentHash content_hash) const
+        {
+            return entity::atom_key_builder()
+                .gen_id(version_id)
+                .start_index(start_index)
+                .end_index(end_index)
+                .content_hash(content_hash)
+                .creation_ts(creation_ts)
+                .build(stream_id, key_type);
         }
     };
 
-    [[nodiscard]] virtual folly::Future<entity::VariantKey> write(
-        PartialKey pk,
-        SegmentInMemory &&segment) = 0;
+    [[nodiscard]] virtual folly::Future<entity::VariantKey> write(PartialKey pk, SegmentInMemory&& segment) = 0;
 
-    virtual entity::VariantKey write_sync(
-        PartialKey pk,
-        SegmentInMemory &&segment) = 0;
+    virtual entity::VariantKey write_sync(PartialKey pk, SegmentInMemory&& segment) = 0;
 
-    virtual entity::VariantKey write_sync(
-        KeyType key_type,
-        const StreamId &stream_id,
-        SegmentInMemory &&segment) = 0;
+    virtual entity::VariantKey write_sync(KeyType key_type, const StreamId& stream_id, SegmentInMemory&& segment) = 0;
 
     struct BatchWriteArgs {
         std::size_t lib_write_count = 0ULL;
-        BatchWriteArgs() : lib_write_count(0ULL) {}
+        BatchWriteArgs()
+            : lib_write_count(0ULL)
+        {
+        }
     };
 
     [[nodiscard]] virtual folly::Future<folly::Unit> write_compressed(storage::KeySegmentPair&& ks) = 0;
 
-    virtual void write_compressed_sync(
-        storage::KeySegmentPair &&ks) = 0;
+    virtual void write_compressed_sync(storage::KeySegmentPair&& ks) = 0;
 
     [[nodiscard]] virtual folly::Future<std::vector<entity::VariantKey>> batch_write(
-        std::vector<std::pair<PartialKey, SegmentInMemory>> &&key_segments,
-        const std::shared_ptr<DeDupMap> &de_dup_map,
-        const BatchWriteArgs &args = BatchWriteArgs()) = 0;
+        std::vector<std::pair<PartialKey, SegmentInMemory>>&& key_segments,
+        const std::shared_ptr<DeDupMap>& de_dup_map,
+        const BatchWriteArgs& args = BatchWriteArgs()) = 0;
 
     [[nodiscard]] virtual folly::Future<folly::Unit> batch_write_compressed(
         std::vector<storage::KeySegmentPair> kvs) = 0;
 
-    [[nodiscard]] virtual folly::Future<RemoveKeyResultType> remove_key(
-        const entity::VariantKey &key, storage::RemoveOpts opts = storage::RemoveOpts{}) = 0;
+    [[nodiscard]] virtual folly::Future<RemoveKeyResultType> remove_key(const entity::VariantKey& key,
+        storage::RemoveOpts opts = storage::RemoveOpts{}) = 0;
 
-    virtual RemoveKeyResultType remove_key_sync(
-        const entity::VariantKey &key, storage::RemoveOpts opts = storage::RemoveOpts{}) = 0;
+    virtual RemoveKeyResultType remove_key_sync(const entity::VariantKey& key,
+        storage::RemoveOpts opts = storage::RemoveOpts{}) = 0;
 
-    [[nodiscard]] virtual folly::Future<std::vector<RemoveKeyResultType>> remove_keys(
-        const std::vector<entity::VariantKey> &keys, storage::RemoveOpts opts = storage::RemoveOpts{}) = 0;
+    [[nodiscard]] virtual folly::Future<std::vector<RemoveKeyResultType>>
+    remove_keys(const std::vector<entity::VariantKey>& keys, storage::RemoveOpts opts = storage::RemoveOpts{}) = 0;
 
     virtual timestamp current_timestamp() = 0;
 };

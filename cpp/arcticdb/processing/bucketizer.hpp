@@ -15,16 +15,19 @@ struct VectorBucketizer {
     std::vector<size_t> vec_;
     size_t num_buckets_;
 
-    VectorBucketizer(std::vector<size_t> &&vec, size_t num_buckets) :
-        vec_(vec),
-        num_buckets_(num_buckets) {
+    VectorBucketizer(std::vector<size_t>&& vec, size_t num_buckets)
+        : vec_(vec),
+          num_buckets_(num_buckets)
+    {
     }
 
-    [[nodiscard]] size_t get_bucket(size_t row) const {
+    [[nodiscard]] size_t get_bucket(size_t row) const
+    {
         return vec_[row];
     }
 
-    [[nodiscard]] size_t num_buckets() const {
+    [[nodiscard]] size_t num_buckets() const
+    {
         return num_buckets_;
     }
 };

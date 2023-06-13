@@ -24,22 +24,30 @@ struct Lz4BlockEncoder {
     using Opts = arcticdb::proto::encoding::VariantCodec::Lz4;
     static constexpr std::uint32_t VERSION = 1;
 
-    static std::size_t max_compressed_size(std::size_t size) {
+    static std::size_t max_compressed_size(std::size_t size)
+    {
         return LZ4_compressBound(static_cast<int>(size));
     }
 
-    static void set_shape_defaults(Opts &opts) {
+    static void set_shape_defaults(Opts& opts)
+    {
         opts.set_acceleration(0);
     }
 
     template<class T>
-    static std::size_t encode_block(const Opts &opts, const T *in, BlockProtobufHelper &block_utils,
-                                    HashAccum &hasher, T *out, std::size_t out_capacity, std::ptrdiff_t &pos,
-                                    arcticdb::proto::encoding::VariantCodec &out_codec) {
-        int compressed_bytes = LZ4_compress_default(
-            reinterpret_cast<const char *>(in),
-            reinterpret_cast<char *>(out),
-            int(block_utils.bytes_), int(out_capacity));
+    static std::size_t encode_block(const Opts& opts,
+        const T* in,
+        BlockProtobufHelper& block_utils,
+        HashAccum& hasher,
+        T* out,
+        std::size_t out_capacity,
+        std::ptrdiff_t& pos,
+        arcticdb::proto::encoding::VariantCodec& out_codec)
+    {
+        int compressed_bytes = LZ4_compress_default(reinterpret_cast<const char*>(in),
+            reinterpret_cast<char*>(out),
+            int(block_utils.bytes_),
+            int(out_capacity));
 
         util::check_arg(compressed_bytes >= 0, "expected compressed bytes >= 0, actual {}", compressed_bytes);
         ARCTICDB_TRACE(log::storage(), "Block of size {} compressed to {} bytes", block_utils.bytes_, compressed_bytes);
@@ -61,21 +69,27 @@ struct Lz4Decoder {
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 
     template<typename T>
-    static void decode_block([[maybe_unused]] std::uint32_t encoder_version, const std::uint8_t *in, std::size_t in_bytes, T *t_out,
-                             std::size_t out_bytes) {
+    static void decode_block([[maybe_unused]] std::uint32_t encoder_version,
+        const std::uint8_t* in,
+        std::size_t in_bytes,
+        T* t_out,
+        std::size_t out_bytes)
+    {
 
         ARCTICDB_TRACE(log::codec(), "Lz4 decoder reading block: {} {}", in_bytes, out_bytes);
-        int real_decomp = LZ4_decompress_safe(
-            reinterpret_cast<const char *>(in),
-            reinterpret_cast<char *>(t_out),
+        int real_decomp = LZ4_decompress_safe(reinterpret_cast<const char*>(in),
+            reinterpret_cast<char*>(t_out),
             int(in_bytes),
-            int(out_bytes)
-        );
-        util::check_arg(real_decomp > 0, "Error while decoding with lz4 at address {:x} with size {}. Code {}", uintptr_t(in), in_bytes, real_decomp);
+            int(out_bytes));
+        util::check_arg(real_decomp > 0,
+            "Error while decoding with lz4 at address {:x} with size {}. Code {}",
+            uintptr_t(in),
+            in_bytes,
+            real_decomp);
         util::check_arg(std::size_t(real_decomp) == out_bytes,
-                        "expected out_bytes == lz4 decompressed bytes, actual {} != {}",
-                        out_bytes,
-                        real_decomp);
+            "expected out_bytes == lz4 decompressed bytes, actual {} != {}",
+            out_bytes,
+            real_decomp);
     }
 
 #pragma GCC diagnostic pop

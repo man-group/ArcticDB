@@ -10,5 +10,5 @@
 #include <string>
 
 namespace arcticdb {
-    std::string get_arcticdb_version_string();
+std::string get_arcticdb_version_string();
 }

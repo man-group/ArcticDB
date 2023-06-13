@@ -12,7 +12,7 @@
 
 namespace arcticdb {
 
-inline auto adapt_read_df = [](ReadResult && ret) -> py::tuple{
+inline auto adapt_read_df = [](ReadResult&& ret) -> py::tuple {
     auto pynorm = python_util::pb_to_python(ret.norm_meta);
     auto pyuser_meta = python_util::pb_to_python(ret.user_meta);
     auto multi_key_meta = python_util::pb_to_python(ret.multi_key_meta);

@@ -11,11 +11,13 @@
 #include <google/protobuf/text_format.h>
 #include <arcticdb/util/format_bytes.hpp>
 
-TEST(TestLog, SmokeTest) {
+TEST(TestLog, SmokeTest)
+{
     arcticdb::log::root().info("Some msg");
 }
 
-TEST(TestLog, ConfigureSingleton) {
+TEST(TestLog, ConfigureSingleton)
+{
     std::string txt_conf = R"pb(
 sink_by_id {
     key: "console"
@@ -40,7 +42,8 @@ logger_by_id {
     arcticdb::log::root().info("Some msg");
 }
 
-TEST(TestLog, TestFormatBytes) {
+TEST(TestLog, TestFormatBytes)
+{
     auto s = arcticdb::format_bytes(12345678);
     ASSERT_EQ(s, "12.35MB");
 }

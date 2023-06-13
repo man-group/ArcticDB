@@ -13,15 +13,18 @@
 
 namespace arcticdb::util {
 
-char from_hex(char c) {
+char from_hex(char c)
+{
     return std::isdigit(c) != 0 ? c - '0' : c - 'A' + 10;
 }
 
-char decode_char(char a, char b) {
+char decode_char(char a, char b)
+{
     return from_hex(a) << 4 | from_hex(b);
 }
 
-std::string safe_encode(const std::string &value) {
+std::string safe_encode(const std::string& value)
+{
     std::ostringstream escaped;
     escaped.fill('0');
     escaped << std::hex;
@@ -35,20 +38,21 @@ std::string safe_encode(const std::string &value) {
         }
 
         escaped << std::uppercase;
-        escaped << escape_char << std::setw(0) << int((unsigned char) c);
+        escaped << escape_char << std::setw(0) << int((unsigned char)c);
         escaped << std::nouppercase;
     }
 
     return escaped.str();
 }
 
-std::string safe_decode(const std::string& value) {
+std::string safe_decode(const std::string& value)
+{
     std::ostringstream unescaped;
     auto pos = 0u;
     const auto len = value.size();
-    while(true) {
-        auto curr = value.find(escape_char, pos)  ;
-        if(curr == std::string::npos) {
+    while (true) {
+        auto curr = value.find(escape_char, pos);
+        if (curr == std::string::npos) {
             unescaped << strv_from_pos(value, pos, len - pos);
             auto test = unescaped.str();
             break;
@@ -58,16 +62,15 @@ std::string safe_decode(const std::string& value) {
         auto test = unescaped.str();
 
         auto is_escaped = len - curr > 2 && std::isxdigit(value[curr + 1]) != 0 && std::isxdigit(value[curr + 2]) != 0;
-        if(is_escaped) {
+        if (is_escaped) {
             unescaped << decode_char(value[curr + 1], value[curr + 2]);
             pos = curr + 3;
-        }  else {
+        } else {
             unescaped << escape_char;
             test = unescaped.str();
             pos = curr + 1;
         }
-
     }
     return unescaped.str();
 }
-} //namespace arcticdb
+} // namespace arcticdb::util

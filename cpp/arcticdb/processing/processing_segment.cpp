@@ -8,20 +8,19 @@
 #include <arcticdb/processing/processing_segment.hpp>
 
 namespace arcticdb {
-void ProcessingSegment::apply_filter(const util::BitSet& bitset,
-                  const std::shared_ptr<Store>& store) {
+void ProcessingSegment::apply_filter(const util::BitSet& bitset, const std::shared_ptr<Store>& store)
+{
     // execution_context_ is null with the legacy filtering implementation
     // Remove null check once legacy filtering is deprecated
-    auto filter_down_stringpool = execution_context_ &&
-        execution_context_->optimisation_ == ExecutionContext::Optimisation::MEMORY;
+    auto filter_down_stringpool =
+        execution_context_ && execution_context_->optimisation_ == ExecutionContext::Optimisation::MEMORY;
 
-    for (auto& slice_and_key: data_) {
-        auto seg = filter_segment(slice_and_key.segment(store),
-                                  bitset,
-                                  filter_down_stringpool);
-        if(!seg.is_null()) {
+    for (auto& slice_and_key : data_) {
+        auto seg = filter_segment(slice_and_key.segment(store), bitset, filter_down_stringpool);
+        if (!seg.is_null()) {
             slice_and_key.slice_.adjust_rows(seg.row_count());
-            slice_and_key.slice_.adjust_columns(seg.descriptor().field_count() - seg.descriptor().index().field_count());
+            slice_and_key.slice_.adjust_columns(
+                seg.descriptor().field_count() - seg.descriptor().index().field_count());
         } else {
             slice_and_key.slice_.adjust_rows(0u);
             slice_and_key.slice_.adjust_columns(0u);
@@ -30,56 +29,51 @@ void ProcessingSegment::apply_filter(const util::BitSet& bitset,
     }
 }
 
-VariantData ProcessingSegment::get(const VariantNode &name, const std::shared_ptr<Store> &store) {
-    return util::variant_match(name, [&](const ColumnName &column_name) {
-        for (auto &slice_and_key: data_) {
-            slice_and_key.segment(store).init_column_map();
-            if (auto opt_idx = slice_and_key.segment(store).column_index(
-                column_name.value))
-                return VariantData(ColumnWithStrings(
-                    slice_and_key.segment(store).column_ptr(
-                        position_t(position_t(opt_idx.value()))),
+VariantData ProcessingSegment::get(const VariantNode& name, const std::shared_ptr<Store>& store)
+{
+    return util::variant_match(
+        name,
+        [&](const ColumnName& column_name) {
+            for (auto& slice_and_key : data_) {
+                slice_and_key.segment(store).init_column_map();
+                if (auto opt_idx = slice_and_key.segment(store).column_index(column_name.value))
+                    return VariantData(ColumnWithStrings(
+                        slice_and_key.segment(store).column_ptr(position_t(position_t(opt_idx.value()))),
                         slice_and_key.segment(store).string_pool_ptr()));
-        }
-        // Try multi-index column names
-        std::string multi_index_column_name = fmt::format("__idx__{}",
-                                                          column_name.value);
-        for (auto &slice_and_key: data_) {
-            if (auto opt_idx = slice_and_key.segment(store).column_index(
-                multi_index_column_name))
-                return VariantData(ColumnWithStrings(
-                    slice_and_key.segment(store).column_ptr(
-                        position_t(opt_idx.value())),
-                        slice_and_key.segment(store).string_pool_ptr()));
-        }
-        if(execution_context_->dynamic_schema()) {
-            log::version().debug("Column not found in {}", data_[0].segment(store).descriptor());
-            return VariantData{EmptyResult{}};
-        }
-        else
-            util::raise_rte("Unexpected column name");
+            }
+            // Try multi-index column names
+            std::string multi_index_column_name = fmt::format("__idx__{}", column_name.value);
+            for (auto& slice_and_key : data_) {
+                if (auto opt_idx = slice_and_key.segment(store).column_index(multi_index_column_name))
+                    return VariantData(
+                        ColumnWithStrings(slice_and_key.segment(store).column_ptr(position_t(opt_idx.value())),
+                            slice_and_key.segment(store).string_pool_ptr()));
+            }
+            if (execution_context_->dynamic_schema()) {
+                log::version().debug("Column not found in {}", data_[0].segment(store).descriptor());
+                return VariantData{EmptyResult{}};
+            } else
+                util::raise_rte("Unexpected column name");
         },
-        [&](const ValueName &value_name) {
-        return VariantData(execution_context_->values_.get_value(value_name.value));
+        [&](const ValueName& value_name) {
+            return VariantData(execution_context_->values_.get_value(value_name.value));
         },
-        [&](const ValueSetName &value_set_name) {
-        return VariantData(execution_context_->value_sets_.get_value(value_set_name.value));
+        [&](const ValueSetName& value_set_name) {
+            return VariantData(execution_context_->value_sets_.get_value(value_set_name.value));
         },
-        [&](const ExpressionName &expression_name) {
-        if (auto computed = computed_data_.find(expression_name.value);
-        computed != std::end(computed_data_)) {
-            return computed->second;
-        } else {
-            auto expr = execution_context_->expression_nodes_.get_value(expression_name.value);
-            auto data = expr->compute(self(), store);
-            computed_data_.try_emplace(expression_name.value, data);
-            return data;
-        }
+        [&](const ExpressionName& expression_name) {
+            if (auto computed = computed_data_.find(expression_name.value); computed != std::end(computed_data_)) {
+                return computed->second;
+            } else {
+                auto expr = execution_context_->expression_nodes_.get_value(expression_name.value);
+                auto data = expr->compute(self(), store);
+                computed_data_.try_emplace(expression_name.value, data);
+                return data;
+            }
         },
-        [&]([[maybe_unused]] const std::monostate &unused) -> VariantData {
-        util::raise_rte("ProcessingSegment::get called with monostate VariantNode");
-    }
-    );
+        [&]([[maybe_unused]] const std::monostate& unused) -> VariantData {
+            util::raise_rte("ProcessingSegment::get called with monostate VariantNode");
+        });
     util::raise_rte("Unexpected value, or expression");
 }
 

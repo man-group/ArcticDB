@@ -20,8 +20,7 @@ namespace arcticdb {
 using namespace arcticdb::entity;
 using namespace arcticdb::stream;
 
-enum class LoadType :
-        uint32_t {
+enum class LoadType : uint32_t {
     NOT_LOADED = 0,
     LOAD_LATEST = 1,
     LOAD_LATEST_UNDELETED = 2,
@@ -31,45 +30,59 @@ enum class LoadType :
 };
 
 struct LoadParameter {
-    explicit LoadParameter(LoadType load_type) :
-        load_type_(load_type) {
+    explicit LoadParameter(LoadType load_type)
+        : load_type_(load_type)
+    {
     }
 
-    LoadParameter(LoadType load_type, VersionId load_until) :
-        load_type_(load_type),
-        load_until_(load_until){
-        util::check(load_type_ == LoadType::LOAD_DOWNTO, "Load until parameter {} supplied with the wrong load type argument: {}", load_until_.value(), int(load_type_));
+    LoadParameter(LoadType load_type, VersionId load_until)
+        : load_type_(load_type),
+          load_until_(load_until)
+    {
+        util::check(load_type_ == LoadType::LOAD_DOWNTO,
+            "Load until parameter {} supplied with the wrong load type argument: {}",
+            load_until_.value(),
+            int(load_type_));
     }
 
     LoadType load_type_ = LoadType::NOT_LOADED;
     std::optional<VersionId> load_until_ = std::nullopt;
 
-    void validate() const {
-        util::check(load_type_ == LoadType::LOAD_DOWNTO ? static_cast<bool>(load_until_) : !static_cast<bool>(load_until_),
-                    "Invalid load parameter: load_type {} with load_util {}", int(load_type_), load_until_.value_or(VersionId{}));
+    void validate() const
+    {
+        util::check(load_type_ == LoadType::LOAD_DOWNTO ? static_cast<bool>(load_until_)
+                                                        : !static_cast<bool>(load_until_),
+            "Invalid load parameter: load_type {} with load_util {}",
+            int(load_type_),
+            load_until_.value_or(VersionId{}));
     }
 };
 
 template<typename T>
-bool deque_is_unique(std::deque<T> vec) {
+bool deque_is_unique(std::deque<T> vec)
+{
     sort(vec.begin(), vec.end());
     auto it = std::unique(vec.begin(), vec.end());
     return it == vec.end();
 }
 
-inline bool is_tombstone_key_type(const AtomKey& key) {
+inline bool is_tombstone_key_type(const AtomKey& key)
+{
     return key.type() == KeyType::TOMBSTONE || key.type() == KeyType::TOMBSTONE_ALL;
 }
 
-inline bool is_index_or_tombstone(const AtomKey &key) {
+inline bool is_index_or_tombstone(const AtomKey& key)
+{
     return is_index_key_type(key.type()) || is_tombstone_key_type(key);
 }
 
-inline void check_is_index_or_tombstone(const AtomKey &key) {
+inline void check_is_index_or_tombstone(const AtomKey& key)
+{
     util::check(is_index_or_tombstone(key), "Expected index or tombstone key type but got {}", key);
 }
 
-inline AtomKey index_to_tombstone(const AtomKey &index_key, StreamId stream_id, timestamp creation_ts) {
+inline AtomKey index_to_tombstone(const AtomKey& index_key, StreamId stream_id, timestamp creation_ts)
+{
     return atom_key_builder()
         .version_id(index_key.version_id())
         .creation_ts(creation_ts)
@@ -79,7 +92,8 @@ inline AtomKey index_to_tombstone(const AtomKey &index_key, StreamId stream_id, 
         .build(stream_id, KeyType::TOMBSTONE);
 }
 
-inline AtomKey index_to_tombstone(VersionId version_id, StreamId stream_id, timestamp creation_ts) {
+inline AtomKey index_to_tombstone(VersionId version_id, StreamId stream_id, timestamp creation_ts)
+{
     return atom_key_builder()
         .version_id(version_id)
         .creation_ts(creation_ts)
@@ -89,7 +103,8 @@ inline AtomKey index_to_tombstone(VersionId version_id, StreamId stream_id, time
         .build(stream_id, KeyType::TOMBSTONE);
 }
 
-inline AtomKey get_tombstone_all_key(const AtomKey &latest, timestamp creation_ts) {
+inline AtomKey get_tombstone_all_key(const AtomKey& latest, timestamp creation_ts)
+{
     return atom_key_builder()
         .version_id(latest.version_id())
         .creation_ts(creation_ts)
@@ -116,18 +131,20 @@ struct VersionMapEntry {
 
     ARCTICDB_MOVE_COPY_DEFAULT(VersionMapEntry)
 
-    void sort() {
+    void sort()
+    {
         util::check(!head_, "Expect sort to be called on newly read entry");
 
         if (keys_.empty())
             return;
 
-        std::sort(std::begin(keys_), std::end(keys_), [](const AtomKey &l, const AtomKey &r) {
+        std::sort(std::begin(keys_), std::end(keys_), [](const AtomKey& l, const AtomKey& r) {
             return l.creation_ts() > r.creation_ts();
         });
     }
 
-    void clear() {
+    void clear()
+    {
         head_.reset();
         load_type_ = LoadType::NOT_LOADED;
         last_reload_time_ = 0;
@@ -136,11 +153,13 @@ struct VersionMapEntry {
         keys_.clear();
     }
 
-    bool empty() const {
+    bool empty() const
+    {
         return !head_;
     }
 
-    friend void swap(VersionMapEntry &left, VersionMapEntry &right) noexcept {
+    friend void swap(VersionMapEntry& left, VersionMapEntry& right) noexcept
+    {
         using std::swap;
         left.validate();
         right.validate();
@@ -155,23 +174,28 @@ struct VersionMapEntry {
 
     // Below four functions used to return optional<AtomKey> of the tombstone, but copying keys is expensive and only
     // one function was actually interested in the key, so they now return bool. See get_tombstone_if_any().
-    bool has_individual_tombstone(VersionId version_id) const {
+    bool has_individual_tombstone(VersionId version_id) const
+    {
         return tombstones_.count(version_id) != 0;
     }
 
-    bool is_tombstoned_via_tombstone_all(VersionId version_id) const {
+    bool is_tombstoned_via_tombstone_all(VersionId version_id) const
+    {
         return tombstone_all_ && tombstone_all_.value().version_id() >= version_id;
     }
 
-    bool is_tombstoned(const AtomKey &key) const {
+    bool is_tombstoned(const AtomKey& key) const
+    {
         return is_tombstoned_via_tombstone_all(key.version_id()) || has_individual_tombstone(key.version_id());
     }
 
-    bool is_tombstoned(VersionId version_id) const {
+    bool is_tombstoned(VersionId version_id) const
+    {
         return is_tombstoned_via_tombstone_all(version_id) || has_individual_tombstone(version_id);
     }
 
-    std::optional<AtomKey> get_tombstone_if_any(VersionId version_id) {
+    std::optional<AtomKey> get_tombstone_if_any(VersionId version_id)
+    {
         if (tombstone_all_ && tombstone_all_.value().version_id() >= version_id) {
             return tombstone_all_;
         }
@@ -179,52 +203,57 @@ struct VersionMapEntry {
         return it != tombstones_.end() ? std::make_optional<AtomKey>(it->second) : std::nullopt;
     }
 
-    std::string dump() const {
+    std::string dump() const
+    {
         std::ostringstream strm;
         strm << std::endl << "Last reload time: " << last_reload_time_ << std::endl;
 
-        if(head_)
+        if (head_)
             strm << "Head: " << fmt::format("{}", head_.value()) << std::endl;
 
-        if(tombstone_all_)
+        if (tombstone_all_)
             strm << "Tombstone all: " << fmt::format("{}", tombstone_all_.value()) << std::endl;
 
         strm << "Keys: " << std::endl << std::endl;
-        for(const auto& key: keys_)
+        for (const auto& key : keys_)
             strm << fmt::format("    {}", key) << std::endl;
 
         strm << "Tombstones: " << std::endl << std::endl;
-        for(const auto& tombstone: tombstones_)
+        for (const auto& tombstone : tombstones_)
             strm << fmt::format("    {} - {}", tombstone.first, tombstone.second) << std::endl;
 
         return strm.str();
     }
 
-    void unshift_key(const AtomKey& key) {
+    void unshift_key(const AtomKey& key)
+    {
         keys_.push_front(key);
     }
 
-    std::vector<IndexTypeKey> get_indexes(bool include_deleted) const {
+    std::vector<IndexTypeKey> get_indexes(bool include_deleted) const
+    {
         std::vector<AtomKey> output;
-        for (const auto &key: keys_) {
+        for (const auto& key : keys_) {
             if (is_index_key_type(key.type()) && (include_deleted || !is_tombstoned(key)))
                 output.emplace_back(key);
         }
         return output;
     }
 
-    std::vector<IndexTypeKey> get_tombstoned_indexes() const {
+    std::vector<IndexTypeKey> get_tombstoned_indexes() const
+    {
         std::vector<AtomKey> output;
-        for (const auto &key: keys_) {
+        for (const auto& key : keys_) {
             if (is_index_key_type(key.type()) && is_tombstoned(key))
                 output.emplace_back(key);
         }
         return output;
     }
 
-    std::optional<AtomKey> get_first_index(bool include_deleted) const {
+    std::optional<AtomKey> get_first_index(bool include_deleted) const
+    {
         std::optional<AtomKey> output;
-        for (const auto &key: keys_) {
+        for (const auto& key : keys_) {
             if (is_index_key_type(key.type()) && (include_deleted || !is_tombstoned(key))) {
                 output = key;
                 break;
@@ -233,23 +262,28 @@ struct VersionMapEntry {
         return output;
     }
 
-    void check_ordering() const {
-        if(empty())
+    void check_ordering() const
+    {
+        if (empty())
             return;
 
-        auto first_index = std::find_if(std::begin(keys_), std::end(keys_),
-                                        [](const auto &key) { return is_index_key_type(key.type()); });
-        if(keys_.size() == 2 && is_tombstone_key_type(keys_[0]))
+        auto first_index = std::find_if(std::begin(keys_), std::end(keys_), [](const auto& key) {
+            return is_index_key_type(key.type());
+        });
+        if (keys_.size() == 2 && is_tombstone_key_type(keys_[0]))
             return;
         util::check(first_index != std::end(keys_), "Didn't find any index keys");
         auto version_id = first_index->version_id();
         std::optional<timestamp> version_timestamp;
         for (const auto& key : keys_) {
-            if(key.type() == KeyType::VERSION) {
-                if(!version_timestamp)
+            if (key.type() == KeyType::VERSION) {
+                if (!version_timestamp)
                     version_timestamp = key.creation_ts();
                 else {
-                    util::check(key.creation_ts() <= version_timestamp.value(), "out of order timestamp: {} > {}", key.creation_ts(), version_timestamp.value());
+                    util::check(key.creation_ts() <= version_timestamp.value(),
+                        "out of order timestamp: {} > {}",
+                        key.creation_ts(),
+                        version_timestamp.value());
                 }
             }
             if (is_index_key_type(key.type())) {
@@ -259,36 +293,40 @@ struct VersionMapEntry {
         }
     }
 
-    void check_head() const {
+    void check_head() const
+    {
         if (head_) {
-            auto it = std::find_if(keys_.begin(), keys_.end(), [&](auto k) {
-                return head_.value() == k;
-            });
+            auto it = std::find_if(keys_.begin(), keys_.end(), [&](auto k) { return head_.value() == k; });
             util::check(it == keys_.end(), "If keys are present head should be set");
         } else {
             util::check(keys_.empty(), "Head should be set when there are keys");
         }
     }
 
-    void check_stream_id() const {
+    void check_stream_id() const
+    {
         if (empty())
             return;
-        
+
         std::unordered_map<StreamId, std::vector<VersionId>> id_to_version_id;
         if (head_)
             id_to_version_id[head_.value().id()].push_back(head_.value().version_id());
-        for (const auto& k: keys_)
+        for (const auto& k : keys_)
             id_to_version_id[k.id()].push_back(k.version_id());
-        util::check_rte(id_to_version_id.size() == 1, "Multiple symbols in keys: {}", fmt::format("{}", id_to_version_id));
+        util::check_rte(id_to_version_id.size() == 1,
+            "Multiple symbols in keys: {}",
+            fmt::format("{}", id_to_version_id));
     }
 
-    void try_set_tombstone_all(const AtomKey& key) {
+    void try_set_tombstone_all(const AtomKey& key)
+    {
         util::check(key.type() == KeyType::TOMBSTONE_ALL, "Can't set tombstone all key with key {}", key);
-        if(!tombstone_all_ || tombstone_all_.value().version_id() < key.version_id())
+        if (!tombstone_all_ || tombstone_all_.value().version_id() < key.version_id())
             tombstone_all_ = key;
     }
 
-    void validate() const {
+    void validate() const
+    {
         if (!head_ && keys_.empty())
             return;
         check_is_index_or_tombstone(keys_[0]);
@@ -298,12 +336,15 @@ struct VersionMapEntry {
         check_stream_id();
     }
 
-    void validate_types() const {
-        util::check(std::all_of(keys_.begin(), keys_.end(),
-                                [](const AtomKey &key) {
-                                    return is_index_key_type(key.type()) || key.type() == KeyType::VERSION || is_tombstone_key_type(key);
-                                }),
-                    "Unexpected key types in write entry");
+    void validate_types() const
+    {
+        util::check(std::all_of(keys_.begin(),
+                        keys_.end(),
+                        [](const AtomKey& key) {
+                            return is_index_key_type(key.type()) || key.type() == KeyType::VERSION ||
+                                   is_tombstone_key_type(key);
+                        }),
+            "Unexpected key types in write entry");
     }
 
     std::optional<AtomKey> head_;
@@ -315,45 +356,56 @@ struct VersionMapEntry {
     std::optional<AtomKey> tombstone_all_;
 };
 
-inline std::optional<VersionId> get_prev_version_in_entry(const std::shared_ptr<VersionMapEntry>& entry, VersionId version_id) {
+inline std::optional<VersionId> get_prev_version_in_entry(const std::shared_ptr<VersionMapEntry>& entry,
+    VersionId version_id)
+{
     //sorted in decreasing order
     //entry->keys_ is not sorted in version_id any more (due to tombstones), we only need to fetch live index keys
     //which will be sorted on version_id
     auto index_keys = entry->get_indexes(false);
 
-    if (auto iterator_lt = std::upper_bound(std::begin(index_keys), std::end(index_keys), version_id,
-                                            [&](VersionId v_id, const AtomKey &key) {
-                                                return key.version_id() < v_id;
-                                            });iterator_lt != index_keys.end()) {
+    if (auto iterator_lt = std::upper_bound(std::begin(index_keys),
+            std::end(index_keys),
+            version_id,
+            [&](VersionId v_id, const AtomKey& key) { return key.version_id() < v_id; });
+        iterator_lt != index_keys.end())
+    {
         return {iterator_lt->version_id()};
     }
     return std::nullopt;
 }
 
-inline std::optional<VersionId> get_next_version_in_entry(const std::shared_ptr<VersionMapEntry>& entry, VersionId version_id) {
+inline std::optional<VersionId> get_next_version_in_entry(const std::shared_ptr<VersionMapEntry>& entry,
+    VersionId version_id)
+{
     //sorted in decreasing order
     //entry->keys_ is not sorted in version_id any more (due to tombstones), we only need to fetch live index keys
     //which will be sorted on version_id
     auto index_keys = entry->get_indexes(false);
 
-    if (auto iterator_gt = std::lower_bound(std::begin(index_keys), std::end(index_keys), version_id,
-                                            [&](const AtomKey &key, VersionId v_id) {
-                                                return key.version_id() > v_id;
-                                            }); iterator_gt != index_keys.begin()) {
+    if (auto iterator_gt = std::lower_bound(std::begin(index_keys),
+            std::end(index_keys),
+            version_id,
+            [&](const AtomKey& key, VersionId v_id) { return key.version_id() > v_id; });
+        iterator_gt != index_keys.begin())
+    {
         iterator_gt--;
         return {iterator_gt->version_id()};
     }
     return std::nullopt;
 }
 
-inline std::optional<AtomKey> find_index_key_for_version_id(VersionId version_id, const std::shared_ptr<VersionMapEntry>& entry) {
-    auto key = std::find_if(std::begin(entry->keys_), std::end(entry->keys_), [version_id] (const auto& key) {
+inline std::optional<AtomKey> find_index_key_for_version_id(VersionId version_id,
+    const std::shared_ptr<VersionMapEntry>& entry)
+{
+    auto key = std::find_if(std::begin(entry->keys_), std::end(entry->keys_), [version_id](const auto& key) {
         return key.type() == KeyType::TABLE_INDEX && key.version_id() == version_id;
     });
     return key == std::end(entry->keys_) ? std::nullopt : std::make_optional(*key);
 }
 
-inline std::optional<std::pair<AtomKey, AtomKey>> get_latest_key_pair(const std::shared_ptr<VersionMapEntry>& entry) {
+inline std::optional<std::pair<AtomKey, AtomKey>> get_latest_key_pair(const std::shared_ptr<VersionMapEntry>& entry)
+{
     if (entry->head_ && !entry->keys_.empty()) {
         auto journal_key = entry->head_.value();
         auto index_key = entry->get_first_index(false);
@@ -363,20 +415,25 @@ inline std::optional<std::pair<AtomKey, AtomKey>> get_latest_key_pair(const std:
     return std::nullopt;
 }
 
-inline void remove_duplicate_index_keys(const std::shared_ptr<VersionMapEntry>& entry) {
+inline void remove_duplicate_index_keys(const std::shared_ptr<VersionMapEntry>& entry)
+{
     entry->keys_.erase(std::unique(entry->keys_.begin(), entry->keys_.end()), entry->keys_.end());
 }
-}
+} // namespace arcticdb
 
 namespace fmt {
-    template<>
-    struct formatter<arcticdb::LoadType> {
-        template<typename ParseContext>
-        constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
+template<>
+struct formatter<arcticdb::LoadType> {
+    template<typename ParseContext>
+    constexpr auto parse(ParseContext& ctx)
+    {
+        return ctx.begin();
+    }
 
     template<typename FormatContext>
-    auto format(const arcticdb::LoadType &l, FormatContext &ctx) const {
-        switch(l) {
+    auto format(const arcticdb::LoadType& l, FormatContext& ctx) const
+    {
+        switch (l) {
         case arcticdb::LoadType::NOT_LOADED:
             return format_to(ctx.out(), "NOT_LOADED");
         case arcticdb::LoadType::LOAD_LATEST:
@@ -394,4 +451,4 @@ namespace fmt {
         }
     }
 };
-}
+} // namespace fmt

@@ -46,4 +46,4 @@ struct UpdateOpts {
     bool upsert_ = false;
 };
 
-}
+} // namespace arcticdb::storage

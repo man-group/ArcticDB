@@ -22,20 +22,21 @@ struct FrameSliceMap {
     robin_hood::unordered_flat_map<std::string_view, std::map<RowRange, ContextData>> columns_;
     std::shared_ptr<PipelineContext> context_;
 
-    FrameSliceMap(const std::shared_ptr<PipelineContext>& context, bool dynamic_schema) :
-        context_(std::move(context)) {
+    FrameSliceMap(const std::shared_ptr<PipelineContext>& context, bool dynamic_schema)
+        : context_(std::move(context))
+    {
 
-        for (const auto &context_row: *context_) {
+        for (const auto& context_row : *context_) {
             const auto& row_range = context_row.slice_and_key().slice_.row_range;
 
             const auto& fields = context_row.descriptor().fields();
-            for(const auto& field : folly::enumerate(fields)) {
+            for (const auto& field : folly::enumerate(fields)) {
                 if (!context_->is_in_filter_columns_set(field->name())) {
                     ARCTICDB_DEBUG(log::version(), "{} not present in filtered columns, skipping", field->name());
                     continue;
                 }
 
-                if(!dynamic_schema && !is_sequence_type(type_desc_from_proto(field->type_desc()).data_type())) {
+                if (!dynamic_schema && !is_sequence_type(type_desc_from_proto(field->type_desc()).data_type())) {
                     ARCTICDB_DEBUG(log::version(), "{} not a string type in dynamic schema, skipping", field->name());
                     continue;
                 }

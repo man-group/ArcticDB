@@ -10,8 +10,8 @@
 
 #include <arcticdb/pipeline/test/test_container.hpp>
 
-
-TEST(BitsetForIndex, DynamicSchemaStrictlyBefore) {
+TEST(BitsetForIndex, DynamicSchemaStrictlyBefore)
+{
     using namespace arcticdb;
     using namespace arcticdb::pipelines;
     TestContainer container;
@@ -23,7 +23,8 @@ TEST(BitsetForIndex, DynamicSchemaStrictlyBefore) {
     ASSERT_EQ(bitset->count(), 0);
 }
 
-TEST(BitsetForIndex, DynamicSchemaStrictlyAfter) {
+TEST(BitsetForIndex, DynamicSchemaStrictlyAfter)
+{
     using namespace arcticdb;
     using namespace arcticdb::pipelines;
     TestContainer container;
@@ -35,19 +36,21 @@ TEST(BitsetForIndex, DynamicSchemaStrictlyAfter) {
     ASSERT_EQ(bitset->count(), 0);
 }
 
-TEST(BitsetForIndex, DynamicSchemaMiddle) {
-   using namespace arcticdb;
-   using namespace arcticdb::pipelines;
-   TestContainer container;
-   container.seg().set_range(0, 2);
-   container.seg().set_range(5, 7);
-   IndexRange rg(3, 4);
-   std::unique_ptr<util::BitSet> input;
-   auto bitset = build_bitset_for_index<TestContainer, TimeseriesIndex>(container, rg, true, false, std::move(input));
-   ASSERT_EQ(bitset->count(), 0);
+TEST(BitsetForIndex, DynamicSchemaMiddle)
+{
+    using namespace arcticdb;
+    using namespace arcticdb::pipelines;
+    TestContainer container;
+    container.seg().set_range(0, 2);
+    container.seg().set_range(5, 7);
+    IndexRange rg(3, 4);
+    std::unique_ptr<util::BitSet> input;
+    auto bitset = build_bitset_for_index<TestContainer, TimeseriesIndex>(container, rg, true, false, std::move(input));
+    ASSERT_EQ(bitset->count(), 0);
 }
 
-TEST(BitsetForIndex, DynamicSchemaOverlapBegin) {
+TEST(BitsetForIndex, DynamicSchemaOverlapBegin)
+{
     using namespace arcticdb;
     using namespace arcticdb::pipelines;
     TestContainer container;
@@ -60,7 +63,8 @@ TEST(BitsetForIndex, DynamicSchemaOverlapBegin) {
     ASSERT_EQ(bitset->count(), 1);
 }
 
-TEST(BitsetForIndex, DynamicSchemaOverlapEnd) {
+TEST(BitsetForIndex, DynamicSchemaOverlapEnd)
+{
     using namespace arcticdb;
     using namespace arcticdb::pipelines;
     TestContainer container;

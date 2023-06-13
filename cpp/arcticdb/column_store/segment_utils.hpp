@@ -14,12 +14,13 @@
 #include <arcticdb/util/configs_map.hpp>
 
 namespace arcticdb {
-emilib::HashSet<StringPool::offset_t> unique_values_for_string_column(const Column &column) {
+emilib::HashSet<StringPool::offset_t> unique_values_for_string_column(const Column& column)
+{
     auto column_data = column.data();
     return column_data.type().visit_tag([&](auto type_desc_tag) -> emilib::HashSet<StringPool::offset_t> {
         using TDT = decltype(type_desc_tag);
         using DTT = typename TDT::DataTypeTag;
-        if constexpr(is_sequence_type(DTT::data_type)) {
+        if constexpr (is_sequence_type(DTT::data_type)) {
             using RawType = typename TDT::DataTypeTag::raw_type;
             emilib::HashSet<StringPool::offset_t> output;
             // Guessing that unique values is a third of the column length
@@ -27,7 +28,7 @@ emilib::HashSet<StringPool::offset_t> unique_values_for_string_column(const Colu
             output.reserve(column.row_count() / map_reserve_ratio);
 
             while (auto block = column_data.next<TDT>()) {
-                auto ptr = reinterpret_cast<const RawType *>(block.value().data());
+                auto ptr = reinterpret_cast<const RawType*>(block.value().data());
                 const auto row_count = block->row_count();
                 for (auto i = 0u; i < row_count; ++i) {
                     output.insert(*ptr++);
@@ -40,4 +41,4 @@ emilib::HashSet<StringPool::offset_t> unique_values_for_string_column(const Colu
     });
 }
 
-}
+} // namespace arcticdb

@@ -9,7 +9,8 @@
 #include <arcticdb/column_store/chunked_buffer.hpp>
 #include <arcticdb/util/cursored_buffer.hpp>
 
-TEST(ChunkedBuffer, Iterator) {
+TEST(ChunkedBuffer, Iterator)
+{
     using namespace arcticdb;
 
     auto buff = CursoredBuffer<ChunkedBufferImpl<64>>{};
@@ -22,13 +23,14 @@ TEST(ChunkedBuffer, Iterator) {
     auto it = buff.buffer().iterator(8);
     uint64_t count = 0;
     while (!it.finished()) {
-        ASSERT_EQ(*reinterpret_cast<uint64_t *>(it.value()), count++);
+        ASSERT_EQ(*reinterpret_cast<uint64_t*>(it.value()), count++);
         it.next();
     }
 
     ASSERT_EQ(count, 10000);
 }
-TEST(ChunkedBuffer, Split) {
+TEST(ChunkedBuffer, Split)
+{
     using namespace arcticdb;
     std::vector<uint8_t> input{1, 0, 0};
     auto chunk_size = 1;
@@ -53,7 +55,8 @@ TEST(ChunkedBuffer, Split) {
     }
 }
 
-TEST(ChunkedBuffer, RapidCheckRepro) {
+TEST(ChunkedBuffer, RapidCheckRepro)
+{
     std::vector<uint8_t> input(64);
     using namespace arcticdb;
     auto chunk_size = 5u;
@@ -75,10 +78,10 @@ TEST(ChunkedBuffer, RapidCheckRepro) {
         auto left = buf->cast<uint8_t>(where);
         auto right = input[i];
         auto& buf_obj = *buf;
-        if(buf_obj.cast<uint8_t>(where) != input[i])
+        if (buf_obj.cast<uint8_t>(where) != input[i])
             std::cout << "Blarf";
         ASSERT_EQ(left, right);
-        if(((i + 1) % split_size) == 0)
+        if (((i + 1) % split_size) == 0)
             ++buf;
     }
 }

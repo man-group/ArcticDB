@@ -24,7 +24,8 @@ namespace arcticdb::storage::apy {
 
 using namespace python_util;
 
-std::shared_ptr<LibraryIndex> create_library_index(const std::string &environment_name, const py::object &py_envs) {
+std::shared_ptr<LibraryIndex> create_library_index(const std::string& environment_name, const py::object& py_envs)
+{
     arcticdb::proto::storage::EnvironmentConfigsMap envs;
     pb_from_python(py_envs, envs);
     auto env_by_id = convert_environment_config(envs);
@@ -32,7 +33,8 @@ std::shared_ptr<LibraryIndex> create_library_index(const std::string &environmen
     return std::make_shared<LibraryIndex>(EnvironmentName{environment_name}, mem_resolver);
 }
 
-void register_bindings(py::module &m, py::exception<arcticdb::ArcticException>& base_exception) {
+void register_bindings(py::module& m, py::exception<arcticdb::ArcticException>& base_exception)
+{
     auto storage = m.def_submodule("storage", "Segment storage implementation apis");
 
     py::enum_<KeyType>(storage, "KeyType")
@@ -59,8 +61,7 @@ void register_bindings(py::module &m, py::exception<arcticdb::ArcticException>& 
         .value("BACKUP_SNAPSHOT_REF", KeyType::BACKUP_SNAPSHOT_REF)
         .value("TOMBSTONE_ALL", KeyType::TOMBSTONE_ALL)
         .value("SNAPSHOT_TOMBSTONE", KeyType::SNAPSHOT_TOMBSTONE)
-        .value("LOG_COMPACTED", KeyType::LOG_COMPACTED)
-        ;
+        .value("LOG_COMPACTED", KeyType::LOG_COMPACTED);
 
     py::enum_<OpenMode>(storage, "OpenMode")
         .value("READ", OpenMode::READ)
@@ -69,88 +70,93 @@ void register_bindings(py::module &m, py::exception<arcticdb::ArcticException>& 
 
     storage.def("create_library_index", &create_library_index);
 
-    storage.def("create_mem_config_resolver", [](const py::object & env_config_map_py) -> std::shared_ptr<ConfigResolver> {
-        arcticdb::proto::storage::EnvironmentConfigsMap ecm;
-        pb_from_python(env_config_map_py, ecm);
-        auto resolver = std::make_shared<storage::details::InMemoryConfigResolver>();
-        for(auto &[env, cfg] :ecm.env_by_id()){
-            EnvironmentName env_name{env};
-            for(auto &[id, storage]: cfg.storage_by_id()){
-                resolver->add_storage(env_name, StorageName{id}, storage);
+    storage.def("create_mem_config_resolver",
+        [](const py::object& env_config_map_py) -> std::shared_ptr<ConfigResolver> {
+            arcticdb::proto::storage::EnvironmentConfigsMap ecm;
+            pb_from_python(env_config_map_py, ecm);
+            auto resolver = std::make_shared<storage::details::InMemoryConfigResolver>();
+            for (auto& [env, cfg] : ecm.env_by_id()) {
+                EnvironmentName env_name{env};
+                for (auto& [id, storage] : cfg.storage_by_id()) {
+                    resolver->add_storage(env_name, StorageName{id}, storage);
+                }
+                for (auto& [id, lib_desc] : cfg.lib_by_path()) {
+                    resolver->add_library(env_name, lib_desc);
+                }
             }
-            for(auto &[id, lib_desc]: cfg.lib_by_path()){
-                resolver->add_library(env_name, lib_desc);
-            }
-        }
-        return resolver;
-    });
+            return resolver;
+        });
 
     py::class_<ConfigResolver, std::shared_ptr<ConfigResolver>>(storage, "ConfigResolver");
 
     py::class_<Library, std::shared_ptr<Library>>(storage, "Library")
-        .def_property_readonly("library_path", [](Library &library){ return library.library_path().to_delim_path(); })
-        .def_property_readonly("open_mode", [](Library &library){ return library.open_mode(); })
-        .def_property_readonly("config", [](const Library & library)->py::object{
-            return util::variant_match(library.config(),
-                                       [](const arcticdb::proto::storage::VersionStoreConfig & cfg){
-                                           return pb_to_python(cfg);
-                                       },
-                                       [](const std::monostate & ){
-                                            auto none = py::none{};
-                                            none.inc_ref();
-                                            return none.cast<py::object>();
-                                       });
-        })
-        ;
+        .def_property_readonly("library_path", [](Library& library) { return library.library_path().to_delim_path(); })
+        .def_property_readonly("open_mode", [](Library& library) { return library.open_mode(); })
+        .def_property_readonly("config", [](const Library& library) -> py::object {
+            return util::variant_match(
+                library.config(),
+                [](const arcticdb::proto::storage::VersionStoreConfig& cfg) { return pb_to_python(cfg); },
+                [](const std::monostate&) {
+                    auto none = py::none{};
+                    none.inc_ref();
+                    return none.cast<py::object>();
+                });
+        });
 
     py::class_<LibraryManager, std::shared_ptr<LibraryManager>>(storage, "LibraryManager")
         .def(py::init<std::shared_ptr<storage::Library>>())
-        .def("write_library_config", [](LibraryManager& library_manager, py::object& lib_cfg, std::string_view library_path) {
-            LibraryPath lib_path{library_path, '.'};
+        .def("write_library_config",
+            [](LibraryManager& library_manager, py::object& lib_cfg, std::string_view library_path) {
+                LibraryPath lib_path{library_path, '.'};
 
-            return library_manager.write_library_config(lib_cfg, lib_path);
-        })
-        .def("get_library_config", [](LibraryManager& library_manager, std::string_view library_path){
-            return library_manager.get_library_config(LibraryPath{library_path, '.'});
-        })
-        .def("remove_library_config", [](LibraryManager& library_manager, std::string_view library_path){
-            return library_manager.remove_library_config(LibraryPath{library_path, '.'});
-        })
-        .def("get_library", [](LibraryManager& library_manager, std::string_view library_path){
-            return library_manager.get_library(LibraryPath{library_path, '.'});
-        })
-        .def("has_library", [](LibraryManager& library_manager, std::string_view library_path){
-            return library_manager.has_library(LibraryPath{library_path, '.'});
-        })
-        .def("list_libraries", [](LibraryManager& library_manager){
+                return library_manager.write_library_config(lib_cfg, lib_path);
+            })
+        .def("get_library_config",
+            [](LibraryManager& library_manager, std::string_view library_path) {
+                return library_manager.get_library_config(LibraryPath{library_path, '.'});
+            })
+        .def("remove_library_config",
+            [](LibraryManager& library_manager, std::string_view library_path) {
+                return library_manager.remove_library_config(LibraryPath{library_path, '.'});
+            })
+        .def("get_library",
+            [](LibraryManager& library_manager, std::string_view library_path) {
+                return library_manager.get_library(LibraryPath{library_path, '.'});
+            })
+        .def("has_library",
+            [](LibraryManager& library_manager, std::string_view library_path) {
+                return library_manager.has_library(LibraryPath{library_path, '.'});
+            })
+        .def("list_libraries", [](LibraryManager& library_manager) {
             std::vector<std::string> res;
-            for(auto & lp:library_manager.get_library_paths()){
+            for (auto& lp : library_manager.get_library_paths()) {
                 res.push_back(lp.to_delim_path());
             }
             return res;
         });
 
     py::class_<LibraryIndex, std::shared_ptr<LibraryIndex>>(storage, "LibraryIndex")
-        .def(py::init<>([](const std::string &environment_name) {
-                 auto resolver = std::make_shared<details::InMemoryConfigResolver>();
-                 return std::make_unique<LibraryIndex>(EnvironmentName{environment_name}, resolver);
-             })
-        )
-        .def_static("create_from_resolver", [](const std::string &environment_name, std::shared_ptr<ConfigResolver> resolver){
-            return std::make_shared<LibraryIndex>(EnvironmentName{environment_name}, resolver);
-        })
-        .def("list_libraries", [](LibraryIndex &library_index, std::string_view prefix = ""){
-            std::vector<std::string> res;
-            for(auto & lp:library_index.list_libraries(prefix)){
-                res.push_back(lp.to_delim_path());
-            }
-            return res;
-        } )
-        .def("get_library", [](LibraryIndex &library_index, const std::string &library_path, OpenMode open_mode = OpenMode::DELETE) {
-            LibraryPath path = LibraryPath::from_delim_path(library_path);
-            return library_index.get_library(path, open_mode, UserAuth{});
-        })
-        ;
+        .def(py::init<>([](const std::string& environment_name) {
+            auto resolver = std::make_shared<details::InMemoryConfigResolver>();
+            return std::make_unique<LibraryIndex>(EnvironmentName{environment_name}, resolver);
+        }))
+        .def_static("create_from_resolver",
+            [](const std::string& environment_name, std::shared_ptr<ConfigResolver> resolver) {
+                return std::make_shared<LibraryIndex>(EnvironmentName{environment_name}, resolver);
+            })
+        .def("list_libraries",
+            [](LibraryIndex& library_index, std::string_view prefix = "") {
+                std::vector<std::string> res;
+                for (auto& lp : library_index.list_libraries(prefix)) {
+                    res.push_back(lp.to_delim_path());
+                }
+                return res;
+            })
+        .def("get_library",
+            [](LibraryIndex& library_index, const std::string& library_path, OpenMode open_mode = OpenMode::DELETE) {
+                LibraryPath path = LibraryPath::from_delim_path(library_path);
+                return library_index.get_library(path, open_mode, UserAuth{});
+            });
 
     py::register_exception<DuplicateKeyException>(storage, "DuplicateKeyException", base_exception.ptr());
     py::register_exception<NoDataFoundException>(storage, "NoDataFoundException", base_exception.ptr());
@@ -158,4 +164,3 @@ void register_bindings(py::module &m, py::exception<arcticdb::ArcticException>& 
 }
 
 } // namespace arcticdb::storage::apy
-

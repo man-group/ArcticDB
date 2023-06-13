@@ -11,7 +11,6 @@
 
 #include <third_party/recycle/src/recycle/shared_pool.hpp>
 
-
 namespace arcticdb {
 
 struct lock_policy {
@@ -26,21 +25,24 @@ class BufferPool {
     static void init();
 
     recycle::shared_pool<Buffer, lock_policy> pool_;
+
 public:
     static std::shared_ptr<BufferPool> instance();
     static void destroy_instance();
 
     BufferPool();
 
-    auto allocate() {
+    auto allocate()
+    {
         auto output = pool_.allocate();
         ARCTICDB_DEBUG(log::version(), "Pool returning {}", uintptr_t(output.get()));
         return output;
     }
-    
-    void clear() {
+
+    void clear()
+    {
         pool_.free_unused();
     }
 };
 
- } //namespace arcticdb
+} //namespace arcticdb

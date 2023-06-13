@@ -8,8 +8,8 @@
 #include <gtest/gtest.h>
 #include <arcticdb/util/configs_map.hpp>
 
-
-TEST(RuntimeConfig, PersistToProtobuf) {
+TEST(RuntimeConfig, PersistToProtobuf)
+{
     using namespace arcticdb;
 
     ConfigsMap test_map;

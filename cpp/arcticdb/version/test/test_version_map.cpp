@@ -21,26 +21,43 @@ namespace arcticdb {
 
 using ::testing::UnorderedElementsAre;
 
-#define THREE_SIMPLE_KEYS \
-    auto key1 = atom_key_builder().version_id(1).creation_ts(PilotedClock::nanos_since_epoch()).content_hash(3).start_index( \
-        4).end_index(5).build(id, KeyType::TABLE_INDEX); \
-    auto key2 = atom_key_builder().version_id(2).creation_ts(PilotedClock::nanos_since_epoch()).content_hash(4).start_index(  \
-        5).end_index(6).build(id, KeyType::TABLE_INDEX); \
-    auto key3 = atom_key_builder().version_id(3).creation_ts(PilotedClock::nanos_since_epoch()).content_hash(5).start_index(  \
-        6).end_index(7).build(id, KeyType::TABLE_INDEX);
+#define THREE_SIMPLE_KEYS                                                                                              \
+    auto key1 = atom_key_builder()                                                                                     \
+                    .version_id(1)                                                                                     \
+                    .creation_ts(PilotedClock::nanos_since_epoch())                                                    \
+                    .content_hash(3)                                                                                   \
+                    .start_index(4)                                                                                    \
+                    .end_index(5)                                                                                      \
+                    .build(id, KeyType::TABLE_INDEX);                                                                  \
+    auto key2 = atom_key_builder()                                                                                     \
+                    .version_id(2)                                                                                     \
+                    .creation_ts(PilotedClock::nanos_since_epoch())                                                    \
+                    .content_hash(4)                                                                                   \
+                    .start_index(5)                                                                                    \
+                    .end_index(6)                                                                                      \
+                    .build(id, KeyType::TABLE_INDEX);                                                                  \
+    auto key3 = atom_key_builder()                                                                                     \
+                    .version_id(3)                                                                                     \
+                    .creation_ts(PilotedClock::nanos_since_epoch())                                                    \
+                    .content_hash(5)                                                                                   \
+                    .start_index(6)                                                                                    \
+                    .end_index(7)                                                                                      \
+                    .build(id, KeyType::TABLE_INDEX);
 
 struct VersionMapStore : TestStore {
 protected:
-    std::string get_name() override {
+    std::string get_name() override
+    {
         return "version_map";
     }
 };
 
-TEST(VersionMap, Basic) {
+TEST(VersionMap, Basic)
+{
     auto store = std::make_shared<InMemoryStore>();
     StreamId id{"test"};
-    auto key1 = atom_key_builder().version_id(1).creation_ts(2).content_hash(3).start_index(
-        4).end_index(5).build(id, KeyType::TABLE_INDEX);
+    auto key1 = atom_key_builder().version_id(1).creation_ts(2).content_hash(3).start_index(4).end_index(5).build(id,
+        KeyType::TABLE_INDEX);
 
     auto version_map = std::make_shared<VersionMap>();
     version_map->set_validate(true);
@@ -48,7 +65,7 @@ TEST(VersionMap, Basic) {
     ASSERT_EQ(store->num_atom_keys(), 1);
     ASSERT_EQ(store->num_ref_keys(), 1);
 
-    RefKey ref_key{id,  KeyType::VERSION_REF};
+    RefKey ref_key{id, KeyType::VERSION_REF};
     auto ref_fut = store->read(ref_key, storage::ReadKeyOpts{});
     auto [key, seg] = std::move(ref_fut).get();
 
@@ -63,7 +80,8 @@ TEST(VersionMap, Basic) {
     ASSERT_EQ(ver_key_row_1, key1);
 }
 
-TEST(VersionMap, WithPredecessors) {
+TEST(VersionMap, WithPredecessors)
+{
     auto store = std::make_shared<InMemoryStore>();
     StreamId id{"test1"};
 
@@ -81,18 +99,23 @@ TEST(VersionMap, WithPredecessors) {
     ASSERT_EQ(latest.value(), key2);
     version_map->write_version(store, key3);
 
-    std::vector<AtomKey> expected{ key3, key2, key1};
+    std::vector<AtomKey> expected{key3, key2, key1};
     auto result = get_all_versions(store, version_map, id, true, false);
     ASSERT_EQ(result, expected);
-
 }
 
-TEST(VersionMap, TombstoneDelete) {
+TEST(VersionMap, TombstoneDelete)
+{
     auto store = std::make_shared<InMemoryStore>();
     StreamId id{"test1"};
     THREE_SIMPLE_KEYS
-    auto key4 = atom_key_builder().version_id(4).creation_ts(PilotedClock::nanos_since_epoch()).content_hash(6).start_index(
-        7).end_index(8).build(id, KeyType::TABLE_INDEX);
+    auto key4 = atom_key_builder()
+                    .version_id(4)
+                    .creation_ts(PilotedClock::nanos_since_epoch())
+                    .content_hash(6)
+                    .start_index(7)
+                    .end_index(8)
+                    .build(id, KeyType::TABLE_INDEX);
 
     auto version_map = std::make_shared<VersionMap>();
     version_map->set_validate(true);
@@ -142,7 +165,8 @@ TEST(VersionMap, TombstoneDelete) {
     ASSERT_TRUE(del_res.could_share_data.empty());
 }
 
-TEST(VersionMap, PingPong) {
+TEST(VersionMap, PingPong)
+{
     auto store = std::make_shared<InMemoryStore>();
     StreamId id{"test1"};
     auto left = std::make_shared<VersionMap>();
@@ -152,51 +176,67 @@ TEST(VersionMap, PingPong) {
 
     ScopedConfig sc("VersionMap.ReloadInterval", 0); // always reload
 
-    auto key1 = atom_key_builder().version_id(1).creation_ts(2).content_hash(3).start_index(
-        4).end_index(5).build(id, KeyType::TABLE_INDEX);
+    auto key1 = atom_key_builder().version_id(1).creation_ts(2).content_hash(3).start_index(4).end_index(5).build(id,
+        KeyType::TABLE_INDEX);
 
     left->write_version(store, key1);
     auto latest = get_latest_undeleted_version(store, right, id, false, false);
     ASSERT_EQ(latest.value(), key1);
 
-    auto key2 = atom_key_builder().version_id(2).creation_ts(3).content_hash(4).start_index(
-        5).end_index(6).build(id, KeyType::TABLE_INDEX);
+    auto key2 = atom_key_builder().version_id(2).creation_ts(3).content_hash(4).start_index(5).end_index(6).build(id,
+        KeyType::TABLE_INDEX);
 
     right->write_version(store, key2);
 
-    auto key3 = atom_key_builder().version_id(3).creation_ts(4).content_hash(5).start_index(
-        6).end_index(7).build(id, KeyType::TABLE_INDEX);
+    auto key3 = atom_key_builder().version_id(3).creation_ts(4).content_hash(5).start_index(6).end_index(7).build(id,
+        KeyType::TABLE_INDEX);
 
     left->write_version(store, key3);
 
-    std::vector<AtomKey> expected{ key3, key2, key1};
+    std::vector<AtomKey> expected{key3, key2, key1};
     auto left_result = get_all_versions(store, left, id, false, false);
     ASSERT_EQ(left_result, expected);
     auto right_result = get_all_versions(store, right, id, false, false);
     ASSERT_EQ(right_result, expected);
 }
 
-TEST(VersionMap, TestLoadsRefAndIteration) {
+TEST(VersionMap, TestLoadsRefAndIteration)
+{
     auto store = std::make_shared<InMemoryStore>();
     StreamId id{"test1"};
     auto version_map = std::make_shared<VersionMap>();
     version_map->set_validate(true);
 
-    auto key1 = atom_key_builder().version_id(1).creation_ts(PilotedClock::nanos_since_epoch()).content_hash(3).start_index( \
-        4).end_index(5).build(id, KeyType::TABLE_INDEX);
+    auto key1 = atom_key_builder()
+                    .version_id(1)
+                    .creation_ts(PilotedClock::nanos_since_epoch())
+                    .content_hash(3)
+                    .start_index(4)
+                    .end_index(5)
+                    .build(id, KeyType::TABLE_INDEX);
     version_map->write_version(store, key1);
 
-    auto key2 = atom_key_builder().version_id(2).creation_ts(PilotedClock::nanos_since_epoch()).content_hash(4).start_index(  \
-        5).end_index(6).build(id, KeyType::TABLE_INDEX);
+    auto key2 = atom_key_builder()
+                    .version_id(2)
+                    .creation_ts(PilotedClock::nanos_since_epoch())
+                    .content_hash(4)
+                    .start_index(5)
+                    .end_index(6)
+                    .build(id, KeyType::TABLE_INDEX);
     version_map->write_version(store, key2);
 
-    auto key3 = atom_key_builder().version_id(3).creation_ts(PilotedClock::nanos_since_epoch()).content_hash(5).start_index(  \
-        6).end_index(7).build(id, KeyType::TABLE_INDEX);
+    auto key3 = atom_key_builder()
+                    .version_id(3)
+                    .creation_ts(PilotedClock::nanos_since_epoch())
+                    .content_hash(5)
+                    .start_index(6)
+                    .end_index(7)
+                    .build(id, KeyType::TABLE_INDEX);
     version_map->write_version(store, key3);
 
     ScopedConfig reload_interval("VersionMap.ReloadInterval", 0); // always reload
 
-    std::vector<AtomKey> expected{ key3, key2, key1};
+    std::vector<AtomKey> expected{key3, key2, key1};
     auto result = get_all_versions(store, version_map, id, false, false);
     ASSERT_EQ(result, expected);
 
@@ -208,15 +248,19 @@ TEST(VersionMap, TestLoadsRefAndIteration) {
 
     ASSERT_EQ(entry_iteration->head_, entry_ref->head_);
     ASSERT_EQ(entry_iteration->keys_.size(), entry_ref->keys_.size());
-    for(size_t idx = 0; idx<entry_iteration->keys_.size(); idx++)
-        if(entry_iteration->keys_[idx] != entry_ref->keys_[idx]) {
-            util::raise_rte("Keys Mismatch on idx {}: {} != {}", idx, entry_iteration->keys_[idx], entry_ref->keys_[idx]);
+    for (size_t idx = 0; idx < entry_iteration->keys_.size(); idx++)
+        if (entry_iteration->keys_[idx] != entry_ref->keys_[idx]) {
+            util::raise_rte("Keys Mismatch on idx {}: {} != {}",
+                idx,
+                entry_iteration->keys_[idx],
+                entry_ref->keys_[idx]);
         }
     entry_iteration->validate();
     entry_ref->validate();
 }
 
-TEST(VersionMap, TestCompact) {
+TEST(VersionMap, TestCompact)
+{
     auto store = std::make_shared<InMemoryStore>();
     StreamId id{"test1"};
     THREE_SIMPLE_KEYS
@@ -234,12 +278,13 @@ TEST(VersionMap, TestCompact) {
     ASSERT_EQ(store->num_atom_keys(), 2);
     ASSERT_EQ(store->num_ref_keys(), 1);
 
-    std::vector<AtomKey> expected{ key3, key2, key1};
+    std::vector<AtomKey> expected{key3, key2, key1};
     auto result = get_all_versions(store, version_map, id, false, false);
     ASSERT_EQ(result, expected);
 }
 
-TEST(VersionMap, TestCompactWithDelete) {
+TEST(VersionMap, TestCompactWithDelete)
+{
     auto store = std::make_shared<InMemoryStore>();
     StreamId id{"test1"};
     THREE_SIMPLE_KEYS
@@ -258,13 +303,13 @@ TEST(VersionMap, TestCompactWithDelete) {
     ASSERT_EQ(store->num_atom_keys(), 2);
     ASSERT_EQ(store->num_ref_keys(), 1);
 
-    std::vector<AtomKey> expected{ key3, key1};
+    std::vector<AtomKey> expected{key3, key1};
     auto result = get_all_versions(store, version_map, id, false, false);
     ASSERT_EQ(result, expected);
 }
 
-
-TEST(VersionMap, TestLatestVersionWithDeleteTombstones) {
+TEST(VersionMap, TestLatestVersionWithDeleteTombstones)
+{
     auto store = std::make_shared<InMemoryStore>();
     StreamId id{"test1"};
     THREE_SIMPLE_KEYS
@@ -280,7 +325,8 @@ TEST(VersionMap, TestLatestVersionWithDeleteTombstones) {
     ASSERT_EQ(version_id, 4);
 }
 
-TEST(VersionMap, TestCompactWithDeleteTombstones) {
+TEST(VersionMap, TestCompactWithDeleteTombstones)
+{
     auto store = std::make_shared<InMemoryStore>();
     StreamId id{"test1"};
     THREE_SIMPLE_KEYS
@@ -296,12 +342,13 @@ TEST(VersionMap, TestCompactWithDeleteTombstones) {
     ScopedConfig reload_interval("VersionMap.ReloadInterval", 0); // always reload
     version_map->compact(store, id);
 
-    std::vector<AtomKey> expected{ key3, key1};
+    std::vector<AtomKey> expected{key3, key1};
     auto result = get_all_versions(store, version_map, id, false, false);
     ASSERT_EQ(result, expected);
 }
 
-TEST(VersionMap, TombstoneAllTwice) {
+TEST(VersionMap, TombstoneAllTwice)
+{
     auto store = std::make_shared<InMemoryStore>();
     StreamId id{"test1"};
     THREE_SIMPLE_KEYS
@@ -316,7 +363,8 @@ TEST(VersionMap, TombstoneAllTwice) {
     // Don't need a check condition, checking validation
 }
 
-TEST(VersionMap, TombstoneAllRemoveFastTombstone) {
+TEST(VersionMap, TombstoneAllRemoveFastTombstone)
+{
     auto store = std::make_shared<InMemoryStore>();
     StreamId id{"test1"};
     THREE_SIMPLE_KEYS
@@ -325,30 +373,34 @@ TEST(VersionMap, TombstoneAllRemoveFastTombstone) {
     version_map->set_fast_tombstone_all(true);
     version_map->set_validate(true);
     version_map->write_and_prune_previous(store, key1, std::nullopt);
-    auto maybe_prev = get_latest_version(store, version_map,  id, true, false);
+    auto maybe_prev = get_latest_version(store, version_map, id, true, false);
     version_map->write_and_prune_previous(store, key2, maybe_prev.value());
     version_map->set_fast_tombstone_all(false);
-    maybe_prev = get_latest_version(store, version_map,  id, true, false);
+    maybe_prev = get_latest_version(store, version_map, id, true, false);
     version_map->write_and_prune_previous(store, key3, maybe_prev.value());
     auto versions = get_all_versions(store, version_map, id, true, false);
     ASSERT_EQ(versions.size(), 1);
     ASSERT_EQ(versions[0], key3);
 }
 
-void write_old_style_journal_entry(const AtomKey &key, std::shared_ptr<StreamSink> store) {
-    IndexAggregator<RowCountIndex> journal_agg(key.id(), [&](auto &&segment) {
-        store->write(KeyType::VERSION_JOURNAL,
-                          key.version_id(),
-                          key.id(),
-                          IndexValue(0),
-                          IndexValue(0),
-                          std::move(segment)).wait();
+void write_old_style_journal_entry(const AtomKey& key, std::shared_ptr<StreamSink> store)
+{
+    IndexAggregator<RowCountIndex> journal_agg(key.id(), [&](auto&& segment) {
+        store
+            ->write(KeyType::VERSION_JOURNAL,
+                key.version_id(),
+                key.id(),
+                IndexValue(0),
+                IndexValue(0),
+                std::move(segment))
+            .wait();
     });
     journal_agg.add_key(key);
     journal_agg.commit();
 }
 
-TEST(VersionMap, BackwardsCompatibility) {
+TEST(VersionMap, BackwardsCompatibility)
+{
     StreamId id{"test3"};
     THREE_SIMPLE_KEYS
 
@@ -359,47 +411,61 @@ TEST(VersionMap, BackwardsCompatibility) {
     ASSERT_EQ(store->num_atom_keys_of_type(KeyType::VERSION_JOURNAL), 3);
     auto version_map = std::make_shared<VersionMap>();
 
-    auto key4 = atom_key_builder().version_id(4).creation_ts(5).content_hash(6).start_index(
-        7).end_index(8).build(id, KeyType::TABLE_INDEX);
+    auto key4 = atom_key_builder().version_id(4).creation_ts(5).content_hash(6).start_index(7).end_index(8).build(id,
+        KeyType::TABLE_INDEX);
 
     version_map->write_version(store, key4);
     ASSERT_EQ(store->num_atom_keys_of_type(KeyType::VERSION_JOURNAL), 0);
     ASSERT_EQ(store->num_atom_keys_of_type(KeyType::VERSION), 2);
     ASSERT_EQ(store->num_ref_keys_of_type(KeyType::VERSION_REF), 1);
 
-    std::vector<AtomKey> expected{ key4, key3, key2, key1};
+    std::vector<AtomKey> expected{key4, key3, key2, key1};
     auto result = get_all_versions(store, version_map, id, true, false);
     ASSERT_EQ(result, expected);
 }
 
-TEST(VersionMap, IterateOnFailure) {
+TEST(VersionMap, IterateOnFailure)
+{
     auto store = std::make_shared<InMemoryStore>();
     StreamId id{"test1"};
 
     auto version_map = std::make_shared<VersionMap>();
     version_map->set_validate(true);
-    auto key1 =
-        atom_key_builder().version_id(1).creation_ts(PilotedClock::nanos_since_epoch()).content_hash(3).start_index(
-            4).end_index(5).build(id, KeyType::TABLE_INDEX);
+    auto key1 = atom_key_builder()
+                    .version_id(1)
+                    .creation_ts(PilotedClock::nanos_since_epoch())
+                    .content_hash(3)
+                    .start_index(4)
+                    .end_index(5)
+                    .build(id, KeyType::TABLE_INDEX);
     version_map->write_version(store, key1);
-    auto key2 =
-        atom_key_builder().version_id(2).creation_ts(PilotedClock::nanos_since_epoch()).content_hash(4).start_index(
-            5).end_index(6).build(id, KeyType::TABLE_INDEX);
+    auto key2 = atom_key_builder()
+                    .version_id(2)
+                    .creation_ts(PilotedClock::nanos_since_epoch())
+                    .content_hash(4)
+                    .start_index(5)
+                    .end_index(6)
+                    .build(id, KeyType::TABLE_INDEX);
     version_map->write_version(store, key2);
-    auto key3 =
-        atom_key_builder().version_id(3).creation_ts(PilotedClock::nanos_since_epoch()).content_hash(5).start_index(
-            6).end_index(7).build(id, KeyType::TABLE_INDEX);
+    auto key3 = atom_key_builder()
+                    .version_id(3)
+                    .creation_ts(PilotedClock::nanos_since_epoch())
+                    .content_hash(5)
+                    .start_index(6)
+                    .end_index(7)
+                    .build(id, KeyType::TABLE_INDEX);
     version_map->write_version(store, key3);
 
     RefKey ref_key{id, KeyType::VERSION_REF};
     store->remove_key_sync(ref_key, storage::RemoveOpts{});
 
-    std::vector<AtomKey> expected{ key3, key2, key1};
+    std::vector<AtomKey> expected{key3, key2, key1};
     auto result = get_all_versions(store, version_map, id, false, true);
     ASSERT_EQ(result, expected);
 }
 
-TEST(VersionMap, GetNextVersionInEntry) {
+TEST(VersionMap, GetNextVersionInEntry)
+{
     using namespace arcticdb;
 
     auto entry = std::make_shared<VersionMapEntry>();
@@ -431,21 +497,37 @@ TEST(VersionMap, GetNextVersionInEntry) {
     ASSERT_EQ(get_next_version_in_entry(entry, 0).value(), 1);
 }
 
-TEST(VersionMap, FixRefKey) {
+TEST(VersionMap, FixRefKey)
+{
     auto store = std::make_shared<InMemoryStore>();
     StreamId id{"test_fix_ref"};
 
     auto version_map = std::make_shared<VersionMap>();
-    auto key1 = atom_key_builder().version_id(1).creation_ts(PilotedClock::nanos_since_epoch()).content_hash(3).start_index( \
-        4).end_index(5).build(id, KeyType::TABLE_INDEX);
+    auto key1 = atom_key_builder()
+                    .version_id(1)
+                    .creation_ts(PilotedClock::nanos_since_epoch())
+                    .content_hash(3)
+                    .start_index(4)
+                    .end_index(5)
+                    .build(id, KeyType::TABLE_INDEX);
     version_map->write_version(store, key1);
 
-    auto key2 = atom_key_builder().version_id(2).creation_ts(PilotedClock::nanos_since_epoch()).content_hash(4).start_index(  \
-        5).end_index(6).build(id, KeyType::TABLE_INDEX);
+    auto key2 = atom_key_builder()
+                    .version_id(2)
+                    .creation_ts(PilotedClock::nanos_since_epoch())
+                    .content_hash(4)
+                    .start_index(5)
+                    .end_index(6)
+                    .build(id, KeyType::TABLE_INDEX);
     version_map->write_version(store, key2);
 
-    auto key3 = atom_key_builder().version_id(3).creation_ts(PilotedClock::nanos_since_epoch()).content_hash(5).start_index(  \
-        6).end_index(7).build(id, KeyType::TABLE_INDEX);
+    auto key3 = atom_key_builder()
+                    .version_id(3)
+                    .creation_ts(PilotedClock::nanos_since_epoch())
+                    .content_hash(5)
+                    .start_index(6)
+                    .end_index(7)
+                    .build(id, KeyType::TABLE_INDEX);
     version_map->write_version(store, key3);
     ASSERT_TRUE(version_map->check_ref_key(store, id));
 
@@ -465,21 +547,37 @@ TEST(VersionMap, FixRefKey) {
     ASSERT_EQ(result, expected);
 }
 
-TEST(VersionMap, RewriteVersionKeys) {
+TEST(VersionMap, RewriteVersionKeys)
+{
     auto store = std::make_shared<InMemoryStore>();
     StreamId id{"test_rewrite_version_keys"};
 
     auto version_map = std::make_shared<VersionMap>();
-    auto key1 = atom_key_builder().version_id(1).creation_ts(PilotedClock::nanos_since_epoch()).content_hash(3).start_index( \
-        4).end_index(5).build(id, KeyType::TABLE_INDEX);
+    auto key1 = atom_key_builder()
+                    .version_id(1)
+                    .creation_ts(PilotedClock::nanos_since_epoch())
+                    .content_hash(3)
+                    .start_index(4)
+                    .end_index(5)
+                    .build(id, KeyType::TABLE_INDEX);
     version_map->write_version(store, key1);
 
-    auto key2 = atom_key_builder().version_id(2).creation_ts(PilotedClock::nanos_since_epoch()).content_hash(4).start_index(  \
-        5).end_index(6).build(id, KeyType::TABLE_INDEX);
+    auto key2 = atom_key_builder()
+                    .version_id(2)
+                    .creation_ts(PilotedClock::nanos_since_epoch())
+                    .content_hash(4)
+                    .start_index(5)
+                    .end_index(6)
+                    .build(id, KeyType::TABLE_INDEX);
     version_map->write_version(store, key2);
 
-    auto key3 = atom_key_builder().version_id(3).creation_ts(PilotedClock::nanos_since_epoch()).content_hash(5).start_index(  \
-        6).end_index(7).build(id, KeyType::TABLE_INDEX);
+    auto key3 = atom_key_builder()
+                    .version_id(3)
+                    .creation_ts(PilotedClock::nanos_since_epoch())
+                    .content_hash(5)
+                    .start_index(6)
+                    .end_index(7)
+                    .build(id, KeyType::TABLE_INDEX);
     version_map->write_version(store, key3);
 
     // the above write_version wont write index keys - only version keys
@@ -515,7 +613,8 @@ TEST(VersionMap, RewriteVersionKeys) {
     ASSERT_EQ(result, expected);
 }
 
-TEST(VersionMap, RecoverDeleted) {
+TEST(VersionMap, RecoverDeleted)
+{
     auto store = std::make_shared<InMemoryStore>();
     StreamId id{"test_recover"};
     THREE_SIMPLE_KEYS
@@ -538,12 +637,13 @@ TEST(VersionMap, RecoverDeleted) {
     ASSERT_EQ(get_all_versions(store, version_map, id, true, false).size(), 0);
     version_map->recover_deleted(store, id);
 
-    std::vector<AtomKey> expected{ key3, key2, key1};
+    std::vector<AtomKey> expected{key3, key2, key1};
     auto result = get_all_versions(store, version_map, id, true, false);
     ASSERT_EQ(result, expected);
 }
 
-TEST(VersionMap, StorageLogging) {
+TEST(VersionMap, StorageLogging)
+{
     auto store = std::make_shared<InMemoryStore>();
     StreamId id{"test_storage_logging"};
     THREE_SIMPLE_KEYS
@@ -560,17 +660,18 @@ TEST(VersionMap, StorageLogging) {
 
     std::unordered_set<AtomKey> log_keys;
 
-    store->iterate_type(KeyType::LOG, [&](VariantKey &&vk) {
-        log_keys.emplace(std::get<AtomKey>(vk));
-    }, "");
+    store->iterate_type(
+        KeyType::LOG,
+        [&](VariantKey&& vk) { log_keys.emplace(std::get<AtomKey>(vk)); },
+        "");
 
     ASSERT_EQ(log_keys.size(), 6u);
     size_t write_keys = 0;
     size_t tomb_keys = 0;
-    for (const auto& key: log_keys) {
+    for (const auto& key : log_keys) {
         if (std::get<StringId>(key.id()) == arcticdb::WriteVersionId) {
             write_keys++;
-        } else if(std::get<StringId>(key.id()) == arcticdb::TombstoneVersionId) {
+        } else if (std::get<StringId>(key.id()) == arcticdb::TombstoneVersionId) {
             tomb_keys++;
         } else {
             FAIL();
@@ -582,37 +683,47 @@ TEST(VersionMap, StorageLogging) {
 
 #define GTEST_COUT std::cerr << "[          ] [ INFO ]"
 
-TEST_F(VersionMapStore, StressTestWrite) {
+TEST_F(VersionMapStore, StressTestWrite)
+{
     using namespace arcticdb;
     std::vector<AtomKey> keys;
     const size_t num_tests = 999;
     StreamId id{"test"};
     for (auto i = 0ULL; i < num_tests; ++i) {
-        keys.emplace_back(
-                atom_key_builder().version_id(i).creation_ts(PilotedClock::nanos_since_epoch()).content_hash(i).start_index( \
-                4).end_index(5).build(id, KeyType::TABLE_INDEX));
+        keys.emplace_back(atom_key_builder()
+                              .version_id(i)
+                              .creation_ts(PilotedClock::nanos_since_epoch())
+                              .content_hash(i)
+                              .start_index(4)
+                              .end_index(5)
+                              .build(id, KeyType::TABLE_INDEX));
     }
 
     auto version_map = std::make_shared<VersionMap>();
     std::string timer_name("write_stress");
     interval_timer timer(timer_name);
-    for(const auto& key : keys) {
+    for (const auto& key : keys) {
         version_map->write_version(test_store_->_test_get_store(), key);
     }
     timer.stop_timer(timer_name);
     GTEST_COUT << timer.display_all() << std::endl;
 }
 
-TEST_F(VersionMapStore, StressTestBatchSameSymbol) {
+TEST_F(VersionMapStore, StressTestBatchSameSymbol)
+{
     using namespace arcticdb;
     auto name = std::string("stress_batch");
     std::vector<AtomKey> keys;
     const size_t num_tests = 999;
     StreamId id{"test"};
     for (auto i = 0ULL; i < num_tests; ++i) {
-        keys.emplace_back(
-            atom_key_builder().version_id(i).creation_ts(PilotedClock::nanos_since_epoch()).content_hash(i).start_index( \
-            4).end_index(5).build(id, KeyType::TABLE_INDEX));
+        keys.emplace_back(atom_key_builder()
+                              .version_id(i)
+                              .creation_ts(PilotedClock::nanos_since_epoch())
+                              .content_hash(i)
+                              .start_index(4)
+                              .end_index(5)
+                              .build(id, KeyType::TABLE_INDEX));
     }
 
     auto store = test_store_->_test_get_store();
@@ -620,7 +731,8 @@ TEST_F(VersionMapStore, StressTestBatchSameSymbol) {
     batch_write_version(store, version_map, keys);
 }
 
-TEST_F(VersionMapStore, StressTestBatchWrite) {
+TEST_F(VersionMapStore, StressTestBatchWrite)
+{
     using namespace arcticdb;
     auto name = std::string("stress_batch");
     std::vector<AtomKey> keys;
@@ -628,9 +740,13 @@ TEST_F(VersionMapStore, StressTestBatchWrite) {
 
     for (auto i = 0ULL; i < num_tests; ++i) {
         StreamId id{fmt::format("test_{}", i)};
-        keys.emplace_back(
-            atom_key_builder().version_id(i).creation_ts(PilotedClock::nanos_since_epoch()).content_hash(i).start_index( \
-            4).end_index(5).build(id, KeyType::TABLE_INDEX));
+        keys.emplace_back(atom_key_builder()
+                              .version_id(i)
+                              .creation_ts(PilotedClock::nanos_since_epoch())
+                              .content_hash(i)
+                              .start_index(4)
+                              .end_index(5)
+                              .build(id, KeyType::TABLE_INDEX));
     }
 
     auto store = test_store_->_test_get_store();

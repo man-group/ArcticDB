@@ -9,7 +9,8 @@
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/entity/type_utils.hpp>
 
-TEST(HasValidTypePromotion, DifferentDimensions) {
+TEST(HasValidTypePromotion, DifferentDimensions)
+{
     using namespace arcticdb;
     using namespace arcticdb::entity;
     TypeDescriptor source(ValueType::UNKNOWN_VALUE_TYPE, SizeBits::UNKNOWN_SIZE_BITS, Dimension::Dim0);
@@ -18,7 +19,8 @@ TEST(HasValidTypePromotion, DifferentDimensions) {
     EXPECT_FALSE(result.has_value());
 }
 
-TEST(HasValidTypePromotion, NonNumericTypes) {
+TEST(HasValidTypePromotion, NonNumericTypes)
+{
     using namespace arcticdb;
     using namespace arcticdb::entity;
     TypeDescriptor non_numeric_source(ValueType::ASCII_FIXED, SizeBits::UNKNOWN_SIZE_BITS, Dimension::Dim0);
@@ -31,7 +33,8 @@ TEST(HasValidTypePromotion, NonNumericTypes) {
     EXPECT_FALSE(result.has_value());
 }
 
-TEST(HasValidTypePromotion, UintUint) {
+TEST(HasValidTypePromotion, UintUint)
+{
     using namespace arcticdb;
     using namespace arcticdb::entity;
     TypeDescriptor source(ValueType::UINT, SizeBits::S16, Dimension::Dim0);
@@ -43,7 +46,8 @@ TEST(HasValidTypePromotion, UintUint) {
     ASSERT_EQ(has_valid_type_promotion(source, target_wider), target_wider);
 }
 
-TEST(HasValidTypePromotion, UintInt) {
+TEST(HasValidTypePromotion, UintInt)
+{
     using namespace arcticdb;
     using namespace arcticdb::entity;
     TypeDescriptor source(ValueType::UINT, SizeBits::S16, Dimension::Dim0);
@@ -55,7 +59,8 @@ TEST(HasValidTypePromotion, UintInt) {
     ASSERT_EQ(has_valid_type_promotion(source, target_wider), target_wider);
 }
 
-TEST(HasValidTypePromotion, UintFloat) {
+TEST(HasValidTypePromotion, UintFloat)
+{
     using namespace arcticdb;
     using namespace arcticdb::entity;
     TypeDescriptor source(ValueType::UINT, SizeBits::S64, Dimension::Dim0);
@@ -65,7 +70,8 @@ TEST(HasValidTypePromotion, UintFloat) {
     ASSERT_EQ(has_valid_type_promotion(source, float64), float64);
 }
 
-TEST(HasValidTypePromotion, IntUint) {
+TEST(HasValidTypePromotion, IntUint)
+{
     using namespace arcticdb;
     using namespace arcticdb::entity;
     TypeDescriptor source(ValueType::INT, SizeBits::S8, Dimension::Dim0);
@@ -73,7 +79,8 @@ TEST(HasValidTypePromotion, IntUint) {
     EXPECT_FALSE(has_valid_type_promotion(source, target));
 }
 
-TEST(HasValidTypePromotion, IntInt) {
+TEST(HasValidTypePromotion, IntInt)
+{
     using namespace arcticdb;
     using namespace arcticdb::entity;
     TypeDescriptor source(ValueType::INT, SizeBits::S16, Dimension::Dim0);
@@ -85,7 +92,8 @@ TEST(HasValidTypePromotion, IntInt) {
     ASSERT_EQ(has_valid_type_promotion(source, target_wider), target_wider);
 }
 
-TEST(HasValidTypePromotion, IntFloat) {
+TEST(HasValidTypePromotion, IntFloat)
+{
     using namespace arcticdb;
     using namespace arcticdb::entity;
     TypeDescriptor source(ValueType::INT, SizeBits::S64, Dimension::Dim0);
@@ -95,7 +103,8 @@ TEST(HasValidTypePromotion, IntFloat) {
     ASSERT_EQ(has_valid_type_promotion(source, float64), float64);
 }
 
-TEST(HasValidTypePromotion, FloatUint) {
+TEST(HasValidTypePromotion, FloatUint)
+{
     using namespace arcticdb;
     using namespace arcticdb::entity;
     TypeDescriptor source(ValueType::FLOAT, SizeBits::S32, Dimension::Dim0);
@@ -103,7 +112,8 @@ TEST(HasValidTypePromotion, FloatUint) {
     EXPECT_FALSE(has_valid_type_promotion(source, target));
 }
 
-TEST(HasValidTypePromotion, FloatInt) {
+TEST(HasValidTypePromotion, FloatInt)
+{
     using namespace arcticdb;
     using namespace arcticdb::entity;
     TypeDescriptor source(ValueType::FLOAT, SizeBits::S32, Dimension::Dim0);
@@ -111,7 +121,8 @@ TEST(HasValidTypePromotion, FloatInt) {
     EXPECT_FALSE(has_valid_type_promotion(source, target));
 }
 
-TEST(HasValidTypePromotion, FloatFloat) {
+TEST(HasValidTypePromotion, FloatFloat)
+{
     using namespace arcticdb;
     using namespace arcticdb::entity;
     TypeDescriptor float32(ValueType::FLOAT, SizeBits::S32, Dimension::Dim0);
@@ -120,4 +131,3 @@ TEST(HasValidTypePromotion, FloatFloat) {
     ASSERT_EQ(has_valid_type_promotion(float32, float32), float32);
     EXPECT_FALSE(has_valid_type_promotion(float64, float32));
 }
-

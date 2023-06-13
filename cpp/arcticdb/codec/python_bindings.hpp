@@ -11,10 +11,11 @@
 namespace py = pybind11;
 
 namespace arcticdb {
-void register_codec(py::module &m);
+void register_codec(py::module& m);
 
 namespace codec {
-inline void register_bindings(py::module &m) {
+inline void register_bindings(py::module& m)
+{
     auto arcticdb_codec = m.def_submodule("codec", R"pydoc(
     Encoding / decoding of in memory segments for storage
     -----------------------------------------------------
@@ -23,6 +24,5 @@ inline void register_bindings(py::module &m) {
     arcticdb::register_codec(arcticdb_codec);
 }
 
-} // namespace arcticdb::codec
+} // namespace codec
 } // namespace arcticdb
-

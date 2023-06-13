@@ -11,17 +11,23 @@
 
 namespace arcticdb::util {
 
-template<class... Ts> struct overload : Ts... { using Ts::operator()...; };
-template<class... Ts> overload(Ts...) -> overload<Ts...>;
+template<class... Ts>
+struct overload : Ts... {
+    using Ts::operator()...;
+};
+template<class... Ts>
+overload(Ts...) -> overload<Ts...>;
 
 template<class Variant, class... Ts>
-auto variant_match(Variant && v, Ts... ts){
+auto variant_match(Variant&& v, Ts... ts)
+{
     return std::visit(overload{ts...}, v);
 }
 
 template<class Variant, class... Ts>
-auto variant_match(const Variant && v, Ts... ts){
+auto variant_match(const Variant&& v, Ts... ts)
+{
     return std::visit(overload{ts...}, v);
 }
 
-} // arctic::util
+} // namespace arcticdb::util

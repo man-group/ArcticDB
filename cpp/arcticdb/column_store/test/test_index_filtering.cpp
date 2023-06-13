@@ -17,12 +17,10 @@
 namespace arcticdb {
 using namespace arcticdb::pipelines;
 
-std::pair<arcticdb::proto::descriptors::TimeSeriesDescriptor , std::vector<SliceAndKey>> get_sample_slice_and_key(StreamId stream_id, VersionId version_id, size_t col_slices = 1, size_t row_slices = 10) {
-    StreamDescriptor stream_desc{
-        stream_id,
-        IndexDescriptor{1, IndexDescriptor::TIMESTAMP},
-        {}
-    };
+std::pair<arcticdb::proto::descriptors::TimeSeriesDescriptor, std::vector<SliceAndKey>>
+get_sample_slice_and_key(StreamId stream_id, VersionId version_id, size_t col_slices = 1, size_t row_slices = 10)
+{
+    StreamDescriptor stream_desc{stream_id, IndexDescriptor{1, IndexDescriptor::TIMESTAMP}, {}};
 
     stream_desc.add_field(scalar_field_proto(DataType::MICROS_UTC64, "time"));
 
@@ -38,28 +36,19 @@ std::pair<arcticdb::proto::descriptors::TimeSeriesDescriptor , std::vector<Slice
     metadata.mutable_stream_descriptor()->CopyFrom(stream_desc.proto());
     std::vector<SliceAndKey> slice_and_keys;
 
-    for(auto col_range = 0u; col_range < col_slices; ++col_range) {
+    for (auto col_range = 0u; col_range < col_slices; ++col_range) {
 
         auto start_val = 0;
         auto end_val = start_val + step;
         for (auto i = 0u; i < row_slices; ++i) {
-            slice_and_keys.push_back(
-                SliceAndKey{
-                    FrameSlice{
-                        ColRange{start_col, end_col},
-                        RowRange{start_val, end_val}
-                    },
-                    AtomKey{
-                        stream_id,
-                        version_id,
-                        i,
-                        col_range,
-                        IndexValue{start_val},
-                        IndexValue{end_val},
-                        KeyType::TABLE_DATA
-                    }
-                }
-            );
+            slice_and_keys.push_back(SliceAndKey{FrameSlice{ColRange{start_col, end_col}, RowRange{start_val, end_val}},
+                AtomKey{stream_id,
+                    version_id,
+                    i,
+                    col_range,
+                    IndexValue{start_val},
+                    IndexValue{end_val},
+                    KeyType::TABLE_DATA}});
             start_val = end_val;
             end_val += step;
         }
@@ -69,9 +58,10 @@ std::pair<arcticdb::proto::descriptors::TimeSeriesDescriptor , std::vector<Slice
     }
     return std::make_pair(metadata, slice_and_keys);
 }
-}
+} // namespace arcticdb
 
-TEST(IndexFilter, Static) {
+TEST(IndexFilter, Static)
+{
     using namespace arcticdb;
     using namespace arcticdb::pipelines;
 
@@ -84,7 +74,7 @@ TEST(IndexFilter, Static) {
     auto mock_store = std::make_shared<InMemoryStore>();
     index::IndexWriter<stream::RowCountIndex> writer(mock_store, partial_key, std::move(metadata));
 
-    for (auto &slice_and_key : slice_and_keys) {
+    for (auto& slice_and_key : slice_and_keys) {
         writer.add(slice_and_key.key(), slice_and_key.slice());
     }
     auto key_fut = writer.commit();
@@ -96,18 +86,16 @@ TEST(IndexFilter, Static) {
     ReadQuery read_query{};
     read_query.row_filter = IndexRange{25, 65};
 
-    auto queries = get_column_bitset_and_query_functions<index::IndexSegmentReader>(
-        read_query,
-        pipeline_context,
-        false,
-        false);
+    auto queries =
+        get_column_bitset_and_query_functions<index::IndexSegmentReader>(read_query, pipeline_context, false, false);
 
     pipeline_context->slice_and_keys_ = filter_index(isr, combine_filter_functions(queries));
     ASSERT_EQ(pipeline_context->slice_and_keys_[0].key_, slice_and_keys[2].key_);
     ASSERT_EQ(pipeline_context->slice_and_keys_[4].key_, slice_and_keys[6].key_);
 }
 
-TEST(IndexFilter, Dynamic) {
+TEST(IndexFilter, Dynamic)
+{
     using namespace arcticdb;
     using namespace arcticdb::pipelines;
 
@@ -120,7 +108,7 @@ TEST(IndexFilter, Dynamic) {
     auto mock_store = std::make_shared<InMemoryStore>();
     index::IndexWriter<stream::RowCountIndex> writer(mock_store, partial_key, std::move(metadata));
 
-    for (auto &slice_and_key : slice_and_keys) {
+    for (auto& slice_and_key : slice_and_keys) {
         writer.add(slice_and_key.key(), slice_and_key.slice());
     }
     auto key_fut = writer.commit();
@@ -132,18 +120,16 @@ TEST(IndexFilter, Dynamic) {
     ReadQuery read_query{};
     read_query.row_filter = IndexRange{25, 65};
 
-    auto queries = get_column_bitset_and_query_functions<index::IndexSegmentReader>(
-        read_query,
-        pipeline_context,
-        true,
-        false);
+    auto queries =
+        get_column_bitset_and_query_functions<index::IndexSegmentReader>(read_query, pipeline_context, true, false);
 
     pipeline_context->slice_and_keys_ = filter_index(isr, combine_filter_functions(queries));
     ASSERT_EQ(pipeline_context->slice_and_keys_[0].key(), slice_and_keys[2].key());
     ASSERT_EQ(pipeline_context->slice_and_keys_[4].key(), slice_and_keys[6].key());
 }
 
-TEST(IndexFilter, StaticMulticolumn) {
+TEST(IndexFilter, StaticMulticolumn)
+{
     using namespace arcticdb;
     using namespace arcticdb::pipelines;
 
@@ -156,7 +142,7 @@ TEST(IndexFilter, StaticMulticolumn) {
     auto mock_store = std::make_shared<InMemoryStore>();
     index::IndexWriter<stream::RowCountIndex> writer(mock_store, partial_key, std::move(metadata));
 
-    for (auto &slice_and_key : slice_and_keys) {
+    for (auto& slice_and_key : slice_and_keys) {
         writer.add(slice_and_key.key(), slice_and_key.slice());
     }
     auto key_fut = writer.commit();
@@ -168,11 +154,8 @@ TEST(IndexFilter, StaticMulticolumn) {
     ReadQuery read_query{};
     read_query.row_filter = IndexRange{25, 65};
 
-    auto queries = get_column_bitset_and_query_functions<index::IndexSegmentReader>(
-        read_query,
-        pipeline_context,
-        false,
-        false);
+    auto queries =
+        get_column_bitset_and_query_functions<index::IndexSegmentReader>(read_query, pipeline_context, false, false);
 
     pipeline_context->slice_and_keys_ = filter_index(isr, combine_filter_functions(queries));
     ASSERT_EQ(pipeline_context->slice_and_keys_[0].key_, slice_and_keys[2].key_);
@@ -183,7 +166,8 @@ TEST(IndexFilter, StaticMulticolumn) {
     ASSERT_EQ(pipeline_context->slice_and_keys_[49].key_, slice_and_keys[96].key_);
 }
 
-TEST(IndexFilter, MultiColumnSelectAll) {
+TEST(IndexFilter, MultiColumnSelectAll)
+{
     using namespace arcticdb;
     using namespace arcticdb::pipelines;
 
@@ -196,7 +180,7 @@ TEST(IndexFilter, MultiColumnSelectAll) {
     auto mock_store = std::make_shared<InMemoryStore>();
     index::IndexWriter<stream::RowCountIndex> writer(mock_store, partial_key, std::move(metadata));
 
-    for (auto &slice_and_key : slice_and_keys) {
+    for (auto& slice_and_key : slice_and_keys) {
         writer.add(slice_and_key.key(), slice_and_key.slice());
     }
     auto key_fut = writer.commit();
@@ -208,17 +192,15 @@ TEST(IndexFilter, MultiColumnSelectAll) {
     ReadQuery read_query{};
     read_query.row_filter = IndexRange{0, 100};
 
-    auto queries = get_column_bitset_and_query_functions<index::IndexSegmentReader>(
-        read_query,
-        pipeline_context,
-        false,
-        false);
+    auto queries =
+        get_column_bitset_and_query_functions<index::IndexSegmentReader>(read_query, pipeline_context, false, false);
 
     pipeline_context->slice_and_keys_ = filter_index(isr, combine_filter_functions(queries));
     ASSERT_EQ(pipeline_context->slice_and_keys_, slice_and_keys);
 }
 
-TEST(IndexFilter, StaticMulticolumnFilterColumns) {
+TEST(IndexFilter, StaticMulticolumnFilterColumns)
+{
     using namespace arcticdb;
     using namespace arcticdb::pipelines;
 
@@ -231,7 +213,7 @@ TEST(IndexFilter, StaticMulticolumnFilterColumns) {
     auto mock_store = std::make_shared<InMemoryStore>();
     index::IndexWriter<stream::RowCountIndex> writer(mock_store, partial_key, std::move(metadata));
 
-    for (auto &slice_and_key : slice_and_keys) {
+    for (auto& slice_and_key : slice_and_keys) {
         writer.add(slice_and_key.key(), slice_and_key.slice());
     }
     auto key_fut = writer.commit();
@@ -242,13 +224,10 @@ TEST(IndexFilter, StaticMulticolumnFilterColumns) {
 
     ReadQuery read_query{};
     read_query.row_filter = IndexRange{25, 65};
-    read_query.columns = std::vector<std::string> {"col_10", "col_91"};
+    read_query.columns = std::vector<std::string>{"col_10", "col_91"};
 
-    auto queries = get_column_bitset_and_query_functions<index::IndexSegmentReader>(
-        read_query,
-        pipeline_context,
-        false,
-        false);
+    auto queries =
+        get_column_bitset_and_query_functions<index::IndexSegmentReader>(read_query, pipeline_context, false, false);
 
     pipeline_context->slice_and_keys_ = filter_index(isr, combine_filter_functions(queries));
     ASSERT_EQ(pipeline_context->slice_and_keys_[0].key_, slice_and_keys[12].key_);

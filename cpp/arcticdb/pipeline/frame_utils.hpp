@@ -23,19 +23,25 @@
 
 namespace arcticdb {
 
-inline size_t get_first_string_size(const pipelines::PipelineContextRow& context_row, ChunkedBuffer &src, std::size_t first_row_in_frame) {
+inline size_t get_first_string_size(const pipelines::PipelineContextRow& context_row,
+    ChunkedBuffer& src,
+    std::size_t first_row_in_frame)
+{
     auto offset = first_context_row(context_row.slice_and_key(), first_row_in_frame);
     auto num_rows = context_row.slice_and_key().slice_.row_range.diff();
     util::check(context_row.has_string_pool(), "String pool not found for context row {}", context_row.index());
     return get_first_string_size(num_rows, src, offset, context_row.string_pool());
 }
 
-inline size_t get_max_string_size(const pipelines::PipelineContextRow& context_row, ChunkedBuffer &src, std::size_t first_row_in_frame) {
+inline size_t get_max_string_size(const pipelines::PipelineContextRow& context_row,
+    ChunkedBuffer& src,
+    std::size_t first_row_in_frame)
+{
     auto offset = first_context_row(context_row.slice_and_key(), first_row_in_frame);
     auto num_rows = context_row.slice_and_key().slice_.row_range.diff();
     size_t max_length{0u};
 
-    for(auto row = 0u; row < num_rows; ++row) {
+    for (auto row = 0u; row < num_rows; ++row) {
         auto offset_val = get_offset_string_at(offset + row, src);
         if (offset_val == nan_placeholder() || offset_val == not_a_string())
             continue;
@@ -45,38 +51,34 @@ inline size_t get_max_string_size(const pipelines::PipelineContextRow& context_r
     return max_length;
 }
 
-arcticdb::proto::descriptors::TimeSeriesDescriptor make_descriptor(
-    size_t rows,
+arcticdb::proto::descriptors::TimeSeriesDescriptor make_descriptor(size_t rows,
     StreamDescriptor&& desc,
     arcticdb::proto::descriptors::NormalizationMetadata& norm_meta,
     std::optional<arcticdb::proto::descriptors::UserDefinedMetadata>&& user_meta,
     std::optional<AtomKey>&& prev_key = std::nullopt,
-    bool bucketize_dynamic=false);
+    bool bucketize_dynamic = false);
 
-arcticdb::proto::descriptors::TimeSeriesDescriptor make_descriptor(
-    size_t rows,
+arcticdb::proto::descriptors::TimeSeriesDescriptor make_descriptor(size_t rows,
     pipelines::index::IndexSegmentReader&& index_segment_reader,
     std::optional<AtomKey>&& prev_key = std::nullopt,
-    bool bucketize_dynamic=false);
+    bool bucketize_dynamic = false);
 
 arcticdb::proto::descriptors::TimeSeriesDescriptor make_descriptor(
     const std::shared_ptr<pipelines::PipelineContext>& pipeline_context,
     std::optional<AtomKey>&& prev_key = std::nullopt,
-    bool bucketize_dynamic=false);
+    bool bucketize_dynamic = false);
 
-arcticdb::proto::descriptors::TimeSeriesDescriptor descriptor_from_frame(
-    pipelines::InputTensorFrame&& frame,
+arcticdb::proto::descriptors::TimeSeriesDescriptor descriptor_from_frame(pipelines::InputTensorFrame&& frame,
     size_t existing_rows,
     std::optional<entity::AtomKey>&& prev_key = {});
 
-template <typename RawType>
-RawType* flatten_tensor(
-        std::optional<ChunkedBuffer>& flattened_buffer,
-        size_t rows_to_write,
-        const NativeTensor& tensor,
-        size_t slice_num,
-        size_t regular_slice_size
-        ) {
+template<typename RawType>
+RawType* flatten_tensor(std::optional<ChunkedBuffer>& flattened_buffer,
+    size_t rows_to_write,
+    const NativeTensor& tensor,
+    size_t slice_num,
+    size_t regular_slice_size)
+{
     flattened_buffer = ChunkedBuffer::presized(rows_to_write * sizeof(RawType));
     TypedTensor<RawType> t(tensor, slice_num, regular_slice_size, rows_to_write);
     util::FlattenHelper flattener{t};
@@ -86,23 +88,24 @@ RawType* flatten_tensor(
 }
 
 template<typename Tensor, typename Aggregator>
-void aggregator_set_data(
-    const TypeDescriptor &type_desc,
-    Tensor &tensor,
-    Aggregator &agg,
+void aggregator_set_data(const TypeDescriptor& type_desc,
+    Tensor& tensor,
+    Aggregator& agg,
     size_t col,
     size_t rows_to_write,
     size_t row,
     size_t slice_num,
     size_t regular_slice_size,
-    bool sparsify_floats
-) {
-    type_desc.visit_tag([&](auto &&tag) {
+    bool sparsify_floats)
+{
+    type_desc.visit_tag([&](auto&& tag) {
         using RawType = typename std::decay_t<decltype(tag)>::DataTypeTag::raw_type;
         constexpr auto dt = std::decay_t<decltype(tag)>::DataTypeTag::data_type;
 
-        util::check(type_desc.data_type() == tensor.data_type(), "Type desc {} != {} tensor type", type_desc.data_type(),
-                    tensor.data_type());
+        util::check(type_desc.data_type() == tensor.data_type(),
+            "Type desc {} != {} tensor type",
+            type_desc.data_type(),
+            tensor.data_type());
         util::check(type_desc.data_type() == dt, "Type desc {} != {} static type", type_desc.data_type(), dt);
         auto c_style = util::is_cstyle_array<RawType>(tensor);
         std::optional<ChunkedBuffer> flattened_buffer;
@@ -111,34 +114,35 @@ void aggregator_set_data(
             if (is_fixed_string_type(dt)) {
                 // deduplicate the strings
                 auto str_stride = tensor.strides(0);
-                auto data = const_cast<void *>(tensor.data());
-                auto char_data = reinterpret_cast<char *>(data) + row * str_stride;
+                auto data = const_cast<void*>(tensor.data());
+                auto char_data = reinterpret_cast<char*>(data) + row * str_stride;
                 auto str_len = tensor.elsize();
 
                 for (size_t s = 0; s < rows_to_write; ++s, char_data += str_stride) {
                     agg.set_string_at(col, s, char_data, str_len);
                 }
             } else {
-                auto data = const_cast<void *>(tensor.data());
-                auto ptr_data = reinterpret_cast<PyObject **>(data);
+                auto data = const_cast<void*>(tensor.data());
+                auto ptr_data = reinterpret_cast<PyObject**>(data);
                 ptr_data += row;
                 if (!c_style)
-                    ptr_data = flatten_tensor<PyObject*>(flattened_buffer, rows_to_write, tensor, slice_num, regular_slice_size);
+                    ptr_data = flatten_tensor<PyObject*>(flattened_buffer,
+                        rows_to_write,
+                        tensor,
+                        slice_num,
+                        regular_slice_size);
 
                 auto none = py::none{};
                 for (size_t s = 0; s < rows_to_write; ++s, ++ptr_data) {
                     if (*ptr_data == none.ptr()) {
                         agg.set_no_string_at(col, s, not_a_string());
-                    }
-                    else if(is_py_nan(*ptr_data)){
+                    } else if (is_py_nan(*ptr_data)) {
                         agg.set_no_string_at(col, s, nan_placeholder());
-                    }
-                    else {
+                    } else {
                         if constexpr (is_utf_type(slice_value_type(dt))) {
-                            auto wrapper= convert::py_unicode_to_buffer(*ptr_data);
+                            auto wrapper = convert::py_unicode_to_buffer(*ptr_data);
                             agg.set_string_at(col, s, wrapper.buffer_, wrapper.length_);
-                        }
-                        else {
+                        } else {
                             auto wrapper = convert::pystring_to_buffer(*ptr_data);
                             agg.set_string_at(col, s, wrapper.buffer_, wrapper.length_);
                         }
@@ -160,11 +164,12 @@ void aggregator_set_data(
                 } else {
                     ARCTICDB_SUBSAMPLE_AGG(SetDataFlatten)
                     ARCTICDB_DEBUG(log::version(),
-                            "Data contains non-contiguous columns, writing will be inefficient, consider coercing to c_style ndarray (shape={}, data_size={})",
-                            tensor.strides(0),
-                            sizeof(RawType));
+                        "Data contains non-contiguous columns, writing will be inefficient, consider coercing to "
+                        "c_style ndarray (shape={}, data_size={})",
+                        tensor.strides(0),
+                        sizeof(RawType));
 
-                    TypedTensor <RawType> t(tensor, slice_num, regular_slice_size, rows_to_write);
+                    TypedTensor<RawType> t(tensor, slice_num, regular_slice_size, rows_to_write);
                     agg.set_array(col, t);
                 }
             }
@@ -172,18 +177,22 @@ void aggregator_set_data(
     });
 }
 
-inline arcticdb::proto::descriptors::TimeSeriesDescriptor timeseries_descriptor_from_any(const google::protobuf::Any& any) {
+inline arcticdb::proto::descriptors::TimeSeriesDescriptor timeseries_descriptor_from_any(
+    const google::protobuf::Any& any)
+{
     arcticdb::proto::descriptors::TimeSeriesDescriptor tsd;
     any.UnpackTo(&tsd);
     return tsd;
 }
 
-inline arcticdb::proto::descriptors::TimeSeriesDescriptor timeseries_descriptor_from_segment(const SegmentInMemory& seg) {
+inline arcticdb::proto::descriptors::TimeSeriesDescriptor timeseries_descriptor_from_segment(const SegmentInMemory& seg)
+{
     util::check(seg.metadata(), "Can't get descriptor from null metadata");
     return timeseries_descriptor_from_any(*seg.metadata());
 }
 
-inline arcticdb::proto::descriptors::TimeSeriesDescriptor default_pandas_descriptor(const SegmentInMemory& segment) {
+inline arcticdb::proto::descriptors::TimeSeriesDescriptor default_pandas_descriptor(const SegmentInMemory& segment)
+{
     arcticdb::proto::descriptors::TimeSeriesDescriptor desc;
     desc.mutable_stream_descriptor()->CopyFrom(segment.descriptor().proto());
     desc.set_total_rows(segment.row_count());
@@ -192,40 +201,32 @@ inline arcticdb::proto::descriptors::TimeSeriesDescriptor default_pandas_descrip
     return desc;
 }
 
-arcticdb::proto::descriptors::TimeSeriesDescriptor get_timeseries_descriptor(
-    const StreamDescriptor& descriptor,
+arcticdb::proto::descriptors::TimeSeriesDescriptor get_timeseries_descriptor(const StreamDescriptor& descriptor,
     size_t total_rows,
     const std::optional<AtomKey>& next_key,
     arcticdb::proto::descriptors::NormalizationMetadata&& norm_meta);
 
-google::protobuf::Any pack_timeseries_descriptor(
-    StreamDescriptor&& descriptor,
+google::protobuf::Any pack_timeseries_descriptor(StreamDescriptor&& descriptor,
     size_t total_rows,
     const std::optional<AtomKey>& next_key,
     arcticdb::proto::descriptors::NormalizationMetadata&& norm_meta);
 
-SegmentInMemory segment_from_frame(
-    pipelines::InputTensorFrame&& frame,
+SegmentInMemory segment_from_frame(pipelines::InputTensorFrame&& frame,
     size_t existing_rows,
     std::optional<entity::AtomKey>&& prev_key,
-    bool allow_sparse = false
-);
+    bool allow_sparse = false);
 
 namespace pipelines {
 struct SliceAndKey;
 struct PipelineContext;
-}
+} // namespace pipelines
 
-size_t adjust_slice_rowcounts(
-    std::vector<pipelines::SliceAndKey> & slice_and_keys);
+size_t adjust_slice_rowcounts(std::vector<pipelines::SliceAndKey>& slice_and_keys);
 
-void adjust_slice_rowcounts(
-    const std::shared_ptr<pipelines::PipelineContext>& pipeline_context);
+void adjust_slice_rowcounts(const std::shared_ptr<pipelines::PipelineContext>& pipeline_context);
 
-size_t get_slice_rowcounts(
-    std::vector<pipelines::SliceAndKey> & slice_and_keys);
+size_t get_slice_rowcounts(std::vector<pipelines::SliceAndKey>& slice_and_keys);
 
-std::pair<size_t, size_t> offset_and_row_count(
-    const std::shared_ptr<pipelines::PipelineContext>& context);
+std::pair<size_t, size_t> offset_and_row_count(const std::shared_ptr<pipelines::PipelineContext>& context);
 
 } //namespace arcticdb

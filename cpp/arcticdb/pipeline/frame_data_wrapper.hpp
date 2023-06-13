@@ -22,14 +22,18 @@ namespace arcticdb::pipelines {
 
 namespace py = pybind11;
 
-struct ARCTICDB_VISIBILITY_HIDDEN FrameDataWrapper{
-    explicit FrameDataWrapper(size_t size) : data_(size) {}
+struct ARCTICDB_VISIBILITY_HIDDEN FrameDataWrapper {
+    explicit FrameDataWrapper(size_t size)
+        : data_(size)
+    {
+    }
 
-    const std::vector<py::array>& data() const {
+    const std::vector<py::array>& data() const
+    {
         return data_;
     }
 
     std::vector<py::array> data_;
 };
 
-} // arcticdb::pipelines
+} // namespace arcticdb::pipelines

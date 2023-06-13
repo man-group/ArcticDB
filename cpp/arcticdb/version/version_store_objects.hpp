@@ -40,11 +40,14 @@ struct PreDeleteChecks {
      * For example, certain callers to delete_tree() already performed some of the checks above, so can disable the
      * corresponding flags and put the results here.
      */
-    std::unordered_set<IndexTypeKey> could_share_data {};
+    std::unordered_set<IndexTypeKey> could_share_data{};
 
-    LoadType calc_load_type() const {
-        if (prev_version) return LoadType::LOAD_ALL;
-        if (version_visible | next_version) return LoadType::LOAD_DOWNTO;
+    LoadType calc_load_type() const
+    {
+        if (prev_version)
+            return LoadType::LOAD_ALL;
+        if (version_visible | next_version)
+            return LoadType::LOAD_DOWNTO;
         return LoadType::NOT_LOADED;
     }
 };
@@ -55,8 +58,10 @@ static const PreDeleteChecks default_pre_delete_checks;
  * Output from tombstone_version() with additional fields on top of PreDeleteChecks. Safe to be sliced to the latter.
  */
 struct TombstoneVersionResult : PreDeleteChecks {
-    explicit TombstoneVersionResult(bool entry_already_scanned) :
-        PreDeleteChecks{true, entry_already_scanned, entry_already_scanned, entry_already_scanned, {}} {}
+    explicit TombstoneVersionResult(bool entry_already_scanned)
+        : PreDeleteChecks{true, entry_already_scanned, entry_already_scanned, entry_already_scanned, {}}
+    {
+    }
 
     /**
      * The index key that just got tombstoned, if any.
@@ -88,4 +93,4 @@ struct UpdateInfo {
     VersionId next_version_id_;
 };
 
-} // namespace
+} // namespace arcticdb::version_store

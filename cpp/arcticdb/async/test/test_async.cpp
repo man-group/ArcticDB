@@ -26,7 +26,8 @@ namespace as = arcticdb::storage;
 namespace asl = arcticdb::storage::lmdb;
 namespace ast = arcticdb::stream;
 
-TEST(Async, SinkBasic) {
+TEST(Async, SinkBasic)
+{
 
     as::EnvironmentName environment_name{"research"};
     as::StorageName storage_name("lmdb_local");
@@ -42,22 +43,26 @@ TEST(Async, SinkBasic) {
     aa::TaskScheduler sched{1};
 
     auto seg = ac::SegmentInMemory();
-    aa::EncodeAtomTask enc{
-        ac::entity::KeyType::GENERATION, 6, 123, 456, 457, 999, std::move(seg), lib, codec_opt, size_t(0)
-    };
+    aa::EncodeAtomTask
+        enc{ac::entity::KeyType::GENERATION, 6, 123, 456, 457, 999, std::move(seg), lib, codec_opt, size_t(0)};
 
     auto v = sched.submit_cpu_task(enc).via(&aa::io_executor()).thenValue(aa::WriteSegmentTask{lib}).get();
 
     ac::HashAccum h;
     auto default_content_hash = h.digest();
 
-    ASSERT_EQ(ac::entity::atom_key_builder().gen_id(6).start_index(456).end_index(457).creation_ts(999)
-                  .content_hash(default_content_hash).build(123, ac::entity::KeyType::GENERATION),
-              to_atom(v)
-    );
+    ASSERT_EQ(ac::entity::atom_key_builder()
+                  .gen_id(6)
+                  .start_index(456)
+                  .end_index(457)
+                  .creation_ts(999)
+                  .content_hash(default_content_hash)
+                  .build(123, ac::entity::KeyType::GENERATION),
+        to_atom(v));
 }
 
-TEST(Async, DeDupTest) {
+TEST(Async, DeDupTest)
+{
 
     as::EnvironmentName environment_name{"research"};
     as::StorageName storage_name("lmdb_local");
@@ -82,8 +87,13 @@ TEST(Async, DeDupTest) {
     auto default_content_hash = h.digest();
 
     auto de_dup_map = std::make_shared<ac::DeDupMap>();
-    auto k = ac::entity::atom_key_builder().gen_id(3).start_index(0).end_index(1).creation_ts(999)
-            .content_hash(default_content_hash).build("", ac::entity::KeyType::TABLE_DATA);
+    auto k = ac::entity::atom_key_builder()
+                 .gen_id(3)
+                 .start_index(0)
+                 .end_index(1)
+                 .creation_ts(999)
+                 .content_hash(default_content_hash)
+                 .build("", ac::entity::KeyType::TABLE_DATA);
     de_dup_map->insert_key(k);
 
     auto keys = store.batch_write(std::move(key_segments), de_dup_map, ast::StreamSink::BatchWriteArgs()).get();
@@ -97,12 +107,13 @@ TEST(Async, DeDupTest) {
 }
 
 struct DummyTask : arcticdb::async::BaseTask {
-    folly::Future<int> operator()() {
+    folly::Future<int> operator()()
+    {
         using namespace arcticdb;
         arcticdb::init_random(42);
         ::sleep(3);
         auto x = 0;
-        for(auto i = 0; i < 250; ++i) {
+        for (auto i = 0; i < 250; ++i) {
             x += arcticdb::random_int();
         }
         return x;
@@ -110,7 +121,8 @@ struct DummyTask : arcticdb::async::BaseTask {
 };
 
 struct MetaTask : arcticdb::async::BaseTask {
-    folly::Future<int> operator()(int x) {
+    folly::Future<int> operator()(int x)
+    {
         return x * 2;
     }
 };
@@ -118,14 +130,16 @@ struct MetaTask : arcticdb::async::BaseTask {
 struct MaybeThrowTask : arcticdb::async::BaseTask {
     int id_;
     bool do_throw_;
-    MaybeThrowTask(int id, bool do_throw) :
-        id_(id),
-        do_throw_(do_throw) {
+    MaybeThrowTask(int id, bool do_throw)
+        : id_(id),
+          do_throw_(do_throw)
+    {
     }
 
-    folly::Unit operator()() {
+    folly::Unit operator()()
+    {
         using namespace arcticdb;
-        if(do_throw_)
+        if (do_throw_)
             log::version().info("Thread {} throwing", id_);
         else
             log::version().info("Thread {} running", id_);
@@ -135,19 +149,20 @@ struct MaybeThrowTask : arcticdb::async::BaseTask {
     }
 };
 
-TEST(Async, CollectWithThrow) {
-   std::vector<folly::Future<folly::Unit>> stuff;
-   using namespace arcticdb;
+TEST(Async, CollectWithThrow)
+{
+    std::vector<folly::Future<folly::Unit>> stuff;
+    using namespace arcticdb;
 
-   async::TaskScheduler sched{20};
-   try {
-       for(auto i = 0u; i < 1000; ++i) {
-           stuff.push_back(sched.submit_io_task(MaybeThrowTask(i, i==3)));
-       }
-       auto vec_fut = folly::collectAll(stuff).get();
-   } catch(std::exception&) {
-       log::version().info("Caught something");
-   }
+    async::TaskScheduler sched{20};
+    try {
+        for (auto i = 0u; i < 1000; ++i) {
+            stuff.push_back(sched.submit_io_task(MaybeThrowTask(i, i == 3)));
+        }
+        auto vec_fut = folly::collectAll(stuff).get();
+    } catch (std::exception&) {
+        log::version().info("Caught something");
+    }
 
-   log::version().info("Collect returned");
+    log::version().info("Collect returned");
 }

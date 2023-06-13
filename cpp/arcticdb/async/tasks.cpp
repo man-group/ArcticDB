@@ -10,49 +10,51 @@
 
 namespace arcticdb::async {
 
-    // N.B. Not the same as the filtered descriptor commonly used in allocate_frame, as the segment may not contain all the columns in the filter
-    StreamDescriptor get_filtered_descriptor(const StreamDescriptor::Proto& desc, const std::shared_ptr<std::unordered_set<std::string>>& filter_columns) {
-        // We assume here that filter_columns_ will always contain the index.
-        auto index = stream::index_type_from_descriptor(desc);
+// N.B. Not the same as the filtered descriptor commonly used in allocate_frame, as the segment may not contain all the columns in the filter
+StreamDescriptor get_filtered_descriptor(const StreamDescriptor::Proto& desc,
+    const std::shared_ptr<std::unordered_set<std::string>>& filter_columns)
+{
+    // We assume here that filter_columns_ will always contain the index.
+    auto index = stream::index_type_from_descriptor(desc);
 
-        return util::variant_match(index, [&desc, &filter_columns] (const auto& idx) {
-            if(filter_columns) {
-                std::vector<FieldDescriptor::Proto> columns;
-                for(const auto& field : desc.fields()) {
-                    if(filter_columns->find(field.name()) != std::cend(*filter_columns)) {
-                        ARCTICDB_DEBUG(log::version(), "Field {} is required", field.name());
-                        FieldDescriptor::Proto new_field;
-                        new_field.CopyFrom(field);
-                        columns.push_back(std::move(new_field));
-                    } else {
-                        ARCTICDB_DEBUG(log::version(), "Field {} is not required", field.name());
-                    }
-
+    return util::variant_match(index, [&desc, &filter_columns](const auto& idx) {
+        if (filter_columns) {
+            std::vector<FieldDescriptor::Proto> columns;
+            for (const auto& field : desc.fields()) {
+                if (filter_columns->find(field.name()) != std::cend(*filter_columns)) {
+                    ARCTICDB_DEBUG(log::version(), "Field {} is required", field.name());
+                    FieldDescriptor::Proto new_field;
+                    new_field.CopyFrom(field);
+                    columns.push_back(std::move(new_field));
+                } else {
+                    ARCTICDB_DEBUG(log::version(), "Field {} is not required", field.name());
                 }
-
-                return StreamDescriptor{index_descriptor(StreamDescriptor::id_from_proto(desc), idx, std::move(columns))};
             }
-            else {
-                return StreamDescriptor{index_descriptor(StreamDescriptor::id_from_proto(desc), idx, desc.fields())};
-            }
-        });
-    }
 
-    pipelines::SliceAndKey DecodeSlicesTask::decode_into_slice(std::pair<Segment, pipelines::SliceAndKey>&& sk_pair) const {
-        auto [seg, sk] = std::move(sk_pair);
-        ARCTICDB_DEBUG(log::storage(), "ReadAndDecodeAtomTask decoding segment of size {} with key {}",
-                      seg.total_segment_size(),
-                      variant_key_view(sk.key()));
+            return StreamDescriptor{index_descriptor(StreamDescriptor::id_from_proto(desc), idx, std::move(columns))};
+        } else {
+            return StreamDescriptor{index_descriptor(StreamDescriptor::id_from_proto(desc), idx, desc.fields())};
+        }
+    });
+}
 
-        auto &hdr = seg.header();
-        auto descriptor = async::get_filtered_descriptor(hdr.stream_descriptor(), filter_columns_);
+pipelines::SliceAndKey DecodeSlicesTask::decode_into_slice(std::pair<Segment, pipelines::SliceAndKey>&& sk_pair) const
+{
+    auto [seg, sk] = std::move(sk_pair);
+    ARCTICDB_DEBUG(log::storage(),
+        "ReadAndDecodeAtomTask decoding segment of size {} with key {}",
+        seg.total_segment_size(),
+        variant_key_view(sk.key()));
 
-        ARCTICDB_TRACE(log::codec(), "Creating segment");
-        SegmentInMemory res(std::move(descriptor));
+    auto& hdr = seg.header();
+    auto descriptor = async::get_filtered_descriptor(hdr.stream_descriptor(), filter_columns_);
 
-        decode(seg, hdr, res, hdr.stream_descriptor());
-        sk.set_segment(std::move(res));
-        return sk;
-    }
+    ARCTICDB_TRACE(log::codec(), "Creating segment");
+    SegmentInMemory res(std::move(descriptor));
+
+    decode(seg, hdr, res, hdr.stream_descriptor());
+    sk.set_segment(std::move(res));
+    return sk;
+}
 
 } //namespace arcticdb::async

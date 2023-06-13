@@ -13,20 +13,23 @@
 
 namespace arcticdb {
 
-ExpressionNode::ExpressionNode(VariantNode left, VariantNode right, OperationType op) :
-    left_(std::move(left)),
-    right_(std::move(right)),
-    operation_type_(op) {
+ExpressionNode::ExpressionNode(VariantNode left, VariantNode right, OperationType op)
+    : left_(std::move(left)),
+      right_(std::move(right)),
+      operation_type_(op)
+{
     util::check(is_binary_operation(op), "Left and right expressions supplied to non-binary operator");
 }
 
-ExpressionNode::ExpressionNode(VariantNode left, OperationType op) :
-    left_(std::move(left)),
-    operation_type_(op) {
+ExpressionNode::ExpressionNode(VariantNode left, OperationType op)
+    : left_(std::move(left)),
+      operation_type_(op)
+{
     util::check(!is_binary_operation(op), "Binary expression expects both left and right children");
 }
 
-VariantData ExpressionNode::compute(ProcessingSegment& seg, const std::shared_ptr<Store>& store) const {
+VariantData ExpressionNode::compute(ProcessingSegment& seg, const std::shared_ptr<Store>& store) const
+{
     if (is_binary_operation(operation_type_)) {
         return dispatch_binary(seg.get(left_, store), seg.get(right_, store), operation_type_);
     } else {

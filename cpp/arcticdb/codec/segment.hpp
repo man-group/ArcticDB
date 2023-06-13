@@ -21,7 +21,8 @@
 namespace arcticdb {
 
 namespace segment_size {
-inline std::tuple<size_t, size_t> compressed(const arcticdb::proto::encoding::SegmentHeader& seg_hdr) {
+inline std::tuple<size_t, size_t> compressed(const arcticdb::proto::encoding::SegmentHeader& seg_hdr)
+{
     size_t metadata_size = 0;
     // If we have metadata it is part of the buffer size, otherwise the allocated buffer is much too small
     if (seg_hdr.has_metadata_field())
@@ -35,7 +36,8 @@ inline std::tuple<size_t, size_t> compressed(const arcticdb::proto::encoding::Se
     return {string_pool_size, buffer_size};
 }
 
-inline std::tuple<size_t, size_t> uncompressed(const arcticdb::proto::encoding::SegmentHeader& seg_hdr) {
+inline std::tuple<size_t, size_t> uncompressed(const arcticdb::proto::encoding::SegmentHeader& seg_hdr)
+{
     size_t metadata_size = 0;
     // If we have metadata it is part of the buffer size, otherwise the allocated buffer is much too small
     if (seg_hdr.has_metadata_field())
@@ -48,9 +50,7 @@ inline std::tuple<size_t, size_t> uncompressed(const arcticdb::proto::encoding::
     std::size_t buffer_size = encoding_size::uncompressed_size(seg_hdr) + metadata_size + string_pool_size;
     return {string_pool_size, buffer_size};
 }
-}
-
-
+} // namespace segment_size
 
 /*
  * Segment contains compressed data as returned from storage. When reading data the next step will usually be to
@@ -59,7 +59,7 @@ inline std::tuple<size_t, size_t> uncompressed(const arcticdb::proto::encoding::
  * codec.cpp:encode).
  */
 class Segment {
-  public:
+public:
     constexpr static uint16_t MAGIC_NUMBER = 0xFA57;
     constexpr static uint16_t ENCODING_VERSION = 1;
 
@@ -69,67 +69,81 @@ class Segment {
         std::uint16_t encoding_version;
         std::uint32_t header_bytes;
 
-        void write(std::uint8_t *dst) const {
+        void write(std::uint8_t* dst) const
+        {
             ARCTICDB_DEBUG(log::codec(), "Writing header with size {}", header_bytes);
-            auto h = reinterpret_cast<FixedHeader *>(dst);
+            auto h = reinterpret_cast<FixedHeader*>(dst);
             *h = *this;
         }
 
-        void write(std::ostream &dst){
+        void write(std::ostream& dst)
+        {
             dst.write(reinterpret_cast<char*>(this), sizeof(FixedHeader));
         }
     };
 
     constexpr static std::size_t FIXED_HEADER_SIZE = sizeof(FixedHeader);
 
-    Segment() :
-        header_(google::protobuf::Arena::CreateMessage<arcticdb::proto::encoding::SegmentHeader>(arena_.get())) {
+    Segment()
+        : header_(google::protobuf::Arena::CreateMessage<arcticdb::proto::encoding::SegmentHeader>(arena_.get()))
+    {
     }
 
-    Segment(std::unique_ptr<google::protobuf::Arena>&& arena, arcticdb::proto::encoding::SegmentHeader* header, std::shared_ptr<Buffer> &&buffer) :
-        arena_(std::move(arena)),
-        header_(header),
-        buffer_(std::move(buffer)) {
+    Segment(std::unique_ptr<google::protobuf::Arena>&& arena,
+        arcticdb::proto::encoding::SegmentHeader* header,
+        std::shared_ptr<Buffer>&& buffer)
+        : arena_(std::move(arena)),
+          header_(header),
+          buffer_(std::move(buffer))
+    {
     }
 
-    Segment(std::unique_ptr<google::protobuf::Arena>&& arena, arcticdb::proto::encoding::SegmentHeader* header,  BufferView &&buffer) :
-        arena_(std::move(arena)),
-        header_(header),
-        buffer_(std::move(buffer)) {}
+    Segment(std::unique_ptr<google::protobuf::Arena>&& arena,
+        arcticdb::proto::encoding::SegmentHeader* header,
+        BufferView&& buffer)
+        : arena_(std::move(arena)),
+          header_(header),
+          buffer_(std::move(buffer))
+    {
+    }
 
     // for rvo only, go to solution should be to move
-    Segment(const Segment &that) :
-    header_(google::protobuf::Arena::CreateMessage<arcticdb::proto::encoding::SegmentHeader>(arena_.get())) {
+    Segment(const Segment& that)
+        : header_(google::protobuf::Arena::CreateMessage<arcticdb::proto::encoding::SegmentHeader>(arena_.get()))
+    {
         header_->CopyFrom(*that.header_);
         auto b = std::make_shared<Buffer>();
-        util::variant_match(that.buffer_,
-            [] (const std::monostate&) {/* Uninitialized buffer */},
+        util::variant_match(
+            that.buffer_,
+            [](const std::monostate&) { /* Uninitialized buffer */ },
             [&b](const BufferView& buf) { buf.copy_to(*b); },
-            [&b](const std::shared_ptr<Buffer>& buf) { buf->copy_to(*b); }
-            );
+            [&b](const std::shared_ptr<Buffer>& buf) { buf->copy_to(*b); });
         buffer_ = std::move(b);
     }
 
-    Segment &operator=(const Segment &that) {
+    Segment& operator=(const Segment& that)
+    {
         header_->CopyFrom(*that.header_);
         auto b = std::make_shared<Buffer>();
-        util::variant_match(that.buffer_,
-                            [] (const std::monostate&) {/* Uninitialized buffer */},
-                            [&b](const BufferView& buf) { buf.copy_to(*b); },
-                            [&b](const std::shared_ptr<Buffer>& buf) { buf->copy_to(*b); }
-                            );
+        util::variant_match(
+            that.buffer_,
+            [](const std::monostate&) { /* Uninitialized buffer */ },
+            [&b](const BufferView& buf) { buf.copy_to(*b); },
+            [&b](const std::shared_ptr<Buffer>& buf) { buf->copy_to(*b); });
         buffer_ = std::move(b);
         return *this;
     }
 
-    Segment(Segment &&that) noexcept {
+    Segment(Segment&& that) noexcept
+    {
         using std::swap;
         swap(header_, that.header_);
         swap(arena_, that.arena_);
         move_buffer(std::move(that));
     }
 
-    Segment &operator=(Segment &&that) noexcept {
+    Segment& operator=(Segment&& that) noexcept
+    {
         using std::swap;
         swap(header_, that.header_);
         swap(arena_, that.arena_);
@@ -141,51 +155,65 @@ class Segment {
 
     static Segment from_buffer(std::shared_ptr<Buffer>&& buf);
 
-    void set_buffer(VariantBuffer&& buffer) {
+    void set_buffer(VariantBuffer&& buffer)
+    {
         buffer_ = std::move(buffer);
     }
 
-    static Segment from_bytes(std::uint8_t *src, std::size_t readable_size, bool copy_data = false);
+    static Segment from_bytes(std::uint8_t* src, std::size_t readable_size, bool copy_data = false);
 
-    void write_to(std::uint8_t *dst, std::size_t hdr_sz);
+    void write_to(std::uint8_t* dst, std::size_t hdr_sz);
 
     std::pair<uint8_t*, size_t> try_internal_write(std::shared_ptr<Buffer>& tmp, size_t hdr_size);
 
     void write_header(uint8_t* dst, size_t hdr_size);
 
-    [[nodiscard]] std::size_t total_segment_size() const {
+    [[nodiscard]] std::size_t total_segment_size() const
+    {
         return total_segment_size(segment_header_bytes_size());
     }
 
-    [[nodiscard]] std::size_t total_segment_size(std::size_t hdr_size) const {
+    [[nodiscard]] std::size_t total_segment_size(std::size_t hdr_size) const
+    {
         auto total = FIXED_HEADER_SIZE + hdr_size + buffer_bytes();
-        ARCTICDB_TRACE(log::storage(), "Total segment size {} + {} + {} = {}", FIXED_HEADER_SIZE, hdr_size, buffer_bytes(), total);
+        ARCTICDB_TRACE(log::storage(),
+            "Total segment size {} + {} + {} = {}",
+            FIXED_HEADER_SIZE,
+            hdr_size,
+            buffer_bytes(),
+            total);
         return total;
     }
 
-    [[nodiscard]] std::size_t segment_header_bytes_size() const {
+    [[nodiscard]] std::size_t segment_header_bytes_size() const
+    {
         return header_->ByteSizeLong();
     }
 
-    [[nodiscard]] std::size_t buffer_bytes() const {
+    [[nodiscard]] std::size_t buffer_bytes() const
+    {
         std::size_t s = 0;
-         util::variant_match(buffer_,
-           [] (const std::monostate&) { /* Uninitialized buffer */},
-           [&s](const BufferView& b) { s = b.bytes(); },
-           [&s](const std::shared_ptr<Buffer>& b) { s = b->bytes(); });
+        util::variant_match(
+            buffer_,
+            [](const std::monostate&) { /* Uninitialized buffer */ },
+            [&s](const BufferView& b) { s = b.bytes(); },
+            [&s](const std::shared_ptr<Buffer>& b) { s = b->bytes(); });
 
         return s;
     }
 
-    arcticdb::proto::encoding::SegmentHeader &header() {
+    arcticdb::proto::encoding::SegmentHeader& header()
+    {
         return *header_;
     }
 
-    [[nodiscard]] const arcticdb::proto::encoding::SegmentHeader &header() const {
+    [[nodiscard]] const arcticdb::proto::encoding::SegmentHeader& header() const
+    {
         return *header_;
     }
 
-    [[nodiscard]] BufferView buffer() const {
+    [[nodiscard]] BufferView buffer() const
+    {
         if (std::holds_alternative<std::shared_ptr<Buffer>>(buffer_)) {
             return std::get<std::shared_ptr<Buffer>>(buffer_)->view();
         } else {
@@ -193,19 +221,23 @@ class Segment {
         }
     }
 
-    [[nodiscard]] bool is_uninitialized() const {
+    [[nodiscard]] bool is_uninitialized() const
+    {
         return std::holds_alternative<std::monostate>(buffer_);
     }
 
-    [[nodiscard]] bool is_empty() const {
+    [[nodiscard]] bool is_empty() const
+    {
         return is_uninitialized() || (buffer().bytes() == 0 && header_->ByteSizeLong() == 0);
     }
 
-    [[nodiscard]] bool is_owning_buffer() const {
+    [[nodiscard]] bool is_owning_buffer() const
+    {
         return std::holds_alternative<std::shared_ptr<Buffer>>(buffer_);
     }
 
-    void force_own_buffer() {
+    void force_own_buffer()
+    {
         if (!is_owning_buffer()) {
             auto b = std::make_shared<Buffer>();
             std::get<BufferView>(buffer_).copy_to(*b);
@@ -213,9 +245,10 @@ class Segment {
         }
     }
 
-  private:
-    void move_buffer(Segment &&that) {
-        if(is_uninitialized() || that.is_uninitialized()) {
+private:
+    void move_buffer(Segment&& that)
+    {
+        if (is_uninitialized() || that.is_uninitialized()) {
             std::swap(buffer_, that.buffer_);
         } else if (!(is_owning_buffer() ^ that.is_owning_buffer())) {
             if (is_owning_buffer()) {

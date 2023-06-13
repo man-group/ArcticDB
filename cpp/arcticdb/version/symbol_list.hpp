@@ -42,53 +42,61 @@ static const char* const CompactionLockName = "SymbolListCompactionLock";
 
 class SymbolList {
     using StreamId = entity::StreamId;
-    using CollectionType  = std::set<StreamId>;
+    using CollectionType = std::set<StreamId>;
     using KeyVector = std::vector<entity::AtomKey>;
 
     StreamId type_holder_;
     uint64_t max_delta_ = 0;
     std::shared_ptr<VersionMap> version_map_;
 
-  public:
-    explicit SymbolList(std::shared_ptr<VersionMap> version_map, StreamId type_indicator = StringId()) :
-        type_holder_(std::move(type_indicator)),
-        max_delta_(ConfigsMap::instance()->get_int("SymbolList.MaxDelta", 500)),
-        version_map_(std::move(version_map)){
+public:
+    explicit SymbolList(std::shared_ptr<VersionMap> version_map, StreamId type_indicator = StringId())
+        : type_holder_(std::move(type_indicator)),
+          max_delta_(ConfigsMap::instance()->get_int("SymbolList.MaxDelta", 500)),
+          version_map_(std::move(version_map))
+    {
     }
 
-    CollectionType load(const std::shared_ptr<Store>& store, bool no_compaction) {
+    CollectionType load(const std::shared_ptr<Store>& store, bool no_compaction)
+    {
         return ExponentialBackoff<std::runtime_error>(100, 2000).go([&]() {
             SYMBOL_LIST_RUNTIME_LOG("Symbol list load attempt");
             return load_symbols(store, no_compaction);
         });
     }
 
-    std::vector<StreamId> get_symbols(const std::shared_ptr<Store>& store, bool no_compaction=false) {
+    std::vector<StreamId> get_symbols(const std::shared_ptr<Store>& store, bool no_compaction = false)
+    {
         SYMBOL_LIST_RUNTIME_LOG("no_compaction={}", no_compaction); // function name logged in macro
         auto symbols = load(store, no_compaction);
         return {std::make_move_iterator(symbols.begin()), std::make_move_iterator(symbols.end())};
     }
 
-    std::set<StreamId> get_symbol_set(const std::shared_ptr<Store>& store) {
+    std::set<StreamId> get_symbol_set(const std::shared_ptr<Store>& store)
+    {
         SYMBOL_LIST_RUNTIME_LOG("called");
         return load(store, false);
     }
 
-    void add_symbol(const std::shared_ptr<Store>& store, const StreamId& symbol) {
+    void add_symbol(const std::shared_ptr<Store>& store, const StreamId& symbol)
+    {
         SYMBOL_LIST_RUNTIME_LOG("{}", symbol);
         write_symbol(store, symbol);
     }
 
-    void remove_symbol(const std::shared_ptr<Store>& store, const StreamId& symbol) {
+    void remove_symbol(const std::shared_ptr<Store>& store, const StreamId& symbol)
+    {
         SYMBOL_LIST_RUNTIME_LOG("{}", symbol);
         delete_symbol(store, symbol);
     }
 
-    void clear(const std::shared_ptr<Store>& store) {
+    void clear(const std::shared_ptr<Store>& store)
+    {
         delete_all_keys_of_type(KeyType::SYMBOL_LIST, store, true);
     }
 
-    void reload(const std::shared_ptr<Store>& store) {
+    void reload(const std::shared_ptr<Store>& store)
+    {
         clear(store);
         load(store, false);
     }
@@ -100,11 +108,13 @@ private:
 
     CollectionType compact(std::shared_ptr<Store> store, const std::vector<AtomKey>& symbol_keys);
 
-    void write_symbol(const std::shared_ptr<Store>& store, const StreamId& symbol) {
+    void write_symbol(const std::shared_ptr<Store>& store, const StreamId& symbol)
+    {
         write_journal(store, symbol, AddSymbol);
     }
 
-    void delete_symbol(const std::shared_ptr<Store>& store, const StreamId& symbol) {
+    void delete_symbol(const std::shared_ptr<Store>& store, const StreamId& symbol)
+    {
         write_journal(store, symbol, DeleteSymbol);
     }
 
@@ -112,40 +122,43 @@ private:
 
     [[nodiscard]] CollectionType load_from_version_keys(const std::shared_ptr<Store>& store);
 
-    [[nodiscard]] folly::Future<VariantKey> write_symbols(
-            const std::shared_ptr<Store>& store,
-            const CollectionType& symbols,
-            const StreamId& stream_id,
-            timestamp creation_ts);
+    [[nodiscard]] folly::Future<VariantKey> write_symbols(const std::shared_ptr<Store>& store,
+        const CollectionType& symbols,
+        const StreamId& stream_id,
+        timestamp creation_ts);
 
-    [[nodiscard]] CollectionType load_from_storage(const std::shared_ptr<StreamSource>& store, const
-        std::vector<AtomKey>& keys);
+    [[nodiscard]] CollectionType load_from_storage(const std::shared_ptr<StreamSource>& store,
+        const std::vector<AtomKey>& keys);
 
-    void read_list_from_storage(const std::shared_ptr<StreamSource>& store, const AtomKey& key,
-            CollectionType& symbols);
+    void
+    read_list_from_storage(const std::shared_ptr<StreamSource>& store, const AtomKey& key, CollectionType& symbols);
 
     [[nodiscard]] KeyVector get_all_symbol_list_keys(const std::shared_ptr<StreamSource>& store) const;
 
-    void delete_keys(
-            std::shared_ptr<Store> store, const KeyVector& lists);
+    void delete_keys(std::shared_ptr<Store> store, const KeyVector& lists);
 
     std::optional<KeyVector::difference_type> last_compaction(const KeyVector& keys);
 
-    inline StreamDescriptor symbol_stream_descriptor(const StreamId& stream_id) {
+    inline StreamDescriptor symbol_stream_descriptor(const StreamId& stream_id)
+    {
         auto data_type = std::holds_alternative<StringId>(type_holder_) ? DataType::ASCII_DYNAMIC64 : DataType::UINT64;
-        return StreamDescriptor{stream_descriptor(stream_id, RowCountIndex(), {
-            scalar_field_proto(data_type, "symbol")}
-        )};
+        return StreamDescriptor{
+            stream_descriptor(stream_id, RowCountIndex(), {scalar_field_proto(data_type, "symbol")})};
     };
 
-    inline StreamDescriptor journal_stream_descriptor(const StreamId& action, const StreamId& id) {
-        return util::variant_match(id,
-        [&action] (const NumericId&) {
-            return StreamDescriptor{stream_descriptor(action, RowCountIndex(), { scalar_field_proto(DataType::UINT64, "symbol") })};
-        },
-        [&action] (const StringId&) {
-            return StreamDescriptor{stream_descriptor(action, RowCountIndex(), { scalar_field_proto(DataType::UTF_DYNAMIC64, "symbol") })};
-        });
+    inline StreamDescriptor journal_stream_descriptor(const StreamId& action, const StreamId& id)
+    {
+        return util::variant_match(
+            id,
+            [&action](const NumericId&) {
+                return StreamDescriptor{
+                    stream_descriptor(action, RowCountIndex(), {scalar_field_proto(DataType::UINT64, "symbol")})};
+            },
+            [&action](const StringId&) {
+                return StreamDescriptor{stream_descriptor(action,
+                    RowCountIndex(),
+                    {scalar_field_proto(DataType::UTF_DYNAMIC64, "symbol")})};
+            });
     };
 };
 
@@ -154,20 +167,18 @@ struct WriteSymbolTask : async::BaseTask {
     std::shared_ptr<SymbolList> symbol_list_;
     const StreamId stream_id_;
 
-    WriteSymbolTask(
-            std::shared_ptr<Store> store,
-            std::shared_ptr<SymbolList> symbol_list,
-            StreamId stream_id) :
-            store_(store),
-            symbol_list_(symbol_list),
-            stream_id_(stream_id) {
+    WriteSymbolTask(std::shared_ptr<Store> store, std::shared_ptr<SymbolList> symbol_list, StreamId stream_id)
+        : store_(store),
+          symbol_list_(symbol_list),
+          stream_id_(stream_id)
+    {
     }
 
-    folly::Future<folly::Unit> operator()() {
+    folly::Future<folly::Unit> operator()()
+    {
         symbol_list_->add_symbol(store_, stream_id_);
         return folly::Unit{};
     }
-
 };
 
 } //namespace arcticdb

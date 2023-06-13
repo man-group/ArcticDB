@@ -33,14 +33,17 @@ struct ExecutionContext {
 
     ARCTICDB_MOVE_ONLY_DEFAULT(ExecutionContext)
 
-    template <class T>
+    template<class T>
     class ConstantMap {
         std::unordered_map<std::string, std::shared_ptr<T>> map_;
+
     public:
-        void set_value(std::string name, std::shared_ptr<T> val) {
+        void set_value(std::string name, std::shared_ptr<T> val)
+        {
             map_.try_emplace(name, val);
         }
-        std::shared_ptr<T> get_value(std::string name) {
+        std::shared_ptr<T> get_value(std::string name)
+        {
             return map_.at(name);
         }
     };
@@ -48,49 +51,59 @@ struct ExecutionContext {
         SPEED,
         MEMORY
     };
-    void add_column(const std::string& column_name) {
+    void add_column(const std::string& column_name)
+    {
         columns_.emplace(column_name);
     }
 
-    void add_expression_node(const std::string& name, std::shared_ptr<ExpressionNode> expression_node) {
+    void add_expression_node(const std::string& name, std::shared_ptr<ExpressionNode> expression_node)
+    {
         expression_nodes_.set_value(name, std::move(expression_node));
     }
 
-    void set_descriptor(const StreamDescriptor& desc) {
+    void set_descriptor(const StreamDescriptor& desc)
+    {
         output_descriptor_ = desc;
     }
 
-    void set_norm_meta_descriptor(NormMetaDescriptor& desc) {
+    void set_norm_meta_descriptor(NormMetaDescriptor& desc)
+    {
         norm_meta_ = desc;
     }
 
-    NormMetaDescriptor get_norm_meta_descriptor() {
+    NormMetaDescriptor get_norm_meta_descriptor()
+    {
         return norm_meta_;
     }
 
-    void add_value(const std::string& name, std::shared_ptr<Value> value) {
+    void add_value(const std::string& name, std::shared_ptr<Value> value)
+    {
         values_.set_value(name, std::move(value));
     }
 
-    void add_value_set(const std::string& name, std::shared_ptr<ValueSet> value_set) {
+    void add_value_set(const std::string& name, std::shared_ptr<ValueSet> value_set)
+    {
         value_sets_.set_value(name, std::move(value_set));
     }
 
-    void check_output_column(const std::string& name, DataType type) {
+    void check_output_column(const std::string& name, DataType type)
+    {
         std::scoped_lock lock{*column_mutex_};
         auto it = output_columns_.find(name);
-        if(it == std::end(output_columns_)) {
+        if (it == std::end(output_columns_)) {
             output_columns_.try_emplace(name, type);
             output_descriptor_->add_field(scalar_field_proto(type, name));
             //TODO check type compatibility in dynamic schema
         }
     }
 
-    bool dynamic_schema() const {
+    bool dynamic_schema() const
+    {
         return dynamic_schema_;
     }
 
-    void set_dynamic_schema(bool dynamic_schema) {
+    void set_dynamic_schema(bool dynamic_schema)
+    {
         dynamic_schema_ = dynamic_schema;
     }
 
@@ -112,4 +125,4 @@ struct ExecutionContext {
     bool dynamic_schema_ = false;
 };
 
-}//namespace arcticdb
+} //namespace arcticdb

@@ -24,20 +24,20 @@
 
 struct VersionStoreTest : arcticdb::TestStore {
 protected:
-    std::string get_name() override {
+    std::string get_name() override
+    {
         return "test.version_store";
     }
 };
 
-auto write_version_frame(
-    const StreamId& stream_id,
+auto write_version_frame(const StreamId& stream_id,
     VersionId v_id,
     arcticdb::version_store::PythonVersionStore& pvs,
     size_t rows = 1000000,
     bool update_version_map = false,
     size_t start_val = 0,
-    const std::shared_ptr<arcticdb::DeDupMap>& de_dup_map = std::make_shared<arcticdb::DeDupMap>()
-) {
+    const std::shared_ptr<arcticdb::DeDupMap>& de_dup_map = std::make_shared<arcticdb::DeDupMap>())
+{
     using namespace arcticdb;
     using namespace arcticdb::storage;
     using namespace arcticdb::stream;
@@ -57,7 +57,8 @@ auto write_version_frame(
     return key;
 }
 
-TEST(PythonVersionStore, FreesMemory) {
+TEST(PythonVersionStore, FreesMemory)
+{
     using namespace arcticdb;
     using namespace arcticdb::storage;
     using namespace arcticdb::stream;
@@ -72,7 +73,8 @@ TEST(PythonVersionStore, FreesMemory) {
     ASSERT_TRUE(Allocator::empty());
 }
 
-TEST(PythonVersionStore, DeleteDatabase) {
+TEST(PythonVersionStore, DeleteDatabase)
+{
     using namespace arcticdb;
     using namespace arcticdb::storage;
     using namespace arcticdb::stream;
@@ -87,7 +89,8 @@ TEST(PythonVersionStore, DeleteDatabase) {
     ASSERT_EQ(mock_store->num_ref_keys(), 0);
 }
 
-TEST(PythonVersionStore, WriteWithPruneVersions) {
+TEST(PythonVersionStore, WriteWithPruneVersions)
+{
     using namespace arcticdb;
     using namespace arcticdb::storage;
     using namespace arcticdb::stream;
@@ -101,7 +104,8 @@ TEST(PythonVersionStore, WriteWithPruneVersions) {
     ASSERT_EQ(mock_store->num_atom_keys_of_type(KeyType::TABLE_INDEX), 1);
 }
 
-TEST(PythonVersionStore, DeleteAllVersions) {
+TEST(PythonVersionStore, DeleteAllVersions)
+{
     using namespace arcticdb;
     using namespace arcticdb::storage;
     using namespace arcticdb::stream;
@@ -117,7 +121,8 @@ TEST(PythonVersionStore, DeleteAllVersions) {
     ASSERT_EQ(mock_store->num_atom_keys_of_type(KeyType::TABLE_INDEX), 0);
 }
 
-TEST(PythonVersionStore, IterationVsRefWrite) {
+TEST(PythonVersionStore, IterationVsRefWrite)
+{
     using namespace arcticdb;
     using namespace arcticdb::storage;
     using namespace arcticdb::stream;
@@ -154,14 +159,17 @@ TEST(PythonVersionStore, IterationVsRefWrite) {
     version_map->load_via_iteration(mock_store, stream_id, iter_entry_compact);
     version_map->load_via_ref_key(mock_store, stream_id, LoadParameter{LoadType::LOAD_ALL}, ref_entry_compact);
 
-    EXPECT_EQ(std::string(iter_entry_compact->head_.value().view()), std::string(ref_entry_compact->head_.value().view()));
+    EXPECT_EQ(std::string(iter_entry_compact->head_.value().view()),
+        std::string(ref_entry_compact->head_.value().view()));
     ASSERT_EQ(iter_entry_compact->keys_.size(), ref_entry_compact->keys_.size());
     for (size_t idx = 0; idx != iter_entry_compact->keys_.size(); idx++) {
-        EXPECT_EQ(std::string(iter_entry_compact->keys_[idx].view()), std::string(ref_entry_compact->keys_[idx].view()));
+        EXPECT_EQ(std::string(iter_entry_compact->keys_[idx].view()),
+            std::string(ref_entry_compact->keys_[idx].view()));
     }
 }
 
-TEST_F(VersionStoreTest, SortMerge) {
+TEST_F(VersionStoreTest, SortMerge)
+{
     using namespace arcticdb;
     using namespace arcticdb::storage;
     using namespace arcticdb::stream;
@@ -173,32 +181,31 @@ TEST_F(VersionStoreTest, SortMerge) {
     StreamId symbol{"compact_me"};
 
     for (auto i = 0; i < 10; ++i) {
-        auto wrapper = SinkWrapper(symbol, {
-            scalar_field_proto(DataType::UINT64, "thing1"),
-            scalar_field_proto(DataType::UINT64,  "thing2")
-        });
+        auto wrapper = SinkWrapper(symbol,
+            {scalar_field_proto(DataType::UINT64, "thing1"), scalar_field_proto(DataType::UINT64, "thing2")});
 
-        for(auto j = 0; j < 20; ++j ) {
-            wrapper.aggregator_.start_row(timestamp(count++))([&](auto &&rb) {
+        for (auto j = 0; j < 20; ++j) {
+            wrapper.aggregator_.start_row(timestamp(count++))([&](auto&& rb) {
                 rb.set_scalar(1, j);
                 rb.set_scalar(2, i + j);
             });
         }
 
         wrapper.aggregator_.commit();
-        data.emplace_back( SegmentToInputFrameAdapter{std::move(wrapper.segment())});
+        data.emplace_back(SegmentToInputFrameAdapter{std::move(wrapper.segment())});
     }
     std::mt19937 mt{42};
     std::shuffle(data.begin(), data.end(), mt);
 
-    for(auto&& frame : data) {
+    for (auto&& frame : data) {
         test_store_->append_incomplete_frame(symbol, std::move(frame.input_frame_));
     }
 
     test_store_->sort_merge_internal(symbol, std::nullopt, true, false, false, false);
 }
 
-TEST_F(VersionStoreTest, CompactIncompleteDynamicSchema) {
+TEST_F(VersionStoreTest, CompactIncompleteDynamicSchema)
+{
     using namespace arcticdb;
     using namespace arcticdb::storage;
     using namespace arcticdb::stream;
@@ -210,15 +217,14 @@ TEST_F(VersionStoreTest, CompactIncompleteDynamicSchema) {
     StreamId symbol{"compact_me_dynamic"};
 
     for (size_t i = 0; i < 10; ++i) {
-        auto wrapper = SinkWrapper(symbol, {
-            scalar_field_proto(DataType::UINT64, "thing1"),
-            scalar_field_proto(DataType::UINT64, "thing2"),
-            scalar_field_proto(DataType::UINT64, "thing3"),
-            scalar_field_proto(DataType::UINT64, "thing4")
-        });
+        auto wrapper = SinkWrapper(symbol,
+            {scalar_field_proto(DataType::UINT64, "thing1"),
+                scalar_field_proto(DataType::UINT64, "thing2"),
+                scalar_field_proto(DataType::UINT64, "thing3"),
+                scalar_field_proto(DataType::UINT64, "thing4")});
 
-        for(size_t j = 0; j < 20; ++j ) {
-            wrapper.aggregator_.start_row(timestamp(count++))([&](auto &&rb) {
+        for (size_t j = 0; j < 20; ++j) {
+            wrapper.aggregator_.start_row(timestamp(count++))([&](auto&& rb) {
                 rb.set_scalar(1, j);
                 rb.set_scalar(2, i);
                 rb.set_scalar(3, i + j);
@@ -228,12 +234,12 @@ TEST_F(VersionStoreTest, CompactIncompleteDynamicSchema) {
 
         wrapper.aggregator_.commit();
         wrapper.segment().drop_column((i % 3) + 1);
-        data.emplace_back( SegmentToInputFrameAdapter{std::move(wrapper.segment())});
+        data.emplace_back(SegmentToInputFrameAdapter{std::move(wrapper.segment())});
     }
     std::mt19937 mt{42};
     std::shuffle(data.begin(), data.end(), mt);
 
-    for(auto& frame : data) {
+    for (auto& frame : data) {
         test_store_->write_parallel_frame(symbol, std::move(frame.input_frame_));
     }
 
@@ -243,26 +249,26 @@ TEST_F(VersionStoreTest, CompactIncompleteDynamicSchema) {
     const auto& seg = read_result.frame_data.frame();
 
     count = 0;
-    auto col1_pos = seg.column_index( "thing1").value();
-    auto col2_pos = seg.column_index( "thing2").value();
-    auto col3_pos = seg.column_index( "thing3").value();
-    auto col4_pos = seg.column_index( "thing4").value();
+    auto col1_pos = seg.column_index("thing1").value();
+    auto col2_pos = seg.column_index("thing2").value();
+    auto col3_pos = seg.column_index("thing3").value();
+    auto col4_pos = seg.column_index("thing4").value();
 
     for (size_t i = 0; i < 10; ++i) {
         auto dropped_column = (i % 3) + 1;
-        for(size_t j = 0; j < 20; ++j ) {
+        for (size_t j = 0; j < 20; ++j) {
             auto idx = seg.scalar_at<uint64_t>(count, 0);
             ASSERT_EQ(idx.value(), count);
             auto v1 = seg.scalar_at<uint64_t>(count, col1_pos);
             auto expected = dropped_column == 1 ? 0 : j;
             ASSERT_EQ(v1.value(), expected);
-            auto v2 = seg.scalar_at<uint64_t>(count , col2_pos);
+            auto v2 = seg.scalar_at<uint64_t>(count, col2_pos);
             expected = dropped_column == 2 ? 0 : i;
             ASSERT_EQ(v2.value(), expected);
             auto v3 = seg.scalar_at<uint64_t>(count, col3_pos);
             expected = dropped_column == 3 ? 0 : i + j;
             ASSERT_EQ(v3.value(), expected);
-            auto v4 = seg.scalar_at<uint64_t>(count , col4_pos);
+            auto v4 = seg.scalar_at<uint64_t>(count, col4_pos);
             expected = dropped_column == 4 ? 0 : i * j;
             ASSERT_EQ(v4.value(), expected);
             ++count;
@@ -270,7 +276,8 @@ TEST_F(VersionStoreTest, CompactIncompleteDynamicSchema) {
     }
 }
 
-TEST_F(VersionStoreTest, GetIncompleteSymbols) {
+TEST_F(VersionStoreTest, GetIncompleteSymbols)
+{
     using namespace arcticdb;
     using namespace arcticdb::storage;
     using namespace arcticdb::stream;
@@ -291,12 +298,13 @@ TEST_F(VersionStoreTest, GetIncompleteSymbols) {
     auto& frame3 = wrapper3.frame_;
     test_store_->append_incomplete_frame(stream_id3, std::move(frame3));
 
-    std::set<StreamId> expected{ stream_id1, stream_id2, stream_id3};
+    std::set<StreamId> expected{stream_id1, stream_id2, stream_id3};
     auto result = test_store_->get_incomplete_symbols();
     ASSERT_EQ(result, expected);
 }
 
-TEST_F(VersionStoreTest, StressBatchWrite) {
+TEST_F(VersionStoreTest, StressBatchWrite)
+{
     SKIP_WIN("Works OK but fills up LMDB");
     using namespace arcticdb;
     using namespace arcticdb::storage;
@@ -309,7 +317,7 @@ TEST_F(VersionStoreTest, StressBatchWrite) {
     std::vector<VersionId> version_ids;
     std::vector<std::shared_ptr<DeDupMap>> dedup_maps;
 
-    for(int i = 0; i < 1000; ++i) {
+    for (int i = 0; i < 1000; ++i) {
         auto symbol = fmt::format("symbol_{}", i);
         symbols.emplace_back(symbol);
         version_ids.push_back(0);
@@ -323,98 +331,116 @@ TEST_F(VersionStoreTest, StressBatchWrite) {
     test_store_->batch_write_internal(version_ids, symbols, frames, dedup_maps, false);
 }
 
-TEST_F(VersionStoreTest, StressBatchReadUncompressed) {
+TEST_F(VersionStoreTest, StressBatchReadUncompressed)
+{
     using namespace arcticdb;
     using namespace arcticdb::storage;
     using namespace arcticdb::stream;
     using namespace arcticdb::pipelines;
 
     std::vector<StreamId> symbols;
-    for(int i = 0; i < 10; ++i) {
+    for (int i = 0; i < 10; ++i) {
         auto symbol = fmt::format("symbol_{}", i);
         symbols.emplace_back(symbol);
 
-        for(int j = 0; j < 10; ++j) {
+        for (int j = 0; j < 10; ++j) {
             auto wrapper = get_test_simple_frame(symbol, 10, i + j);
             test_store_->write_versioned_dataframe_internal(symbol, std::move(wrapper.frame_), false, false, false);
         }
 
-        for(int k = 1; k < 10; ++k) {
+        for (int k = 1; k < 10; ++k) {
             test_store_->delete_version(symbol, k);
         }
     }
 
     std::vector<ReadQuery> read_queries;
     auto latest_versions = test_store_->batch_read(symbols, std::vector<VersionQuery>{}, read_queries, ReadOptions{});
-    for(auto version : folly::enumerate(latest_versions)) {
+    for (auto version : folly::enumerate(latest_versions)) {
         auto expected = get_test_simple_frame(version->item.symbol(), 10, version.index);
         bool equal = expected.segment_ == version->frame_data.frame();
         ASSERT_EQ(equal, true);
     }
 }
 
-#define THREE_SIMPLE_KEYS \
-    auto key1 = atom_key_builder().version_id(1).creation_ts(PilotedClock::nanos_since_epoch()).content_hash(3).start_index( \
-        4).end_index(5).build(id, KeyType::TABLE_INDEX); \
-    auto key2 = atom_key_builder().version_id(2).creation_ts(PilotedClock::nanos_since_epoch()).content_hash(4).start_index(  \
-        5).end_index(6).build(id, KeyType::TABLE_INDEX); \
-    auto key3 = atom_key_builder().version_id(3).creation_ts(PilotedClock::nanos_since_epoch()).content_hash(5).start_index(  \
-        6).end_index(7).build(id, KeyType::TABLE_INDEX);
+#define THREE_SIMPLE_KEYS                                                                                              \
+    auto key1 = atom_key_builder()                                                                                     \
+                    .version_id(1)                                                                                     \
+                    .creation_ts(PilotedClock::nanos_since_epoch())                                                    \
+                    .content_hash(3)                                                                                   \
+                    .start_index(4)                                                                                    \
+                    .end_index(5)                                                                                      \
+                    .build(id, KeyType::TABLE_INDEX);                                                                  \
+    auto key2 = atom_key_builder()                                                                                     \
+                    .version_id(2)                                                                                     \
+                    .creation_ts(PilotedClock::nanos_since_epoch())                                                    \
+                    .content_hash(4)                                                                                   \
+                    .start_index(5)                                                                                    \
+                    .end_index(6)                                                                                      \
+                    .build(id, KeyType::TABLE_INDEX);                                                                  \
+    auto key3 = atom_key_builder()                                                                                     \
+                    .version_id(3)                                                                                     \
+                    .creation_ts(PilotedClock::nanos_since_epoch())                                                    \
+                    .content_hash(5)                                                                                   \
+                    .start_index(6)                                                                                    \
+                    .end_index(7)                                                                                      \
+                    .build(id, KeyType::TABLE_INDEX);
 
+TEST(VersionStore, TestReadTimestampAt)
+{
 
-TEST(VersionStore, TestReadTimestampAt) {
+    using namespace arcticdb;
+    using namespace arcticdb::storage;
+    using namespace arcticdb::stream;
+    using namespace arcticdb::pipelines;
+    PilotedClock::reset();
 
-  using namespace arcticdb;
-  using namespace arcticdb::storage;
-  using namespace arcticdb::stream;
-  using namespace arcticdb::pipelines;
-  PilotedClock::reset();
+    StreamId id{"test"};
+    THREE_SIMPLE_KEYS
 
-  StreamId id{"test"};
-  THREE_SIMPLE_KEYS
+    auto [version_store, mock_store] = python_version_store_in_memory();
 
-  auto [version_store, mock_store] = python_version_store_in_memory();
+    auto version_map = version_store._test_get_version_map();
+    version_map->write_version(mock_store, key1);
+    auto key = get_version_key_from_time(mock_store, version_map, id, timestamp(0), true, false);
+    ASSERT_EQ(key.value().content_hash(), 3);
 
-  auto version_map = version_store._test_get_version_map();
-  version_map->write_version(mock_store, key1);
-  auto key = get_version_key_from_time(mock_store, version_map, id, timestamp(0), true, false);
-  ASSERT_EQ(key.value().content_hash(), 3);
+    version_map->write_version(mock_store, key2);
+    key = get_version_key_from_time(mock_store, version_map, id, timestamp(0), true, false);
+    ASSERT_EQ(key.value().content_hash(), 3);
+    key = get_version_key_from_time(mock_store, version_map, id, timestamp(1), true, false);
+    ASSERT_EQ(key.value().content_hash(), 4);
 
-  version_map->write_version(mock_store, key2);
-  key = get_version_key_from_time(mock_store, version_map, id, timestamp(0), true, false);
-  ASSERT_EQ(key.value().content_hash(), 3);
-  key = get_version_key_from_time(mock_store, version_map, id, timestamp(1), true, false);
-  ASSERT_EQ(key.value().content_hash(), 4);
-
-  version_map->write_version(mock_store, key3);
-  key = get_version_key_from_time(mock_store, version_map, id, timestamp(0), true, false);
-  ASSERT_EQ(key.value().content_hash(), 3);
-  key = get_version_key_from_time(mock_store, version_map, id, timestamp(1), true, false);
-  ASSERT_EQ(key.value().content_hash(), 4);
-  key = get_version_key_from_time(mock_store, version_map, id, timestamp(2), true, false);
-  ASSERT_EQ(key.value().content_hash(), 5);
+    version_map->write_version(mock_store, key3);
+    key = get_version_key_from_time(mock_store, version_map, id, timestamp(0), true, false);
+    ASSERT_EQ(key.value().content_hash(), 3);
+    key = get_version_key_from_time(mock_store, version_map, id, timestamp(1), true, false);
+    ASSERT_EQ(key.value().content_hash(), 4);
+    key = get_version_key_from_time(mock_store, version_map, id, timestamp(2), true, false);
+    ASSERT_EQ(key.value().content_hash(), 5);
 }
 
-TEST(VersionStore, TestReadTimestampAtInequality) {
+TEST(VersionStore, TestReadTimestampAtInequality)
+{
     using namespace arcticdb;
     using namespace arcticdb::storage;
     using namespace arcticdb::stream;
     using namespace arcticdb::pipelines;
 
-  PilotedClock::reset();
-  StreamId id{"test"};
+    PilotedClock::reset();
+    StreamId id{"test"};
 
-  THREE_SIMPLE_KEYS
-  auto [version_store, mock_store] = python_version_store_in_memory();
+    THREE_SIMPLE_KEYS
+    auto [version_store, mock_store] = python_version_store_in_memory();
 
-  auto version_map = version_store._test_get_version_map();
-  version_map->write_version(mock_store, key1);
-  auto key = get_version_key_from_time(mock_store, version_map, id, timestamp(1), true, false);
-  ASSERT_EQ(static_cast<bool>(key), true);
-  ASSERT_EQ(key.value().content_hash(), 3);
+    auto version_map = version_store._test_get_version_map();
+    version_map->write_version(mock_store, key1);
+    auto key = get_version_key_from_time(mock_store, version_map, id, timestamp(1), true, false);
+    ASSERT_EQ(static_cast<bool>(key), true);
+    ASSERT_EQ(key.value().content_hash(), 3);
 }
 
-TEST(VersionStore, UpdateWithin) {
+TEST(VersionStore, UpdateWithin)
+{
     using namespace arcticdb;
     using namespace arcticdb::storage;
     using namespace arcticdb::stream;
@@ -429,36 +455,36 @@ TEST(VersionStore, UpdateWithin) {
     size_t num_rows{100};
     size_t start_val{0};
 
-    std::vector<FieldDescriptor::Proto> fields{
-        scalar_field_proto(DataType::UINT8, "thing1"),
+    std::vector<FieldDescriptor::Proto> fields{scalar_field_proto(DataType::UINT8, "thing1"),
         scalar_field_proto(DataType::UINT8, "thing2"),
         scalar_field_proto(DataType::UINT16, "thing3"),
-        scalar_field_proto(DataType::UINT16, "thing4")
-    };
+        scalar_field_proto(DataType::UINT16, "thing4")};
 
-    auto test_frame =  get_test_frame<stream::TimeseriesIndex>(symbol, fields, num_rows, start_val);
+    auto test_frame = get_test_frame<stream::TimeseriesIndex>(symbol, fields, num_rows, start_val);
     version_store.write_versioned_dataframe_internal(symbol, std::move(test_frame.frame_), false, false, false);
 
     RowRange update_range{10, 15};
     size_t update_val{1};
-    auto update_frame =  get_test_frame<stream::TimeseriesIndex>(symbol, fields, update_range.diff(), update_range.first, update_val);
+    auto update_frame =
+        get_test_frame<stream::TimeseriesIndex>(symbol, fields, update_range.diff(), update_range.first, update_val);
     version_store.update_internal(symbol, UpdateQuery{}, std::move(update_frame.frame_), false, false, false);
 
     ReadQuery read_query;
     auto read_result = version_store.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, ReadOptions{});
     const auto& seg = read_result.second.frame_;
 
-    for(auto i = 0u; i < num_rows; ++i) {
+    for (auto i = 0u; i < num_rows; ++i) {
         auto expected = i;
-        if(update_range.contains(i))
+        if (update_range.contains(i))
             expected += update_val;
 
-        auto val1 = seg.scalar_at<uint8_t >(i, 1);
+        auto val1 = seg.scalar_at<uint8_t>(i, 1);
         ASSERT_EQ(val1.value(), expected);
     }
 }
 
-TEST(VersionStore, UpdateBefore) {
+TEST(VersionStore, UpdateBefore)
+{
     using namespace arcticdb;
     using namespace arcticdb::storage;
     using namespace arcticdb::stream;
@@ -471,36 +497,36 @@ TEST(VersionStore, UpdateBefore) {
     size_t num_rows{100};
     size_t start_val{10};
 
-    std::vector<FieldDescriptor::Proto> fields{
-        scalar_field_proto(DataType::UINT8, "thing1"),
+    std::vector<FieldDescriptor::Proto> fields{scalar_field_proto(DataType::UINT8, "thing1"),
         scalar_field_proto(DataType::UINT8, "thing2"),
         scalar_field_proto(DataType::UINT16, "thing3"),
-        scalar_field_proto(DataType::UINT16, "thing4")
-    };
+        scalar_field_proto(DataType::UINT16, "thing4")};
 
-    auto test_frame =  get_test_frame<stream::TimeseriesIndex>(symbol, fields, num_rows, start_val);
+    auto test_frame = get_test_frame<stream::TimeseriesIndex>(symbol, fields, num_rows, start_val);
     version_store.write_versioned_dataframe_internal(symbol, std::move(test_frame.frame_), false, false, false);
 
     RowRange update_range{0, 10};
     size_t update_val{1};
-    auto update_frame =  get_test_frame<stream::TimeseriesIndex>(symbol, fields, update_range.diff(), update_range.first, update_val);
+    auto update_frame =
+        get_test_frame<stream::TimeseriesIndex>(symbol, fields, update_range.diff(), update_range.first, update_val);
     version_store.update_internal(symbol, UpdateQuery{}, std::move(update_frame.frame_), false, false, false);
 
     ReadQuery read_query;
     auto read_result = version_store.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, ReadOptions{});
     const auto& seg = read_result.second.frame_;
 
-    for(auto i = 0u; i < num_rows + update_range.diff(); ++i) {
+    for (auto i = 0u; i < num_rows + update_range.diff(); ++i) {
         auto expected = i;
-        if(update_range.contains(i))
+        if (update_range.contains(i))
             expected += update_val;
 
-        auto val1 = seg.scalar_at<uint8_t >(i, 1);
+        auto val1 = seg.scalar_at<uint8_t>(i, 1);
         ASSERT_EQ(val1.value(), expected);
     }
 }
 
-TEST(VersionStore, UpdateAfter) {
+TEST(VersionStore, UpdateAfter)
+{
     using namespace arcticdb;
     using namespace arcticdb::storage;
     using namespace arcticdb::stream;
@@ -513,36 +539,36 @@ TEST(VersionStore, UpdateAfter) {
     size_t num_rows{100};
     size_t start_val{0};
 
-    std::vector<FieldDescriptor::Proto> fields{
-        scalar_field_proto(DataType::UINT8, "thing1"),
+    std::vector<FieldDescriptor::Proto> fields{scalar_field_proto(DataType::UINT8, "thing1"),
         scalar_field_proto(DataType::UINT8, "thing2"),
         scalar_field_proto(DataType::UINT16, "thing3"),
-        scalar_field_proto(DataType::UINT16, "thing4")
-    };
+        scalar_field_proto(DataType::UINT16, "thing4")};
 
-    auto test_frame =  get_test_frame<stream::TimeseriesIndex>(symbol, fields, num_rows, start_val);
+    auto test_frame = get_test_frame<stream::TimeseriesIndex>(symbol, fields, num_rows, start_val);
     version_store.write_versioned_dataframe_internal(symbol, std::move(test_frame.frame_), false, false, false);
 
     RowRange update_range{100, 110};
     size_t update_val{1};
-    auto update_frame =  get_test_frame<stream::TimeseriesIndex>(symbol, fields, update_range.diff(), update_range.first, update_val);
+    auto update_frame =
+        get_test_frame<stream::TimeseriesIndex>(symbol, fields, update_range.diff(), update_range.first, update_val);
     version_store.update_internal(symbol, UpdateQuery{}, std::move(update_frame.frame_), false, false, false);
 
     ReadQuery read_query;
     auto read_result = version_store.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, ReadOptions{});
     const auto& seg = read_result.second.frame_;
 
-    for(auto i = 0u; i < num_rows + update_range.diff(); ++i) {
+    for (auto i = 0u; i < num_rows + update_range.diff(); ++i) {
         auto expected = i;
-        if(update_range.contains(i))
+        if (update_range.contains(i))
             expected += update_val;
 
-        auto val1 = seg.scalar_at<uint8_t >(i, 1);
+        auto val1 = seg.scalar_at<uint8_t>(i, 1);
         ASSERT_EQ(val1.value(), expected);
     }
 }
 
-TEST(VersionStore, UpdateIntersectBefore) {
+TEST(VersionStore, UpdateIntersectBefore)
+{
     using namespace arcticdb;
     using namespace arcticdb::storage;
     using namespace arcticdb::stream;
@@ -555,12 +581,10 @@ TEST(VersionStore, UpdateIntersectBefore) {
     size_t num_rows{100};
     size_t start_val{5};
 
-    std::vector<FieldDescriptor::Proto> fields{
-        scalar_field_proto(DataType::UINT8, "thing1"),
+    std::vector<FieldDescriptor::Proto> fields{scalar_field_proto(DataType::UINT8, "thing1"),
         scalar_field_proto(DataType::UINT8, "thing2"),
         scalar_field_proto(DataType::UINT16, "thing3"),
-        scalar_field_proto(DataType::UINT16, "thing4")
-    };
+        scalar_field_proto(DataType::UINT16, "thing4")};
 
     auto test_frame = get_test_frame<stream::TimeseriesIndex>(symbol, fields, num_rows, start_val);
     version_store.write_versioned_dataframe_internal(symbol, std::move(test_frame.frame_), false, false, false);
@@ -572,9 +596,8 @@ TEST(VersionStore, UpdateIntersectBefore) {
     version_store.update_internal(symbol, UpdateQuery{}, std::move(update_frame.frame_), false, false, false);
 
     ReadQuery read_query;
-    auto
-        read_result = version_store.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, ReadOptions{});
-    const auto &seg = read_result.second.frame_;
+    auto read_result = version_store.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, ReadOptions{});
+    const auto& seg = read_result.second.frame_;
 
     for (auto i = 0u; i < num_rows + 5; ++i) {
         auto expected = i;
@@ -586,7 +609,8 @@ TEST(VersionStore, UpdateIntersectBefore) {
     }
 }
 
-TEST(VersionStore, UpdateIntersectAfter) {
+TEST(VersionStore, UpdateIntersectAfter)
+{
     using namespace arcticdb;
     using namespace arcticdb::storage;
     using namespace arcticdb::stream;
@@ -599,12 +623,10 @@ TEST(VersionStore, UpdateIntersectAfter) {
     size_t num_rows{100};
     size_t start_val{0};
 
-    std::vector<FieldDescriptor::Proto> fields{
-        scalar_field_proto(DataType::UINT8, "thing1"),
+    std::vector<FieldDescriptor::Proto> fields{scalar_field_proto(DataType::UINT8, "thing1"),
         scalar_field_proto(DataType::UINT8, "thing2"),
         scalar_field_proto(DataType::UINT16, "thing3"),
-        scalar_field_proto(DataType::UINT16, "thing4")
-    };
+        scalar_field_proto(DataType::UINT16, "thing4")};
 
     auto test_frame = get_test_frame<stream::TimeseriesIndex>(symbol, fields, num_rows, start_val);
     version_store.write_versioned_dataframe_internal(symbol, std::move(test_frame.frame_), false, false, false);
@@ -616,9 +638,8 @@ TEST(VersionStore, UpdateIntersectAfter) {
     version_store.update_internal(symbol, UpdateQuery{}, std::move(update_frame.frame_), false, false, false);
 
     ReadQuery read_query;
-    auto
-        read_result = version_store.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, ReadOptions{});
-    const auto &seg = read_result.second.frame_;
+    auto read_result = version_store.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, ReadOptions{});
+    const auto& seg = read_result.second.frame_;
 
     for (auto i = 0u; i < num_rows + 5; ++i) {
         auto expected = i;
@@ -630,7 +651,8 @@ TEST(VersionStore, UpdateIntersectAfter) {
     }
 }
 
-TEST(VersionStore, UpdateWithinSchemaChange) {
+TEST(VersionStore, UpdateWithinSchemaChange)
+{
     using namespace arcticdb;
     using namespace arcticdb::storage;
     using namespace arcticdb::stream;
@@ -643,37 +665,36 @@ TEST(VersionStore, UpdateWithinSchemaChange) {
     size_t num_rows{100};
     size_t start_val{0};
 
-    std::vector<FieldDescriptor::Proto> fields{
-        scalar_field_proto(DataType::UINT8, "thing1"),
+    std::vector<FieldDescriptor::Proto> fields{scalar_field_proto(DataType::UINT8, "thing1"),
         scalar_field_proto(DataType::UINT8, "thing2"),
         scalar_field_proto(DataType::UINT16, "thing3"),
-        scalar_field_proto(DataType::UINT16, "thing4")
-    };
+        scalar_field_proto(DataType::UINT16, "thing4")};
 
     auto test_frame = get_test_frame<stream::TimeseriesIndex>(symbol, fields, num_rows, start_val);
-    version_store.
-        write_versioned_dataframe_internal(symbol, std::move(test_frame.frame_), false, false, false);
+    version_store.write_versioned_dataframe_internal(symbol, std::move(test_frame.frame_), false, false, false);
 
     RowRange update_range{10, 15};
     size_t update_val{1};
 
-    std::vector<FieldDescriptor::Proto> update_fields{
-        scalar_field_proto(DataType::UINT8, "thing1"),
+    std::vector<FieldDescriptor::Proto> update_fields{scalar_field_proto(DataType::UINT8, "thing1"),
         scalar_field_proto(DataType::UINT8, "thing2"),
         scalar_field_proto(DataType::UINT16, "thing3"),
-        scalar_field_proto(DataType::UINT16, "thing5")
-    };
+        scalar_field_proto(DataType::UINT16, "thing5")};
 
-    auto update_frame = get_test_frame<stream::TimeseriesIndex>(symbol, update_fields, update_range.diff(), update_range.first, update_val);
+    auto update_frame = get_test_frame<stream::TimeseriesIndex>(symbol,
+        update_fields,
+        update_range.diff(),
+        update_range.first,
+        update_val);
     version_store.update_internal(symbol, UpdateQuery{}, std::move(update_frame.frame_), false, true, false);
 
     ReadOptions read_options;
     read_options.set_dynamic_schema(true);
     ReadQuery read_query;
     auto read_result = version_store.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, read_options);
-    const auto &seg = read_result.second.frame_;
+    const auto& seg = read_result.second.frame_;
 
-    for (auto i = 0u;i < num_rows; ++i) {
+    for (auto i = 0u; i < num_rows; ++i) {
         auto expected = i;
         if (update_range.contains(i))
             expected += update_val;
@@ -691,7 +712,8 @@ TEST(VersionStore, UpdateWithinSchemaChange) {
     }
 }
 
-TEST(VersionStore, UpdateWithinTypeAndSchemaChange) {
+TEST(VersionStore, UpdateWithinTypeAndSchemaChange)
+{
     using namespace arcticdb;
     using namespace arcticdb::storage;
     using namespace arcticdb::stream;
@@ -705,12 +727,10 @@ TEST(VersionStore, UpdateWithinTypeAndSchemaChange) {
     size_t num_rows{100};
     size_t start_val{0};
 
-    std::vector<FieldDescriptor::Proto> fields{
-        scalar_field_proto(DataType::UINT8, "thing1"),
+    std::vector<FieldDescriptor::Proto> fields{scalar_field_proto(DataType::UINT8, "thing1"),
         scalar_field_proto(DataType::UINT8, "thing2"),
         scalar_field_proto(DataType::UINT16, "thing3"),
-        scalar_field_proto(DataType::UINT16, "thing4")
-    };
+        scalar_field_proto(DataType::UINT16, "thing4")};
 
     auto test_frame = get_test_frame<stream::TimeseriesIndex>(symbol, fields, num_rows, start_val);
     version_store.write_versioned_dataframe_internal(symbol, std::move(test_frame.frame_), false, false, false);
@@ -718,23 +738,25 @@ TEST(VersionStore, UpdateWithinTypeAndSchemaChange) {
     RowRange update_range{10, 15};
     size_t update_val{1};
 
-    std::vector<FieldDescriptor::Proto> update_fields{
-        scalar_field_proto(DataType::UINT8, "thing1"),
+    std::vector<FieldDescriptor::Proto> update_fields{scalar_field_proto(DataType::UINT8, "thing1"),
         scalar_field_proto(DataType::UINT16, "thing2"),
         scalar_field_proto(DataType::UINT32, "thing3"),
-        scalar_field_proto(DataType::UINT32, "thing5")
-    };
+        scalar_field_proto(DataType::UINT32, "thing5")};
 
-    auto update_frame = get_test_frame<stream::TimeseriesIndex>(symbol, update_fields, update_range.diff(), update_range.first, update_val);
+    auto update_frame = get_test_frame<stream::TimeseriesIndex>(symbol,
+        update_fields,
+        update_range.diff(),
+        update_range.first,
+        update_val);
     version_store.update_internal(symbol, UpdateQuery{}, std::move(update_frame.frame_), false, true, false);
 
     ReadOptions read_options;
     read_options.set_dynamic_schema(true);
     ReadQuery read_query;
     auto read_result = version_store.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, read_options);
-    const auto &seg = read_result.second.frame_;
+    const auto& seg = read_result.second.frame_;
 
-    for (auto i = 0u;i < num_rows; ++i) {
+    for (auto i = 0u; i < num_rows; ++i) {
         auto expected = i;
         if (update_range.contains(i))
             expected += update_val;
@@ -752,7 +774,8 @@ TEST(VersionStore, UpdateWithinTypeAndSchemaChange) {
     }
 }
 
-TEST(VersionStore, TestWriteAppendMapHead) {
+TEST(VersionStore, TestWriteAppendMapHead)
+{
 
     using namespace arcticdb;
     using namespace arcticdb::storage;
@@ -765,19 +788,21 @@ TEST(VersionStore, TestWriteAppendMapHead) {
     auto version_store = get_test_engine();
     size_t num_rows{100};
 
-    std::vector<FieldDescriptor> fields{
-        FieldDescriptor{ scalar_field_proto(DataType::UINT8, "thing1") },
-        FieldDescriptor{ scalar_field_proto(DataType::UINT8, "thing2") },
-        FieldDescriptor{ scalar_field_proto(DataType::UINT16, "thing3") },
-        FieldDescriptor{scalar_field_proto(DataType::UINT16, "thing4") }
-    };
+    std::vector<FieldDescriptor> fields{FieldDescriptor{scalar_field_proto(DataType::UINT8, "thing1")},
+        FieldDescriptor{scalar_field_proto(DataType::UINT8, "thing2")},
+        FieldDescriptor{scalar_field_proto(DataType::UINT16, "thing3")},
+        FieldDescriptor{scalar_field_proto(DataType::UINT16, "thing4")}};
 
-    auto key = atom_key_builder().version_id(0).creation_ts(PilotedClock::nanos_since_epoch()).content_hash(0).build(symbol, KeyType::APPEND_DATA);
+    auto key = atom_key_builder()
+                   .version_id(0)
+                   .creation_ts(PilotedClock::nanos_since_epoch())
+                   .content_hash(0)
+                   .build(symbol, KeyType::APPEND_DATA);
 
-    auto descriptor = StreamDescriptor{symbol, IndexDescriptor{1u, IndexDescriptor::TIMESTAMP}, fields_proto_from_range(fields)};
+    auto descriptor =
+        StreamDescriptor{symbol, IndexDescriptor{1u, IndexDescriptor::TIMESTAMP}, fields_proto_from_range(fields)};
     stream::write_head(version_store._test_get_store(), key, num_rows);
     auto [next_key, total_rows] = stream::read_head(version_store._test_get_store(), symbol);
     ASSERT_EQ(next_key, key);
     ASSERT_EQ(total_rows, num_rows);
 }
-

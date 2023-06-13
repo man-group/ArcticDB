@@ -17,25 +17,25 @@ struct SegmentHolder {
     arcticdb::SegmentInMemory segment;
 };
 
-TEST(RowBuilder, Basic) {
+TEST(RowBuilder, Basic)
+{
     using namespace arcticdb;
     const auto index = as::TimeseriesIndex::default_index();
-    as::FixedSchema schema{
-        index.create_stream_descriptor(123, {
-            arcticdb::scalar_field_proto(DataType::UINT8, "bbb"),
-            arcticdb::scalar_field_proto(DataType::INT8, "AAA"),
-        }), index
-    };
+    as::FixedSchema schema{index.create_stream_descriptor(123,
+                               {
+                                   arcticdb::scalar_field_proto(DataType::UINT8, "bbb"),
+                                   arcticdb::scalar_field_proto(DataType::INT8, "AAA"),
+                               }),
+        index};
 
     SegmentHolder holder;
 
-    as::FixedTimestampAggregator agg(std::move(schema), [&](SegmentInMemory &&mem) {
-        holder.segment = std::move(mem);
-    });
+    as::FixedTimestampAggregator agg(std::move(schema),
+        [&](SegmentInMemory&& mem) { holder.segment = std::move(mem); });
 
     ASSERT_EQ(agg.row_count(), 0);
 
-    auto &rb = agg.row_builder();
+    auto& rb = agg.row_builder();
 
     ASSERT_TRUE(rb.find_field("AAA"));
     ASSERT_FALSE(rb.find_field("BBB"));
@@ -48,7 +48,7 @@ TEST(RowBuilder, Basic) {
 
     // now using the transactional api with auto commit
     // out of order fields are ok
-    agg.start_row(arcticdb::timestamp{2})([](auto &rb) {
+    agg.start_row(arcticdb::timestamp{2})([](auto& rb) {
         rb.set_scalar(2, int8_t{-66});
         rb.set_scalar(1, uint8_t{42});
     });
@@ -56,10 +56,10 @@ TEST(RowBuilder, Basic) {
     ASSERT_EQ(2, agg.row_count());
 
     // TODO uncomment this once rollback on segment is implemented
-//    ASSERT_THROW(agg.start_row(timestamp{3})([](auto & rb){
-//       rb.set_scalar(1, 666.);
-//    }), std::invalid_argument);
-//    ASSERT_EQ(2, agg.row_count());
+    //    ASSERT_THROW(agg.start_row(timestamp{3})([](auto & rb){
+    //       rb.set_scalar(1, 666.);
+    //    }), std::invalid_argument);
+    //    ASSERT_EQ(2, agg.row_count());
 
     // monotonic index
     ASSERT_THROW(rb.start_row(timestamp{1}), ArcticCategorizedException<ErrorCategory::INTERNAL>);
@@ -82,7 +82,4 @@ TEST(RowBuilder, Basic) {
     rb.set_scalar(1, uint8_t{3});
     rb.set_scalar(2, int8_t{-2});
     rb.end_row();
-
 }
-
-

@@ -25,29 +25,35 @@ class ColumnMap {
     StringPool pool_;
 
 public:
-    ColumnMap(size_t size) :
-        column_offsets_(size) {}
+    ColumnMap(size_t size)
+        : column_offsets_(size)
+    {
+    }
 
-    void clear() {
+    void clear()
+    {
         column_offsets_.clear();
         pool_.clear();
     }
 
-    void insert(std::string_view name, size_t index) {
+    void insert(std::string_view name, size_t index)
+    {
         auto off_str = pool_.get(name);
         column_offsets_.insert(robin_hood::pair<std::string_view, size_t>(pool_.get_view(off_str.offset()), index));
         column_offsets_[pool_.get_view(off_str.offset())] = index;
     }
 
-    void set_from_descriptor(const StreamDescriptor& descriptor) {
-        for(const auto& field : folly::enumerate(descriptor.fields())) {
+    void set_from_descriptor(const StreamDescriptor& descriptor)
+    {
+        for (const auto& field : folly::enumerate(descriptor.fields())) {
             insert(field->name(), field.index);
         }
     }
 
-    std::optional<std::size_t> column_index(std::string_view name) {
+    std::optional<std::size_t> column_index(std::string_view name)
+    {
         auto it = column_offsets_.find(name);
-        if(it != column_offsets_.end())
+        if (it != column_offsets_.end())
             return it->second;
         else {
             ARCTICDB_TRACE(log::version(), "Column {} not found in map of size {}", name, column_offsets_.size());

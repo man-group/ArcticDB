@@ -20,8 +20,6 @@ namespace arcticdb::toolbox::apy {
 
 namespace py = pybind11;
 
-void register_bindings(py::module &m);
+void register_bindings(py::module& m);
 
 } // namespace arcticdb::toolbox::apy
-
-

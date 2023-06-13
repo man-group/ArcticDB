@@ -8,7 +8,8 @@
 #include <gtest/gtest.h>
 #include <arcticdb/util/string_utils.hpp>
 
-TEST(StringUtils, SafeEncodeNoSpecials) {
+TEST(StringUtils, SafeEncodeNoSpecials)
+{
     using namespace arcticdb;
     std::string simple("testwithnospecialchars");
     auto enc = util::safe_encode(simple);
@@ -16,7 +17,8 @@ TEST(StringUtils, SafeEncodeNoSpecials) {
     ASSERT_EQ(simple, dec);
 }
 
-TEST(StringUtils, SafeEncodeSpecial) {
+TEST(StringUtils, SafeEncodeSpecial)
+{
     using namespace arcticdb;
     std::string simple("testwith/slash");
     auto enc = util::safe_encode(simple);
@@ -25,7 +27,8 @@ TEST(StringUtils, SafeEncodeSpecial) {
     ASSERT_EQ(simple, dec);
 }
 
-TEST(StringUtils, SafeEncodeEscapeChar) {
+TEST(StringUtils, SafeEncodeEscapeChar)
+{
     using namespace arcticdb;
     std::string simple("testwith~escapechar");
     auto enc = util::safe_encode(simple);
@@ -33,7 +36,8 @@ TEST(StringUtils, SafeEncodeEscapeChar) {
     ASSERT_EQ(simple, dec);
 }
 
-TEST(StringUtils, SafeEncodeEncodeCharEnd) {
+TEST(StringUtils, SafeEncodeEncodeCharEnd)
+{
     using namespace arcticdb;
     std::string simple("testwith/");
     auto enc = util::safe_encode(simple);
@@ -41,7 +45,8 @@ TEST(StringUtils, SafeEncodeEncodeCharEnd) {
     ASSERT_EQ(simple, dec);
 }
 
-TEST(StringUtils, SafeEncodeEncodeCharStartEnd) {
+TEST(StringUtils, SafeEncodeEncodeCharStartEnd)
+{
     using namespace arcticdb;
     std::string simple("/testwithboth/");
     auto enc = util::safe_encode(simple);
@@ -49,7 +54,8 @@ TEST(StringUtils, SafeEncodeEncodeCharStartEnd) {
     ASSERT_EQ(simple, dec);
 }
 
-TEST(StringUtils, SafeEncodeMultiple) {
+TEST(StringUtils, SafeEncodeMultiple)
+{
     using namespace arcticdb;
     std::string simple("~test~with");
     auto enc = util::safe_encode(simple);
@@ -57,7 +63,8 @@ TEST(StringUtils, SafeEncodeMultiple) {
     ASSERT_EQ(simple, dec);
 }
 
-TEST(StringUtils, SafeEncodeMixed) {
+TEST(StringUtils, SafeEncodeMixed)
+{
     using namespace arcticdb;
     std::string simple("~test~with/andstuff/");
     auto enc = util::safe_encode(simple);
@@ -65,7 +72,8 @@ TEST(StringUtils, SafeEncodeMixed) {
     ASSERT_EQ(simple, dec);
 }
 
-TEST(StringUtils, SafeEncodeMixedReverse) {
+TEST(StringUtils, SafeEncodeMixedReverse)
+{
     using namespace arcticdb;
     std::string simple("/test~with/andstuff~");
     auto enc = util::safe_encode(simple);

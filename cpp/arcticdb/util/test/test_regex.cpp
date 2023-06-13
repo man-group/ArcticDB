@@ -8,7 +8,8 @@
 #include <gtest/gtest.h>
 #include <arcticdb/util/regex_filter.hpp>
 
-TEST(Regex, Simple) {
+TEST(Regex, Simple)
+{
     using namespace arcticdb;
 
     const std::string match_text = "Hello World";
@@ -19,7 +20,8 @@ TEST(Regex, Simple) {
     ASSERT_EQ(regex.match(no_match), false);
 }
 
-TEST(Regex, Complex) {
+TEST(Regex, Complex)
+{
     using namespace arcticdb;
     std::string match_text = "PANEURO_MACRO/maquity/bondlike/predictors/fidiv_3";
     std::string no_match = "Ubi solitudinem faciunt pacem appellant";
@@ -28,4 +30,3 @@ TEST(Regex, Complex) {
     ASSERT_EQ(regex.match(match_text), true);
     ASSERT_EQ(regex.match(no_match), false);
 }
-

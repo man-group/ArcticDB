@@ -12,11 +12,12 @@
 
 using ErrorCode = arcticdb::ErrorCode;
 
-TEST(ErrorCode, DoesThrow) {
+TEST(ErrorCode, DoesThrow)
+{
     ASSERT_THROW(arcticdb::normalization::raise<ErrorCode::E_INCOMPATIBLE_OBJECTS>("msg {}", 1),
-            arcticdb::NormalizationException);
+        arcticdb::NormalizationException);
     ASSERT_THROW(arcticdb::normalization::check<ErrorCode::E_INCOMPATIBLE_OBJECTS>(false, "msg {}", 2),
-            arcticdb::NormalizationException);
+        arcticdb::NormalizationException);
 }
 
 // FUTURE: Find a way to test the static_assert in detail::Raise?

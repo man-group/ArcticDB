@@ -12,7 +12,7 @@
 
 namespace arcticdb {
 
-struct ModuleData{
+struct ModuleData {
     ~ModuleData();
 
     static std::shared_ptr<ModuleData> instance_;
@@ -22,7 +22,6 @@ struct ModuleData{
     static std::shared_ptr<ModuleData> instance();
     static void destroy_instance();
 };
-
 
 void shutdown_globals();
 

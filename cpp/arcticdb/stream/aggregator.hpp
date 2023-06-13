@@ -19,11 +19,12 @@
 namespace arcticdb::stream {
 
 namespace {
-    template <class Container, class F, std::size_t... Is>
-    void compile_for_(Container cont, F func, std::index_sequence<Is...>) {
-        (func(cont.at(Is)), ...);
-    }
+template<class Container, class F, std::size_t... Is>
+void compile_for_(Container cont, F func, std::index_sequence<Is...>)
+{
+    (func(cont.at(Is)), ...);
 }
+} // namespace
 
 struct AggregationStats {
     size_t nbytes = 0;
@@ -35,55 +36,77 @@ struct AggregationStats {
 
     void update(size_t num_bytes);
 
-    void update_many(size_t rows, size_t num_bytes );
+    void update_many(size_t rows, size_t num_bytes);
 
-    inline void update_rows(size_t rows) { total_rows_ += rows; }
+    inline void update_rows(size_t rows)
+    {
+        total_rows_ += rows;
+    }
 
-    [[nodiscard]] inline size_t total_rows() const { return total_rows_; }
+    [[nodiscard]] inline size_t total_rows() const
+    {
+        return total_rows_;
+    }
 };
 
 class RowCountSegmentPolicy {
-  public:
+public:
     static constexpr std::size_t default_max_row_count_ = 100000;
 
     RowCountSegmentPolicy() = default;
-    explicit RowCountSegmentPolicy(std::size_t row_count) : max_row_count_(row_count) {}
+    explicit RowCountSegmentPolicy(std::size_t row_count)
+        : max_row_count_(row_count)
+    {
+    }
 
-    bool operator()(AggregationStats &stats) const {
-        ARCTICDB_DEBUG(log::inmem(), "RowCountSegmentPolicy AggregationStats total_rows={}, max_row={}",
-            stats.total_rows_, max_row_count_);
+    bool operator()(AggregationStats& stats) const
+    {
+        ARCTICDB_DEBUG(log::inmem(),
+            "RowCountSegmentPolicy AggregationStats total_rows={}, max_row={}",
+            stats.total_rows_,
+            max_row_count_);
         return stats.total_rows_ >= max_row_count_;
     }
 
-    size_t expected_row_size() const { return max_row_count_; }
+    size_t expected_row_size() const
+    {
+        return max_row_count_;
+    }
 
-  private:
+private:
     std::size_t max_row_count_ = default_max_row_count_;
 };
 
 class NeverSegmentPolicy {
-  public:
+public:
     NeverSegmentPolicy() = default;
-    constexpr bool operator()(AggregationStats &) const {
+    constexpr bool operator()(AggregationStats&) const
+    {
         return false;
     }
 
-    [[nodiscard]] size_t expected_row_size() const { return 0; }
+    [[nodiscard]] size_t expected_row_size() const
+    {
+        return 0;
+    }
 };
 
-template<class Sysclock=util::SysClock>
+template<class Sysclock = util::SysClock>
 class TimeBasedSegmentPolicy {
 public:
     static constexpr std::size_t default_max_diff_ = 2 * ONE_MINUTE;
 
     TimeBasedSegmentPolicy() = default;
-    explicit TimeBasedSegmentPolicy(timestamp diff) : max_diff_(diff) {}
+    explicit TimeBasedSegmentPolicy(timestamp diff)
+        : max_diff_(diff)
+    {
+    }
 
-    bool operator()(AggregationStats &stats) const {
+    bool operator()(AggregationStats& stats) const
+    {
         auto curr_time = Sysclock::coarse_nanos_since_epoch();
         auto diff = curr_time - stats.last_active_time_;
-        ARCTICDB_DEBUG(log::inmem(), "TimeBasedSegmentPolicy AggregationStats diff={}, max_diff={}",
-            diff, max_diff_);
+        ARCTICDB_DEBUG(log::inmem(), "TimeBasedSegmentPolicy AggregationStats diff={}, max_diff={}", diff, max_diff_);
         bool is_policy_valid = false;
         if (diff >= max_diff_) {
             is_policy_valid = true;
@@ -92,7 +115,10 @@ public:
         return is_policy_valid;
     }
 
-    [[nodiscard]] size_t expected_row_size() const { return 0; }
+    [[nodiscard]] size_t expected_row_size() const
+    {
+        return 0;
+    }
 
 private:
     timestamp max_diff_ = default_max_diff_;
@@ -100,35 +126,40 @@ private:
 
 using VariantPolicyType = std::variant<NeverSegmentPolicy, RowCountSegmentPolicy, TimeBasedSegmentPolicy<>>;
 
-template <int N>
+template<int N>
 class ListOfSegmentPolicies {
 public:
-
     ListOfSegmentPolicies() = default;
-    template <typename... Policies>
-    explicit ListOfSegmentPolicies(const Policies&... policies) {
+    template<typename... Policies>
+    explicit ListOfSegmentPolicies(const Policies&... policies)
+    {
         static_assert(N == sizeof...(policies));
         policies_ = {policies...};
     }
 
-    bool operator()(AggregationStats &stats) const {
+    bool operator()(AggregationStats& stats) const
+    {
         bool is_policy_valid = false;
-        compile_for_(policies_, [&is_policy_valid, &stats](const auto& variant_policy) {
-            std::visit([&is_policy_valid, &stats](const auto& policy) {
-                is_policy_valid = is_policy_valid || policy(stats);
-            }, variant_policy);
-        }, std::make_index_sequence<N>());
+        compile_for_(
+            policies_,
+            [&is_policy_valid, &stats](const auto& variant_policy) {
+                std::visit([&is_policy_valid, &stats](
+                               const auto& policy) { is_policy_valid = is_policy_valid || policy(stats); },
+                    variant_policy);
+            },
+            std::make_index_sequence<N>());
         return is_policy_valid;
     }
 
-    [[nodiscard]] size_t expected_row_size() const {
+    [[nodiscard]] size_t expected_row_size() const
+    {
         size_t val = 0;
         // TODO: Do it differently later, currently just using 0 since that's what we need for tickdata
         return val;
     }
 
 private:
-    std::array<VariantPolicyType, N> policies_ ;
+    std::array<VariantPolicyType, N> policies_;
 };
 
 class DenseColumnPolicy {
@@ -143,52 +174,62 @@ public:
 
 using VariantColumnPolicy = std::variant<DenseColumnPolicy, SparseColumnPolicy>;
 
-template<class Index, class Schema, class SegmentingPolicy = RowCountSegmentPolicy, class DensityPolicy = DenseColumnPolicy>
+template<class Index,
+    class Schema,
+    class SegmentingPolicy = RowCountSegmentPolicy,
+    class DensityPolicy = DenseColumnPolicy>
 class Aggregator {
-  public:
+public:
     using IndexType = Index;
     using SchemaPolicy = Schema;
     using SparsePolicy = DensityPolicy;
     using SegmentingPolicyType = SegmentingPolicy;
     using SelfType = Aggregator<IndexType, Schema, SegmentingPolicy, DensityPolicy>;
     using RowBuilderType = RowBuilder<IndexType, Schema, SelfType>;
-    using Callback = folly::Function<void(SegmentInMemory &&)>;
+    using Callback = folly::Function<void(SegmentInMemory&&)>;
     friend RowBuilderType;
 
     template<class C>
-    Aggregator(
-        SchemaPolicy &&schema,
-        C &&c,
-        SegmentingPolicy &&segmenting_policy = SegmentingPolicyType(),
+    Aggregator(SchemaPolicy&& schema,
+        C&& c,
+        SegmentingPolicy&& segmenting_policy = SegmentingPolicyType(),
         const std::optional<StreamDescriptor>& desc = std::nullopt,
-        const std::optional<size_t> row_count = std::nullopt) :
-        schema_policy_(std::move(schema)),
-        row_builder_(schema_policy_, self()),
-        callback_(std::forward<Callback>(c)),
-        stats_(),
-        segmenting_policy_(std::move(segmenting_policy)),
-        //TODO presizing with expected rowsize  (using a rowcount segmenting policy) means that buffer sizes are always irregular, unless
-        // the expected rowsize matches the column size, or some more clever logic is done so that if the row-count subdivides the buffer
-        // size then you get default buffer sizes.
-        segment_(desc.value_or(schema_policy_.default_descriptor()), row_count.value_or(segmenting_policy_.expected_row_size()), false, SparsePolicy::allow_sparse) {
-            segment_.init_column_map();
-            index().check(segment_.descriptor().fields());
+        const std::optional<size_t> row_count = std::nullopt)
+        : schema_policy_(std::move(schema)),
+          row_builder_(schema_policy_, self()),
+          callback_(std::forward<Callback>(c)),
+          stats_(),
+          segmenting_policy_(std::move(segmenting_policy)),
+          //TODO presizing with expected rowsize  (using a rowcount segmenting policy) means that buffer sizes are always irregular, unless
+          // the expected rowsize matches the column size, or some more clever logic is done so that if the row-count subdivides the buffer
+          // size then you get default buffer sizes.
+          segment_(desc.value_or(schema_policy_.default_descriptor()),
+              row_count.value_or(segmenting_policy_.expected_row_size()),
+              false,
+              SparsePolicy::allow_sparse)
+    {
+        segment_.init_column_map();
+        index().check(segment_.descriptor().fields());
     };
 
-    RowBuilderType &row_builder() {
+    RowBuilderType& row_builder()
+    {
         return row_builder_;
     }
 
-    template<class ...Args>
-    RowBuilderType &start_row(Args...args) {
-        SCOPE_FAIL {
+    template<class... Args>
+    RowBuilderType& start_row(Args... args)
+    {
+        SCOPE_FAIL
+        {
             row_builder_.rollback_row();
         };
         row_builder_.start_row(args...);
         return row_builder_;
     }
 
-    inline void rollback_row(util::BitSet &) noexcept {
+    inline void rollback_row(util::BitSet&) noexcept
+    {
         // TODO implement rollback
     }
 
@@ -196,108 +237,154 @@ class Aggregator {
 
     void clear();
 
-    const IndexType& index() const {
+    const IndexType& index() const
+    {
         return std::get<IndexType>(schema_policy_.index());
     }
 
-    inline size_t row_count() { return segment_.row_count(); }
+    inline size_t row_count()
+    {
+        return segment_.row_count();
+    }
 
-    inline size_t commits_count() const { return commits_count_; }
+    inline size_t commits_count() const
+    {
+        return commits_count_;
+    }
 
-    inline const AggregationStats &stats() const { return stats_; }
+    inline const AggregationStats& stats() const
+    {
+        return stats_;
+    }
 
-    inline const arcticdb::entity::StreamDescriptor &descriptor() const { return segment_.descriptor(); }
+    inline const arcticdb::entity::StreamDescriptor& descriptor() const
+    {
+        return segment_.descriptor();
+    }
 
-    inline arcticdb::entity::StreamDescriptor default_descriptor() const { return schema_policy_.default_descriptor(); }
+    inline arcticdb::entity::StreamDescriptor default_descriptor() const
+    {
+        return schema_policy_.default_descriptor();
+    }
 
-    auto &segment() { return segment_; }
+    auto& segment()
+    {
+        return segment_;
+    }
 
     template<class T, std::enable_if_t<std::is_integral_v<T> || std::is_floating_point_v<T>, int> = 0>
-    void set_external_block(std::size_t pos, T *val, size_t size) {
+    void set_external_block(std::size_t pos, T* val, size_t size)
+    {
         segment_.set_external_block(pos, val, size);
     }
 
     template<class T, std::enable_if_t<std::is_integral_v<T> || std::is_floating_point_v<T>, int> = 0>
-    void set_sparse_block(std::size_t pos, T *val, size_t rows_to_write) {
-        segment_.set_sparse_block(pos, val,  rows_to_write);
+    void set_sparse_block(std::size_t pos, T* val, size_t rows_to_write)
+    {
+        segment_.set_sparse_block(pos, val, rows_to_write);
     }
 
-    void set_string_at(position_t col, position_t row, const char* val, size_t size) {
+    void set_string_at(position_t col, position_t row, const char* val, size_t size)
+    {
         segment_.set_string_at(col, row, val, size);
     }
 
-    void set_no_string_at(position_t col, position_t row, OffsetString::offset_t placeholder) {
+    void set_no_string_at(position_t col, position_t row, OffsetString::offset_t placeholder)
+    {
         segment_.set_no_string_at(col, row, placeholder);
     }
 
-    void set_offset(ssize_t offset) {
+    void set_offset(ssize_t offset)
+    {
         segment_.set_offset(offset);
     }
 
-    inline void end_block_write(size_t size) {
+    inline void end_block_write(size_t size)
+    {
         stats_.update_rows(size);
         segment_.end_block_write(size);
     }
 
-    template<class T, template<class> class Tensor, std::enable_if_t<
-        std::is_integral_v<T> || std::is_floating_point_v<T>,
-        int> = 0>
-    void set_array(position_t pos, Tensor<T> &val) {
+    template<class T,
+        template<class>
+        class Tensor,
+        std::enable_if_t<std::is_integral_v<T> || std::is_floating_point_v<T>, int> = 0>
+    void set_array(position_t pos, Tensor<T>& val)
+    {
         segment_.set_array(pos, val);
     }
 
-    template<class T, std::enable_if_t<
-        std::is_integral_v<T> || std::is_floating_point_v<T>,
-        int> = 0>
-    void set_array(position_t pos, py::array_t<T>& val) {
+    template<class T, std::enable_if_t<std::is_integral_v<T> || std::is_floating_point_v<T>, int> = 0>
+    void set_array(position_t pos, py::array_t<T>& val)
+    {
         segment_.set_array(pos, val);
     }
-    
-    void set_string_array(position_t pos, size_t string_size, size_t num_strings, char *data) {
+
+    void set_string_array(position_t pos, size_t string_size, size_t num_strings, char* data)
+    {
         segment_.set_string_array(pos, string_size, num_strings, data);
     }
 
-    SegmentingPolicyType segmenting_policy() {
+    SegmentingPolicyType segmenting_policy()
+    {
         return segmenting_policy_;
     }
 
-    AggregationStats& stats() { return stats_; }
+    AggregationStats& stats()
+    {
+        return stats_;
+    }
 
 protected:
     void commit_impl();
 
 private:
     template<class T, std::enable_if_t<std::is_integral_v<T> || std::is_floating_point_v<T>, int> = 0>
-    void set_scalar(std::size_t pos, T val) {
+    void set_scalar(std::size_t pos, T val)
+    {
         segment_.set_scalar(pos, val);
     }
 
     template<class T, std::enable_if_t<std::is_integral_v<T> || std::is_floating_point_v<T>, int> = 0>
-    void set_scalar_by_name(std::string_view name, T val, const TypeDescriptor::Proto &desc) {
-        position_t pos = schema_policy_.get_column_idx_by_name(segment_, name, desc, segmenting_policy_.expected_row_size(), segment_.row_count());
+    void set_scalar_by_name(std::string_view name, T val, const TypeDescriptor::Proto& desc)
+    {
+        position_t pos = schema_policy_.get_column_idx_by_name(segment_,
+            name,
+            desc,
+            segmenting_policy_.expected_row_size(),
+            segment_.row_count());
         set_scalar(pos, val);
     }
 
-    void set_string(position_t pos, const std::string &str) {
+    void set_string(position_t pos, const std::string& str)
+    {
         segment_.set_string(pos, str);
     }
 
-    void set_string(position_t pos, std::string_view str) {
+    void set_string(position_t pos, std::string_view str)
+    {
         segment_.set_string(pos, str);
     }
 
-    void set_string_by_name(std::string_view name, std::string_view str, const TypeDescriptor::Proto &desc) {
-        position_t pos = schema_policy_.get_column_idx_by_name(segment_, name, desc, segmenting_policy_.expected_row_size(), segment_.row_count());
+    void set_string_by_name(std::string_view name, std::string_view str, const TypeDescriptor::Proto& desc)
+    {
+        position_t pos = schema_policy_.get_column_idx_by_name(segment_,
+            name,
+            desc,
+            segmenting_policy_.expected_row_size(),
+            segment_.row_count());
         set_string(pos, str);
     }
 
-    void set_string_list(position_t pos, const std::vector<std::string> &input) {
+    void set_string_list(position_t pos, const std::vector<std::string>& input)
+    {
         segment_.set_string_list(pos, input);
     }
 
     void end_row();
 
-    SelfType& self() {
+    SelfType& self()
+    {
         return *this;
     }
 
@@ -311,8 +398,9 @@ private:
 };
 
 using FixedTimestampAggregator = Aggregator<TimeseriesIndex, FixedSchema>;
-using DynamicTimestampAggregator = Aggregator<TimeseriesIndex, DynamicSchema, RowCountSegmentPolicy, SparseColumnPolicy>;
-}
+using DynamicTimestampAggregator =
+    Aggregator<TimeseriesIndex, DynamicSchema, RowCountSegmentPolicy, SparseColumnPolicy>;
+} // namespace arcticdb::stream
 
 #define ARCTICDB_AGGREGATOR_H_
 #include <arcticdb/stream/aggregator-inl.hpp>

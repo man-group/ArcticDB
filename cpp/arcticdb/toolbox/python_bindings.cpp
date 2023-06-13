@@ -14,7 +14,8 @@
 
 namespace arcticdb::toolbox::apy {
 
-void register_bindings(py::module &m) {
+void register_bindings(py::module& m)
+{
     auto tools = m.def_submodule("tools", "Library management tool hooks");
     using namespace arcticdb::toolbox::apy;
     using namespace arcticdb::storage;
@@ -22,41 +23,38 @@ void register_bindings(py::module &m) {
     tools.def("print_mem_usage", &util::print_total_mem_usage);
 
     py::class_<LibraryTool, std::shared_ptr<LibraryTool>>(tools, "LibraryTool")
-            .def(py::init<>([](std::shared_ptr<Library> lib) {
-                return std::make_shared<LibraryTool>(lib);
-            }))
-            .def("read_to_segment", &LibraryTool::read_to_segment)
-            .def("write", &LibraryTool::write)
-            .def("remove", &LibraryTool::remove)
-            .def("find_keys", &LibraryTool::find_keys)
-            .def("count_keys", &LibraryTool::count_keys)
-            .def("get_key_path", &LibraryTool::get_key_path)
-            .def("find_keys_for_id", &LibraryTool::find_keys_for_id)
-            .def("clear_ref_keys", &LibraryTool::clear_ref_keys)
-            .def("batch_key_exists", &LibraryTool::batch_key_exists);
+        .def(py::init<>([](std::shared_ptr<Library> lib) { return std::make_shared<LibraryTool>(lib); }))
+        .def("read_to_segment", &LibraryTool::read_to_segment)
+        .def("write", &LibraryTool::write)
+        .def("remove", &LibraryTool::remove)
+        .def("find_keys", &LibraryTool::find_keys)
+        .def("count_keys", &LibraryTool::count_keys)
+        .def("get_key_path", &LibraryTool::get_key_path)
+        .def("find_keys_for_id", &LibraryTool::find_keys_for_id)
+        .def("clear_ref_keys", &LibraryTool::clear_ref_keys)
+        .def("batch_key_exists", &LibraryTool::batch_key_exists);
 
     // S3 Storage tool
     using namespace arcticdb::storage::s3;
     py::class_<S3StorageTool, std::shared_ptr<S3StorageTool>>(tools, "S3Tool")
-            .def(py::init<>([](
-                    const std::string &bucket_name,
-                    const std::string &credential_name,
-                    const std::string &credential_key,
-                    const std::string &endpoint) -> std::shared_ptr<S3StorageTool> {
-                arcticc::pb2::s3_storage_pb2::Config cfg;
-                cfg.set_bucket_name(bucket_name);
-                cfg.set_credential_name(credential_name);
-                cfg.set_credential_key(credential_key);
-                cfg.set_endpoint(endpoint);
-                return std::make_shared<S3StorageTool>(cfg);
-            }))
-            .def("list_bucket", &S3StorageTool::list_bucket)
-            .def("delete_bucket", &S3StorageTool::delete_bucket)
-            .def("write_object", &S3StorageTool::set_object)
-            .def("get_object", &S3StorageTool::get_object)
-            .def("get_prefix_info", &S3StorageTool::get_prefix_info)
-            .def("get_object_size", &S3StorageTool::get_file_size)
-            .def("delete_object", &S3StorageTool::delete_object);
+        .def(py::init<>([](const std::string& bucket_name,
+                            const std::string& credential_name,
+                            const std::string& credential_key,
+                            const std::string& endpoint) -> std::shared_ptr<S3StorageTool> {
+            arcticc::pb2::s3_storage_pb2::Config cfg;
+            cfg.set_bucket_name(bucket_name);
+            cfg.set_credential_name(credential_name);
+            cfg.set_credential_key(credential_key);
+            cfg.set_endpoint(endpoint);
+            return std::make_shared<S3StorageTool>(cfg);
+        }))
+        .def("list_bucket", &S3StorageTool::list_bucket)
+        .def("delete_bucket", &S3StorageTool::delete_bucket)
+        .def("write_object", &S3StorageTool::set_object)
+        .def("get_object", &S3StorageTool::get_object)
+        .def("get_prefix_info", &S3StorageTool::get_prefix_info)
+        .def("get_object_size", &S3StorageTool::get_file_size)
+        .def("delete_object", &S3StorageTool::delete_object);
 }
 
 } // namespace arcticdb::toolbox::apy

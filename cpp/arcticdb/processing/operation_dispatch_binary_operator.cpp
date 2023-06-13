@@ -15,4 +15,4 @@ template VariantData visit_binary_operator<MinusOperator>(const VariantData&, co
 template VariantData visit_binary_operator<TimesOperator>(const VariantData&, const VariantData&, TimesOperator&&);
 template VariantData visit_binary_operator<DivideOperator>(const VariantData&, const VariantData&, DivideOperator&&);
 
-}
+} // namespace arcticdb

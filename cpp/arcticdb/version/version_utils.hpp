@@ -24,28 +24,29 @@ using namespace arcticdb::storage;
 using namespace arcticdb::entity;
 using namespace arcticdb::stream;
 
-inline entity::VariantKey write_multi_index_entry(
-    std::shared_ptr<StreamSink> store,
-    std::vector<AtomKey> &keys,
-    const StreamId &stream_id,
-    const py::object &metastruct,
-    const py::object &user_meta,
-    VersionId version_id
-    ) {
+inline entity::VariantKey write_multi_index_entry(std::shared_ptr<StreamSink> store,
+    std::vector<AtomKey>& keys,
+    const StreamId& stream_id,
+    const py::object& metastruct,
+    const py::object& user_meta,
+    VersionId version_id)
+{
     ARCTICDB_SAMPLE(WriteJournalEntry, 0)
     ARCTICDB_DEBUG(log::version(), "Version map writing multi key");
     folly::Future<VariantKey> multi_key_fut = folly::Future<VariantKey>::makeEmpty();
 
-    IndexAggregator<RowCountIndex> multi_index_agg(stream_id, [&](auto &&segment) {
-        multi_key_fut = store->write(KeyType::MULTI_KEY,
-                                     version_id,  // version_id
-                                     stream_id,
-                                     0,  // start_index
-                                     0,  // end_index
-                                     std::forward<SegmentInMemory>(segment)).wait();
+    IndexAggregator<RowCountIndex> multi_index_agg(stream_id, [&](auto&& segment) {
+        multi_key_fut = store
+                            ->write(KeyType::MULTI_KEY,
+                                version_id, // version_id
+                                stream_id,
+                                0, // start_index
+                                0, // end_index
+                                std::forward<SegmentInMemory>(segment))
+                            .wait();
     });
 
-    for (auto &key: keys) {
+    for (auto& key : keys) {
         multi_index_agg.add_key(to_atom(key));
     }
     google::protobuf::Any any = {};
@@ -68,9 +69,9 @@ inline entity::VariantKey write_multi_index_entry(
     return multi_key_fut.wait().value();
 }
 
-inline std::pair<std::optional<AtomKey>, VersionId> read_segment_with_keys(
-    const SegmentInMemory &seg,
-    VersionMapEntry& entry) {
+inline std::pair<std::optional<AtomKey>, VersionId> read_segment_with_keys(const SegmentInMemory& seg,
+    VersionMapEntry& entry)
+{
     ssize_t row = 0;
     std::optional<AtomKey> next;
     VersionId oldest_loaded = std::numeric_limits<VersionId>::max();
@@ -83,7 +84,7 @@ inline std::pair<std::optional<AtomKey>, VersionId> read_segment_with_keys(
         } else if (key.type() == KeyType::TOMBSTONE) {
             entry.tombstones_.try_emplace(key.version_id(), key);
             entry.keys_.push_back(key);
-        } else if (key.type() == KeyType::TOMBSTONE_ALL){
+        } else if (key.type() == KeyType::TOMBSTONE_ALL) {
             entry.try_set_tombstone_all(key);
             entry.keys_.push_back(key);
         } else if (key.type() == KeyType::VERSION) {
@@ -99,39 +100,45 @@ inline std::pair<std::optional<AtomKey>, VersionId> read_segment_with_keys(
     return std::make_pair(next, oldest_loaded);
 }
 
-inline std::pair<std::optional<AtomKey>, VersionId> read_segment_with_keys(
-    const SegmentInMemory &seg,
-    const std::shared_ptr<VersionMapEntry>& entry) {
+inline std::pair<std::optional<AtomKey>, VersionId> read_segment_with_keys(const SegmentInMemory& seg,
+    const std::shared_ptr<VersionMapEntry>& entry)
+{
     return read_segment_with_keys(seg, *entry);
 }
 
 template<class Predicate>
 std::shared_ptr<VersionMapEntry> build_version_map_entry_with_predicate_iteration(
-    const std::shared_ptr<StreamSource> &store,
-    Predicate &&predicate,
-    const StreamId &stream_id,
+    const std::shared_ptr<StreamSource>& store,
+    Predicate&& predicate,
+    const StreamId& stream_id,
     std::vector<KeyType> key_types,
-    bool perform_read_segment_with_keys=true) {
+    bool perform_read_segment_with_keys = true)
+{
 
     auto prefix = std::holds_alternative<StringId>(stream_id) ? std::get<StringId>(stream_id) : std::string();
     auto output = std::make_shared<VersionMapEntry>();
     std::vector<AtomKey> read_keys;
-    for(auto key_type: key_types) {
-        store->iterate_type(key_type, [&predicate, &read_keys, &store, &output, &perform_read_segment_with_keys](VariantKey &&vk) {
-            const auto &key = to_atom(std::move(vk));
-            if (!predicate(key))
-                return;
+    for (auto key_type : key_types) {
+        store->iterate_type(
+            key_type,
+            [&predicate, &read_keys, &store, &output, &perform_read_segment_with_keys](VariantKey&& vk) {
+                const auto& key = to_atom(std::move(vk));
+                if (!predicate(key))
+                    return;
 
-            read_keys.push_back(key);
-            ARCTICDB_DEBUG(log::storage(), "Version map iterating key {}", key);
-            if (perform_read_segment_with_keys) {
-                auto [kv, seg] = store->read(to_atom(key)).get();
-                read_segment_with_keys(seg, output);
-            }
-        }, prefix);
+                read_keys.push_back(key);
+                ARCTICDB_DEBUG(log::storage(), "Version map iterating key {}", key);
+                if (perform_read_segment_with_keys) {
+                    auto [kv, seg] = store->read(to_atom(key)).get();
+                    read_segment_with_keys(seg, output);
+                }
+            },
+            prefix);
     }
     if (!perform_read_segment_with_keys) {
-        output->keys_.insert(output->keys_.end(), std::move_iterator(read_keys.begin()), std::move_iterator(read_keys.end()));
+        output->keys_.insert(output->keys_.end(),
+            std::move_iterator(read_keys.begin()),
+            std::move_iterator(read_keys.end()));
         output->sort();
         // output->head_ isnt populated in this case
         return output;
@@ -139,25 +146,23 @@ std::shared_ptr<VersionMapEntry> build_version_map_entry_with_predicate_iteratio
         if (output->keys_.empty())
             return output;
         util::check(!read_keys.empty(), "Expected there to be some read keys");
-        auto latest_key = std::max_element(std::begin(read_keys), std::end(read_keys),
-                                           [](const auto &left, const auto &right) {
-            return left.creation_ts() < right.creation_ts();
-        });
+        auto latest_key = std::max_element(std::begin(read_keys),
+            std::end(read_keys),
+            [](const auto& left, const auto& right) { return left.creation_ts() < right.creation_ts(); });
         output->sort();
         output->head_ = *latest_key;
     }
 
     return output;
-    }
+}
 
-    inline void check_is_version(const AtomKey &key) {
-        util::check(key.type() == KeyType::VERSION, "Expected version key type but got {}", key);
-    }
+inline void check_is_version(const AtomKey& key)
+{
+    util::check(key.type() == KeyType::VERSION, "Expected version key type but got {}", key);
+}
 
-
-inline std::optional<RefKey> get_symbol_ref_key(
-    const std::shared_ptr<StreamSource>& store,
-    const StreamId& stream_id) {
+inline std::optional<RefKey> get_symbol_ref_key(const std::shared_ptr<StreamSource>& store, const StreamId& stream_id)
+{
     auto ref_key = RefKey{stream_id, KeyType::VERSION_REF};
     if (store->key_exists_sync(ref_key))
         return std::make_optional(std::move(ref_key));
@@ -172,7 +177,8 @@ inline std::optional<RefKey> get_symbol_ref_key(
     return std::make_optional(std::move(ref_key));
 }
 
-inline void read_symbol_ref(std::shared_ptr<StreamSource> store, const StreamId& stream_id, VersionMapEntry& entry) {
+inline void read_symbol_ref(std::shared_ptr<StreamSource> store, const StreamId& stream_id, VersionMapEntry& entry)
+{
     auto maybe_ref_key = get_symbol_ref_key(store, stream_id);
     if (!maybe_ref_key)
         return;
@@ -182,13 +188,16 @@ inline void read_symbol_ref(std::shared_ptr<StreamSource> store, const StreamId&
     std::tie(entry.head_, version_id) = read_segment_with_keys(seg, entry);
 }
 
-inline void write_symbol_ref(std::shared_ptr<StreamSink> store, const AtomKey &latest_index, const AtomKey &journal_key) {
+inline void write_symbol_ref(std::shared_ptr<StreamSink> store, const AtomKey& latest_index, const AtomKey& journal_key)
+{
     check_is_index_or_tombstone(latest_index);
     check_is_version(journal_key);
-    ARCTICDB_DEBUG(log::version(), "Version map writing symbol ref for latest index: {} journal key {}", latest_index,
-                         journal_key);
+    ARCTICDB_DEBUG(log::version(),
+        "Version map writing symbol ref for latest index: {} journal key {}",
+        latest_index,
+        journal_key);
 
-    IndexAggregator<RowCountIndex> ref_agg(latest_index.id(), [&store, &latest_index](auto &&s) {
+    IndexAggregator<RowCountIndex> ref_agg(latest_index.id(), [&store, &latest_index](auto&& s) {
         auto segment = std::forward<SegmentInMemory>(s);
         store->write_sync(KeyType::VERSION_REF, latest_index.id(), std::move(segment));
     });
@@ -200,33 +209,38 @@ inline void write_symbol_ref(std::shared_ptr<StreamSink> store, const AtomKey &l
 
 std::unordered_map<StreamId, size_t> get_num_version_entries(const std::shared_ptr<Store>& store, size_t batch_size);
 
-inline bool need_to_load_further(const LoadParameter& load_params, VersionId loaded_until) {
-    if(!load_params.load_until_|| loaded_until > load_params.load_until_.value())
+inline bool need_to_load_further(const LoadParameter& load_params, VersionId loaded_until)
+{
+    if (!load_params.load_until_ || loaded_until > load_params.load_until_.value())
         return true;
 
-    ARCTICDB_DEBUG(log::version(), "Exiting load downto because request {} <= {}", load_params.load_until_.value(), loaded_until);
+    ARCTICDB_DEBUG(log::version(),
+        "Exiting load downto because request {} <= {}",
+        load_params.load_until_.value(),
+        loaded_until);
     return false;
 }
 
-inline bool load_latest_ongoing(const LoadParameter& load_params, const std::shared_ptr<VersionMapEntry>& entry) {
-    if(!(load_params.load_type_ == LoadType::LOAD_LATEST_UNDELETED && entry->get_first_index(false)) &&
-    !(load_params.load_type_ == LoadType::LOAD_LATEST && entry->get_first_index(true)))
+inline bool load_latest_ongoing(const LoadParameter& load_params, const std::shared_ptr<VersionMapEntry>& entry)
+{
+    if (!(load_params.load_type_ == LoadType::LOAD_LATEST_UNDELETED && entry->get_first_index(false)) &&
+        !(load_params.load_type_ == LoadType::LOAD_LATEST && entry->get_first_index(true)))
         return true;
 
     ARCTICDB_DEBUG(log::version(), "Exiting because we found a non-deleted index in load latest");
     return false;
 }
 
-inline bool looking_for_undeleted(const LoadParameter& load_params, const std::shared_ptr<VersionMapEntry>& entry) {
-    if(!(load_params.load_type_ == LoadType::LOAD_UNDELETED && entry->tombstone_all_))
+inline bool looking_for_undeleted(const LoadParameter& load_params, const std::shared_ptr<VersionMapEntry>& entry)
+{
+    if (!(load_params.load_type_ == LoadType::LOAD_UNDELETED && entry->tombstone_all_))
         return true;
 
     ARCTICDB_DEBUG(log::version(), "Exiting because we have found an undeleted version");
     return false;
 }
 
-void fix_stream_ids_of_index_keys(
-    const std::shared_ptr<Store> &store,
-    const StreamId &stream_id,
-    const std::shared_ptr<VersionMapEntry> &entry);
-}
+void fix_stream_ids_of_index_keys(const std::shared_ptr<Store>& store,
+    const StreamId& stream_id,
+    const std::shared_ptr<VersionMapEntry>& entry);
+} // namespace arcticdb

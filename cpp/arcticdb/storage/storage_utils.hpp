@@ -12,17 +12,17 @@
 
 namespace arcticdb {
 
-inline auto stream_id_prefix_matcher(const std::string &prefix) {
+inline auto stream_id_prefix_matcher(const std::string& prefix)
+{
     return [&prefix](const StreamId& id) {
         return prefix.empty() || (std::holds_alternative<std::string>(id) &&
-        std::get<std::string>(id).compare(0u, prefix.size(), prefix) == 0); };
+                                     std::get<std::string>(id).compare(0u, prefix.size(), prefix) == 0);
+    };
 }
 
-inline std::vector<VariantKey> filter_keys_on_existence(
-        const std::vector<VariantKey>& keys,
-        const std::shared_ptr<Store>& store,
-        bool pred
-        ){
+inline std::vector<VariantKey>
+filter_keys_on_existence(const std::vector<VariantKey>& keys, const std::shared_ptr<Store>& store, bool pred)
+{
     auto key_existence = folly::collect(store->batch_key_exists(keys)).get();
     std::vector<VariantKey> res;
     for (size_t i = 0; i != keys.size(); i++) {
@@ -33,11 +33,13 @@ inline std::vector<VariantKey> filter_keys_on_existence(
     return res;
 }
 
-inline void filter_keys_on_existence(std::vector<AtomKey>& keys, const std::shared_ptr<Store>& store, bool pred) {
+inline void filter_keys_on_existence(std::vector<AtomKey>& keys, const std::shared_ptr<Store>& store, bool pred)
+{
     std::vector<VariantKey> var_vector;
     var_vector.reserve(keys.size());
-    std::transform(keys.begin(), keys.end(), std::back_inserter(var_vector),
-                   [](auto&& k) { return VariantKey(std::move(k)); });
+    std::transform(keys.begin(), keys.end(), std::back_inserter(var_vector), [](auto&& k) {
+        return VariantKey(std::move(k));
+    });
 
     auto key_existence = store->batch_key_exists(var_vector);
 
@@ -52,4 +54,4 @@ inline void filter_keys_on_existence(std::vector<AtomKey>& keys, const std::shar
     keys.erase(keys_itr, keys.end());
 }
 
-}  //namespace arcticdb
+} //namespace arcticdb

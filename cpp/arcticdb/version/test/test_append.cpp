@@ -9,24 +9,20 @@
 
 #include <arcticdb/util/test/generators.hpp>
 
-
-TEST(Append, OutOfOrder) {
+TEST(Append, OutOfOrder)
+{
     using namespace arcticdb;
     auto engine = get_test_engine();
 
     SegmentsSink sink;
-    auto commit_func = [&](SegmentInMemory &&mem) {
-        sink.segments_.push_back(std::move(mem));
-    };
+    auto commit_func = [&](SegmentInMemory&& mem) { sink.segments_.push_back(std::move(mem)); };
 
-    auto agg = get_test_aggregator(std::move(commit_func), "test", {
-        FieldDescriptor{scalar_field_proto(DataType::UINT64, "uint64")}
-    });
+    auto agg = get_test_aggregator(std::move(commit_func),
+        "test",
+        {FieldDescriptor{scalar_field_proto(DataType::UINT64, "uint64")}});
 
     for (size_t i = 0; i < 10; ++i) {
-        agg.start_row(timestamp(i))([&](auto &rb) {
-            rb.set_scalar(1, i * 3);
-        });
+        agg.start_row(timestamp(i))([&](auto& rb) { rb.set_scalar(1, i * 3); });
     }
     agg.commit();
     auto& seg = sink.segments_[0];

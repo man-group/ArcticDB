@@ -22,17 +22,26 @@ struct ARCTICDB_VISIBILITY_HIDDEN PythonOutputFrame {
 
     ARCTICDB_MOVE_ONLY_DEFAULT(PythonOutputFrame)
 
-    std::shared_ptr<FrameDataWrapper> arrays(py::object &ref);
+    std::shared_ptr<FrameDataWrapper> arrays(py::object& ref);
 
-    std::vector<std::string> &names() { return names_; }
+    std::vector<std::string>& names()
+    {
+        return names_;
+    }
 
-    std::vector<std::string> &index_columns() { return index_columns_; }
+    std::vector<std::string>& index_columns()
+    {
+        return index_columns_;
+    }
 
-    SegmentInMemory frame() { return frame_; }
+    SegmentInMemory frame()
+    {
+        return frame_;
+    }
 
 private:
-    std::shared_ptr<FrameDataWrapper> initialize_array(py::object &ref);
-    py::array array_at(std::size_t col_pos, py::object &anchor);
+    std::shared_ptr<FrameDataWrapper> initialize_array(py::object& ref);
+    py::array array_at(std::size_t col_pos, py::object& anchor);
 
     std::shared_ptr<ModuleData> module_data_;
     SegmentInMemory frame_;
@@ -42,8 +51,9 @@ private:
     std::shared_ptr<BufferHolder> buffers_;
 };
 
-inline PythonOutputFrame output_frame_from_segment(const SegmentInMemory& frame) {
+inline PythonOutputFrame output_frame_from_segment(const SegmentInMemory& frame)
+{
     return PythonOutputFrame(frame, {});
 }
 
-}
+} // namespace arcticdb::pipelines

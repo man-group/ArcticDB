@@ -11,21 +11,27 @@
 namespace arcticdb::entity {
 
 struct KeyData {
-    KeyData() :
-        long_name_("undefined"),
-        short_name_('u'),
-        variant_type_(VariantType::UNKNOWN_TYPE),
-        key_class_(KeyClass::UNKNOWN_CLASS),
-        description_()
-        {}
+    KeyData()
+        : long_name_("undefined"),
+          short_name_('u'),
+          variant_type_(VariantType::UNKNOWN_TYPE),
+          key_class_(KeyClass::UNKNOWN_CLASS),
+          description_()
+    {
+    }
 
-    KeyData(const char* long_name, char short_name, VariantType variant_type, KeyClass key_class, const char* description) :
-        long_name_(long_name),
-        short_name_(short_name),
-        variant_type_(variant_type),
-        key_class_(key_class),
-        description_(description){}
-
+    KeyData(const char* long_name,
+        char short_name,
+        VariantType variant_type,
+        KeyClass key_class,
+        const char* description)
+        : long_name_(long_name),
+          short_name_(short_name),
+          variant_type_(variant_type),
+          key_class_(key_class),
+          description_(description)
+    {
+    }
 
     const char* long_name_;
     char short_name_;
@@ -34,14 +40,16 @@ struct KeyData {
     const char* description_;
 };
 
-const KeyData& get_key_data(KeyType key_type) {
-    struct KeyMapTag{};
+const KeyData& get_key_data(KeyType key_type)
+{
+    struct KeyMapTag {};
     using KeyMap = semi::static_map<int, KeyData, KeyMapTag>;
 
 #define KEY_ID(x) []() constexpr { return static_cast<int>(x); }
-#define NUMERIC_KEY(kt, name, c) KeyMap::get(KEY_ID(kt)) = { #name, c, VariantType::NUMERIC_TYPE, KeyClass::ATOM_KEY, #kt };
-#define STRING_KEY(kt, name, c) KeyMap::get(KEY_ID(kt)) = { #name, c, VariantType::STRING_TYPE, KeyClass::ATOM_KEY, #kt};
-#define STRING_REF(kt, name, c) KeyMap::get(KEY_ID(kt)) = { #name, c, VariantType::STRING_TYPE, KeyClass::REF_KEY,  #kt };
+#define NUMERIC_KEY(kt, name, c)                                                                                       \
+    KeyMap::get(KEY_ID(kt)) = {#name, c, VariantType::NUMERIC_TYPE, KeyClass::ATOM_KEY, #kt};
+#define STRING_KEY(kt, name, c) KeyMap::get(KEY_ID(kt)) = {#name, c, VariantType::STRING_TYPE, KeyClass::ATOM_KEY, #kt};
+#define STRING_REF(kt, name, c) KeyMap::get(KEY_ID(kt)) = {#name, c, VariantType::STRING_TYPE, KeyClass::REF_KEY, #kt};
 
     NUMERIC_KEY(KeyType::STREAM_GROUP, sg, 'g')
     NUMERIC_KEY(KeyType::GENERATION, gen, 'G')
@@ -69,33 +77,39 @@ const KeyData& get_key_data(KeyType key_type) {
     STRING_KEY(KeyType::TOMBSTONE_ALL, tall, 'q')
     STRING_REF(KeyType::LIBRARY_CONFIG, cref, 'C')
 
-    const auto& data =  KeyMap::get(int(key_type));
+    const auto& data = KeyMap::get(int(key_type));
     util::check(data.short_name_ != 'u', "Could not get data for key_type {}", static_cast<int>(key_type));
     return data;
 }
 
-const char* key_type_long_name(KeyType key_type) {
+const char* key_type_long_name(KeyType key_type)
+{
     return get_key_data(key_type).long_name_;
 }
 
-char key_type_short_name(KeyType key_type) {
+char key_type_short_name(KeyType key_type)
+{
     return get_key_data(key_type).short_name_;
 }
 
-VariantType variant_type_from_key_type(KeyType key_type) {
+VariantType variant_type_from_key_type(KeyType key_type)
+{
     return get_key_data(key_type).variant_type_;
 }
 
-KeyClass key_class_from_key_type(KeyType key_type) {
+KeyClass key_class_from_key_type(KeyType key_type)
+{
     return get_key_data(key_type).key_class_;
 }
 
-bool is_string_key_type(KeyType key_type){
+bool is_string_key_type(KeyType key_type)
+{
     return variant_type_from_key_type(key_type) == VariantType::STRING_TYPE;
 }
 
-bool is_ref_key_class(KeyType key_type){
+bool is_ref_key_class(KeyType key_type)
+{
     return key_class_from_key_type(key_type) == KeyClass::REF_KEY;
 }
 
-}
+} // namespace arcticdb::entity

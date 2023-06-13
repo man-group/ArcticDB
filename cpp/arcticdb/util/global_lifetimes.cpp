@@ -21,7 +21,8 @@
 
 namespace arcticdb {
 
-ModuleData::~ModuleData() {
+ModuleData::~ModuleData()
+{
     BufferPool::destroy_instance();
     TracingData::destroy_instance();
     SharedMemoryAllocator::destroy_instance();
@@ -33,16 +34,19 @@ ModuleData::~ModuleData() {
     log::Loggers::destroy_instance();
 }
 
-std::shared_ptr<ModuleData> ModuleData::instance() {
+std::shared_ptr<ModuleData> ModuleData::instance()
+{
     std::call_once(ModuleData::init_flag_, &ModuleData::init);
     return instance_;
 }
 
-void ModuleData::destroy_instance() {
+void ModuleData::destroy_instance()
+{
     ModuleData::instance_.reset();
 }
 
-void ModuleData::init() {
+void ModuleData::init()
+{
     ModuleData::instance_ = std::make_shared<ModuleData>();
 
 #if defined(_MSC_VER) && defined(_DEBUG)
@@ -57,7 +61,8 @@ void ModuleData::init() {
 std::shared_ptr<ModuleData> ModuleData::instance_;
 std::once_flag ModuleData::init_flag_;
 
-void shutdown_globals() {
+void shutdown_globals()
+{
     async::TaskScheduler::destroy_instance();
     storage::mongo::MongoInstance::destroy_instance();
     ModuleData::destroy_instance();

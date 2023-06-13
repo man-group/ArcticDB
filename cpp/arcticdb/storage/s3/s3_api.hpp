@@ -15,8 +15,8 @@ namespace arcticdb::storage::s3 {
 
 class S3ApiInstance {
 public:
-  S3ApiInstance(Aws::Utils::Logging::LogLevel log_level = Aws::Utils::Logging::LogLevel::Off);
-  ~S3ApiInstance();
+    S3ApiInstance(Aws::Utils::Logging::LogLevel log_level = Aws::Utils::Logging::LogLevel::Off);
+    ~S3ApiInstance();
 
     static std::shared_ptr<S3ApiInstance> instance_;
     static std::once_flag init_flag_;
@@ -26,8 +26,8 @@ public:
     static void destroy_instance();
 
 private:
-  Aws::Utils::Logging::LogLevel log_level_;
-  Aws::SDKOptions options_;
+    Aws::Utils::Logging::LogLevel log_level_;
+    Aws::SDKOptions options_;
 };
 
 } //namespace arcticdb::storage::s3

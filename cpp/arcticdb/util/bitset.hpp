@@ -27,7 +27,8 @@ using BitIndex = bm::bvector<>::rs_index_type;
 
 } // namespace util
 
-constexpr bm::bvector<>::size_type bv_size(uint64_t val) {
+constexpr bm::bvector<>::size_type bv_size(uint64_t val)
+{
     return static_cast<bm::bvector<>::size_type>(val);
 }
-}
+} // namespace arcticdb

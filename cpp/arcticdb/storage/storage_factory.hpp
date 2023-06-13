@@ -18,17 +18,18 @@ namespace arcticdb::storage {
 
 template<class Impl>
 class StorageFactory {
-  public:
-
+public:
     StorageFactory() = default;
 
-    auto create_storage(const LibraryPath &lib, OpenMode mode) {
+    auto create_storage(const LibraryPath& lib, OpenMode mode)
+    {
         return derived().do_create_storage(lib, mode);
     }
 
-  private:
-    Impl &derived() {
-        return *static_cast<Impl *>(this);
+private:
+    Impl& derived()
+    {
+        return *static_cast<Impl*>(this);
     }
 };
 

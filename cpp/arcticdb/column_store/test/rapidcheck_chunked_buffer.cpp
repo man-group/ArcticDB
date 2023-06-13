@@ -14,7 +14,8 @@
 #include <vector>
 #include <algorithm>
 
-TEST(ChunkedBuffer, Basic) {
+TEST(ChunkedBuffer, Basic)
+{
     using namespace arcticdb;
     ChunkedBuffer cb;
     cb.ensure(4);
@@ -23,7 +24,8 @@ TEST(ChunkedBuffer, Basic) {
     ASSERT_EQ(out, std::numeric_limits<uint64_t>::max());
 }
 
-RC_GTEST_PROP(ChunkedBuffer, ReadWriteRegular, (const std::vector<uint8_t> &input, uint8_t chunk_size)) {
+RC_GTEST_PROP(ChunkedBuffer, ReadWriteRegular, (const std::vector<uint8_t>& input, uint8_t chunk_size))
+{
     using namespace arcticdb;
     RC_PRE(input.size() > 0u);
     RC_PRE(chunk_size > 0u);
@@ -43,7 +45,8 @@ RC_GTEST_PROP(ChunkedBuffer, ReadWriteRegular, (const std::vector<uint8_t> &inpu
     }
 }
 
-RC_GTEST_PROP(ChunkedBuffer, SplitBuffer, (const std::vector<uint8_t> &input, uint8_t chunk_size, uint32_t split_size)) {
+RC_GTEST_PROP(ChunkedBuffer, SplitBuffer, (const std::vector<uint8_t>& input, uint8_t chunk_size, uint32_t split_size))
+{
     using namespace arcticdb;
     RC_PRE(input.size() > 0u);
     RC_PRE(chunk_size > 0u);
@@ -66,18 +69,19 @@ RC_GTEST_PROP(ChunkedBuffer, SplitBuffer, (const std::vector<uint8_t> &input, ui
         auto left = buf->cast<uint8_t>(where);
         auto right = input[i];
         auto& buf_obj = *buf;
-        if(buf_obj.cast<uint8_t>(where) != input[i])
+        if (buf_obj.cast<uint8_t>(where) != input[i])
             log::version().info("Mismatch at {} ({}), {} != {}", i, where, left, right);
         RC_ASSERT(left == right);
-        if(((i + 1) % split_size) == 0)
+        if (((i + 1) % split_size) == 0)
             ++buf;
     }
 }
 
-RC_GTEST_PROP(ChunkedBuffer, ReadWriteIrregular, (const std::vector<std::vector<uint64_t>> &inputs)) {
+RC_GTEST_PROP(ChunkedBuffer, ReadWriteIrregular, (const std::vector<std::vector<uint64_t>>& inputs))
+{
     using namespace arcticdb;
     CursoredBuffer<ChunkedBufferImpl<64>> cb;
-    for (auto &vec : inputs) {
+    for (auto& vec : inputs) {
         if (vec.empty())
             continue;
 
@@ -88,7 +92,7 @@ RC_GTEST_PROP(ChunkedBuffer, ReadWriteIrregular, (const std::vector<std::vector<
     }
 
     size_t count = 0;
-    for (auto &vec : inputs) {
+    for (auto& vec : inputs) {
         for (auto val : vec) {
             auto pos = count * sizeof(uint64_t);
             RC_ASSERT(*cb.buffer().ptr_cast<uint64_t>(pos, sizeof(uint64_t)) == val);
@@ -99,8 +103,9 @@ RC_GTEST_PROP(ChunkedBuffer, ReadWriteIrregular, (const std::vector<std::vector<
 }
 
 RC_GTEST_PROP(ChunkedBuffer,
-              ReadWriteTransition,
-              (const std::vector<std::vector<uint64_t>> &inputs, uint8_t regular_chunks)) {
+    ReadWriteTransition,
+    (const std::vector<std::vector<uint64_t>>& inputs, uint8_t regular_chunks))
+{
     using namespace arcticdb;
     CursoredBuffer<ChunkedBufferImpl<64>> cb;
     for (uint8_t i = 0; i < regular_chunks; ++i) {
@@ -111,7 +116,7 @@ RC_GTEST_PROP(ChunkedBuffer,
         cb.commit();
     }
 
-    for (auto &vec : inputs) {
+    for (auto& vec : inputs) {
         if (vec.empty())
             continue;
 
@@ -131,7 +136,7 @@ RC_GTEST_PROP(ChunkedBuffer,
 
     auto irregular_start_pos = regular_chunks * 64;
     size_t next_count = 0;
-    for (auto &vec : inputs) {
+    for (auto& vec : inputs) {
         for (auto val : vec) {
             const auto pos = irregular_start_pos + (next_count * sizeof(uint64_t));
             RC_ASSERT(*cb.buffer().ptr_cast<uint64_t>(pos, sizeof(uint64_t)) == val);
@@ -139,4 +144,3 @@ RC_GTEST_PROP(ChunkedBuffer,
         }
     }
 }
-

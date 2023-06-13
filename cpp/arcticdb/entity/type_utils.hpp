@@ -11,28 +11,33 @@
 
 namespace arcticdb {
 
-inline bool trivially_compatible_types(entity::TypeDescriptor left, entity::TypeDescriptor right) {
-    if(left == right)
+inline bool trivially_compatible_types(entity::TypeDescriptor left, entity::TypeDescriptor right)
+{
+    if (left == right)
         return true;
 
-    if(is_sequence_type(left.data_type()) && is_sequence_type(right.data_type())) {
+    if (is_sequence_type(left.data_type()) && is_sequence_type(right.data_type())) {
         //TODO coercion of utf strings is not always safe, should allow safe conversion and reinstate the
         //stronger requirement for trivial conversion below.
-//        if(!is_utf_type(slice_value_type(left.data_type)) && !is_utf_type(slice_value_type(right.data_type)))
-//            return true;
+        //        if(!is_utf_type(slice_value_type(left.data_type)) && !is_utf_type(slice_value_type(right.data_type)))
+        //            return true;
 
-        return is_utf_type(slice_value_type(left.data_type()))  == is_utf_type(slice_value_type(right.data_type()));
+        return is_utf_type(slice_value_type(left.data_type())) == is_utf_type(slice_value_type(right.data_type()));
     }
 
     return false;
 }
 
-inline bool trivially_compatible_types(const arcticdb::proto::descriptors::TypeDescriptor& left, const arcticdb::proto::descriptors::TypeDescriptor& right) {
+inline bool trivially_compatible_types(const arcticdb::proto::descriptors::TypeDescriptor& left,
+    const arcticdb::proto::descriptors::TypeDescriptor& right)
+{
     return trivially_compatible_types(entity::type_desc_from_proto(left), entity::type_desc_from_proto(right));
 }
 
-inline std::optional<entity::TypeDescriptor> has_valid_type_promotion(entity::TypeDescriptor source, entity::TypeDescriptor target) {
-    if(source.dimension() != target.dimension())
+inline std::optional<entity::TypeDescriptor> has_valid_type_promotion(entity::TypeDescriptor source,
+    entity::TypeDescriptor target)
+{
+    if (source.dimension() != target.dimension())
         return std::nullopt;
 
     auto source_type = source.data_type();
@@ -93,7 +98,9 @@ inline std::optional<entity::TypeDescriptor> has_valid_type_promotion(entity::Ty
     return entity::TypeDescriptor{combine_data_type(slice_value_type(target_type), target_size), target.dimension()};
 }
 
-inline std::optional<entity::TypeDescriptor> has_valid_common_type(entity::TypeDescriptor left, entity::TypeDescriptor right) {
+inline std::optional<entity::TypeDescriptor> has_valid_common_type(entity::TypeDescriptor left,
+    entity::TypeDescriptor right)
+{
     auto maybe_common_type = has_valid_type_promotion(left, right);
     if (!maybe_common_type) {
         maybe_common_type = has_valid_type_promotion(right, left);
@@ -101,4 +108,4 @@ inline std::optional<entity::TypeDescriptor> has_valid_common_type(entity::TypeD
     return maybe_common_type;
 }
 
-}
+} // namespace arcticdb

@@ -11,9 +11,10 @@
 
 namespace arcticdb::util::timeout {
 
-inline folly::Duration get_default() {
+inline folly::Duration get_default()
+{
     static folly::Duration duration(40 * 60 * 1000);
     return duration;
 }
 
-}
+} // namespace arcticdb::util::timeout

@@ -9,7 +9,8 @@
 #include <arcticdb/util/sparse_utils.hpp>
 
 namespace arcticdb {
-void Column::append_sparse_map(const util::BitMagic& bv, position_t at_row) {
+void Column::append_sparse_map(const util::BitMagic& bv, position_t at_row)
+{
     auto& sm = sparse_map();
 
     bm::bvector<>::enumerator en = bv.first();
@@ -22,7 +23,8 @@ void Column::append_sparse_map(const util::BitMagic& bv, position_t at_row) {
     }
 }
 
-void Column::append(const Column& other, position_t at_row) {
+void Column::append(const Column& other, position_t at_row)
+{
     if (other.row_count() == 0)
         return;
     util::check(type() == other.type(), "Cannot append column type {} to column type {}", type(), other.type());
@@ -33,7 +35,7 @@ void Column::append(const Column& other, position_t at_row) {
 
     const auto& blocks = other.data_.buffer().blocks();
     const auto initial_row_count = row_count();
-    for(const auto& block : blocks) {
+    for (const auto& block : blocks) {
         data_.ensure<uint8_t>(block->bytes());
         block->copy_to(data_.cursor());
         data_.commit();
@@ -42,59 +44,73 @@ void Column::append(const Column& other, position_t at_row) {
     last_logical_row_ = at_row + other.last_logical_row_;
     last_physical_row_ += other.last_physical_row_ + 1;
 
-    ARCTICDB_DEBUG(log::version(), "at_row: {}\tother.last_logical_row_: {}\tother.last_physical_row_: {}\tother.row_count(): {}",
-        at_row, other.last_logical_row_, other.last_physical_row_, other.row_count());
-    ARCTICDB_DEBUG(log::version(), "initial_row_count: {}\tlast_logical_row_: {}\tlast_physical_row_: {}\trow_count: {}",
-                        initial_row_count, last_logical_row_, last_physical_row_, row_count());
+    ARCTICDB_DEBUG(log::version(),
+        "at_row: {}\tother.last_logical_row_: {}\tother.last_physical_row_: {}\tother.row_count(): {}",
+        at_row,
+        other.last_logical_row_,
+        other.last_physical_row_,
+        other.row_count());
+    ARCTICDB_DEBUG(log::version(),
+        "initial_row_count: {}\tlast_logical_row_: {}\tlast_physical_row_: {}\trow_count: {}",
+        initial_row_count,
+        last_logical_row_,
+        last_physical_row_,
+        row_count());
 
     util::check(last_physical_row_ + 1 == row_count(), "Row count calculation incorrect after dense append");
 
-    if(at_row == initial_row_count && !other.is_sparse() && !is_sparse()) {
-        util::check(last_logical_row_ == last_physical_row_, "Expected logical and physical rows to line up in append of non-sparse columns");
+    if (at_row == initial_row_count && !other.is_sparse() && !is_sparse()) {
+        util::check(last_logical_row_ == last_physical_row_,
+            "Expected logical and physical rows to line up in append of non-sparse columns");
         return;
     }
 
     util::check(sparse_permitted(), "Non-sparse append in dense column not permitted");
-    if(!was_sparse) {
-        if(!was_empty)
+    if (!was_sparse) {
+        if (!was_empty)
             backfill_sparse_map(initial_row_count - 1);
         else
             sparse_map().clear();
     }
 
-    if(other.is_sparse()) {
+    if (other.is_sparse()) {
         ARCTICDB_DEBUG(log::version(), "Other column is sparse, appending sparsemap");
         append_sparse_map(other.sparse_map(), at_row);
-    }
-    else {
-        ARCTICDB_DEBUG(log::version(), "Other column is dense, setting range from {} to {}", at_row, at_row + other.row_count());
+    } else {
+        ARCTICDB_DEBUG(log::version(),
+            "Other column is dense, setting range from {} to {}",
+            at_row,
+            at_row + other.row_count());
         sparse_map().set_range(uint32_t(at_row), uint32_t(at_row + other.last_logical_row_), true);
     }
 
-    util::check(!is_sparse() || row_count() == sparse_map_.value().count(), "Row count incorrect exiting append",
-                row_count(), sparse_map().count());
+    util::check(!is_sparse() || row_count() == sparse_map_.value().count(),
+        "Row count incorrect exiting append",
+        row_count(),
+        sparse_map().count());
 }
 
-void Column::sort_external(const JiveTable& jive_table) {
+void Column::sort_external(const JiveTable& jive_table)
+{
     auto rows = row_count();
-    if(!is_sparse()) {
+    if (!is_sparse()) {
         auto unsorted = jive_table.unsorted_rows_;
         auto& buffer = data_.buffer();
-        type().visit_tag([&jive_table, &buffer, &unsorted] (auto tdt) {
+        type().visit_tag([&jive_table, &buffer, &unsorted](auto tdt) {
             using TagType = decltype(tdt);
             using RawType = typename TagType::DataTypeTag::raw_type;
 
             auto loc = unsorted.get_first();
-            auto tmp =  buffer.cast<RawType>(jive_table.orig_pos_[loc]);
-            for(auto i = 0u; i < jive_table.num_unsorted_; ++i) {
+            auto tmp = buffer.cast<RawType>(jive_table.orig_pos_[loc]);
+            for (auto i = 0u; i < jive_table.num_unsorted_; ++i) {
                 std::swap(tmp, buffer.cast<RawType>(loc));
                 unsorted.set(loc, false);
                 const auto next_pos = jive_table.sorted_pos_[loc];
-                if(unsorted[next_pos]) {
+                if (unsorted[next_pos]) {
                     loc = next_pos;
                 } else {
-                   loc =  unsorted.get_first();
-                   tmp = buffer.cast<RawType>(jive_table.orig_pos_[loc]);
+                    loc = unsorted.get_first();
+                    tmp = buffer.cast<RawType>(jive_table.orig_pos_[loc]);
                 }
             }
             util::check(!unsorted.any(), "Did not sort all possible values, still have {} unsorted", unsorted.count());
@@ -112,20 +128,22 @@ void Column::sort_external(const JiveTable& jive_table) {
             ++en;
         }
 
-        util::check(new_map.count() == row_count(), "Mismatch between new bitmap size and row_count: {} != {}",
-            new_map.count(), row_count());
+        util::check(new_map.count() == row_count(),
+            "Mismatch between new bitmap size and row_count: {} != {}",
+            new_map.count(),
+            row_count());
 
         auto new_buf = ChunkedBuffer::presized_in_blocks(data_.bytes());
         en = new_map.first();
         auto& buffer = data_.buffer();
-        auto rs= std::make_unique<util::BitIndex>();
+        auto rs = std::make_unique<util::BitIndex>();
         sm.build_rs_index(rs.get());
 
-        type().visit_tag([&jive_table, &sm, &rs, &buffer, rows, &en, &new_buf] (auto tdt) {
+        type().visit_tag([&jive_table, &sm, &rs, &buffer, rows, &en, &new_buf](auto tdt) {
             using TagType = decltype(tdt);
             using RawType = typename TagType::DataTypeTag::raw_type;
 
-            for(auto i = 0u; i < rows; ++i) {
+            for (auto i = 0u; i < rows; ++i) {
                 const auto bv_index = *en;
                 const auto logical_pos = jive_table.orig_pos_[bv_index];
                 const auto physical_pos = sm.count_to(logical_pos, *rs) - 1;
@@ -138,19 +156,23 @@ void Column::sort_external(const JiveTable& jive_table) {
     }
 }
 
-std::vector<std::shared_ptr<Column>> Column::split(const std::shared_ptr<Column>& column, size_t rows) {
+std::vector<std::shared_ptr<Column>> Column::split(const std::shared_ptr<Column>& column, size_t rows)
+{
     // TODO: Doesn't work the way you would expect for sparse columns - the bytes for each buffer won't be uniform
     const auto bytes = rows * get_type_size(column->type().data_type());
     auto new_buffers = ::arcticdb::split(column->data_.buffer(), bytes);
-    util::check(bytes % get_type_size(column->type().data_type()) == 0, "Bytes {} is not a multiple of type size {}", bytes, column->type());
+    util::check(bytes % get_type_size(column->type().data_type()) == 0,
+        "Bytes {} is not a multiple of type size {}",
+        bytes,
+        column->type());
     std::vector<std::shared_ptr<Column>> output;
     output.reserve(new_buffers.size());
 
     auto row = 0;
-    for(auto& buffer : new_buffers) {
+    for (auto& buffer : new_buffers) {
         output.push_back(std::make_shared<Column>(column->type(), column->allow_sparse_, std::move(buffer)));
 
-        if(column->is_sparse()) {
+        if (column->is_sparse()) {
             util::BitSet bit_subset;
             auto new_col = output.rbegin();
             const auto row_count = (*new_col)->row_count();

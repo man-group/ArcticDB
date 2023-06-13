@@ -5,7 +5,6 @@
  * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
  */
 
-
 #include <arcticdb/python/python_to_tensor_frame.hpp>
 #include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/entity/performance_tracing.hpp>
@@ -19,12 +18,14 @@ namespace arcticdb::convert {
 
 using namespace arcticdb::pipelines;
 
-bool is_unicode(PyObject *obj) {
+bool is_unicode(PyObject* obj)
+{
     return PyUnicode_Check(obj);
 }
 
-PyStringWrapper pystring_to_buffer(PyObject *obj, py::handle handle) {
-    char *buffer;
+PyStringWrapper pystring_to_buffer(PyObject* obj, py::handle handle)
+{
+    char* buffer;
     ssize_t length;
     util::check(!is_unicode(obj), "Unexpected unicode object");
     if (PYBIND11_BYTES_AS_STRING_AND_SIZE(obj, &buffer, &length))
@@ -33,7 +34,8 @@ PyStringWrapper pystring_to_buffer(PyObject *obj, py::handle handle) {
     return {buffer, length, handle};
 }
 
-PyStringWrapper py_unicode_to_buffer(PyObject *obj) {
+PyStringWrapper py_unicode_to_buffer(PyObject* obj)
+{
     if (is_unicode(obj)) {
         py::handle handle{PyUnicode_AsUTF8String(obj)};
         if (!handle)
@@ -44,8 +46,9 @@ PyStringWrapper py_unicode_to_buffer(PyObject *obj) {
     }
 }
 
-NativeTensor obj_to_tensor(PyObject *ptr) {
-//    ARCTICDB_SAMPLE(ObjToTensor, RMTSF_Aggregate)
+NativeTensor obj_to_tensor(PyObject* ptr)
+{
+    //    ARCTICDB_SAMPLE(ObjToTensor, RMTSF_Aggregate)
     auto& api = pybind11::detail::npy_api::get();
     util::check(api.PyArray_Check_(ptr), "Expected Python array");
     auto arr = pybind11::detail::array_proxy(ptr);
@@ -65,9 +68,9 @@ NativeTensor obj_to_tensor(PyObject *ptr) {
         // otherwise try to work out whether it was a bytes (string) type or unicode
         if (!is_fixed_string_type(val_type) && size > 0) {
             auto none = py::none{};
-            auto obj = reinterpret_cast<PyObject **>(arr->data);
+            auto obj = reinterpret_cast<PyObject**>(arr->data);
             bool empty = false;
-            PyObject *sample = *obj;
+            PyObject* sample = *obj;
             if (sample == none.ptr() || is_py_nan(sample)) {
                 // Iterate till we find the first non null element, the frontend ensures there is at least one.
                 util::check(c_style, "Non contiguous columns with first element as None not supported yet.");
@@ -88,11 +91,11 @@ NativeTensor obj_to_tensor(PyObject *ptr) {
     return {nbytes, ndim, arr->strides, arr->dimensions, dt, descr->elsize, arr->data};
 }
 
-InputTensorFrame py_ndf_to_frame(
-    const StreamId& stream_name,
-    const py::tuple &item,
-    const py::object &norm_meta,
-    const py::object &user_meta) {
+InputTensorFrame py_ndf_to_frame(const StreamId& stream_name,
+    const py::tuple& item,
+    const py::object& norm_meta,
+    const py::object& user_meta)
+{
     ARCTICDB_SUBSAMPLE_DEFAULT(NormalizeFrame)
     InputTensorFrame res;
     res.desc.set_id(stream_name);
@@ -105,8 +108,9 @@ InputTensorFrame py_ndf_to_frame(
     auto idx_names = item[0].cast<std::vector<std::string>>();
     auto idx_vals = item[2].cast<std::vector<py::object>>();
     util::check(idx_names.size() == idx_vals.size(),
-                "Number idx names {} and values {} do not match",
-                idx_names.size(), idx_vals.size());
+        "Number idx names {} and values {} do not match",
+        idx_names.size(),
+        idx_vals.size());
 
     if (idx_names.empty()) {
         res.index = stream::RowCountIndex();

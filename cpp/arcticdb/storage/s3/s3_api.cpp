@@ -18,19 +18,22 @@
 
 namespace arcticdb::storage::s3 {
 
-S3ApiInstance::S3ApiInstance(Aws::Utils::Logging::LogLevel log_level) :
-    log_level_(log_level),
-    options_() {
-    if(log_level_ > Aws::Utils::Logging::LogLevel::Off) {
-      Aws::Utils::Logging::InitializeAWSLogging(
-          Aws::MakeShared<Aws::Utils::Logging::DefaultLogSystem>(
-              "v", log_level, "aws_sdk_"));
+S3ApiInstance::S3ApiInstance(Aws::Utils::Logging::LogLevel log_level)
+    : log_level_(log_level),
+      options_()
+{
+    if (log_level_ > Aws::Utils::Logging::LogLevel::Off) {
+        Aws::Utils::Logging::InitializeAWSLogging(
+            Aws::MakeShared<Aws::Utils::Logging::DefaultLogSystem>("v", log_level, "aws_sdk_"));
     }
     ARCTICDB_RUNTIME_DEBUG(log::storage(), "Begin initializing AWS API");
     Aws::InitAPI(options_);
     // A workaround for https://github.com/aws/aws-sdk-cpp/issues/1410.
-    for (auto name : std::initializer_list<const char*>{
-            "AWS_EC2_METADATA_DISABLED", "AWS_DEFAULT_REGION", "AWS_REGION", "AWS_EC2_METADATA_SERVICE_ENDPOINT" }) {
+    for (auto name : std::initializer_list<const char*>{"AWS_EC2_METADATA_DISABLED",
+             "AWS_DEFAULT_REGION",
+             "AWS_REGION",
+             "AWS_EC2_METADATA_SERVICE_ENDPOINT"})
+    {
         if (!Aws::Environment::GetEnv(name).empty())
             return;
     }
@@ -45,29 +48,32 @@ S3ApiInstance::S3ApiInstance(Aws::Utils::Logging::LogLevel log_level) :
 #endif
 }
 
-S3ApiInstance::~S3ApiInstance() {
-    if(log_level_ > Aws::Utils::Logging::LogLevel::Off)
+S3ApiInstance::~S3ApiInstance()
+{
+    if (log_level_ > Aws::Utils::Logging::LogLevel::Off)
         Aws::Utils::Logging::ShutdownAWSLogging();
 
     //Aws::ShutdownAPI(options_); This causes a crash on shutdown in Aws::CleanupMonitoring
 }
 
-void S3ApiInstance::init() {
-  	auto log_level = ConfigsMap::instance()->get_int("AWS.LogLevel", 0);
+void S3ApiInstance::init()
+{
+    auto log_level = ConfigsMap::instance()->get_int("AWS.LogLevel", 0);
     S3ApiInstance::instance_ = std::make_shared<S3ApiInstance>(Aws::Utils::Logging::LogLevel(log_level));
 }
 
-std::shared_ptr<S3ApiInstance> S3ApiInstance::instance() {
+std::shared_ptr<S3ApiInstance> S3ApiInstance::instance()
+{
     std::call_once(S3ApiInstance::init_flag_, &S3ApiInstance::init);
     return instance_;
 }
 
-void S3ApiInstance::destroy_instance() {
+void S3ApiInstance::destroy_instance()
+{
     S3ApiInstance::instance_.reset();
 }
 
 std::shared_ptr<S3ApiInstance> S3ApiInstance::instance_;
 std::once_flag S3ApiInstance::init_flag_;
-
 
 } // namespace arcticdb::storage::s3

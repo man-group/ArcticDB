@@ -17,15 +17,18 @@
 
 struct SparseTestStore : arcticdb::TestStore {
 protected:
-    std::string get_name() override {
+    std::string get_name() override
+    {
         return "test.sparse";
     }
 };
 
-TEST(Sparse, Simple) {
+TEST(Sparse, Simple)
+{
     using namespace arcticdb;
     using namespace arcticdb::stream;
-    using DynamicAggregator =  Aggregator<TimeseriesIndex, DynamicSchema, stream::NeverSegmentPolicy, stream::SparseColumnPolicy>;
+    using DynamicAggregator =
+        Aggregator<TimeseriesIndex, DynamicSchema, stream::NeverSegmentPolicy, stream::SparseColumnPolicy>;
     using DynamicSinkWrapper = SinkWrapperImpl<DynamicAggregator>;
 
     const std::string stream_id("test_sparse");
@@ -33,13 +36,11 @@ TEST(Sparse, Simple) {
     DynamicSinkWrapper wrapper(stream_id, {});
     auto& aggregator = wrapper.aggregator_;
 
-    aggregator.start_row(timestamp{0})([](auto& rb) {
-        rb.set_scalar_by_name("first", uint32_t(5), make_scalar_type(DataType::UINT32));
-    });
+    aggregator.start_row(timestamp{0})(
+        [](auto& rb) { rb.set_scalar_by_name("first", uint32_t(5), make_scalar_type(DataType::UINT32)); });
 
-    aggregator.start_row(timestamp{1})([](auto& rb) {
-        rb.set_scalar_by_name("second", uint64_t(6), make_scalar_type(DataType::UINT64));
-    });
+    aggregator.start_row(timestamp{1})(
+        [](auto& rb) { rb.set_scalar_by_name("second", uint64_t(6), make_scalar_type(DataType::UINT64)); });
 
     wrapper.aggregator_.commit();
 
@@ -55,10 +56,12 @@ TEST(Sparse, Simple) {
     ASSERT_EQ(val4, 6);
 }
 
-TEST_F(SparseTestStore, SimpleRoundtrip) {
+TEST_F(SparseTestStore, SimpleRoundtrip)
+{
     using namespace arcticdb;
     using namespace arcticdb::stream;
-    using DynamicAggregator =  Aggregator<TimeseriesIndex, DynamicSchema, stream::NeverSegmentPolicy, stream::SparseColumnPolicy>;
+    using DynamicAggregator =
+        Aggregator<TimeseriesIndex, DynamicSchema, stream::NeverSegmentPolicy, stream::SparseColumnPolicy>;
     using DynamicSinkWrapper = SinkWrapperImpl<DynamicAggregator>;
 
     const std::string stream_id("test_sparse");
@@ -66,13 +69,11 @@ TEST_F(SparseTestStore, SimpleRoundtrip) {
     DynamicSinkWrapper wrapper(stream_id, {});
     auto& aggregator = wrapper.aggregator_;
 
-    aggregator.start_row(timestamp{0})([](auto& rb) {
-        rb.set_scalar_by_name("first",  uint32_t(5), make_scalar_type(DataType::UINT32));
-    });
+    aggregator.start_row(timestamp{0})(
+        [](auto& rb) { rb.set_scalar_by_name("first", uint32_t(5), make_scalar_type(DataType::UINT32)); });
 
-    aggregator.start_row(timestamp{1})([](auto& rb) {
-        rb.set_scalar_by_name("second",  uint64_t(6), make_scalar_type(DataType::UINT64));
-    });
+    aggregator.start_row(timestamp{1})(
+        [](auto& rb) { rb.set_scalar_by_name("second", uint64_t(6), make_scalar_type(DataType::UINT64)); });
 
     wrapper.aggregator_.commit();
 
@@ -84,8 +85,10 @@ TEST_F(SparseTestStore, SimpleRoundtrip) {
     read_options.set_incompletes(true);
     pipelines::ReadQuery read_query;
     read_query.row_filter = universal_range();
-    auto read_result = test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options);
-    const auto& frame =read_result.frame_data.frame();;
+    auto read_result =
+        test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options);
+    const auto& frame = read_result.frame_data.frame();
+    ;
 
     ASSERT_EQ(frame.row_count(), 2);
     auto val1 = frame.scalar_at<uint32_t>(0, 1);
@@ -98,10 +101,12 @@ TEST_F(SparseTestStore, SimpleRoundtrip) {
     ASSERT_EQ(val4, 6);
 }
 
-TEST_F(SparseTestStore, DenseToSparse) {
+TEST_F(SparseTestStore, DenseToSparse)
+{
     using namespace arcticdb;
     using namespace arcticdb::stream;
-    using DynamicAggregator =  Aggregator<TimeseriesIndex, DynamicSchema, stream::NeverSegmentPolicy, stream::SparseColumnPolicy>;
+    using DynamicAggregator =
+        Aggregator<TimeseriesIndex, DynamicSchema, stream::NeverSegmentPolicy, stream::SparseColumnPolicy>;
     using DynamicSinkWrapper = SinkWrapperImpl<DynamicAggregator>;
 
     const std::string stream_id("test_sparse");
@@ -109,19 +114,16 @@ TEST_F(SparseTestStore, DenseToSparse) {
     DynamicSinkWrapper wrapper(stream_id, {});
     auto& aggregator = wrapper.aggregator_;
 
-    for(auto i = 0; i < 5; ++i) {
-        aggregator.start_row(timestamp{i})([&](auto &rb) {
-            rb.set_scalar_by_name("first",  uint32_t(i + 1), make_scalar_type(DataType::UINT32));
-        });
+    for (auto i = 0; i < 5; ++i) {
+        aggregator.start_row(timestamp{i})(
+            [&](auto& rb) { rb.set_scalar_by_name("first", uint32_t(i + 1), make_scalar_type(DataType::UINT32)); });
     }
 
-    aggregator.start_row(timestamp{5})([](auto& rb) {
-        rb.set_scalar_by_name("second",  uint64_t(6), make_scalar_type(DataType::UINT64));
-    });
+    aggregator.start_row(timestamp{5})(
+        [](auto& rb) { rb.set_scalar_by_name("second", uint64_t(6), make_scalar_type(DataType::UINT64)); });
 
-    aggregator.start_row(timestamp{6})([](auto& rb) {
-        rb.set_scalar_by_name("first",  uint32_t(7), make_scalar_type(DataType::UINT32));
-    });
+    aggregator.start_row(timestamp{6})(
+        [](auto& rb) { rb.set_scalar_by_name("first", uint32_t(7), make_scalar_type(DataType::UINT32)); });
 
     wrapper.aggregator_.commit();
 
@@ -133,12 +135,13 @@ TEST_F(SparseTestStore, DenseToSparse) {
     read_options.set_incompletes(true);
     pipelines::ReadQuery read_query;
     read_query.row_filter = universal_range();
-    auto read_result = test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options);
-    const auto& frame =read_result.frame_data.frame();;
-
+    auto read_result =
+        test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options);
+    const auto& frame = read_result.frame_data.frame();
+    ;
 
     ASSERT_EQ(frame.row_count(), 7);
-    for(int i = 0; i < 5; ++i) {
+    for (int i = 0; i < 5; ++i) {
         auto val1 = frame.scalar_at<uint32_t>(i, 1);
         ASSERT_EQ(val1, i + 1);
     }
@@ -148,10 +151,12 @@ TEST_F(SparseTestStore, DenseToSparse) {
     ASSERT_EQ(val3, 7);
 }
 
-TEST_F(SparseTestStore, SimpleRoundtripStrings) {
+TEST_F(SparseTestStore, SimpleRoundtripStrings)
+{
     using namespace arcticdb;
     using namespace arcticdb::stream;
-    using DynamicAggregator =  Aggregator<TimeseriesIndex, DynamicSchema, stream::NeverSegmentPolicy, stream::SparseColumnPolicy>;
+    using DynamicAggregator =
+        Aggregator<TimeseriesIndex, DynamicSchema, stream::NeverSegmentPolicy, stream::SparseColumnPolicy>;
     using DynamicSinkWrapper = SinkWrapperImpl<DynamicAggregator>;
 
     const std::string stream_id("test_sparse");
@@ -160,11 +165,15 @@ TEST_F(SparseTestStore, SimpleRoundtripStrings) {
     auto& aggregator = wrapper.aggregator_;
 
     aggregator.start_row(timestamp{0})([](auto& rb) {
-        rb.set_scalar_by_name(std::string_view{"first"}, std::string_view{"five"}, make_scalar_type(DataType::UTF_DYNAMIC64));
+        rb.set_scalar_by_name(std::string_view{"first"},
+            std::string_view{"five"},
+            make_scalar_type(DataType::UTF_DYNAMIC64));
     });
 
     aggregator.start_row(timestamp{1})([](auto& rb) {
-        rb.set_scalar_by_name(std::string_view{"second"}, std::string_view{"six"}, make_scalar_type(DataType::UTF_FIXED64));
+        rb.set_scalar_by_name(std::string_view{"second"},
+            std::string_view{"six"},
+            make_scalar_type(DataType::UTF_FIXED64));
     });
 
     wrapper.aggregator_.commit();
@@ -177,8 +186,10 @@ TEST_F(SparseTestStore, SimpleRoundtripStrings) {
     read_options.set_incompletes(true);
     pipelines::ReadQuery read_query;
     read_query.row_filter = universal_range();
-    auto read_result = test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options);
-    const auto& frame = read_result.frame_data.frame();;
+    auto read_result =
+        test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options);
+    const auto& frame = read_result.frame_data.frame();
+    ;
 
     ASSERT_EQ(frame.row_count(), 2);
     auto val1 = frame.scalar_at<PyObject*>(0, 1);
@@ -195,11 +206,13 @@ TEST_F(SparseTestStore, SimpleRoundtripStrings) {
     ASSERT_EQ(val4, "six");
 }
 
-TEST_F(SparseTestStore, Multiblock) {
+TEST_F(SparseTestStore, Multiblock)
+{
     SKIP_WIN("Works OK but fills up LMDB");
     using namespace arcticdb;
     using namespace arcticdb::stream;
-    using DynamicAggregator =  Aggregator<TimeseriesIndex, DynamicSchema, stream::NeverSegmentPolicy, stream::SparseColumnPolicy>;
+    using DynamicAggregator =
+        Aggregator<TimeseriesIndex, DynamicSchema, stream::NeverSegmentPolicy, stream::SparseColumnPolicy>;
     using DynamicSinkWrapper = SinkWrapperImpl<DynamicAggregator>;
 
     const std::string stream_id("test_sparse");
@@ -209,13 +222,13 @@ TEST_F(SparseTestStore, Multiblock) {
 
     constexpr size_t num_rows = 1000000;
 
-    for(size_t i = 0; i < num_rows; i += 2) {
-        aggregator.start_row(timestamp(i))([&](auto &rb) {
-            rb.set_scalar_by_name(std::string_view{"first"},  uint32_t(i + 1), make_scalar_type(DataType::UINT32));
+    for (size_t i = 0; i < num_rows; i += 2) {
+        aggregator.start_row(timestamp(i))([&](auto& rb) {
+            rb.set_scalar_by_name(std::string_view{"first"}, uint32_t(i + 1), make_scalar_type(DataType::UINT32));
         });
 
-        aggregator.start_row(timestamp(i + 1))([&](auto &rb) {
-            rb.set_scalar_by_name(std::string_view{"second"},  uint64_t(i + 2), make_scalar_type(DataType::UINT64));
+        aggregator.start_row(timestamp(i + 1))([&](auto& rb) {
+            rb.set_scalar_by_name(std::string_view{"second"}, uint64_t(i + 2), make_scalar_type(DataType::UINT64));
         });
     }
 
@@ -229,47 +242,50 @@ TEST_F(SparseTestStore, Multiblock) {
     read_options.set_incompletes(true);
     pipelines::ReadQuery read_query;
     read_query.row_filter = universal_range();
-    auto read_result = test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options);
-    const auto& frame =read_result.frame_data.frame();;
+    auto read_result =
+        test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options);
+    const auto& frame = read_result.frame_data.frame();
+    ;
 
-    for(size_t i = 0; i < num_rows; i += 2) {
+    for (size_t i = 0; i < num_rows; i += 2) {
         ASSERT_EQ(frame.row_count(), num_rows);
         auto val1 = frame.scalar_at<uint32_t>(i, 1);
         ASSERT_EQ(val1, i + 1);
         auto val2 = frame.scalar_at<uint64_t>(i, 2);
         ASSERT_EQ(val2, 0);
-        auto val3 = frame.scalar_at<uint32_t>(i+ 1, 1);
+        auto val3 = frame.scalar_at<uint32_t>(i + 1, 1);
         ASSERT_EQ(val3, 0);
         auto val4 = frame.scalar_at<uint64_t>(i + 1, 2);
         ASSERT_EQ(val4, i + 2);
     }
 }
 
-TEST_F(SparseTestStore, Segment) {
+TEST_F(SparseTestStore, Segment)
+{
     SKIP_WIN("Works OK but fills up LMDB");
     using namespace arcticdb;
     using namespace arcticdb::stream;
-    using DynamicAggregator =  Aggregator<TimeseriesIndex, DynamicSchema, stream::RowCountSegmentPolicy, stream::SparseColumnPolicy>;
+    using DynamicAggregator =
+        Aggregator<TimeseriesIndex, DynamicSchema, stream::RowCountSegmentPolicy, stream::SparseColumnPolicy>;
 
     const std::string stream_id("test_sparse");
     const auto index = TimeseriesIndex::default_index();
-    DynamicSchema schema{
-        index.create_stream_descriptor(stream_id, {}), index
-    };
+    DynamicSchema schema{index.create_stream_descriptor(stream_id, {}), index};
 
-    DynamicAggregator aggregator(std::move(schema), [&](SegmentInMemory &&segment) {
-        test_store_->append_incomplete_segment(stream_id, std::move(segment));
-    }, RowCountSegmentPolicy{1000});
+    DynamicAggregator aggregator(
+        std::move(schema),
+        [&](SegmentInMemory&& segment) { test_store_->append_incomplete_segment(stream_id, std::move(segment)); },
+        RowCountSegmentPolicy{1000});
 
     constexpr size_t num_rows = 1000000;
 
-    for(size_t i = 0; i < num_rows; i += 2) {
-        aggregator.start_row(timestamp(i))([&](auto &rb) {
-            rb.set_scalar_by_name(std::string_view{"first"},  uint32_t(i + 1), make_scalar_type(DataType::UINT32));
+    for (size_t i = 0; i < num_rows; i += 2) {
+        aggregator.start_row(timestamp(i))([&](auto& rb) {
+            rb.set_scalar_by_name(std::string_view{"first"}, uint32_t(i + 1), make_scalar_type(DataType::UINT32));
         });
 
-        aggregator.start_row(timestamp(i + 1))([&](auto &rb) {
-            rb.set_scalar_by_name(std::string_view{"second"},  uint64_t(i + 2), make_scalar_type(DataType::UINT64));
+        aggregator.start_row(timestamp(i + 1))([&](auto& rb) {
+            rb.set_scalar_by_name(std::string_view{"second"}, uint64_t(i + 2), make_scalar_type(DataType::UINT64));
         });
     }
 
@@ -280,54 +296,58 @@ TEST_F(SparseTestStore, Segment) {
     read_options.set_incompletes(true);
     pipelines::ReadQuery read_query;
     read_query.row_filter = universal_range();
-    auto read_result = test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options);
-    const auto& frame =read_result.frame_data.frame();;
+    auto read_result =
+        test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options);
+    const auto& frame = read_result.frame_data.frame();
+    ;
 
-    for(size_t i = 0; i < num_rows; i += 2) {
+    for (size_t i = 0; i < num_rows; i += 2) {
         ASSERT_EQ(frame.row_count(), num_rows);
         auto val1 = frame.scalar_at<uint32_t>(i, 1);
         ASSERT_EQ(val1, i + 1);
         auto val2 = frame.scalar_at<uint64_t>(i, 2);
         ASSERT_EQ(val2, 0);
-        auto val3 = frame.scalar_at<uint32_t>(i+ 1, 1);
+        auto val3 = frame.scalar_at<uint32_t>(i + 1, 1);
         ASSERT_EQ(val3, 0);
         auto val4 = frame.scalar_at<uint64_t>(i + 1, 2);
         ASSERT_EQ(val4, i + 2);
     }
 }
 
-TEST_F(SparseTestStore, SegmentWithExistingIndex) {
+TEST_F(SparseTestStore, SegmentWithExistingIndex)
+{
     using namespace arcticdb;
     using namespace arcticdb::stream;
-    using DynamicAggregator =  Aggregator<TimeseriesIndex, DynamicSchema, stream::RowCountSegmentPolicy, stream::SparseColumnPolicy>;
+    using DynamicAggregator =
+        Aggregator<TimeseriesIndex, DynamicSchema, stream::RowCountSegmentPolicy, stream::SparseColumnPolicy>;
 
     const std::string stream_id("test_sparse");
 
     const auto index = TimeseriesIndex::default_index();
-    DynamicSchema schema{
-        index.create_stream_descriptor(stream_id, {}), index
-    };
+    DynamicSchema schema{index.create_stream_descriptor(stream_id, {}), index};
 
     bool written = false;
-    DynamicAggregator aggregator(std::move(schema), [&](SegmentInMemory &&segment) {
-        if(!written) {
-            test_store_->write_individual_segment(stream_id, std::move(segment), false);
-            written = true;
-        }
-        else {
-            test_store_->append_incomplete_segment(stream_id, std::move(segment));
-        }
-    }, RowCountSegmentPolicy{1000});
+    DynamicAggregator aggregator(
+        std::move(schema),
+        [&](SegmentInMemory&& segment) {
+            if (!written) {
+                test_store_->write_individual_segment(stream_id, std::move(segment), false);
+                written = true;
+            } else {
+                test_store_->append_incomplete_segment(stream_id, std::move(segment));
+            }
+        },
+        RowCountSegmentPolicy{1000});
 
     constexpr size_t num_rows = 100000;
 
-    for(size_t i = 0; i < num_rows; i += 2) {
-        aggregator.start_row(timestamp(i))([&](auto &rb) {
-            rb.set_scalar_by_name(std::string_view{"first"},  uint32_t(i + 1), make_scalar_type(DataType::UINT32));
+    for (size_t i = 0; i < num_rows; i += 2) {
+        aggregator.start_row(timestamp(i))([&](auto& rb) {
+            rb.set_scalar_by_name(std::string_view{"first"}, uint32_t(i + 1), make_scalar_type(DataType::UINT32));
         });
 
-        aggregator.start_row(timestamp(i + 1))([&](auto &rb) {
-            rb.set_scalar_by_name(std::string_view{"second"},  uint64_t(i + 2), make_scalar_type(DataType::UINT64));
+        aggregator.start_row(timestamp(i + 1))([&](auto& rb) {
+            rb.set_scalar_by_name(std::string_view{"second"}, uint64_t(i + 2), make_scalar_type(DataType::UINT64));
         });
     }
 
@@ -338,54 +358,58 @@ TEST_F(SparseTestStore, SegmentWithExistingIndex) {
     read_options.set_incompletes(true);
     pipelines::ReadQuery read_query;
     read_query.row_filter = universal_range();
-    auto read_result = test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options);
-    const auto& frame =read_result.frame_data.frame();;
+    auto read_result =
+        test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options);
+    const auto& frame = read_result.frame_data.frame();
+    ;
 
     ASSERT_EQ(frame.row_count(), num_rows);
-    for(size_t i = 0; i < num_rows; i += 2) {
+    for (size_t i = 0; i < num_rows; i += 2) {
         auto val1 = frame.scalar_at<uint32_t>(i, 1);
         check_value(val1, i + 1);
         auto val2 = frame.scalar_at<uint64_t>(i, 2);
         check_value(val2, 0);
-        auto val3 = frame.scalar_at<uint32_t>(i+ 1, 1);
+        auto val3 = frame.scalar_at<uint32_t>(i + 1, 1);
         check_value(val3, 0);
         auto val4 = frame.scalar_at<uint64_t>(i + 1, 2);
         check_value(val4, i + 2);
     }
 }
 
-TEST_F(SparseTestStore, SegmentAndFilterColumn) {
+TEST_F(SparseTestStore, SegmentAndFilterColumn)
+{
     using namespace arcticdb;
     using namespace arcticdb::stream;
-    using DynamicAggregator =  Aggregator<TimeseriesIndex, DynamicSchema, stream::RowCountSegmentPolicy, stream::SparseColumnPolicy>;
+    using DynamicAggregator =
+        Aggregator<TimeseriesIndex, DynamicSchema, stream::RowCountSegmentPolicy, stream::SparseColumnPolicy>;
 
     const std::string stream_id("test_sparse");
 
     const auto index = TimeseriesIndex::default_index();
-    DynamicSchema schema{
-        index.create_stream_descriptor(stream_id, {}), index
-    };
+    DynamicSchema schema{index.create_stream_descriptor(stream_id, {}), index};
 
     bool written = false;
-    DynamicAggregator aggregator(std::move(schema), [&](SegmentInMemory &&segment) {
-        if(!written) {
-            test_store_->write_individual_segment(stream_id, std::move(segment), false);
-            written = true;
-        }
-        else {
-            test_store_->append_incomplete_segment(stream_id, std::move(segment));
-        }
-    }, RowCountSegmentPolicy{1000});
+    DynamicAggregator aggregator(
+        std::move(schema),
+        [&](SegmentInMemory&& segment) {
+            if (!written) {
+                test_store_->write_individual_segment(stream_id, std::move(segment), false);
+                written = true;
+            } else {
+                test_store_->append_incomplete_segment(stream_id, std::move(segment));
+            }
+        },
+        RowCountSegmentPolicy{1000});
 
     constexpr size_t num_rows = 100000;
 
-    for(size_t i = 0; i < num_rows; i += 2) {
-        aggregator.start_row(timestamp(i))([&](auto &rb) {
-            rb.set_scalar_by_name(std::string_view{"first"},  uint32_t(i + 1), make_scalar_type(DataType::UINT32));
+    for (size_t i = 0; i < num_rows; i += 2) {
+        aggregator.start_row(timestamp(i))([&](auto& rb) {
+            rb.set_scalar_by_name(std::string_view{"first"}, uint32_t(i + 1), make_scalar_type(DataType::UINT32));
         });
 
-        aggregator.start_row(timestamp(i + 1))([&](auto &rb) {
-            rb.set_scalar_by_name(std::string_view{"second"},  uint64_t(i + 2), make_scalar_type(DataType::UINT64));
+        aggregator.start_row(timestamp(i + 1))([&](auto& rb) {
+            rb.set_scalar_by_name(std::string_view{"second"}, uint64_t(i + 2), make_scalar_type(DataType::UINT64));
         });
     }
 
@@ -397,50 +421,54 @@ TEST_F(SparseTestStore, SegmentAndFilterColumn) {
     pipelines::ReadQuery read_query;
     read_query.columns = {"time", "first"};
     read_query.row_filter = universal_range();
-    auto read_result = test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options);
-    const auto& frame =read_result.frame_data.frame();;
+    auto read_result =
+        test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options);
+    const auto& frame = read_result.frame_data.frame();
+    ;
     ASSERT_EQ(frame.row_count(), num_rows);
     ASSERT_EQ(frame.descriptor().field_count(), 2);
 
-    for(size_t i = 0; i < num_rows; i += 2) {
+    for (size_t i = 0; i < num_rows; i += 2) {
         auto val1 = frame.scalar_at<uint32_t>(i, 1);
         ASSERT_EQ(val1, i + 1);
-        auto val3 = frame.scalar_at<uint32_t>(i+ 1, 1);
+        auto val3 = frame.scalar_at<uint32_t>(i + 1, 1);
         ASSERT_EQ(val3, 0);
     }
 }
 
-TEST_F(SparseTestStore, SegmentWithRangeFilter) {
+TEST_F(SparseTestStore, SegmentWithRangeFilter)
+{
     using namespace arcticdb;
     using namespace arcticdb::stream;
-    using DynamicAggregator =  Aggregator<TimeseriesIndex, DynamicSchema, stream::RowCountSegmentPolicy, stream::SparseColumnPolicy>;
+    using DynamicAggregator =
+        Aggregator<TimeseriesIndex, DynamicSchema, stream::RowCountSegmentPolicy, stream::SparseColumnPolicy>;
 
     const std::string stream_id("test_sparse");
     const auto index = TimeseriesIndex::default_index();
-    DynamicSchema schema{
-        index.create_stream_descriptor(stream_id, {}), index
-    };
+    DynamicSchema schema{index.create_stream_descriptor(stream_id, {}), index};
 
     bool written = false;
-    DynamicAggregator aggregator(std::move(schema), [&](SegmentInMemory &&segment) {
-        if(!written) {
-            test_store_->write_individual_segment(stream_id, std::move(segment), false);
-            written = true;
-        }
-        else {
-            test_store_->append_incomplete_segment(stream_id, std::move(segment));
-        }
-    }, RowCountSegmentPolicy{1000});
+    DynamicAggregator aggregator(
+        std::move(schema),
+        [&](SegmentInMemory&& segment) {
+            if (!written) {
+                test_store_->write_individual_segment(stream_id, std::move(segment), false);
+                written = true;
+            } else {
+                test_store_->append_incomplete_segment(stream_id, std::move(segment));
+            }
+        },
+        RowCountSegmentPolicy{1000});
 
     constexpr size_t num_rows = 10000;
 
-    for(size_t i = 0; i < num_rows; i += 2) {
-        aggregator.start_row(timestamp(i))([&](auto &rb) {
-            rb.set_scalar_by_name(std::string_view{"first"},  uint32_t(i + 1), make_scalar_type(DataType::UINT32));
+    for (size_t i = 0; i < num_rows; i += 2) {
+        aggregator.start_row(timestamp(i))([&](auto& rb) {
+            rb.set_scalar_by_name(std::string_view{"first"}, uint32_t(i + 1), make_scalar_type(DataType::UINT32));
         });
 
-        aggregator.start_row(timestamp(i + 1))([&](auto &rb) {
-            rb.set_scalar_by_name(std::string_view{"second"},  uint64_t(i + 2), make_scalar_type(DataType::UINT64));
+        aggregator.start_row(timestamp(i + 1))([&](auto& rb) {
+            rb.set_scalar_by_name(std::string_view{"second"}, uint64_t(i + 2), make_scalar_type(DataType::UINT64));
         });
     }
 
@@ -451,46 +479,53 @@ TEST_F(SparseTestStore, SegmentWithRangeFilter) {
     read_options.set_incompletes(true);
     pipelines::ReadQuery read_query;
     read_query.row_filter = IndexRange(timestamp{3000}, timestamp{6999});
-    auto read_result = test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options);
-    const auto& frame =read_result.frame_data.frame();;
+    auto read_result =
+        test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options);
+    const auto& frame = read_result.frame_data.frame();
+    ;
 
     ASSERT_EQ(frame.row_count(), 4000);
-    for(size_t i = 0; i < frame.row_count(); i += 2) {
+    for (size_t i = 0; i < frame.row_count(); i += 2) {
         auto val1 = frame.scalar_at<uint32_t>(i, 1);
         ASSERT_EQ(val1, i + 3001);
         auto val2 = frame.scalar_at<uint64_t>(i, 2);
         ASSERT_EQ(val2, 0);
-        auto val3 = frame.scalar_at<uint32_t>(i+ 1, 1);
+        auto val3 = frame.scalar_at<uint32_t>(i + 1, 1);
         ASSERT_EQ(val3, 0);
         auto val4 = frame.scalar_at<uint64_t>(i + 1, 2);
         ASSERT_EQ(val4, i + 3002);
     }
 }
 
-TEST_F(SparseTestStore, Compact) {
+TEST_F(SparseTestStore, Compact)
+{
     using namespace arcticdb;
     using namespace arcticdb::stream;
-    using DynamicAggregator =  Aggregator<TimeseriesIndex, DynamicSchema, stream::RowCountSegmentPolicy, stream::SparseColumnPolicy>;
+    using DynamicAggregator =
+        Aggregator<TimeseriesIndex, DynamicSchema, stream::RowCountSegmentPolicy, stream::SparseColumnPolicy>;
 
     const std::string stream_id("test_sparse");
     const auto index = TimeseriesIndex::default_index();
-    DynamicSchema schema{
-        index.create_stream_descriptor(stream_id, {}), index
-    };
+    DynamicSchema schema{index.create_stream_descriptor(stream_id, {}), index};
 
-    DynamicAggregator aggregator(std::move(schema), [&](SegmentInMemory &&segment) {
-        test_store_->append_incomplete_segment(stream_id, std::move(segment));
-    }, RowCountSegmentPolicy{10});
+    DynamicAggregator aggregator(
+        std::move(schema),
+        [&](SegmentInMemory&& segment) { test_store_->append_incomplete_segment(stream_id, std::move(segment)); },
+        RowCountSegmentPolicy{10});
 
     constexpr size_t num_rows = 100;
 
-    for(size_t i = 0; i < num_rows; i += 2) {
-        aggregator.start_row(timestamp(i))([&](auto &rb) {
-            rb.set_scalar_by_name(std::string_view{"first"}, uint32_t(i + 1), TypeDescriptor{DataType::UINT32, Dimension::Dim0});
+    for (size_t i = 0; i < num_rows; i += 2) {
+        aggregator.start_row(timestamp(i))([&](auto& rb) {
+            rb.set_scalar_by_name(std::string_view{"first"},
+                uint32_t(i + 1),
+                TypeDescriptor{DataType::UINT32, Dimension::Dim0});
         });
 
-        aggregator.start_row(timestamp(i + 1))([&](auto &rb) {
-            rb.set_scalar_by_name(std::string_view{"second"}, uint64_t(i + 2), TypeDescriptor{DataType::UINT64, Dimension::Dim0});
+        aggregator.start_row(timestamp(i + 1))([&](auto& rb) {
+            rb.set_scalar_by_name(std::string_view{"second"},
+                uint64_t(i + 2),
+                TypeDescriptor{DataType::UINT64, Dimension::Dim0});
         });
     }
 
@@ -501,49 +536,55 @@ TEST_F(SparseTestStore, Compact) {
     read_options.set_dynamic_schema(true);
     pipelines::ReadQuery read_query;
     read_query.row_filter = universal_range();
-    auto read_result = test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options);
+    auto read_result =
+        test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options);
     const auto& frame = read_result.frame_data.frame();
 
     ASSERT_EQ(frame.row_count(), num_rows);
-    for(size_t i = 0; i < num_rows; i += 2) {
+    for (size_t i = 0; i < num_rows; i += 2) {
         auto val1 = frame.scalar_at<uint32_t>(i, 1);
         ASSERT_EQ(val1, i + 1);
         auto val2 = frame.scalar_at<uint64_t>(i, 2);
         ASSERT_EQ(val2, 0);
-        auto val3 = frame.scalar_at<uint32_t>(i+ 1, 1);
+        auto val3 = frame.scalar_at<uint32_t>(i + 1, 1);
         ASSERT_EQ(val3, 0);
         auto val4 = frame.scalar_at<uint64_t>(i + 1, 2);
         ASSERT_EQ(val4, i + 2);
     }
 }
 
-TEST_F(SparseTestStore, CompactWithStrings) {
+TEST_F(SparseTestStore, CompactWithStrings)
+{
     using namespace arcticdb;
     using namespace arcticdb::stream;
-    using DynamicAggregator =  Aggregator<TimeseriesIndex, DynamicSchema, stream::RowCountSegmentPolicy, stream::SparseColumnPolicy>;
+    using DynamicAggregator =
+        Aggregator<TimeseriesIndex, DynamicSchema, stream::RowCountSegmentPolicy, stream::SparseColumnPolicy>;
 
     const std::string stream_id("test_sparse");
 
     const auto index = TimeseriesIndex::default_index();
-    DynamicSchema schema{
-        index.create_stream_descriptor(stream_id, {}), index
-    };
+    DynamicSchema schema{index.create_stream_descriptor(stream_id, {}), index};
 
-    DynamicAggregator aggregator(std::move(schema), [&](SegmentInMemory &&segment) {
-        test_store_->append_incomplete_segment(stream_id, std::move(segment));
-    }, RowCountSegmentPolicy{10});
+    DynamicAggregator aggregator(
+        std::move(schema),
+        [&](SegmentInMemory&& segment) { test_store_->append_incomplete_segment(stream_id, std::move(segment)); },
+        RowCountSegmentPolicy{10});
 
     constexpr size_t num_rows = 100;
 
-    for(size_t i = 0; i < num_rows; i += 2) {
-        aggregator.start_row(timestamp(i))([&](auto &rb) {
+    for (size_t i = 0; i < num_rows; i += 2) {
+        aggregator.start_row(timestamp(i))([&](auto& rb) {
             auto val = fmt::format("{}", i + 1);
-            rb.set_scalar_by_name(std::string_view{"first"}, std::string_view{val}, make_scalar_type(DataType::UTF_DYNAMIC64));
+            rb.set_scalar_by_name(std::string_view{"first"},
+                std::string_view{val},
+                make_scalar_type(DataType::UTF_DYNAMIC64));
         });
 
-        aggregator.start_row(timestamp(i + 1))([&](auto &rb) {
+        aggregator.start_row(timestamp(i + 1))([&](auto& rb) {
             auto val = fmt::format("{}", i + 2);
-            rb.set_scalar_by_name(std::string_view{"second"}, std::string_view{val}, make_scalar_type(DataType::UTF_FIXED64));
+            rb.set_scalar_by_name(std::string_view{"second"},
+                std::string_view{val},
+                make_scalar_type(DataType::UTF_FIXED64));
         });
     }
 
@@ -554,11 +595,12 @@ TEST_F(SparseTestStore, CompactWithStrings) {
     read_options.set_dynamic_schema(true);
     pipelines::ReadQuery read_query;
     read_query.row_filter = universal_range();
-    auto read_result = test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options);
+    auto read_result =
+        test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options);
     const auto& frame = read_result.frame_data.frame();
     ASSERT_EQ(frame.row_count(), num_rows);
 
-    for(size_t i = 0; i < num_rows; i += 2) {
+    for (size_t i = 0; i < num_rows; i += 2) {
         auto val1 = frame.scalar_at<PyObject*>(i, 1);
         auto str_wrapper = convert::py_unicode_to_buffer(val1.value());
         auto expected = fmt::format("{}", i + 1);

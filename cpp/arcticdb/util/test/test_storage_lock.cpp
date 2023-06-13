@@ -15,7 +15,8 @@
 using namespace arcticdb;
 using namespace folly;
 
-TEST(StorageLock, SingleThreaded) {
+TEST(StorageLock, SingleThreaded)
+{
     SKIP_WIN("StorageLock is not supported");
     auto store = std::make_shared<InMemoryStore>();
     StorageLock lock1{StringId{"test_lock"}};
@@ -31,7 +32,8 @@ TEST(StorageLock, SingleThreaded) {
     ASSERT_EQ(!lock2.try_lock(store), true);
 }
 
-TEST(StorageLock, Timeout) {
+TEST(StorageLock, Timeout)
+{
     SKIP_WIN("StorageLock is not supported");
     auto store = std::make_shared<InMemoryStore>();
     StorageLock lock{"test_lock"};
@@ -56,34 +58,35 @@ struct LockData {
     const size_t num_tests_;
     bool timedout_;
 
-    LockData(size_t num_tests) :
-    lock_name_("stress_test_lock"),
-    store_(std::make_shared<InMemoryStore>()),
-    vol_(0),
-    atomic_(0),
-    contended_(false),
-    num_tests_(num_tests),
-    timedout_(false){
+    LockData(size_t num_tests)
+        : lock_name_("stress_test_lock"),
+          store_(std::make_shared<InMemoryStore>()),
+          vol_(0),
+          atomic_(0),
+          contended_(false),
+          num_tests_(num_tests),
+          timedout_(false)
+    {
     }
-
 };
 
 struct OptimisticLockTask {
     std::shared_ptr<LockData> data_;
 
-    explicit OptimisticLockTask(std::shared_ptr<LockData> data) :
-        data_(std::move(data)) {
+    explicit OptimisticLockTask(std::shared_ptr<LockData> data)
+        : data_(std::move(data))
+    {
     }
 
-    folly::Future<folly::Unit> operator()() {
+    folly::Future<folly::Unit> operator()()
+    {
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
         StorageLock<> lock{data_->lock_name_};
 
         for (auto i = size_t(0); i < data_->num_tests_; ++i) {
             if (!lock.try_lock(data_->store_)) {
                 data_->contended_ = true;
-            }
-            else {
+            } else {
                 ++data_->vol_;
                 // This should be unnecessary as we are already locked
                 std::lock_guard l{data_->mutex_};
@@ -95,15 +98,15 @@ struct OptimisticLockTask {
     }
 };
 
-
-TEST(StorageLock, Contention) {
+TEST(StorageLock, Contention)
+{
     using namespace arcticdb;
 
     auto lock_data = std::make_shared<LockData>(4);
     folly::FutureExecutor<folly::CPUThreadPoolExecutor> exec{4};
 
     std::vector<Future<Unit>> futures;
-    for(auto i = size_t{0}; i < 4; ++i) {
+    for (auto i = size_t{0}; i < 4; ++i) {
         futures.emplace_back(exec.addFuture(OptimisticLockTask{lock_data}));
     }
     std::this_thread::sleep_for(std::chrono::milliseconds(500));
@@ -117,18 +120,20 @@ struct PessimisticLockTask {
     std::shared_ptr<LockData> data_;
     std::optional<size_t> timeout_ms_;
 
-    PessimisticLockTask(std::shared_ptr<LockData> data, std::optional<size_t> timeout_ms = std::nullopt) :
-        data_(std::move(data)),
-        timeout_ms_(timeout_ms){
+    PessimisticLockTask(std::shared_ptr<LockData> data, std::optional<size_t> timeout_ms = std::nullopt)
+        : data_(std::move(data)),
+          timeout_ms_(timeout_ms)
+    {
     }
 
-    folly::Future<folly::Unit> operator()() {
+    folly::Future<folly::Unit> operator()()
+    {
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
         StorageLock<> lock{data_->lock_name_};
 
         for (auto i = size_t(0); i < data_->num_tests_; ++i) {
             try {
-                if(timeout_ms_)
+                if (timeout_ms_)
                     lock.lock_timeout(data_->store_, timeout_ms_.value());
                 else
                     lock.lock(data_->store_);
@@ -138,8 +143,7 @@ struct PessimisticLockTask {
                 std::lock_guard l{data_->mutex_};
                 ++data_->atomic_;
                 lock.unlock(data_->store_);
-            }
-            catch(const StorageLockTimeout&) {
+            } catch (const StorageLockTimeout&) {
                 data_->timedout_ = true;
             }
         }
@@ -152,19 +156,23 @@ struct ForceReleaseLockTask {
     int sleep_ms_;
     std::optional<size_t> timeout_ms_;
 
-    ForceReleaseLockTask(std::shared_ptr<LockData> data, int sleep_ms = 1, std::optional<size_t> timeout_ms = std::nullopt) :
-    data_(std::move(data)),
-    sleep_ms_(sleep_ms),
-    timeout_ms_(timeout_ms){
+    ForceReleaseLockTask(std::shared_ptr<LockData> data,
+        int sleep_ms = 1,
+        std::optional<size_t> timeout_ms = std::nullopt)
+        : data_(std::move(data)),
+          sleep_ms_(sleep_ms),
+          timeout_ms_(timeout_ms)
+    {
     }
 
-    folly::Future<folly::Unit> operator()() {
+    folly::Future<folly::Unit> operator()()
+    {
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
         StorageLock<> lock{data_->lock_name_};
 
         for (auto i = size_t(0); i < data_->num_tests_; ++i) {
             try {
-                if(timeout_ms_)
+                if (timeout_ms_)
                     lock.lock_timeout(data_->store_, timeout_ms_.value());
                 else
                     lock.lock(data_->store_);
@@ -174,8 +182,7 @@ struct ForceReleaseLockTask {
                 std::lock_guard l{data_->mutex_};
                 ++data_->atomic_;
                 // Dont unlock
-            }
-            catch(const StorageLockTimeout&) {
+            } catch (const StorageLockTimeout&) {
                 data_->timedout_ = true;
             }
         }
@@ -183,7 +190,8 @@ struct ForceReleaseLockTask {
     }
 };
 
-TEST(StorageLock, Wait) {
+TEST(StorageLock, Wait)
+{
     SKIP_WIN("StorageLock is not supported");
     using namespace arcticdb;
 
@@ -191,7 +199,7 @@ TEST(StorageLock, Wait) {
     folly::FutureExecutor<folly::CPUThreadPoolExecutor> exec{4};
 
     std::vector<Future<Unit>> futures;
-    for(auto i = size_t{0}; i < 4; ++i) {
+    for (auto i = size_t{0}; i < 4; ++i) {
         futures.emplace_back(exec.addFuture(PessimisticLockTask{lock_data}));
     }
     collect(futures).get();
@@ -200,25 +208,27 @@ TEST(StorageLock, Wait) {
     ASSERT_EQ(16u, lock_data->vol_);
 }
 
-TEST(StorageLock, Timeouts) {
+TEST(StorageLock, Timeouts)
+{
     SKIP_WIN("StorageLock is not supported");
     using namespace arcticdb;
-    std::unordered_map<std::string, spdlog::level::level_enum> log_levels{ {"lock", spdlog::level::debug}};
+    std::unordered_map<std::string, spdlog::level::level_enum> log_levels{{"lock", spdlog::level::debug}};
 
     auto lock_data = std::make_shared<LockData>(4);
     folly::FutureExecutor<folly::CPUThreadPoolExecutor> exec{4};
 
     std::vector<Future<Unit>> futures;
-    for(auto i = size_t{0}; i < 4; ++i) {
+    for (auto i = size_t{0}; i < 4; ++i) {
         futures.emplace_back(exec.addFuture(PessimisticLockTask{lock_data, 20}));
     }
     collect(futures).get();
     ASSERT_TRUE(lock_data->timedout_);
 }
 
-TEST(StorageLock, ForceReleaseLock) {
+TEST(StorageLock, ForceReleaseLock)
+{
     using namespace arcticdb;
-    std::unordered_map<std::string, spdlog::level::level_enum> log_levels{ {"lock", spdlog::level::debug}};
+    std::unordered_map<std::string, spdlog::level::level_enum> log_levels{{"lock", spdlog::level::debug}};
 
     auto lock_data = std::make_shared<LockData>(4);
     folly::FutureExecutor<folly::CPUThreadPoolExecutor> exec{4};
@@ -227,7 +237,7 @@ TEST(StorageLock, ForceReleaseLock) {
     // This is set in nanoseconds => 1ms
     ConfigsMap::instance()->set_int("StorageLock.TTL", 2 * 1000 * 1000);
     std::vector<Future<Unit>> futures;
-    for(auto i = size_t{0}; i < 4; ++i) {
+    for (auto i = size_t{0}; i < 4; ++i) {
         futures.emplace_back(exec.addFuture(ForceReleaseLockTask{lock_data, 1, 10 * 1000}));
     }
     collect(futures).get();

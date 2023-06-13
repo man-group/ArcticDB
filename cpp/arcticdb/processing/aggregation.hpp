@@ -18,21 +18,23 @@
 
 namespace arcticdb {
 
-template<typename T, typename T2=void>
+template<typename T, typename T2 = void>
 struct OutputType;
 
-template <typename InputType>
-struct OutputType <InputType, typename std::enable_if_t<is_floating_point_type(InputType::DataTypeTag::data_type)>> {
+template<typename InputType>
+struct OutputType<InputType, typename std::enable_if_t<is_floating_point_type(InputType::DataTypeTag::data_type)>> {
     using type = ScalarTagType<DataTypeTag<DataType::FLOAT64>>;
 };
 
-template <typename InputType>
-struct OutputType <InputType, typename std::enable_if_t<is_unsigned_type(InputType::DataTypeTag::data_type)>> {
+template<typename InputType>
+struct OutputType<InputType, typename std::enable_if_t<is_unsigned_type(InputType::DataTypeTag::data_type)>> {
     using type = ScalarTagType<DataTypeTag<DataType::UINT64>>;
 };
 
-template <typename InputType>
-struct OutputType<InputType, typename std::enable_if_t<is_signed_type(InputType::DataTypeTag::data_type) && is_integer_type(InputType::DataTypeTag::data_type)>> {
+template<typename InputType>
+struct OutputType<InputType,
+    typename std::enable_if_t<is_signed_type(InputType::DataTypeTag::data_type) &&
+                              is_integer_type(InputType::DataTypeTag::data_type)>> {
     using type = ScalarTagType<DataTypeTag<DataType::INT64>>;
 };
 
@@ -52,33 +54,48 @@ struct Sum {
     ColumnName output_column_name_;
     DataType data_type_ = {};
 
-    Sum(ColumnName input_column_name, ColumnName output_column_name) :
-        input_column_name_(std::move(input_column_name)),
-        output_column_name_(std::move(output_column_name)) {
+    Sum(ColumnName input_column_name, ColumnName output_column_name)
+        : input_column_name_(std::move(input_column_name)),
+          output_column_name_(std::move(output_column_name))
+    {
     }
 
-    void aggregate(const std::optional<ColumnWithStrings>& input_column, const std::vector<size_t>& groups, size_t unique_values);
+    void aggregate(const std::optional<ColumnWithStrings>& input_column,
+        const std::vector<size_t>& groups,
+        size_t unique_values);
 
     std::optional<DataType> finalize(SegmentInMemory& seg, bool dynamic_schema, size_t unique_values);
 
-    [[nodiscard]] ColumnName get_input_column_name() const { return input_column_name_; }
+    [[nodiscard]] ColumnName get_input_column_name() const
+    {
+        return input_column_name_;
+    }
 
-    [[nodiscard]] ColumnName get_output_column_name() const { return output_column_name_; }
+    [[nodiscard]] ColumnName get_output_column_name() const
+    {
+        return output_column_name_;
+    }
 
-    [[nodiscard]] Sum construct() const { return {input_column_name_, output_column_name_}; }
+    [[nodiscard]] Sum construct() const
+    {
+        return {input_column_name_, output_column_name_};
+    }
 
-    void set_data_type(DataType data_type) { data_type_ = data_type; }
-
+    void set_data_type(DataType data_type)
+    {
+        data_type_ = data_type;
+    }
 };
 
-template <typename T>
+template<typename T>
 struct MaybeValue {
     bool written_ = false;
     T value_ = std::numeric_limits<T>::lowest();
 };
 
 enum class Extremum {
-    max, min
+    max,
+    min
 };
 
 struct MaxOrMin {
@@ -88,24 +105,38 @@ struct MaxOrMin {
     DataType data_type_ = {};
     Extremum extremum_;
 
-    MaxOrMin(ColumnName input_column_name, ColumnName output_column_name, Extremum extremum) :
-        input_column_name_(std::move(input_column_name)),
-        output_column_name_(std::move(output_column_name)),
-        extremum_(extremum){
+    MaxOrMin(ColumnName input_column_name, ColumnName output_column_name, Extremum extremum)
+        : input_column_name_(std::move(input_column_name)),
+          output_column_name_(std::move(output_column_name)),
+          extremum_(extremum)
+    {
     }
 
-    void aggregate(const std::optional<ColumnWithStrings>& input_column, const std::vector<size_t>& groups, size_t unique_values);
+    void aggregate(const std::optional<ColumnWithStrings>& input_column,
+        const std::vector<size_t>& groups,
+        size_t unique_values);
 
     std::optional<DataType> finalize(SegmentInMemory& seg, bool dynamic_schema, size_t unique_values);
 
-    [[nodiscard]] ColumnName get_input_column_name() const { return input_column_name_; }
+    [[nodiscard]] ColumnName get_input_column_name() const
+    {
+        return input_column_name_;
+    }
 
-    [[nodiscard]] ColumnName get_output_column_name() const { return output_column_name_; }
+    [[nodiscard]] ColumnName get_output_column_name() const
+    {
+        return output_column_name_;
+    }
 
-    [[nodiscard]] MaxOrMin construct() const { return {input_column_name_, output_column_name_, extremum_}; }
+    [[nodiscard]] MaxOrMin construct() const
+    {
+        return {input_column_name_, output_column_name_, extremum_};
+    }
 
-    void set_data_type(DataType data_type) { data_type_ = data_type; }
-
+    void set_data_type(DataType data_type)
+    {
+        data_type_ = data_type;
+    }
 };
 
 struct Mean {
@@ -115,23 +146,37 @@ struct Mean {
     ColumnName output_column_name_;
     DataType data_type_ = {};
 
-    explicit Mean(ColumnName input_column_name, ColumnName output_column_name) :
-        input_column_name_(std::move(input_column_name)),
-        output_column_name_(std::move(output_column_name)) {
+    explicit Mean(ColumnName input_column_name, ColumnName output_column_name)
+        : input_column_name_(std::move(input_column_name)),
+          output_column_name_(std::move(output_column_name))
+    {
     }
 
-    void aggregate(const std::optional<ColumnWithStrings>& input_column, const std::vector<size_t>& groups, size_t unique_values);
+    void aggregate(const std::optional<ColumnWithStrings>& input_column,
+        const std::vector<size_t>& groups,
+        size_t unique_values);
 
     std::optional<DataType> finalize(SegmentInMemory& seg, bool dynamic_schema, size_t unique_values);
 
-    [[nodiscard]] ColumnName get_input_column_name() const { return input_column_name_; }
+    [[nodiscard]] ColumnName get_input_column_name() const
+    {
+        return input_column_name_;
+    }
 
-    [[nodiscard]] ColumnName get_output_column_name() const { return output_column_name_; }
+    [[nodiscard]] ColumnName get_output_column_name() const
+    {
+        return output_column_name_;
+    }
 
-    [[nodiscard]] Mean construct() const { return Mean(input_column_name_, output_column_name_); }
+    [[nodiscard]] Mean construct() const
+    {
+        return Mean(input_column_name_, output_column_name_);
+    }
 
-    void set_data_type(DataType data_type) { data_type_ = data_type; }
-
+    void set_data_type(DataType data_type)
+    {
+        data_type_ = data_type;
+    }
 };
 
 } //namespace arcticdb

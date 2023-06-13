@@ -11,16 +11,15 @@
 #include <arcticdb/processing/processing_segment.hpp>
 #include <arcticdb/util/test/generators.hpp>
 
-TEST(ExpressionNode, AddBasic) {
+TEST(ExpressionNode, AddBasic)
+{
     using namespace arcticdb;
     StreamId symbol("test_add");
-    auto wrapper = SinkWrapper(symbol, {
-            scalar_field_proto(DataType::UINT64, "thing1"),
-            scalar_field_proto(DataType::UINT64, "thing2")
-    });
+    auto wrapper = SinkWrapper(symbol,
+        {scalar_field_proto(DataType::UINT64, "thing1"), scalar_field_proto(DataType::UINT64, "thing2")});
 
-    for(auto j = 0; j < 20; ++j ) {
-        wrapper.aggregator_.start_row(timestamp(j))([&](auto &&rb) {
+    for (auto j = 0; j < 20; ++j) {
+        wrapper.aggregator_.start_row(timestamp(j))([&](auto&& rb) {
             rb.set_scalar(1, j);
             rb.set_scalar(2, j + 1);
         });
@@ -38,8 +37,8 @@ TEST(ExpressionNode, AddBasic) {
     auto ret = proc.get(ExpressionName("new_thing"), empty);
     const auto& col = std::get<ColumnWithStrings>(ret).column_;
 
-    for(auto j = 0; j < 20; ++j ) {
-        auto v1 =proc.data_[0].segment(empty).scalar_at<uint64_t>(j, 1) ;
+    for (auto j = 0; j < 20; ++j) {
+        auto v1 = proc.data_[0].segment(empty).scalar_at<uint64_t>(j, 1);
         ASSERT_EQ(v1.value(), j);
         auto v2 = proc.data_[0].segment(empty).scalar_at<uint64_t>(j, 2);
         ASSERT_EQ(v2.value(), j + 1);

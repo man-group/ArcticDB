@@ -12,13 +12,14 @@
 namespace py = pybind11;
 
 namespace arcticdb {
-void register_types(py::module &m);
+void register_types(py::module& m);
 
 namespace stream {
 
-void register_stream_bindings(py::module &m);
+void register_stream_bindings(py::module& m);
 
-inline void register_bindings(py::module &m) {
+inline void register_bindings(py::module& m)
+{
     auto arcticxx_types = m.def_submodule("types", R"pydoc(
     Fundamental types
     -----------------
@@ -35,6 +36,5 @@ inline void register_bindings(py::module &m) {
     arcticdb::stream::register_stream_bindings(arcticxx_stream);
 }
 
-} // namespace arcticdb::stream
+} // namespace stream
 } // namespace arcticdb
-

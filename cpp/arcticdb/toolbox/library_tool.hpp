@@ -20,7 +20,7 @@ namespace arcticdb::storage {
 class Library;
 
 class LibraryIndex;
-}
+} // namespace arcticdb::storage
 
 namespace arcticdb::toolbox::apy {
 
@@ -29,7 +29,10 @@ namespace py = pybind11;
 class LibraryTool {
 
 public:
-    explicit LibraryTool(std::shared_ptr<storage::Library> lib) : lib_(std::move(lib)) {}
+    explicit LibraryTool(std::shared_ptr<storage::Library> lib)
+        : lib_(std::move(lib))
+    {
+    }
 
     Segment read_to_segment(const VariantKey& key);
 
@@ -43,7 +46,7 @@ public:
 
     std::string get_key_path(const VariantKey& key);
 
-    std::vector<VariantKey> find_keys_for_id(entity::KeyType kt, const entity::StreamId &stream_id);
+    std::vector<VariantKey> find_keys_for_id(entity::KeyType kt, const entity::StreamId& stream_id);
 
     int count_keys(entity::KeyType kt);
 

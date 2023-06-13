@@ -16,7 +16,8 @@
 
 namespace arcticdb {
 
-inline arcticdb::proto::descriptors::NormalizationMetadata make_timeseries_norm_meta(const entity::StreamId& stream_id) {
+inline arcticdb::proto::descriptors::NormalizationMetadata make_timeseries_norm_meta(const entity::StreamId& stream_id)
+{
     using namespace arcticdb::proto::descriptors;
     NormalizationMetadata norm_meta;
     NormalizationMetadata_PandasDataFrame pandas;
@@ -32,12 +33,15 @@ inline arcticdb::proto::descriptors::NormalizationMetadata make_timeseries_norm_
 /**
  * Set the minimum defaults into norm_meta. Originally created to synthesize norm_meta for incomplete compaction.
  */
-inline void ensure_norm_meta(arcticdb::proto::descriptors::NormalizationMetadata& norm_meta, const entity::StreamId& stream_id, bool set_tz) {
-    if(norm_meta.input_type_case() == arcticdb::proto::descriptors::NormalizationMetadata::INPUT_TYPE_NOT_SET) {
+inline void ensure_norm_meta(arcticdb::proto::descriptors::NormalizationMetadata& norm_meta,
+    const entity::StreamId& stream_id,
+    bool set_tz)
+{
+    if (norm_meta.input_type_case() == arcticdb::proto::descriptors::NormalizationMetadata::INPUT_TYPE_NOT_SET) {
         norm_meta.CopyFrom(make_timeseries_norm_meta(stream_id));
     }
 
-    if(set_tz && norm_meta.df().common().index().tz().empty())
+    if (set_tz && norm_meta.df().common().index().tz().empty())
         norm_meta.mutable_df()->mutable_common()->mutable_index()->set_tz("UTC");
 }
 

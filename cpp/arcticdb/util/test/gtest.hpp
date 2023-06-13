@@ -15,10 +15,11 @@
 [build] gtest/internal/gtest-port.h(2075): note: while trying to match the argument list '(int)'
 */
 namespace testing::internal::posix {
-    inline int close(int i) {
-        return ::close(i);
-    }
+inline int close(int i)
+{
+    return ::close(i);
 }
-#endif  // _WIN32
+} // namespace testing::internal::posix
+#endif // _WIN32
 
 #include <gtest/gtest.h>

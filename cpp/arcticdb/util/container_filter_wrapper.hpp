@@ -26,9 +26,12 @@ class ContainerFilterWrapper {
     const Container& original_;
     Container filtered_;
     bool use_original_;
+
 public:
-    explicit ContainerFilterWrapper(const Container& original_):
-        original_(original_), filtered_(), use_original_(true){};
+    explicit ContainerFilterWrapper(const Container& original_)
+        : original_(original_),
+          filtered_(),
+          use_original_(true){};
 
     /**
      * The filter should take an item and return true to indicate if the item should be removed.
@@ -36,7 +39,8 @@ public:
      * If the filter throws, the result might be corrupted.
      */
     template<typename Filter>
-    void remove_if(Filter filter) {
+    void remove_if(Filter filter)
+    {
         if (use_original_) {
             auto end = original_.cend();
             for (auto itr = original_.cbegin(); itr != end; itr++) {
@@ -59,7 +63,8 @@ public:
      * Only makes a copy if the argument is not already in the set.
      */
     template<typename C = Container>
-    void insert(const std::enable_if_t<std::is_same_v<C, std::unordered_set<value_type>>, value_type>& val) {
+    void insert(const std::enable_if_t<std::is_same_v<C, std::unordered_set<value_type>>, value_type>& val)
+    {
         if (use_original_) {
             if (original_.count(val) > 0) {
                 return;
@@ -76,7 +81,8 @@ public:
      * Only makes a copy if the argument is in the set.
      */
     template<typename C = Container>
-    void erase(const std::enable_if_t<std::is_same_v<C, std::unordered_set<value_type>>, value_type>& val) {
+    void erase(const std::enable_if_t<std::is_same_v<C, std::unordered_set<value_type>>, value_type>& val)
+    {
         if (use_original_) {
             if (original_.count(val) == 0) {
                 return;
@@ -89,18 +95,26 @@ public:
         filtered_.erase(val);
     }
 
-    void clear() {
+    void clear()
+    {
         use_original_ = false;
         filtered_.clear();
     }
 
     // C++20: Use bitset and Ranges to hide/combine items instead of copying
-    const Container& get() {
+    const Container& get()
+    {
         return use_original_ ? original_ : filtered_;
     }
 
-    const Container& operator*() { return get(); }
-    const Container* operator->() { return &get(); }
+    const Container& operator*()
+    {
+        return get();
+    }
+    const Container* operator->()
+    {
+        return &get();
+    }
 };
 
-}
+} // namespace arcticdb::util

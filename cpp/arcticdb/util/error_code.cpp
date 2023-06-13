@@ -11,14 +11,15 @@
 
 namespace arcticdb {
 
-struct ErrorMapTag{};
+struct ErrorMapTag {};
 using ErrorCodeMap = semi::static_map<int, ErrorCodeData, ErrorMapTag>;
 
 #define ERROR_ID(x) []() constexpr { return static_cast<int>(x); }
-ErrorCodeData get_error_code_data(ErrorCode code) {
-    #define ERROR_CODE(code, Name) ErrorCodeMap::get(ERROR_ID(code)) = error_code_data<ErrorCode::Name>;
-        ARCTIC_ERROR_CODES
-    #undef ERROR_CODE
+ErrorCodeData get_error_code_data(ErrorCode code)
+{
+#define ERROR_CODE(code, Name) ErrorCodeMap::get(ERROR_ID(code)) = error_code_data<ErrorCode::Name>;
+    ARCTIC_ERROR_CODES
+#undef ERROR_CODE
 
     return ErrorCodeMap::get(static_cast<int>(code));
 }

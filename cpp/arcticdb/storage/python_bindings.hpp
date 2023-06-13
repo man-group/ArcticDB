@@ -18,6 +18,6 @@ namespace arcticdb::storage::apy {
 
 namespace py = pybind11;
 
-void register_bindings(py::module &m, py::exception<arcticdb::ArcticException>& base_exception);
+void register_bindings(py::module& m, py::exception<arcticdb::ArcticException>& base_exception);
 
-} // namespace arcticdb
+} // namespace arcticdb::storage::apy

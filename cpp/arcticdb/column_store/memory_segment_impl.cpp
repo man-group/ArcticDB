@@ -18,21 +18,27 @@ namespace arcticdb {
 // first and create the target segment with the merged descriptor. Could be modified in the future to
 // retroactively insert and default-initialize or sparsify the new column, but that's not required
 //  at the moment.
-void SegmentInMemoryImpl::append(const SegmentInMemoryImpl& other) {
+void SegmentInMemoryImpl::append(const SegmentInMemoryImpl& other)
+{
     if (other.row_count() == 0)
         return;
 
     other.init_column_map();
-    for(auto col = 0u; col < num_columns(); ++col) {
+    for (auto col = 0u; col < num_columns(); ++col) {
         auto col_name = descriptor().field(col).name();
 
         auto col_index = other.column_index(col_name);
-        if(col_index) {
+        if (col_index) {
             ARCTICDB_DEBUG(log::version(), "Appending column {} at index {}", col_name, col_index.value());
             auto this_type = column_unchecked(col).type();
-            auto other_type =  other.column_unchecked(col_index.value()).type();
-            util::check(this_type == other_type, "Could not append type {} to type {} for column {}, this index {}, other index {}",
-                        other_type, this_type, col_name, col, col_index.value());
+            auto other_type = other.column_unchecked(col_index.value()).type();
+            util::check(this_type == other_type,
+                "Could not append type {} to type {} for column {}, this index {}, other index {}",
+                other_type,
+                this_type,
+                col_name,
+                col,
+                col_index.value());
 
             column_unchecked(col).append(other.column_unchecked(col_index.value()), row_id_ + 1);
         } else {
@@ -43,12 +49,14 @@ void SegmentInMemoryImpl::append(const SegmentInMemoryImpl& other) {
     set_row_id(row_id_ + other.row_count());
 }
 
-position_t SegmentInMemoryImpl::add_column(const FieldDescriptor::Proto &field, size_t num_rows, bool presize) {
+position_t SegmentInMemoryImpl::add_column(const FieldDescriptor::Proto& field, size_t num_rows, bool presize)
+{
     util::check_arg(!field.name().empty(), "Empty name in field: {}", field);
-    if(!column_map_)
+    if (!column_map_)
         init_column_map();
 
-    columns_.emplace_back(std::make_shared<Column>(type_desc_from_proto(field.type_desc()), num_rows, presize, allow_sparse_));
+    columns_.emplace_back(
+        std::make_shared<Column>(type_desc_from_proto(field.type_desc()), num_rows, presize, allow_sparse_));
     const auto& new_field = descriptor_->add_field(field);
 
     std::lock_guard<std::mutex> lock{*column_map_mutex_};
@@ -56,8 +64,9 @@ position_t SegmentInMemoryImpl::add_column(const FieldDescriptor::Proto &field, 
     return columns_.size() - 1;
 }
 
-position_t SegmentInMemoryImpl::add_column(const FieldDescriptor::Proto &field, const std::shared_ptr<Column>& column) {
-    if(!column_map_)
+position_t SegmentInMemoryImpl::add_column(const FieldDescriptor::Proto& field, const std::shared_ptr<Column>& column)
+{
+    if (!column_map_)
         init_column_map();
 
     columns_.emplace_back(std::move(column));
@@ -68,18 +77,24 @@ position_t SegmentInMemoryImpl::add_column(const FieldDescriptor::Proto &field, 
     return columns_.size() - 1;
 }
 
-void SegmentInMemoryImpl::change_schema(StreamDescriptor descriptor) {
+void SegmentInMemoryImpl::change_schema(StreamDescriptor descriptor)
+{
     //util::check(vector_is_unique(descriptor.fields()), "Non-unique fields in descriptor: {}", descriptor.fields());
     init_column_map();
     std::vector<std::shared_ptr<Column>> new_columns(descriptor.field_count());
-    for(auto col = 0u; col < descriptor.field_count(); ++col) {
+    for (auto col = 0u; col < descriptor.field_count(); ++col) {
         auto col_name = descriptor.field(col).name();
         auto col_index = column_index(col_name);
         auto other_type = type_desc_from_proto(descriptor.field(col).type_desc());
-        if(col_index) {
+        if (col_index) {
             auto this_type = column_unchecked(col_index.value()).type();
-            util::check(this_type == other_type, "Could not convert type {} to type {} for column {}, this index {}, other index {}",
-                        other_type, this_type, col_name, col_index.value(), col);
+            util::check(this_type == other_type,
+                "Could not convert type {} to type {} for column {}, this index {}, other index {}",
+                other_type,
+                this_type,
+                col_name,
+                col_index.value(),
+                col);
             new_columns[col] = std::move(columns_[col_index.value()]);
         } else {
             auto new_column = std::make_shared<Column>(other_type, row_count(), false, allow_sparse_);
@@ -92,13 +107,14 @@ void SegmentInMemoryImpl::change_schema(StreamDescriptor descriptor) {
     generate_column_map();
 }
 
-std::optional<std::string_view> SegmentInMemoryImpl::string_at(position_t row, position_t col) const {
+std::optional<std::string_view> SegmentInMemoryImpl::string_at(position_t row, position_t col) const
+{
     auto td = type_desc_from_proto(descriptor_->field(col).type_desc());
     util::check(is_sequence_type(td.data_type()), "Not a sequence type");
     util::check_arg(size_t(row) < row_count(), "Segment index {} out of bounds in string", row);
     const auto& col_ref = column(col);
 
-    if(is_fixed_string_type(td.data_type()) && col_ref.is_inflated()) {
+    if (is_fixed_string_type(td.data_type()) && col_ref.is_inflated()) {
         auto string_size = col_ref.bytes() / row_count();
         auto ptr = col_ref.data().buffer().ptr_cast<char>(row * string_size, string_size);
         return std::string_view(ptr, string_size);
@@ -112,34 +128,42 @@ std::optional<std::string_view> SegmentInMemoryImpl::string_at(position_t row, p
     }
 }
 
-size_t SegmentInMemoryImpl::num_blocks() const {
-    return std::accumulate(std::begin(columns_), std::end(columns_), 0, [] (size_t n, const auto& col) {
+size_t SegmentInMemoryImpl::num_blocks() const
+{
+    return std::accumulate(std::begin(columns_), std::end(columns_), 0, [](size_t n, const auto& col) {
         return n + col->num_blocks();
     });
 }
 
-std::optional<Column::StringArrayData> SegmentInMemoryImpl::string_array_at(position_t row, position_t col) {
+std::optional<Column::StringArrayData> SegmentInMemoryImpl::string_array_at(position_t row, position_t col)
+{
     util::check_arg(size_t(row) < row_count(), "Segment index {} out of bounds in string array", row);
     return column(col).string_array_at(row, *string_pool_);
 }
 
-size_t SegmentInMemoryImpl::num_bytes() const {
-    return std::accumulate(std::begin(columns_), std::end(columns_), 0, [] (size_t n, const auto& col) {
+size_t SegmentInMemoryImpl::num_bytes() const
+{
+    return std::accumulate(std::begin(columns_), std::end(columns_), 0, [](size_t n, const auto& col) {
         return n + col->bytes();
     });
 }
 
-void SegmentInMemoryImpl::sort(const std::string& column_name) {
+void SegmentInMemoryImpl::sort(const std::string& column_name)
+{
     init_column_map();
     auto idx = column_index(std::string_view(column_name));
     util::check(static_cast<bool>(idx), "Column {} not found in sort", column_name);
     sort(idx.value());
 }
 
-void SegmentInMemoryImpl::sort(position_t idx) {
+void SegmentInMemoryImpl::sort(position_t idx)
+{
     auto& sort_col = column_unchecked(idx);
-    util::check(!sort_col.is_sparse(), "Can't sort on sparse column idx {} because it is not supported yet. The user should either fill the column data or filter the empty columns out",idx);
-    auto table = sort_col.type().visit_tag([&sort_col] (auto tdt) {
+    util::check(!sort_col.is_sparse(),
+        "Can't sort on sparse column idx {} because it is not supported yet. The user should either fill the column "
+        "data or filter the empty columns out",
+        idx);
+    auto table = sort_col.type().visit_tag([&sort_col](auto tdt) {
         using TagType = decltype(tdt);
         using RawType = typename TagType::DataTypeTag::raw_type;
         return create_jive_table<RawType>(sort_col);
@@ -150,4 +174,4 @@ void SegmentInMemoryImpl::sort(position_t idx) {
     }
 }
 
-}
+} // namespace arcticdb

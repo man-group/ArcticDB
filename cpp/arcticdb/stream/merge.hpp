@@ -11,29 +11,29 @@
 
 namespace arcticdb::stream {
 template<typename IndexType, typename WrapperType, typename AggregatorType, typename QueueType>
-void do_merge(
-    QueueType& input_streams,
-    AggregatorType& agg,
-    bool add_symbol_column
-    ) {
+void do_merge(QueueType& input_streams, AggregatorType& agg, bool add_symbol_column)
+{
     while (!input_streams.empty()) {
         auto next = input_streams.pop_top();
 
-        agg.start_row(pipelines::index::index_value_from_row(next->row(), IndexDescriptor::TIMESTAMP, 0).value()) ([&next, add_symbol_column](auto &rb) {
-            if(add_symbol_column)
-                rb.set_scalar_by_name("symbol", std::string_view(std::get<StringId>(next->id())), make_scalar_type(DataType::UTF_DYNAMIC64));
+        agg.start_row(pipelines::index::index_value_from_row(next->row(), IndexDescriptor::TIMESTAMP, 0).value())(
+            [&next, add_symbol_column](auto& rb) {
+                if (add_symbol_column)
+                    rb.set_scalar_by_name("symbol",
+                        std::string_view(std::get<StringId>(next->id())),
+                        make_scalar_type(DataType::UTF_DYNAMIC64));
 
-            auto val = next->row().begin();
-            std::advance(val, IndexType::field_count());
-            for(; val != next->row().end(); ++val) {
-                val->visit_field([&rb] (const auto& opt_v, std::string_view name, const TypeDescriptor& type_desc) {
-                    if(opt_v)
-                        rb.set_scalar_by_name(name, opt_v.value(), type_desc);
-                });
-            }
-        });
+                auto val = next->row().begin();
+                std::advance(val, IndexType::field_count());
+                for (; val != next->row().end(); ++val) {
+                    val->visit_field([&rb](const auto& opt_v, std::string_view name, const TypeDescriptor& type_desc) {
+                        if (opt_v)
+                            rb.set_scalar_by_name(name, opt_v.value(), type_desc);
+                    });
+                }
+            });
 
-        if(next->advance())
+        if (next->advance())
             input_streams.emplace(std::move(next));
     }
     agg.commit();

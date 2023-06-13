@@ -10,9 +10,14 @@
 #include <fmt/ostream.h>
 #include <arcticdb/entity/variant_key.hpp>
 
-#define MAKE_GTEST_FMT(our_type, fstr) namespace testing::internal { \
-template<> inline void PrintTo(const our_type&val, ::std::ostream* os) { fmt::print(*os, fstr, val); } \
-}
+#define MAKE_GTEST_FMT(our_type, fstr)                                                                                 \
+    namespace testing::internal {                                                                                      \
+    template<>                                                                                                         \
+    inline void PrintTo(const our_type& val, ::std::ostream* os)                                                       \
+    {                                                                                                                  \
+        fmt::print(*os, fstr, val);                                                                                    \
+    }                                                                                                                  \
+    }
 
 // For the most common types, format them by default:
 MAKE_GTEST_FMT(arcticdb::entity::VariantKey, "VariantKey({})")

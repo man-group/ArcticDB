@@ -17,14 +17,13 @@
 
 namespace arcticdb::storage {
 
-
-struct EnvironmentNameTag{};
+struct EnvironmentNameTag {};
 using EnvironmentName = util::StringWrappingValue<EnvironmentNameTag>;
 
-struct StorageNameTag{};
+struct StorageNameTag {};
 using StorageName = util::StringWrappingValue<StorageNameTag>;
 
-struct InstanceUriTag{};
+struct InstanceUriTag {};
 using InstanceUri = util::StringWrappingValue<InstanceUriTag>;
 
 /*
@@ -38,26 +37,26 @@ struct LibraryDescriptor {
     std::string description_;
     std::vector<StorageName> storage_ids_;
 
-    using VariantStoreConfig = std::variant<
-            std::monostate, //  make variant default constructible and unconfigured
-            arcticdb::proto::storage::VersionStoreConfig
-     >;
+    using VariantStoreConfig = std::variant<std::monostate, //  make variant default constructible and unconfigured
+        arcticdb::proto::storage::VersionStoreConfig>;
 
-     VariantStoreConfig config_ = std::monostate{};
+    VariantStoreConfig config_ = std::monostate{};
 };
 
-inline std::vector<char> stream_to_vector(std::vector<char> &src) {
+inline std::vector<char> stream_to_vector(std::vector<char>& src)
+{
     return src;
 }
 
-inline size_t get_stream_length(std::iostream& src) {
+inline size_t get_stream_length(std::iostream& src)
+{
     src.seekg(0, std::ios::end);
     auto len = src.tellg();
     src.seekg(0, std::ios::beg);
     return static_cast<size_t>(len);
 }
 
-inline std::vector<char> stream_to_vector(std::iostream &src)
+inline std::vector<char> stream_to_vector(std::iostream& src)
 {
     ARCTICDB_SAMPLE(StreamToVector, 0)
     auto len = get_stream_length(src);
@@ -66,12 +65,13 @@ inline std::vector<char> stream_to_vector(std::iostream &src)
     return v;
 }
 
-inline void vector_to_stream(std::vector<char>& src, std::stringstream& output) {
+inline void vector_to_stream(std::vector<char>& src, std::stringstream& output)
+{
     output.write(src.data(), src.size());
 }
 
 template<typename T>
-struct is_key_type :  std::false_type {};
+struct is_key_type : std::false_type {};
 
 template<>
 struct is_key_type<entity::AtomKey> : std::true_type {};
@@ -82,8 +82,7 @@ struct is_key_type<entity::RefKey> : std::true_type {};
 template<>
 struct is_key_type<entity::VariantKey> : std::true_type {};
 
-template <typename T>
+template<typename T>
 inline constexpr bool is_key_type_v = is_key_type<T>::value;
 
-}  //namespace arcticdb::storage
-
+} //namespace arcticdb::storage

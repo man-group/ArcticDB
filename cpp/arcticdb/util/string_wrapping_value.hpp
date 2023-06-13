@@ -24,32 +24,42 @@ struct StringWrappingValue : BaseType {
     std::string value;
     //TODO might be nice to have view_or_value
     StringWrappingValue() = default;
-    explicit StringWrappingValue(std::string_view s) : value(s) {}
-    explicit StringWrappingValue(const std::string &s) : value(s) {}
-    explicit StringWrappingValue(const char *c) : value(c) {}
+    explicit StringWrappingValue(std::string_view s)
+        : value(s)
+    {
+    }
+    explicit StringWrappingValue(const std::string& s)
+        : value(s)
+    {
+    }
+    explicit StringWrappingValue(const char* c)
+        : value(c)
+    {
+    }
 
     ARCTICDB_MOVE_COPY_DEFAULT(StringWrappingValue)
 
-    friend bool operator==(const StringWrappingValue &l, const StringWrappingValue &r) {
+    friend bool operator==(const StringWrappingValue& l, const StringWrappingValue& r)
+    {
         return l.value == r.value;
     }
 
-    friend bool operator!=(const StringWrappingValue &l, const StringWrappingValue &r) {
+    friend bool operator!=(const StringWrappingValue& l, const StringWrappingValue& r)
+    {
         return !(l == r);
     }
 };
-}
+} // namespace arcticdb::util
 
 namespace std {
 template<typename TagType>
-struct hash<arcticdb::util::StringWrappingValue<TagType>>
-{
+struct hash<arcticdb::util::StringWrappingValue<TagType>> {
     std::size_t operator()(const arcticdb::util::StringWrappingValue<TagType>& s) const
     {
-      return std::hash<std::string>()(s.value);
+        return std::hash<std::string>()(s.value);
     }
 };
-}
+} // namespace std
 
 namespace fmt {
 
@@ -58,15 +68,18 @@ using namespace arcticdb::util;
 template<typename BaseType>
 struct formatter<StringWrappingValue<BaseType>> {
     template<typename ParseContext>
-    constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
+    constexpr auto parse(ParseContext& ctx)
+    {
+        return ctx.begin();
+    }
 
     template<typename FormatContext>
-    auto format(const StringWrappingValue<BaseType> &srv, FormatContext &ctx) const {
+    auto format(const StringWrappingValue<BaseType>& srv, FormatContext& ctx) const
+    {
         return format_to(ctx.out(), "{}", srv.value);
     }
 };
 
-}
+} // namespace fmt
 
 //TODO format stuff, integrate with defaultstringviewable
-

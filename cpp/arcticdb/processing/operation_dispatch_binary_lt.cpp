@@ -10,7 +10,9 @@
 
 namespace arcticdb {
 
-template VariantData visit_binary_comparator<LessThanOperator>(const VariantData&, const VariantData&, LessThanOperator&&);
-template VariantData visit_binary_comparator<LessThanEqualsOperator>(const VariantData&, const VariantData&, LessThanEqualsOperator&&);
+template VariantData
+visit_binary_comparator<LessThanOperator>(const VariantData&, const VariantData&, LessThanOperator&&);
+template VariantData
+visit_binary_comparator<LessThanEqualsOperator>(const VariantData&, const VariantData&, LessThanEqualsOperator&&);
 
-}
+} // namespace arcticdb

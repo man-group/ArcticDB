@@ -23,9 +23,11 @@ struct PipelineContextRow {
     std::shared_ptr<PipelineContext> parent_;
     size_t index_;
 
-    PipelineContextRow(const std::shared_ptr<PipelineContext>& parent, size_t index) :
-        parent_(parent),
-        index_(index) { }
+    PipelineContextRow(const std::shared_ptr<PipelineContext>& parent, size_t index)
+        : parent_(parent),
+          index_(index)
+    {
+    }
 
     PipelineContextRow() = default;
 
@@ -54,32 +56,51 @@ struct PipelineContextRow {
  */
 struct PipelineContext : public std::enable_shared_from_this<PipelineContext> {
 
-    template <class ValueType>
-    class PipelineContextIterator :  public boost::iterator_facade<PipelineContextIterator<ValueType>, ValueType, boost::random_access_traversal_tag> {
+    template<class ValueType>
+    class PipelineContextIterator : public boost::iterator_facade<PipelineContextIterator<ValueType>,
+                                        ValueType,
+                                        boost::random_access_traversal_tag> {
         std::shared_ptr<PipelineContext> parent_;
-        size_t  index_;
+        size_t index_;
+
     public:
         PipelineContextIterator(std::shared_ptr<PipelineContext> parent, size_t index)
-            :  parent_(std::move(parent)), index_(index) { }
+            : parent_(std::move(parent)),
+              index_(index)
+        {
+        }
 
-        template <class OtherValue>
+        template<class OtherValue>
         explicit PipelineContextIterator(const PipelineContextIterator<OtherValue>& other)
-            : parent_(other.parent_), index_(other.index_){}
+            : parent_(other.parent_),
+              index_(other.index_)
+        {
+        }
 
-        template <class OtherValue>
+        template<class OtherValue>
         bool equal(const PipelineContextIterator<OtherValue>& other) const
         {
             util::check(parent_ == other.parent_, "Invalid context iterator comparison");
             return index_ == other.index_;
         }
 
-        void increment(){ ++index_; }
+        void increment()
+        {
+            ++index_;
+        }
 
-        void decrement(){ --index_; }
+        void decrement()
+        {
+            --index_;
+        }
 
-        void advance(ptrdiff_t n){ index_ += n; }
+        void advance(ptrdiff_t n)
+        {
+            index_ += n;
+        }
 
-        ValueType& dereference() const {
+        ValueType& dereference() const
+        {
             row_ = PipelineContextRow{parent_, index_};
             return row_;
         }
@@ -89,8 +110,10 @@ struct PipelineContext : public std::enable_shared_from_this<PipelineContext> {
 
     PipelineContext() = default;
 
-    explicit PipelineContext(StreamDescriptor desc) :
-        desc_(std::move(desc)) {}
+    explicit PipelineContext(StreamDescriptor desc)
+        : desc_(std::move(desc))
+    {
+    }
 
     explicit PipelineContext(SegmentInMemory& frame, const AtomKey& key);
 
@@ -125,45 +148,54 @@ struct PipelineContext : public std::enable_shared_from_this<PipelineContext> {
     std::optional<size_t> incompletes_after_;
     bool bucketize_dynamic_ = false;
 
-    PipelineContextRow operator[](size_t num) {
+    PipelineContextRow operator[](size_t num)
+    {
         return PipelineContextRow{shared_from_this(), num};
     }
 
-    size_t last_slice_row() const {
+    size_t last_slice_row() const
+    {
         return slice_and_keys_.empty() ? 0 : slice_and_keys_.rbegin()->slice_.row_range.second;
     }
 
-    size_t first_slice_row() const {
+    size_t first_slice_row() const
+    {
         return slice_and_keys_.empty() ? 0 : slice_and_keys_.begin()->slice_.row_range.first;
     }
 
-    size_t calc_rows() const {
+    size_t calc_rows() const
+    {
         return last_slice_row() - first_slice_row();
     }
 
-    const StreamDescriptor& descriptor() const {
+    const StreamDescriptor& descriptor() const
+    {
         util::check(static_cast<bool>(desc_), "Stream descriptor not found in pipeline context");
         return *desc_;
     }
 
-    void set_descriptor(StreamDescriptor&& desc) {
+    void set_descriptor(StreamDescriptor&& desc)
+    {
         desc_ = std::move(desc);
     }
 
-    void set_descriptor(const StreamDescriptor& desc) {
+    void set_descriptor(const StreamDescriptor& desc)
+    {
         desc_ = desc;
     }
 
     void set_selected_columns(const std::vector<std::string>& columns);
 
-    IndexRange index_range() const {
-        if(slice_and_keys_.empty())
+    IndexRange index_range() const
+    {
+        if (slice_and_keys_.empty())
             return unspecified_range();
 
-        return IndexRange{ slice_and_keys_.begin()->key().start_index(), slice_and_keys_.rbegin()->key().end_index() };
+        return IndexRange{slice_and_keys_.begin()->key().start_index(), slice_and_keys_.rbegin()->key().end_index()};
     }
 
-    friend void swap(PipelineContext& left, PipelineContext& right) noexcept {
+    friend void swap(PipelineContext& left, PipelineContext& right) noexcept
+    {
         using std::swap;
 
         swap(left.desc_, right.desc_);
@@ -183,21 +215,33 @@ struct PipelineContext : public std::enable_shared_from_this<PipelineContext> {
 
     using iterator = PipelineContextIterator<PipelineContextRow>;
     using const_iterator = PipelineContextIterator<const PipelineContextRow>;
-    iterator begin() { return iterator{shared_from_this(), size_t(0)}; }
-
-    iterator incompletes_begin() { return iterator{shared_from_this(), incompletes_after() }; }
-
-    size_t incompletes_after() const { return incompletes_after_.value_or(slice_and_keys_.size());  }
-
-    iterator end() {
-        return iterator{shared_from_this(),  slice_and_keys_.size()};
+    iterator begin()
+    {
+        return iterator{shared_from_this(), size_t(0)};
     }
 
-    bool is_in_filter_columns_set(std::string_view name) {
+    iterator incompletes_begin()
+    {
+        return iterator{shared_from_this(), incompletes_after()};
+    }
+
+    size_t incompletes_after() const
+    {
+        return incompletes_after_.value_or(slice_and_keys_.size());
+    }
+
+    iterator end()
+    {
+        return iterator{shared_from_this(), slice_and_keys_.size()};
+    }
+
+    bool is_in_filter_columns_set(std::string_view name)
+    {
         return !filter_columns_set_ || filter_columns_set_.value().find(name) != filter_columns_set_.value().end();
     }
 
-    void clear_vectors() {
+    void clear_vectors()
+    {
         slice_and_keys_.clear();
         fetch_index_.clear();
         string_pools_.clear();
@@ -205,7 +249,8 @@ struct PipelineContext : public std::enable_shared_from_this<PipelineContext> {
         compacted_.clear();
     }
 
-    void ensure_vectors() {
+    void ensure_vectors()
+    {
         util::check(slice_and_keys_.size() == fetch_index_.size(), "Size mismatch in pipeline context index vector");
         auto size = slice_and_keys_.size();
         string_pools_.resize(size);
@@ -213,10 +258,12 @@ struct PipelineContext : public std::enable_shared_from_this<PipelineContext> {
         compacted_.resize(size);
     }
 
-    bool is_pickled() const {
+    bool is_pickled() const
+    {
         util::check(static_cast<bool>(norm_meta_), "No normalization metadata defined");
-        return norm_meta_->input_type_case() == arcticdb::proto::descriptors::NormalizationMetadata::InputTypeCase::kMsgPackFrame;
+        return norm_meta_->input_type_case() ==
+               arcticdb::proto::descriptors::NormalizationMetadata::InputTypeCase::kMsgPackFrame;
     }
 };
 
-}
+} // namespace arcticdb::pipelines

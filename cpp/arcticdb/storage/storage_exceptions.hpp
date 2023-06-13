@@ -14,24 +14,28 @@
 namespace arcticdb::storage {
 
 class PermissionException : public std::exception {
-  public:
-    PermissionException(const LibraryPath &path, OpenMode mode, std::string_view operation) :
-        lib_path_(path), mode_(mode), msg_(fmt::format(
-        "{} not permitted. lib={}, mode={}", operation, lib_path_, mode_)
-    ) {}
+public:
+    PermissionException(const LibraryPath& path, OpenMode mode, std::string_view operation)
+        : lib_path_(path),
+          mode_(mode),
+          msg_(fmt::format("{} not permitted. lib={}, mode={}", operation, lib_path_, mode_))
+    {
+    }
 
-    const char *what() const noexcept override {
+    const char* what() const noexcept override
+    {
         return msg_.data();
     }
 
-    const LibraryPath &library_path() const {
+    const LibraryPath& library_path() const
+    {
         return lib_path_;
     }
 
-  private:
+private:
     LibraryPath lib_path_;
     OpenMode mode_;
     std::string msg_;
 };
 
-}
+} // namespace arcticdb::storage

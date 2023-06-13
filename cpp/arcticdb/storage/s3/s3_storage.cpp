@@ -16,9 +16,10 @@ namespace arcticdb::storage::s3 {
 const std::string USE_AWS_CRED_PROVIDERS_TOKEN = "_RBAC_";
 
 namespace detail {
-std::streamsize S3StreamBuffer::xsputn(const char_type* s, std::streamsize n) {
+std::streamsize S3StreamBuffer::xsputn(const char_type* s, std::streamsize n)
+{
     ARCTICDB_DEBUG(log::version(), "xsputn {} pos at {}, {} bytes", uintptr_t(buffer_.get()), pos_, n);
-    if(buffer_->bytes() < pos_ + n) {
+    if (buffer_->bytes() < pos_ + n) {
         ARCTICDB_DEBUG(log::version(), "{} Calling ensure for {}", uintptr_t(buffer_.get()), (pos_ + n) * 2);
         buffer_->ensure((pos_ + n) * 2);
     }
@@ -30,22 +31,30 @@ std::streamsize S3StreamBuffer::xsputn(const char_type* s, std::streamsize n) {
     ARCTICDB_DEBUG(log::version(), "{} pos is now {}, returning {}", uintptr_t(buffer_.get()), pos_, n);
     return n;
 }
-}
+} // namespace detail
 
-S3Storage::S3Storage(const LibraryPath &library_path, OpenMode mode, const Config &conf) :
-    Parent(library_path, mode),
-    s3_api_(S3ApiInstance::instance()),
-    root_folder_(get_root_folder(library_path)),
-    bucket_name_(conf.bucket_name()) {
+S3Storage::S3Storage(const LibraryPath& library_path, OpenMode mode, const Config& conf)
+    : Parent(library_path, mode),
+      s3_api_(S3ApiInstance::instance()),
+      root_folder_(get_root_folder(library_path)),
+      bucket_name_(conf.bucket_name())
+{
 
     auto creds = get_aws_credentials(conf);
 
-    if (creds.GetAWSAccessKeyId() == USE_AWS_CRED_PROVIDERS_TOKEN && creds.GetAWSSecretKey() == USE_AWS_CRED_PROVIDERS_TOKEN){
+    if (creds.GetAWSAccessKeyId() == USE_AWS_CRED_PROVIDERS_TOKEN &&
+        creds.GetAWSSecretKey() == USE_AWS_CRED_PROVIDERS_TOKEN)
+    {
         ARCTICDB_RUNTIME_DEBUG(log::storage(), "Using AWS auth mechanisms");
-        s3_client_ = Aws::S3::S3Client(get_s3_config(conf), Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never, conf.use_virtual_addressing());
+        s3_client_ = Aws::S3::S3Client(get_s3_config(conf),
+            Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never,
+            conf.use_virtual_addressing());
     } else {
         ARCTICDB_RUNTIME_DEBUG(log::storage(), "Using provided auth credentials");
-        s3_client_ = Aws::S3::S3Client(creds, get_s3_config(conf), Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never, conf.use_virtual_addressing());
+        s3_client_ = Aws::S3::S3Client(creds,
+            get_s3_config(conf),
+            Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never,
+            conf.use_virtual_addressing());
     }
 
     if (!conf.prefix().empty()) {
@@ -58,7 +67,7 @@ S3Storage::S3Storage(const LibraryPath &library_path, OpenMode mode, const Confi
     // When linking against libraries built with pre-GCC5 compilers, the num_put facet is not initalized on the classic locale
     // Rather than change the locale globally, which might cause unexpected behaviour in legacy code, just add the required
     // facet here
-    std::locale locale{ std::locale::classic(), new std::num_put<char>()};
+    std::locale locale{std::locale::classic(), new std::num_put<char>()};
     (void)std::locale::global(locale);
     s3_api_.reset();
 }

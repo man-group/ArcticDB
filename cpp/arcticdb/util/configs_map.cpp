@@ -10,19 +10,22 @@
 
 namespace arcticdb {
 
-std::shared_ptr<ConfigsMap> ConfigsMap::instance(){
+std::shared_ptr<ConfigsMap> ConfigsMap::instance()
+{
     std::call_once(ConfigsMap::init_flag_, &ConfigsMap::init);
     return ConfigsMap::instance_;
 }
 
-void ConfigsMap::init() {
+void ConfigsMap::init()
+{
     ConfigsMap::instance_ = std::make_shared<ConfigsMap>();
 }
 
 std::shared_ptr<ConfigsMap> ConfigsMap::instance_;
 std::once_flag ConfigsMap::init_flag_;
 
-void read_runtime_config(const RuntimeConfig& config) {
+void read_runtime_config(const RuntimeConfig& config)
+{
     ConfigsMap::instance()->read_proto(config);
 }
 

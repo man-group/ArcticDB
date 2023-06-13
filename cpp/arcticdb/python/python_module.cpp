@@ -43,100 +43,100 @@ enum class LoggerId {
     SCHEDULE
 };
 
-void initialize_folly() {
+void initialize_folly()
+{
     //folly::SingletonVault::singleton()->registrationComplete();
-    auto programName ="__arcticdb_logger__";
+    auto programName = "__arcticdb_logger__";
     google::InitGoogleLogging(programName);
 }
 
-void register_log(py::module && log) {
-    log.def("configure", [](const py::object & py_log_conf, bool force=false){
+void register_log(py::module&& log)
+{
+    log.def("configure", [](const py::object& py_log_conf, bool force = false) {
         arcticdb::proto::logger::LoggersConfig config;
         arcticdb::python_util::pb_from_python(py_log_conf, config);
         return arcticdb::log::Loggers::instance()->configure(config, force);
     });
 
-     py::enum_<spdlog::level::level_enum>(log, "LogLevel")
-             .value("DEBUG", spdlog::level::level_enum::debug)
-             .value("INFO", spdlog::level::level_enum::info)
-             .value("WARN", spdlog::level::level_enum::warn)
-             .value("ERROR", spdlog::level::level_enum::err)
-             .export_values()
-     ;
-     py::enum_<LoggerId>(log, "LoggerId")
-             .value("ROOT", LoggerId::ROOT)
-             .value("STORAGE", LoggerId::STORAGE)
-             .value("IN_MEM", LoggerId::IN_MEM)
-             .value("CODEC", LoggerId::CODEC)
-             .value("VERSION", LoggerId::VERSION)
-             .value("MEMORY", LoggerId::MEMORY)
-             .value("TIMINGS", LoggerId::TIMINGS)
-             .value("LOCK", LoggerId::LOCK)
-             .value("SCHEDULE", LoggerId::SCHEDULE)
-             .export_values()
-    ;
-    auto choose_logger = [&](LoggerId log_id) -> decltype(arcticdb::log::storage()) /* logger ref */{
+    py::enum_<spdlog::level::level_enum>(log, "LogLevel")
+        .value("DEBUG", spdlog::level::level_enum::debug)
+        .value("INFO", spdlog::level::level_enum::info)
+        .value("WARN", spdlog::level::level_enum::warn)
+        .value("ERROR", spdlog::level::level_enum::err)
+        .export_values();
+    py::enum_<LoggerId>(log, "LoggerId")
+        .value("ROOT", LoggerId::ROOT)
+        .value("STORAGE", LoggerId::STORAGE)
+        .value("IN_MEM", LoggerId::IN_MEM)
+        .value("CODEC", LoggerId::CODEC)
+        .value("VERSION", LoggerId::VERSION)
+        .value("MEMORY", LoggerId::MEMORY)
+        .value("TIMINGS", LoggerId::TIMINGS)
+        .value("LOCK", LoggerId::LOCK)
+        .value("SCHEDULE", LoggerId::SCHEDULE)
+        .export_values();
+    auto choose_logger = [&](LoggerId log_id) -> decltype(arcticdb::log::storage()) /* logger ref */ {
         switch (log_id) {
-            case LoggerId::STORAGE:
-                return arcticdb::log::storage();
-            case LoggerId::IN_MEM:
-                return arcticdb::log::inmem();
-            case LoggerId::CODEC:
-                return arcticdb::log::codec();
-            case LoggerId::MEMORY:
-                return arcticdb::log::memory();
-            case LoggerId::VERSION:
-                return arcticdb::log::version();
-            case LoggerId::ROOT:
-                return arcticdb::log::root();
-            case LoggerId::TIMINGS:
-                return arcticdb::log::timings();
-            case LoggerId::LOCK:
-                return arcticdb::log::lock();
-            case LoggerId::SCHEDULE:
-                return arcticdb::log::schedule();
-            default:
-                arcticdb::util::raise_rte("Unsupported logger id");
+        case LoggerId::STORAGE:
+            return arcticdb::log::storage();
+        case LoggerId::IN_MEM:
+            return arcticdb::log::inmem();
+        case LoggerId::CODEC:
+            return arcticdb::log::codec();
+        case LoggerId::MEMORY:
+            return arcticdb::log::memory();
+        case LoggerId::VERSION:
+            return arcticdb::log::version();
+        case LoggerId::ROOT:
+            return arcticdb::log::root();
+        case LoggerId::TIMINGS:
+            return arcticdb::log::timings();
+        case LoggerId::LOCK:
+            return arcticdb::log::lock();
+        case LoggerId::SCHEDULE:
+            return arcticdb::log::schedule();
+        default:
+            arcticdb::util::raise_rte("Unsupported logger id");
         }
     };
 
-    log.def("log",[&](LoggerId log_id, spdlog::level::level_enum level, const std::string & msg){
+    log.def("log", [&](LoggerId log_id, spdlog::level::level_enum level, const std::string& msg) {
         //assuming formatting done in python
-        auto & logger = choose_logger(log_id);
-        switch(level){
-            case spdlog::level::level_enum::debug:
-                logger.debug(msg);
-                break;
-            case spdlog::level::level_enum::info:
-                logger.info(msg);
-                break;
-            case spdlog::level::level_enum::warn:
-                logger.warn(msg);
-                break;
-            case spdlog::level::level_enum::err:
-                logger.error(msg);
-                break;
-            default:
-                arcticdb::util::raise_rte("Unsupported log level", spdlog::level::to_string_view(level));
+        auto& logger = choose_logger(log_id);
+        switch (level) {
+        case spdlog::level::level_enum::debug:
+            logger.debug(msg);
+            break;
+        case spdlog::level::level_enum::info:
+            logger.info(msg);
+            break;
+        case spdlog::level::level_enum::warn:
+            logger.warn(msg);
+            break;
+        case spdlog::level::level_enum::err:
+            logger.error(msg);
+            break;
+        default:
+            arcticdb::util::raise_rte("Unsupported log level", spdlog::level::to_string_view(level));
         }
     });
 
-    log.def("is_active", [&](LoggerId log_id, spdlog::level::level_enum level){
-       auto & logger = choose_logger(log_id);
-       return logger.should_log(level);
+    log.def("is_active", [&](LoggerId log_id, spdlog::level::level_enum level) {
+        auto& logger = choose_logger(log_id);
+        return logger.should_log(level);
     });
 
-    log.def("flush_all", [](){
-        arcticdb::log::Loggers::instance()->flush_all();
-    });
+    log.def("flush_all", []() { arcticdb::log::Loggers::instance()->flush_all(); });
 }
 
-void register_configs_map_api(py::module& m) {
+void register_configs_map_api(py::module& m)
+{
     using namespace arcticdb;
-#define EXPOSE_TYPE(LABEL, TYPE) \
-    m.def("get_config_" #LABEL, [](const std::string& label) { return ConfigsMap::instance()->get_##LABEL(label); }); \
-    m.def("set_config_" #LABEL, [](const std::string& label, TYPE value)  { ConfigsMap::instance()->set_##LABEL(label, value); }); \
-    m.def("unset_config_" #LABEL, [](const std::string& label)  { ConfigsMap::instance()->unset_##LABEL(label); });
+#define EXPOSE_TYPE(LABEL, TYPE)                                                                                       \
+    m.def("get_config_" #LABEL, [](const std::string& label) { return ConfigsMap::instance()->get_##LABEL(label); });  \
+    m.def("set_config_" #LABEL,                                                                                        \
+        [](const std::string& label, TYPE value) { ConfigsMap::instance()->set_##LABEL(label, value); });              \
+    m.def("unset_config_" #LABEL, [](const std::string& label) { ConfigsMap::instance()->unset_##LABEL(label); });
 
     EXPOSE_TYPE(int, int64_t)
     EXPOSE_TYPE(string, std::string)
@@ -149,34 +149,39 @@ __declspec(noinline)
 #else
 __attribute__((noinline))
 #endif
-int rec_call(int i){
-    if(i < 0){
+    int rec_call(int i)
+{
+    if (i < 0) {
         throw std::invalid_argument("Explosion");
-    } else if(i == 0) return 7;
-    if(i % 3 == 0)
+    } else if (i == 0)
+        return 7;
+    if (i % 3 == 0)
         return rec_call(i - 4);
     else
-        return rec_call(i-1);
+        return rec_call(i - 1);
 }
 
-void register_termination_handler() {
-    std::set_terminate([]{
+void register_termination_handler()
+{
+    std::set_terminate([] {
         auto eptr = std::current_exception();
         try {
             std::rethrow_exception(eptr);
-        } catch (const std::exception &e) {
+        } catch (const std::exception& e) {
             arcticdb::log::root().error("Terminate called in thread {}: {}\n Aborting",
-                                        folly::getCurrentThreadName().value_or("Unknown"), e.what());
+                folly::getCurrentThreadName().value_or("Unknown"),
+                e.what());
             std::abort();
         }
     });
 }
 
-void register_error_code_ecosystem(py::module& m, py::exception<arcticdb::ArcticException>& base_exception) {
+void register_error_code_ecosystem(py::module& m, py::exception<arcticdb::ArcticException>& base_exception)
+{
     using namespace arcticdb;
 
     auto cat_enum = py::enum_<ErrorCategory>(m, "ErrorCategory");
-    for (const auto& [member, name]: get_error_category_names()) {
+    for (const auto& [member, name] : get_error_category_names()) {
         cat_enum.value(name, member);
     }
 
@@ -185,7 +190,7 @@ void register_error_code_ecosystem(py::module& m, py::exception<arcticdb::Arctic
     for (auto code : get_error_codes()) {
         auto data = get_error_code_data(code);
         code_enum.value(data.name_.data(), code, data.as_string_.data());
-        enum_value_to_prefix[py::int_((int) code)] = data.as_string_;
+        enum_value_to_prefix[py::int_((int)code)] = data.as_string_;
     }
 
     setattr(m, "enum_value_to_prefix", enum_value_to_prefix);
@@ -193,20 +198,21 @@ void register_error_code_ecosystem(py::module& m, py::exception<arcticdb::Arctic
 
     // legacy exception base type kept for backwards compat with Man Python client
     struct ArcticCompatibilityException : public ArcticException {};
-    auto compat_exception = py::register_exception<ArcticCompatibilityException>(
-            m, "_ArcticLegacyCompatibilityException", base_exception);
+    auto compat_exception =
+        py::register_exception<ArcticCompatibilityException>(m, "_ArcticLegacyCompatibilityException", base_exception);
 
     static py::exception<InternalException> internal_exception(m, "InternalException", compat_exception.ptr());
 
     py::register_exception_translator([](std::exception_ptr p) {
         try {
-            if (p) std::rethrow_exception(p);
-        } catch (const arcticdb::InternalException & e){
+            if (p)
+                std::rethrow_exception(p);
+        } catch (const arcticdb::InternalException& e) {
             internal_exception(e.what());
-        } catch (const py::stop_iteration &e){
+        } catch (const py::stop_iteration& e) {
             // let stop iteration bubble up, since this is how python implements iteration termination
             std::rethrow_exception(p);
-        } catch (const std::exception &e) {
+        } catch (const std::exception& e) {
             std::string msg = fmt::format("{}({})", arcticdb::get_type_name(typeid(e)), e.what());
             internal_exception(msg.c_str());
         }
@@ -216,40 +222,41 @@ void register_error_code_ecosystem(py::module& m, py::exception<arcticdb::Arctic
     py::register_exception<MissingDataException>(m, "MissingDataException", compat_exception.ptr());
     py::register_exception<SchemaException>(m, "SchemaException", compat_exception.ptr());
     py::register_exception<StorageException>(m, "StorageException", compat_exception.ptr());
-    auto sorting_exception =
-            py::register_exception<SortingException>(m, "SortingException", compat_exception.ptr());
+    auto sorting_exception = py::register_exception<SortingException>(m, "SortingException", compat_exception.ptr());
     py::register_exception<UnsortedDataException>(m, "UnsortedDataException", sorting_exception.ptr());
 }
 
-void reinit_scheduler() {
+void reinit_scheduler()
+{
     ARCTICDB_DEBUG(arcticdb::log::version(), "Post-fork, reinitializing the task scheduler");
     arcticdb::async::TaskScheduler::reattach_instance();
 }
 
-void register_instrumentation(py::module && m){
+void register_instrumentation(py::module&& m)
+{
     auto remotery = m.def_submodule("remotery");
     py::class_<RemoteryInstance, std::shared_ptr<RemoteryInstance>>(remotery, "Instance");
-    remotery.def("configure", [](const py::object & py_config){
+    remotery.def("configure", [](const py::object& py_config) {
         arcticdb::proto::utils::RemoteryConfig config;
         arcticdb::python_util::pb_from_python(py_config, config);
         RemoteryConfigInstance::instance()->config.CopyFrom(config);
     });
-    remotery.def("log", [](std::string s ARCTICDB_UNUSED){
-       ARCTICDB_SAMPLE_LOG(s.c_str())
-    });
+    remotery.def("log", [](std::string s ARCTICDB_UNUSED) { ARCTICDB_SAMPLE_LOG(s.c_str()) });
 }
 
-void register_metrics(py::module && m){
+void register_metrics(py::module&& m)
+{
     auto prometheus = m.def_submodule("prometheus");
     py::class_<arcticdb::PrometheusInstance, std::shared_ptr<arcticdb::PrometheusInstance>>(prometheus, "Instance");
-    prometheus.def("configure", [](const py::object & py_config){
+    prometheus.def("configure", [](const py::object& py_config) {
         arcticdb::proto::utils::PrometheusConfig config;
         arcticdb::python_util::pb_from_python(py_config, config);
         arcticdb::PrometheusConfigInstance::instance()->config.CopyFrom(config);
     });
 }
 
-PYBIND11_MODULE(arcticdb_ext, m) {
+PYBIND11_MODULE(arcticdb_ext, m)
+{
     m.doc() = R"pbdoc(
         ArcticDB Extension plugin
 
@@ -262,8 +269,8 @@ PYBIND11_MODULE(arcticdb_ext, m) {
 #endif
     // Set up the global exception handlers first, so module-specific exception handler can override it:
     auto exceptions = m.def_submodule("exceptions");
-    auto base_exception = py::register_exception<arcticdb::ArcticException>(
-            exceptions, "ArcticException", PyExc_RuntimeError);
+    auto base_exception =
+        py::register_exception<arcticdb::ArcticException>(exceptions, "ArcticException", PyExc_RuntimeError);
     register_error_code_ecosystem(exceptions, base_exception);
 
     arcticdb::async::register_bindings(m);
@@ -294,4 +301,3 @@ PYBIND11_MODULE(arcticdb_ext, m) {
     m.attr("__version__") = "dev";
 #endif
 }
-
