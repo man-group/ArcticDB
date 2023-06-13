@@ -31,7 +31,10 @@ dependencies:
   - spdlog
   # Incompatibility with fmt last version
   - fmt < 10
-  - folly >2022.10.31 # latest version published on vcpkg
+  # folly has no ABI compatibility from one commit to another.
+  # Hence we have to use the exact same version of folly on both build setup.
+  # This is the common oldest version of folly on vcpkg and conda-forge
+  - folly==2023.05.22.00
   # Vendored build dependencies (see `cpp/thirdparty`)
   # Versions must be kept in sync
   - xxhash
