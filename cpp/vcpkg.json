@@ -158,7 +158,7 @@
     { "name": "double-conversion", "version": "3.2.1" },
     { "name": "fizz", "version-string": "2022.10.31.00" },
     { "name": "fmt", "version": "9.1.0#1" },
-    { "name": "folly", "version-string": "2022.10.31.00#3" },
+    { "name": "folly", "version-string": "2023.05.22.00" },
     { "name": "gflags", "version": "2.2.2#5" },
     { "name": "glog", "version": "0.6.0#2" },
     { "name": "gtest", "version": "1.12.1" },
