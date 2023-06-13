@@ -127,7 +127,7 @@ class SymbolDescription(NamedTuple):
     index: NameWithDType
     index_type: str
     row_count: int
-    last_update_time: datetime.datetime
+    last_update_time: datetime64
     date_range: Tuple[datetime.datetime, datetime.datetime]
 
 
