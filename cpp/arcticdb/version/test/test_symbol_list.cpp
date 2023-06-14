@@ -160,7 +160,11 @@ INSTANTIATE_TEST_SUITE_P(SymbolListWithReadFailuresSources, SymbolListWithReadFa
         FailSimParam{{FailureType::READ, {fault(), fault(), fault(), fault(), no_op}}},
         FailSimParam{{FailureType::READ, {fault(0.4), no_op}}}, // 40% chance of exception
         FailSimParam{{FailureType::ITERATE, RAISE_ONCE}, {FailureType::READ, {no_op, fault(), no_op}}}
-));
+),
+[](auto & info) {
+      return std::string("some_name");
+    }
+);
 
 TEST_F(SymbolListSuite, MultipleWrites) {
     write_initial_compaction_key();
