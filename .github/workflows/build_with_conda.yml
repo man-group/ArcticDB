@@ -126,7 +126,7 @@ jobs:
           ARTICDB_BUILD_CPP_TESTS: ${{ matrix.cpp_tests }}
 
       - name: Build C++ Tests
-        if: matrix.cpp_tests == true
+        if: matrix.cpp_tests == '1'
         shell: bash -l {0}
         run: |
           cd cpp/out/linux-conda-release-build/
