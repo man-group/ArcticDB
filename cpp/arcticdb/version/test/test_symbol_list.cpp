@@ -153,7 +153,7 @@ TEST_P(SymbolListWithReadFailures, VersionMapSource) {
     ASSERT_THAT(symbols, UnorderedElementsAre(symbol_1, symbol_2, symbol_3));
 }
 
-INSTANTIATE_TEST_SUITE_P(, SymbolListWithReadFailures, Values(
+INSTANTIATE_TEST_SUITE_P(SymbolListWithReadFailuresSources, SymbolListWithReadFailures, Values(
         FailSimParam{}, // No failure
         FailSimParam{{FailureType::ITERATE, RAISE_ONCE}},
         FailSimParam{{FailureType::READ, RAISE_ONCE}},
