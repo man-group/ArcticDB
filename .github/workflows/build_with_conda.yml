@@ -16,12 +16,12 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
-            cpp_tests: "ON"
-            python_tests: "OFF"
+            cpp_tests: "1"
+            python_tests: "0"
 
           - os: ubuntu-latest
-            cpp_tests: "OFF"
-            python_tests: "ON"
+            cpp_tests: "1"
+            python_tests: "0"
 
       fail-fast: false
     runs-on: ${{ matrix.os }}
@@ -60,7 +60,7 @@ jobs:
           ARTICDB_BUILD_CPP_TESTS: ${{ matrix.cpp_tests }}
 
       - name: Build C++ Tests
-        if: matrix.cpp_tests == 'ON'
+        if: matrix.cpp_tests == '1'
         shell: bash -l {0}
         run: |
           cd cpp/out/linux-conda-release-build/
@@ -68,7 +68,7 @@ jobs:
           make -j ${{ steps.cpu-cores.outputs.count }} test_unit_arcticdb
 
       - name: Run C++ Tests
-        if: matrix.cpp_tests == 'ON'
+        if: matrix.cpp_tests == '1'
         shell: bash -l {0}
         run: |
           cd cpp/out/linux-conda-release-build/
@@ -76,7 +76,7 @@ jobs:
 
       - name: Test with pytest
         shell: bash -l {0}
-        if: matrix.python_tests == 'ON'
+        if: matrix.python_tests == '1'
         run: |
           cd python
           python -m pytest tests
@@ -86,12 +86,12 @@ jobs:
       matrix:
         include:
           - os: macos-latest
-            cpp_tests: "ON"
-            python_tests: "OFF"
+            cpp_tests: "1"
+            python_tests: "0"
             
           - os: macos-latest
-            cpp_tests: "OFF"
-            python_tests: "ON"
+            cpp_tests: "0"
+            python_tests: "1"
 
 
       fail-fast: false
@@ -134,14 +134,14 @@ jobs:
           make -j ${{ steps.cpu-cores.outputs.count }} test_unit_arcticdb
   
       - name: Run C++ Tests
-        if: matrix.cpp_tests == 'ON'
+        if: matrix.cpp_tests == '1'
         shell: bash -l {0}
         run: |
           cd cpp/out/linux-conda-release-build/
           make test
 
       - name: Test with pytest
-        if: matrix.python_tests == 'ON'
+        if: matrix.python_tests == '1'
         shell: bash -l {0}
         run: |
           cd python
