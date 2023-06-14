@@ -16,6 +16,16 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
+            cpp_tests: true
+            python_tests: false
+            env:
+              - ARCTICDB_BUILD_CPP_TESTS: 1
+
+          - os: ubuntu-latest
+            cpp_tests: false
+            python_tests: true
+            env:
+              - ARCTICDB_BUILD_CPP_TESTS: 0
 
       fail-fast: false
     runs-on: ${{ matrix.os }}
@@ -30,6 +40,10 @@ jobs:
       - uses: actions/checkout@v3
         with:
           submodules: recursive
+
+      - name: Get number of CPU cores
+        uses: SimenB/github-actions-cpu-cores@v1
+        id: cpu-cores
 
       - name: Install Conda environment from environment_unix.yml
         uses: mamba-org/setup-micromamba@v1
@@ -48,8 +62,24 @@ jobs:
         env:
           ARCTICDB_USING_CONDA: 1
 
+      - name: Build C++ Tests
+        if: matrix.cpp_tests == true
+        shell: bash -l {0}
+        run: |
+          cd cpp/out/linux-conda-release-build/
+          make -j ${{ steps.cpu-cores.outputs.count }} arcticdb_rapidcheck_tests
+          make -j ${{ steps.cpu-cores.outputs.count }} test_unit_arcticdb
+
+      - name: Run C++ Tests
+        if: matrix.cpp_tests == true
+        shell: bash -l {0}
+        run: |
+          cd cpp/out/linux-conda-release-build/
+          make test
+
       - name: Test with pytest
         shell: bash -l {0}
+        if: matrix.python_tests == true
         run: |
           cd python
           python -m pytest tests
@@ -59,6 +89,16 @@ jobs:
       matrix:
         include:
           - os: macos-latest
+            cpp_tests: true
+            python_tests: false
+            env:
+              - ARCTICDB_BUILD_CPP_TESTS: 1
+
+          - os: macos-latest
+            cpp_tests: false
+            python_tests: true
+            env:
+              - ARCTICDB_BUILD_CPP_TESTS: 0
 
       fail-fast: false
     runs-on: ${{ matrix.os }}
@@ -67,6 +107,10 @@ jobs:
       - uses: actions/checkout@v3
         with:
           submodules: recursive
+
+      - name: Get number of CPU cores
+        uses: SimenB/github-actions-cpu-cores@v1
+        id: cpu-cores
 
       - name: Install Conda environment from environment_unix.yml
         uses: mamba-org/setup-micromamba@v1
@@ -86,7 +130,23 @@ jobs:
         env:
           ARCTICDB_USING_CONDA: 1
 
+      - name: Build C++ Tests
+        if: matrix.cpp_tests == true
+        shell: bash -l {0}
+        run: |
+          cd cpp/out/linux-conda-release-build/
+          make -j ${{ steps.cpu-cores.outputs.count }} arcticdb_rapidcheck_tests
+          make -j ${{ steps.cpu-cores.outputs.count }} test_unit_arcticdb
+  
+      - name: Run C++ Tests
+        if: matrix.cpp_tests == true
+        shell: bash -l {0}
+        run: |
+          cd cpp/out/linux-conda-release-build/
+          make test
+
       - name: Test with pytest
+        if: matrix.python_tests == true
         shell: bash -l {0}
         run: |
           cd python

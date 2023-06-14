@@ -17,6 +17,7 @@ using namespace folly;
 
 TEST(StorageLock, SingleThreaded) {
     SKIP_WIN("StorageLock is not supported");
+    SKIP_MAC("StorageLock is not supported");
     auto store = std::make_shared<InMemoryStore>();
     StorageLock lock1{StringId{"test_lock"}};
     StorageLock lock2{StringId{"test_lock"}};
@@ -33,6 +34,7 @@ TEST(StorageLock, SingleThreaded) {
 
 TEST(StorageLock, Timeout) {
     SKIP_WIN("StorageLock is not supported");
+    SKIP_MAC("StorageLock is not supported");
     auto store = std::make_shared<InMemoryStore>();
     StorageLock lock{"test_lock"};
     StorageLock lock2{"test_lock"};
@@ -97,6 +99,8 @@ struct OptimisticLockTask {
 
 
 TEST(StorageLock, Contention) {
+
+    SKIP_MAC("StorageLock is not supported");
     using namespace arcticdb;
 
     auto lock_data = std::make_shared<LockData>(4);
@@ -185,6 +189,7 @@ struct ForceReleaseLockTask {
 
 TEST(StorageLock, Wait) {
     SKIP_WIN("StorageLock is not supported");
+    SKIP_MAC("StorageLock is not supported");
     using namespace arcticdb;
 
     auto lock_data = std::make_shared<LockData>(4);
@@ -202,6 +207,7 @@ TEST(StorageLock, Wait) {
 
 TEST(StorageLock, Timeouts) {
     SKIP_WIN("StorageLock is not supported");
+    SKIP_MAC("StorageLock is not supported");
     using namespace arcticdb;
     std::unordered_map<std::string, spdlog::level::level_enum> log_levels{ {"lock", spdlog::level::debug}};
 
@@ -217,6 +223,7 @@ TEST(StorageLock, Timeouts) {
 }
 
 TEST(StorageLock, ForceReleaseLock) {
+    SKIP_MAC("StorageLock is not supported");
     using namespace arcticdb;
     std::unordered_map<std::string, spdlog::level::level_enum> log_levels{ {"lock", spdlog::level::debug}};
 
