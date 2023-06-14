@@ -129,7 +129,7 @@ jobs:
         if: matrix.cpp_tests == '1'
         shell: bash -l {0}
         run: |
-          cd cpp/out/linux-conda-release-build/
+          cd cpp/out/darwin-conda-release-build/
           make -j ${{ steps.cpu-cores.outputs.count }} arcticdb_rapidcheck_tests
           make -j ${{ steps.cpu-cores.outputs.count }} test_unit_arcticdb
   
@@ -137,7 +137,7 @@ jobs:
         if: matrix.cpp_tests == '1'
         shell: bash -l {0}
         run: |
-          cd cpp/out/linux-conda-release-build/
+          cd cpp/out/darwin-conda-release-build/
           make test
 
       - name: Test with pytest
