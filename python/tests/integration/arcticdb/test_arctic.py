@@ -423,7 +423,7 @@ def test_prune_previous_versions(arctic_library):
     assert lib["symbol"].metadata == {"tres": "interessant"}
 
 
-def test_non_prune_previous_versions_by_default(arctic_library):
+def test_do_not_prune_previous_versions_by_default(arctic_library):
     lib = arctic_library
     df = pd.DataFrame({"col1": [1, 2, 3], "col2": [4, 5, 6]})
     lib.write("symbol", df)
@@ -699,7 +699,7 @@ def test_prune_previous_versions_with_write(arctic_library):
     v1 = lib.read("sym", as_of=1).data
     assert not v1.empty
 
-    # We prune by default
+    # We do not prune by default
     lib.write("sym", pd.DataFrame(), prune_previous_versions=True)
     with pytest.raises(NoDataFoundException):
         lib.read("sym", as_of=0)

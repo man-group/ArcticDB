@@ -114,7 +114,7 @@ class VersionStoreComparison(RuleBasedStateMachine):
 
     @rule(
         sym=symbols,
-        prune=st.sampled_from([True, False]),  # booleans() shrinks towards False, but prune is on by default
+        prune=st.sampled_from([True, False]),  # booleans() shrinks towards False, but prune is off by default
         write_mode=st.sampled_from(WriteMode),
     )
     def write_new_version_to_symbol(self, sym: str, prune: bool, write_mode: WriteMode):
