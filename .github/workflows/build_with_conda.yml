@@ -20,8 +20,8 @@ jobs:
             python_tests: "0"
 
           - os: ubuntu-latest
-            cpp_tests: "1"
-            python_tests: "0"
+            cpp_tests: "0"
+            python_tests: "1"
 
       fail-fast: false
     runs-on: ${{ matrix.os }}
