@@ -162,7 +162,7 @@ INSTANTIATE_TEST_SUITE_P(SymbolListWithReadFailuresSources, SymbolListWithReadFa
         FailSimParam{{FailureType::ITERATE, RAISE_ONCE}, {FailureType::READ, {no_op, fault(), no_op}}}
 ),
 [](auto & info) {
-      return std::string("some_name")+ std::to_string(info.index);
+      return std::string("Value #")+ std::to_string(info.index);
     }
 );
 
@@ -254,7 +254,11 @@ INSTANTIATE_TEST_SUITE_P(, SymbolListWithWriteFailures, Values(
         WriteFailuresParams{{{FailureType::WRITE, RAISE_ONCE}}, CompactOutcome::NOT_WRITTEN}, // Interferes with locking
         WriteFailuresParams{{{FailureType::WRITE, RAISE_ON_2ND_CALL}}, CompactOutcome::NOT_WRITTEN},
         WriteFailuresParams{{{FailureType::DELETE, RAISE_ONCE}}, CompactOutcome::NOT_CLEANED_UP}
-));
+),
+[](auto & info) {
+      return std::string("Value #")+ std::to_string(info.index);
+    }
+);
 
 template <typename T, typename U>
 std::optional<T> random_choice(const std::set<T>& set, U& gen) {
