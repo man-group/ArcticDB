@@ -127,7 +127,7 @@ class SymbolDescription(NamedTuple):
     index: NameWithDType
     index_type: str
     row_count: int
-    last_update_time: datetime.datetime
+    last_update_time: datetime64
     date_range: Tuple[datetime.datetime, datetime.datetime]
 
 
@@ -1338,10 +1338,10 @@ class Library:
             For documentation on each field.
         """
         info = self._nvs.get_info(symbol, as_of)
-
-        last_update_time = pd.to_datetime(info["last_update"])
+        last_update_time = pd.to_datetime(info["last_update"], utc=True)
         columns = tuple(NameWithDType(n, t) for n, t in zip(info["col_names"]["columns"], info["dtype"]))
         index = NameWithDType(info["col_names"]["index"], info["col_names"]["index_dtype"])
+        date_range = tuple(map(lambda x: x.replace(tzinfo=datetime.timezone.utc), info["date_range"]))
 
         return SymbolDescription(
             columns=columns,
@@ -1349,7 +1349,7 @@ class Library:
             row_count=info["rows"],
             last_update_time=last_update_time,
             index_type=info["index_type"],
-            date_range=info["date_range"],
+            date_range=date_range,
         )
 
     def get_description_batch(self, symbols: List[Union[str, ReadInfoRequest]]) -> List[SymbolDescription]:
