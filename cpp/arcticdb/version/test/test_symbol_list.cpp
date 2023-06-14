@@ -162,7 +162,7 @@ INSTANTIATE_TEST_SUITE_P(SymbolListWithReadFailuresSources, SymbolListWithReadFa
         FailSimParam{{FailureType::ITERATE, RAISE_ONCE}, {FailureType::READ, {no_op, fault(), no_op}}}
 ),
 [](auto & info) {
-      return std::string("some_name");
+      return std::string("some_name")+ std::to_string(info.index);
     }
 );
 
