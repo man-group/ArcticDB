@@ -548,6 +548,14 @@ TEST_P(SymbolListRace, Run) {
 }
 
 // For symbol list source (which is used for subsequent compactions), all flag combinations are valid:
-INSTANTIATE_TEST_SUITE_P(SymbolListSource, SymbolListRace, Combine(Values('S'), Bool(), Bool(), Bool()));
+INSTANTIATE_TEST_SUITE_P(SymbolListSource, SymbolListRace, Combine(Values('S'), Bool(), Bool(), Bool()),
+    [](auto & info) {
+      return std::string("Value")+ std::to_string(info.index);
+    }
+);
 // For version keys source (initial compaction), there's no old compaction key to remove:
-INSTANTIATE_TEST_SUITE_P(VersionKeysSource, SymbolListRace, Combine(Values('V'), Values(false), Bool(), Bool()));
+INSTANTIATE_TEST_SUITE_P(VersionKeysSource, SymbolListRace, Combine(Values('V'), Values(false), Bool(), Bool()),
+    [](auto & info) {
+      return std::string("Value")+ std::to_string(info.index);
+    }
+);
