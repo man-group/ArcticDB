@@ -2604,3 +2604,18 @@ class NativeVersionStore:
 
     def library_tool(self) -> LibraryTool:
         return LibraryTool(self.library())
+
+    def generate_symbol_stats(self):
+        self.version_store.refresh_symbol_cache()
+
+    def get_symbol_stats(
+        self,
+        as_of: Optional[VersionQueryInput] = None,
+        columns: Optional[List[str]] = None,
+        query_builder: Optional[QueryBuilder] = None):
+        return self.read(
+            self.version_store.symbol_cache_name(),
+            as_of=as_of,
+            columns=columns,
+            query_builder=query_builder
+        )

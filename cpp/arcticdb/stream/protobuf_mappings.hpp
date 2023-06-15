@@ -29,6 +29,16 @@ inline arcticdb::proto::descriptors::NormalizationMetadata make_timeseries_norm_
     return norm_meta;
 }
 
+inline arcticdb::proto::descriptors::NormalizationMetadata make_rowcount_norm_meta(const entity::StreamId& stream_id) {
+    using namespace arcticdb::proto::descriptors;
+    NormalizationMetadata norm_meta;
+    NormalizationMetadata_PandasDataFrame pandas;
+    auto id = std::get<entity::StringId>(stream_id);
+    pandas.mutable_common()->set_name(std::move(id));
+    norm_meta.mutable_df()->CopyFrom(pandas);
+    return norm_meta;
+}
+
 /**
  * Set the minimum defaults into norm_meta. Originally created to synthesize norm_meta for incomplete compaction.
  */

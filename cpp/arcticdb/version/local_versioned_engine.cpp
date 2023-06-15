@@ -1066,6 +1066,106 @@ VersionedItem LocalVersionedEngine::append_internal(
     }
 }
 
+VersionedItem LocalVersionedEngine::refresh_symbol_cache() {
+    struct SymbolData {
+        StreamId stream_id_;
+        timestamp first_index_;
+        timestamp last_index_;
+        size_t num_rows_;
+    };
+
+    auto stream_ids = symbol_list().get_symbols(store());
+    std::vector<VersionQuery> version_queries;
+    version_queries.resize(stream_ids.size());
+    auto versions = batch_get_versions(store(), version_map(), stream_ids, version_queries);
+    std::vector<folly::Future<SymbolData>> output;
+    for (auto &&version : folly::enumerate(versions)) {
+        output.emplace_back(std::move(*version).thenValue([store = store()](auto maybe_index_key) -> ReadKeyOutput {
+            util::check(static_cast<bool>(maybe_index_key), "Version not found for stream");
+            return store->read_sync(maybe_index_key.value());
+        }).thenValue([store = store()](auto &&key_segment_pair) {
+            auto [index_key, index_segment] = std::move(key_segment_pair);
+            using FieldType = pipelines::index::Fields;
+            const auto first_index = pipelines::index::index_start_from_segment<SegmentInMemory, FieldType>(index_segment, 0);
+            const auto last_index = pipelines::index::index_end_from_segment<SegmentInMemory, FieldType>(index_segment, index_segment.get_row_id());
+            const auto last_row = index_segment.template scalar_at<std::size_t>(index_segment.get_row_id(), static_cast<position_t>(FieldType::end_row));
+            const auto& stream_id = variant_key_id(index_key);
+            util::check(std::holds_alternative<timestamp>(first_index), "First index key is not of timestamp type in symbol {}", stream_id);
+            util::check(std::holds_alternative<timestamp>(last_index), "Last index key is not of timestamp type in symbol {}", stream_id);
+            util::check(static_cast<bool>(last_row), "Unable to determine last row for symbol {}", stream_id);
+            return SymbolData {
+                stream_id,
+                std::get<timestamp>(first_index),
+                std::get<timestamp>(last_index),
+                last_row.value()
+            };
+        }));
+    }
+    auto symbols_data = folly::collect(output).get();
+    using SymbolInfoAggregator = Aggregator<RowCountIndex, FixedSchema, RowCountSegmentPolicy>;
+
+    auto maybe_prev = ::arcticdb::get_latest_version(store(), version_map(), symbol_cache_id(), true, false);
+    auto version_id = get_next_version_from_key(maybe_prev);
+    RowCountIndex index;
+    auto symbol_data_descriptor = index.create_stream_descriptor(
+        symbol_cache_id(), {
+            scalar_field_proto(DataType::UTF_DYNAMIC64, "symbol"),
+            scalar_field_proto(DataType::MICROS_UTC64, "start_time"),
+            scalar_field_proto(DataType::MICROS_UTC64, "end_time"),
+            scalar_field_proto(DataType::UINT64, "num_rows")
+        }
+    );
+
+    std::vector<folly::Future<VariantKey>> key_futs;
+    size_t row_count = 0;
+    std::vector<FrameSlice> slices;
+    SymbolInfoAggregator aggregator{
+        FixedSchema{symbol_data_descriptor, RowCountIndex{}},
+        [store=store(), &key_futs, &slices, &row_count, version_id, symbol=symbol_cache_id()] (auto&& segment) {
+            const auto start = row_count;
+            row_count += segment.row_count();
+            const auto end = row_count;
+            slices.push_back(FrameSlice{ColRange{0, 4}, RowRange{start, end}});
+            StreamSink::PartialKey pk{KeyType::TABLE_DATA, version_id, symbol, IndexValue{static_cast<timestamp>(start)}, IndexValue{static_cast<timestamp>(end)}};
+            key_futs.push_back(store->write(
+                std::move(pk),
+                std::move(segment)));
+        }
+    };
+
+    for(const auto& sym : symbols_data) {
+        aggregator.start_row()(
+            [&sym] (auto&& rb) {
+                rb.set_string(0, std::get<StringId>(sym.stream_id_));
+                rb.template set_scalar<timestamp>(1, sym.first_index_);
+                rb.template set_scalar<timestamp>(2, sym.last_index_);
+                rb.template set_scalar<uint64_t>(3, sym.num_rows_);
+            });
+    }
+
+
+    aggregator.commit();
+    auto keys = folly::collect(key_futs).get();
+
+    std::vector<SliceAndKey> sk;
+    sk.reserve(keys.size());
+    for (auto key : folly::enumerate(keys))
+        sk.emplace_back(std::move(slices[key.index]), to_atom(std::move(*key)));
+
+    auto descriptor = get_timeseries_descriptor(symbol_data_descriptor, row_count, std::nullopt, make_rowcount_norm_meta(symbol_cache_id()));
+    auto index_key_fut = index::write_index(
+        RowCountIndex::default_index(),
+        std::move(descriptor),
+        std::move(sk),
+        IndexPartialKey{symbol_cache_id(), version_id},
+        store_);
+
+    auto index_key = to_atom(std::move(index_key_fut).get());
+    version_map()->write_version(store(), index_key);
+    return VersionedItem{index_key};
+}
+
+
 std::vector<AtomKey> LocalVersionedEngine::batch_append_internal(
     std::vector<VersionId> version_ids,
     const std::vector<StreamId>& stream_ids,

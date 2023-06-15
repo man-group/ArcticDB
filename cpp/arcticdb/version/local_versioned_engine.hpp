@@ -281,6 +281,8 @@ public:
 
     timestamp get_update_time_internal(const StreamId &stream_id, const VersionQuery &version_query);
 
+    VersionedItem refresh_symbol_cache();
+
     std::vector<timestamp> batch_get_update_times(
             const std::vector<StreamId>& stream_ids,
             const std::vector<VersionQuery>& version_queries);
@@ -324,6 +326,10 @@ public:
         const std::optional<AtomKey>& maybe_prev,
         const WriteOptions& write_options
     );
+
+    StreamId symbol_cache_id() {
+        return "__symbol_cache__";
+    }
 
     std::unordered_map<KeyType, std::pair<size_t, size_t>> scan_object_sizes();
     std::shared_ptr<Store>& _test_get_store() { return store_; }
@@ -375,7 +381,6 @@ protected:
     SpecificAndLatestVersionKeys get_stream_index_map(
         const std::vector<StreamId>& stream_ids,
         const std::vector<VersionQuery>& version_queries);
-
 
 private:
 

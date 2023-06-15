@@ -577,6 +577,12 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
         .def("latest_timestamp",
              &PythonVersionStore::latest_timestamp,
              "Returns latest timestamp of a symbol")
+        .def("refresh_symbol_cache",
+            &PythonVersionStore::refresh_symbol_cache,
+            "Refresh the cache of symbol start and end times and sizes")
+        .def("symbol_cache_name",
+             &PythonVersionStore::symbol_cache_id,
+             "Get the name of the symbol data cache")
         ;
 
     py::class_<LocalVersionedEngine>(version, "VersionedEngine")
