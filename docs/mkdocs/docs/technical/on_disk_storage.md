@@ -72,7 +72,7 @@ Note that where this documentation refers to a _Key Type_ key (for example a _ve
 
 Note that **Atom** keys are immutable. **Reference** keys are not immutable and therefore the associated value can be updated. 
 
-!!! Version Ref
+!!! info "Version Ref"
 
     In this documentation, `Version Reference key` is sometimes shortened to `Version Ref key`. 
 
@@ -100,7 +100,7 @@ We will soon be adding an API to perform exactly this operation, re-slicing data
 ### Symbol List Caching
 
 
-!!! Speeding up listing symbols
+!!! info "Speeding up listing symbols"
 
     The below documentation details the architecture for the symbol list cache.
     
