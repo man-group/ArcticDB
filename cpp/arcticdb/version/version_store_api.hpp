@@ -324,6 +324,13 @@ private:
     void delete_snapshot_sync(const SnapshotId& snap_name, const VariantKey& snap_key);
 };
 
+struct StringArray {
+    std::string data_;
+    std::vector<uint8_t> objects_;
+    std::vector<PyObject*> vec_;
+    py::array get_strings();
+};
+
 inline std::vector<ReadResult> frame_to_read_result(std::vector<std::pair<VersionedItem, FrameAndDescriptor>>&& keys_frame_and_descriptors) {
     std::vector<ReadResult> read_results;
     read_results.reserve(keys_frame_and_descriptors.size());

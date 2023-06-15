@@ -26,6 +26,10 @@
 namespace arcticdb::version_store {
 
 void register_bindings(py::module &version, py::exception<arcticdb::ArcticException>& base_exception) {
+    py::class_<StringArray, std::shared_ptr<StringArray>>(version, "StringArray")
+        .def(py::init())
+        .def("get_array", &StringArray::get_strings);
+
 
     py::register_exception<StreamDescriptorMismatch>(version, "StreamDescriptorMismatch", base_exception.ptr());
 

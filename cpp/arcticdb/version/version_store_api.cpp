@@ -39,8 +39,91 @@
 #include <arcticdb/version/version_map_batch_methods.hpp>
 #include <arcticdb/version/version_utils.hpp>
 #include <arcticdb/pipeline/pipeline_utils.hpp>
+#include <Python.h>
 
 namespace arcticdb::version_store {
+
+
+    struct ArenaAllocatableUnicode : public PyUnicodeObject {
+
+    };
+
+    namespace arena_allocatable_methods {
+    void dealloc(PyObject*) {
+
+    }
+
+    int traverse(PyObject*, visitproc visit, void* arg) {
+
+    }
+    }
+
+    static PyTypeObject arena_allocatable_unicode = {
+        PyVarObject_HEAD_INIT(NULL, 0)
+        "my_module.MyUnicode",                      // tp_name
+        sizeof(ArenaAllocatableUnicode),                    // tp_basicsize
+        0,                                          // tp_itemsize
+        (destructor)arena_allocatable_methods::dealloc,        // tp_dealloc
+        0,                                          // tp_print
+        0,                                          // tp_getattr
+        0,                                          // tp_setattr
+        0,                                          // tp_reserved
+        0,                                          // tp_repr
+        0,                                          // tp_as_number
+        0,                                          // tp_as_sequence
+        0,                                          // tp_as_mapping
+        0,                                          // tp_hash
+        0,                                          // tp_call
+        0,                                          // tp_str
+        0,                                          // tp_getattro
+        0,                                          // tp_setattro
+        0,                                          // tp_as_buffer
+        Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE,    // tp_flags
+        "My custom Unicode string object",           // tp_doc
+        (traverseproc)arena_allocatable_methods::traverse,     // tp_traverse
+        0,                                          // tp_clear
+        0,                                          // tp_richcompare
+        0,                                          // tp_weaklistoffset
+        0,                                          // tp_iter
+        0,                                          // tp_iternext
+        0,                                          // tp_methods
+        0,                                          // tp_members
+        0,                                          // tp_getset
+        &PyUnicode_Type,                            // tp_base
+        0,                                          // tp_dict
+        0,                                          // tp_descr_get
+        0,                                          // tp_descr_set
+        0,                                          // tp_dictoffset
+        0,                                          // tp_init
+        0,                                          // tp_alloc
+        PyType_GenericNew                           // tp_new
+    };
+
+PyASCIIObject* ascii_cast(ArenaAllocatableUnicode* obj) {
+    return reinterpret_cast<PyASCIIObject*>(obj);
+}
+
+py::array StringArray::get_strings() {
+    data_ = "something";
+    objects_.resize(sizeof(ArenaAllocatableUnicode));
+    ArenaAllocatableUnicode* obj = reinterpret_cast<ArenaAllocatableUnicode*>(objects_.data());
+    ascii_cast(obj)->length = data_.size();
+    ascii_cast(obj)->hash = -1;
+    ascii_cast(obj)->state.kind = 0;
+    ascii_cast(obj)->state.compact = 0;
+    ascii_cast(obj)->state.ascii = 0;
+    ascii_cast(obj)->wstr = reinterpret_cast<wchar_t*>(data_.data());
+
+
+    vec_.push_back(reinterpret_cast<PyObject*>(obj));
+    ssize_t esize = 8;
+    std::string dtype{"O"};
+    py::array::ShapeContainer shapes{1};
+    py::array::StridesContainer strides{esize};
+    py::array arr{py::dtype{dtype}, std::move(shapes), std::move(strides), vec_.data(), nullptr};
+    return arr;
+}
+
 
 using namespace arcticdb::entity;
 namespace as = arcticdb::stream;
