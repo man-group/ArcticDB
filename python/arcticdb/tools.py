@@ -57,7 +57,7 @@ def set_config_from_env_vars(env_vars: Dict[str, str]):
                     if config_name.upper() == "ALL":
                         default_log_level = v.upper()
                     else:
-                        log_level_changes[config_name] = v.upper()
+                        log_level_changes[config_name.lower()] = v.upper()
                 else:
                     logging.error("Invalid type for env var %s (value %s), type used %s", k, v, var_type)
             except Exception as e:
