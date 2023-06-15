@@ -162,7 +162,7 @@ INSTANTIATE_TEST_SUITE_P(SymbolListWithReadFailuresSources, SymbolListWithReadFa
         FailSimParam{{FailureType::ITERATE, RAISE_ONCE}, {FailureType::READ, {no_op, fault(), no_op}}}
 ),
 [](auto & info) {
-      return std::string("Value #")+ std::to_string(info.index);
+      return std::string("Value")+ std::to_string(info.index);
     }
 );
 
@@ -256,7 +256,7 @@ INSTANTIATE_TEST_SUITE_P(, SymbolListWithWriteFailures, Values(
         WriteFailuresParams{{{FailureType::DELETE, RAISE_ONCE}}, CompactOutcome::NOT_CLEANED_UP}
 ),
 [](auto & info) {
-      return std::string("Value #")+ std::to_string(info.index);
+      return std::string("Value")+ std::to_string(info.index);
     }
 );
 
