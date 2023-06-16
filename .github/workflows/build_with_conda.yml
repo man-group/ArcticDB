@@ -107,6 +107,7 @@ jobs:
         id: cpu-cores
 
       - name: Append to environment_unix.yml
+        if: matrix.cpp_tests == '1'
         shell: bash -l {0}
         run: |
             echo "  - cxx-compiler" >> environment_unix.yml
