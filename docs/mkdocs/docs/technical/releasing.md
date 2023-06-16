@@ -11,23 +11,29 @@ Click `Run Workflow` on the right hand side:
 1. Type in the new version number
 2. Click `Run workflow`.
 
-Leave `Bump branch to the next version` as `No`. 
-This will create a branch off of `master` incrementing the version in `setup.cfg` but, 
+Leave `Bump branch to the next version` as `No`.
+This will create a branch off of `master` incrementing the version in `setup.cfg` but,
 as of the time of writing, we are leaving that unchanged.
 
 ## 2. Update the version number in the tag
 
 **This should not be a manual process - but is required for now!**
 
-We need to update the version for 
-[`arcticdb.__version__`](https://github.com/man-group/ArcticDB/blob/master/python/arcticdb/\_\_init\_\_.py#LL14C1-L14C1).
+We need to update the public version identifier:
+ - [CMake's `PROJECT_VERSION`](https://github.com/man-group/ArcticDB/blob/master/cpp/CMakeLists.txt#L5)
+ - [`arcticdb.__version__`](https://github.com/man-group/ArcticDB/blob/master/python/arcticdb/\_\_init\_\_.py#LL14C1-L14C1).
+ - `version` in the `metadata` section of [`setup.cfg`](https://github.com/man-group/ArcticDB/blob/master/setup.cfg)
+ - the license conversion table in [the License section on `README.md`](https://github.com/man-group/ArcticDB/blob/master/README.md#license)
 
 To do this, force push a new commit to the tag:
 
 ```
 git fetch --all --tags
 git checkout <NEWLY CREATED TAG>
+
+# Edit files, e.g.
 vi python/arcticdb/__init__.py
+
 git add python/arcticdb/__init__.py
 git commit -m 'Manually update version'
 git tag <NEWLY CREATED TAG> -f
@@ -61,15 +67,25 @@ before an update to the feedstock.
 ## 4. Release to PyPi
 
 After building, GitHub Actions job you kicked off in step 2 after comitting
-the tag will be waiting on approval to deploy to PyPi. 
+the tag will be waiting on approval to deploy to PyPi.
 Find the job and click approve to deploy.
 
 ## 5. Release to Conda
 
-Merge the PR created in step 3. 
+Merge the PR created in step 3.
 
 It will build packages, [pushing them to the `cf-staging` channel before publishing them
 on the `conda-forge` channel for validation](https://conda-forge.org/docs/maintainer/infrastructure.html#output-validation-and-feedstock-tokens).
 
 Packages are generally available a few dozen minutes after the CI runs' completion
 on `main`.
+
+## 6. After the release
+
+You need to update the public version identifier so that it indicates that it is the development version for the next version (see [PEP 440](https://peps.python.org/pep-0440/#public-version-identifiers)).
+
+For instance, if you have released `1.3.0` and the next version is planned to be `1.3.1`:
+ - the public version identifier for Python has to be updated to `1.3.1.dev0` for:
+   - [`arcticdb.__version__`](https://github.com/man-group/ArcticDB/blob/master/python/arcticdb/\_\_init\_\_.py#LL14C1-L14C1).
+   - `version` in the `metadata` section of [`setup.cfg`](https://github.com/man-group/ArcticDB/blob/master/setup.cfg).
+ - [CMake's `PROJECT_VERSION`](https://github.com/man-group/ArcticDB/blob/master/cpp/CMakeLists.txt#L5) has to be updated to `1.3.1` (since CMake does not (yet) support PEP 440)
