@@ -77,6 +77,7 @@ Create your first library and list the libraries in the instance:
 
 Create a test dataframe:
 ```Python
+>>> import numpy as np
 >>> import pandas as pd
 >>> NUM_COLUMNS=10
 >>> NUM_ROWS=100_000
