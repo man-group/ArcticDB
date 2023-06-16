@@ -30,10 +30,8 @@
 #include <mutex>
 
 // FUTURE(GitHub #297)
-#define SYMBOL_LIST_RUNTIME_LOG(message, ...) SYMBOL_LIST_RUNTIME_LOG_IMPL(message, ##__VA_ARGS__, DEFAULT_VAL)
-#define SYMBOL_LIST_RUNTIME_LOG_IMPL(message, value, ...) ARCTICDB_RUNTIME_DEBUG(log::version(), "Symbol List: {}: {} {}", __func__, message, value)
-
-#define DEFAULT_VAL ""
+#define SYMBOL_LIST_RUNTIME_LOG(message) ARCTICDB_RUNTIME_DEBUG(log::version(), "Symbol List: {}: " message, __func__)
+#define SYMBOL_LIST_RUNTIME_LOG_VAL(message, value) ARCTICDB_RUNTIME_DEBUG(log::version(), "Symbol List: {}: " message, __func__, value)
 
 namespace arcticdb {
 
@@ -53,7 +51,7 @@ class SymbolList {
     StreamId type_holder_;
     uint64_t max_delta_ = 0;
     std::shared_ptr<VersionMap> version_map_;
-    bool warned_expected_slowdown_ = false;
+    std::atomic<bool> warned_expected_slowdown_ = false;
 
   public:
     explicit SymbolList(std::shared_ptr<VersionMap> version_map, StreamId type_indicator = StringId()) :
@@ -65,7 +63,7 @@ class SymbolList {
     CollectionType load(const std::shared_ptr<Store>& store, bool no_compaction);
 
     std::vector<StreamId> get_symbols(const std::shared_ptr<Store>& store, bool no_compaction=false) {
-        SYMBOL_LIST_RUNTIME_LOG("no_compaction={}", no_compaction); // function name logged in macro
+        SYMBOL_LIST_RUNTIME_LOG_VAL("no_compaction={}", no_compaction); // function name logged in macro
         auto symbols = load(store, no_compaction);
         return {std::make_move_iterator(symbols.begin()), std::make_move_iterator(symbols.end())};
     }
@@ -76,12 +74,12 @@ class SymbolList {
     }
 
     void add_symbol(const std::shared_ptr<Store>& store, const StreamId& symbol) {
-        SYMBOL_LIST_RUNTIME_LOG("{}", symbol);
+        SYMBOL_LIST_RUNTIME_LOG_VAL("{}", symbol);
         write_symbol(store, symbol);
     }
 
     void remove_symbol(const std::shared_ptr<Store>& store, const StreamId& symbol) {
-        SYMBOL_LIST_RUNTIME_LOG("{}", symbol);
+        SYMBOL_LIST_RUNTIME_LOG_VAL("{}", symbol);
         delete_symbol(store, symbol);
     }
 

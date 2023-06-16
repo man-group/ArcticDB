@@ -91,8 +91,8 @@ bool SymbolList::can_update_symbol_list(const std::shared_ptr<Store>& store,
             }, std::get<std::string>(compaction_id));
     }
 
-    SYMBOL_LIST_RUNTIME_LOG("found_last=", found_last);
-    SYMBOL_LIST_RUNTIME_LOG("has_newer=", has_newer);
+    SYMBOL_LIST_RUNTIME_LOG_VAL("found_last={}", found_last);
+    SYMBOL_LIST_RUNTIME_LOG_VAL("has_newer={}", has_newer);
     return (!maybe_last_compaction || found_last) && !has_newer;
 }
 
@@ -119,7 +119,7 @@ bool SymbolList::can_update_symbol_list(const std::shared_ptr<Store>& store,
             stream_ids.push_back(id);
 
             if (stream_ids.size() == this->max_delta_ * 2 && !warned_expected_slowdown_) {
-                log::storage().warn(
+                log::version().warn(
                         "Warning - no compacted symbol list cache found. "
                         "`list_symbols` may take longer than expected. \n\n"
                         "See here for more information: https://docs.arcticdb.io/technical/on_disk_storage/#symbol-list-caching\n\n"
@@ -145,7 +145,7 @@ bool SymbolList::can_update_symbol_list(const std::shared_ptr<Store>& store,
         const StreamId& stream_id,
         timestamp creation_ts)  {
 
-        SYMBOL_LIST_RUNTIME_LOG("Writing following number of symbols to symbol list cache: ", symbols.size());
+        SYMBOL_LIST_RUNTIME_LOG_VAL("Writing following number of symbols to symbol list cache: {}", symbols.size());
         SegmentInMemory list_segment{symbol_stream_descriptor(stream_id)};
 
         for(const auto& symbol : symbols) {
@@ -177,7 +177,7 @@ bool SymbolList::can_update_symbol_list(const std::shared_ptr<Store>& store,
             const folly::Range<KeyVectorItr>& keys) {
         SYMBOL_LIST_RUNTIME_LOG("Loading symbols from symbol list keys");
         bool read_compaction = false;
-        int uncompacted_keys_found = 0;
+        uint64_t uncompacted_keys_found = 0;
         CollectionType symbols{};
         for(const auto& key : keys) {
             if(key.id() == compaction_id) {
@@ -187,7 +187,7 @@ bool SymbolList::can_update_symbol_list(const std::shared_ptr<Store>& store,
             else {
                 uncompacted_keys_found++;
                 if (uncompacted_keys_found == this->max_delta_ * 2 && !warned_expected_slowdown_) {
-                    log::storage().warn(
+                    log::version().warn(
                             "Warning - symbol list cache is significantly out of date. "
                             "`list_symbols` may take longer than expected. \n\n"
                             "See here for more information: https://docs.arcticdb.io/technical/on_disk_storage/#symbol-list-caching\n\n"
@@ -207,9 +207,9 @@ bool SymbolList::can_update_symbol_list(const std::shared_ptr<Store>& store,
                 }
             }
         }
-        SYMBOL_LIST_RUNTIME_LOG("Post load, got following number of symbols: ", symbols.size());
+        SYMBOL_LIST_RUNTIME_LOG_VAL("Post load, got following number of symbols: {}", symbols.size());
         if(!read_compaction) {
-            SYMBOL_LIST_RUNTIME_LOG("Read no compacted segment from symbol list of size:", keys.size());
+            SYMBOL_LIST_RUNTIME_LOG_VAL("Read no compacted segment from symbol list of size: {}", keys.size());
         }
         return symbols;
     }
