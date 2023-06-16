@@ -55,10 +55,10 @@ conda recipe. [Here's an example.](https://github.com/conda-forge/arcticdb-feeds
 
 You will need to update:
 
-1. The version, pointing to the tag created in step 1. 
+1. `version`, pointing to the tag created in step 1
 2. The `sha256sum` of the source tarball
-3. The build number (i.e. `number` under the `build` section) to 0
-4. Dependencies (if they have changed since the last version)
+3. The build number (i.e. `number` under the `build` section) to `0`
+4. Dependencies (if they have changed since the last version, see `setup.cfg`)
 5. Rerender the feedstock's recipe to create Azure CI jobs' specification for all variants of the package
 
 A PR is generally open with a todo-list summarizing all the required steps to perform,
