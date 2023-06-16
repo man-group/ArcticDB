@@ -99,7 +99,6 @@ struct OptimisticLockTask {
 
 
 TEST(StorageLock, Contention) {
-
     SKIP_MAC("StorageLock is not supported");
     using namespace arcticdb;
 
