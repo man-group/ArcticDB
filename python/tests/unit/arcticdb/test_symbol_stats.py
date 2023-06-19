@@ -12,8 +12,8 @@ import random
 
 
 def test_symbol_stats(lmdb_version_store):
-    num_symbols = 10;
-    symbol_to_df={}
+    num_symbols = 10
+    symbol_to_df = {}
     initial_timestamp = pd.Timestamp("2019-01-01")
     for i in range(num_symbols):
         symbol = "symbol_{}".format(i)
@@ -23,12 +23,12 @@ def test_symbol_stats(lmdb_version_store):
         symbol_to_df[symbol] = df
         lmdb_version_store.write(symbol, df)
 
-    lmdb_version_store.generate_symbol_stats()
+    lmdb_version_store.refresh_symbol_stats_cache()
     vit = lmdb_version_store.get_symbol_stats()
 
     for sym in vit.data.index:
         df = symbol_to_df[sym]
-        assert(vit.data["start_time"][sym] == df.index[0])
-        end_time = vit.data["end_time"][sym].floor('ms')
-        assert(end_time == df.index[-1])
-        assert(vit.data["num_rows"][sym] == len(df))
+        assert vit.data["start_time"][sym] == df.index[0]
+        end_time = vit.data["end_time"][sym].floor("ms")
+        assert end_time == df.index[-1]
+        assert vit.data["num_rows"][sym] == len(df)

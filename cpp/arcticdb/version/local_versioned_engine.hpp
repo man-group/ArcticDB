@@ -281,7 +281,7 @@ public:
 
     timestamp get_update_time_internal(const StreamId &stream_id, const VersionQuery &version_query);
 
-    VersionedItem refresh_symbol_cache();
+    VersionedItem refresh_symbol_stats_cache();
 
     std::vector<timestamp> batch_get_update_times(
             const std::vector<StreamId>& stream_ids,

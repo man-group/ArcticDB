@@ -1066,7 +1066,7 @@ VersionedItem LocalVersionedEngine::append_internal(
     }
 }
 
-VersionedItem LocalVersionedEngine::refresh_symbol_cache() {
+VersionedItem LocalVersionedEngine::refresh_symbol_stats_cache() {
     struct SymbolData {
         StreamId stream_id_;
         timestamp first_index_;
@@ -1410,7 +1410,7 @@ std::unordered_map<KeyType, std::pair<size_t, size_t>> LocalVersionedEngine::sca
         pair.first = keys.size();
         std::vector<stream::StreamSource::ReadContinuation> continuations;
         std::atomic<size_t> key_size{0};
-        for(auto&& key : keys) {
+        for(auto&& key ARCTICDB_UNUSED : keys) {
             continuations.emplace_back([&key_size] (auto&& ks) {
                 auto key_seg = std::move(ks);
                 key_size += key_seg.segment().total_segment_size();
