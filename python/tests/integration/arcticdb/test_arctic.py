@@ -6,6 +6,8 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 import sys
+
+import pytz
 from arcticdb_ext.exceptions import InternalException
 from arcticdb.exceptions import ArcticNativeNotYetImplemented
 
@@ -23,7 +25,7 @@ import math
 import re
 import pytest
 import pandas as pd
-from datetime import datetime, date
+from datetime import datetime, date, timezone
 import numpy as np
 from arcticdb.util.test import assert_frame_equal
 
@@ -421,6 +423,17 @@ def test_prune_previous_versions(arctic_library):
     assert lib["symbol"].metadata == {"tres": "interessant"}
 
 
+def test_non_prune_previous_versions_by_default(arctic_library):
+    lib = arctic_library
+    df = pd.DataFrame({"col1": [1, 2, 3], "col2": [4, 5, 6]})
+    lib.write("symbol", df)
+    lib.write("symbol", df)
+    lib.write("symbol", df)
+    lib.write("symbol", df)
+    lib.write("symbol", df)
+    assert len(lib.list_versions("symbol")) == 5
+
+
 def test_delete_version(arctic_library):
     lib = arctic_library
     df = pd.DataFrame({"col1": [1, 2, 3], "col2": [4, 5, 6]})
@@ -676,8 +689,8 @@ def test_write_with_unpacking(arctic_library):
 def test_prune_previous_versions_with_write(arctic_library):
     lib = arctic_library
     # When
-    lib.write("sym", pd.DataFrame())
-    lib.write("sym", pd.DataFrame({"col": [1, 2, 3]}), prune_previous_versions=False)
+    lib.write("sym", pd.DataFrame(), prune_previous_versions=True)
+    lib.write("sym", pd.DataFrame({"col": [1, 2, 3]}))
 
     # Then
     v0 = lib.read("sym", as_of=0).data
@@ -687,7 +700,7 @@ def test_prune_previous_versions_with_write(arctic_library):
     assert not v1.empty
 
     # We prune by default
-    lib.write("sym", pd.DataFrame())
+    lib.write("sym", pd.DataFrame(), prune_previous_versions=True)
     with pytest.raises(NoDataFoundException):
         lib.read("sym", as_of=0)
     with pytest.raises(NoDataFoundException):
@@ -1106,12 +1119,13 @@ def test_get_description(arctic_library):
     original_info = lib.get_description("symbol", as_of=0)
     # then
     assert [c[0] for c in info.columns] == ["column"]
-    assert info.date_range == (datetime(2018, 1, 1), datetime(2018, 1, 6))
+    assert info.date_range == (datetime(2018, 1, 1, tzinfo=timezone.utc), datetime(2018, 1, 6, tzinfo=timezone.utc))
     assert info.index[0] == ["named_index"]
     assert info.index_type == "index"
     assert info.row_count == 6
     assert original_info.row_count == 4
     assert info.last_update_time > original_info.last_update_time
+    assert info.last_update_time.tz == pytz.UTC
 
 
 def test_get_description_batch(arctic_library):

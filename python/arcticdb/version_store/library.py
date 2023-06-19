@@ -127,7 +127,7 @@ class SymbolDescription(NamedTuple):
     index: NameWithDType
     index_type: str
     row_count: int
-    last_update_time: datetime.datetime
+    last_update_time: datetime64
     date_range: Tuple[datetime.datetime, datetime.datetime]
 
 
@@ -275,7 +275,7 @@ class Library:
         symbol: str,
         data: NormalizableType,
         metadata: Any = None,
-        prune_previous_versions: bool = True,
+        prune_previous_versions: bool = False,
         staged=False,
         validate_index=True,
     ) -> VersionedItem:
@@ -314,7 +314,7 @@ class Library:
             Data to be written. To write non-normalizable data, use `write_pickle`.
         metadata : Any, default=None
             Optional metadata to persist along with the symbol.
-        prune_previous_versions : bool, default=True
+        prune_previous_versions : bool, default=False
             Removes previous (non-snapshotted) versions from the database.
         staged : bool, default=False
             Whether to write to a staging area rather than immediately to the library.
@@ -382,7 +382,7 @@ class Library:
         )
 
     def write_pickle(
-        self, symbol: str, data: Any, metadata: Any = None, prune_previous_versions: bool = True, staged=False
+        self, symbol: str, data: Any, metadata: Any = None, prune_previous_versions: bool = False, staged=False
     ) -> VersionedItem:
         """
         See `write`. This method differs from `write` only in that ``data`` can be of any type that is serialisable via
@@ -455,7 +455,7 @@ class Library:
         raise ArcticUnsupportedDataTypeException(error_message)
 
     def write_batch(
-        self, payloads: List[WritePayload], prune_previous_versions: bool = True, staged=False, validate_index=True
+        self, payloads: List[WritePayload], prune_previous_versions: bool = False, staged=False, validate_index=True
     ) -> List[VersionedItem]:
         """
         Write a batch of multiple symbols.
@@ -464,7 +464,7 @@ class Library:
         ----------
         payloads : `List[WritePayload]`
             Symbols and their corresponding data. There must not be any duplicate symbols in `payload`.
-        prune_previous_versions: `bool`, default=True
+        prune_previous_versions: `bool`, default=False
             See `write`.
         staged: `bool`, default=False
             See `write`.
@@ -529,7 +529,7 @@ class Library:
         )
 
     def write_batch_pickle(
-        self, payloads: List[WritePayload], prune_previous_versions: bool = True, staged=False
+        self, payloads: List[WritePayload], prune_previous_versions: bool = False, staged=False
     ) -> List[VersionedItem]:
         """
         Write a batch of multiple symbols, pickling their data if necessary.
@@ -538,7 +538,7 @@ class Library:
         ----------
         payloads : `List[WritePayload]`
             Symbols and their corresponding data. There must not be any duplicate symbols in `payload`.
-        prune_previous_versions: `bool`, default=True
+        prune_previous_versions: `bool`, default=False
             See `write`.
         staged: `bool`, default=False
             See `write`.
@@ -1338,10 +1338,10 @@ class Library:
             For documentation on each field.
         """
         info = self._nvs.get_info(symbol, as_of)
-
-        last_update_time = pd.to_datetime(info["last_update"])
+        last_update_time = pd.to_datetime(info["last_update"], utc=True)
         columns = tuple(NameWithDType(n, t) for n, t in zip(info["col_names"]["columns"], info["dtype"]))
         index = NameWithDType(info["col_names"]["index"], info["col_names"]["index_dtype"])
+        date_range = tuple(map(lambda x: x.replace(tzinfo=datetime.timezone.utc), info["date_range"]))
 
         return SymbolDescription(
             columns=columns,
@@ -1349,7 +1349,7 @@ class Library:
             row_count=info["rows"],
             last_update_time=last_update_time,
             index_type=info["index_type"],
-            date_range=info["date_range"],
+            date_range=date_range,
         )
 
     def get_description_batch(self, symbols: List[Union[str, ReadInfoRequest]]) -> List[SymbolDescription]:
