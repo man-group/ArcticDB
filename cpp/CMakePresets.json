@@ -125,7 +125,7 @@
 
 
     { "name": "windows-cl-release",       "inherits": "windows-cl-debug",       "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" }},
-    { "name": "windows-cl-conda-release", "inherits": "windows-cl-conda-debug", "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" } },
+    { "name": "windows-cl-conda-release", "inherits": "windows-cl-conda-debug", "cacheVariables": { "CMAKE_BUILD_TYPE": "RelWithDebInfo" } },
     { "name": "linux-release",            "inherits": "linux-debug",            "cacheVariables": { "CMAKE_BUILD_TYPE": "RelWithDebInfo" } },
     { "name": "linux-conda-release",      "inherits": "linux-conda-debug",      "cacheVariables": { "CMAKE_BUILD_TYPE": "RelWithDebInfo" } },
     { "name": "darwin-conda-release",     "inherits": "darwin-conda-debug",     "cacheVariables": { "CMAKE_BUILD_TYPE": "RelWithDebInfo" } }
