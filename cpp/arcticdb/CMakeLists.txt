@@ -245,6 +245,7 @@ set(arcticdb_srcs
         storage/storage_factory.hpp
         storage/storage_options.hpp
         storage/storage.hpp
+        storage/storage_override.hpp
         storage/store.hpp
         storage/variant_storage.hpp
         stream/aggregator.hpp
@@ -313,6 +314,7 @@ set(arcticdb_srcs
         util/variant.hpp
         version/de_dup_map.hpp
         version/op_log.hpp
+        version/schema_checks.hpp
         version/snapshot.hpp
         version/version_constants.hpp
         version/version_core.hpp
@@ -403,9 +405,7 @@ set(arcticdb_srcs
         version/version_core.cpp
         version/version_store_api.cpp
         version/version_utils.cpp
-        version/symbol_list.cpp
-        version/schema_checks.hpp
-        )
+        version/symbol_list.cpp)
 
 # Exclude vendored sources when using conda.
 if(NOT ${ARCTICDB_USING_CONDA})
