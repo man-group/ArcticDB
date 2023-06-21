@@ -7,8 +7,9 @@ As of the Change Date specified in that file, in accordance with the Business So
 """
 from arcticdb.options import LibraryOptions
 from arcticc.pb2.storage_pb2 import LibraryConfig
-from arcticdb_ext.storage import Library
+from arcticdb_ext.storage import Library, StorageOverride
 from abc import ABC, abstractmethod
+from typing import Optional
 
 
 def set_library_options(lib_desc: "LibraryConfig", options: LibraryOptions):
@@ -62,3 +63,6 @@ class ArcticLibraryAdapter(ABC):
 
     def delete_library(self, library: Library, library_config: LibraryConfig):
         return library._nvs.version_store.clear()
+
+    def get_storage_override(self) -> StorageOverride:
+        return StorageOverride()

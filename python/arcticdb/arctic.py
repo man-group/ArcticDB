@@ -8,7 +8,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 from typing import List, Optional
 
 from arcticdb.options import LibraryOptions
-from arcticdb_ext.storage import LibraryManager
+from arcticdb_ext.storage import LibraryManager, StorageOverride
 from arcticdb.version_store.library import Library
 from arcticdb.version_store._store import NativeVersionStore
 from arcticdb.adapters.s3_library_adapter import S3LibraryAdapter
@@ -60,6 +60,8 @@ class Arctic:
             | path_prefix               | Path within S3 bucket to use for data storage                                                                                                                 |
             +---------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------+
             | aws_auth                  | If true, authentication to endpoint will be computed via AWS environment vars/config files. If no options are provided `aws_auth` will be assumed to be true. |
+              +---------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------+
+            | force_uri_lib_config      | Override the credentials and endpoint of an S3 storage with the URI of the Arctic object, used for multi-endpoint storages that use interzone replication.    |
             +---------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------+
 
             Note: When connecting to AWS, `region` can be automatically deduced from the endpoint if the given endpoint
@@ -93,10 +95,11 @@ class Arctic:
         self._uri = uri
 
     def __getitem__(self, name: str) -> Library:
+        storage_override = self._library_adapter.get_storage_override()
         lib = NativeVersionStore(
-            self._library_manager.get_library(name),
+            self._library_manager.get_library(name, storage_override),
             repr(self._library_adapter),
-            lib_cfg=self._library_manager.get_library_config(name),
+            lib_cfg=self._library_manager.get_library_config(name, storage_override),
         )
         return Library(repr(self), lib)
 
@@ -173,7 +176,9 @@ class Arctic:
         """
         if not self._library_manager.has_library(name):
             return
-        self._library_adapter.delete_library(self[name], self._library_manager.get_library_config(name))
+        self._library_adapter.delete_library(
+            self[name], self._library_manager.get_library_config(name, StorageOverride())
+        )
         self._library_manager.remove_library_config(name)
 
     def list_libraries(self) -> List[str]:
