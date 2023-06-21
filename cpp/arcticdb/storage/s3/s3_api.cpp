@@ -21,6 +21,10 @@ namespace arcticdb::storage::s3 {
 S3ApiInstance::S3ApiInstance(Aws::Utils::Logging::LogLevel log_level) :
     log_level_(log_level),
     options_() {
+    // Use correct URI encoding rather than legacy compat one in AWS SDK. PURE S3 needs this to handle symbol names
+    // that have special characters (eg ':').
+    options_.httpOptions.compliantRfc3986Encoding = true;
+
     if(log_level_ > Aws::Utils::Logging::LogLevel::Off) {
       Aws::Utils::Logging::InitializeAWSLogging(
           Aws::MakeShared<Aws::Utils::Logging::DefaultLogSystem>(
