@@ -72,7 +72,8 @@ struct StreamSource {
 
     virtual std::vector<Composite<ProcessingSegment>> batch_read_uncompressed(
         std::vector<Composite<pipelines::SliceAndKey>> &&keys,
-        const std::vector<std::shared_ptr<Clause>>& clauses,
+        const std::shared_ptr<std::vector<Clause>>& query,
+        const StreamDescriptor& desc,
         const std::shared_ptr<std::unordered_set<std::string>>& filter_columns,
         const BatchReadArgs &args) = 0;
 

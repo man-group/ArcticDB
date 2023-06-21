@@ -1391,7 +1391,7 @@ class NativeVersionStore:
         read_query = _PythonVersionStoreReadQuery()
 
         if query_builder:
-            read_query.add_clauses(query_builder.clauses)
+            read_query.set_clause_builder(query_builder.finalize_clause_builder())
 
         if date_range is not None:
             read_query.row_filter = _normalize_dt_range(date_range)

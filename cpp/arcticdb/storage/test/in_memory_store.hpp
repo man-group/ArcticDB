@@ -41,7 +41,8 @@ namespace arcticdb {
 
         std::vector<Composite<ProcessingSegment>> batch_read_uncompressed(
                 std::vector<Composite<pipelines::SliceAndKey>> &&,
-                const std::vector<std::shared_ptr<Clause>>&,
+                const std::shared_ptr<std::vector<Clause>>&,
+                const StreamDescriptor&,
                 const std::shared_ptr<std::unordered_set<std::string>>&,
                 const BatchReadArgs &) override {
             throw std::runtime_error("Not implemented for tests");

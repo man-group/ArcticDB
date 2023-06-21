@@ -974,7 +974,7 @@ std::vector<std::pair<VersionedItem, FrameAndDescriptor>> LocalVersionedEngine::
     const ReadOptions& read_options) {
 
     if(std::none_of(std::begin(read_queries), std::end(read_queries), [] (const auto& read_query) {
-        return !read_query.clauses_.empty();
+        return !read_query.query_->empty();
     })) {
         return temp_batch_read_internal_direct(stream_ids, version_queries, read_queries, read_options);
     }

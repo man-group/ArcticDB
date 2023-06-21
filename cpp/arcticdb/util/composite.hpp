@@ -134,12 +134,7 @@ struct Composite {
         }
 
         [[nodiscard]] bool empty() const {
-            return values_.empty() || std::all_of(values_.begin(), values_.end(), [](const ValueType& v) {
-                return util::variant_match(v,
-                                           [](const T &) { return false; },
-                                           [](const std::unique_ptr<Composite<T>> &c) { return c->empty(); }
-                );
-            });
+            return values_.empty();
         }
 
         auto as_range() {

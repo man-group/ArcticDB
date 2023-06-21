@@ -417,7 +417,7 @@ public:
         columns_.reserve(descriptor_->field_count());
         for (size_t i = old_size; i < size_t(descriptor_->field_count()); ++i) {
             auto type = type_desc_from_proto(descriptor_->fields(i).type_desc());
-            util::check(type.data_type() != DataType::UNKNOWN, "Can't create column in create_columns with unknown data type");
+            util::check(type.data_type() != DataType::UNKNOWN, "Can't create column with unknown data type");
             columns_.emplace_back(
                 std::make_shared<Column>(type_desc_from_proto(descriptor_->fields(i).type_desc()), expected_column_size, presize, allow_sparse));
         }

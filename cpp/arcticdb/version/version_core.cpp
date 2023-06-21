@@ -410,98 +410,6 @@ FrameAndDescriptor read_multi_key(
     return {res.frame_, multi_key_desc, keys, std::shared_ptr<BufferHolder>{}};
 }
 
-Composite<ProcessingSegment> process_remaining_clauses(
-        const std::shared_ptr<Store>& store,
-        std::vector<Composite<ProcessingSegment>>&& procs,
-        std::vector<std::shared_ptr<Clause>> clauses ) { // pass by copy deliberately as we don't want to modify read_query
-    while (!clauses.empty()) {
-        if (clauses[0]->clause_info().requires_repartition_) {
-            std::vector<Composite<ProcessingSegment>> repartitioned_procs = clauses[0]->repartition(std::move(procs)).value();
-            // Erasing from front of vector not ideal, but they're just shared_ptr and there shouldn't be loads of clauses
-            clauses.erase(clauses.begin());
-            std::vector<folly::Future<Composite<ProcessingSegment>>> fut_procs;
-            for (auto&& proc : repartitioned_procs) {
-                fut_procs.emplace_back(
-                        async::submit_cpu_task(
-                                async::MemSegmentProcessingTask(store,
-                                                                clauses,
-                                                                std::move(proc))
-                        )
-                );
-            }
-            procs = folly::collect(fut_procs).get();
-        } else {
-            // Erasing from front of vector not ideal, but they're just shared_ptr and there shouldn't be loads of clauses
-            clauses.erase(clauses.begin());
-        }
-    }
-    return merge_composites(std::move(procs));
-}
-
-void set_output_descriptors(
-        const Composite<ProcessingSegment>& merged_procs,
-        const std::vector<std::shared_ptr<Clause>>& clauses,
-        const std::shared_ptr<PipelineContext>& pipeline_context) {
-    std::optional<std::string> index_column;
-    for (auto clause = clauses.rbegin(); clause != clauses.rend(); ++clause) {
-        if (auto new_index = (*clause)->clause_info().new_index_; new_index.has_value()) {
-            index_column = new_index;
-            pipeline_context->norm_meta_->mutable_df()->mutable_common()->mutable_index()->set_name(*new_index);
-            pipeline_context->norm_meta_->mutable_df()->mutable_common()->mutable_index()->clear_fake_name();
-            pipeline_context->norm_meta_->mutable_df()->mutable_common()->mutable_index()->set_is_not_range_index(
-                    true);
-            break;
-        }
-    }
-    std::optional<StreamDescriptor> new_stream_descriptor;
-    merged_procs.broadcast([&new_stream_descriptor](const auto& proc) {
-        if (!new_stream_descriptor.has_value()) {
-            if (proc.data_.size() > 0) {
-                new_stream_descriptor = std::make_optional<StreamDescriptor>();
-                new_stream_descriptor->set_index(proc.data_[0].segment_->descriptor().index());
-                for (size_t idx = 0; idx < new_stream_descriptor->index().field_count(); idx++) {
-                    new_stream_descriptor->add_field(proc.data_[0].segment_->descriptor().field(idx));
-                }
-            }
-        }
-        if (new_stream_descriptor.has_value()) {
-            std::vector<StreamDescriptor::FieldsCollection> fields;
-            for (const auto &slice_and_key: proc.data_) {
-                fields.push_back(slice_and_key.segment_->descriptor().fields());
-            }
-            new_stream_descriptor = merge_descriptors(*new_stream_descriptor,
-                                                      fields,
-                                                      std::vector<std::string>{});
-        }
-    });
-    if (new_stream_descriptor.has_value()) {
-        // Columns might be in a different order to the original dataframe, so reorder here
-        auto original_stream_descriptor = pipeline_context->descriptor();
-        StreamDescriptor final_stream_descriptor{original_stream_descriptor.id()};
-        final_stream_descriptor.set_index(new_stream_descriptor->index());
-        // Erase field from new_stream_descriptor as we add them to final_stream_descriptor, as all fields left in new_stream_descriptor
-        // after these operations were created by the processing pipeline, and so should be appended
-        // Index columns should always appear first
-        if (index_column.has_value()) {
-            auto opt_idx = new_stream_descriptor->find_field(*index_column);
-            internal::check<ErrorCode::E_ASSERTION_FAILURE>(opt_idx.has_value(), "New index column not found in processing pipeline");
-            final_stream_descriptor.add_field(new_stream_descriptor->field(*opt_idx));
-            new_stream_descriptor->erase_field(*opt_idx);
-        }
-        for (const auto& field: original_stream_descriptor.fields()) {
-            if (auto position = new_stream_descriptor->find_field(field.name()); position.has_value()) {
-                final_stream_descriptor.add_field(new_stream_descriptor->field(*position));
-
-                new_stream_descriptor->erase_field(*position);
-            }
-        }
-        for (const auto& field: new_stream_descriptor->fields()) {
-            final_stream_descriptor.add_field(field);
-        }
-        pipeline_context->set_descriptor(final_stream_descriptor);
-    }
-}
-
 /*
  * Processes the slices in the given pipeline_context.
  *
@@ -519,11 +427,23 @@ std::vector<SliceAndKey> read_and_process(
     const ReadOptions& read_options,
     size_t start_from
     ) {
+    std::vector<Composite<SliceAndKey>> rows;
+    if(!read_query.query_->empty()) {
+        if(auto execution_context = read_query.query_->begin()->execution_context(); execution_context) {
+            execution_context->set_descriptor(pipeline_context->descriptor());
+            execution_context->set_norm_meta_descriptor(pipeline_context->norm_meta_);
+        }
+
+        for(auto& clause : *read_query.query_) {
+            if(auto execution_context = clause.execution_context(); execution_context)
+                execution_context->set_dynamic_schema(opt_false(read_options.dynamic_schema_));
+        }
+    }
+
     std::sort(std::begin(pipeline_context->slice_and_keys_), std::end(pipeline_context->slice_and_keys_), [] (const SliceAndKey& left, const SliceAndKey& right) {
         return std::tie(left.slice().row_range.first, left.slice().col_range.first) < std::tie(right.slice().row_range.first, right.slice().col_range.first);
     });
 
-    std::vector<Composite<SliceAndKey>> rows;
     auto sk_it = std::begin(pipeline_context->slice_and_keys_);
     std::advance(sk_it, start_from);
     while(sk_it != std::end(pipeline_context->slice_and_keys_)) {
@@ -548,30 +468,44 @@ std::vector<SliceAndKey> read_and_process(
         }
     }
 
-    ProcessingConfig processing_config{opt_false(read_options.dynamic_schema_)};
-    for (auto& clause: read_query.clauses_) {
-        clause->set_processing_config(processing_config);
+    auto parallel_output = store->batch_read_uncompressed(std::move(rows), read_query.query_, pipeline_context->descriptor(), filter_columns, BatchReadArgs{});
+
+    size_t clause_index = 0;
+    for (const auto& clause : *read_query.query_) {
+        if (clause.requires_repartition()) {
+            std::vector<Composite<ProcessingSegment>> composites = clause.repartition(std::move(parallel_output)).value();
+
+            std::vector<folly::Future<Composite<ProcessingSegment>>> batch;
+            std::vector<Composite<ProcessingSegment>> res;
+            res.reserve(composites.size());
+            for (auto&& val : composites){
+                auto clause_copy = std::make_shared<std::vector<Clause>>(read_query.query_->begin() + clause_index + 1, read_query.query_->end());
+                batch.emplace_back(
+                        async::submit_cpu_task(
+                                async::MemSegmentPassthroughProcessingTask(store, clause_copy, std::move(val))
+                        )
+                );
+            }
+
+            if(!batch.empty()) {
+                auto segments = folly::collect(batch).get();
+                res.insert(std::end(res), std::make_move_iterator(std::begin(segments)), std::make_move_iterator(std::end(segments)));
+            }
+
+            parallel_output = std::move(res);
+        }
+
+        clause_index++;
     }
 
-    // At this stage, each Composite contains a single ProcessingSegment, which holds a row-slice
-    // Different row-slices are held in different elements of the vector
-    // All clauses that do not require repartitioning (e.g. filters and projections) will have already been applied
-    // to these processing segments
-    std::vector<Composite<ProcessingSegment>> procs = store->batch_read_uncompressed(
-            std::move(rows),
-            read_query.clauses_,
-            filter_columns,
-            BatchReadArgs{}
-            );
-
-    auto merged_procs = process_remaining_clauses(store, std::move(procs), read_query.clauses_);
     //TODO split pipeline context into load_context and output_context
-    if (std::any_of(read_query.clauses_.begin(), read_query.clauses_.end(), [](const std::shared_ptr<Clause>& clause) {
-        return clause->clause_info().modifies_output_descriptor_;
-    })) {
-        set_output_descriptors(merged_procs, read_query.clauses_, pipeline_context);
+        for(auto clause  = read_query.query_->rbegin(); clause != read_query.query_->rend(); ++clause ) {
+        if(clause->execution_context() && clause->execution_context()->output_descriptor_)
+            pipeline_context->set_descriptor(clause->execution_context()->output_descriptor_.value());
     }
-    return collect_segments(std::move(merged_procs));
+
+    auto merged = merge_composites(std::move(parallel_output));
+    return collect_segments(std::move(merged));
 }
 
 SegmentInMemory read_direct(const std::shared_ptr<Store>& store,
@@ -839,7 +773,7 @@ void create_column_stats_impl(
         log::version().warn("Cannot create empty column stats");
         return;
     }
-    ReadQuery read_query({std::make_shared<Clause>(std::move(*clause))});
+    ReadQuery read_query({*clause});
 
     auto column_stats_key = index_key_to_column_stats_key(versioned_item.key_);
     std::optional<SegmentInMemory> old_segment;
@@ -996,7 +930,7 @@ FrameAndDescriptor read_dataframe_impl(
     ARCTICDB_DEBUG(log::version(), "Fetching data to frame");
     SegmentInMemory frame;
     auto buffers = std::make_shared<BufferHolder>();
-    if(!read_query.clauses_.empty()) {
+    if(!read_query.query_->empty()) {
         ARCTICDB_SAMPLE(RunPipelineAndOutput, 0)
         util::check_rte(!pipeline_context->is_pickled(),"Cannot filter pickled data");
         auto segs = read_and_process(store, pipeline_context, read_query, read_options, 0u);
@@ -1083,11 +1017,15 @@ VersionedItem sort_merge_impl(
     auto index = stream::index_type_from_descriptor(pipeline_context->descriptor());
     util::variant_match(index,
         [&](const stream::TimeseriesIndex &timeseries_index) {
-            read_query.clauses_.emplace_back(std::make_shared<Clause>(SortClause{timeseries_index.name()}));
-            read_query.clauses_.emplace_back(std::make_shared<Clause>(RemoveColumnPartitioningClause{}));
+        read_query.query_->emplace_back(SortClause{timeseries_index.name()});
+            ExecutionContext remove_column_partition_context{};
+            remove_column_partition_context.set_descriptor(pipeline_context->descriptor());
+            read_query.query_->emplace_back(RemoveColumnPartitioningClause{std::make_shared<ExecutionContext>(std::move(remove_column_partition_context))});
             const auto split_size = ConfigsMap::instance()->get_int("Split.RowCount", 10000);
-            read_query.clauses_.emplace_back(std::make_shared<Clause>(SplitClause{static_cast<size_t>(split_size)}));
-            read_query.clauses_.emplace_back(std::make_shared<Clause>(MergeClause{timeseries_index, DenseColumnPolicy{}, stream_id, pipeline_context->descriptor()}));
+            read_query.query_->emplace_back(SplitClause{static_cast<size_t>(split_size)});
+            ExecutionContext merge_clause_context{};
+            merge_clause_context.set_descriptor(pipeline_context->descriptor());
+            read_query.query_->emplace_back(MergeClause{timeseries_index, DenseColumnPolicy{}, stream_id, std::make_shared<ExecutionContext>(std::move(merge_clause_context))});
             auto segments = read_and_process(store, pipeline_context, read_query, ReadOptions{}, pipeline_context->incompletes_after());
             pipeline_context->total_rows_ = num_versioned_rows + get_slice_rowcounts(segments);
 
@@ -1282,7 +1220,9 @@ VersionedItem defragment_symbol_data_impl(
 
     util::variant_match(std::move(policies), [
         &fut_vec, &slices, &store, &options, &pre_defragmentation_info, segment_size=segment_size] (auto &&idx, auto &&schema) {
-        pre_defragmentation_info.read_query.clauses_.emplace_back(std::make_shared<Clause>(RemoveColumnPartitioningClause{}));
+        ExecutionContext remove_column_partition_context{};
+        remove_column_partition_context.set_descriptor(pre_defragmentation_info.pipeline_context->descriptor());
+        pre_defragmentation_info.read_query.query_->emplace_back(RemoveColumnPartitioningClause{std::make_shared<ExecutionContext>(std::move(remove_column_partition_context))});
         auto segments = read_and_process(store, pre_defragmentation_info.pipeline_context, pre_defragmentation_info.read_query, defragmentation_read_options_generator(options), pre_defragmentation_info.append_after.value());
         using IndexType = std::remove_reference_t<decltype(idx)>;
         using SchemaType = std::remove_reference_t<decltype(schema)>;

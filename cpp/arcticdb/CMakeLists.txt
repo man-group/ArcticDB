@@ -220,7 +220,7 @@ set(arcticdb_srcs
         processing/processing_segment.hpp
         processing/bucketizer.hpp
         processing/clause.hpp
-        processing/expression_context.hpp
+        processing/execution_context.hpp
         processing/expression_node.hpp
         storage/common.hpp
         storage/config_resolvers.hpp

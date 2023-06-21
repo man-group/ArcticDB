@@ -128,33 +128,34 @@ inline std::optional<util::BitSet> requested_column_bitset_including_index(const
 }
 
 inline std::optional<util::BitSet> clause_column_bitset(const StreamDescriptor::Proto& desc,
-                                                        const std::vector<std::shared_ptr<Clause>>& clauses) {
-    folly::F14FastSet<std::string_view> column_set;
-    for (const auto& clause: clauses) {
-        auto opt_columns = clause->clause_info().input_columns_;
-        if (opt_columns.has_value()) {
-            for (const auto& column: *clause->clause_info().input_columns_) {
-                column_set.insert(std::string_view(column));
+                                                        const std::shared_ptr<std::vector<Clause>>& clauses) {
+    std::optional<util::BitSet> res;
+    if (clauses) {
+        folly::F14FastSet<std::string_view> column_set;
+        for (const auto& clause: *clauses) {
+            std::shared_ptr<ExecutionContext> execution_context = clause.execution_context();
+            if (execution_context) {
+                for (const auto& column: execution_context->columns_) {
+                    column_set.insert(std::string_view(column));
+                }
             }
         }
+        // If only needed because the hacky clause for head memory usage doesn't specify columns
+        if (!column_set.empty()) {
+            res = build_column_bitset(desc, column_set);
+        }
     }
-    // If only needed because the hacky clause for head memory usage doesn't specify columns
-    if (!column_set.empty()) {
-        return build_column_bitset(desc, column_set);
-    } else {
-        return std::nullopt;
-    }
+    return res;
 }
 
 // Returns std::nullopt if all columns are required, which is the case if requested_columns is std::nullopt
 // Otherwise augment the requested_columns bitset with columns that are required by any of the clauses
 inline std::optional<util::BitSet> overall_column_bitset(const StreamDescriptor::Proto& desc,
-                                                         const std::vector<std::shared_ptr<Clause>>& clauses,
+                                                         const std::shared_ptr<std::vector<Clause>>& clauses,
                                                          const std::optional<util::BitSet>& requested_columns) {
     // std::all_of returns true if the range is empty
-    auto clauses_can_combine_with_column_selection = std::all_of(clauses.begin(), clauses.end(),
-                                                                 [](const std::shared_ptr<Clause>& clause){
-        return clause->clause_info().can_combine_with_column_selection_;
+    auto clauses_can_combine_with_column_selection = std::all_of(clauses->begin(), clauses->end(), [](const Clause& clause){
+        return clause.can_combine_with_column_selection();
     });
     user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
             !requested_columns.has_value() || clauses_can_combine_with_column_selection,
@@ -208,7 +209,7 @@ inline std::vector<FilterQuery<ContainerType>> get_column_bitset_and_query_funct
     if(!dynamic_schema || column_groups) {
         pipeline_context->set_selected_columns(query.columns);
         pipeline_context->overall_column_bitset_ = overall_column_bitset(pipeline_context->descriptor().proto(),
-                                                                         query.clauses_,
+                                                                         query.query_,
                                                                          pipeline_context->selected_columns_);
     }
     return build_read_query_filters<ContainerType>(pipeline_context->overall_column_bitset_, pipeline_context, query.row_filter, dynamic_schema, column_groups);

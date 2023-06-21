@@ -43,18 +43,3 @@ TEST(Composite, IterationSimple) {
     for(auto x : comp.as_range())
         ASSERT_EQ(x, expected++);
 }
-
-TEST(Composite, Empty) {
-    using namespace arcticdb;
-    Composite<int> comp1;
-    Composite<int> comp2;
-    comp1.push_back(std::move(comp2));
-    ASSERT_EQ(comp1.size(), 0);
-    ASSERT_TRUE(comp1.empty());
-
-    Composite<int> comp3;
-    Composite<int> comp4(0);
-    comp3.push_back(std::move(comp4));
-    ASSERT_EQ(comp3.size(), 1);
-    ASSERT_FALSE(comp3.empty());
-}

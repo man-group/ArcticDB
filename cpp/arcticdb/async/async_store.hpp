@@ -305,7 +305,8 @@ public:
 
     std::vector<Composite<ProcessingSegment>> batch_read_uncompressed(
         std::vector<Composite<pipelines::SliceAndKey>> &&slice_and_keys,
-        const std::vector<std::shared_ptr<Clause>>& clauses,
+        const std::shared_ptr<std::vector<Clause>>& query,
+        const StreamDescriptor& desc,
         const std::shared_ptr<std::unordered_set<std::string>>& filter_columns,
         const BatchReadArgs & args) override {
 
@@ -320,15 +321,15 @@ public:
                 batch.push_back(
                     async::submit_io_task(ReadCompressedSlicesTask(std::move(sk), library_))
                         .via(&async::cpu_executor())
-                        .thenValue(DecodeSlicesTask{filter_columns})
-                        .thenValue(MemSegmentProcessingTask{shared_from_this(), clauses}));
+                        .thenValue(DecodeSlicesTask{desc, filter_columns})
+                        .thenValue(MemSegmentProcessingTask{shared_from_this(),query}));
             }
             // IO option will execute all work in the same Folly thread potentially limiting context switches.
             else {
                 batch.push_back(
                     async::submit_io_task(ReadCompressedSlicesTask(std::move(sk), library_))
-                        .thenValue(DecodeSlicesTask{filter_columns})
-                        .thenValue(MemSegmentProcessingTask{shared_from_this(), clauses}));
+                        .thenValue(DecodeSlicesTask{desc, filter_columns})
+                        .thenValue(MemSegmentProcessingTask{shared_from_this(),query}));
             }
 
             if(++current_size == args.batch_size_) {
