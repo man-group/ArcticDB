@@ -121,7 +121,7 @@ private:
     void read_list_from_storage(const std::shared_ptr<StreamSource>& store, const AtomKey& key,
             CollectionType& symbols);
 
-    [[nodiscard]] KeyVector get_all_symbol_list_keys(const std::shared_ptr<StreamSource>& store) const;
+    [[nodiscard]] KeyVector get_all_symbol_list_keys(const std::shared_ptr<StreamSource>& store);
 
     [[nodiscard]] static folly::Future<std::vector<Store::RemoveKeyResultType>>
     delete_keys(const std::shared_ptr<Store>& store, KeyVector&& to_remove, const AtomKey& exclude);
