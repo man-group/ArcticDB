@@ -15,7 +15,7 @@ from arcticdb.version_store.helper import add_s3_library_to_env
 from arcticdb.config import _DEFAULT_ENV
 from arcticdb.version_store._store import NativeVersionStore
 from arcticdb.adapters.arctic_library_adapter import ArcticLibraryAdapter, set_library_options
-from arcticdb_ext.storage import Library
+from arcticdb_ext.storage import Library, StorageOverride, S3CredentialsOverride
 from collections import namedtuple
 from dataclasses import dataclass, fields
 from distutils.util import strtobool
@@ -36,6 +36,8 @@ class ParsedQuery:
     aws_auth: Optional[bool] = False
 
     path_prefix: Optional[str] = None
+
+    force_uri_lib_config: Optional[bool] = False
 
 
 class S3LibraryAdapter(ArcticLibraryAdapter):
@@ -116,11 +118,26 @@ class S3LibraryAdapter(ArcticLibraryAdapter):
             if field_dict[key].type == bool:
                 parsed_query[key] = bool(strtobool(parsed_query[key][0]))
 
+            if field_dict[key].type == Optional[bool] and field_dict[key] is not None:
+                parsed_query[key] = bool(strtobool(parsed_query[key][0]))
+
         if parsed_query.get("path_prefix"):
             parsed_query["path_prefix"] = parsed_query["path_prefix"].strip("/")
 
         _kwargs = {k: v for k, v in parsed_query.items()}
         return ParsedQuery(**_kwargs)
+
+    def get_storage_override(self) -> StorageOverride:
+        storage_override = StorageOverride()
+        if self._query_params.force_uri_lib_config:
+            s3_override = S3CredentialsOverride()
+            s3_override.credential_name = self._query_params.access
+            s3_override.credential_key = self._query_params.secret
+            s3_override.endpoint = self._endpoint
+            storage_override = StorageOverride()
+            storage_override.set_override(s3_override)
+
+        return storage_override
 
     def create_library_config(self, name, library_options: LibraryOptions) -> LibraryConfig:
         env_cfg = EnvironmentConfigsMap()

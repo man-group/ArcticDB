@@ -8,13 +8,15 @@ As of the Change Date specified in that file, in accordance with the Business So
 import re
 import os
 
+from typing import Optional
+
 from arcticdb.options import LibraryOptions
 from arcticc.pb2.storage_pb2 import EnvironmentConfigsMap, LibraryConfig
 from arcticdb.version_store.helper import add_lmdb_library_to_env
 from arcticdb.config import _DEFAULT_ENV
 from arcticdb.version_store._store import NativeVersionStore
 from arcticdb.adapters.arctic_library_adapter import ArcticLibraryAdapter, set_library_options
-from arcticdb_ext.storage import Library
+from arcticdb_ext.storage import Library, StorageOverride
 
 
 class LMDBLibraryAdapter(ArcticLibraryAdapter):
@@ -51,6 +53,9 @@ class LMDBLibraryAdapter(ArcticLibraryAdapter):
         lib = NativeVersionStore.create_store_from_config(env_cfg, _DEFAULT_ENV, self.CONFIG_LIBRARY_NAME)._library
 
         return lib
+
+    def get_storage_override(self) -> StorageOverride:
+        return StorageOverride()
 
     def create_library_config(self, name, library_options: LibraryOptions) -> LibraryConfig:
         env_cfg = EnvironmentConfigsMap()

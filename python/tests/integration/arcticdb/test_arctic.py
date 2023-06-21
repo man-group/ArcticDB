@@ -19,8 +19,11 @@ except ImportError:
 from arcticdb_ext.storage import NoDataFoundException
 
 from arcticdb.arctic import Arctic
+from arcticdb.adapters.s3_library_adapter import S3LibraryAdapter
 from arcticdb.options import LibraryOptions
 from arcticdb import QueryBuilder
+from arcticc.pb2.s3_storage_pb2 import Config as S3Config
+
 import math
 import re
 import pytest
@@ -70,6 +73,35 @@ def test_library_creation_deletion(arctic_client):
     assert not ac.list_libraries()
     with pytest.raises(Exception):  # TODO: Nicely wrap?
         _lib = ac["pytest_test_lib"]
+
+
+def test_uri_override(moto_s3_uri_incl_bucket):
+    def _get_s3_storage_config(lib):
+        primary_storage_name = lib._nvs.lib_cfg().lib_desc.storage_ids[0]
+        primary_any = lib._nvs.lib_cfg().storage_by_id[primary_storage_name]
+        s3_config = S3Config()
+        primary_any.config.Unpack(s3_config)
+        return s3_config
+
+    wrong_uri = "s3://otherhost:test_bucket_0?access=dog&secret=cat&port=17988"
+    altered_ac = Arctic(moto_s3_uri_incl_bucket)
+    altered_ac._library_adapter = S3LibraryAdapter(wrong_uri)
+    # At this point the library_manager is still correct, so we can write
+    # and retrieve libraries, but the library_adapter has fake credentials
+    altered_ac.create_library("override_endpoint", LibraryOptions())
+    lib = altered_ac["override_endpoint"]
+    s3_storage = _get_s3_storage_config(lib)
+    assert s3_storage.endpoint == "otherhost:17988"
+    assert s3_storage.credential_name == "dog"
+    assert s3_storage.credential_key == "cat"
+
+    override_uri = "{}&force_uri_lib_config=True".format(moto_s3_uri_incl_bucket)
+    override_ac = Arctic(override_uri)
+    override_lib = override_ac["override_endpoint"]
+    s3_storage = _get_s3_storage_config(override_lib)
+    assert s3_storage.endpoint == override_ac._library_adapter._endpoint
+    assert s3_storage.credential_name == override_ac._library_adapter._query_params.access
+    assert s3_storage.credential_key == override_ac._library_adapter._query_params.secret
 
 
 def test_library_options(moto_s3_uri_incl_bucket):
