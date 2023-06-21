@@ -177,7 +177,6 @@ bool SymbolList::can_update_symbol_list(const std::shared_ptr<Store>& store,
             const folly::Range<KeyVectorItr>& keys) {
         SYMBOL_LIST_RUNTIME_LOG("Loading symbols from symbol list keys");
         bool read_compaction = false;
-        uint64_t uncompacted_keys_found = 0;
         CollectionType symbols{};
         for(const auto& key : keys) {
             if(key.id() == compaction_id) {
@@ -185,16 +184,6 @@ bool SymbolList::can_update_symbol_list(const std::shared_ptr<Store>& store,
                 read_compaction = true;
             }
             else {
-                uncompacted_keys_found++;
-                if (uncompacted_keys_found == this->max_delta_ * 2 && !warned_expected_slowdown_) {
-                    log::version().warn(
-                            "Warning - symbol list cache is significantly out of date. "
-                            "`list_symbols` may take longer than expected. \n\n"
-                            "See here for more information: https://docs.arcticdb.io/technical/on_disk_storage/#symbol-list-caching\n\n"
-                            "To resolve, run `list_symbols` through to completion frequently.");
-
-                    warned_expected_slowdown_ = true;
-                }
                 const auto& action = key.id();
                 const auto& symbol = key.start_index();
                 if(action == StreamId{DeleteSymbol}) {
@@ -243,10 +232,25 @@ bool SymbolList::can_update_symbol_list(const std::shared_ptr<Store>& store,
         }
     }
 
-    SymbolList::KeyVector SymbolList::get_all_symbol_list_keys(const std::shared_ptr<StreamSource>& store) const {
+    SymbolList::KeyVector SymbolList::get_all_symbol_list_keys(const std::shared_ptr<StreamSource>& store) {
         std::vector<AtomKey> output;
+        uint64_t uncompacted_keys_found = 0;
         store->iterate_type(KeyType::SYMBOL_LIST, [&] (auto&& key) -> void {
-            output.push_back(to_atom(key));
+            auto atom_key = to_atom(key);
+            if(atom_key.id() != compaction_id) {
+                uncompacted_keys_found++;
+            }
+            if (uncompacted_keys_found == this->max_delta_ * 2 && !warned_expected_slowdown_) {
+                log::version().warn(
+                        "Warning - symbol list cache is significantly out of date. "
+                        "`list_symbols` may take longer than expected. \n\n"
+                        "See here for more information: https://docs.arcticdb.io/technical/on_disk_storage/#symbol-list-caching\n\n"
+                        "To resolve, run `list_symbols` through to completion frequently.");
+
+                warned_expected_slowdown_ = true;
+            }
+
+            output.push_back(atom_key);
         });
 
         std::sort(output.begin(), output.end(), [] (const AtomKey& left, const AtomKey& right) {
