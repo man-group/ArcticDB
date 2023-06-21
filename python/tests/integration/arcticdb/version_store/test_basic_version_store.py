@@ -74,6 +74,16 @@ def test_simple_flow(lmdb_version_store_no_symbol_list, symbol):
     assert lmdb_version_store_no_symbol_list.list_symbols() == lmdb_version_store_no_symbol_list.list_versions() == []
 
 
+@pytest.mark.parametrize("special_char", ["$", ",", ":", "=", "@", "-", "_", ".", "~"])
+def test_special_chars(s3_version_store, special_char):
+    """Test chars with special URI encoding under RFC 3986"""
+    sym = f"prefix{special_char}postfix"
+    df = sample_dataframe()
+    s3_version_store.write(sym, df)
+    vitem = s3_version_store.read(sym)
+    assert_frame_equal(vitem.data, df)
+
+
 @pytest.mark.parametrize("version_store", SMOKE_TEST_VERSION_STORES)
 def test_with_prune(request, version_store, symbol):
     version_store = request.getfixturevalue(version_store)
