@@ -120,10 +120,11 @@ bool SymbolList::can_update_symbol_list(const std::shared_ptr<Store>& store,
 
             if (stream_ids.size() == this->max_delta_ * 2 && !warned_expected_slowdown_) {
                 log::version().warn(
-                        "Warning - no compacted symbol list cache found. "
+                        "No compacted symbol list cache found. "
                         "`list_symbols` may take longer than expected. \n\n"
                         "See here for more information: https://docs.arcticdb.io/technical/on_disk_storage/#symbol-list-caching\n\n"
-                        "To resolve, run `list_symbols` through to completion to compact the symbol list cache.");
+                        "To resolve, run `list_symbols` through to completion to compact the symbol list cache.\n"
+                        "Note: This warning will only appear once.\n");
 
                 warned_expected_slowdown_ = true;
             }
@@ -242,10 +243,10 @@ bool SymbolList::can_update_symbol_list(const std::shared_ptr<Store>& store,
             }
             if (uncompacted_keys_found == this->max_delta_ * 2 && !warned_expected_slowdown_) {
                 log::version().warn(
-                        "Warning - symbol list cache is significantly out of date. "
-                        "`list_symbols` may take longer than expected. \n\n"
+                        "`list_symbols` may take longer than expected as there have been many modifications since `list_symbols` was last called. \n\n"
                         "See here for more information: https://docs.arcticdb.io/technical/on_disk_storage/#symbol-list-caching\n\n"
-                        "To resolve, run `list_symbols` through to completion frequently.");
+                        "To resolve, run `list_symbols` through to completion frequently.\n"
+                        "Note: This warning will only appear once.\n");
 
                 warned_expected_slowdown_ = true;
             }
