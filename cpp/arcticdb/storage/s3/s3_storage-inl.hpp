@@ -49,6 +49,32 @@ static const size_t DELETE_OBJECTS_LIMIT = 1000;
 template<class It>
 using Range = folly::Range<It>;
 
+template<class Result, class KeyType>
+void handle_common_errors(const Aws::Utils::Outcome<Result, Aws::S3::S3Error>& outcome,
+        const char* op,
+        const KeyType& key) {
+    using namespace Aws::S3;
+    if (!outcome.IsSuccess()) {
+        auto& err = outcome.GetError();
+        auto type = err.GetErrorType();
+        if (type == S3Errors::NO_SUCH_KEY || type == S3Errors::RESOURCE_NOT_FOUND) {
+            return; // Caller need to handle these
+        }
+
+#define S3_ERROR_FMT " error while {} {}: S3Error#{} {}: {}", \
+            op, key, int(err.GetErrorType()), err.GetExceptionName().c_str(), err.GetMessage().c_str()
+
+        if (type == S3Errors::ACCESS_DENIED || type == S3Errors::INVALID_ACCESS_KEY_ID) {
+            raise<ErrorCode::E_PERMISSION>("Permission" S3_ERROR_FMT);
+        }
+        if (err.ShouldRetry()) {
+            raise_retryable<ErrorCode::E_S3_RETRYABLE>("Retry-able" S3_ERROR_FMT);
+        }
+        raise<ErrorCode::E_UNEXPECTED_S3_ERROR>("Unexpected" S3_ERROR_FMT);
+#undef S3_ERROR_FMT
+    }
+}
+
 struct FlatBucketizer {
     static std::string bucketize(const std::string& root_folder, const VariantKey&) {
         return root_folder;
@@ -102,14 +128,8 @@ void do_write_impl(
             ARCTICDB_SUBSAMPLE(S3StoragePutObject, 0)
             auto put_object_outcome = s3_client.PutObject(object_request);
 
-            if (!put_object_outcome.IsSuccess()) {
-                auto& error = put_object_outcome.GetError();
-                util::raise_rte("Failed to write s3 with key '{}' {}: {}",
-                                k,
-                                error.GetExceptionName().c_str(),
-                                error.GetMessage().c_str());
-            }
-             ARCTICDB_RUNTIME_DEBUG(log::storage(), "Wrote key {}: {}, with {} bytes of data",
+            handle_common_errors(put_object_outcome, "writing key", k);
+            ARCTICDB_RUNTIME_DEBUG(log::storage(), "Wrote key {}: {}, with {} bytes of data",
                                  variant_key_type(k),
                                  variant_key_view(k),
                                  seg.total_segment_size(hdr_size));
@@ -126,16 +146,6 @@ void do_update_impl(
         KeyBucketizer&& bucketizer) {
     // s3 updates the key if it already exists. We skip the check for key not found to save a round-trip.
     do_write_impl(std::move(kvs), root_folder, bucket_name, s3_client, std::forward<KeyBucketizer>(bucketizer));
-}
-
-struct UnexpectedS3ErrorException : public std::exception {};
-
-inline bool is_expected_error_type(Aws::S3::S3Errors err) {
-    return err == Aws::S3::S3Errors::NO_SUCH_KEY
-        || err == Aws::S3::S3Errors::NO_SUCH_BUCKET
-        || err == Aws::S3::S3Errors::INVALID_ACCESS_KEY_ID
-        || err == Aws::S3::S3Errors::ACCESS_DENIED
-        || err == Aws::S3::S3Errors::RESOURCE_NOT_FOUND;
 }
 
 //TODO Use buffer pool once memory profile and lifetime is well understood
@@ -196,14 +206,7 @@ auto get_object(
     request.SetResponseStreamFactory(S3StreamFactory());
     auto res = s3_client.GetObject(request);
 
-    if (!res.IsSuccess() && !is_expected_error_type(res.GetError().GetErrorType())) {
-        log::storage().error("Got unexpected error: '{}' {}: {}",
-                             int(res.GetError().GetErrorType()),
-                             res.GetError().GetExceptionName().c_str(),
-                             res.GetError().GetMessage().c_str());
-
-        throw UnexpectedS3ErrorException{};
-    }
+    handle_common_errors(res, "getting key", key);
     ARCTICDB_RUNTIME_DEBUG(log::storage(), "Returning object {}", s3_object_name);
     return res;
 }
@@ -223,14 +226,7 @@ auto head_object(
     request.WithBucket(bucket_name.c_str()).WithKey(s3_object_name.c_str());
     auto res = s3_client.HeadObject(request);
 
-    if (!res.IsSuccess() && !is_expected_error_type(res.GetError().GetErrorType())) {
-        log::storage().error("Got unexpected error: '{}' {}: {}",
-                             int(res.GetError().GetErrorType()),
-                             res.GetError().GetExceptionName().c_str(),
-                             res.GetError().GetMessage().c_str());
-
-        throw UnexpectedS3ErrorException{};
-    }
+    handle_common_errors(res, "checking", key);
     ARCTICDB_RUNTIME_DEBUG(log::storage(), "Returning head of object {}", s3_object_name);
     return res;
 }
@@ -269,8 +265,8 @@ void do_read_impl(Composite<VariantKey> && ks,
                 ARCTICDB_DEBUG(log::storage(), "Read key {}: {}", variant_key_type(k), variant_key_view(k));
             }
             else {
-                auto& error = get_object_outcome.GetError();
                 if (!opts.dont_warn_about_missing_key) {
+                    auto& error = get_object_outcome.GetError();
                     log::storage().warn("Failed to find segment for key '{}' {}: {}",
                             variant_key_view(k),
                             error.GetExceptionName().c_str(),
@@ -370,6 +366,7 @@ void do_iterate_type_impl(KeyType key_type,
     bool more;
     do {
         auto list_objects_outcome = s3_client.ListObjectsV2(objects_request);
+        handle_common_errors(list_objects_outcome, "iterating keys of type ", key_type);
 
         if (list_objects_outcome.IsSuccess()) {
             auto object_list = list_objects_outcome.GetResult().GetContents();
@@ -392,15 +389,6 @@ void do_iterate_type_impl(KeyType key_type,
             more = list_objects_outcome.GetResult().GetIsTruncated();
             if (more)
                 objects_request.SetContinuationToken(list_objects_outcome.GetResult().GetNextContinuationToken());
-
-        }
-        else {
-            const auto& error = list_objects_outcome.GetError();
-            log::storage().warn("Failed to iterate key type with key '{}' {}: {}",
-                                key_type,
-                                error.GetExceptionName().c_str(),
-                                error.GetMessage().c_str());
-            return;
         }
     } while (more);
 }

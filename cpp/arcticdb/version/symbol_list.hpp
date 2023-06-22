@@ -19,7 +19,6 @@
 #include <arcticdb/util/configs_map.hpp>
 #include <arcticdb/util/storage_lock.hpp>
 #include <arcticdb/util/key_utils.hpp>
-#include <arcticdb/storage/storage_exceptions.hpp>
 #include <arcticdb/version/version_functions.hpp>
 #include <arcticdb/version/version_map_batch_methods.hpp>
 

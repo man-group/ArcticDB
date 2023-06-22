@@ -13,7 +13,6 @@
 #include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/storage/common.hpp>
 #include <arcticdb/entity/key.hpp>
-#include <arcticdb/storage/storage_exceptions.hpp>
 #include <arcticdb/storage/open_mode.hpp>
 #include <arcticdb/storage/storages.hpp>
 #include <arcticdb/storage/library.hpp>
