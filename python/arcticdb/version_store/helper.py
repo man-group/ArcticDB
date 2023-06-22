@@ -5,6 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+import os.path as osp
 import re
 import time
 from typing import Iterable, Dict, Any, Union
@@ -13,6 +14,7 @@ from arcticc.pb2.lmdb_storage_pb2 import Config as LmdbConfig
 from arcticc.pb2.s3_storage_pb2 import Config as S3Config
 from arcticc.pb2.in_memory_storage_pb2 import Config as MemoryConfig
 from arcticc.pb2.mongo_storage_pb2 import Config as MongoConfig
+from arcticc.pb2.nfs_backed_storage_pb2 import Config as NfsConfig
 from arcticc.pb2.storage_pb2 import (
     EnvironmentConfigsMap,
     EnvironmentConfig,
@@ -77,7 +79,7 @@ class ArcticConfig(object):
         self.uri_builder = uri_builder
 
 
-class ArcticcFileConfig(ArcticConfig):
+class ArcticFileConfig(ArcticConfig):
     def __init__(self, env=Defaults.ENV, config_path=Defaults.ENV_FILE_PATH):
         # type: (EnvName, FilePath)->None
         self._conf_path = _expand_path(config_path)
@@ -334,4 +336,4 @@ def get_arctic_native_lib(lib_fqn):
     if m is None:
         raise LibraryNotFound(lib_fqn)
     lib, path = m.group(1), m.group(2)
-    return ArcticcFileConfig(config_path=path)[lib]
+    return ArcticFileConfig(config_path=path)[lib]
