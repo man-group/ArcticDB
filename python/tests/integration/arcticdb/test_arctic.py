@@ -89,8 +89,8 @@ def test_uri_override(moto_s3_uri_incl_bucket):
     # At this point the library_manager is still correct, so we can write
     # and retrieve libraries, but the library_adapter has fake credentials
     altered_ac.create_library("override_endpoint", LibraryOptions())
-    lib = altered_ac["override_endpoint"]
-    s3_storage = _get_s3_storage_config(lib)
+    altered_lib = altered_ac["override_endpoint"]
+    s3_storage = _get_s3_storage_config(altered_lib)
     assert s3_storage.endpoint == "otherhost:17988"
     assert s3_storage.credential_name == "dog"
     assert s3_storage.credential_key == "cat"
@@ -102,6 +102,13 @@ def test_uri_override(moto_s3_uri_incl_bucket):
     assert s3_storage.endpoint == override_ac._library_adapter._endpoint
     assert s3_storage.credential_name == override_ac._library_adapter._query_params.access
     assert s3_storage.credential_key == override_ac._library_adapter._query_params.secret
+
+    ac = Arctic(moto_s3_uri_incl_bucket)
+    lib = ac["override_endpoint"]
+    s3_storage = _get_s3_storage_config(lib)
+    assert s3_storage.endpoint == "otherhost:17988"
+    assert s3_storage.credential_name == "dog"
+    assert s3_storage.credential_key == "cat"
 
 
 def test_library_options(moto_s3_uri_incl_bucket):
