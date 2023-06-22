@@ -1,3 +1,10 @@
+/* Copyright 2023 Man Group Operations Limited
+ *
+ * Use of this software is governed by the Business Source License 1.1 included in the file LICENSE.txt
+ *
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ */
+
 #pragma once
 #include <arcticdb/codec/codec.hpp>
 #include <arcticdb/entity/key.hpp>
@@ -27,6 +34,12 @@ namespace arcticdb::storage {
 
 struct StorageBase {}; // marker class for type checking
 
+/**
+ * Thrown for an attempt to overwrite an AtomKey (which is defined to be unique and immutable).
+ *
+ * As this detection can require an extra round-trip to the storage server, a Storage will only check this if efficient
+ * to do.
+ */
 class DuplicateKeyException : public ArcticSpecificException<ErrorCode::E_DUPLICATE_KEY> {
 public:
     explicit DuplicateKeyException(VariantKey key) :
@@ -63,10 +76,14 @@ private:
     std::optional<VariantId> key_;
 };
 
-class KeyNotFoundException : public ArcticSpecificException<ErrorCode::E_DUPLICATE_KEY> {
+class KeyNotFoundException : public ArcticSpecificException<ErrorCode::E_KEY_NOT_FOUND> {
+    using format_string_t = fmt::format_string<Composite<VariantKey>>;
 public:
-    explicit KeyNotFoundException(Composite<VariantKey>&& keys) :
-        ArcticSpecificException<ErrorCode::E_DUPLICATE_KEY>(fmt::format("{}", keys)),
+    explicit KeyNotFoundException(const VariantKey& single_key, format_string_t format = "Not found: {}"):
+        KeyNotFoundException(Composite<VariantKey>{VariantKey{single_key}}, format) {}
+
+    explicit KeyNotFoundException(Composite<VariantKey>&& keys, format_string_t format = "Not found: {}") :
+        ArcticSpecificException<ErrorCode::E_KEY_NOT_FOUND>(fmt::format(format, keys)),
         keys_(std::make_shared<Composite<VariantKey>>(std::move(keys))) {
     }
 
@@ -76,6 +93,25 @@ public:
 private:
     std::shared_ptr<Composite<VariantKey>> keys_;
     mutable std::string msg_;
+};
+
+class PermissionException : public PermissionSpecificException {
+public:
+    PermissionException(const LibraryPath &path, OpenMode mode, std::string_view operation) :
+            PermissionSpecificException(fmt::format("{} not permitted. lib={}, mode={}", operation, lib_path_, mode_)),
+            lib_path_(path), mode_(mode) {}
+
+    const LibraryPath &library_path() const {
+        return lib_path_;
+    }
+
+    OpenMode mode() const {
+        return mode_;
+    }
+
+private:
+    LibraryPath lib_path_;
+    OpenMode mode_;
 };
 
 template<class Impl>
@@ -100,6 +136,9 @@ public:
         return derived().do_update(std::move(kvs), opts);
     }
 
+    /**
+     * @throws KeyNotFoundException May throw if opts.upsert_=false and the key is not found. S3 does not support this.
+     */
     void update(KeySegmentPair &&kv, UpdateOpts opts) {
         return update(Composite<KeySegmentPair>{std::move(kv)}, opts);
     }

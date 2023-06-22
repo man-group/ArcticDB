@@ -32,6 +32,7 @@ enum class ErrorCategory : BaseType {
     SORTING = 6,
     USER_INPUT = 7,
     COMPATIBILITY = 8,
+    STORAGE_RETRYABLE = 9,
     // NEW CATEGORIES MUST ALSO BE ADDED TO python_module.cpp:register_error_code_ecosystem
 };
 
@@ -46,6 +47,7 @@ inline std::unordered_map<ErrorCategory, const char*> get_error_category_names()
         {ErrorCategory::SORTING, "SORTING"},
         {ErrorCategory::USER_INPUT, "USER_INPUT"},
         {ErrorCategory::COMPATIBILITY, "COMPATIBILITY"},
+        {ErrorCategory::STORAGE_RETRYABLE, "STORAGE_RETRYABLE"},
     };
 }
 
@@ -62,6 +64,7 @@ inline std::unordered_map<ErrorCategory, const char*> get_error_category_names()
     ERROR_CODE(2003, E_INCOMPATIBLE_INDEX)  \
     ERROR_CODE(2004, E_WRONG_SHAPE) \
     ERROR_CODE(3000, E_NO_SUCH_VERSION)  \
+    ERROR_CODE(3001, E_SYMBOL_NOT_FOUND) \
     ERROR_CODE(3010, E_UNREADABLE_SYMBOL_LIST)  \
     ERROR_CODE(4000, E_DESCRIPTOR_MISMATCH)  \
     ERROR_CODE(4001, E_COLUMN_DOESNT_EXIST)  \
@@ -70,11 +73,16 @@ inline std::unordered_map<ErrorCategory, const char*> get_error_category_names()
     ERROR_CODE(4004, E_OPERATION_NOT_SUPPORTED_WITH_PICKLED_DATA)  \
     ERROR_CODE(5000, E_KEY_NOT_FOUND) \
     ERROR_CODE(5001, E_DUPLICATE_KEY) \
-    ERROR_CODE(5002, E_SYMBOL_NOT_FOUND) \
+    ERROR_CODE(5002, E_PERMISSION)    \
+    ERROR_CODE(5003, E_MONGO_OP_FAILED) \
+    ERROR_CODE(5004, E_UNEXPECTED_S3_ERROR) \
     ERROR_CODE(6000, E_UNSORTED_DATA) \
     ERROR_CODE(7000, E_INVALID_USER_ARGUMENT) \
     ERROR_CODE(7001, E_INVALID_DECIMAL_STRING) \
     ERROR_CODE(8000, E_UNRECOGNISED_COLUMN_STATS_VERSION) \
+    ERROR_CODE(9000, E_MONGO_BULK_OP_NO_REPLY) \
+    ERROR_CODE(9001, E_S3_RETRYABLE) \
+
 
 enum class ErrorCode : BaseType {
 #define ERROR_CODE(code, Name, ...) Name = code,
@@ -121,6 +129,12 @@ struct ArcticCategorizedException : public ArcticException {
     using ArcticException::ArcticException;
 };
 
+template<>
+struct ArcticCategorizedException<ErrorCategory::STORAGE_RETRYABLE> :
+        ArcticCategorizedException<ErrorCategory::STORAGE> {
+    using ArcticCategorizedException<ErrorCategory::STORAGE>::ArcticCategorizedException;
+};
+
 template<ErrorCode specific_code>
 struct ArcticSpecificException : public ArcticCategorizedException<get_error_category(specific_code)> {
     static constexpr ErrorCategory category = get_error_category(specific_code);
@@ -136,7 +150,9 @@ using SchemaException = ArcticCategorizedException<ErrorCategory::SCHEMA>;
 using NormalizationException = ArcticCategorizedException<ErrorCategory::NORMALIZATION>;
 using NoSuchVersionException = ArcticSpecificException<ErrorCode::E_NO_SUCH_VERSION>;
 using StorageException = ArcticCategorizedException<ErrorCategory::STORAGE>;
+using StorageRetryableException = ArcticCategorizedException<ErrorCategory::STORAGE_RETRYABLE>;
 using MissingDataException = ArcticCategorizedException<ErrorCategory::MISSING_DATA>;
+using PermissionSpecificException = ArcticSpecificException<ErrorCode::E_PERMISSION>;
 using SortingException = ArcticCategorizedException<ErrorCategory::SORTING>;
 using UnsortedDataException = ArcticSpecificException<ErrorCode::E_UNSORTED_DATA>;
 using UserInputException = ArcticCategorizedException<ErrorCategory::USER_INPUT>;

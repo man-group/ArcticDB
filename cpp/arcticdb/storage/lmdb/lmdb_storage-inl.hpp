@@ -50,6 +50,7 @@ inline void LmdbStorage::do_write_internal(Composite<KeySegmentPair>&& kvs, ::lm
             ARCTICDB_SUBSAMPLE(LmdbPut, 0)
             int res = ::mdb_put(txn.handle(), dbi.handle(), &mdb_key, &mdb_val, MDB_RESERVE | overwrite_flag);
             if (res == MDB_KEYEXIST) {
+                // Since LMDB is in-memory, we can efficiently detect: (see its doc for details)
                 throw DuplicateKeyException(kv.variant_key());
             } else if (res != 0) {
                 throw std::runtime_error(fmt::format("Invalid lmdb error code {} while putting key {}",
@@ -85,7 +86,8 @@ inline void LmdbStorage::do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts o
     if(!failed_deletes.empty()) {
         ARCTICDB_SUBSAMPLE(LmdbStorageCommit, 0)
         txn.commit();
-        throw KeyNotFoundException(Composite<VariantKey>(std::move(failed_deletes)));
+        throw KeyNotFoundException(Composite<VariantKey>(std::move(failed_deletes)),
+                "do_update called with upsert=false on non-exist key(s): {}");
     }
     do_write_internal(std::move(kvs), txn);
     ARCTICDB_SUBSAMPLE(LmdbStorageCommit, 0)
@@ -93,7 +95,7 @@ inline void LmdbStorage::do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts o
 }
 
 template<class Visitor>
-    void LmdbStorage::do_read(Composite<VariantKey>&& ks, Visitor &&visitor, storage::ReadKeyOpts) {
+void LmdbStorage::do_read(Composite<VariantKey>&& ks, Visitor &&visitor, storage::ReadKeyOpts) {
     ARCTICDB_SAMPLE(LmdbStorageRead, 0)
     auto txn = ::lmdb::txn::begin(env(), nullptr, MDB_RDONLY);
 
@@ -176,11 +178,14 @@ inline std::vector<VariantKey> LmdbStorage::do_remove_internal(Composite<Variant
                 }
             }
         } catch (const std::exception& e) {
+            // TODO https://github.com/man-group/ArcticDB/issues/518
             if (!opts.ignores_missing_key_) {
                 for (auto &k : group.values()) {
                     log::storage().warn("Failed to delete segment for key {}", variant_key_view(k) );
                                         failed_deletes.push_back(k);
                 }
+            } else {
+                log::storage().debug("Ignoring exception during remove: {}", e.what());
             }
         }
     });

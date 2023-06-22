@@ -43,7 +43,7 @@ SymbolList::LoadResult SymbolList::attempt_load(const std::shared_ptr<Store>& st
 
 SymbolList::CollectionType SymbolList::load(const std::shared_ptr<Store>& store, bool no_compaction) {
     // TODO: tighten the exception that triggers retry. https://github.com/man-group/ArcticDB/issues/447
-    const LoadResult load_result = ExponentialBackoff<std::runtime_error>(100, 2000)
+    const LoadResult load_result = ExponentialBackoff<KeyNotFoundException>(100, 2000)
             .go([this, &store]() { return attempt_load(store); });
 
     if (!no_compaction && (load_result.symbol_list_keys.size() > max_delta_ || !load_result.maybe_last_compaction)) {

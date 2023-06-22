@@ -124,8 +124,8 @@ void do_update_impl(
         const std::string& bucket_name,
         S3ClientType& s3_client,
         KeyBucketizer&& bucketizer) {
-    // s3 updates the key if it already exists (our buckets don't have versioning)
-    do_write_impl(std::move(kvs), root_folder, bucket_name, s3_client, std::move(bucketizer));
+    // s3 updates the key if it already exists. We skip the check for key not found to save a round-trip.
+    do_write_impl(std::move(kvs), root_folder, bucket_name, s3_client, std::forward<KeyBucketizer>(bucketizer));
 }
 
 struct UnexpectedS3ErrorException : public std::exception {};
@@ -317,7 +317,8 @@ void do_remove_impl(Composite<VariantKey>&& ks,
                 if (delete_object_outcome.IsSuccess()) {
                      ARCTICDB_RUNTIME_DEBUG(log::storage(), "Deleted object with key '{}'", variant_key_view(*k));
                 } else {
-                    // AN-256: Per AWS S3 documentation, deleting non-exist objects is not an error, so not handling
+                    // TODO https://github.com/man-group/ArcticDB/issues/518
+                    // Per AWS S3 documentation, deleting non-exist objects is not an error, so not handling
                     // RemoveOpts.ignores_missing_key_
                     for(const auto& bad_key : delete_object_outcome.GetResult().GetErrors()) {
                         auto bad_key_name = bad_key.GetKey().substr(key_type_folder.size(), std::string::npos);
@@ -420,8 +421,8 @@ bool do_key_exists_impl(
         bucketizer);
 
     if(!head_object_outcome.IsSuccess()) {
-        auto& error ARCTICDB_UNUSED = head_object_outcome.GetError();
-        ARCTICDB_DEBUG(log::storage(), "Head object returned false for key {} {} {}:{}",
+        auto& error = head_object_outcome.GetError();
+        ARCTICDB_RUNTIME_DEBUG(log::storage(), "Head object returned false for key {} {} {}:{}",
                              variant_key_view(key),
                              int(error.GetErrorType()),
                              error.GetExceptionName().c_str(),

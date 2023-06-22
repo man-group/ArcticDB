@@ -937,7 +937,7 @@ void PythonVersionStore::prune_previous_versions(const StreamId& stream_id) {
             true,
             false,
             __FUNCTION__);
-    storage::check<ErrorCode::E_SYMBOL_NOT_FOUND>(!entry->empty(), "Symbol {} is not found", stream_id);
+    missing_data::check<ErrorCode::E_SYMBOL_NOT_FOUND>(!entry->empty(), "Symbol {} is not found", stream_id);
     auto latest = entry->get_first_index(false);
 
     auto prev_id = get_prev_version_in_entry(entry, latest->version_id());

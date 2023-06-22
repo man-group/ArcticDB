@@ -185,7 +185,7 @@ public:
 
                 follow_version_chain(store, ref_entry, entry, load_params);
                 break;
-            } catch (const std::exception &err) {
+            } catch (const KeyNotFoundException& err) {
                 // We retry to read via ref key because it could have been modified by someone else (e.g. compaction)
                 log::version().warn(
                         "Loading versions from storage via ref key failed with error: {} for stream {}. Retrying",

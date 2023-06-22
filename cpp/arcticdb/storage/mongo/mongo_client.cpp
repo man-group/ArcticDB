@@ -10,6 +10,7 @@
 #include <bsoncxx/string/to_string.hpp>
 #include <bsoncxx/builder/stream/document.hpp>
 #include <bsoncxx/types.hpp>
+#include <bsoncxx/json.hpp>
 #include <mongocxx/uri.hpp>
 #include <arcticdb/entity/variant_key.hpp>
 #include <arcticdb/storage/mongo/mongo_instance.hpp>
@@ -21,7 +22,8 @@
 #include <arcticdb/util/exponential_backoff.hpp>
 #include <mongocxx/model/replace_one.hpp>
 #include <mongocxx/config/version.hpp>
-#include <arcticdb/util/composite.hpp>
+#include <mongocxx/exception/bulk_write_exception.hpp>
+#include <mongocxx/exception/server_error_code.hpp>
 
 namespace arcticdb::storage::mongo {
 
@@ -154,6 +156,31 @@ auto build_document(storage::KeySegmentPair &kv) {
 
     return basic_builder.extract();
 }
+
+/*
+ * Mongo error handling notes:
+ * All exceptions are subtypes of https://mongocxx.org/api/current/classmongocxx_1_1exception.html
+ * - mongocxx::logic_error is thrown for invalid API calls and has no error number
+ * - mongocxx::operation_exception for wrapping errors from libmongoc with an std::error_code
+ *   See https://mongoc.org/libmongoc/current/errors.html for docs
+ *   https://github.com/mongodb/mongo-cxx-driver/blob/master/src/mongocxx/exception/error_code.hpp for constants
+ */
+
+/** Mongo often fail to set the what() string, so has to manually format the exception */
+[[noreturn]] void translate_operation_exception(const mongocxx::operation_exception& e) {
+    std::string json;
+    if (e.raw_server_error()) {
+        try {
+            json = bsoncxx::to_json(e.raw_server_error()->view());
+        } catch (const std::exception& e) {
+            json = fmt::format("(Failed to format server response either: {})", e.what());
+        }
+    } else {
+        json = "No response from server";
+    }
+    raise<ErrorCode::E_MONGO_OP_FAILED>("Inner {} error {}: {}. {}\n{}",
+            e.code().category().name(), e.code().value(), e.code().message(), e.what(), json);
+}
 } //namespace detail
 
 class MongoClientImpl {
@@ -263,11 +290,25 @@ void MongoClientImpl::write_segment(const std::string &database_name,
         replace.upsert(true);
         auto bulk_write = collection.create_bulk_write();
         bulk_write.append(replace);
-        auto result = bulk_write.execute();
-        util::check(bool(result), "Mongo error while putting key {}", kv.key_view());
+        try {
+            auto result = bulk_write.execute();
+            // We don't use the "mongoc_write_concern_set_w" that allows nullopt to be returned, but check it anyway:
+            check_retryable<ErrorCode::E_MONGO_BULK_OP_NO_REPLY>(
+                    result.has_value(), "Mongo did not acknowledge write for key {}", kv.key_view());
+        } catch(const mongocxx::operation_exception& e) {
+            detail::translate_operation_exception(e);
+        }
     } else {
-        auto result = collection.insert_one(doc.view());
-        util::check(bool(result), "Mongo error while putting key {}", kv.key_view());
+        try {
+            // Note: since our `key` field in the `doc` is not the unique `_id` field, and `ensure_collection()`, which
+            // adds an index on it, is never called, we cannot guarantee the unique-ness of the AtomKey in the storage
+            // even with `insert_one`.
+            auto result = collection.insert_one(doc.view());
+            check_retryable<ErrorCode::E_MONGO_BULK_OP_NO_REPLY>(
+                    result.has_value(), "Mongo did not acknowledge write for key {}", kv.key_view());
+        } catch(const mongocxx::operation_exception& e) {
+            detail::translate_operation_exception(e);
+        }
     }
 }
 
@@ -292,9 +333,18 @@ void MongoClientImpl::update_segment(const std::string &database_name,
     replace.upsert(upsert);
     auto bulk_write = collection.create_bulk_write();
     bulk_write.append(replace);
-    auto result = bulk_write.execute();
-    util::check(bool(result), "Mongo error while updating key {}", kv.key_view());
-    util::check(upsert || result->modified_count() > 0, "update called with upsert=false but key does not exist");
+    try {
+        auto result = bulk_write.execute();
+        // We don't use the "mongoc_write_concern_set_w" that allows nullopt to be returned, but check it anyway:
+        check_retryable<ErrorCode::E_MONGO_BULK_OP_NO_REPLY>(
+                result.has_value(), "Mongo did not acknowledge write for key {}", kv.key_view());
+        if (!upsert && result->modified_count() == 0) {
+            throw KeyNotFoundException(std::move(kv.variant_key()),
+                    "update_segment called with upsert=false on non-exist key: {}");
+        }
+    } catch(const mongocxx::operation_exception& e) {
+        detail::translate_operation_exception(e);
+    }
 }
 
 storage::KeySegmentPair MongoClientImpl::read_segment(const std::string &database_name,
@@ -310,31 +360,28 @@ storage::KeySegmentPair MongoClientImpl::read_segment(const std::string &databas
     auto database = client->database(database_name); //TODO maybe cache
     auto collection = database[collection_name];
 
-    try {
-        ARCTICDB_SUBSAMPLE(MongoStorageReadFindOne, 0)
-        auto stream_id = variant_key_id(key);
-        if(StorageFailureSimulator::instance()->configured())
-            StorageFailureSimulator::instance()->go(FailureType::READ);
+    ARCTICDB_SUBSAMPLE(MongoStorageReadFindOne, 0)
+    auto stream_id = variant_key_id(key);
+    if(StorageFailureSimulator::instance()->configured())
+        StorageFailureSimulator::instance()->go(FailureType::READ);
 
+    try {
         auto result = collection.find_one(document{} << "key" << fmt::format("{}", key) << "stream_id" <<
-                                                                                                       fmt::format("{}", stream_id) << finalize);
+                                                     fmt::format("{}", stream_id) << finalize);
         if (result) {
-            const auto &doc = result->view();
+            const auto& doc = result->view();
             auto size = doc["total_size"].get_int64().value;
-            entity::VariantKey stored_key{ detail::variant_key_from_document(doc, key) };
+            entity::VariantKey stored_key{detail::variant_key_from_document(doc, key)};
             util::check(stored_key == key, "Key mismatch: {} != {}");
             return storage::KeySegmentPair(
                     std::move(stored_key),
-                    Segment::from_bytes(const_cast<uint8_t *>(result->view()["data"].get_binary().bytes), std::size_t(size), true)
+                    Segment::from_bytes(const_cast<uint8_t*>(doc["data"].get_binary().bytes), std::size_t(size), true)
             );
         } else {
-            // find_one returned nothing, if this was an exception it would fall through to the catch below.
-            throw std::runtime_error(fmt::format("Missing key in mongo: {} for symbol: {}", key, stream_id));
+            throw KeyNotFoundException(key);
         }
-    }
-    catch(const std::exception& ex) {
-        log::storage().info("Segment read error: {}", ex.what());
-        throw storage::KeyNotFoundException{Composite<VariantKey>{VariantKey{key}}};
+    } catch(const mongocxx::operation_exception& e) {
+        detail::translate_operation_exception(e);
     }
 }
 
@@ -355,10 +402,8 @@ bool MongoClientImpl::key_exists(const std::string &database_name,
         ARCTICDB_SUBSAMPLE(MongoStorageKeyExistsFindOne, 0)
         auto result = collection.find_one(document{} << "key" << fmt::format("{}", key) << finalize);
         return static_cast<bool>(result);
-    }
-    catch(const std::exception& ex) {
-        log::storage().error(fmt::format("Key exists error: {}", ex.what()));
-        throw;
+    } catch(const mongocxx::operation_exception& e) {
+        detail::translate_operation_exception(e);
     }
 }
 
@@ -375,21 +420,25 @@ void MongoClientImpl::remove_keyvalue(const std::string &database_name,
     auto collection = database[collection_name];
     ARCTICDB_SUBSAMPLE(MongoStorageRemoveGetCol, 0)
     mongocxx::stdx::optional<mongocxx::result::delete_result> result;
-    if (std::holds_alternative<RefKey>(key)) {
-        result = collection.delete_many(document{} << "key" << fmt::format("{}", key) << "stream_id" <<
-                                                   fmt::format("{}", variant_key_id(key)) << finalize);
-    } else {
-        result = collection.delete_one(document{} << "key" << fmt::format("{}", key) << "stream_id" <<
-                                                  fmt::format("{}", variant_key_id(key)) << finalize);
+    auto filter = document{} << "key" << fmt::format("{}", key) << "stream_id" << fmt::format("{}", variant_key_id(key))
+        << finalize;
+    try {
+        if (std::holds_alternative<RefKey>(key)) {
+            result = collection.delete_many(std::move(filter));
+        } else {
+            result = collection.delete_one(std::move(filter));
+        }
+    } catch(const mongocxx::operation_exception& e) {
+        detail::translate_operation_exception(e);
     }
     ARCTICDB_SUBSAMPLE(MongoStorageRemoveDelOne, 0)
     if (result) {
         std::int32_t deleted_count = result->deleted_count();
-        util::warn(deleted_count == 1, "Expect to delete a single document with key {}",
-                   key); // possible values are 0 and 1 here when returned from delete_one
+        if (deleted_count == 0) {
+            throw KeyNotFoundException(key);
+        }
     } else
-        throw std::runtime_error(fmt::format("Mongo error deleting data for key {}", key));
-
+        raise_retryable<ErrorCode::E_MONGO_BULK_OP_NO_REPLY>("Mongo did not acknowledge deletion for key {}", key);
 }
 
 void MongoClientImpl::iterate_type(const std::string &database_name,

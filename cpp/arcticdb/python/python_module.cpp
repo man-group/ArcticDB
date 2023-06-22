@@ -215,7 +215,8 @@ void register_error_code_ecosystem(py::module& m, py::exception<arcticdb::Arctic
 
     py::register_exception<SchemaException>(m, "SchemaException", compat_exception.ptr());
     py::register_exception<NormalizationException>(m, "NormalizationException", compat_exception.ptr());
-    py::register_exception<StorageException>(m, "StorageException", compat_exception.ptr());
+    auto& storage_exception = py::register_exception<StorageException>(m, "StorageException", compat_exception.ptr());
+    py::register_exception<StorageRetryableException>(m, "StorageRetryableException", storage_exception.ptr());
     py::register_exception<MissingDataException>(m, "MissingDataException", compat_exception.ptr());
     auto sorting_exception =
             py::register_exception<SortingException>(m, "SortingException", compat_exception.ptr());

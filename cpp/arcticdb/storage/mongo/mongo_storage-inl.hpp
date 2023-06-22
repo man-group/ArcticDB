@@ -85,12 +85,25 @@ inline void MongoStorage::do_remove(Composite<VariantKey>&& ks, RemoveOpts) {
     auto fmt_db = [](auto &&k) { return variant_key_type(k); };
     ARCTICDB_SAMPLE(MongoStorageRemove, 0)
 
-    (fg::from(ks.as_range()) | fg::move | fg::groupBy(fmt_db)).foreach([&](auto &&group) {
+    Composite<VariantKey> failed_deletes;
+
+    (fg::from(ks.as_range()) | fg::move | fg::groupBy(fmt_db)).foreach([this, &failed_deletes](auto &&group) {
         for (auto &k : group.values()) {
             auto collection = collection_name(variant_key_type(k));
-            client_->remove_keyvalue(db_, collection, k);
+            try {
+                client_->remove_keyvalue(db_, collection, k);
+            } catch(KeyNotFoundException& e) {
+                failed_deletes.push_back(std::move(e.keys()));
+            } catch(const std::exception& e) {
+                // TODO https://github.com/man-group/ArcticDB/issues/518
+                log::storage().warn("Error during remove: {}", e.what());
+                failed_deletes.push_back(std::move(k));
+            }
         }
     });
+    if (!failed_deletes.empty()) {
+        throw KeyNotFoundException(std::move(failed_deletes));
+    }
 }
 
 template<class Visitor>

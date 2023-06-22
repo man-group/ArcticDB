@@ -98,6 +98,12 @@ constexpr auto check = util::detail::Check<code, ErrorCategory::STORAGE>{};
 
 template<ErrorCode code>
 constexpr auto raise = check<code>.raise;
+
+template<ErrorCode code>
+constexpr auto check_retryable = util::detail::Check<code, ErrorCategory::STORAGE_RETRYABLE>{};
+
+template<ErrorCode code>
+constexpr auto raise_retryable = check_retryable<code>.raise;
 }
 
 namespace sorting {
