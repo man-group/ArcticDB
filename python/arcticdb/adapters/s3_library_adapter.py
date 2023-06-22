@@ -134,6 +134,7 @@ class S3LibraryAdapter(ArcticLibraryAdapter):
             s3_override.credential_name = self._query_params.access
             s3_override.credential_key = self._query_params.secret
             s3_override.endpoint = self._endpoint
+            s3_override.bucket_name = self._bucket
             storage_override = StorageOverride()
             storage_override.set_override(s3_override)
 

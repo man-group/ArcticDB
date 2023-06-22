@@ -106,7 +106,8 @@ void register_bindings(py::module& storage, py::exception<arcticdb::ArcticExcept
         .def(py::init<>())
         .def_property("credential_name", &S3CredentialsOverride::credential_name,  &S3CredentialsOverride::set_credential_name)
         .def_property("credential_key", &S3CredentialsOverride::credential_key, &S3CredentialsOverride::set_credential_key)
-        .def_property("endpoint", &S3CredentialsOverride::endpoint, &S3CredentialsOverride::set_endpoint);
+        .def_property("endpoint", &S3CredentialsOverride::endpoint, &S3CredentialsOverride::set_endpoint)
+        .def_property("bucket_name", &S3CredentialsOverride::bucket_name, &S3CredentialsOverride::set_bucket_name);
 
     py::class_<StorageOverride>(storage, "StorageOverride")
         .def(py::init<>())
