@@ -42,7 +42,7 @@ class Arctic:
             Options is a query string that specifies connection specific options as ``<name>=<value>`` pairs joined with
             ``&``.
 
-            Available options:
+            Available options for S3:
 
             +---------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------+
             | Option                    | Description                                                                                                                                                   |
@@ -60,14 +60,15 @@ class Arctic:
             | path_prefix               | Path within S3 bucket to use for data storage                                                                                                                 |
             +---------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------+
             | aws_auth                  | If true, authentication to endpoint will be computed via AWS environment vars/config files. If no options are provided `aws_auth` will be assumed to be true. |
-              +---------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------+
-            | force_uri_lib_config      | Override the credentials and endpoint of an S3 storage with the URI of the Arctic object, used for multi-endpoint storages that use interzone replication.    |
+            +---------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------+
+            | force_uri_lib_config      | Override the credentials and endpoint of an S3 storage with the URI of the Arctic object. Use if accessing a replicated (to different region/bucket) library. |
             +---------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------+
 
             Note: When connecting to AWS, `region` can be automatically deduced from the endpoint if the given endpoint
             specifies the region and `region` is not set.
 
-            The LMDB URI connection scheme has the form ``lmdb:///<path to store LMDB files>``.
+            The LMDB URI connection scheme has the form ``lmdb:///<path to store LMDB files>``. There are no options
+            available for the LMDB URI connection scheme.
 
         Examples
         --------
