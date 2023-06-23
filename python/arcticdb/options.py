@@ -68,7 +68,7 @@ class LibraryOptions:
             fixed intervals and data is only de-duplicated if the hashes of the data segments are identical. A one row
             offset will therefore prevent this de-duplication.
 
-            Note that these conditions will also be checked with write_pickle and write_batch_pickle. However, pickled
+            Note that these conditions will also be checked with write_pickle and write_pickle_batch. However, pickled
             objects are always written as a single data segment, and so dedup will only occur if the written object is
             identical to the previous version.
 
