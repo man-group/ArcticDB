@@ -448,7 +448,7 @@ class Library:
 
         error_message = (
             "payload contains some data of types that cannot be normalized. Consider using "
-            f"write_batch_pickle instead. symbols with bad datatypes={bad_symbols[:5]}"
+            f"write_pickle_batch instead. symbols with bad datatypes={bad_symbols[:5]}"
         )
         if len(bad_symbols) > 5:
             error_message += f" (and more)... {len(bad_symbols)} data in total have bad types."
@@ -528,7 +528,7 @@ class Library:
             validate_index=validate_index,
         )
 
-    def write_batch_pickle(
+    def write_pickle_batch(
         self, payloads: List[WritePayload], prune_previous_versions: bool = False, staged=False
     ) -> List[VersionedItem]:
         """

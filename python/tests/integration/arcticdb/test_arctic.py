@@ -611,7 +611,7 @@ def test_write_object_with_pickle_mode(arctic_library):
 def test_write_batch_with_pickle_mode(arctic_library):
     """Writing in pickle mode should succeed when the user uses the dedicated method."""
     lib = arctic_library
-    lib.write_batch_pickle(
+    lib.write_pickle_batch(
         [WritePayload("test_1", A("id_1")), WritePayload("test_2", A("id_2"), metadata="the metadata")]
     )
     assert lib["test_1"].data.id == "id_1"
@@ -634,7 +634,7 @@ def test_write_object_in_batch_without_pickle_mode(arctic_library):
         lib.write_batch([WritePayload("test_1", A("id_1"))])
     # omit the part with the full class path as that will change in arcticdb
     assert e.value.args[0].startswith(
-        "payload contains some data of types that cannot be normalized. Consider using write_batch_pickle instead."
+        "payload contains some data of types that cannot be normalized. Consider using write_pickle_batch instead."
         " symbols with bad datatypes"
     )
 
@@ -703,11 +703,11 @@ def test_write_batch_duplicate_symbols(arctic_library):
     assert not lib.list_symbols()
 
 
-def test_write_batch_pickle_duplicate_symbols(arctic_library):
+def test_write_pickle_batch_duplicate_symbols(arctic_library):
     """Should throw and not write if duplicate symbols are provided."""
     lib = arctic_library
     with pytest.raises(ArcticDuplicateSymbolsInBatchException):
-        lib.write_batch_pickle(
+        lib.write_pickle_batch(
             [
                 WritePayload("symbol_1", pd.DataFrame()),
                 WritePayload("symbol_1", pd.DataFrame(), metadata="great_metadata"),
