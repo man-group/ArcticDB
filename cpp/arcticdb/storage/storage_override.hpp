@@ -11,7 +11,8 @@ class S3CredentialsOverride {
     std::string credential_name_;
     std::string credential_key_;
     std::string endpoint_;
-    std::string bucket_;
+    std::string bucket_name_;
+    std::string region_;
 
 public:
     std::string credential_name() const {
@@ -38,12 +39,20 @@ public:
         endpoint_ = endpoint;
     }
 
-    std::string bucket_name_() const {
-        return bucket_;
+    std::string bucket_name() const {
+        return bucket_name_;
     }
 
     void set_bucket_name(std::string_view bucket_name){
         bucket_name_ = bucket_name;
+    }
+
+    std::string region() const {
+        return region_;
+    }
+
+    void set_region(std::string_view region){
+        region_ = region;
     }
 
     void modify_storage_credentials(arcticdb::proto::storage::VariantStorage& storage) const {
@@ -59,8 +68,11 @@ public:
             if(!endpoint_.empty())
                 s3_storage.set_endpoint(endpoint_);
 
-            if (!bucket_name_).empty())
+            if (!bucket_name_.empty())
                 s3_storage.set_bucket_name(bucket_name_);
+
+            if (!region_.empty())
+                s3_storage.set_region(region_);
 
             util::pack_to_any(s3_storage, *storage.mutable_config());
         }

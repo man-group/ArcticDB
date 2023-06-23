@@ -83,7 +83,7 @@ def test_uri_override(moto_s3_uri_incl_bucket):
         primary_any.config.Unpack(s3_config)
         return s3_config
 
-    wrong_uri = "s3://otherhost:test_bucket_0?access=dog&secret=cat&port=17988"
+    wrong_uri = "s3://otherhost:test_bucket_0?access=dog&secret=cat&port=17988&region=blah"
     altered_ac = Arctic(moto_s3_uri_incl_bucket)
     altered_ac._library_adapter = S3LibraryAdapter(wrong_uri)
     # At this point the library_manager is still correct, so we can write
@@ -94,21 +94,31 @@ def test_uri_override(moto_s3_uri_incl_bucket):
     assert s3_storage.endpoint == "otherhost:17988"
     assert s3_storage.credential_name == "dog"
     assert s3_storage.credential_key == "cat"
+    assert s3_storage.bucket_name == "test_bucket_0"
+    assert s3_storage.region == "blah"
 
-    override_uri = "{}&force_uri_lib_config=True".format(moto_s3_uri_incl_bucket)
+    # Enable `force_uri_lib_config` and instantiate Arctic using the genuine moto details.
+    # These differ from the fake details that the library was created with.
+    override_uri = "{}&region=reg&force_uri_lib_config=True".format(moto_s3_uri_incl_bucket)
     override_ac = Arctic(override_uri)
     override_lib = override_ac["override_endpoint"]
     s3_storage = _get_s3_storage_config(override_lib)
     assert s3_storage.endpoint == override_ac._library_adapter._endpoint
     assert s3_storage.credential_name == override_ac._library_adapter._query_params.access
     assert s3_storage.credential_key == override_ac._library_adapter._query_params.secret
+    assert s3_storage.bucket_name == override_ac._library_adapter._bucket
+    assert s3_storage.region == override_ac._library_adapter._query_params.region
 
+    # Same as above, but with `force_uri_lib_config` off.
+    # This should return the fake details the library was created with.
     ac = Arctic(moto_s3_uri_incl_bucket)
     lib = ac["override_endpoint"]
     s3_storage = _get_s3_storage_config(lib)
     assert s3_storage.endpoint == "otherhost:17988"
     assert s3_storage.credential_name == "dog"
     assert s3_storage.credential_key == "cat"
+    assert s3_storage.bucket_name == "test_bucket_0"
+    assert s3_storage.region == "blah"
 
 
 def test_library_options(moto_s3_uri_incl_bucket):
