@@ -14,9 +14,17 @@
 #include <arcticdb/entity/protobufs.hpp>
 
 namespace arcticdb {
-/*
- * Interface for a read/write compatible storage backend. At the time of writing, the main implementers are AsyncStore
- * and InMemoryStore.
+/**
+ * Fundamental, non-leaky abstraction for a read/write compatible storage backend.
+ *
+ * A Store writes SegmentInMemory to a persistent storage, returning a key.
+ * A Store takes keys and returns their associated SegmentInMemory.
+ *
+ * This is intended, as much as possible, to be a .
+ *
+ * Higher level operations can read from or write to a Store without any consideration of what sort of storage is
+ * being written to, what compression (if any) is being applied, the encoding to be used etc etc.
+ *
  */
 class Store : public stream::StreamSink, public stream::StreamSource, public std::enable_shared_from_this<Store> {
 public:

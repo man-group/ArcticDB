@@ -187,19 +187,6 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
         .def_property_readonly("end", &pipelines::ColRange::end)
         .def_property_readonly("diff", &pipelines::ColRange::diff);
 
-
-
-    auto adapt_read_dfs = [](std::vector<ReadResult> && ret) -> py::list {
-        py::list lst;
-        for (auto &res: ret) {
-            auto pynorm = python_util::pb_to_python(res.norm_meta);
-            auto pyuser_meta = python_util::pb_to_python(res.user_meta);
-            auto multi_key_meta = python_util::pb_to_python(res.multi_key_meta);
-            lst.append(py::make_tuple(res.item, std::move(res.frame_data), pynorm, pyuser_meta, multi_key_meta, res.multi_keys));
-        }
-        return lst;
-    };
-
     py::class_<IndexRange>(version, "IndexRange")
             .def(py::init([](timestamp start, timestamp end){
                 return IndexRange(start, end);

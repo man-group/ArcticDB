@@ -324,6 +324,12 @@ private:
     void delete_snapshot_sync(const SnapshotId& snap_name, const VariantKey& snap_key);
 };
 
+
+/**
+ * @brief Convert between C++ structures and Python structures before returning to Python
+ * @param keys_frame_and_descriptors
+ * @return
+ */
 inline std::vector<ReadResult> frame_to_read_result(std::vector<std::pair<VersionedItem, FrameAndDescriptor>>&& keys_frame_and_descriptors) {
     std::vector<ReadResult> read_results;
     read_results.reserve(keys_frame_and_descriptors.size());

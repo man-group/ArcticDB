@@ -19,6 +19,11 @@
 
 namespace arcticdb::async {
 
+/**
+ * @brief AsyncStore is a wrapper around a Store that allows for asynchronous writes.
+ *
+ * @tparam ClockType
+ */
 template<class ClockType = util::SysClock>
 class AsyncStore : public Store {
 public:

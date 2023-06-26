@@ -18,6 +18,9 @@
 #include <arcticdb/storage/storage.hpp>
 
 namespace arcticdb {
+    /**
+     * In-memory store for testing purposes.
+     */
     class InMemoryStore : public Store {
 
     public:

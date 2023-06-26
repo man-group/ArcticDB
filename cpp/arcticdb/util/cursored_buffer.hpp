@@ -129,7 +129,6 @@ public:
 
     template<typename T>
     const T *ptr_cast(position_t t_pos, size_t required_bytes) const {
-//        return reinterpret_cast<const T *>(buffer_.template ptr_cast<T>(t_pos * sizeof(T), required_bytes));
         return reinterpret_cast<const T *>(buffer_.template ptr_cast<T>(t_pos * sizeof(T), required_bytes));
     }
 

@@ -54,7 +54,7 @@ namespace arcticdb::storage {
             return std::get<AtomKey >(variant_key());
         }
 
-        const AtomKey &atom_key() const {
+        [[nodiscard]] const AtomKey &atom_key() const {
             util::check(std::holds_alternative<AtomKey>(variant_key()), "Expected atom key access");
             return std::get<AtomKey >(variant_key());
         }
@@ -64,7 +64,7 @@ namespace arcticdb::storage {
             return std::get<RefKey >(variant_key());
         }
 
-        const RefKey &ref_key() const {
+        [[nodiscard]] const RefKey &ref_key() const {
             util::check(std::holds_alternative<RefKey>(variant_key()), "Expected ref key access");
             return std::get<RefKey >(variant_key());
         }
@@ -73,23 +73,23 @@ namespace arcticdb::storage {
             return data_->key_;
         }
 
-        const VariantKey& variant_key() const {
+        [[nodiscard]] const VariantKey& variant_key() const {
             return data_->key_;
         }
 
-        const Segment &segment() const {
+        [[nodiscard]] const Segment &segment() const {
             return data_->segment_;
         }
 
-        bool has_segment() const {
+        [[nodiscard]] bool has_segment() const {
             return !segment().is_empty();
         }
 
-        std::string_view key_view() const {
+        [[nodiscard]] std::string_view key_view() const {
             return variant_key_view(variant_key());
         }
 
-        KeyType key_type() const {
+        [[nodiscard]] KeyType key_type() const {
             return variant_key_type(variant_key());
         }
 

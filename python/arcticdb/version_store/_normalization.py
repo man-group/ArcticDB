@@ -169,9 +169,14 @@ def _to_primitive(arr, arr_name, dynamic_strings, string_max_len=None, coerce_co
         return arr.codes
 
     obj_tokens = (object, "object", "O")
-    if arr.dtype.hasobject is False and not (
-        dynamic_strings and arr.dtype == "float" and coerce_column_type in obj_tokens
-    ):
+
+    is_numpy_array_primitively_typed = (
+            hasattr(arr.dtype, "hasobject") and arr.dtype.hasobject is False and not (
+            dynamic_strings and arr.dtype == "float" and coerce_column_type in obj_tokens
+        )
+    )
+
+    if is_numpy_array_primitively_typed:
         # not an object type numpy column and not going to later be
         # coerced to an object type column - does not require conversion to a primitive type.
         return arr

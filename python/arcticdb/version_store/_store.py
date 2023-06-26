@@ -336,7 +336,10 @@ class NativeVersionStore:
                 item, norm_meta = self._normalizer.normalize(item)
                 norm_meta.custom.CopyFrom(custom_norm_meta)
             else:
-                # TODO: just for pandas dataframes for now.
+                # Normalize pandas DataFrame. For now, DataFrames backed by one F-ordered
+                # NumPy array or a collection of NumPy arrays are the only DataFrames supported.
+                # TODO: support other DataFrame types, such as pandas backed by pyarrow, polars,
+                # pyspark.sql.DataFrame (if it makes sense), etc.
                 item, norm_meta = self._normalizer.normalize(
                     dataframe,
                     pickle_on_failure=pickle_on_failure,
