@@ -47,7 +47,7 @@ dependencies:
   # Python dependences
   - python =3.10 # Python 3.11 requires protobuf>=4
   - numpy
-  - pandas < 2
+  - pandas
   - pytest
   - boto3
   - werkzeug
