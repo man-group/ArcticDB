@@ -15,30 +15,9 @@ Leave `Bump branch to the next version` as `No`.
 This will create a branch off of `master` incrementing the version in `setup.cfg` but, 
 as of the time of writing, we are leaving that unchanged.
 
-## 2. Update the version number in the tag
-
-**This should not be a manual process - but is required for now!**
-
-We need to update the version for 
-[`arcticdb.__version__`](https://github.com/man-group/ArcticDB/blob/master/python/arcticdb/\_\_init\_\_.py#LL14C1-L14C1).
-
-To do this, force push a new commit to the tag:
-
-```
-git fetch --all --tags
-git checkout <NEWLY CREATED TAG>
-vi python/arcticdb/__init__.py
-git add python/arcticdb/__init__.py
-git commit -m 'Manually update version'
-git tag <NEWLY CREATED TAG> -f
-git push origin <NEWLY CREATED TAG> -f
-```
-
-The result should look similar to [this commit](https://github.com/man-group/ArcticDB/commit/c90a21a611b5c6ec2ef4b049981ac5c2ccb8ad08).
-
 The [build will now be running for the tag.](https://github.com/man-group/ArcticDB/actions/workflows/build.yml)
 
-## 3. Update conda-forge recipe
+## 2. Update conda-forge recipe
 
 [`regro-cf-autotick-bot`](https://github.com/regro-cf-autotick-bot) generally opens a PR
 on [ArcticDB's feedstock](https://github.com/conda-forge/arcticdb-feedstock)
@@ -58,13 +37,13 @@ You will need to update:
 A PR is generally open with a todo-list summarizing all the required steps to perform,
 before an update to the feedstock.
 
-## 4. Release to PyPi
+## 3. Release to PyPi
 
 After building, GitHub Actions job you kicked off in step 2 after comitting
 the tag will be waiting on approval to deploy to PyPi. 
 Find the job and click approve to deploy.
 
-## 5. Release to Conda
+## 4. Release to Conda
 
 Merge the PR created in step 3. 
 
