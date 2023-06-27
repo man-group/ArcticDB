@@ -23,6 +23,7 @@
 #include <folly/Poly.h>
 #include <arcticdb/column_store/string_pool.hpp>
 #include <arcticdb/util/hash.hpp>
+#include <arcticdb/util/third_party/emilib_map.hpp>
 
 namespace arcticdb::grouping {
 
@@ -35,47 +36,69 @@ public:
         using DataTypeTag = typename GrouperDescriptor::DataTypeTag;
         using RawType = typename DataTypeTag::raw_type;
 
-        std::optional<size_t> group(RawType key, std::shared_ptr<StringPool> sp) const {
+        // The multiple return statements in here are ugly, but avoids creating temporaries as far as possible
+        std::optional<size_t> group(RawType key, const std::shared_ptr<StringPool>& sp) {
             constexpr DataType dt = DataTypeTag::data_type;
-            std::optional<HashedValue> hash_result;
-            if constexpr(dt == DataType::ASCII_FIXED64 || dt == DataType::ASCII_DYNAMIC64 || dt == DataType::UTF_FIXED64 || dt == DataType::UTF_DYNAMIC64) {
-                if (is_a_string(key)) {
-                    hash_result = hash(sp->get_view(key));
+            if constexpr (dt == DataType::ASCII_FIXED64 || dt == DataType::ASCII_DYNAMIC64 ||
+                          dt == DataType::UTF_FIXED64 || dt == DataType::UTF_DYNAMIC64) {
+                if (auto it = cache_.find(key); it != cache_.end()) {
+                    return it->second;
                 } else {
-                    hash_result = std::nullopt;
+                    if (is_a_string(key)) {
+                        auto hashed_value = hash(sp->get_view(key));
+                        cache_.insert_unique(std::move(key), std::move(hashed_value));
+                        return hashed_value;
+                    } else {
+                        cache_.insert(key, std::nullopt);
+                        return std::nullopt;
+                    }
+                }
+            } else if constexpr(dt == DataType::FLOAT32 || dt == DataType::FLOAT64) {
+                if (std::isnan(key)) {
+                    return std::nullopt;
+                } else {
+                    return hash<RawType>(&key, 1);
                 }
             } else {
-                hash_result = hash<RawType>(&key, 1);
+                return hash<RawType>(&key, 1);
             }
-
-            return hash_result;
         }
+    private:
+        // Only use a cache for grouping on string columns to avoid getting and hashing the same string view repeatedly
+        // No point for numeric types, as we would have to hash it to look it up in this map anyway
+        // This will be slower in cases where there aren't many repeats in string grouping columns
+        // Maybe track cache hit ratio and stop using it if it is too low?
+        // Tested with 100,000,000 row dataframe with 100,000 unique values in the grouping column. Timings:
+        // 10.39 seconds without caching
+        // 11.01 seconds with caching
+        // Not worth worrying about right now
+        emilib::HashMap<RawType, std::optional<size_t>> cache_;
     };
 };
 
 class Bucketizer {
     public:
-    virtual size_t bucket(size_t group) const = 0;
+    virtual uint8_t bucket(size_t group) const = 0;
 
-    virtual size_t num_buckets() const = 0;
+    virtual uint8_t num_buckets() const = 0;
 
     virtual ~Bucketizer() {};
 };
 
 class ModuloBucketizer : Bucketizer {
-    size_t mod_;
+    uint8_t mod_;
 public:
-    ModuloBucketizer(size_t mod) :
+    ModuloBucketizer(uint8_t mod) :
         mod_(mod) {
     }
 
     ARCTICDB_MOVE_COPY_DEFAULT(ModuloBucketizer)
 
-    size_t bucket(size_t group) const {
+    uint8_t bucket(size_t group) const {
         return group % mod_;
     }
 
-    virtual size_t num_buckets() const {
+    virtual uint8_t num_buckets() const {
         return mod_;
     }
 
@@ -84,11 +107,11 @@ public:
 
 class IdentityBucketizer : Bucketizer {
 public:
-    size_t bucket(size_t group) const {
+    uint8_t bucket(size_t group) const {
         return group;
     }
 
-    virtual size_t num_buckets() const {
+    virtual uint8_t num_buckets() const {
         return 0;
     }
 };
