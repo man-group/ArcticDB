@@ -23,6 +23,24 @@ from hypothesis import assume, given, settings
 from hypothesis.extra.pandas import column, data_frames, range_indexes
 
 
+def test_group_on_float_column_with_nans(lmdb_version_store):
+    lib = lmdb_version_store
+    sym = "test_group_on_float_column_with_nans"
+    df = pd.DataFrame(
+        {
+            "grouping_column": [1.0, 2.0, np.nan, 1.0, 2.0, 2.0],
+            "agg_column": [1, 2, 3, 4, 5, 6],
+        }
+    )
+    lib.write(sym, df)
+    expected = df.groupby("grouping_column").agg({"agg_column": "sum"})
+    q = QueryBuilder()
+    q = q.groupby("grouping_column").agg({"agg_column": "sum"})
+    received = lib.read(sym, query_builder=q).data
+    received.sort_index(inplace=True)
+    assert_frame_equal(expected, received)
+
+
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(

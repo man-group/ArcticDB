@@ -145,6 +145,17 @@ ENDIF()
 
 set(CMAKE_INSTALL_RPATH "\\$ORIGIN/lib")
 
+if (NOT WIN32)
+    if(NOT ${ARCTICDB_USING_CONDA})
+        # Compilers on conda-forge are relatively strict.
+        # For now, we do not want to treat warnings as errors for those builds.
+        add_compile_options("-Werror")
+    endif()
+    add_compile_options("-ggdb")
+    add_compile_options("-fvisibility=hidden")
+    add_compile_options("-fno-omit-frame-pointer")
+endif ()
+
 ## Core library without python bindings ##
 set(arcticdb_srcs
         # header files
@@ -566,17 +577,6 @@ target_link_libraries(arcticdb_core PRIVATE
         )
 
 GENERATE_EXPORT_HEADER(arcticdb_core)
-
-if (NOT WIN32)
-    if(NOT ${ARCTICDB_USING_CONDA})
-        # Compilers on conda-forge are relatively strict.
-        # For now, we do not want to treat warnings as errors for those builds.
-        add_compile_options("-Werror")
-    endif()
-    add_compile_options("-ggdb")
-    add_compile_options("-fvisibility=hidden")
-    add_compile_options("-fno-omit-frame-pointer")
-endif ()
 
 ## Core python bindings, private only ##
 set(arcticdb_python_srcs

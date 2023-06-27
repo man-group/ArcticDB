@@ -104,7 +104,9 @@ namespace arcticdb {
         }
 
         size_t get_bucket(){
-            return bucket_.value();
+            internal::check<ErrorCode::E_ASSERTION_FAILURE>(bucket_.has_value(),
+                                                            "ProcessingSegment::get_bucket called, but bucket_ has no value");
+            return *bucket_;
         }
 
         void set_bucket(size_t bucket) {
@@ -137,11 +139,21 @@ namespace arcticdb {
     }
 
     template<typename Grouper, typename Bucketizer>
-    std::vector<std::optional<size_t>> get_buckets(const ColumnWithStrings& col, std::shared_ptr<Grouper> grouper, std::shared_ptr<Bucketizer> bucketizer) {
+    std::pair<std::vector<std::optional<uint8_t>>, std::vector<uint64_t>> get_buckets(
+            const ColumnWithStrings& col,
+            Grouper& grouper,
+            Bucketizer& bucketizer) {
+        schema::check<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>(!col.column_->is_sparse(),
+                                                            "GroupBy not supported with sparse columns");
         auto input_data = col.column_->data();
+        // Mapping from row to bucket
+        // std::nullopt only for Nones and NaNs in string/float columns
+        std::vector<std::optional<uint8_t>> row_to_bucket;
+        row_to_bucket.reserve(col.column_->row_count());
+        // Tracks how many rows are in each bucket
+        // Use to skip empty buckets, and presize columns in the output ProcessingSegments
+        std::vector<uint64_t> bucket_counts(bucketizer.num_buckets(), 0);
 
-        std::vector<std::optional<size_t>> output;
-        output.reserve(col.column_->row_count());
         using TypeDescriptorTag = typename Grouper::GrouperDescriptor;
         using RawType = typename TypeDescriptorTag::DataTypeTag::raw_type;
 
@@ -150,16 +162,18 @@ namespace arcticdb {
             auto ptr = reinterpret_cast<const RawType*>(block->data());
             for(auto i = 0u; i < row_count; ++i, ++ptr){
                 if constexpr(std::is_same_v<typename Grouper::GrouperDescriptor, TypeDescriptorTag>) {
-                    auto opt_group = grouper->group(*ptr, col.string_pool_);
+                    auto opt_group = grouper.group(*ptr, col.string_pool_);
                     if (opt_group.has_value()) {
-                        output.emplace_back(bucketizer->bucket(*opt_group));
+                        auto bucket = bucketizer.bucket(*opt_group);
+                        row_to_bucket.emplace_back(bucket);
+                        ++bucket_counts[bucket];
                     } else {
-                        output.emplace_back(std::nullopt);
+                        row_to_bucket.emplace_back(std::nullopt);
                     }
                 }
             }
         }
-        return output;
+        return {std::move(row_to_bucket), std::move(bucket_counts)};
     }
 
     template<typename GrouperType, typename BucketizerType>
@@ -168,6 +182,7 @@ namespace arcticdb {
             ProcessingSegment& input,
             const ColumnName& grouping_column_name,
             bool dynamic_schema) {
+
         Composite<ProcessingSegment> output;
         auto get_result = input.get(ColumnName(grouping_column_name), store);
         if (std::holds_alternative<ColumnWithStrings>(get_result)) {
@@ -176,37 +191,32 @@ namespace arcticdb {
                 using TypeDescriptorTag = decltype(type_desc_tag);
                 using ResolvedGrouperType = typename GrouperType::template Grouper<TypeDescriptorTag>;
 
-                auto grouper = std::make_shared<ResolvedGrouperType>(ResolvedGrouperType());
+                ResolvedGrouperType grouper;
                 auto num_buckets = ConfigsMap::instance()->get_int("Partition.NumBuckets", async::TaskScheduler::instance()->cpu_thread_count());
-                auto bucketizer = std::make_shared<BucketizerType>(num_buckets);
-                auto bucket_vec = get_buckets(partitioning_column, grouper, bucketizer);
-                std::vector<util::BitSet> bitsets;
-                bitsets.resize(bucketizer->num_buckets());
-                std::vector<util::BitSet::bulk_insert_iterator> iterators;
-                for(auto& bitset : bitsets)
-                    iterators.emplace_back(util::BitSet::bulk_insert_iterator(bitset));
-
-                for(auto val : folly::enumerate(bucket_vec))
-                    if (val->has_value())
-                        iterators[val->value()] = val.index;
-
-                for(auto& iterator : iterators)
-                    iterator.flush();
-
-                for(auto bitset : folly::enumerate(bitsets)) {
-                    if(bitset->count() != 0) {
-                        ProcessingSegment proc;
-                        proc.set_bucket(bitset.index);
-                        for (auto& seg_slice_and_key : input.data()) {
-                            const SegmentInMemory& seg = seg_slice_and_key.segment(store);
-                            bitset->resize(seg.row_count());
-                            auto new_seg = filter_segment(seg, *bitset);
+                if (num_buckets > std::numeric_limits<uint8_t>::max()) {
+                    log::version().warn("GroupBy partitioning buckets capped at {} (received {})",
+                                        std::numeric_limits<uint8_t>::max(),
+                                        num_buckets);
+                    num_buckets = std::numeric_limits<uint8_t>::max();
+                }
+                std::vector<ProcessingSegment> procs{static_cast<size_t>(num_buckets)};
+                BucketizerType bucketizer(num_buckets);
+                auto [row_to_bucket, bucket_counts] = get_buckets(partitioning_column, grouper, bucketizer);
+                for (auto& seg_slice_and_key : input.data()) {
+                    const SegmentInMemory& seg = seg_slice_and_key.segment(store);
+                    auto new_segs = partition_segment(seg, row_to_bucket, bucket_counts);
+                    for (auto&& new_seg: folly::enumerate(new_segs)) {
+                        if (bucket_counts.at(new_seg.index) > 0) {
                             pipelines::FrameSlice new_slice{seg_slice_and_key.slice()};
-                            new_slice.adjust_rows(new_seg.row_count());
-
-                            proc.data().emplace_back(pipelines::SliceAndKey{std::move(new_seg), std::move(new_slice)});
+                            new_slice.adjust_rows(new_seg->row_count());
+                            procs.at(new_seg.index).data().emplace_back(pipelines::SliceAndKey{std::move(*new_seg), std::move(new_slice)});
                         }
-                        output.push_back(std::move(proc));
+                    }
+                }
+                for (auto&& proc: folly::enumerate(procs)) {
+                    if (bucket_counts.at(proc.index) > 0) {
+                        proc->set_bucket(proc.index);
+                        output.push_back(std::move(*proc));
                     }
                 }
             });
