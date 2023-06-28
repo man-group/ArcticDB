@@ -56,7 +56,7 @@ inline std::vector<folly::Future<version_store::UpdateInfo>> async_batch_get_lat
             auto latest_undeleted_version = entry->get_first_index(false);
             VersionId next_version_id = latest_version.has_value() ? latest_version->version_id() + 1 : 0;
             return version_store::UpdateInfo{latest_undeleted_version, next_version_id};
-        }));
+        }).via(&async::cpu_executor()));
     }
     return vector_fut;
 }

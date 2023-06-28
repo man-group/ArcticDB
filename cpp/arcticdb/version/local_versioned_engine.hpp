@@ -340,6 +340,19 @@ public:
         const UpdateInfo& stream_update_info,
         bool prune_previous_versions);
 
+
+    std::vector<VersionedItem> batch_write_versioned_dataframe_internal(
+        const std::vector<StreamId>& stream_ids,
+        std::vector<InputTensorFrame>&& frames,
+        bool prune_previous_versions,
+        bool validate_index
+    );
+
+    std::pair<VersionId, std::shared_ptr<DeDupMap>> create_version_id_and_dedup_map(
+        const version_store::UpdateInfo& update_info, 
+        const StreamId& stream_id, 
+        const WriteOptions& write_options);
+
     std::unordered_map<KeyType, std::pair<size_t, size_t>> scan_object_sizes();
     std::shared_ptr<Store>& _test_get_store() { return store_; }
     AtomKey _test_write_segment(const std::string& symbol);

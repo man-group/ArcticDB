@@ -738,7 +738,7 @@ def test_write_pickle_batch_duplicate_symbols(arctic_library):
 @pytest.mark.parametrize("num_columns", [8, 16])
 @pytest.mark.parametrize("num_days", [10, 200])
 @pytest.mark.parametrize("num_symbols", [100, 200])
-def test_write_batch_stress(arctic_library, num_columns, num_days, num_symbols):
+def test_write_batch_different_params(arctic_library, num_columns, num_days, num_symbols):
     """Should be able to write different size of batch of data."""
     lib = arctic_library
     dt = datetime(2019, 4, 8, 0, 0, 0)
@@ -757,10 +757,8 @@ def test_write_batch_stress(arctic_library, num_columns, num_days, num_symbols):
 
     for sym in range(num_symbols):
         original_dataframe = list_dataframes[sym]
-        for col in original_dataframe.columns:
-            read_column_data = lib.read("symbol_" + str(sym), columns=[col]).data
-            original_column_data = original_dataframe[[col]]
-            assert_frame_equal(read_column_data, original_column_data)
+        read_dataframe = lib.read("symbol_" + str(sym)).data
+        assert_frame_equal(read_dataframe, original_dataframe)
 
 
 def test_write_with_unpacking(arctic_library):

@@ -108,17 +108,6 @@ std::vector<VersionedItem> PythonVersionStore::batch_write_index_keys_to_version
     return output;
 }
 
-std::pair<VersionId, std::shared_ptr<DeDupMap>> PythonVersionStore::create_version_id_and_dedup_map(
-    version_store::UpdateInfo& update_info, 
-    const StreamId& stream_id, 
-    WriteOptions& write_options){
-    if(cfg().write_options().de_duplication()) {
-        return {update_info.next_version_id_, get_de_dup_map(stream_id, update_info.previous_index_key_, write_options)};
-    } else {
-        return {update_info.next_version_id_, std::make_shared<DeDupMap>()};
-    }
-}
-
 std::vector<VersionedItem> PythonVersionStore::batch_write(
     const std::vector<StreamId>& stream_ids,
     const std::vector<py::tuple> &items,
@@ -127,40 +116,8 @@ std::vector<VersionedItem> PythonVersionStore::batch_write(
     bool prune_previous_versions,
     bool validate_index) {
 
-    auto write_options = get_write_options();
-    auto update_info_fut_vector = async_batch_get_latest_undeleted_version_and_next_version_id(store(),
-                                                                                               version_map(),
-                                                                                               stream_ids);
     auto frames = create_input_tensor_frames(stream_ids, items, norms, user_metas);
-    std::vector<version_store::UpdateInfo> vector_update_info(stream_ids.size());
-    std::vector<folly::Future<VersionedItem>> version_futures;
-    for(auto&& update_info_fut : folly::enumerate(update_info_fut_vector)) {
-        auto idx = update_info_fut.index;
-        version_futures.push_back(std::move(*update_info_fut)
-            .thenValue([this, &stream_id = stream_ids[idx], &write_options, &vector_update_info, idx](auto&& update_info){
-                vector_update_info[idx] = std::move(update_info);
-                return this->create_version_id_and_dedup_map(vector_update_info[idx], stream_id, write_options);
-            })
-            .thenValue([this, &stream_id = stream_ids[idx], &write_options, &validate_index, &frame = frames[idx]](
-                auto&& version_id_de_dup_map_pair){
-                    auto& [version_id, de_dup_map] = version_id_de_dup_map_pair;
-                    ARCTICDB_SAMPLE(WriteDataFrame, 0)
-                    ARCTICDB_DEBUG(log::version(), "Writing dataframe for stream id {}", stream_id);
-                    return async_write_dataframe_impl( store(),
-                        version_id,
-                        std::move(frame),
-                        write_options,
-                        de_dup_map,
-                        false,
-                        validate_index
-                    );
-            })
-            .thenValue([this, &prune_previous_versions, &update_info = vector_update_info[idx]](auto&& index_key){
-                return async_write_index_key_to_version_map(version_map(), std::move(index_key), update_info, prune_previous_versions);
-            })
-        );
-    }
-    return folly::collect(version_futures).get();
+    return batch_write_versioned_dataframe_internal(stream_ids, std::move(frames), prune_previous_versions, validate_index);
 }
 
 std::vector<VersionedItem> PythonVersionStore::batch_append(

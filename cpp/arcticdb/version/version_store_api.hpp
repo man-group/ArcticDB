@@ -255,11 +255,6 @@ class PythonVersionStore : public LocalVersionedEngine {
         const std::optional<bool>& iterate_on_failure,
         const std::optional<bool>& skip_snapshots);
 
-    std::pair<VersionId, std::shared_ptr<DeDupMap>> create_version_id_and_dedup_map(
-        version_store::UpdateInfo& update_info, 
-        const StreamId& stream_id, 
-        WriteOptions& write_options);
-
     // Batch methods
     std::vector<VersionedItem> batch_write(
         const std::vector<StreamId> &stream_ids,
