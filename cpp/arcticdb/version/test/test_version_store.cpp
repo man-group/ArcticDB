@@ -320,7 +320,7 @@ TEST_F(VersionStoreTest, StressBatchWrite) {
         frames.push_back(wrapper.frame_);
     }
 
-    test_store_->batch_write_internal(version_ids, symbols, std::move(frames), dedup_maps, false).get();
+    folly::collect(test_store_->batch_write_internal(version_ids, symbols, std::move(frames), dedup_maps, false)).get();
 }
 
 TEST_F(VersionStoreTest, StressBatchReadUncompressed) {

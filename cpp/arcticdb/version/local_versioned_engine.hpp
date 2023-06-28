@@ -247,7 +247,7 @@ public:
         bool sparsify
         );
 
-    folly::Future<std::vector<AtomKey>> batch_write_internal(
+    std::vector<folly::Future<AtomKey>> batch_write_internal(
         std::vector<VersionId> version_ids,
         const std::vector<StreamId>& stream_ids,
         std::vector<InputTensorFrame>&& frames,
@@ -333,6 +333,12 @@ public:
         const std::optional<AtomKey>& maybe_prev,
         const WriteOptions& write_options
     );
+
+    folly::Future<VersionedItem> async_write_index_key_to_version_map(
+        const std::shared_ptr<VersionMap> &version_map,
+        const AtomKey&& index_key,
+        const UpdateInfo& stream_update_info,
+        bool prune_previous_versions);
 
     std::unordered_map<KeyType, std::pair<size_t, size_t>> scan_object_sizes();
     std::shared_ptr<Store>& _test_get_store() { return store_; }

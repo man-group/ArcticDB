@@ -1058,7 +1058,30 @@ std::vector<std::pair<VersionedItem, FrameAndDescriptor>> LocalVersionedEngine::
     return folly::collect(results_fut).get();
 }
 
-folly::Future<std::vector<AtomKey>> LocalVersionedEngine::batch_write_internal(
+folly::Future<VersionedItem> LocalVersionedEngine::async_write_index_key_to_version_map(
+    const std::shared_ptr<VersionMap> &version_map,
+    const AtomKey&& index_key,
+    const UpdateInfo& stream_update_info,
+    bool prune_previous_versions) {
+
+    folly::Future<folly::Unit> write_version_fut;
+
+    if(prune_previous_versions) {
+        write_version_fut = async::submit_io_task(WriteAndPrunePreviousTask{store(), version_map, index_key, stream_update_info.previous_index_key_});
+    } else {
+        write_version_fut = async::submit_io_task(WriteVersionTask{store(), version_map, index_key});
+    }
+
+    return std::move(write_version_fut)
+    .then([this, index_key, store = store()](auto &&){
+        return async::submit_io_task(WriteSymbolTask(store, symbol_list_ptr(), index_key.id()))
+        .then([index_key](auto &&){
+            return VersionedItem(index_key);
+        });
+    });
+}
+
+std::vector<folly::Future<AtomKey>> LocalVersionedEngine::batch_write_internal(
     std::vector<VersionId> version_ids,
     const std::vector<StreamId>& stream_ids,
     std::vector<InputTensorFrame>&& frames,
@@ -1079,10 +1102,8 @@ folly::Future<std::vector<AtomKey>> LocalVersionedEngine::batch_write_internal(
             validate_index
         ));
     }
-    return folly::collect(results_fut).via(&async::cpu_executor());
+    return results_fut;
 }
-
-
 
 VersionedItem LocalVersionedEngine::append_internal(
     const StreamId& stream_id,
