@@ -11,7 +11,6 @@
 #include <pybind11/numpy.h>
 #include <pybind11/operators.h>
 #include <arcticdb/version/version_store_api.hpp>
-#include <arcticdb/python/arctic_version.hpp>
 #include <arcticdb/python/python_utils.hpp>
 #include <arcticdb/pipeline/column_stats.hpp>
 #include <arcticdb/pipeline/query.hpp>

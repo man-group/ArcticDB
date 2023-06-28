@@ -17,7 +17,6 @@
 #include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/util/trace.hpp>
 #include <arcticdb/python/python_utils.hpp>
-#include <arcticdb/python/arctic_version.hpp>
 #include <arcticdb/entity/performance_tracing.hpp>
 #include <arcticdb/entity/metrics.hpp>
 #include <arcticdb/entity/protobufs.hpp>
@@ -283,7 +282,6 @@ PYBIND11_MODULE(arcticdb_ext, m) {
     arcticdb::stream::register_bindings(m);
     arcticdb::toolbox::apy::register_bindings(m);
 
-    m.def("get_version_string", &arcticdb::get_arcticdb_version_string);
     m.def("read_runtime_config", [](const py::object object) {
         auto config = arcticc::pb2::config_pb2::RuntimeConfig{};
         arcticdb::python_util::pb_from_python(object, config);
