@@ -38,40 +38,93 @@ class Arctic:
         uri: str
             URI specifying the backing store used to access, configure, and create Arctic libraries.
 
-            The S3 URI connection scheme has the form ``s3(s)://<s3 end point>:<s3 bucket>[?options]``.
+            S3
+            --
 
-            Use s3s as the protocol if communicating with a secure endpoint.
+                The S3 URI connection scheme has the form ``s3(s)://<s3 end point>:<s3 bucket>[?options]``.
 
-            Options is a query string that specifies connection specific options as ``<name>=<value>`` pairs joined with
-            ``&``.
+                Use s3s as the protocol if communicating with a secure endpoint.
 
-            Available options for S3:
+                Options is a query string that specifies connection specific options as ``<name>=<value>`` pairs joined with
+                ``&``.
 
-            +---------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------+
-            | Option                    | Description                                                                                                                                                   |
-            +===========================+===============================================================================================================================================================+
-            | port                      | port to use for S3 connection                                                                                                                                 |
-            +---------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------+
-            | region                    | S3 region                                                                                                                                                     |
-            +---------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------+
-            | use_virtual_addressing    | Whether to use virtual addressing to access the S3 bucket                                                                                                     |
-            +---------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------+
-            | access                    | S3 access key                                                                                                                                                 |
-            +---------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------+
-            | secret                    | S3 secret access key                                                                                                                                          |
-            +---------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------+
-            | path_prefix               | Path within S3 bucket to use for data storage                                                                                                                 |
-            +---------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------+
-            | aws_auth                  | If true, authentication to endpoint will be computed via AWS environment vars/config files. If no options are provided `aws_auth` will be assumed to be true. |
-            +---------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------+
-            | force_uri_lib_config      | Override the credentials and endpoint of an S3 storage with the URI of the Arctic object. Use if accessing a replicated (to different region/bucket) library. |
-            +---------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------+
+                Available options for S3:
 
-            Note: When connecting to AWS, `region` can be automatically deduced from the endpoint if the given endpoint
-            specifies the region and `region` is not set.
+                +---------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------+
+                | Option                    | Description                                                                                                                                                   |
+                +===========================+===============================================================================================================================================================+
+                | port                      | port to use for S3 connection                                                                                                                                 |
+                +---------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------+
+                | region                    | S3 region                                                                                                                                                     |
+                +---------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------+
+                | use_virtual_addressing    | Whether to use virtual addressing to access the S3 bucket                                                                                                     |
+                +---------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------+
+                | access                    | S3 access key                                                                                                                                                 |
+                +---------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------+
+                | secret                    | S3 secret access key                                                                                                                                          |
+                +---------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------+
+                | path_prefix               | Path within S3 bucket to use for data storage                                                                                                                 |
+                +---------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------+
+                | aws_auth                  | If true, authentication to endpoint will be computed via AWS environment vars/config files. If no options are provided `aws_auth` will be assumed to be true. |
+                +---------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------+
+                | force_uri_lib_config      | Override the credentials and endpoint of an S3 storage with the URI of the Arctic object. Use if accessing a replicated (to different region/bucket) library. |
+                +---------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------+
 
-            The LMDB URI connection scheme has the form ``lmdb:///<path to store LMDB files>``. There are no options
-            available for the LMDB URI connection scheme.
+                Note: When connecting to AWS, `region` can be automatically deduced from the endpoint if the given endpoint
+                specifies the region and `region` is not set.
+
+            Azure
+            -----
+                The Azure URI connection scheme has the form ``azure://<azure end point>[:port]:<azure container>[?options]``.
+
+                Options is a query string that specifies connection specific options as ``<name>=<value>`` pairs joined with
+                ``&``.
+
+                Available options for Azure:
+                +---------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------+
+                | Option                    | Description                                                                                                                                                   |
+                +===========================+===============================================================================================================================================================+
+                | access                    | Azure access key                                                                                                                                              |
+                +---------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------+
+                | secret                    | Azure secret access key                                                                                                                                       |
+                +---------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------+
+                | path_prefix               | Path within Azure container to use for data storage                                                                                                           |
+                +---------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------+
+                | https                     | If true, https communication will be used; Default false                                                                                                      |
+                +---------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------+
+                | connect_to_azurite        | If true, special communication handling for Azurite (Azure enumerator) will be enabled. Default false                                                         |
+                |                           | It is due to a bug in Azurite https://github.com/Azure/Azurite/issues/1822                                                                                    |
+                +---------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------+
+                | ca_cert_path              | Azure CA certificate path. If not set, default path will be used.                                                                                             |
+                |                           | Note: For Linux distribution, default path is set to `/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem`.                                                     |
+                |                           | If the certificate cannot be foune in the path, a Azure exception, with no meaningful errorcode will be thrown. Please refer to the below Exception part for  |
+                |                           | more details.                                                                                                                                                 |
+                |                           | In the future https://github.com/man-group/ArcticDB/issues/514, Linux distribution-dependent default path should be used instead                              |
+                |                           |                                                                                                                                                               |
+                |                           | Default certificate path in various Linux distributions:                                                                                                      |
+                |                           | "/etc/ssl/certs/ca-certificates.crt"                  Debian/Ubuntu/Gentoo etc.                                                                               |
+                |                           | "/etc/pki/tls/certs/ca-bundle.crt"                    Fedora/RHEL 6                                                                                           |
+                |                           | "/etc/ssl/ca-bundle.pem"                              OpenSUSE                                                                                                |
+                |                           | "/etc/pki/tls/cacert.pem"                             OpenELEC                                                                                                |
+                |                           | "/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem"   CentOS/RHEL 7                                                                                           |
+                |                           | "/etc/ssl/cert.pem"                                   Alpine Linux                                                                                            |
+                +---------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------+
+
+
+                Note: Support for Azure Blob Storage is currently only available in *non-Conda* binaries distribution.
+
+
+                Exception: Azure related exception's message always ends with `{AZURE_SDK_HTTP_STATUS_CODE}:{AZURE_SDK_REASON_PHRASE}`.
+                Please refer to https://github.com/Azure/azure-sdk-for-cpp/blob/24ed290815d8f9dbcd758a60fdc5b6b9205f74e0/sdk/core/azure-core/inc/azure/core/http/http_status_code.hpp for
+                more details of status code. Due to a bug in Azure C++ SDK https://github.com/Azure/azure-sdk-for-cpp/issues/4738, Azure may not give meaningful status code and reason
+                phrase in the exception. For debuggin in this situation, please run `export AZURE_LOG_LEVEL=1` to enable the SDK debug log.
+
+
+            LMDB
+            ----
+
+                The LMDB URI connection scheme has the form ``lmdb:///<path to store LMDB files>``. There are no options
+                available for the LMDB URI connection scheme.
 
         Examples
         --------

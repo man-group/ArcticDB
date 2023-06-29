@@ -3,9 +3,14 @@
 ## What is ArcticDB?
 
 ArcticDB is an embedded/serverless database engine designed to integrate with Pandas and the Python Data Science ecosystem. ArcticDB enables 
-you to store, retrieve and process DataFrames at scale, backed by commodity S3 storage.
+you to store, retrieve and process DataFrames at scale, backed by commodity object storage. 
 
-ArcticDB requires *zero additional infrastructure* beyond a running Python environment and access to S3 storage and can be **installed in seconds.**
+Object storage we support:
+
+- **S3**
+- **Azure Blob Storage**
+
+ArcticDB requires *zero additional infrastructure* beyond a running Python environment and access to object storage and can be **installed in seconds.**
 
 ArcticDB is:
 
@@ -31,11 +36,13 @@ pip install arcticdb
 
 ### Usage
 
-ArcticDB is a storage engine designed for S3. As a result, you must have an available S3 bucket to store data using ArcticDB. 
+ArcticDB is a storage engine designed for object storage. As a result, you must have an available object storage to store data using ArcticDB. 
 
 !!! Storage Compatibility
 
     ArcticDB supports any S3 API compatible storage. It has been tested against AWS S3 and storage appliances like [VAST Universal Storage](https://vastdata.com/).
+
+    Beside S3, we also support Azure Blob Storage as well.
 
     ArcticDB also supports LMDB for local/file based storage - to use LMDB, pass an LMDB path as the URI: `Arctic('lmdb://path/to/desired/database')`.
 
@@ -92,12 +99,22 @@ Connecting to AWS with a pre-defined region:
 Note that no explicit credential parameters are given. When `aws_auth` is passed, authentication is delegated to the AWS SDK which is responsible for locating the appropriate credentials in the `.config` file or 
 in environment variables. 
 
-##### Using a specific path within a bucket
+#### Azure Configuration Examples
+
+```python
+>>> from arcticdb import Arctic
+>>> ac = Arctic('azure://ENDPOINT:CONTAINER?access=ABCD&secret=DCBA&https=true')
+```
+
+#### Using a specific path within a bucket/container
 
 You may want to restrict access for the ArcticDB library to a specific path within the bucket. To do this, you can use the `path_prefix` parameter:
 
 ```python
+>>> #s3
 >>> ac = Arctic('s3s://s3.eu-west-2.amazonaws.com:arcticdb-test-bucket?path_prefix=test/&aws_auth=true')
+>>> #azure
+>>> ac = Arctic('azure://ENDPOINT:CONTAINER?path_prefix=test/access=ABCD&secret=DCBA&https=true')
 ```
 
 #### Library Setup
