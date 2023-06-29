@@ -69,7 +69,7 @@ std::vector<FrameSlice> slice(InputTensorFrame &frame, const SlicingPolicy& slic
 
 folly::Future<std::vector<SliceAndKey>> write_slices(
     const InputTensorFrame &frame,
-    const std::shared_ptr<std::vector<FrameSlice>> slices,
+    std::vector<FrameSlice> slices,
     const SlicingPolicy& slicing,
     folly::Function<stream::StreamSink::PartialKey(const FrameSlice &)>&& partial_key_gen,
     const std::shared_ptr<stream::StreamSink>& sink,

@@ -31,6 +31,16 @@ namespace arcticdb::version_store {
  */
 using SpecificAndLatestVersionKeys = std::pair<std::shared_ptr<std::unordered_map<std::pair<StreamId, VersionId>, AtomKey>>,
                                                 std::shared_ptr<std::unordered_map<StreamId, AtomKey>>>;
+struct VersionIdAndDedupMapInfo{
+    VersionId version_id;
+    std::shared_ptr<DeDupMap> de_dup_map;
+    version_store::UpdateInfo update_info;
+};
+
+struct IndexKeyAndUpdateInfo{
+    entity::AtomKey index_key;
+    version_store::UpdateInfo update_info;
+};
 class LocalVersionedEngine : public VersionedEngine {
 
 public:
@@ -334,12 +344,11 @@ public:
         const WriteOptions& write_options
     );
 
-    folly::Future<VersionedItem> async_write_index_key_to_version_map(
+    folly::Future<VersionedItem> write_index_key_to_version_map_async(
         const std::shared_ptr<VersionMap> &version_map,
         const AtomKey&& index_key,
         const UpdateInfo& stream_update_info,
         bool prune_previous_versions);
-
 
     std::vector<VersionedItem> batch_write_versioned_dataframe_internal(
         const std::vector<StreamId>& stream_ids,
@@ -348,8 +357,8 @@ public:
         bool validate_index
     );
 
-    std::pair<VersionId, std::shared_ptr<DeDupMap>> create_version_id_and_dedup_map(
-        const version_store::UpdateInfo& update_info, 
+    VersionIdAndDedupMapInfo create_version_id_and_dedup_map(
+        const version_store::UpdateInfo&& update_info, 
         const StreamId& stream_id, 
         const WriteOptions& write_options);
 

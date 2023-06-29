@@ -40,7 +40,7 @@ inline std::shared_ptr<std::unordered_map<StreamId, AtomKey>> batch_get_latest_v
 }
 
 // The logic here is the same as get_latest_undeleted_version_and_next_version_id
-inline std::vector<folly::Future<version_store::UpdateInfo>> async_batch_get_latest_undeleted_version_and_next_version_id(
+inline std::vector<folly::Future<version_store::UpdateInfo>> batch_get_latest_undeleted_version_and_next_version_id_async(
         const std::shared_ptr<Store> &store,
         const std::shared_ptr<VersionMap> &version_map,
         const std::vector<StreamId> &stream_ids) {
@@ -56,7 +56,7 @@ inline std::vector<folly::Future<version_store::UpdateInfo>> async_batch_get_lat
             auto latest_undeleted_version = entry->get_first_index(false);
             VersionId next_version_id = latest_version.has_value() ? latest_version->version_id() + 1 : 0;
             return version_store::UpdateInfo{latest_undeleted_version, next_version_id};
-        }).via(&async::cpu_executor()));
+        }));
     }
     return vector_fut;
 }
@@ -198,7 +198,7 @@ inline std::optional<AtomKey> get_key_for_version_query(
         });
 }
 
-inline std::vector<folly::Future<std::optional<AtomKey>>> batch_get_versions(
+inline std::vector<folly::Future<std::optional<AtomKey>>> batch_get_versions_async(
     const std::shared_ptr<Store>& store,
     const std::shared_ptr<VersionMap>& version_map,
     const std::vector<StreamId>& symbols,

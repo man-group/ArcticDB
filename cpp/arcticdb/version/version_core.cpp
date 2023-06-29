@@ -99,7 +99,7 @@ folly::Future<entity::AtomKey> async_write_dataframe_impl(
     auto partial_key = IndexPartialKey{frame.desc.id(), version_id};
     sorting::check<ErrorCode::E_UNSORTED_DATA>(!validate_index || frame.desc.get_sorted() == SortedValue::ASCENDING || !std::holds_alternative<stream::TimeseriesIndex>(frame.index),
                 "When calling write with validate_index enabled, input data must be sorted.");
-    return write_frame(partial_key, std::move(frame), slicing_arg, store, de_dup_map, sparsify_floats);
+    return write_frame(std::move(partial_key), std::move(frame), slicing_arg, store, de_dup_map, sparsify_floats);
 }
 
 namespace {

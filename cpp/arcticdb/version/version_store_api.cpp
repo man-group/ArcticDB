@@ -128,7 +128,7 @@ std::vector<VersionedItem> PythonVersionStore::batch_append(
     bool prune_previous_versions,
     bool validate_index) {
     auto write_options = get_write_options();
-    auto stream_update_info_vector_fut = async_batch_get_latest_undeleted_version_and_next_version_id(store(),
+    auto stream_update_info_vector_fut = batch_get_latest_undeleted_version_and_next_version_id_async(store(),
                                                                                                       version_map(),
                                                                                                       stream_ids);
     
@@ -1006,7 +1006,7 @@ std::vector<VersionedItem> PythonVersionStore::batch_write_metadata(
     bool prune_previous_versions) {
     std::vector<std::pair<VersionedItem, py::object>> results;
     std::vector<AtomKey> keys_to_read;
-    auto stream_update_info_vector_fut = async_batch_get_latest_undeleted_version_and_next_version_id(store(),
+    auto stream_update_info_vector_fut = batch_get_latest_undeleted_version_and_next_version_id_async(store(),
                                                                                                       version_map(),
                                                                                                       stream_ids);
     auto stream_update_info_vector = folly::collect(stream_update_info_vector_fut).via(&async::io_executor()).get();

@@ -418,7 +418,7 @@ DescriptorItem LocalVersionedEngine::read_descriptor_internal(
 std::vector<DescriptorItem> LocalVersionedEngine::batch_read_descriptor_internal(
     const std::vector<StreamId>& stream_ids,
     const std::vector<VersionQuery>& version_queries) {
-    auto versions_fut = batch_get_versions(store(), version_map(), stream_ids, version_queries);
+    auto versions_fut = batch_get_versions_async(store(), version_map(), stream_ids, version_queries);
     std::vector<folly::Future<DescriptorItem>> fut_vec;
     for(const auto& stream_id : folly::enumerate(stream_ids)) {
         fut_vec.push_back(
@@ -1014,7 +1014,7 @@ std::vector<std::pair<VersionedItem, FrameAndDescriptor>> LocalVersionedEngine::
     std::vector<ReadQuery> &read_queries,
     const ReadOptions &read_options) {
     py::gil_scoped_release release_gil;
-    auto versions = batch_get_versions(store(), version_map(), stream_ids, version_queries);
+    auto versions = batch_get_versions_async(store(), version_map(), stream_ids, version_queries);
     std::vector<folly::Future<std::pair<VersionedItem, FrameAndDescriptor>>> output;
     for (auto &&version : folly::enumerate(versions)) {
         auto read_query = read_queries.empty() ? ReadQuery{} : read_queries[version.index];
@@ -1058,7 +1058,7 @@ std::vector<std::pair<VersionedItem, FrameAndDescriptor>> LocalVersionedEngine::
     return folly::collect(results_fut).get();
 }
 
-folly::Future<VersionedItem> LocalVersionedEngine::async_write_index_key_to_version_map(
+folly::Future<VersionedItem> LocalVersionedEngine::write_index_key_to_version_map_async(
     const std::shared_ptr<VersionMap> &version_map,
     const AtomKey&& index_key,
     const UpdateInfo& stream_update_info,
@@ -1073,10 +1073,10 @@ folly::Future<VersionedItem> LocalVersionedEngine::async_write_index_key_to_vers
     }
 
     return std::move(write_version_fut)
-    .then([this, index_key, store = store()](auto &&){
-        return async::submit_io_task(WriteSymbolTask(store, symbol_list_ptr(), index_key.id()))
-        .then([index_key](auto &&){
-            return VersionedItem(index_key);
+    .then([this, index_key = std::move(index_key)](auto &&) mutable {
+        return async::submit_io_task(WriteSymbolTask(store(), symbol_list_ptr(), index_key.id()))
+        .then([index_key = std::move(index_key)](auto &&) mutable {
+            return VersionedItem(std::move(index_key));
         });
     });
 }
@@ -1105,14 +1105,14 @@ std::vector<folly::Future<AtomKey>> LocalVersionedEngine::batch_write_internal(
     return results_fut;
 }
 
-std::pair<VersionId, std::shared_ptr<DeDupMap>> LocalVersionedEngine::create_version_id_and_dedup_map(
-    const version_store::UpdateInfo& update_info, 
+VersionIdAndDedupMapInfo LocalVersionedEngine::create_version_id_and_dedup_map(
+    const version_store::UpdateInfo&& update_info, 
     const StreamId& stream_id, 
     const WriteOptions& write_options){
     if(cfg().write_options().de_duplication()) {
-        return {update_info.next_version_id_, get_de_dup_map(stream_id, update_info.previous_index_key_, write_options)};
+        return VersionIdAndDedupMapInfo{update_info.next_version_id_, get_de_dup_map(stream_id, update_info.previous_index_key_, write_options), std::move(update_info)};
     } else {
-        return {update_info.next_version_id_, std::make_shared<DeDupMap>()};
+        return VersionIdAndDedupMapInfo{update_info.next_version_id_, std::make_shared<DeDupMap>(), std::move(update_info)};
     }
 }
 
@@ -1123,25 +1123,23 @@ std::vector<VersionedItem> LocalVersionedEngine::batch_write_versioned_dataframe
     bool validate_index
 ) {
     auto write_options = get_write_options();
-    auto update_info_fut_vector = async_batch_get_latest_undeleted_version_and_next_version_id(store(),
+    auto update_info_futs = batch_get_latest_undeleted_version_and_next_version_id_async(store(),
                                                                                                version_map(),
                                                                                                stream_ids);
-    util::check(stream_ids.size() == update_info_fut_vector.size(), "stream_ids and update_info_fut_vectormust be of the same size");                                                                                    
-    std::vector<version_store::UpdateInfo> vector_update_info(stream_ids.size());
+    internal::check<ErrorCode::E_ASSERTION_FAILURE>(stream_ids.size() == update_info_futs.size(), "stream_ids and update_info_futs must be of the same size");
     std::vector<folly::Future<VersionedItem>> version_futures;
-    for(auto&& update_info_fut : folly::enumerate(update_info_fut_vector)) {
+    for(auto&& update_info_fut : folly::enumerate(update_info_futs)) {
         auto idx = update_info_fut.index;
         version_futures.push_back(std::move(*update_info_fut)
-            .thenValue([this, &stream_id = stream_ids[idx], &write_options, &vector_update_info, idx](auto&& update_info){
-                vector_update_info[idx] = std::move(update_info);
-                return create_version_id_and_dedup_map(vector_update_info[idx], stream_id, write_options);
-            })
+            .thenValue([this, &stream_id = stream_ids[idx], &write_options, idx](auto&& update_info){
+                return create_version_id_and_dedup_map(std::move(update_info), stream_id, write_options);
+            }).via(&async::cpu_executor())
             .thenValue([this, &stream_id = stream_ids[idx], &write_options, &validate_index, &frame = frames[idx]](
-                auto&& version_id_de_dup_map_pair){
-                    auto& [version_id, de_dup_map] = version_id_de_dup_map_pair;
+                auto&& version_id_and_dedup_map){
+                    auto& [version_id, de_dup_map, update_info] = version_id_and_dedup_map;
                     ARCTICDB_SAMPLE(WriteDataFrame, 0)
                     ARCTICDB_DEBUG(log::version(), "Writing dataframe for stream id {}", stream_id);
-                    return async_write_dataframe_impl( store(),
+                    auto write_fut = async_write_dataframe_impl( store(),
                         version_id,
                         std::move(frame),
                         write_options,
@@ -1149,9 +1147,14 @@ std::vector<VersionedItem> LocalVersionedEngine::batch_write_versioned_dataframe
                         false,
                         validate_index
                     );
+                    return std::move(write_fut)
+                    .thenValue([update_info = std::move(update_info)](auto&& index_key) mutable {
+                        return IndexKeyAndUpdateInfo{std::move(index_key), std::move(update_info)};
+                    });
             })
-            .thenValue([this, &prune_previous_versions, &update_info = vector_update_info[idx]](auto&& index_key){
-                return async_write_index_key_to_version_map(version_map(), std::move(index_key), update_info, prune_previous_versions);
+            .thenValue([this, &prune_previous_versions](auto&& index_key_and_update_info){
+                auto& [index_key, update_info] = index_key_and_update_info;
+                return write_index_key_to_version_map_async(version_map(), std::move(index_key), update_info, prune_previous_versions);
             })
         );
     }
@@ -1361,7 +1364,7 @@ std::vector<std::pair<std::optional<VariantKey>, std::optional<google::protobuf:
     const std::vector<StreamId>& stream_ids,
     const std::vector<VersionQuery>& version_queries
     ) {
-    auto versions_fut = batch_get_versions(store(), version_map(), stream_ids, version_queries);
+    auto versions_fut = batch_get_versions_async(store(), version_map(), stream_ids, version_queries);
     std::vector<folly::Future<std::pair<std::optional<VariantKey>, std::optional<google::protobuf::Any>>>> fut_vec;
     for (auto&& version: versions_fut){
         fut_vec.push_back(get_metadata_async(std::move(version)));

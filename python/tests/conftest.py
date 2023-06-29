@@ -40,7 +40,8 @@ from arcticdb.util.test import configure_test_logger, apply_lib_cfg
 from arcticdb.version_store.helper import ArcticMemoryConfig
 from arcticdb.version_store import NativeVersionStore
 from arcticdb.version_store._normalization import MsgPackNormalizer
-
+from arcticdb.options import LibraryOptions
+from arcticdb_ext.storage import Library
 
 configure_test_logger()
 
@@ -229,6 +230,35 @@ def version_store_factory(lib_name, tmpdir):
             result._library = None
 
         shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+def _arctic_library_factory_impl(used, name, arctic_client, library_options) -> Library:
+    """Common logic behind all the factory fixtures"""
+    name = name or default_name
+    if name == "_unique_":
+        name = name + str(len(used))
+    assert name not in used, f"{name} is already in use"
+    arctic_client.create_library(name, library_options)
+    out = arctic_client[name]
+    used[name] = out
+    return out
+
+
+@pytest.fixture(scope="function")
+def library_factory(arctic_client, lib_name):
+    used: Dict[str, Library] = {}
+
+    def create_library(
+        library_options: Optional[LibraryOptions] = None,
+    ) -> Library:
+        return _arctic_library_factory_impl(used, lib_name, arctic_client, library_options)
+
+    return create_library
+
+
+@pytest.fixture(scope="function")
+def library_factory_small_segment_size(library_factory):
+    return library_factory(LibraryOptions(rows_per_segment=10))
 
 
 @pytest.fixture

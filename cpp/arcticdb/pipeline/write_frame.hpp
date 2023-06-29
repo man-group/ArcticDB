@@ -44,7 +44,7 @@ std::vector<folly::Future<SliceAndKey>> write_slices(
     const std::shared_ptr<DeDupMap>& de_dup_map);
 
 folly::Future<entity::AtomKey> write_frame(
-    const IndexPartialKey &key,
+    IndexPartialKey &&key,
     InputTensorFrame&& frame,
     const SlicingPolicy &slicing,
     const std::shared_ptr<Store> &store,
