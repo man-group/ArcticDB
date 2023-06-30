@@ -142,8 +142,6 @@ InputTensorFrame py_ndf_to_frame(
     auto sorted = item[4].cast<SortedValue>();
 
     res.set_sorted(sorted);
-    std::vector<std::pair<std::string_view, NativeTensor>> tensors;
-    tensors.reserve(idx_names.size() + col_names.size());
 
     for (auto i = 0u; i < col_vals.size(); ++i) {
         auto tensor = obj_to_tensor(col_vals[i].ptr());
