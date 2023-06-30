@@ -963,6 +963,27 @@ def test_filter_numeric_isnotin_empty_set(lmdb_version_store, df):
     generic_filter_test(lmdb_version_store, "test_filter_numeric_isnotin_empty_set", df, q, pandas_query)
 
 
+def test_filter_nones_and_nans_retained_in_string_column(lmdb_version_store):
+    lib = lmdb_version_store
+    sym = "test_filter_nones_and_nans_retained_in_string_column"
+    df = pd.DataFrame(
+        {
+            "filter_column": [1, 2, 1, 2, 1, 2],
+            "string_column": ["1", "2", np.nan, "4", None, "6"],
+        },
+    )
+    lib.write(sym, df)
+    q = QueryBuilder()
+    q = q[q["filter_column"] == 1]
+    q.optimise_for_memory()
+    expected = df.query("filter_column == 1")
+    received = lib.read(sym, query_builder=q).data
+    assert np.array_equal(expected["filter_column"], received["filter_column"])
+    assert received["string_column"].iloc[0] == "1"
+    assert np.isnan(received["string_column"].iloc[1])
+    assert received["string_column"].iloc[2] is None
+
+
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
