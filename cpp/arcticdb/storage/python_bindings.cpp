@@ -100,6 +100,19 @@ void register_bindings(py::module& storage, py::exception<arcticdb::ArcticExcept
                                             return none.cast<py::object>();
                                        });
         })
+        .def("check_accessibility_of_primary_storage", &Library::check_accessibility_of_primary_storage)
+        ;
+
+    py::class_<CheckAccessibilityResult, std::shared_ptr<CheckAccessibilityResult>>(storage, "CheckAccessibilityResult")
+        .def_readonly("log_level", &CheckAccessibilityResult::log_level_)
+        .def_readonly("user_friendly_description", &CheckAccessibilityResult::user_friendly_description_)
+        .def_readonly("technical_details", &CheckAccessibilityResult::technical_details_)
+        .def("__str__", [](CheckAccessibilityResult self) {
+            return fmt::format("CheckAccessibilityResult({}, {}, {})",
+                    self.log_level_,
+                    self.user_friendly_description_,
+                    self.technical_details_);
+        })
         ;
 
     py::class_<S3CredentialsOverride>(storage, "S3CredentialsOverride")

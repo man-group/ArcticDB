@@ -24,6 +24,9 @@ class MongoStorage final : public Storage {
 
     MongoStorage(const LibraryPath &lib, OpenMode mode, const Config &conf);
 
+    CheckAccessibilityResult check_accessibility() override {
+        return {spdlog::level::debug, "Storage access check not yet implemented for MongoDB"};
+    }
   private:
     void do_write(Composite<KeySegmentPair>&& kvs) final;
 

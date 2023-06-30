@@ -31,6 +31,7 @@
 #include <aws/s3/model/DeleteObjectsRequest.h>
 #include <aws/s3/model/ListObjectsV2Request.h>
 #include <aws/s3/model/HeadObjectRequest.h>
+#include <aws/s3/model/HeadBucketRequest.h>
 #include <aws/s3/model/Object.h>
 #include <aws/s3/model/Delete.h>
 #include <aws/s3/model/ObjectIdentifier.h>
@@ -50,6 +51,42 @@ namespace s3 {
 
 namespace fg = folly::gen;
 
+CheckAccessibilityResult do_check_accessibility(const Aws::S3::S3Client& s3_client, const std::string& bucket_name) {
+    using namespace Aws::S3;
+    using namespace spdlog::level;
+    // We cannot easily change the timeouts of the s3_client_, so use async:
+    auto future = s3_client.HeadBucketCallable(Model::HeadBucketRequest().WithBucket(bucket_name.c_str()));
+    auto wait = std::chrono::milliseconds(ConfigsMap::instance()->get_int("S3Storage.CheckBucketMaxWait", 1000));
+    if (future.wait_for(wait) == std::future_status::ready) {
+        auto outcome = future.get();
+        if (!outcome.IsSuccess()) {
+            auto& error = outcome.GetError();
+            auto details = fmt::format("HTTP Status: {}. Server response: {}",
+                    int(error.GetResponseCode()), error.GetMessage().c_str());
+
+            // HEAD request can't return the error details, so can't use the more detailed error codes.
+            switch (error.GetResponseCode()) {
+                case Aws::Http::HttpResponseCode::NOT_FOUND:
+                    return {err, fmt::format("The specified bucket [{}] does not exist", bucket_name), std::move(details)};
+                case Aws::Http::HttpResponseCode::UNAUTHORIZED:
+                case Aws::Http::HttpResponseCode::FORBIDDEN:
+                    // This is not an error because AWS's ACL scheme might be able to block HEAD'ing the bucket, but
+                    // allow accessing the blobs
+                    return {warn, "No permission to access the bucket", std::move(details)};
+                case Aws::Http::HttpResponseCode::REQUEST_NOT_MADE:
+                    return {warn, "Cannot connect to the given server", std::move(details)};
+                default:
+                    return {warn,
+                            "Unexpected error while checking for storage access. "
+                            "Please report an issue with below details:",
+                            std::move(details)};
+            }
+        }
+        return {debug, "Bucket access check successful"};
+    } else {
+        return {info, "Unable to determine bucket accessibility within the allotted time"};
+    }
+}
 
 inline std::string S3Storage::get_key_path(const VariantKey& key) const {
     auto b = FlatBucketizer{};

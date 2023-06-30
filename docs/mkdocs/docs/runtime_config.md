@@ -53,6 +53,19 @@ The [symbol list cache](/technical/on_disk_storage#symbol-list-caching) is compa
 
 The default is 500.
 
+### S3Storage.CheckBucketMaxWait
+
+The `Arctic` constructor will check the given S3 bucket is accessible.
+It will wait at most this amount of time in milliseconds.
+
+The default is 1000ms.
+
+### S3Storage.ConnectTimeoutMs and S3Storage.RequestTimeoutMs
+
+Refer to [AWS documentation](https://docs.aws.amazon.com/sdk-for-cpp/v1/developer-guide/client-config.html).
+
+The defaults are 30000 and 200000 respectively.
+
 ### S3Storage.DeleteBatchSize
 
 The S3 API supports the `DeleteObjects` method, whereby a single HTTP request can be used to delete multiple objects. This parameter can be used to control how many objects are requested to be deleted at a time.
@@ -84,7 +97,7 @@ If only `NumCPUThreads` is set, `NumIOThreads` will still default to x1.5 `NumCP
 
 ArcticDB has multiple log streams, and the verbosity of each can be configured independently. 
 The available streams are visible in the [source code](https://github.com/man-group/ArcticDB/blob/master/python/arcticdb/log.py), although the most commonly useful logs are in:
- 
+
 * `version` - contains information about versions being read, created, or destroyed, and traversal of the [version layer](/technical/on_disk_storage#version-layer) linked list
 * `storage` - contains information about individual operations that interact with the storage device (read object, write object, delete object, etc)
 

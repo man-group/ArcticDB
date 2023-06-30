@@ -5,8 +5,12 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+import logging
+from typing import Optional
+
 from arcticdb.options import LibraryOptions
 from arcticc.pb2.storage_pb2 import LibraryConfig
+from arcticdb_ext.log import LogLevel
 from arcticdb_ext.storage import Library, StorageOverride
 from arcticdb.encoding_version import EncodingVersion
 from arcticdb.version_store._store import NativeVersionStore
@@ -65,3 +69,27 @@ class ArcticLibraryAdapter(ABC):
 
     def get_storage_override(self) -> StorageOverride:
         return StorageOverride()
+
+    def check_storage_access(self) -> Optional[bool]:
+        """Check if the storage is accessible.
+
+        Throws if the storage is conclusively not accessible, e.g. server indicates the storage location don't exist.
+        Otherwise, it will log and return the result of the check.
+
+        (This currently use Python ``logging`` to ensure visibility in Jupyter, but this may change without notice.)
+
+        Returns
+        -------
+        Detailed result of the check.
+        """
+        result = self.config_library.check_accessibility_of_primary_storage()
+        if result.log_level.value >= LogLevel.ERROR.value:
+            raise ValueError(f"{result.user_friendly_description}\nTechnical details: {result.technical_details}")
+        else:
+            log = logging.getLogger(self.__class__.__module__).log
+            level = result.log_level.value * 10  # https://docs.python.org/3/library/logging.html#logging-levels
+            log(level, result.user_friendly_description)
+            if result.technical_details:
+                log(level, "Technical details: " + result.technical_details)
+
+        return result

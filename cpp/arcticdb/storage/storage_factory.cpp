@@ -60,9 +60,7 @@ std::unique_ptr<Storage> create_storage(
         } else if (type_name == azure::AzureStorage::Config::descriptor()->full_name()) {
         azure::AzureStorage::Config azure_config;
         storage_descriptor.config().UnpackTo(&azure_config);
-        storage = std::make_unique<azure::AzureStorage  >(
-            azure::AzureStorage(library_path, mode, azure_config)
-        );
+        storage = std::make_unique<azure::AzureStorage>(library_path, mode, std::move(azure_config));
 #endif
     } else
         throw std::runtime_error(fmt::format("Unknown config type {}", type_name));

@@ -18,9 +18,10 @@ using namespace Azure::Storage;
 using namespace Azure::Storage::Blobs;
 
 
-AzureStorage::AzureStorage(const LibraryPath &library_path, OpenMode mode, const Config &conf) :
+AzureStorage::AzureStorage(const LibraryPath &library_path, OpenMode mode, Config&& conf) :
     Storage(library_path, mode),
-    container_client_(BlobContainerClient::CreateFromConnectionString(conf.endpoint(), conf.container_name(), get_client_options(conf))),
+    container_client_(std::make_shared<BlobContainerClient>(BlobContainerClient::CreateFromConnectionString(
+            conf.endpoint(), conf.container_name(), get_client_options(conf)))),
     root_folder_(object_store_utils::get_root_folder(library_path)),
     request_timeout_(conf.request_timeout() == 0 ? 60000 : conf.request_timeout()){
         if (conf.ca_cert_path().empty())
@@ -41,10 +42,12 @@ AzureStorage::AzureStorage(const LibraryPath &library_path, OpenMode mode, const
 }
 
 Azure::Storage::Blobs::BlobClientOptions AzureStorage::get_client_options(const Config &conf) {
-    Azure::Core::Http::CurlTransportOptions curl_transport_options;
-    curl_transport_options.CAInfo = conf.ca_cert_path();
     BlobClientOptions client_options;
-    client_options.Transport.Transport = std::make_shared<Azure::Core::Http::CurlTransport>(curl_transport_options);
+    if (!conf.ca_cert_path().empty()) {
+        Azure::Core::Http::CurlTransportOptions curl_transport_options;
+        curl_transport_options.CAInfo = conf.ca_cert_path();
+        client_options.Transport.Transport = std::make_shared<Azure::Core::Http::CurlTransport>(curl_transport_options);
+    }
     return client_options;
 }
 

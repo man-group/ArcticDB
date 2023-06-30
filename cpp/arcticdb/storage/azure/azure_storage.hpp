@@ -28,12 +28,14 @@ class AzureStorage final : public Storage {
     // friend class AzureTestClientAccessor<AzureStorage>;
     using Config = arcticdb::proto::azure_storage::Config;
 
-    AzureStorage(const LibraryPath &lib, OpenMode mode, const Config &conf);
+    AzureStorage(const LibraryPath &library_path, OpenMode mode, Config&& conf);
 
     /**
      * Full object path in Azure bucket.
      */
     std::string get_key_path(const VariantKey& key) const;
+
+    CheckAccessibilityResult check_accessibility() override;
 
   protected:
     void do_write(Composite<KeySegmentPair>&& kvs) final;
@@ -59,7 +61,9 @@ class AzureStorage final : public Storage {
     std::string do_key_path(const VariantKey&) const final { return {}; };
 
   private:
-    Azure::Storage::Blobs::BlobContainerClient container_client_;
+    // The check_accessibility() starts an async task internally with a timeout, so the client code could be still
+    // running this AzureStorage is disposed, so must share:
+    std::shared_ptr<Azure::Storage::Blobs::BlobContainerClient> container_client_;
     std::string root_folder_;
     unsigned int request_timeout_;
     Azure::Storage::Blobs::UploadBlockBlobFromOptions upload_option_;

@@ -34,6 +34,10 @@ class LmdbStorage final : public Storage {
 
     LmdbStorage(const LibraryPath &lib, OpenMode mode, const Config &conf);
 
+    CheckAccessibilityResult check_accessibility() override {
+        return {spdlog::level::trace, "No storage access check necessary"}; // The constructor throws on invalid path
+    }
+
   private:
     void do_write(Composite<KeySegmentPair>&& kvs) final;
 

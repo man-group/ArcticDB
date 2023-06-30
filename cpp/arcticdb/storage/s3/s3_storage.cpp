@@ -8,6 +8,7 @@
 #define ARCTICDB_S3_STORAGE_H_
 #include <arcticdb/storage/s3/s3_storage-inl.hpp>
 #include <aws/core/auth/AWSCredentialsProvider.h>
+#include <aws/core/platform/Environment.h>
 #include <arcticdb/storage/s3/s3_api.hpp>
 #include <arcticdb/log/log.hpp>
 #include <locale>
@@ -33,6 +34,16 @@ std::streamsize S3StreamBuffer::xsputn(const char_type* s, std::streamsize n) {
 }
 }
 
+void check_ec2_metadata_endpoint(const S3ApiInstance& s3_api) {
+    auto disabled_env = Aws::Environment::GetEnv("AWS_EC2_METADATA_DISABLED");
+    if (Aws::Utils::StringUtils::ToLower(disabled_env.c_str()) == "true") {
+        const char* who_disabled = s3_api.is_ec2_metadata_disabled_by_us() ?
+            "EC2 metadata endpoint did not respond in time so was bypassed":
+            "AWS_EC2_METADATA_DISABLED environment variable is set to true";
+        log::storage().warn("{}. This means machine identity authentication will not work.", who_disabled);
+    }
+}
+
 S3Storage::S3Storage(const LibraryPath &library_path, OpenMode mode, const Config &conf) :
     Storage(library_path, mode),
     s3_api_(S3ApiInstance::instance()),
@@ -43,6 +54,7 @@ S3Storage::S3Storage(const LibraryPath &library_path, OpenMode mode, const Confi
 
     if (creds.GetAWSAccessKeyId() == USE_AWS_CRED_PROVIDERS_TOKEN && creds.GetAWSSecretKey() == USE_AWS_CRED_PROVIDERS_TOKEN){
         ARCTICDB_RUNTIME_DEBUG(log::storage(), "Using AWS auth mechanisms");
+        check_ec2_metadata_endpoint(*s3_api_);
         s3_client_ = Aws::S3::S3Client(get_s3_config(conf), Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never, conf.use_virtual_addressing());
     } else {
         ARCTICDB_RUNTIME_DEBUG(log::storage(), "Using provided auth credentials");

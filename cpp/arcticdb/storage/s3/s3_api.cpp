@@ -42,6 +42,7 @@ S3ApiInstance::S3ApiInstance(Aws::Utils::Logging::LogLevel log_level) :
         return;
     ARCTICDB_RUNTIME_DEBUG(log::Loggers::instance()->storage(),
         "Does not appear to be using AWS. Will set AWS_EC2_METADATA_DISABLED");
+    ec2_metadata_disabled_by_us_ = true;
 #ifdef WIN32
     _putenv_s("AWS_EC2_METADATA_DISABLED", "true");
 #else

@@ -16,6 +16,7 @@
 
 #include <google/protobuf/io/zero_copy_stream_impl_lite.h>
 #include <folly/gen/Base.h>
+#include <arcticdb/async/task_scheduler.hpp>
 #include <arcticdb/storage/azure/azure_storage.hpp>
 #include <arcticdb/storage/storage_utils.hpp>
 #include <arcticdb/storage/object_store_utils.hpp>
@@ -293,20 +294,69 @@ bool do_key_exists_impl(
 }
 } //namespace detail
 
+struct CheckAccessibilityTask : async::BaseTask {
+    // This ref assumes the `AzureStorage` will out live the TaskScheduler
+    std::shared_ptr<Azure::Storage::Blobs::BlobContainerClient> container_client_;
+
+    void operator()() {
+        container_client_->GetProperties();
+    }
+};
+
+CheckAccessibilityResult AzureStorage::check_accessibility() {
+    using namespace spdlog::level;
+    using HttpStatus = Azure::Core::Http::HttpStatusCode;
+
+    auto wait_ms = ConfigsMap::instance()->get_int("AzureStorage.CheckContainerMaxWaitMs", 1000);
+    auto wait_duration = std::chrono::duration_cast<folly::HighResDuration>(std::chrono::milliseconds(wait_ms));
+    auto fut = async::TaskScheduler::instance()->submit_cpu_task(CheckAccessibilityTask{{}, container_client_});
+    std::string details;
+    try {
+        std::move(fut).get(wait_duration);
+        return {debug, "Container access check successful"};
+    } catch (const folly::FutureTimeout&) {
+        return {info, "Unable to determine bucket accessibility within the allotted time"};
+    } catch (const Azure::Storage::StorageException& e) {
+        details = fmt::format("HTTP {}. {} {}.",
+                static_cast<std::underlying_type_t<HttpStatus>>(e.StatusCode), e.ErrorCode, e.ReasonPhrase);
+
+        switch (e.StatusCode) {
+            case HttpStatus::Unauthorized:
+            case HttpStatus::Forbidden:
+                return {warn, "No permission to access the container", std::move(details)};
+            case HttpStatus::NotFound:
+            case HttpStatus::Conflict:
+                return {err, "The container is not found or being deleted", std::move(details)};
+            case HttpStatus::BadRequest:
+                if ("InvalidResourceName" == e.ErrorCode) {
+                    return {err, "The container name is invalid", std::move(details)};
+                }
+                break;
+            default:
+                break;
+        }
+    } catch (const std::exception& e) {
+        details = e.what();
+    }
+    return {warn,
+            "Unexpected error while checking for storage access. Please report an issue with below details:",
+            std::move(details)};
+}
+
 inline void AzureStorage::do_write(Composite<KeySegmentPair>&& kvs) {
-    detail::do_write_impl(std::move(kvs), root_folder_, container_client_, FlatBucketizer{}, upload_option_, request_timeout_);
+    detail::do_write_impl(std::move(kvs), root_folder_, *container_client_, FlatBucketizer{}, upload_option_, request_timeout_);
 }
 
 inline void AzureStorage::do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts) {
-    detail::do_update_impl(std::move(kvs), root_folder_, container_client_, FlatBucketizer{}, upload_option_, request_timeout_);
+    detail::do_update_impl(std::move(kvs), root_folder_, *container_client_, FlatBucketizer{}, upload_option_, request_timeout_);
 }
 
 inline void AzureStorage::do_read(Composite<VariantKey>&& ks, const ReadVisitor& visitor, ReadKeyOpts opts) {
-    detail::do_read_impl(std::move(ks), visitor, root_folder_, container_client_, FlatBucketizer{}, opts, download_option_, request_timeout_);
+    detail::do_read_impl(std::move(ks), visitor, root_folder_, *container_client_, FlatBucketizer{}, opts, download_option_, request_timeout_);
 }
 
 inline void AzureStorage::do_remove(Composite<VariantKey>&& ks, RemoveOpts) {
-    detail::do_remove_impl(std::move(ks), root_folder_, container_client_, FlatBucketizer{}, request_timeout_);
+    detail::do_remove_impl(std::move(ks), root_folder_, *container_client_, FlatBucketizer{}, request_timeout_);
 }
 
 inline void AzureStorage::do_iterate_type(KeyType key_type, const IterateTypeVisitor& visitor, const std::string &prefix) {
@@ -314,11 +364,11 @@ inline void AzureStorage::do_iterate_type(KeyType key_type, const IterateTypeVis
         return !prefix.empty() ? fmt::format("{}/{}*{}", key_type_dir, key_descriptor, prefix) : key_type_dir;
     };
 
-    detail::do_iterate_type_impl(key_type, std::move(visitor), root_folder_, container_client_, FlatBucketizer{}, std::move(prefix_handler), prefix);
+    detail::do_iterate_type_impl(key_type, std::move(visitor), root_folder_, *container_client_, FlatBucketizer{}, std::move(prefix_handler), prefix);
 }
 
 inline bool AzureStorage::do_key_exists(const VariantKey& key) {
-    return detail::do_key_exists_impl(key, root_folder_, container_client_, FlatBucketizer{});
+    return detail::do_key_exists_impl(key, root_folder_, *container_client_, FlatBucketizer{});
 }
 
 } // namespace azure

@@ -33,6 +33,10 @@ public:
 
     NfsBackedStorage(const LibraryPath &lib, OpenMode mode, const Config &conf);
 
+    CheckAccessibilityResult check_accessibility() override {
+        return arcticdb::storage::s3::do_check_accessibility(s3_client_, bucket_name_);
+    }
+
 private:
     void do_write(Composite<KeySegmentPair>&& kvs) final;
 
