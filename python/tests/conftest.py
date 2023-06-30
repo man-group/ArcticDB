@@ -407,6 +407,7 @@ def s3_version_store(s3_store_factory):
 def mongo_version_store(mongo_store_factory):
     return mongo_store_factory()
 
+
 @pytest.fixture(
     scope="function",
     params=["s3_store_factory", "azure_store_factory"] if AZURE_SUPPORT else ["s3_store_factory"],
