@@ -6,12 +6,10 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 import sys
-import os
 
 import pytz
 from arcticdb_ext.exceptions import InternalException
 from arcticdb.exceptions import ArcticNativeNotYetImplemented
-from pandas import Timestamp
 
 try:
     from arcticdb.version_store import VersionedItem as PythonVersionedItem
@@ -34,7 +32,6 @@ import pandas as pd
 from datetime import datetime, date, timezone, timedelta
 import numpy as np
 from arcticdb_ext.tools import AZURE_SUPPORT
-from numpy import datetime64
 from arcticdb.util.test import (
     assert_frame_equal,
     random_strings_of_length,
@@ -42,12 +39,8 @@ from arcticdb.util.test import (
 )
 import random
 
-
-if AZURE_SUPPORT:
-    from azure.storage.blob import BlobServiceClient
 from botocore.client import BaseClient as BotoClient
 import time
-
 
 try:
     from arcticdb.version_store.library import (
@@ -70,6 +63,16 @@ except ImportError:
         ArcticInvalidApiUsageException,
         StagedDataFinalizeMethod,
     )
+
+
+@pytest.fixture
+def boto_client(s3_bucket):
+    return s3_bucket.make_boto_client()
+
+
+@pytest.fixture
+def moto_s3_uri_incl_bucket(s3_bucket):
+    return s3_bucket.get_arctic_uri()
 
 
 def generate_dataframe(columns, dt, num_days, num_rows_per_day):

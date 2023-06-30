@@ -25,9 +25,13 @@ public:
     static std::shared_ptr<S3ApiInstance> instance();
     static void destroy_instance();
 
+    bool is_ec2_metadata_disabled_by_us() const {
+        return ec2_metadata_disabled_by_us_;
+    }
 private:
   Aws::Utils::Logging::LogLevel log_level_;
   Aws::SDKOptions options_;
+  bool ec2_metadata_disabled_by_us_;
 };
 
 } //namespace arcticdb::storage::s3

@@ -7,6 +7,8 @@
 
 #include <arcticdb/storage/s3/s3_storage.hpp>
 #include <aws/core/auth/AWSCredentialsProvider.h>
+#include <aws/core/platform/Environment.h>
+#include <aws/s3/model/HeadBucketRequest.h>
 #include <arcticdb/storage/s3/s3_api.hpp>
 #include <arcticdb/log/log.hpp>
 #include <locale>
@@ -32,6 +34,48 @@ std::streamsize S3StreamBuffer::xsputn(const char_type* s, std::streamsize n) {
 }
 }
 
+void check_ec2_metadata_endpoint(const S3ApiInstance& s3_api) {
+    auto disabled_env = Aws::Environment::GetEnv("AWS_EC2_METADATA_DISABLED");
+    if (Aws::Utils::StringUtils::ToLower(disabled_env.c_str()) == "true") {
+        const char* who_disabled = s3_api.is_ec2_metadata_disabled_by_us() ?
+            "EC2 metadata endpoint did not respond in time so was bypassed":
+            "AWS_EC2_METADATA_DISABLED environment variable is set to true";
+        log::storage().warn("{}. This means machine identity authentication will not work.", who_disabled);
+    }
+}
+
+bool S3Storage::check_creds_and_bucket() {
+    using namespace Aws::S3;
+    // We cannot easily change the timeouts of the s3_client_, so use async:
+    auto future = s3_client_.HeadBucketCallable(Model::HeadBucketRequest().WithBucket(bucket_name_.c_str()));
+    auto wait = std::chrono::milliseconds(ConfigsMap::instance()->get_int("S3Storage.CheckBucketMaxWait", 1000));
+    if (future.wait_for(wait) == std::future_status::ready) {
+        auto outcome = future.get();
+        if (!outcome.IsSuccess()) {
+            auto& error = outcome.GetError();
+
+#define BUCKET_LOG(level, msg, ...) log::storage().level(msg "\nHTTP Status: {}. Server response: {}", \
+            ## __VA_ARGS__, int(error.GetResponseCode()), error.GetMessage().c_str()); break
+
+            // HEAD request can't return the error details, so can't use the more detailed error codes.
+            switch (error.GetResponseCode()) {
+            case Aws::Http::HttpResponseCode::UNAUTHORIZED:
+            case Aws::Http::HttpResponseCode::FORBIDDEN:
+                BUCKET_LOG(warn, "Unable to access bucket. Subsequent operations may fail.");
+            case Aws::Http::HttpResponseCode::NOT_FOUND:
+                BUCKET_LOG(error, "The specified bucket {} does not exist.", bucket_name_);
+            default:
+                BUCKET_LOG(info, "Unable to determine if the bucket is accessible.");
+            }
+#undef BUCKET_LOG
+        }
+        return outcome.IsSuccess();
+    } else {
+        log::storage().info("Unable to determine if the bucket is accessible. Request timed out.");
+    }
+    return false;
+}
+
 S3Storage::S3Storage(const LibraryPath &library_path, OpenMode mode, const Config &conf) :
     Parent(library_path, mode),
     s3_api_(S3ApiInstance::instance()),
@@ -42,6 +86,7 @@ S3Storage::S3Storage(const LibraryPath &library_path, OpenMode mode, const Confi
 
     if (creds.GetAWSAccessKeyId() == USE_AWS_CRED_PROVIDERS_TOKEN && creds.GetAWSSecretKey() == USE_AWS_CRED_PROVIDERS_TOKEN){
         ARCTICDB_RUNTIME_DEBUG(log::storage(), "Using AWS auth mechanisms");
+        check_ec2_metadata_endpoint(*s3_api_);
         s3_client_ = Aws::S3::S3Client(get_s3_config(conf), Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never, conf.use_virtual_addressing());
     } else {
         ARCTICDB_RUNTIME_DEBUG(log::storage(), "Using provided auth credentials");

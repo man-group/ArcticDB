@@ -100,6 +100,13 @@ void register_bindings(py::module& storage, py::exception<arcticdb::ArcticExcept
                                             return none.cast<py::object>();
                                        });
         })
+        .def("check_primary_storage_is_accessible", [](Library& library) {
+            std::optional<bool> out;
+            library.storage_specific([&out](storage::s3::S3Storage& s3) {
+                out = s3.check_creds_and_bucket();
+            });
+            return out;
+        }, "Currently only implemented by S3 storage. Calling on other storage types does nothing.")
         ;
 
     py::class_<S3CredentialsOverride>(storage, "S3CredentialsOverride")

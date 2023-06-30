@@ -150,6 +150,8 @@ class Arctic:
         self._library_manager = LibraryManager(self._library_adapter.config_library)
         self._uri = uri
 
+        self._library_adapter.check_storage_is_accessible()
+
     def __getitem__(self, name: str) -> Library:
         storage_override = self._library_adapter.get_storage_override()
         lib = NativeVersionStore(

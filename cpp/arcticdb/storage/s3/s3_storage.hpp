@@ -43,6 +43,9 @@ class S3Storage final : public Storage<S3Storage> {
      */
     std::string get_key_path(const VariantKey& key) const;
 
+    /* Logs warning(s) and returns false if there are likely to be access problems.*/
+    bool check_creds_and_bucket();
+
   protected:
     void do_write(Composite<KeySegmentPair>&& kvs);
 
@@ -232,6 +235,12 @@ inline Aws::Client::ClientConfiguration get_proxy_config(Aws::Http::Scheme endpo
     }
 }
 
+namespace {
+inline uint32_t fallback(uint32_t protobuf_config, const std::string& label, uint32_t default_val) {
+    return protobuf_config != 0 ? protobuf_config : ConfigsMap::instance()->get_int(label, default_val);
+}
+}
+
 template<typename ConfigType>
 auto get_s3_config(const ConfigType& conf) {
     auto endpoint_scheme = conf.https() ? Aws::Http::Scheme::HTTPS : Aws::Http::Scheme::HTTP;
@@ -245,14 +254,14 @@ auto get_s3_config(const ConfigType& conf) {
     auto endpoint = conf.endpoint();
     util::check_arg(!endpoint.empty(), "S3 Endpoint must be specified");
     client_configuration.endpointOverride = endpoint;
+
     const bool verify_ssl = ConfigsMap::instance()->get_int("S3Storage.VerifySSL", conf.ssl());
     ARCTICDB_RUNTIME_DEBUG(log::storage(), "Verify ssl: {}", verify_ssl);
     client_configuration.verifySSL = verify_ssl;
-    client_configuration.maxConnections = conf.max_connections() == 0 ?
-            ConfigsMap::instance()->get_int("VersionStore.NumIOThreads", 16) :
-            conf.max_connections();
-    client_configuration.connectTimeoutMs = conf.connect_timeout() == 0 ? 30000 : conf.connect_timeout();
-    client_configuration.requestTimeoutMs = conf.request_timeout() == 0 ? 200000 : conf.request_timeout();
+
+    client_configuration.maxConnections = fallback(conf.max_connections(), "VersionStore.NumIOThreads", 16);
+    client_configuration.connectTimeoutMs = fallback(conf.connect_timeout(), "S3Storage.ConnectTimeoutMs", 30000);
+    client_configuration.requestTimeoutMs = fallback(conf.request_timeout(), "S3Storage.RequestTimeoutMs", 200000);
     return client_configuration;
 }
 
