@@ -6,136 +6,60 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 import functools
-import multiprocessing
 import shutil
-
-import boto3
-import werkzeug
-from moto.server import DomainDispatcherApplication, create_backend_app
-
-import sys
-import signal
 import enum
-
-if sys.platform == "win32":
-    # Hack to define signal.SIGKILL as some deps eg pytest-test-fixtures hardcode SIGKILL terminations.
-    signal.SIGKILL = signal.SIGINT
-
-import time
 import os
 import pytest
+import requests
 import numpy as np
 import pandas as pd
 import random
 from datetime import datetime
 from typing import Optional, Any, Dict
 
-import requests
-from pytest_server_fixtures.base import get_ephemeral_port
-
 from arcticdb.arctic import Arctic
-from arcticdb.version_store.helper import create_test_lmdb_cfg, create_test_s3_cfg, create_test_mongo_cfg
-from arcticdb.config import Defaults
-from arcticdb.util.test import configure_test_logger, apply_lib_cfg
-from arcticdb.version_store.helper import ArcticMemoryConfig
+from arcticdb.version_store.helper import create_test_lmdb_cfg, create_test_mongo_cfg
 from arcticdb.version_store import NativeVersionStore
+from arcticdb.util.test import configure_test_logger
 from arcticdb.version_store._normalization import MsgPackNormalizer
+from tests.util.storage_fixtures import MotoS3StorageFixtureFactory, _version_store_factory_impl
 
 
 configure_test_logger()
 
-BUCKET_ID = 0
 # Use a smaller memory mapped limit for all tests
 MsgPackNormalizer.MMAP_DEFAULT_SIZE = 20 * (1 << 20)
 
 
-def run_server(port):
-    werkzeug.run_simple(
-        "0.0.0.0", port, DomainDispatcherApplication(create_backend_app, service="s3"), threaded=True, ssl_context=None
-    )
-
-
-@pytest.fixture(scope="module")
-def _moto_s3_uri_module():
-    port = get_ephemeral_port()
-    p = multiprocessing.Process(target=run_server, args=(port,))
-    p.start()
-
-    time.sleep(0.5)
-
-    yield f"http://localhost:{port}"
-
-    try:
-        # terminate sends SIGTERM - no need to be polite here so...
-        os.kill(p.pid, signal.SIGKILL)
-
-        p.terminate()
-        p.join()
-    except Exception:
-        pass
-
-
-@pytest.fixture(scope="function")
-def boto_client(_moto_s3_uri_module):
-    endpoint = _moto_s3_uri_module
-    client = boto3.client(
-        service_name="s3", endpoint_url=endpoint, aws_access_key_id="awd", aws_secret_access_key="awd"
-    )
-
-    yield client
+@pytest.fixture(scope="session")
+def s3_storage_factory():
+    with MotoS3StorageFixtureFactory() as f:
+        yield f
 
 
 @pytest.fixture
-def aws_access_key():
-    return "awd"
-
-
-@pytest.fixture
-def aws_secret_key():
-    return "awd"
-
-
-@pytest.fixture(scope="function")
-def moto_s3_endpoint_and_credentials(_moto_s3_uri_module, aws_access_key, aws_secret_key):
-    global BUCKET_ID
-
-    endpoint = _moto_s3_uri_module
-    port = endpoint.rsplit(":", 1)[1]
-    client = boto3.client(
-        service_name="s3", endpoint_url=endpoint, aws_access_key_id=aws_access_key, aws_secret_access_key=aws_secret_key
-    )
-
-    bucket = f"test_bucket_{BUCKET_ID}"
-    client.create_bucket(Bucket=bucket)
-    BUCKET_ID = BUCKET_ID + 1
-    yield endpoint, port, bucket, aws_access_key, aws_secret_key
-
-
-@pytest.fixture(scope="function")
-def moto_s3_uri_incl_bucket(moto_s3_endpoint_and_credentials):
-    endpoint, port, bucket, aws_access_key, aws_secret_key = moto_s3_endpoint_and_credentials
-    yield endpoint.replace("http://", "s3://").rsplit(":", 1)[
-        0
-    ] + ":" + bucket + "?access=" + aws_access_key + "&secret=" + aws_secret_key + "&port=" + port
+def s3_bucket(s3_storage_factory):
+    with s3_storage_factory.create_fixture() as f:
+        yield f
 
 
 @pytest.fixture(scope="function", params=("S3", "LMDB"))
-def arctic_client(request, moto_s3_uri_incl_bucket, tmpdir, encoding_version):
+def arctic_client(request, s3_bucket, tmpdir, encoding_version):
     if request.param == "S3":
-        ac = Arctic(moto_s3_uri_incl_bucket, encoding_version)
+        ac = Arctic(s3_bucket.get_arctic_uri(), encoding_version)
     elif request.param == "LMDB":
         ac = Arctic(f"lmdb://{tmpdir}", encoding_version)
     else:
         raise NotImplementedError()
 
     assert not ac.list_libraries()
-    yield ac
+    return ac
 
 
 @pytest.fixture(scope="function")
 def arctic_library(arctic_client):
     arctic_client.create_library("pytest_test_lib")
-    yield arctic_client["pytest_test_lib"]
+    return arctic_client["pytest_test_lib"]
 
 
 @pytest.fixture()
@@ -146,25 +70,6 @@ def sym():
 @pytest.fixture()
 def lib_name():
     return f"local.test_{random.randint(0, 999)}_{datetime.utcnow().strftime('%Y-%m-%dT%H_%M_%S_%f')}"
-
-
-def _version_store_factory_impl(
-    used, make_cfg, default_name, *, name: str = None, reuse_name=False, **kwargs
-) -> NativeVersionStore:
-    """Common logic behind all the factory fixtures"""
-    name = name or default_name
-    if name == "_unique_":
-        name = name + str(len(used))
-
-    assert (name not in used) or reuse_name, f"{name} is already in use"
-    cfg = make_cfg(name)
-    lib = cfg.env_by_id[Defaults.ENV].lib_by_path[name]
-    # Use symbol list by default (can still be overridden by kwargs)
-    lib.version.symbol_list = True
-    apply_lib_cfg(lib, kwargs)
-    out = ArcticMemoryConfig(cfg, Defaults.ENV)[name]
-    used[name] = out
-    return out
 
 
 @enum.unique
@@ -232,25 +137,13 @@ def version_store_factory(lib_name, tmpdir):
 
 
 @pytest.fixture
-def s3_store_factory(lib_name, moto_s3_endpoint_and_credentials):
+def s3_store_factory(lib_name, s3_bucket):
     """Factory to create any number of S3 libs with the given WriteOptions or VersionStoreConfig.
 
     `name` can be a magical value "_unique_" which will create libs with unique names.
     This factory will clean up any libraries requested
     """
-    endpoint, port, bucket, aws_access_key, aws_secret_key = moto_s3_endpoint_and_credentials
-
-    # Not exposing the config factory to discourage people from creating libs that won't get cleaned up
-    def make_cfg(name):
-        # with_prefix=False to allow reuse_name to work correctly
-        return create_test_s3_cfg(name, aws_access_key, aws_secret_key, bucket, endpoint, with_prefix=False)
-
-    used = {}
-    try:
-        yield functools.partial(_version_store_factory_impl, used, make_cfg, lib_name)
-    finally:
-        for lib in used.values():
-            lib.version_store.clear()
+    return s3_bucket.create_version_store_factory(lib_name)
 
 
 @pytest.fixture

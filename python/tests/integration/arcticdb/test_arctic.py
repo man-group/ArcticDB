@@ -6,12 +6,10 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 import sys
-import os
 
 import pytz
 from arcticdb_ext.exceptions import InternalException
 from arcticdb.exceptions import ArcticNativeNotYetImplemented
-from pandas import Timestamp
 
 try:
     from arcticdb.version_store import VersionedItem as PythonVersionedItem
@@ -57,6 +55,16 @@ except ImportError:
         ArcticInvalidApiUsageException,
         StagedDataFinalizeMethod,
     )
+
+
+@pytest.fixture
+def boto_client(s3_bucket):
+    return s3_bucket.make_boto_client()
+
+
+@pytest.fixture
+def moto_s3_uri_incl_bucket(s3_bucket):
+    return s3_bucket.get_arctic_uri()
 
 
 def test_library_creation_deletion(arctic_client):

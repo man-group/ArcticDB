@@ -69,3 +69,12 @@ class ArcticLibraryAdapter(ABC):
 
     def get_storage_override(self) -> StorageOverride:
         return StorageOverride()
+
+    def check_storage_is_accessible(self) -> Optional[bool]:
+        """Logs message(s) to inform the user if there are obvious issues with the storage.
+
+        Returns
+        -------
+        None if no check is implemented. Otherwise returns if all checks have passed
+        """
+        return self.config_library.check_primary_storage_is_accessible()

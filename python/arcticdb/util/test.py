@@ -6,6 +6,8 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 import os
+import sys
+import signal
 from contextlib import contextmanager
 from typing import Mapping, Any, Optional, Iterable, NamedTuple, List, AnyStr
 import numpy as np
@@ -193,6 +195,14 @@ def configure_test_logger(level="INFO"):
     else:
         outputs = ["console"]
     configure(get_test_logger_config(level=level, outputs=outputs), force=True)
+
+
+def gracefully_terminate_process(p):
+    p.terminate()
+    if sys.platform != "win32":
+        p.join(timeout=2)
+        if p.exitcode is None:
+            os.kill(p.pid, signal.SIGKILL)  # TODO (python37): use Process.kill()
 
 
 CustomThing = NamedTuple(
