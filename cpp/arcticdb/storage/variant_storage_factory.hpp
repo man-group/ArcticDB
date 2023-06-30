@@ -26,7 +26,14 @@
 #include <vector>
 #include <memory>
 
-namespace arcticdb::storage {
+namespace arcticdb{
+#ifdef ARCTICDB_USING_CONDA
+static const bool AZURE_SUPPORT = false;
+#else
+static const bool AZURE_SUPPORT = true;
+#endif
+
+namespace storage {
 
 #ifdef ARCTICDB_USING_CONDA //Awaiting Azure sdk support in conda https://github.com/man-group/ArcticDB/issues/519
 using VariantStorageTypes = std::variant<lmdb::LmdbStorage, mongo::MongoStorage, s3::S3Storage, memory::MemoryStorage, nfs_backed::NfsBackedStorage>;
@@ -68,4 +75,5 @@ std::unique_ptr<VariantStorage> create_storage(
     OpenMode mode,
     const arcticdb::proto::storage::VariantStorage &storage_config);
 
-} // namespace arcticdb::storage
+} // namespace storage
+} // namespace arcticdb

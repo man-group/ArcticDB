@@ -197,17 +197,18 @@ def test_separation_between_libraries_with_prefixes(object_storage_uri_incl_buck
     assert ac_mars["pytest_test_lib"].list_symbols() == ["test_2"]
 
 
-@pytest.mark.parametrize(
-    "connection_string, client",
-    [
+def object_storage_uri_and_client():
+    return [
         ("moto_s3_uri_incl_bucket", "boto_client"),
         pytest.param(
             "azurite_azure_uri_incl_bucket",
             "azure_client",
             marks=pytest.mark.skipif(not AZURE_SUPPORT, reason="Pending Azure Storge Conda support"),
         ),
-    ],
-)
+    ]
+
+
+@pytest.mark.parametrize("connection_string, client", object_storage_uri_and_client())
 def test_library_management_path_prefix(connection_string, client, request):
     connection_string = request.getfixturevalue(request.getfixturevalue("connection_string"))
     client = request.getfixturevalue(request.getfixturevalue("client"))
@@ -1511,17 +1512,7 @@ def test_segment_slicing(object_storage_uri_incl_bucket):
     assert num_data_segments == math.ceil(rows / rows_per_segment) * math.ceil(columns / columns_per_segment)
 
 
-@pytest.mark.parametrize(
-    "connection_string, client",
-    [
-        ("moto_s3_uri_incl_bucket", "boto_client"),
-        pytest.param(
-            "azurite_azure_uri_incl_bucket",
-            "azure_client",
-            marks=pytest.mark.skipif(not AZURE_SUPPORT, reason="Pending Azure Storge Conda support"),
-        ),
-    ],
-)
+@pytest.mark.parametrize("connection_string, client", object_storage_uri_and_client())
 def test_reload_symbol_list(connection_string, client, request):
     connection_string = request.getfixturevalue(request.getfixturevalue("connection_string"))
     client = request.getfixturevalue(request.getfixturevalue("client"))

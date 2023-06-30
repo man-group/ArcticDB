@@ -41,11 +41,6 @@ static const char* const CompactionId = "__symbols__";
 static const char* const AddSymbol = "__add__";
 static const char* const DeleteSymbol = "__delete__";
 static const char* const CompactionLockName = "SymbolListCompactionLock";
-#ifdef ARCTICDB_USING_CONDA
-static const bool AZURE_SUPPORT = false;
-#else
-static const bool AZURE_SUPPORT = true;
-#endif
 
 class SymbolList {
     using StreamId = entity::StreamId;

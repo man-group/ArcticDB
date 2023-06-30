@@ -407,14 +407,18 @@ def s3_version_store(s3_store_factory):
 def mongo_version_store(mongo_store_factory):
     return mongo_store_factory()
 
-
 @pytest.fixture(
     scope="function",
     params=["s3_store_factory", "azure_store_factory"] if AZURE_SUPPORT else ["s3_store_factory"],
 )
-def object_version_store_prune_previous(request):
+def object_store_factory(request):
     store_factory = request.getfixturevalue(request.param)
-    return store_factory(prune_previous_version=True)
+    return store_factory
+
+
+@pytest.fixture
+def object_version_store_prune_previous(object_store_factory):
+    return object_store_factory(prune_previous_version=True)
 
 
 @pytest.fixture
@@ -568,20 +572,18 @@ def azurite_port():
 def spawn_azurite(azurite_port):
     if AZURE_SUPPORT:
         print("Spawning Azurite")
-        port = str(azurite_port)
-        temp_folder = tempfile.TemporaryDirectory().name
-        os.mkdir(temp_folder)
-        try:
-            p = subprocess.Popen(
-                f"azurite --silent --blobPort {port} --blobHost 127.0.0.1 --queuePort 0 --tablePort 0",
-                cwd=temp_folder,
-                shell=True,
-            )
-            time.sleep(2)
-            yield
-        finally:
-            print("Killing Azurite")
-            p.kill()
+        with tempfile.TemporaryDirectory() as temp_folder:
+            try:
+                p = subprocess.Popen(
+                    f"azurite --silent --blobPort {azurite_port} --blobHost 127.0.0.1 --queuePort 0 --tablePort 0",
+                    cwd=temp_folder,
+                    shell=True,
+                )
+                time.sleep(2)
+                yield
+            finally:
+                print("Killing Azurite")
+                p.kill()
     else:
         yield
 
@@ -596,12 +598,9 @@ def object_storage_uri_incl_bucket(request):
     yield request.getfixturevalue(request.param)
 
 
-@pytest.fixture(
-    scope="function",
-    params=["s3_version_store", "azure_version_store"] if AZURE_SUPPORT else ["s3_version_store"],
-)
-def object_version_store(request):
-    yield request.getfixturevalue(request.param)
+@pytest.fixture
+def object_version_store(object_store_factory):
+    return object_store_factory()
 
 
 @pytest.fixture(

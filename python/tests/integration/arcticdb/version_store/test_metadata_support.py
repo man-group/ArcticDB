@@ -57,16 +57,17 @@ def test_read_metadata(object_and_lmdb_version_store):
 
 
 def test_read_metadata_by_version(object_and_lmdb_version_store):
+    lib = object_and_lmdb_version_store
     data_v1 = [1, 2, 3]
     data_v2 = [10, 20, 30]
     symbol = "test_symbol"
     metadata_v0 = {"something": 1}
     metadata_v1 = {"something more": 2}
-    object_and_lmdb_version_store.write(symbol, data_v1, metadata=metadata_v0)
-    object_and_lmdb_version_store.write(symbol, data_v2, metadata=metadata_v1)
-    assert object_and_lmdb_version_store.read_metadata(symbol).metadata == metadata_v1
-    assert object_and_lmdb_version_store.read_metadata(symbol, 0).metadata == metadata_v0
-    assert object_and_lmdb_version_store.read_metadata(symbol, 1).metadata == metadata_v1
+    lib.write(symbol, data_v1, metadata=metadata_v0)
+    lib.write(symbol, data_v2, metadata=metadata_v1)
+    assert lib.read_metadata(symbol).metadata == metadata_v1
+    assert lib.read_metadata(symbol, 0).metadata == metadata_v0
+    assert lib.read_metadata(symbol, 1).metadata == metadata_v1
 
 
 def test_read_metadata_by_snapshot(lmdb_version_store):

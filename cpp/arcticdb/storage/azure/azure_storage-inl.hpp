@@ -171,7 +171,6 @@ void do_remove_impl(Composite<VariantKey>&& ks,
     unsigned int request_timeout) {
         ARCTICDB_SUBSAMPLE(AzureStorageDeleteBatch, 0)
         auto fmt_db = [](auto&& k) { return variant_key_type(k); };
-        std::vector<VariantKey> failed_deletes;
         static const size_t delete_object_limit =
             std::min(BATCH_SUBREQUEST_LIMIT, static_cast<size_t>(ConfigsMap::instance()->get_int("AzureStorage.DeleteBatchSize", BATCH_SUBREQUEST_LIMIT)));
         
@@ -192,7 +191,7 @@ void do_remove_impl(Composite<VariantKey>&& ks,
         };
         
         (fg::from(ks.as_range()) | fg::move | fg::groupBy(fmt_db)).foreach(
-            [&container_client, &root_folder, b=std::move(bucketizer), &failed_deletes, &batch, delete_object_limit=delete_object_limit, &batch_counter, &submit_batch, &connect_to_azurite, &request_timeout] (auto&& group) {//bypass incorrect 'set but no used" error for delete_object_limit
+            [&container_client, &root_folder, b=std::move(bucketizer), &batch, delete_object_limit=delete_object_limit, &batch_counter, &submit_batch, &connect_to_azurite, &request_timeout] (auto&& group) {//bypass incorrect 'set but no used" error for delete_object_limit
                 auto key_type_dir = key_type_folder(root_folder, group.key());
                 for (auto k : folly::enumerate(group.values())) {
                     auto blob_name = object_path(b.bucketize(key_type_dir, *k), *k);
@@ -223,10 +222,6 @@ void do_remove_impl(Composite<VariantKey>&& ks,
         if (batch_counter) {
             submit_batch(batch);
         }
-
-        util::check(failed_deletes.empty(), "Have {} segment that have not been removed", failed_deletes.size());
-        if(!failed_deletes.empty())
-            throw KeyNotFoundException(Composite<VariantKey>(std::move(failed_deletes)));
 }
 
 inline auto default_prefix_handler() {

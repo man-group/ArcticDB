@@ -11,7 +11,6 @@ from arcticdb_ext.storage import KeyType
 from arcticdb_ext.tools import AZURE_SUPPORT
 
 import pytest
-import sys
 
 
 def py_enum_to_dict(enum):

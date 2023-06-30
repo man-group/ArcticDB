@@ -120,7 +120,7 @@ class AzureLibraryAdapter(ArcticLibraryAdapter):
         _key = self._query_params.secret
 
         if self._query_params.path_prefix:
-            # add time to prefix - so that the s3 root folder is unique and we can delete and recreate fast
+            # add time to prefix - so that the azure root folder is unique and we can delete and recreate fast
             with_prefix = f"{self._query_params.path_prefix}/{name}{time.time() * 1e9:.0f}"
         else:
             with_prefix = True
