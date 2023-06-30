@@ -292,7 +292,6 @@ set(arcticdb_srcs
         util/movable_priority_queue.hpp
         util/offset_string.hpp
         util/offset_string.hpp
-        util/optional_defaults.hpp
         util/pb_util.hpp
         util/preconditions.hpp
         util/preprocess.hpp

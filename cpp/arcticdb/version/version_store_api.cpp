@@ -33,7 +33,6 @@
 
 #include <regex>
 #include <arcticdb/pipeline/input_tensor_frame.hpp>
-#include <arcticdb/util/optional_defaults.hpp>
 #include <arcticdb/python/python_to_tensor_frame.hpp>
 #include <arcticdb/pipeline/read_frame.hpp>
 #include <arcticdb/version/version_tasks.hpp>
@@ -42,6 +41,14 @@
 #include <arcticdb/pipeline/pipeline_utils.hpp>
 
 namespace arcticdb::version_store {
+
+inline bool opt_true(const std::optional<bool> &opt) {
+    return !opt || opt.value();
+}
+
+inline bool opt_false(const std::optional<bool> &opt) {
+    return opt && opt.value();
+}
 
 using namespace arcticdb::entity;
 namespace as = arcticdb::stream;

@@ -13,7 +13,6 @@
 #include <arcticdb/async/task_scheduler.hpp>
 #include <arcticdb/async/tasks.hpp>
 #include <arcticdb/util/key_utils.hpp>
-#include <arcticdb/util/optional_defaults.hpp>
 #include <arcticdb/stream/append_map.hpp>
 #include <arcticdb/pipeline/pipeline_context.hpp>
 #include <arcticdb/pipeline/read_frame.hpp>
@@ -31,6 +30,14 @@
 #include <arcticdb/version/version_utils.hpp>
 
 namespace arcticdb::version_store {
+
+inline bool opt_true(const std::optional<bool> &opt) {
+    return !opt || opt.value();
+}
+
+inline bool opt_false(const std::optional<bool> &opt) {
+    return opt && opt.value();
+}
 
 void modify_descriptor(const std::shared_ptr<pipelines::PipelineContext>& pipeline_context, const ReadOptions& read_options) {
 

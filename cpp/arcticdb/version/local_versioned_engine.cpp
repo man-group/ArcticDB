@@ -10,7 +10,6 @@
 #include <arcticdb/version/version_core.hpp>
 #include <arcticdb/storage/storage.hpp>
 #include <arcticdb/storage/storage_options.hpp>
-#include <arcticdb/util/optional_defaults.hpp>
 #include <arcticdb/version/snapshot.hpp>
 #include <arcticdb/stream/stream_sink.hpp>
 #include <arcticdb/util/preconditions.hpp>
@@ -24,6 +23,14 @@
 #include <arcticdb/python/gil_lock.hpp>
 
 namespace arcticdb::version_store {
+
+inline bool opt_true(const std::optional<bool> &opt) {
+    return !opt || opt.value();
+}
+
+inline bool opt_false(const std::optional<bool> &opt) {
+    return opt && opt.value();
+}
 
 LocalVersionedEngine::LocalVersionedEngine(
         const std::shared_ptr<storage::Library>& library) :

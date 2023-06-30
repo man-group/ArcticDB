@@ -8,9 +8,17 @@
 #pragma once
 
 #include <arcticdb/entity/protobufs.hpp>
-#include <arcticdb/util/optional_defaults.hpp>
 
 namespace arcticdb {
+
+inline bool opt_true(const std::optional<bool> &opt) {
+    return !opt || opt.value();
+}
+
+inline bool opt_false(const std::optional<bool> &opt) {
+    return opt && opt.value();
+}
+
 struct ReadOptions {
     std::optional<bool> force_strings_to_fixed_;
     std::optional<bool> force_strings_to_object_;
