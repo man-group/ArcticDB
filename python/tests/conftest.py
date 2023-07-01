@@ -580,11 +580,13 @@ def spawn_azurite(azurite_port):
                     cwd=temp_folder,
                     shell=True,
                 )
-                time.sleep(2)
+                time.sleep(2)  # Wait for Azurite to start up
                 yield
             finally:
                 print("Killing Azurite")
                 p.kill()
+                time.sleep(2)  # Wait for Azurite to stop so that temp files can be removed
+
     else:
         yield
 
