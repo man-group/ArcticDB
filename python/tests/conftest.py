@@ -585,7 +585,8 @@ def spawn_azurite(azurite_port):
             finally:
                 print("Killing Azurite")
                 p.kill()
-                time.sleep(2)  # Wait for Azurite to stop so that temp files can be removed
+                if sys.platform == "win32":
+                    time.sleep(5)  # Wait for Azurite to stop so that temp files can be removed
 
     else:
         yield
