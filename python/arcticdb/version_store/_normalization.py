@@ -268,6 +268,7 @@ _range_index_props_are_public = hasattr(RangeIndex, "start")
 def _normalize_single_index(index, index_names, index_norm, dynamic_strings=None, string_max_len=None):
     # index: pd.Index or np.ndarray -> np.ndarray
     index_tz = None
+
     if isinstance(index, RangeIndex):
         # skip index since we can reconstruct it, so no need to actually store it
         if index.name:
@@ -498,6 +499,12 @@ class _PandasNormalizer(Normalizer):
             df.reset_index(fields, inplace=True)
             index = df.index
         else:
+            if isinstance(index, RangeIndex) and len(index) == 0:
+                # In Pandas 2.0, RangeIndex is used by default when an empty dataframe or series is created.
+                # The index is converted to a DatetimeIndex for preserving the behavior of ArcticDB with
+                # Pandas 1.0.
+                index = DatetimeIndex([])
+
             index_norm = pd_norm.index
             index_norm.is_not_range_index = not isinstance(index, RangeIndex)
 

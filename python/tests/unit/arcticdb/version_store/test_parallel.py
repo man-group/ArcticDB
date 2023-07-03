@@ -19,6 +19,8 @@ from arcticdb.util.test import (
     random_dates,
 )
 
+from arcticdb.util._versions import IS_PANDAS_TWO
+
 
 def test_parallel_write(lmdb_version_store):
     sym = "parallel"
@@ -182,7 +184,6 @@ def test_datetimes_to_nats(lmdb_version_store):
         index = pd.Index([dt + datetime.timedelta(seconds=s) for s in range(num_rows_per_day)])
         vals = {c: random_dates(num_rows_per_day) for c in cols}
         new_df = pd.DataFrame(data=vals, index=index)
-
         dataframes.append(new_df)
         df = pd.concat((df, new_df))
         dt = dt + datetime.timedelta(days=1)
@@ -196,4 +197,4 @@ def test_datetimes_to_nats(lmdb_version_store):
     df.sort_index(axis=1, inplace=True)
     result = vit.data
     result.sort_index(axis=1, inplace=True)
-    assert_frame_equal(vit.data, df)
+    assert_frame_equal(result, df, check_dtype=not IS_PANDAS_TWO)

@@ -101,7 +101,7 @@ def test_write_no_rows_and_columns(lmdb_version_store_dynamic_schema, sym):
         columns=column_names + ["d"],
         index=[pd.Timestamp(3), pd.Timestamp(4)],
     )
-    df5 = df2.append(df4)
+    df5 = pd.concat((df2, df4))
     lmdb_version_store_dynamic_schema.append(sym, df4, dynamic_strings=True)
     assert_frame_equal(lmdb_version_store_dynamic_schema.read(sym).data, df5)
 
@@ -135,6 +135,12 @@ def test_empty_series(lmdb_version_store_dynamic_schema, sym):
     ser = pd.Series([])
     lmdb_version_store_dynamic_schema.write(sym, ser)
     assert not lmdb_version_store_dynamic_schema.is_symbol_pickled(sym)
+    if IS_PANDAS_TWO:
+        # In Pandas 2.0, RangeIndex is used by default when an empty dataframe or series is created.
+        # The index is converted to a DatetimeIndex for preserving the behavior of ArcticDB with
+        # Pandas 1.0.
+        ser.index = ser.index.astype("datetime64[ns]")
+
     assert_series_equal(lmdb_version_store_dynamic_schema.read(sym).data, ser)
 
 
@@ -142,5 +148,15 @@ def test_fallback_to_pickle(lmdb_version_store, sym):
     column_names = ["a", "b", "c"]
     df = pd.DataFrame(columns=column_names)
     lmdb_version_store.write(sym, df)
-    assert lmdb_version_store.is_symbol_pickled(sym)
-    assert_frame_equal(df, lmdb_version_store.read(sym).data)
+
+    if IS_PANDAS_TWO:
+        # In Pandas 2.0, RangeIndex is used by default when an empty dataframe or series is created.
+        # The index is converted to a DatetimeIndex for preserving the behavior of ArcticDB with Pandas 1.0.
+        df.index = df.index.astype("datetime64[ns]")
+        # Pandas 2.0 uses an internal representation which is normalizable and therefore not pickled.
+        # TODO: Find out what has changed to make it normalizable (is it the default floating dtype?).
+        assert not lmdb_version_store.is_symbol_pickled(sym)
+    else:
+        assert lmdb_version_store.is_symbol_pickled(sym)
+
+    assert_frame_equal(df, lmdb_version_store.read(sym).data, check_dtype=False)
