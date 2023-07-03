@@ -429,7 +429,7 @@ public:
                                encoding_version_));
         }, write_count);
 
-        for (folly::Future<VariantKey>&& encode_fut : encode_futs) {
+        for (folly::Future<storage::KeySegmentPair>& encode_fut : encode_futs) {
             futs.emplace_back(
                 std::move(encode_fut).thenValue([de_dup_map](auto &&ks) -> std::pair<VariantKey,
                                                                                      std::optional<Segment>> {
