@@ -183,7 +183,7 @@ public:
         load_params.validate();
         static const auto max_trial_config = ConfigsMap::instance()->get_int("VersionMap.MaxReadRefTrials", 2);
         auto max_trials = max_trial_config;
-        while (max_trials--) {
+        while (true) {
             try {
                 VersionMapEntry ref_entry;
                 read_symbol_ref(store, stream_id, ref_entry);
@@ -193,6 +193,9 @@ public:
                 follow_version_chain(store, ref_entry, entry, load_params);
                 break;
             } catch (const std::exception &err) {
+                if (--max_trials <= 0) {
+                    throw;
+                }
                 // We retry to read via ref key because it could have been modified by someone else (e.g. compaction)
                 log::version().warn(
                         "Loading versions from storage via ref key failed with error: {} for stream {}. Retrying",
@@ -202,8 +205,6 @@ public:
                 continue;
             }
         }
-        util::check_rte(max_trials >= 0,"Couldn't read via ref key {} even after multiple trials", stream_id);
-
         if (validate_)
             entry->validate();
     }
