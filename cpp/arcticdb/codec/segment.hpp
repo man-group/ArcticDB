@@ -34,7 +34,7 @@ static constexpr uint16_t HEADER_VERSION_V1 = 1;
 
 inline EncodingVersion encoding_version(const storage::LibraryDescriptor::VariantStoreConfig cfg) {
     return util::variant_match(cfg,
-                               [&cfg](const arcticdb::proto::storage::VersionStoreConfig &version_config) {
+                               [](const arcticdb::proto::storage::VersionStoreConfig &version_config) {
                                    return EncodingVersion(version_config.encoding_version());
                                },
                                [](std::monostate) {
