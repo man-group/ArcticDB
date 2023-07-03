@@ -962,24 +962,35 @@ class NativeVersionStore:
             Dictionary of symbol mapping with the versioned items
         """
         _check_batch_kwargs(NativeVersionStore.batch_read, NativeVersionStore.read, kwargs)
+        throw_on_missing_version = True
         versioned_items = self._batch_read_to_versioned_items(
-            symbols, as_ofs, date_ranges, columns, query_builder, kwargs
+            symbols, as_ofs, date_ranges, columns, query_builder, throw_on_missing_version, kwargs
+        )
+        check(
+            all(v is not None for v in versioned_items),
+            "Null value from _batch_read_to_versioned_items. NoDataFoundException should have been thrown instead.",
         )
         return {v.symbol: v for v in versioned_items}
 
-    def _batch_read_to_versioned_items(self, symbols, as_ofs, date_ranges, columns, query_builder, kwargs=None):
+    def _batch_read_to_versioned_items(
+        self, symbols, as_ofs, date_ranges, columns, query_builder, throw_on_missing_version, kwargs=None
+    ):
         if kwargs is None:
             kwargs = dict()
         version_queries = self._get_version_queries(len(symbols), as_ofs, **kwargs)
         read_queries = self._get_read_queries(len(symbols), date_ranges, columns, query_builder)
         read_options = self._get_read_options(**kwargs)
+        read_options.set_batch_throw_on_missing_version(throw_on_missing_version)
         read_results = self.version_store.batch_read(symbols, version_queries, read_queries, read_options)
         versioned_items = []
         for i in range(len(read_results)):
-            read_result = ReadResult(*read_results[i])
-            read_query = read_queries[i]
-            vitem = self._post_process_dataframe(read_result, read_query)
-            versioned_items.append(vitem)
+            if read_results[i] is not None:
+                read_result = ReadResult(*read_results[i])
+                read_query = read_queries[i]
+                vitem = self._post_process_dataframe(read_result, read_query)
+                versioned_items.append(vitem)
+            else:
+                versioned_items.append(None)
         return versioned_items
 
     def batch_read_metadata(
