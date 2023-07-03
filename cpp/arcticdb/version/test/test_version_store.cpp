@@ -345,10 +345,12 @@ TEST_F(VersionStoreTest, StressBatchReadUncompressed) {
     }
 
     std::vector<ReadQuery> read_queries;
-    auto latest_versions = test_store_->batch_read(symbols, std::vector<VersionQuery>(10), read_queries, ReadOptions{});
+    ReadOptions read_options;
+    read_options.set_batch_throw_on_missing_version(true);
+    auto latest_versions = test_store_->batch_read(symbols, std::vector<VersionQuery>(10), read_queries, read_options);
     for(auto version : folly::enumerate(latest_versions)) {
-        auto expected = get_test_simple_frame(version->item.symbol(), 10, version.index);
-        bool equal = expected.segment_ == version->frame_data.frame();
+        auto expected = get_test_simple_frame((*version)->item.symbol(), 10, version.index);
+        bool equal = expected.segment_ == (*version)->frame_data.frame();
         ASSERT_EQ(equal, true);
     }
 }
@@ -445,8 +447,8 @@ TEST(VersionStore, UpdateWithin) {
     version_store.update_internal(symbol, UpdateQuery{}, std::move(update_frame.frame_), false, false, false);
 
     ReadQuery read_query;
-    auto read_result = version_store.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, ReadOptions{});
-    const auto& seg = read_result.second.frame_;
+    auto read_result = version_store.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, ReadOptions{}).value();
+    const auto& seg = read_result.frame_and_descriptor_.frame_;
 
     for(auto i = 0u; i < num_rows; ++i) {
         auto expected = i;
@@ -487,8 +489,8 @@ TEST(VersionStore, UpdateBefore) {
     version_store.update_internal(symbol, UpdateQuery{}, std::move(update_frame.frame_), false, false, false);
 
     ReadQuery read_query;
-    auto read_result = version_store.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, ReadOptions{});
-    const auto& seg = read_result.second.frame_;
+    auto read_result = version_store.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, ReadOptions{}).value();
+    const auto& seg = read_result.frame_and_descriptor_.frame_;
 
     for(auto i = 0u; i < num_rows + update_range.diff(); ++i) {
         auto expected = i;
@@ -529,8 +531,8 @@ TEST(VersionStore, UpdateAfter) {
     version_store.update_internal(symbol, UpdateQuery{}, std::move(update_frame.frame_), false, false, false);
 
     ReadQuery read_query;
-    auto read_result = version_store.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, ReadOptions{});
-    const auto& seg = read_result.second.frame_;
+    auto read_result = version_store.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, ReadOptions{}).value();
+    const auto& seg = read_result.frame_and_descriptor_.frame_;
 
     for(auto i = 0u; i < num_rows + update_range.diff(); ++i) {
         auto expected = i;
@@ -572,9 +574,8 @@ TEST(VersionStore, UpdateIntersectBefore) {
     version_store.update_internal(symbol, UpdateQuery{}, std::move(update_frame.frame_), false, false, false);
 
     ReadQuery read_query;
-    auto
-        read_result = version_store.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, ReadOptions{});
-    const auto &seg = read_result.second.frame_;
+    auto read_result = version_store.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, ReadOptions{}).value();
+    const auto &seg = read_result.frame_and_descriptor_.frame_;
 
     for (auto i = 0u; i < num_rows + 5; ++i) {
         auto expected = i;
@@ -616,9 +617,8 @@ TEST(VersionStore, UpdateIntersectAfter) {
     version_store.update_internal(symbol, UpdateQuery{}, std::move(update_frame.frame_), false, false, false);
 
     ReadQuery read_query;
-    auto
-        read_result = version_store.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, ReadOptions{});
-    const auto &seg = read_result.second.frame_;
+    auto read_result = version_store.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, ReadOptions{}).value();
+    const auto &seg = read_result.frame_and_descriptor_.frame_;
 
     for (auto i = 0u; i < num_rows + 5; ++i) {
         auto expected = i;
@@ -670,8 +670,8 @@ TEST(VersionStore, UpdateWithinSchemaChange) {
     ReadOptions read_options;
     read_options.set_dynamic_schema(true);
     ReadQuery read_query;
-    auto read_result = version_store.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, read_options);
-    const auto &seg = read_result.second.frame_;
+    auto read_result = version_store.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, read_options).value();
+    const auto &seg = read_result.frame_and_descriptor_.frame_;
 
     for (auto i = 0u;i < num_rows; ++i) {
         auto expected = i;
@@ -731,8 +731,8 @@ TEST(VersionStore, UpdateWithinTypeAndSchemaChange) {
     ReadOptions read_options;
     read_options.set_dynamic_schema(true);
     ReadQuery read_query;
-    auto read_result = version_store.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, read_options);
-    const auto &seg = read_result.second.frame_;
+    auto read_result = version_store.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, read_options).value();
+    const auto &seg = read_result.frame_and_descriptor_.frame_;
 
     for (auto i = 0u;i < num_rows; ++i) {
         auto expected = i;
