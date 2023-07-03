@@ -23,6 +23,7 @@ import random
 import string
 
 from arcticdb.exceptions import ArcticNativeException
+from arcticdb_ext.storage import NoDataFoundException
 from arcticdb.version_store.processing import QueryBuilder
 from arcticdb_ext.exceptions import InternalException, UserInputException
 from arcticdb.util.test import assert_frame_equal, IS_PANDAS_ZERO
@@ -2027,6 +2028,32 @@ def test_filter_batch_incorrect_query_count(lmdb_version_store):
         batch_res = lmdb_version_store.batch_read([sym1, sym2], query_builder=[q])
     with pytest.raises(ArcticNativeException):
         batch_res = lmdb_version_store.batch_read([sym1, sym2], query_builder=[q, q, q])
+
+
+def test_filter_batch_symbol_doesnt_exist(lmdb_version_store):
+    sym1 = "sym1"
+    sym2 = "sym2"
+    df1 = DataFrame({"a": [1, 2]}, index=np.arange(2))
+    lmdb_version_store.write(sym1, df1)
+    q = QueryBuilder()
+    q = q[q["a"] == 2]
+    with pytest.raises(NoDataFoundException):
+        batch_res = lmdb_version_store.batch_read([sym1, sym2], query_builder=q)
+
+
+def test_filter_batch_version_doesnt_exist(lmdb_version_store):
+    sym1 = "sym1"
+    sym2 = "sym2"
+    df1 = DataFrame({"a": [1, 2]}, index=np.arange(2))
+    df2 = DataFrame({"a": [2, 3]}, index=np.arange(2))
+    lmdb_version_store.write(sym1, df1)
+    lmdb_version_store.write(sym2, df2)
+
+    q = QueryBuilder()
+    q = q[q["a"] == 2]
+    # pandas_query = "a == 2"
+    with pytest.raises(NoDataFoundException):
+        batch_res = lmdb_version_store.batch_read([sym1, sym2], as_ofs=[0, 1], query_builder=q)
 
 
 def test_filter_numeric_membership_equivalence():
