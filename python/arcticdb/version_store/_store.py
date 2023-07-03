@@ -336,18 +336,55 @@ class NativeVersionStore:
                 item, norm_meta = self._normalizer.normalize(item)
                 norm_meta.custom.CopyFrom(custom_norm_meta)
             else:
-                # Normalize pandas DataFrame. For now, DataFrames backed by one F-ordered
-                # NumPy array or a collection of NumPy arrays are the only DataFrames supported.
-                # TODO: support other DataFrame types, such as pandas backed by pyarrow, polars,
-                # pyspark.sql.DataFrame (if it makes sense), etc.
-                item, norm_meta = self._normalizer.normalize(
-                    dataframe,
-                    pickle_on_failure=pickle_on_failure,
-                    dynamic_strings=dynamic_strings,
-                    coerce_columns=coerce_columns,
-                    dynamic_schema=dynamic_schema,
-                    **kwargs,
-                )
+                if isinstance(dataframe, pd.DataFrame) and hasattr(dataframe._mgr.arrays[0], "combine_chunks"):
+                    try:
+                        import pyarrow as pa
+                        from pyarrow.cffi import ffi
+                    except ImportError:
+                        raise ArcticNativeNotYetImplemented(
+                            "PyArrow must be installed for supporting the interaction"
+                            " with PyArrow-backed pandas DataFrames")
+
+                    # PyArrow Support
+                    arrow_extension_arrays = dataframe._mgr.arrays
+                    # Likely a list of `pyarrow.lib.FloatArray` (a subclass of `pyarrow.lib.Array`)
+                    # Depending on the dtype, we might have other `pyarrow.lib.*Array` extending `pyarrow.lib.Array`
+                    #
+                    # We need to call `combine_chunks` because `pyarrow.lib.ChunkArray` have (for now) no way to
+                    # export or import data (e.g. with `_import_from_c`/`_export_to_c`).
+                    pyarrow_arrays = list(map(lambda array: array._data.combine_chunks(), arrow_extension_arrays))
+
+                    for pyarrow_array in pyarrow_arrays:
+                        if not isinstance(pyarrow_array, pa.lib.FloatArray):
+                            raise ArcticNativeNotYetImplemented(
+                                "Only PyArrow-backed pandas DataFrames with FloatArray are supported")
+
+                    c_schema = ffi.new("struct ArrowSchema*")
+                    c_schema_ptr = int(ffi.cast("uintptr_t", c_schema))
+
+                    c_array = ffi.new("struct ArrowArray*")
+                    c_array_ptr = int(ffi.cast("uintptr_t", c_array))
+
+                    first_pyarrow_array = pyarrow_arrays[0]
+                    # Populate opaque pointers
+                    first_pyarrow_array.type._export_to_c(c_schema_ptr)
+                    first_pyarrow_array._export_to_c(c_array_ptr)
+
+                    # TODO: consume from the C++ side
+
+                else:
+                    # Normalize pandas DataFrame. For now, DataFrames backed by one F-ordered
+                    # NumPy array or a collection of NumPy arrays are the only DataFrames supported.
+                    # TODO: support other DataFrame types, such as pandas backed by pyarrow, polars,
+                    # pyspark.sql.DataFrame (if it makes sense), etc.
+                    item, norm_meta = self._normalizer.normalize(
+                        dataframe,
+                        pickle_on_failure=pickle_on_failure,
+                        dynamic_strings=dynamic_strings,
+                        coerce_columns=coerce_columns,
+                        dynamic_schema=dynamic_schema,
+                        **kwargs,
+                    )
         except ArcticNativeNotYetImplemented as ex:
             log.error("Not supported: normalizing symbol={}, data={}, metadata={}, {}", symbol, dataframe, metadata, ex)
             raise
