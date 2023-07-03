@@ -1235,6 +1235,67 @@ def test_read_batch_unhandled_type(arctic_library):
         lib.read_batch([1])
 
 
+def test_read_batch_symbol_doesnt_exist(arctic_library):
+    lib = arctic_library
+
+    # Given
+    df = pd.DataFrame({"a": [3, 5, 7]})
+    lib.write("s1", df)
+    # When
+    batch = lib.read_batch(["s1", "s2"])
+    # Then
+    assert_frame_equal(batch[0].data, df)
+    assert batch[1] is None
+
+
+def test_read_batch_version_doesnt_exist(arctic_library):
+    lib = arctic_library
+
+    # Given
+    df1 = pd.DataFrame({"a": [3, 5, 7]})
+    df2 = pd.DataFrame({"a": [4, 6, 8]})
+    lib.write("s1", df1)
+    lib.write("s2", df2)
+    # When
+    batch = lib.read_batch([ReadRequest("s1", as_of=0), ReadRequest("s1", as_of=1), ReadRequest("s2", as_of=1)])
+    # Then
+    assert_frame_equal(batch[0].data, df1)
+    assert batch[1] is None
+    assert batch[2] is None
+
+
+def test_read_batch_query_builder_symbol_doesnt_exist(arctic_library):
+    lib = arctic_library
+
+    # Given
+    q = QueryBuilder()
+    q = q[q["a"] < 5]
+    lib.write("s1", pd.DataFrame({"a": [3, 5, 7]}))
+    # When
+    batch = lib.read_batch(["s1", "s2"], query_builder=q)
+    # Then
+    assert_frame_equal(batch[0].data, pd.DataFrame({"a": [3]}))
+    assert batch[1] is None
+
+
+def test_read_batch_query_builder_version_doesnt_exist(arctic_library):
+    lib = arctic_library
+
+    # Given
+    q = QueryBuilder()
+    q = q[q["a"] < 5]
+    lib.write("s1", pd.DataFrame({"a": [3, 5, 7]}))
+    lib.write("s2", pd.DataFrame({"a": [4, 6, 8]}))
+    # When
+    batch = lib.read_batch(
+        [ReadRequest("s1", as_of=0), ReadRequest("s1", as_of=1), ReadRequest("s2", as_of=1)], query_builder=q
+    )
+    # Then
+    assert_frame_equal(batch[0].data, pd.DataFrame({"a": [3]}))
+    assert batch[1] is None
+    assert batch[2] is None
+
+
 def test_has_symbol(arctic_library):
     lib = arctic_library
     lib.write("symbol", pd.DataFrame())

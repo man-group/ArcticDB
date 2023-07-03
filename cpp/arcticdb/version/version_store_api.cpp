@@ -776,16 +776,20 @@ ReadResult PythonVersionStore::read_dataframe_merged(
     return create_python_read_result(version, std::move(final_frame));
 }
 
-std::vector<ReadResult> PythonVersionStore::batch_read(
+std::vector<std::optional<ReadResult>> PythonVersionStore::batch_read(
     const std::vector<StreamId>& stream_ids,
     const std::vector<VersionQuery>& version_queries,
     std::vector<ReadQuery>& read_queries,
     const ReadOptions& read_options) {
 
-    auto versions_and_frames = batch_read_internal(stream_ids, version_queries, read_queries, read_options);
-    std::vector<ReadResult> res;
-    for (auto&& [version, frame_and_descriptor]: versions_and_frames) {
-        res.emplace_back(create_python_read_result(version, std::move(frame_and_descriptor)));
+    auto opt_versions_and_frames = batch_read_internal(stream_ids, version_queries, read_queries, read_options);
+    std::vector<std::optional<ReadResult>> res;
+    for (auto&& opt_version_and_frame: opt_versions_and_frames) {
+        if (opt_version_and_frame.has_value()) {
+            res.emplace_back(create_python_read_result(opt_version_and_frame->versioned_item_, std::move(opt_version_and_frame->frame_and_descriptor_)));
+        } else {
+            res.emplace_back(std::nullopt);
+        }
     }
     return res;
 }
@@ -795,8 +799,10 @@ ReadResult PythonVersionStore::read_dataframe_version(
     const VersionQuery& version_query,
     ReadQuery& read_query,
     const ReadOptions& read_options) {
-    auto [versioned_item, frame_and_descriptor] =  read_dataframe_version_internal(stream_id, version_query, read_query, read_options);
-    return create_python_read_result(versioned_item, std::move(frame_and_descriptor));
+    auto opt_version_and_frame = read_dataframe_version_internal(stream_id, version_query, read_query, read_options);
+    internal::check<ErrorCode::E_ASSERTION_FAILURE>(opt_version_and_frame.has_value(),
+                                                    "read_dataframe_version_internal should never return nullopt for non-batch reads");
+    return create_python_read_result(opt_version_and_frame->versioned_item_, std::move(opt_version_and_frame->frame_and_descriptor_));
 }
 
 void PythonVersionStore::delete_snapshot(const SnapshotId& snap_name) {
