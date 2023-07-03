@@ -120,7 +120,7 @@ FrameAndDescriptor LocalVersionedEngine::read_column_stats_internal(
     return read_column_stats_impl(store(), versioned_item);
 }
 
-std::pair<VersionedItem, FrameAndDescriptor> LocalVersionedEngine::read_column_stats_version_internal(
+ReadVersionOutput LocalVersionedEngine::read_column_stats_version_internal(
     const StreamId& stream_id,
     const VersionQuery& version_query) {
     auto versioned_item = get_version_to_read(stream_id, version_query);
@@ -130,7 +130,7 @@ std::pair<VersionedItem, FrameAndDescriptor> LocalVersionedEngine::read_column_s
             stream_id
             );
     auto frame_and_descriptor = read_column_stats_internal(versioned_item.value());
-    return std::make_pair(versioned_item.value(), std::move(frame_and_descriptor));
+    return ReadVersionOutput{std::move(versioned_item.value()), std::move(frame_and_descriptor)};
 }
 
 ColumnStats LocalVersionedEngine::get_column_stats_info_internal(
@@ -333,7 +333,7 @@ IndexRange LocalVersionedEngine::get_index_range(
     return index::get_index_segment_range(version.value().key_, store());
 }
 
-std::pair<VersionedItem, FrameAndDescriptor> LocalVersionedEngine::read_dataframe_version_internal(
+ReadVersionOutput LocalVersionedEngine::read_dataframe_version_internal(
     const StreamId &stream_id,
     const VersionQuery& version_query,
     ReadQuery& read_query,
@@ -344,16 +344,17 @@ std::pair<VersionedItem, FrameAndDescriptor> LocalVersionedEngine::read_datafram
         if(opt_false(read_options.incompletes_)) {
             log::version().warn("No index:  Key not found for {}, will attempt to use incomplete segments.", stream_id);
             identifier = stream_id;
+        } else {
+            missing_data::raise<ErrorCode::E_NO_SUCH_VERSION>(
+                    "read_dataframe_version: version matching query '{}' not found for symbol '{}'", version_query, stream_id);
         }
-        else
-            throw storage::NoDataFoundException(fmt::format("read_dataframe_version: version not found for symbol '{}'", stream_id));
     }
     else  {
         identifier = version.value();
     }
 
     auto frame_and_descriptor = read_dataframe_internal(identifier, read_query, read_options);
-    return std::make_pair(version.value_or(VersionedItem{}), std::move(frame_and_descriptor));
+    return ReadVersionOutput{version.value_or(VersionedItem{}), std::move(frame_and_descriptor)};
 }
 
 folly::Future<DescriptorItem> LocalVersionedEngine::get_descriptor(
@@ -966,7 +967,7 @@ VersionedItem LocalVersionedEngine::defragment_symbol_data(const StreamId& strea
     return versioned_item;
 }
 
-folly::Future<std::pair<VersionedItem, FrameAndDescriptor>> async_read_direct(
+folly::Future<ReadVersionOutput> async_read_direct(
     const std::shared_ptr<Store>& store,
     const VariantKey& index_key,
     SegmentInMemory&& index_segment,
@@ -1001,12 +1002,12 @@ folly::Future<std::pair<VersionedItem, FrameAndDescriptor>> async_read_direct(
             reduce_and_fix_columns(pipeline_context, frame, read_options);
         }).thenValue(
         [index_segment_reader, frame, index_key, buffers](auto &&) {
-            return std::make_pair(VersionedItem{to_atom(index_key)},
-                                  FrameAndDescriptor{frame, std::move(index_segment_reader->mutable_tsd()), {}, buffers});
+            return ReadVersionOutput{VersionedItem{to_atom(index_key)},
+                                  FrameAndDescriptor{frame, std::move(index_segment_reader->mutable_tsd()), {}, buffers}};
         });
 }
 
-std::vector<std::pair<VersionedItem, FrameAndDescriptor>> LocalVersionedEngine::batch_read_keys(
+std::vector<ReadVersionOutput> LocalVersionedEngine::batch_read_keys(
     const std::vector<AtomKey> &keys,
     const std::vector<ReadQuery> &read_queries,
     const ReadOptions& read_options) {
@@ -1017,7 +1018,7 @@ std::vector<std::pair<VersionedItem, FrameAndDescriptor>> LocalVersionedEngine::
     }
     auto indexes = folly::collect(index_futures).get();
 
-    std::vector<folly::Future<std::pair<VersionedItem, FrameAndDescriptor>>> results_fut;
+    std::vector<folly::Future<ReadVersionOutput>> results_fut;
     auto i = 0u;
     util::check(read_queries.empty() || read_queries.size() == keys.size(), "Expected read queries to either be empty or equal to size of keys");
     for (auto&& [index_key, index_segment] : indexes) {
@@ -1028,37 +1029,68 @@ std::vector<std::pair<VersionedItem, FrameAndDescriptor>> LocalVersionedEngine::
     return folly::collect(results_fut).get();
 }
 
-std::vector<std::pair<VersionedItem, FrameAndDescriptor>> LocalVersionedEngine::temp_batch_read_internal_direct(
+std::vector<std::variant<ReadVersionOutput, DataError>> LocalVersionedEngine::temp_batch_read_internal_direct(
     const std::vector<StreamId> &stream_ids,
     const std::vector<VersionQuery> &version_queries,
     std::vector<ReadQuery> &read_queries,
     const ReadOptions &read_options) {
     py::gil_scoped_release release_gil;
     auto versions = batch_get_versions_async(store(), version_map(), stream_ids, version_queries);
-    std::vector<folly::Future<std::pair<VersionedItem, FrameAndDescriptor>>> output;
-    for (auto &&version : folly::enumerate(versions)) {
-        auto read_query = read_queries.empty() ? ReadQuery{} : read_queries[version.index];
-        output.emplace_back(std::move(*version).thenValue([store = store()](auto maybe_index_key) -> ReadKeyOutput {
-            util::check(static_cast<bool>(maybe_index_key), "Version not found for stream");
-            return store->read_sync(maybe_index_key.value());
-        }).thenValue([store = store(), read_query = std::move(read_query), read_options](auto &&key_segment_pair) {
-            auto [index_key, index_segment] = std::move(key_segment_pair);
-            return async_read_direct(store,
-                                     std::move(index_key),
-                                     std::move(index_segment),
-                                     read_query,
-                                     std::make_shared<BufferHolder>(),
-                                     read_options);
-        }));
+    std::vector<folly::Future<ReadVersionOutput>> read_versions_futs;
+    for (auto&& [idx, version] : folly::enumerate(versions)) {
+        auto read_query = read_queries.empty() ? ReadQuery{} : read_queries[idx];
+        read_versions_futs.emplace_back(std::move(version)
+            .thenValue([store = store()](auto&& maybe_index_key) {
+                           missing_data::check<ErrorCode::E_NO_SUCH_VERSION>(
+                                   maybe_index_key.has_value(),
+                                   "Version not found for symbol");
+                           return store->read(*maybe_index_key);
+                       })
+            .thenValue([store = store(), read_query, read_options](auto&& key_segment_pair) {
+                auto [index_key, index_segment] = std::move(key_segment_pair);
+                return async_read_direct(store,
+                                         std::move(index_key),
+                                         std::move(index_segment),
+                                         read_query,
+                                         std::make_shared<BufferHolder>(),
+                                         read_options);
+            })
+        );
     }
-    return folly::collect(output).get();
+    // TODO: https://github.com/man-group/ArcticDB/issues/241
+    // Move everything from here to the end of the function out into batch_read_internal as part of #241
+    auto read_versions = folly::collectAll(read_versions_futs).get();
+    std::vector<std::variant<ReadVersionOutput, DataError>> read_versions_or_errors;
+    read_versions_or_errors.reserve(read_versions.size());
+    for (auto&& [idx, read_version]: folly::enumerate(read_versions)) {
+        if (read_version.hasValue()) {
+            read_versions_or_errors.emplace_back(std::move(read_version.value()));
+        } else {
+            if (*read_options.batch_throw_on_missing_version_) {
+                read_version.throwUnlessValue();
+            } else {
+                auto exception = read_version.exception();
+                DataError data_error(stream_ids[idx], version_queries[idx].content_, exception.what().toStdString());
+                if (exception.is_compatible_with<NoSuchVersionException>()) {
+                    data_error.set_error_code(ErrorCode::E_NO_SUCH_VERSION);
+                } else if (exception.is_compatible_with<storage::KeyNotFoundException>()) {
+                    data_error.set_error_code(ErrorCode::E_KEY_NOT_FOUND);
+                }
+                read_versions_or_errors.emplace_back(std::move(data_error));
+            }
+        }
+    }
+    return read_versions_or_errors;
 }
 
-std::vector<std::pair<VersionedItem, FrameAndDescriptor>> LocalVersionedEngine::batch_read_internal(
+std::vector<std::variant<ReadVersionOutput, DataError>> LocalVersionedEngine::batch_read_internal(
     const std::vector<StreamId>& stream_ids,
     const std::vector<VersionQuery>& version_queries,
     std::vector<ReadQuery>& read_queries,
     const ReadOptions& read_options) {
+    // This read option should always be set when calling batch_read
+    internal::check<ErrorCode::E_ASSERTION_FAILURE>(read_options.batch_throw_on_missing_version_.has_value(),
+                                                    "ReadOptions::batch_throw_on_missing_version_ should always be set here");
 
     if(std::none_of(std::begin(read_queries), std::end(read_queries), [] (const auto& read_query) {
         return !read_query.clauses_.empty();
@@ -1066,16 +1098,53 @@ std::vector<std::pair<VersionedItem, FrameAndDescriptor>> LocalVersionedEngine::
         return temp_batch_read_internal_direct(stream_ids, version_queries, read_queries, read_options);
     }
 
-    std::vector<folly::Future<std::pair<VersionedItem, FrameAndDescriptor>>> results_fut;
+    std::vector<std::variant<ReadVersionOutput, DataError>> read_versions_or_errors;
+    read_versions_or_errors.reserve(stream_ids.size());
     for (size_t idx=0; idx < stream_ids.size(); idx++) {
         auto version_query = version_queries.size() > idx ? version_queries[idx] : VersionQuery{};
         auto read_query = read_queries.size() > idx ? read_queries[idx] : ReadQuery{};
-        results_fut.push_back(read_dataframe_version_internal(stream_ids[idx],
-                                                              version_query,
-                                                              read_query,
-                                                              read_options));
+        // TODO: https://github.com/man-group/ArcticDB/issues/241
+        // Remove this try-catch in favour of the implementation in temp_batch_read_internal_direct as part of #241
+        try {
+            auto read_version = read_dataframe_version_internal(stream_ids[idx],
+                                                                version_query,
+                                                                read_query,
+                                                                read_options);
+            read_versions_or_errors.emplace_back(std::move(read_version));
+        } catch (const NoSuchVersionException& e) {
+            if (*read_options.batch_throw_on_missing_version_) {
+                throw;
+            }
+            read_versions_or_errors.emplace_back(DataError(stream_ids[idx],
+                                                           version_query.content_,
+                                                           e.what(),
+                                                           ErrorCode::E_NO_SUCH_VERSION));
+        } catch (const storage::NoDataFoundException& e) {
+            if (*read_options.batch_throw_on_missing_version_) {
+                throw;
+            }
+            read_versions_or_errors.emplace_back(DataError(stream_ids[idx],
+                                                           version_query.content_,
+                                                           e.what(),
+                                                           ErrorCode::E_KEY_NOT_FOUND));
+        } catch (const storage::KeyNotFoundException& e) {
+            if (*read_options.batch_throw_on_missing_version_) {
+                throw;
+            }
+            read_versions_or_errors.emplace_back(DataError(stream_ids[idx],
+                                                           version_query.content_,
+                                                           e.what(),
+                                                           ErrorCode::E_KEY_NOT_FOUND));
+        } catch (const std::exception& e) {
+            if (*read_options.batch_throw_on_missing_version_) {
+                throw;
+            }
+            read_versions_or_errors.emplace_back(DataError(stream_ids[idx],
+                                                           version_query.content_,
+                                                           e.what()));
+        }
     }
-    return folly::collect(results_fut).get();
+    return read_versions_or_errors;
 }
 
 folly::Future<VersionedItem> LocalVersionedEngine::write_index_key_to_version_map_async(

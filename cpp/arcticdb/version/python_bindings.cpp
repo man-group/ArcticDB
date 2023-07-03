@@ -10,6 +10,7 @@
 #include <pybind11/stl.h>
 #include <pybind11/numpy.h>
 #include <pybind11/operators.h>
+#include <arcticdb/entity/data_error.hpp>
 #include <arcticdb/version/version_store_api.hpp>
 #include <arcticdb/python/arctic_version.hpp>
 #include <arcticdb/python/python_utils.hpp>
@@ -108,6 +109,7 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
         .def("set_incompletes", &ReadOptions::set_incompletes)
         .def("set_set_tz", &ReadOptions::set_set_tz)
         .def("set_optimise_string_memory", &ReadOptions::set_optimise_string_memory)
+        .def("set_batch_throw_on_missing_version", &ReadOptions::set_batch_throw_on_missing_version)
         .def_property_readonly("incompletes", &ReadOptions::get_incompletes);
 
     using FrameDataWrapper = arcticdb::pipelines::FrameDataWrapper;
@@ -130,6 +132,20 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
         .def_property_readonly("names", &PythonOutputFrame::names, py::return_value_policy::reference)
         .def_property_readonly("index_columns", &PythonOutputFrame::index_columns, py::return_value_policy::reference);
 
+    py::enum_<VersionRequestType>(version, "VersionRequestType")
+            .value("SNAPSHOT", VersionRequestType::SNAPSHOT)
+            .value("TIMESTAMP", VersionRequestType::TIMESTAMP)
+            .value("SPECIFIC", VersionRequestType::SPECIFIC)
+            .value("LATEST", VersionRequestType::LATEST);
+
+    py::class_<DataError, std::shared_ptr<DataError>>(version, "DataError")
+            .def_property_readonly("symbol", &DataError::symbol)
+            .def_property_readonly("version_request_type", &DataError::version_request_type)
+            .def_property_readonly("version_request_data", &DataError::version_request_data)
+            .def_property_readonly("error_code", &DataError::error_code)
+            .def_property_readonly("error_category", &DataError::error_category)
+            .def_property_readonly("exception_string", &DataError::exception_string)
+            .def("__str__", &DataError::to_string);
 
     // TODO: add repr.
     py::class_<VersionedItem>(version, "VersionedItem")
@@ -189,13 +205,22 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
 
 
 
-    auto adapt_read_dfs = [](std::vector<ReadResult> && ret) -> py::list {
+    auto adapt_read_dfs = [](std::vector<std::variant<ReadResult, DataError>> && ret) -> py::list {
         py::list lst;
         for (auto &res: ret) {
-            auto pynorm = python_util::pb_to_python(res.norm_meta);
-            auto pyuser_meta = python_util::pb_to_python(res.user_meta);
-            auto multi_key_meta = python_util::pb_to_python(res.multi_key_meta);
-            lst.append(py::make_tuple(res.item, std::move(res.frame_data), pynorm, pyuser_meta, multi_key_meta, res.multi_keys));
+            util::variant_match(
+                    res,
+                    [&lst] (ReadResult& res) {
+                        auto pynorm = python_util::pb_to_python(res.norm_meta);
+                        auto pyuser_meta = python_util::pb_to_python(res.user_meta);
+                        auto multi_key_meta = python_util::pb_to_python(res.multi_key_meta);
+                        lst.append(py::make_tuple(res.item, std::move(res.frame_data), pynorm, pyuser_meta, multi_key_meta,
+                                                  res.multi_keys));
+                    },
+                    [&lst] (DataError& data_error) {
+                        lst.append(data_error);
+                    }
+            );
         }
         return lst;
     };
