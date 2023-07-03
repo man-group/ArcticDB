@@ -135,6 +135,7 @@ enum class ValueType : uint8_t {
     EMPTY = 13,
     /// Nullable booleans
     PYBOOL = 14,
+    TIME_SYM = 15,
     COUNT // Not a real value type, should not be added to proto descriptor. Used to count the number of items in the enum
 };
 
@@ -233,6 +234,10 @@ enum class DataType : uint8_t {
     EMPTYVAL = detail::combine_val_bits(ValueType::EMPTY, SizeBits::S64),
     PYBOOL8 = detail::combine_val_bits(ValueType::PYBOOL, SizeBits::S8),
     PYBOOL64 = detail::combine_val_bits(ValueType::PYBOOL, SizeBits::S64),
+    BYTES_DYNAMIC64 = detail::combine_val_bits(ValueType::BYTES, SizeBits::S64),
+    TIME_SYM64 = detail::combine_val_bits(ValueType::TIME_SYM, SizeBits::S64),
+
+#undef DT_COMBINE
     UNKNOWN = 0,
 };
 
@@ -419,6 +424,7 @@ DATA_TYPE_TAG(UTF_DYNAMIC64, std::uint64_t)
 DATA_TYPE_TAG(EMPTYVAL, std::uint64_t)
 DATA_TYPE_TAG(PYBOOL8, uint8_t)
 DATA_TYPE_TAG(PYBOOL64, std::uint64_t)
+DATA_TYPE_TAG(TIME_SYM64, std::uint64_t)
 #undef DATA_TYPE_TAG
 
 enum class Dimension : uint8_t {
@@ -613,6 +619,7 @@ struct IndexDescriptor {
     static const Type ROWCOUNT = arcticdb::proto::descriptors::IndexDescriptor_Type_ROWCOUNT;
     static const Type STRING = arcticdb::proto::descriptors::IndexDescriptor_Type_STRING;
     static const Type TIMESTAMP = arcticdb::proto::descriptors::IndexDescriptor_Type_TIMESTAMP;
+    static const Type TIME_SYMBOL = arcticdb::proto::descriptors::IndexDescriptor_Type_TIME_SYMBOL;
 
     using TypeChar = char;
 
@@ -656,6 +663,7 @@ struct IndexDescriptor {
 constexpr IndexDescriptor::TypeChar to_type_char(IndexDescriptor::Type type) {
     switch (type) {
     case IndexDescriptor::TIMESTAMP:return 'T';
+    case IndexDescriptor::TIME_SYMBOL:return 'C';
     case IndexDescriptor::ROWCOUNT:return 'R';
     case IndexDescriptor::STRING:return 'S';
     case IndexDescriptor::UNKNOWN:return 'U';
@@ -666,6 +674,7 @@ constexpr IndexDescriptor::TypeChar to_type_char(IndexDescriptor::Type type) {
 constexpr IndexDescriptor::Type from_type_char(IndexDescriptor::TypeChar type) {
     switch (type) {
     case 'T': return IndexDescriptor::TIMESTAMP;
+    case 'C': return IndexDescriptor::TIME_SYMBOL;
     case 'R': return IndexDescriptor::ROWCOUNT;
     case 'S': return IndexDescriptor::STRING;
     case 'U': return IndexDescriptor::UNKNOWN;

@@ -52,6 +52,8 @@ inline VariantType variant_type_from_index_type(IndexDescriptor::Type index_type
             return VariantType::NUMERIC_TYPE;
         case IndexDescriptor::STRING:
             return VariantType::STRING_TYPE;
+    case IndexDescriptor::TIME_SYMBOL:
+            return VariantType::UNSIGNED_TYPE;
         default:
             return VariantType::UNKNOWN_TYPE;
     }

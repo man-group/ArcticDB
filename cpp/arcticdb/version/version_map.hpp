@@ -38,6 +38,17 @@
 
 namespace arcticdb {
 
+template <typename Callable>
+auto aggregate_entry(const StreamId& stream_id, const std::shared_ptr<VersionMapEntry> entry, Callable&& c) {
+    entry->validate_types();
+
+    IndexAggregator<RowCountIndex> version_agg(stream_id, std::move(c));
+    for (const auto &key : entry->keys_)
+        version_agg.add_key(key);
+
+    return version_agg.commit();
+}
+
 template<class Clock=util::SysClock>
 class VersionMapImpl {
     /*
@@ -188,6 +199,7 @@ public:
                 if (--max_trials <= 0) {
                     throw;
                 }
+            } catch (const std::exception &err) {  //TODO catch only KeyNotFoundException
                 // We retry to read via ref key because it could have been modified by someone else (e.g. compaction)
                 log::version().warn(
                         "Loading versions from storage via ref key failed with error: {} for stream {}. Retrying",
@@ -671,29 +683,27 @@ private:
     }
 
     AtomKey write_entry_to_storage(
-            std::shared_ptr<Store> store,
-            const StreamId &stream_id,
-            VersionId version_id,
-            const std::shared_ptr<VersionMapEntry> &entry) {
-        AtomKey journal_key;
+        std::shared_ptr<Store> store,
+        const StreamId &stream_id,
+        VersionId version_id,
+        const std::shared_ptr<VersionMapEntry> &entry) {
+        folly::Future<VariantKey> journal_key_fut = folly::Future<VariantKey>::makeEmpty();
         entry->validate_types();
 
-        IndexAggregator<RowCountIndex> version_agg(stream_id, [&store, &journal_key, &version_id, &stream_id](auto &&segment) {
+        auto commit_func = [&store, &journal_key_fut, &version_id, &stream_id](auto &&segment) {
             stream::StreamSink::PartialKey pk{
-                    KeyType::VERSION,
-                    version_id,
-                    stream_id,
-                    IndexValue(0),
-                    IndexValue(0)};
+                KeyType::VERSION,
+                version_id,
+                stream_id,
+                IndexValue(0),
+                IndexValue(0)};
 
-            journal_key = to_atom(store->write_sync(pk, std::forward<decltype(segment)>(segment)));
-        });
+            journal_key_fut = store->write_sync(pk, std::forward<SegmentInMemory>(segment));
+        };
+        aggregate_entry(stream_id, entry, std::move(commit_func));
 
-        for (const auto &key : entry->keys_) {
-            version_agg.add_key(key);
-        }
-
-        version_agg.commit();
+        auto journal_key =  to_atom(std::move(journal_key_fut).get());
+        write_symbol_ref(store, *entry->keys_.cbegin(), journal_key);
         return journal_key;
     }
 
@@ -701,16 +711,16 @@ private:
         return static_cast<bool>(get_symbol_ref_key(store, stream_id));
     }
 
+    /*
+     * Goes to the storage for a given symbol, and recreates the VersionMapEntry from preferably the ref key
+     * structure, and if that fails it then goes and builds that from iterating all keys from storage which can
+     * be much slower, though always consistent.
+     */
     std::shared_ptr<VersionMapEntry> storage_reload(
         std::shared_ptr<Store> store,
         const StreamId& stream_id,
         const LoadParameter& load_param,
         bool iterate_on_failure) {
-        /*
-         * Goes to the storage for a given symbol, and recreates the VersionMapEntry from preferably the ref key
-         * structure, and if that fails it then goes and builds that from iterating all keys from storage which can
-         * be much slower, though always consistent.
-         */
 
         auto entry = get_entry(stream_id);
         entry->clear();

@@ -16,7 +16,6 @@
 #include <arcticdb/pipeline/pipeline_common.hpp>
 
 namespace arcticdb::pipelines::index {
-// TODO: change the name - something like KeysSegmentWriter or KeyAggragator or  better
 template<class Index, std::enable_if_t<InputTensorFrame::is_valid_index_v<Index>, bool> = 0>
 class IndexWriter {
     // All index segments are row-count indexed in the sense that the keys are
@@ -44,7 +43,7 @@ public:
         if(encoding == 1) {
             meta_.copy_to_self_proto();
         }
-        agg_.segment().set_timeseries_descriptor(std::move(meta_)); //TODO very weird, why this short-lived member?
+        agg_.segment().set_timeseries_descriptor(std::move(meta_));
     }
 
     void add(const arcticdb::entity::AtomKey &key, const FrameSlice &slice) {

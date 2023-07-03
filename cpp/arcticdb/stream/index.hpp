@@ -296,6 +296,100 @@ class RowCountIndex : public BaseIndex<RowCountIndex> {
     static constexpr const char *name() { return "row_count"; }
 };
 
+// An index for coalesced segments, comprising four bytes of (truncated)
+// timestamp and four bytes of symbol name
+class TimeSymbolIndex : public BaseIndex<TimeSymbolIndex> {
+public:
+    static constexpr const char* DefaultName = "time_symbol";
+
+    explicit TimeSymbolIndex(const std::string name) :
+        name_(name) {
+    }
+
+    static TimeSymbolIndex default_index() {
+        return TimeSymbolIndex(DefaultName);
+    }
+
+    using TypeDescTag = TypeDescriptorTag<
+        DataTypeTag<DataType::UINT64>,
+        DimensionTag<Dimension::Dim0>>;
+
+    static constexpr size_t field_count() {
+        return 1;
+    }
+
+    static constexpr IndexDescriptor::Type type() {
+        return IndexDescriptor::TIME_SYMBOL;
+    }
+
+    void check(const FieldCollection &fields) const {
+        util::check_arg(fields.size() >= int(field_count()), "expected at least {} fields, actual {}",
+                        field_count(), fields.size());
+        util::check_arg(fields[0].type() == this->field(0).type(), "expected field[0]={}, actual {}",
+                        this->field(0), fields[0]);
+    }
+
+    template<typename SegmentType>
+    static IndexValue start_value_for_segment(const SegmentType &segment) {
+        if (segment.row_count() == 0)
+            return {0};
+        auto first_ts = segment.template scalar_at<uint64_t>(0, 0).value();
+        return {first_ts};
+    }
+
+    template<typename SegmentType>
+    static IndexValue end_value_for_segment(const SegmentType &segment) {
+        auto row_count = segment.row_count();
+        if (row_count == 0)
+            return {0};
+        auto last_ts = segment.template scalar_at<uint64_t>(row_count - 1, 0).value();
+        return {last_ts};
+    }
+
+    template<typename SegmentType>
+    static IndexValue start_value_for_keys_segment(const SegmentType &segment) {
+        if (segment.row_count() == 0)
+            return {0};
+        auto start_index_id = int(pipelines::index::Fields::start_index);
+        auto first_ts = segment.template scalar_at<uint64_t>(0, start_index_id).value();
+        return {first_ts};
+    }
+
+    template<typename SegmentType>
+    static IndexValue end_value_for_keys_segment(const SegmentType &segment) {
+        auto row_count = segment.row_count();
+        if (row_count == 0)
+            return {0};
+        auto end_index_id = int(pipelines::index::Fields::end_index);
+        auto last_ts = segment.template scalar_at<uint64_t>(row_count - 1, end_index_id).value();
+        return {last_ts};
+    }
+
+    template<class RowCellSetter>
+    void set(RowCellSetter setter, const IndexValue &index_value) {
+        if (std::holds_alternative<UnsignedIndex>(index_value)) {
+            auto ts = std::get<uint64_t>(index_value);
+            util::check_arg(ts >= ts_, "timestamp decreasing, current val={}, candidate={}", ts_, ts);
+            ts_ = ts;
+            setter(0, ts);
+        } else
+            util::raise_rte("Cannot set this type, expecting timestamp");
+    }
+
+    [[nodiscard]] const char *name() const { return name_.c_str(); }
+
+    static TimeseriesIndex make_from_descriptor(const StreamDescriptor& desc) {
+        if(desc.field_count() > 0)
+            return TimeseriesIndex(std::string(desc.fields(0).name()));
+
+        return TimeseriesIndex(DefaultName);
+    }
+
+private:
+    std::string name_;
+    uint64_t ts_ = 0;
+};
+
 using Index = std::variant<stream::TimeseriesIndex, stream::RowCountIndex, stream::TableIndex>;
 
 inline Index index_type_from_descriptor(const StreamDescriptor &desc) {
@@ -318,6 +412,8 @@ inline Index default_index_type_from_descriptor(const IndexDescriptor::Proto &de
         return TableIndex::default_index();
     case IndexDescriptor::ROWCOUNT:
         return RowCountIndex::default_index();
+    case IndexDescriptor::TIME_SYMBOL:
+        return TimeSymbolIndex::default_index();
     default:
         util::raise_rte("Unknown index type {} trying to generate index type", int(desc.kind()));
     }
