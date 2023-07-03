@@ -42,8 +42,8 @@ from arcticdb.util.test import (
     TestCustomNormalizer,
     assert_frame_equal,
     assert_series_equal,
-    IS_PANDAS_ZERO,
 )
+from arcticdb.util._versions import IS_PANDAS_ZERO
 from arcticdb.exceptions import ArcticNativeException
 
 

@@ -25,6 +25,7 @@ from mmap import mmap
 from collections import Counter
 from arcticdb.exceptions import ArcticNativeException, ArcticNativeNotYetImplemented
 from arcticdb.supported_types import time_types as supported_time_types
+from arcticdb.util._versions import IS_PANDAS_TWO
 from arcticdb.version_store.read_result import ReadResult
 from arcticdb_ext.version_store import SortedValue as _SortedValue
 from pandas.core.internals import make_block
@@ -178,12 +179,12 @@ def _to_primitive(arr, arr_name, dynamic_strings, string_max_len=None, coerce_co
 
     if len(arr) == 0:
         if coerce_column_type is None:
-            raise ArcticNativeNotYetImplemented(
-                "coercing column type is required when empty column of object type, Column type={} for column={}"
-                .format(arr.dtype, arr_name)
-            )
-        else:
-            return arr.astype(coerce_column_type)
+            # Before Pandas 2.0, empty series' dtype was float, but as of Pandas 2.0. empty series' dtype became object.
+            # See: https://github.com/pandas-dev/pandas/issues/17261
+            # We want to maintain consistent behaviour, so we treat empty series as containing floats.
+            # val_type = ValueType::FLOAT;
+            coerce_column_type = float
+        return arr.astype(coerce_column_type)
 
     # Coerce column allows us to force a column to the given type, which means we can skip expensive iterations in
     # Python with the caveat that if the user gave an invalid type it's going to blow up in the core.
@@ -552,6 +553,13 @@ class SeriesNormalizer(_PandasNormalizer):
             s.name = norm_meta.common.name
         else:
             s.name = None
+
+        if s.empty and IS_PANDAS_TWO:
+            # Before Pandas 2.0, empty series' dtype was float, but as of Pandas 2.0. empty series' dtype became object.
+            # See: https://github.com/pandas-dev/pandas/issues/17261
+            # We want to maintain consistent behaviour, so we return empty series as containing objects
+            # when the Pandas version is >= 2.0
+            s = s.astype("object")
 
         return s
 
