@@ -26,7 +26,9 @@ jobs:
       BASH_FUNC_tag_and_push%%: |-
         () {
           sed -ri '/^\[metadata]/, /^\[/ s/^version[[:blank:]]*=.*/version = '$2/ setup.cfg
-          git add setup.cfg README.md
+          sed -i "/__version__ =/d" python/arcticdb/__init__.py 
+          echo "__version__ = \"$2\"" >> python/arcticdb/__init__.py
+          git add setup.cfg README.md python/arcticdb/__init__.py
           git status
           git diff --cached --exit-code || git commit -m "$1 v$2"
           set -x

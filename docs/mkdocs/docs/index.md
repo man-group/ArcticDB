@@ -323,6 +323,6 @@ Note the timestamps - we've read the data prior to the _append_ operation. Pleas
 
 !!! note "Versioning & Prune Previous"
 
-    By default, `write`, `append`, and `update` operations will remove the previous versions to save on space. 
-
-    Use the `prune_previous` argument to control this behaviour. 
+    By default, `write`, `append`, and `update` operations will **not** remove the previous versions. Please be aware that this will consume more space.
+    
+    This behaviour can be can be controlled via the `prune_previous_versions` keyword argument. 

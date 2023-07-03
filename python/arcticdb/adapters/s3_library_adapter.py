@@ -15,7 +15,8 @@ from arcticdb.version_store.helper import add_s3_library_to_env
 from arcticdb.config import _DEFAULT_ENV
 from arcticdb.version_store._store import NativeVersionStore
 from arcticdb.adapters.arctic_library_adapter import ArcticLibraryAdapter, set_library_options
-from arcticdb_ext.storage import Library
+from arcticdb_ext.storage import Library, StorageOverride, S3CredentialsOverride
+from arcticdb.encoding_version import EncodingVersion
 from collections import namedtuple
 from dataclasses import dataclass, fields
 from distutils.util import strtobool
@@ -37,6 +38,8 @@ class ParsedQuery:
 
     path_prefix: Optional[str] = None
 
+    force_uri_lib_config: Optional[bool] = False
+
 
 class S3LibraryAdapter(ArcticLibraryAdapter):
     REGEX = r"s3(s)?://(?P<endpoint>.*):(?P<bucket>[-_a-zA-Z0-9.]+)(?P<query>\?.*)?"
@@ -45,7 +48,7 @@ class S3LibraryAdapter(ArcticLibraryAdapter):
     def supports_uri(uri: str) -> bool:
         return uri.startswith("s3://") or uri.startswith("s3s://")
 
-    def __init__(self, uri: str, *args, **kwargs):
+    def __init__(self, uri: str, encoding_version: EncodingVersion, *args, **kwargs):
         match = re.match(self.REGEX, uri)
         match_groups = match.groupdict()
 
@@ -58,11 +61,12 @@ class S3LibraryAdapter(ArcticLibraryAdapter):
             self._endpoint += f":{self._query_params.port}"
 
         self._https = uri.startswith("s3s")
+        self._encoding_version = encoding_version
 
         if "amazonaws" in self._endpoint:
             self._configure_aws()
 
-        super().__init__(uri)
+        super().__init__(uri, self._encoding_version)
 
     def __repr__(self):
         return "S3(endpoint=%s, bucket=%s)" % (self._endpoint, self._bucket)
@@ -90,7 +94,9 @@ class S3LibraryAdapter(ArcticLibraryAdapter):
             use_virtual_addressing=self._query_params.use_virtual_addressing,
         )
 
-        lib = NativeVersionStore.create_store_from_config(env_cfg, _DEFAULT_ENV, self.CONFIG_LIBRARY_NAME)._library
+        lib = NativeVersionStore.create_store_from_config(
+            env_cfg, _DEFAULT_ENV, self.CONFIG_LIBRARY_NAME, encoding_version=self._encoding_version
+        )._library
 
         return lib
 
@@ -116,11 +122,33 @@ class S3LibraryAdapter(ArcticLibraryAdapter):
             if field_dict[key].type == bool:
                 parsed_query[key] = bool(strtobool(parsed_query[key][0]))
 
+            if field_dict[key].type == Optional[bool] and field_dict[key] is not None:
+                parsed_query[key] = bool(strtobool(parsed_query[key][0]))
+
         if parsed_query.get("path_prefix"):
             parsed_query["path_prefix"] = parsed_query["path_prefix"].strip("/")
 
         _kwargs = {k: v for k, v in parsed_query.items()}
         return ParsedQuery(**_kwargs)
+
+    def get_storage_override(self) -> StorageOverride:
+        storage_override = StorageOverride()
+        if self._query_params.force_uri_lib_config:
+            s3_override = S3CredentialsOverride()
+            if self._query_params.access:
+                s3_override.credential_name = self._query_params.access
+            if self._query_params.secret:
+                s3_override.credential_key = self._query_params.secret
+            if self._query_params.region:
+                s3_override.region = self._query_params.region
+            if self._endpoint:
+                s3_override.endpoint = self._endpoint
+            if self._bucket:
+                s3_override.bucket_name = self._bucket
+            storage_override = StorageOverride()
+            storage_override.set_override(s3_override)
+
+        return storage_override
 
     def create_library_config(self, name, library_options: LibraryOptions) -> LibraryConfig:
         env_cfg = EnvironmentConfigsMap()
@@ -150,7 +178,9 @@ class S3LibraryAdapter(ArcticLibraryAdapter):
 
         set_library_options(env_cfg.env_by_id[_DEFAULT_ENV].lib_by_path[name], library_options)
 
-        lib = NativeVersionStore.create_store_from_config(env_cfg, _DEFAULT_ENV, name)
+        lib = NativeVersionStore.create_store_from_config(
+            env_cfg, _DEFAULT_ENV, name, encoding_version=self._encoding_version
+        )
 
         return lib._lib_cfg
 

@@ -136,6 +136,16 @@ All of these errors are of type `arcticdb.exceptions.ArcticException`.
 | Non-numeric type provided to binary operation: <typename\> | Error messages like this imply that an operation that ArcticDB does not support was provided in the `QueryBuilder` argument e.g. adding two string columns together. | The `get_description` method can be used to inspect the types of the columns. A full list of supported operations are provided in the `QueryBuilder` [API documentation](/api/query_builder). |
 | Cannot compare <typename 1\> to <typename 2\> (possible categorical?) | If `get_description` indicates that a column is of categorical type, and this categorical is being used to store string values, then comparisons to other strings will fail with an error message like this one. | Categorical support in ArcticDB is [extremely limited](/faq#does-arcticdb-support-categorical-data), but may be added in the future. |
 
+### Encoding errors
+
+These errors should be extremely rare, however it is possible that the encoding in the storage may change from time to time. Whilst the changes will always be backwards compatible (new clients can always read the old data), it's possible they may not be forward-compatible, and data that has been written by a new client cannot be read by an older one
+
+All of these errors are of type `arcticdb.exceptions.ArcticException`.
+
+| Error messages | Cause | Resolution |
+|:--------------|:-------|:-----------|
+|  Error decoding | A column was unable to be decoded by the compression algorithm. | Upgrade to a later version of the client. |
+
 ## Exception Hierarchy
 
 ArcticDB exceptions are exposed in `arcticdb.exceptions` and sit in a hierarchy:

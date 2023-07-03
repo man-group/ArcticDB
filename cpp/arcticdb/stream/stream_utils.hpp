@@ -36,14 +36,14 @@ StreamDescriptor idx_stream_desc(StreamId stream_id, IndexType index) {
     // All index segments are row-count indexed in the sense that the keys are
     // already ordered - they don't need an additional index
     return StreamDescriptor{index_descriptor(stream_id, index, {
-        scalar_field_proto(DataTypeTag::data_type, "start_index"),
-        scalar_field_proto(DataTypeTag::data_type, "end_index"),
-        scalar_field_proto(DataType::UINT64, "version_id"),
-        scalar_field_proto(stream_id_data_type(stream_id), "stream_id"),
-        scalar_field_proto(DataType::UINT64, "creation_ts"),
-        scalar_field_proto(DataType::UINT64, "content_hash"),
-        scalar_field_proto(DataType::UINT8, "index_type"),
-        scalar_field_proto(DataType::UINT8, "key_type")
+        scalar_field(DataTypeTag::data_type, "start_index"),
+        scalar_field(DataTypeTag::data_type, "end_index"),
+        scalar_field(DataType::UINT64, "version_id"),
+        scalar_field(stream_id_data_type(stream_id), "stream_id"),
+        scalar_field(DataType::UINT64, "creation_ts"),
+        scalar_field(DataType::UINT64, "content_hash"),
+        scalar_field(DataType::UINT8, "index_type"),
+        scalar_field(DataType::UINT8, "key_type")
     })};
 }
 
@@ -56,26 +56,25 @@ struct IndexSliceDescriptor : StreamDescriptor {
     explicit IndexSliceDescriptor(const StreamId &stream_id, bool has_column_groups)
             : StreamDescriptor(stream_descriptor(stream_id, IndexType(), {
 
-        scalar_field_proto(DataTypeTag::data_type, "start_index"),
-        scalar_field_proto(DataTypeTag::data_type, "end_index"),
+        scalar_field(DataTypeTag::data_type, "start_index"),
+        scalar_field(DataTypeTag::data_type, "end_index"),
 
-        scalar_field_proto(DataType::UINT64, "version_id"),
-        scalar_field_proto(stream_id_data_type(stream_id), "stream_id"),
-        scalar_field_proto(DataType::UINT64, "creation_ts"),
-        scalar_field_proto(DataType::UINT64, "content_hash"),
-        scalar_field_proto(DataType::UINT8, "index_type"),
-        scalar_field_proto(DataType::UINT8, "key_type"),
+        scalar_field(DataType::UINT64, "version_id"),
+        scalar_field(stream_id_data_type(stream_id), "stream_id"),
+        scalar_field(DataType::UINT64, "creation_ts"),
+        scalar_field(DataType::UINT64, "content_hash"),
+        scalar_field(DataType::UINT8, "index_type"),
+        scalar_field(DataType::UINT8, "key_type"),
 
-        scalar_field_proto(DataType::UINT64, "start_col"),
-        scalar_field_proto(DataType::UINT64, "end_col"),
-        scalar_field_proto(DataType::UINT64, "start_row"),
-        scalar_field_proto(DataType::UINT64, "end_row")
+        scalar_field(DataType::UINT64, "start_col"),
+        scalar_field(DataType::UINT64, "end_col"),
+        scalar_field(DataType::UINT64, "start_row"),
+        scalar_field(DataType::UINT64, "end_row")
     })) {
         if(has_column_groups) {
-            add_field(scalar_field_proto(DataType::UINT64, "hash_bucket"));
-            add_field(scalar_field_proto(DataType::UINT64, "num_buckets"));
+            add_field(scalar_field(DataType::UINT64, "hash_bucket"));
+            add_field(scalar_field(DataType::UINT64, "num_buckets"));
         }
-
     }
 
     static stream::FixedSchema schema(const StreamId &stream_id, bool has_column_groups) {
@@ -116,7 +115,7 @@ inline KeyType key_type_from_segment(const SegmentInMemory& seg, ssize_t row) {
 
 template<typename FieldType>
 inline StreamId stream_id_from_segment(const SegmentInMemory &seg, ssize_t row) {
-    if (const auto fd = seg.descriptor()[int(FieldType::stream_id)]; is_sequence_type(data_type_from_proto(fd.type_desc())))
+    if (const auto& fd = seg.descriptor()[int(FieldType::stream_id)]; is_sequence_type(fd.type().data_type()))
         return std::string(seg.string_at(row, int(FieldType::stream_id)).value());
     else
         return seg.scalar_at<timestamp>(row, int(FieldType::stream_id)).value();
@@ -368,9 +367,9 @@ inline std::set<StreamId> filter_by_regex(const std::set<StreamId>& results, con
     return filtered_results;
 }
 
-inline std::vector<std::string> get_index_columns_from_descriptor(const arcticdb::proto::descriptors::TimeSeriesDescriptor& descriptor) {
-    const auto& norm_info = descriptor.normalization();
-    const auto& stream_descriptor = descriptor.stream_descriptor();
+inline std::vector<std::string> get_index_columns_from_descriptor(const TimeseriesDescriptor& descriptor) {
+    const auto& norm_info = descriptor.proto().normalization();
+    const auto& stream_descriptor = descriptor.proto().stream_descriptor();
     // For explicit integer indexes, the index is actually present in the first column even though the field_count
     // is 0.
     ssize_t index_till;
@@ -408,7 +407,7 @@ storage::KeySegmentPair make_target_key(KeyType key_type,
         if (is_ref_key_class(variant_key_type(source_key))) {
             auto return_segment = std::move(segment);
             auto clone = return_segment;
-            auto decoded = decode(std::move(clone));
+            auto decoded = decode_segment(std::move(clone));
             auto index = index_type_from_descriptor(decoded.descriptor());
             auto range = get_range_from_segment(index, decoded);
             auto new_key = atom_key_builder().version_id(version_id).creation_ts(ClockType::nanos_since_epoch()).start_index(range.start_).end_index(

@@ -105,18 +105,19 @@ FieldEncodingResult py_encode_field(py::object &opts, DynamicFieldBuffer &field_
     const auto [uncompressed, required] = ColumnEncoder::max_compressed_size(opts_cpp, *field);
     auto buffer = std::make_shared<Buffer>(required);
     field->reset();
-    ColumnEncoder::encode(opts_cpp, *field, encoded_field, *buffer, pos);
+    ColumnEncoder encoder;
+    encoder.encode(opts_cpp, *field, encoded_field, *buffer, pos);
     return FieldEncodingResult{buffer, encoded_field};
 }
 
-Segment encode_segment(SegmentInMemory segment_in_memory, const py::object &opts) {
+Segment encode_segment(SegmentInMemory segment_in_memory, const py::object &opts, EncodingVersion encoding_version) {
     proto::encoding::VariantCodec opts_cpp;
     python_util::pb_from_python(opts, opts_cpp);
-    return encode(std::move(segment_in_memory), opts_cpp);
+    return encode_dispatch(std::move(segment_in_memory), opts_cpp, encoding_version);
 }
 
-SegmentInMemory decode_segment(Segment segment) {
-    return decode(std::move(segment));
+SegmentInMemory decode_python_segment(Segment segment) {
+    return decode_segment(std::move(segment));
 }
 
 class BufferPairDataSink {
@@ -172,7 +173,7 @@ FieldDecodingResult py_decode_field(const TypeDescriptor &td, py::object &encode
 
     BufferPairDataSink ds;
     std::optional<util::BitMagic> bv;
-    decode(td, enc_field, reinterpret_cast<std::uint8_t *>(info.ptr), ds, bv);
+    decode_field(td, enc_field, reinterpret_cast<std::uint8_t *>(info.ptr), ds, bv);
     return FieldDecodingResult{ds.shapes(), ds.values()};
 }
 
@@ -210,6 +211,8 @@ void register_codec(py::module &m) {
 
     py::class_<Segment>(m, "Segment")
             .def(py::init<>())
+            .def("fields_size", &Segment::fields_size)
+            .def("fields", &Segment::fields_vector)
             .def_property_readonly("header", [](const Segment& self) {
                 return pb_to_python(self.header());
             })
@@ -218,7 +221,7 @@ void register_codec(py::module &m) {
             });
 
     m.def("encode_segment", &encode_segment);
-    m.def("decode_segment", &decode_segment, py::return_value_policy::move);
+    m.def("decode_segment", &decode_python_segment, py::return_value_policy::move);
     m.def("encode_field", &py_encode_field, py::return_value_policy::move);
     m.def("decode_field", &py_decode_field, py::return_value_policy::move);
 }

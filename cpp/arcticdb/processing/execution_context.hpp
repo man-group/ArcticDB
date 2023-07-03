@@ -13,6 +13,7 @@
 #include <unordered_set>
 
 #include <arcticdb/processing/expression_node.hpp>
+#include <arcticdb/entity/stream_descriptor.hpp>
 #include <arcticdb/pipeline/value.hpp>
 #include <arcticdb/pipeline/value_set.hpp>
 
@@ -81,7 +82,7 @@ struct ExecutionContext {
         auto it = output_columns_.find(name);
         if(it == std::end(output_columns_)) {
             output_columns_.try_emplace(name, type);
-            output_descriptor_->add_field(scalar_field_proto(type, name));
+            output_descriptor_->add_field(scalar_field(type, name));
             //TODO check type compatibility in dynamic schema
         }
     }

@@ -74,8 +74,8 @@ void register_bindings(py::module& storage, py::exception<arcticdb::ArcticExcept
         auto resolver = std::make_shared<storage::details::InMemoryConfigResolver>();
         for(auto &[env, cfg] :ecm.env_by_id()){
             EnvironmentName env_name{env};
-            for(auto &[id, storage]: cfg.storage_by_id()){
-                resolver->add_storage(env_name, StorageName{id}, storage);
+            for(auto &[id, variant_storage]: cfg.storage_by_id()){
+                resolver->add_storage(env_name, StorageName{id}, variant_storage);
             }
             for(auto &[id, lib_desc]: cfg.lib_by_path()){
                 resolver->add_library(env_name, lib_desc);
@@ -87,9 +87,9 @@ void register_bindings(py::module& storage, py::exception<arcticdb::ArcticExcept
     py::class_<ConfigResolver, std::shared_ptr<ConfigResolver>>(storage, "ConfigResolver");
 
     py::class_<Library, std::shared_ptr<Library>>(storage, "Library")
-        .def_property_readonly("library_path", [](Library &library){ return library.library_path().to_delim_path(); })
-        .def_property_readonly("open_mode", [](Library &library){ return library.open_mode(); })
-        .def_property_readonly("config", [](const Library & library)->py::object{
+        .def_property_readonly("library_path", [](const Library &library){ return library.library_path().to_delim_path(); })
+        .def_property_readonly("open_mode", [](const Library &library){ return library.open_mode(); })
+        .def_property_readonly("config", [](const Library & library) {
             return util::variant_match(library.config(),
                                        [](const arcticdb::proto::storage::VersionStoreConfig & cfg){
                                            return pb_to_python(cfg);
@@ -102,26 +102,39 @@ void register_bindings(py::module& storage, py::exception<arcticdb::ArcticExcept
         })
         ;
 
+    py::class_<S3CredentialsOverride>(storage, "S3CredentialsOverride")
+        .def(py::init<>())
+        .def_property("credential_name", &S3CredentialsOverride::credential_name,  &S3CredentialsOverride::set_credential_name)
+        .def_property("credential_key", &S3CredentialsOverride::credential_key, &S3CredentialsOverride::set_credential_key)
+        .def_property("endpoint", &S3CredentialsOverride::endpoint, &S3CredentialsOverride::set_endpoint)
+        .def_property("bucket_name", &S3CredentialsOverride::bucket_name, &S3CredentialsOverride::set_bucket_name)
+        .def_property("region", &S3CredentialsOverride::region, &S3CredentialsOverride::set_region);
+
+
+    py::class_<StorageOverride>(storage, "StorageOverride")
+        .def(py::init<>())
+        .def("set_override", &StorageOverride::set_override);
+
     py::class_<LibraryManager, std::shared_ptr<LibraryManager>>(storage, "LibraryManager")
         .def(py::init<std::shared_ptr<storage::Library>>())
-        .def("write_library_config", [](LibraryManager& library_manager, py::object& lib_cfg, std::string_view library_path) {
+        .def("write_library_config", [](const LibraryManager& library_manager, py::object& lib_cfg, std::string_view library_path) {
             LibraryPath lib_path{library_path, '.'};
 
             return library_manager.write_library_config(lib_cfg, lib_path);
         })
-        .def("get_library_config", [](LibraryManager& library_manager, std::string_view library_path){
-            return library_manager.get_library_config(LibraryPath{library_path, '.'});
+        .def("get_library_config", [](const LibraryManager& library_manager, std::string_view library_path, const StorageOverride& storage_override){
+            return library_manager.get_library_config(LibraryPath{library_path, '.'}, storage_override);
         })
-        .def("remove_library_config", [](LibraryManager& library_manager, std::string_view library_path){
+        .def("remove_library_config", [](const LibraryManager& library_manager, std::string_view library_path){
             return library_manager.remove_library_config(LibraryPath{library_path, '.'});
         })
-        .def("get_library", [](LibraryManager& library_manager, std::string_view library_path){
-            return library_manager.get_library(LibraryPath{library_path, '.'});
+        .def("get_library", [](const LibraryManager& library_manager, std::string_view library_path, const StorageOverride& storage_override){
+            return library_manager.get_library(LibraryPath{library_path, '.'}, storage_override);
         })
-        .def("has_library", [](LibraryManager& library_manager, std::string_view library_path){
+        .def("has_library", [](const LibraryManager& library_manager, std::string_view library_path){
             return library_manager.has_library(LibraryPath{library_path, '.'});
         })
-        .def("list_libraries", [](LibraryManager& library_manager){
+        .def("list_libraries", [](const LibraryManager& library_manager){
             std::vector<std::string> res;
             for(auto & lp:library_manager.get_library_paths()){
                 res.push_back(lp.to_delim_path());
@@ -140,7 +153,7 @@ void register_bindings(py::module& storage, py::exception<arcticdb::ArcticExcept
         })
         .def("list_libraries", [](LibraryIndex &library_index, std::string_view prefix = ""){
             std::vector<std::string> res;
-            for(auto & lp:library_index.list_libraries(prefix)){
+            for(const auto& lp:library_index.list_libraries(prefix)){
                 res.push_back(lp.to_delim_path());
             }
             return res;

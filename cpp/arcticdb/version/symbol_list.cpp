@@ -91,7 +91,8 @@ bool SymbolList::can_update_symbol_list(const std::shared_ptr<Store>& store,
             }, std::get<std::string>(compaction_id));
     }
 
-    SYMBOL_LIST_RUNTIME_LOG("found_last={}, has_newer={}", found_last, has_newer);
+    SYMBOL_LIST_RUNTIME_LOG_VAL("found_last={}", found_last);
+    SYMBOL_LIST_RUNTIME_LOG_VAL("has_newer={}", has_newer);
     return (!maybe_last_compaction || found_last) && !has_newer;
 }
 
@@ -116,6 +117,17 @@ bool SymbolList::can_update_symbol_list(const std::shared_ptr<Store>& store,
         store->iterate_type(KeyType::VERSION_REF, [&] (const auto& key) {
             auto id = variant_key_id(key);
             stream_ids.push_back(id);
+
+            if (stream_ids.size() == this->max_delta_ * 2 && !warned_expected_slowdown_) {
+                log::version().warn(
+                        "No compacted symbol list cache found. "
+                        "`list_symbols` may take longer than expected. \n\n"
+                        "See here for more information: https://docs.arcticdb.io/technical/on_disk_storage/#symbol-list-caching\n\n"
+                        "To resolve, run `list_symbols` through to completion to compact the symbol list cache.\n"
+                        "Note: This warning will only appear once.\n");
+
+                warned_expected_slowdown_ = true;
+            }
         });
         auto res = batch_get_latest_version(store, version_map_, stream_ids, false);
 
@@ -134,7 +146,7 @@ bool SymbolList::can_update_symbol_list(const std::shared_ptr<Store>& store,
         const StreamId& stream_id,
         timestamp creation_ts)  {
 
-        SYMBOL_LIST_RUNTIME_LOG("Writing {} symbols to symbol list cache", symbols.size());
+        SYMBOL_LIST_RUNTIME_LOG_VAL("Writing following number of symbols to symbol list cache: {}", symbols.size());
         SegmentInMemory list_segment{symbol_stream_descriptor(stream_id)};
 
         for(const auto& symbol : symbols) {
@@ -185,23 +197,25 @@ bool SymbolList::can_update_symbol_list(const std::shared_ptr<Store>& store,
                 }
             }
         }
-        SYMBOL_LIST_RUNTIME_LOG("Post load, got {} symbols", symbols.size());
+        SYMBOL_LIST_RUNTIME_LOG_VAL("Post load, got following number of symbols: {}", symbols.size());
         if(!read_compaction) {
-            SYMBOL_LIST_RUNTIME_LOG("Read no compacted segment from symbol list of size {}", keys.size());
+            SYMBOL_LIST_RUNTIME_LOG_VAL("Read no compacted segment from symbol list of size: {}", keys.size());
         }
         return symbols;
     }
 
-    void SymbolList::read_list_from_storage(const std::shared_ptr<StreamSource>& store, const AtomKey& key,
-                                            CollectionType& symbols) {
+    void SymbolList::read_list_from_storage(
+        const std::shared_ptr<StreamSource>& store,
+        const AtomKey& key,
+        CollectionType& symbols) {
         ARCTICDB_DEBUG(log::version(), "Reading list from storage with key {}", key);
         auto key_seg = store->read(key).get().second;
-        auto field_desc = key_seg.descriptor().field_at(0);
-        missing_data::check<ErrorCode::E_UNREADABLE_SYMBOL_LIST>(field_desc.has_value(),
+        missing_data::check<ErrorCode::E_UNREADABLE_SYMBOL_LIST>( key_seg.descriptor().field_count() > 0,
             "Expected at least one column in symbol list with key {}", key);
 
+        const auto& field_desc = key_seg.descriptor().field(0);
         if (key_seg.row_count() > 0) {
-            auto data_type = data_type_from_proto(field_desc->type_desc());
+            auto data_type =  field_desc.type().data_type();
             if (data_type == DataType::UINT64) {
                 for (auto row : key_seg) {
                     auto num_id = key_seg.scalar_at<uint64_t>(row.row_id_, 0).value();
@@ -221,10 +235,25 @@ bool SymbolList::can_update_symbol_list(const std::shared_ptr<Store>& store,
         }
     }
 
-    SymbolList::KeyVector SymbolList::get_all_symbol_list_keys(const std::shared_ptr<StreamSource>& store) const {
+    SymbolList::KeyVector SymbolList::get_all_symbol_list_keys(const std::shared_ptr<StreamSource>& store) {
         std::vector<AtomKey> output;
+        uint64_t uncompacted_keys_found = 0;
         store->iterate_type(KeyType::SYMBOL_LIST, [&] (auto&& key) -> void {
-            output.push_back(to_atom(key));
+            auto atom_key = to_atom(key);
+            if(atom_key.id() != compaction_id) {
+                uncompacted_keys_found++;
+            }
+            if (uncompacted_keys_found == this->max_delta_ * 2 && !warned_expected_slowdown_) {
+                log::version().warn(
+                        "`list_symbols` may take longer than expected as there have been many modifications since `list_symbols` was last called. \n\n"
+                        "See here for more information: https://docs.arcticdb.io/technical/on_disk_storage/#symbol-list-caching\n\n"
+                        "To resolve, run `list_symbols` through to completion frequently.\n"
+                        "Note: This warning will only appear once.\n");
+
+                warned_expected_slowdown_ = true;
+            }
+
+            output.push_back(atom_key);
         });
 
         std::sort(output.begin(), output.end(), [] (const AtomKey& left, const AtomKey& right) {

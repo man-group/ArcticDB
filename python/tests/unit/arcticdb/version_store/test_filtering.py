@@ -67,6 +67,7 @@ def test_querybuilder_shallow_copy(lmdb_version_store):
     q = q[q["a"] > 1]
     q_copy = copy.copy(q)
     pandas_query = "a > 1"
+    generic_filter_test(lmdb_version_store, "test_querybuilder_shallow_copy", df, q, pandas_query)
     generic_filter_test(lmdb_version_store, "test_querybuilder_shallow_copy", df, q_copy, pandas_query)
 
 
@@ -76,6 +77,8 @@ def test_querybuilder_deepcopy(lmdb_version_store):
     q = q[q["a"] > 1]
     q_copy = copy.deepcopy(q)
     pandas_query = "a > 1"
+    generic_filter_test(lmdb_version_store, "test_querybuilder_deepcopy", df, q, pandas_query)
+    del q
     generic_filter_test(lmdb_version_store, "test_querybuilder_deepcopy", df, q_copy, pandas_query)
 
 
@@ -84,12 +87,22 @@ def test_querybuilder_pickle(lmdb_version_store):
     q = QueryBuilder()
     q = q[q["a"] > 1]
     q_pickled = pickle.dumps(q)
-    q_unpickled = pickle.loads(q_pickled)
     pandas_query = "a > 1"
+    generic_filter_test(lmdb_version_store, "test_querybuilder_pickle", df, q, pandas_query)
+    del q
+    q_unpickled = pickle.loads(q_pickled)
     generic_filter_test(lmdb_version_store, "test_querybuilder_pickle", df, q_unpickled, pandas_query)
 
 
-@pytest.mark.parametrize("lib_type", ["lmdb_version_store", "lmdb_version_store_dynamic_schema"])
+@pytest.mark.parametrize(
+    "lib_type",
+    [
+        "lmdb_version_store_v1",
+        "lmdb_version_store_v2",
+        "lmdb_version_store_dynamic_schema_v1",
+        "lmdb_version_store_dynamic_schema_v2",
+    ],
+)
 def test_filter_empty_dataframe(request, lib_type):
     lib = request.getfixturevalue(lib_type)
     df = DataFrame({"a": []})
@@ -111,7 +124,15 @@ def test_filter_column_not_present_static(lmdb_version_store):
         _ = lmdb_version_store.read(symbol, query_builder=q)
 
 
-@pytest.mark.parametrize("lib_type", ["lmdb_version_store", "lmdb_version_store_dynamic_schema"])
+@pytest.mark.parametrize(
+    "lib_type",
+    [
+        "lmdb_version_store_v1",
+        "lmdb_version_store_v2",
+        "lmdb_version_store_dynamic_schema_v1",
+        "lmdb_version_store_dynamic_schema_v2",
+    ],
+)
 def test_filter_column_attribute_syntax(request, lib_type):
     lib = request.getfixturevalue(lib_type)
     df = DataFrame({"a": [np.uint8(1), np.uint8(0)]})
@@ -130,7 +151,15 @@ def test_filter_column_attribute_syntax(request, lib_type):
 #     generic_filter_test(lmdb_version_store, "test_filter_where_syntax", df, q, pandas_query)
 
 
-@pytest.mark.parametrize("lib_type", ["lmdb_version_store", "lmdb_version_store_dynamic_schema"])
+@pytest.mark.parametrize(
+    "lib_type",
+    [
+        "lmdb_version_store_v1",
+        "lmdb_version_store_v2",
+        "lmdb_version_store_dynamic_schema_v1",
+        "lmdb_version_store_dynamic_schema_v2",
+    ],
+)
 def test_filter_explicit_index(request, lib_type):
     lib = request.getfixturevalue(lib_type)
     df = DataFrame({"a": [np.uint8(1), np.uint8(0)]}, index=np.arange(2))
@@ -142,19 +171,32 @@ def test_filter_explicit_index(request, lib_type):
     assert_frame_equal(df.query(pandas_query), lib.read(symbol, query_builder=q).data)
 
 
-@pytest.mark.parametrize("lib_type", ["lmdb_version_store", "lmdb_version_store_dynamic_schema"])
+@pytest.mark.parametrize(
+    "lib_type",
+    [
+        "lmdb_version_store_v1",
+        "lmdb_version_store_v2",
+        "lmdb_version_store_dynamic_schema_v1",
+        "lmdb_version_store_dynamic_schema_v2",
+    ],
+)
 def test_filter_infinite_value(request, lib_type):
     lib = request.getfixturevalue(lib_type)
     df = DataFrame({"a": np.arange(1)})
     q = QueryBuilder()
-    q = q[q["a"] < inf]
-    symbol = "test_filter_infinite_value"
-    lib.write(symbol, df)
-    with pytest.raises(ArcticNativeException) as e_info:
-        _ = lib.read(symbol, query_builder=q)
+    with pytest.raises(ArcticNativeException):
+        q = q[q["a"] < inf]
 
 
-@pytest.mark.parametrize("lib_type", ["lmdb_version_store", "lmdb_version_store_dynamic_schema"])
+@pytest.mark.parametrize(
+    "lib_type",
+    [
+        "lmdb_version_store_v1",
+        "lmdb_version_store_v2",
+        "lmdb_version_store_dynamic_schema_v1",
+        "lmdb_version_store_dynamic_schema_v2",
+    ],
+)
 def test_filter_categorical(request, lib_type):
     lib = request.getfixturevalue(lib_type)
     df = DataFrame({"a": ["hello", "hi", "hello"]}, index=np.arange(3))
@@ -167,7 +209,15 @@ def test_filter_categorical(request, lib_type):
         _ = lib.read(symbol, query_builder=q)
 
 
-@pytest.mark.parametrize("lib_type", ["lmdb_version_store", "lmdb_version_store_dynamic_schema"])
+@pytest.mark.parametrize(
+    "lib_type",
+    [
+        "lmdb_version_store_v1",
+        "lmdb_version_store_v2",
+        "lmdb_version_store_dynamic_schema_v1",
+        "lmdb_version_store_dynamic_schema_v2",
+    ],
+)
 def test_filter_pickled_symbol(request, lib_type):
     lib = request.getfixturevalue(lib_type)
     symbol = "test_filter_pickled_symbol"
@@ -179,7 +229,15 @@ def test_filter_pickled_symbol(request, lib_type):
         _ = lib.read(symbol, query_builder=q)
 
 
-@pytest.mark.parametrize("lib_type", ["lmdb_version_store", "lmdb_version_store_dynamic_schema"])
+@pytest.mark.parametrize(
+    "lib_type",
+    [
+        "lmdb_version_store_v1",
+        "lmdb_version_store_v2",
+        "lmdb_version_store_dynamic_schema_v1",
+        "lmdb_version_store_dynamic_schema_v2",
+    ],
+)
 def test_filter_date_range_pickled_symbol(request, lib_type):
     lib = request.getfixturevalue(lib_type)
     symbol = "test_filter_date_range_pickled_symbol"
@@ -964,6 +1022,27 @@ def test_filter_numeric_isnotin_empty_set(lmdb_version_store, df):
     generic_filter_test(lmdb_version_store, "test_filter_numeric_isnotin_empty_set", df, q, pandas_query)
 
 
+def test_filter_nones_and_nans_retained_in_string_column(lmdb_version_store):
+    lib = lmdb_version_store
+    sym = "test_filter_nones_and_nans_retained_in_string_column"
+    df = pd.DataFrame(
+        {
+            "filter_column": [1, 2, 1, 2, 1, 2],
+            "string_column": ["1", "2", np.nan, "4", None, "6"],
+        },
+    )
+    lib.write(sym, df)
+    q = QueryBuilder()
+    q = q[q["filter_column"] == 1]
+    q.optimise_for_memory()
+    expected = df.query("filter_column == 1")
+    received = lib.read(sym, query_builder=q).data
+    assert np.array_equal(expected["filter_column"], received["filter_column"])
+    assert received["string_column"].iloc[0] == "1"
+    assert np.isnan(received["string_column"].iloc[1])
+    assert received["string_column"].iloc[2] is None
+
+
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
@@ -1062,7 +1141,6 @@ def test_filter_stringpool_shrinking_block_alignment(lmdb_version_store):
     q = QueryBuilder()
     string_to_find = data[3]
     q = q[q["a"] == string_to_find]
-    q.optimise_for_memory()
     pandas_query = f"a == '{string_to_find}'"
     generic_filter_test_strings(
         lmdb_version_store, "test_filter_stringpool_shrinking_block_alignment", df, q, pandas_query
@@ -2018,12 +2096,14 @@ def test_filter_numeric_membership_equivalence():
 
 def test_filter_bool_short_circuiting():
     def _clear(first, second):
-        first.stages.clear()
-        second.stages.clear()
+        first.clauses.clear()
+        first._python_clauses.clear()
+        second.clauses.clear()
+        second._python_clauses.clear()
 
     # Original query
     q1 = QueryBuilder()
-    # Expected short circuited version
+    # Expected short-circuited version
     q2 = QueryBuilder()
     errors = []
 
@@ -2033,10 +2113,8 @@ def test_filter_bool_short_circuiting():
         errors.append("and true")
     _clear(q1, q2)
 
-    q1 = q1[(q1["a"] < 5) & False]
-    q2 = q2[False]
-    if q1 != q2:
-        errors.append("and false")
+    with pytest.raises(ArcticNativeException):
+        q1 = q1[(q1["a"] < 5) & False]
     _clear(q1, q2)
 
     q1 = q1[True & (q1["a"] < 5)]
@@ -2045,16 +2123,12 @@ def test_filter_bool_short_circuiting():
         errors.append("rand true")
     _clear(q1, q2)
 
-    q1 = q1[False & (q1["a"] < 5)]
-    q2 = q2[False]
-    if q1 != q2:
-        errors.append("rand false")
+    with pytest.raises(ArcticNativeException):
+        q1 = q1[False & (q1["a"] < 5)]
     _clear(q1, q2)
 
-    q1 = q1[(q1["a"] < 5) | True]
-    q2 = q2[True]
-    if q1 != q2:
-        errors.append("or true")
+    with pytest.raises(ArcticNativeException):
+        q1 = q1[(q1["a"] < 5) | True]
     _clear(q1, q2)
 
     q1 = q1[(q1["a"] < 5) | False]
@@ -2063,10 +2137,8 @@ def test_filter_bool_short_circuiting():
         errors.append("or false")
     _clear(q1, q2)
 
-    q1 = q1[True | (q1["a"] < 5)]
-    q2 = q2[True]
-    if q1 != q2:
-        errors.append("ror true")
+    with pytest.raises(ArcticNativeException):
+        q1 = q1[True | (q1["a"] < 5)]
     _clear(q1, q2)
 
     q1 = q1[False | (q1["a"] < 5)]

@@ -72,8 +72,7 @@ struct StreamSource {
 
     virtual std::vector<Composite<ProcessingSegment>> batch_read_uncompressed(
         std::vector<Composite<pipelines::SliceAndKey>> &&keys,
-        const std::shared_ptr<std::vector<Clause>>& query,
-        const StreamDescriptor& desc,
+        const std::vector<std::shared_ptr<Clause>>& clauses,
         const std::shared_ptr<std::unordered_set<std::string>>& filter_columns,
         const BatchReadArgs &args) = 0;
 
@@ -81,10 +80,15 @@ struct StreamSource {
         const entity::VariantKey &key,
         storage::ReadKeyOpts opts = storage::ReadKeyOpts{}) = 0;
 
-    virtual folly::Future<std::tuple<VariantKey, std::optional<google::protobuf::Any>, StreamDescriptor::Proto>> read_metadata_and_descriptor(
+    virtual folly::Future<std::tuple<VariantKey, std::optional<google::protobuf::Any>, StreamDescriptor>> read_metadata_and_descriptor(
         const entity::VariantKey& key,
         storage::ReadKeyOpts opts = storage::ReadKeyOpts{}
         ) = 0;
+
+    virtual folly::Future<std::pair<VariantKey, TimeseriesDescriptor>>
+        read_timeseries_descriptor(const entity::VariantKey& key) = 0;
+
+
 };
 
 } // namespace arcticdb::stream
