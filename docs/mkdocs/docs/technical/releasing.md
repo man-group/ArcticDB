@@ -3,6 +3,14 @@
 This document details the release process for ArcticDB. 
 ArcticDB is released onto [PyPi](https://pypi.org/project/arcticdb/) and [conda-forge](https://anaconda.org/conda-forge/arcticdb).
 
+## 0. Check Internal Tests
+
+We have some internal tests that test compatibility with old data and with on-prem storages. Verify that they pass with the release
+candidate by running the following builds (links are internal to Man Group):
+
+* [Python 36](https://manbuild-ci.res.m/job/manbuilds/job/pegasus/job/current/job/DATA/job/man.arcticdb-master/job/master/)
+* [Python 38](https://manbuild-ci.res.m/job/manbuilds/job/pegasus/job/next/job/DATA/job/man.arcticdb-master/job/master/)
+
 ## 1. Create a new tag
 
 Navigate to the [Tag Release](https://github.com/man-group/ArcticDB/actions/workflows/tag.yml) Github Action.
