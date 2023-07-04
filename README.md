@@ -38,12 +38,16 @@ ArcticDB is designed from the outset to be resilient; there is no single point o
 
 ## Quickstart
 
-> ⚠️ **Pre-built binaries only available for Linux and Windows**: MacOS binaries are coming soon!
+> ⚠️ **Pre-built binaries are available for Linux, Windows and MacOS (Apple silicon)**
 
 Install ArcticDB:
 
 ```bash
 $ pip install arcticdb
+```
+or using conda-forge
+```bash
+$ conda install -c conda-forge arcticdb
 ```
 
 Import ArcticDB:
