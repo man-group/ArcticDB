@@ -63,7 +63,6 @@ class AzureStorage final : public Storage<AzureStorage> {
     }
 
   private:
-    std::string blob_container_url_;
     Azure::Storage::Blobs::BlobContainerClient container_client_;
     std::string root_folder_;
     bool connect_to_azurite_;

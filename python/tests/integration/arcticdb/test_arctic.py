@@ -170,6 +170,13 @@ def test_separation_between_libraries(object_storage_uri_incl_bucket):
     assert ac["pytest_test_lib_2"].list_symbols() == ["test_2"]
 
 
+def get_path_prefix_option(uri):
+    if "azure" in uri:  # azure connection string has a different format
+        return ";Path_prefix"
+    else:
+        return "&path_prefix"
+
+
 def test_separation_between_libraries_with_prefixes(object_storage_uri_incl_bucket):
     """The motivation for the prefix feature is that separate users want to be able to create libraries
     with the same name in the same bucket without over-writing each other's work. This can be useful when
@@ -177,11 +184,13 @@ def test_separation_between_libraries_with_prefixes(object_storage_uri_incl_buck
 
     See AN-566.
     """
-    mercury_uri = object_storage_uri_incl_bucket + "&path_prefix=/planet/mercury"
+
+    option = get_path_prefix_option(object_storage_uri_incl_bucket)
+    mercury_uri = f"{object_storage_uri_incl_bucket}{option}=/planet/mercury"
     ac_mercury = Arctic(mercury_uri)
     assert ac_mercury.list_libraries() == []
 
-    mars_uri = object_storage_uri_incl_bucket + "&path_prefix=/planet/mars"
+    mars_uri = f"{object_storage_uri_incl_bucket}{option}=/planet/mars"
     ac_mars = Arctic(mars_uri)
     assert ac_mars.list_libraries() == []
 
@@ -202,7 +211,7 @@ def object_storage_uri_and_client():
         ("moto_s3_uri_incl_bucket", "boto_client"),
         pytest.param(
             "azurite_azure_uri_incl_bucket",
-            "azure_client",
+            "azure_client_and_create_container",
             marks=pytest.mark.skipif(not AZURE_SUPPORT, reason="Pending Azure Storge Conda support"),
         ),
     ]
@@ -221,7 +230,7 @@ def test_library_management_path_prefix(connection_string, client, request):
         time.sleep(1)  # Azurite is slow....
         test_bucket = list(client.list_containers())
 
-    URI = connection_string + "&path_prefix=hello/world"
+    URI = f"{connection_string}{get_path_prefix_option(connection_string)}=hello/world"
     ac = Arctic(URI)
     assert ac.list_libraries() == []
 
@@ -238,7 +247,7 @@ def test_library_management_path_prefix(connection_string, client, request):
     if isinstance(client, BotoClient):
         keys = [d["Key"] for d in client.list_objects(Bucket=test_bucket)["Contents"]]
     else:
-        REGEX = r"azure://(.*?)/(?P<container>[-_a-zA-Z0-9.]+)(\?.*)?"
+        REGEX = r".*Container=(?P<container>[^;]+).*"
         match = re.match(REGEX, connection_string)
         container = match.groupdict()["container"]
         keys = [blob["name"] for blob in client.get_container_client(container).list_blobs()]
@@ -611,8 +620,7 @@ def test_s3_repr(moto_s3_uri_incl_bucket):
     s3_endpoint += f":{port}"
     bucket = moto_s3_uri_incl_bucket.split(":")[-1].split("?")[0]
     assert (
-        repr(lib)
-        == "Library("
+        repr(lib) == "Library("
         "Arctic("
         "config=S3("
         f"endpoint={s3_endpoint}, bucket={bucket})), path=pytest_test_lib, storage=s3_storage)"
@@ -621,29 +629,6 @@ def test_s3_repr(moto_s3_uri_incl_bucket):
     df = pd.DataFrame({"col1": [1, 2, 3], "col2": [4, 5, 6]})
     written_vi = lib.write("my_symbol", df)
     assert re.match(r"S3\(endpoint=localhost:\d+, bucket=test_bucket_\d+\)", written_vi.host)
-
-
-@pytest.mark.skipif(not AZURE_SUPPORT, reason="Pending Azure Storge Conda support")
-def test_azure_repr(azurite_azure_uri_incl_bucket):
-    ac = Arctic(azurite_azure_uri_incl_bucket)
-
-    assert ac.list_libraries() == []
-    ac.create_library("pytest_test_lib")
-
-    lib = ac["pytest_test_lib"]
-    endpoint = azurite_azure_uri_incl_bucket.split("//")[1].split("/")[0]
-    container = azurite_azure_uri_incl_bucket.split("//")[-1].split("?")[0].split("/")[1]
-    assert (
-        repr(lib)
-        == "Library("
-        "Arctic("
-        "config=azure("
-        f"endpoint={endpoint}, container={container})), path=pytest_test_lib, storage=azure_storage)"
-    )
-
-    df = pd.DataFrame({"col1": [1, 2, 3], "col2": [4, 5, 6]})
-    written_vi = lib.write("my_symbol", df)
-    assert re.match(r"azure\(endpoint=\d+\.\d+\.\d+\.\d+:\d+, container=testbucket\d+\)", written_vi.host)
 
 
 class A:
@@ -1524,7 +1509,7 @@ def test_reload_symbol_list(connection_string, client, request):
             ]
         else:
             time.sleep(1)  # Azurite is slow....
-            REGEX = r"azure://(.*?)/(?P<container>[-_a-zA-Z0-9.]+)(\?.*)?"
+            REGEX = r".*Container=(?P<container>[^;]+).*"
             match = re.match(REGEX, connection_string)
             container = match.groupdict()["container"]
             keys = [

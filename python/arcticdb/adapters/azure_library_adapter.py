@@ -25,33 +25,37 @@ PARSED_QUERY = namedtuple("PARSED_QUERY", ["region"])
 
 @dataclass
 class ParsedQuery:
-    access: Optional[str] = None
-    secret: Optional[str] = None
-    path_prefix: Optional[str] = None
-    https: bool = False
-    connect_to_azurite: bool = False
-    ca_cert_path: Optional[str] = None
+    Path_prefix: Optional[str] = None
+    CA_cert_path: Optional[str] = None
+    Container: Optional[str] = None
 
 
 class AzureLibraryAdapter(ArcticLibraryAdapter):
-    REGEX = r"azure://(?P<endpoint>[^/]+)/(?P<container>[a-zA-Z0-9][-a-zA-Z0-9]+)(?P<query>\?.*)?"
+    REGEX = r"azure://(?P<query>.*)"
 
     @staticmethod
     def supports_uri(uri: str) -> bool:
         return uri.startswith("azure://")
 
     def __init__(self, uri: str, *args, **kwargs):
+        self._uri = uri
         match = re.match(self.REGEX, uri)
         match_groups = match.groupdict()
 
-        self._endpoint = match_groups["endpoint"]
-        self._bucket = match_groups["container"]
+        additional_options = self._parse_query(match["query"])
+        self._query_params: ParsedQuery = ParsedQuery(**additional_options)
 
-        self._query_params: ParsedQuery = self._parse_query(match["query"])
-
-        self._https = self._query_params.https
-        self._connect_to_azurite = self._query_params.connect_to_azurite
-        self._ca_cert_path = self._query_params.ca_cert_path
+        option_regex = r"(?P<option>[^=]+)=(?P<value>.*)"
+        self._endpoint = ";".join(  # azure c++ sdk doesn't accept any non-standard string
+            [
+                f"{match[0]}={match[1]}"
+                for option_str in uri[len("azure://") :].split(";")
+                for match in re.findall(option_regex, option_str)
+                if match[0] not in additional_options
+            ]
+        )
+        self._bucket = self._query_params.Container
+        self._ca_cert_path = self._query_params.CA_cert_path
 
         super().__init__(uri)
 
@@ -61,23 +65,17 @@ class AzureLibraryAdapter(ArcticLibraryAdapter):
     @property
     def config_library(self) -> Library:
         env_cfg = EnvironmentConfigsMap()
-        _name = self._query_params.access
-        _key = self._query_params.secret
         with_prefix = (
-            f"{self._query_params.path_prefix}/{self.CONFIG_LIBRARY_NAME}" if self._query_params.path_prefix else False
+            f"{self._query_params.Path_prefix}/{self.CONFIG_LIBRARY_NAME}" if self._query_params.Path_prefix else False
         )
 
         add_azure_library_to_env(
             cfg=env_cfg,
             lib_name=self.CONFIG_LIBRARY_NAME,
             env_name=_DEFAULT_ENV,
-            credential_name=_name,
-            credential_key=_key,
             container_name=self._bucket,
             endpoint=self._endpoint,
             with_prefix=with_prefix,
-            is_https=self._https,
-            connect_to_azurite=self._connect_to_azurite,
             ca_cert_path=self._ca_cert_path,
         )
 
@@ -91,37 +89,24 @@ class AzureLibraryAdapter(ArcticLibraryAdapter):
         elif not query:
             raise ValueError(f"Invalid Azure URI. Missing query parameter")
 
-        parsed_query = re.split("[;&]", query)
+        parsed_query = re.split("[;]", query)
         parsed_query = {t.split("=", 1)[0]: t.split("=", 1)[1] for t in parsed_query}
 
         for key in parsed_query.keys():
             field_dict = {field.name: field for field in fields(ParsedQuery)}
-            if key not in field_dict.keys():
-                raise ValueError(
-                    "Invalid Azure URI. "
-                    f"Invalid query parameter '{key}' passed in. "
-                    "Value query parameters: "
-                    f"{list(field_dict.keys())}"
-                )
 
-            if field_dict[key].type == bool:
-                parsed_query[key] = bool(strtobool(parsed_query[key][0]))
+        if parsed_query.get("Path_prefix"):
+            parsed_query["Path_prefix"] = parsed_query["Path_prefix"].strip("/")
 
-        if parsed_query.get("path_prefix"):
-            parsed_query["path_prefix"] = parsed_query["path_prefix"].strip("/")
-
-        _kwargs = {k: v for k, v in parsed_query.items()}
-        return ParsedQuery(**_kwargs)
+        _kwargs = {k: v for k, v in parsed_query.items() if k in field_dict.keys()}
+        return _kwargs
 
     def create_library_config(self, name, library_options: LibraryOptions) -> LibraryConfig:
         env_cfg = EnvironmentConfigsMap()
 
-        _name = self._query_params.access
-        _key = self._query_params.secret
-
-        if self._query_params.path_prefix:
+        if self._query_params.Path_prefix:
             # add time to prefix - so that the azure root folder is unique and we can delete and recreate fast
-            with_prefix = f"{self._query_params.path_prefix}/{name}{time.time() * 1e9:.0f}"
+            with_prefix = f"{self._query_params.Path_prefix}/{name}{time.time() * 1e9:.0f}"
         else:
             with_prefix = True
 
@@ -129,13 +114,9 @@ class AzureLibraryAdapter(ArcticLibraryAdapter):
             cfg=env_cfg,
             lib_name=name,
             env_name=_DEFAULT_ENV,
-            credential_name=_name,
-            credential_key=_key,
             container_name=self._bucket,
             endpoint=self._endpoint,
             with_prefix=with_prefix,
-            is_https=self._https,
-            connect_to_azurite=self._connect_to_azurite,
             ca_cert_path=self._ca_cert_path,
         )
 
@@ -150,4 +131,4 @@ class AzureLibraryAdapter(ArcticLibraryAdapter):
 
     @property
     def path_prefix(self):
-        return self._query_params.path_prefix
+        return self._query_params.Path_prefix

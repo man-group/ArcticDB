@@ -309,12 +309,8 @@ def create_test_azure_cfg(
         cfg=cfg,
         lib_name=lib_name,
         env_name=Defaults.ENV,
-        credential_name=credential_name,
-        credential_key=credential_key,
         container_name=container_name,
         endpoint=endpoint,
-        is_https=is_https,
-        connect_to_azurite=connect_to_azurite,
         ca_cert_path=ca_cert_path,
     )
     return cfg
@@ -336,23 +332,15 @@ def get_azure_proto(
     cfg,
     lib_name,
     env_name,
-    credential_name,
-    credential_key,
     container_name,
     endpoint,
     with_prefix: Optional[bool] = True,
-    is_https: Optional[bool] = False,
-    connect_to_azurite: Optional[bool] = False,
     ca_cert_path: Optional[str] = None,
 ):
     env = cfg.env_by_id[env_name]
     azure = AzureConfig()
     azure.container_name = container_name
-    azure.credential_name = credential_name
-    azure.credential_key = credential_key
     azure.endpoint = endpoint
-    azure.https = is_https
-    azure.connect_to_azurite = connect_to_azurite
     if with_prefix:
         if isinstance(with_prefix, str):
             azure.prefix = with_prefix
@@ -371,14 +359,10 @@ def add_azure_library_to_env(
     cfg,
     lib_name,
     env_name,
-    credential_name,
-    credential_key,
     container_name,
     endpoint,
     description: Optional[bool] = None,
     with_prefix: Optional[bool] = True,
-    is_https: Optional[bool] = True,
-    connect_to_azurite: Optional[bool] = False,
     ca_cert_path: Optional[str] = None,
 ):
     env = cfg.env_by_id[env_name]
@@ -386,13 +370,9 @@ def add_azure_library_to_env(
         cfg=cfg,
         lib_name=lib_name,
         env_name=env_name,
-        credential_name=credential_name,
-        credential_key=credential_key,
         container_name=container_name,
         endpoint=endpoint,
         with_prefix=with_prefix,
-        is_https=is_https,
-        connect_to_azurite=connect_to_azurite,
         ca_cert_path=ca_cert_path,
     )
 

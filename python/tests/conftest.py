@@ -87,24 +87,16 @@ def _moto_s3_uri_module():
 
 
 @pytest.fixture(scope="function")
-def azure_client(azurite_azure_test_connection_setting):
-    (
-        endpoint,
-        container,
-        credential_name,
-        credential_key,
-        is_https,
-        connect_to_azurite,
-        ca_cert_path,
-    ) = azurite_azure_test_connection_setting
-    credential = {"account_name": credential_name, "account_key": credential_key}
-    account_url = "https://" if is_https else "http://"
-    account_url += f"{endpoint}/{credential_name}" if connect_to_azurite else f"{credential_name}.{endpoint}"
-    client = BlobServiceClient(
-        account_url=account_url, credential=credential, connection_verify=False
+def azure_client_and_create_container(azurite_container, azurite_azure_uri):
+    client = BlobServiceClient.from_connection_string(
+        conn_str=azurite_azure_uri, container_name=azurite_container
     )  # add connection_verify=False to bypass ssl checking
 
-    yield client
+    container_client = client.get_container_client(container=azurite_container)
+    if not container_client.exists():
+        client.create_container(name=azurite_container)
+
+    return client
 
 
 @pytest.fixture(scope="function")
@@ -152,25 +144,20 @@ def moto_s3_uri_incl_bucket(moto_s3_endpoint_and_credentials):
 
 
 @pytest.fixture
-def azurite_azure_test_connection_setting(azurite_port, spawn_azurite):
-    global bucket_id
-
-    container = f"testbucket{bucket_id}"
-    bucket_id = bucket_id + 1
-
+def azurite_azure_test_connection_setting(azurite_port, azurite_container, spawn_azurite):
     credential_name = "devstoreaccount1"
     credential_key = "Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw=="
-    endpoint = f"127.0.0.1:{azurite_port}"
+    endpoint = f"http://127.0.0.1:{azurite_port}"
     is_https = False
     connect_to_azurite = True
     # Default cert path is used; May run into problem on Linux's non RHEL distribution; See more on https://github.com/man-group/ArcticDB/issues/514
     ca_cert_path = ""
 
-    return endpoint, container, credential_name, credential_key, is_https, connect_to_azurite, ca_cert_path
+    return endpoint, azurite_container, credential_name, credential_key, is_https, connect_to_azurite, ca_cert_path
 
 
 @pytest.fixture
-def azurite_azure_endpoint_and_credentials(azurite_azure_test_connection_setting, azure_client):
+def azurite_azure_uri(azurite_azure_test_connection_setting):
     (
         endpoint,
         container,
@@ -180,24 +167,12 @@ def azurite_azure_endpoint_and_credentials(azurite_azure_test_connection_setting
         connect_to_azurite,
         ca_cert_path,
     ) = azurite_azure_test_connection_setting
-    container_client = azure_client.get_container_client(container=container)
-    if not container_client.exists():
-        azure_client.create_container(name=container)
-    return endpoint, container, credential_name, credential_key, is_https, connect_to_azurite, ca_cert_path
+    return f"azure://DefaultEndpointsProtocol=http;AccountName={credential_name};AccountKey={credential_key};BlobEndpoint={endpoint}/{credential_name};Container={container};CA_cert_path={ca_cert_path}"  # semi-colon at the end is not accepted by the sdk
 
 
 @pytest.fixture
-def azurite_azure_uri_incl_bucket(azurite_azure_endpoint_and_credentials):
-    (
-        endpoint,
-        container,
-        credential_name,
-        credential_key,
-        is_https,
-        connect_to_azurite,
-        ca_cert_path,
-    ) = azurite_azure_endpoint_and_credentials
-    return f"azure://{endpoint}/{container}?access={credential_name}&secret={credential_key}&https={is_https}&connect_to_azurite={connect_to_azurite}&ca_cert_path={ca_cert_path}"
+def azurite_azure_uri_incl_bucket(azurite_azure_uri, azure_client_and_create_container):
+    return azurite_azure_uri
 
 
 @pytest.fixture(scope="function", params=["S3", "LMDB", "Azure"] if AZURE_SUPPORT else ["S3", "LMDB"])
@@ -216,9 +191,9 @@ def arctic_client(request, tmpdir):
 
 
 @pytest.fixture(scope="function")
-def arctic_library(arctic_client):
+def arctic_library(azure_client_and_create_container, arctic_client):
     arctic_client.create_library("pytest_test_lib")
-    yield arctic_client["pytest_test_lib"]
+    return arctic_client["pytest_test_lib"]
 
 
 @pytest.fixture()
@@ -243,7 +218,7 @@ def arcticdb_test_s3_config(moto_s3_endpoint_and_credentials):
 
 @pytest.fixture
 def arcticdb_test_azure_config(
-    azurite_azure_endpoint_and_credentials,
+    azurite_azure_test_connection_setting,
 ):
     def create(lib_name):
         (
@@ -254,7 +229,7 @@ def arcticdb_test_azure_config(
             is_https,
             connect_to_azurite,
             ca_cert_path,
-        ) = azurite_azure_endpoint_and_credentials
+        ) = azurite_azure_test_connection_setting
         return create_test_azure_cfg(
             lib_name=lib_name,
             credential_name=credential_name,
@@ -356,7 +331,7 @@ def s3_store_factory(lib_name, moto_s3_endpoint_and_credentials):
 
 
 @pytest.fixture
-def azure_store_factory(lib_name, arcticdb_test_azure_config):
+def azure_store_factory(lib_name, arcticdb_test_azure_config, azure_client_and_create_container):
     """Factory to create any number of Azure libs with the given WriteOptions or VersionStoreConfig.
 
     `name` can be a magical value "_unique_" which will create libs with unique names.
@@ -569,6 +544,14 @@ def azurite_port():
     return get_ephemeral_port()
 
 
+@pytest.fixture
+def azurite_container():
+    global bucket_id
+    container = f"testbucket{bucket_id}"
+    bucket_id = bucket_id + 1
+    return container
+
+
 @pytest.fixture(scope="module")
 def spawn_azurite(azurite_port):
     if AZURE_SUPPORT:
@@ -584,10 +567,10 @@ def spawn_azurite(azurite_port):
                 yield
             finally:
                 print("Killing Azurite")
-                p.kill()
-                del p
-                if sys.platform == "win32":
-                    time.sleep(5)  # Wait for Azurite to stop so that temp files can be removed
+                if sys.platform == "win32":  # different way of killing process on Windows
+                    os.kill(p.pid, signal.CTRL_C_EVENT)
+                else:
+                    p.kill()
 
     else:
         yield
