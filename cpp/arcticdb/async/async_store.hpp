@@ -408,6 +408,7 @@ public:
 
         auto res = std::make_shared<std::vector<VariantKey>>(key_segments.size());
         auto count = 0ULL;
+        std::vector<folly::Future<folly::Unit>> write_futures;
         for (std::size_t start = 0ULL, nxt; start < key_segments.size(); start = nxt) {
             nxt = std::min(start + write_count, key_segments.size());
             auto range = folly::Range(key_segments.begin() + start, key_segments.begin() + nxt);
@@ -459,10 +460,12 @@ public:
                 if (!key_segs->empty())
                     lib->write(Composite<storage::KeySegmentPair>(std::move(*key_segs)));
             });
-            std::move(write_fut).get();
+            write_futures.push_back(std::move(write_fut));
         }
 
-        return folly::makeFuture(std::move(*res));
+        return folly::collect(std::move(write_futures)).via(&async::io_executor()).then([res](auto &&){
+            return std::move(*res);
+        });
     }
 
     void set_failure_sim(const arcticdb::proto::storage::VersionStoreConfig::StorageFailureSimulator &cfg)
