@@ -26,7 +26,7 @@ dependencies:
   - cyrus-sasl
   - aws-sdk-cpp
   - prometheus-cpp
-  - libprotobuf < 4
+  - libprotobuf
   - bitmagic
   - spdlog
   # Incompatibility with fmt last version
@@ -48,7 +48,7 @@ dependencies:
   - libiconv
   - aws-c-s3
   # Python dependences
-  - python =3.10 # Python 3.11 requires protobuf>=4
+  - python =3.10
   - numpy
   - pandas < 2
   - pytest
