@@ -301,9 +301,7 @@ def create_test_s3_cfg(
     return cfg
 
 
-def create_test_azure_cfg(
-    lib_name, credential_name, credential_key, container_name, endpoint, is_https, connect_to_azurite, ca_cert_path
-):
+def create_test_azure_cfg(lib_name, credential_name, credential_key, container_name, endpoint, ca_cert_path):
     cfg = EnvironmentConfigsMap()
     add_azure_library_to_env(
         cfg=cfg,

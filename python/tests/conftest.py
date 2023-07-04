@@ -148,12 +148,10 @@ def azurite_azure_test_connection_setting(azurite_port, azurite_container, spawn
     credential_name = "devstoreaccount1"
     credential_key = "Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw=="
     endpoint = f"http://127.0.0.1:{azurite_port}"
-    is_https = False
-    connect_to_azurite = True
     # Default cert path is used; May run into problem on Linux's non RHEL distribution; See more on https://github.com/man-group/ArcticDB/issues/514
     ca_cert_path = ""
 
-    return endpoint, azurite_container, credential_name, credential_key, is_https, connect_to_azurite, ca_cert_path
+    return endpoint, azurite_container, credential_name, credential_key, ca_cert_path
 
 
 @pytest.fixture
@@ -163,8 +161,6 @@ def azurite_azure_uri(azurite_azure_test_connection_setting):
         container,
         credential_name,
         credential_key,
-        is_https,
-        connect_to_azurite,
         ca_cert_path,
     ) = azurite_azure_test_connection_setting
     return f"azure://DefaultEndpointsProtocol=http;AccountName={credential_name};AccountKey={credential_key};BlobEndpoint={endpoint}/{credential_name};Container={container};CA_cert_path={ca_cert_path}"  # semi-colon at the end is not accepted by the sdk
@@ -217,17 +213,13 @@ def arcticdb_test_s3_config(moto_s3_endpoint_and_credentials):
 
 
 @pytest.fixture
-def arcticdb_test_azure_config(
-    azurite_azure_test_connection_setting,
-):
+def arcticdb_test_azure_config(azurite_azure_test_connection_setting, azurite_azure_uri):
     def create(lib_name):
         (
             endpoint,
             container,
             credential_name,
             credential_key,
-            is_https,
-            connect_to_azurite,
             ca_cert_path,
         ) = azurite_azure_test_connection_setting
         return create_test_azure_cfg(
@@ -235,9 +227,7 @@ def arcticdb_test_azure_config(
             credential_name=credential_name,
             credential_key=credential_key,
             container_name=container,
-            endpoint=endpoint,
-            is_https=is_https,
-            connect_to_azurite=connect_to_azurite,
+            endpoint=azurite_azure_uri,
             ca_cert_path=ca_cert_path,
         )
 

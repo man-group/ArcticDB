@@ -65,7 +65,6 @@ class AzureStorage final : public Storage<AzureStorage> {
   private:
     Azure::Storage::Blobs::BlobContainerClient container_client_;
     std::string root_folder_;
-    bool connect_to_azurite_;
     unsigned int request_timeout_;
     Azure::Storage::Blobs::UploadBlockBlobFromOptions upload_option_;
     Azure::Storage::Blobs::DownloadBlobToOptions download_option_;
@@ -103,15 +102,11 @@ inline arcticdb::proto::storage::VariantStorage pack_config(const std::string &c
 
 inline arcticdb::proto::storage::VariantStorage pack_config(
         const std::string &container_name,
-        const std::string &credential_name,
-        const std::string &credential_key,
         const std::string &endpoint
         ) {
     arcticdb::proto::storage::VariantStorage output;
     arcticdb::proto::azure_storage::Config cfg;
     cfg.set_container_name(container_name);
-    cfg.set_credential_name(credential_name);
-    cfg.set_credential_key(credential_key);
     cfg.set_endpoint(endpoint);
     util::pack_to_any(cfg, *output.mutable_config());
     return output;

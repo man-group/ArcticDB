@@ -167,7 +167,6 @@ void do_remove_impl(Composite<VariantKey>&& ks,
     const std::string& root_folder,
     Azure::Storage::Blobs::BlobContainerClient& container_client,
     KeyBucketizer&& bucketizer,
-    bool connect_to_azurite,
     unsigned int request_timeout) {
         ARCTICDB_SUBSAMPLE(AzureStorageDeleteBatch, 0)
         auto fmt_db = [](auto&& k) { return variant_key_type(k); };
@@ -191,30 +190,34 @@ void do_remove_impl(Composite<VariantKey>&& ks,
         };
         
         (fg::from(ks.as_range()) | fg::move | fg::groupBy(fmt_db)).foreach(
-            [&container_client, &root_folder, b=std::move(bucketizer), &batch, delete_object_limit=delete_object_limit, &batch_counter, &submit_batch, &connect_to_azurite, &request_timeout] (auto&& group) {//bypass incorrect 'set but no used" error for delete_object_limit
+            [&container_client, &root_folder, b=std::move(bucketizer), &batch, delete_object_limit=delete_object_limit, &batch_counter, &submit_batch, &request_timeout] (auto&& group) {//bypass incorrect 'set but no used" error for delete_object_limit
                 auto key_type_dir = key_type_folder(root_folder, group.key());
                 for (auto k : folly::enumerate(group.values())) {
                     auto blob_name = object_path(b.bucketize(key_type_dir, *k), *k);
                     ARCTICDB_RUNTIME_DEBUG(log::storage(), "Removing azure object with key {}", blob_name);
-                    if (connect_to_azurite){ //https://github.com/Azure/Azurite/issues/1822 due to an open issue of Azurite not filling subrequeset response after batch delete
-                        ARCTICDB_SUBSAMPLE(AzureStorageDeleteObjects, 0)
-                        try{
-                            auto blob_client = container_client.GetBlockBlobClient(blob_name);
-                            auto response = blob_client.Delete(Azure::Storage::Blobs::DeleteBlobOptions{}, get_context(request_timeout));
-                        }
-                        catch (const Azure::Core::RequestFailedException& e){
-                            if (e.ErrorCode != "BlobNotFound") { //To align with s3 behaviour, deleting non-exist objects is not an error, so not handling response
-                                util::raise_rte("Failed to process azure segment remove request {}: {}",
-                                                    static_cast<int>(e.StatusCode),
-                                                    e.ReasonPhrase);
-                            }
-                        }
-                    }
-                    else {
-                        batch.DeleteBlob(blob_name);
-                        if (++batch_counter == delete_object_limit) {
-                            submit_batch(batch);
-                        }
+                    // if (connect_to_azurite){ //https://github.com/Azure/Azurite/issues/1822 due to an open issue of Azurite not filling subrequeset response after batch delete
+                    //     ARCTICDB_SUBSAMPLE(AzureStorageDeleteObjects, 0)
+                    //     try{
+                    //         auto blob_client = container_client.GetBlockBlobClient(blob_name);
+                    //         auto response = blob_client.Delete(Azure::Storage::Blobs::DeleteBlobOptions{}, get_context(request_timeout));
+                    //     }
+                    //     catch (const Azure::Core::RequestFailedException& e){
+                    //         if (e.ErrorCode != "BlobNotFound") { //To align with s3 behaviour, deleting non-exist objects is not an error, so not handling response
+                    //             util::raise_rte("Failed to process azure segment remove request {}: {}",
+                    //                                 static_cast<int>(e.StatusCode),
+                    //                                 e.ReasonPhrase);
+                    //         }
+                    //     }
+                    // }
+                    // else {
+                    //     batch.DeleteBlob(blob_name);
+                    //     if (++batch_counter == delete_object_limit) {
+                    //         submit_batch(batch);
+                    //     }
+                    // }
+                    batch.DeleteBlob(blob_name);
+                    if (++batch_counter == delete_object_limit) {
+                        submit_batch(batch);
                     }
                 }
             }
@@ -313,7 +316,7 @@ void AzureStorage::do_read(Composite<VariantKey>&& ks, Visitor&& visitor, ReadKe
 }
 
 inline void AzureStorage::do_remove(Composite<VariantKey>&& ks, RemoveOpts) {
-    detail::do_remove_impl(std::move(ks), root_folder_, container_client_, FlatBucketizer{}, connect_to_azurite_, request_timeout_);
+    detail::do_remove_impl(std::move(ks), root_folder_, container_client_, FlatBucketizer{}, request_timeout_);
 }
 
 

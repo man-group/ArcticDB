@@ -12,13 +12,9 @@ package arcticc.pb2.azure_storage_pb2;
 
 message Config {
     string container_name = 1;
-    string credential_name = 2;
-    string credential_key = 3;
-    string endpoint = 4;
-    uint32 max_connections = 5;
-    uint32 request_timeout = 6;
-    string prefix = 7;
-    bool https = 8;
-    string ca_cert_path= 9;
-    bool connect_to_azurite = 10;
+    string endpoint = 2;
+    uint32 max_connections = 3;
+    uint32 request_timeout = 4;
+    string prefix = 5;
+    string ca_cert_path = 6;
 }

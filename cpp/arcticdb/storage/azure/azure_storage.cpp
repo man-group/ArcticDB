@@ -19,7 +19,6 @@ AzureStorage::AzureStorage(const LibraryPath &library_path, OpenMode mode, const
     Parent(library_path, mode),
     container_client_(BlobContainerClient::CreateFromConnectionString(conf.endpoint(), conf.container_name(), get_client_options(conf))),
     root_folder_(object_store_utils::get_root_folder(library_path)),
-    connect_to_azurite_(conf.connect_to_azurite()),
     request_timeout_(conf.request_timeout() == 0 ? 60000 : conf.request_timeout()){
         if (conf.ca_cert_path().empty())
             log::version().info("Using default CA cert path");
