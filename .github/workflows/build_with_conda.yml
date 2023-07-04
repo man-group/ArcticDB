@@ -132,8 +132,6 @@ jobs:
           python -m pip install --no-build-isolation --no-deps -v -e .
         env:
           ARCTICDB_USING_CONDA: 1
-          # Makes 'cl' usable by Ninja
-          CL: "/MP"
 
       - name: Test with pytest
         shell: cmd

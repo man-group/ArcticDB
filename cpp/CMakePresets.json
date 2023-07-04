@@ -83,7 +83,11 @@
     },
     {
       "name": "windows-cl-conda-debug",
-      "inherits": ["common_conda", "windows"]
+      "inherits": ["common_conda", "windows"],
+      "cacheVariables": {
+        "CMAKE_C_COMPILER": "cl",
+        "CMAKE_CXX_COMPILER": "cl"
+      }
     },
 
 
