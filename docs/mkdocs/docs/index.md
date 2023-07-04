@@ -103,7 +103,7 @@ in environment variables.
 
 ```python
 >>> from arcticdb import Arctic
->>> ac = Arctic('azure://ENDPOINT:CONTAINER?access=ABCD&secret=DCBA&https=true')
+>>> ac = Arctic('azure://AccountName=ABCD;AccountKey=EFGH;BlobEndpoint=ENDPOINT;Container=CONTAINER')
 ```
 
 #### Using a specific path within a bucket/container
@@ -114,7 +114,7 @@ You may want to restrict access for the ArcticDB library to a specific path with
 >>> #s3
 >>> ac = Arctic('s3s://s3.eu-west-2.amazonaws.com:arcticdb-test-bucket?path_prefix=test/&aws_auth=true')
 >>> #azure
->>> ac = Arctic('azure://ENDPOINT:CONTAINER?path_prefix=test/access=ABCD&secret=DCBA&https=true')
+>>> ac = Arctic('azure://AccountName=ABCD;AccountKey=EFGH;BlobEndpoint=ENDPOINT;Container=CONTAINER;Path_prefix=test/')
 ```
 
 #### Library Setup

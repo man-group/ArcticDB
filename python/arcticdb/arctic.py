@@ -75,27 +75,21 @@ class Arctic:
 
             Azure
             -----
-                The Azure URI connection scheme has the form ``azure://<azure end point>[:port]:<azure container>[?options]``.
+                The Azure URI connection scheme has the form ``azure://[options]``.
+                It is based on Azure Connection String, with addtional options for configuring ArcticDB storage adaptation layer.
+                Please refer to https://learn.microsoft.com/en-us/azure/storage/common/storage-configure-connection-string for more details.
 
-                Options is a query string that specifies connection specific options as ``<name>=<value>`` pairs joined with
-                ``&``.
+                Options is a string that specifies connection specific options as ``<name>=<value>`` pairs joined with ``;``.
 
-                Available options for Azure:
+                Additional options specific for ArcticDB Azure storage adaptation layer:
                 +---------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------+
                 | Option                    | Description                                                                                                                                                   |
                 +===========================+===============================================================================================================================================================+
-                | access                    | Azure access key                                                                                                                                              |
+                | Container                 | Azure container for blobs                                                                                                                                     |
                 +---------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------+
-                | secret                    | Azure secret access key                                                                                                                                       |
+                | Path_prefix               | Path within Azure container to use for data storage                                                                                                           |
                 +---------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------+
-                | path_prefix               | Path within Azure container to use for data storage                                                                                                           |
-                +---------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------+
-                | https                     | If true, https communication will be used; Default false                                                                                                      |
-                +---------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------+
-                | connect_to_azurite        | If true, special communication handling for Azurite (Azure enumerator) will be enabled. Default false                                                         |
-                |                           | It is due to a bug in Azurite https://github.com/Azure/Azurite/issues/1822                                                                                    |
-                +---------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------+
-                | ca_cert_path              | Azure CA certificate path. If not set, default path will be used.                                                                                             |
+                | CA_cert_path              | Azure CA certificate path. If not set, default path will be used.                                                                                             |
                 |                           | Note: For Linux distribution, default path is set to `/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem`.                                                     |
                 |                           | If the certificate cannot be foune in the path, a Azure exception, with no meaningful errorcode will be thrown. Please refer to the below Exception part for  |
                 |                           | more details.                                                                                                                                                 |
@@ -111,13 +105,13 @@ class Arctic:
                 +---------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------+
 
 
-                Note: Support for Azure Blob Storage is currently only available in *non-Conda* binaries distribution.
+                Note: Support for Azure Blob Storage is currently only available in *non-Conda* binaries distribution. Connection string should not be ended with ``;``
 
 
                 Exception: Azure related exception's message always ends with `{AZURE_SDK_HTTP_STATUS_CODE}:{AZURE_SDK_REASON_PHRASE}`.
                 Please refer to https://github.com/Azure/azure-sdk-for-cpp/blob/24ed290815d8f9dbcd758a60fdc5b6b9205f74e0/sdk/core/azure-core/inc/azure/core/http/http_status_code.hpp for
                 more details of status code. Due to a bug in Azure C++ SDK https://github.com/Azure/azure-sdk-for-cpp/issues/4738, Azure may not give meaningful status code and reason
-                phrase in the exception. For debuggin in this situation, please run `export AZURE_LOG_LEVEL=1` to enable the SDK debug log.
+                phrase in the exception. For debuggin in this situation, please set environment variable ``export AZURE_LOG_LEVEL`` to ``1`` to enable the SDK debug log.
 
 
             LMDB
