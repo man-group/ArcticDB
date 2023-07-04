@@ -58,9 +58,11 @@ folly::Future<entity::AtomKey> write_index(
     const IndexPartialKey &partial_key,
     const std::shared_ptr<stream::StreamSink> &sink
     ) {
-    auto keys_fut = folly::collect(std::move(slice_and_keys));
-    auto slice_and_keys_vals = keys_fut.wait().value();
-    return write_index(std::move(frame), std::move(slice_and_keys_vals), partial_key, sink);
+    auto keys_fut = folly::collect(std::move(slice_and_keys)).via(&async::cpu_executor());
+    return std::move(keys_fut)
+    .thenValue([frame = std::move(frame), &partial_key, &sink](auto&& slice_and_keys_vals) mutable {
+        return write_index(std::move(frame), std::move(slice_and_keys_vals), partial_key, sink);
+    });
 }
 
 std::pair<index::IndexSegmentReader, std::vector<SliceAndKey>> read_index_to_vector(

@@ -276,13 +276,13 @@ public:
         bool prune_previous_versions,
         std::vector<arcticdb::proto::descriptors::UserDefinedMetadata>&& user_meta_protos);
 
-    std::vector<AtomKey> batch_append_internal(
-        std::vector<VersionId> version_ids,
+    std::vector<std::variant<VersionedItem, DataError>> batch_append_internal(
         const std::vector<StreamId>& stream_ids,
-        std::vector<AtomKey> prevs,
-        std::vector<InputTensorFrame> frames,
-        const WriteOptions& write_options,
-        bool validate_index);
+        std::vector<InputTensorFrame>&& frames,
+        bool prune_previous_versions,
+        bool validate_index,
+        bool upsert,
+        bool throw_on_missing_version);
 
     std::vector<ReadVersionOutput> batch_read_keys(
         const std::vector<AtomKey> &keys,
