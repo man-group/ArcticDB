@@ -1914,6 +1914,16 @@ def test_batch_append(lmdb_version_store_tombstone, three_col_df):
         assert vit.metadata == append_metadata[sym]
 
 
+def test_batch_append_with_throw_exception(lmdb_version_store, three_col_df):
+    multi_data = {"sym1": three_col_df(), "sym2": three_col_df(1)}
+    with pytest.raises(NoSuchVersionException):
+        lmdb_version_store.batch_append(
+            list(multi_data.keys()),
+            list(multi_data.values()),
+            write_if_missing=False,
+        )
+
+
 @pytest.mark.parametrize("use_date_range_clause", [True, False])
 def test_batch_read_date_range(lmdb_version_store_tombstone_and_sync_passive, use_date_range_clause):
     lmdb_version_store = lmdb_version_store_tombstone_and_sync_passive

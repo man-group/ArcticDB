@@ -503,7 +503,7 @@ class Library:
         staged: `bool`, default=False
             See `write`.
         validate_index: bool, default=False
-            If True, will verify for each entry in the batch hat the index of `data` supports date range searches and update operations.
+            If set to True, it will verify for each entry in the batch whether the index of the data supports date range searches and update operations.
             This in effect tests that the data is sorted in ascending order. ArcticDB relies on Pandas to detect if data is sorted -
             you can call DataFrame.index.is_monotonic_increasing on your input DataFrame to see if Pandas believes the data to be sorted
 
@@ -686,6 +686,55 @@ class Library:
             metadata=metadata,
             prune_previous_version=prune_previous_versions,
             validate_index=validate_index,
+        )
+
+    def append_batch(
+        self, append_payloads: List[WritePayload], prune_previous_versions: bool = False, validate_index=True
+    ) -> List[Union[VersionedItem, DataError]]:
+        """
+        Append data to multiple symbols in a batch fashion. This is more efficient than making multiple `append` calls in
+        succession as some constant-time operations can be executed only once rather than once for each element of
+        `append_payloads`.
+        Note that this isn't an atomic operation - it's possible for one symbol to be fully written and readable before
+        another symbol.
+        Parameters
+        ----------
+        append_payloads : `List[WritePayload]`
+            Symbols and their corresponding data. There must not be any duplicate symbols in `append_payloads`.
+        prune_previous_versions : bool, default=False
+            Removes previous (non-snapshotted) versions from the database.
+        validate_index: bool, default=False
+            If set to True, it will verify for each entry in the batch whether the index of the data supports date range searches and update operations.
+            This in effect tests that the data is sorted in ascending order. ArcticDB relies on Pandas to detect if data is sorted -
+            you can call DataFrame.index.is_monotonic_increasing on your input DataFrame to see if Pandas believes the data to be sorted
+
+        Returns
+        -------
+        List[Union[VersionedItem, DataError]]
+            List of versioned items. i-th entry corresponds to i-th element of `append_payloads`.
+            Each result correspond to a structure containing metadata and version number of the affected
+            symbol in the store. If any internal exception is raised, a DataError object is returned, with symbol,
+            error_code, error_category, and exception_string properties.
+
+        Raises
+        ------
+        ArcticDuplicateSymbolsInBatchException
+            When duplicate symbols appear in payload.
+        ArcticUnsupportedDataTypeException
+            If data that is not of NormalizableType appears in any of the payloads.
+        """
+
+        self._raise_if_duplicate_symbols_in_batch(append_payloads)
+        self._raise_if_unsupported_type_in_write_batch(append_payloads)
+        throw_on_missing_version = False
+
+        return self._nvs._batch_append_to_versioned_items(
+            [p.symbol for p in append_payloads],
+            [p.data for p in append_payloads],
+            [p.metadata for p in append_payloads],
+            prune_previous_version=prune_previous_versions,
+            validate_index=validate_index,
+            throw_on_missing_version=throw_on_missing_version,
         )
 
     def update(

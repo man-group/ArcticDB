@@ -1141,7 +1141,7 @@ class NativeVersionStore:
         pickle_on_failure : `Optional[bool]`, default=None
             Pickle results if normalization fails. Uses library default if left as None.
         validate_index: bool, default=False
-            If True, will verify for each entry in the batch hat the index of `data` supports date range searches and update operations.
+            If set to True, it will verify for each entry in the batch whether the index of the data supports date range searches and update operations.
             This in effect tests that the data is sorted in ascending order. ArcticDB relies on Pandas to detect if data is sorted -
             you can call DataFrame.index.is_monotonic_increasing on your input DataFrame to see if Pandas believes the data to be sorted
         kwargs :
@@ -1286,7 +1286,7 @@ class NativeVersionStore:
         prune_previous_version : `Optional[bool]`, default=None
             Remove previous versions from version list. Uses library default if left as None.
         validate_index: bool, default=False
-            If True, will verify for each entry in the batch hat the index of `data` supports date range searches and update operations.
+            If set to True, it will verify for each entry in the batch whether the index of the data supports date range searches and update operations.
             This in effect tests that the data is sorted in ascending order. ArcticDB relies on Pandas to detect if data is sorted -
             you can call DataFrame.index.is_monotonic_increasing on your input DataFrame to see if Pandas believes the data to be sorted
         kwargs :
@@ -1303,8 +1303,28 @@ class NativeVersionStore:
         UnsortedDataException
             If data is unsorted, when validate_index is set to True.
         """
+        throw_on_missing_version = True
         _check_batch_kwargs(NativeVersionStore.batch_append, NativeVersionStore.append, kwargs)
+        return self._batch_append_to_versioned_items(
+            symbols,
+            data_vector,
+            metadata_vector,
+            prune_previous_version,
+            validate_index,
+            throw_on_missing_version,
+            **kwargs,
+        )
 
+    def _batch_append_to_versioned_items(
+        self,
+        symbols,
+        data_vector,
+        metadata_vector,
+        prune_previous_version,
+        validate_index,
+        throw_on_missing_version,
+        **kwargs,
+    ):
         for symbol in symbols:
             self.check_symbol_validity(symbol)
 
@@ -1336,10 +1356,26 @@ class NativeVersionStore:
         udms = [info[0] for info in normalized_infos]
         items = [info[1] for info in normalized_infos]
         norm_metas = [info[2] for info in normalized_infos]
+
+        write_if_missing = kwargs.get("write_if_missing", True)
+
         cxx_versioned_items = self.version_store.batch_append(
-            symbols, items, norm_metas, udms, prune_previous_version, validate_index
+            symbols,
+            items,
+            norm_metas,
+            udms,
+            prune_previous_version,
+            validate_index,
+            write_if_missing,
+            throw_on_missing_version,
         )
-        return [self._convert_thin_cxx_item_to_python(v) for v in cxx_versioned_items]
+        append_results = []
+        for result in cxx_versioned_items:
+            if isinstance(result, DataError):
+                append_results.append(result)
+            else:
+                append_results.append(self._convert_thin_cxx_item_to_python(result))
+        return append_results
 
     def batch_restore_version(
         self, symbols: List[str], as_ofs: Optional[List[VersionQueryInput]] = None, **kwargs
