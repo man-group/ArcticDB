@@ -82,13 +82,16 @@ class CompileProto(Command):
                 f"protobuf=={proto_ver}.*",
             )
             env = {**os.environ, "PYTHONPATH": pythonpath, "PYTHONNOUSERSITE": "1"}
+            # Using protoc of grpcio-tools installed in the environment from PyPI.
+            cmd = [sys.executable, "-mgrpc_tools.protoc", "-Icpp/proto", "--python_out=" + version_output_dir]
         else:
-            # grpcio-tools is already installed in the conda environment (see environment.yml)
+            # grpcio-tools and protobuf already are installed in the conda environment (see environment.yml)
+            # Using protoc installed in the conda environment from conda-forge.
             env = {**os.environ}
+            cmd = ["protoc", "-Icpp/proto", "--python_out=" + version_output_dir]
 
         # Compile
         os.makedirs(version_output_dir, exist_ok=True)
-        cmd = [sys.executable, "-mgrpc_tools.protoc", "-Icpp/proto", "--python_out=" + version_output_dir]
         _log_and_run(*cmd, *glob.glob(os.path.normpath("cpp/proto/arcticc/pb2/*.proto")), env=env)
 
         shutil.rmtree(pythonpath)
