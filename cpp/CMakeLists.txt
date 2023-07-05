@@ -27,15 +27,21 @@ if(WIN32)
     # We always generate the debug info on Windows since those are not in the final .dll.
     # sccache needs the /Z7 format, but the linker will still produce .pdb files.
     # Guide to MSVC compilation warnings https://learn.microsoft.com/en-us/cpp/error-messages/compiler-warnings/compiler-warnings-c4000-through-c4199?view=msvc-170
-    set(CMAKE_CXX_FLAGS "/DWIN32 /D_WINDOWS /GR /EHsc /bigobj /Z7 /w /wd4244 /wd4267")
-    set(CMAKE_CXX_FLAGS_RELEASE "/MT /DNDEBUG")
-    set(CMAKE_CXX_FLAGS_DEBUG "/MTd /RTC1")
+    if(${ARCTICDB_USING_CONDA})
+        set(CMAKE_CXX_FLAGS "/DWIN32 /D_WINDOWS /GR /EHsc /bigobj /Z7 /w /wd4244 /wd4267 /MP")
+        set(CMAKE_CXX_FLAGS_RELEASE "/MD /DNDEBUG")
+        set(CMAKE_CXX_FLAGS_DEBUG "/MD")
 
-    # `RelWithDebInfo` is used for conda-forge builds.
-    # The default for `CMAKE_CXX_FLAGS_RELWITHDEBINFO` is `/MD /Zi /O2 /Ob1 /DNDEBUG`.
-    # We don't want /Zi, because it uses .pdb files instead
-    # which are not distributed by some libraries like folly.
-    set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "/MD /O2 /Ob1 /DNDEBUG")
+        # `RelWithDebInfo` is used for conda-forge builds.
+        # The default for `CMAKE_CXX_FLAGS_RELWITHDEBINFO` is `/MD /Zi /O2 /Ob1 /DNDEBUG`.
+        # We don't want /Zi, because it uses .pdb files instead
+        # which are not distributed by some libraries like folly.
+        set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "/MD /Ob1 /DNDEBUG")
+    else()
+        set(CMAKE_CXX_FLAGS "/DWIN32 /D_WINDOWS /GR /EHsc /bigobj /Z7 /w /wd4244 /wd4267")
+        set(CMAKE_CXX_FLAGS_RELEASE "/MT /DNDEBUG")
+        set(CMAKE_CXX_FLAGS_DEBUG "/MTd /RTC1")
+    endif()
 else()
     if(${ARCTICDB_USING_CONDA})
         set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wextra")

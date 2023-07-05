@@ -60,7 +60,7 @@
     {
       "name": "windows",
       "hidden": true,
-      "generator": "Ninja",
+      "generator": "Visual Studio 17 2022",
       "environment": {"cmakepreset_expected_host_system": "Windows"}
     },
     {
