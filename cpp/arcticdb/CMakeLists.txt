@@ -766,7 +766,7 @@ if(${TEST})
     else()
         set(COMMON_PUBLIC_TEST_LIBRARIES
                 arcticdb_core_static
-                libatomic.a  # Otherwise gtest_discover_tests cannot run the test if libatomic is not in a standard location
+                atomic
                 GTest::gtest
                 GTest::gmock
                 Python::Python # + pybind11::pybind11 (transitively included) = pybind11::embed, but latter is sometimes not found...
