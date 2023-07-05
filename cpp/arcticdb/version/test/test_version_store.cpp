@@ -8,6 +8,7 @@
 #include <gtest/gtest.h>
 
 #include <arcticdb/version/version_store_api.hpp>
+#include <arcticdb/storage/library.hpp>
 #include <arcticdb/storage/open_mode.hpp>
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/storage/lmdb/lmdb_storage.hpp>
@@ -16,11 +17,11 @@
 #include <arcticdb/util/test/generators.hpp>
 #include <arcticdb/util/allocator.hpp>
 #include <arcticdb/codec/default_codecs.hpp>
+
 #include <filesystem>
 #include <chrono>
 #include <thread>
 #include <folly/futures/Barrier.h>
-#include <arcticdb/util/test/gtest_utils.hpp>
 
 struct VersionStoreTest : arcticdb::TestStore {
 protected:
@@ -48,7 +49,7 @@ auto write_version_frame(
     auto wrapper = get_test_simple_frame(stream_id, rows, start_val);
     auto& frame = wrapper.frame_;
     auto store = pvs._test_get_store();
-    auto var_key = write_frame(pk, std::move(frame), slicing, store, de_dup_map).get();
+    auto var_key = write_frame(std::move(pk), std::move(frame), slicing, store, de_dup_map).get();
     auto key = to_atom(var_key); // Moves
     if (update_version_map) {
         pvs._test_get_version_map()->write_version(store, key);
@@ -174,8 +175,8 @@ TEST_F(VersionStoreTest, SortMerge) {
 
     for (auto i = 0; i < 10; ++i) {
         auto wrapper = SinkWrapper(symbol, {
-            scalar_field_proto(DataType::UINT64, "thing1"),
-            scalar_field_proto(DataType::UINT64,  "thing2")
+            scalar_field(DataType::UINT64, "thing1"),
+            scalar_field(DataType::UINT64,  "thing2")
         });
 
         for(auto j = 0; j < 20; ++j ) {
@@ -211,10 +212,10 @@ TEST_F(VersionStoreTest, CompactIncompleteDynamicSchema) {
 
     for (size_t i = 0; i < 10; ++i) {
         auto wrapper = SinkWrapper(symbol, {
-            scalar_field_proto(DataType::UINT64, "thing1"),
-            scalar_field_proto(DataType::UINT64, "thing2"),
-            scalar_field_proto(DataType::UINT64, "thing3"),
-            scalar_field_proto(DataType::UINT64, "thing4")
+            scalar_field(DataType::UINT64, "thing1"),
+            scalar_field(DataType::UINT64, "thing2"),
+            scalar_field(DataType::UINT64, "thing3"),
+            scalar_field(DataType::UINT64, "thing4")
         });
 
         for(size_t j = 0; j < 20; ++j ) {
@@ -297,7 +298,6 @@ TEST_F(VersionStoreTest, GetIncompleteSymbols) {
 }
 
 TEST_F(VersionStoreTest, StressBatchWrite) {
-    SKIP_WIN("Works OK but fills up LMDB");
     using namespace arcticdb;
     using namespace arcticdb::storage;
     using namespace arcticdb::stream;
@@ -320,7 +320,7 @@ TEST_F(VersionStoreTest, StressBatchWrite) {
         frames.push_back(wrapper.frame_);
     }
 
-    test_store_->batch_write_internal(version_ids, symbols, frames, dedup_maps, false);
+    folly::collect(test_store_->batch_write_internal(version_ids, symbols, std::move(frames), dedup_maps, false)).get();
 }
 
 TEST_F(VersionStoreTest, StressBatchReadUncompressed) {
@@ -429,11 +429,11 @@ TEST(VersionStore, UpdateWithin) {
     size_t num_rows{100};
     size_t start_val{0};
 
-    std::vector<FieldDescriptor::Proto> fields{
-        scalar_field_proto(DataType::UINT8, "thing1"),
-        scalar_field_proto(DataType::UINT8, "thing2"),
-        scalar_field_proto(DataType::UINT16, "thing3"),
-        scalar_field_proto(DataType::UINT16, "thing4")
+    std::vector<FieldRef> fields{
+        scalar_field(DataType::UINT8, "thing1"),
+        scalar_field(DataType::UINT8, "thing2"),
+        scalar_field(DataType::UINT16, "thing3"),
+        scalar_field(DataType::UINT16, "thing4")
     };
 
     auto test_frame =  get_test_frame<stream::TimeseriesIndex>(symbol, fields, num_rows, start_val);
@@ -471,11 +471,11 @@ TEST(VersionStore, UpdateBefore) {
     size_t num_rows{100};
     size_t start_val{10};
 
-    std::vector<FieldDescriptor::Proto> fields{
-        scalar_field_proto(DataType::UINT8, "thing1"),
-        scalar_field_proto(DataType::UINT8, "thing2"),
-        scalar_field_proto(DataType::UINT16, "thing3"),
-        scalar_field_proto(DataType::UINT16, "thing4")
+    std::vector<FieldRef> fields{
+        scalar_field(DataType::UINT8, "thing1"),
+        scalar_field(DataType::UINT8, "thing2"),
+        scalar_field(DataType::UINT16, "thing3"),
+        scalar_field(DataType::UINT16, "thing4")
     };
 
     auto test_frame =  get_test_frame<stream::TimeseriesIndex>(symbol, fields, num_rows, start_val);
@@ -513,11 +513,11 @@ TEST(VersionStore, UpdateAfter) {
     size_t num_rows{100};
     size_t start_val{0};
 
-    std::vector<FieldDescriptor::Proto> fields{
-        scalar_field_proto(DataType::UINT8, "thing1"),
-        scalar_field_proto(DataType::UINT8, "thing2"),
-        scalar_field_proto(DataType::UINT16, "thing3"),
-        scalar_field_proto(DataType::UINT16, "thing4")
+    std::vector<FieldRef> fields{
+        scalar_field(DataType::UINT8, "thing1"),
+        scalar_field(DataType::UINT8, "thing2"),
+        scalar_field(DataType::UINT16, "thing3"),
+        scalar_field(DataType::UINT16, "thing4")
     };
 
     auto test_frame =  get_test_frame<stream::TimeseriesIndex>(symbol, fields, num_rows, start_val);
@@ -555,11 +555,11 @@ TEST(VersionStore, UpdateIntersectBefore) {
     size_t num_rows{100};
     size_t start_val{5};
 
-    std::vector<FieldDescriptor::Proto> fields{
-        scalar_field_proto(DataType::UINT8, "thing1"),
-        scalar_field_proto(DataType::UINT8, "thing2"),
-        scalar_field_proto(DataType::UINT16, "thing3"),
-        scalar_field_proto(DataType::UINT16, "thing4")
+    std::vector<FieldRef> fields{
+        scalar_field(DataType::UINT8, "thing1"),
+        scalar_field(DataType::UINT8, "thing2"),
+        scalar_field(DataType::UINT16, "thing3"),
+        scalar_field(DataType::UINT16, "thing4")
     };
 
     auto test_frame = get_test_frame<stream::TimeseriesIndex>(symbol, fields, num_rows, start_val);
@@ -599,11 +599,11 @@ TEST(VersionStore, UpdateIntersectAfter) {
     size_t num_rows{100};
     size_t start_val{0};
 
-    std::vector<FieldDescriptor::Proto> fields{
-        scalar_field_proto(DataType::UINT8, "thing1"),
-        scalar_field_proto(DataType::UINT8, "thing2"),
-        scalar_field_proto(DataType::UINT16, "thing3"),
-        scalar_field_proto(DataType::UINT16, "thing4")
+    std::vector<FieldRef> fields{
+        scalar_field(DataType::UINT8, "thing1"),
+        scalar_field(DataType::UINT8, "thing2"),
+        scalar_field(DataType::UINT16, "thing3"),
+        scalar_field(DataType::UINT16, "thing4")
     };
 
     auto test_frame = get_test_frame<stream::TimeseriesIndex>(symbol, fields, num_rows, start_val);
@@ -643,11 +643,11 @@ TEST(VersionStore, UpdateWithinSchemaChange) {
     size_t num_rows{100};
     size_t start_val{0};
 
-    std::vector<FieldDescriptor::Proto> fields{
-        scalar_field_proto(DataType::UINT8, "thing1"),
-        scalar_field_proto(DataType::UINT8, "thing2"),
-        scalar_field_proto(DataType::UINT16, "thing3"),
-        scalar_field_proto(DataType::UINT16, "thing4")
+    std::vector<FieldRef> fields{
+        scalar_field(DataType::UINT8, "thing1"),
+        scalar_field(DataType::UINT8, "thing2"),
+        scalar_field(DataType::UINT16, "thing3"),
+        scalar_field(DataType::UINT16, "thing4")
     };
 
     auto test_frame = get_test_frame<stream::TimeseriesIndex>(symbol, fields, num_rows, start_val);
@@ -657,11 +657,11 @@ TEST(VersionStore, UpdateWithinSchemaChange) {
     RowRange update_range{10, 15};
     size_t update_val{1};
 
-    std::vector<FieldDescriptor::Proto> update_fields{
-        scalar_field_proto(DataType::UINT8, "thing1"),
-        scalar_field_proto(DataType::UINT8, "thing2"),
-        scalar_field_proto(DataType::UINT16, "thing3"),
-        scalar_field_proto(DataType::UINT16, "thing5")
+    std::vector<FieldRef> update_fields{
+        scalar_field(DataType::UINT8, "thing1"),
+        scalar_field(DataType::UINT8, "thing2"),
+        scalar_field(DataType::UINT16, "thing3"),
+        scalar_field(DataType::UINT16, "thing5")
     };
 
     auto update_frame = get_test_frame<stream::TimeseriesIndex>(symbol, update_fields, update_range.diff(), update_range.first, update_val);
@@ -705,11 +705,11 @@ TEST(VersionStore, UpdateWithinTypeAndSchemaChange) {
     size_t num_rows{100};
     size_t start_val{0};
 
-    std::vector<FieldDescriptor::Proto> fields{
-        scalar_field_proto(DataType::UINT8, "thing1"),
-        scalar_field_proto(DataType::UINT8, "thing2"),
-        scalar_field_proto(DataType::UINT16, "thing3"),
-        scalar_field_proto(DataType::UINT16, "thing4")
+    std::vector<FieldRef> fields{
+        scalar_field(DataType::UINT8, "thing1"),
+        scalar_field(DataType::UINT8, "thing2"),
+        scalar_field(DataType::UINT16, "thing3"),
+        scalar_field(DataType::UINT16, "thing4")
     };
 
     auto test_frame = get_test_frame<stream::TimeseriesIndex>(symbol, fields, num_rows, start_val);
@@ -718,11 +718,11 @@ TEST(VersionStore, UpdateWithinTypeAndSchemaChange) {
     RowRange update_range{10, 15};
     size_t update_val{1};
 
-    std::vector<FieldDescriptor::Proto> update_fields{
-        scalar_field_proto(DataType::UINT8, "thing1"),
-        scalar_field_proto(DataType::UINT16, "thing2"),
-        scalar_field_proto(DataType::UINT32, "thing3"),
-        scalar_field_proto(DataType::UINT32, "thing5")
+    std::vector<FieldRef> update_fields{
+        scalar_field(DataType::UINT8, "thing1"),
+        scalar_field(DataType::UINT16, "thing2"),
+        scalar_field(DataType::UINT32, "thing3"),
+        scalar_field(DataType::UINT32, "thing5")
     };
 
     auto update_frame = get_test_frame<stream::TimeseriesIndex>(symbol, update_fields, update_range.diff(), update_range.first, update_val);
@@ -765,19 +765,18 @@ TEST(VersionStore, TestWriteAppendMapHead) {
     auto version_store = get_test_engine();
     size_t num_rows{100};
 
-    std::vector<FieldDescriptor> fields{
-        FieldDescriptor{ scalar_field_proto(DataType::UINT8, "thing1") },
-        FieldDescriptor{ scalar_field_proto(DataType::UINT8, "thing2") },
-        FieldDescriptor{ scalar_field_proto(DataType::UINT16, "thing3") },
-        FieldDescriptor{scalar_field_proto(DataType::UINT16, "thing4") }
+    std::vector<FieldRef> fields{
+        scalar_field(DataType::UINT8, "thing1"),
+        scalar_field(DataType::UINT8, "thing2"),
+        scalar_field(DataType::UINT16, "thing3"),
+        scalar_field(DataType::UINT16, "thing4")
     };
 
     auto key = atom_key_builder().version_id(0).creation_ts(PilotedClock::nanos_since_epoch()).content_hash(0).build(symbol, KeyType::APPEND_DATA);
 
-    auto descriptor = StreamDescriptor{symbol, IndexDescriptor{1u, IndexDescriptor::TIMESTAMP}, fields_proto_from_range(fields)};
-    stream::write_head(version_store._test_get_store(), key, num_rows);
-    auto [next_key, total_rows] = stream::read_head(version_store._test_get_store(), symbol);
+    auto descriptor = StreamDescriptor{symbol, IndexDescriptor{1u, IndexDescriptor::TIMESTAMP}, std::make_shared<FieldCollection>(fields_from_range(fields))};
+    write_head(version_store._test_get_store(), key, num_rows);
+    auto [next_key, total_rows] = read_head(version_store._test_get_store(), symbol);
     ASSERT_EQ(next_key, key);
     ASSERT_EQ(total_rows, num_rows);
 }
-

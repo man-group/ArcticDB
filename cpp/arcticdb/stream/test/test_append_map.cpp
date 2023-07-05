@@ -11,12 +11,13 @@
 #include <arcticdb/stream/append_map.hpp>
 #include <arcticdb/async/task_scheduler.hpp>
 #include <arcticdb/storage/test/in_memory_store.hpp>
+#include <arcticdb/entity/merge_descriptors.hpp>
 #include <arcticdb/pipeline/read_frame.hpp>
 
 TEST(Append, Simple) {
     using namespace arcticdb;
-    using namespace arcticdb::stream;
     using namespace arcticdb::pipelines;
+
     auto store = std::make_shared<InMemoryStore>();
     StreamId stream_id{"test_append"};
     auto wrapper = get_test_simple_frame(stream_id, 10, 0);
@@ -31,7 +32,7 @@ TEST(Append, Simple) {
     pipeline_context->fetch_index_.flip();
     async::TaskScheduler scheduler{5};
 
-    pipeline_context->slice_and_keys_ = arcticdb::stream::get_incomplete(store, stream_id, range, 0, false, false);
+    pipeline_context->slice_and_keys_ = arcticdb::get_incomplete(store, stream_id, range, 0, false, false);
     generate_filtered_field_descriptors(pipeline_context, {});
 
     SegmentInMemory allocated_frame = allocate_frame(pipeline_context);
@@ -44,36 +45,40 @@ TEST(Append, MergeDescriptorsPromote) {
     StreamId id{"test_desc"};
     IndexDescriptor idx{1u, IndexDescriptor::TIMESTAMP};
 
-    std::vector<FieldDescriptor> fields {
-        FieldDescriptor{scalar_field_proto(DataType::MICROS_UTC64, "time")},
-        FieldDescriptor{scalar_field_proto(DataType::INT8, "int8")},
-        FieldDescriptor{scalar_field_proto(DataType::INT16, "int16")},
-        FieldDescriptor{scalar_field_proto(DataType::UINT8, "uint8")},
-        FieldDescriptor{scalar_field_proto(DataType::UINT16, "uint16")}
+    std::vector<FieldRef> fields {
+        scalar_field(DataType::MICROS_UTC64, "time"),
+        scalar_field(DataType::INT8, "int8"),
+        scalar_field(DataType::INT16, "int16"),
+        scalar_field(DataType::UINT8, "uint8"),
+        scalar_field(DataType::UINT16, "uint16")
     };
 
     StreamDescriptor original{
-        id, idx, fields_proto_from_range(fields)
+        id, idx, std::make_shared<FieldCollection>(fields_from_range(fields))
     };
 
-    std::vector<std::vector<FieldDescriptor>> new_fields {{
-        FieldDescriptor{scalar_field_proto(DataType::MICROS_UTC64, "time")},
-        FieldDescriptor{scalar_field_proto(DataType::INT16, "int8")},
-        FieldDescriptor{scalar_field_proto(DataType::INT32, "int16")},
-        FieldDescriptor{scalar_field_proto(DataType::UINT16, "uint8")},
-        FieldDescriptor{scalar_field_proto(DataType::UINT32, "uint16")}
-    }};
+    auto get_new_fields = [] () {
+        std::vector<std::vector<FieldRef>> new_fields {{
+            scalar_field(DataType::MICROS_UTC64, "time"),
+            scalar_field(DataType::INT16, "int8"),
+            scalar_field(DataType::INT32, "int16"),
+            scalar_field(DataType::UINT16, "uint8"),
+            scalar_field(DataType::UINT32, "uint16")
+        }};
+        return new_fields;
+    };
 
-    auto new_desc = stream::merge_descriptors(original, { fields_proto_from_range(new_fields[0]) }, std::vector<std::string>{});
-    auto new_proto = fields_proto_from_range(new_fields[0]);
-    google::protobuf::util::MessageDifferencer diff;
-    auto result = std::equal(std::begin(new_desc.fields()), std::end(new_desc.fields()), std::begin(new_proto), std::end(new_proto), [&diff]
+    std::vector<std::shared_ptr<FieldCollection>> new_desc_fields;
+    new_desc_fields.emplace_back(std::make_shared<FieldCollection>(fields_from_range(get_new_fields()[0])));
+    auto new_desc = merge_descriptors(original, std::move(new_desc_fields), std::vector<std::string>{});
+    new_desc_fields.emplace_back(std::make_shared<FieldCollection>(fields_from_range(get_new_fields()[0])));
+
+    auto result = std::equal(std::begin(new_desc.fields()), std::end(new_desc.fields()), std::begin(*new_desc_fields[0]), std::end(*new_desc_fields[0]), []
         (const auto& left, const auto& right) {
-        return diff.Compare(left, right);
+        return left == right;
     });
     ASSERT_EQ(result, true);
 }
-
 
 TEST(Append, MergeDescriptorsNoPromote) {
     using namespace arcticdb;
@@ -81,31 +86,32 @@ TEST(Append, MergeDescriptorsNoPromote) {
     StreamId id{"test_desc"};
     IndexDescriptor idx{1u, IndexDescriptor::TIMESTAMP};
 
-    std::vector<FieldDescriptor> fields {
-        FieldDescriptor{scalar_field_proto(DataType::MICROS_UTC64, "time")},
-        FieldDescriptor{scalar_field_proto(DataType::INT8, "int8")},
-        FieldDescriptor{scalar_field_proto(DataType::INT16, "int16")},
-        FieldDescriptor{scalar_field_proto(DataType::UINT8, "uint8")},
-        FieldDescriptor{scalar_field_proto(DataType::UINT16, "uint16")}
+    std::vector<FieldRef> fields {
+        scalar_field(DataType::MICROS_UTC64, "time"),
+        scalar_field(DataType::INT8, "int8"),
+        scalar_field(DataType::INT16, "int16"),
+        scalar_field(DataType::UINT8, "uint8"),
+        scalar_field(DataType::UINT16, "uint16")
     };
 
     StreamDescriptor original{
-        id, idx, fields_proto_from_range(fields)
+        id, idx, std::make_shared<FieldCollection>(fields_from_range(fields))
     };
 
-    std::vector<std::vector<FieldDescriptor>> new_fields {{
-      FieldDescriptor{scalar_field_proto(DataType::MICROS_UTC64, "time")},
-      FieldDescriptor{scalar_field_proto(DataType::INT8, "int8")},
-      FieldDescriptor{scalar_field_proto(DataType::INT16, "int16")},
-      FieldDescriptor{scalar_field_proto(DataType::UINT8, "uint8")},
-      FieldDescriptor{scalar_field_proto(DataType::UINT16, "uint16")}
+    std::vector<std::vector<FieldRef>> new_fields {{
+      scalar_field(DataType::MICROS_UTC64, "time"),
+      scalar_field(DataType::INT8, "int8"),
+      scalar_field(DataType::INT16, "int16"),
+      scalar_field(DataType::UINT8, "uint8"),
+      scalar_field(DataType::UINT16, "uint16")
     }};
 
-    auto new_desc = stream::merge_descriptors(original, { fields_proto_from_range(new_fields[0]) }, std::vector<std::string>{});
-    google::protobuf::util::MessageDifferencer diff;
-    auto result = std::equal(std::begin(new_desc.fields()), std::end(new_desc.fields()), std::begin(original), std::end(original), [&diff]
+    std::vector<std::shared_ptr<FieldCollection>> new_desc_fields;
+    new_desc_fields.emplace_back(std::make_shared<FieldCollection>(fields_from_range(new_fields[0])));
+    auto new_desc = merge_descriptors(original, std::move(new_desc_fields), std::vector<std::string>{});
+    auto result = std::equal(std::begin(new_desc.fields()), std::end(new_desc.fields()), std::begin(original), std::end(original), []
     (const auto& left, const auto& right) {
-        return diff.Compare(left, right);
+        return left == right;
     });
     ASSERT_EQ(result, true);
 }

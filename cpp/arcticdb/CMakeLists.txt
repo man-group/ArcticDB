@@ -145,6 +145,17 @@ ENDIF()
 
 set(CMAKE_INSTALL_RPATH "\\$ORIGIN/lib")
 
+if (NOT WIN32)
+    if(NOT ${ARCTICDB_USING_CONDA})
+        # Compilers on conda-forge are relatively strict.
+        # For now, we do not want to treat warnings as errors for those builds.
+        add_compile_options("-Werror")
+    endif()
+    add_compile_options("-ggdb")
+    add_compile_options("-fvisibility=hidden")
+    add_compile_options("-fno-omit-frame-pointer")
+endif ()
+
 ## Core library without python bindings ##
 set(arcticdb_srcs
         # header files
@@ -185,6 +196,7 @@ set(arcticdb_srcs
         entity/types-inl.hpp
         entity/variant_key.hpp
         entity/versioned_item.hpp
+        entity/descriptor_item.hpp
         log/log.hpp
         log/trace.hpp
         pipeline/column_mapping.hpp
@@ -220,7 +232,7 @@ set(arcticdb_srcs
         processing/processing_segment.hpp
         processing/bucketizer.hpp
         processing/clause.hpp
-        processing/execution_context.hpp
+        processing/expression_context.hpp
         processing/expression_node.hpp
         storage/common.hpp
         storage/config_resolvers.hpp
@@ -245,6 +257,7 @@ set(arcticdb_srcs
         storage/storage_factory.hpp
         storage/storage_options.hpp
         storage/storage.hpp
+        storage/storage_override.hpp
         storage/store.hpp
         storage/variant_storage.hpp
         stream/aggregator.hpp
@@ -313,6 +326,7 @@ set(arcticdb_srcs
         util/variant.hpp
         version/de_dup_map.hpp
         version/op_log.hpp
+        version/schema_checks.hpp
         version/snapshot.hpp
         version/version_constants.hpp
         version/version_core.hpp
@@ -333,12 +347,15 @@ set(arcticdb_srcs
         codec/codec.cpp
         codec/encoding_sizes.cpp
         codec/segment.cpp
+        codec/variant_encoded_field_collection.cpp
         column_store/chunked_buffer.cpp
         column_store/column.cpp
         column_store/memory_segment_impl.cpp
         column_store/memory_segment_impl.cpp
         column_store/string_pool.cpp
+        entity/field_collection.cpp
         entity/key.cpp
+        entity/merge_descriptors.cpp
         entity/metrics.cpp
         entity/performance_tracing.cpp
         entity/types.cpp
@@ -403,9 +420,7 @@ set(arcticdb_srcs
         version/version_core.cpp
         version/version_store_api.cpp
         version/version_utils.cpp
-        version/symbol_list.cpp
-        version/schema_checks.hpp
-        )
+        version/symbol_list.cpp)
 
 # Exclude vendored sources when using conda.
 if(NOT ${ARCTICDB_USING_CONDA})
@@ -563,17 +578,6 @@ target_link_libraries(arcticdb_core PRIVATE
 
 GENERATE_EXPORT_HEADER(arcticdb_core)
 
-if (NOT WIN32)
-    if(NOT ${ARCTICDB_USING_CONDA})
-        # Compilers on conda-forge are relatively strict.
-        # For now, we do not want to treat warnings as errors for those builds.
-        add_compile_options("-Werror")
-    endif()
-    add_compile_options("-ggdb")
-    add_compile_options("-fvisibility=hidden")
-    add_compile_options("-fno-omit-frame-pointer")
-endif ()
-
 ## Core python bindings, private only ##
 set(arcticdb_python_srcs
         async/python_bindings.cpp
@@ -588,7 +592,6 @@ add_library(arcticdb_python STATIC ${arcticdb_python_srcs})
 
 target_link_libraries(arcticdb_python
         PUBLIC
-        #tsan
         arcticdb_core_static
         ${AWSSDK_LINK_LIBRARIES}
         )
@@ -631,7 +634,6 @@ endif()
 
 target_link_libraries(arcticdb_ext
         PUBLIC
-        #tsan
         PRIVATE
         arcticdb_python
         ${additional_link_flags}
@@ -743,6 +745,7 @@ if(${TEST})
     set(EXECUTABLE_PERMS OWNER_WRITE OWNER_READ OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE) # 755
 
     add_executable(test_unit_arcticdb ${unit_test_srcs})
+
     install(TARGETS test_unit_arcticdb RUNTIME
                 DESTINATION .
                 PERMISSIONS ${EXECUTABLE_PERMS}
@@ -763,7 +766,7 @@ if(${TEST})
     else()
         set(COMMON_PUBLIC_TEST_LIBRARIES
                 arcticdb_core_static
-                libatomic.a  # Otherwise gtest_discover_tests cannot run the test if libatomic is not in a standard location
+                atomic
                 GTest::gtest
                 GTest::gmock
                 Python::Python # + pybind11::pybind11 (transitively included) = pybind11::embed, but latter is sometimes not found...
@@ -792,7 +795,7 @@ if(${TEST})
                 )
     endif()
 
-    gtest_discover_tests(test_unit_arcticdb PROPERTIES DISCOVERY_TIMEOUT 30)
+    gtest_discover_tests(test_unit_arcticdb PROPERTIES DISCOVERY_TIMEOUT 60)
 
     set(rapidcheck_srcs
             column_store/test/rapidcheck_column_store.cpp
@@ -837,5 +840,5 @@ if(${TEST})
             )
     endif()
 
-    gtest_discover_tests(arcticdb_rapidcheck_tests PROPERTIES DISCOVERY_TIMEOUT 30)
+    gtest_discover_tests(arcticdb_rapidcheck_tests PROPERTIES DISCOVERY_TIMEOUT 60)
 endif()

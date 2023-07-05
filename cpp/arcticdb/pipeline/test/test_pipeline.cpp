@@ -95,7 +95,7 @@ struct TestProjection {
 
     SegmentInMemory operator()(SegmentInMemory segment) {
         auto desc = segment.descriptor();
-        auto fd = scalar_field_proto(TDT::DataTypeTag::data_type, field_name_);
+        auto fd = scalar_field(TDT::DataTypeTag::data_type, field_name_);
         desc.add_field(fd);
         auto col_index = segment.add_column(fd, 0, false);
         auto& column = segment.column(col_index);
@@ -119,20 +119,21 @@ struct TestAggregation {
 
     SegmentInMemory operator()(SegmentInMemory input) {
         auto index_field_count = input.descriptor().index().field_count();
-        StreamDescriptor desc{input.descriptor().id(), input.descriptor().index(), {}};
-        for(auto i = 0u; i < index_field_count; ++i)
-            desc.add_field(input.descriptor().fields(i));
+        StreamDescriptor desc{input.descriptor().id(), input.descriptor().index()};
+        for(auto i = 0u; i < index_field_count; ++i) {
+            const auto& field = input.descriptor().fields(i);
+            desc.add_field(FieldRef{field.type(), field.name()});
+        }
 
         const auto& agg_field_pos = input.descriptor().find_field(field_name_);
         if(!agg_field_pos)
             util::raise_rte("Field {} not found in aggregation", field_name_);
 
-        auto agg_field = input.descriptor().field(agg_field_pos.value());
-        google::protobuf::util::MessageDifferencer diff;
-        if(std::find_if(desc.fields().begin(), desc.fields().end(), [&agg_field, &diff] (const auto& field) {
-            return diff.Compare(agg_field, field);
+        const auto& agg_field = input.descriptor().field(agg_field_pos.value());
+        if(std::find_if(desc.fields().begin(), desc.fields().end(), [&agg_field] (const auto& field) {
+            return agg_field == field;
         }) == desc.fields().end())
-            desc.add_field(agg_field);
+            desc.add_field(FieldRef{agg_field.type(), agg_field.name()});
 
         SegmentInMemory output{StreamDescriptor{std::move(desc)}};
         for(const auto& row : input) {
@@ -161,7 +162,7 @@ TEST(Pipeline, Basic) {
     };
 
     auto agg = get_test_aggregator(std::move(commit_func), "test", {
-        FieldDescriptor{scalar_field_proto(DataType::UINT64, "uint64")}
+        scalar_field(DataType::UINT64, "uint64")
     });
 
     const size_t NumTests = 100;
@@ -218,5 +219,5 @@ TEST(Pipeline, Basic) {
     auto fut = pipeline.run(std::move(seg));
     auto output = std::move(fut).get();
     ASSERT_EQ(output.row_count(), 5);
-
 }
+

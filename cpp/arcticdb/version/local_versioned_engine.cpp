@@ -26,8 +26,9 @@
 namespace arcticdb::version_store {
 
 LocalVersionedEngine::LocalVersionedEngine(
-        const std::shared_ptr<storage::Library>& library) :
-    store_(std::make_shared<async::AsyncStore<util::SysClock>>(library, codec::default_lz4_codec())),
+        const std::shared_ptr<storage::Library>& library,
+        const std::optional<std::string>& license_key ARCTICDB_UNUSED) :
+    store_(std::make_shared<async::AsyncStore<util::SysClock>>(library, codec::default_lz4_codec(), encoding_version(library->config()))),
     symbol_list_(std::make_shared<SymbolList>(version_map_)){
     configure(library->config());
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Created versioned engine at {} for library path {}  with config {}", uintptr_t(this),
@@ -213,7 +214,7 @@ std::optional<VersionedItem> LocalVersionedEngine::get_specific_version(
     auto key = ::arcticdb::get_specific_version(store(), version_map(), stream_id, version_id, opt_true(version_query.skip_compat_),
                                                    opt_true(version_query.iterate_on_failure_));
     if (!key) {
-        log::version().warn("Version {} for symbol {} is missing, checking snapshots (this can be slow)", version_id, stream_id);
+        ARCTICDB_DEBUG(log::version(), "Version {} for symbol {} is missing, checking snapshots:", version_id, stream_id);
         auto index_keys = get_index_keys_in_snapshots(store(), stream_id);
         auto index_key = std::find_if(index_keys.begin(), index_keys.end(), [version_id](const AtomKey& k) {
             return k.version_id() == version_id;
@@ -337,30 +338,93 @@ std::pair<VersionedItem, FrameAndDescriptor> LocalVersionedEngine::read_datafram
     return std::make_pair(version.value_or(VersionedItem{}), std::move(frame_and_descriptor));
 }
 
-std::pair<VersionedItem, std::optional<google::protobuf::Any>> LocalVersionedEngine::read_descriptor_version_internal(
-        const StreamId& stream_id,
-        const VersionQuery& version_query
-    ) {
-    ARCTICDB_SAMPLE(ReadDescriptor, 0)
+folly::Future<DescriptorItem> LocalVersionedEngine::get_descriptor(
+    AtomKey&& key){
+    return store()->read(key)
+    .thenValue([](auto&& key_seg_pair) -> DescriptorItem {
+        auto key_seg = std::move(std::get<0>(key_seg_pair));
+        auto seg = std::move(std::get<1>(key_seg_pair));
+        auto timeseries_descriptor = seg.has_metadata() ? std::make_optional<google::protobuf::Any>(*seg.metadata()) : std::nullopt;
+        auto start_index = seg.column(position_t(index::Fields::start_index)).type().visit_tag([&](auto column_desc_tag) -> std::optional<NumericIndex> {
+            using ColumnDescriptorType = std::decay_t<decltype(column_desc_tag)>;
+            using ColumnTagType =  typename ColumnDescriptorType::DataTypeTag;
+            if (seg.row_count() == 0) {
+                return std::nullopt;
+            } else if constexpr (is_numeric_type(ColumnTagType::data_type)) {
+                std::optional<NumericIndex> start_index;
+                auto column_data = seg.column(position_t(index::Fields::start_index)).data();
+                while (auto block = column_data.template next<ColumnDescriptorType>()) {
+                    auto ptr = reinterpret_cast<const NumericIndex *>(block.value().data());
+                    const auto row_count = block.value().row_count();
+                    for (auto i = 0u; i < row_count; ++i) {
+                        auto value = *ptr++;
+                        start_index = start_index.has_value() ? std::min(start_index.value(), value) : value; 
+                    }
+                }
+                return start_index;
+            } else {
+                util::raise_rte("Unsupported index type {}", seg.column(position_t(index::Fields::start_index)).type());
+            }
+        });
 
-    auto version = get_version_to_read(stream_id, version_query);
-    missing_data::check<ErrorCode::E_NO_SUCH_VERSION>(static_cast<bool>(version),
-        "Unable to retrieve descriptor data. {}@{}: version not found", stream_id, version_query);
-
-    auto metadata_proto = store()->read_metadata(version->key_).get().second;
-    return std::pair{version.value(), metadata_proto};
+        auto end_index = seg.column(position_t(index::Fields::end_index)).type().visit_tag([&](auto column_desc_tag) -> std::optional<NumericIndex> {
+            using ColumnDescriptorType = std::decay_t<decltype(column_desc_tag)>;
+            using ColumnTagType =  typename ColumnDescriptorType::DataTypeTag;
+            if (seg.row_count() == 0) {
+                return std::nullopt;
+            } else if constexpr (is_numeric_type(ColumnTagType::data_type)) {
+                std::optional<NumericIndex> end_index;
+                auto column_data = seg.column(position_t(index::Fields::end_index)).data();
+                while (auto block = column_data.template next<ColumnDescriptorType>()) {
+                    auto ptr = reinterpret_cast<const NumericIndex *>(block.value().data());
+                    const auto row_count = block.value().row_count();
+                    for (auto i = 0u; i < row_count; ++i) {
+                        auto value = *ptr++;
+                        end_index = end_index.has_value() ? std::max(end_index.value(), value) : value; 
+                    }
+                }
+                return end_index;
+            } else {
+                util::raise_rte("Unsupported index type {}", seg.column(position_t(index::Fields::end_index)).type());
+            }
+        });
+        return DescriptorItem{std::move(to_atom(key_seg)), std::move(start_index), std::move(end_index), std::move(timeseries_descriptor)};
+    });
 }
 
-std::vector<std::pair<VersionedItem, std::optional<google::protobuf::Any>>> LocalVersionedEngine::batch_read_descriptor_internal(
-        const std::vector<StreamId>& stream_ids,
-        const std::vector<VersionQuery>& version_queries) {
-    std::vector<folly::Future<std::pair<VersionedItem, std::optional<google::protobuf::Any>>>> results_fut;
-    for (size_t idx=0; idx < stream_ids.size(); idx++) {
-        auto version_query = version_queries.size() > idx ? version_queries[idx] : VersionQuery{};
-        results_fut.push_back(read_descriptor_version_internal(stream_ids[idx],
-                                                              version_query));
+folly::Future<DescriptorItem> LocalVersionedEngine::get_descriptor_async(
+    folly::Future<std::optional<AtomKey>>&& version_fut,
+    const StreamId& stream_id,
+    const VersionQuery& version_query){
+    return  std::move(version_fut)
+    .thenValue([this, &stream_id, &version_query](std::optional<AtomKey>&& key){
+        missing_data::check<ErrorCode::E_NO_SUCH_VERSION>(key.has_value(),
+        "Unable to retrieve descriptor data. {}@{}: version not found", stream_id, version_query);
+        return get_descriptor(std::move(key.value()));
+    }).via(&async::cpu_executor());
+}
+
+DescriptorItem LocalVersionedEngine::read_descriptor_internal(
+    const StreamId& stream_id,
+    const VersionQuery& version_query
+    ) {
+    ARCTICDB_SAMPLE(ReadDescriptor, 0)
+    auto version = get_version_to_read(stream_id, version_query);
+    missing_data::check<ErrorCode::E_NO_SUCH_VERSION>(version.has_value(),
+        "Unable to retrieve descriptor data. {}@{}: version not found", stream_id, version_query);
+    return get_descriptor(std::move(version->key_)).get();
+}
+
+std::vector<DescriptorItem> LocalVersionedEngine::batch_read_descriptor_internal(
+    const std::vector<StreamId>& stream_ids,
+    const std::vector<VersionQuery>& version_queries) {
+    auto versions_fut = batch_get_versions_async(store(), version_map(), stream_ids, version_queries);
+    std::vector<folly::Future<DescriptorItem>> fut_vec;
+    for(const auto& stream_id : folly::enumerate(stream_ids)) {
+        fut_vec.push_back(
+            get_descriptor_async(std::move(versions_fut[stream_id.index]), *stream_id, version_queries[stream_id.index]));
     }
-    return folly::collect(results_fut).get();
+    return folly::collect(fut_vec).get();
 }
 
 void LocalVersionedEngine::flush_version_map() {
@@ -416,13 +480,15 @@ VersionedItem LocalVersionedEngine::sort_index(const StreamId& stream_id, bool d
     }
 
     auto total_rows = adjust_slice_rowcounts(slice_and_keys);
-    auto index = index_type_from_descriptor(index_segment_reader.tsd().stream_descriptor());
+
+    auto index = index_type_from_descriptor(index_segment_reader.tsd().as_stream_descriptor());
     bool bucketize_dynamic = index_segment_reader.bucketize_dynamic();
-    auto time_series = make_descriptor(
+    auto time_series = make_timeseries_descriptor(
         total_rows,
-        StreamDescriptor{std::move(*index_segment_reader.mutable_tsd().mutable_stream_descriptor())},
-        *index_segment_reader.mutable_tsd().mutable_normalization(),
-        std::move(*index_segment_reader.mutable_tsd().mutable_user_meta()),
+        StreamDescriptor{index_segment_reader.mutable_tsd().as_stream_descriptor()},
+        std::move(*index_segment_reader.mutable_tsd().mutable_proto().mutable_normalization()),
+        std::move(*index_segment_reader.mutable_tsd().mutable_proto().mutable_user_meta()),
+        std::nullopt,
         std::nullopt,
         bucketize_dynamic);
 
@@ -562,11 +628,11 @@ VersionedItem LocalVersionedEngine::write_versioned_dataframe_internal(
     }
 }
 
-std::pair<VersionedItem, arcticdb::proto::descriptors::TimeSeriesDescriptor> LocalVersionedEngine::restore_version(
+std::pair<VersionedItem, TimeseriesDescriptor> LocalVersionedEngine::restore_version(
     const StreamId& stream_id,
     const VersionQuery& version_query
     ) {
-    ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: res    tore_version");
+    ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: restore_version");
     auto version_to_restore = get_version_to_read(stream_id, version_query);
     missing_data::check<ErrorCode::E_NO_SUCH_VERSION>(static_cast<bool>(version_to_restore),
                                                  "Unable to restore {}@{}: version not found", stream_id, version_query);
@@ -594,7 +660,7 @@ std::pair<VersionedItem, std::vector<AtomKey>> LocalVersionedEngine::write_indiv
     };
 
     auto frame_slice = FrameSlice{segment};
-    auto descriptor = get_timeseries_descriptor(segment.descriptor(), segment.row_count(), std::nullopt, {});
+    auto descriptor = make_timeseries_descriptor(segment.row_count(),segment.descriptor().clone(), {}, std::nullopt,std::nullopt, std::nullopt, false);
     auto key = store_->write(pk, std::move(segment)).get();
     std::vector sk{SliceAndKey{frame_slice, to_atom(key)}};
     auto index_key_fut = index::write_index(index, std::move(descriptor), std::move(sk), IndexPartialKey{stream_id, version_id}, store_);
@@ -792,19 +858,19 @@ void LocalVersionedEngine::delete_trees_responsibly(
 void LocalVersionedEngine::remove_incomplete(
     const StreamId& stream_id
     ) {
-    stream::remove_incomplete_segments(store_, stream_id);
+    remove_incomplete_segments(store_, stream_id);
 }
 
 std::set<StreamId> LocalVersionedEngine::get_incomplete_symbols() {
-    return stream::get_incomplete_symbols(store_);
+    return ::arcticdb::get_incomplete_symbols(store_);
 }
 
 std::set<StreamId> LocalVersionedEngine::get_incomplete_refs() {
-    return stream::get_incomplete_refs(store_);
+    return ::arcticdb::get_incomplete_refs(store_);
 }
 
 std::set<StreamId> LocalVersionedEngine::get_active_incomplete_refs() {
-    return stream::get_active_incomplete_refs(store_);
+    return ::arcticdb::get_active_incomplete_refs(store_);
 }
 
 void LocalVersionedEngine::push_incompletes_to_symbol_list(const std::set<StreamId>& incompletes) {
@@ -818,19 +884,19 @@ void LocalVersionedEngine::push_incompletes_to_symbol_list(const std::set<Stream
 void LocalVersionedEngine::append_incomplete_frame(
     const StreamId& stream_id,
     InputTensorFrame&& frame) const {
-    arcticdb::stream::append_incomplete(store_, stream_id, std::move(frame));
+    arcticdb::append_incomplete(store_, stream_id, std::move(frame));
 }
 
 void LocalVersionedEngine::append_incomplete_segment(
     const StreamId& stream_id,
     SegmentInMemory &&seg) {
-    arcticdb::stream::append_incomplete_segment(store_, stream_id, std::move(seg));
+    arcticdb::append_incomplete_segment(store_, stream_id, std::move(seg));
 }
 
 void LocalVersionedEngine::write_parallel_frame(
     const StreamId& stream_id,
     InputTensorFrame&& frame) const {
-    stream::write_parallel(store_, stream_id, std::move(frame));
+    write_parallel(store_, stream_id, std::move(frame));
 }
 
 VersionedItem LocalVersionedEngine::compact_incomplete_dynamic(
@@ -890,8 +956,9 @@ folly::Future<std::pair<VersionedItem, FrameAndDescriptor>> async_read_direct(
     std::shared_ptr<BufferHolder> buffers,
     const ReadOptions& read_options) {
     auto index_segment_reader = std::make_shared<index::IndexSegmentReader>(std::move(index_segment));
+
     check_column_and_date_range_filterable(*index_segment_reader, read_query);
-    auto pipeline_context = std::make_shared<PipelineContext>(StreamDescriptor{*index_segment_reader->mutable_tsd().mutable_stream_descriptor()});
+    auto pipeline_context = std::make_shared<PipelineContext>(StreamDescriptor{index_segment_reader->tsd().as_stream_descriptor()});
     pipeline_context->set_selected_columns(read_query.columns);
     const bool dynamic_schema = opt_false(read_options.dynamic_schema_);
     const bool bucketize_dynamic = index_segment_reader->bucketize_dynamic();
@@ -947,7 +1014,7 @@ std::vector<std::pair<VersionedItem, FrameAndDescriptor>> LocalVersionedEngine::
     std::vector<ReadQuery> &read_queries,
     const ReadOptions &read_options) {
     py::gil_scoped_release release_gil;
-    auto versions = batch_get_versions(store(), version_map(), stream_ids, version_queries);
+    auto versions = batch_get_versions_async(store(), version_map(), stream_ids, version_queries);
     std::vector<folly::Future<std::pair<VersionedItem, FrameAndDescriptor>>> output;
     for (auto &&version : folly::enumerate(versions)) {
         auto read_query = read_queries.empty() ? ReadQuery{} : read_queries[version.index];
@@ -974,7 +1041,7 @@ std::vector<std::pair<VersionedItem, FrameAndDescriptor>> LocalVersionedEngine::
     const ReadOptions& read_options) {
 
     if(std::none_of(std::begin(read_queries), std::end(read_queries), [] (const auto& read_query) {
-        return !read_query.query_->empty();
+        return !read_query.clauses_.empty();
     })) {
         return temp_batch_read_internal_direct(stream_ids, version_queries, read_queries, read_options);
     }
@@ -991,10 +1058,33 @@ std::vector<std::pair<VersionedItem, FrameAndDescriptor>> LocalVersionedEngine::
     return folly::collect(results_fut).get();
 }
 
-std::vector<AtomKey> LocalVersionedEngine::batch_write_internal(
+folly::Future<VersionedItem> LocalVersionedEngine::write_index_key_to_version_map_async(
+    const std::shared_ptr<VersionMap> &version_map,
+    const AtomKey&& index_key,
+    const UpdateInfo& stream_update_info,
+    bool prune_previous_versions) {
+
+    folly::Future<folly::Unit> write_version_fut;
+
+    if(prune_previous_versions) {
+        write_version_fut = async::submit_io_task(WriteAndPrunePreviousTask{store(), version_map, index_key, stream_update_info.previous_index_key_});
+    } else {
+        write_version_fut = async::submit_io_task(WriteVersionTask{store(), version_map, index_key});
+    }
+
+    return std::move(write_version_fut)
+    .then([this, index_key = std::move(index_key)](auto &&) mutable {
+        return async::submit_io_task(WriteSymbolTask(store(), symbol_list_ptr(), index_key.id()))
+        .then([index_key = std::move(index_key)](auto &&) mutable {
+            return VersionedItem(std::move(index_key));
+        });
+    });
+}
+
+std::vector<folly::Future<AtomKey>> LocalVersionedEngine::batch_write_internal(
     std::vector<VersionId> version_ids,
     const std::vector<StreamId>& stream_ids,
-    std::vector<InputTensorFrame> frames,
+    std::vector<InputTensorFrame>&& frames,
     std::vector<std::shared_ptr<DeDupMap>> de_dup_maps,
     bool validate_index
 ) {
@@ -1012,9 +1102,64 @@ std::vector<AtomKey> LocalVersionedEngine::batch_write_internal(
             validate_index
         ));
     }
-    return folly::collect(results_fut).get();
+    return results_fut;
 }
 
+VersionIdAndDedupMapInfo LocalVersionedEngine::create_version_id_and_dedup_map(
+    const version_store::UpdateInfo&& update_info, 
+    const StreamId& stream_id, 
+    const WriteOptions& write_options){
+    if(cfg().write_options().de_duplication()) {
+        return VersionIdAndDedupMapInfo{update_info.next_version_id_, get_de_dup_map(stream_id, update_info.previous_index_key_, write_options), std::move(update_info)};
+    } else {
+        return VersionIdAndDedupMapInfo{update_info.next_version_id_, std::make_shared<DeDupMap>(), std::move(update_info)};
+    }
+}
+
+std::vector<VersionedItem> LocalVersionedEngine::batch_write_versioned_dataframe_internal(
+    const std::vector<StreamId>& stream_ids,
+    std::vector<InputTensorFrame>&& frames,
+    bool prune_previous_versions,
+    bool validate_index
+) {
+    auto write_options = get_write_options();
+    auto update_info_futs = batch_get_latest_undeleted_version_and_next_version_id_async(store(),
+                                                                                               version_map(),
+                                                                                               stream_ids);
+    internal::check<ErrorCode::E_ASSERTION_FAILURE>(stream_ids.size() == update_info_futs.size(), "stream_ids and update_info_futs must be of the same size");
+    std::vector<folly::Future<VersionedItem>> version_futures;
+    for(auto&& update_info_fut : folly::enumerate(update_info_futs)) {
+        auto idx = update_info_fut.index;
+        version_futures.push_back(std::move(*update_info_fut)
+            .thenValue([this, &stream_id = stream_ids[idx], &write_options, idx](auto&& update_info){
+                return create_version_id_and_dedup_map(std::move(update_info), stream_id, write_options);
+            }).via(&async::cpu_executor())
+            .thenValue([this, &stream_id = stream_ids[idx], &write_options, &validate_index, &frame = frames[idx]](
+                auto&& version_id_and_dedup_map){
+                    auto& [version_id, de_dup_map, update_info] = version_id_and_dedup_map;
+                    ARCTICDB_SAMPLE(WriteDataFrame, 0)
+                    ARCTICDB_DEBUG(log::version(), "Writing dataframe for stream id {}", stream_id);
+                    auto write_fut = async_write_dataframe_impl( store(),
+                        version_id,
+                        std::move(frame),
+                        write_options,
+                        de_dup_map,
+                        false,
+                        validate_index
+                    );
+                    return std::move(write_fut)
+                    .thenValue([update_info = std::move(update_info)](auto&& index_key) mutable {
+                        return IndexKeyAndUpdateInfo{std::move(index_key), std::move(update_info)};
+                    });
+            })
+            .thenValue([this, &prune_previous_versions](auto&& index_key_and_update_info){
+                auto& [index_key, update_info] = index_key_and_update_info;
+                return write_index_key_to_version_map_async(version_map(), std::move(index_key), update_info, prune_previous_versions);
+            })
+        );
+    }
+    return folly::collect(version_futures).get();
+}
 
 
 VersionedItem LocalVersionedEngine::append_internal(
@@ -1126,7 +1271,7 @@ std::map<StreamId, VersionVectorType> get_multiple_sym_versions_from_query(
     return sym_versions;
 }
 
-std::vector<std::pair<VersionedItem, arcticdb::proto::descriptors::TimeSeriesDescriptor>> LocalVersionedEngine::batch_restore_version_internal(
+std::vector<std::pair<VersionedItem, TimeseriesDescriptor>> LocalVersionedEngine::batch_restore_version_internal(
     const std::vector<StreamId>& stream_ids,
     const std::vector<VersionQuery>& version_queries) {
     util::check(stream_ids.size() == version_queries.size(), "Symbol vs version query size mismatch: {} != {}", stream_ids.size(), version_queries.size());
@@ -1134,7 +1279,7 @@ std::vector<std::pair<VersionedItem, arcticdb::proto::descriptors::TimeSeriesDes
     util::check(sym_versions.size() == version_queries.size(), "Restore versions requires specific version to be supplied");
     auto previous = batch_get_latest_version(store(), version_map(), stream_ids, false);
     auto versions_to_restore = batch_get_specific_version(store(), version_map(), sym_versions);
-    std::vector<folly::Future<std::pair<VersionedItem, arcticdb::proto::descriptors::TimeSeriesDescriptor>>> fut_vec;
+    std::vector<folly::Future<std::pair<VersionedItem, TimeseriesDescriptor>>> fut_vec;
 
     for(const auto& stream_id : folly::enumerate(stream_ids)) {
         auto prev = previous->find(*stream_id);
@@ -1199,7 +1344,7 @@ SpecificAndLatestVersionKeys LocalVersionedEngine::get_stream_index_map(
 }
 
 folly::Future<std::pair<std::optional<VariantKey>, std::optional<google::protobuf::Any>>> LocalVersionedEngine::get_metadata(
-    std::optional<AtomKey> key){
+    std::optional<AtomKey>&& key){
     if (key.has_value()){
         return store()->read_metadata(key.value());
     }else{
@@ -1210,8 +1355,8 @@ folly::Future<std::pair<std::optional<VariantKey>, std::optional<google::protobu
 folly::Future<std::pair<std::optional<VariantKey>, std::optional<google::protobuf::Any>>> LocalVersionedEngine::get_metadata_async(
     folly::Future<std::optional<AtomKey>>&& version_fut){
     return  std::move(version_fut)
-    .thenValue([this](std::optional<AtomKey> key){
-        return get_metadata(key);
+    .thenValue([this](std::optional<AtomKey>&& key){
+        return get_metadata(std::move(key));
     });
 }
 
@@ -1219,7 +1364,7 @@ std::vector<std::pair<std::optional<VariantKey>, std::optional<google::protobuf:
     const std::vector<StreamId>& stream_ids,
     const std::vector<VersionQuery>& version_queries
     ) {
-    auto versions_fut = batch_get_versions(store(), version_map(), stream_ids, version_queries);
+    auto versions_fut = batch_get_versions_async(store(), version_map(), stream_ids, version_queries);
     std::vector<folly::Future<std::pair<std::optional<VariantKey>, std::optional<google::protobuf::Any>>>> fut_vec;
     for (auto&& version: versions_fut){
         fut_vec.push_back(get_metadata_async(std::move(version)));
@@ -1233,7 +1378,7 @@ std::pair<std::optional<VariantKey>, std::optional<google::protobuf::Any>> Local
     ) {
     auto version = get_version_to_read(stream_id, version_query);
     std::optional<AtomKey> key = version.has_value() ? std::make_optional<AtomKey>(version->key_) : std::nullopt;
-    return get_metadata(key).get();
+    return get_metadata(std::move(key)).get();
 }
 
 
@@ -1290,7 +1435,7 @@ void LocalVersionedEngine::configure(const storage::LibraryDescriptor::VariantSt
 }
 
 timestamp LocalVersionedEngine::latest_timestamp(const std::string& symbol) {
-    if(auto latest_incomplete = stream::latest_incomplete_timestamp(store(), symbol); latest_incomplete)
+    if(auto latest_incomplete = latest_incomplete_timestamp(store(), symbol); latest_incomplete)
         return latest_incomplete.value();
 
     if(auto latest_key = get_latest_version(symbol, VersionQuery{}); latest_key)
@@ -1310,7 +1455,7 @@ std::unordered_map<KeyType, std::pair<size_t, size_t>> LocalVersionedEngine::sca
         pair.first = keys.size();
         std::vector<stream::StreamSource::ReadContinuation> continuations;
         std::atomic<size_t> key_size{0};
-        for(auto&& key : keys) {
+        for(auto&& key ARCTICDB_UNUSED : keys) {
             continuations.emplace_back([&key_size] (auto&& ks) {
                 auto key_seg = std::move(ks);
                 key_size += key_seg.segment().total_segment_size();
@@ -1337,10 +1482,10 @@ WriteOptions LocalVersionedEngine::get_write_options() const  {
 
 AtomKey LocalVersionedEngine::_test_write_segment(const std::string& symbol) {
     auto wrapper = SinkWrapper(symbol, {
-        scalar_field_proto(DataType::UINT64, "thing1"),
-        scalar_field_proto(DataType::UINT64, "thing2"),
-        scalar_field_proto(DataType::UINT64, "thing3"),
-        scalar_field_proto(DataType::UINT64, "thing4")
+        scalar_field(DataType::UINT64, "thing1"),
+        scalar_field(DataType::UINT64, "thing2"),
+        scalar_field(DataType::UINT64, "thing3"),
+        scalar_field(DataType::UINT64, "thing4")
     });
 
     for(size_t j = 0; j < 20; ++j ) {

@@ -194,10 +194,10 @@ void fix_normalization_or_throw(
     bool is_append,
     const pipelines::index::IndexSegmentReader &existing_isr,
     const pipelines::InputTensorFrame &new_frame) {
-    auto &old_norm = existing_isr.tsd().normalization();
+    auto &old_norm = existing_isr.tsd().proto().normalization();
     auto &new_norm = new_frame.norm_meta;
 
-    if (check_pandas_like(is_append, old_norm, new_norm, existing_isr.tsd().total_rows()))
+    if (check_pandas_like(is_append, old_norm, new_norm, existing_isr.tsd().proto().total_rows()))
         return;
     if (is_append) {
         if (check_ndarray_append(old_norm, new_norm))

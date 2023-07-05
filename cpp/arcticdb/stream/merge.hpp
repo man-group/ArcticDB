@@ -21,14 +21,14 @@ void do_merge(
 
         agg.start_row(pipelines::index::index_value_from_row(next->row(), IndexDescriptor::TIMESTAMP, 0).value()) ([&next, add_symbol_column](auto &rb) {
             if(add_symbol_column)
-                rb.set_scalar_by_name("symbol", std::string_view(std::get<StringId>(next->id())), make_scalar_type(DataType::UTF_DYNAMIC64));
+                rb.set_scalar_by_name("symbol", std::string_view(std::get<StringId>(next->id())), DataType::UTF_DYNAMIC64);
 
             auto val = next->row().begin();
             std::advance(val, IndexType::field_count());
             for(; val != next->row().end(); ++val) {
                 val->visit_field([&rb] (const auto& opt_v, std::string_view name, const TypeDescriptor& type_desc) {
                     if(opt_v)
-                        rb.set_scalar_by_name(name, opt_v.value(), type_desc);
+                        rb.set_scalar_by_name(name, opt_v.value(), type_desc.data_type());
                 });
             }
         });

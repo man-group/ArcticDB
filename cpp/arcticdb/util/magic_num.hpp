@@ -7,9 +7,10 @@
 
 #pragma  once
 
+#include <arcticdb/util/preconditions.hpp>
+
 #include <cstdint>
 #include <climits>
-#include <arcticdb/util/preconditions.hpp>
 
 namespace arcticdb::util {
 template<char a, char b, char c, char d>
@@ -20,10 +21,6 @@ struct MagicNum {
             c << CHAR_BIT * 2 |
             d << CHAR_BIT * 3;
 
-    MagicNum() : magic_(Magic) {}
-
-    //uint64_t magic() const { return magic_; }
-
     ~MagicNum() {
         magic_ = ~magic_;
     }
@@ -31,7 +28,7 @@ struct MagicNum {
     void check() const { util::check(magic_ == Magic, "Magic number failure, expected {} got {}", Magic, magic_); }
 
   private:
-    volatile uint64_t magic_;
+    volatile uint64_t magic_ = Magic;
 };
 
 template<char a, char b>
@@ -39,8 +36,6 @@ struct SmallMagicNum {
     static constexpr uint16_t Magic =
         a << CHAR_BIT * 0 |
             b << CHAR_BIT * 1;
-
-    SmallMagicNum() : magic_(Magic) {}
 
     ~SmallMagicNum() {
         magic_ = ~magic_;
@@ -51,7 +46,7 @@ struct SmallMagicNum {
     void check() const { util::check(magic_ == Magic, "Magic number failure, expected {} got {}", Magic, magic_); }
 
 private:
-    volatile uint16_t magic_;
+    volatile uint16_t magic_ = Magic;
 };
 
 template <typename MagicNumType>

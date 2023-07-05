@@ -7,16 +7,6 @@
 
 #include <arcticdb/version/version_store_api.hpp>
 
-#include <arcticdb/entity/types.hpp>
-#include <arcticdb/stream/schema.hpp>
-#include <arcticdb/stream/stream_writer.hpp>
-#include <arcticdb/stream/index.hpp>
-#include <arcticdb/util/clock.hpp>
-#include <arcticdb/util/timeouts.hpp>
-#include <arcticdb/util/variant.hpp>
-#include <arcticdb/stream/protobuf_mappings.hpp>
-#include <fmt/format.h>
-#include <pybind11/pybind11.h>
 #include <arcticdb/python/python_utils.hpp>
 #include <arcticdb/async/async_store.hpp>
 #include <arcticdb/version/version_map.hpp>
@@ -27,10 +17,9 @@
 #include <arcticdb/util/ranges_from_future.hpp>
 
 #include <arcticdb/entity/versioned_item.hpp>
+#include <arcticdb/entity/descriptor_item.hpp>
 #include <arcticdb/pipeline/query.hpp>
 #include <arcticdb/pipeline/slicing.hpp>
-
-#include <regex>
 #include <arcticdb/pipeline/input_tensor_frame.hpp>
 #include <arcticdb/util/optional_defaults.hpp>
 #include <arcticdb/python/python_to_tensor_frame.hpp>
@@ -39,6 +28,9 @@
 #include <arcticdb/version/version_map_batch_methods.hpp>
 #include <arcticdb/version/version_utils.hpp>
 #include <arcticdb/pipeline/pipeline_utils.hpp>
+#include <arcticdb/pipeline/frame_utils.hpp>
+
+#include <regex>
 
 namespace arcticdb::version_store {
 
@@ -48,8 +40,8 @@ using namespace arcticdb::storage;
 
 constexpr auto coarse_nano = &util::SysClock::coarse_nanos_since_epoch;
 
-PythonVersionStore::PythonVersionStore(const std::shared_ptr<storage::Library>& library) :
-    LocalVersionedEngine(library) {
+PythonVersionStore::PythonVersionStore(const std::shared_ptr<storage::Library>& library, const std::optional<std::string>& license_key) :
+    LocalVersionedEngine(library, license_key) {
 }
 
 VersionedItem PythonVersionStore::write_dataframe_specific_version(
@@ -95,11 +87,11 @@ std::vector<InputTensorFrame> create_input_tensor_frames(
 
 std::vector<VersionedItem> PythonVersionStore::batch_write_index_keys_to_version_map(
     const std::vector<AtomKey>& index_keys,
-    const std::unordered_map<StreamId, UpdateInfo>& stream_update_info_map,
+    const std::vector<UpdateInfo>& stream_update_info_vector,
     bool prune_previous_versions) {
 
     if(prune_previous_versions)
-        batch_write_and_prune_previous(store(), version_map(), index_keys, stream_update_info_map);
+        batch_write_and_prune_previous(store(), version_map(), index_keys, stream_update_info_vector);
     else
         batch_write_version(store(), version_map(), index_keys);
 
@@ -124,25 +116,8 @@ std::vector<VersionedItem> PythonVersionStore::batch_write(
     bool prune_previous_versions,
     bool validate_index) {
 
-    std::vector<VersionId> version_ids;
-    auto write_options = get_write_options();
-    auto stream_update_info_map = batch_get_latest_undeleted_version_and_next_version_id(store(),
-                                                                                         version_map(),
-                                                                                         stream_ids);
-    std::vector<std::shared_ptr<DeDupMap>> de_dup_maps;
-    for (const auto &stream_id: stream_ids) {
-        const auto& update_info = stream_update_info_map.at(stream_id);
-        version_ids.push_back(update_info.next_version_id_);
-        if(cfg().write_options().de_duplication()) {
-            auto de_dup_map = get_de_dup_map(stream_id, update_info.previous_index_key_, write_options);
-            de_dup_maps.push_back(de_dup_map);
-        } else {
-            de_dup_maps.emplace_back(std::make_shared<DeDupMap>());
-        }
-    }
     auto frames = create_input_tensor_frames(stream_ids, items, norms, user_metas);
-    auto index_keys = batch_write_internal(std::move(version_ids), stream_ids, std::move(frames), std::move(de_dup_maps), validate_index);
-    return batch_write_index_keys_to_version_map(index_keys, stream_update_info_map, prune_previous_versions);
+    return batch_write_versioned_dataframe_internal(stream_ids, std::move(frames), prune_previous_versions, validate_index);
 }
 
 std::vector<VersionedItem> PythonVersionStore::batch_append(
@@ -153,20 +128,20 @@ std::vector<VersionedItem> PythonVersionStore::batch_append(
     bool prune_previous_versions,
     bool validate_index) {
     auto write_options = get_write_options();
-    auto stream_update_info_map = batch_get_latest_undeleted_version_and_next_version_id(store(),
-                                                                                         version_map(),
-                                                                                         stream_ids);
+    auto stream_update_info_vector_fut = batch_get_latest_undeleted_version_and_next_version_id_async(store(),
+                                                                                                      version_map(),
+                                                                                                      stream_ids);
+    
+    auto stream_update_info_vector = folly::collect(stream_update_info_vector_fut).via(&async::io_executor()).get();
     std::vector<VersionId> version_ids;
     std::vector<AtomKey> existing_keys;
-    for (const auto &stream_id: stream_ids) {
-        auto update_info = stream_update_info_map.at(stream_id);
-        util::check(update_info.previous_index_key_.has_value(), "Can't batch append to nonexistent symbol {}", stream_id);
+    for (const auto& update_info: stream_update_info_vector) {
         version_ids.push_back(update_info.next_version_id_);
         existing_keys.push_back(*(update_info.previous_index_key_));
     }
     auto frames = create_input_tensor_frames(stream_ids, items, norms, user_metas);
     auto index_keys = batch_append_internal(std::move(version_ids), stream_ids, std::move(existing_keys), std::move(frames), write_options, validate_index);
-    return batch_write_index_keys_to_version_map(index_keys, stream_update_info_map, prune_previous_versions);
+    return batch_write_index_keys_to_version_map(index_keys, stream_update_info_vector, prune_previous_versions);
 }
 
 void PythonVersionStore::_clear_symbol_list_keys() {
@@ -588,7 +563,7 @@ VersionedItem PythonVersionStore::write_versioned_composite_data(
     }
 
     auto frames = create_input_tensor_frames(sub_keys, items, norm_metas, user_metas);
-    auto index_keys = batch_write_internal(std::move(version_ids), sub_keys, std::move(frames), std::move(de_dup_maps), false);
+    auto index_keys = folly::collect(batch_write_internal(std::move(version_ids), sub_keys, std::move(frames), std::move(de_dup_maps), false)).get();
     auto multi_key = write_multi_index_entry(store(), index_keys, stream_id, metastruct, user_meta, version_id);
     auto versioned_item = VersionedItem(to_atom(multi_key));
     version_map()->write_version(store(), versioned_item.key_);
@@ -758,7 +733,7 @@ FrameAndDescriptor create_frame(const StreamId& target_id, SegmentInMemory seg, 
     seg.unsparsify();
     reduce_and_fix_columns(context, seg, read_options);
     auto norm_meta = make_timeseries_norm_meta(target_id);
-    const auto desc = get_timeseries_descriptor(seg.descriptor(), seg.row_count(), std::nullopt, std::move(norm_meta));
+    const auto desc = make_timeseries_descriptor(seg.row_count(), seg.descriptor().clone(), std::move(norm_meta), std::nullopt, std::nullopt, std::nullopt, false);
     return FrameAndDescriptor{std::move(seg), desc, {}, {}};
 }
 
@@ -865,6 +840,8 @@ void PythonVersionStore::delete_snapshot_sync(const SnapshotId& snap_name, const
     }
 }
 
+namespace {
+
 std::vector<SnapshotVariantKey> ARCTICDB_UNUSED iterate_snapshot_tombstones (
     const std::string& limit_stream_id,
     std::set<IndexTypeKey>& candidates,
@@ -898,6 +875,8 @@ std::vector<SnapshotVariantKey> ARCTICDB_UNUSED iterate_snapshot_tombstones (
     }
     return snap_tomb_keys;
 }
+
+} // namespace
 
 void PythonVersionStore::delete_version(
     const StreamId& stream_id,
@@ -1027,14 +1006,15 @@ std::vector<VersionedItem> PythonVersionStore::batch_write_metadata(
     bool prune_previous_versions) {
     std::vector<std::pair<VersionedItem, py::object>> results;
     std::vector<AtomKey> keys_to_read;
-    auto stream_update_info_map = batch_get_latest_undeleted_version_and_next_version_id(store(),
-                                                                                         version_map(),
-                                                                                         stream_ids);
+    auto stream_update_info_vector_fut = batch_get_latest_undeleted_version_and_next_version_id_async(store(),
+                                                                                                      version_map(),
+                                                                                                      stream_ids);
+    auto stream_update_info_vector = folly::collect(stream_update_info_vector_fut).via(&async::io_executor()).get();
     std::vector<folly::Future<AtomKey>> fut_vec;
     for(const auto& stream_id : folly::enumerate(stream_ids)) {
         arcticdb::proto::descriptors::UserDefinedMetadata user_meta_proto;
         python_util::pb_from_python(user_meta[stream_id.index], user_meta_proto);
-        const auto& update_info = stream_update_info_map.at(*stream_id);
+        const auto& update_info = stream_update_info_vector[stream_id.index];
         util::check(update_info.previous_index_key_.has_value(),
                     "Failed to find latest version to write metadata to for symbol {}",
                     *stream_id);
@@ -1044,7 +1024,7 @@ std::vector<VersionedItem> PythonVersionStore::batch_write_metadata(
     }
     auto index_keys = folly::collect(fut_vec).get();
     if(prune_previous_versions) {
-        batch_write_and_prune_previous(store(), version_map(), index_keys, stream_update_info_map);
+        batch_write_and_prune_previous(store(), version_map(), index_keys, stream_update_info_vector);
     } else {
         batch_write_version(store(), version_map(), index_keys);
     }
@@ -1056,7 +1036,7 @@ std::vector<VersionedItem> PythonVersionStore::batch_write_metadata(
     return output;
 }
 
-std::vector<std::pair<VersionedItem, arcticdb::proto::descriptors::TimeSeriesDescriptor>> PythonVersionStore::batch_restore_version(
+std::vector<std::pair<VersionedItem, TimeseriesDescriptor>> PythonVersionStore::batch_restore_version(
     const std::vector<StreamId>& stream_ids,
     const std::vector<VersionQuery>& version_queries) {
     return batch_restore_version_internal(stream_ids, version_queries);
@@ -1082,40 +1062,18 @@ std::vector<std::pair<VersionedItem, py::object>> PythonVersionStore::batch_read
     return results;
 }
 
-std::pair<VersionedItem, py::object> PythonVersionStore::read_descriptor(
+DescriptorItem PythonVersionStore::read_descriptor(
     const StreamId& stream_id,
     const VersionQuery& version_query
     ) {
-    auto [version, metadata_proto] = read_descriptor_version_internal(stream_id, version_query);
-    py::object pyobj;
-    if (metadata_proto.has_value()) {
-        arcticdb::proto::descriptors::TimeSeriesDescriptor tsd;
-        metadata_proto->UnpackTo(&tsd);
-        pyobj = python_util::pb_to_python(tsd);
-    } else {
-        pyobj = pybind11::none();
-    }
-    return std::make_pair(version, pyobj);
+    return read_descriptor_internal(stream_id, version_query);
 }
 
-std::vector<std::pair<VersionedItem, py::object>> PythonVersionStore::batch_read_descriptor(
+std::vector<DescriptorItem> PythonVersionStore::batch_read_descriptor(
         const std::vector<StreamId>& stream_ids,
         const std::vector<VersionQuery>& version_queries){
     
-    auto vector_descriptors = batch_read_descriptor_internal(stream_ids, version_queries);
-    std::vector<std::pair<VersionedItem, py::object>> output_vector;
-    for (auto [version, metadata_proto] : vector_descriptors) {
-        py::object pyobj;
-        if (metadata_proto.has_value()) {
-            arcticdb::proto::descriptors::TimeSeriesDescriptor tsd;
-            metadata_proto->UnpackTo(&tsd);
-            pyobj = python_util::pb_to_python(tsd);
-        } else {
-            pyobj = pybind11::none();
-        }
-        output_vector.push_back(std::make_pair(version, pyobj));
-    }
-    return output_vector;
+    return batch_read_descriptor_internal(stream_ids, version_queries);
 }
 
 ReadResult PythonVersionStore::read_index(
@@ -1146,7 +1104,7 @@ void PythonVersionStore::compact_library(size_t batch_size) {
 }
 
 std::vector<SliceAndKey> PythonVersionStore::list_incompletes(const StreamId& stream_id) {
-    return stream::get_incomplete(store(), stream_id, unspecified_range(), 0u, true, false);
+    return get_incomplete(store(), stream_id, unspecified_range(), 0u, true, false);
 }
 
 void PythonVersionStore::clear() {

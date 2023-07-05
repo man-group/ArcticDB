@@ -18,17 +18,18 @@
 namespace arcticdb::pipelines::index {
 // TODO: change the name - something like KeysSegmentWriter or KeyAggragator or  better
 template<class Index, std::enable_if_t<InputTensorFrame::is_valid_index_v<Index>, bool> = 0>
-class IndexWriter : boost::noncopyable {
+class IndexWriter {
     // All index segments are row-count indexed in the sense that the keys are
     // already ordered - they don't need an additional index
     using AggregatorIndexType = stream::RowCountIndex;
     using SliceAggregator = stream::Aggregator<AggregatorIndexType, stream::FixedSchema, stream::NeverSegmentPolicy>;
-    using TimeSeriesDescriptor = arcticdb::proto::descriptors::TimeSeriesDescriptor;
     using Desc = stream::IndexSliceDescriptor<AggregatorIndexType>;
 
 public:
-    IndexWriter(std::shared_ptr<stream::StreamSink> sink, IndexPartialKey partial_key, TimeSeriesDescriptor &&meta, const std::optional<KeyType>& key_type = std::nullopt) :
-            bucketize_columns_(meta.has_column_groups() && meta.column_groups().enabled()),
+    ARCTICDB_MOVE_ONLY_DEFAULT(IndexWriter)
+
+    IndexWriter(std::shared_ptr<stream::StreamSink> sink, IndexPartialKey partial_key, TimeseriesDescriptor &&meta, const std::optional<KeyType>& key_type = std::nullopt) :
+            bucketize_columns_(meta.proto().has_column_groups() && meta.proto().column_groups().enabled()),
             partial_key_(std::move(partial_key)),
             meta_(std::move(meta)),
             agg_(Desc::schema(partial_key_.id, bucketize_columns_),
@@ -38,11 +39,12 @@ public:
             stream::NeverSegmentPolicy{}),
             sink_(std::move(sink)),
             key_being_committed_(folly::Future<AtomKey>::makeEmpty()),
-            key_type_(key_type){
-
-        google::protobuf::Any any;
-        any.PackFrom(meta_);
-        agg_.segment().set_metadata(std::move(any));
+            key_type_(key_type) {
+        static const auto encoding = ConfigsMap::instance()->get_int("VersionStore.Encoding", 1);
+        if(encoding == 1) {
+            meta_.copy_to_self_proto();
+        }
+        agg_.segment().set_timeseries_descriptor(std::move(meta_)); //TODO very weird, why this short-lived member?
     }
 
     void add(const arcticdb::entity::AtomKey &key, const FrameSlice &slice) {
@@ -125,7 +127,7 @@ private:
 
     bool bucketize_columns_ = false;
     IndexPartialKey partial_key_;
-    TimeSeriesDescriptor meta_;
+    TimeseriesDescriptor meta_;
     SliceAggregator agg_;
     std::shared_ptr<stream::StreamSink> sink_;
     folly::Future<arcticdb::entity::AtomKey> key_being_committed_;

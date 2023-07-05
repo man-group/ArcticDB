@@ -20,8 +20,8 @@ TEST(InMemory, ReadTwice) {
     size_t start_val{0};
 
     auto version_store = get_test_engine();
-    std::vector<FieldDescriptor::Proto> fields{
-        scalar_field_proto(DataType::UINT8, "thing1"),
+    std::vector<FieldRef> fields{
+        scalar_field(DataType::UINT8, "thing1"),
     };
 
     auto test_frame =  get_test_frame<stream::TimeseriesIndex>(symbol, fields, num_rows, start_val);

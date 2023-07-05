@@ -5,14 +5,16 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+import enum
 from typing import List, Optional
 
 from arcticdb.options import LibraryOptions
-from arcticdb_ext.storage import LibraryManager
+from arcticdb_ext.storage import LibraryManager, StorageOverride
 from arcticdb.version_store.library import Library
 from arcticdb.version_store._store import NativeVersionStore
 from arcticdb.adapters.s3_library_adapter import S3LibraryAdapter
 from arcticdb.adapters.lmdb_library_adapter import LMDBLibraryAdapter
+from arcticdb.encoding_version import EncodingVersion
 
 
 class Arctic:
@@ -23,7 +25,7 @@ class Arctic:
 
     _LIBRARY_ADAPTERS = [S3LibraryAdapter, LMDBLibraryAdapter]
 
-    def __init__(self, uri: str):
+    def __init__(self, uri: str, encoding_version: EncodingVersion = EncodingVersion.V1):
         """
         Initializes a top-level Arctic library management instance.
 
@@ -42,7 +44,7 @@ class Arctic:
             Options is a query string that specifies connection specific options as ``<name>=<value>`` pairs joined with
             ``&``.
 
-            Available options:
+            Available options for S3:
 
             +---------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------+
             | Option                    | Description                                                                                                                                                   |
@@ -61,11 +63,14 @@ class Arctic:
             +---------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------+
             | aws_auth                  | If true, authentication to endpoint will be computed via AWS environment vars/config files. If no options are provided `aws_auth` will be assumed to be true. |
             +---------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------+
+            | force_uri_lib_config      | Override the credentials and endpoint of an S3 storage with the URI of the Arctic object. Use if accessing a replicated (to different region/bucket) library. |
+            +---------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------+
 
             Note: When connecting to AWS, `region` can be automatically deduced from the endpoint if the given endpoint
             specifies the region and `region` is not set.
 
-            The LMDB URI connection scheme has the form ``lmdb:///<path to store LMDB files>``.
+            The LMDB URI connection scheme has the form ``lmdb:///<path to store LMDB files>``. There are no options
+            available for the LMDB URI connection scheme.
 
         Examples
         --------
@@ -88,15 +93,17 @@ class Arctic:
                 f"Invalid URI specified. Please see URI format specification for available formats. uri={uri}"
             )
 
-        self._library_adapter = _cls(uri)
+        self._encoding_version = encoding_version
+        self._library_adapter = _cls(uri, self._encoding_version)
         self._library_manager = LibraryManager(self._library_adapter.config_library)
         self._uri = uri
 
     def __getitem__(self, name: str) -> Library:
+        storage_override = self._library_adapter.get_storage_override()
         lib = NativeVersionStore(
-            self._library_manager.get_library(name),
+            self._library_manager.get_library(name, storage_override),
             repr(self._library_adapter),
-            lib_cfg=self._library_manager.get_library_config(name),
+            lib_cfg=self._library_manager.get_library_config(name, storage_override),
         )
         return Library(repr(self), lib)
 
@@ -173,7 +180,9 @@ class Arctic:
         """
         if not self._library_manager.has_library(name):
             return
-        self._library_adapter.delete_library(self[name], self._library_manager.get_library_config(name))
+        self._library_adapter.delete_library(
+            self[name], self._library_manager.get_library_config(name, StorageOverride())
+        )
         self._library_manager.remove_library_config(name)
 
     def list_libraries(self) -> List[str]:

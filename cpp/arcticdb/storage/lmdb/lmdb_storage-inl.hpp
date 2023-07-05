@@ -102,7 +102,7 @@ template<class Visitor>
     std::vector<VariantKey> failed_reads;
 
     (fg::from(ks.as_range()) | fg::move | fg::groupBy(fmt_db)).foreach([&](auto &&group) {
-        auto db_name = fmt::format("{}", group.key());
+        auto db_name = fmt::format(FMT_COMPILE("{}"), group.key());
         ARCTICDB_SUBSAMPLE(LmdbStorageOpenDb, 0)
         auto dbi = ::lmdb::dbi::open(txn, db_name.data());
         for (auto &k : group.values()) {

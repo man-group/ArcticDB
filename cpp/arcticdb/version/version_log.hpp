@@ -21,7 +21,7 @@ namespace arcticdb {
     using namespace arcticdb::stream;
     // Log events for passive sync
     inline StreamDescriptor log_stream_descriptor(const StreamId& event) {
-        return StreamDescriptor{stream_descriptor(event, RowCountIndex(), {})};
+        return stream_descriptor(event, RowCountIndex(), {});
     };
 
     inline void log_event(const std::shared_ptr<StreamSink>& store, const StreamId& id, std::string action, VersionId version_id=0) {
@@ -65,7 +65,7 @@ namespace arcticdb {
     inline StreamDescriptor ts_stream_descriptor(const StreamId &stream_id) {
         return StreamDescriptor{
             stream_descriptor(stream_id, stream::RowCountIndex(),
-                {scalar_field_proto(DataType::UINT64, "ts")})
+                {scalar_field(DataType::UINT64, "ts")})
         };
     }
 
@@ -75,6 +75,5 @@ namespace arcticdb {
         output.end_row();
         return output;
     }
-;
 
  } //namespace arcticdb

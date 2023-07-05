@@ -62,9 +62,7 @@ TEST(Clause, Partition) {
     Composite<ProcessingSegment> comp;
     comp.push_back(std::move(proc_seg));
 
-    ExecutionContext context{};
-    context.root_node_name_ = ExpressionName("int8");
-    PartitionClause<arcticdb::grouping::HashingGroupers, arcticdb::grouping::ModuloBucketizer> partition{std::make_shared<ExecutionContext>(std::move(context))};
+    PartitionClause<arcticdb::grouping::HashingGroupers, arcticdb::grouping::ModuloBucketizer> partition{"int8"};
 
     auto partitioned = partition.process(empty, std::move(comp));
 
@@ -88,9 +86,7 @@ TEST(Clause, PartitionString) {
     Composite<ProcessingSegment> comp;
     comp.push_back(std::move(proc_seg));
 
-    ExecutionContext context{};
-    context.root_node_name_ = ExpressionName("strings");
-    PartitionClause<arcticdb::grouping::HashingGroupers, arcticdb::grouping::ModuloBucketizer> partition{std::make_shared<ExecutionContext>(std::move(context))};
+    PartitionClause<arcticdb::grouping::HashingGroupers, arcticdb::grouping::ModuloBucketizer> partition{"strings"};
 
     auto partitioned = partition.process(empty, std::move(comp));
 
@@ -146,14 +142,12 @@ TEST(Clause, Split) {
     auto res = split_clause.process(empty, std::move(comp));
     ASSERT_EQ(res.size(), 10);
 
-    std::vector<FieldDescriptor> desc;
+    FieldCollection desc;
     const auto& fields = copied.descriptor().fields();
     auto beg = std::begin(fields);
     std::advance(beg, 1);
     for(auto field = beg; field != std::end(fields); ++field) {
-        FieldDescriptor::Proto proto;
-        proto.CopyFrom(*field);
-        desc.emplace_back(std::move(proto));
+            desc.add_field(field->ref());
     }
 
     SegmentSinkWrapper seg_wrapper(symbol, TimeseriesIndex::default_index(), std::move(desc));
@@ -188,11 +182,9 @@ TEST(Clause, Merge) {
     }
 
     StreamDescriptor descriptor{};
-    descriptor.add_field(scalar_field_proto(DataType::MICROS_UTC64, "time"));
-    ExecutionContext merge_clause_context{};
-    merge_clause_context.set_descriptor(descriptor);
+    descriptor.add_field(FieldRef{make_scalar_type(DataType::MICROS_UTC64),"time"});
     auto stream_id = StreamId("Merge");
-    MergeClause merge_clause{TimeseriesIndex{"time"}, DenseColumnPolicy{}, stream_id, std::make_shared<ExecutionContext>(std::move(merge_clause_context))};
+    MergeClause merge_clause{TimeseriesIndex{"time"}, DenseColumnPolicy{}, stream_id, descriptor};
     std::shared_ptr<Store> empty;
     auto res = merge_clause.process(empty, std::move(comp));
     ASSERT_EQ(res.size(), 4u);

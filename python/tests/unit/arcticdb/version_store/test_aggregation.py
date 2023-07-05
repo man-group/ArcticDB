@@ -11,7 +11,7 @@ import pandas as pd
 from pandas import DataFrame
 
 from arcticdb.version_store.processing import QueryBuilder
-from arcticdb_ext.exceptions import InternalException
+from arcticdb_ext.exceptions import InternalException, SchemaException
 from arcticdb.util.test import assert_frame_equal
 from arcticdb.util.hypothesis import (
     use_of_function_scoped_fixtures_in_hypothesis_checked,
@@ -21,6 +21,24 @@ from arcticdb.util.hypothesis import (
 
 from hypothesis import assume, given, settings
 from hypothesis.extra.pandas import column, data_frames, range_indexes
+
+
+def test_group_on_float_column_with_nans(lmdb_version_store):
+    lib = lmdb_version_store
+    sym = "test_group_on_float_column_with_nans"
+    df = pd.DataFrame(
+        {
+            "grouping_column": [1.0, 2.0, np.nan, 1.0, 2.0, 2.0],
+            "agg_column": [1, 2, 3, 4, 5, 6],
+        }
+    )
+    lib.write(sym, df)
+    expected = df.groupby("grouping_column").agg({"agg_column": "sum"})
+    q = QueryBuilder()
+    q = q.groupby("grouping_column").agg({"agg_column": "sum"})
+    received = lib.read(sym, query_builder=q).data
+    received.sort_index(inplace=True)
+    assert_frame_equal(expected, received)
 
 
 @use_of_function_scoped_fixtures_in_hypothesis_checked
@@ -112,7 +130,7 @@ def test_hypothesis_max_min_agg(lmdb_version_store, df):
     assert_frame_equal(expected, vit.data)
 
 
-def test_sum_aggregation(s3_version_store):
+def test_sum_aggregation(lmdb_version_store):
     df = DataFrame(
         {"grouping_column": ["group_1", "group_1", "group_1", "group_2", "group_2"], "to_sum": [1, 1, 2, 2, 2]},
         index=np.arange(5),
@@ -120,18 +138,19 @@ def test_sum_aggregation(s3_version_store):
     q = QueryBuilder()
     q = q.groupby("grouping_column").agg({"to_sum": "sum"})
     symbol = "test_sum_aggregation"
-    s3_version_store.write(symbol, df)
+    lmdb_version_store.write(symbol, df)
 
-    res = s3_version_store.read(symbol, query_builder=q)
+    res = lmdb_version_store.read(symbol, query_builder=q)
     res.data.sort_index(inplace=True)
 
     df = pd.DataFrame({"to_sum": [4, 4]}, index=["group_1", "group_2"])
     df.index.rename("grouping_column", inplace=True)
+    res.data.sort_index(inplace=True)
 
     assert_frame_equal(res.data, df)
 
 
-def test_mean_aggregation(s3_version_store):
+def test_mean_aggregation(lmdb_version_store):
     df = DataFrame(
         {"grouping_column": ["group_1", "group_1", "group_1", "group_2", "group_2"], "to_mean": [1, 1, 2, 2, 2]},
         index=np.arange(5),
@@ -139,44 +158,23 @@ def test_mean_aggregation(s3_version_store):
     q = QueryBuilder()
     q = q.groupby("grouping_column").agg({"to_mean": "mean"})
     symbol = "test_aggregation"
-    s3_version_store.write(symbol, df)
+    lmdb_version_store.write(symbol, df)
 
-    res = s3_version_store.read(symbol, query_builder=q)
+    res = lmdb_version_store.read(symbol, query_builder=q)
     res.data.sort_index(inplace=True)
 
     df = pd.DataFrame({"to_mean": [4 / 3, 2]}, index=["group_1", "group_2"])
     df.index.rename("grouping_column", inplace=True)
+    res.data.sort_index(inplace=True)
 
     assert_frame_equal(res.data, df)
 
 
-def test_mean_aggregation_float(s3_version_store):
+def test_mean_aggregation_float(lmdb_version_store):
     df = DataFrame(
         {
             "grouping_column": ["group_1", "group_1", "group_1", "group_2", "group_2"],
             "to_mean": [1.1, 1.4, 2.5, 2.2, 2.2],
-        },
-        index=np.arange(5),
-    )
-    q = QueryBuilder()
-    q = q.groupby("grouping_column").agg({"to_mean": "mean"})
-    symbol = "test_aggregation"
-    s3_version_store.write(symbol, df)
-
-    res = s3_version_store.read(symbol, query_builder=q)
-    res.data.sort_index(inplace=True)
-
-    df = pd.DataFrame({"to_mean": [(1.1 + 1.4 + 2.5) / 3, 2.2]}, index=["group_1", "group_2"])
-    df.index.rename("grouping_column", inplace=True)
-
-    assert_frame_equal(res.data, df)
-
-
-def test_mean_aggregation_float_nan(lmdb_version_store):
-    df = DataFrame(
-        {
-            "grouping_column": ["group_1", "group_1", "group_1", "group_2", "group_2"],
-            "to_mean": [1.1, 1.4, 2.5, np.nan, 2.2],
         },
         index=np.arange(5),
     )
@@ -188,8 +186,31 @@ def test_mean_aggregation_float_nan(lmdb_version_store):
     res = lmdb_version_store.read(symbol, query_builder=q)
     res.data.sort_index(inplace=True)
 
+    df = pd.DataFrame({"to_mean": [(1.1 + 1.4 + 2.5) / 3, 2.2]}, index=["group_1", "group_2"])
+    df.index.rename("grouping_column", inplace=True)
+    res.data.sort_index(inplace=True)
+
+    assert_frame_equal(res.data, df)
+
+
+def test_mean_aggregation_float_nan(lmdb_version_store_v2):
+    df = DataFrame(
+        {
+            "grouping_column": ["group_1", "group_1", "group_1", "group_2", "group_2"],
+            "to_mean": [1.1, 1.4, 2.5, np.nan, 2.2],
+        },
+        index=np.arange(5),
+    )
+    q = QueryBuilder()
+    q = q.groupby("grouping_column").agg({"to_mean": "mean"})
+    symbol = "test_aggregation"
+    lmdb_version_store_v2.write(symbol, df)
+
+    res = lmdb_version_store_v2.read(symbol, query_builder=q)
+
     df = pd.DataFrame({"to_mean": [(1.1 + 1.4 + 2.5) / 3, np.nan]}, index=["group_1", "group_2"])
     df.index.rename("grouping_column", inplace=True)
+    res.data.sort_index(inplace=True)
 
     assert_frame_equal(res.data, df)
 
@@ -221,8 +242,8 @@ def test_group_empty_dataframe(lmdb_version_store):
 
     symbol = "test_group_empty_dataframe"
     lmdb_version_store.write(symbol, df)
-    vit = lmdb_version_store.read(symbol, query_builder=q)
-    assert vit.data.empty
+    with pytest.raises(SchemaException):
+        _ = lmdb_version_store.read(symbol, query_builder=q)
 
 
 def test_group_pickled_symbol(lmdb_version_store):
@@ -291,6 +312,48 @@ def test_group_column_splitting_strings(lmdb_version_store_tiny_segment):
     assert_frame_equal(expected, vit.data)
 
 
+def test_aggregation_with_nones_and_nans_in_string_grouping_column(version_store_factory):
+    lib = version_store_factory(column_group_size=2, segment_row_size=2, dynamic_strings=True)
+    symbol = "test_aggregation_with_nones_and_nans_in_string_grouping_column"
+    # Structured so that the row-slices of the grouping column contain:
+    # 1 - All strings
+    # 2 - Strings and Nones
+    # 3 - Strings and NaNs
+    # 4 - All Nones
+    # 5 - All NaNs
+    # 6 - Nones and NaNs
+    df = DataFrame(
+        {
+            "grouping_column": [
+                "group_1",
+                "group_2",
+                "group_1",
+                None,
+                np.nan,
+                "group_2",
+                None,
+                None,
+                np.nan,
+                np.nan,
+                None,
+                np.nan,
+            ],
+            "to_sum": np.arange(12),
+        },
+        index=np.arange(12),
+    )
+    lib.write(symbol, df, dynamic_strings=True)
+
+    expected = df.groupby("grouping_column").agg({"to_sum": "sum"})
+
+    q = QueryBuilder()
+    q = q.groupby("grouping_column").agg({"to_sum": "sum"})
+    res = lib.read(symbol, query_builder=q)
+    res.data.sort_index(inplace=True)
+
+    assert_frame_equal(res.data, expected)
+
+
 def test_docstring_example_query_builder_apply(lmdb_version_store):
     lib = lmdb_version_store
     df = pd.DataFrame(
@@ -334,6 +397,6 @@ def test_docstring_example_query_builder_groupby_max_and_mean(lmdb_version_store
 
     lmdb_version_store.write("symbol", df)
     res = lmdb_version_store.read("symbol", query_builder=q)
-    df = pd.DataFrame({"to_max": [2.5], "to_mean": (1.1 + 1.4 + 2.5) / 3}, index=["group_1"])
+    df = pd.DataFrame({"to_mean": (1.1 + 1.4 + 2.5) / 3, "to_max": [2.5]}, index=["group_1"])
     df.index.rename("grouping_column", inplace=True)
     assert_frame_equal(res.data, df)

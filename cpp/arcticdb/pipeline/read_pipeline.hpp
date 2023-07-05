@@ -128,34 +128,33 @@ inline std::optional<util::BitSet> requested_column_bitset_including_index(const
 }
 
 inline std::optional<util::BitSet> clause_column_bitset(const StreamDescriptor::Proto& desc,
-                                                        const std::shared_ptr<std::vector<Clause>>& clauses) {
-    std::optional<util::BitSet> res;
-    if (clauses) {
-        folly::F14FastSet<std::string_view> column_set;
-        for (const auto& clause: *clauses) {
-            std::shared_ptr<ExecutionContext> execution_context = clause.execution_context();
-            if (execution_context) {
-                for (const auto& column: execution_context->columns_) {
-                    column_set.insert(std::string_view(column));
-                }
+                                                        const std::vector<std::shared_ptr<Clause>>& clauses) {
+    folly::F14FastSet<std::string_view> column_set;
+    for (const auto& clause: clauses) {
+        auto opt_columns = clause->clause_info().input_columns_;
+        if (opt_columns.has_value()) {
+            for (const auto& column: *clause->clause_info().input_columns_) {
+                column_set.insert(std::string_view(column));
             }
         }
-        // If only needed because the hacky clause for head memory usage doesn't specify columns
-        if (!column_set.empty()) {
-            res = build_column_bitset(desc, column_set);
-        }
     }
-    return res;
+    // If only needed because the hacky clause for head memory usage doesn't specify columns
+    if (!column_set.empty()) {
+        return build_column_bitset(desc, column_set);
+    } else {
+        return std::nullopt;
+    }
 }
 
 // Returns std::nullopt if all columns are required, which is the case if requested_columns is std::nullopt
 // Otherwise augment the requested_columns bitset with columns that are required by any of the clauses
 inline std::optional<util::BitSet> overall_column_bitset(const StreamDescriptor::Proto& desc,
-                                                         const std::shared_ptr<std::vector<Clause>>& clauses,
+                                                         const std::vector<std::shared_ptr<Clause>>& clauses,
                                                          const std::optional<util::BitSet>& requested_columns) {
     // std::all_of returns true if the range is empty
-    auto clauses_can_combine_with_column_selection = std::all_of(clauses->begin(), clauses->end(), [](const Clause& clause){
-        return clause.can_combine_with_column_selection();
+    auto clauses_can_combine_with_column_selection = std::all_of(clauses.begin(), clauses.end(),
+                                                                 [](const std::shared_ptr<Clause>& clause){
+        return clause->clause_info().can_combine_with_column_selection_;
     });
     user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
             !requested_columns.has_value() || clauses_can_combine_with_column_selection,
@@ -178,15 +177,13 @@ inline void generate_filtered_field_descriptors(PipelineContext& context, const 
     if (!columns.empty()) {
         std::unordered_set<std::string_view> column_set{std::begin(columns), std::end(columns)};
         
-        context.filter_columns_ = std::make_shared<std::vector<FieldDescriptor::Proto>>();
-        context.filter_columns_->reserve(columns.size());
+        context.filter_columns_ = std::make_shared<FieldCollection>();
         const auto& desc = context.descriptor();
         ARCTICDB_DEBUG(log::version(), "Context descriptor: {}", desc);
-        std::copy_if(desc.fields().begin(), desc.fields().end(),
-                     std::back_inserter(*context.filter_columns_),
-                     [&](auto &field) {
-                         return column_set.find(field.name()) != column_set.end();
-                     });
+        for(const auto& field : desc.fields()) {
+            if(column_set.find(field.name()) != column_set.end())
+                context.filter_columns_->add_field(field.type(), field.name());
+        }
 
         context.filter_columns_set_ = std::unordered_set<std::string_view>{};
         for(const auto& field : *context.filter_columns_)
@@ -209,7 +206,7 @@ inline std::vector<FilterQuery<ContainerType>> get_column_bitset_and_query_funct
     if(!dynamic_schema || column_groups) {
         pipeline_context->set_selected_columns(query.columns);
         pipeline_context->overall_column_bitset_ = overall_column_bitset(pipeline_context->descriptor().proto(),
-                                                                         query.query_,
+                                                                         query.clauses_,
                                                                          pipeline_context->selected_columns_);
     }
     return build_read_query_filters<ContainerType>(pipeline_context->overall_column_bitset_, pipeline_context, query.row_filter, dynamic_schema, column_groups);
