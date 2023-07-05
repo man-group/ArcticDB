@@ -546,7 +546,7 @@ def azurite_container():
 def spawn_azurite(azurite_port):
     if AZURE_SUPPORT:
         temp_folder = tempfile.TemporaryDirectory()
-        try: #Awaiting fix for cleanup in windows file-in-use problem
+        try:  # Awaiting fix for cleanup in windows file-in-use problem
             p = subprocess.Popen(
                 f"azurite --silent --blobPort {azurite_port} --blobHost 127.0.0.1 --queuePort 0 --tablePort 0",
                 cwd=temp_folder.name,
@@ -560,8 +560,8 @@ def spawn_azurite(azurite_port):
                 os.system(f"taskkill /F /PID {p.pid}")
             else:
                 p.kill()
-            temp_folder = None #For cleanup; For an unknown reason somehow using with syntax causes error
-            
+            temp_folder = None  # For cleanup; For an unknown reason somehow using with syntax causes error
+
     else:
         yield
 
