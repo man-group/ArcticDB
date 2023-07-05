@@ -59,6 +59,14 @@ The S3 API supports the `DeleteObjects` method, whereby a single HTTP request ca
 
 The default is 1000.
 
+### S3Storage.VerifySSL
+
+Control whether the client should verify the SSL certificate of the storage. If set, this will override the library option set upon library creation.
+
+Values:
+* 0: Do not perform SSL verification.
+* 1: Perform SSL verification.
+
 ### VersionStore.NumCPUThreads and VersionStore.NumIOThreads
 
 ArcticDB uses two threadpools in order to manage computational resources:
