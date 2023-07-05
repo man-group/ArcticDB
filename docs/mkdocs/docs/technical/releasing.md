@@ -52,3 +52,12 @@ on the `conda-forge` channel for validation](https://conda-forge.org/docs/mainta
 
 Packages are generally available a few dozen minutes after the CI runs' completion
 on `main`.
+
+## 5. Update the BSL conversion table
+
+If you are releasing either a major (e.g. 2.0.0) or a minor (e.g. 1.5.0) release, please update the license conversion schedule tables:
+
+- [in the readme](https://github.com/man-group/ArcticDB/blob/master/README.md)
+- [and in the licensing documentation](https://github.com/man-group/ArcticDB/blob/master/docs/mkdocs/docs/licensing.md)
+
+This is not required if you are releasing a patch release.
