@@ -32,7 +32,7 @@ import pandas as pd
 from datetime import datetime, date, timezone
 import numpy as np
 from arcticdb.util.test import assert_frame_equal
-from numpy import datetime64
+
 
 try:
     from arcticdb.version_store.library import (
@@ -588,8 +588,7 @@ def test_repr(moto_s3_uri_incl_bucket):
     s3_endpoint += f":{port}"
     bucket = moto_s3_uri_incl_bucket.split(":")[-1].split("?")[0]
     assert (
-        repr(lib)
-        == "Library("
+        repr(lib) == "Library("
         "Arctic("
         "config=S3("
         f"endpoint={s3_endpoint}, bucket={bucket})), path=pytest_test_lib, storage=s3_storage)"

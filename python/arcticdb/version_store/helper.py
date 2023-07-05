@@ -239,20 +239,19 @@ def get_s3_proto(
 
 
 def add_s3_library_to_env(
-    cfg,
-    lib_name,
-    env_name,
-    credential_name,
-    credential_key,
-    bucket_name,
-    endpoint,
-    description=None,
-    with_prefix=True,
+    cfg: EnvironmentConfigsMap,
+    lib_name: LibName,
+    env_name: EnvName,
+    credential_name: str,
+    credential_key: str,
+    bucket_name: Optional[str],
+    endpoint: Optional[str],
+    description: Optional[str] = None,
+    with_prefix: Union[str, bool, None] = True,
     is_https=False,
-    region=None,
+    region: Optional[str] = None,
     use_virtual_addressing=False,
 ):
-    # type: (EnvironmentConfigsMap, LibName, EnvName, AnyStr, AnyStr, Optional[AnyStr], Optional[AnyStr], Optional[AnyStr], Optional[AnyStr], bool, Optional[AnyStr], bool)->None
     env = cfg.env_by_id[env_name]
     sid, storage = get_s3_proto(
         cfg=cfg,
@@ -269,35 +268,6 @@ def add_s3_library_to_env(
     )
 
     _add_lib_desc_to_env(env, lib_name, sid, description)
-
-
-def create_test_lmdb_cfg(lib_name: str, db_dir: str, lmdb_config: Dict[str, Any] = {}):
-    cfg = EnvironmentConfigsMap()
-    add_lmdb_library_to_env(cfg, lib_name=lib_name, env_name=Defaults.ENV, db_dir=db_dir, lmdb_config=lmdb_config)
-    return cfg
-
-
-def create_test_s3_cfg(
-    lib_name: str,
-    credential_name: str,
-    credential_key: str,
-    bucket_name: str,
-    endpoint: str,
-    *,
-    with_prefix: Union[str, bool, None] = True,
-) -> EnvironmentConfigsMap:
-    cfg = EnvironmentConfigsMap()
-    add_s3_library_to_env(
-        cfg,
-        lib_name=lib_name,
-        env_name=Defaults.ENV,
-        credential_name=credential_name,
-        credential_key=credential_key,
-        bucket_name=bucket_name,
-        endpoint=endpoint,
-        with_prefix=with_prefix,
-    )
-    return cfg
 
 
 def create_test_memory_cfg(lib_name=Defaults.LIB, description=None):

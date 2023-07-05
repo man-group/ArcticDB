@@ -18,11 +18,9 @@ from datetime import datetime
 from typing import Optional, Any, Dict
 
 from arcticdb.arctic import Arctic
-from arcticdb.version_store.helper import create_test_lmdb_cfg, create_test_mongo_cfg
-from arcticdb.version_store import NativeVersionStore
 from arcticdb.util.test import configure_test_logger
 from arcticdb.version_store._normalization import MsgPackNormalizer
-from tests.util.storage_fixtures import MotoS3StorageFixtureFactory, _version_store_factory_impl
+from tests.util.storage_fixtures import MotoS3StorageFixtureFactory, LmdbStorageFixture, _version_store_factory_impl
 
 
 configure_test_logger()
@@ -43,12 +41,18 @@ def s3_bucket(s3_storage_factory):
         yield f
 
 
+@pytest.fixture
+def _lmdb_storage(tmpdir):
+    with LmdbStorageFixture(tmpdir) as f:
+        yield f
+
+
 @pytest.fixture(scope="function", params=("S3", "LMDB"))
-def arctic_client(request, s3_bucket, tmpdir, encoding_version):
+def arctic_client(request, s3_bucket, _lmdb_storage, encoding_version):
     if request.param == "S3":
         ac = Arctic(s3_bucket.get_arctic_uri(), encoding_version)
     elif request.param == "LMDB":
-        ac = Arctic(f"lmdb://{tmpdir}", encoding_version)
+        ac = Arctic(_lmdb_storage.get_arctic_uri(), encoding_version)
     else:
         raise NotImplementedError()
 
@@ -84,7 +88,7 @@ def encoding_version(request) -> EncodingVersion:
 
 
 @pytest.fixture
-def version_store_factory(lib_name, tmpdir):
+def version_store_factory(lib_name, _lmdb_storage):
     """Factory to create any number of distinct LMDB libs with the given WriteOptions or VersionStoreConfig.
 
     Accepts legacy options col_per_group and row_per_segment.
@@ -92,48 +96,7 @@ def version_store_factory(lib_name, tmpdir):
     The values in `lmdb_config` populates the `LmdbConfig` Protobuf that creates the `Library` in C++. On Windows, it
     can be used to override the `map_size`.
     """
-    used: Dict[str, NativeVersionStore] = {}
-
-    def create_version_store(
-        col_per_group: Optional[int] = None,
-        row_per_segment: Optional[int] = None,
-        lmdb_config: Dict[str, Any] = {},
-        override_name: str = None,
-        **kwargs,
-    ) -> NativeVersionStore:
-        if col_per_group is not None and "column_group_size" not in kwargs:
-            kwargs["column_group_size"] = col_per_group
-        if row_per_segment is not None and "segment_row_size" not in kwargs:
-            kwargs["segment_row_size"] = row_per_segment
-
-        if override_name is not None:
-            library_name = override_name
-        else:
-            library_name = lib_name
-
-        cfg_factory = functools.partial(create_test_lmdb_cfg, db_dir=str(tmpdir), lmdb_config=lmdb_config)
-        return _version_store_factory_impl(used, cfg_factory, library_name, **kwargs)
-
-    try:
-        yield create_version_store
-    except RuntimeError as e:
-        if "mdb_" in str(e):  # Dump keys when we get uncaught exception from LMDB:
-            for store in used.values():
-                print(store)
-                lt = store.library_tool()
-                for kt in lt.key_types():
-                    for key in lt.find_keys(kt):
-                        print(key)
-        raise
-    finally:
-        for result in used.values():
-            #  pytest holds a member variable `cached_result` equal to `result` above which keeps the storage alive and
-            #  locked. See https://github.com/pytest-dev/pytest/issues/5642 . So we need to decref the C++ objects keeping
-            #  the LMDB env open before they will release the lock and allow Windows to delete the LMDB files.
-            result.version_store = None
-            result._library = None
-
-        shutil.rmtree(tmpdir, ignore_errors=True)
+    return _lmdb_storage.create_version_store_factory(lib_name)
 
 
 @pytest.fixture

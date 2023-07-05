@@ -7,6 +7,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 """
 
 import multiprocessing
+import shutil
 import time
 import functools
 import pytest
@@ -16,6 +17,7 @@ import requests
 from typing import Optional, Any, Dict, Callable, NamedTuple, List
 from contextlib import AbstractContextManager, contextmanager
 from abc import abstractmethod
+from tempfile import mkdtemp
 
 import boto3
 import werkzeug
@@ -268,3 +270,46 @@ class MotoS3StorageFixtureFactory(StorageFixtureFactory):
                 lib.version_store.clear()
 
             self._s3_admin.delete_bucket(Bucket=b.bucket)
+
+
+class LmdbStorageFixture(StorageFixture):
+    def __init__(self, db_dir: Optional[str]):
+        self.db_dir = db_dir or mkdtemp(suffix="LmdbStorageFixtureFactory")
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        for result in self.generated_libs.values():
+            #  pytest holds a member variable `cached_result` equal to `result` above which keeps the storage alive and
+            #  locked. See https://github.com/pytest-dev/pytest/issues/5642 . So we need to decref the C++ objects
+            #  keeping the LMDB env open before they will release the lock and allow Windows to delete the LMDB files.
+            result.version_store = None
+            result._library = None
+
+        shutil.rmtree(self.db_dir, ignore_errors=True)
+
+    def get_arctic_uri(self) -> str:
+        return "lmdb://" + self.db_dir  # TODO: extra config?
+
+    def create_test_cfg(self, lib_name: str, *, lmdb_config: Dict[str, Any] = {}) -> EnvironmentConfigsMap:
+        cfg = EnvironmentConfigsMap()
+        add_lmdb_library_to_env(
+            cfg, lib_name=lib_name, env_name=Defaults.ENV, db_dir=self.db_dir, lmdb_config=lmdb_config
+        )
+        return cfg
+
+    def create_version_store_factory(self, default_lib_name: str):
+        def create_version_store(
+            col_per_group: Optional[int] = None,  # Legacy option names
+            row_per_segment: Optional[int] = None,
+            lmdb_config: Dict[str, Any] = {},  # Mainly to allow setting map_size
+            **kwargs,
+        ) -> NativeVersionStore:
+            if col_per_group is not None and "column_group_size" not in kwargs:
+                kwargs["column_group_size"] = col_per_group
+            if row_per_segment is not None and "segment_row_size" not in kwargs:
+                kwargs["segment_row_size"] = row_per_segment
+            cfg_factory = self.create_test_cfg
+            if lmdb_config:
+                cfg_factory = functools.partial(cfg_factory, lmdb_config=lmdb_config)
+            return _version_store_factory_impl(self.generated_libs, cfg_factory, default_lib_name, **kwargs)
+
+        return create_version_store

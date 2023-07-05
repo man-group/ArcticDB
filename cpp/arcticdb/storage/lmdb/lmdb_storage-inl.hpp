@@ -147,7 +147,7 @@ inline bool LmdbStorage::do_key_exists(const VariantKey&key) {
         MDB_val mdb_val;
         return ::lmdb::dbi_get(txn, dbi.handle(), &mdb_key, &mdb_val);
     } catch (const ::lmdb::not_found_error &ex) {
-        ARCTICDB_DEBUG(log::storage(), "Caught lmdn not found error: {}", ex.what());
+        ARCTICDB_DEBUG(log::storage(), "Caught LMDB not found error: {}", ex.what());
         return false;
     }
 }

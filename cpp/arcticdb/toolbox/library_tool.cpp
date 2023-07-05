@@ -27,9 +27,12 @@ Segment LibraryTool::read_to_segment(const VariantKey& key) {
     return kv.segment();
 }
 
-void LibraryTool::write(VariantKey key, Segment segment) {
-    storage::KeySegmentPair kv{std::move(key), std::move(segment)};
-    lib_->write(Composite<storage::KeySegmentPair>{std::move(kv)});
+void LibraryTool::write_batch(std::vector<VariantKey> keys, std::vector<Segment> segments) {
+    Composite<storage::KeySegmentPair> composite;
+    for (size_t i = 0; i < keys.size(); i++) {
+        composite.push_back({std::move(keys[i]), std::move(segments.at(i))});
+    }
+    lib_->write(std::move(composite));
 }
 
 void LibraryTool::remove(VariantKey key) {

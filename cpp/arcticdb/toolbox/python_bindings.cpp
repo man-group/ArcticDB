@@ -27,7 +27,7 @@ void register_bindings(py::module &m) {
                 return std::make_shared<LibraryTool>(lib);
             }))
             .def("read_to_segment", &LibraryTool::read_to_segment)
-            .def("write", &LibraryTool::write)
+            .def("write_batch", &LibraryTool::write_batch)
             .def("remove", &LibraryTool::remove)
             .def("find_keys", &LibraryTool::find_keys)
             .def("count_keys", &LibraryTool::count_keys)

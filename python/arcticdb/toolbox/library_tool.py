@@ -7,7 +7,7 @@ from typing import Optional, Union, List, Dict, Any
 import pandas as pd
 
 from arcticdb.version_store._normalization import FrameData
-from arcticdb_ext.codec import decode_segment
+from arcticdb_ext.codec import decode_segment, Segment
 from arcticdb_ext.storage import KeyType
 from arcticdb_ext.stream import SegmentInMemory
 from arcticdb_ext.tools import LibraryTool as LibraryToolImpl
@@ -33,6 +33,9 @@ class LibraryTool(LibraryToolImpl):
     @staticmethod
     def key_types() -> List[KeyType]:
         return list(KeyType.__members__.values())
+
+    def write(self, key: VariantKey, segment: Segment):
+        return self.write_batch([key], [segment])
 
     @staticmethod
     def dataframe_to_keys(

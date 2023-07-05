@@ -33,7 +33,8 @@ public:
 
     Segment read_to_segment(const VariantKey& key);
 
-    void write(VariantKey key, Segment segment);
+    // Copying the keys is not wasteful because VariantKey is not mapped to Python
+    void write_batch(std::vector<VariantKey> keys, std::vector<Segment> segments);
 
     void remove(VariantKey key);
 
