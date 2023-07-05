@@ -558,7 +558,7 @@ def spawn_azurite(azurite_port):
             finally:
                 print("Killing Azurite")
                 if sys.platform == "win32":  # different way of killing process on Windows
-                    os.kill(p.pid, signal.CTRL_C_EVENT)
+                    os.system(f"taskkill /F /PID {p.pid}")
                 else:
                     p.kill()
 
