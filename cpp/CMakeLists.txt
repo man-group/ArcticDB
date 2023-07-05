@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.12) # FindPython
 
 set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/CMake" ${CMAKE_MODULE_PATH})
 cmake_policy(SET CMP0048 NEW)
-project(arcticdb VERSION 1.3.1)
+project(arcticdb VERSION 0.0.1)
 
 enable_testing()
 
