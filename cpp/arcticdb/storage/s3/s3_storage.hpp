@@ -245,7 +245,9 @@ auto get_s3_config(const ConfigType& conf) {
     auto endpoint = conf.endpoint();
     util::check_arg(!endpoint.empty(), "S3 Endpoint must be specified");
     client_configuration.endpointOverride = endpoint;
-    client_configuration.verifySSL = false;
+    const bool use_ssl = ConfigsMap::instance()->get_int("S3Storage.UseSSL", conf.ssl());
+    log::storage().debug("Use ssl: {}", use_ssl);
+    client_configuration.verifySSL = use_ssl;
     client_configuration.maxConnections = conf.max_connections() == 0 ?
             ConfigsMap::instance()->get_int("VersionStore.NumIOThreads", 16) :
             conf.max_connections();
