@@ -165,7 +165,7 @@ struct MaxOrMinAggregatorData {
                     auto col_data = input_column->column_->data();
                     auto out_ptr = reinterpret_cast<MaybeValue<GlobalRawType>*>(that->aggregated_.data());
                     std::fill(out_ptr + prev_size, out_ptr + unique_values, MaybeValue<GlobalRawType>{});
-                    entity::details::visit_type(input_column->column_->type().data_type(), [&groups, &out_ptr, &col_data, that=that] (auto type_desc_tag) {
+                    entity::details::visit_type(input_column->column_->type().data_type(), [&groups, &out_ptr, &col_data] (auto type_desc_tag) {
                         using ColumnTagType = std::decay_t<decltype(type_desc_tag)>;
                         using ColumnType =  typename ColumnTagType::raw_type;
                         if constexpr(!is_sequence_type(ColumnTagType::data_type)) {
