@@ -545,32 +545,23 @@ def azurite_container():
 @pytest.fixture(scope="module")
 def spawn_azurite(azurite_port):
     if AZURE_SUPPORT:
-        print("Spawning Azurite")
         temp_folder = tempfile.TemporaryDirectory()
-        p = subprocess.Popen(
-            f"azurite --silent --blobPort {azurite_port} --blobHost 127.0.0.1 --queuePort 0 --tablePort 0",
-            cwd=temp_folder.name,
-            shell=True,
-        )
-        time.sleep(2)  # Wait for Azurite to start up
-        yield
-        print("Killing Azurite")
-        p.kill()
-        # try: #Awaiting fix for cleanup in windows file-in-use problem
-        #     p = subprocess.Popen(
-        #         f"azurite --silent --blobPort {azurite_port} --blobHost 127.0.0.1 --queuePort 0 --tablePort 0",
-        #         cwd=temp_folder,
-        #         shell=True,
-        #     )
-        #     time.sleep(2)  # Wait for Azurite to start up
-        #     yield
-        # finally:
-        #     print("Killing Azurite")
-        #     if sys.platform == "win32":  # different way of killing process on Windows
-        #         os.system(f"taskkill /F /PID {p.pid}")
-        #     else:
-        #         p.kill()
-
+        try: #Awaiting fix for cleanup in windows file-in-use problem
+            p = subprocess.Popen(
+                f"azurite --silent --blobPort {azurite_port} --blobHost 127.0.0.1 --queuePort 0 --tablePort 0",
+                cwd=temp_folder.name,
+                shell=True,
+            )
+            time.sleep(2)  # Wait for Azurite to start up
+            yield
+        finally:
+            print("Killing Azurite")
+            if sys.platform == "win32":  # different way of killing process on Windows
+                os.system(f"taskkill /F /PID {p.pid}")
+            else:
+                p.kill()
+            temp_folder = None #For cleanup; For an unknown reason somehow using with syntax causes error
+            
     else:
         yield
 
