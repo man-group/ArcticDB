@@ -549,7 +549,7 @@ def spawn_azurite(azurite_port):
         temp_folder = tempfile.TemporaryDirectory()
         p = subprocess.Popen(
             f"azurite --silent --blobPort {azurite_port} --blobHost 127.0.0.1 --queuePort 0 --tablePort 0",
-            cwd=temp_folder,
+            cwd=temp_folder.name,
             shell=True,
         )
         time.sleep(2)  # Wait for Azurite to start up
