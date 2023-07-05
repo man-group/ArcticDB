@@ -245,9 +245,9 @@ auto get_s3_config(const ConfigType& conf) {
     auto endpoint = conf.endpoint();
     util::check_arg(!endpoint.empty(), "S3 Endpoint must be specified");
     client_configuration.endpointOverride = endpoint;
-    const bool use_ssl = ConfigsMap::instance()->get_int("S3Storage.UseSSL", conf.ssl());
-    log::storage().debug("Use ssl: {}", use_ssl);
-    client_configuration.verifySSL = use_ssl;
+    const bool verify_ssl = ConfigsMap::instance()->get_int("S3Storage.VerifySSL", conf.ssl());
+    ARCTICDB_RUNTIME_DEBUG(log::storage(), "Verify ssl: {}", verify_ssl);
+    client_configuration.verifySSL = verify_ssl;
     client_configuration.maxConnections = conf.max_connections() == 0 ?
             ConfigsMap::instance()->get_int("VersionStore.NumIOThreads", 16) :
             conf.max_connections();
