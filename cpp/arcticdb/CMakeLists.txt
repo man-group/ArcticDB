@@ -468,7 +468,7 @@ set (arcticdb_core_libraries
         prometheus-cpp::pull
         ${standard_libraries}
         fmt::fmt
-        ${Protobuf_lite_LIBRARY}
+	# ${Protobuf_lite_LIBRARY}
         ${Protobuf_LIBRARY}
         ${LZ4_LIBRARY}
         ${Zstd_LIBRARY}
