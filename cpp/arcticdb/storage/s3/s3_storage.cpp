@@ -53,21 +53,21 @@ bool S3Storage::check_creds_and_bucket() {
         auto outcome = future.get();
         if (!outcome.IsSuccess()) {
             auto& error = outcome.GetError();
-
-#define BUCKET_LOG(level, msg, ...) log::storage().level(msg "\nHTTP Status: {}. Server response: {}", \
-            ## __VA_ARGS__, int(error.GetResponseCode()), error.GetMessage().c_str()); break
+            auto details = fmt::format("\nHTTP Status: {}. Server response: {}",
+                    int(error.GetResponseCode()), error.GetMessage().c_str());
 
             // HEAD request can't return the error details, so can't use the more detailed error codes.
             switch (error.GetResponseCode()) {
             case Aws::Http::HttpResponseCode::UNAUTHORIZED:
             case Aws::Http::HttpResponseCode::FORBIDDEN:
-                BUCKET_LOG(warn, "Unable to access bucket. Subsequent operations may fail.");
+                log::storage().warn("Unable to access bucket. Subsequent operations may fail.{}", details);
+                break;
             case Aws::Http::HttpResponseCode::NOT_FOUND:
-                BUCKET_LOG(error, "The specified bucket {} does not exist.", bucket_name_);
+                user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>("The specified bucket {} does not exist.{}",
+                        bucket_name_, details);
             default:
-                BUCKET_LOG(info, "Unable to determine if the bucket is accessible.");
+                log::storage().info("Unable to determine if the bucket is accessible.{}", details);
             }
-#undef BUCKET_LOG
         }
         return outcome.IsSuccess();
     } else {
