@@ -16,6 +16,7 @@ from arcticdb.config import _DEFAULT_ENV
 from arcticdb.version_store._store import NativeVersionStore
 from arcticdb.adapters.arctic_library_adapter import ArcticLibraryAdapter, set_library_options
 from arcticdb_ext.storage import Library
+from arcticdb.encoding_version import EncodingVersion
 from collections import namedtuple
 from dataclasses import dataclass, fields
 from distutils.util import strtobool
@@ -56,7 +57,7 @@ class AzureLibraryAdapter(ArcticLibraryAdapter):
         self._container = self._query_params.Container
         self._ca_cert_path = self._query_params.CA_cert_path
 
-        super().__init__(uri)
+        super().__init__(uri, EncodingVersion.V1)
 
     def __repr__(self):
         return "azure(endpoint=%s, container=%s)" % (self._endpoint, self._container)
