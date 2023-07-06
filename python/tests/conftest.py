@@ -174,13 +174,7 @@ def azurite_azure_test_connection_setting(azurite_port, azurite_container, spawn
 
 @pytest.fixture
 def azurite_azure_uri(azurite_azure_test_connection_setting):
-    (
-        endpoint,
-        container,
-        credential_name,
-        credential_key,
-        ca_cert_path,
-    ) = azurite_azure_test_connection_setting
+    (endpoint, container, credential_name, credential_key, ca_cert_path) = azurite_azure_test_connection_setting
     return f"azure://DefaultEndpointsProtocol=http;AccountName={credential_name};AccountKey={credential_key};BlobEndpoint={endpoint}/{credential_name};Container={container};CA_cert_path={ca_cert_path}"  # semi-colon at the end is not accepted by the sdk
 
 
@@ -218,13 +212,7 @@ def arcticdb_test_s3_config(moto_s3_endpoint_and_credentials):
 @pytest.fixture
 def arcticdb_test_azure_config(azurite_azure_test_connection_setting, azurite_azure_uri):
     def create(lib_name):
-        (
-            endpoint,
-            container,
-            credential_name,
-            credential_key,
-            ca_cert_path,
-        ) = azurite_azure_test_connection_setting
+        (endpoint, container, credential_name, credential_key, ca_cert_path) = azurite_azure_test_connection_setting
         return create_test_azure_cfg(
             lib_name=lib_name,
             credential_name=credential_name,
@@ -336,9 +324,7 @@ def _arctic_library_factory_impl(used, name, arctic_client, library_options) -> 
 def library_factory(arctic_client, lib_name):
     used: Dict[str, Library] = {}
 
-    def create_library(
-        library_options: Optional[LibraryOptions] = None,
-    ) -> Library:
+    def create_library(library_options: Optional[LibraryOptions] = None,) -> Library:
         return _arctic_library_factory_impl(used, lib_name, arctic_client, library_options)
 
     return create_library
@@ -449,8 +435,7 @@ def mongo_version_store(mongo_store_factory):
 
 
 @pytest.fixture(
-    scope="function",
-    params=["s3_store_factory", "azure_store_factory"] if AZURE_SUPPORT else ["s3_store_factory"],
+    scope="function", params=["s3_store_factory", "azure_store_factory"] if AZURE_SUPPORT else ["s3_store_factory"]
 )
 def object_store_factory(request):
     store_factory = request.getfixturevalue(request.param)
@@ -502,7 +487,7 @@ def lmdb_version_store_prune_previous(version_store_factory):
 
 @pytest.fixture
 def lmdb_version_store_big_map(version_store_factory):
-    return version_store_factory(lmdb_config={"map_size": 2**30})
+    return version_store_factory(lmdb_config={"map_size": 2 ** 30})
 
 
 @pytest.fixture
@@ -585,12 +570,12 @@ def lmdb_version_store_ignore_order(version_store_factory):
 
 @pytest.fixture
 def lmdb_version_store_small_segment(version_store_factory):
-    return version_store_factory(column_group_size=1000, segment_row_size=1000, lmdb_config={"map_size": 2**30})
+    return version_store_factory(column_group_size=1000, segment_row_size=1000, lmdb_config={"map_size": 2 ** 30})
 
 
 @pytest.fixture
 def lmdb_version_store_tiny_segment(version_store_factory):
-    return version_store_factory(column_group_size=2, segment_row_size=2, lmdb_config={"map_size": 2**30})
+    return version_store_factory(column_group_size=2, segment_row_size=2, lmdb_config={"map_size": 2 ** 30})
 
 
 @pytest.fixture
@@ -705,7 +690,13 @@ def object_version_store(object_store_factory):
 @pytest.fixture(
     scope="function",
     params=(
-        ["lmdb_version_store_v1", "lmdb_version_store_v2", "s3_version_store_v1", "s3_version_store_v2", "azure_version_store"]
+        [
+            "lmdb_version_store_v1",
+            "lmdb_version_store_v2",
+            "s3_version_store_v1",
+            "s3_version_store_v2",
+            "azure_version_store",
+        ]
         if AZURE_SUPPORT
         else ["lmdb_version_store_v1", "lmdb_version_store_v2", "s3_version_store_v1", "s3_version_store_v2"]
     ),
