@@ -12,7 +12,7 @@ dependencies:
   - doxygen
   - grpcio
   - grpcio-tools
-  - protobuf < 4
+  - protobuf==3.20.3
   # Host dependencies
   - boost-cpp
   - krb5
@@ -26,7 +26,7 @@ dependencies:
   - cyrus-sasl
   - aws-sdk-cpp
   - prometheus-cpp
-  - libprotobuf < 4
+  - libprotobuf==3.20.3
   - bitmagic
   - spdlog
   # Incompatibility with fmt last version
