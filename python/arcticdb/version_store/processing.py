@@ -24,6 +24,8 @@ from arcticdb_ext.version_store import FilterClause as _FilterClause
 from arcticdb_ext.version_store import ProjectClause as _ProjectClause
 from arcticdb_ext.version_store import GroupByClause as _GroupByClause
 from arcticdb_ext.version_store import AggregationClause as _AggregationClause
+from arcticdb_ext.version_store import RowRangeClause as _RowRangeClause
+from arcticdb_ext.version_store import RowRangeType as _RowRangeType
 from arcticdb_ext.version_store import ExpressionName as _ExpressionName
 from arcticdb_ext.version_store import ColumnName as _ColumnName
 from arcticdb_ext.version_store import ValueName as _ValueName
@@ -262,6 +264,7 @@ PythonFilterClause = namedtuple("PythonFilterClause", ["expr"])
 PythonProjectionClause = namedtuple("PythonProjectionClause", ["name", "expr"])
 PythonGroupByClause = namedtuple("PythonGroupByClause", ["name"])
 PythonAggregationClause = namedtuple("PythonAggregationClause", ["aggregations"])
+PythonRowRangeClause = namedtuple("PythonRowRangeClause", ["row_range_type", "n"])
 
 
 class QueryBuilder:
@@ -480,6 +483,18 @@ class QueryBuilder:
         self._python_clauses.append(PythonAggregationClause(aggregations))
         return self
 
+    def _head(self, n: int):
+        check(not len(self.clauses), "Head only supported as first clause in the pipeline")
+        self.clauses.append(_RowRangeClause(_RowRangeType.HEAD, n))
+        self._python_clauses.append(PythonRowRangeClause(_RowRangeType.HEAD, n))
+        return self
+
+    def _tail(self, n: int):
+        check(not len(self.clauses), "Tail only supported as first clause in the pipeline")
+        self.clauses.append(_RowRangeClause(_RowRangeType.TAIL, n))
+        self._python_clauses.append(PythonRowRangeClause(_RowRangeType.TAIL, n))
+        return self
+
     def __eq__(self, right):
         return self._optimisation == right._optimisation and self._python_clauses == right._python_clauses
 
@@ -551,6 +566,9 @@ class QueryBuilder:
         for clause in self.clauses:
             if hasattr(clause, "set_pipeline_optimisation"):
                 clause.set_pipeline_optimisation(_Optimisation.MEMORY)
+
+    def needs_post_processing(self):
+        return not any(isinstance(clause, _RowRangeClause) for clause in self.clauses)
 
 
 CONSTRUCTOR_MAP = {

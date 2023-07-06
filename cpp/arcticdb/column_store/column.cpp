@@ -161,4 +161,69 @@ std::vector<std::shared_ptr<Column>> Column::split(const std::shared_ptr<Column>
     return output;
 }
 
+// Produces a new column
+// Inclusive of start_row, exclusive of end_row
+std::shared_ptr<Column> Column::truncate(const std::shared_ptr<Column>& column, size_t start_row, size_t end_row) {
+    auto type_size = get_type_size(column->type().data_type());
+    // Bytes from the underlying chunked buffer to include. Inclusive of start_byte, exclusive of end_byte
+    size_t start_byte;
+    size_t end_byte;
+    util::BitMagic input_sparse_map;
+    if (column->is_sparse()) {
+        input_sparse_map = column->sparse_map();
+        internal::check<ErrorCode::E_ASSERTION_FAILURE>(input_sparse_map.size() > 0, "Unexpected empty sparse map in Column::truncate");
+        // Sparse columns do not include trailing 0s in the bitset, so the relevant end_row is capped at the size of the biset
+        end_row = std::min(end_row, static_cast<size_t>(input_sparse_map.size()));
+        // count_range is inclusive at both ends
+        auto set_bits_before_range = start_row > 0 ? input_sparse_map.count_range(0, start_row - 1) : 0;
+        auto set_bits_in_range = input_sparse_map.count_range(start_row, end_row - 1);
+        start_byte = set_bits_before_range * type_size;
+        end_byte = start_byte + (set_bits_in_range * type_size);
+    } else {
+        start_byte = start_row * type_size;
+        end_byte = end_row * type_size;
+    }
+    internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+            start_byte % type_size == 0,
+            "start_byte {} is not a multiple of type size {}", start_byte, column->type());
+    internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+            end_byte % type_size == 0,
+            "start_byte {} is not a multiple of type size {}", end_byte, column->type());
+    auto buffer = ::arcticdb::truncate(column->data_.buffer(), start_byte, end_byte);
+    auto res = std::make_shared<Column>(column->type(), column->allow_sparse_, std::move(buffer));
+    if (column->is_sparse()) {
+        // The output sparse map is the slice [start_row, end_row) of the input sparse map
+        // BitMagic doesn't have a method for this, so hand-roll it here
+        // Ctor parameter is the size
+        util::BitMagic output_sparse_map(end_row - start_row);
+        util::BitSet::bulk_insert_iterator inserter(output_sparse_map);
+        util::BitSetSizeType set_input_bit;
+        if (start_row == 0) {
+            // get_first can return 0 if no bits are set, but we checked earlier that input_sparse_map.size() > 0,
+            // and we do not have sparse maps with no bits set
+            set_input_bit = input_sparse_map.get_first();
+            if (set_input_bit < end_row) {
+                inserter = set_input_bit;
+            }
+        } else {
+            set_input_bit = input_sparse_map.get_next(start_row - 1);
+            // get_next returns 0 if no more bits are set
+            if (set_input_bit != 0 && set_input_bit < end_row) {
+                // Shift start_row elements to the left
+                inserter = set_input_bit - start_row;
+            }
+        }
+        do {
+            set_input_bit = input_sparse_map.get_next(set_input_bit);
+            if (set_input_bit != 0 && set_input_bit < end_row) {
+                inserter = set_input_bit - start_row;
+            }
+        } while (set_input_bit != 0);
+        inserter.flush();
+        res->set_sparse_map(std::move(output_sparse_map));
+    }
+    res->set_row_data(end_row - (start_row + 1));
+    return res;
+}
+
 } //namespace arcticdb

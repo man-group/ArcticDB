@@ -980,7 +980,10 @@ class NativeVersionStore:
             else:
                 read_result = ReadResult(*read_results[i])
                 read_query = read_queries[i]
-                vitem = self._post_process_dataframe(read_result, read_query)
+                query = None
+                if query_builder is not None:
+                    query = query_builder if isinstance(query_builder, QueryBuilder) else query_builder[i]
+                vitem = self._post_process_dataframe(read_result, read_query, query)
                 versioned_items.append(vitem)
         return versioned_items
 
@@ -1525,7 +1528,7 @@ class NativeVersionStore:
             as_of, date_range, row_range, columns, query_builder, **kwargs
         )
         read_result = self._read_dataframe(symbol, version_query, read_query, read_options)
-        return self._post_process_dataframe(read_result, read_query)
+        return self._post_process_dataframe(read_result, read_query, query_builder)
 
     def head(
         self,
@@ -1556,9 +1559,11 @@ class NativeVersionStore:
         """
 
         row_range = _HeadRange(n)
-        version_query, read_options, read_query = self._get_queries(as_of, None, row_range, columns, None, **kwargs)
+        q = QueryBuilder()
+        q = q._head(n)
+        version_query, read_options, read_query = self._get_queries(as_of, None, row_range, columns, q, **kwargs)
         read_result = self._read_dataframe(symbol, version_query, read_query, read_options)
-        return self._post_process_dataframe(read_result, read_query)
+        return self._post_process_dataframe(read_result, read_query, q)
 
     def tail(
         self, symbol: str, n: int = 5, as_of: VersionQueryInput = None, columns: Optional[List[str]] = None, **kwargs
@@ -1584,17 +1589,19 @@ class NativeVersionStore:
         """
 
         row_range = _TailRange(n)
-        version_query, read_options, read_query = self._get_queries(as_of, None, row_range, columns, None, **kwargs)
+        q = QueryBuilder()
+        q = q._tail(n)
+        version_query, read_options, read_query = self._get_queries(as_of, None, row_range, columns, q, **kwargs)
         read_result = self._read_dataframe(symbol, version_query, read_query, read_options)
-        return self._post_process_dataframe(read_result, read_query)
+        return self._post_process_dataframe(read_result, read_query, q)
 
     def _read_dataframe(self, symbol, version_query, read_query, read_options):
         return ReadResult(*self.version_store.read_dataframe_version(symbol, version_query, read_query, read_options))
 
-    def _post_process_dataframe(self, read_result, read_query):
-        # post filter
-        start_idx = end_idx = None
-        if read_query.row_filter is not None:
+    def _post_process_dataframe(self, read_result, read_query, query_builder):
+        if read_query.row_filter is not None and (query_builder is None or query_builder.needs_post_processing()):
+            # post filter
+            start_idx = end_idx = None
             if isinstance(read_query.row_filter, _RowRange):
                 start_idx = read_query.row_filter.start - read_result.frame_data.offset
                 end_idx = read_query.row_filter.end - read_result.frame_data.offset

@@ -540,7 +540,7 @@ std::vector<SliceAndKey> read_and_process(
         }
     }
 
-    ProcessingConfig processing_config{opt_false(read_options.dynamic_schema_)};
+    ProcessingConfig processing_config{opt_false(read_options.dynamic_schema_), pipeline_context->rows_};
     for (auto& clause: read_query.clauses_) {
         clause->set_processing_config(processing_config);
     }
@@ -668,6 +668,7 @@ void read_indexed_keys_to_pipeline(
 
     pipeline_context->slice_and_keys_ = filter_index(index_segment_reader, combine_filter_functions(queries));
     pipeline_context->total_rows_ = pipeline_context->calc_rows();
+    pipeline_context->rows_ = index_segment_reader.tsd().proto().total_rows();
     pipeline_context->norm_meta_ = std::make_unique<arcticdb::proto::descriptors::NormalizationMetadata>(std::move(*index_segment_reader.mutable_tsd().mutable_proto().mutable_normalization()));
     pipeline_context->user_meta_ = std::make_unique<arcticdb::proto::descriptors::UserDefinedMetadata>(std::move(*index_segment_reader.mutable_tsd().mutable_proto().mutable_user_meta()));
     pipeline_context->bucketize_dynamic_ = bucketize_dynamic;
@@ -774,6 +775,10 @@ void copy_segments_to_frame(const std::shared_ptr<Store>& store, const std::shar
         }
 
         auto field_count = context_row->slice_and_key().slice_.col_range.diff() + index_field_count;
+        internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+                field_count == segment.descriptor().field_count(),
+                "Column range does not match segment descriptor field count in copy_segments_to_frame: {} != {}",
+                field_count, segment.descriptor().field_count());
         for (auto field_col = index_field_count; field_col < field_count; ++field_col) {
             const auto& field_name = context_row->descriptor().fields(field_col).name();
             auto frame_loc_opt = frame.column_index(field_name);

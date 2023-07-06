@@ -582,21 +582,53 @@ Composite<ProcessingSegment> ColumnStatsGenerationClause::process(std::shared_pt
     return Composite{ProcessingSegment{std::move(seg)}};
 }
 
-Composite<ProcessingSegment> RowNumberLimitClause::process(std::shared_ptr<Store> store,
+Composite<ProcessingSegment> RowRangeClause::process(std::shared_ptr<Store> store,
                                                            Composite<ProcessingSegment> &&p) const {
     auto procs = std::move(p);
     procs.broadcast([&store, this](ProcessingSegment &proc) {
         auto row_range = proc.data()[0].slice_.row_range;
-        if (row_range.start() == 0ULL && row_range.end() > n) {
-            util::BitSet bv(static_cast<util::BitSet::size_type>(row_range.diff()));
-            bv.set_range(0, bv_size(n));
-            proc.apply_filter(bv, store, PipelineOptimisation::MEMORY);
-        } else if (!warning_shown) {
-            warning_shown = true;
-            log::version().info("RowNumberLimitFilter bypassed because rows.start() == {}", row_range.start());
-        }
+        if ((start_ > row_range.start() && start_ < row_range.end()) || (end_ > row_range.start() && end_ < row_range.end())) {
+            // Zero-indexed within this ProcessingSegment
+            size_t start_row{0};
+            size_t end_row{row_range.diff()};
+            if (start_ > row_range.start() && start_ < row_range.end()) {
+                start_row = start_ - row_range.start();
+            }
+            if (end_ > row_range.start() && end_ < row_range.end()) {
+                end_row = end_ - (row_range.start());
+            }
+            proc.truncate(start_row, end_row, store);
+        } // else all rows in the processing segment are required, do nothing
     });
     return procs;
+}
+
+void RowRangeClause::set_processing_config(const ProcessingConfig& processing_config) {
+    auto total_rows = static_cast<int64_t>(processing_config.total_rows_);
+    switch(row_range_type_) {
+        case RowRangeType::HEAD:
+            if (n_ >= 0) {
+                end_ = std::min(n_, total_rows);
+            } else {
+                end_ = std::max(static_cast<int64_t>(0), total_rows + n_);
+            }
+            break;
+        case RowRangeType::TAIL:
+            if (n_ >= 0) {
+                start_ = std::max(static_cast<int64_t>(0), total_rows - n_);
+                end_ = total_rows;
+            } else {
+                start_ = std::min(-n_, total_rows);
+                end_ = total_rows;
+            }
+            break;
+        default:
+            internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Unrecognised RowRangeType {}", static_cast<uint8_t>(row_range_type_));
+    }
+}
+
+std::string RowRangeClause::to_string() const {
+    return fmt::format("{} {}", row_range_type_ == RowRangeType::HEAD ? "HEAD" : "TAIL", n_);
 }
 
 }
