@@ -70,12 +70,6 @@ struct ReadQuery {
             } else {
                 row_filter = RowRange(0, std::max(static_cast<int64_t>(0), total_rows + head_range.num_rows_));
             }
-            if (clauses_.empty() && columns.empty() && head_range.num_rows_ > 0) {
-                // TODO: columns aren't supported due to AN-334
-                clauses_.emplace_back(std::make_shared<Clause>(RowNumberLimitClause{static_cast<size_t>(head_range.num_rows_)}));
-            } else {
-                log::version().info("Arguments not compatible with head() memory usage optimisation");
-            }
             },
             [&](const TailRange &tail_range) {
             if (tail_range.num_rows_ >= 0) {

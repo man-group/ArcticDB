@@ -211,16 +211,18 @@ class ChunkedBufferImpl {
     struct BlockAndOffset {
         MemBlock* block_;
         size_t offset_;
+        size_t block_index_;
 
-        BlockAndOffset(MemBlock* block, size_t offset) :
+        BlockAndOffset(MemBlock* block, size_t offset, size_t block_index) :
             block_(block),
-            offset_(offset){
+            offset_(offset),
+            block_index_(block_index){
         }
     };
 
     BlockAndOffset block_and_offset(size_t pos_bytes) const {
         if(blocks_.size() == 1u)
-            return BlockAndOffset(blocks_[0], pos_bytes);
+            return BlockAndOffset(blocks_[0], pos_bytes, 0);
 
         if (is_regular_sized() || pos_bytes < regular_sized_until_) {
             size_t block_offset = pos_bytes / DefaultBlockSize;
@@ -230,7 +232,7 @@ class ChunkedBufferImpl {
                         blocks_.size());
             MemBlock *block = blocks_[block_offset];
             block->magic_.check();
-            return BlockAndOffset(block, pos_bytes % DefaultBlockSize);
+            return BlockAndOffset(block, pos_bytes % DefaultBlockSize, block_offset);
         }
 
         util::check(!block_offsets_.empty(), "Expected an irregular block-sized buffer to have offsets");
@@ -241,11 +243,11 @@ class ChunkedBufferImpl {
         auto irregular_block_num = std::distance(block_offsets_.begin(), block_offset);
         auto first_irregular_block = regular_sized_until_ / DefaultBlockSize;
         auto block = blocks_[first_irregular_block + irregular_block_num];
-        return BlockAndOffset(block, pos_bytes - *block_offset);
+        return BlockAndOffset(block, pos_bytes - *block_offset, first_irregular_block + irregular_block_num);
     }
 
     uint8_t &operator[](size_t pos_bytes) {
-        auto [block, pos] = block_and_offset(pos_bytes);
+        auto [block, pos, _] = block_and_offset(pos_bytes);
         return (*block)[pos];
     }
 
@@ -300,7 +302,7 @@ class ChunkedBufferImpl {
     template<typename T>
     const T* internal_ptr_cast(size_t pos_bytes, size_t required_bytes) const {
         check_bytes(pos_bytes, required_bytes);
-        auto [block, pos] = block_and_offset(pos_bytes);
+        auto [block, pos, _] = block_and_offset(pos_bytes);
         return reinterpret_cast<const T*>(block->internal_ptr(pos));
     }
 
@@ -412,4 +414,7 @@ using ChunkedBuffer = ChunkedBufferImpl<BufferSize>;
 
 template <size_t BlockSize>
 std::vector<ChunkedBufferImpl<BlockSize>> split(const ChunkedBufferImpl<BlockSize>& input, size_t nbytes);
+
+template <size_t BlockSize>
+ChunkedBufferImpl<BlockSize> truncate(const ChunkedBufferImpl<BlockSize>& input, size_t start_byte, size_t end_byte);
 }

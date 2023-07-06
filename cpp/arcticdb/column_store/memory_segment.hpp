@@ -403,6 +403,10 @@ public:
         return SegmentInMemory(impl_->filter(filter_bitset, filter_down_stringpool, validate));
     }
 
+    SegmentInMemory truncate(size_t start_row, size_t end_row) const{
+        return SegmentInMemory(impl_->truncate(start_row, end_row));
+    }
+
     std::vector<SegmentInMemory> partition(const std::vector<std::optional<uint8_t>>& row_to_segment,
                            const std::vector<uint64_t>& segment_counts) const{
         std::vector<SegmentInMemory> res;
