@@ -853,6 +853,8 @@ public:
 
     static std::vector<std::shared_ptr<Column>> split(const std::shared_ptr<Column>& column, size_t num_rows);
 
+    static std::shared_ptr<Column> truncate(const std::shared_ptr<Column>& column, size_t start_row, size_t end_row);
+
 private:
     position_t last_offset() const {
         return offsets_.empty() ? 0 : *offsets_.rbegin();
@@ -918,7 +920,7 @@ private:
 
     util::BitMagic& sparse_map() {
         if(!sparse_map_)
-            sparse_map_ = std::make_optional<util::BitMagic>();
+            sparse_map_ = std::make_optional<util::BitMagic>(0);
 
         return sparse_map_.value();
     }

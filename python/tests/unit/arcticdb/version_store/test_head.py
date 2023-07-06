@@ -20,6 +20,11 @@ def generic_head_test(version_store, symbol, df, num_rows):
     assert np.array_equal(df.head(num_rows), version_store.head(symbol, num_rows).data)
 
 
+def test_head_large_segment(lmdb_version_store):
+    df = DataFrame({"x": np.arange(100_000, dtype=np.int64)})
+    generic_head_test(lmdb_version_store, "test_head_large_segment", df, 50_000)
+
+
 def test_head_zero_num_rows(lmdb_version_store, one_col_df):
     generic_head_test(lmdb_version_store, "test_head_zero_num_rows", one_col_df(), 0)
 

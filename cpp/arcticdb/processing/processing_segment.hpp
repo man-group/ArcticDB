@@ -115,6 +115,8 @@ namespace arcticdb {
 
         void apply_filter(const util::BitSet& bitset, const std::shared_ptr<Store>& store, PipelineOptimisation optimisation);
 
+        void truncate(size_t start_row, size_t end_row, const std::shared_ptr<Store>& store);
+
         void set_expression_context(const std::shared_ptr<ExpressionContext>& expression_context) {
             expression_context_ = expression_context;
         }
