@@ -147,11 +147,11 @@ def moto_s3_uri_incl_bucket(moto_s3_endpoint_and_credentials):
 
 
 @pytest.fixture(scope="function", params=["S3", "LMDB", "Azure"] if AZURE_SUPPORT else ["S3", "LMDB"])
-def arctic_client(request, moto_s3_uri_incl_bucket, azurite_azure_uri_incl_bucket, tmpdir, encoding_version):
+def arctic_client(request, moto_s3_uri_incl_bucket, tmpdir, encoding_version):
     if request.param == "S3":
         ac = Arctic(moto_s3_uri_incl_bucket, encoding_version)
     elif request.param == "Azure":
-        ac = Arctic(azurite_azure_uri_incl_bucket, encoding_version)
+        ac = Arctic(request.getfixturevalue("azurite_azure_uri_incl_bucket"), encoding_version)
     elif request.param == "LMDB":
         ac = Arctic(f"lmdb://{tmpdir}", encoding_version)
     else:
