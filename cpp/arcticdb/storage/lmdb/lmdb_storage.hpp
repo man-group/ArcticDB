@@ -67,7 +67,7 @@ private:
     std::vector<VariantKey> do_remove_internal(Composite<VariantKey>&& ks, ::lmdb::txn& txn, RemoveOpts opts);
 
     std::unique_ptr<std::mutex> write_mutex_;
-    std::unique_ptr<::lmdb::env> env_;
+    std::shared_ptr<::lmdb::env> env_;
 };
 
 class LmdbStorageFactory final : public StorageFactory<LmdbStorageFactory> {

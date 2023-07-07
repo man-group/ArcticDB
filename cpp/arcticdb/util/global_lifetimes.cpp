@@ -9,6 +9,7 @@
 #include <arcticdb/async/task_scheduler.hpp>
 #include <arcticdb/util/allocator.hpp>
 #include <arcticdb/storage/s3/s3_api.hpp>
+#include <arcticdb/storage/lmdb/lmdb_api.hpp>
 #include <arcticdb/storage/mongo/mongo_instance.hpp>
 #include <arcticdb/log/log.hpp>
 #include <arcticdb/entity/metrics.hpp>
@@ -32,6 +33,8 @@ ModuleData::~ModuleData() {
 #endif
     ARCTICDB_DEBUG(log::version(), "Destroying AWS instance");
     storage::s3::S3ApiInstance::destroy_instance();
+    ARCTICDB_DEBUG(log::version(), "Destroying LMDB instance");
+    storage::lmdb::LmdbStorageApiInstance::destroy_instance();
     log::Loggers::destroy_instance();
 }
 

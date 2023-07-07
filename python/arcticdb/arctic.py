@@ -206,7 +206,7 @@ class Arctic:
         >>> my_library = arctic['test.library']
         """
         if self._library_manager.has_library(name):
-            raise ValueError(f"{name} already exists as a library. Please delete prior to re-creating.")
+            raise ValueError(f"Library [{name}] already exists.")
 
         if library_options is None:
             library_options = LibraryOptions()
