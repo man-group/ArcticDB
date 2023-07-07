@@ -92,7 +92,8 @@
       "hidden": true,
       "generator": "Unix Makefiles",
       "cacheVariables": {
-        "CMAKE_MAKE_PROGRAM": "make"
+        "CMAKE_MAKE_PROGRAM": "make",
+        "VCPKG_TARGET_TRIPLET": "x64-linux-custom"
       },
       "environment": {"cmakepreset_expected_host_system": "Linux"}
     },

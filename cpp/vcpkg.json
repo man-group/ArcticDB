@@ -179,7 +179,8 @@
     { "name": "zstd", "version": "1.5.2" }
   ],
   "vcpkg-configuration": {
-    "overlay-ports": ["third_party/vcpkg_overlays"]
+    "overlay-ports": ["third_party/vcpkg_overlays"],
+    "overlay-triplets": ["third_party/vcpkg_triplets"]
   },
   "$note on builtin-baseline": "Remember to regenerate third_party/vcpkg_overlays",
   "builtin-baseline": "d4d39d71b3e6dd7536592c36ab2f7e84a8a64942"
