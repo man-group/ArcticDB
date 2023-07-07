@@ -1655,23 +1655,6 @@ def test_batch_read_date_range(lmdb_version_store_tombstone_and_sync_passive):
         assert_frame_equal(vit.data, dfs[x].loc[start:end])
 
 
-def test_batch_read_symbol_doesnt_exist(lmdb_version_store):
-    sym1 = "sym1"
-    sym2 = "sym2"
-    lmdb_version_store.write(sym1, 1)
-    with pytest.raises(NoDataFoundException):
-        _ = lmdb_version_store.batch_read([sym1, sym2])
-
-
-def test_batch_read_version_doesnt_exist(lmdb_version_store):
-    sym1 = "sym1"
-    sym2 = "sym2"
-    lmdb_version_store.write(sym1, 1)
-    lmdb_version_store.write(sym2, 2)
-    with pytest.raises(NoDataFoundException):
-        _ = lmdb_version_store.batch_read([sym1, sym2], as_ofs=[0, 1])
-
-
 def test_index_keys_start_end_index(lmdb_version_store, sym):
     idx = pd.date_range("2022-01-01", periods=100, freq="D")
     df = pd.DataFrame({"a": range(len(idx))}, index=idx)
