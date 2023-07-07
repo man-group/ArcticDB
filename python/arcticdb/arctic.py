@@ -75,13 +75,15 @@ class Arctic:
 
             Azure
             -----
-                The Azure URI connection scheme has the form ``azure://[options]``.
-                It is based on Azure Connection String, with addtional options for configuring ArcticDB storage adaptation layer.
+
+                The Azure URI connection scheme has the form ``azure://[options]``. 
+                It is based on the Azure Connection String, with additional options for configuring ArcticDB.
                 Please refer to https://learn.microsoft.com/en-us/azure/storage/common/storage-configure-connection-string for more details.
 
-                Options is a string that specifies connection specific options as ``<name>=<value>`` pairs joined with ``;``.
+                ``options`` is a string that specifies connection specific options as ``<name>=<value>`` pairs joined with ``;`` (the final key value pair should not include a trailing ``;``).
 
-                Additional options specific for ArcticDB Azure storage adaptation layer:
+                Additional options specific for ArcticDB:
+
                 +---------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------+
                 | Option                    | Description                                                                                                                                                   |
                 +===========================+===============================================================================================================================================================+
@@ -104,14 +106,13 @@ class Arctic:
                 |                           | "/etc/ssl/cert.pem"                                   Alpine Linux                                                                                            |
                 +---------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------+
 
+                Note: Support for Azure Blob Storage is currently only available in *non-Conda* binaries distribution.
 
-                Note: Support for Azure Blob Storage is currently only available in *non-Conda* binaries distribution. Connection string should not be ended with ``;``
+                Exception: Azure exceptions message always ends with `{AZURE_SDK_HTTP_STATUS_CODE}:{AZURE_SDK_REASON_PHRASE}`.
 
-
-                Exception: Azure related exception's message always ends with `{AZURE_SDK_HTTP_STATUS_CODE}:{AZURE_SDK_REASON_PHRASE}`.
                 Please refer to https://github.com/Azure/azure-sdk-for-cpp/blob/24ed290815d8f9dbcd758a60fdc5b6b9205f74e0/sdk/core/azure-core/inc/azure/core/http/http_status_code.hpp for
-                more details of status code. Due to a bug in Azure C++ SDK https://github.com/Azure/azure-sdk-for-cpp/issues/4738, Azure may not give meaningful status code and reason
-                phrase in the exception. For debuggin in this situation, please set environment variable ``export AZURE_LOG_LEVEL`` to ``1`` to enable the SDK debug log.
+                more details of provided status codes. Note that due to a bug in Azure C++ SDK (https://github.com/Azure/azure-sdk-for-cpp/issues/4738), Azure may not give meaningful status codes and
+                reason phrases in the exception. To debug these instances, please set the environment variable ``export AZURE_LOG_LEVEL`` to ``1`` to turn on the SDK debug logging.
 
 
             LMDB

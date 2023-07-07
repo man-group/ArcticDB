@@ -3,12 +3,7 @@
 ## What is ArcticDB?
 
 ArcticDB is an embedded/serverless database engine designed to integrate with Pandas and the Python Data Science ecosystem. ArcticDB enables 
-you to store, retrieve and process DataFrames at scale, backed by commodity object storage. 
-
-Object storage we support:
-
-- **S3**
-- **Azure Blob Storage**
+you to store, retrieve and process DataFrames at scale, backed by commodity object storage (S3-compatible storages and Azure Blob Storage are both supported).
 
 ArcticDB requires *zero additional infrastructure* beyond a running Python environment and access to object storage and can be **installed in seconds.**
 
@@ -36,7 +31,7 @@ pip install arcticdb
 
 ### Usage
 
-ArcticDB is a storage engine designed for object storage. As a result, you must have an available object storage to store data using ArcticDB. 
+ArcticDB is a storage engine designed for object storage, but also supports local-disk storage using LMDB.
 
 !!! Storage Compatibility
 
@@ -99,22 +94,21 @@ Connecting to AWS with a pre-defined region:
 Note that no explicit credential parameters are given. When `aws_auth` is passed, authentication is delegated to the AWS SDK which is responsible for locating the appropriate credentials in the `.config` file or 
 in environment variables. 
 
-#### Azure Configuration Examples
-
-```python
->>> from arcticdb import Arctic
->>> ac = Arctic('azure://AccountName=ABCD;AccountKey=EFGH;BlobEndpoint=ENDPOINT;Container=CONTAINER')
-```
-
 #### Using a specific path within a bucket/container
 
 You may want to restrict access for the ArcticDB library to a specific path within the bucket. To do this, you can use the `path_prefix` parameter:
 
 ```python
->>> #s3
 >>> ac = Arctic('s3s://s3.eu-west-2.amazonaws.com:arcticdb-test-bucket?path_prefix=test/&aws_auth=true')
->>> #azure
->>> ac = Arctic('azure://AccountName=ABCD;AccountKey=EFGH;BlobEndpoint=ENDPOINT;Container=CONTAINER;Path_prefix=test/')
+```
+
+#### Azure configuration
+
+ArcticDB uses the [Azure connection string](https://learn.microsoft.com/en-us/azure/storage/common/storage-configure-connection-string) to define the connection: 
+
+```python
+>>> from arcticdb import Arctic
+>>> ac = Arctic('azure://AccountName=ABCD;AccountKey=EFGH;BlobEndpoint=ENDPOINT;Container=CONTAINER')
 ```
 
 #### Library Setup
