@@ -101,6 +101,7 @@ else ()
     find_library(Sasl2_LIBRARY NAMES sasl2 libsasl2 PATHS /usr/local/lib/libsasl2.a REQUIRED)
 endif ()
 
+
 find_path(BITMAGIC_INCLUDE_DIRS "bitmagic/bm.h")
 
 set(FIND_LIBRARY_USE_LIB64_PATHS ON)
@@ -247,13 +248,13 @@ set(arcticdb_srcs
         storage/mongo/mongo_client.hpp
         storage/mongo/mongo_instance.hpp
         storage/mongo/mongo_storage.hpp
+        storage/object_store_utils.hpp
         storage/s3/nfs_backed_storage.hpp
         storage/s3/nfs_backed_storage-inl.hpp
         storage/s3/s3_client_accessor.hpp
         storage/s3/s3_storage-inl.hpp
         storage/s3/s3_storage_tool.hpp
         storage/s3/s3_storage_tool-inl.hpp
-        storage/s3/s3_utils.hpp
         storage/storage_factory.hpp
         storage/storage_options.hpp
         storage/storage.hpp
@@ -423,9 +424,12 @@ set(arcticdb_srcs
         version/symbol_list.cpp)
 
 # Exclude vendored sources when using conda.
-if(NOT ${ARCTICDB_USING_CONDA})
+if(NOT ${ARCTICDB_USING_CONDA}) #Awaiting Azure sdk support in conda https://github.com/man-group/ArcticDB/issues/519
     list (APPEND arcticdb_srcs
         util/third_party/robin_hood.hpp
+        storage/azure/azure_storage-inl.hpp
+        storage/azure/azure_storage.hpp
+        storage/azure/azure_storage.cpp
     )
 endif()
 
@@ -484,6 +488,15 @@ set (arcticdb_core_libraries
         spdlog::spdlog
         Folly::folly # Transitively includes: double-conversion, gflags, glog, libevent, libssl, libcrypto, libiberty, libsodium
         )
+
+if(NOT ${ARCTICDB_USING_CONDA})  #Awaiting Azure sdk support in conda https://github.com/man-group/ArcticDB/issues/519
+    find_package(azure-identity-cpp CONFIG REQUIRED)
+    find_package(azure-storage-blobs-cpp CONFIG REQUIRED)
+    list (APPEND arcticdb_core_libraries
+        Azure::azure-identity
+        Azure::azure-storage-blobs
+    )
+endif()
 
 # Dependencies expose different names of their libraries depending
 # on their origin (i.e. vendored source or packages on conda-forge).
@@ -550,8 +563,8 @@ if (SSL_LINK)
         list(APPEND arcticdb_core_includes  ${KERBEROS_INCLUDE_DIR})
     endif()
 endif ()
-
 target_link_libraries(arcticdb_core_object PUBLIC ${arcticdb_core_libraries})
+
 
 target_include_directories(arcticdb_core_object
         PRIVATE

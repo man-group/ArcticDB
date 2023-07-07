@@ -33,6 +33,7 @@ import pytest
 import pandas as pd
 from datetime import datetime, date, timezone, timedelta
 import numpy as np
+from arcticdb_ext.tools import AZURE_SUPPORT
 from numpy import datetime64
 from arcticdb.util.test import (
     assert_frame_equal,
@@ -40,6 +41,12 @@ from arcticdb.util.test import (
     random_floats,
 )
 import random
+
+
+if AZURE_SUPPORT:
+    from azure.storage.blob import BlobServiceClient
+from botocore.client import BaseClient as BotoClient
+import time
 
 
 try:
@@ -141,8 +148,8 @@ def test_uri_override(moto_s3_uri_incl_bucket):
     assert s3_storage.region == "blah"
 
 
-def test_library_options(moto_s3_uri_incl_bucket):
-    ac = Arctic(moto_s3_uri_incl_bucket)
+def test_library_options(object_storage_uri_incl_bucket):
+    ac = Arctic(object_storage_uri_incl_bucket)
     assert ac.list_libraries() == []
     ac.create_library("pytest_default_options")
     lib = ac["pytest_default_options"]
@@ -165,9 +172,9 @@ def test_library_options(moto_s3_uri_incl_bucket):
     assert write_options.dynamic_strings
 
 
-def test_separation_between_libraries(moto_s3_uri_incl_bucket):
+def test_separation_between_libraries(object_storage_uri_incl_bucket):
     """Validate that symbols in one library are not exposed in another."""
-    ac = Arctic(moto_s3_uri_incl_bucket)
+    ac = Arctic(object_storage_uri_incl_bucket)
     assert ac.list_libraries() == []
 
     ac.create_library("pytest_test_lib")
@@ -181,18 +188,25 @@ def test_separation_between_libraries(moto_s3_uri_incl_bucket):
     assert ac["pytest_test_lib_2"].list_symbols() == ["test_2"]
 
 
-def test_separation_between_libraries_with_prefixes(moto_s3_uri_incl_bucket):
+def get_path_prefix_option(uri):
+    if "azure" in uri:  # azure connection string has a different format
+        return ";Path_prefix"
+    else:
+        return "&path_prefix"
+
+
+def test_separation_between_libraries_with_prefixes(object_storage_uri_incl_bucket):
     """The motivation for the prefix feature is that separate users want to be able to create libraries
     with the same name in the same bucket without over-writing each other's work. This can be useful when
     creating a new bucket is time-consuming, for example due to organisational issues.
-
-    See AN-566.
     """
-    mercury_uri = moto_s3_uri_incl_bucket + "&path_prefix=/planet/mercury"
+
+    option = get_path_prefix_option(object_storage_uri_incl_bucket)
+    mercury_uri = f"{object_storage_uri_incl_bucket}{option}=/planet/mercury"
     ac_mercury = Arctic(mercury_uri)
     assert ac_mercury.list_libraries() == []
 
-    mars_uri = moto_s3_uri_incl_bucket + "&path_prefix=/planet/mars"
+    mars_uri = f"{object_storage_uri_incl_bucket}{option}=/planet/mars"
     ac_mars = Arctic(mars_uri)
     assert ac_mars.list_libraries() == []
 
@@ -208,12 +222,31 @@ def test_separation_between_libraries_with_prefixes(moto_s3_uri_incl_bucket):
     assert ac_mars["pytest_test_lib"].list_symbols() == ["test_2"]
 
 
-def test_library_management_path_prefix(moto_s3_uri_incl_bucket, boto_client):
-    test_bucket = sorted(boto_client.list_buckets()["Buckets"], key=lambda bucket_meta: bucket_meta["CreationDate"])[
-        -1
-    ]["Name"]
+def object_storage_uri_and_client():
+    return [
+        ("moto_s3_uri_incl_bucket", "boto_client"),
+        pytest.param(
+            "azurite_azure_uri_incl_bucket",
+            "azure_client_and_create_container",
+            marks=pytest.mark.skipif(not AZURE_SUPPORT, reason="Pending Azure Storge Conda support"),
+        ),
+    ]
 
-    URI = moto_s3_uri_incl_bucket + "&path_prefix=hello/world"
+
+@pytest.mark.parametrize("connection_string, client", object_storage_uri_and_client())
+def test_library_management_path_prefix(connection_string, client, request):
+    connection_string = request.getfixturevalue(request.getfixturevalue("connection_string"))
+    client = request.getfixturevalue(request.getfixturevalue("client"))
+
+    if isinstance(client, BotoClient):
+        test_bucket = sorted(client.list_buckets()["Buckets"], key=lambda bucket_meta: bucket_meta["CreationDate"])[-1][
+            "Name"
+        ]
+    else:
+        time.sleep(1)  # Azurite is slow....
+        test_bucket = list(client.list_containers())
+
+    URI = f"{connection_string}{get_path_prefix_option(connection_string)}=hello/world"
     ac = Arctic(URI)
     assert ac.list_libraries() == []
 
@@ -227,7 +260,13 @@ def test_library_management_path_prefix(moto_s3_uri_incl_bucket, boto_client):
     ac["pytest_test_lib"].snapshot("test_snapshot")
     assert ac["pytest_test_lib"].list_snapshots() == {"test_snapshot": None}
 
-    keys = [d["Key"] for d in boto_client.list_objects(Bucket=test_bucket)["Contents"]]
+    if isinstance(client, BotoClient):
+        keys = [d["Key"] for d in client.list_objects(Bucket=test_bucket)["Contents"]]
+    else:
+        REGEX = r".*Container=(?P<container>[^;]+).*"
+        match = re.match(REGEX, connection_string)
+        container = match.groupdict()["container"]
+        keys = [blob["name"] for blob in client.get_container_client(container).list_blobs()]
     assert all(k.startswith("hello/world") for k in keys)
     assert any(k.startswith("hello/world/_arctic_cfg") for k in keys)
     assert any(k.startswith("hello/world/pytest_test_lib") for k in keys)
@@ -585,7 +624,7 @@ def test_delete_date_range(arctic_library):
     assert lib["symbol"].version == 1
 
 
-def test_repr(moto_s3_uri_incl_bucket):
+def test_s3_repr(moto_s3_uri_incl_bucket):
     ac = Arctic(moto_s3_uri_incl_bucket)
 
     assert ac.list_libraries() == []
@@ -1514,8 +1553,8 @@ def test_tail(arctic_library):
 
 
 @pytest.mark.parametrize("dedup", [True, False])
-def test_dedup(moto_s3_uri_incl_bucket, dedup):
-    ac = Arctic(moto_s3_uri_incl_bucket)
+def test_dedup(object_storage_uri_incl_bucket, dedup):
+    ac = Arctic(object_storage_uri_incl_bucket)
     assert ac.list_libraries() == []
     ac.create_library("pytest_test_library", LibraryOptions(dedup=dedup))
     lib = ac["pytest_test_library"]
@@ -1526,8 +1565,8 @@ def test_dedup(moto_s3_uri_incl_bucket, dedup):
     assert data_key_version == 0 if dedup else 1
 
 
-def test_segment_slicing(moto_s3_uri_incl_bucket):
-    ac = Arctic(moto_s3_uri_incl_bucket)
+def test_segment_slicing(object_storage_uri_incl_bucket):
+    ac = Arctic(object_storage_uri_incl_bucket)
     assert ac.list_libraries() == []
     rows_per_segment = 5
     columns_per_segment = 2
@@ -1547,11 +1586,26 @@ def test_segment_slicing(moto_s3_uri_incl_bucket):
     assert num_data_segments == math.ceil(rows / rows_per_segment) * math.ceil(columns / columns_per_segment)
 
 
-def test_reload_symbol_list(moto_s3_uri_incl_bucket, boto_client):
+@pytest.mark.parametrize("connection_string, client", object_storage_uri_and_client())
+def test_reload_symbol_list(connection_string, client, request):
+    connection_string = request.getfixturevalue(request.getfixturevalue("connection_string"))
+    client = request.getfixturevalue(request.getfixturevalue("client"))
+
     def get_symbol_list_keys():
-        keys = [
-            d["Key"] for d in boto_client.list_objects(Bucket=test_bucket)["Contents"] if d["Key"].startswith(lib_name)
-        ]
+        if isinstance(client, BotoClient):
+            keys = [
+                d["Key"] for d in client.list_objects(Bucket=test_bucket)["Contents"] if d["Key"].startswith(lib_name)
+            ]
+        else:
+            time.sleep(1)  # Azurite is slow....
+            REGEX = r".*Container=(?P<container>[^;]+).*"
+            match = re.match(REGEX, connection_string)
+            container = match.groupdict()["container"]
+            keys = [
+                blob["name"]
+                for blob in client.get_container_client(container).list_blobs()
+                if blob["name"].startswith(lib_name)
+            ]
         symbol_list_keys = []
         for key in keys:
             path_components = key.split("/")
@@ -1559,10 +1613,14 @@ def test_reload_symbol_list(moto_s3_uri_incl_bucket, boto_client):
                 symbol_list_keys.append(path_components[2])
         return symbol_list_keys
 
-    test_bucket = sorted(boto_client.list_buckets()["Buckets"], key=lambda bucket_meta: bucket_meta["CreationDate"])[
-        -1
-    ]["Name"]
-    ac = Arctic(moto_s3_uri_incl_bucket)
+    if isinstance(client, BotoClient):
+        test_bucket = sorted(client.list_buckets()["Buckets"], key=lambda bucket_meta: bucket_meta["CreationDate"])[-1][
+            "Name"
+        ]
+    else:
+        test_bucket = list(client.list_containers())
+
+    ac = Arctic(connection_string)
     assert ac.list_libraries() == []
 
     lib_name = "pytest_test_lib"
@@ -1583,6 +1641,6 @@ def test_reload_symbol_list(moto_s3_uri_incl_bucket, boto_client):
     assert len(get_symbol_list_keys()) == 1
 
 
-def test_get_uri(moto_s3_uri_incl_bucket):
-    ac = Arctic(moto_s3_uri_incl_bucket)
-    assert ac.get_uri() == moto_s3_uri_incl_bucket
+def test_get_uri(object_storage_uri_incl_bucket):
+    ac = Arctic(object_storage_uri_incl_bucket)
+    assert ac.get_uri() == object_storage_uri_incl_bucket

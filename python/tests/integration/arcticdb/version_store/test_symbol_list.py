@@ -95,8 +95,8 @@ def test_interleaved_store_read(version_store_factory):
 
 @pytest.mark.parametrize("compact_first", [True, False])
 # Using S3 because LMDB does not allow OpenMode to be changed
-def test_symbol_list_read_only_compaction_needed(small_max_delta, s3_version_store, compact_first):
-    lib_write = s3_version_store
+def test_symbol_list_read_only_compaction_needed(small_max_delta, object_version_store, compact_first):
+    lib_write = object_version_store
     lib_read = make_read_only(lib_write)
     lt = lib_write.library_tool()
     old_compaction = []

@@ -231,14 +231,15 @@ jobs:
           disk-root: "D:"  # This is also the checkout directory. Total size 12GB.
         continue-on-error: true
 
-      - name: Install azurite
+      - name: Install npm # Linux github runner image does not come with npm
         if: matrix.os == 'linux'
-        run: |
-          yum install -y npm
-          npm install -g azurite
+        uses: actions/setup-node@v3.3.0
+        with:
+          node-version: '16'
 
       - name: Install the wheel and dependencies
         run: |
+          npm install -g azurite
           cmake -P cpp/CMake/CpuCount.cmake | sed 's/^-- //' | tee -a $GITHUB_ENV
           python -V
           cd "$RUNNER_TEMP" # Works for Windows-style paths as well
