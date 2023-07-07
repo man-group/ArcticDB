@@ -73,8 +73,8 @@ class AzureLibraryAdapter(ArcticLibraryAdapter):
             cfg=env_cfg,
             lib_name=self.CONFIG_LIBRARY_NAME,
             env_name=_DEFAULT_ENV,
-            container_name=self._bucket,
-            endpoint=self._container,
+            container_name=self._container,
+            endpoint=self._endpoint,
             with_prefix=with_prefix,
             ca_cert_path=self._ca_cert_path,
         )
