@@ -108,7 +108,6 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
         .def("set_incompletes", &ReadOptions::set_incompletes)
         .def("set_set_tz", &ReadOptions::set_set_tz)
         .def("set_optimise_string_memory", &ReadOptions::set_optimise_string_memory)
-        .def("set_batch_throw_on_missing_version", &ReadOptions::set_batch_throw_on_missing_version)
         .def_property_readonly("incompletes", &ReadOptions::get_incompletes);
 
     using FrameDataWrapper = arcticdb::pipelines::FrameDataWrapper;
@@ -190,18 +189,13 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
 
 
 
-    auto adapt_read_dfs = [](std::vector<std::optional<ReadResult>> && ret) -> py::list {
+    auto adapt_read_dfs = [](std::vector<ReadResult> && ret) -> py::list {
         py::list lst;
         for (auto &res: ret) {
-            if (res.has_value()) {
-                auto pynorm = python_util::pb_to_python(res->norm_meta);
-                auto pyuser_meta = python_util::pb_to_python(res->user_meta);
-                auto multi_key_meta = python_util::pb_to_python(res->multi_key_meta);
-                lst.append(py::make_tuple(res->item, std::move(res->frame_data), pynorm, pyuser_meta, multi_key_meta,
-                                          res->multi_keys));
-            } else {
-                lst.append(py::none());
-            }
+            auto pynorm = python_util::pb_to_python(res.norm_meta);
+            auto pyuser_meta = python_util::pb_to_python(res.user_meta);
+            auto multi_key_meta = python_util::pb_to_python(res.multi_key_meta);
+            lst.append(py::make_tuple(res.item, std::move(res.frame_data), pynorm, pyuser_meta, multi_key_meta, res.multi_keys));
         }
         return lst;
     };
