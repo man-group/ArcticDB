@@ -94,7 +94,7 @@ Connecting to AWS with a pre-defined region:
 Note that no explicit credential parameters are given. When `aws_auth` is passed, authentication is delegated to the AWS SDK which is responsible for locating the appropriate credentials in the `.config` file or 
 in environment variables. 
 
-#### Using a specific path within a bucket/container
+#### Using a specific path within a bucket
 
 You may want to restrict access for the ArcticDB library to a specific path within the bucket. To do this, you can use the `path_prefix` parameter:
 
@@ -109,7 +109,10 @@ ArcticDB uses the [Azure connection string](https://learn.microsoft.com/en-us/az
 ```python
 >>> from arcticdb import Arctic
 >>> ac = Arctic('azure://AccountName=ABCD;AccountKey=EFGH;BlobEndpoint=ENDPOINT;Container=CONTAINER')
+
 ```
+
+For more information, [see the Arctic class reference](https://docs.arcticdb.io/api/arcticdb#arcticdb.Arctic.__init__).
 
 #### Library Setup
 
