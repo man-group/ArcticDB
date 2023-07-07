@@ -3,7 +3,7 @@
 ## What is ArcticDB?
 
 ArcticDB is an embedded/serverless database engine designed to integrate with Pandas and the Python Data Science ecosystem. ArcticDB enables 
-you to store, retrieve and process DataFrames at scale, backed by commodity object storage (S3-compatible storages and Azure Blob Storage are both supported).
+you to store, retrieve and process DataFrames at scale, backed by commodity object storage (S3-compatible storages and Azure Blob Storage).
 
 ArcticDB requires *zero additional infrastructure* beyond a running Python environment and access to object storage and can be **installed in seconds.**
 
@@ -36,8 +36,6 @@ ArcticDB is a storage engine designed for object storage, but also supports loca
 !!! Storage Compatibility
 
     ArcticDB supports any S3 API compatible storage. It has been tested against AWS S3 and storage appliances like [VAST Universal Storage](https://vastdata.com/).
-
-    Beside S3, we also support Azure Blob Storage as well.
 
     ArcticDB also supports LMDB for local/file based storage - to use LMDB, pass an LMDB path as the URI: `Arctic('lmdb://path/to/desired/database')`.
 
