@@ -184,7 +184,10 @@ def azurite_azure_uri_incl_bucket(azurite_azure_uri, azure_client_and_create_con
 
 
 @pytest.fixture(scope="function")
-def arctic_library(azure_client_and_create_container, arctic_client):
+def arctic_library(request, arctic_client):
+    if AZURE_SUPPORT:
+        request.getfixturevalue("azure_client_and_create_container")
+
     arctic_client.create_library("pytest_test_lib")
     return arctic_client["pytest_test_lib"]
 
