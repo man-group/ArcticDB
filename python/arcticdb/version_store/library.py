@@ -935,9 +935,9 @@ class Library:
                     f"Unsupported item in the symbols argument s=[{s}] type(s)=[{type(s)}]. Only [str] and"
                     " [ReadRequest] are supported."
                 )
-        throw_on_missing_version = False
+
         return self._nvs._batch_read_to_versioned_items(
-            symbol_strings, as_ofs, date_ranges, columns, query_builder or query_builders, throw_on_missing_version
+            symbol_strings, as_ofs, date_ranges, columns, query_builder or query_builders
         )
 
     def read_metadata(self, symbol: str, as_of: Optional[AsOf] = None) -> VersionedItem:
