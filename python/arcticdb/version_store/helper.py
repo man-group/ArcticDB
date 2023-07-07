@@ -12,6 +12,7 @@ from typing import Iterable, Dict, Any, Union
 
 from arcticc.pb2.lmdb_storage_pb2 import Config as LmdbConfig
 from arcticc.pb2.s3_storage_pb2 import Config as S3Config
+from arcticc.pb2.azure_storage_pb2 import Config as AzureConfig
 from arcticc.pb2.in_memory_storage_pb2 import Config as MemoryConfig
 from arcticc.pb2.mongo_storage_pb2 import Config as MongoConfig
 from arcticc.pb2.nfs_backed_storage_pb2 import Config as NfsConfig
@@ -300,6 +301,19 @@ def create_test_s3_cfg(
     return cfg
 
 
+def create_test_azure_cfg(lib_name, credential_name, credential_key, container_name, endpoint, ca_cert_path):
+    cfg = EnvironmentConfigsMap()
+    add_azure_library_to_env(
+        cfg=cfg,
+        lib_name=lib_name,
+        env_name=Defaults.ENV,
+        container_name=container_name,
+        endpoint=endpoint,
+        ca_cert_path=ca_cert_path,
+    )
+    return cfg
+
+
 def create_test_memory_cfg(lib_name=Defaults.LIB, description=None):
     cfg = EnvironmentConfigsMap()
     add_memory_library_to_env(cfg, lib_name=lib_name, env_name=Defaults.ENV, description=description)
@@ -310,6 +324,57 @@ def create_test_mongo_cfg(lib_name=Defaults.LIB, uri="mongodb://localhost:27017"
     cfg = EnvironmentConfigsMap()
     add_mongo_library_to_env(cfg, lib_name=lib_name, env_name=Defaults.ENV, uri=uri, description=description)
     return cfg
+
+
+def get_azure_proto(
+    cfg,
+    lib_name,
+    env_name,
+    container_name,
+    endpoint,
+    with_prefix: Optional[bool] = True,
+    ca_cert_path: Optional[str] = None,
+):
+    env = cfg.env_by_id[env_name]
+    azure = AzureConfig()
+    azure.container_name = container_name
+    azure.endpoint = endpoint
+    if with_prefix:
+        if isinstance(with_prefix, str):
+            azure.prefix = with_prefix
+        else:
+            azure.prefix = f"{lib_name}{time.time() * 1e9:.0f}"
+    else:
+        azure.prefix = lib_name
+    azure.ca_cert_path = ca_cert_path
+
+    sid, storage = get_storage_for_lib_name(azure.prefix, env)
+    storage.config.Pack(azure, type_url_prefix="cxx.arctic.org")
+    return sid, storage
+
+
+def add_azure_library_to_env(
+    cfg,
+    lib_name,
+    env_name,
+    container_name,
+    endpoint,
+    description: Optional[bool] = None,
+    with_prefix: Optional[bool] = True,
+    ca_cert_path: Optional[str] = None,
+):
+    env = cfg.env_by_id[env_name]
+    sid, storage = get_azure_proto(
+        cfg=cfg,
+        lib_name=lib_name,
+        env_name=env_name,
+        container_name=container_name,
+        endpoint=endpoint,
+        with_prefix=with_prefix,
+        ca_cert_path=ca_cert_path,
+    )
+
+    _add_lib_desc_to_env(env, lib_name, sid, description)
 
 
 # see https://regex101.com/r/mBCS80/1

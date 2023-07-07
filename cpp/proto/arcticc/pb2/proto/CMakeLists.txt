@@ -11,6 +11,7 @@ SET(PROTO_IN_FILES
         mongo_storage.proto
         in_memory_storage.proto
         s3_storage.proto
+        azure_storage.proto
         nfs_backed_storage.proto
         logger.proto
         )
