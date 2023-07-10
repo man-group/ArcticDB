@@ -31,7 +31,7 @@ import pandas as pd
 from datetime import datetime, date, timezone
 import numpy as np
 from arcticdb.util.test import assert_frame_equal
-
+from arcticdb.util._versions import IS_PANDAS_TWO
 
 try:
     from arcticdb.version_store.library import (
@@ -1174,7 +1174,8 @@ def test_get_description(arctic_library):
     assert info.row_count == 6
     assert original_info.row_count == 4
     assert info.last_update_time > original_info.last_update_time
-    assert info.last_update_time.tz == pytz.UTC
+    utc_implementation = timezone.utc if IS_PANDAS_TWO else pytz.UTC
+    assert info.last_update_time.tz == utc_implementation
 
 
 def test_get_description_batch(arctic_library):
