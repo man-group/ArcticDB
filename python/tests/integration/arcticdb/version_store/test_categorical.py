@@ -11,6 +11,7 @@ import pandas as pd
 import pytest
 
 from arcticdb.exceptions import ArcticNativeNotYetImplemented
+from arcticdb.util._versions import IS_PANDAS_TWO
 from arcticdb.util.test import assert_frame_equal
 
 
@@ -81,7 +82,7 @@ def test_categorical_empty(lmdb_version_store, sym):
     lib = lmdb_version_store
     lib.write(sym, df)
     read_df = lib.read(sym).data
-    assert_frame_equal(df, read_df)
+    assert_frame_equal(df, read_df, check_dtype=not IS_PANDAS_TWO)
 
 
 def test_categorical_with_integers(lmdb_version_store, sym):

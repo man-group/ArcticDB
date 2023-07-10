@@ -43,6 +43,7 @@ from arcticdb.util.test import (
     assert_frame_equal,
     assert_series_equal,
 )
+from arcticdb.util._versions import IS_PANDAS_TWO
 from arcticdb_ext.tools import AZURE_SUPPORT
 from tests.util.date import DateRange
 
@@ -1724,7 +1725,11 @@ def test_dynamic_schema_column_hash_update(lmdb_version_store_column_buckets):
     lib.update("symbol", df2)
     vit = lib.read("symbol")
     df.update(df2)
-    assert_frame_equal(vit.data.astype("float"), df)
+    if not IS_PANDAS_TWO:
+        # Pandas 1.0 does not cast to float natively, but Pandas 2.0 does.
+        vit.data = vit.data.astype("float")
+
+    assert_frame_equal(vit.data, df)
 
 
 def test_dynamic_schema_column_hash_append(lmdb_version_store_column_buckets):

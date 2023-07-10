@@ -153,10 +153,9 @@ def test_fallback_to_pickle(lmdb_version_store, sym):
         # In Pandas 2.0, RangeIndex is used by default when an empty dataframe or series is created.
         # The index is converted to a DatetimeIndex for preserving the behavior of ArcticDB with Pandas 1.0.
         df.index = df.index.astype("datetime64[ns]")
-        # Pandas 2.0 uses an internal representation which is normalizable and therefore not pickled.
-        # TODO: Find out what has changed to make it normalizable (is it the default floating dtype?).
-        assert not lmdb_version_store.is_symbol_pickled(sym)
-    else:
-        assert lmdb_version_store.is_symbol_pickled(sym)
+
+    # NOTE: This is now storable without necessitating pickle.
+    # What is the purpose of this test?
+    assert not lmdb_version_store.is_symbol_pickled(sym)
 
     assert_frame_equal(df, lmdb_version_store.read(sym).data, check_dtype=False)
