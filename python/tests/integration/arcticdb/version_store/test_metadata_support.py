@@ -9,6 +9,7 @@ import time
 import numpy as np
 from pandas import DataFrame, Timestamp
 import pytest
+import sys
 
 from arcticdb.version_store import NativeVersionStore, VersionedItem
 from arcticdb.exceptions import ArcticNativeNotYetImplemented
@@ -20,9 +21,8 @@ from arcticdb.util.test import assert_frame_equal
 # test_rt_df stands for roundtrip dataframe (implicitly pandas given file name)
 
 
-@pytest.mark.parametrize("lib_type", ["lmdb_version_store", "s3_version_store"])
-def test_rt_df_with_small_meta(lib_type, request):
-    lib = request.getfixturevalue(lib_type)
+def test_rt_df_with_small_meta(object_and_lmdb_version_store):
+    lib = object_and_lmdb_version_store
     #  type: (NativeVersionStore)->None
     df = DataFrame(data=["A", "B", "C"])
     meta = {"abc": "def", "xxx": "yyy"}
@@ -32,24 +32,21 @@ def test_rt_df_with_small_meta(lib_type, request):
     assert meta == vit.metadata
 
 
-@pytest.mark.parametrize("lib_type", ["lmdb_version_store", "s3_version_store"])
-def test_rt_df_with_humonguous_meta(lib_type, request):
+def test_rt_df_with_humonguous_meta(object_and_lmdb_version_store):
     with pytest.raises(ArcticNativeNotYetImplemented):
         from arcticdb.version_store._normalization import _MAX_USER_DEFINED_META as MAX
 
-        lib = request.getfixturevalue(lib_type)
         df = DataFrame(data=["A", "B", "C"])
         meta = {"a": "x" * (MAX)}
-        lib.write("pandas", df, metadata=meta)
+        object_and_lmdb_version_store.write("pandas", df, metadata=meta)
 
-        vit = lib.read("pandas")
+        vit = object_and_lmdb_version_store.read("pandas")
         assert_frame_equal(df, vit)
         assert meta == vit.metadata
 
 
-@pytest.mark.parametrize("lib_type", ["s3_version_store", "lmdb_version_store", "s3_version_store"])
-def test_read_metadata(lib_type, request):
-    lib = request.getfixturevalue(lib_type)
+def test_read_metadata(object_and_lmdb_version_store):
+    lib = object_and_lmdb_version_store
     original_data = [1, 2, 3]
     snap_name = "metadata_snap_1"
     symbol = "test_symbol"
@@ -59,9 +56,8 @@ def test_read_metadata(lib_type, request):
     assert lib.read_metadata("test_symbol").metadata == metadata
 
 
-@pytest.mark.parametrize("lib_type", ["lmdb_version_store", "s3_version_store"])
-def test_read_metadata_by_version(lib_type, request):
-    lib = request.getfixturevalue(lib_type)
+def test_read_metadata_by_version(object_and_lmdb_version_store):
+    lib = object_and_lmdb_version_store
     data_v1 = [1, 2, 3]
     data_v2 = [10, 20, 30]
     symbol = "test_symbol"

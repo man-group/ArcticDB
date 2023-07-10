@@ -36,7 +36,7 @@ inline constexpr OffsetString::offset_t not_a_string() { return std::numeric_lim
 inline constexpr OffsetString::offset_t nan_placeholder() { return not_a_string() - 1; }
 
 // Returns true if the provided offset does not represent None or NaN
-inline bool is_a_string(OffsetString::offset_t offset) {
+inline constexpr bool is_a_string(OffsetString::offset_t offset) {
     return offset < nan_placeholder();
 }
 

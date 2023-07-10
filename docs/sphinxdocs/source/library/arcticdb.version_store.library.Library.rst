@@ -37,7 +37,7 @@
       ~Library.update
       ~Library.write
       ~Library.write_batch
-      ~Library.write_batch_pickle
+      ~Library.write_pickle_batch
       ~Library.write_metadata
       ~Library.write_pickle
    

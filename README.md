@@ -38,12 +38,24 @@ ArcticDB is designed from the outset to be resilient; there is no single point o
 
 ## Quickstart
 
-> ⚠️ **Pre-built binaries only available for Linux and Windows**: MacOS binaries are coming soon!
+### Prebuilt binary availability
+
+|                       | PyPI | conda-forge |
+| --------------------- | - | - |
+| Linux                 | ✔️ | ✔️ |
+| Windows               | ✔️ | ➖ |
+| MacOS (Apple Silicon) | ➖ | ✔️ |
+
+### Installation
 
 Install ArcticDB:
 
 ```bash
 $ pip install arcticdb
+```
+or using conda-forge
+```bash
+$ conda install -c conda-forge arcticdb
 ```
 
 Import ArcticDB:
@@ -77,6 +89,7 @@ Create your first library and list the libraries in the instance:
 
 Create a test dataframe:
 ```Python
+>>> import numpy as np
 >>> import pandas as pd
 >>> NUM_COLUMNS=10
 >>> NUM_ROWS=100_000
@@ -110,12 +123,14 @@ Use of ArcticDB in production or for a Database Service requires a paid for lice
 and is licensed under the ArcticDB Software License Agreement. For more information please contact [arcticdb@man.com](mailto:ArcticDB@man.com).
 
 The BSL is not certified as an open-source license, but most of the [Open Source Initiative (OSI)](https://opensource.org/) criteria are met.
-
-For each BSL release all associated alpha, beta, major, and minor (point) releases will become Apache Licensed, version 2.0 on the same day two years after the major release date. For the license conversion dates, see the table below.
+Please see version conversion dates in the below table:
 
 | ArcticDB Version | License | Converts to Apache 2.0 |
 | ------------- | ------------- | ------------- |
 | 1.0 | Business Source License 1.1 | Mar 16, 2025 |
+| 1.2 | Business Source License 1.1 | May 22, 2025 |
+| 1.3 | Business Source License 1.1 | Jun  9, 2025 |
+| 1.4 | Business Source License 1.1 | Jun  23, 2025 |
 
 ## Code of Conduct
 

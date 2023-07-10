@@ -10,7 +10,7 @@
 #include <arcticdb/storage/storage.hpp>
 #include <arcticdb/storage/storage_factory.hpp>
 #include <arcticdb/log/log.hpp>
-#include <arcticdb/storage/s3/s3_utils.hpp>
+#include <arcticdb/storage/object_store_utils.hpp>
 #include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/util/composite.hpp>
 #include <arcticdb/storage/s3/s3_client_accessor.hpp>

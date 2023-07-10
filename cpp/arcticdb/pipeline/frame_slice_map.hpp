@@ -35,7 +35,7 @@ struct FrameSliceMap {
                     continue;
                 }
 
-                if(!dynamic_schema && !is_sequence_type(type_desc_from_proto(field->type_desc()).data_type())) {
+                if(!dynamic_schema && !is_sequence_type(field->type().data_type())) {
                     ARCTICDB_DEBUG(log::version(), "{} not a string type in dynamic schema, skipping", field->name());
                     continue;
                 }

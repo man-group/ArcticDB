@@ -19,7 +19,7 @@ inline std::size_t sizeof_datatype(const TypeDescriptor &td) {
 struct ColumnMapping {
     const TypeDescriptor source_type_desc_;
     const TypeDescriptor dest_type_desc_;
-    const FieldDescriptor::Proto& frame_field_descriptor_;
+    const Field& frame_field_descriptor_;
     const size_t dest_size_;
     const size_t num_rows_;
     const size_t first_row_;
@@ -27,8 +27,8 @@ struct ColumnMapping {
     const size_t dest_bytes_;
 
     ColumnMapping(SegmentInMemory &frame, size_t dst_col, size_t field_col, pipelines::PipelineContextRow &context) :
-        source_type_desc_(type_desc_from_proto(context.descriptor().fields(field_col).type_desc())),
-        dest_type_desc_(type_desc_from_proto(frame.field(dst_col).type_desc())),
+        source_type_desc_(context.descriptor().fields(field_col).type()),
+        dest_type_desc_(frame.field(dst_col).type()),
         frame_field_descriptor_(frame.field(dst_col)),
         dest_size_(sizeof_datatype(dest_type_desc_)),
         num_rows_(context.slice_and_key().slice_.row_range.diff()),

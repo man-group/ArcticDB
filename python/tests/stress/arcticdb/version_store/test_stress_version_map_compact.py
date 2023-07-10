@@ -55,10 +55,10 @@ def read_data(lib, sym, done):
             assert vs[idx]["version"] == vs[idx + 1]["version"] + 1
 
 
-def test_stress_version_map_compact(s3_version_store, sym, capsys):
+def test_stress_version_map_compact(object_version_store, sym, capsys):
     done = Value("b", 0)
     error = Value("b", 0)
-    lib = s3_version_store
+    lib = object_version_store
     lib.version_store._set_validate_version_map()
     with capsys.disabled():
         try:

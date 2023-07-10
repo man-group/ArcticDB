@@ -29,17 +29,17 @@ std::vector<Composite<ProcessingSegment>> single_partition(std::vector<Composite
 class GroupingMap {
     using NumericMapType = std::variant<
             std::monostate,
-            std::shared_ptr<std::unordered_map<bool, size_t>>,
-            std::shared_ptr<std::unordered_map<uint8_t, size_t>>,
-            std::shared_ptr<std::unordered_map<uint16_t, size_t>>,
-            std::shared_ptr<std::unordered_map<uint32_t, size_t>>,
-            std::shared_ptr<std::unordered_map<uint64_t, size_t>>,
-            std::shared_ptr<std::unordered_map<int8_t, size_t>>,
-            std::shared_ptr<std::unordered_map<int16_t, size_t>>,
-            std::shared_ptr<std::unordered_map<int32_t, size_t>>,
-            std::shared_ptr<std::unordered_map<int64_t, size_t>>,
-            std::shared_ptr<std::unordered_map<float, size_t>>,
-            std::shared_ptr<std::unordered_map<double, size_t>>>;
+            std::shared_ptr<emilib::HashMap<bool, size_t>>,
+            std::shared_ptr<emilib::HashMap<uint8_t, size_t>>,
+            std::shared_ptr<emilib::HashMap<uint16_t, size_t>>,
+            std::shared_ptr<emilib::HashMap<uint32_t, size_t>>,
+            std::shared_ptr<emilib::HashMap<uint64_t, size_t>>,
+            std::shared_ptr<emilib::HashMap<int8_t, size_t>>,
+            std::shared_ptr<emilib::HashMap<int16_t, size_t>>,
+            std::shared_ptr<emilib::HashMap<int32_t, size_t>>,
+            std::shared_ptr<emilib::HashMap<int64_t, size_t>>,
+            std::shared_ptr<emilib::HashMap<float, size_t>>,
+            std::shared_ptr<emilib::HashMap<double, size_t>>>;
 
     NumericMapType map_;
 
@@ -55,16 +55,16 @@ public:
     }
 
     template<typename T>
-    std::shared_ptr<std::unordered_map<T, size_t>> get() {
+    std::shared_ptr<emilib::HashMap<T, size_t>> get() {
         return util::variant_match(map_,
                                    [that = this](const std::monostate &) {
-                                       that->map_ = std::make_shared<std::unordered_map<T, size_t>>();
-                                       return std::get<std::shared_ptr<std::unordered_map<T, size_t>>>(that->map_);
+                                       that->map_ = std::make_shared<emilib::HashMap<T, size_t>>();
+                                       return std::get<std::shared_ptr<emilib::HashMap<T, size_t>>>(that->map_);
                                    },
-                                   [](const std::shared_ptr<std::unordered_map<T, size_t>> &ptr) {
+                                   [](const std::shared_ptr<emilib::HashMap<T, size_t>> &ptr) {
                                        return ptr;
                                    },
-                                   [](const auto &) -> std::shared_ptr<std::unordered_map<T, size_t>> {
+                                   [](const auto &) -> std::shared_ptr<emilib::HashMap<T, size_t>> {
                                        schema::raise<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>(
                                                "GroupBy does not support the grouping column type changing with dynamic schema");
                                    });
@@ -149,7 +149,7 @@ Composite<ProcessingSegment> ProjectClause::process(std::shared_ptr<Store> store
 
                                 auto &slice_and_keys = proc.data();
                                 auto &last = *slice_and_keys.rbegin();
-                                last.segment(store).add_column(scalar_field_proto(data_type, name), col.column_);
+                                last.segment(store).add_column(scalar_field(data_type, name), col.column_);
                                 ++last.slice().col_range.second;
                                 output.push_back(std::move(proc));
                             },
@@ -245,26 +245,45 @@ Composite<ProcessingSegment> AggregationClause::process(std::shared_ptr<Store> s
                                                 row_to_group.reserve(col.column_->row_count());
                                                 auto input_data = col.column_->data();
                                                 auto hash_to_group = grouping_map.get<RawType>();
+                                                // For string grouping columns, keep a local map within this ProcessingSegment
+                                                // from offsets to groups, to avoid needless calls to col.string_at_offset and
+                                                // string_pool->get
+                                                // This could be slower in cases where there aren't many repeats in string
+                                                // grouping columns. Maybe track hit ratio of finds and stop using it if it is
+                                                // too low?
+                                                // Tested with 100,000,000 row dataframe with 100,000 unique values in the grouping column. Timings:
+                                                // 11.14 seconds without caching
+                                                // 11.01 seconds with caching
+                                                // Not worth worrying about right now
+                                                emilib::HashMap<RawType, size_t> offset_to_group;
                                                 while (auto block = input_data.next<ScalarTagType<DataTypeTagType>>()) {
                                                     const auto row_count = block->row_count();
                                                     auto ptr = block->data();
                                                     for (size_t i = 0; i < row_count; ++i, ++ptr) {
                                                         RawType val;
                                                         if constexpr(is_sequence_type(data_type)) {
-                                                            std::optional<std::string_view> str = col.string_at_offset(*ptr);
-                                                            if (str.has_value()) {
-                                                                val = string_pool->get(*str, true).offset();
+                                                            auto offset = *ptr;
+                                                            if (auto it = offset_to_group.find(offset); it != offset_to_group.end()) {
+                                                                val = it->second;
                                                             } else {
-                                                                val = *ptr;
+                                                                std::optional<std::string_view> str = col.string_at_offset(offset);
+                                                                if (str.has_value()) {
+                                                                    val = string_pool->get(*str, true).offset();
+                                                                } else {
+                                                                    val = offset;
+                                                                }
+                                                                RawType val_copy(val);
+                                                                offset_to_group.insert_unique(std::move(offset), std::move(val_copy));
                                                             }
                                                         } else {
                                                             val = *ptr;
                                                         }
                                                         if (auto it = hash_to_group->find(val); it == hash_to_group->end()) {
-                                                            row_to_group.push_back(next_group_id);
-                                                            hash_to_group->try_emplace(val, next_group_id++);
+                                                            row_to_group.emplace_back(next_group_id);
+                                                            auto group_id = next_group_id++;
+                                                            hash_to_group->insert_unique(std::move(val), std::move(group_id));
                                                         } else {
-                                                            row_to_group.push_back(it->second);
+                                                            row_to_group.emplace_back(it->second);
                                                         }
                                                     }
                                                 }
@@ -288,7 +307,7 @@ Composite<ProcessingSegment> AggregationClause::process(std::shared_ptr<Store> s
 
     SegmentInMemory seg;
     auto index_col = std::make_shared<Column>(make_scalar_type(grouping_data_type), grouping_map.size(), true, false);
-    auto index_pos = seg.add_column(scalar_field_proto(grouping_data_type, grouping_column_), index_col);
+    auto index_pos = seg.add_column(scalar_field(grouping_data_type, grouping_column_), index_col);
     seg.descriptor().set_index(IndexDescriptor(0, IndexDescriptor::ROWCOUNT));
 
     entity::details::visit_type(grouping_data_type, [&seg, &grouping_map, index_pos](auto data_type_tag) {
@@ -414,12 +433,9 @@ void merge_impl(
     };
     
     using AggregatorType = stream::Aggregator<IndexType, stream::DynamicSchema, SegmentationPolicy, DensityPolicy>;
-    auto fields = stream_descriptor.fields();
-    StreamDescriptor::FieldsCollection new_fields{};
-    auto field_name = fields[0].name();
-    auto new_field = new_fields.Add();
-    new_field->set_name(field_name.data(), field_name.size());
-    new_field->CopyFrom(fields[0]);
+    const auto& fields = stream_descriptor.fields();
+    FieldCollection new_fields{};
+    (void)new_fields.add(fields[0].ref());
     
     auto index_desc = index_descriptor(stream_id, index, new_fields);
     auto desc = StreamDescriptor{index_desc};
@@ -428,7 +444,6 @@ void merge_impl(
             stream::DynamicSchema{desc, index},
             std::move(func), std::move(segmentation_policy), desc, std::nullopt
     };
-
 
     stream::do_merge<IndexType, SliceAndKeyWrapper, AggregatorType, decltype(input_streams)>(
         input_streams, agg, add_symbol_column);
@@ -525,16 +540,17 @@ Composite<ProcessingSegment> ColumnStatsGenerationClause::process(std::shared_pt
                     end_indexes.insert(slice_and_key.key_->end_index());
                 }
                 for (auto agg_data : folly::enumerate(aggregators_data)) {
-                    auto input_column_name = that->column_stats_aggregators_->at(agg_data.index).get_input_column_name();
+                    auto
+                        input_column_name = that->column_stats_aggregators_->at(agg_data.index).get_input_column_name();
                     auto input_column = proc.get(input_column_name, store);
                     if (std::holds_alternative<ColumnWithStrings>(input_column)) {
                         auto input_column_with_strings = std::get<ColumnWithStrings>(input_column);
                         agg_data->aggregate(input_column_with_strings);
                     } else {
-                        if(!that->processing_config_.dynamic_schema_)
+                        if (!that->processing_config_.dynamic_schema_)
                             internal::raise<ErrorCode::E_ASSERTION_FAILURE>(
-                                    "Unable to resolve column denoted by aggregation operator: '{}'",
-                                    input_column_name);
+                                "Unable to resolve column denoted by aggregation operator: '{}'",
+                                input_column_name);
                     }
                 }
             });
@@ -557,8 +573,8 @@ Composite<ProcessingSegment> ColumnStatsGenerationClause::process(std::shared_pt
 
     SegmentInMemory seg;
     seg.descriptor().set_index(IndexDescriptor(0, IndexDescriptor::ROWCOUNT));
-    seg.add_column(scalar_field_proto(DataType::MICROS_UTC64, start_index_column_name), start_index_col);
-    seg.add_column(scalar_field_proto(DataType::MICROS_UTC64, end_index_column_name), end_index_col);
+    seg.add_column(scalar_field(DataType::MICROS_UTC64, start_index_column_name), start_index_col);
+    seg.add_column(scalar_field(DataType::MICROS_UTC64, end_index_column_name), end_index_col);
     for (const auto& agg_data: folly::enumerate(aggregators_data)) {
         seg.concatenate(agg_data->finalize(column_stats_aggregators_->at(agg_data.index).get_output_column_names()));
     }

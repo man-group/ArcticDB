@@ -95,6 +95,10 @@ public:
         return buffer_;
     }
 
+    BufferType& buffer() {
+        return buffer_;
+    }
+
     void compact_blocks() {
         if(buffer_.blocks().size() <=1)
             return;
@@ -107,10 +111,6 @@ public:
         }
         util::check(cursor_ == tmp.cursor_, "Cursor mismatch on compact_blocks, {} != {}", cursor_, tmp.cursor_);
         std::swap(tmp.buffer_, buffer_);
-    }
-
-    BufferType& buffer() {
-        return buffer_;
     }
 
     template<class T>

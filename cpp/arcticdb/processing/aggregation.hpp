@@ -165,7 +165,7 @@ struct MaxOrMinAggregatorData {
                     auto col_data = input_column->column_->data();
                     auto out_ptr = reinterpret_cast<MaybeValue<GlobalRawType>*>(that->aggregated_.data());
                     std::fill(out_ptr + prev_size, out_ptr + unique_values, MaybeValue<GlobalRawType>{});
-                    entity::details::visit_type(input_column->column_->type().data_type(), [&groups, &out_ptr, &col_data, that=that] (auto type_desc_tag) {
+                    entity::details::visit_type(input_column->column_->type().data_type(), [&groups, &out_ptr, &col_data] (auto type_desc_tag) {
                         using ColumnTagType = std::decay_t<decltype(type_desc_tag)>;
                         using ColumnType =  typename ColumnTagType::raw_type;
                         if constexpr(!is_sequence_type(ColumnTagType::data_type)) {
@@ -224,7 +224,7 @@ struct MaxOrMinAggregatorData {
                         *out_ptr = in_ptr->written_ ? static_cast<double>(in_ptr->value_) : std::numeric_limits<double>::quiet_NaN();                }
 
                     col->set_row_data(unique_values - 1);
-                    res.add_column(scalar_field_proto(DataType::FLOAT64, output_column_name.value), col);
+                    res.add_column(scalar_field(DataType::FLOAT64, output_column_name.value), col);
                 });
             } else {
                 entity::details::visit_type(*data_type_, [that=this, &res, output_column_name, unique_values] (auto type_desc_tag) {
@@ -236,7 +236,7 @@ struct MaxOrMinAggregatorData {
                         *out_ptr = in_ptr->value_;
                     }
                     col->set_row_data(unique_values - 1);
-                    res.add_column(scalar_field_proto(that->data_type_.value(), output_column_name.value), col);
+                    res.add_column(scalar_field(that->data_type_.value(), output_column_name.value), col);
                 });
             }
         }

@@ -6,6 +6,7 @@
  */
 
 #include <arcticdb/processing/aggregation.hpp>
+
 #include <cmath>
 
 namespace arcticdb {
@@ -66,8 +67,8 @@ SegmentInMemory MinMaxAggregatorData::finalize(const std::vector<ColumnName>& ou
             auto max_col = std::make_shared<Column>(make_scalar_type(that->max_->data_type_), true);
             max_col->template push_back<RawType>(that->max_->get<RawType>());
 
-            seg.add_column(scalar_field_proto(min_col->type().data_type(), output_column_names[0].value), min_col);
-            seg.add_column(scalar_field_proto(max_col->type().data_type(), output_column_names[1].value), max_col);
+            seg.add_column(scalar_field(min_col->type().data_type(), output_column_names[0].value), min_col);
+            seg.add_column(scalar_field(max_col->type().data_type(), output_column_names[1].value), max_col);
         });
     }
     return seg;
@@ -114,7 +115,7 @@ SegmentInMemory SumAggregatorData::finalize(const ColumnName& output_column_name
             that->aggregated_.resize(sizeof(RawType)* unique_values);
             auto col = std::make_shared<Column>(make_scalar_type(that->data_type_.value()), unique_values, true, false);
             memcpy(col->ptr(), that->aggregated_.data(), that->aggregated_.size());
-            res.add_column(scalar_field_proto(that->data_type_.value(), output_column_name.value), col);
+            res.add_column(scalar_field(that->data_type_.value(), output_column_name.value), col);
             col->set_row_data(unique_values - 1);
         });
     }
@@ -147,8 +148,7 @@ SegmentInMemory MeanAggregatorData::finalize(const ColumnName& output_column_nam
     SegmentInMemory res;
     if(!data_.fractions_.empty()) {
         data_.fractions_.resize(unique_values);
-        auto grouping_desc = scalar_field_proto(arcticdb::entity::DataType::FLOAT64, output_column_name.value);
-        auto pos = res.add_column(grouping_desc, data_.fractions_.size(), true);
+        auto pos = res.add_column(scalar_field(DataType::FLOAT64, output_column_name.value), data_.fractions_.size(), true);
         auto& column = res.column(pos);
         auto ptr = reinterpret_cast<double*>(column.ptr());
         column.set_row_data(data_.fractions_.size() - 1);

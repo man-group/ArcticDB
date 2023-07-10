@@ -80,10 +80,15 @@ struct StreamSource {
         const entity::VariantKey &key,
         storage::ReadKeyOpts opts = storage::ReadKeyOpts{}) = 0;
 
-    virtual folly::Future<std::tuple<VariantKey, std::optional<google::protobuf::Any>, StreamDescriptor::Proto>> read_metadata_and_descriptor(
+    virtual folly::Future<std::tuple<VariantKey, std::optional<google::protobuf::Any>, StreamDescriptor>> read_metadata_and_descriptor(
         const entity::VariantKey& key,
         storage::ReadKeyOpts opts = storage::ReadKeyOpts{}
         ) = 0;
+
+    virtual folly::Future<std::pair<VariantKey, TimeseriesDescriptor>>
+        read_timeseries_descriptor(const entity::VariantKey& key) = 0;
+
+
 };
 
 } // namespace arcticdb::stream

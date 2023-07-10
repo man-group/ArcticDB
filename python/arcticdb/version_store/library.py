@@ -448,7 +448,7 @@ class Library:
 
         error_message = (
             "payload contains some data of types that cannot be normalized. Consider using "
-            f"write_batch_pickle instead. symbols with bad datatypes={bad_symbols[:5]}"
+            f"write_pickle_batch instead. symbols with bad datatypes={bad_symbols[:5]}"
         )
         if len(bad_symbols) > 5:
             error_message += f" (and more)... {len(bad_symbols)} data in total have bad types."
@@ -528,7 +528,7 @@ class Library:
             validate_index=validate_index,
         )
 
-    def write_batch_pickle(
+    def write_pickle_batch(
         self, payloads: List[WritePayload], prune_previous_versions: bool = False, staged=False
     ) -> List[VersionedItem]:
         """
@@ -1341,8 +1341,12 @@ class Library:
         last_update_time = pd.to_datetime(info["last_update"], utc=True)
         columns = tuple(NameWithDType(n, t) for n, t in zip(info["col_names"]["columns"], info["dtype"]))
         index = NameWithDType(info["col_names"]["index"], info["col_names"]["index_dtype"])
-        date_range = tuple(map(lambda x: x.replace(tzinfo=datetime.timezone.utc), info["date_range"]))
-
+        date_range = tuple(
+            map(
+                lambda x: x.replace(tzinfo=datetime.timezone.utc) if not np.isnat(np.datetime64(x)) else x,
+                info["date_range"],
+            )
+        )
         return SymbolDescription(
             columns=columns,
             index=index,
@@ -1397,10 +1401,15 @@ class Library:
         infos = self._nvs.batch_get_info(symbol_strings, as_ofs)
         list_descriptions = []
         for info in infos:
-            last_update_time = pd.to_datetime(info["last_update"])
+            last_update_time = pd.to_datetime(info["last_update"], utc=True)
             columns = tuple(NameWithDType(n, t) for n, t in zip(info["col_names"]["columns"], info["dtype"]))
             index = NameWithDType(info["col_names"]["index"], info["col_names"]["index_dtype"])
-
+            date_range = tuple(
+                map(
+                    lambda x: x.replace(tzinfo=datetime.timezone.utc) if not np.isnat(np.datetime64(x)) else x,
+                    info["date_range"],
+                )
+            )
             list_descriptions.append(
                 SymbolDescription(
                     columns=columns,
@@ -1408,7 +1417,7 @@ class Library:
                     row_count=info["rows"],
                     last_update_time=last_update_time,
                     index_type=info["index_type"],
-                    date_range=info["date_range"],
+                    date_range=date_range,
                 )
             )
         return list_descriptions

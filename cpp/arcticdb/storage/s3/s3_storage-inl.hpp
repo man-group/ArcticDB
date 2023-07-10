@@ -16,8 +16,9 @@
 
 #include <google/protobuf/io/zero_copy_stream_impl_lite.h>
 #include <folly/gen/Base.h>
-#include <arcticdb/storage/s3/s3_utils.hpp>
+#include <arcticdb/storage/object_store_utils.hpp>
 #include <arcticdb/storage/storage_options.hpp>
+#include <arcticdb/storage/storage_utils.hpp>
 #include <arcticdb/entity/serialized_key.hpp>
 #include <arcticdb/util/exponential_backoff.hpp>
 #include <arcticdb/util/configs_map.hpp>
@@ -38,7 +39,11 @@
 
 #undef GetMessage
 
-namespace arcticdb::storage::s3 {
+namespace arcticdb::storage {
+
+using namespace object_store_utils;
+
+namespace s3 {
 
 namespace fg = folly::gen;
 
@@ -48,16 +53,6 @@ static const size_t DELETE_OBJECTS_LIMIT = 1000;
 
 template<class It>
 using Range = folly::Range<It>;
-
-struct FlatBucketizer {
-    static std::string bucketize(const std::string& root_folder, const VariantKey&) {
-        return root_folder;
-    }
-
-    static size_t bucketize_length(KeyType) {
-        return 0;
-    }
-};
 
 template<class S3ClientType, class KeyBucketizer>
 void do_write_impl(
@@ -71,13 +66,13 @@ void do_write_impl(
 
     (fg::from(kvs.as_range()) | fg::move | fg::groupBy(fmt_db)).foreach(
         [&s3_client, &bucket_name, &root_folder, b=std::move(bucketizer)] (auto&& group) {
-        auto key_type_folder = s3_key_type_folder(root_folder, group.key());
-        ARCTICDB_TRACE(log::storage(), "S3 key_type_folder is {}", key_type_folder);
+        auto key_type_dir = key_type_folder(root_folder, group.key());
+        ARCTICDB_TRACE(log::storage(), "S3 key_type_folder is {}", key_type_dir);
 
         ARCTICDB_SUBSAMPLE(S3StorageWriteValues, 0)
         for (auto& kv : group.values()) {
             auto& k = kv.variant_key();
-            auto s3_object_name = s3_object_path(b.bucketize(key_type_folder, k), k);
+            auto s3_object_name = object_path(b.bucketize(key_type_dir, k), k);
             auto& seg = kv.segment();
 
             ARCTICDB_SUBSAMPLE(S3StorageWritePreamble, 0)
@@ -187,8 +182,8 @@ auto get_object(
     const std::string &bucket_name,
     S3ClientType &s3_client,
     KeyBucketizer& b) {
-    auto key_type_folder = s3_key_type_folder(root_folder, variant_key_type(key));
-    auto s3_object_name = s3_object_path(b.bucketize(key_type_folder, key), key);
+    auto key_type_dir = key_type_folder(root_folder, variant_key_type(key));
+    auto s3_object_name = object_path(b.bucketize(key_type_dir, key), key);
 
     ARCTICDB_RUNTIME_DEBUG(log::storage(), "Looking for object {}", s3_object_name);
     Aws::S3::Model::GetObjectRequest request;
@@ -215,8 +210,8 @@ auto head_object(
     const std::string &bucket_name,
     S3ClientType &s3_client,
     KeyBucketizer& b) {
-    auto key_type_folder = s3_key_type_folder(root_folder, variant_key_type(key));
-    auto s3_object_name = s3_object_path(b.bucketize(key_type_folder, key), key);
+    auto key_type_dir = key_type_folder(root_folder, variant_key_type(key));
+    auto s3_object_name = object_path(b.bucketize(key_type_dir, key), key);
 
     ARCTICDB_RUNTIME_DEBUG(log::storage(), "Looking for head of object {}", s3_object_name);
     Aws::S3::Model::HeadObjectRequest request;
@@ -303,9 +298,9 @@ void do_remove_impl(Composite<VariantKey>&& ks,
 
     (fg::from(ks.as_range()) | fg::move | fg::groupBy(fmt_db)).foreach(
         [&s3_client, &root_folder, &del_objects, &object_request, b=std::move(bucketizer), &failed_deletes] (auto&& group) {
-        auto key_type_folder = s3_key_type_folder(root_folder, group.key());
+        auto key_type_dir = key_type_folder(root_folder, group.key());
         for (auto k : folly::enumerate(group.values())) {
-            auto s3_object_name = s3_object_path(b.bucketize(key_type_folder, *k), *k);
+            auto s3_object_name = object_path(b.bucketize(key_type_dir, *k), *k);
              ARCTICDB_RUNTIME_DEBUG(log::storage(), "Removing s3 object with key {}", s3_object_name);
 
             del_objects.AddObjects(Aws::S3::Model::ObjectIdentifier().WithKey(s3_object_name.c_str()));
@@ -320,7 +315,7 @@ void do_remove_impl(Composite<VariantKey>&& ks,
                     // AN-256: Per AWS S3 documentation, deleting non-exist objects is not an error, so not handling
                     // RemoveOpts.ignores_missing_key_
                     for(const auto& bad_key : delete_object_outcome.GetResult().GetErrors()) {
-                        auto bad_key_name = bad_key.GetKey().substr(key_type_folder.size(), std::string::npos);
+                        auto bad_key_name = bad_key.GetKey().substr(key_type_dir.size(), std::string::npos);
                         failed_deletes.push_back(
                             from_tokenized_variant_key(reinterpret_cast<const uint8_t*>(bad_key_name.data()), bad_key_name.size(), group.key()));
                     }
@@ -352,7 +347,7 @@ void do_iterate_type_impl(KeyType key_type,
                           const std::string& prefix = std::string{}
 ) {
     ARCTICDB_SAMPLE(S3StorageIterateType, 0)
-    auto key_type_dir = s3_key_type_folder(root_folder, key_type);
+    auto key_type_dir = key_type_folder(root_folder, key_type);
 
     // Generally we get the key descriptor from the AtomKey, but in the case of iterating version journals
     // where we want to have a narrower prefix, we can use the info that it's a version journal and derive
@@ -433,28 +428,28 @@ bool do_key_exists_impl(
 } //namespace detail
 
 inline std::string S3Storage::get_key_path(const VariantKey& key) const {
-    auto b = detail::FlatBucketizer{};
-    auto key_type_folder = s3_key_type_folder(root_folder_, variant_key_type(key));
-    return s3_object_path(b.bucketize(key_type_folder, key), key);
+    auto b = FlatBucketizer{};
+    auto key_type_dir = key_type_folder(root_folder_, variant_key_type(key));
+    return object_path(b.bucketize(key_type_dir, key), key);
     // FUTURE: if we can reuse `detail::do_*` below doing polymorphism instead of templating, then this method is useful
     // to most of them
 }
 
 inline void S3Storage::do_write(Composite<KeySegmentPair>&& kvs) {
-    detail::do_write_impl(std::move(kvs), root_folder_, bucket_name_, s3_client_, detail::FlatBucketizer{});
+    detail::do_write_impl(std::move(kvs), root_folder_, bucket_name_, s3_client_, FlatBucketizer{});
 }
 
 inline void S3Storage::do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts) {
-    detail::do_update_impl(std::move(kvs), root_folder_, bucket_name_, s3_client_, detail::FlatBucketizer{});
+    detail::do_update_impl(std::move(kvs), root_folder_, bucket_name_, s3_client_, FlatBucketizer{});
 }
 
 template<class Visitor>
 void S3Storage::do_read(Composite<VariantKey>&& ks, Visitor&& visitor, ReadKeyOpts opts) {
-    detail::do_read_impl(std::move(ks), std::move(visitor), root_folder_, bucket_name_, s3_client_, detail::FlatBucketizer{}, opts);
+    detail::do_read_impl(std::move(ks), std::move(visitor), root_folder_, bucket_name_, s3_client_, FlatBucketizer{}, opts);
 }
 
 inline void S3Storage::do_remove(Composite<VariantKey>&& ks, RemoveOpts) {
-    detail::do_remove_impl(std::move(ks), root_folder_, bucket_name_, s3_client_, detail::FlatBucketizer{});
+    detail::do_remove_impl(std::move(ks), root_folder_, bucket_name_, s3_client_, FlatBucketizer{});
 }
 
 
@@ -465,12 +460,14 @@ void S3Storage::do_iterate_type(KeyType key_type, Visitor&& visitor, const std::
         return !prefix.empty() ? fmt::format("{}/{}*{}", key_type_dir, key_descriptor, prefix) : key_type_dir;
     };
 
-    detail::do_iterate_type_impl(key_type, std::move(visitor), root_folder_, bucket_name_, s3_client_, detail::FlatBucketizer{}, std::move(prefix_handler), prefix);
+    detail::do_iterate_type_impl(key_type, std::move(visitor), root_folder_, bucket_name_, s3_client_, FlatBucketizer{}, std::move(prefix_handler), prefix);
 }
 
 inline bool S3Storage::do_key_exists(const VariantKey& key) {
-    return detail::do_key_exists_impl(key, root_folder_, bucket_name_, s3_client_, detail::FlatBucketizer{});
+    return detail::do_key_exists_impl(key, root_folder_, bucket_name_, s3_client_, FlatBucketizer{});
 }
 
 
-} // namespace arcticdb::storage::s3
+} // namespace s3
+
+} // namespace arcticdb::storage
