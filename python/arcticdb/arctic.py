@@ -76,7 +76,7 @@ class Arctic:
             Azure
             -----
 
-                The Azure URI connection scheme has the form ``azure://[options]``. 
+                The Azure URI connection scheme has the form ``azure://[options]``.
                 It is based on the Azure Connection String, with additional options for configuring ArcticDB.
                 Please refer to https://learn.microsoft.com/en-us/azure/storage/common/storage-configure-connection-string for more details.
 
