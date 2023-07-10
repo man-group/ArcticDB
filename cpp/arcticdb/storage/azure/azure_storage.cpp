@@ -21,10 +21,10 @@ AzureStorage::AzureStorage(const LibraryPath &library_path, OpenMode mode, const
     root_folder_(object_store_utils::get_root_folder(library_path)),
     request_timeout_(conf.request_timeout() == 0 ? 60000 : conf.request_timeout()){
         if (conf.ca_cert_path().empty())
-            log::storage().info("Using default CA cert path");
+            ARCTICDB_RUNTIME_DEBUG(log::storage(), "Using default CA cert path");
         else
-            log::storage().info("CA cert path: {}", conf.ca_cert_path());
-        log::storage().info("Connecting to Azure Blob Storage: {} Container: {}", conf.endpoint(), conf.container_name());
+            ARCTICDB_RUNTIME_DEBUG(log::storage(), "CA cert path: {}", conf.ca_cert_path());
+        ARCTICDB_RUNTIME_DEBUG(log::storage(), "Connecting to Azure Blob Storage: {} Container: {}", conf.endpoint(), conf.container_name());
 
         if (!conf.prefix().empty()) {
             ARCTICDB_RUNTIME_DEBUG(log::storage(), "Azure prefix found, using: {}", conf.prefix());
