@@ -75,6 +75,12 @@ def symbol():
     return "sym" + str(random.randint(0, 10000))
 
 
+def assert_equal_value(data, expected):
+    received = data.reindex(sorted(data.columns), axis=1)
+    expected = expected.reindex(sorted(expected.columns), axis=1)
+    assert_frame_equal(received, expected)
+
+
 def test_simple_flow(lmdb_version_store_no_symbol_list, symbol):
     df = sample_dataframe()
     modified_df = pd.DataFrame({"col": [1, 2, 3, 4]})
@@ -1653,6 +1659,30 @@ def test_batch_read_date_range(lmdb_version_store_tombstone_and_sync_passive):
         start = date_range[0]
         end = date_range[-1]
         assert_frame_equal(vit.data, dfs[x].loc[start:end])
+
+
+def test_batch_read_columns(lmdb_version_store_tombstone_and_sync_passive):
+    lmdb_version_store = lmdb_version_store_tombstone_and_sync_passive
+    columns_of_interest = ["strings", "uint8"]
+    number_of_requests = 5
+    symbols = []
+    for i in range(number_of_requests):
+        symbols.append("sym_{}".format(i))
+
+    base_date = pd.Timestamp("2019-06-01")
+    dfs = []
+    for j in range(number_of_requests):
+        df = get_sample_dataframe(1000, j)
+        df.index = pd.date_range(base_date + pd.DateOffset(j), periods=len(df))
+        dfs.append(df)
+
+    for x, symbol in enumerate(symbols):
+        lmdb_version_store.write(symbol, dfs[x])
+
+    result_dict = lmdb_version_store.batch_read(symbols, columns=[columns_of_interest] * number_of_requests)
+    for x, sym in enumerate(result_dict.keys()):
+        vit = result_dict[sym]
+        assert_equal_value(vit.data, dfs[x][columns_of_interest])
 
 
 def test_index_keys_start_end_index(lmdb_version_store, sym):
