@@ -12,6 +12,9 @@
 #include <arcticdb/storage/lmdb/lmdb_storage.hpp>
 #include <arcticdb/storage/s3/s3_storage.hpp>
 #include <arcticdb/storage/s3/nfs_backed_storage.hpp>
+#ifndef ARCTICDB_USING_CONDA //Awaiting Azure sdk support in conda https://github.com/man-group/ArcticDB/issues/519
+#include <arcticdb/storage/azure/azure_storage.hpp>
+#endif
 #include <arcticdb/storage/memory/memory_storage.hpp>
 #include <arcticdb/storage/library_path.hpp>
 #include <arcticdb/storage/open_mode.hpp>
@@ -23,9 +26,20 @@
 #include <vector>
 #include <memory>
 
-namespace arcticdb::storage {
+namespace arcticdb{
+#ifdef ARCTICDB_USING_CONDA
+static const bool AZURE_SUPPORT = false;
+#else
+static const bool AZURE_SUPPORT = true;
+#endif
 
+namespace storage {
+
+#ifdef ARCTICDB_USING_CONDA //Awaiting Azure sdk support in conda https://github.com/man-group/ArcticDB/issues/519
 using VariantStorageTypes = std::variant<lmdb::LmdbStorage, mongo::MongoStorage, s3::S3Storage, memory::MemoryStorage, nfs_backed::NfsBackedStorage>;
+#else
+using VariantStorageTypes = std::variant<lmdb::LmdbStorage, mongo::MongoStorage, s3::S3Storage, memory::MemoryStorage, nfs_backed::NfsBackedStorage, azure::AzureStorage>;
+#endif
 using VariantStorage = variant::VariantStorage<VariantStorageTypes>;
 
 class VariantStorageFactory final : public StorageFactory<VariantStorageFactory> {
@@ -46,7 +60,11 @@ public:
         }, factory_variant_);
     }
   private:
+#ifdef ARCTICDB_USING_CONDA //Awaiting Azure sdk support in conda https://github.com/man-group/ArcticDB/issues/519
     std::variant<lmdb::LmdbStorageFactory, mongo::MongoStorageFactory, s3::S3StorageFactory, memory::MemoryStorageFactory, nfs_backed::NfsBackedStorageFactory> factory_variant_;
+#else
+    std::variant<lmdb::LmdbStorageFactory, mongo::MongoStorageFactory, s3::S3StorageFactory, memory::MemoryStorageFactory, nfs_backed::NfsBackedStorageFactory, azure::AzureStorageFactory> factory_variant_;
+#endif
 };
 
 std::shared_ptr<VariantStorageFactory> create_storage_factory(
@@ -57,4 +75,5 @@ std::unique_ptr<VariantStorage> create_storage(
     OpenMode mode,
     const arcticdb::proto::storage::VariantStorage &storage_config);
 
-} // namespace arcticdb::storage
+} // namespace storage
+} // namespace arcticdb
