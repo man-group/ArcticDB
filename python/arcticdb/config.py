@@ -171,7 +171,12 @@ def save_runtime_config(config=None, path=Defaults.RUNTIME_CONF_FILE_PATH):
     _save_config(config, path, RuntimeConfig)
 
 
-def make_loggers_config(default_level=Defaults.DEFAULT_LOG_LEVEL, specific_log_levels: Optional[Dict[str, str]] = None):
+def make_loggers_config(
+    default_level=Defaults.DEFAULT_LOG_LEVEL,
+    specific_log_levels: Optional[Dict[str, str]] = None,
+    console_output: bool = True,
+    file_output_path: Optional[str] = None,
+):
     """
     Generate a ``LoggersConfig`` object with sink set to stderr and the given log levels.
 
@@ -182,6 +187,11 @@ def make_loggers_config(default_level=Defaults.DEFAULT_LOG_LEVEL, specific_log_l
         Valid values are "DEBUG", "INFO", "WARN", "ERROR".
     specific_log_levels
         Optional overrides for specific logger(s). The possible logger names can be found in log.py.
+    console_output
+        Boolean indicating whether to output logs to the terminal.
+    file_output_path
+        If None, logs will not be written to a file. Otherwise, this value should be set to the path of a file to which
+        logging output will be written.
 
     Examples
     --------
@@ -190,23 +200,43 @@ def make_loggers_config(default_level=Defaults.DEFAULT_LOG_LEVEL, specific_log_l
     log_cfgs = LoggersConfig()
     specific_log_levels = {} if not specific_log_levels else specific_log_levels
 
-    sink = log_cfgs.sink_by_id["console"]
-    sink.console.std_err = True
+    if not console_output and not file_output_path:
+        raise ValueError(
+            "Logging configured with both console logging and file logging disabled. One of console logging "
+            "or file logging must be enabled."
+        )
+
+    if console_output:
+        sink = log_cfgs.sink_by_id["console"]
+        sink.console.std_err = True
+
+    if file_output_path:
+        sink = log_cfgs.sink_by_id["file"]
+        sink.file.path = file_output_path
 
     for logger_name in logger_by_name:
         level_to_set = specific_log_levels.get(logger_name, default_level)
         logger = log_cfgs.logger_by_id[logger_name]
-        logger.sink_ids.append("console")
+        if console_output:
+            logger.sink_ids.append("console")
+        if file_output_path:
+            logger.sink_ids.append("file")
         logger.level = getattr(LoggerConfig, level_to_set)
 
     return log_cfgs
 
 
-def set_log_level(default_level=Defaults.DEFAULT_LOG_LEVEL, specific_log_levels=None):
+def set_log_level(
+    default_level=Defaults.DEFAULT_LOG_LEVEL, specific_log_levels=None, console_output=True, file_output_path=None
+):
     """
     Passes the arguments to ``make_loggers_config`` and then configures the loggers, overwriting any existing config.
+
+    For more information on the parameters this method takes, please see the documentation for `make_loggers_config`.
     """
-    return configure(make_loggers_config(default_level, specific_log_levels), force=True)
+    return configure(
+        make_loggers_config(default_level, specific_log_levels, console_output, file_output_path), force=True
+    )
 
 
 def default_loggers_config():
