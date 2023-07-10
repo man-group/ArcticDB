@@ -282,7 +282,7 @@ bool do_key_exists_impl(
                 return true;
         }
         catch (const Azure::Core::RequestFailedException& e){
-            log::storage().warn("Failed to check azure key '{}' {} {}: {}",
+            log::storage().debug("Failed to check azure key '{}' {} {}: {}",
                                 key,
                                 blob_name,
                                 static_cast<int>(e.StatusCode),
