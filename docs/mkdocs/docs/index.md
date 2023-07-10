@@ -107,7 +107,13 @@ ArcticDB uses the [Azure connection string](https://learn.microsoft.com/en-us/az
 ```python
 >>> from arcticdb import Arctic
 >>> ac = Arctic('azure://AccountName=ABCD;AccountKey=EFGH;BlobEndpoint=ENDPOINT;Container=CONTAINER')
+```
 
+For example: 
+
+```python
+>>> from arcticdb import Arctic
+>>> ac = Arctic("azure://CA_cert_path=/etc/ssl/certs/ca-certificates.crt;BlobEndpoint=https://arctic.blob.core.windows.net;Container=acblob;SharedAccessSignature=sp=awd&st=2001-01-01T00:00:00Z&se=2002-01-01T00:00:00Z&spr=https&rf=g&sig=awd%3D")
 ```
 
 For more information, [see the Arctic class reference](https://docs.arcticdb.io/api/arcticdb#arcticdb.Arctic.__init__).

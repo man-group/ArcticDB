@@ -93,9 +93,9 @@ class Arctic:
                 +---------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------+
                 | CA_cert_path              | Azure CA certificate path. If not set, default path will be used.                                                                                             |
                 |                           | Note: For Linux distribution, default path is set to `/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem`.                                                     |
-                |                           | If the certificate cannot be foune in the path, a Azure exception, with no meaningful errorcode will be thrown. Please refer to the below Exception part for  |
-                |                           | more details.                                                                                                                                                 |
-                |                           | In the future https://github.com/man-group/ArcticDB/issues/514, Linux distribution-dependent default path should be used instead                              |
+                |                           | If the certificate cannot be found in the provided path, an Azure exception with no meaningful error code will be thrown.                                     |
+                |                           | For more details, please see https://github.com/Azure/azure-sdk-for-cpp/issues/4738.                                                                          |
+                |                           | For example, ``Failed to iterate azure blobs 'C' 0:``.                                                                                                        |
                 |                           |                                                                                                                                                               |
                 |                           | Default certificate path in various Linux distributions:                                                                                                      |
                 |                           | "/etc/ssl/certs/ca-certificates.crt"                  Debian/Ubuntu/Gentoo etc.                                                                               |
@@ -111,7 +111,9 @@ class Arctic:
                 Exception: Azure exceptions message always ends with `{AZURE_SDK_HTTP_STATUS_CODE}:{AZURE_SDK_REASON_PHRASE}`.
 
                 Please refer to https://github.com/Azure/azure-sdk-for-cpp/blob/24ed290815d8f9dbcd758a60fdc5b6b9205f74e0/sdk/core/azure-core/inc/azure/core/http/http_status_code.hpp for
-                more details of provided status codes. Note that due to a bug in Azure C++ SDK (https://github.com/Azure/azure-sdk-for-cpp/issues/4738), Azure may not give meaningful status codes and
+                more details of provided status codes.
+
+                Note that due to a bug in Azure C++ SDK (https://github.com/Azure/azure-sdk-for-cpp/issues/4738), Azure may not give meaningful status codes and
                 reason phrases in the exception. To debug these instances, please set the environment variable ``export AZURE_LOG_LEVEL`` to ``1`` to turn on the SDK debug logging.
 
 
@@ -126,6 +128,7 @@ class Arctic:
 
         >>> ac = Arctic('s3://MY_ENDPOINT:MY_BUCKET')  # Leave AWS to derive credential information
         >>> ac = Arctic('s3://MY_ENDPOINT:MY_BUCKET?region=YOUR_REGION&access=ABCD&secret=DCBA') # Manually specify creds
+        >>> ac = Arctic('azure://CA_cert_path=/etc/ssl/certs/ca-certificates.crt;BlobEndpoint=https://arctic.blob.core.windows.net;Container=acblob;SharedAccessSignature=sp=sig')
         >>> ac.create_library('travel_data')
         >>> ac.list_libraries()
         ['travel_data']
