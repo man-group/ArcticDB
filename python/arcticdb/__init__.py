@@ -11,4 +11,4 @@ from arcticdb.tools import set_config_from_env_vars
 
 set_config_from_env_vars(_os.environ)
 
-__version__ = "1.4.1.dev0"
+__version__ = "1.5.0"
