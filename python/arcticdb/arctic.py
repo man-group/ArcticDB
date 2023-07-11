@@ -146,16 +146,8 @@ class Arctic:
         self._library_adapter = _cls(uri, self._encoding_version)
         self._library_manager = LibraryManager(self._library_adapter.config_library)
         self._uri = uri
-        self._libs = (
-            dict()
-        )  # TODO this cache should go to the LibraryManager so it can stop constantly creating storages
 
     def __getitem__(self, name: str) -> Library:
-        open_lib = self._libs.get(name)
-        if open_lib is not None:
-            return open_lib
-        if name in self._libs:
-            return self._libs[name]
         storage_override = self._library_adapter.get_storage_override()
         lib = NativeVersionStore(
             self._library_manager.get_library(name, storage_override),
@@ -163,7 +155,6 @@ class Arctic:
             lib_cfg=self._library_manager.get_library_config(name, storage_override),
         )
         res = Library(repr(self), lib)
-        self._libs[name] = res
         return res
 
     def __repr__(self):
@@ -243,7 +234,6 @@ class Arctic:
             self[name], self._library_manager.get_library_config(name, StorageOverride())
         )
         self._library_manager.remove_library_config(name)
-        self._libs.pop(name, None)
 
     def list_libraries(self) -> List[str]:
         """

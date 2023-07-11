@@ -31,10 +31,12 @@
 #include <filesystem>
 
 namespace arcticdb::storage {
+    // Not threadsafe
     class LibraryManager {
     public:
         explicit LibraryManager(const std::shared_ptr<storage::Library>& library) :
-            store_(std::make_shared<async::AsyncStore<util::SysClock>>(library, codec::default_lz4_codec(), encoding_version(library->config()))){
+            store_(std::make_shared<async::AsyncStore<util::SysClock>>(library, codec::default_lz4_codec(), encoding_version(library->config()))),
+            open_libs_() {
         }
 
         void write_library_config(const py::object& lib_cfg, const LibraryPath& path) const {
@@ -59,11 +61,15 @@ namespace arcticdb::storage {
             return arcticdb::python_util::pb_to_python(config);
         }
 
-        void remove_library_config(const LibraryPath& path) const {
+        void remove_library_config(const LibraryPath& path) {
             store_->remove_key(RefKey{StreamId(path.to_delim_path()), entity::KeyType::LIBRARY_CONFIG}).wait();
+            open_libs_.erase(path);
         }
 
-        [[nodiscard]] std::shared_ptr<Library> get_library(const LibraryPath& path, const StorageOverride& storage_override = StorageOverride{}) const {
+        [[nodiscard]] std::shared_ptr<Library> get_library(const LibraryPath& path, const StorageOverride& storage_override = StorageOverride{}) {
+            if (auto it{open_libs_.find(path)}; it != std::end(open_libs_)) {
+                return it->second;
+            }
             arcticdb::proto::storage::LibraryConfig config = get_config_internal(path, storage_override);
 
             std::vector<arcticdb::proto::storage::VariantStorage> st;
@@ -72,7 +78,9 @@ namespace arcticdb::storage {
             }
             auto storages = create_storages(path, OpenMode::DELETE, st);
 
-            return std::make_shared<Library>(path, std::move(storages), config.lib_desc().version());
+            auto res = std::make_shared<Library>(path, std::move(storages), config.lib_desc().version());
+            open_libs_.insert({path, res});
+            return res;
         }
 
         [[nodiscard]] std::vector<LibraryPath> get_library_paths() const {
@@ -118,5 +126,6 @@ namespace arcticdb::storage {
         }
 
         std::shared_ptr<Store> store_;
+        std::unordered_map<LibraryPath, std::shared_ptr<Library>> open_libs_;
     };
 }

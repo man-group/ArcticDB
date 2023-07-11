@@ -125,10 +125,10 @@ void register_bindings(py::module& storage, py::exception<arcticdb::ArcticExcept
         .def("get_library_config", [](const LibraryManager& library_manager, std::string_view library_path, const StorageOverride& storage_override){
             return library_manager.get_library_config(LibraryPath{library_path, '.'}, storage_override);
         })
-        .def("remove_library_config", [](const LibraryManager& library_manager, std::string_view library_path){
+        .def("remove_library_config", [](LibraryManager& library_manager, std::string_view library_path){
             return library_manager.remove_library_config(LibraryPath{library_path, '.'});
         })
-        .def("get_library", [](const LibraryManager& library_manager, std::string_view library_path, const StorageOverride& storage_override){
+        .def("get_library", [](LibraryManager& library_manager, std::string_view library_path, const StorageOverride& storage_override){
             return library_manager.get_library(LibraryPath{library_path, '.'}, storage_override);
         })
         .def("has_library", [](const LibraryManager& library_manager, std::string_view library_path){

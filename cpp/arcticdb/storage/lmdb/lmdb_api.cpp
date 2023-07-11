@@ -66,6 +66,7 @@ void LmdbStorageApiInstance::destroy_instances() {
     for (auto i : instances_) {
         i.second.reset();
     }
+    instances_.clear();
 }
 
 std::unordered_map<std::string, std::shared_ptr<::lmdb::env>> LmdbStorageApiInstance::instances_;
