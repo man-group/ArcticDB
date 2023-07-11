@@ -38,7 +38,8 @@ def test_check_storage_is_accessible_permission(s3_storage_factory: MotoS3Storag
 
 def test_check_storage_is_accessible_no_bucket(s3_bucket):
     uri = re.compile(r"(s3:[^:]+)[^?]+(.*)").match(s3_bucket.get_arctic_uri()).expand(r"\1:bad_bucket\2")
-    check_storage_is_accessible_logging(uri, "[error] The specified bucket bad_bucket does not exist", 404)
+    expected_msg = "UserInputException: E_INVALID_USER_ARGUMENT The specified bucket bad_bucket does not exist"
+    check_storage_is_accessible_logging(uri, expected_msg, 404)
 
 
 def test_check_storage_is_accessible_network_error(s3_bucket):

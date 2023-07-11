@@ -35,6 +35,7 @@ class ParsedQuery:
     access: Optional[str] = None
     secret: Optional[str] = None
     aws_auth: Optional[bool] = False
+    check_storage_access: Optional[bool] = True
 
     path_prefix: Optional[str] = None
 
@@ -198,3 +199,7 @@ class S3LibraryAdapter(ArcticLibraryAdapter):
     @property
     def path_prefix(self):
         return self._query_params.path_prefix
+
+    def check_storage_access(self) -> Optional[bool]:
+        if self._query_params.check_storage_access:
+            return self.config_library.check_primary_storage_is_accessible()

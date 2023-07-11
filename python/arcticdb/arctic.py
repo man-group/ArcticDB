@@ -69,6 +69,8 @@ class Arctic:
                 +---------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------+
                 | force_uri_lib_config      | Override the credentials and endpoint of an S3 storage with the URI of the Arctic object. Use if accessing a replicated (to different region/bucket) library. |
                 +---------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------+
+                | check_storage_access      | Defaults to true. If set to false, will not check the credentials and bucket are valid.                                                                       |
+                +---------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------+
 
                 Note: When connecting to AWS, `region` can be automatically deduced from the endpoint if the given endpoint
                 specifies the region and `region` is not set.
@@ -150,7 +152,7 @@ class Arctic:
         self._library_manager = LibraryManager(self._library_adapter.config_library)
         self._uri = uri
 
-        self._library_adapter.check_storage_is_accessible()
+        self._library_adapter.check_storage_access()
 
     def __getitem__(self, name: str) -> Library:
         storage_override = self._library_adapter.get_storage_override()

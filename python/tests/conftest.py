@@ -28,7 +28,7 @@ from arcticdb.version_store.library import Library
 from arcticdb.version_store._normalization import MsgPackNormalizer
 from arcticdb.util.test import configure_test_logger
 from arcticdb.options import LibraryOptions
-from tests.util.storage_fixtures import MotoS3StorageFixtureFactory, _version_store_factory_impl
+from tests.util.storage_fixtures import MotoS3StorageFixtureFactory, _version_store_factory_impl, get_ephemeral_port
 from arcticdb_ext.tools import AZURE_SUPPORT
 
 if AZURE_SUPPORT:
