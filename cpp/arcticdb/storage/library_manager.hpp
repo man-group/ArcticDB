@@ -47,7 +47,7 @@ namespace arcticdb::storage {
             segment.set_metadata(std::move(output));
 
             store_->write_sync(
-                    entity::KeyType::                       LIBRARY_CONFIG,
+                    entity::KeyType::LIBRARY_CONFIG,
                     StreamId(path.to_delim_path()),
                     std::move(segment)
             );

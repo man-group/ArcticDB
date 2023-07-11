@@ -19,7 +19,8 @@ namespace arcticdb::storage::lmdb {
 LmdbStorage::LmdbStorage(const LibraryPath &library_path, OpenMode mode, const Config &conf) :
     Parent(library_path, mode),
     write_mutex_(new std::mutex{}),
-    env_(LmdbStorageApiInstance::instance(library_path, mode, conf)->global_lmdb_env()) {
+    env_(LmdbStorageApiInstance::global_lmdb_env(library_path, mode, conf)) {
+
 }
 
 } // namespace arcticdb::storage::lmdb

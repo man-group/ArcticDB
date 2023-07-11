@@ -1,5 +1,6 @@
 #pragma once
 
+#include <map>
 #include <memory>
 #include <mutex>
 
@@ -15,15 +16,13 @@ namespace arcticdb::storage::lmdb {
 
 class LmdbStorageApiInstance {
 public:
-    std::shared_ptr<::lmdb::env> global_lmdb_env();
+    static std::shared_ptr<::lmdb::env> global_lmdb_env(const LibraryPath& library_path, OpenMode mode, const LmdbStorage::Config& conf);
 
-    static std::shared_ptr<LmdbStorageApiInstance> instance_;
-    static std::once_flag init_flag_;
+    // TODO keying this off strings is weird
+    static std::unordered_map<
+      std::string, std::shared_ptr<::lmdb::env>> instances_;
+    static std::mutex mutex_;
 
-    static void init(const LibraryPath &library_path, OpenMode mode, const LmdbStorage::Config& conf);
-    static std::shared_ptr<LmdbStorageApiInstance> instance(const LibraryPath &library_path, OpenMode mode, const LmdbStorage::Config& conf);
-    static void destroy_instance();
-private:
-    std::shared_ptr<::lmdb::env> lmdb_env_;
+    static void destroy_instances();
 };
 }
