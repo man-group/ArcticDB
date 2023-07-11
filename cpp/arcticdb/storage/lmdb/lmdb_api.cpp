@@ -11,13 +11,13 @@ namespace {
 } // anonymous
 
 
-std::shared_ptr<::lmdb::env> LmdbStorageApiInstance::global_lmdb_env(
+std::shared_ptr<::lmdb::env> LmdbEnvironments::lmdb_env(
         const LibraryPath& library_path, OpenMode mode, const LmdbStorage::Config& conf) {
     fs::path root_path = conf.path().c_str();
     auto lib_path_str = library_path.to_delim_path(fs::path::preferred_separator);
     fs::path lib_dir = root_path / lib_path_str;
     const std::lock_guard<std::mutex> lock(mutex_);
-    if (auto it{instances_.find(lib_dir.generic_string())}; it != std::end(instances_)) {
+    if (auto it{envs_by_path_.find(lib_dir.generic_string())}; it != std::end(envs_by_path_)) {
         return it->second;
     } else {
         auto lmdb_env = std::make_shared<::lmdb::env>(::lmdb::env::create(conf.flags()));
@@ -55,21 +55,21 @@ std::shared_ptr<::lmdb::env> LmdbStorageApiInstance::global_lmdb_env(
         lmdb_env->set_max_readers(or_else(conf.max_readers(), 1024U));
         lmdb_env->open(lib_dir.generic_string().c_str(), MDB_NOTLS);
 
-        instances_.insert({lib_dir.generic_string(), lmdb_env});
+        envs_by_path_.insert({lib_dir.generic_string(), lmdb_env});
         ARCTICDB_DEBUG(log::storage(), "Opened lmdb storage at {} with map size {}", lib_dir.generic_string(), format_bytes(mapsize));
         return lmdb_env;
     }
 }
 
-void LmdbStorageApiInstance::destroy_instances() {
+void LmdbEnvironments::tear_down_lmdb_environments() {
     const std::lock_guard<std::mutex> lock(mutex_);
-    for (auto i : instances_) {
+    for (auto i : envs_by_path_) {
         i.second.reset();
     }
-    instances_.clear();
+    envs_by_path_.clear();
 }
 
-std::unordered_map<std::string, std::shared_ptr<::lmdb::env>> LmdbStorageApiInstance::instances_;
-std::mutex LmdbStorageApiInstance::mutex_;
+std::unordered_map<std::string, std::shared_ptr<::lmdb::env>> LmdbEnvironments::envs_by_path_;
+std::mutex LmdbEnvironments::mutex_;  // for map above
 
 }

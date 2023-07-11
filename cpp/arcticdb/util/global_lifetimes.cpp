@@ -34,7 +34,7 @@ ModuleData::~ModuleData() {
     ARCTICDB_DEBUG(log::version(), "Destroying AWS instance");
     storage::s3::S3ApiInstance::destroy_instance();
     ARCTICDB_DEBUG(log::version(), "Destroying LMDB envs");
-    storage::lmdb::LmdbStorageApiInstance::destroy_instances();
+    storage::lmdb::LmdbEnvironments::tear_down_lmdb_environments();
     log::Loggers::destroy_instance();
 }
 
