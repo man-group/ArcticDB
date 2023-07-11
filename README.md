@@ -40,11 +40,22 @@ ArcticDB is designed from the outset to be resilient; there is no single point o
 
 ### Prebuilt binary availability
 
-|                       | PyPI | conda-forge |
+|                       | PyPI (Python 3.6 - 3.11) | conda-forge (Python 3.8 - 3.11) |
 | --------------------- | - | - |
 | Linux                 | ✔️ | ✔️ |
 | Windows               | ✔️ | ➖ |
 | MacOS (Apple Silicon) | ➖ | ✔️ |
+
+### Storage compatibility
+
+
+|                       | PyPI | conda-forge |
+| --------------------- | - | - |
+| S3                 | ✔️ | ✔️ |
+| LMDB               | ✔️ | ✔️ |
+| Azure Blob Storage | ✔️ | ➖ |
+
+Support for Azure Blob Storage in conda-forge is tracked in [#519](https://github.com/man-group/ArcticDB/issues/519).
 
 ### Installation
 

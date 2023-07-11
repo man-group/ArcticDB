@@ -259,7 +259,7 @@ def _to_tz_timestamp(dt):
 
 def _from_tz_timestamp(ts, tz):
     # type: (int, Optional[str])->(datetime.datetime)
-    return pd.Timestamp(ts).tz_localize(tz).to_pydatetime()
+    return pd.Timestamp(ts).tz_localize(tz).to_pydatetime(warn=False)
 
 
 _range_index_props_are_public = hasattr(RangeIndex, "start")
@@ -1283,7 +1283,11 @@ def restrict_data_to_date_range_only(data: T, *, start: Timestamp, end: Timestam
     else:  # non-Pandas, try to slice it anyway
         if not getattr(data, "timezone", None):
             start, end = _strip_tz(start, end)
-        data = data[start.to_pydatetime() - timedelta(microseconds=1) : end.to_pydatetime() + timedelta(microseconds=1)]
+        data = data[
+            start.to_pydatetime(warn=False)
+            - timedelta(microseconds=1) : end.to_pydatetime(warn=False)
+            + timedelta(microseconds=1)
+        ]
     return data
 
 
