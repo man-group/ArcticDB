@@ -82,6 +82,13 @@ def test_categorical_empty(lmdb_version_store, sym):
     lib = lmdb_version_store
     lib.write(sym, df)
     read_df = lib.read(sym).data
+    # In Pandas 1.0, an Index is used by default for any an empty dataframe or series is created,
+    # except if there are categorical columns in which case a RangeIndex is used.
+    #
+    # In Pandas 2.0, RangeIndex is used by default for _any_ an empty dataframe or series is created.
+    # See: https://github.com/pandas-dev/pandas/issues/49572
+    assert isinstance(df.index, pd.RangeIndex)
+    assert isinstance(read_df.index, pd.RangeIndex)
     assert_frame_equal(df, read_df, check_dtype=not IS_PANDAS_TWO)
 
 
