@@ -63,7 +63,7 @@ class AzureLibraryAdapter(ArcticLibraryAdapter):
         return "azure(endpoint=%s, container=%s)" % (self._endpoint, self._container)
 
     @property
-    def config_library(self) -> Library:
+    def config_library(self):
         env_cfg = EnvironmentConfigsMap()
         with_prefix = (
             f"{self._query_params.Path_prefix}/{self.CONFIG_LIBRARY_NAME}" if self._query_params.Path_prefix else False
@@ -79,9 +79,9 @@ class AzureLibraryAdapter(ArcticLibraryAdapter):
             ca_cert_path=self._ca_cert_path,
         )
 
-        lib = NativeVersionStore.create_store_from_config(env_cfg, _DEFAULT_ENV, self.CONFIG_LIBRARY_NAME)._library
+        lib = NativeVersionStore.create_store_from_config(env_cfg, _DEFAULT_ENV, self.CONFIG_LIBRARY_NAME)
 
-        return lib
+        return lib._library
 
     def _parse_query(self, query: str) -> ParsedQuery:
         if query and query.startswith("?"):
@@ -100,7 +100,7 @@ class AzureLibraryAdapter(ArcticLibraryAdapter):
         _kwargs = {k: v for k, v in parsed_query.items() if k in field_dict.keys()}
         return _kwargs
 
-    def create_library_config(self, name, library_options: LibraryOptions) -> LibraryConfig:
+    def create_library(self, name, library_options: LibraryOptions):
         env_cfg = EnvironmentConfigsMap()
 
         if self._query_params.Path_prefix:
@@ -123,10 +123,7 @@ class AzureLibraryAdapter(ArcticLibraryAdapter):
 
         lib = NativeVersionStore.create_store_from_config(env_cfg, _DEFAULT_ENV, name)
 
-        return lib._lib_cfg
-
-    def initialize_library(self, name: str, config: LibraryConfig):
-        pass
+        return lib
 
     @property
     def path_prefix(self):
