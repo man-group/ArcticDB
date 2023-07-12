@@ -328,7 +328,7 @@ def test_aggregation_grouping_column_missing_from_row_group(lmdb_version_store_d
         {"to_sum": [3, 4]},
         index=np.arange(2, 4),
     )
-    expected = df0.append(df1).groupby("grouping_column").agg({"to_sum": "sum"})
+    expected = pd.concat((df0, df1)).groupby("grouping_column").agg({"to_sum": "sum"})
 
     symbol = "test_aggregation_grouping_column_missing_from_row_group"
     lib.write(symbol, df0)
