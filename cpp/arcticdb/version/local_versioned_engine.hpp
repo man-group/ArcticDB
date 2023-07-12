@@ -93,7 +93,7 @@ public:
 
     std::optional<VersionedItem> get_specific_version(
         const StreamId &stream_id,
-        VersionId version_id,
+        SignedVersionId signed_version_id,
         const VersionQuery& version_query);
 
     std::optional<VersionedItem> get_version_at_time(

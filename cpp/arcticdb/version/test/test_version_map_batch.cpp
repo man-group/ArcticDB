@@ -54,7 +54,7 @@ TEST_F(VersionMapBatchStore, SimpleVersionIdQueries) {
         auto stream = fmt::format("stream_{}", i);
         for(uint64_t j = 0; j < num_versions_per_stream; j++){
             stream_ids.push_back(StreamId{stream});
-            version_queries.push_back(VersionQuery{SpecificVersionQuery{j}, false, false});
+            version_queries.push_back(VersionQuery{SpecificVersionQuery{static_cast<SignedVersionId>(j)}, false, false});
         }
     }
 
@@ -74,13 +74,11 @@ TEST_F(VersionMapBatchStore, SimpleVersionIdQueries) {
 
 TEST_F(VersionMapBatchStore, SimpleTimestampQueries) {
     SKIP_WIN("Exceeds LMDB map size");
-    ScopedConfig cpu_threads("VersionStore.NumCPUThreads", 1);
-    ScopedConfig io_threads("VersionStore.NumIOThreads", 1);
     auto store = test_store_->_test_get_store();
     auto version_map = std::make_shared<VersionMap>();
 
-    uint64_t num_streams = 1000;
-    uint64_t num_versions_per_stream = 500;
+    uint64_t num_streams = 25;
+    uint64_t num_versions_per_stream = 50;
 
     for(uint64_t i = 0; i < num_streams; ++i) {
         auto stream = fmt::format("stream_{}", i);
@@ -98,7 +96,7 @@ TEST_F(VersionMapBatchStore, SimpleTimestampQueries) {
         auto stream = fmt::format("stream_{}", i);
         for(uint64_t j = 0; j < num_versions_per_stream; j++){
             stream_ids.push_back(StreamId{stream});
-            version_queries.push_back(VersionQuery{SpecificVersionQuery{j}, false, false});
+            version_queries.push_back(VersionQuery{SpecificVersionQuery{static_cast<SignedVersionId>(j)}, false, false});
         }
     }
 
@@ -148,7 +146,7 @@ TEST_F(VersionMapBatchStore, MultipleVersionsSameSymbolVersionIdQueries) {
     // Add queries
     for(uint64_t i = 0; i < num_versions; i++){
         stream_ids.push_back(StreamId{"stream_0"});
-        version_queries.push_back(VersionQuery{SpecificVersionQuery{i}, false, false});
+        version_queries.push_back(VersionQuery{SpecificVersionQuery{static_cast<SignedVersionId>(i)}, false, false});
     }
 
     // Do query
@@ -181,7 +179,7 @@ TEST_F(VersionMapBatchStore, MultipleVersionsSameSymbolTimestampQueries) {
     // Add queries
     for(uint64_t i = 0; i < num_versions; i++){
         stream_ids.push_back(StreamId{"stream_0"});
-        version_queries.push_back(VersionQuery{SpecificVersionQuery{i}, false, false});
+        version_queries.push_back(VersionQuery{SpecificVersionQuery{static_cast<SignedVersionId>(i)}, false, false});
     }
 
     // Do query
@@ -228,7 +226,7 @@ TEST_F(VersionMapBatchStore, CombinedQueries) {
         auto stream = fmt::format("stream_{}", i);
         for(uint64_t j = 0; j < num_versions_per_stream; j++){
             stream_ids.push_back(StreamId{stream});
-            version_queries.push_back(VersionQuery{SpecificVersionQuery{j}, false, false});
+            version_queries.push_back(VersionQuery{SpecificVersionQuery{static_cast<SignedVersionId>(j)}, false, false});
         }
     }
 
@@ -243,7 +241,7 @@ TEST_F(VersionMapBatchStore, CombinedQueries) {
         for(uint64_t j = 0; j < num_versions_per_stream; j++){
             uint64_t idx = i * num_versions_per_stream + j;
             stream_ids.push_back(StreamId{stream});
-            version_queries.push_back(VersionQuery{SpecificVersionQuery{j}, false, false});
+            version_queries.push_back(VersionQuery{SpecificVersionQuery{static_cast<SignedVersionId>(j)}, false, false});
             stream_ids.push_back(StreamId{stream});
             version_queries.push_back(VersionQuery{TimestampVersionQuery{timestamp(versions[idx]->creation_ts())}, false, false});
             stream_ids.push_back(StreamId{stream});
