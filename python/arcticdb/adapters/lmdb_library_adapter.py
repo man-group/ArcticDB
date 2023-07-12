@@ -47,21 +47,21 @@ class LMDBLibraryAdapter(ArcticLibraryAdapter):
         return "LMDB(path=%s)" % self._path
 
     @property
-    def config_library(self) -> Library:
+    def config_library(self):
         env_cfg = EnvironmentConfigsMap()
 
         add_lmdb_library_to_env(env_cfg, lib_name=self.CONFIG_LIBRARY_NAME, env_name=_DEFAULT_ENV, db_dir=self._path)
 
         lib = NativeVersionStore.create_store_from_config(
             env_cfg, _DEFAULT_ENV, self.CONFIG_LIBRARY_NAME, encoding_version=self._encoding_version
-        )._library
+        )
 
-        return lib
+        return lib._library
 
     def get_storage_override(self) -> StorageOverride:
         return StorageOverride()
 
-    def create_library_config(self, name, library_options: LibraryOptions) -> LibraryConfig:
+    def create_library(self, name, library_options: LibraryOptions):
         env_cfg = EnvironmentConfigsMap()
 
         add_lmdb_library_to_env(env_cfg, lib_name=name, env_name=_DEFAULT_ENV, db_dir=self._path)
@@ -72,7 +72,4 @@ class LMDBLibraryAdapter(ArcticLibraryAdapter):
             env_cfg, _DEFAULT_ENV, name, encoding_version=self._encoding_version
         )
 
-        return lib._lib_cfg
-
-    def initialize_library(self, name: str, config: LibraryConfig):
-        pass
+        return lib
