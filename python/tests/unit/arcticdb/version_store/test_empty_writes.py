@@ -149,13 +149,17 @@ def test_fallback_to_pickle(lmdb_version_store, sym):
     df = pd.DataFrame(columns=column_names)
     lmdb_version_store.write(sym, df)
 
+    # In Pandas 2.0, RangeIndex is used by default when an empty dataframe or series is created.
+    # The index is converted to a DatetimeIndex for preserving the behavior of ArcticDB with Pandas 1.0.
+    assert isinstance(df.index, pd.RangeIndex if IS_PANDAS_TWO else pd.Index)
+
     if IS_PANDAS_TWO:
         # In Pandas 2.0, RangeIndex is used by default when an empty dataframe or series is created.
-        # The index is converted to a DatetimeIndex for preserving the behavior of ArcticDB with Pandas 1.0.
+        # The index has to be converted to a DatetimeIndex by ArcticDB to perform updates.
         df.index = df.index.astype("datetime64[ns]")
 
-    # NOTE: This is now storable without necessitating pickle.
-    # What is the purpose of this test?
-    assert not lmdb_version_store.is_symbol_pickled(sym)
+    # In Pandas 2.0, the DataFrame can be stored without pickling.
+    # In Pandas 1.0, the DataFrame has to be pickled.
+    assert IS_PANDAS_TWO ^ lmdb_version_store.is_symbol_pickled(sym)
 
-    assert_frame_equal(df, lmdb_version_store.read(sym).data, check_dtype=False)
+    assert_frame_equal(df, lmdb_version_store.read(sym).data, check_dtype=not IS_PANDAS_TWO)
