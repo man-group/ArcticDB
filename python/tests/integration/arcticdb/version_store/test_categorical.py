@@ -89,7 +89,7 @@ def test_categorical_empty(lmdb_version_store, sym):
     # See: https://github.com/pandas-dev/pandas/issues/49572
     assert isinstance(df.index, pd.RangeIndex)
     assert isinstance(read_df.index, pd.RangeIndex)
-    assert_frame_equal(df, read_df, check_dtype=not IS_PANDAS_TWO)
+    assert_frame_equal(df, read_df)
 
 
 def test_categorical_with_integers(lmdb_version_store, sym):
