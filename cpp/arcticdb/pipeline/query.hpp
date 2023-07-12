@@ -107,7 +107,7 @@ struct TimestampVersionQuery {
 };
 
 struct SpecificVersionQuery {
-    VersionId version_id_;
+    SignedVersionId version_id_;
 };
 
 struct VersionQuery {
@@ -123,7 +123,7 @@ struct VersionQuery {
         content_ = TimestampVersionQuery{ts};
     }
 
-    void set_version(VersionId version) {
+    void set_version(SignedVersionId version) {
         content_ = SpecificVersionQuery{version};
     }
 

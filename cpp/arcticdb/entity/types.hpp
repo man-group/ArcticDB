@@ -71,6 +71,7 @@ using VariantId = std::variant<NumericId, StringId>;
 using StreamId = VariantId;
 using SnapshotId = VariantId;
 using VersionId = uint64_t;
+using SignedVersionId = int64_t;
 using GenerationId = VersionId;
 using timestamp = int64_t;
 using shape_t = ssize_t;

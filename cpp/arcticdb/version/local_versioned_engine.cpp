@@ -208,15 +208,33 @@ std::optional<VersionedItem> LocalVersionedEngine::get_latest_version(
 
 std::optional<VersionedItem> LocalVersionedEngine::get_specific_version(
     const StreamId &stream_id,
-    VersionId version_id,
+    SignedVersionId signed_version_id,
     const VersionQuery& version_query) {
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: get_specific_version");
-    auto key = ::arcticdb::get_specific_version(store(), version_map(), stream_id, version_id, opt_true(version_query.skip_compat_),
+    auto key = ::arcticdb::get_specific_version(store(), version_map(), stream_id, signed_version_id, opt_true(version_query.skip_compat_),
                                                    opt_true(version_query.iterate_on_failure_));
     if (!key) {
-        ARCTICDB_DEBUG(log::version(), "Version {} for symbol {} is missing, checking snapshots:", version_id, stream_id);
+        VersionId version_id;
+        if (signed_version_id >= 0) {
+            version_id = static_cast<VersionId>(signed_version_id);
+        } else {
+            auto opt_latest_key = ::arcticdb::get_latest_version(store(), version_map(), stream_id, opt_true(version_query.skip_compat_),
+                                                 opt_true(version_query.iterate_on_failure_));
+            if (opt_latest_key.has_value()) {
+                auto opt_version_id = get_version_id_negative_index(opt_latest_key->version_id(), signed_version_id);
+                if (opt_version_id.has_value()) {
+                    version_id = *opt_version_id;
+                }  else {
+                    return std::nullopt;
+                }
+            } else {
+                return std::nullopt;
+            }
+        }
+        ARCTICDB_DEBUG(log::version(), "Version {} for symbol {} is missing, checking snapshots:", version_id,
+                       stream_id);
         auto index_keys = get_index_keys_in_snapshots(store(), stream_id);
-        auto index_key = std::find_if(index_keys.begin(), index_keys.end(), [version_id](const AtomKey& k) {
+        auto index_key = std::find_if(index_keys.begin(), index_keys.end(), [version_id](const AtomKey &k) {
             return k.version_id() == version_id;
         });
         if (index_key != index_keys.end()) {
@@ -776,7 +794,7 @@ void LocalVersionedEngine::delete_trees_responsibly(
             async::submit_tasks_for_range(min_vers,
                     [store=store(), version_map=version_map(), load_type](auto& sym_version) {
                         auto load_param = load_type == LoadType::LOAD_DOWNTO
-                                ? LoadParameter{load_type, sym_version.second}
+                                ? LoadParameter{load_type, static_cast<SignedVersionId>(sym_version.second)}
                                 : LoadParameter{load_type};
                         return async::submit_io_task(CheckReloadTask{store, version_map, sym_version.first,
                                                                      load_param, true});

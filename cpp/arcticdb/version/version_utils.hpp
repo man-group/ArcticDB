@@ -68,12 +68,12 @@ inline entity::VariantKey write_multi_index_entry(
     return multi_key_fut.wait().value();
 }
 
-inline std::pair<std::optional<AtomKey>, VersionId> read_segment_with_keys(
+inline std::optional<AtomKey> read_segment_with_keys(
     const SegmentInMemory &seg,
-    VersionMapEntry &entry) {
+    VersionMapEntry &entry,
+    VersionId& oldest_loaded_index) {
     ssize_t row = 0;
     std::optional<AtomKey> next;
-    VersionId oldest_loaded_index = std::numeric_limits<VersionId>::max();
     for (; row < ssize_t(seg.row_count()); ++row) {
         auto key = read_key_row(seg, row);
         ARCTICDB_TRACE(log::version(), "Reading key {}", key);
@@ -96,13 +96,14 @@ inline std::pair<std::optional<AtomKey>, VersionId> read_segment_with_keys(
         }
     }
     util::check(row == ssize_t(seg.row_count()), "Unexpected ordering in journal segment");
-    return std::make_pair(next, oldest_loaded_index);
+    return next;
 }
 
-inline std::pair<std::optional<AtomKey>, VersionId> read_segment_with_keys(
+inline std::optional<AtomKey> read_segment_with_keys(
     const SegmentInMemory &seg,
-    const std::shared_ptr<VersionMapEntry> &entry) {
-    return read_segment_with_keys(seg, *entry);
+    const std::shared_ptr<VersionMapEntry> &entry,
+    VersionId& oldest_loaded_index) {
+    return read_segment_with_keys(seg, *entry, oldest_loaded_index);
 }
 
 template<class Predicate>
@@ -127,7 +128,8 @@ std::shared_ptr<VersionMapEntry> build_version_map_entry_with_predicate_iteratio
                                 ARCTICDB_DEBUG(log::storage(), "Version map iterating key {}", key);
                                 if (perform_read_segment_with_keys) {
                                     auto [kv, seg] = store->read_sync(to_atom(key));
-                                    read_segment_with_keys(seg, output);
+                                    VersionId version_id{};
+                                    read_segment_with_keys(seg, output, version_id);
                                 }
                             },
                             prefix);
@@ -182,7 +184,7 @@ inline void read_symbol_ref(std::shared_ptr<StreamSource> store, const StreamId 
 
     auto [key, seg] = store->read_sync(maybe_ref_key.value());
     VersionId version_id{};
-    std::tie(entry.head_, version_id) = read_segment_with_keys(seg, entry);
+    entry.head_ = read_segment_with_keys(seg, entry, version_id);
 }
 
 inline void write_symbol_ref(std::shared_ptr<StreamSink> store,
@@ -203,16 +205,43 @@ inline void write_symbol_ref(std::shared_ptr<StreamSink> store,
     ARCTICDB_DEBUG(log::version(), "Done writing symbol ref for key: {}", journal_key);
 }
 
+// Given the latest version, and a negative index into the version map, returns the desired version ID or std::nullopt if it would be negative
+inline std::optional<VersionId> get_version_id_negative_index(VersionId latest, SignedVersionId index) {
+    internal::check<ErrorCode::E_ASSERTION_FAILURE>(index < 0, "get_version_id_negative_index expects a negative index, received {}", index);
+    // +1 so that as_of=-1 returns the latest entry
+    auto candidate_version_id = static_cast<SignedVersionId>(latest) + index + 1;
+    return candidate_version_id >= 0 ? std::make_optional<VersionId>(static_cast<VersionId>(candidate_version_id)) : std::nullopt;
+}
+
 std::unordered_map<StreamId, size_t> get_num_version_entries(const std::shared_ptr<Store> &store, size_t batch_size);
 
-inline bool need_to_load_further(const LoadParameter &load_params, VersionId loaded_until) {
-    if (!load_params.load_until_ || loaded_until > load_params.load_until_.value())
+inline bool need_to_load_further(const LoadParameter &load_params,
+                                 VersionId loaded_until,
+                                 const std::optional<VersionId>& latest_version) {
+    if (!load_params.load_until_)
         return true;
 
+    if (load_params.load_until_.value() >= 0) {
+        if (loaded_until > static_cast<VersionId>(load_params.load_until_.value())) {
+            return true;
+        }
+    } else {
+        if (latest_version.has_value()) {
+            auto opt_version_id = get_version_id_negative_index(latest_version.value(), *load_params.load_until_);
+            if (opt_version_id.has_value()) {
+                if (loaded_until > *opt_version_id) {
+                    return true;
+                }
+            }
+        } else {
+            return true;
+        }
+    }
     ARCTICDB_DEBUG(log::version(),
-                   "Exiting load downto because request {} <= {}",
-                   load_params.load_until_.value(),
-                   loaded_until);
+                   "Exiting load downto because loaded to version {} for request {} with {} total versions",
+                   loaded_until,
+                   *load_params.load_until_,
+                   latest_version.value());
     return false;
 }
 
