@@ -36,20 +36,24 @@ struct LoadParameter {
         load_type_(load_type) {
     }
 
-    LoadParameter(LoadType load_type, timestamp load_from_time) :
+    LoadParameter(LoadType load_type, int64_t load_from_time_or_until) :
         load_type_(load_type),
-        load_from_time_(load_from_time) {
-        util::check(load_type_ == LoadType::LOAD_FROM_TIME, "Load to timestamp parameter {} supplied with the wrong load type argument: {}", load_from_time_.value(), int(load_type_));
-    }
-
-    LoadParameter(LoadType load_type, VersionId load_until) :
-        load_type_(load_type),
-        load_until_(load_until){
-        util::check(load_type_ == LoadType::LOAD_DOWNTO, "Load until parameter {} supplied with the wrong load type argument: {}", load_until_.value(), int(load_type_));
+        load_from_time_(load_from_time_or_until) {
+        switch(load_type_) {
+            case LoadType::LOAD_FROM_TIME:
+                load_from_time_ = load_from_time_or_until;
+                break;
+            case LoadType::LOAD_DOWNTO:
+                load_until_ = load_from_time_or_until;
+                break;
+            default:
+                internal::raise<ErrorCode::E_ASSERTION_FAILURE>("LoadParameter constructor with load_from_time_or_until parameter {} provided invalid load_type {}",
+                                                                load_from_time_or_until, static_cast<uint32_t>(load_type));
+        }
     }
 
     LoadType load_type_ = LoadType::NOT_LOADED;
-    std::optional<VersionId> load_until_ = std::nullopt;
+    std::optional<SignedVersionId> load_until_ = std::nullopt;
     std::optional<timestamp> load_from_time_ = std::nullopt;
 
     void validate() const {
