@@ -55,18 +55,18 @@ def test_project_column_types_changing_and_missing(lmdb_version_store_dynamic_sc
     # uint8
     df = pd.DataFrame({"col_to_project": np.arange(2, dtype=np.uint8), "data_col": [2, 3]}, index=np.arange(2, 4))
     lib.append(symbol, df)
-    expected = expected.append(df)
+    expected = pd.concat((expected, df))
     # Missing
     df = pd.DataFrame({"data_col": [4, 5]}, index=np.arange(4, 6))
     lib.append(symbol, df)
-    expected = expected.append(df)
+    expected = pd.concat((expected, df))
     # int16
     df = pd.DataFrame(
         {"col_to_project": np.arange(200, 202, dtype=np.int16), "data_col": [6, 7]}, index=np.arange(6, 8)
     )
     lib.append(symbol, df)
 
-    expected = expected.append(df)
+    expected = pd.concat((expected, df))
     expected["projected_col"] = expected["col_to_project"] * 2
     q = QueryBuilder()
     q = q.apply("projected_col", q["col_to_project"] * 2)

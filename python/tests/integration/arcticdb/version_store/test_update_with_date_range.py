@@ -53,7 +53,14 @@ class CustomTimeseries:
 
     def __getitem__(self, item):
         if isinstance(item, slice):
-            open_ended = slice(item.start + timedelta(microseconds=1), item.stop - timedelta(microseconds=1), item.step)
+            # Comparing datetimes with timezone to datetimes without timezone has been deprecated in Pandas 1.2.0
+            # (see https://github.com/pandas-dev/pandas/pull/36148/) and is not support anymore in Pandas 2.0
+            # (see https://github.com/pandas-dev/pandas/pull/49492/).
+            # We explicitly remove the timezone from the start and stop of the slice to be able to use the
+            # index of the wrapped DataFrame.
+            start_wo_tz = item.start.replace(tzinfo=None) + timedelta(microseconds=1)
+            stop_wo_tz = item.stop.replace(tzinfo=None) - timedelta(microseconds=1)
+            open_ended = slice(start_wo_tz, stop_wo_tz, item.step)
             return CustomTimeseries(
                 self.wrapped[open_ended],
                 with_timezone_attr=self.with_timezone_attr,
