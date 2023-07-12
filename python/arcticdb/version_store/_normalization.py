@@ -389,7 +389,17 @@ def _denormalize_columns(item, norm_meta, idx_type, n_indexes):
         if len(item.data) == 0:
             data = None
         else:
-            data = {n: item.data[i + n_indexes] if i < len(item.data) else [] for i, n in enumerate(columns)}
+            # Before Pandas 2.0, empty Series' dtype was "float64" and empty DataFrames' Columns' dtype was "object".
+            # As of Pandas 2.0, empty Series' dtype is "object" and empty DataFrames' Columns' dtype remains "object".
+            # See: https://github.com/pandas-dev/pandas/issues/17261
+            # When normalizing in Pandas 2.0, we convert empty Series' dtype to float to "float64" to be consistent
+            # with the behavior of ArcticDB with Pandas 1.0.
+            # The same logic is used to normalize empty DataFrames' columns.
+            # Yet, when denormalizing we have to convert empty DataFrames' Columns' to "object" to be consistent.
+            data = {
+                n: item.data[i + n_indexes] if i < len(item.data) else np.empty(0, dtype="object")
+                for i, n in enumerate(columns)
+            }
     return columns, denormed_columns, data
 
 

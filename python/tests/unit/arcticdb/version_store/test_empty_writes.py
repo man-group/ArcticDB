@@ -162,4 +162,4 @@ def test_fallback_to_pickle(lmdb_version_store, sym):
     # In Pandas 1.0, the DataFrame has to be pickled.
     assert IS_PANDAS_TWO ^ lmdb_version_store.is_symbol_pickled(sym)
 
-    assert_frame_equal(df, lmdb_version_store.read(sym).data, check_dtype=not IS_PANDAS_TWO)
+    assert_frame_equal(df, lmdb_version_store.read(sym).data)
