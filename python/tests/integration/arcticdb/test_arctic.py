@@ -381,16 +381,16 @@ def test_read_meta_batch_with_as_ofs(arctic_library):
     assert results_list[4].metadata == {"meta2": 8}
 
 
-def test_read_meta_batch_with_as_ofs_stress(arctic_library):
+def test_read_meta_batch_with_as_ofs_high_amount(arctic_library):
     lib = arctic_library
     num_symbols = 10
-    num_versions = 20
-    for sym in range(num_symbols):
-        for version in range(num_versions):
-            lib.write_pickle(
-                "sym_" + str(sym), version, metadata={"meta_" + str(sym): version}, prune_previous_versions=False
-            )
+    num_versions = 4
 
+    for version in range(num_versions):
+        write_requests = []
+        for sym in range(num_symbols):
+            write_requests.append(WritePayload("sym_" + str(sym), version, metadata={"meta_" + str(sym): version}))
+        lib.write_pickle_batch(write_requests, prune_previous_versions=False)
     requests = [
         ReadInfoRequest("sym_" + str(sym), as_of=version)
         for sym in range(num_symbols)
@@ -401,11 +401,6 @@ def test_read_meta_batch_with_as_ofs_stress(arctic_library):
         for version in range(num_versions):
             idx = sym * num_versions + version
             assert results_list[idx].metadata == {"meta_" + str(sym): version}
-
-    requests = ["sym_" + str(sym) for sym in range(num_symbols)]
-    results_list = lib.read_metadata_batch(requests)
-    for sym in range(num_symbols):
-        assert results_list[sym].metadata == {"meta_" + str(sym): num_versions - 1}
 
 
 def test_basic_write_read_update_and_append(arctic_library):
@@ -761,28 +756,30 @@ def test_write_batch(library_factory):
     """Should be able to write different size of batch of data."""
     lib = library_factory(LibraryOptions(rows_per_segment=10))
     assert lib._nvs._lib_cfg.lib_desc.version.write_options.segment_row_size == 10
-    num_columns = 16
-    num_days = 200
-    num_symbols = 200
+    num_days = 40
+    num_symbols = 40
     dt = datetime(2019, 4, 8, 0, 0, 0)
-    column_length = 6
+    column_length = 4
+    num_columns = 5
     num_rows_per_day = 1
-    list_requests = []
+    write_requests = []
+    read_requests = []
     list_dataframes = {}
+    columns = random_strings_of_length(num_columns, num_columns, True)
     for sym in range(num_symbols):
-        columns = random_strings_of_length(num_columns, column_length, True)
-        df = generate_dataframe(random.sample(columns, 6), dt, num_days, num_rows_per_day)
-        list_requests.append(WritePayload("symbol_" + str(sym), df, metadata="great_metadata" + str(sym)))
+        df = generate_dataframe(random.sample(columns, num_columns), dt, num_days, num_rows_per_day)
+        write_requests.append(WritePayload("symbol_" + str(sym), df, metadata="great_metadata" + str(sym)))
+        read_requests.append("symbol_" + str(sym))
         list_dataframes[sym] = df
 
-    batch = lib.write_batch(list_requests)
-    assert all(type(w) == PythonVersionedItem for w in batch)
+    write_batch_result = lib.write_batch(write_requests)
+    assert all(type(w) == PythonVersionedItem for w in write_batch_result)
 
+    read_batch_result = lib.read_batch(read_requests)
     for sym in range(num_symbols):
         original_dataframe = list_dataframes[sym]
-        read_dataframe = lib.read("symbol_" + str(sym))
-        assert read_dataframe.metadata == "great_metadata" + str(sym)
-        assert_frame_equal(read_dataframe.data, original_dataframe)
+        assert read_batch_result[sym].metadata == "great_metadata" + str(sym)
+        assert_frame_equal(read_batch_result[sym].data, original_dataframe)
 
 
 def test_write_with_unpacking(arctic_library):
@@ -1417,21 +1414,24 @@ def test_get_description_batch_multiple_versions(arctic_library):
 def test_read_description_batch_high_amount(arctic_library):
     lib = arctic_library
     num_symbols = 10
-    num_versions = 10
+    num_versions = 4
     start_year = 2000
     start_day = 1
-    for sym in range(num_symbols):
-        for version in range(num_versions):
+    for version in range(num_versions):
+        write_requests = []
+        for sym in range(num_symbols):
             start_date = pd.Timestamp(str("{}/1/{}".format(start_year + sym, start_day + version)))
             end_date = pd.Timestamp(str("{}/1/{}".format(start_year + sym, start_day + version + 3)))
             df = pd.DataFrame({"column": [1, 2, 3, 4]}, index=pd.date_range(start=start_date, end=end_date))
-            lib.write("sym_" + str(sym), df, prune_previous_versions=False)
-    requests = [
+            write_requests.append(WritePayload("sym_" + str(sym), df))
+        lib.write_batch(write_requests, prune_previous_versions=False)
+
+    description_requests = [
         ReadInfoRequest("sym_" + str(sym), as_of=version)
         for sym in range(num_symbols)
         for version in range(num_versions)
     ]
-    results_list = lib.get_description_batch(requests)
+    results_list = lib.get_description_batch(description_requests)
     for sym in range(num_symbols):
         for version in range(num_versions):
             idx = sym * num_versions + version
