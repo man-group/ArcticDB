@@ -51,9 +51,10 @@ namespace as = arcticdb::stream;
 class PythonVersionStore : public LocalVersionedEngine {
 
   public:
-    explicit PythonVersionStore(
-        const std::shared_ptr<storage::Library>& library,
-        const std::optional<std::string>& license_key = std::nullopt);
+    template<class ClockType = util::SysClock>
+    explicit PythonVersionStore(const std::shared_ptr<storage::Library>& library, const ClockType& ct = util::SysClock{}) :
+        LocalVersionedEngine(library, ct) {
+    }
 
     VersionedItem write_dataframe_specific_version(
         const StreamId& stream_id,
@@ -333,6 +334,11 @@ private:
         bool prune_previous_versions);
 
     void delete_snapshot_sync(const SnapshotId& snap_name, const VariantKey& snap_key);
+};
+
+struct ManualClockVersionStore : PythonVersionStore {
+    ManualClockVersionStore(const std::shared_ptr<storage::Library>& library) :
+            PythonVersionStore(library, util::ManualClock{}) {}
 };
 
 inline std::vector<std::variant<ReadResult, DataError>> frame_to_read_result(std::vector<ReadVersionOutput>&& keys_frame_and_descriptors) {

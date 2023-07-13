@@ -36,7 +36,7 @@ from arcticdb.version_store._custom_normalizers import CustomNormalizer, registe
 from arcticdb.version_store._store import UNSUPPORTED_S3_CHARS, MAX_SYMBOL_SIZE, VersionedItem
 from arcticdb_ext.exceptions import _ArcticLegacyCompatibilityException
 from arcticdb_ext.storage import KeyType, NoDataFoundException
-from arcticdb_ext.version_store import NoSuchVersionException, StreamDescriptorMismatch
+from arcticdb_ext.version_store import NoSuchVersionException, StreamDescriptorMismatch, ManualClockVersionStore
 from arcticc.pb2.descriptors_pb2 import NormalizationMetadata  # Importing from arcticdb dynamically loads arcticc.pb2
 from arcticdb.util.test import (
     sample_dataframe,
@@ -1738,6 +1738,8 @@ def test_dynamic_schema_similar_index_column_dataframe_multiple_col(lmdb_version
 
 def test_restore_version(version_store_factory):
     lmdb_version_store = version_store_factory(col_per_group=2, row_per_segment=2)
+    # Triggers bug https://github.com/man-group/ArcticDB/issues/469 by freezing time
+    lmdb_version_store.version_store = ManualClockVersionStore(lmdb_version_store._library)
     symbol = "test_restore_version"
     df1 = get_sample_dataframe(20, 4)
     df1.index = pd.DatetimeIndex([pd.Timestamp.now()] * len(df1))

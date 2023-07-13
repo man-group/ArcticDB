@@ -38,9 +38,8 @@ using namespace arcticdb::entity;
 namespace as = arcticdb::stream;
 using namespace arcticdb::storage;
 
-PythonVersionStore::PythonVersionStore(const std::shared_ptr<storage::Library>& library, const std::optional<std::string>& license_key) :
-    LocalVersionedEngine(library, license_key) {
-}
+template PythonVersionStore::PythonVersionStore(const std::shared_ptr<storage::Library>& library, const util::SysClock& ct);
+template PythonVersionStore::PythonVersionStore(const std::shared_ptr<storage::Library>& library, const util::ManualClock& ct);
 
 VersionedItem PythonVersionStore::write_dataframe_specific_version(
     const StreamId& stream_id,
