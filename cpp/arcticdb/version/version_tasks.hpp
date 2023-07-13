@@ -96,8 +96,8 @@ struct AsyncRestoreVersionTask : async::BaseTask {
             }).thenValue([store=store_, version_map=version_map_, tsd=tsd, stream_id=stream_id_, version_id] (auto&& new_slice_and_keys) {
                 auto index = index_type_from_descriptor(tsd->as_stream_descriptor());
                 return index::index_and_version(index, store, *tsd, new_slice_and_keys, stream_id, version_id);
-            }).thenValue([store=store_, version_map=version_map_, tsd=tsd] (auto versioned_item) {
-                version_map->write_version(store, versioned_item.key_);
+            }).thenValue([store=store_, version_map=version_map_, tsd=tsd, maybe_prev=maybe_prev_] (auto versioned_item) {
+                version_map->write_version(store, versioned_item.key_, std::nullopt);
                 return std::make_pair(versioned_item, *tsd);
             });
         }
@@ -130,19 +130,22 @@ struct WriteVersionTask : async::BaseTask {
     const std::shared_ptr<Store> store_;
     const std::shared_ptr<VersionMap> version_map_;
     const AtomKey key_;
+    const std::optional<AtomKey> previous_key_;
 
     WriteVersionTask(
         std::shared_ptr<Store> store,
         std::shared_ptr<VersionMap> version_map,
-        AtomKey key) :
+        AtomKey key,
+        const std::optional<AtomKey>& previous_key) :
         store_(std::move(store)),
         version_map_(std::move(version_map)),
-        key_(std::move(key)){
+        key_(std::move(key)),
+        previous_key_(previous_key){
     }
 
     folly::Unit operator()() {
         ScopedLock lock(version_map_->get_lock_object(key_.id()));
-        version_map_->write_version(store_, key_);
+        version_map_->write_version(store_, key_, previous_key_);
         return folly::Unit{};
     }
 };

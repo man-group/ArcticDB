@@ -27,6 +27,7 @@
 #include <arcticdb/python/python_utils.hpp>
 #include <arcticdb/util/configs_map.hpp>
 #include <arcticdb/storage/store.hpp>
+#include <arcticdb/storage/storage.hpp>
 #include <arcticdb/util/constants.hpp>
 #include <arcticdb/util/key_utils.hpp>
 #include <arcticdb/version/version_map_entry.hpp>
@@ -37,6 +38,7 @@
 
 
 namespace arcticdb {
+
 
 template<class Clock=util::SysClock>
 class VersionMapImpl {
@@ -149,11 +151,17 @@ public:
 
         std::optional<VersionId> latest_version;
         LoadProgress load_progress;
-        util::check(ref_entry.keys_.size() >= 2, "Invalid number of keys in ref entry: {}", ref_entry.keys_.size());
-        if (key_exists_in_ref_entry(load_params, ref_entry)) {
-            load_progress.loaded_until_ = ref_entry.loaded_until_;
-            load_progress.oldest_loaded_index_version_ = ref_entry.loaded_until_;
+        util::check(ref_entry.keys_.size() >= 2, "Invalid empty ref entry");
+        std::optional<AtomKey> cached_penultimate_index;
+        if(ref_entry.keys_.size() == 3) {
+            util::check(is_index_or_tombstone(ref_entry.keys_[1]), "Expected index key in as second item in 3-item ref key, got {}", ref_entry.keys_[1]);
+            cached_penultimate_index = ref_entry.keys_[1];
+        }
+
+        if (key_exists_in_ref_entry(load_params, ref_entry, cached_penultimate_index, load_progress)) {
             entry->keys_.push_back(ref_entry.keys_[0]);
+            if(cached_penultimate_index)
+                entry->keys_.push_back(*cached_penultimate_index);
         } else {
             do {
                 ARCTICDB_DEBUG(log::version(), "Loading version key {}", next_key.value());
@@ -224,12 +232,12 @@ public:
             entry->validate();
     }
 
-    void write_version(std::shared_ptr<Store> store, const AtomKey &key) {
+    void write_version(std::shared_ptr<Store> store, const AtomKey &key, const std::optional<AtomKey>& previous_key) {
         LoadParameter load_param{LoadType::LOAD_LATEST};
         auto entry = check_reload(store, key.id(), load_param,  __FUNCTION__);
 
         do_write(store, key, entry);
-        write_symbol_ref(store, key, std::nullopt, entry->head_.value());
+        write_symbol_ref(store, key, previous_key, entry->head_.value());
         if (validate_)
             entry->validate();
         if(log_changes_)
@@ -501,6 +509,8 @@ public:
 
         auto journal_key = to_atom(std::move(journal_single_key(store, key, entry->head_)));
         write_to_entry(entry, key, journal_key);
+        auto previous_index = entry->get_second_undeleted_index();
+        write_symbol_ref(store, key, previous_index, journal_key);
     }
 
     AtomKey write_tombstone(
@@ -603,12 +613,12 @@ public:
                 }
 
                 if (requested_load_type == LoadType::LOAD_LATEST_UNDELETED) {
-                    auto opt_latest = entry->get_first_index(false);
+                    auto opt_latest = entry->get_first_index(false).first;
                     return opt_latest.has_value();
                 }
 
                 if (requested_load_type == LoadType::LOAD_LATEST) {
-                    auto opt_latest = entry->get_first_index(true);
+                    auto opt_latest = entry->get_first_index(true).first;
                     return opt_latest.has_value();
                 }
 
@@ -712,7 +722,7 @@ private:
                 return true;
             }
         } else {
-            auto opt_latest = entry.get_first_index(true);
+            auto opt_latest = entry.get_first_index(true).first;
             if (opt_latest.has_value()) {
                 auto opt_version_id = get_version_id_negative_index(opt_latest->version_id(),
                                                                     *load_param.load_until_);
@@ -758,6 +768,8 @@ private:
         }
 
         version_agg.commit();
+        auto previous_index = entry->get_second_undeleted_index();
+        write_symbol_ref(store, *entry->keys_.cbegin(), previous_index, journal_key);
         return journal_key;
     }
 
@@ -819,7 +831,7 @@ private:
                      [](const auto &key) {
                          return is_index_or_tombstone(key);
                      });
-        const auto first_index = new_entry->get_first_index(true);
+        const auto first_index = new_entry->get_first_index(true).first;
         util::check(static_cast<bool>(first_index), "No index exists in rewrite entry");
         auto version_id = first_index->version_id();
         new_entry->head_ = write_entry_to_storage(store, stream_id, version_id, new_entry);
@@ -959,10 +971,11 @@ public:
     }
 
 private:
-    std::pair<VersionId, std::vector<AtomKey>> tombstone_from_key_or_all_internal(std::shared_ptr<Store> store,
-                                                            const StreamId& stream_id,
-                                                            std::optional<AtomKey> first_key_to_tombstone = std::nullopt,
-                                                            std::shared_ptr<VersionMapEntry> entry = nullptr) {
+    std::pair<VersionId, std::vector<AtomKey>> tombstone_from_key_or_all_internal(
+            std::shared_ptr<Store> store,
+            const StreamId& stream_id,
+            std::optional<AtomKey> first_key_to_tombstone = std::nullopt,
+            std::shared_ptr<VersionMapEntry> entry = nullptr) {
         if (!entry) {
             entry = check_reload(
                     store,
@@ -972,7 +985,7 @@ private:
         }
 
         if (!first_key_to_tombstone)
-            first_key_to_tombstone = entry->get_first_index(false);
+            first_key_to_tombstone = entry->get_first_index(false).first;
 
         std::vector<AtomKey> output;
         for (const auto& key : entry->keys_) {
@@ -982,7 +995,7 @@ private:
             }
         }
 
-        const auto& latest_version = entry->get_first_index(true);
+        const auto& latest_version = entry->get_first_index(true).first;
         const VersionId version_id = latest_version ? latest_version->version_id() : 0;
 
         if (!output.empty()) {

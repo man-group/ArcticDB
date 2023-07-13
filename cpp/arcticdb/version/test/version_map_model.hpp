@@ -36,9 +36,9 @@ struct MapStorePair {
 
     void write_version(const std::string &id) {
         log::version().info("MapStorePair, write version {}", id);
-        auto prev = get_latest_version(store_, map_, id, pipelines::VersionQuery{});
+        auto prev = get_latest_version(store_, map_, id, pipelines::VersionQuery{}).first;
         auto version_id = prev ? prev->version_id() + 1 : 0;
-        map_->write_version(store_, make_test_index_key(id, version_id, KeyType::TABLE_INDEX));
+        map_->write_version(store_, make_test_index_key(id, version_id, KeyType::TABLE_INDEX), prev);
     }
 
     void delete_all_versions(const std::string &id) {
@@ -51,7 +51,7 @@ struct MapStorePair {
 
     void write_and_prune_previous(const std::string &id) {
         log::version().info("MapStorePair, write_and_prune_previous version {}", id);
-        auto prev = get_latest_version(store_, map_, id, pipelines::VersionQuery{});
+        auto prev = get_latest_version(store_, map_, id, pipelines::VersionQuery{}).first;
         auto version_id = prev ? prev->version_id() + 1 : 0;
 
         if(tombstones_)

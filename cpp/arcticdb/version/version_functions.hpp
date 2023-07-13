@@ -14,7 +14,7 @@
 
 namespace arcticdb {
 
-inline void set_load_param_options(LoadParameter& load_param, const pipelines::VersionQuery &version_query) {
+inline void set_load_param_options(LoadParameter& load_param, const pipelines::VersionQuery& version_query) {
     load_param.iterate_on_failure_ = version_query.iterate_on_failure_.value_or(false);
 }
 
@@ -27,10 +27,10 @@ inline std::optional<AtomKey> get_latest_undeleted_version(
     LoadParameter load_param{LoadType::LOAD_LATEST_UNDELETED};
     set_load_param_options(load_param, version_query);
     const auto entry = version_map->check_reload(store, stream_id, load_param, __FUNCTION__);
-    return entry->get_first_index(false);
+    return entry->get_first_index(false).first;
 }
 
-inline std::optional<AtomKey> get_latest_version(
+inline std::pair<std::optional<AtomKey>, bool> get_latest_version(
     const std::shared_ptr<Store> &store,
     const std::shared_ptr<VersionMap> &version_map,
     const StreamId &stream_id,
@@ -52,8 +52,8 @@ inline version_store::UpdateInfo get_latest_undeleted_version_and_next_version_i
     LoadParameter load_param{LoadType::LOAD_LATEST_UNDELETED};
         set_load_param_options(load_param, version_query);
     auto entry = version_map->check_reload(store, stream_id, load_param, __FUNCTION__);
-    auto latest_version = entry->get_first_index(true);
-    auto latest_undeleted_version = entry->get_first_index(false);
+    auto latest_version = entry->get_first_index(true).first;
+    auto latest_undeleted_version = entry->get_first_index(false).first;
     VersionId next_version_id = latest_version.has_value() ? latest_version->version_id() + 1 : 0;
     return {latest_undeleted_version, next_version_id};
 }
@@ -85,7 +85,7 @@ inline std::optional<AtomKey> get_specific_version(
     if (signed_version_id >= 0) {
         version_id = static_cast<VersionId>(signed_version_id);
     } else {
-        auto opt_latest = entry->get_first_index(true);
+        auto opt_latest = entry->get_first_index(true).first;
         if (opt_latest.has_value()) {
             auto opt_version_id = get_version_id_negative_index(opt_latest->version_id(), signed_version_id);
             if (opt_version_id.has_value()) {
@@ -196,7 +196,7 @@ inline version_store::TombstoneVersionResult tombstone_version(
             util::raise_rte("Version {} for symbol {} is already deleted", version_id, stream_id);
         } else {
             if (!allow_tombstoning_beyond_latest_version) {
-                auto latest_key = get_latest_version(store, version_map, stream_id, version_query);
+                auto latest_key = get_latest_version(store, version_map, stream_id, version_query).first;
                 if (!latest_key || latest_key->version_id() < version_id)
                     util::raise_rte("Can't delete version {} for symbol {} - it's higher than the latest version",
                             stream_id, version_id);
@@ -212,8 +212,8 @@ inline version_store::TombstoneVersionResult tombstone_version(
     if (version_map->validate())
         entry->validate();
 
-    res.no_undeleted_left = !entry->get_first_index(false).has_value();
-    res.latest_version_ = entry->get_first_index(true)->version_id();
+    res.no_undeleted_left = !entry->get_first_index(false).first.has_value();
+    res.latest_version_ = entry->get_first_index(true).first->version_id();
     return res;
 }
 
