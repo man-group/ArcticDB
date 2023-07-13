@@ -88,7 +88,7 @@ std::optional<AtomKey> get_specific_version_from_entry(
     if (signed_version_id >= 0) {
         version_id = static_cast<VersionId>(signed_version_id);
     } else {
-        auto opt_latest = version_map_entry->get_first_index(true);
+        auto opt_latest = version_map_entry->get_first_index(true).first;
         if (opt_latest.has_value()) {
             auto opt_version_id = get_version_id_negative_index(opt_latest->version_id(),
                                                                 signed_version_id);
@@ -129,7 +129,7 @@ inline std::optional<AtomKey> get_key_for_version_query(
             return get_version_map_entry_by_timestamp(version_map_entry, timestamp_version);
         },
         [&version_map_entry](const std::monostate &) {
-           return version_map_entry->get_first_index(false);
+           return version_map_entry->get_first_index(false).first;
         },
         [](const auto &) -> std::optional<AtomKey> {
            util::raise_rte("Unsupported version query type");

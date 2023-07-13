@@ -62,7 +62,7 @@ VersionedItem PythonVersionStore::write_dataframe_specific_version(
         convert::py_ndf_to_frame(stream_id, item, norm, user_meta),
         get_write_options());
 
-    version_map()->write_version(store(), versioned_item.key_);
+    version_map()->write_version(store(), versioned_item.key_, std::nullopt);
     if(cfg().symbol_list())
         symbol_list().add_symbol(store(), stream_id, version_id);
 
@@ -79,25 +79,6 @@ std::vector<std::shared_ptr<InputTensorFrame>> create_input_tensor_frames(
     for (size_t idx = 0; idx < stream_ids.size(); idx++) {
         output.emplace_back(convert::py_ndf_to_frame(stream_ids[idx], items[idx], norms[idx], user_metas[idx]));
     }
-    return output;
-}
-
-std::vector<VersionedItem> PythonVersionStore::batch_write_index_keys_to_version_map(
-    const std::vector<AtomKey>& index_keys,
-    const std::vector<UpdateInfo>& stream_update_info_vector,
-    bool prune_previous_versions) {
-
-    folly::collect(batch_write_version_and_prune_if_needed(index_keys, stream_update_info_vector, prune_previous_versions)).get();
-    std::vector<VersionedItem> output(index_keys.size());
-    for(auto key : folly::enumerate(index_keys))
-        output[key.index] = *key;
-
-    std::vector<folly::Future<folly::Unit>> symbol_write_futs;
-    for(const auto& item : output) {
-        symbol_write_futs.emplace_back(async::submit_io_task(WriteSymbolTask(store(), symbol_list_ptr(), item.key_.id(), item.key_.version_id())));
-    }
-    folly::collect(symbol_write_futs).wait();
-
     return output;
 }
 
@@ -510,7 +491,7 @@ VersionedItem PythonVersionStore::write_partitioned_dataframe(
     const std::vector<std::string>& partition_value
     ) {
     ARCTICDB_SAMPLE(WritePartitionedDataFrame, 0)
-    auto maybe_prev = ::arcticdb::get_latest_version(store(), version_map(), stream_id, VersionQuery{});
+    auto [maybe_prev, deleted] = ::arcticdb::get_latest_version(store(), version_map(), stream_id, VersionQuery{});
     auto version_id = get_next_version_from_key(maybe_prev);
 
     //    TODO: We are not actually partitioning stuff atm, just assuming a single partition is passed for now.
@@ -563,7 +544,7 @@ VersionedItem PythonVersionStore::write_versioned_composite_data(
     ARCTICDB_SAMPLE(WriteVersionedMultiKey, 0)
 
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: write_versioned_composite_data");
-    auto maybe_prev = ::arcticdb::get_latest_version(store(), version_map(), stream_id, VersionQuery{});
+    auto [maybe_prev, deleted] = ::arcticdb::get_latest_version(store(), version_map(), stream_id, VersionQuery{});
     auto version_id = get_next_version_from_key(maybe_prev);
     ARCTICDB_DEBUG(log::version(), "write_versioned_composite_data for stream_id: {} , version_id = {}", stream_id, version_id);
     // TODO: Assuming each sub key is always going to have the same version attached to it.
@@ -943,7 +924,7 @@ void PythonVersionStore::prune_previous_versions(const StreamId& stream_id) {
             LoadParameter{LoadType::LOAD_UNDELETED},
             __FUNCTION__);
     storage::check<ErrorCode::E_SYMBOL_NOT_FOUND>(!entry->empty(), "Symbol {} is not found", stream_id);
-    auto latest = entry->get_first_index(false);
+    auto [latest, deleted] = entry->get_first_index(false);
     util::check(static_cast<bool>(latest), "Failed to find latest index");
     auto prev_id = get_prev_version_in_entry(entry, latest->version_id());
     if (!prev_id) {
@@ -960,7 +941,6 @@ void PythonVersionStore::delete_all_versions(const StreamId& stream_id) {
     ARCTICDB_SAMPLE(DeleteAllVersions, 0)
 
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: delete_all_versions");
-
     try {
         auto [version_id, all_index_keys] = version_map()->delete_all_versions(store(), stream_id);
         if (all_index_keys.empty()) {

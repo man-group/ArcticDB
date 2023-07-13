@@ -67,12 +67,12 @@ inline std::shared_ptr<std::unordered_map<StreamId, SymbolStatus>> batch_check_l
           return async::submit_io_task(CheckReloadTask{store, version_map, symbol, load_param});
         },
         [output, mutex](const auto& id, const std::shared_ptr<VersionMapEntry> &entry) {
-          auto index_key = entry->get_first_index(false);
+          auto index_key = entry->get_first_index(false).first;
           if (index_key) {
               std::lock_guard lock{*mutex};
               output->insert(std::make_pair<StreamId, SymbolStatus>(StreamId{id}, {index_key->version_id(), true, index_key->creation_ts()}));
           } else {
-              index_key = entry->get_first_index(true);
+              index_key = entry->get_first_index(true).first;
               if (index_key) {
                   std::lock_guard lock{*mutex};
                   output->insert(std::make_pair<StreamId, SymbolStatus>(StreamId{id}, {index_key->version_id(), false, index_key->creation_ts()}));
@@ -103,10 +103,10 @@ inline std::shared_ptr<std::unordered_map<StreamId, AtomKey>> batch_get_latest_v
                 return async::submit_io_task(CheckReloadTask{store, version_map, stream_id, load_param});
             },
             [output, include_deleted, mutex](auto id, auto entry) {
-                auto index_key = entry->get_first_index(include_deleted);
+                auto [index_key, deleted] = entry->get_first_index(include_deleted);
                 if (index_key) {
                     std::lock_guard lock{*mutex};
-                    (*output)[id] = *index_key;
+                    (*output)[id] =*index_key;
                 }
             });
 
@@ -125,7 +125,7 @@ inline std::vector<folly::Future<std::pair<std::optional<AtomKey>, std::optional
                                                                    stream_id,
                                                                    LoadParameter{LoadType::LOAD_LATEST_UNDELETED}})
                                  .thenValue([](const std::shared_ptr<VersionMapEntry>& entry){
-                                     return std::make_pair(entry->get_first_index(false), entry->get_first_index(true));
+                                     return std::make_pair(entry->get_first_index(false).first, entry->get_first_index(true).first);
                                  }));
     }
     return vector_fut;
@@ -143,8 +143,8 @@ inline std::vector<folly::Future<version_store::UpdateInfo>> batch_get_latest_un
                                                      stream_id,
                                                      LoadParameter{LoadType::LOAD_LATEST_UNDELETED}})
         .thenValue([](auto entry){
-            auto latest_version = entry->get_first_index(true);
-            auto latest_undeleted_version = entry->get_first_index(false);
+            auto latest_version = entry->get_first_index(true).first;
+            auto latest_undeleted_version = entry->get_first_index(false).first;
             VersionId next_version_id = latest_version.has_value() ? latest_version->version_id() + 1 : 0;
             return version_store::UpdateInfo{latest_undeleted_version, next_version_id};
         }));
@@ -257,31 +257,5 @@ std::vector<folly::Future<std::optional<AtomKey>>> batch_get_versions_async(
     const std::vector<StreamId>& symbols,
     const std::vector<pipelines::VersionQuery>& version_queries);
 
-inline std::vector<folly::Future<folly::Unit>> batch_write_version(
-    const std::shared_ptr<Store> &store,
-    const std::shared_ptr<VersionMap> &version_map,
-    const std::vector<AtomKey> &keys) {
-    std::vector<folly::Future<folly::Unit>> results;
-    results.reserve(keys.size());
-    for (const auto &key : keys) {
-        results.emplace_back(async::submit_io_task(WriteVersionTask{store, version_map, key}));
-    }
 
-    return results;
-}
-
-inline std::vector<folly::Future<std::vector<AtomKey>>> batch_write_and_prune_previous(
-    const std::shared_ptr<Store> &store,
-    const std::shared_ptr<VersionMap> &version_map,
-    const std::vector<AtomKey> &keys,
-    const std::vector<version_store::UpdateInfo>& stream_update_info_vector) {
-    std::vector<folly::Future<std::vector<AtomKey>>> results;
-    results.reserve(keys.size());
-    for(auto key : folly::enumerate(keys)){
-        auto previous_index_key = stream_update_info_vector[key.index].previous_index_key_;
-        results.emplace_back(async::submit_io_task(WriteAndPrunePreviousTask{store, version_map, *key, previous_index_key}));
-    }
-    
-    return results;
-}
 } //namespace arcticdb
