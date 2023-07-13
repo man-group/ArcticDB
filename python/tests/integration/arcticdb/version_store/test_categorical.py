@@ -104,11 +104,6 @@ def test_categorical_with_integers(lmdb_version_store, sym):
     assert lib.get_info(sym)["type"] == "pandasdf"
     # should be category
     assert read_df.cat_int.dtype == "category"
-    # TODO: understand why Windows with Pandas 2.0 fails with this error:
-    # AssertionError: Attributes of DataFrame.iloc[:, 1] (column name="cat_int") are different
-    # Attribute "dtype" are different
-    # [left]:  CategoricalDtype(categories=[0, 1, 2, 3, 4, 5], ordered=False)
-    # [right]: CategoricalDtype(categories=[0, 1, 2, 3, 4, 5], ordered=False)
     if IS_PANDAS_TWO and (sys.maxsize <= 2**32 or sys.platform.startswith("win32")):
         # Pandas 2.0.0 changed the underlying creation from numpy integral arrays:
         # "Instantiating using a numpy numeric array now follows the dtype of the numpy array.
