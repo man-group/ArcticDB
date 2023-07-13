@@ -37,7 +37,6 @@ from arcticdb.version_store.library import (
 
 from tests.util.mark import AZURE_TESTS_MARK, MONGO_TESTS_MARK, REAL_S3_TESTS_MARK
 
-
 def test_library_creation_deletion(arctic_client):
     ac = arctic_client
     assert ac.list_libraries() == []

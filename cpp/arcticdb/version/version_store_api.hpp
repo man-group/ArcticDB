@@ -328,12 +328,6 @@ class PythonVersionStore : public LocalVersionedEngine {
     std::vector<AtomKey> get_version_history(const StreamId& stream_id);
 
 private:
-
-    std::vector<VersionedItem> batch_write_index_keys_to_version_map(
-        const std::vector<AtomKey>& index_keys,
-        const std::vector<UpdateInfo>& stream_update_info_vector,
-        bool prune_previous_versions);
-
     void delete_snapshot_sync(const SnapshotId& snap_name, const VariantKey& snap_key);
 };
 

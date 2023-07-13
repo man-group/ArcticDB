@@ -184,6 +184,7 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
     // TODO: add repr.
     py::class_<VersionedItem>(version, "VersionedItem")
         .def_property_readonly("symbol", &VersionedItem::symbol)
+        .def_property_readonly("timestamp", &VersionedItem::timestamp)
         .def_property_readonly("version", &VersionedItem::version);
 
     py::class_<DescriptorItem>(version, "DescriptorItem")
