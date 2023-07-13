@@ -197,4 +197,9 @@ def test_datetimes_to_nats(lmdb_version_store):
     df.sort_index(axis=1, inplace=True)
     result = vit.data
     result.sort_index(axis=1, inplace=True)
+
+    # TODO: In pandas 1.0, `datetime64[ns]` was _always_ used. `datetime64[ns]` is also used by ArcticDB.
+    # In pandas 2.0, the `datetime64` can be used with other resolutions (namely 's', 'ms', and 'us').
+    # See: https://pandas.pydata.org/docs/dev/whatsnew/v2.0.0.html#construction-with-datetime64-or-timedelta64-dtype-with-unsupported-resolution  # noqa
+    # How should we handle this properly?
     assert_frame_equal(result, df, check_dtype=not IS_PANDAS_TWO)
