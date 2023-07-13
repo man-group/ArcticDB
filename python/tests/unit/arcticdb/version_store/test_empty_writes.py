@@ -158,8 +158,22 @@ def test_fallback_to_pickle(lmdb_version_store, sym):
         # The index has to be converted to a DatetimeIndex by ArcticDB to perform updates.
         df.index = df.index.astype("datetime64[ns]")
 
-    # In Pandas 2.0, the DataFrame can be stored without pickling.
-    # In Pandas 1.0, the DataFrame has to be pickled.
-    assert IS_PANDAS_TWO ^ lmdb_version_store.is_symbol_pickled(sym)
+    # Before Pandas 2.0, empty Series' dtype was "float64" and empty DataFrames' Columns' dtype was "object".
+    # As of Pandas 2.0, empty Series' dtype is "object" and empty DataFrames' Columns' dtype remains "object".
+    # See: https://github.com/pandas-dev/pandas/issues/17261
+    # When normalizing in Pandas 2.0, we convert empty Series' dtype to float to "float64" to be consistent
+    # with the behavior of ArcticDB with Pandas 1.0.
+    # The same logic is used to normalize empty DataFrames' columns.
 
-    assert_frame_equal(df, lmdb_version_store.read(sym).data)
+    # Hence:
+    if IS_PANDAS_TWO:
+        # In Pandas 2.0, empty Dataframes can now be stored without being pickled.
+        assert not lmdb_version_store.is_symbol_pickled(sym)
+        # and ArcticDB returns empty DataFrames with float64 for all columns if they have not been specified.
+        df = df.astype("float64", copy=False)
+        assert_frame_equal(df, lmdb_version_store.read(sym).data)
+    else:
+        # In Pandas 1.0, empty Dataframes are pickled.
+        assert lmdb_version_store.is_symbol_pickled(sym)
+        # and ArcticDB simply deserialize empty DataFrames.
+        assert_frame_equal(df, lmdb_version_store.read(sym).data)
