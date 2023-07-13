@@ -36,13 +36,8 @@ from datetime import datetime, date, timezone, timedelta
 import numpy as np
 from arcticdb_ext.tools import AZURE_SUPPORT
 from numpy import datetime64
-from arcticdb.util.test import (
-    assert_frame_equal,
-    random_strings_of_length,
-    random_floats,
-)
+from arcticdb.util.test import assert_frame_equal, random_strings_of_length, random_floats
 import random
-
 
 if AZURE_SUPPORT:
     from azure.storage.blob import BlobServiceClient

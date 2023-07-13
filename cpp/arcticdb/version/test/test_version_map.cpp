@@ -72,17 +72,21 @@ TEST(VersionMap, WithPredecessors) {
     auto version_map = std::make_shared<VersionMap>();
     version_map->set_validate(true);
     version_map->write_version(store, key1);
-    auto latest = get_latest_undeleted_version(store, version_map, id, false, false);
+    pipelines::VersionQuery version_query;
+    version_query.set_skip_compat(false);
+    version_query.set_iterate_on_failure(false);
+    auto latest = get_latest_undeleted_version(store, version_map, id, version_query, ReadOptions{});
     ASSERT_TRUE(latest);
     ASSERT_EQ(latest.value(), key1);
     version_map->write_version(store, key2);
 
-    latest = get_latest_undeleted_version(store, version_map, id, false, false);
+    latest = get_latest_undeleted_version(store, version_map, id, version_query, ReadOptions{});
     ASSERT_EQ(latest.value(), key2);
     version_map->write_version(store, key3);
 
     std::vector<AtomKey> expected{ key3, key2, key1};
-    auto result = get_all_versions(store, version_map, id, true, false);
+    version_query.set_skip_compat(true);
+    auto result = get_all_versions(store, version_map, id, version_query, ReadOptions{});
     ASSERT_EQ(result, expected);
 
 }
@@ -94,49 +98,55 @@ TEST(VersionMap, TombstoneDelete) {
     auto key4 = atom_key_builder().version_id(4).creation_ts(PilotedClock::nanos_since_epoch()).content_hash(6).start_index(
         7).end_index(8).build(id, KeyType::TABLE_INDEX);
 
+    pipelines::VersionQuery version_query;
+    version_query.set_skip_compat(false),
+    version_query.set_iterate_on_failure(false);
+
     auto version_map = std::make_shared<VersionMap>();
     version_map->set_validate(true);
     version_map->write_version(store, key1);
-    auto latest = get_latest_undeleted_version(store, version_map, id, false, false);
+    auto latest = get_latest_undeleted_version(store, version_map, id, version_query, ReadOptions{});
     ASSERT_TRUE(latest);
     ASSERT_EQ(latest.value(), key1);
     version_map->write_version(store, key2);
 
-    latest = get_latest_undeleted_version(store, version_map, id, false, false);
+    latest = get_latest_undeleted_version(store, version_map, id, version_query, ReadOptions{});
     ASSERT_EQ(latest.value(), key2);
     version_map->write_version(store, key3);
 
-    latest = get_latest_undeleted_version(store, version_map, id, false, false);
+    latest = get_latest_undeleted_version(store, version_map, id, version_query, ReadOptions{});
     ASSERT_EQ(latest.value(), key3);
     version_map->write_version(store, key4);
 
-    auto del_res = tombstone_version(store, version_map, id, VersionId{2});
+    auto del_res = tombstone_version(store, version_map, id, VersionId{2}, pipelines::VersionQuery{}, ReadOptions{});
 
     ASSERT_FALSE(del_res.no_undeleted_left);
     ASSERT_EQ(del_res.keys_to_delete.front(), key2);
     ASSERT_THAT(del_res.could_share_data, UnorderedElementsAre(key1, key3));
 
     std::vector<AtomKey> expected{key4, key3, key1};
-    auto result = get_all_versions(store, version_map, id, true, false);
+    version_query.set_skip_compat(true);
+    auto result = get_all_versions(store, version_map, id, version_query, ReadOptions{});
     ASSERT_EQ(result, expected);
 
-    del_res = tombstone_version(store, version_map, id, VersionId{3});
+    del_res = tombstone_version(store, version_map, id, VersionId{3}, pipelines::VersionQuery{}, ReadOptions{});
     ASSERT_FALSE(del_res.no_undeleted_left);
     ASSERT_EQ(del_res.keys_to_delete.front(), key3);
     ASSERT_THAT(del_res.could_share_data, UnorderedElementsAre(key1, key4));
 
-    latest = get_latest_undeleted_version(store, version_map, id, false, false);
+    version_query.set_skip_compat(false);
+    latest = get_latest_undeleted_version(store, version_map, id, version_query, ReadOptions{});
     ASSERT_EQ(latest.value(), key4);
 
-    del_res = tombstone_version(store, version_map, id, VersionId{4});
+    del_res = tombstone_version(store, version_map, id, VersionId{4}, pipelines::VersionQuery{}, ReadOptions{});
     ASSERT_FALSE(del_res.no_undeleted_left);
     ASSERT_EQ(del_res.keys_to_delete.front(), key4);
     ASSERT_EQ(*del_res.could_share_data.begin(), key1);
 
-    latest = get_latest_undeleted_version(store, version_map, id, false, false);
+    latest = get_latest_undeleted_version(store, version_map, id, version_query, ReadOptions{});
     ASSERT_EQ(latest.value(), key1);
 
-    del_res = tombstone_version(store, version_map, id, VersionId{1});
+    del_res = tombstone_version(store, version_map, id, VersionId{1}, pipelines::VersionQuery{}, ReadOptions{});
     ASSERT_TRUE(del_res.no_undeleted_left);
     ASSERT_EQ(del_res.keys_to_delete.front(), key1);
     ASSERT_TRUE(del_res.could_share_data.empty());
@@ -156,7 +166,7 @@ TEST(VersionMap, PingPong) {
         4).end_index(5).build(id, KeyType::TABLE_INDEX);
 
     left->write_version(store, key1);
-    auto latest = get_latest_undeleted_version(store, right, id, false, false);
+    auto latest = get_latest_undeleted_version(store, right, id, pipelines::VersionQuery{}, ReadOptions{});
     ASSERT_EQ(latest.value(), key1);
 
     auto key2 = atom_key_builder().version_id(2).creation_ts(3).content_hash(4).start_index(
@@ -170,9 +180,9 @@ TEST(VersionMap, PingPong) {
     left->write_version(store, key3);
 
     std::vector<AtomKey> expected{ key3, key2, key1};
-    auto left_result = get_all_versions(store, left, id, false, false);
+    auto left_result = get_all_versions(store, left, id, pipelines::VersionQuery{}, ReadOptions{});
     ASSERT_EQ(left_result, expected);
-    auto right_result = get_all_versions(store, right, id, false, false);
+    auto right_result = get_all_versions(store, right, id, pipelines::VersionQuery{}, ReadOptions{});
     ASSERT_EQ(right_result, expected);
 }
 
@@ -197,7 +207,7 @@ TEST(VersionMap, TestLoadsRefAndIteration) {
     ScopedConfig reload_interval("VersionMap.ReloadInterval", 0); // always reload
 
     std::vector<AtomKey> expected{ key3, key2, key1};
-    auto result = get_all_versions(store, version_map, id, false, false);
+    auto result = get_all_versions(store, version_map, id, pipelines::VersionQuery{}, ReadOptions{});
     ASSERT_EQ(result, expected);
 
     auto entry_iteration = std::make_shared<VersionMapEntry>();
@@ -235,7 +245,7 @@ TEST(VersionMap, TestCompact) {
     ASSERT_EQ(store->num_ref_keys(), 1);
 
     std::vector<AtomKey> expected{ key3, key2, key1};
-    auto result = get_all_versions(store, version_map, id, false, false);
+    auto result = get_all_versions(store, version_map, id, pipelines::VersionQuery{}, ReadOptions{});
     ASSERT_EQ(result, expected);
 }
 
@@ -249,7 +259,7 @@ TEST(VersionMap, TestCompactWithDelete) {
     version_map->write_version(store, key1);
     version_map->write_version(store, key2);
     version_map->write_version(store, key3);
-    tombstone_version(store, version_map, id, 2);
+    tombstone_version(store, version_map, id, 2, pipelines::VersionQuery{}, ReadOptions{});
 
     ScopedConfig max_blocks("VersionMap.MaxVersionBlocks", 1);
     ScopedConfig reload_interval("VersionMap.ReloadInterval", 0); // always reload
@@ -259,7 +269,7 @@ TEST(VersionMap, TestCompactWithDelete) {
     ASSERT_EQ(store->num_ref_keys(), 1);
 
     std::vector<AtomKey> expected{ key3, key1};
-    auto result = get_all_versions(store, version_map, id, false, false);
+    auto result = get_all_versions(store, version_map, id, pipelines::VersionQuery{}, ReadOptions{});
     ASSERT_EQ(result, expected);
 }
 
@@ -274,8 +284,8 @@ TEST(VersionMap, TestLatestVersionWithDeleteTombstones) {
     version_map->write_version(store, key1);
     version_map->write_version(store, key2);
     version_map->write_version(store, key3);
-    tombstone_version(store, version_map, id, 2);
-    auto maybe_prev = get_latest_version(store, version_map, id, true, false);
+    tombstone_version(store, version_map, id, 2, pipelines::VersionQuery{}, ReadOptions{});
+    auto maybe_prev = get_latest_version(store, version_map, id, pipelines::VersionQuery{}, ReadOptions{});
     auto version_id = get_next_version_from_key(maybe_prev);
     ASSERT_EQ(version_id, 4);
 }
@@ -290,14 +300,14 @@ TEST(VersionMap, TestCompactWithDeleteTombstones) {
     version_map->write_version(store, key1);
     version_map->write_version(store, key2);
     version_map->write_version(store, key3);
-    tombstone_version(store, version_map, id, 2);
+    tombstone_version(store, version_map, id, 2, pipelines::VersionQuery{}, ReadOptions{});
 
     ScopedConfig max_blocks("VersionMap.MaxVersionBlocks", 1);
     ScopedConfig reload_interval("VersionMap.ReloadInterval", 0); // always reload
     version_map->compact(store, id);
 
     std::vector<AtomKey> expected{ key3, key1};
-    auto result = get_all_versions(store, version_map, id, false, false);
+    auto result = get_all_versions(store, version_map, id, pipelines::VersionQuery{}, ReadOptions{});
     ASSERT_EQ(result, expected);
 }
 
@@ -349,7 +359,10 @@ TEST(VersionMap, BackwardsCompatibility) {
     ASSERT_EQ(store->num_ref_keys_of_type(KeyType::VERSION_REF), 1);
 
     std::vector<AtomKey> expected{ key4, key3, key2, key1};
-    auto result = get_all_versions(store, version_map, id, true, false);
+    pipelines::VersionQuery version_query;
+    version_query.set_iterate_on_failure(true);
+    version_query.set_skip_compat(false);
+    auto result = get_all_versions(store, version_map, id, version_query, ReadOptions{});
     ASSERT_EQ(result, expected);
 }
 
@@ -376,7 +389,9 @@ TEST(VersionMap, IterateOnFailure) {
     store->remove_key_sync(ref_key, storage::RemoveOpts{});
 
     std::vector<AtomKey> expected{ key3, key2, key1};
-    auto result = get_all_versions(store, version_map, id, false, true);
+    pipelines::VersionQuery version_query;
+    version_query.set_iterate_on_failure(true);
+    auto result = get_all_versions(store, version_map, id, version_query, ReadOptions{});
     ASSERT_EQ(result, expected);
 }
 
@@ -442,7 +457,7 @@ TEST(VersionMap, FixRefKey) {
     ASSERT_TRUE(version_map->check_ref_key(store, id));
 
     std::vector<AtomKey> expected{key3, key2, key1};
-    auto result = get_all_versions(store, version_map, id, true, false);
+    auto result = get_all_versions(store, version_map, id, pipelines::VersionQuery{}, ReadOptions{});
     ASSERT_EQ(result, expected);
 }
 
@@ -472,11 +487,11 @@ TEST(VersionMap, RewriteVersionKeys) {
     ASSERT_TRUE(version_map->check_ref_key(store, id));
 
     // This will just write tombstone key
-    arcticdb::tombstone_version(store, version_map, id, 2);
-    arcticdb::tombstone_version(store, version_map, id, 1);
+    arcticdb::tombstone_version(store, version_map, id, 2, pipelines::VersionQuery{}, ReadOptions{});
+    arcticdb::tombstone_version(store, version_map, id, 1, pipelines::VersionQuery{}, ReadOptions{});
 
-    auto index_key1 = arcticdb::get_specific_version(store, version_map, id, 1, false, false);
-    auto index_key2 = arcticdb::get_specific_version(store, version_map, id, 2, false, false);
+    auto index_key1 = arcticdb::get_specific_version(store, version_map, id, 1, pipelines::VersionQuery{}, ReadOptions{});
+    auto index_key2 = arcticdb::get_specific_version(store, version_map, id, 2, pipelines::VersionQuery{}, ReadOptions{});
 
     // will be null since they were tombstoned (but not actually deleted
     ASSERT_FALSE(index_key1.has_value());
@@ -484,15 +499,15 @@ TEST(VersionMap, RewriteVersionKeys) {
 
     version_map->remove_and_rewrite_version_keys(store, id);
 
-    auto final_index_key1 = arcticdb::get_specific_version(store, version_map, id, 1, false, false);
-    auto final_index_key2 = arcticdb::get_specific_version(store, version_map, id, 2, false, false);
+    auto final_index_key1 = arcticdb::get_specific_version(store, version_map, id, 1, pipelines::VersionQuery{}, ReadOptions{});
+    auto final_index_key2 = arcticdb::get_specific_version(store, version_map, id, 2, pipelines::VersionQuery{}, ReadOptions{});
 
     // will not be null anymore since the data actually existed
     ASSERT_TRUE(final_index_key1.has_value());
     ASSERT_TRUE(final_index_key1.has_value());
 
     std::vector<AtomKey> expected{key3, key2, key1};
-    auto result = get_all_versions(store, version_map, id, true, false);
+    auto result = get_all_versions(store, version_map, id, pipelines::VersionQuery{}, ReadOptions{});
     ASSERT_EQ(result, expected);
 }
 
@@ -516,11 +531,11 @@ TEST(VersionMap, RecoverDeleted) {
 
     deleted = version_map->find_deleted_version_keys(store, id);
     ASSERT_EQ(deleted.size(), 3);
-    EXPECT_THROW({ get_all_versions(store, version_map, id, true, false); }, std::runtime_error);
+    EXPECT_THROW({ get_all_versions(store, version_map, id, pipelines::VersionQuery{}, ReadOptions{}); }, std::runtime_error);
     version_map->recover_deleted(store, id);
 
     std::vector<AtomKey> expected{ key3, key2, key1};
-    auto result = get_all_versions(store, version_map, id, true, false);
+    auto result = get_all_versions(store, version_map, id, pipelines::VersionQuery{}, ReadOptions{});
     ASSERT_EQ(result, expected);
 }
 
@@ -535,9 +550,9 @@ TEST(VersionMap, StorageLogging) {
     version_map->write_version(store, key2);
     version_map->write_version(store, key3);
 
-    tombstone_version(store, version_map, id, key1.version_id());
-    tombstone_version(store, version_map, id, key3.version_id());
-    tombstone_version(store, version_map, id, key2.version_id());
+    tombstone_version(store, version_map, id, key1.version_id(), pipelines::VersionQuery{}, ReadOptions{});
+    tombstone_version(store, version_map, id, key3.version_id(), pipelines::VersionQuery{}, ReadOptions{});
+    tombstone_version(store, version_map, id, key2.version_id(), pipelines::VersionQuery{}, ReadOptions{});
 
     std::unordered_set<AtomKey> log_keys;
 
