@@ -403,22 +403,15 @@ storage::KeySegmentPair make_target_key(KeyType key_type,
     if (is_ref_key_class(key_type)) {
         return {RefKey{stream_id, key_type}, std::move(segment)};
     } else {
-        if (is_ref_key_class(variant_key_type(source_key))) {
-            auto return_segment = std::move(segment);
-            auto clone = return_segment;
-            auto decoded = decode_segment(std::move(clone));
-            auto index = index_type_from_descriptor(decoded.descriptor());
-            auto range = get_range_from_segment(index, decoded);
-            auto new_key = atom_key_builder().version_id(version_id).creation_ts(ClockType::nanos_since_epoch()).start_index(range.start_).end_index(
-                range.end_).build(stream_id, key_type);
+        util::check(!is_ref_key_class(variant_key_type(source_key)),
+            "Cannot convert ref key {} to {}", source_key, key_type);
+        auto& atom_source_key = to_atom(source_key);
+        auto new_key = atom_key_builder().version_id(version_id).creation_ts(ClockType::nanos_since_epoch())
+            .start_index(atom_source_key.start_index()).end_index(atom_source_key.end_index())
+            .content_hash(atom_source_key.content_hash())
+            .build(stream_id, key_type);
 
-            return {new_key, std::move(return_segment)};
-        } else {
-            auto new_key = atom_key_builder().version_id(version_id).creation_ts(ClockType::nanos_since_epoch()).start_index(
-                to_atom(source_key).start_index()).end_index(to_atom(source_key).end_index()).build(stream_id, key_type);
-
-            return {new_key, std::move(segment)};
-        }
+        return {new_key, std::move(segment)};
     }
 }
 
