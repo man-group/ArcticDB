@@ -212,8 +212,7 @@ class Arctic:
         >>> arctic.create_library('test.library')
         >>> my_library = arctic['test.library']
         """
-        already_open = self._open_libraries.get(name)
-        if already_open or self._library_manager.has_library(name):
+        if name in self._open_libraries or self._library_manager.has_library(name):
             raise ValueError(f"Library [{name}] already exists.")
 
         if library_options is None:
