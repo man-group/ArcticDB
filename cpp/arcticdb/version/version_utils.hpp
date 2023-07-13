@@ -83,7 +83,7 @@ inline std::optional<AtomKey> read_segment_with_keys(
 
     for (; row < ssize_t(seg.row_count()); ++row) {
         auto key = read_key_row(seg, row);
-        ARCTICDB_DEBUG(log::version(), "Reading key {}", key);
+        ARCTICDB_TRACE(log::version(), "Reading key {}", key);
 
         if (is_index_key_type(key.type())) {
             entry.keys_.push_back(key);
@@ -208,10 +208,12 @@ inline void read_symbol_ref(const std::shared_ptr<StreamSource>& store, const St
 
 inline void write_symbol_ref(std::shared_ptr<StreamSink> store,
                              const AtomKey &latest_index,
-                             const std::optional<AtomKey>&,
+                             const std::optional<AtomKey>& previous_key,
                              const AtomKey &journal_key) {
     check_is_index_or_tombstone(latest_index);
     check_is_version(journal_key);
+    if(previous_key)
+        check_is_index_or_tombstone(*previous_key);
 
     ARCTICDB_DEBUG(log::version(), "Version map writing symbol ref for latest index: {} journal key {}", latest_index,
                    journal_key);
@@ -221,6 +223,8 @@ inline void write_symbol_ref(std::shared_ptr<StreamSink> store,
         store->write_sync(KeyType::VERSION_REF, latest_index.id(), std::move(segment));
     });
     ref_agg.add_key(latest_index);
+    if(previous_key && is_index_key_type(latest_index.type()))
+        ref_agg.add_key(*previous_key);
 
     ref_agg.add_key(journal_key);
     ref_agg.commit();
@@ -270,7 +274,7 @@ inline bool loaded_until_version_id(const LoadParameter &load_params, const Load
 
 inline void set_latest_version(const std::shared_ptr<VersionMapEntry>& entry, std::optional<VersionId>& latest_version) {
     if (!latest_version) {
-        auto latest = entry->get_first_index(true);
+        auto latest = entry->get_first_index(true).first;
         if(latest)
             latest_version = latest->version_id();
     }
@@ -292,8 +296,8 @@ inline bool loaded_until_timestamp(const LoadParameter &load_params, const LoadP
 }
 
 inline bool load_latest_ongoing(const LoadParameter &load_params, const std::shared_ptr<VersionMapEntry> &entry) {
-    if (!(load_params.load_type_ == LoadType::LOAD_LATEST_UNDELETED && entry->get_first_index(false)) &&
-        !(load_params.load_type_ == LoadType::LOAD_LATEST && entry->get_first_index(true)))
+    if (!(load_params.load_type_ == LoadType::LOAD_LATEST_UNDELETED && entry->get_first_index(false).first) &&
+        !(load_params.load_type_ == LoadType::LOAD_LATEST && entry->get_first_index(true).first))
         return true;
 
     ARCTICDB_DEBUG(log::version(), "Exiting because we found a non-deleted index in load latest");
@@ -322,10 +326,29 @@ inline bool looking_for_undeleted(const LoadParameter& load_params, const std::s
     }
 }
 
-inline bool key_exists_in_ref_entry(const LoadParameter& load_params, const VersionMapEntry& ref_entry, const std::optional<AtomKey>&, LoadProgress&) {
-    if (is_latest_load_type(load_params.load_type_) && is_index_key_type(ref_entry.keys_[0].type())) {
-        ARCTICDB_DEBUG(log::version(), "Not following version chain as key for {} exists in ref entry", ref_entry.head_->id());
+inline bool penultimate_key_contains_required_version_id(const AtomKey& key, const LoadParameter& load_params) {
+    if(is_positive_version_query(load_params)) {
+        return key.version_id() <= static_cast<VersionId>(load_params.load_until_.value());
+    } else {
+        return *load_params.load_until_ == -1;
+    }
+}
+
+inline bool key_exists_in_ref_entry(const LoadParameter& load_params, const VersionMapEntry& ref_entry, std::optional<AtomKey>& cached_penultimate_key, LoadProgress& load_progress) {
+    if (is_latest_load_type(load_params.load_type_) && is_index_key_type(ref_entry.keys_[0].type()))
         return true;
+
+    if(cached_penultimate_key && is_partial_load_type(load_params.load_type_)) {
+        load_params.validate();
+        if(load_params.load_type_ == LoadType::LOAD_DOWNTO && penultimate_key_contains_required_version_id(*cached_penultimate_key, load_params)) {
+            load_progress.loaded_until_ = cached_penultimate_key->version_id();
+            return true;
+        }
+
+        if(load_params.load_type_ == LoadType::LOAD_FROM_TIME &&cached_penultimate_key->creation_ts() <= load_params.load_from_time_.value()) {
+            load_progress.loaded_until_ = cached_penultimate_key->version_id();
+            return true;
+        }
     }
 
     return false;

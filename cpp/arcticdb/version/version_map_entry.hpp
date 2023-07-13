@@ -62,8 +62,6 @@ struct LoadParameter {
     LoadType load_type_ = LoadType::NOT_LOADED;
     std::optional<SignedVersionId> load_until_ = std::nullopt;
     std::optional<timestamp> load_from_time_ = std::nullopt;
-    bool use_previous_ = false;
-    bool skip_compat_ = true;
     bool iterate_on_failure_ = false;
 
     void validate() const {
@@ -246,12 +244,28 @@ struct VersionMapEntry {
         return output;
     }
 
-    std::optional<AtomKey> get_first_index(bool include_deleted) const {
-        std::optional<AtomKey> output;
+    std::pair<std::optional<AtomKey>, bool> get_first_index(bool include_deleted) const {
         for (const auto &key: keys_) {
-            if (is_index_key_type(key.type()) && (include_deleted || !is_tombstoned(key))) {
-                output = key;
-                break;
+            if (is_index_key_type(key.type())) {
+                const auto tombstoned = is_tombstoned(key);
+                if(!tombstoned || include_deleted)
+                    return {key, tombstoned};
+            }
+        }
+        return {std::nullopt, false};
+    }
+
+    std::optional<AtomKey> get_second_undeleted_index() const {
+        std::optional<AtomKey> output;
+        bool found_first = false;
+        for (const auto &key: keys_) {
+            if (is_index_key_type(key.type()) && !is_tombstoned(key)) {
+                if(!found_first) {
+                    found_first = true;
+                } else {
+                    output = key;
+                    break;
+                }
             }
         }
         return output;
@@ -390,7 +404,7 @@ inline std::optional<AtomKey> find_index_key_for_version_id(
 inline std::optional<std::pair<AtomKey, AtomKey>> get_latest_key_pair(const std::shared_ptr<VersionMapEntry>& entry) {
     if (entry->head_ && !entry->keys_.empty()) {
         auto journal_key = entry->head_.value();
-        auto index_key = entry->get_first_index(false);
+        auto index_key = entry->get_first_index(false).first;
         util::check(static_cast<bool>(index_key), "Did not find undeleted version");
         return std::make_pair(std::move(*index_key), std::move(journal_key));
     }

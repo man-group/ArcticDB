@@ -88,7 +88,7 @@ std::optional<AtomKey> get_specific_version_from_entry(
     if (signed_version_id >= 0) {
         version_id = static_cast<VersionId>(signed_version_id);
     } else {
-        auto opt_latest = version_map_entry->get_first_index(true);
+        auto opt_latest = version_map_entry->get_first_index(true).first;
         if (opt_latest.has_value()) {
             auto opt_version_id = get_version_id_negative_index(opt_latest->version_id(),
                                                                 signed_version_id);
@@ -129,7 +129,7 @@ inline std::optional<AtomKey> get_key_for_version_query(
             return get_version_map_entry_by_timestamp(version_map_entry, timestamp_version);
         },
         [&version_map_entry](const std::monostate &) {
-           return version_map_entry->get_first_index(false);
+           return version_map_entry->get_first_index(false).first;
         },
         [](const auto &) -> std::optional<AtomKey> {
            util::raise_rte("Unsupported version query type");
@@ -251,8 +251,7 @@ std::vector<folly::Future<std::optional<AtomKey>>> batch_get_versions_async(
     const std::shared_ptr<Store> &store,
     const std::shared_ptr<VersionMap> &version_map,
     const std::vector<StreamId> &symbols,
-    const std::vector<pipelines::VersionQuery> &version_queries,
-    const std::optional<bool> &use_previous_on_error) {
+    const std::vector<pipelines::VersionQuery> &version_queries) {
     ARCTICDB_SAMPLE(BatchGetVersion, 0)
     util::check(symbols.size() == version_queries.size(),
                 "Symbol and version query list mismatch: {} != {}",
@@ -293,13 +292,10 @@ std::vector<folly::Future<std::optional<AtomKey>>> batch_get_versions_async(
                     store
                 );
             },
-            [&version_entry_fut, &version_data, &symbol, &version_futures, use_previous_on_error, &store, &version_map](
+            [&version_entry_fut, &version_data, &symbol, &version_futures, &store, &version_map](
                 const auto &) {
                 const auto it = version_data.find(*symbol);
                 util::check(it != version_data.end(), "Missing version data for symbol {}", *symbol);
-
-                if (use_previous_on_error.value_or(false))
-                    it->second.load_param_.use_previous_ = true;
 
                 version_entry_fut = set_up_version_future(
                     *symbol,

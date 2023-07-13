@@ -226,7 +226,7 @@ std::optional<VersionedItem> LocalVersionedEngine::get_specific_version(
         if (signed_version_id >= 0) {
             version_id = static_cast<VersionId>(signed_version_id);
         } else {
-            auto opt_latest_key = ::arcticdb::get_latest_version(store(), version_map(), stream_id, version_query, read_options);
+            auto [opt_latest_key, deleted] = ::arcticdb::get_latest_version(store(), version_map(), stream_id, version_query, read_options);
             if (opt_latest_key.has_value()) {
                 auto opt_version_id = get_version_id_negative_index(opt_latest_key->version_id(), signed_version_id);
                 if (opt_version_id.has_value()) {
@@ -445,7 +445,7 @@ std::vector<std::variant<DescriptorItem, DataError>> LocalVersionedEngine::batch
     internal::check<ErrorCode::E_ASSERTION_FAILURE>(read_options.batch_throw_on_error_.has_value(),
                                                     "ReadOptions::batch_throw_on_error_ should always be set here");
 
-    auto version_futures = batch_get_versions_async(store(), version_map(), stream_ids, version_queries, read_options.read_previous_on_failure_);
+    auto version_futures = batch_get_versions_async(store(), version_map(), stream_ids, version_queries);
     std::vector<folly::Future<DescriptorItem>> descriptor_futures;
     for (auto&& [idx, version_fut]: folly::enumerate(version_futures)) {
         descriptor_futures.emplace_back(
@@ -542,7 +542,7 @@ VersionedItem LocalVersionedEngine::sort_index(const StreamId& stream_id, bool d
         bucketize_dynamic);
 
     auto versioned_item = pipelines::index::index_and_version(index, store(), time_series, std::move(slice_and_keys), stream_id, version_id).get();
-    version_map()->write_version(store(), versioned_item.key_);
+    version_map()->write_version(store(), versioned_item.key_, maybe_prev);
     ARCTICDB_DEBUG(log::version(), "sorted index of stream_id: {} , version_id: {}", stream_id, version_id);
     return versioned_item;
 }
@@ -558,7 +558,7 @@ VersionedItem LocalVersionedEngine::delete_range_internal(
                                             query,
                                             get_write_options(),
                                             dynamic_schema);
-    version_map()->write_version(store(), versioned_item.key_);
+    version_map()->write_version(store(), versioned_item.key_, maybe_prev);
     return versioned_item;
 }
 
@@ -607,7 +607,7 @@ VersionedItem LocalVersionedEngine::update_internal(
             if(cfg_.symbol_list())
                 symbol_list().add_symbol(store_, stream_id, update_info.next_version_id_);
 
-            version_map()->write_version(store(), versioned_item.key_);
+            version_map()->write_version(store(), versioned_item.key_, std::nullopt);
             return versioned_item;
         } else {
             util::raise_rte("Cannot update non-existent symbol {}", stream_id);
@@ -637,6 +637,7 @@ VersionedItem LocalVersionedEngine::write_versioned_metadata_internal(
         auto versioned_item = write_versioned_dataframe_internal(stream_id, frame, prune_previous_versions, false, false);
         if(cfg_.symbol_list())
             symbol_list().add_symbol(store_, stream_id, update_info.next_version_id_);
+
         return versioned_item;
     }
 }
@@ -710,7 +711,7 @@ VersionedItem LocalVersionedEngine::write_versioned_dataframe_internal(
     ARCTICDB_SAMPLE(WriteVersionedDataFrame, 0)
     py::gil_scoped_release release_gil;
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: write_versioned_dataframe");
-    auto maybe_prev = ::arcticdb::get_latest_version(store(), version_map(), stream_id, VersionQuery{}, ReadOptions{});
+    auto [maybe_prev, deleted] = ::arcticdb::get_latest_version(store(), version_map(), stream_id, VersionQuery{}, ReadOptions{});
     auto version_id = get_next_version_from_key(maybe_prev);
     ARCTICDB_DEBUG(log::version(), "write_versioned_dataframe for stream_id: {} , version_id = {}", stream_id, version_id);
     auto write_options = get_write_options();
@@ -728,7 +729,7 @@ VersionedItem LocalVersionedEngine::write_versioned_dataframe_internal(
     if(cfg().symbol_list())
         symbol_list().add_symbol(store(), stream_id, versioned_item.key_.version_id());
 
-    write_version_and_prune_previous(prune_previous_versions, versioned_item.key_, maybe_prev);
+    write_version_and_prune_previous(prune_previous_versions, versioned_item.key_, deleted ? std::nullopt : maybe_prev);
     return versioned_item;
 }
 
@@ -740,7 +741,7 @@ std::pair<VersionedItem, TimeseriesDescriptor> LocalVersionedEngine::restore_ver
     auto version_to_restore = get_version_to_read(stream_id, version_query, ReadOptions{});
     missing_data::check<ErrorCode::E_NO_SUCH_VERSION>(static_cast<bool>(version_to_restore),
                                                  "Unable to restore {}@{}: version not found", stream_id, version_query);
-    auto maybe_prev = ::arcticdb::get_latest_version(store(), version_map(), stream_id, VersionQuery{}, ReadOptions{});
+    auto [maybe_prev, deleted] = ::arcticdb::get_latest_version(store(), version_map(), stream_id, VersionQuery{}, ReadOptions{});
     ARCTICDB_DEBUG(log::version(), "restore for stream_id: {} , version_id = {}", stream_id, version_to_restore->key_.version_id());
     return AsyncRestoreVersionTask{store(), version_map(), stream_id, version_to_restore->key_, maybe_prev}().get();
 }
@@ -753,7 +754,7 @@ VersionedItem LocalVersionedEngine::write_individual_segment(
     ARCTICDB_SAMPLE(WriteVersionedDataFrame, 0)
 
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: write_versioned_dataframe");
-    auto maybe_prev = ::arcticdb::get_latest_version(store(), version_map(), stream_id, VersionQuery{}, ReadOptions{});
+    auto [maybe_prev, deleted] = ::arcticdb::get_latest_version(store(), version_map(), stream_id, VersionQuery{}, ReadOptions{});
     auto version_id = get_next_version_from_key(maybe_prev);
     ARCTICDB_DEBUG(log::version(), "write_versioned_dataframe for stream_id: {} , version_id = {}", stream_id, version_id);
     auto index = index_type_from_descriptor(segment.descriptor());
@@ -770,7 +771,7 @@ VersionedItem LocalVersionedEngine::write_individual_segment(
     auto index_key_fut = index::write_index(index, std::move(descriptor), std::move(sk), IndexPartialKey{stream_id, version_id}, store_);
     auto versioned_item = VersionedItem{to_atom(std::move(index_key_fut).get())};
 
-    write_version_and_prune_previous(prune_previous_versions, versioned_item.key_, maybe_prev);
+    write_version_and_prune_previous(prune_previous_versions, versioned_item.key_, deleted ? std::nullopt : maybe_prev);
     return versioned_item;
 }
 
@@ -1042,11 +1043,11 @@ VersionedItem LocalVersionedEngine::defragment_symbol_data(const StreamId& strea
             store(), stream_id, update_info, options,
             segment_size.has_value() ? *segment_size : options.segment_row_size);
 
-    version_map_->write_version(store_, versioned_item.key_);
+    version_map_->write_version(store_, versioned_item.key_, update_info.previous_index_key_);
 
     if(cfg_.symbol_list())
         symbol_list().add_symbol(store_, stream_id, versioned_item.key_.version_id());
-    
+
     return versioned_item;
 }
 
@@ -1119,7 +1120,7 @@ std::vector<std::variant<ReadVersionOutput, DataError>> LocalVersionedEngine::te
     const ReadOptions &read_options) {
     py::gil_scoped_release release_gil;
 
-    auto versions = batch_get_versions_async(store(), version_map(), stream_ids, version_queries, read_options.read_previous_on_failure_);
+    auto versions = batch_get_versions_async(store(), version_map(), stream_ids, version_queries);
     std::vector<folly::Future<ReadVersionOutput>> read_versions_futs;
     for (auto&& [idx, version] : folly::enumerate(versions)) {
         auto read_query = read_queries.empty() ? ReadQuery{} : read_queries[idx];
@@ -1240,29 +1241,7 @@ void LocalVersionedEngine::write_version_and_prune_previous(
         delete_unreferenced_pruned_indexes(pruned_indexes, new_version).get();
     }
     else {
-        version_map()->write_version(store(), new_version);
-    }
-}
-
-std::vector<folly::Future<folly::Unit>> LocalVersionedEngine::batch_write_version_and_prune_if_needed(
-    const std::vector<AtomKey>& index_keys,
-    const std::vector<UpdateInfo>& stream_update_info_vector,
-    bool prune_previous_versions) {
-    if(prune_previous_versions) {
-        std::vector<folly::Future<folly::Unit>> pruned_keys_futures;
-        auto pruned_versions_futures = batch_write_and_prune_previous(store(), version_map(), index_keys, stream_update_info_vector);
-        for(auto&& [idx, pruned_version_fut] : folly::enumerate(pruned_versions_futures)) {
-            pruned_keys_futures.push_back(
-                std::move(pruned_version_fut)
-                .thenValue([this, &index_key = index_keys[idx]](auto&& atom_key_vec){
-                    return delete_unreferenced_pruned_indexes(std::move(atom_key_vec), index_key);
-                })
-            );
-        }
-        return pruned_keys_futures;
-    }
-    else {
-        return batch_write_version(store(), version_map(), index_keys);
+        version_map()->write_version(store(), new_version, previous_key);
     }
 }
 
@@ -1281,7 +1260,7 @@ folly::Future<VersionedItem> LocalVersionedEngine::write_index_key_to_version_ma
             return delete_unreferenced_pruned_indexes(std::move(atom_key_vec), index_key);
         });
     } else {
-        write_version_fut = async::submit_io_task(WriteVersionTask{store(), version_map, index_key});
+        write_version_fut = async::submit_io_task(WriteVersionTask{store(), version_map, index_key, stream_update_info.previous_index_key_});
     }
 
     if(add_new_symbol){
@@ -1321,8 +1300,8 @@ std::vector<folly::Future<AtomKey>> LocalVersionedEngine::batch_write_internal(
 }
 
 VersionIdAndDedupMapInfo LocalVersionedEngine::create_version_id_and_dedup_map(
-    const version_store::UpdateInfo&& update_info, 
-    const StreamId& stream_id, 
+    const version_store::UpdateInfo&& update_info,
+    const StreamId& stream_id,
     const WriteOptions& write_options){
     if(cfg().write_options().de_duplication()) {
         return VersionIdAndDedupMapInfo{update_info.next_version_id_, get_de_dup_map(stream_id, update_info.previous_index_key_, write_options), std::move(update_info)};
@@ -1441,7 +1420,7 @@ VersionedItem LocalVersionedEngine::append_internal(
             if(cfg_.symbol_list())
                 symbol_list().add_symbol(store_, stream_id, update_info.next_version_id_);
 
-            version_map()->write_version(store(), versioned_item.key_);
+            version_map()->write_version(store(), versioned_item.key_, std::nullopt);
             return versioned_item;
         } else {
             util::raise_rte( "Cannot append to non-existent symbol {}", stream_id);
@@ -1655,7 +1634,7 @@ folly::Future<std::pair<VariantKey, std::optional<google::protobuf::Any>>> Local
         return std::make_pair(std::move(*opt_key), std::move(meta_proto));
     });
 }
- 
+
 std::vector<std::variant<std::pair<VariantKey, std::optional<google::protobuf::Any>>, DataError>> LocalVersionedEngine::batch_read_metadata_internal(
     const std::vector<StreamId>& stream_ids,
     const std::vector<VersionQuery>& version_queries,
@@ -1664,7 +1643,7 @@ std::vector<std::variant<std::pair<VariantKey, std::optional<google::protobuf::A
     // This read option should always be set when calling batch_read_metadata
     internal::check<ErrorCode::E_ASSERTION_FAILURE>(read_options.batch_throw_on_error_.has_value(),
                                                     "ReadOptions::batch_throw_on_error_ should always be set here");
-    auto version_futures = batch_get_versions_async(store(), version_map(), stream_ids, version_queries, read_options.read_previous_on_failure_);
+    auto version_futures = batch_get_versions_async(store(), version_map(), stream_ids, version_queries);
     std::vector<folly::Future<std::pair<VariantKey, std::optional<google::protobuf::Any>>>> metadata_futures;
     for (auto&& [idx, version]: folly::enumerate(version_futures)) {
         metadata_futures.emplace_back(get_metadata_async(std::move(version), stream_ids[idx], version_queries[idx]));
@@ -1716,7 +1695,7 @@ VersionedItem LocalVersionedEngine::sort_merge_internal(
     ) {
     auto update_info = get_latest_undeleted_version_and_next_version_id(store(), version_map(), stream_id, VersionQuery{}, ReadOptions{});
     auto versioned_item = sort_merge_impl(store_, stream_id, user_meta, update_info, append, convert_int_to_float, via_iteration, sparsify);
-    version_map()->write_version(store(), versioned_item.key_);
+    version_map()->write_version(store(), versioned_item.key_, update_info.previous_index_key_);
     return versioned_item;
 }
 

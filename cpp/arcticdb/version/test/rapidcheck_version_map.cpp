@@ -23,7 +23,7 @@
 template <typename Model>
 void check_latest_versions(const Model&  s0, MapStorePair &sut, std::string symbol) {
     using namespace arcticdb;
-    auto prev = get_latest_version(sut.store_,sut.map_, symbol, pipelines::VersionQuery{}, ReadOptions{});
+    auto prev = get_latest_version(sut.store_,sut.map_, symbol, pipelines::VersionQuery{}, ReadOptions{}).first;
     auto sut_version_id = prev ? prev->version_id() : 0;
     auto model_prev = s0.get_latest_version(symbol);
     auto model_version_id = model_prev ? model_prev.value() : 0;
