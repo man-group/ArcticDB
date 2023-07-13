@@ -782,6 +782,46 @@ def test_write_batch(library_factory):
         assert_frame_equal(read_batch_result[sym].data, original_dataframe)
 
 
+def test_write_batch_dedup(library_factory):
+    """Should be able to write different size of batch of data."""
+    lib = library_factory(LibraryOptions(rows_per_segment=10, dedup=True))
+    assert lib._nvs._lib_cfg.lib_desc.version.write_options.segment_row_size == 10
+    assert lib._nvs._lib_cfg.lib_desc.version.write_options.de_duplication == True
+    num_days = 40
+    num_symbols = 10
+    num_versions = 4
+    dt = datetime(2019, 4, 8, 0, 0, 0)
+    column_length = 4
+    num_columns = 5
+    num_rows_per_day = 1
+    read_requests = []
+    list_dataframes = {}
+    columns = random_strings_of_length(num_columns, num_columns, True)
+    df = generate_dataframe(random.sample(columns, num_columns), dt, num_days, num_rows_per_day)
+    for v in range(num_versions):
+        write_requests = []
+        for sym in range(num_symbols):
+            write_requests.append(WritePayload("symbol_" + str(sym), df, metadata="great_metadata" + str(v)))
+            read_requests.append("symbol_" + str(sym))
+            list_dataframes[sym] = df
+        write_batch_result = lib.write_batch(write_requests)
+        assert all(type(w) == PythonVersionedItem for w in write_batch_result)
+
+    read_batch_result = lib.read_batch(read_requests)
+    for sym in range(num_symbols):
+        original_dataframe = list_dataframes[sym]
+        assert read_batch_result[sym].metadata == "great_metadata" + str(num_versions - 1)
+        assert_frame_equal(read_batch_result[sym].data, original_dataframe)
+
+    num_segments = int(
+        (num_days * num_rows_per_day) / lib._nvs._lib_cfg.lib_desc.version.write_options.segment_row_size
+    )
+    for sym in range(num_symbols):
+        data_key_version = lib._nvs.read_index("symbol_" + str(sym))["version_id"]
+        for s in range(num_segments):
+            assert data_key_version[s] == 0
+
+
 def test_write_with_unpacking(arctic_library):
     """Check the syntactic sugar that lets us unpack WritePayload in `write` calls using *."""
     lib = arctic_library

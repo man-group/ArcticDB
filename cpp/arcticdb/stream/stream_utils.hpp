@@ -205,13 +205,13 @@ inline auto generate_segments_from_keys(
     return
         map([&read_store](auto &&key) {
             ARCTICDB_DEBUG(log::inmem(), "Getting segment for key {}: {}", key.type(), key.view());
-            return read_store.read(std::forward<decltype(key)>(key));
+            return read_store.read_sync(std::forward<decltype(key)>(key));
         })
             | window(prefetch_window)
             | move
-            | map([timeout, opts](auto &&fut_key_seg) {
+            | map([timeout, opts](auto &&key_seg) {
                 try {
-                    return std::make_optional(std::forward<decltype(fut_key_seg)>(fut_key_seg).get(timeout));
+                    return std::make_optional(std::forward<decltype(key_seg)>(key_seg));
                 } catch(storage::KeyNotFoundException& e) {
                     if (opts.ignores_missing_key_) {
                         return std::optional<ReadKeyOutput>();
@@ -229,10 +229,10 @@ inline auto generate_keys_from_segments(
     std::optional<entity::KeyType> expected_index_type = std::nullopt) {
     return folly::gen::map([expected_key_type, expected_index_type, &read_store](auto &&key_seg) {
         return folly::gen::detail::GeneratorBuilder<entity::AtomKey>() + [&](auto &&yield) {
-            std::stack<folly::Future<std::pair<entity::VariantKey, SegmentInMemory>>> key_segs;
-            key_segs.push(folly::makeFuture(std::forward<decltype(key_seg)>(key_seg)));
+            std::stack<std::pair<entity::VariantKey, SegmentInMemory>> key_segs;
+            key_segs.push(std::forward<decltype(key_seg)>(key_seg));
             while(!key_segs.empty()) {
-                auto [key, seg] = std::move(key_segs.top()).get();
+                auto [key, seg] = std::move(key_segs.top());
                 key_segs.pop();
                 for (ssize_t i = 0; i < ssize_t(seg.row_count()); ++i) {
                     auto read_key = read_key_row(seg, i);
@@ -241,7 +241,7 @@ inline auto generate_keys_from_segments(
                             "Found unsupported key type in index segment. Expected {} or (index) {}, actual {}",
                             expected_key_type, expected_index_type.value(), read_key
                         );
-                        key_segs.push(read_store.read(read_key));
+                        key_segs.push(read_store.read_sync(read_key));
                     }
                     yield(read_key);
                 }
