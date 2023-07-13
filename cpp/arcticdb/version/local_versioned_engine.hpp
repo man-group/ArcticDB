@@ -45,9 +45,11 @@ struct IndexKeyAndUpdateInfo{
 class LocalVersionedEngine : public VersionedEngine {
 
 public:
+    template<class ClockType = util::SysClock>
     explicit LocalVersionedEngine(
         const std::shared_ptr<storage::Library>& library,
-        const std::optional<std::string>& license_key = std::nullopt);
+        const ClockType& = util::SysClock{} // Only used to allow the template variable to be inferred
+        );
 
     virtual ~LocalVersionedEngine() = default;
 

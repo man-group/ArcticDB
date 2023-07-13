@@ -107,8 +107,13 @@ bool SymbolList::can_update_symbol_list(const std::shared_ptr<Store>& store,
             });
 
         seg.end_row();
-        store->write_sync(KeyType::SYMBOL_LIST, 0, StreamId{action}, IndexValue{symbol}, IndexValue{symbol},
+        try {
+            store->write_sync(KeyType::SYMBOL_LIST, 0, StreamId{ action }, IndexValue{ symbol }, IndexValue{ symbol },
                 std::move(seg));
+        } catch (const DuplicateKeyException& e [[unused]]) {
+            // Both version and content hash are fixed, so collision is possible
+            ARCTICDB_DEBUG(log::storage(), "Symbol list DuplicateKeyException: {}", e.what());
+        }
     }
 
     SymbolList::CollectionType SymbolList::load_from_version_keys(const std::shared_ptr<Store>& store) {

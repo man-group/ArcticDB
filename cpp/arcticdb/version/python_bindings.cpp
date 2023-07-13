@@ -395,7 +395,9 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
             .def_readwrite("row_filter",&UpdateQuery::row_filter);
 
     py::class_<PythonVersionStore>(version, "PythonVersionStore")
-        .def(py::init<std::shared_ptr<storage::Library>, std::optional<std::string>>(),
+        .def(py::init([](const std::shared_ptr<storage::Library>& library, std::optional<std::string>) {
+                return PythonVersionStore(library);
+             }),
              py::arg("library"),
              py::arg("license_key") = std::nullopt)
         .def("write_partitioned_dataframe",
@@ -684,6 +686,13 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
              &PythonVersionStore::latest_timestamp,
              "Returns latest timestamp of a symbol")
         ;
+
+    py::class_<ManualClockVersionStore, PythonVersionStore>(version, "ManualClockVersionStore")
+        .def(py::init<const std::shared_ptr<storage::Library>&>())
+        .def_property_static("time",
+            []() { return util::ManualClock::time_.load(); },
+            [](entity::timestamp ts) { util::ManualClock::time_ = ts; })
+         ;
 
     py::class_<LocalVersionedEngine>(version, "VersionedEngine")
       .def(py::init<std::shared_ptr<storage::Library>>())
