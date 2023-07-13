@@ -68,6 +68,7 @@ private:
 
     std::unique_ptr<std::mutex> write_mutex_;
     std::unique_ptr<::lmdb::env> env_;
+    std::unordered_map<std::string, ::lmdb::dbi> dbi_by_key_type_;
 };
 
 class LmdbStorageFactory final : public StorageFactory<LmdbStorageFactory> {
