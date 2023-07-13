@@ -215,7 +215,7 @@ bool LmdbStorage::do_fast_delete() {
         ARCTICDB_SUBSAMPLE(LmdbStorageOpenDb, 0)
         ARCTICDB_DEBUG(log::storage(), "dropping {}", db_name);
         ::lmdb::dbi& dbi = dbi_by_key_type_.at(db_name);
-        ::lmdb::dbi_drop(dtxn, dbi, true);
+        ::lmdb::dbi_drop(dtxn, dbi);
     });
 
     dtxn.commit();
