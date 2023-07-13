@@ -493,8 +493,7 @@ public:
         if (validate_)
             entry->validate();
 
-        auto fut_journal_key = journal_single_key(store, key, entry->head_);
-        auto journal_key = to_atom(std::move(fut_journal_key).get());
+        auto journal_key = to_atom(std::move(journal_single_key(store, key, entry->head_)));
         write_to_entry(entry, key, journal_key);
         write_symbol_ref(store, key, journal_key);
     }
@@ -610,10 +609,10 @@ private:
 
     AtomKey write_entry_to_storage(std::shared_ptr<Store> store, const StreamId &stream_id, VersionId version_id,
                                    const std::shared_ptr<VersionMapEntry> &entry) {
-        folly::Future<VariantKey> journal_key_fut = folly::Future<VariantKey>::makeEmpty();
+        VariantKey journal_key;
         entry->validate_types();
 
-        IndexAggregator<RowCountIndex> version_agg(stream_id, [&store, &journal_key_fut, &version_id, &stream_id](auto &&segment) {
+        IndexAggregator<RowCountIndex> version_agg(stream_id, [&store, &journal_key, &version_id, &stream_id](auto &&segment) {
             stream::StreamSink::PartialKey pk{
                     KeyType::VERSION,
                     version_id,
@@ -621,7 +620,7 @@ private:
                     IndexValue(0),
                     IndexValue(0)};
 
-            journal_key_fut = store->write_sync(pk, std::forward<SegmentInMemory>(segment));
+            journal_key = store->write_sync(pk, std::forward<SegmentInMemory>(segment));
         });
 
         for (const auto &key : entry->keys_) {
@@ -629,9 +628,9 @@ private:
         }
 
         version_agg.commit();
-        auto journal_key =  to_atom(std::move(journal_key_fut).get());
-        write_symbol_ref(store, *entry->keys_.cbegin(), journal_key);
-        return journal_key;
+        auto journal_atom_key =  to_atom(std::move(journal_key));
+        write_symbol_ref(store, *entry->keys_.cbegin(), journal_atom_key);
+        return journal_atom_key;
     }
 
     bool has_stored_entry(std::shared_ptr<StreamSource> store, const StreamId &stream_id) const {
@@ -683,14 +682,14 @@ private:
         return entry;
     }
 
-    folly::Future<VariantKey> journal_single_key(
+    VariantKey journal_single_key(
         std::shared_ptr<StreamSink> store,
         const AtomKey &key,
         std::optional<AtomKey> prev_journal_key) {
         ARCTICDB_SAMPLE(WriteJournalEntry, 0)
         ARCTICDB_DEBUG(log::version(), "Version map writing version for key {}", key);
 
-        folly::Future<VariantKey> journal_key = folly::Future<VariantKey>::makeEmpty();
+        VariantKey journal_key;
         IndexAggregator<RowCountIndex> journal_agg(key.id(), [&store, &journal_key, &key](auto &&segment) {
             stream::StreamSink::PartialKey pk{
                 KeyType::VERSION,
@@ -877,7 +876,7 @@ private:
         if (auto old_entry = load_from_old_journal_keys(store, stream_id); !old_entry->keys_.empty()) {
             entry->keys_ = std::move(old_entry->keys_);
             entry->head_ = rewrite_old_journal_keys(store, stream_id, entry);
-            delete_keys_of_type_for_stream(store, stream_id, KeyType::VERSION_JOURNAL);
+            delete_keys_of_type_for_stream_sync(store, stream_id, KeyType::VERSION_JOURNAL);
         }
         return entry;
     }

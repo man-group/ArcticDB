@@ -126,7 +126,7 @@ std::shared_ptr<VersionMapEntry> build_version_map_entry_with_predicate_iteratio
                                 read_keys.push_back(key);
                                 ARCTICDB_DEBUG(log::storage(), "Version map iterating key {}", key);
                                 if (perform_read_segment_with_keys) {
-                                    auto [kv, seg] = store->read(to_atom(key)).get();
+                                    auto [kv, seg] = store->read_sync(to_atom(key));
                                     read_segment_with_keys(seg, output);
                                 }
                             },
