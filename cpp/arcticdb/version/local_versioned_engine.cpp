@@ -24,11 +24,11 @@
 #include <arcticdb/python/gil_lock.hpp>
 
 namespace arcticdb::version_store {
-
+template<class ClockType>
 LocalVersionedEngine::LocalVersionedEngine(
         const std::shared_ptr<storage::Library>& library,
-        const std::optional<std::string>& license_key ARCTICDB_UNUSED) :
-    store_(std::make_shared<async::AsyncStore<util::SysClock>>(library, codec::default_lz4_codec(), encoding_version(library->config()))),
+        const ClockType&) :
+    store_(std::make_shared<async::AsyncStore<ClockType>>(library, codec::default_lz4_codec(), encoding_version(library->config()))),
     symbol_list_(std::make_shared<SymbolList>(version_map_)){
     configure(library->config());
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Created versioned engine at {} for library path {}  with config {}", uintptr_t(this),
@@ -43,6 +43,9 @@ LocalVersionedEngine::LocalVersionedEngine(
         async::TaskScheduler::reattach_instance();
     }
 }
+
+template LocalVersionedEngine::LocalVersionedEngine(const std::shared_ptr<storage::Library>& library, const util::SysClock&);
+template LocalVersionedEngine::LocalVersionedEngine(const std::shared_ptr<storage::Library>& library, const util::ManualClock&);
 
 folly::Future<folly::Unit> LocalVersionedEngine::delete_unreferenced_pruned_indexes(
         const std::vector<AtomKey> &pruned_indexes,
@@ -834,7 +837,7 @@ folly::Future<folly::Unit> LocalVersionedEngine::delete_trees_responsibly(
     log::version().debug("Forbidden: {} total of data keys", data_keys_not_to_be_deleted.size());
     storage::RemoveOpts remove_opts;
     remove_opts.ignores_missing_key_ = true;
-    
+
     std::vector<entity::VariantKey> vks_column_stats;
     std::transform(keys_to_delete->begin(),
                     keys_to_delete->end(),
