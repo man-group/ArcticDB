@@ -564,8 +564,8 @@ Composite<ProcessingSegment> ColumnStatsGenerationClause::process(std::shared_pt
             std::holds_alternative<NumericIndex>(start_index) && std::holds_alternative<NumericIndex>(end_index),
             "Cannot build column stats over string-indexed symbol"
     );
-    auto start_index_col = std::make_shared<Column>(make_scalar_type(DataType::MICROS_UTC64), true);
-    auto end_index_col = std::make_shared<Column>(make_scalar_type(DataType::MICROS_UTC64), true);
+    auto start_index_col = std::make_shared<Column>(make_scalar_type(DataType::NANOSECONDS_UTC64), true);
+    auto end_index_col = std::make_shared<Column>(make_scalar_type(DataType::NANOSECONDS_UTC64), true);
     start_index_col->template push_back<NumericIndex>(std::get<NumericIndex>(start_index));
     end_index_col->template push_back<NumericIndex>(std::get<NumericIndex>(end_index));
     start_index_col->set_row_data(0);
@@ -573,8 +573,8 @@ Composite<ProcessingSegment> ColumnStatsGenerationClause::process(std::shared_pt
 
     SegmentInMemory seg;
     seg.descriptor().set_index(IndexDescriptor(0, IndexDescriptor::ROWCOUNT));
-    seg.add_column(scalar_field(DataType::MICROS_UTC64, start_index_column_name), start_index_col);
-    seg.add_column(scalar_field(DataType::MICROS_UTC64, end_index_column_name), end_index_col);
+    seg.add_column(scalar_field(DataType::NANOSECONDS_UTC64, start_index_column_name), start_index_col);
+    seg.add_column(scalar_field(DataType::NANOSECONDS_UTC64, end_index_column_name), end_index_col);
     for (const auto& agg_data: folly::enumerate(aggregators_data)) {
         seg.concatenate(agg_data->finalize(column_stats_aggregators_->at(agg_data.index).get_output_column_names()));
     }

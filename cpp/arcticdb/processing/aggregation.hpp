@@ -44,8 +44,8 @@ struct OutputType<DataTypeTag<DataType::BOOL8>, void> {
 };
 
 template<>
-struct OutputType<DataTypeTag<DataType::MICROS_UTC64>, void> {
-    using type = ScalarTagType<DataTypeTag<DataType::MICROS_UTC64>>;
+struct OutputType<DataTypeTag<DataType::NANOSECONDS_UTC64>, void> {
+    using type = ScalarTagType<DataTypeTag<DataType::NANOSECONDS_UTC64>>;
 };
 
 void add_data_type_impl(DataType data_type, std::optional<DataType>& current_data_type);

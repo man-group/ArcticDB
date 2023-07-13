@@ -25,7 +25,7 @@ TEST(TickStreamDesc, FromFields) {
             scalar_field(DataType::INT8, "int8")
         })};
     ASSERT_EQ(fmt::format("{}", tsd),
-              "TSD<tsid=123, idx=IDX<size=1, kind=T>, fields=[FD<name=time, type=TD<type=MICROS_UTC64, dim=0>>, FD<name=uint8, type=TD<type=UINT8, dim=0>>, FD<name=int8, type=TD<type=INT8, dim=0>>]>");
+              "TSD<tsid=123, idx=IDX<size=1, kind=T>, fields=[FD<name=time, type=TD<type=NANOSECONDS_UTC64, dim=0>>, FD<name=uint8, type=TD<type=UINT8, dim=0>>, FD<name=int8, type=TD<type=INT8, dim=0>>]>");
 }
 
 TEST(DataTypeVisit, VisitTag) {
