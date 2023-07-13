@@ -96,21 +96,34 @@ def test_categorical_empty(lmdb_version_store, sym):
 
 def test_categorical_with_integers(lmdb_version_store, sym):
     c = pd.Categorical(np.arange(6))
-    df = pd.DataFrame({"int": np.arange(6), "cat": c})
+    df = pd.DataFrame({"int": np.arange(6), "cat_int": c})
     lib = lmdb_version_store
     lib.write(sym, df)
     read_df = lib.read(sym).data
     # Not pickled
     assert lib.get_info(sym)["type"] == "pandasdf"
     # should be category
-    assert read_df.cat.dtype == "category"
+    assert read_df.cat_int.dtype == "category"
     # TODO: understand why Windows with Pandas 2.0 fails with this error:
     # AssertionError: Attributes of DataFrame.iloc[:, 1] (column name="cat_int") are different
     # Attribute "dtype" are different
     # [left]:  CategoricalDtype(categories=[0, 1, 2, 3, 4, 5], ordered=False)
     # [right]: CategoricalDtype(categories=[0, 1, 2, 3, 4, 5], ordered=False)
-    check_dtype = not (sys.platform.startswith("win") and IS_PANDAS_TWO)
-    assert_frame_equal(df, read_df, check_dtype=check_dtype)
+    if IS_PANDAS_TWO and (sys.maxsize <= 2**32 or sys.platform.startswith("win32")):
+        # Pandas 2.0.0 changed the underlying creation from numpy integral arrays:
+        # "Instantiating using a numpy numeric array now follows the dtype of the numpy array.
+        # Previously, all indexes created from numpy numeric arrays were forced to 64-bit.
+        # Now, for example, Index(np.array([1, 2, 3])) will be int32 on 32-bit systems,
+        # where it previously would have been int64 even on 32-bit systems.
+        # Instantiating Index using a list of numbers will still return 64bit dtypes,
+        # e.g. Index([1, 2, 3]) will have a int64 dtype, which is the same as previously."
+        # See: https://pandas.pydata.org/docs/dev/whatsnew/v2.0.0.html#index-can-now-hold-numpy-numeric-dtypes
+        # We have not control over the underlying integral array storing code for categorical columns
+        # so we replace the categorical column with its codes to perform the comparison with indentical dtypes.
+        df.cat_int = df.cat_int.cat.codes.astype(np.int32)
+        read_df.cat_int = read_df.cat_int.cat.codes.astype(np.int32)
+
+    assert_frame_equal(df, read_df)
 
 
 def test_categorical_with_integers_and_strings(lmdb_version_store, sym):
@@ -130,8 +143,21 @@ def test_categorical_with_integers_and_strings(lmdb_version_store, sym):
     # Attribute "dtype" are different
     # [left]:  CategoricalDtype(categories=[0, 1, 2, 3, 4, 5], ordered=False)
     # [right]: CategoricalDtype(categories=[0, 1, 2, 3, 4, 5], ordered=False)
-    check_dtype = not (sys.platform.startswith("win") and IS_PANDAS_TWO)
-    assert_frame_equal(df, read_df, check_dtype=check_dtype)
+    if IS_PANDAS_TWO and (sys.maxsize <= 2**32 or sys.platform.startswith("win32")):
+        # Pandas 2.0.0 changed the underlying creation from numpy integral arrays:
+        # "Instantiating using a numpy numeric array now follows the dtype of the numpy array.
+        # Previously, all indexes created from numpy numeric arrays were forced to 64-bit.
+        # Now, for example, Index(np.array([1, 2, 3])) will be int32 on 32-bit systems,
+        # where it previously would have been int64 even on 32-bit systems.
+        # Instantiating Index using a list of numbers will still return 64bit dtypes,
+        # e.g. Index([1, 2, 3]) will have a int64 dtype, which is the same as previously."
+        # See: https://pandas.pydata.org/docs/dev/whatsnew/v2.0.0.html#index-can-now-hold-numpy-numeric-dtypes
+        # We have not control over the underlying integral array storing code for categorical columns
+        # so we replace the categorical column with its codes to perform the comparison with indentical dtypes.
+        df.cat_int = df.cat_int.cat.codes.astype(np.int32)
+        read_df.cat_int = read_df.cat_int.cat.codes.astype(np.int32)
+
+    assert_frame_equal(df, read_df)
 
 
 def test_categorical_batch_write(lmdb_version_store):
