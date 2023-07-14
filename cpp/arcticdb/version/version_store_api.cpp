@@ -776,19 +776,19 @@ ReadResult PythonVersionStore::read_dataframe_merged(
     return create_python_read_result(version, std::move(final_frame));
 }
 
-std::vector<std::optional<ReadResult>> PythonVersionStore::batch_read(
+std::vector<std::variant<ReadResult, NoDataRetrieved>> PythonVersionStore::batch_read(
     const std::vector<StreamId>& stream_ids,
     const std::vector<VersionQuery>& version_queries,
     std::vector<ReadQuery>& read_queries,
     const ReadOptions& read_options) {
 
     auto opt_versions_and_frames = batch_read_internal(stream_ids, version_queries, read_queries, read_options);
-    std::vector<std::optional<ReadResult>> res;
-    for (auto&& opt_version_and_frame: opt_versions_and_frames) {
+    std::vector<std::variant<ReadResult, NoDataRetrieved>> res;
+    for (auto&& [idx, opt_version_and_frame]: folly::enumerate(opt_versions_and_frames)) {
         if (opt_version_and_frame.has_value()) {
             res.emplace_back(create_python_read_result(opt_version_and_frame->versioned_item_, std::move(opt_version_and_frame->frame_and_descriptor_)));
         } else {
-            res.emplace_back(std::nullopt);
+            res.emplace_back(NoDataRetrieved(stream_ids[idx], version_queries[idx].content_));
         }
     }
     return res;

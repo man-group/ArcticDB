@@ -186,6 +186,7 @@ set(arcticdb_srcs
         entity/key.hpp
         entity/key-inl.hpp
         entity/metrics.hpp
+        entity/no_data_retrieved.hpp
         entity/native_tensor.hpp
         entity/performance_tracing.hpp
         entity/protobuf_mappings.hpp

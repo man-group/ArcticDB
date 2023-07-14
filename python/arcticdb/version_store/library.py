@@ -876,8 +876,10 @@ class Library:
 
         Returns
         -------
-        List[VersionedItem]
+        List[Union[VersionedItem, NoDataRetrieved]]
             A list of the read results, whose i-th element corresponds to the i-th element of the ``symbols`` parameter.
+            If the specified version does not exist, a NoDataRetrieved object is returned, with symbol,
+            version_request_type, and version_request_data properties.
 
         Raises
         ------
@@ -891,11 +893,19 @@ class Library:
         >>> lib.write("s2", pd.DataFrame({"col": [1, 2, 3]}))
         >>> lib.write("s2", pd.DataFrame(), prune_previous_versions=False)
         >>> lib.write("s3", pd.DataFrame())
-        >>> batch = lib.read_batch(["s1", ReadRequest("s2", as_of=0), "s3"])
+        >>> batch = lib.read_batch(["s1", ReadRequest("s2", as_of=0), "s3", ReadRequest("s2", as_of=1000)])
         >>> batch[0].data.empty
         True
         >>> batch[1].data.empty
         False
+        >>> batch[2].data.empty
+        True
+        >>> batch[3].symbol
+        "s2"
+        >>> batch[3].version_request_type
+        VersionRequestType.SPECIFIC
+        >>> batch[3].version_request_data
+        1000
 
         See Also
         --------

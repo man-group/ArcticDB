@@ -348,9 +348,9 @@ TEST_F(VersionStoreTest, StressBatchReadUncompressed) {
     ReadOptions read_options;
     read_options.set_batch_throw_on_missing_version(true);
     auto latest_versions = test_store_->batch_read(symbols, std::vector<VersionQuery>(10), read_queries, read_options);
-    for(auto version : folly::enumerate(latest_versions)) {
-        auto expected = get_test_simple_frame((*version)->item.symbol(), 10, version.index);
-        bool equal = expected.segment_ == (*version)->frame_data.frame();
+    for(auto&& [idx, version] : folly::enumerate(latest_versions)) {
+        auto expected = get_test_simple_frame(std::get<ReadResult>(version).item.symbol(), 10, idx);
+        bool equal = expected.segment_ == std::get<ReadResult>(version).frame_data.frame();
         ASSERT_EQ(equal, true);
     }
 }

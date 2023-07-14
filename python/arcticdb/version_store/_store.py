@@ -48,6 +48,7 @@ from arcticdb_ext.version_store import PythonVersionStoreReadOptions as _PythonV
 from arcticdb_ext.version_store import PythonVersionStoreVersionQuery as _PythonVersionStoreVersionQuery
 from arcticdb_ext.version_store import ColumnStats as _ColumnStats
 from arcticdb_ext.version_store import StreamDescriptorMismatch
+from arcticdb_ext.version_store import NoDataRetrieved
 from arcticdb.authorization.permissions import OpenMode
 from arcticdb.exceptions import ArcticNativeNotYetImplemented, ArcticNativeException
 from arcticdb.flattener import Flattener
@@ -984,13 +985,13 @@ class NativeVersionStore:
         read_results = self.version_store.batch_read(symbols, version_queries, read_queries, read_options)
         versioned_items = []
         for i in range(len(read_results)):
-            if read_results[i] is not None:
+            if isinstance(read_results[i], NoDataRetrieved):
+                versioned_items.append(read_results[i])
+            else:
                 read_result = ReadResult(*read_results[i])
                 read_query = read_queries[i]
                 vitem = self._post_process_dataframe(read_result, read_query)
                 versioned_items.append(vitem)
-            else:
-                versioned_items.append(None)
         return versioned_items
 
     def batch_read_metadata(

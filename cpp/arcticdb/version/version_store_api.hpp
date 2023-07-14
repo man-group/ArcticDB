@@ -7,6 +7,7 @@
 
 #pragma once
 
+#include <arcticdb/entity/no_data_retrieved.hpp>
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/stream/index.hpp>
 #include <arcticdb/util/timeouts.hpp>
@@ -281,7 +282,7 @@ class PythonVersionStore : public LocalVersionedEngine {
         const std::vector<StreamId>& id,
         const std::vector<VersionQuery>& version_query);
 
-    std::vector<std::optional<ReadResult>> batch_read(
+    std::vector<std::variant<ReadResult, NoDataRetrieved>> batch_read(
         const std::vector<StreamId>& stream_ids,
         const std::vector<VersionQuery>& version_queries,
         std::vector<ReadQuery>& read_queries,
@@ -334,8 +335,8 @@ private:
     void delete_snapshot_sync(const SnapshotId& snap_name, const VariantKey& snap_key);
 };
 
-inline std::vector<std::optional<ReadResult>> frame_to_read_result(std::vector<ReadVersionOutput>&& keys_frame_and_descriptors) {
-    std::vector<std::optional<ReadResult>> read_results;
+inline std::vector<std::variant<ReadResult, NoDataRetrieved>> frame_to_read_result(std::vector<ReadVersionOutput>&& keys_frame_and_descriptors) {
+    std::vector<std::variant<ReadResult, NoDataRetrieved>> read_results;
     read_results.reserve(keys_frame_and_descriptors.size());
     for (auto& read_version_output : keys_frame_and_descriptors) {
         read_results.emplace_back(ReadResult(

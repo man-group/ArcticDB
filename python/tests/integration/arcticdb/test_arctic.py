@@ -19,6 +19,8 @@ except ImportError:
     # arcticdb squashes the packages
     from arcticdb._store import VersionedItem as PythonVersionedItem
 from arcticdb_ext.storage import NoDataFoundException
+from arcticdb_ext.version_store import NoDataRetrieved
+from arcticdb_ext.version_store import VersionRequestType
 
 from arcticdb.arctic import Arctic
 from arcticdb.adapters.s3_library_adapter import S3LibraryAdapter
@@ -1245,7 +1247,10 @@ def test_read_batch_symbol_doesnt_exist(arctic_library):
     batch = lib.read_batch(["s1", "s2"])
     # Then
     assert_frame_equal(batch[0].data, df)
-    assert batch[1] is None
+    assert isinstance(batch[1], NoDataRetrieved)
+    assert batch[1].symbol == "s2"
+    assert batch[1].version_request_type == VersionRequestType.LATEST
+    assert batch[1].version_request_data == None
 
 
 def test_read_batch_version_doesnt_exist(arctic_library):
@@ -1260,8 +1265,15 @@ def test_read_batch_version_doesnt_exist(arctic_library):
     batch = lib.read_batch([ReadRequest("s1", as_of=0), ReadRequest("s1", as_of=1), ReadRequest("s2", as_of=1)])
     # Then
     assert_frame_equal(batch[0].data, df1)
-    assert batch[1] is None
-    assert batch[2] is None
+    assert isinstance(batch[1], NoDataRetrieved)
+    assert batch[1].symbol == "s1"
+    assert batch[1].version_request_type == VersionRequestType.SPECIFIC
+    assert batch[1].version_request_data == 1
+
+    assert isinstance(batch[2], NoDataRetrieved)
+    assert batch[2].symbol == "s2"
+    assert batch[2].version_request_type == VersionRequestType.SPECIFIC
+    assert batch[2].version_request_data == 1
 
 
 def test_read_batch_query_builder_symbol_doesnt_exist(arctic_library):
@@ -1275,7 +1287,10 @@ def test_read_batch_query_builder_symbol_doesnt_exist(arctic_library):
     batch = lib.read_batch(["s1", "s2"], query_builder=q)
     # Then
     assert_frame_equal(batch[0].data, pd.DataFrame({"a": [3]}))
-    assert batch[1] is None
+    assert isinstance(batch[1], NoDataRetrieved)
+    assert batch[1].symbol == "s2"
+    assert batch[1].version_request_type == VersionRequestType.LATEST
+    assert batch[1].version_request_data == None
 
 
 def test_read_batch_query_builder_version_doesnt_exist(arctic_library):
@@ -1292,8 +1307,15 @@ def test_read_batch_query_builder_version_doesnt_exist(arctic_library):
     )
     # Then
     assert_frame_equal(batch[0].data, pd.DataFrame({"a": [3]}))
-    assert batch[1] is None
-    assert batch[2] is None
+    assert isinstance(batch[1], NoDataRetrieved)
+    assert batch[1].symbol == "s1"
+    assert batch[1].version_request_type == VersionRequestType.SPECIFIC
+    assert batch[1].version_request_data == 1
+
+    assert isinstance(batch[2], NoDataRetrieved)
+    assert batch[2].symbol == "s2"
+    assert batch[2].version_request_type == VersionRequestType.SPECIFIC
+    assert batch[2].version_request_data == 1
 
 
 def test_has_symbol(arctic_library):
