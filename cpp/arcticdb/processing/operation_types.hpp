@@ -181,7 +181,7 @@ struct type_arithmetic_promoted_type {
                             // If the signed type is strictly larger than the unsigned type, then promote to the signed type
                             typename arithmetic_promoted_type::details::signed_width_t<max_width>,
                             // Otherwise, check if the unsigned one is the widest type we support
-                            std::conditional_t<std::is_same_v<LHS, uint64_t> || std::is_same_v<LHS, uint64_t>,
+                            std::conditional_t<std::is_same_v<LHS, uint64_t> || std::is_same_v<RHS, uint64_t>,
                                 // If so, there's no common type that can completely hold both arguments. We trigger operation-specific handling
                                 std::conditional_t<std::is_base_of_v<MembershipOperator, Func>,
                                     RHS, // Retains ValueSetBaseType in binary_membership()
@@ -383,12 +383,6 @@ bool operator()(int64_t t, uint64_t u) const {
 
 struct MembershipOperator {
 protected:
-    /** Returns the high bits beyond what can be held in the signed integer type I, including I's sign bit. */
-    template<typename I>
-    static constexpr uint64_t incomparable_bits() {
-        return std::numeric_limits<uint64_t>::max() - static_cast<uint64_t>(std::numeric_limits<I>::max());
-    }
-
     template<typename U>
     static constexpr bool is_signed_int = std::is_integral_v<U> && std::is_signed_v<U>;
 
@@ -412,8 +406,7 @@ bool operator()(T t, const std::unordered_set<U>& u) const {
 
 template<typename U, typename=std::enable_if_t<is_signed_int<U>>>
 bool operator()(uint64_t t, const std::unordered_set<U>& u, UInt64SpecialHandlingTag = {}) const {
-    auto incomparable = t & incomparable_bits<U>();
-    if (incomparable)
+    if (t > static_cast<uint64_t>(std::numeric_limits<U>::max()))
         return false;
     else
         return u.count(t) > 0;
@@ -439,8 +432,7 @@ bool operator()(T t, const std::unordered_set<U>& u) const {
 
 template<typename U, typename = std::enable_if_t<is_signed_int<U>>>
 bool operator()(uint64_t t, const std::unordered_set<U>& u, UInt64SpecialHandlingTag = {}) const {
-    auto incomparable = t & incomparable_bits<U>();
-    if (incomparable)
+    if (t > static_cast<uint64_t>(std::numeric_limits<U>::max()))
         return true;
     else
         return u.count(t) == 0;
