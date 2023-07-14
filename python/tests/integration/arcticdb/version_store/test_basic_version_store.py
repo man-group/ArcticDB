@@ -693,6 +693,7 @@ def test_list_versions_with_snapshots(lmdb_version_store):
 
 def test_read_ts(lmdb_version_store):
     lmdb_version_store.write("a", 1)  # v0
+    time.sleep(0.001)  # In case utcnow() has a lower precision and returning a timestamp before the write (#496)
     time_after_first_write = pd.Timestamp.utcnow()
 
     assert lmdb_version_store.read("a", as_of=time_after_first_write).version == 0
