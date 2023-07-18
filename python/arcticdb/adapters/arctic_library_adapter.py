@@ -60,9 +60,6 @@ class ArcticLibraryAdapter(ABC):
     def create_library(self, name: str, library_options: LibraryOptions) -> NativeVersionStore:
         raise NotImplementedError
 
-    def delete_library(self, library: Library, library_config: LibraryConfig):
-        return library._nvs.version_store.clear()
-
     def cleanup_library(self, library_name: str, library_config: LibraryConfig):
         pass
 
