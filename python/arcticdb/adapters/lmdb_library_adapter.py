@@ -17,7 +17,7 @@ from arcticdb.version_store.helper import add_lmdb_library_to_env
 from arcticdb.config import _DEFAULT_ENV
 from arcticdb.version_store._store import NativeVersionStore
 from arcticdb.adapters.arctic_library_adapter import ArcticLibraryAdapter, set_library_options
-from arcticdb_ext.storage import Library, StorageOverride
+from arcticdb_ext.storage import StorageOverride
 from arcticdb.encoding_version import EncodingVersion
 
 
