@@ -822,6 +822,53 @@ def test_write_batch_dedup(library_factory):
             assert data_key_version[s] == 0
 
 
+def test_read_batch_time_stamp(arctic_library):
+    """Should be able to read data in batch mode using a timestamp."""
+    lib = arctic_library
+    sym = "sym_"
+    num_versions = 3
+    num_symbols = 3
+    original_dataframes = []
+    for v_num in range(num_versions):
+        write_requests = []
+        for sym_num in range(num_symbols):
+            write_requests.append(
+                WritePayload(
+                    sym + str(sym_num), pd.DataFrame({"col": [sym_num + v_num, sym_num * v_num, sym_num - v_num]})
+                )
+            )
+        lib.write_batch(write_requests)
+        time.sleep(1)
+
+    data_non_batch = []
+    requests_batch = []
+    original_dataframes = []
+    for sym_num in range(num_symbols):
+        versions = lib.list_versions(sym + str(sym_num))
+        for version_info in versions:
+            date_obj = versions[version_info].date
+            date_obj += +timedelta(seconds=1)
+            as_of = datetime(
+                date_obj.year,
+                date_obj.month,
+                date_obj.day,
+                date_obj.hour,
+                date_obj.minute,
+                date_obj.second,
+                tzinfo=timezone.utc,
+            )
+            data_non_batch.append(lib.read(sym + str(sym_num), as_of=as_of))
+            requests_batch.append(ReadRequest(sym + str(sym_num), as_of=as_of))
+            v_num = version_info.version
+            original_dataframes.append(pd.DataFrame({"col": [sym_num + v_num, sym_num * v_num, sym_num - v_num]}))
+
+    data_batch = lib.read_batch(requests_batch)
+    list_data_to_compate = list(zip(data_non_batch, data_batch, original_dataframes))
+    for d1, d2, d3 in list_data_to_compate:
+        assert_frame_equal(d1.data, d2.data)
+        assert_frame_equal(d2.data, d3)
+
+
 def test_write_with_unpacking(arctic_library):
     """Check the syntactic sugar that lets us unpack WritePayload in `write` calls using *."""
     lib = arctic_library
