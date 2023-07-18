@@ -12,7 +12,7 @@
 #include <arcticdb/version/version_tasks.hpp>
 #include <arcticdb/version/version_store_objects.hpp>
 #include <arcticdb/pipeline/query.hpp>
-
+#include <arcticdb/version/version_functions.hpp>
 #include <folly/futures/FutureSplitter.h>
 
 namespace arcticdb {
@@ -192,8 +192,14 @@ inline std::optional<AtomKey> get_key_for_version_query(
         [&version_map_entry] (const pipelines::SpecificVersionQuery& specific_version) {
             return find_index_key_for_version_id(specific_version.version_id_, version_map_entry);
         },
-        [&version_map_entry] (const pipelines::TimestampVersionQuery& timestamp_version) {
-        return find_index_key_for_version_timestamp(timestamp_version.timestamp_, version_map_entry);
+        [&version_map_entry] (const pipelines::TimestampVersionQuery& timestamp_version) -> std::optional<AtomKey> {
+            auto version_key = get_version_key_from_time_for_versions(timestamp_version.timestamp_, version_map_entry->get_indexes(false));
+            if(version_key.has_value()){
+                auto version_id = version_key.value().version_id();
+                return find_index_key_for_version_id(version_id, version_map_entry);
+            }else{
+                return std::nullopt;
+            }
         },
         [&version_map_entry] (const std::monostate&) {
         return version_map_entry->get_first_index(false);
