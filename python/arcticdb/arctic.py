@@ -240,10 +240,12 @@ class Arctic:
         if not already_open and not self._library_manager.has_library(name):
             return
         config = self._library_manager.get_library_config(name, StorageOverride())
-        self._library_adapter.delete_library(already_open or self[name], config)
+        (already_open or self[name])._nvs.version_store.clear()
         del already_open  # essential to free resources held by the library
-        self._library_adapter.cleanup_library(name, config)
-        self._library_manager.remove_library_config(name)
+        try:
+            self._library_adapter.cleanup_library(name, config)
+        finally:
+            self._library_manager.remove_library_config(name)
 
     def list_libraries(self) -> List[str]:
         """
