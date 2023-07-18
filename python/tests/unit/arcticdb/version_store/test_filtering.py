@@ -27,7 +27,7 @@ from arcticdb.exceptions import ArcticNativeException
 from arcticdb.version_store.processing import QueryBuilder
 from arcticdb_ext.exceptions import InternalException, UserInputException
 from arcticdb.util.test import assert_frame_equal
-from arcticdb.util._versions import PANDAS_VERSION, IS_PANDAS_ZERO
+from arcticdb.util._versions import PANDAS_VERSION
 from arcticdb.util.hypothesis import (
     use_of_function_scoped_fixtures_in_hypothesis_checked,
     integral_type_strategies,
