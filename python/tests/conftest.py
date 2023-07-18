@@ -253,9 +253,15 @@ class EncodingVersion(enum.IntEnum):
     V2 = 1
 
 
-@pytest.fixture(params=list(EncodingVersion))
-def encoding_version(request) -> EncodingVersion:
-    return request.param
+@pytest.fixture(scope="session")
+def only_test_encoding_version_v1():
+    """Dummy fixture to reference at module/class level to reduce test cases"""
+
+
+def pytest_generate_tests(metafunc):
+    if "encoding_version" in metafunc.fixturenames:
+        only_v1 = "only_test_encoding_version_v1" in metafunc.fixturenames
+        metafunc.parametrize("encoding_version", [EncodingVersion.V1] if only_v1 else list(EncodingVersion))
 
 
 @pytest.fixture

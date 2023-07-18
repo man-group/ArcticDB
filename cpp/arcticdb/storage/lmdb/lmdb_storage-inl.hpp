@@ -31,7 +31,7 @@ inline void LmdbStorage::do_write_internal(Composite<KeySegmentPair>&& kvs, ::lm
         auto db_name = fmt::format("{}", group.key());
 
         ARCTICDB_SUBSAMPLE(LmdbStorageOpenDb, 0)
-        auto dbi = ::lmdb::dbi::open(txn, db_name.data(), MDB_CREATE);
+        ::lmdb::dbi& dbi = dbi_by_key_type_.at(db_name);
 
         ARCTICDB_SUBSAMPLE(LmdbStorageWriteValues, 0)
         for (auto &kv : group.values()) {
@@ -104,7 +104,7 @@ template<class Visitor>
     (fg::from(ks.as_range()) | fg::move | fg::groupBy(fmt_db)).foreach([&](auto &&group) {
         auto db_name = fmt::format("{}", group.key());
         ARCTICDB_SUBSAMPLE(LmdbStorageOpenDb, 0)
-        auto dbi = ::lmdb::dbi::open(txn, db_name.data());
+        ::lmdb::dbi& dbi = dbi_by_key_type_.at(db_name);
         for (auto &k : group.values()) {
             auto stored_key = to_serialized_key(k);
             MDB_val mdb_key{stored_key.size(), stored_key.data()};
@@ -129,14 +129,14 @@ template<class Visitor>
 
 inline bool LmdbStorage::do_key_exists(const VariantKey&key) {
     ARCTICDB_SAMPLE(LmdbStorageKeyExists, 0)
-    auto txn = ::lmdb::txn::begin(env(), nullptr, MDB_RDONLY);  // abort()s on destruction
+    auto txn = ::lmdb::txn::begin(env(), nullptr, MDB_RDONLY);
     ARCTICDB_SUBSAMPLE(LmdbStorageInTransaction, 0)
 
     auto db_name = fmt::format("{}", variant_key_type(key));
     ARCTICDB_SUBSAMPLE(LmdbStorageOpenDb, 0)
 
     try {
-        auto dbi = ::lmdb::dbi::open(txn, db_name.data());
+        ::lmdb::dbi& dbi = dbi_by_key_type_.at(db_name);
         if (unsigned int tmp; ::mdb_dbi_flags(txn, dbi, &tmp) == EINVAL) {
             return false;
         }
@@ -145,7 +145,7 @@ inline bool LmdbStorage::do_key_exists(const VariantKey&key) {
         MDB_val mdb_val;
         return ::lmdb::dbi_get(txn, dbi.handle(), &mdb_key, &mdb_val);
     } catch (const ::lmdb::not_found_error &ex) {
-        ARCTICDB_DEBUG(log::storage(), "Caught lmdn not found error: {}", ex.what());
+        ARCTICDB_DEBUG(log::storage(), "Caught lmdb not found error: {}", ex.what());
         return false;
     }
 }
@@ -160,7 +160,7 @@ inline std::vector<VariantKey> LmdbStorage::do_remove_internal(Composite<Variant
         ARCTICDB_SUBSAMPLE(LmdbStorageOpenDb, 0)
         try {
             // If no key of this type has been written before, this can fail
-            auto dbi = ::lmdb::dbi::open(txn, db_name.data());
+            ::lmdb::dbi& dbi = dbi_by_key_type_.at(db_name);
             for (auto &k : group.values()) {
                 auto stored_key = to_serialized_key(k);
                 MDB_val mdb_key{stored_key.size(), stored_key.data()};
@@ -206,19 +206,16 @@ bool LmdbStorage::do_fast_delete() {
     // bool is probably not the best return type here but it does help prevent the insane boilerplate for
     // an additional function that checks whether this is supported (like the prefix matching)
     auto dtxn = ::lmdb::txn::begin(env());
-    ::lmdb::dbi default_dbi{0};
-
     foreach_key_type([&] (KeyType key_type) {
-        auto db_name = fmt::format("{}", key_type);
-        try {
-            ARCTICDB_SUBSAMPLE(LmdbStorageOpenDb, 0)
-            auto dbi = ::lmdb::dbi::open(dtxn, db_name.data());
-            ::lmdb::dbi_drop(dtxn, dbi, true);
-        }
-        catch (const ::lmdb::not_found_error &e) {
-            // Key type was not created, just skip.
+        if (key_type == KeyType::TOMBSTONE) {
+            // TOMBSTONE and LOCK both format to code 'x' - do not try to drop both
             return;
         }
+        auto db_name = fmt::format("{}", key_type);
+        ARCTICDB_SUBSAMPLE(LmdbStorageOpenDb, 0)
+        ARCTICDB_DEBUG(log::storage(), "dropping {}", db_name);
+        ::lmdb::dbi& dbi = dbi_by_key_type_.at(db_name);
+        ::lmdb::dbi_drop(dtxn, dbi);
     });
 
     dtxn.commit();
@@ -230,19 +227,10 @@ void LmdbStorage::do_iterate_type(KeyType key_type, Visitor &&visitor, const std
     ARCTICDB_SAMPLE(LmdbStorageItType, 0);
     auto txn = ::lmdb::txn::begin(env(), nullptr, MDB_RDONLY); // scoped abort on
     std::string type_db = fmt::format("{}", key_type);
-    ::lmdb::dbi default_dbi{0};
-    try {
-        ARCTICDB_SUBSAMPLE(LmdbStorageOpenDb, 0)
-        default_dbi = ::lmdb::dbi::open(txn, type_db.c_str());
-    }
-    catch (const ::lmdb::not_found_error &e) {
-        // this gets thrown when a storage has not yet been created among other case (we use lazy create on write)
-        // it is sufficient to return here as non existent store should result in no iteration
-        ARCTICDB_DEBUG(log::storage(), "lmdb not found error for key_type: {}", key_type);
-        return;
-    }
+    ::lmdb::dbi& dbi = dbi_by_key_type_.at(type_db);
+
     ARCTICDB_SUBSAMPLE(LmdbStorageOpenCursor, 0)
-    auto db_cursor = ::lmdb::cursor::open(txn, default_dbi);
+    auto db_cursor = ::lmdb::cursor::open(txn, dbi);
 
     MDB_val mdb_db_key;
     ARCTICDB_SUBSAMPLE(LmdbStorageCursorFirst, 0)
