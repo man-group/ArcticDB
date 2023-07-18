@@ -76,12 +76,11 @@ class LMDBLibraryAdapter(ArcticLibraryAdapter):
 
         return lib
 
-    def delete_library(self, library: Library, library_config: LibraryConfig):
-        super().delete_library(library, library_config)
+    def cleanup_library(self, library_name: str, library_config: LibraryConfig):
         for k, v in library_config.storage_by_id.items():
             lmdb_config = LmdbConfig()
             v.config.Unpack(lmdb_config)
-            shutil.rmtree(os.path.join(lmdb_config.path, library.name), onerror=_rmtree_errorhandler)
+            shutil.rmtree(os.path.join(lmdb_config.path, library_name), onerror=_rmtree_errorhandler)
 
     def get_storage_override(self) -> StorageOverride:
         return StorageOverride()
