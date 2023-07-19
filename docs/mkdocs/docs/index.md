@@ -166,7 +166,7 @@ Let's first look at writing a DataFrame to storage:
 Write the DataFrame:
 
 ```Python
->>> lib.write('test_frame', df)
+>>> library.write('test_frame', df)
 VersionedItem(symbol=test_frame,library=data,data=n/a,version=0,metadata=None,host=<host>)
 ```
 
@@ -206,7 +206,7 @@ ArcticDB enables you to slice by _row_ and by _column_.
 ###### Row-slicing
 
 ```Python
->>> lib.read('test_frame', date_range=(df.index[5], df.index[8])).data
+>>> library.read('test_frame', date_range=(df.index[5], df.index[8])).data
                      COL_0  COL_1  COL_2  COL_3  COL_4  COL_5  COL_6  COL_7  ...
 2000-01-01 10:00:00     43     28     36     18     10     37     31     32  ...
 2000-01-01 11:00:00     36      5     30     18     44     15     31     28  ...
@@ -219,7 +219,7 @@ ArcticDB enables you to slice by _row_ and by _column_.
 ```Python
 >>> _range = (df.index[5], df.index[8])
 >>> _columns = ['COL_30', 'COL_31']
->>> lib.read('test_frame', date_range=_range, columns=_columns).data
+>>> library.read('test_frame', date_range=_range, columns=_columns).data
                      COL_30  COL_31
 2000-01-01 10:00:00       7      26
 2000-01-01 11:00:00      29      18
@@ -243,7 +243,7 @@ ArcticDB uses a Pandas-_like_ syntax to describe how to filter data. For more de
 >>> from arcticdb import QueryBuilder
 >>> q = QueryBuilder()
 >>> q = q[(q["COL_30"] > 30) & (q["COL_31"] < 50)]
->>> lib.read('test_frame', date_range=_range, columns=_cols, query_builder=q).data
+>>> library.read('test_frame', date_range=_range, columns=_cols, query_builder=q).data
 >>>
                      COL_30  COL_31
 2000-01-01 12:00:00      36      26
@@ -305,9 +305,9 @@ Let's append data to the end of the timeseries:
 Let's now _append_ that DataFrame to what was written previously, and then pull back the final 7 rows from storage:
 
 ```Python
->>> lib.append('test_frame', df_append)
+>>> library.append('test_frame', df_append)
 VersionedItem(symbol=test_frame,library=data,data=n/a,version=2,metadata=None,host=<host>)
->>> lib.tail('test_frame', 7).data
+>>> library.tail('test_frame', 7).data
                      COL_0  COL_1  COL_2  COL_3  COL_4  COL_5  COL_6  COL_7  ...
 2000-01-02 04:00:00      4     13      8     14     25     11     11     11  ...
 2000-01-02 05:00:00     14     41     24      7     16     10     15     36  ...
@@ -326,7 +326,7 @@ You might have noticed that _read_ calls do not return the data directly - but i
 (_write_, _append_ and _update_) increment the version counter. ArcticDB versions all modifications, which means you can retrieve earlier versions of data (ArcticDB is a bitemporal database!):
 
 ```Python
->>> lib.tail('test_frame', 7, as_of=0).data
+>>> library.tail('test_frame', 7, as_of=0).data
                      COL_0  COL_1  COL_2  COL_3  COL_4  COL_5  COL_6  COL_7  ...
 2000-01-01 23:00:00     26     38     12     30     25     29     47     27  ...
 2000-01-02 00:00:00     12     14     42     11     44     32     19     11  ...
