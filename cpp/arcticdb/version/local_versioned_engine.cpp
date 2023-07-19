@@ -44,7 +44,7 @@ LocalVersionedEngine::LocalVersionedEngine(
     }
 }
 
-void LocalVersionedEngine::delete_unreferenced_pruned_indexes(
+folly::Future<folly::Unit> LocalVersionedEngine::delete_unreferenced_pruned_indexes(
         const std::vector<AtomKey> &pruned_indexes,
         const AtomKey& key_to_keep
 ) {
@@ -56,12 +56,13 @@ void LocalVersionedEngine::delete_unreferenced_pruned_indexes(
                     pruned_indexes);
             in_snaps.insert(key_to_keep);
             PreDeleteChecks checks{false, false, false, false, in_snaps};
-            delete_trees_responsibly(not_in_snaps, {}, {}, checks);
+            return delete_trees_responsibly(not_in_snaps, {}, {}, checks);
         }
     } catch (const std::exception &ex) {
         // Best-effort so deliberately swallow
         log::version().warn("Could not prune previous versions due to: {}", ex.what());
     }
+    return folly::Unit();
 }
 
 void LocalVersionedEngine::create_column_stats_internal(
@@ -555,7 +556,7 @@ VersionedItem LocalVersionedEngine::update_internal(
                                           dynamic_schema);
         if (prune_previous_versions) {
             auto pruned_indexes = version_map()->write_and_prune_previous(store(), versioned_item.key_, update_info.previous_index_key_);
-            delete_unreferenced_pruned_indexes(pruned_indexes, versioned_item.key_);
+            delete_unreferenced_pruned_indexes(pruned_indexes, versioned_item.key_).get();
         } else {
             version_map()->write_version(store(), versioned_item.key_);
         }
@@ -602,7 +603,7 @@ VersionedItem LocalVersionedEngine::write_versioned_metadata_internal(
     if(prune_previous_versions) {
         auto versioned_item = VersionedItem{index_key};
         auto pruned_indexes = version_map()->write_and_prune_previous(store(), index_key, update_info.previous_index_key_);
-        delete_unreferenced_pruned_indexes(pruned_indexes, versioned_item.key_);
+        delete_unreferenced_pruned_indexes(pruned_indexes, versioned_item.key_).get();
         return versioned_item;
     }
     else {
@@ -638,7 +639,7 @@ VersionedItem LocalVersionedEngine::write_versioned_dataframe_internal(
 
     if(prune_previous_versions) {
         auto pruned_indexes = version_map()->write_and_prune_previous(store(), versioned_item.key_, maybe_prev);
-        delete_unreferenced_pruned_indexes(pruned_indexes, versioned_item.key_);
+        delete_unreferenced_pruned_indexes(pruned_indexes, versioned_item.key_).get();
         return versioned_item;
     }
     else {
@@ -743,7 +744,7 @@ std::unordered_map<StreamId, VersionId> min_versions_for_each_stream(const std::
     return out;
 }
 
-void LocalVersionedEngine::delete_trees_responsibly(
+folly::Future<folly::Unit> LocalVersionedEngine::delete_trees_responsibly(
         const std::vector<IndexTypeKey>& orig_keys_to_delete,
         const arcticdb::MasterSnapshotMap& snapshot_map,
         const std::optional<SnapshotId>& snapshot_being_deleted,
@@ -790,19 +791,14 @@ void LocalVersionedEngine::delete_trees_responsibly(
     if (load_type != LoadType::NOT_LOADED) {
         std::unordered_map<StreamId, std::shared_ptr<VersionMapEntry>> entry_map;
         {
-            auto min_vers = min_versions_for_each_stream(orig_keys_to_delete);
-
-            async::submit_tasks_for_range(min_vers,
-                    [store=store(), version_map=version_map(), load_type](auto& sym_version) {
-                        auto load_param = load_type == LoadType::LOAD_DOWNTO
-                                ? LoadParameter{load_type, static_cast<SignedVersionId>(sym_version.second)}
-                                : LoadParameter{load_type};
-                        return async::submit_io_task(CheckReloadTask{store, version_map, sym_version.first,
-                                                                     load_param, true});
-                    },
-                    [&entry_map](auto& sym_version, auto&& entry) {
-                        entry_map.emplace(std::move(sym_version.first), entry);
-                    });
+            auto min_versions = min_versions_for_each_stream(orig_keys_to_delete);
+            for (const auto& min : min_versions) {
+                auto load_param = load_type == LoadType::LOAD_DOWNTO
+                        ? LoadParameter{load_type, static_cast<SignedVersionId>(min.second)}
+                        : LoadParameter{load_type};
+                const auto entry = version_map()->check_reload(store(), min.first, load_param, true, false, __FUNCTION__);
+                entry_map.emplace(std::move(min.first), entry);
+            }
         }
 
         keys_to_delete.remove_if([&entry_map, &check, &not_to_delete](const auto& key) {
@@ -841,38 +837,51 @@ void LocalVersionedEngine::delete_trees_responsibly(
     auto data_keys_not_to_be_deleted = get_data_keys_set(store(), *not_to_delete, read_opts);
     not_to_delete.clear();
     log::version().debug("Forbidden: {} total of data keys", data_keys_not_to_be_deleted.size());
-
     RemoveOpts remove_opts;
     remove_opts.ignores_missing_key_ = true;
+    
+    std::vector<entity::VariantKey> vks_column_stats;
+    std::transform(keys_to_delete->begin(),
+                    keys_to_delete->end(),
+                    std::back_inserter(vks_column_stats),
+                    [](const IndexTypeKey& index_key) {
+        return index_key_to_column_stats_key(index_key);
+    });
+    log::version().debug("Number of Column Stats keys to be deleted: {}", vks_column_stats.size());
 
-    std::vector<entity::VariantKey> vks;
-    // Delete any associated column stats keys first
-    if (!dry_run) {
-        std::transform(keys_to_delete->begin(),
-                       keys_to_delete->end(),
-                       std::back_inserter(vks),
-                       [](const IndexTypeKey& index_key) {
-            return index_key_to_column_stats_key(index_key);
-        });
-        store()->remove_keys(vks, remove_opts).get();
-    }
+    std::vector<entity::VariantKey> vks_to_delete;
+    std::copy(std::make_move_iterator(keys_to_delete->begin()),
+                std::make_move_iterator(keys_to_delete->end()),
+                std::back_inserter(vks_to_delete));
+    log::version().debug("Number of Index keys to be deleted: {}", vks_to_delete.size());
 
-    vks.clear();
-    if (!dry_run) {
-        std::copy(keys_to_delete->begin(), keys_to_delete->end(), std::back_inserter(vks));
-        store()->remove_keys(vks, remove_opts).get();
-    }
-
-    vks.clear();
+    std::vector<entity::VariantKey> vks_data_to_delete;
     std::copy_if(std::make_move_iterator(data_keys_to_be_deleted.begin()),
-                 std::make_move_iterator(data_keys_to_be_deleted.end()),
-                 std::back_inserter(vks),
-                 [&](const auto& k) {return !data_keys_not_to_be_deleted.count(k);});
-    log::version().debug("Index keys deleted. Proceeding with {} number of data keys", vks.size());
+                std::make_move_iterator(data_keys_to_be_deleted.end()),
+                std::back_inserter(vks_data_to_delete),
+                [&](const auto& k) {return !data_keys_not_to_be_deleted.count(k);});
+    log::version().debug("Number of Data keys to be deleted: {}", vks_data_to_delete.size());
+
+    folly::Future<folly::Unit> remove_keys_fut;
     if (!dry_run) {
-        store()->remove_keys(vks, remove_opts).get();
+        // Delete any associated column stats keys first
+        remove_keys_fut = store()->remove_keys(std::move(vks_column_stats), remove_opts)
+        .thenValue([this, vks_to_delete = std::move(vks_to_delete), remove_opts](auto&& ) mutable {
+            log::version().debug("Column Stats keys deleted.");
+            return store()->remove_keys(std::move(vks_to_delete), remove_opts);
+        })
+        .thenValue([this, vks_data_to_delete = std::move(vks_data_to_delete), remove_opts](auto&&) mutable {
+            log::version().debug("Index keys deleted.");
+            return store()->remove_keys(std::move(vks_data_to_delete), remove_opts);
+        })
+        .thenValue([](auto&&){
+            log::version().debug("Data keys deleted.");
+            return folly::Unit();
+        });
     }
+    return remove_keys_fut;
 }
+
 
 void LocalVersionedEngine::remove_incomplete(
     const StreamId& stream_id
@@ -1147,6 +1156,28 @@ std::vector<std::variant<ReadVersionOutput, DataError>> LocalVersionedEngine::ba
     return read_versions_or_errors;
 }
 
+std::vector<folly::Future<folly::Unit>> LocalVersionedEngine::batch_write_version_and_prune_if_needed(
+    const std::vector<AtomKey>& index_keys,
+    const std::vector<UpdateInfo>& stream_update_info_vector,
+    bool prune_previous_versions) {
+    if(prune_previous_versions) {
+        std::vector<folly::Future<folly::Unit>> pruned_keys_futures;
+        auto pruned_versions_futures = batch_write_and_prune_previous(store(), version_map(), index_keys, stream_update_info_vector);
+        for(auto&& [idx, pruned_version_fut] : folly::enumerate(pruned_versions_futures)) {
+            pruned_keys_futures.push_back(
+                std::move(pruned_version_fut)
+                .thenValue([this, &index_key = index_keys[idx]](auto&& atom_key_vec){
+                    return delete_unreferenced_pruned_indexes(std::move(atom_key_vec), index_key);
+                })
+            );
+        }
+        return pruned_keys_futures;
+    }
+    else {
+        return batch_write_version(store(), version_map(), index_keys);
+    }
+}
+
 folly::Future<VersionedItem> LocalVersionedEngine::write_index_key_to_version_map_async(
     const std::shared_ptr<VersionMap> &version_map,
     const AtomKey&& index_key,
@@ -1156,7 +1187,10 @@ folly::Future<VersionedItem> LocalVersionedEngine::write_index_key_to_version_ma
     folly::Future<folly::Unit> write_version_fut;
 
     if(prune_previous_versions) {
-        write_version_fut = async::submit_io_task(WriteAndPrunePreviousTask{store(), version_map, index_key, stream_update_info.previous_index_key_});
+        write_version_fut = async::submit_io_task(WriteAndPrunePreviousTask{store(), version_map, index_key, stream_update_info.previous_index_key_})
+        .thenValue([this, index_key](auto&& atom_key_vec){
+            return delete_unreferenced_pruned_indexes(std::move(atom_key_vec), index_key);
+        });
     } else {
         write_version_fut = async::submit_io_task(WriteVersionTask{store(), version_map, index_key});
     }
@@ -1272,7 +1306,7 @@ VersionedItem LocalVersionedEngine::append_internal(
                                           validate_index);
         if (prune_previous_versions) {
             auto pruned_indexes = version_map()->write_and_prune_previous(store(), versioned_item.key_, update_info.previous_index_key_);
-            delete_unreferenced_pruned_indexes(pruned_indexes, versioned_item.key_);
+            delete_unreferenced_pruned_indexes(pruned_indexes, versioned_item.key_).get();
         } else {
             version_map()->write_version(store(), versioned_item.key_);
         }

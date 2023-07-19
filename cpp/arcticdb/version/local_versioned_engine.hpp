@@ -146,7 +146,7 @@ public:
         const PreDeleteChecks& checks = default_pre_delete_checks
     ) override {
         auto snapshot_map = get_master_snapshots_map(store());
-        delete_trees_responsibly(idx_to_be_deleted, snapshot_map, std::nullopt, checks);
+        delete_trees_responsibly(idx_to_be_deleted, snapshot_map, std::nullopt, checks).get();
     };
 
     /**
@@ -157,7 +157,7 @@ public:
      * to exclude it from shared data check
      * @param dry_run Only do the check, but don't actually delete anything.
      */
-    void delete_trees_responsibly(
+    folly::Future<folly::Unit> delete_trees_responsibly(
         const std::vector<IndexTypeKey>& idx_to_be_deleted,
         const arcticdb::MasterSnapshotMap& snapshot_map,
         const std::optional<SnapshotId>& snapshot_being_deleted = std::nullopt,
@@ -351,6 +351,11 @@ public:
         const UpdateInfo& stream_update_info,
         bool prune_previous_versions);
 
+    std::vector<folly::Future<folly::Unit>> batch_write_version_and_prune_if_needed(
+        const std::vector<AtomKey>& index_keys,
+        const std::vector<UpdateInfo>& stream_update_info_vector,
+        bool prune_previous_versions);
+
     std::vector<VersionedItem> batch_write_versioned_dataframe_internal(
         const std::vector<StreamId>& stream_ids,
         std::vector<InputTensorFrame>&& frames,
@@ -387,7 +392,7 @@ protected:
      *
      * @param pruned_indexes Must all share the same id() and should be tombstoned.
      */
-    void delete_unreferenced_pruned_indexes(
+    folly::Future<folly::Unit> delete_unreferenced_pruned_indexes(
             const std::vector<AtomKey> &pruned_indexes,
             const AtomKey& key_to_keep
     );
