@@ -90,7 +90,8 @@ Connecting to AWS with a pre-defined region:
 ```
 
 Note that no explicit credential parameters are given. When `aws_auth` is passed, authentication is delegated to the AWS SDK which is responsible for locating the appropriate credentials in the `.config` file or 
-in environment variables. You can manually configure which profile is being used by setting the `AWS_PROFILE` environment variable as described in the [AWS Documentation](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-files.html).
+in environment variables. You can manually configure which profile is being used by setting the `AWS_PROFILE` environment variable as described in the
+[AWS Documentation](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-files.html).
 
 #### Using a specific path within a bucket
 
