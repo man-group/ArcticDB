@@ -598,7 +598,7 @@ TEST_F(VersionMapStore, StressTestBatchSameSymbol) {
 
     auto store = test_store_->_test_get_store();
     auto version_map = std::make_shared<VersionMap>();
-    batch_write_version(store, version_map, keys);
+    folly::collect(batch_write_version(store, version_map, keys)).get();
 }
 
 TEST_F(VersionMapStore, StressTestBatchWrite) {
@@ -616,6 +616,6 @@ TEST_F(VersionMapStore, StressTestBatchWrite) {
 
     auto store = test_store_->_test_get_store();
     auto version_map = std::make_shared<VersionMap>();
-    batch_write_version(store, version_map, keys);
+    folly::collect(batch_write_version(store, version_map, keys)).get();
 }
 } // namespace arcticdb
