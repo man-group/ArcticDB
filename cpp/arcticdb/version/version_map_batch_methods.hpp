@@ -255,7 +255,7 @@ inline std::vector<folly::Future<std::optional<AtomKey>>> batch_get_versions_asy
     return output;
 }
 
-inline void batch_write_version(
+inline std::vector<folly::Future<folly::Unit>> batch_write_version(
     const std::shared_ptr<Store> &store,
     const std::shared_ptr<VersionMap> &version_map,
     const std::vector<AtomKey> &keys) {
@@ -265,21 +265,21 @@ inline void batch_write_version(
         results.emplace_back(async::submit_io_task(WriteVersionTask{store, version_map, key}));
     }
 
-    folly::collect(results).wait();
+    return results;
 }
 
-inline void batch_write_and_prune_previous(
+inline std::vector<folly::Future<std::vector<AtomKey>>> batch_write_and_prune_previous(
     const std::shared_ptr<Store> &store,
     const std::shared_ptr<VersionMap> &version_map,
     const std::vector<AtomKey> &keys,
     const std::vector<version_store::UpdateInfo>& stream_update_info_vector) {
-    std::vector<folly::Future<folly::Unit>> results;
+    std::vector<folly::Future<std::vector<AtomKey>>> results;
     results.reserve(keys.size());
     for(auto key : folly::enumerate(keys)){
         auto previous_index_key = stream_update_info_vector[key.index].previous_index_key_;
         results.emplace_back(async::submit_io_task(WriteAndPrunePreviousTask{store, version_map, *key, previous_index_key}));
     }
-
-    folly::collect(results).wait();
+    
+    return results;
 }
 } //namespace arcticdb

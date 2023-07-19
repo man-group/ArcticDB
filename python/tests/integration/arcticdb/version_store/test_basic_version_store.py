@@ -210,6 +210,99 @@ def test_prune_previous_versions_multiple_times(lmdb_version_store, symbol):
     assert len([ver for ver in lmdb_version_store.list_versions() if not ver["deleted"]]) == 1
 
 
+def test_prune_previous_versions_write_batch(lmdb_version_store):
+    """Verify that the batch write method correctly prunes previous versions when the corresponding option is specified.
+    """
+    # Given
+    lib = lmdb_version_store
+    lib_tool = lib.library_tool()
+    sym1 = "test_symbol1"
+    sym2 = "test_symbol2"
+    df0 = pd.DataFrame({"col_0": ["a", "b"]}, index=pd.date_range("2000-01-01", periods=2))
+    df1 = pd.DataFrame({"col_0": ["c", "d"]}, index=pd.date_range("2000-01-03", periods=2))
+
+    # When
+    lib.batch_write([sym1, sym2], [df0, df0])
+    lib.batch_write([sym1, sym2], [df1, df1], prune_previous_version=True)
+
+    # Then - only latest version and keys should survive
+    assert len(lib.list_versions(sym1)) == 1
+    assert len(lib.list_versions(sym2)) == 1
+    assert len(lib_tool.find_keys(KeyType.TABLE_INDEX)) == 2
+    assert len(lib_tool.find_keys(KeyType.TABLE_DATA)) == 2
+
+    # Then - we got 3 version keys per symbol: version 0, version 0 tombstone, version 1
+    keys_for_sym1 = lib_tool.find_keys_for_id(KeyType.VERSION, sym1)
+    keys_for_sym2 = lib_tool.find_keys_for_id(KeyType.VERSION, sym2)
+
+    assert len(keys_for_sym1) == 3
+    assert len(keys_for_sym2) == 3
+    # Then - we got 4 symbol keys: 2 for each of the writes
+    assert len(lib_tool.find_keys(KeyType.SYMBOL_LIST)) == 4
+
+
+def test_prune_previous_versions_batch_write_metadata(lmdb_version_store):
+    """Verify that the batch write metadata method correctly prunes previous versions when the corresponding option is specified.
+    """
+    # Given
+    lib = lmdb_version_store
+    lib_tool = lib.library_tool()
+    sym1 = "test_symbol1"
+    sym2 = "test_symbol2"
+    meta0 = {"a": 0}
+    meta1 = {"a": 1}
+
+    # When
+    lib.batch_write([sym1, sym2], [None, None], metadata_vector=[meta0, meta0])
+    lib.batch_write_metadata([sym1, sym2], [meta1, meta1], prune_previous_version=True)
+
+    # Then - only latest version and keys should survive
+    assert len(lib.list_versions(sym1)) == 1
+    assert len(lib.list_versions(sym2)) == 1
+    assert len(lib_tool.find_keys(KeyType.TABLE_INDEX)) == 2
+    assert len(lib_tool.find_keys(KeyType.TABLE_DATA)) == 2
+
+    # Then - we got 3 version keys per symbol: version 0, version 0 tombstone, version 1
+    keys_for_sym1 = lib_tool.find_keys_for_id(KeyType.VERSION, sym1)
+    keys_for_sym2 = lib_tool.find_keys_for_id(KeyType.VERSION, sym2)
+
+    assert len(keys_for_sym1) == 3
+    assert len(keys_for_sym2) == 3
+    # Then - we got 2 symbol keys: 1 for each of the writes
+    assert len(lib_tool.find_keys(KeyType.SYMBOL_LIST)) == 2
+
+
+def test_prune_previous_versions_append_batch(lmdb_version_store):
+    """Verify that the batch append method correctly prunes previous versions when the corresponding option is specified.
+    """
+    # Given
+    lib = lmdb_version_store
+    lib_tool = lib.library_tool()
+    sym1 = "test_symbol1"
+    sym2 = "test_symbol2"
+    df0 = pd.DataFrame({"col_0": ["a", "b"]}, index=pd.date_range("2000-01-01", periods=2))
+    df1 = pd.DataFrame({"col_0": ["c", "d"]}, index=pd.date_range("2000-01-03", periods=2))
+
+    # When
+    lib.batch_write([sym1, sym2], [df0, df0])
+    lib.batch_append([sym1, sym2], [df1, df1], prune_previous_version=True)
+
+    # Then - only latest version and index keys should survive. Data keys remain the same
+    assert len(lib.list_versions(sym1)) == 1
+    assert len(lib.list_versions(sym2)) == 1
+    assert len(lib_tool.find_keys(KeyType.TABLE_INDEX)) == 2
+    assert len(lib_tool.find_keys(KeyType.TABLE_DATA)) == 4
+
+    # Then - we got 3 version keys per symbol: version 0, version 0 tombstone, version 1
+    keys_for_sym1 = lib_tool.find_keys_for_id(KeyType.VERSION, sym1)
+    keys_for_sym2 = lib_tool.find_keys_for_id(KeyType.VERSION, sym2)
+
+    assert len(keys_for_sym1) == 3
+    assert len(keys_for_sym2) == 3
+    # Then - we got 4 symbol keys: 2 for each of the writes
+    assert len(lib_tool.find_keys(KeyType.SYMBOL_LIST)) == 4
+
+
 def test_deleting_unknown_symbol(lmdb_version_store, symbol):
     df = sample_dataframe()
 

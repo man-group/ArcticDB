@@ -304,6 +304,16 @@ namespace arcticdb {
             return output;
         }
 
+        folly::Future<std::vector<RemoveKeyResultType>>
+        remove_keys(std::vector<entity::VariantKey> &&keys, storage::RemoveOpts opts) override {
+            std::vector<RemoveKeyResultType> output;
+            for (const auto &key: keys) {
+                output.emplace_back(remove_key_sync(key, opts));
+            }
+
+            return output;
+        }
+
         void insert_atom_key(const AtomKey &key) {
             seg_by_atom_key_.insert(std::make_pair(key, std::make_unique<SegmentInMemory>()));
         }
