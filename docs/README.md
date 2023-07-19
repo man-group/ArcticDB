@@ -12,12 +12,6 @@ mkdir /tmp/docs_build/
 
 #### Working in Man Group:
 
-* CentOS headnode
-```
-sudo docker run --rm --user $(id -u):$(id -g) -v /tmp/docs_build:/tmp/docs_build -v $(pwd)/mkdocs:/docs external-sandbox-docker.repo.prod.m/squidfunk/mkdocs-material:latest build -f mkdocs.yml -d /tmp/docs_build
-```
-
-* Ubuntu headnode
 ```
 docker run --rm -v /tmp/docs_build:/tmp/docs_build -v $(pwd)/mkdocs:/docs external-sandbox-docker.repo.prod.m/squidfunk/mkdocs-material:latest build -f mkdocs.yml -d /tmp/docs_build
 ```
