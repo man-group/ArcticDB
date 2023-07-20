@@ -378,7 +378,8 @@ class NativeVersionStore:
         if os.environ.get("STRICT_SYMBOL_CHECK", "1") == "1":
             if len(symbol_set.difference(SUPPORTED_CHARS)):
                 raise ArcticNativeNotYetImplemented(
-                    f"The symbol '{symbol}' has one or more characters that are not currently supported.\nThe supported chars are ({','.join(SUPPORTED_CHARS)})."
+                    f"The symbol '{symbol}' has one or more characters that are not currently supported.\nThe supported"
+                    f" chars are ({','.join(sorted(SUPPORTED_CHARS))})."
                 )
         else:
             if len(set(symbol).intersection(UNSUPPORTED_S3_CHARS)):
