@@ -9,6 +9,7 @@ from typing import List, Optional
 
 from arcticdb.options import LibraryOptions
 from arcticdb_ext.storage import LibraryManager, StorageOverride
+from arcticdb.exceptions import LibraryNotFound
 from arcticdb.version_store.library import Library
 from arcticdb.version_store._store import NativeVersionStore
 from arcticdb.adapters.s3_library_adapter import S3LibraryAdapter
@@ -154,6 +155,9 @@ class Arctic:
         already_open = self._open_libraries.get(name)
         if already_open:
             return already_open
+
+        if not self._library_manager.has_library(name):
+            raise LibraryNotFound(name)
 
         storage_override = self._library_adapter.get_storage_override()
         lib = NativeVersionStore(

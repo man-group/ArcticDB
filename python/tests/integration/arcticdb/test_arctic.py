@@ -10,7 +10,7 @@ import os
 
 import pytz
 from arcticdb_ext.exceptions import InternalException
-from arcticdb.exceptions import ArcticNativeNotYetImplemented
+from arcticdb.exceptions import ArcticNativeNotYetImplemented, LibraryNotFound
 from pandas import Timestamp
 
 try:
@@ -98,7 +98,7 @@ def test_library_creation_deletion(arctic_client):
     ac.delete_library("library_that_does_not_exist")
 
     assert not ac.list_libraries()
-    with pytest.raises(Exception):  # TODO: Nicely wrap?
+    with pytest.raises(LibraryNotFound):
         _lib = ac["pytest_test_lib"]
 
 
@@ -274,7 +274,7 @@ def test_library_management_path_prefix(connection_string, client, request):
     ac.delete_library("pytest_test_lib")
 
     assert not ac.list_libraries()
-    with pytest.raises(Exception):  # TODO: Nicely wrap?
+    with pytest.raises(LibraryNotFound):
         _lib = ac["pytest_test_lib"]
 
 
