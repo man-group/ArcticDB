@@ -70,7 +70,6 @@ from arcticdb.version_store._normalization import (
 )
 from arcticdb.util.memory import format_bytes
 
-
 _ExtDateRangeTypes = pd.core.indexes.datetimelike.DatetimeIndexOpsMixin
 if TYPE_CHECKING:
     try:
@@ -82,6 +81,12 @@ if TYPE_CHECKING:
 
 # These chars are encoded by S3 and on doing a list_symbols they will show up as the encoded form eg. &amp
 UNSUPPORTED_S3_CHARS = {"*", "&", "<", ">"}
+
+# If we have enabled STRICT_SYMBOL_CHECK (enabled by default)
+# we will use the SUPPORTED_CHARS set for the check
+# To add more chars as supported, simply add them to the set, e.g. SUPPORTED_CHARS.add('c')
+SUPPORTED_CHARS = set([chr(c) for c in range(33, 127)])
+SUPPORTED_CHARS = SUPPORTED_CHARS.difference(UNSUPPORTED_S3_CHARS)
 MAX_SYMBOL_SIZE = (2**8) - 1
 
 
@@ -368,10 +373,18 @@ class NativeVersionStore:
             raise ArcticNativeNotYetImplemented(
                 f"Symbol length {len(symbol)} chars exceeds the max supported length of {MAX_SYMBOL_SIZE} chars."
             )
-        if len(set(symbol).intersection(UNSUPPORTED_S3_CHARS)):
-            raise ArcticNativeNotYetImplemented(
-                f"The symbol '{symbol}' has one or more unsupported characters({','.join(UNSUPPORTED_S3_CHARS)})."
-            )
+
+        symbol_set = set(symbol)
+        if os.environ.get("STRICT_SYMBOL_CHECK", "1") == "1":
+            if len(symbol_set.difference(SUPPORTED_CHARS)):
+                raise ArcticNativeNotYetImplemented(
+                    f"The symbol '{symbol}' has one or more characters that are not currently supported.\nThe supported chars are ({','.join(SUPPORTED_CHARS)})."
+                )
+        else:
+            if len(set(symbol).intersection(UNSUPPORTED_S3_CHARS)):
+                raise ArcticNativeNotYetImplemented(
+                    f"The symbol '{symbol}' has one or more unsupported characters({','.join(UNSUPPORTED_S3_CHARS)})."
+                )
 
     def try_flatten_and_write_composite_object(self, symbol, data, metadata, pickle_on_failure, dynamic_strings):
         fl = Flattener()

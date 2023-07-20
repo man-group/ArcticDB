@@ -106,6 +106,27 @@ def test_special_chars(s3_version_store, special_char):
     vitem = s3_version_store.read(sym)
     assert_frame_equal(vitem.data, df)
 
+@pytest.mark.parametrize("breaking_char", [chr(0), "&", "*", "<", ">", chr(127)])
+def test_breaking_chars(s3_version_store, breaking_char):
+    """Test that chars that are not supported are raising the appropriate exception and that we fail on write without corrupting the db"""
+    sym = f"prefix{breaking_char}postfix"
+    df = sample_dataframe()
+    with pytest.raises(ArcticNativeNotYetImplemented):
+        s3_version_store.write(sym, df)
+
+    assert sym not in s3_version_store.list_symbols()
+
+@pytest.mark.parametrize("unhandled_char", [chr(0)])
+@mock.patch.dict(os.environ, {'STRICT_SYMBOL_CHECK': '0'})
+def test_unhandled_chars(s3_version_store, unhandled_char):
+    """Test that when we turn the STRICT_SYMBOL_CHECK off, the problematic \x00 is raising an exception"""
+    sym = f"prefix{chr(0)}postfix"
+    df = sample_dataframe()
+    s3_version_store.write(sym, df)
+    vitem = s3_version_store.read(sym)
+    with pytest.raises(InternalException):
+        assert vitem.symbol in s3_version_store.list_symbols()
+
 
 @pytest.mark.parametrize("version_store", SMOKE_TEST_VERSION_STORES)
 def test_with_prune(request, version_store, symbol):
