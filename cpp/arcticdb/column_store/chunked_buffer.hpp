@@ -26,6 +26,14 @@
 
 namespace arcticdb {
 
+/*
+ * ChunkedBufferImpl is an untyped buffer that is composed of blocks of data that can be either regularly or
+ * irregularly sized, with optimizations for both cases as well as the case where there is a single contiguous
+ * block.
+ *
+ * This class can be wrapped in a cursor for the purposes of linear reads and writes (see CursoredBuffer),
+ * and subsequently detached if required.
+ */
 template<size_t DefaultBlockSize>
 class ChunkedBufferImpl {
 

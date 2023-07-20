@@ -19,6 +19,10 @@
 
 namespace arcticdb::async {
 
+/*
+ * AsyncStore is a wrapper around a Store that provides async methods for writing and reading data.
+ * It is used by the VersionStore to write data to the Store in a non-blocking way.
+ */
 template<class ClockType = util::SysClock>
 class AsyncStore : public Store {
 public:

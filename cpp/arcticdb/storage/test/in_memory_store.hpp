@@ -20,6 +20,7 @@
 #include <vector>
 
 namespace arcticdb {
+    /* In-memory implementation of Store for testing purposes. */
     class InMemoryStore : public Store {
 
     public:
