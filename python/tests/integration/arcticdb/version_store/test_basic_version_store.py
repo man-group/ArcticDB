@@ -113,7 +113,7 @@ def test_breaking_chars(s3_version_store, breaking_char):
     """
     sym = f"prefix{breaking_char}postfix"
     df = sample_dataframe()
-    with pytest.raises(InternalException):
+    with pytest.raises(ArcticNativeNotYetImplemented):
         s3_version_store.write(sym, df)
 
     assert sym not in s3_version_store.list_symbols()
@@ -123,7 +123,7 @@ def test_breaking_chars(s3_version_store, breaking_char):
 @mock.patch.dict(os.environ, {"STRICT_SYMBOL_CHECK": "0"})
 def test_unhandled_chars(s3_version_store, unhandled_char):
     """Test that when we turn the STRICT_SYMBOL_CHECK off, the problematic \x00 is raising an exception"""
-    sym = f"prefix{chr(0)}postfix"
+    sym = f"prefix{unhandled_char}postfix"
     df = sample_dataframe()
     s3_version_store.write(sym, df)
     vitem = s3_version_store.read(sym)
