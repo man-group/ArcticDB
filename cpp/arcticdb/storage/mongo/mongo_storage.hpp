@@ -58,27 +58,6 @@ class MongoStorage final : public Storage<MongoStorage> {
     std::string prefix_;
 };
 
-//TODO I don't see why we need a factory at all
-class MongoStorageFactory final : public StorageFactory<MongoStorageFactory> {
-
-    using Parent = StorageFactory<MongoStorageFactory>;
-    friend Parent;
-
-  public:
-    using Config = arcticdb::proto::mongo_storage::Config;
-    using StorageType = MongoStorage;
-
-    MongoStorageFactory(Config conf) :
-        conf_(std::move(conf)) {}
-
-  private:
-    auto do_create_storage(LibraryPath lib, OpenMode mode) {
-        return MongoStorage(std::move(lib), mode, conf_);
-    }
-
-    Config conf_;
-};
-
 inline arcticdb::proto::storage::VariantStorage pack_config(InstanceUri uri) {
     arcticdb::proto::storage::VariantStorage output;
     arcticdb::proto::mongo_storage::Config cfg;

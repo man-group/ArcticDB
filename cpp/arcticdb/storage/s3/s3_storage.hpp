@@ -77,26 +77,6 @@ class S3Storage final : public Storage<S3Storage> {
     std::string bucket_name_;
 };
 
-
-class S3StorageFactory final : public StorageFactory<S3StorageFactory> {
-    using Parent = StorageFactory<S3StorageFactory>;
-    friend Parent;
-
-  public:
-    using Config = arcticdb::proto::s3_storage::Config;
-    using StorageType = S3Storage;
-
-    S3StorageFactory(const Config &conf) :
-        conf_(conf) {
-    }
-  private:
-    auto do_create_storage(const LibraryPath &lib, OpenMode mode) {
-            return S3Storage(lib, mode, conf_);
-    }
-
-    Config conf_;
-};
-
 inline arcticdb::proto::storage::VariantStorage pack_config(const std::string &bucket_name) {
     arcticdb::proto::storage::VariantStorage output;
     arcticdb::proto::s3_storage::Config cfg;

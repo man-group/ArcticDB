@@ -64,25 +64,6 @@ private:
     std::string bucket_name_;
 };
 
-class NfsBackedStorageFactory final : public StorageFactory<NfsBackedStorageFactory> {
-    using Parent = StorageFactory<NfsBackedStorageFactory>;
-    friend Parent;
-
-public:
-    using Config = arcticdb::proto::nfs_backed_storage::Config;
-    using StorageType = NfsBackedStorageFactory;
-
-    NfsBackedStorageFactory(const Config &conf) :
-        conf_(conf) {
-    }
-private:
-    auto do_create_storage(const LibraryPath &lib, OpenMode mode) {
-        return NfsBackedStorage(lib, mode, conf_);
-    }
-
-    Config conf_;
-};
-
 inline arcticdb::proto::storage::VariantStorage pack_config(const std::string &bucket_name) {
     arcticdb::proto::storage::VariantStorage output;
     arcticdb::proto::nfs_backed_storage::Config cfg;
