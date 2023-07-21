@@ -501,6 +501,8 @@ public:
         if (validate_)
             entry->validate();
 
+        check_key(key, entry);
+
         auto journal_key = to_atom(std::move(journal_single_key(store, key, entry->head_)));
         write_to_entry(entry, key, journal_key);
         write_symbol_ref(store, key, journal_key);
@@ -563,6 +565,22 @@ private:
 
         if (validate_)
             entry->validate();
+    }
+
+    void check_key(const AtomKey &key,
+                   const std::shared_ptr<VersionMapEntry> &entry) {
+        if (entry->head_)
+            return;
+
+        if (std::getenv("ARCTICDB_NO_STRICT_SYMBOL_CHECK"))
+            return;
+
+        for (unsigned char c : std::get<std::string>(key.id())) {
+            if (c < 32 || c > 127) {
+                throw UserInputException(
+                        "The symbol key can contain only valid ASCII chars in the range 32-127 inclusive");
+            } // TODO: Use a better exception
+        }
     }
 
     bool has_cached_entry(const StreamId &stream_id, const LoadParameter load_param) const {

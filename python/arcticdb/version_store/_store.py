@@ -85,7 +85,7 @@ UNSUPPORTED_S3_CHARS = {"*", "&", "<", ">"}
 # If we have enabled STRICT_SYMBOL_CHECK (enabled by default)
 # we will use the SUPPORTED_CHARS set for the check
 # To add more chars as supported, simply add them to the set, e.g. SUPPORTED_CHARS.add('c')
-SUPPORTED_CHARS = set([chr(c) for c in range(33, 127)])
+SUPPORTED_CHARS = set([chr(c) for c in range(1, 128)])
 SUPPORTED_CHARS = SUPPORTED_CHARS.difference(UNSUPPORTED_S3_CHARS)
 MAX_SYMBOL_SIZE = (2**8) - 1
 
@@ -374,18 +374,10 @@ class NativeVersionStore:
                 f"Symbol length {len(symbol)} chars exceeds the max supported length of {MAX_SYMBOL_SIZE} chars."
             )
 
-        symbol_set = set(symbol)
-        if os.environ.get("STRICT_SYMBOL_CHECK", "1") == "1":
-            if len(symbol_set.difference(SUPPORTED_CHARS)):
-                raise ArcticNativeNotYetImplemented(
-                    f"The symbol '{symbol}' has one or more characters that are not currently supported.\nThe supported"
-                    f" chars are ({','.join(sorted(SUPPORTED_CHARS))})."
-                )
-        else:
-            if len(set(symbol).intersection(UNSUPPORTED_S3_CHARS)):
-                raise ArcticNativeNotYetImplemented(
-                    f"The symbol '{symbol}' has one or more unsupported characters({','.join(UNSUPPORTED_S3_CHARS)})."
-                )
+        if len(set(symbol).intersection(UNSUPPORTED_S3_CHARS)):
+            raise ArcticNativeNotYetImplemented(
+                f"The symbol '{symbol}' has one or more unsupported characters({','.join(UNSUPPORTED_S3_CHARS)})."
+            )
 
     def try_flatten_and_write_composite_object(self, symbol, data, metadata, pickle_on_failure, dynamic_strings):
         fl = Flattener()

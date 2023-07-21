@@ -70,6 +70,7 @@ struct SymbolListSuite : Test {
     const StreamId symbol_1 {"aaa"};
     const StreamId symbol_2 {"bbb"};
     const StreamId symbol_3 {"ccc"};
+    const StreamId bad_symbol {"prefix\0postfix" };
 
     std::shared_ptr<InMemoryStore> store = std::make_shared<InMemoryStore>();
     std::shared_ptr<VersionMap> version_map = std::make_shared<VersionMap>();
@@ -117,6 +118,17 @@ TEST_P(SymbolListWithReadFailures, FromSymbolListSource) {
     ASSERT_EQ(copy.size(), 2) << fmt::format("got {}", copy);
     ASSERT_EQ(copy[0], StreamId{"aaa"});
     ASSERT_EQ(copy[1], StreamId{"bbb"});
+}
+
+TEST_F(SymbolListSuite, BadSymbol) {
+
+    auto bad_key = atom_key_builder().version_id(1).creation_ts(2).content_hash(3).start_index(
+            4).end_index(5).build(bad_symbol, KeyType::TABLE_INDEX);
+
+    version_map->write_version(store, bad_key);
+
+    std::vector<StreamId> symbols = symbol_list.get_symbols(store);
+    ASSERT_THAT(symbols, UnorderedElementsAre(bad_symbol));
 }
 
 TEST_F(SymbolListSuite, Persistence) {

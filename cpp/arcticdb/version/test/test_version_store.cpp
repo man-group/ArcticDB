@@ -118,6 +118,20 @@ TEST(PythonVersionStore, DeleteAllVersions) {
     ASSERT_EQ(mock_store->num_atom_keys_of_type(KeyType::TABLE_INDEX), 0);
 }
 
+TEST(PythonVersionStore, WriteBadStreamId) {
+    using namespace arcticdb;
+    using namespace arcticdb::storage;
+    using namespace arcticdb::stream;
+    using namespace arcticdb::pipelines;
+
+    auto [version_store, mock_store] = python_version_store_in_memory();
+
+    std::string stream_id(1, 0);
+
+    auto version_map = version_store._test_get_version_map();
+    write_version_frame(stream_id, 0, version_store, 1000000, true);
+}
+
 TEST(PythonVersionStore, IterationVsRefWrite) {
     using namespace arcticdb;
     using namespace arcticdb::storage;

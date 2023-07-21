@@ -235,6 +235,8 @@ struct GetAllVersions : rc::state::Command<Model, MapStorePair> {
 };
 
 RC_GTEST_PROP(VersionMap, Rapidcheck, ()) {
+    char env[] = "ARCTICDB_NO_STRICT_SYMBOL_CHECK=0";
+    putenv(env);
     VersionMapModel initial_state;
     ScopedConfig max_blocks("VersionMap.MaxVersionBlocks", 1);
     ScopedConfig reload_interval("VersionMap.ReloadInterval", 0);
@@ -255,6 +257,8 @@ RC_GTEST_PROP(VersionMap, Rapidcheck, ()) {
 }
 
 RC_GTEST_PROP(VersionMap, RapidcheckTombstones, ()) {
+    char env[] = "ARCTICDB_NO_STRICT_SYMBOL_CHECK=0";
+    putenv(env);
     VersionMapTombstonesModel initial_state;
     auto num_symbols = *rc::gen::inRange(size_t{1}, size_t{5});
     initial_state.symbols_ = *rc::gen::container<std::vector<std::string>>(num_symbols, rc::gen::nonEmpty(rc::gen::string<std::string>()));
