@@ -72,26 +72,6 @@ class AzureStorage final : public Storage<AzureStorage> {
     Azure::Storage::Blobs::BlobClientOptions get_client_options(const Config &conf);
 };
 
-
-class AzureStorageFactory final : public StorageFactory<AzureStorageFactory> {
-    using Parent = StorageFactory<AzureStorageFactory>;
-    friend Parent;
-
-  public:
-    using Config = arcticdb::proto::azure_storage::Config;
-    using StorageType = AzureStorage;
-
-    AzureStorageFactory(const Config &conf) :
-        conf_(conf) {
-    }
-  private:
-    auto do_create_storage(const LibraryPath &lib, OpenMode mode) {
-            return AzureStorage(lib, mode, conf_);
-    }
-
-    Config conf_;
-};
-
 inline arcticdb::proto::storage::VariantStorage pack_config(const std::string &container_name) {
     arcticdb::proto::storage::VariantStorage output;
     arcticdb::proto::azure_storage::Config cfg;
