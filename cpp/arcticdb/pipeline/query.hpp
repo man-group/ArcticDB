@@ -110,8 +110,15 @@ struct SpecificVersionQuery {
     SignedVersionId version_id_;
 };
 
+using VersionQueryType = std::variant<
+        std::monostate, // Represents "latest"
+        SnapshotVersionQuery,
+        TimestampVersionQuery,
+        SpecificVersionQuery
+        >;
+
 struct VersionQuery {
-    std::variant<std::monostate, SnapshotVersionQuery, TimestampVersionQuery, SpecificVersionQuery> content_;
+    VersionQueryType content_;
     std::optional<bool> skip_compat_;
     std::optional<bool> iterate_on_failure_;
 
