@@ -491,6 +491,8 @@ public:
         if (!skip_compat && !has_stored_entry(store, stream_id))
             do_backwards_compat_check(store, stream_id);
 
+        verify_stream_id(store, stream_id);
+
         return storage_reload(store, stream_id, load_param, iterate_on_failure);
     }
 
@@ -500,8 +502,6 @@ public:
         const std::shared_ptr<VersionMapEntry> &entry) {
         if (validate_)
             entry->validate();
-
-        check_key(key, entry);
 
         auto journal_key = to_atom(std::move(journal_single_key(store, key, entry->head_)));
         write_to_entry(entry, key, journal_key);
@@ -567,15 +567,15 @@ private:
             entry->validate();
     }
 
-    void check_key(const AtomKey &key,
-                   const std::shared_ptr<VersionMapEntry> &entry) {
-        if (entry->head_)
+    void verify_stream_id(const std::shared_ptr<Store> &store,
+                   const StreamId &stream_id) {
+        if (has_cached_entry(stream_id, LoadParameter{LoadType::LOAD_LATEST}) || has_stored_entry(store, stream_id))
             return;
 
         if (std::getenv("ARCTICDB_NO_STRICT_SYMBOL_CHECK"))
             return;
 
-        for (unsigned char c : std::get<std::string>(key.id())) {
+        for (unsigned char c : std::get<std::string>(stream_id)) {
             if (c < 32 || c > 127) {
                 throw UserInputException(
                         "The symbol key can contain only valid ASCII chars in the range 32-127 inclusive");

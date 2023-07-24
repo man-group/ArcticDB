@@ -127,9 +127,16 @@ TEST(PythonVersionStore, WriteBadStreamId) {
     auto [version_store, mock_store] = python_version_store_in_memory();
 
     std::string stream_id(1, 0);
-
     auto version_map = version_store._test_get_version_map();
-    write_version_frame(stream_id, 0, version_store, 1000000, true);
+    try
+    {
+        write_version_frame(stream_id, 0, version_store, 1000000, true);
+    }
+    catch (const UserInputException& err)
+    {
+        ASSERT_STREQ("The symbol key can contain only valid ASCII chars in the range 32-127 inclusive", err.what());
+    }
+    delete_all(version_store._test_get_store(), true);
 }
 
 TEST(PythonVersionStore, IterationVsRefWrite) {

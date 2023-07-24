@@ -254,6 +254,9 @@ RC_GTEST_PROP(VersionMap, Rapidcheck, ()) {
           //  DeleteRefKey<VersionMapModel>,
             Compact<VersionMapModel>>()
     );
+
+    char null_env[] = "ARCTICDB_NO_STRICT_SYMBOL_CHECK";
+    putenv(null_env);
 }
 
 RC_GTEST_PROP(VersionMap, RapidcheckTombstones, ()) {
@@ -276,4 +279,6 @@ RC_GTEST_PROP(VersionMap, RapidcheckTombstones, ()) {
                          DeleteAllVersions<VersionMapTombstonesModel>,
                          Compact<VersionMapTombstonesModel>>()
     );
+    char null_env[] = "ARCTICDB_NO_STRICT_SYMBOL_CHECK";
+    putenv(null_env);
 }
