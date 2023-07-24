@@ -133,17 +133,16 @@ inline void NfsBackedStorage::do_update(Composite<KeySegmentPair>&& kvs, UpdateO
     s3::detail::do_update_impl(std::move(enc), root_folder_, bucket_name_, s3_client_, NfsBucketizer{});
 }
 
-template<class Visitor>
-void NfsBackedStorage::do_read(Composite<VariantKey>&& ks, Visitor&& visitor, ReadKeyOpts opts) {
-    auto func = [v = std::forward<Visitor>(visitor)] (const VariantKey& k, Segment&& seg) mutable {
-        v(unencode_object_id(k), std::move(seg));
+inline void NfsBackedStorage::do_read(Composite<VariantKey>&& ks, const ReadVisitor& visitor, ReadKeyOpts opts) {
+    auto func = [visitor] (const VariantKey& k, Segment&& seg) mutable {
+        visitor(std::move(unencode_object_id(k)), std::move(seg));
     };
 
     auto enc = ks.transform([] (auto&& key) {
         return encode_object_id(key);
     });
 
-    s3::detail::do_read_impl(std::move(enc), std::move(func), root_folder_, bucket_name_, s3_client_, NfsBucketizer{}, opts);
+    s3::detail::do_read_impl(std::move(enc), func, root_folder_, bucket_name_, s3_client_, NfsBucketizer{}, opts);
 }
 
 inline void NfsBackedStorage::do_remove(Composite<VariantKey>&& ks, RemoveOpts) {
@@ -154,8 +153,8 @@ inline void NfsBackedStorage::do_remove(Composite<VariantKey>&& ks, RemoveOpts) 
 }
 
 template<class Visitor>
-void NfsBackedStorage::do_iterate_type(KeyType key_type, Visitor&& visitor, const std::string& prefix) {
-    auto func = [v = std::move(visitor), prefix=prefix] (VariantKey&& k) mutable {
+void NfsBackedStorage::do_iterate_type(KeyType key_type, Visitor&& func, const std::string& prefix) {
+    auto visitor = [v = std::move(func), prefix=prefix] (VariantKey&& k) mutable {
         auto key = unencode_object_id(k);
         if(prefix.empty() || variant_key_id(key) == StreamId{prefix})
             v(std::move(key));

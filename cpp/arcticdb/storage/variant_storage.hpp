@@ -69,10 +69,9 @@ class VariantStorage final : public Storage<VariantStorage<VariantStorageType>> 
         });
     }
 
-    template<class Visitor>
-    void do_read(Composite<VariantKey>&& ks, Visitor &&visitor, ReadKeyOpts opts) {
+    void do_read(Composite<VariantKey>&& ks, const ReadVisitor& visitor, ReadKeyOpts opts) {
         return delegate([&](auto &&impl) {
-            return impl.read(std::move(ks), std::move(visitor), opts);
+            return impl.read(std::move(ks), visitor, opts);
         });
     }
 

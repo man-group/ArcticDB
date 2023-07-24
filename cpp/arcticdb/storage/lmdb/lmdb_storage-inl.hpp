@@ -92,8 +92,7 @@ inline void LmdbStorage::do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts o
     txn.commit();
 }
 
-template<class Visitor>
-    void LmdbStorage::do_read(Composite<VariantKey>&& ks, Visitor &&visitor, storage::ReadKeyOpts) {
+inline void LmdbStorage::do_read(Composite<VariantKey>&& ks, const ReadVisitor& visitor, storage::ReadKeyOpts) {
     ARCTICDB_SAMPLE(LmdbStorageRead, 0)
     auto txn = ::lmdb::txn::begin(env(), nullptr, MDB_RDONLY);
 

@@ -48,8 +48,7 @@ class S3Storage final : public Storage<S3Storage> {
 
     void do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts opts);
 
-    template<class Visitor>
-    void do_read(Composite<VariantKey>&& ks, Visitor &&visitor, ReadKeyOpts opts);
+    void do_read(Composite<VariantKey>&& ks, const ReadVisitor& visitor, ReadKeyOpts opts);
 
     void do_remove(Composite<VariantKey>&& ks, RemoveOpts opts);
 
