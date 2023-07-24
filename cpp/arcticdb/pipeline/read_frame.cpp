@@ -212,9 +212,9 @@ void decode_or_expand_impl(
     if(handler) {
         handler->handle_type(data,
             dest,
+            dest_bytes,
             VariantField{&encoded_field_info},
             type_descriptor,
-            dest_bytes,
             std::move(buffers));
     } else {
         std::optional<util::BitMagic> bv;

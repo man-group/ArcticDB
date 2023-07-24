@@ -13,7 +13,7 @@ namespace arcticdb {
                 const uint8_t*& data,
                 uint8_t* dest,
                 size_t dest_bytes,
-                const arcticdb::proto::encoding::EncodedField& encoded_field_info,
+                const VariantField& encoded_field,
                 const entity::TypeDescriptor& type_descriptor,
                 std::shared_ptr<BufferHolder> buffers
         );

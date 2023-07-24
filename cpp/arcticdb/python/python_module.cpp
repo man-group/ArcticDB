@@ -25,10 +25,13 @@
 #include <arcticdb/util/global_lifetimes.hpp>
 #include <arcticdb/util/configs_map.hpp>
 #include <arcticdb/util/error_code.hpp>
+#include <arcticdb/python/python_handlers.hpp>
 
 #include <pybind11/pybind11.h>
 #include <folly/system/ThreadName.h>
 #include <folly/portability/PThread.h>
+#include "util/type_handler.hpp"
+#include "python_handlers.hpp"
 
 namespace py = pybind11;
 
@@ -253,6 +256,9 @@ void register_metrics(py::module && m){
         arcticdb::PrometheusConfigInstance::instance()->config.CopyFrom(config);
     });
 }
+void register_type_handlers() {
+    arcticdb::TypeHandlerRegistry::instance()->register_handler(arcticdb::DataType::EMPTYVAL, arcticdb::EmptyHandler());
+}
 
 PYBIND11_MODULE(arcticdb_ext, m) {
     m.doc() = R"pbdoc(
@@ -299,6 +305,7 @@ PYBIND11_MODULE(arcticdb_ext, m) {
     register_log(m.def_submodule("log"));
     register_instrumentation(m.def_submodule("instrumentation"));
     register_metrics(m.def_submodule("metrics"));
+    register_type_handlers();
 
     auto cleanup_callback = []() {
         using namespace arcticdb;

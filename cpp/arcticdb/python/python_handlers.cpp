@@ -6,7 +6,7 @@ namespace arcticdb {
             const uint8_t*& data ARCTICDB_UNUSED,
             uint8_t* dest,
             size_t dest_bytes,
-            const arcticdb::proto::encoding::EncodedField& encoded_field_info ARCTICDB_UNUSED,
+            const VariantField& encoded_field_info ARCTICDB_UNUSED,
             const entity::TypeDescriptor& type_descriptor ARCTICDB_UNUSED,
             std::shared_ptr<BufferHolder> buffers ARCTICDB_UNUSED
     ) {
