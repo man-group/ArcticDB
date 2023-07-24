@@ -635,6 +635,8 @@ pybind11_add_module(arcticdb_ext MODULE
         python/arctic_version.hpp
         python/reader.hpp
         python/adapt_read_dataframe.hpp
+        python/python_handlers.hpp
+        python/python_handlers.cpp
         )
 
 set (additional_link_flags "")

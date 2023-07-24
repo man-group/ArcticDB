@@ -208,8 +208,14 @@ void decode_or_expand_impl(
     const TypeDescriptor& type_descriptor,
     size_t dest_bytes,
     std::shared_ptr<BufferHolder> buffers) {
-    if(auto handler = TypeHandlerRegistry::instance()->get_handler(type_descriptor.data_type()); handler) {
-        handler->handle_type(data, dest, VariantField{&encoded_field_info}, type_descriptor, dest_bytes, buffers);
+    const std::shared_ptr<TypeHandler>& handler = TypeHandlerRegistry::instance()->get_handler(type_descriptor.data_type());
+    if(handler) {
+        handler->handle_type(data,
+            dest,
+            VariantField{&encoded_field_info},
+            type_descriptor,
+            dest_bytes,
+            std::move(buffers));
     } else {
         std::optional<util::BitMagic> bv;
         if (encoded_field_info.has_ndarray() && encoded_field_info.ndarray().sparse_map_bytes() > 0) {
@@ -293,6 +299,18 @@ void advance_skipped_cols(
     }
 }
 
+template<typename IteratorType>
+bool remaining_fields_empty(IteratorType it, const PipelineContextRow& context) {
+    while(it.has_next()) {
+        const StreamDescriptor& stream_desc = context.descriptor();
+        const Field& field = stream_desc.fields(it.source_field_pos());
+        if(!is_empty_type(field.type().data_type())) {
+            return false;
+        }
+    }
+    return true;
+}
+
 void decode_into_frame_static(
     SegmentInMemory &frame,
     PipelineContextRow &context,
@@ -338,7 +356,7 @@ void decode_into_frame_static(
                         it.dest_col(),
                         m.frame_field_descriptor_.name());
 
-            util::check(data != end, "Reached end of input block with {} fields to decode", it.remaining_fields());
+            util::check(data != end || remaining_fields_empty(it, context), "Reached end of input block with {} fields to decode", it.remaining_fields());
             decode_or_expand(data, buffer.data() + m.offset_bytes_, encoded_field, m.source_type_desc_,  m.dest_bytes_, buffers);
             ARCTICDB_TRACE(log::codec(), "Decoded column {} to position {}", field_name, data - begin);
 

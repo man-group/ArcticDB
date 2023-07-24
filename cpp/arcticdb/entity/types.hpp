@@ -115,6 +115,8 @@ enum class ValueType : uint8_t {
 
     UTF_DYNAMIC = 11,
     ASCII_DYNAMIC = 12,
+    EMPTY = 13,
+    COUNT // Not a real value type, should not be added to proto descriptor. Used to count the number of items in the enum
 };
 
 // Sequence types are composed of more than one element
@@ -152,12 +154,17 @@ constexpr bool is_utf_type(ValueType v) {
     return v == ValueType::UTF8_FIXED || v == ValueType::UTF_DYNAMIC;
 }
 
+constexpr bool is_empty_type(ValueType v) {
+    return v == ValueType::EMPTY;
+}
+
 enum class SizeBits : uint8_t {
     UNKNOWN_SIZE_BITS = 0,
     S8 = 1,
     S16 = 2,
     S32 = 3,
     S64 = 4,
+    COUNT
 };
 
 constexpr SizeBits get_size_bits(uint8_t size) {
@@ -196,6 +203,7 @@ enum class DataType : uint8_t {
     UTF_FIXED64 = detail::combine_val_bits(ValueType::UTF8_FIXED, SizeBits::S64),
     UTF_DYNAMIC64 = detail::combine_val_bits(ValueType::UTF_DYNAMIC, SizeBits::S64),
     BYTES_DYNAMIC64 = detail::combine_val_bits(ValueType::BYTES, SizeBits::S64),
+    EMPTYVAL = detail::combine_val_bits(ValueType::EMPTY, SizeBits::S64),
 #undef DT_COMBINE
     UNKNOWN = 0,
 };
@@ -282,6 +290,10 @@ constexpr bool is_utf_type(DataType v){
     return is_utf_type(slice_value_type(v));
 }
 
+constexpr bool is_empty_type(DataType v){
+    return is_empty_type(slice_value_type(v));
+}
+
 static_assert(slice_value_type((DataType::UINT16)) == ValueType(1));
 static_assert(get_type_size(DataType::UINT32) == 4);
 static_assert(get_type_size(DataType::UINT64) == 8);
@@ -357,6 +369,7 @@ DATA_TYPE_TAG(ASCII_FIXED64, std::uint64_t)
 DATA_TYPE_TAG(ASCII_DYNAMIC64, std::uint64_t)
 DATA_TYPE_TAG(UTF_FIXED64, std::uint64_t)
 DATA_TYPE_TAG(UTF_DYNAMIC64, std::uint64_t)
+DATA_TYPE_TAG(EMPTYVAL, uintptr_t)
 #undef DATA_TYPE_TAG
 
 enum class Dimension : uint8_t {

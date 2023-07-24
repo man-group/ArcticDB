@@ -149,6 +149,8 @@ void aggregator_set_data(
                     }
                 }
             }
+        } else if constexpr (is_empty_type(dt)) {
+
         } else {
             auto ptr = tensor.template ptr_cast<RawType>(row);
             if (sparsify_floats) {

@@ -35,6 +35,7 @@ std::string_view datatype_to_str(const DataType dt) {
         TO_STR(ASCII_DYNAMIC64)
         TO_STR(UTF_FIXED64)
         TO_STR(UTF_DYNAMIC64)
+        TO_STR(EMPTYVAL)
         //    TO_STR(UTF8_STRING)
 //     TO_STR(BYTES)
         //    TO_STR(PICKLE)

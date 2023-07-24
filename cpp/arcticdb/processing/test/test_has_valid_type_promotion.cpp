@@ -121,3 +121,14 @@ TEST(HasValidTypePromotion, FloatFloat) {
     EXPECT_FALSE(has_valid_type_promotion(float64, float32));
 }
 
+TEST(HasValidTypePromotion, EmptyToEverything) {
+    using namespace arcticdb;
+    using namespace arcticdb::entity;
+    TypeDescriptor source(ValueType::EMPTY, SizeBits::S64, Dimension::Dim0);
+    for(int value_type = int(ValueType::UNKNOWN_VALUE_TYPE); value_type < int(ValueType::COUNT); ++value_type) {
+        for(int size_bits = int(SizeBits::UNKNOWN_SIZE_BITS); size_bits < int(SizeBits::COUNT); ++size_bits) {
+            const TypeDescriptor target(ValueType(value_type), SizeBits(size_bits), Dimension::Dim0);
+            ASSERT_EQ(has_valid_type_promotion(source, target), target);
+        }
+    }
+}
