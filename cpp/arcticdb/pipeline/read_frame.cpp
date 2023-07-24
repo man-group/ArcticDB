@@ -208,8 +208,14 @@ void decode_or_expand_impl(
     const TypeDescriptor& type_descriptor,
     size_t dest_bytes,
     std::shared_ptr<BufferHolder> buffers) {
-    if(auto handler = TypeHandlerRegistry::instance()->get_handler(type_descriptor.data_type()); handler) {
-        handler->handle_type(data, dest, VariantField{&encoded_field_info}, type_descriptor, dest_bytes, buffers);
+    const std::shared_ptr<TypeHandler>& handler = TypeHandlerRegistry::instance()->get_handler(type_descriptor.data_type());
+    if(handler) {
+        handler->handle_type(data,
+            dest,
+            VariantField{&encoded_field_info},
+            type_descriptor,
+            dest_bytes,
+            std::move(buffers));
     } else {
         std::optional<util::BitMagic> bv;
         if (encoded_field_info.has_ndarray() && encoded_field_info.ndarray().sparse_map_bytes() > 0) {

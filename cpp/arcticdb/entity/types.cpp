@@ -42,4 +42,3 @@ std::string_view datatype_to_str(const DataType dt) {
 }
 
 } // namespace arcticdb
-
