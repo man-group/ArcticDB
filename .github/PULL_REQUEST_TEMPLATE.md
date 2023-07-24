@@ -25,7 +25,7 @@ See: https://docs.github.com/en/issues/tracking-your-work-with-issues/linking-a-
    Code change checklist...
   </summary>
  
- - [ ] Have you updated the relevent docstring/documentation pages?
+ - [ ] Have you updated the relevant docstring/documentation pages?
  - [ ] Does your change support the following schema options:
    - [ ] Dynamic schema
    - [ ] Sparse data
