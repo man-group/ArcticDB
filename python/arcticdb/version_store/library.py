@@ -813,7 +813,7 @@ class Library:
         as_of : AsOf, default=None
             Return the data as it was as of the point in time. ``None`` means that the latest version should be read. The
             various types of this parameter mean:
-           - ``int``: specific version number
+           - ``int``: specific version number. Negative indexing is supported, with -1 representing the latest version, -2 the version before that, etc.
            - ``str``: snapshot name which contains the version
            - ``datetime.datetime`` : the version of the data that existed ``as_of`` the requested point in time
 
