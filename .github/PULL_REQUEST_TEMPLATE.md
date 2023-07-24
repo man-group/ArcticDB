@@ -15,9 +15,22 @@ is merged.
 See: https://docs.github.com/en/issues/tracking-your-work-with-issues/linking-a-pull-request-to-an-issue
 -->
 
-
 #### What does this implement/fix? Explain your changes.
 
+
+#### Checklist
+
+<details>
+  <summary>
+   Code change checklist...
+  </summary>
+ 
+ - [ ] Have you updated the relevent docstring/documentation pages?
+ - [ ] Does your change support the following schema options:
+   - [ ] Dynamic schema
+   - [ ] Sparse data
+ - [ ] Do all exceptions introduced raise appropriate [error messages](https://docs.arcticdb.io/error_messages/)?
+</details>
 
 #### Any other comments?
 
