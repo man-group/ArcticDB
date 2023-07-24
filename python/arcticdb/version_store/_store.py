@@ -805,7 +805,7 @@ class NativeVersionStore:
             )
 
     def create_column_stats(
-        self, symbol: str, column_stats: Dict[str, Set[str]], as_of: VersionQueryInput = None
+        self, symbol: str, column_stats: Dict[str, Set[str]], as_of: Optional[VersionQueryInput] = None
     ) -> None:
         """
         Calculates the specified column statistics for each row-slice for the given symbol. In the future, these
@@ -821,11 +821,8 @@ class NativeVersionStore:
             Keys are column names.
             Values are sets of statistic types to build for that column. Options are:
                 "MINMAX" : store the minimum and maximum value for the column in each row-slice
-        as_of : `str` or `int` or `datetime.datetime`
-            Create the column stats for the version as it was as_of the point in time.
-            `int` : specific version number
-            `str` : snapshot name which contains the version
-            `datetime.datetime` : the version of the data that existed as_of the requested point in time
+        as_of : `Optional[VersionQueryInput]`, default=None
+            See documentation of `read` method for more details.
 
         Returns
         -------
@@ -836,7 +833,7 @@ class NativeVersionStore:
         self.version_store.create_column_stats_version(symbol, column_stats, version_query)
 
     def drop_column_stats(
-        self, symbol: str, column_stats: Optional[Dict[str, Set[str]]] = None, as_of: VersionQueryInput = None
+        self, symbol: str, column_stats: Optional[Dict[str, Set[str]]] = None, as_of: Optional[VersionQueryInput] = None
     ) -> None:
         """
         Deletes the specified column statistics for the given symbol.
@@ -848,11 +845,8 @@ class NativeVersionStore:
         column_stats: `Optional[Dict[str, Set[str]]], default=None`
             The column stats to drop. If not provided, all column stats will be dropped.
             See documentation of `create_column_stats` method for more details.
-        as_of : `str` or `int` or `datetime.datetime`
-            Create the column stats for the version as it was as_of the point in time.
-            `int` : specific version number
-            `str` : snapshot name which contains the version
-            `datetime.datetime` : the version of the data that existed as_of the requested point in time
+        as_of : `Optional[VersionQueryInput]`, default=None
+            See documentation of `read` method for more details.
 
         Returns
         -------
@@ -862,7 +856,7 @@ class NativeVersionStore:
         version_query = self._get_version_query(as_of)
         self.version_store.drop_column_stats_version(symbol, column_stats, version_query)
 
-    def read_column_stats(self, symbol: str, as_of: VersionQueryInput = None, **kwargs) -> pd.DataFrame:
+    def read_column_stats(self, symbol: str, as_of: Optional[VersionQueryInput] = None, **kwargs) -> pd.DataFrame:
         """
         Read all the column statistics data that has been generated for the given symbol.
 
@@ -870,11 +864,8 @@ class NativeVersionStore:
         ----------
         symbol: `str`
             Symbol name.
-        as_of : `str` or `int` or `datetime.datetime`
-            Create the column stats for the version as it was as_of the point in time.
-            `int` : specific version number
-            `str` : snapshot name which contains the version
-            `datetime.datetime` : the version of the data that existed as_of the requested point in time
+        as_of : `Optional[VersionQueryInput]`, default=None
+            See documentation of `read` method for more details.
 
         Returns
         -------
@@ -885,7 +876,9 @@ class NativeVersionStore:
         data = denormalize_dataframe(self.version_store.read_column_stats_version(symbol, version_query))
         return data
 
-    def get_column_stats_info(self, symbol: str, as_of: VersionQueryInput = None, **kwargs) -> Dict[str, Set[str]]:
+    def get_column_stats_info(
+        self, symbol: str, as_of: Optional[VersionQueryInput] = None, **kwargs
+    ) -> Dict[str, Set[str]]:
         """
         Read the column statistics dictionary for the given symbol.
 
@@ -893,11 +886,8 @@ class NativeVersionStore:
         ----------
         symbol: `str`
             Symbol name.
-        as_of : `str` or `int` or `datetime.datetime`
-            Create the column stats for the version as it was as_of the point in time.
-            `int` : specific version number
-            `str` : snapshot name which contains the version
-            `datetime.datetime` : the version of the data that existed as_of the requested point in time
+        as_of : `Optional[VersionQueryInput]`, default=None
+            See documentation of `read` method for more details.
 
         Returns
         -------
@@ -1495,7 +1485,7 @@ class NativeVersionStore:
             Symbol name.
         as_of : `Optional[VersionQueryInput]`, default=None
             Return the data as it was as_of the point in time. Defaults to getting the latest version.
-            `int` : specific version number
+            `int` : specific version number. Negative indexing is supported, with -1 representing the latest version, -2 the version before that, etc.
             `str` : snapshot name which contains the version
             `datetime.datetime` : the version of the data that existed as_of the requested point in time
         date_range: `Optional[DateRangeInput]`, default=None
