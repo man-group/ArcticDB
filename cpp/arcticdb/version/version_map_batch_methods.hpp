@@ -196,7 +196,7 @@ inline std::optional<AtomKey> get_key_for_version_query(
             auto version_key = get_version_key_from_time_for_versions(timestamp_version.timestamp_, version_map_entry->get_indexes(false));
             if(version_key.has_value()){
                 auto version_id = version_key.value().version_id();
-                return find_index_key_for_version_id(version_id, version_map_entry);
+                return find_index_key_for_version_id(version_id, version_map_entry, false);
             }else{
                 return std::nullopt;
             }
