@@ -18,7 +18,8 @@ dependencies:
   - libevent
   - libmongocxx
   - zstd
-  - pybind11
+  # TODO: remove once the regression is fixed in pybind 2.11.X
+  - pybind11 < 2.11
   - pcre
   - cyrus-sasl
   - aws-sdk-cpp
