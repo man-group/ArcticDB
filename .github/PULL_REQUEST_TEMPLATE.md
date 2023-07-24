@@ -26,10 +26,11 @@ See: https://docs.github.com/en/issues/tracking-your-work-with-issues/linking-a-
   </summary>
  
  - [ ] Have you updated the relevant docstring/documentation pages?
- - [ ] Does your change support the following schema options:
+ - [ ] Does your change have automated test coverage for the following schema options:
    - [ ] Dynamic schema
    - [ ] Sparse data
  - [ ] Do all exceptions introduced raise appropriate [error messages](https://docs.arcticdb.io/error_messages/)?
+ - [ ] Are API changes highlighted in the above section?
 </details>
 
 #### Any other comments?
