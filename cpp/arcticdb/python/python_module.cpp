@@ -31,6 +31,8 @@
 #include <pybind11/pybind11.h>
 #include <folly/system/ThreadName.h>
 #include <folly/portability/PThread.h>
+#include "util/type_handler.hpp"
+#include "python_handlers.hpp"
 
 namespace py = pybind11;
 
@@ -254,6 +256,9 @@ void register_metrics(py::module && m){
         arcticdb::python_util::pb_from_python(py_config, config);
         arcticdb::PrometheusConfigInstance::instance()->config.CopyFrom(config);
     });
+}
+void register_type_handlers() {
+    arcticdb::TypeHandlerRegistry::instance()->register_handler(arcticdb::DataType::EMPTYVAL, arcticdb::EmptyHandler());
 }
 
 /// Register handling of non-trivial types. For more information @see arcticdb::TypeHandlerRegistry and
