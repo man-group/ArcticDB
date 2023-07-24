@@ -330,20 +330,13 @@ void do_remove_impl(Composite<VariantKey>&& ks,
         throw KeyNotFoundException(Composite<VariantKey>(std::move(failed_deletes)));
 }
 
-inline auto default_prefix_handler() {
-    return [] (const std::string& prefix, const std::string& key_type_dir, const KeyDescriptor& key_descriptor, KeyType) {
-        return !prefix.empty() ? fmt::format("{}/{}*{}", key_type_dir, key_descriptor, prefix) : key_type_dir;
-    };
-}
-
-template<class Visitor, class S3ClientType, class KeyBucketizer, class PrefixHandler>
+template<class Visitor, class S3ClientType, class KeyBucketizer>
 void do_iterate_type_impl(KeyType key_type,
                           Visitor&& visitor,
                           const std::string& root_folder,
                           const std::string& bucket_name,
                           S3ClientType& s3_client,
                           KeyBucketizer&& bucketizer,
-                          PrefixHandler&& prefix_handler = default_prefix_handler(),
                           const std::string& prefix = std::string{}
 ) {
     ARCTICDB_SAMPLE(S3StorageIterateType, 0)
@@ -355,7 +348,7 @@ void do_iterate_type_impl(KeyType key_type,
     // TODO: Set the IndexDescriptor correctly
     KeyDescriptor key_descriptor(prefix,
         is_ref_key_class(key_type) ? IndexDescriptor::UNKNOWN : IndexDescriptor::TIMESTAMP, FormatType::TOKENIZED);
-    auto key_prefix = prefix_handler(prefix, key_type_dir, key_descriptor, key_type);
+    auto key_prefix = !prefix.empty() ? fmt::format("{}/{}*{}", key_type_dir, key_descriptor, prefix) : key_type_dir;
     ARCTICDB_RUNTIME_DEBUG(log::storage(), "Searching for objects in bucket {} with prefix {}", bucket_name, key_prefix);
     Aws::S3::Model::ListObjectsV2Request objects_request;
     objects_request.WithBucket(bucket_name.c_str());
@@ -456,11 +449,7 @@ inline void S3Storage::do_remove(Composite<VariantKey>&& ks, RemoveOpts) {
 
 template<class Visitor>
 void S3Storage::do_iterate_type(KeyType key_type, Visitor&& visitor, const std::string& prefix) {
-    auto prefix_handler = [] (const std::string& prefix, const std::string& key_type_dir, const KeyDescriptor key_descriptor, KeyType) {
-        return !prefix.empty() ? fmt::format("{}/{}*{}", key_type_dir, key_descriptor, prefix) : key_type_dir;
-    };
-
-    detail::do_iterate_type_impl(key_type, std::move(visitor), root_folder_, bucket_name_, s3_client_, FlatBucketizer{}, std::move(prefix_handler), prefix);
+    detail::do_iterate_type_impl(key_type, std::move(visitor), root_folder_, bucket_name_, s3_client_, FlatBucketizer{}, prefix);
 }
 
 inline bool S3Storage::do_key_exists(const VariantKey& key) {

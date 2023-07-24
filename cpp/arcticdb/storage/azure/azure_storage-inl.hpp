@@ -217,26 +217,19 @@ void do_remove_impl(Composite<VariantKey>&& ks,
         }
 }
 
-inline auto default_prefix_handler() {
-    return [] (const std::string& prefix, const std::string& key_type_dir, const KeyDescriptor& key_descriptor, KeyType) {
-        return !prefix.empty() ? fmt::format("{}/{}*{}", key_type_dir, key_descriptor, prefix) : key_type_dir;
-    };
-}
-
-template<class Visitor, class KeyBucketizer, class PrefixHandler>
+template<class Visitor, class KeyBucketizer>
 void do_iterate_type_impl(KeyType key_type,
     Visitor&& visitor,
     const std::string& root_folder,
     Azure::Storage::Blobs::BlobContainerClient& container_client,
     KeyBucketizer&& bucketizer,
-    PrefixHandler&& prefix_handler = default_prefix_handler(),
     const std::string& prefix = std::string{}) {
         ARCTICDB_SAMPLE(AzureStorageIterateType, 0)
         auto key_type_dir = key_type_folder(root_folder, key_type);
 
         KeyDescriptor key_descriptor(prefix,
             is_ref_key_class(key_type) ? IndexDescriptor::UNKNOWN : IndexDescriptor::TIMESTAMP, FormatType::TOKENIZED);
-        auto key_prefix = prefix_handler(prefix, key_type_dir, key_descriptor, key_type);
+        auto key_prefix = !prefix.empty() ? fmt::format("{}/{}*{}", key_type_dir, key_descriptor, prefix) : key_type_dir;
         ARCTICDB_RUNTIME_DEBUG(log::storage(), "Searching for objects with prefix {}", key_prefix);
         const auto root_folder_size = key_type_dir.size() + 1 + bucketizer.bucketize_length(key_type);
 
@@ -313,11 +306,7 @@ inline void AzureStorage::do_remove(Composite<VariantKey>&& ks, RemoveOpts) {
 
 template<class Visitor>
 void AzureStorage::do_iterate_type(KeyType key_type, Visitor&& visitor, const std::string& prefix) {
-    auto prefix_handler = [] (const std::string& prefix, const std::string& key_type_dir, const KeyDescriptor key_descriptor, KeyType) {
-        return !prefix.empty() ? fmt::format("{}/{}*{}", key_type_dir, key_descriptor, prefix) : key_type_dir;
-    };
-
-    detail::do_iterate_type_impl(key_type, std::move(visitor), root_folder_, container_client_, FlatBucketizer{}, std::move(prefix_handler), prefix);
+    detail::do_iterate_type_impl(key_type, std::move(visitor), root_folder_, container_client_, FlatBucketizer{}, std::move(prefix_handler));
 }
 
 inline bool AzureStorage::do_key_exists(const VariantKey& key) {
