@@ -829,7 +829,6 @@ def test_read_batch_time_stamp(arctic_library):
     sym = "sym_"
     num_versions = 3
     num_symbols = 3
-    original_dataframes = []
     for v_num in range(num_versions):
         write_requests = []
         for sym_num in range(num_symbols):
