@@ -129,8 +129,6 @@ def test_unhandled_chars_default(s3_version_store, unhandled_char):
         s3_version_store.write(sym, df)
     syms = s3_version_store.list_symbols()
     assert sym not in syms
-    # assert "prefix" not in syms
-
 
 @pytest.mark.parametrize("unhandled_char", [chr(0)])
 @mock.patch.dict(os.environ, {"ARCTICDB_NO_STRICT_SYMBOL_CHECK": "0"})
@@ -142,6 +140,15 @@ def test_unhandled_chars_no_strict_check(s3_version_store, unhandled_char):
     with pytest.raises(InternalException):
         s3_version_store.list_symbols()
 
+@pytest.mark.parametrize("unhandled_char", [chr(128)])
+@mock.patch.dict(os.environ, {"ARCTICDB_NO_STRICT_SYMBOL_CHECK": "0"})
+def test_unhandled_chars_already_present(s3_version_store, unhandled_char):
+    sym = f"prefix{unhandled_char}postfix"
+    df = sample_dataframe()
+    s3_version_store.write(sym, df)
+
+    with mock.patch.dict(os.environ, clear=True):
+        s3_version_store.write(sym, df)
 
 @pytest.mark.parametrize("version_store", SMOKE_TEST_VERSION_STORES)
 def test_with_prune(request, version_store, symbol):

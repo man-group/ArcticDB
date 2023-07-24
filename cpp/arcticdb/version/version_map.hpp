@@ -573,7 +573,10 @@ private:
             return;
 
         if (std::getenv("ARCTICDB_NO_STRICT_SYMBOL_CHECK"))
+        {
+            ARCTICDB_DEBUG(log::version(), "Key with stream id {} will not be strictly checked because ARCTICDB_NO_STRICT_SYMBOL_CHECK env var is set.", stream_id);
             return;
+        }
 
         for (unsigned char c : std::get<std::string>(stream_id)) {
             if (c < 32 || c > 127) {
