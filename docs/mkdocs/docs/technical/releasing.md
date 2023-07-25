@@ -3,17 +3,20 @@
 This document details the release process for ArcticDB. 
 ArcticDB is released onto [PyPi](https://pypi.org/project/arcticdb/) and [conda-forge](https://anaconda.org/conda-forge/arcticdb).
 
+## 0. Check Internal Tests
+
+Check Man Group's internal tests against the release candidate. See "ArcticDB - Support Process" internal wiki page.
+
 ## 1. Create a new tag
 
 Navigate to the [Tag Release](https://github.com/man-group/ArcticDB/actions/workflows/tag.yml) Github Action.
 
 Click `Run Workflow` on the right hand side:
-1. Type in the new version number
+1. Type in the new version number eg `1.6.0`.
 2. Click `Run workflow`.
 
 Leave `Bump branch to the next version` as `No`.
-This will create a branch off of `master` incrementing the version in `setup.cfg` but,
-as of the time of writing, we are leaving that unchanged.
+This will create a branch off of `master` incrementing the version in `setup.cfg` but we ignore it for now.
 
 The [build will now be running for the tag.](https://github.com/man-group/ArcticDB/actions/workflows/build.yml)
 
@@ -39,8 +42,8 @@ before an update to the feedstock.
 
 ## 3. Release to PyPi
 
-After building, GitHub Actions job you kicked off in step 2 after comitting
-the tag will be waiting on approval to deploy to PyPi.
+The GitHub Actions "Build and Test" job kicked off automatically at the end of step 1 will wait on approval to deploy to PyPi.
+
 Find the job and click approve to deploy.
 
 ## 4. Release to Conda
