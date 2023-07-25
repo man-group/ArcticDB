@@ -9,11 +9,11 @@ import sys
 import numpy as np
 import pandas as pd
 import pytest
-import time
 
 from arcticdb.util.test import assert_frame_equal
 from arcticdb_ext.exceptions import InternalException
 from arcticdb_ext.storage import KeyType, NoDataFoundException
+from arcticdb_ext.version_store import ManualClockVersionStore
 from arcticdb.version_store._normalization import NPDDataFrame
 from arcticdb.util.test import sample_dataframe
 
@@ -56,53 +56,40 @@ def test_delete_version_with_update(version_store_factory, pos, sym):
         assert_frame_equal(lmdb_version_store.read(symbol, 0).data, original_df)
 
 
-@pytest.mark.skip(reason="Flaky test, needs investigation.")
 def test_delete_by_timestamp(lmdb_version_store, sym):
     symbol = sym
-    time_initial = pd.Timestamp.utcnow()
-    time.sleep(0.1)
+    now = lmdb_version_store.version_store.get_store_current_timestamp_for_tests()
+    lmdb_version_store.version_store = ManualClockVersionStore(lmdb_version_store._library)
+    minute_in_ns = 60 * int(1e9)
 
+    ManualClockVersionStore.time = now - 5 * minute_in_ns
     lmdb_version_store.write(symbol, 1)  # v0
-    time_after_v0 = pd.Timestamp.utcnow()
-    time.sleep(0.1)
 
+    ManualClockVersionStore.time = now - 4 * minute_in_ns
     lmdb_version_store.write(symbol, 2)  # v1
-    time_after_v1 = pd.Timestamp.utcnow()
-    time.sleep(0.1)
 
+    ManualClockVersionStore.time = now - 3 * minute_in_ns
     lmdb_version_store.write(symbol, 3)  # v2
-    time_after_v2 = pd.Timestamp.utcnow()
-    time.sleep(0.1)
 
+    ManualClockVersionStore.time = now - 2 * minute_in_ns
     lmdb_version_store.write(symbol, 4)  # v3
-    time_after_v3 = pd.Timestamp.utcnow()
-    time.sleep(0.1)
 
+    ManualClockVersionStore.time = now - 1 * minute_in_ns
     lmdb_version_store.write(symbol, 5)  # v4
-    time_after_v4 = pd.Timestamp.utcnow()
 
-    lmdb_version_store._prune_previous_versions(
-        symbol, keep_mins=(pd.Timestamp.utcnow() - time_initial).microseconds / 60.0 / 1000000
-    )
+    lmdb_version_store._prune_previous_versions(symbol, keep_mins=5.5)
     assert len(lmdb_version_store.list_versions(symbol)) == 5
 
-    lmdb_version_store._prune_previous_versions(
-        symbol, keep_mins=(pd.Timestamp.utcnow() - time_after_v0).microseconds / 60.0 / 1000000
-    )
+    lmdb_version_store._prune_previous_versions(symbol, keep_mins=4.5)
     assert len(lmdb_version_store.list_versions(symbol)) == 4
 
-    lmdb_version_store._prune_previous_versions(
-        symbol, keep_mins=(pd.Timestamp.utcnow() - time_after_v3).microseconds / 60.0 / 1000000, keep_version=2
-    )
+    lmdb_version_store._prune_previous_versions(symbol, keep_mins=1.5, keep_version=2)
     assert len(lmdb_version_store.list_versions(symbol)) == 2
 
-    lmdb_version_store._prune_previous_versions(
-        symbol, keep_mins=(pd.Timestamp.utcnow() - time_after_v4).microseconds / 60.0 / 1000000
-    )
+    lmdb_version_store._prune_previous_versions(symbol, keep_mins=1.5)
     assert len(lmdb_version_store.list_versions(symbol)) == 1
 
 
-@pytest.mark.skip
 def test_clear_lmdb(lmdb_version_store, sym):
     symbol = sym
     lmdb_version_store.version_store.clear()

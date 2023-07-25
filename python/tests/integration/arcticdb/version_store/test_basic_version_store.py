@@ -29,7 +29,6 @@ from arcticdb.exceptions import (
     StreamDescriptorMismatch,
     UserInputException,
 )
-from arcticdb_ext.storage import NoDataFoundException
 from arcticdb.flattener import Flattener
 from arcticdb.version_store import NativeVersionStore
 from arcticdb.version_store._custom_normalizers import CustomNormalizer, register_normalizer
@@ -45,10 +44,11 @@ from arcticdb.util.test import (
     assert_frame_equal,
     assert_series_equal,
     config_context,
+    distinct_timestamps,
 )
 from arcticdb_ext.tools import AZURE_SUPPORT
 from tests.util.date import DateRange
-from arcticdb_ext import set_config_int, unset_config_int
+
 
 if sys.platform == "linux":
     SMOKE_TEST_VERSION_STORES = [
@@ -785,17 +785,17 @@ def test_is_pickled_by_snapshot(lmdb_version_store):
 def test_is_pickled_by_timestamp(lmdb_version_store):
     symbol = "test"
     will_be_pickled = [1, 2, 3]
-    lmdb_version_store.write(symbol, will_be_pickled)
-    time_after_first_write = pd.Timestamp.utcnow()
-    time.sleep(0.1)
+    with distinct_timestamps(lmdb_version_store) as first_write_timestamps:
+        lmdb_version_store.write(symbol, will_be_pickled)
 
     not_pickled = pd.DataFrame({"a": np.arange(3)})
-    lmdb_version_store.write(symbol, not_pickled)
+    with distinct_timestamps(lmdb_version_store):
+        lmdb_version_store.write(symbol, not_pickled)
 
     with pytest.raises(NoDataFoundException):
         lmdb_version_store.read(symbol, pd.Timestamp(0))
     assert lmdb_version_store.is_symbol_pickled(symbol) is False
-    assert lmdb_version_store.is_symbol_pickled(symbol, time_after_first_write) is True
+    assert lmdb_version_store.is_symbol_pickled(symbol, first_write_timestamps.after) is True
     assert lmdb_version_store.is_symbol_pickled(symbol, pd.Timestamp(np.iinfo(np.int64).max)) is False
 
 
@@ -878,17 +878,13 @@ def test_list_versions_with_snapshots(lmdb_version_store):
 
 
 def test_read_ts(lmdb_version_store):
-    lmdb_version_store.write("a", 1)  # v0
-    time.sleep(0.001)  # In case utcnow() has a lower precision and returning a timestamp before the write (#496)
-    time_after_first_write = pd.Timestamp.utcnow()
-
-    assert lmdb_version_store.read("a", as_of=time_after_first_write).version == 0
-    time.sleep(0.1)
-    lmdb_version_store.write("a", 2)  # v1
-    time.sleep(0.11)
-
-    lmdb_version_store.write("a", 3)  # v2
-    time.sleep(0.1)
+    with distinct_timestamps(lmdb_version_store) as first_write_timestamps:
+        lmdb_version_store.write("a", 1)  # v0
+    assert lmdb_version_store.read("a", as_of=first_write_timestamps.after).version == 0
+    with distinct_timestamps(lmdb_version_store):
+        lmdb_version_store.write("a", 2)  # v1
+    with distinct_timestamps(lmdb_version_store):
+        lmdb_version_store.write("a", 3)  # v2
     lmdb_version_store.write("a", 4)  # v3
     lmdb_version_store.snapshot("snap3")
     versions = lmdb_version_store.list_versions()
@@ -912,7 +908,7 @@ def test_read_ts(lmdb_version_store):
     assert vitem.version == 3
     assert vitem.data == 4
 
-    vitem = lmdb_version_store.read("a", as_of=time_after_first_write)
+    vitem = lmdb_version_store.read("a", as_of=first_write_timestamps.after)
     assert vitem.version == 0
     assert vitem.data == 1
 
