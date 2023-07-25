@@ -97,6 +97,7 @@ def test_simple_flow(lmdb_version_store_no_symbol_list, symbol):
     lmdb_version_store_no_symbol_list.delete(symbol)
     assert lmdb_version_store_no_symbol_list.list_symbols() == lmdb_version_store_no_symbol_list.list_versions() == []
 
+
 @pytest.mark.parametrize(
     "special_char",
     [
