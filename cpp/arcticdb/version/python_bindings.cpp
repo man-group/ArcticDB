@@ -651,13 +651,16 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
         .def("latest_timestamp",
              &PythonVersionStore::latest_timestamp,
              "Returns latest timestamp of a symbol")
+        .def("get_store_current_timestamp_for_tests",
+             &PythonVersionStore::get_store_current_timestamp_for_tests,
+             "For testing purposes only")
         ;
 
     py::class_<ManualClockVersionStore, PythonVersionStore>(version, "ManualClockVersionStore")
         .def(py::init<const std::shared_ptr<storage::Library>&>())
         .def_property_static("time",
             []() { return util::ManualClock::time_.load(); },
-            [](entity::timestamp ts) { util::ManualClock::time_ = ts; })
+            [](const py::class_<ManualClockVersionStore>&, entity::timestamp ts) { util::ManualClock::time_ = ts; })
          ;
 
     py::class_<LocalVersionedEngine>(version, "VersionedEngine")

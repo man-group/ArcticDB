@@ -379,6 +379,12 @@ public:
     void _test_set_store(std::shared_ptr<Store> store);
     std::shared_ptr<VersionMap> _test_get_version_map();
 
+    /** Get the time used by the Store (e.g. that would be used in the AtomKey).
+        For testing purposes only. */
+    entity::timestamp get_store_current_timestamp_for_tests() {
+        return store()->current_timestamp();
+    }
+
 protected:
     VersionedItem compact_incomplete_dynamic(
             const StreamId& stream_id,
