@@ -780,10 +780,7 @@ if(${TEST})
     else()
         set(COMMON_PUBLIC_TEST_LIBRARIES
                 arcticdb_core_static
-<<<<<<< HEAD
-=======
                 atomic
->>>>>>> 729c743d552512f0e9514799fff636b22ed6338d
                 GTest::gtest
                 GTest::gmock
                 Python::Python # + pybind11::pybind11 (transitively included) = pybind11::embed, but latter is sometimes not found...
