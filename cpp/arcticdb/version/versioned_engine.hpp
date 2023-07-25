@@ -23,6 +23,24 @@ namespace arcticdb::version_store {
 using namespace arcticdb::entity;
 using namespace arcticdb::pipelines;
 
+struct ReadVersionOutput {
+    ReadVersionOutput() = delete;
+    ReadVersionOutput(VersionedItem&& versioned_item, FrameAndDescriptor&& frame_and_descriptor):
+            versioned_item_(std::move(versioned_item)),
+            frame_and_descriptor_(std::move(frame_and_descriptor)) {}
+
+    ARCTICDB_MOVE_ONLY_DEFAULT(ReadVersionOutput)
+
+    VersionedItem versioned_item_;
+    FrameAndDescriptor frame_and_descriptor_;
+};
+
+/**
+ * The VersionedEngine interface contains methods that are portable between languages.
+ *
+ * It is currently implemented by LocalVersionedEngine, but could also be implemented with a RemoteVersionedEngine that
+ * sends Protobufs down a wire (to a server with a LocalVersionedEngine talking directly to the storage).
+ */
 class VersionedEngine {
 
 public:
@@ -81,7 +99,7 @@ public:
         const PreDeleteChecks& checks = default_pre_delete_checks
     ) = 0;
 
-    virtual std::pair<VersionedItem,   arcticdb::proto::descriptors::TimeSeriesDescriptor> restore_version(
+    virtual std::pair<VersionedItem,   TimeseriesDescriptor> restore_version(
         const StreamId& id,
         const VersionQuery& version_query
         ) = 0;
@@ -91,7 +109,7 @@ public:
         ReadQuery& read_query,
         const ReadOptions& read_options) = 0;
 
-    virtual std::pair<VersionedItem, FrameAndDescriptor> read_dataframe_version_internal(
+    virtual ReadVersionOutput read_dataframe_version_internal(
         const StreamId &stream_id,
         const VersionQuery& version_query,
         ReadQuery& read_query,

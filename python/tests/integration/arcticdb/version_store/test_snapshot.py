@@ -35,38 +35,38 @@ def test_re_snapshot_with_same_name(lmdb_version_store):
         lmdb_version_store.snapshot("snap_1")
 
 
-def test_read_old_snapshot_data(s3_version_store):
+def test_read_old_snapshot_data(object_version_store):
     original_data = [1, 2, 3]
     modified_data = [1, 2, 3, 4]
-    s3_version_store.write("c", original_data)
-    s3_version_store.snapshot("snap_3")
-    s3_version_store.write("c", modified_data)
-    s3_version_store.snapshot("snap_4")
-    assert s3_version_store.read("c", as_of="snap_3").data == original_data
-    assert s3_version_store.read("c").data == modified_data
+    object_version_store.write("c", original_data)
+    object_version_store.snapshot("snap_3")
+    object_version_store.write("c", modified_data)
+    object_version_store.snapshot("snap_4")
+    assert object_version_store.read("c", as_of="snap_3").data == original_data
+    assert object_version_store.read("c").data == modified_data
 
 
-def test_snapshot_metadata(s3_version_store):
+def test_snapshot_metadata(object_version_store):
     original_data = [1, 2, 3]
     metadata = {"metadata": "Because why not?"}
     snap_name = "meta_snap"
-    s3_version_store.write(snap_name, original_data)
-    s3_version_store.snapshot(snap_name, metadata=metadata)
+    object_version_store.write(snap_name, original_data)
+    object_version_store.snapshot(snap_name, metadata=metadata)
 
-    assert s3_version_store.read(snap_name).data == original_data
-    all_snaps = s3_version_store.list_snapshots()
+    assert object_version_store.read(snap_name).data == original_data
+    all_snaps = object_version_store.list_snapshots()
     metadata_for_snap = [meta for snap, meta in all_snaps.items() if snap == snap_name][0]
     assert metadata_for_snap == metadata
 
 
-def test_snapshots_skip_symbol(s3_version_store):
+def test_snapshots_skip_symbol(object_version_store):
     original_data = [1, 2, 3]
-    s3_version_store.write("f", original_data)
-    s3_version_store.write("g", original_data)
-    s3_version_store.snapshot("snap_5", metadata=None, skip_symbols=["f"])
-    assert s3_version_store.read("g", as_of="snap_5").data == original_data
+    object_version_store.write("f", original_data)
+    object_version_store.write("g", original_data)
+    object_version_store.snapshot("snap_5", metadata=None, skip_symbols=["f"])
+    assert object_version_store.read("g", as_of="snap_5").data == original_data
     with pytest.raises(Exception):
-        s3_version_store.read("f", as_of="snap_5")
+        object_version_store.read("f", as_of="snap_5")
 
 
 def test_snapshot_explicit_versions(lmdb_version_store):
@@ -85,29 +85,29 @@ def test_snapshot_explicit_versions(lmdb_version_store):
     assert lib.read("j", as_of="snap_8").data == modified_data
 
 
-def test_list_symbols_with_snaps(s3_version_store):
+def test_list_symbols_with_snaps(object_version_store):
     original_data = [1, 2, 3]
 
-    s3_version_store.write("s1", original_data)
-    s3_version_store.write("s2", original_data)
+    object_version_store.write("s1", original_data)
+    object_version_store.write("s2", original_data)
 
-    s3_version_store.snapshot("snap_9")
-    s3_version_store.write("s3", original_data)
+    object_version_store.snapshot("snap_9")
+    object_version_store.write("s3", original_data)
 
-    assert "s3" not in s3_version_store.list_symbols(snapshot="snap_9")
-    assert "s3" in s3_version_store.list_symbols()
+    assert "s3" not in object_version_store.list_symbols(snapshot="snap_9")
+    assert "s3" in object_version_store.list_symbols()
 
 
-def test_list_versions(s3_version_store):
+def test_list_versions(object_version_store):
     original_data = [1, 2, 3]
 
-    s3_version_store.write("t1", original_data)
-    s3_version_store.write("t2", original_data)
+    object_version_store.write("t1", original_data)
+    object_version_store.write("t2", original_data)
 
-    s3_version_store.snapshot("snap_versions")
-    s3_version_store.write("t1", original_data)
+    object_version_store.snapshot("snap_versions")
+    object_version_store.write("t1", original_data)
 
-    all_versions = s3_version_store.list_versions()
+    all_versions = object_version_store.list_versions()
 
     assert sorted([v["version"] for v in all_versions if v["symbol"] == "t1" and not v["deleted"]]) == sorted([0, 1])
 

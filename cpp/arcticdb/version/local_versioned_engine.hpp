@@ -19,9 +19,10 @@
 #include <arcticdb/pipeline/input_tensor_frame.hpp>
 #include <arcticdb/version/version_core.hpp>
 #include <arcticdb/version/versioned_engine.hpp>
+#include <arcticdb/entity/descriptor_item.hpp>
+#include <arcticdb/entity/data_error.hpp>
 
 #include <sstream>
-
 namespace arcticdb::version_store {
 
 /**
@@ -31,11 +32,22 @@ namespace arcticdb::version_store {
  */
 using SpecificAndLatestVersionKeys = std::pair<std::shared_ptr<std::unordered_map<std::pair<StreamId, VersionId>, AtomKey>>,
                                                 std::shared_ptr<std::unordered_map<StreamId, AtomKey>>>;
+struct VersionIdAndDedupMapInfo{
+    VersionId version_id;
+    std::shared_ptr<DeDupMap> de_dup_map;
+    version_store::UpdateInfo update_info;
+};
+
+struct IndexKeyAndUpdateInfo{
+    entity::AtomKey index_key;
+    version_store::UpdateInfo update_info;
+};
 class LocalVersionedEngine : public VersionedEngine {
 
 public:
     explicit LocalVersionedEngine(
-        const std::shared_ptr<storage::Library>& library);
+        const std::shared_ptr<storage::Library>& library,
+        const std::optional<std::string>& license_key = std::nullopt);
 
     virtual ~LocalVersionedEngine() = default;
 
@@ -63,7 +75,7 @@ public:
         const StreamId& stream_id,
         SegmentInMemory &&seg) override;
 
-    std::pair<VersionedItem, arcticdb::proto::descriptors::TimeSeriesDescriptor> restore_version(
+    std::pair<VersionedItem, TimeseriesDescriptor> restore_version(
         const StreamId& id,
         const VersionQuery& version_query
         ) override;
@@ -82,7 +94,7 @@ public:
 
     std::optional<VersionedItem> get_specific_version(
         const StreamId &stream_id,
-        VersionId version_id,
+        SignedVersionId signed_version_id,
         const VersionQuery& version_query);
 
     std::optional<VersionedItem> get_version_at_time(
@@ -109,13 +121,13 @@ public:
         ReadQuery& read_query,
         const ReadOptions& read_options) override;
 
-    std::pair<VersionedItem, FrameAndDescriptor> read_dataframe_version_internal(
+    ReadVersionOutput read_dataframe_version_internal(
         const StreamId &stream_id,
         const VersionQuery& version_query,
         ReadQuery& read_query,
         const ReadOptions& read_options) override;
 
-    std::pair<VersionedItem, std::optional<google::protobuf::Any>> read_descriptor_version_internal(
+    DescriptorItem read_descriptor_internal(
             const StreamId& stream_id,
             const VersionQuery& version_query);
 
@@ -176,10 +188,18 @@ public:
     );
 
     folly::Future<std::pair<std::optional<VariantKey>, std::optional<google::protobuf::Any>>> get_metadata(
-        std::optional<AtomKey> key);
+        std::optional<AtomKey>&& key);
 
     folly::Future<std::pair<std::optional<VariantKey>, std::optional<google::protobuf::Any>>> get_metadata_async(
         folly::Future<std::optional<AtomKey>>&& version_fut);
+
+    folly::Future<DescriptorItem> get_descriptor(
+        AtomKey&& key);
+
+    folly::Future<DescriptorItem> get_descriptor_async(
+        folly::Future<std::optional<AtomKey>>&& version_fut,
+        const StreamId& stream_id,
+        const VersionQuery& version_query);
 
     void create_column_stats_internal(
         const VersionedItem& versioned_item,
@@ -204,7 +224,7 @@ public:
     FrameAndDescriptor read_column_stats_internal(
         const VersionedItem& versioned_item);
 
-    std::pair<VersionedItem, FrameAndDescriptor> read_column_stats_version_internal(
+    ReadVersionOutput read_column_stats_version_internal(
         const StreamId& stream_id,
         const VersionQuery& version_query);
 
@@ -238,10 +258,10 @@ public:
         bool sparsify
         );
 
-    std::vector<AtomKey> batch_write_internal(
+    std::vector<folly::Future<AtomKey>> batch_write_internal(
         std::vector<VersionId> version_ids,
         const std::vector<StreamId>& stream_ids,
-        std::vector<InputTensorFrame> frames,
+        std::vector<InputTensorFrame>&& frames,
         std::vector<std::shared_ptr<DeDupMap>> de_dup_maps,
         bool validate_index
     );
@@ -254,28 +274,28 @@ public:
         const WriteOptions& write_options,
         bool validate_index);
 
-    std::vector<std::pair<VersionedItem, FrameAndDescriptor>> batch_read_keys(
+    std::vector<ReadVersionOutput> batch_read_keys(
         const std::vector<AtomKey> &keys,
         const std::vector<ReadQuery> &read_queries,
         const ReadOptions& read_options);
 
-    std::vector<std::pair<VersionedItem, FrameAndDescriptor>> batch_read_internal(
+    std::vector<std::variant<ReadVersionOutput, DataError>> batch_read_internal(
         const std::vector<StreamId>& stream_ids,
         const std::vector<VersionQuery>& version_queries,
         std::vector<ReadQuery>& read_queries,
         const ReadOptions& read_options);
 
-    std::vector<std::pair<VersionedItem, FrameAndDescriptor>> temp_batch_read_internal_direct(
+    std::vector<std::variant<ReadVersionOutput, DataError>> temp_batch_read_internal_direct(
         const std::vector<StreamId>& stream_ids,
         const std::vector<VersionQuery>& version_queries,
         std::vector<ReadQuery>& read_queries,
         const ReadOptions& read_options);
 
-    std::vector<std::pair<VersionedItem, std::optional<google::protobuf::Any>>> batch_read_descriptor_internal(
+    std::vector<DescriptorItem> batch_read_descriptor_internal(
             const std::vector<StreamId>& stream_ids,
             const std::vector<VersionQuery>& version_queries);
 
-    std::vector<std::pair<VersionedItem, arcticdb::proto::descriptors::TimeSeriesDescriptor>> batch_restore_version_internal(
+    std::vector<std::pair<VersionedItem, TimeseriesDescriptor>> batch_restore_version_internal(
         const std::vector<StreamId>& stream_ids,
         const std::vector<VersionQuery>& version_queries);
 
@@ -324,6 +344,24 @@ public:
         const std::optional<AtomKey>& maybe_prev,
         const WriteOptions& write_options
     );
+
+    folly::Future<VersionedItem> write_index_key_to_version_map_async(
+        const std::shared_ptr<VersionMap> &version_map,
+        const AtomKey&& index_key,
+        const UpdateInfo& stream_update_info,
+        bool prune_previous_versions);
+
+    std::vector<VersionedItem> batch_write_versioned_dataframe_internal(
+        const std::vector<StreamId>& stream_ids,
+        std::vector<InputTensorFrame>&& frames,
+        bool prune_previous_versions,
+        bool validate_index
+    );
+
+    VersionIdAndDedupMapInfo create_version_id_and_dedup_map(
+        const version_store::UpdateInfo&& update_info, 
+        const StreamId& stream_id, 
+        const WriteOptions& write_options);
 
     std::unordered_map<KeyType, std::pair<size_t, size_t>> scan_object_sizes();
     std::shared_ptr<Store>& _test_get_store() { return store_; }
@@ -376,13 +414,13 @@ protected:
         const std::vector<StreamId>& stream_ids,
         const std::vector<VersionQuery>& version_queries);
 
-
 private:
 
     std::shared_ptr<Store> store_;
     arcticdb::proto::storage::VersionStoreConfig cfg_;
     std::shared_ptr<VersionMap> version_map_ = std::make_shared<VersionMap>();
     std::shared_ptr<SymbolList> symbol_list_;
+    std::optional<std::string> license_key_;
 };
 
 } // arcticdb::version_store

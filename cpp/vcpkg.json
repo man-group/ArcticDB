@@ -56,7 +56,9 @@
     {
       "name": "arrow",
       "default-features": false
-    }
+    },
+    "azure-identity-cpp",
+    "azure-storage-blobs-cpp"
   ],
   "overrides": [
     {

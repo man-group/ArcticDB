@@ -24,9 +24,10 @@ T or_else(T val, T or_else_val, T def = T()) {
 } // anonymous
 
 LmdbStorage::LmdbStorage(const LibraryPath &library_path, OpenMode mode, const Config &conf) :
-    Parent(library_path, mode),
-    write_mutex_(new std::mutex{}),
-    env_(std::make_unique<::lmdb::env>(::lmdb::env::create(conf.flags()))) {
+        Parent(library_path, mode),
+        write_mutex_(new std::mutex{}),
+        env_(std::make_unique<::lmdb::env>(::lmdb::env::create(conf.flags()))),
+        dbi_by_key_type_() {
     fs::path root_path = conf.path().c_str();
     auto lib_path_str = library_path.to_delim_path(fs::path::preferred_separator);
 
@@ -63,6 +64,15 @@ LmdbStorage::LmdbStorage(const LibraryPath &library_path, OpenMode mode, const C
     env().set_max_readers(or_else(conf.max_readers(), 1024U));
     env().open(lib_dir.generic_string().c_str(), MDB_NOTLS);
 
+    auto txn = ::lmdb::txn::begin(env());
+
+    arcticdb::entity::foreach_key_type([&txn, this](KeyType&& key_type) {
+        std::string db_name = fmt::format("{}", key_type);
+        ::lmdb::dbi dbi = ::lmdb::dbi::open(txn, db_name.data(), MDB_CREATE);
+        dbi_by_key_type_.insert({std::move(db_name), std::move(dbi)});
+    });
+
+    txn.commit();
 
     ARCTICDB_DEBUG(log::storage(), "Opened lmdb storage at {} with map size {}", lib_dir.generic_string(), format_bytes(mapsize));
 }

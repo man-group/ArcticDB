@@ -101,6 +101,7 @@ else ()
     find_library(Sasl2_LIBRARY NAMES sasl2 libsasl2 PATHS /usr/local/lib/libsasl2.a REQUIRED)
 endif ()
 
+
 find_path(BITMAGIC_INCLUDE_DIRS "bitmagic/bm.h")
 
 set(FIND_LIBRARY_USE_LIB64_PATHS ON)
@@ -145,6 +146,17 @@ ENDIF()
 
 set(CMAKE_INSTALL_RPATH "\\$ORIGIN/lib")
 
+if (NOT WIN32)
+    if(NOT ${ARCTICDB_USING_CONDA})
+        # Compilers on conda-forge are relatively strict.
+        # For now, we do not want to treat warnings as errors for those builds.
+        add_compile_options("-Werror")
+    endif()
+    add_compile_options("-ggdb")
+    add_compile_options("-fvisibility=hidden")
+    add_compile_options("-fno-omit-frame-pointer")
+endif ()
+
 ## Core library without python bindings ##
 set(arcticdb_srcs
         # header files
@@ -174,6 +186,7 @@ set(arcticdb_srcs
         entity/key.hpp
         entity/key-inl.hpp
         entity/metrics.hpp
+        entity/data_error.hpp
         entity/native_tensor.hpp
         entity/performance_tracing.hpp
         entity/protobuf_mappings.hpp
@@ -185,6 +198,7 @@ set(arcticdb_srcs
         entity/types-inl.hpp
         entity/variant_key.hpp
         entity/versioned_item.hpp
+        entity/descriptor_item.hpp
         log/log.hpp
         log/trace.hpp
         pipeline/column_mapping.hpp
@@ -220,7 +234,7 @@ set(arcticdb_srcs
         processing/processing_segment.hpp
         processing/bucketizer.hpp
         processing/clause.hpp
-        processing/execution_context.hpp
+        processing/expression_context.hpp
         processing/expression_node.hpp
         storage/common.hpp
         storage/config_resolvers.hpp
@@ -235,16 +249,17 @@ set(arcticdb_srcs
         storage/mongo/mongo_client.hpp
         storage/mongo/mongo_instance.hpp
         storage/mongo/mongo_storage.hpp
+        storage/object_store_utils.hpp
         storage/s3/nfs_backed_storage.hpp
         storage/s3/nfs_backed_storage-inl.hpp
         storage/s3/s3_client_accessor.hpp
         storage/s3/s3_storage-inl.hpp
         storage/s3/s3_storage_tool.hpp
         storage/s3/s3_storage_tool-inl.hpp
-        storage/s3/s3_utils.hpp
         storage/storage_factory.hpp
         storage/storage_options.hpp
         storage/storage.hpp
+        storage/storage_override.hpp
         storage/store.hpp
         storage/variant_storage.hpp
         stream/aggregator.hpp
@@ -313,6 +328,7 @@ set(arcticdb_srcs
         util/variant.hpp
         version/de_dup_map.hpp
         version/op_log.hpp
+        version/schema_checks.hpp
         version/snapshot.hpp
         version/version_constants.hpp
         version/version_core.hpp
@@ -333,12 +349,15 @@ set(arcticdb_srcs
         codec/codec.cpp
         codec/encoding_sizes.cpp
         codec/segment.cpp
+        codec/variant_encoded_field_collection.cpp
         column_store/chunked_buffer.cpp
         column_store/column.cpp
         column_store/memory_segment_impl.cpp
         column_store/memory_segment_impl.cpp
         column_store/string_pool.cpp
+        entity/field_collection.cpp
         entity/key.cpp
+        entity/merge_descriptors.cpp
         entity/metrics.cpp
         entity/performance_tracing.cpp
         entity/types.cpp
@@ -403,14 +422,15 @@ set(arcticdb_srcs
         version/version_core.cpp
         version/version_store_api.cpp
         version/version_utils.cpp
-        version/symbol_list.cpp
-        version/schema_checks.hpp
-        )
+        version/symbol_list.cpp)
 
 # Exclude vendored sources when using conda.
-if(NOT ${ARCTICDB_USING_CONDA})
+if(NOT ${ARCTICDB_USING_CONDA}) #Awaiting Azure sdk support in conda https://github.com/man-group/ArcticDB/issues/519
     list (APPEND arcticdb_srcs
         util/third_party/robin_hood.hpp
+        storage/azure/azure_storage-inl.hpp
+        storage/azure/azure_storage.hpp
+        storage/azure/azure_storage.cpp
     )
 endif()
 
@@ -469,6 +489,15 @@ set (arcticdb_core_libraries
         spdlog::spdlog
         Folly::folly # Transitively includes: double-conversion, gflags, glog, libevent, libssl, libcrypto, libiberty, libsodium
         )
+
+if(NOT ${ARCTICDB_USING_CONDA})  #Awaiting Azure sdk support in conda https://github.com/man-group/ArcticDB/issues/519
+    find_package(azure-identity-cpp CONFIG REQUIRED)
+    find_package(azure-storage-blobs-cpp CONFIG REQUIRED)
+    list (APPEND arcticdb_core_libraries
+        Azure::azure-identity
+        Azure::azure-storage-blobs
+    )
+endif()
 
 # Dependencies expose different names of their libraries depending
 # on their origin (i.e. vendored source or packages on conda-forge).
@@ -535,8 +564,8 @@ if (SSL_LINK)
         list(APPEND arcticdb_core_includes  ${KERBEROS_INCLUDE_DIR})
     endif()
 endif ()
-
 target_link_libraries(arcticdb_core_object PUBLIC ${arcticdb_core_libraries})
+
 
 target_include_directories(arcticdb_core_object
         PRIVATE
@@ -563,17 +592,6 @@ target_link_libraries(arcticdb_core PRIVATE
 
 GENERATE_EXPORT_HEADER(arcticdb_core)
 
-if (NOT WIN32)
-    if(NOT ${ARCTICDB_USING_CONDA})
-        # Compilers on conda-forge are relatively strict.
-        # For now, we do not want to treat warnings as errors for those builds.
-        add_compile_options("-Werror")
-    endif()
-    add_compile_options("-ggdb")
-    add_compile_options("-fvisibility=hidden")
-    add_compile_options("-fno-omit-frame-pointer")
-endif ()
-
 ## Core python bindings, private only ##
 set(arcticdb_python_srcs
         async/python_bindings.cpp
@@ -588,7 +606,6 @@ add_library(arcticdb_python STATIC ${arcticdb_python_srcs})
 
 target_link_libraries(arcticdb_python
         PUBLIC
-        #tsan
         arcticdb_core_static
         ${AWSSDK_LINK_LIBRARIES}
         )
@@ -631,7 +648,6 @@ endif()
 
 target_link_libraries(arcticdb_ext
         PUBLIC
-        #tsan
         PRIVATE
         arcticdb_python
         ${additional_link_flags}
@@ -743,6 +759,7 @@ if(${TEST})
     set(EXECUTABLE_PERMS OWNER_WRITE OWNER_READ OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE) # 755
 
     add_executable(test_unit_arcticdb ${unit_test_srcs})
+
     install(TARGETS test_unit_arcticdb RUNTIME
                 DESTINATION .
                 PERMISSIONS ${EXECUTABLE_PERMS}
@@ -763,6 +780,10 @@ if(${TEST})
     else()
         set(COMMON_PUBLIC_TEST_LIBRARIES
                 arcticdb_core_static
+<<<<<<< HEAD
+=======
+                atomic
+>>>>>>> 729c743d552512f0e9514799fff636b22ed6338d
                 GTest::gtest
                 GTest::gmock
                 Python::Python # + pybind11::pybind11 (transitively included) = pybind11::embed, but latter is sometimes not found...
@@ -796,7 +817,7 @@ if(${TEST})
                 )
     endif()
 
-    gtest_discover_tests(test_unit_arcticdb PROPERTIES DISCOVERY_TIMEOUT 30)
+    gtest_discover_tests(test_unit_arcticdb PROPERTIES DISCOVERY_TIMEOUT 60)
 
     set(rapidcheck_srcs
             column_store/test/rapidcheck_column_store.cpp
@@ -846,5 +867,5 @@ if(${TEST})
             )
     endif()
 
-    gtest_discover_tests(arcticdb_rapidcheck_tests PROPERTIES DISCOVERY_TIMEOUT 30)
+    gtest_discover_tests(arcticdb_rapidcheck_tests PROPERTIES DISCOVERY_TIMEOUT 60)
 endif()

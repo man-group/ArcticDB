@@ -118,7 +118,7 @@ See [On Disk Storage Format](../technical/on_disk_storage) and the [documentatio
 
 ### *How does ArcticDB handle streaming data?*
 
-ArcticDB has full support for streaming data workflows - including high throughput tick data pipelines. Please contact us at arcticdb@man.com for more information.
+ArcticDB support for streaming data is on our roadmap for the coming months
 
 ### *How does ArcticDB handle concurrent writers?*
 

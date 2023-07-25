@@ -5,20 +5,25 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
-import copy
+from collections import namedtuple
 import datetime
 from math import inf
 
 import numpy as np
 import pandas as pd
 
-from abc import ABC, abstractmethod
+from typing import Dict
 
 from arcticdb.exceptions import ArcticNativeException, UserInputException
+from arcticdb.preconditions import check
 from arcticdb.supported_types import time_types as supported_time_types
 
-from arcticdb_ext.version_store import ExecutionContextOptimisation as _Optimisation
-from arcticdb_ext.version_store import ExecutionContext as _ExecutionContext
+from arcticdb_ext.version_store import PipelineOptimisation as _Optimisation
+from arcticdb_ext.version_store import ExpressionContext as _ExpressionContext
+from arcticdb_ext.version_store import FilterClause as _FilterClause
+from arcticdb_ext.version_store import ProjectClause as _ProjectClause
+from arcticdb_ext.version_store import GroupByClause as _GroupByClause
+from arcticdb_ext.version_store import AggregationClause as _AggregationClause
 from arcticdb_ext.version_store import ExpressionName as _ExpressionName
 from arcticdb_ext.version_store import ColumnName as _ColumnName
 from arcticdb_ext.version_store import ValueName as _ValueName
@@ -40,8 +45,6 @@ from arcticdb_ext.version_store import (
 )
 from arcticdb_ext.version_store import ExpressionNode as _ExpressionNode
 from arcticdb_ext.version_store import OperationType as _OperationType
-
-from arcticdb_ext.version_store import ClauseBuilder as _ClauseBuilder
 
 COLUMN = "COLUMN"
 
@@ -254,85 +257,11 @@ def value_list_from_args(*args):
     return value_list
 
 
-class PyClauseBase(ABC):
-    @abstractmethod
-    def to_cpp(self, clause_builder) -> None:
-        pass
-
-
-class WhereClause(PyClauseBase):
-    def __init__(self, expr):
-        self.expr = expr
-
-    def __str__(self):
-        return "WhereClause: {}".format(str(self.expr))
-
-    def to_cpp(self, clause_builder):
-        clause_builder.add_FilterClause(visit_expression(self.expr))
-
-
-class ProjectClause(PyClauseBase):
-    def __init__(self, name, expr):
-        self.name = name
-        self.expr = expr
-
-    def __str__(self):
-        return "ProjectClause:{} -> {}".format(str(self.expr), self.name)
-
-    def to_cpp(self, clause_builder):
-        clause_builder.add_ProjectClause(self.name, visit_expression(self.expr))
-
-
-class Aggregation:
-    def __init__(self, source, operator):
-        self.source = source
-        self.operator = operator
-
-    def __str__(self):
-        return "{}({})".format(self.operator, self.source)
-
-    def to_cpp(self, clause_builder):
-        # TODO: Move to dictionary
-        if self.operator.lower() == "sum":
-            clause_builder.add_SumAggregationOperator(self.source, self.source)
-        elif self.operator.lower() == "mean":
-            clause_builder.add_MeanAggregationOperator(self.source, self.source)
-        elif self.operator.lower() == "max":
-            clause_builder.add_MaxAggregationOperator(self.source, self.source)
-        elif self.operator.lower() == "min":
-            clause_builder.add_MinAggregationOperator(self.source, self.source)
-        else:
-            raise ValueError("Aggregation operators are limited to 'sum', 'mean', 'max' and 'min'.")
-
-
-class GroupByClause(PyClauseBase):
-    def __init__(self, key, query_builder):
-        self.key = key
-        self.query_builder = query_builder
-        self.aggregations = {}
-
-    def __str__(self):
-        return "GroupByClause: key={}, [{}]".format(
-            str(self.key), ", ".join(["{} <- {}".format(k, v) for k, v in self.aggregations.items()])
-        )
-
-    def agg(self, aggregations):
-        for key, value in aggregations.items():
-            self.aggregations[key] = Aggregation(key, value)
-
-        return self.query_builder
-
-    def to_cpp(self, clause_builder):
-        def _expression_root_only(col_name: str):
-            _ec = _ExecutionContext()
-            _ec.root_node_name = _ExpressionName(col_name)
-
-            return _ec
-
-        clause_builder.prepare_AggregationClause(_expression_root_only(self.key))
-        for agg in self.aggregations.values():
-            agg.to_cpp(clause_builder)
-        clause_builder.finalize_AggregationClause()
+# These are just used for shallow/deep copying, pickling, and equality checks
+PythonFilterClause = namedtuple("PythonFilterClause", ["expr"])
+PythonProjectionClause = namedtuple("PythonProjectionClause", ["name", "expr"])
+PythonGroupByClause = namedtuple("PythonGroupByClause", ["name"])
+PythonAggregationClause = namedtuple("PythonAggregationClause", ["aggregations"])
 
 
 class QueryBuilder:
@@ -343,22 +272,20 @@ class QueryBuilder:
         >>> q = q[q["a"] < 5] (equivalent to q = q[q.a < 5] provided the column name is also a valid Python variable name)
         >>> dataframe = lib.read(symbol, query_builder=q).data
 
-    QueryBuilder objects are stateful, and so should not be reused without reinitialising:
-
-    >>> q = QueryBuilder()
-
     For Group By and Aggregation functionality please see the documentation for the `groupby`. For projection
     functionality, see the documentation for the `apply` method.
 
-    Supported numeric operations when filtering:
-
-    * Binary comparisons: <, <=, >, >=, ==, !=
-
-    * Unary NOT: ~
+    Supported arithmetic operations when projection or filtering:
 
     * Binary arithmetic: +, -, *, /
 
     * Unary arithmetic: -, abs
+
+    Supported filtering operations:
+
+    * Binary comparisons: <, <=, >, >=, ==, !=
+
+    * Unary NOT: ~
 
     * Binary combinators: &, |, ^
 
@@ -408,10 +335,11 @@ class QueryBuilder:
     """
 
     def __init__(self):
-        self.stages = []
+        self.clauses = []
+        # This is hacky, but the alternative is implementing pickle for the C++ classes of all the clauses, and the tree
+        # of classes these depend on, which is A LOT
+        self._python_clauses = []
         self._optimisation = _Optimisation.SPEED
-
-        self._clause_builder = _ClauseBuilder()
 
     def apply(self, name, expr):
         """
@@ -458,10 +386,12 @@ class QueryBuilder:
         QueryBuilder
             Modified QueryBuilder object.
         """
-        self.stages.append(ProjectClause(name, expr))
+        input_columns, expression_context = visit_expression(expr)
+        self.clauses.append(_ProjectClause(input_columns, name, expression_context))
+        self._python_clauses.append(PythonProjectionClause(name, expr))
         return self
 
-    def groupby(self, expr: str):
+    def groupby(self, name: str):
         """
         Group symbol by column name. GroupBy operations must be followed by an aggregation operator. Currently the following four aggregation
         operators are supported:
@@ -474,8 +404,8 @@ class QueryBuilder:
 
         Parameters
         ----------
-        expr: `str`
-            Name of the symbol to group on. Note that currently GroupBy only supports single-column groupings.
+        name: `str`
+            Name of the column to group on. Note that currently GroupBy only supports single-column groupings.
 
         Examples
         --------
@@ -534,14 +464,27 @@ class QueryBuilder:
         QueryBuilder
             Modified QueryBuilder object.
         """
-        self.stages.append(GroupByClause(expr, self))
-        return self.stages[-1]
+        self.clauses.append(_GroupByClause(name))
+        self._python_clauses.append(PythonGroupByClause(name))
+        return self
+
+    def agg(self, aggregations: Dict[str, str]):
+        # Only makes sense if previous stage is a group-by
+        check(
+            len(self.clauses) and isinstance(self.clauses[-1], _GroupByClause),
+            f"Aggregation only makes sense after groupby",
+        )
+        for v in aggregations.values():
+            v = v.lower()
+        self.clauses.append(_AggregationClause(self.clauses[-1].grouping_column, aggregations))
+        self._python_clauses.append(PythonAggregationClause(aggregations))
+        return self
 
     def __eq__(self, right):
-        return str(self) == str(right)
+        return self._optimisation == right._optimisation and self._python_clauses == right._python_clauses
 
     def __str__(self):
-        return " | ".join(str(e) for e in self.stages)
+        return " | ".join(str(clause) for clause in self.clauses)
 
     def __getitem__(self, item):
         if isinstance(item, str):
@@ -551,7 +494,9 @@ class QueryBuilder:
             # e.g. q = q[q["col"]]
             if isinstance(item, ExpressionNode) and item.operator == COLUMN:
                 item = ExpressionNode.compose(item, _OperationType.IDENTITY, None)
-            self.stages.append(WhereClause(item))
+            input_columns, expression_context = visit_expression(item)
+            self.clauses.append(_FilterClause(input_columns, expression_context, self._optimisation))
+            self._python_clauses.append(PythonFilterClause(item))
             return self
 
     def __getattr__(self, key):
@@ -559,33 +504,41 @@ class QueryBuilder:
 
     def __getstate__(self):
         rv = vars(self).copy()
-        del rv["_clause_builder"]
+        del rv["clauses"]
         return rv
 
     def __setstate__(self, state):
         vars(self).update(state)
-        self._clause_builder = _ClauseBuilder()
-
-    def __copy__(self):
-        cls = self.__class__
-        result = cls.__new__(cls)
-        result.__dict__.update(self.__dict__)
-        return result
+        self.clauses = []
+        for python_clause in self._python_clauses:
+            if isinstance(python_clause, PythonFilterClause):
+                input_columns, expression_context = visit_expression(python_clause.expr)
+                self.clauses.append(_FilterClause(input_columns, expression_context, self._optimisation))
+            elif isinstance(python_clause, PythonProjectionClause):
+                input_columns, expression_context = visit_expression(python_clause.expr)
+                self.clauses.append(_ProjectClause(input_columns, python_clause.name, expression_context))
+            elif isinstance(python_clause, PythonGroupByClause):
+                self.clauses.append(_GroupByClause(python_clause.name))
+            elif isinstance(python_clause, PythonAggregationClause):
+                self.clauses.append(_AggregationClause(self.clauses[-1].grouping_column, python_clause.aggregations))
+            else:
+                raise ArcticNativeException(
+                    f"Unrecognised clause type {type(python_clause)} when unpickling QueryBuilder"
+                )
 
     def __deepcopy__(self, memo):
         cls = self.__class__
         result = cls.__new__(cls)
-        memo[id(self)] = result
-        for k, v in self.__dict__.items():
-            if k != "_clause_builder":
-                setattr(result, k, copy.deepcopy(v, memo))
-        result._clause_builder = _ClauseBuilder()
+        result.__setstate__(self.__getstate__())
         return result
 
     # Might want to apply different optimisations to different clauses once projections/group-bys are implemented
     def optimise_for_speed(self):
         """Process query as fast as possible (the default behaviour)"""
         self._optimisation = _Optimisation.SPEED
+        for clause in self.clauses:
+            if hasattr(clause, "set_pipeline_optimisation"):
+                clause.set_pipeline_optimisation(_Optimisation.SPEED)
 
     def optimise_for_memory(self):
         """Reduce peak memory usage during the query, at the expense of some performance.
@@ -595,18 +548,9 @@ class QueryBuilder:
         * Memory used by strings that are present in segments read from storage, but are not required in the final dataframe that will be presented back to the user, is reclaimed earlier in the processing pipeline.
         """
         self._optimisation = _Optimisation.MEMORY
-
-    def execution_contexts(self):
-        res = [visit_expression(stage.expr) for stage in self.stages]
-        for execution_context in res:
-            execution_context.optimisation = self._optimisation
-        return res
-
-    def finalize_clause_builder(self):
-        for py_clause in self.stages:
-            py_clause.to_cpp(self._clause_builder)
-
-        return self._clause_builder
+        for clause in self.clauses:
+            if hasattr(clause, "set_pipeline_optimisation"):
+                clause.set_pipeline_optimisation(_Optimisation.MEMORY)
 
 
 CONSTRUCTOR_MAP = {
@@ -670,15 +614,15 @@ def visit_expression(expr):
                     else:
                         valueset_keys[key] += 1
                     key = key + "-v" + str(valueset_keys[key])
-                    execution_context.add_value_set(key, _ValueSet(node))
+                    expression_context.add_value_set(key, _ValueSet(node))
                     return _ValueSetName(key)
                 else:
-                    execution_context.add_value(key, create_value(node))
+                    expression_context.add_value(key, create_value(node))
                     return _ValueName(key)
 
             if isinstance(node, ExpressionNode):
                 if node.operator == COLUMN:
-                    execution_context.add_column(node.left)
+                    input_columns.add(node.left)
                     return _ColumnName(node.left)
                 else:
                     _visit(node)
@@ -695,10 +639,11 @@ def visit_expression(expr):
             expression_node = _ExpressionNode(left, right, node.operator)
         else:
             expression_node = _ExpressionNode(left, node.operator)
-        execution_context.add_expression_node(node.get_name(), expression_node)
+        expression_context.add_expression_node(node.get_name(), expression_node)
 
-    execution_context = _ExecutionContext()
+    expression_context = _ExpressionContext()
+    input_columns = set()
     valueset_keys = dict()
     _visit(expr)
-    execution_context.root_node_name = _ExpressionName(expr.get_name())
-    return execution_context
+    expression_context.root_node_name = _ExpressionName(expr.get_name())
+    return input_columns, expression_context

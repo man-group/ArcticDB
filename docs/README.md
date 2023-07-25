@@ -10,13 +10,19 @@ To build mkdocs (to `/tmp/docs_build/` as an example):
 mkdir /tmp/docs_build/
 ```
 
-Working in Man Group:
+#### Working in Man Group:
 
+To build:
 ```
-sudo docker run --rm --user $(id -u):$(id -g) -v /tmp/docs_build:/tmp/docs_build -v $(pwd)/mkdocs:/docs external-sandbox-docker.repo.prod.m/squidfunk/mkdocs-material:latest build -f mkdocs.yml -d /tmp/docs_build
+docker run --rm -v /tmp/docs_build:/tmp/docs_build -v $(pwd)/mkdocs:/docs external-sandbox-docker.repo.prod.m/squidfunk/mkdocs-material:latest build -f mkdocs.yml -d /tmp/docs_build
 ```
 
-Working externally:
+To run the web server on port 8000 (from the `docs` directory):
+```
+docker run --rm -p 8000:8000 -v ${PWD}/mkdocs:/docs external-sandbox-docker.repo.prod.m/squidfunk/mkdocs-material:latest serve -f mkdocs.yml -a 0.0.0.0:8000
+```
+
+#### Working externally:
 
 ```
 docker run --rm -v /tmp/docs_build:/tmp/docs_build -v $(pwd)/mkdocs:/docs squidfunk/mkdocs-material:latest build -f mkdocs.yml -d /tmp/docs_build

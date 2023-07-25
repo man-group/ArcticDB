@@ -3,9 +3,9 @@
 ## What is ArcticDB?
 
 ArcticDB is an embedded/serverless database engine designed to integrate with Pandas and the Python Data Science ecosystem. ArcticDB enables 
-you to store, retrieve and process DataFrames at scale, backed by commodity S3 storage.
+you to store, retrieve and process DataFrames at scale, backed by commodity object storage (S3-compatible storages and Azure Blob Storage).
 
-ArcticDB requires *zero additional infrastructure* beyond a running Python environment and access to S3 storage and can be **installed in seconds.**
+ArcticDB requires *zero additional infrastructure* beyond a running Python environment and access to object storage and can be **installed in seconds.**
 
 ArcticDB is:
 
@@ -31,7 +31,7 @@ pip install arcticdb
 
 ### Usage
 
-ArcticDB is a storage engine designed for S3. As a result, you must have an available S3 bucket to store data using ArcticDB. 
+ArcticDB is a storage engine designed for object storage, but also supports local-disk storage using LMDB.
 
 !!! Storage Compatibility
 
@@ -90,15 +90,34 @@ Connecting to AWS with a pre-defined region:
 ```
 
 Note that no explicit credential parameters are given. When `aws_auth` is passed, authentication is delegated to the AWS SDK which is responsible for locating the appropriate credentials in the `.config` file or 
-in environment variables. 
+in environment variables. You can manually configure which profile is being used by setting the `AWS_PROFILE` environment variable as described in the
+[AWS Documentation](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-files.html).
 
-##### Using a specific path within a bucket
+#### Using a specific path within a bucket
 
 You may want to restrict access for the ArcticDB library to a specific path within the bucket. To do this, you can use the `path_prefix` parameter:
 
 ```python
 >>> ac = Arctic('s3s://s3.eu-west-2.amazonaws.com:arcticdb-test-bucket?path_prefix=test/&aws_auth=true')
 ```
+
+#### Azure configuration
+
+ArcticDB uses the [Azure connection string](https://learn.microsoft.com/en-us/azure/storage/common/storage-configure-connection-string) to define the connection: 
+
+```python
+>>> from arcticdb import Arctic
+>>> ac = Arctic('azure://AccountName=ABCD;AccountKey=EFGH;BlobEndpoint=ENDPOINT;Container=CONTAINER')
+```
+
+For example: 
+
+```python
+>>> from arcticdb import Arctic
+>>> ac = Arctic("azure://CA_cert_path=/etc/ssl/certs/ca-certificates.crt;BlobEndpoint=https://arctic.blob.core.windows.net;Container=acblob;SharedAccessSignature=sp=awd&st=2001-01-01T00:00:00Z&se=2002-01-01T00:00:00Z&spr=https&rf=g&sig=awd%3D")
+```
+
+For more information, [see the Arctic class reference](https://docs.arcticdb.io/api/arcticdb#arcticdb.Arctic.__init__).
 
 #### Library Setup
 
@@ -148,7 +167,7 @@ Let's first look at writing a DataFrame to storage:
 Write the DataFrame:
 
 ```Python
->>> lib.write('test_frame', df)
+>>> library.write('test_frame', df)
 VersionedItem(symbol=test_frame,library=data,data=n/a,version=0,metadata=None,host=<host>)
 ```
 
@@ -188,7 +207,7 @@ ArcticDB enables you to slice by _row_ and by _column_.
 ###### Row-slicing
 
 ```Python
->>> lib.read('test_frame', date_range=(df.index[5], df.index[8])).data
+>>> library.read('test_frame', date_range=(df.index[5], df.index[8])).data
                      COL_0  COL_1  COL_2  COL_3  COL_4  COL_5  COL_6  COL_7  ...
 2000-01-01 10:00:00     43     28     36     18     10     37     31     32  ...
 2000-01-01 11:00:00     36      5     30     18     44     15     31     28  ...
@@ -201,7 +220,7 @@ ArcticDB enables you to slice by _row_ and by _column_.
 ```Python
 >>> _range = (df.index[5], df.index[8])
 >>> _columns = ['COL_30', 'COL_31']
->>> lib.read('test_frame', date_range=_range, columns=_columns).data
+>>> library.read('test_frame', date_range=_range, columns=_columns).data
                      COL_30  COL_31
 2000-01-01 10:00:00       7      26
 2000-01-01 11:00:00      29      18
@@ -225,7 +244,7 @@ ArcticDB uses a Pandas-_like_ syntax to describe how to filter data. For more de
 >>> from arcticdb import QueryBuilder
 >>> q = QueryBuilder()
 >>> q = q[(q["COL_30"] > 30) & (q["COL_31"] < 50)]
->>> lib.read('test_frame', date_range=_range, columns=_cols, query_builder=q).data
+>>> library.read('test_frame', date_range=_range, columns=_cols, query_builder=q).data
 >>>
                      COL_30  COL_31
 2000-01-01 12:00:00      36      26
@@ -287,9 +306,9 @@ Let's append data to the end of the timeseries:
 Let's now _append_ that DataFrame to what was written previously, and then pull back the final 7 rows from storage:
 
 ```Python
->>> lib.append('test_frame', df_append)
+>>> library.append('test_frame', df_append)
 VersionedItem(symbol=test_frame,library=data,data=n/a,version=2,metadata=None,host=<host>)
->>> lib.tail('test_frame', 7).data
+>>> library.tail('test_frame', 7).data
                      COL_0  COL_1  COL_2  COL_3  COL_4  COL_5  COL_6  COL_7  ...
 2000-01-02 04:00:00      4     13      8     14     25     11     11     11  ...
 2000-01-02 05:00:00     14     41     24      7     16     10     15     36  ...
@@ -308,7 +327,7 @@ You might have noticed that _read_ calls do not return the data directly - but i
 (_write_, _append_ and _update_) increment the version counter. ArcticDB versions all modifications, which means you can retrieve earlier versions of data (ArcticDB is a bitemporal database!):
 
 ```Python
->>> lib.tail('test_frame', 7, as_of=0).data
+>>> library.tail('test_frame', 7, as_of=0).data
                      COL_0  COL_1  COL_2  COL_3  COL_4  COL_5  COL_6  COL_7  ...
 2000-01-01 23:00:00     26     38     12     30     25     29     47     27  ...
 2000-01-02 00:00:00     12     14     42     11     44     32     19     11  ...
@@ -323,6 +342,6 @@ Note the timestamps - we've read the data prior to the _append_ operation. Pleas
 
 !!! note "Versioning & Prune Previous"
 
-    By default, `write`, `append`, and `update` operations will remove the previous versions to save on space. 
-
-    Use the `prune_previous` argument to control this behaviour. 
+    By default, `write`, `append`, and `update` operations will **not** remove the previous versions. Please be aware that this will consume more space.
+    
+    This behaviour can be can be controlled via the `prune_previous_versions` keyword argument. 

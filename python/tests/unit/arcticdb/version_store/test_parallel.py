@@ -90,7 +90,6 @@ def test_floats_to_nans(lmdb_version_store):
     assert_frame_equal(vit.data, df)
 
 
-@pytest.mark.skip("index refact")
 def test_sort_merge_write(lmdb_version_store):
     num_rows_per_day = 10
     num_days = 10
@@ -109,7 +108,7 @@ def test_sort_merge_write(lmdb_version_store):
         new_df = pd.DataFrame(data=vals, index=index)
 
         dataframes.append(new_df)
-        df = df.append(new_df)
+        df = pd.concat((df, new_df))
         dt = dt + datetime.timedelta(days=1)
 
     random.shuffle(dataframes)
@@ -123,7 +122,6 @@ def test_sort_merge_write(lmdb_version_store):
     assert_frame_equal(vit.data, df)
 
 
-@pytest.mark.skip("index refact")
 def test_sort_merge_append(lmdb_version_store_dynamic_schema):
     lib = lmdb_version_store_dynamic_schema
     num_rows_per_day = 10
@@ -141,7 +139,7 @@ def test_sort_merge_append(lmdb_version_store_dynamic_schema):
         vals = {c: random_floats(num_rows_per_day) for c in cols}
         new_df = pd.DataFrame(data=vals, index=index)
         dataframes.append(new_df)
-        df = df.append(new_df)
+        df = pd.concat((df, new_df))
         dt = dt + datetime.timedelta(days=1)
 
     half_way = len(dataframes) / 2

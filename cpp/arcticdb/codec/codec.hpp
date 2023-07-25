@@ -23,6 +23,31 @@
 
 namespace arcticdb {
 
+using DescriptorMagic = util::MagicNum<'D','e','s','c'>;
+using EncodedMagic = util::MagicNum<'E','n','c','d'>;
+using StringPoolMagic = util::MagicNum<'S','t','r','p'>;
+using MetadataMagic = util::MagicNum<'M','e','t','a'>;
+using IndexMagic = util::MagicNum<'I','n','d','x'>;
+using ColumnMagic = util::MagicNum<'C','l','m','n'>;
+
+template<typename MagicType>
+void check_magic_in_place(const uint8_t* data) {
+    const auto magic = reinterpret_cast<const MagicType*>(data);
+    magic->check();
+}
+
+template<typename MagicType>
+void check_magic(const uint8_t*& data) {
+    check_magic_in_place<MagicType>(data);
+    data += sizeof(MagicType);
+}
+
+template<typename MagicType>
+void write_magic(Buffer& buffer, std::ptrdiff_t& pos) {
+    new (buffer.data() + pos) MagicType{};
+    pos += sizeof(MagicType);
+}
+
 //TODO  Provide tuning parameters to choose the encoding through encoding tags (also acting as config options)
 template<template<typename> class F, class TD>
 struct TypedBlockEncoderImpl;
@@ -35,6 +60,11 @@ struct BlockEncoderHelper : public TypedBlockEncoderImpl<F, TD> {
     using DataTag = typename TD::DataTypeTag;
 };
 
+size_t encode_bitmap(
+    const util::BitMagic &sparse_map,
+    Buffer &out,
+    std::ptrdiff_t &pos);
+
 template<typename TD>
 using BlockEncoder = BlockEncoderHelper<TypedBlockData, TD>;
 
@@ -43,42 +73,83 @@ struct ColumnEncoder {
         const arcticdb::proto::encoding::VariantCodec &codec_opts,
         ColumnData &column_data);
 
-    static void encode(
+    template <typename EncodedFieldType>
+    void encode(
         const arcticdb::proto::encoding::VariantCodec &codec_opts,
-        ColumnData &f,
-        arcticdb::proto::encoding::EncodedField &field,
+        ColumnData &column_data,
+        EncodedFieldType &field,
         Buffer &out,
-        std::ptrdiff_t &pos);
+        std::ptrdiff_t &pos) {
+        column_data.type().visit_tag([&codec_opts, &column_data, &field, &out, &pos](auto type_desc_tag) {
+            using TDT = decltype(type_desc_tag);
+            using Encoder = BlockEncoder<TDT>;
+            ARCTICDB_TRACE(log::codec(), "Column data has {} blocks", column_data.num_blocks());
+
+            while (auto block = column_data.next<TDT>()) {
+                util::check(block.value().nbytes(), "Zero-sized block");
+                Encoder::encode(codec_opts, block.value(), field, out, pos);
+            }
+        });
+
+        if (column_data.bit_vector() != nullptr && column_data.bit_vector()->count() > 0)   {
+            ARCTICDB_DEBUG(log::codec(), "Sparse map count = {} pos = {}", column_data.bit_vector()->count(), pos);
+            auto sparse_bm_bytes = encode_bitmap(*column_data.bit_vector(), out, pos);
+            field.mutable_ndarray()->set_sparse_map_bytes(static_cast<int>(sparse_bm_bytes));
+        }
+    }
 };
 
-size_t encode_bitmap(
-    const util::BitMagic &sparse_map,
-    Buffer &out,
-    std::ptrdiff_t &pos);
 
-Segment encode(
+Segment encode_v2(
     SegmentInMemory&& in_mem_seg,
     const arcticdb::proto::encoding::VariantCodec &codec_opts);
 
-SegmentInMemory decode(
+Segment encode_v1(
+    SegmentInMemory&& in_mem_seg,
+    const arcticdb::proto::encoding::VariantCodec &codec_opts);
+
+
+inline Segment encode_dispatch(
+    SegmentInMemory&& in_mem_seg,
+    const arcticdb::proto::encoding::VariantCodec &codec_opts,
+    EncodingVersion encoding_version) {
+    if(encoding_version == EncodingVersion::V2) {
+        return encode_v2(std::move(in_mem_seg), codec_opts);
+    } else {
+        return encode_v1(std::move(in_mem_seg), codec_opts);
+    }
+}
+
+Buffer decode_encoded_fields(
+    const arcticdb::proto::encoding::SegmentHeader& hdr,
+    const uint8_t* data,
+    const uint8_t* begin ARCTICDB_UNUSED);
+
+SegmentInMemory decode_segment(
     Segment&& segment);
 
-void decode(
+void decode_into_memory_segment(
     const Segment& segment,
-    const arcticdb::proto::encoding::SegmentHeader& hdr,
+    arcticdb::proto::encoding::SegmentHeader& hdr,
     SegmentInMemory& res,
-    const StreamDescriptor::Proto& desc);
+    StreamDescriptor& desc);
 
-template<class DS>
-std::size_t decode(
+template<class DataSink, typename EncodedFieldType>
+std::size_t decode_field(
     const TypeDescriptor &td,
-    const arcticdb::proto::encoding::EncodedField &field,
+    const EncodedFieldType &field,
     const uint8_t *input,
-    DS &data_sink,
+    DataSink &data_sink,
     std::optional<util::BitMagic>& bv);
 
-std::optional<google::protobuf::Any> decode_metadata(
+std::optional<google::protobuf::Any> decode_metadata_from_segment(
     const Segment& segment);
+
+std::pair<std::optional<google::protobuf::Any>, StreamDescriptor> decode_metadata_and_descriptor_fields(
+    Segment& segment);
+
+std::optional<std::tuple<google::protobuf::Any, arcticdb::proto::descriptors::TimeSeriesDescriptor, FieldCollection>> decode_timeseries_descriptor(
+    Segment& segment);
 
 inline void hash_field(const arcticdb::proto::encoding::EncodedField &field, HashAccum &accum) {
     auto &n = field.ndarray();
@@ -109,4 +180,4 @@ inline HashedValue hash_segment_header(const arcticdb::proto::encoding::SegmentH
 } // namespace arcticdb
 
 #define ARCTICDB_SEGMENT_ENCODER_H_
-#include <arcticdb/codec/codec-inl.hpp>
+#include "codec-inl.hpp"

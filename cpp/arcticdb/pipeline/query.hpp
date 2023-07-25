@@ -9,7 +9,7 @@
 
 #include <arcticdb/util/bitset.hpp>
 #include <arcticdb/entity/index_range.hpp>
-#include <arcticdb/processing/execution_context.hpp>
+#include <arcticdb/processing/expression_context.hpp>
 #include <arcticdb/entity/versioned_item.hpp>
 #include <arcticdb/pipeline/python_output_frame.hpp>
 #include <arcticdb/pipeline/write_frame.hpp>
@@ -50,19 +50,16 @@ struct ReadQuery {
     mutable std::vector<std::string> columns; // empty <=> all columns
     std::variant<std::monostate, HeadRange, TailRange, SignedRowRange> row_range;
     FilterRange row_filter; // no filter by default
-    std::shared_ptr<std::vector<Clause>> query_ = std::make_shared<std::vector<Clause>>();
+    std::vector<std::shared_ptr<Clause>> clauses_;
 
     ReadQuery() = default;
 
-    explicit ReadQuery(std::vector<Clause>&& query) {
-        query_ = std::make_shared<std::vector<Clause>>(std::move(query));
+    explicit ReadQuery(std::vector<std::shared_ptr<Clause>>&& clauses):
+            clauses_(std::move(clauses)) {
     }
 
-    void set_clause_builder(ClauseBuilder& builder) {
-        ClauseBuilder b = std::move(builder);
-        for (auto&& c: b.get_clauses()) {
-            query_->emplace_back(std::move(c));
-        }
+    void add_clauses(std::vector<std::shared_ptr<Clause>>& clauses) {
+        clauses_ = clauses;
     }
 
     void calculate_row_filter(int64_t total_rows) {
@@ -73,9 +70,9 @@ struct ReadQuery {
             } else {
                 row_filter = RowRange(0, std::max(static_cast<int64_t>(0), total_rows + head_range.num_rows_));
             }
-            if (query_->empty() && columns.empty() && head_range.num_rows_ > 0) {
+            if (clauses_.empty() && columns.empty() && head_range.num_rows_ > 0) {
                 // TODO: columns aren't supported due to AN-334
-                query_->emplace_back(RowNumberLimitClause{static_cast<size_t>(head_range.num_rows_)});
+                clauses_.emplace_back(std::make_shared<Clause>(RowNumberLimitClause{static_cast<size_t>(head_range.num_rows_)}));
             } else {
                 log::version().info("Arguments not compatible with head() memory usage optimisation");
             }
@@ -110,11 +107,18 @@ struct TimestampVersionQuery {
 };
 
 struct SpecificVersionQuery {
-    VersionId version_id_;
+    SignedVersionId version_id_;
 };
 
+using VersionQueryType = std::variant<
+        std::monostate, // Represents "latest"
+        SnapshotVersionQuery,
+        TimestampVersionQuery,
+        SpecificVersionQuery
+        >;
+
 struct VersionQuery {
-    std::variant<std::monostate, SnapshotVersionQuery, TimestampVersionQuery, SpecificVersionQuery> content_;
+    VersionQueryType content_;
     std::optional<bool> skip_compat_;
     std::optional<bool> iterate_on_failure_;
 
@@ -126,7 +130,7 @@ struct VersionQuery {
         content_ = TimestampVersionQuery{ts};
     }
 
-    void set_version(VersionId version) {
+    void set_version(SignedVersionId version) {
         content_ = SpecificVersionQuery{version};
     }
 

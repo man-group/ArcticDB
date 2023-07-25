@@ -72,7 +72,7 @@ Note that where this documentation refers to a _Key Type_ key (for example a _ve
 
 Note that **Atom** keys are immutable. **Reference** keys are not immutable and therefore the associated value can be updated. 
 
-!!! Version Ref
+!!! info "Version Ref"
 
     In this documentation, `Version Reference key` is sometimes shortened to `Version Ref key`. 
 
@@ -98,6 +98,16 @@ Consider a use case where a symbol with 10 columns, all of 8 byte numeric types,
 We will soon be adding an API to perform exactly this operation, re-slicing data such that subsequent reads can be as efficient as possible, without harming the efficiency of existing `append` or `update` operations.
 
 ### Symbol List Caching
+
+
+!!! info "Speeding up listing symbols"
+
+    The below documentation details the architecture for the symbol list cache.
+    
+    It explains that to speed up `list_symbols`, **simply run `list_symbols` through to completion frequently**. 
+    The cache is built on first run and _compacted_ afterwards. 
+    This will speed up `list_symbols` for **all accessors of the library - not just the user that runs **`list_symbols`. 
+
 
 `list_symbols` is a common operation to perform on an ArcticDB library. As this returns a list of "live" symbols (those for which at least one version has not been deleted), using the data structures described above, this involves:
 
@@ -130,4 +140,4 @@ Without any housekeeping, this process could lead to unbounded growth in the num
 
 They would be compacted into a single object stating that "symbol1" and "symbol2" were both alive at time t3. The key for this object is of the form `<library prefix>/sl/*sSt*__symbols__*0*t3*<content hash>*0*0`.
 
-Astute observers will correctly take issue with basing logical decisions on timestamps in a purely client-side database with no synchronisation between clocks of different clients enforced. As such, this cache can diverge from reality, if two different clients create and delete the same symbol at about the same time, and this is the most likely cause of odd behaviour such as `lib.read(symbol)` working, but `symbol in lib.list_symols()` returning `False`. If this happens, `lib.reload_symbol_list()` should resolve the issue.
+Astute observers will correctly take issue with basing logical decisions on timestamps in a purely client-side database with no synchronisation between clocks of different clients enforced. As such, this cache can diverge from reality, if two different clients create and delete the same symbol at about the same time, and this is the most likely cause of odd behaviour such as `lib.read(symbol)` working, but `symbol in lib.list_symbols()` returning `False`. If this happens, `lib.reload_symbol_list()` should resolve the issue.

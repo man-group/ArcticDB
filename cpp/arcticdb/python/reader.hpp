@@ -54,7 +54,7 @@ public:
     py::tuple at(size_t row) {
         py::list res;
         for (std::size_t  col= 0; col < segment_.num_columns(); ++col) {
-            auto type_desc = type_desc_from_proto(segment_.column_descriptor(col).type_desc());
+            const auto& type_desc = segment_.column_descriptor(col).type();
             type_desc.visit_tag([&](auto && impl){
                 using T= std::decay_t<decltype(impl)>;
                 using RawType = typename T::DataTypeTag::raw_type;

@@ -1,3 +1,10 @@
+/*
+Copyright 2023 Man Group Operations Limited
+
+Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
+
+As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+*/
 syntax = "proto3";
 
 package arcticc.pb2.encoding_pb2;
@@ -23,6 +30,10 @@ message SegmentHeader {
     EncodedField metadata_field = 7;  // optional metadata encoding
     EncodedField string_pool_field = 8; // string pool
     bool compacted = 9; // is the segment the result of a compaction
+    EncodedField descriptor_field = 10;
+    EncodedField index_descriptor_field = 11;
+    EncodedField column_fields = 12;
+    uint32 encoding_version = 13;
 }
 
 message EncodedField {
@@ -31,6 +42,8 @@ message EncodedField {
         NDArrayEncodedField ndarray = 2;
         DictionaryEncodedField dictionary = 3;
     }
+    uint32 offset = 4;
+    uint32 num_elements = 5;
 }
 
 message VariantCodec {

@@ -7,6 +7,7 @@
 
 #pragma once
 
+#include <arcticdb/entity/data_error.hpp>
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/stream/index.hpp>
 #include <arcticdb/util/timeouts.hpp>
@@ -51,7 +52,8 @@ class PythonVersionStore : public LocalVersionedEngine {
 
   public:
     explicit PythonVersionStore(
-        const std::shared_ptr<storage::Library>& library);
+        const std::shared_ptr<storage::Library>& library,
+        const std::optional<std::string>& license_key = std::nullopt);
 
     VersionedItem write_dataframe_specific_version(
         const StreamId& stream_id,
@@ -182,11 +184,11 @@ class PythonVersionStore : public LocalVersionedEngine {
         const VersionQuery& version_query
     );
 
-    std::vector<std::pair<VersionedItem, py::object>> batch_read_descriptor(
+    std::vector<DescriptorItem> batch_read_descriptor(
         const std::vector<StreamId>& stream_ids,
         const std::vector<VersionQuery>& version_queries);
 
-    std::pair<VersionedItem, py::object> read_descriptor(
+    DescriptorItem read_descriptor(
         const StreamId& stream_id,
         const VersionQuery& version_query);
 
@@ -276,11 +278,11 @@ class PythonVersionStore : public LocalVersionedEngine {
         bool prune_previous_versions,
         bool ensre_sorted);
 
-    std::vector<std::pair<VersionedItem, arcticdb::proto::descriptors::TimeSeriesDescriptor>> batch_restore_version(
+    std::vector<std::pair<VersionedItem, TimeseriesDescriptor>> batch_restore_version(
         const std::vector<StreamId>& id,
         const std::vector<VersionQuery>& version_query);
 
-    std::vector<ReadResult> batch_read(
+    std::vector<std::variant<ReadResult, DataError>> batch_read(
         const std::vector<StreamId>& stream_ids,
         const std::vector<VersionQuery>& version_queries,
         std::vector<ReadQuery>& read_queries,
@@ -308,6 +310,15 @@ class PythonVersionStore : public LocalVersionedEngine {
 
     void fix_symbol_trees(const std::vector<StreamId>& symbols);
 
+    /**
+     * Main business logic of the DeleteTombstonedData background job. Delete tombstoned versions and snapshots.
+     * @param limit_stream_id Test-specific. If non-empty, limit scope to tombstoned versions in the given stream.
+     * @param min_age_sec Minimum age of index keys that can be deleted in unit of seconds.
+     * @param stresser_sync Only used by stress tests to synchronise steps.
+     */
+    void delete_tombstones(const std::string& limit_stream_id, bool dry_run, uint64_t min_age_sec,
+            folly::futures::Barrier* stresser_sync = nullptr, size_t batch_size = 2000);
+
     std::unordered_map<VersionId, bool> get_all_tombstoned_versions(const StreamId &stream_id);
 
     std::vector<SliceAndKey> list_incompletes(const StreamId& stream_id);
@@ -318,22 +329,22 @@ private:
 
     std::vector<VersionedItem> batch_write_index_keys_to_version_map(
         const std::vector<AtomKey>& index_keys,
-        const std::unordered_map<StreamId, UpdateInfo>& stream_update_info_map,
+        const std::vector<UpdateInfo>& stream_update_info_vector,
         bool prune_previous_versions);
 
     void delete_snapshot_sync(const SnapshotId& snap_name, const VariantKey& snap_key);
 };
 
-inline std::vector<ReadResult> frame_to_read_result(std::vector<std::pair<VersionedItem, FrameAndDescriptor>>&& keys_frame_and_descriptors) {
-    std::vector<ReadResult> read_results;
+inline std::vector<std::variant<ReadResult, DataError>> frame_to_read_result(std::vector<ReadVersionOutput>&& keys_frame_and_descriptors) {
+    std::vector<std::variant<ReadResult, DataError>> read_results;
     read_results.reserve(keys_frame_and_descriptors.size());
-    for (auto [item, fd] : keys_frame_and_descriptors) {
+    for (auto& read_version_output : keys_frame_and_descriptors) {
         read_results.emplace_back(ReadResult(
-            item,
-            PythonOutputFrame{fd.frame_, fd.buffers_},
-            fd.desc_.normalization(),
-            fd.desc_.user_meta(),
-            fd.desc_.multi_key_meta(),
+            read_version_output.versioned_item_,
+            PythonOutputFrame{read_version_output.frame_and_descriptor_.frame_, read_version_output.frame_and_descriptor_.buffers_},
+            read_version_output.frame_and_descriptor_.desc_.proto().normalization(),
+            read_version_output.frame_and_descriptor_.desc_.proto().user_meta(),
+            read_version_output.frame_and_descriptor_.desc_.proto().multi_key_meta(),
             std::vector<AtomKey>{}));
     }
     return read_results;

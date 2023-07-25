@@ -28,12 +28,14 @@ from arcticdb.exceptions import (
     NoSuchVersionException,
     StreamDescriptorMismatch,
 )
+from arcticdb_ext.storage import NoDataFoundException
 from arcticdb.flattener import Flattener
 from arcticdb.version_store import NativeVersionStore
 from arcticdb.version_store._custom_normalizers import CustomNormalizer, register_normalizer
 from arcticdb.version_store._store import UNSUPPORTED_S3_CHARS, MAX_SYMBOL_SIZE, VersionedItem
 from arcticdb_ext.exceptions import _ArcticLegacyCompatibilityException
 from arcticdb_ext.storage import KeyType, NoDataFoundException
+from arcticdb_ext.version_store import NoSuchVersionException, StreamDescriptorMismatch
 from arcticc.pb2.descriptors_pb2 import NormalizationMetadata  # Importing from arcticdb dynamically loads arcticc.pb2
 from arcticdb.util.test import (
     sample_dataframe,
@@ -42,21 +44,42 @@ from arcticdb.util.test import (
     assert_frame_equal,
     assert_series_equal,
 )
+from arcticdb_ext.tools import AZURE_SUPPORT
 from tests.util.date import DateRange
 
 
 if sys.platform == "linux":
-    SMOKE_TEST_VERSION_STORES = ["lmdb_version_store", "s3_version_store", "mongo_version_store"]
+    SMOKE_TEST_VERSION_STORES = [
+        "lmdb_version_store_v1",
+        "lmdb_version_store_v2",
+        "s3_version_store_v1",
+        "s3_version_store_v2",
+        "mongo_version_store",
+    ]
 else:
     # leave out Mongo as spinning up a Mongo instance in Windows CI is fiddly, and Mongo support is only
     # currently required for Linux for internal use.
     # We also skip it on Mac as github actions containers don't work with macos
-    SMOKE_TEST_VERSION_STORES = ["lmdb_version_store", "s3_version_store"]  # SKIP_WIN and SKIP_MAC
+    SMOKE_TEST_VERSION_STORES = [
+        "lmdb_version_store_v1",
+        "lmdb_version_store_v2",
+        "s3_version_store_v1",
+        "s3_version_store_v2",
+    ]  # SKIP_WIN and SKIP_MAC
+
+if AZURE_SUPPORT:
+    SMOKE_TEST_VERSION_STORES.append("azure_version_store")
 
 
 @pytest.fixture()
 def symbol():
     return "sym" + str(random.randint(0, 10000))
+
+
+def assert_equal_value(data, expected):
+    received = data.reindex(sorted(data.columns), axis=1)
+    expected = expected.reindex(sorted(expected.columns), axis=1)
+    assert_frame_equal(received, expected)
 
 
 def test_simple_flow(lmdb_version_store_no_symbol_list, symbol):
@@ -72,6 +95,16 @@ def test_simple_flow(lmdb_version_store_no_symbol_list, symbol):
 
     lmdb_version_store_no_symbol_list.delete(symbol)
     assert lmdb_version_store_no_symbol_list.list_symbols() == lmdb_version_store_no_symbol_list.list_versions() == []
+
+
+@pytest.mark.parametrize("special_char", ["$", ",", ":", "=", "@", "-", "_", ".", "~"])
+def test_special_chars(s3_version_store, special_char):
+    """Test chars with special URI encoding under RFC 3986"""
+    sym = f"prefix{special_char}postfix"
+    df = sample_dataframe()
+    s3_version_store.write(sym, df)
+    vitem = s3_version_store.read(sym)
+    assert_frame_equal(vitem.data, df)
 
 
 @pytest.mark.parametrize("version_store", SMOKE_TEST_VERSION_STORES)
@@ -209,7 +242,16 @@ def test_negative_cases(lmdb_version_store, symbol):
     lmdb_version_store.delete(symbol)
 
 
-@pytest.mark.parametrize("lib_type", ["lmdb_version_store", "lmdb_version_store_no_symbol_list"])
+@pytest.mark.parametrize(
+    "lib_type",
+    [
+        "lmdb_version_store_v1",
+        "lmdb_version_store_v2",
+        "lmdb_version_store_no_symbol_list",
+        "s3_version_store_v1",
+        "s3_version_store_v2",
+    ],
+)
 def test_list_symbols_regex(request, lib_type):
     lib = request.getfixturevalue(lib_type)
     lib.write("asdf", {"foo": "bar"}, metadata={"a": 1, "b": 10})
@@ -223,14 +265,14 @@ def test_list_symbols_regex(request, lib_type):
     assert list(sorted(lib.list_symbols())) == sorted(["asdf", "furble"])
 
 
-def test_list_symbols_prefix(s3_version_store):
+def test_list_symbols_prefix(object_version_store):
     blahs = ["blah_asdf201901", "blah_asdf201802", "blah_asdf201803", "blah_asdf201903"]
     nahs = ["nah_asdf201801", "nah_asdf201802", "nah_asdf201803"]
 
     for sym in itertools.chain(blahs, nahs):
-        s3_version_store.write(sym, sample_dataframe(10))
-    assert set(s3_version_store.list_symbols(prefix="blah_")) == set(blahs)
-    assert set(s3_version_store.list_symbols(prefix="nah_")) == set(nahs)
+        object_version_store.write(sym, sample_dataframe(10))
+    assert set(object_version_store.list_symbols(prefix="blah_")) == set(blahs)
+    assert set(object_version_store.list_symbols(prefix="nah_")) == set(nahs)
 
 
 def test_mixed_df_without_pickling_enabled(lmdb_version_store):
@@ -327,9 +369,33 @@ def test_get_info(lmdb_version_store):
     assert info["index_type"] == "index"
 
 
-def test_get_info_version(lmdb_version_store):
+@pytest.mark.parametrize(
+    "lib_type", ["lmdb_version_store_v1", "lmdb_version_store_v2", "s3_version_store_v1", "s3_version_store_v2"]
+)
+def test_get_info_version(request, lib_type):
+    lib = request.getfixturevalue(lib_type)
     # given
     sym = "get_info_version_test"
+    df = pd.DataFrame(data={"col1": np.arange(10)}, index=pd.date_range(pd.Timestamp(0), periods=10))
+    lib.write(sym, df)
+    df = pd.DataFrame(data={"col1": np.arange(20)}, index=pd.date_range(pd.Timestamp(0), periods=20))
+    lib.write(sym, df, prune_previous_version=False)
+
+    # when
+    info_0 = lib.get_info(sym, version=0)
+    info_1 = lib.get_info(sym, version=1)
+    latest_version = lib.get_info(sym)
+
+    # then
+    assert latest_version == info_1
+    assert info_0["rows"] == 10
+    assert info_1["rows"] == 20
+    assert info_1["last_update"] > info_0["last_update"]
+
+
+def test_get_info_date_range(lmdb_version_store):
+    # given
+    sym = "test_get_info_date_range"
     df = pd.DataFrame(data={"col1": np.arange(10)}, index=pd.date_range(pd.Timestamp(0), periods=10))
     lmdb_version_store.write(sym, df)
     df = pd.DataFrame(data={"col1": np.arange(20)}, index=pd.date_range(pd.Timestamp(0), periods=20))
@@ -342,9 +408,27 @@ def test_get_info_version(lmdb_version_store):
 
     # then
     assert latest_version == info_1
-    assert info_0["rows"] == 10
-    assert info_1["rows"] == 20
-    assert info_1["last_update"] > info_0["last_update"]
+    assert info_1["date_range"] == lmdb_version_store.get_timerange_for_symbol(sym, version=1)
+    assert info_0["date_range"] == lmdb_version_store.get_timerange_for_symbol(sym, version=0)
+
+
+def test_get_info_version_no_columns_nat(lmdb_version_store):
+    sym = "test_get_info_version_no_columns_nat"
+    column_names = ["a", "b", "c"]
+    df = pd.DataFrame(columns=column_names)
+    df["b"] = df["b"].astype("int64")
+    lmdb_version_store.write(sym, df, dynamic_strings=True, coerce_columns={"a": float, "b": int, "c": str})
+    info = lmdb_version_store.get_info(sym)
+    assert np.isnat(info["date_range"][0]) == True
+    assert np.isnat(info["date_range"][1]) == True
+
+
+def test_get_info_version_empty_nat(lmdb_version_store):
+    sym = "test_get_info_version_empty_nat"
+    lmdb_version_store.write(sym, pd.DataFrame())
+    info = lmdb_version_store.get_info(sym)
+    assert np.isnat(info["date_range"][0]) == True
+    assert np.isnat(info["date_range"][1]) == True
 
 
 def test_update_times(lmdb_version_store):
@@ -610,6 +694,7 @@ def test_list_versions_with_snapshots(lmdb_version_store):
 
 def test_read_ts(lmdb_version_store):
     lmdb_version_store.write("a", 1)  # v0
+    time.sleep(0.001)  # In case utcnow() has a lower precision and returning a timestamp before the write (#496)
     time_after_first_write = pd.Timestamp.utcnow()
 
     assert lmdb_version_store.read("a", as_of=time_after_first_write).version == 0
@@ -935,13 +1020,12 @@ def test_nested_custom_types(lmdb_version_store):
     assert got_back[0] == 1
 
 
-def test_batch_operations(s3_version_store_prune_previous):
-    lmdb_version_store = s3_version_store_prune_previous
+def test_batch_operations(object_version_store_prune_previous):
     multi_data = {"sym1": np.arange(8), "sym2": np.arange(9), "sym3": np.arange(10)}
 
     for _ in range(10):
-        lmdb_version_store.batch_write(list(multi_data.keys()), list(multi_data.values()))
-        result = lmdb_version_store.batch_read(list(multi_data.keys()))
+        object_version_store_prune_previous.batch_write(list(multi_data.keys()), list(multi_data.values()))
+        result = object_version_store_prune_previous.batch_read(list(multi_data.keys()))
         assert len(result) == 3
         equals(result["sym1"].data, np.arange(8))
         equals(result["sym2"].data, np.arange(9))
@@ -1120,19 +1204,56 @@ def test_coercion_to_str_with_dynamic_strings(lmdb_version_store_string_coercion
         sample_mock.assert_not_called()
 
 
-def test_find_version(lmdb_version_store):
-    lmdb_version_store.write("first", 1)
-    lmdb_version_store.write("second", 1)
-    lmdb_version_store.snapshot("a")
-    lmdb_version_store.write("first", 2)
-    lmdb_version_store.snapshot("b")
+def test_find_version(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    # def test_find_version(lmdb_version_store):
+    #     lib = lmdb_version_store
+    sym = "test_find_version"
 
-    assert lmdb_version_store._find_version("first", as_of=1).version == 1
-    assert lmdb_version_store._find_version("second", as_of=0).version == 0
-    # assert lmdb_version_store._find_version("second", as_of=2) is None
-    assert lmdb_version_store._find_version("first", as_of="a").version == 0
-    assert lmdb_version_store._find_version("first", as_of=datetime.utcnow()).version == 1  # Latest
-    assert lmdb_version_store._find_version("second").version == 0  # Latest
+    # Version 0 is alive and in a snapshot
+    lib.write(sym, 0)
+    lib.snapshot("snap_0")
+    time_0 = datetime.utcnow()
+
+    # Version 1 is only available in snap_1
+    lib.write(sym, 1)
+    lib.snapshot("snap_1")
+    time_1 = datetime.utcnow()
+    lib.delete_version(sym, 1)
+
+    # Version 2 is fully deleted
+    lib.write(sym, 2)
+    time_2 = datetime.utcnow()
+    lib.delete_version(sym, 2)
+
+    # Version 3 is not in any snapshots
+    lib.write(sym, 3)
+    time_3 = datetime.utcnow()
+
+    # Latest
+    assert lib._find_version(sym).version == 3
+    # By version number
+    assert lib._find_version(sym, as_of=0).version == 0
+    assert lib._find_version(sym, as_of=1).version == 1
+    assert lib._find_version(sym, as_of=2) is None
+    assert lib._find_version(sym, as_of=3).version == 3
+    assert lib._find_version(sym, as_of=1000) is None
+    # By negative version number
+    assert lib._find_version(sym, as_of=-1).version == 3
+    assert lib._find_version(sym, as_of=-2) is None
+    assert lib._find_version(sym, as_of=-3).version == 1
+    assert lib._find_version(sym, as_of=-4).version == 0
+    assert lib._find_version(sym, as_of=-1000) is None
+    # By snapshot
+    assert lib._find_version(sym, as_of="snap_0").version == 0
+    assert lib._find_version(sym, as_of="snap_1").version == 1
+    with pytest.raises(NoDataFoundException):
+        lib._find_version(sym, as_of="snap_1000")
+    # By timestamp
+    assert lib._find_version(sym, as_of=time_0).version == 0
+    assert lib._find_version(sym, as_of=time_1).version == 0
+    assert lib._find_version(sym, as_of=time_2).version == 0
+    assert lib._find_version(sym, as_of=time_3).version == 3
 
 
 def test_library_deletion_lmdb(lmdb_version_store):
@@ -1305,8 +1426,8 @@ def test_batch_read_meta_with_pruning(version_store_factory):
     assert lib.read_metadata("sym1").metadata == results_dict["sym1"].metadata
 
 
-def test_batch_read_meta_multiple_versions(s3_version_store):
-    lib = s3_version_store
+def test_batch_read_meta_multiple_versions(object_version_store):
+    lib = object_version_store
     lib.write("sym1", 1, {"meta1": 1})
     lib.write("sym1", 2, {"meta1": 2})
     lib.write("sym1", 3, {"meta1": 3})
@@ -1338,8 +1459,8 @@ def test_list_symbols(lmdb_version_store):
     assert set(lib.list_symbols(regex="a")) == set(lib.list_symbols(regex="a", use_symbol_list=False))
 
 
-def test_get_index(s3_version_store):
-    lib = s3_version_store
+def test_get_index(object_version_store):
+    lib = object_version_store
 
     symbol = "thing"
     lib.write(symbol, 1)
@@ -1397,8 +1518,8 @@ def test_columns_as_nparrary(lmdb_version_store, sym):
     assert all(vit.data["col2"] == [3, 4])
 
 
-def test_simple_recursive_normalizer(s3_version_store):
-    s3_version_store.write(
+def test_simple_recursive_normalizer(object_version_store):
+    object_version_store.write(
         "rec_norm", data={"a": np.arange(5), "b": np.arange(8), "c": None}, recursive_normalizers=True
     )
 
@@ -1579,6 +1700,47 @@ def test_batch_read_date_range(lmdb_version_store_tombstone_and_sync_passive):
         assert_frame_equal(vit.data, dfs[x].loc[start:end])
 
 
+def test_batch_read_columns(lmdb_version_store_tombstone_and_sync_passive):
+    lmdb_version_store = lmdb_version_store_tombstone_and_sync_passive
+    columns_of_interest = ["strings", "uint8"]
+    number_of_requests = 5
+    symbols = []
+    for i in range(number_of_requests):
+        symbols.append("sym_{}".format(i))
+
+    base_date = pd.Timestamp("2019-06-01")
+    dfs = []
+    for j in range(number_of_requests):
+        df = get_sample_dataframe(1000, j)
+        df.index = pd.date_range(base_date + pd.DateOffset(j), periods=len(df))
+        dfs.append(df)
+
+    for x, symbol in enumerate(symbols):
+        lmdb_version_store.write(symbol, dfs[x])
+
+    result_dict = lmdb_version_store.batch_read(symbols, columns=[columns_of_interest] * number_of_requests)
+    for x, sym in enumerate(result_dict.keys()):
+        vit = result_dict[sym]
+        assert_equal_value(vit.data, dfs[x][columns_of_interest])
+
+
+def test_batch_read_symbol_doesnt_exist(lmdb_version_store):
+    sym1 = "sym1"
+    sym2 = "sym2"
+    lmdb_version_store.write(sym1, 1)
+    with pytest.raises(NoDataFoundException):
+        _ = lmdb_version_store.batch_read([sym1, sym2])
+
+
+def test_batch_read_version_doesnt_exist(lmdb_version_store):
+    sym1 = "sym1"
+    sym2 = "sym2"
+    lmdb_version_store.write(sym1, 1)
+    lmdb_version_store.write(sym2, 2)
+    with pytest.raises(NoDataFoundException):
+        _ = lmdb_version_store.batch_read([sym1, sym2], as_ofs=[0, 1])
+
+
 def test_index_keys_start_end_index(lmdb_version_store, sym):
     idx = pd.date_range("2022-01-01", periods=100, freq="D")
     df = pd.DataFrame({"a": range(len(idx))}, index=idx)
@@ -1725,7 +1887,7 @@ def test_modification_methods_dont_return_input_data(lmdb_version_store, batch, 
 def test_diff_long_stream_descriptor_mismatch(lmdb_version_store, method, num):
     lib: NativeVersionStore = lmdb_version_store
     lib.write("x", pd.DataFrame({f"col{i}": [i, i + 1, i + 2] for i in range(num)}, index=pd.date_range(0, periods=3)))
-    bad_row = {f"col{i}": (["a"] if i % 20 == 4 else [i]) for i in (0, *range(3, num + 1))}
+    bad_row = {f"col{i}": ["a"] if i % 20 == 4 else [i] for i in (0, *range(3, num + 1))}
     try:
         if method == "append":
             lib.append("x", pd.DataFrame(bad_row, index=pd.date_range("1970-01-04", periods=1)))
@@ -1737,9 +1899,9 @@ def test_diff_long_stream_descriptor_mismatch(lmdb_version_store, method, num):
         assert not isinstance(e, _ArcticLegacyCompatibilityException)
         msg = str(e)
         for i in (1, 2, *(x for x in range(num) if x % 20 == 4), num):
-            assert f"col{i}: TD<type=INT64, dim=0>" in msg
+            assert f"FD<name=col{i}, type=TD<type=INT64, dim=0>" in msg
             if i % 20 == 4:
-                assert f"col{i}: TD<type=UTF" in msg
+                assert f"FD<name=col{i}, type=TD<type=UTF" in msg
 
 
 def test_get_non_existing_columns_in_series(lmdb_version_store, sym):
@@ -1754,3 +1916,5 @@ def test_get_existing_columns_in_series(lmdb_version_store, sym):
     dst = pd.Series(index=pd.date_range(pd.Timestamp("2022-01-01"), pd.Timestamp("2022-02-01")), data=0.0, name="col1")
     lib.write(sym, dst)
     assert not lmdb_version_store.read(sym, columns=["col1", "col2"]).data.empty
+    if __name__ == "__main__":
+        pytest.main()

@@ -8,6 +8,7 @@
 #pragma once
 
 #include <unordered_set>
+#include <optional>
 
 #include <arcticdb/processing/signed_unsigned_comparison.hpp>
 #include <arcticdb/util/preconditions.hpp>
@@ -55,6 +56,7 @@ struct PlusOperator;
 struct MinusOperator;
 struct TimesOperator;
 struct DivideOperator;
+struct MembershipOperator;
 
 namespace arithmetic_promoted_type::details {
     template <class VAL>
@@ -178,8 +180,15 @@ struct type_arithmetic_promoted_type {
                         std::conditional_t<(std::is_signed_v<LHS> && sizeof(LHS) > sizeof(RHS)) || (std::is_signed_v<RHS> && sizeof(RHS) > sizeof(LHS)),
                             // If the signed type is strictly larger than the unsigned type, then promote to the signed type
                             typename arithmetic_promoted_type::details::signed_width_t<max_width>,
-                            // Otherwise, promote to a signed type wider than the unsigned type, so that it can be exactly represented
-                            typename arithmetic_promoted_type::details::signed_width_t<2 * max_width>
+                            // Otherwise, check if the unsigned one is the widest type we support
+                            std::conditional_t<std::is_same_v<LHS, uint64_t> || std::is_same_v<RHS, uint64_t>,
+                                // If so, there's no common type that can completely hold both arguments. We trigger operation-specific handling
+                                std::conditional_t<std::is_base_of_v<MembershipOperator, Func>,
+                                    RHS, // Retains ValueSetBaseType in binary_membership()
+                                    int64_t>, // Retain the broken behaviour for Divide for now (https://github.com/man-group/ArcticDB/issues/594)
+                                // There should be a signed type wider than the unsigned type, so both can be exactly represented
+                                typename arithmetic_promoted_type::details::signed_width_t<2 * max_width>
+                            >
                         >
                     >
                 >
@@ -372,18 +381,37 @@ bool operator()(int64_t t, uint64_t u) const {
 }
 };
 
-struct IsInOperator {
+struct MembershipOperator {
+protected:
+    template<typename U>
+    static constexpr bool is_signed_int = std::is_integral_v<U> && std::is_signed_v<U>;
+
+public:
+    /** This is tighter than the signatures of the special handling operator()s below to reject argument types smaller
+     * than uint64 going down the special handling via type promotion. */
+    template<typename ColumnType, typename ValueSetBaseType>
+    static constexpr bool needs_uint64_special_handling =
+        (std::is_same_v<ColumnType, uint64_t> && is_signed_int<ValueSetBaseType>) ||
+        (std::is_same_v<ValueSetBaseType, uint64_t> && is_signed_int<ColumnType>);
+};
+
+/** Used as a dummy parameter to ensure we don't pick the non-special handling overloads by mistake. */
+struct UInt64SpecialHandlingTag {};
+
+struct IsInOperator: MembershipOperator {
 template<typename T, typename U>
 bool operator()(T t, const std::unordered_set<U>& u) const {
     return u.count(t) > 0;
 }
-bool operator()(uint64_t t, const std::unordered_set<int64_t>& u) const {
-    if (comparison::msb_set(t))
+
+template<typename U, typename=std::enable_if_t<is_signed_int<U>>>
+bool operator()(uint64_t t, const std::unordered_set<U>& u, UInt64SpecialHandlingTag = {}) const {
+    if (t > static_cast<uint64_t>(std::numeric_limits<U>::max()))
         return false;
     else
         return u.count(t) > 0;
 }
-bool operator()(int64_t t, const std::unordered_set<uint64_t>& u) const {
+bool operator()(int64_t t, const std::unordered_set<uint64_t>& u, UInt64SpecialHandlingTag = {}) const {
     if (t < 0)
         return false;
     else
@@ -396,18 +424,20 @@ bool operator()(T t, const emilib::HashSet<U>& u) const {
 } 
 };
 
-struct IsNotInOperator {
+struct IsNotInOperator: MembershipOperator {
 template<typename T, typename U>
 bool operator()(T t, const std::unordered_set<U>& u) const {
     return u.count(t) == 0;
 }
-bool operator()(uint64_t t, const std::unordered_set<int64_t>& u) const {
-    if (comparison::msb_set(t))
+
+template<typename U, typename = std::enable_if_t<is_signed_int<U>>>
+bool operator()(uint64_t t, const std::unordered_set<U>& u, UInt64SpecialHandlingTag = {}) const {
+    if (t > static_cast<uint64_t>(std::numeric_limits<U>::max()))
         return true;
     else
         return u.count(t) == 0;
 }
-bool operator()(int64_t t, const std::unordered_set<uint64_t>& u) const {
+bool operator()(int64_t t, const std::unordered_set<uint64_t>& u, UInt64SpecialHandlingTag = {}) const {
     if (t < 0)
         return true;
     else

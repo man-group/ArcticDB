@@ -122,6 +122,40 @@ TEST(FieldEncoderTest, PassthroughDim1) {
     ASSERT_EQ(pos, expected_bytes + shapes_bytes);
 }
 
+TEST(SegmentEncoderTest, EncodeSingleStringV1) {
+    const auto tsd = create_tsd<DataTypeTag<DataType::ASCII_DYNAMIC64>, Dimension::Dim0>("thing", 1);
+    SegmentInMemory s(StreamDescriptor{tsd});
+    s.set_scalar(0, timestamp(123));
+    s.set_string(1, "happy");
+    s.end_row();
+    arcticdb::proto::encoding::VariantCodec opt;
+    auto lz4ptr = opt.mutable_lz4();
+    lz4ptr->set_acceleration(1);
+    auto copy = s.clone();
+    Segment seg = encode_v1(s.clone(), opt);
+
+    SegmentInMemory res = decode_segment(std::move(seg));
+    ASSERT_EQ(copy.string_at(0, 1), res.string_at(0, 1));
+    ASSERT_EQ(std::string("happy"), res.string_at(0, 1));
+}
+
+TEST(SegmentEncoderTest, EncodeSingleStringV2) {
+    const auto tsd = create_tsd<DataTypeTag<DataType::ASCII_DYNAMIC64>, Dimension::Dim0>("thing", 1);
+    SegmentInMemory s(StreamDescriptor{tsd});
+    s.set_scalar(0, timestamp(123));
+    s.set_string(1, "happy");
+    s.end_row();
+    arcticdb::proto::encoding::VariantCodec opt;
+    auto lz4ptr = opt.mutable_lz4();
+    lz4ptr->set_acceleration(1);
+    auto copy = s.clone();
+    Segment seg = encode_v2(SegmentInMemory{s}, opt);
+
+    SegmentInMemory res = decode_segment(std::move(seg));
+    ASSERT_EQ(copy.string_at(0, 1), res.string_at(0, 1));
+    ASSERT_EQ(std::string("happy"), res.string_at(0, 1));
+}
+
 TEST(SegmentencoderTest, EncodeStringsBasic) {
     const auto tsd = create_tsd<DataTypeTag<DataType::ASCII_DYNAMIC64>, Dimension::Dim0>();
     SegmentInMemory s(StreamDescriptor{tsd});
@@ -141,9 +175,9 @@ TEST(SegmentencoderTest, EncodeStringsBasic) {
     auto lz4ptr = opt.mutable_lz4();
     lz4ptr->set_acceleration(1);
     auto copy = s.clone();
-    Segment seg = encode(SegmentInMemory{s}, opt);
+    Segment seg = encode_v1(SegmentInMemory{s}, opt);
 
-    SegmentInMemory res = decode(std::move(seg));
+    SegmentInMemory res = decode_segment(std::move(seg));
     ASSERT_EQ(copy.string_at(0, 1), res.string_at(0, 1));
     ASSERT_EQ(std::string("happy"), res.string_at(0, 1));
     ASSERT_EQ(copy.string_at(1, 3), res.string_at(1, 3));
@@ -164,13 +198,13 @@ TEST(SegmentEncoderTest, StressTestString) {
     auto index = as::TimeseriesIndex::default_index();
     as::FixedSchema schema{
         index.create_stream_descriptor(123, {
-            scalar_field_proto(DataType::ASCII_DYNAMIC64, "col_1"),
-            scalar_field_proto(DataType::ASCII_DYNAMIC64, "col_2"),
-            scalar_field_proto(DataType::ASCII_DYNAMIC64, "col_3"),
-            scalar_field_proto(DataType::ASCII_DYNAMIC64, "col_4"),
-            scalar_field_proto(DataType::ASCII_DYNAMIC64, "col_5"),
-            scalar_field_proto(DataType::ASCII_DYNAMIC64, "col_6"),
-            }), index
+            scalar_field(DataType::ASCII_DYNAMIC64, "col_1"),
+            scalar_field(DataType::ASCII_DYNAMIC64, "col_2"),
+            scalar_field(DataType::ASCII_DYNAMIC64, "col_3"),
+            scalar_field(DataType::ASCII_DYNAMIC64, "col_4"),
+            scalar_field(DataType::ASCII_DYNAMIC64, "col_5"),
+            scalar_field(DataType::ASCII_DYNAMIC64, "col_6"),
+        }), index
     };
 
     TestAggregator agg(std::move(schema), [&](SegmentInMemory &&mem) {

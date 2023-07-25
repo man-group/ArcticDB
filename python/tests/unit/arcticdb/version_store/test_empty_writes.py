@@ -23,7 +23,7 @@ def test_write_no_rows(lmdb_version_store, sym):
     assert_frame_equal(lmdb_version_store.read(sym).data, df)
 
     df2 = pd.DataFrame([[1.3, 6, "test"]], columns=column_names, index=[pd.Timestamp(0)])
-    df2 = df.append(df2)
+    df2 = pd.concat((df, df2))
     # coercing not needed
     lmdb_version_store.append(sym, df2, dynamic_strings=True)
     assert_frame_equal(lmdb_version_store.read(sym).data, df2)
@@ -31,7 +31,7 @@ def test_write_no_rows(lmdb_version_store, sym):
     df3 = pd.DataFrame(
         [[3.3, 8, None], [2.3, 10, "test2"]], columns=column_names, index=[pd.Timestamp(1), pd.Timestamp(2)]
     )
-    df2 = df2.append(df3)
+    df2 = pd.concat((df2, df3))
     # coercing not needed
     lmdb_version_store.append(sym, df3, dynamic_strings=True)
     assert_frame_equal(lmdb_version_store.read(sym).data, df2)
@@ -100,7 +100,7 @@ def test_write_no_rows_and_columns(lmdb_version_store_dynamic_schema, sym):
         columns=column_names + ["d"],
         index=[pd.Timestamp(3), pd.Timestamp(4)],
     )
-    df5 = df2.append(df4)
+    df5 = pd.concat((df2, df4))
     lmdb_version_store_dynamic_schema.append(sym, df4, dynamic_strings=True)
     assert_frame_equal(lmdb_version_store_dynamic_schema.read(sym).data, df5)
 

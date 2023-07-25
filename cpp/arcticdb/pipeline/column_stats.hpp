@@ -24,7 +24,7 @@ static const char* const end_index_column_name = "end_index";
 class ColumnStats {
 public:
     explicit ColumnStats(const std::unordered_map<std::string, std::unordered_set<std::string>>& column_stats);
-    explicit ColumnStats(const google::protobuf::RepeatedPtrField<proto::descriptors::StreamDescriptor_FieldDescriptor>& column_stats_fields);
+    explicit ColumnStats(const FieldCollection& column_stats_fields);
 
     void drop(const ColumnStats& to_drop, bool warn_if_missing=true);
     robin_hood::unordered_flat_set<std::string> segment_column_names() const;

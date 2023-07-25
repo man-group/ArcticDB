@@ -12,7 +12,7 @@
 #include <arcticdb/version/version_tasks.hpp>
 #include <arcticdb/version/version_store_objects.hpp>
 #include <arcticdb/pipeline/query.hpp>
-
+#include <arcticdb/version/version_functions.hpp>
 #include <folly/futures/FutureSplitter.h>
 
 namespace arcticdb {
@@ -40,28 +40,25 @@ inline std::shared_ptr<std::unordered_map<StreamId, AtomKey>> batch_get_latest_v
 }
 
 // The logic here is the same as get_latest_undeleted_version_and_next_version_id
-inline std::unordered_map<StreamId, version_store::UpdateInfo> batch_get_latest_undeleted_version_and_next_version_id(
+inline std::vector<folly::Future<version_store::UpdateInfo>> batch_get_latest_undeleted_version_and_next_version_id_async(
         const std::shared_ptr<Store> &store,
         const std::shared_ptr<VersionMap> &version_map,
         const std::vector<StreamId> &stream_ids) {
     ARCTICDB_SAMPLE(BatchGetLatestUndeletedVersionAndNextVersionId, 0)
-    std::unordered_map<StreamId, version_store::UpdateInfo> output;
-
-    async::submit_tasks_for_range(stream_ids,
-                                  [store, version_map](auto& stream_id) {
-        return async::submit_io_task(CheckReloadTask{store,
+    std::vector<folly::Future<version_store::UpdateInfo>> vector_fut;
+    for (auto& stream_id: stream_ids){
+        vector_fut.push_back(async::submit_io_task(CheckReloadTask{store,
                                                      version_map,
                                                      stream_id,
-                                                     LoadParameter{LoadType::LOAD_LATEST_UNDELETED}});
-        },
-        [&output](auto& id, auto&& entry) {
-        auto latest_version = entry->get_first_index(true);
-        auto latest_undeleted_version = entry->get_first_index(false);
-        VersionId next_version_id = latest_version.has_value() ? latest_version->version_id() + 1 : 0;
-        output[id] =  {latest_undeleted_version, next_version_id};
-    });
-
-    return output;
+                                                     LoadParameter{LoadType::LOAD_LATEST_UNDELETED}})
+        .thenValue([](auto&& entry){
+            auto latest_version = entry->get_first_index(true);
+            auto latest_undeleted_version = entry->get_first_index(false);
+            VersionId next_version_id = latest_version.has_value() ? latest_version->version_id() + 1 : 0;
+            return version_store::UpdateInfo{latest_undeleted_version, next_version_id};
+        }));
+    }
+    return vector_fut;
 }
 
 inline std::shared_ptr<std::unordered_map<StreamId, AtomKey>> batch_get_specific_version(
@@ -73,7 +70,7 @@ inline std::shared_ptr<std::unordered_map<StreamId, AtomKey>> batch_get_specific
 
     async::submit_tasks_for_range(sym_versions,
                                   [store, version_map](auto& sym_version) {
-        LoadParameter load_param{LoadType::LOAD_DOWNTO, sym_version.second};
+        LoadParameter load_param{LoadType::LOAD_DOWNTO, static_cast<SignedVersionId>(sym_version.second)};
         return async::submit_io_task(CheckReloadTask{store, version_map, sym_version.first, load_param});
         },
         [output](auto& sym_version, auto&& entry) {
@@ -102,7 +99,7 @@ inline std::shared_ptr<std::unordered_map<std::pair<StreamId, VersionId>, AtomKe
     async::submit_tasks_for_range(sym_versions,
             [store, version_map](auto& sym_version) {
                 auto first_version = *std::min_element(std::begin(sym_version.second), std::end(sym_version.second));
-                LoadParameter load_param{LoadType::LOAD_DOWNTO, first_version};
+                LoadParameter load_param{LoadType::LOAD_DOWNTO, static_cast<SignedVersionId>(first_version)};
                 return async::submit_io_task(CheckReloadTask{store, version_map, sym_version.first, load_param});
             },
             [output, &sym_versions](auto& sym_version, auto&& entry) {
@@ -148,7 +145,12 @@ struct StreamVersionData {
             break;
         case LoadType::LOAD_DOWNTO:
             util::check(load_param_.load_until_.has_value(), "Expect LOAD_DOWNTO to have version specificed");
-            load_param_.load_until_ = std::min(load_param_.load_until_.value(), specific_version.version_id_);
+            if ((specific_version.version_id_ >= 0 && load_param_.load_until_.value() >= 0) ||
+                    (specific_version.version_id_ < 0 && load_param_.load_until_.value() < 0)) {
+                load_param_.load_until_ = std::min(load_param_.load_until_.value(), specific_version.version_id_);
+            } else {
+                load_param_ = LoadParameter{LoadType::LOAD_UNDELETED};
+            }
             break;
         case LoadType::LOAD_FROM_TIME:
         case LoadType::LOAD_UNDELETED:
@@ -190,8 +192,14 @@ inline std::optional<AtomKey> get_key_for_version_query(
         [&version_map_entry] (const pipelines::SpecificVersionQuery& specific_version) {
             return find_index_key_for_version_id(specific_version.version_id_, version_map_entry);
         },
-        [&version_map_entry] (const pipelines::TimestampVersionQuery& timestamp_version) {
-        return find_index_key_for_version_timestamp(timestamp_version.timestamp_, version_map_entry);
+        [&version_map_entry] (const pipelines::TimestampVersionQuery& timestamp_version) -> std::optional<AtomKey> {
+            auto version_key = get_version_key_from_time_for_versions(timestamp_version.timestamp_, version_map_entry->get_indexes(false));
+            if(version_key.has_value()){
+                auto version_id = version_key.value().version_id();
+                return find_index_key_for_version_id(version_id, version_map_entry, false);
+            }else{
+                return std::nullopt;
+            }
         },
         [&version_map_entry] (const std::monostate&) {
         return version_map_entry->get_first_index(false);
@@ -201,7 +209,7 @@ inline std::optional<AtomKey> get_key_for_version_query(
         });
 }
 
-inline std::vector<folly::Future<std::optional<AtomKey>>> batch_get_versions(
+inline std::vector<folly::Future<std::optional<AtomKey>>> batch_get_versions_async(
     const std::shared_ptr<Store>& store,
     const std::shared_ptr<VersionMap>& version_map,
     const std::vector<StreamId>& symbols,
@@ -264,12 +272,12 @@ inline void batch_write_and_prune_previous(
     const std::shared_ptr<Store> &store,
     const std::shared_ptr<VersionMap> &version_map,
     const std::vector<AtomKey> &keys,
-    const std::unordered_map<StreamId, version_store::UpdateInfo>& stream_update_info_map) {
+    const std::vector<version_store::UpdateInfo>& stream_update_info_vector) {
     std::vector<folly::Future<folly::Unit>> results;
     results.reserve(keys.size());
-    for (const auto &key : keys) {
-        auto previous_index_key = stream_update_info_map.at(key.id()).previous_index_key_;
-        results.emplace_back(async::submit_io_task(WriteAndPrunePreviousTask{store, version_map, key, previous_index_key}));
+    for(auto key : folly::enumerate(keys)){
+        auto previous_index_key = stream_update_info_vector[key.index].previous_index_key_;
+        results.emplace_back(async::submit_io_task(WriteAndPrunePreviousTask{store, version_map, *key, previous_index_key}));
     }
 
     folly::collect(results).wait();

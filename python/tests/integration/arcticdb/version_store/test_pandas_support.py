@@ -93,9 +93,7 @@ def test_empty_df(lmdb_version_store):
     assert df2.empty
 
 
-@pytest.mark.parametrize("lib_type", ["lmdb_version_store", "s3_version_store"])
-def test_df_datetime_multi_index_with_timezones(lib_type, request):
-    lib = request.getfixturevalue(lib_type)
+def test_df_datetime_multi_index_with_timezones(object_and_lmdb_version_store):
     zone = "America/Chicago"
     df = DataFrame(
         data=["A", "BC", "DEF"],
@@ -106,7 +104,7 @@ def test_df_datetime_multi_index_with_timezones(lib_type, request):
     )
     first_index, second_index = df.index.levels
     assert first_index.tzinfo.zone == second_index.tzinfo.zone == zone
-    lib.write("pandastz", df)
-    saved_df = lib.read("pandastz").data
+    object_and_lmdb_version_store.write("pandastz", df)
+    saved_df = object_and_lmdb_version_store.read("pandastz").data
     first_index_s, second_index_s = saved_df.index.levels
     assert first_index_s.tzinfo.zone == second_index_s.tzinfo.zone == zone

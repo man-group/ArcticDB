@@ -39,17 +39,17 @@ class _Logger(object):
         _log(self._id, _Lvl.ERROR, msg.format(*args, **kwargs) + "\n" + exc)
 
 
-codec = _Logger(_LoggerId.CODEC)
-inmem = _Logger(_LoggerId.IN_MEM)
-root = _Logger(_LoggerId.ROOT)
-storage = _Logger(_LoggerId.STORAGE)
-version = _Logger(_LoggerId.VERSION)
-memory = _Logger(_LoggerId.MEMORY)
-timings = _Logger(_LoggerId.TIMINGS)
-lock = _Logger(_LoggerId.LOCK)
-schedule = _Logger(_LoggerId.SCHEDULE)
+logger_by_name = {
+    "codec": _Logger(_LoggerId.CODEC),
+    "inmem": _Logger(_LoggerId.IN_MEM),
+    "root": _Logger(_LoggerId.ROOT),
+    "storage": _Logger(_LoggerId.STORAGE),
+    "version": _Logger(_LoggerId.VERSION),
+    "memory": _Logger(_LoggerId.MEMORY),
+    "timings": _Logger(_LoggerId.TIMINGS),
+    "lock": _Logger(_LoggerId.LOCK),
+    "schedule": _Logger(_LoggerId.SCHEDULE),
+}
 
-
-logger_by_name = dict(
-    codec=codec, inmem=inmem, root=root, storage=storage, version=version, memory=memory, timings=timings, lock=lock
-)
+for key, value in logger_by_name.items():
+    globals()[key] = value

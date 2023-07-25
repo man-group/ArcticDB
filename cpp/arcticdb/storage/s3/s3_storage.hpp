@@ -15,7 +15,7 @@
 #include <aws/core/auth/AWSCredentialsProvider.h>
 #include <arcticdb/log/log.hpp>
 #include <arcticdb/storage/s3/s3_api.hpp>
-#include <arcticdb/storage/s3/s3_utils.hpp>
+#include <arcticdb/storage/object_store_utils.hpp>
 #include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/storage/s3/s3_client_accessor.hpp>
 #include <arcticdb/util/composite.hpp>
@@ -75,26 +75,6 @@ class S3Storage final : public Storage<S3Storage> {
     Aws::S3::S3Client s3_client_;
     std::string root_folder_;
     std::string bucket_name_;
-};
-
-
-class S3StorageFactory final : public StorageFactory<S3StorageFactory> {
-    using Parent = StorageFactory<S3StorageFactory>;
-    friend Parent;
-
-  public:
-    using Config = arcticdb::proto::s3_storage::Config;
-    using StorageType = S3Storage;
-
-    S3StorageFactory(const Config &conf) :
-        conf_(conf) {
-    }
-  private:
-    auto do_create_storage(const LibraryPath &lib, OpenMode mode) {
-            return S3Storage(lib, mode, conf_);
-    }
-
-    Config conf_;
 };
 
 inline arcticdb::proto::storage::VariantStorage pack_config(const std::string &bucket_name) {
@@ -245,7 +225,9 @@ auto get_s3_config(const ConfigType& conf) {
     auto endpoint = conf.endpoint();
     util::check_arg(!endpoint.empty(), "S3 Endpoint must be specified");
     client_configuration.endpointOverride = endpoint;
-    client_configuration.verifySSL = false;
+    const bool verify_ssl = ConfigsMap::instance()->get_int("S3Storage.VerifySSL", conf.ssl());
+    ARCTICDB_RUNTIME_DEBUG(log::storage(), "Verify ssl: {}", verify_ssl);
+    client_configuration.verifySSL = verify_ssl;
     client_configuration.maxConnections = conf.max_connections() == 0 ?
             ConfigsMap::instance()->get_int("VersionStore.NumIOThreads", 16) :
             conf.max_connections();

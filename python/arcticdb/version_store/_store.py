@@ -29,6 +29,7 @@ from arcticdb.supported_types import time_types as supported_time_types
 from arcticdb.toolbox.library_tool import LibraryTool
 from arcticdb.version_store.processing import QueryBuilder
 from arcticdb_ext.storage import OpenMode as _OpenMode
+from arcticdb.encoding_version import EncodingVersion
 from arcticdb_ext.storage import (
     create_mem_config_resolver as _create_mem_config_resolver,
     LibraryIndex as _LibraryIndex,
@@ -47,6 +48,7 @@ from arcticdb_ext.version_store import PythonVersionStoreReadOptions as _PythonV
 from arcticdb_ext.version_store import PythonVersionStoreVersionQuery as _PythonVersionStoreVersionQuery
 from arcticdb_ext.version_store import ColumnStats as _ColumnStats
 from arcticdb_ext.version_store import StreamDescriptorMismatch
+from arcticdb_ext.version_store import DataError
 from arcticdb.authorization.permissions import OpenMode
 from arcticdb.exceptions import ArcticNativeNotYetImplemented, ArcticNativeException
 from arcticdb.flattener import Flattener
@@ -263,10 +265,13 @@ class NativeVersionStore:
         return cls(library=lib, lib_cfg=lib_cfg, env=env, open_mode=open_mode)
 
     @classmethod
-    def create_store_from_config(cls, cfg, env, lib_name, open_mode=OpenMode.DELETE):
+    def create_store_from_config(
+        cls, cfg, env, lib_name, open_mode=OpenMode.DELETE, encoding_version=EncodingVersion.V1
+    ):
         from arcticdb.version_store.helper import extract_lib_config
 
         lib_cfg = extract_lib_config(cfg.env_by_id[env], lib_name)
+        lib_cfg.lib_desc.version.encoding_version = encoding_version
         lib = cls.create_lib_from_lib_config(lib_cfg, env, open_mode)
         return cls(library=lib, lib_cfg=lib_cfg, env=env, open_mode=open_mode)
 
@@ -801,7 +806,7 @@ class NativeVersionStore:
             )
 
     def create_column_stats(
-        self, symbol: str, column_stats: Dict[str, Set[str]], as_of: VersionQueryInput = None
+        self, symbol: str, column_stats: Dict[str, Set[str]], as_of: Optional[VersionQueryInput] = None
     ) -> None:
         """
         Calculates the specified column statistics for each row-slice for the given symbol. In the future, these
@@ -817,11 +822,8 @@ class NativeVersionStore:
             Keys are column names.
             Values are sets of statistic types to build for that column. Options are:
                 "MINMAX" : store the minimum and maximum value for the column in each row-slice
-        as_of : `str` or `int` or `datetime.datetime`
-            Create the column stats for the version as it was as_of the point in time.
-            `int` : specific version number
-            `str` : snapshot name which contains the version
-            `datetime.datetime` : the version of the data that existed as_of the requested point in time
+        as_of : `Optional[VersionQueryInput]`, default=None
+            See documentation of `read` method for more details.
 
         Returns
         -------
@@ -832,7 +834,7 @@ class NativeVersionStore:
         self.version_store.create_column_stats_version(symbol, column_stats, version_query)
 
     def drop_column_stats(
-        self, symbol: str, column_stats: Optional[Dict[str, Set[str]]] = None, as_of: VersionQueryInput = None
+        self, symbol: str, column_stats: Optional[Dict[str, Set[str]]] = None, as_of: Optional[VersionQueryInput] = None
     ) -> None:
         """
         Deletes the specified column statistics for the given symbol.
@@ -844,11 +846,8 @@ class NativeVersionStore:
         column_stats: `Optional[Dict[str, Set[str]]], default=None`
             The column stats to drop. If not provided, all column stats will be dropped.
             See documentation of `create_column_stats` method for more details.
-        as_of : `str` or `int` or `datetime.datetime`
-            Create the column stats for the version as it was as_of the point in time.
-            `int` : specific version number
-            `str` : snapshot name which contains the version
-            `datetime.datetime` : the version of the data that existed as_of the requested point in time
+        as_of : `Optional[VersionQueryInput]`, default=None
+            See documentation of `read` method for more details.
 
         Returns
         -------
@@ -858,7 +857,7 @@ class NativeVersionStore:
         version_query = self._get_version_query(as_of)
         self.version_store.drop_column_stats_version(symbol, column_stats, version_query)
 
-    def read_column_stats(self, symbol: str, as_of: VersionQueryInput = None, **kwargs) -> pd.DataFrame:
+    def read_column_stats(self, symbol: str, as_of: Optional[VersionQueryInput] = None, **kwargs) -> pd.DataFrame:
         """
         Read all the column statistics data that has been generated for the given symbol.
 
@@ -866,11 +865,8 @@ class NativeVersionStore:
         ----------
         symbol: `str`
             Symbol name.
-        as_of : `str` or `int` or `datetime.datetime`
-            Create the column stats for the version as it was as_of the point in time.
-            `int` : specific version number
-            `str` : snapshot name which contains the version
-            `datetime.datetime` : the version of the data that existed as_of the requested point in time
+        as_of : `Optional[VersionQueryInput]`, default=None
+            See documentation of `read` method for more details.
 
         Returns
         -------
@@ -881,7 +877,9 @@ class NativeVersionStore:
         data = denormalize_dataframe(self.version_store.read_column_stats_version(symbol, version_query))
         return data
 
-    def get_column_stats_info(self, symbol: str, as_of: VersionQueryInput = None, **kwargs) -> Dict[str, Set[str]]:
+    def get_column_stats_info(
+        self, symbol: str, as_of: Optional[VersionQueryInput] = None, **kwargs
+    ) -> Dict[str, Set[str]]:
         """
         Read the column statistics dictionary for the given symbol.
 
@@ -889,11 +887,8 @@ class NativeVersionStore:
         ----------
         symbol: `str`
             Symbol name.
-        as_of : `str` or `int` or `datetime.datetime`
-            Create the column stats for the version as it was as_of the point in time.
-            `int` : specific version number
-            `str` : snapshot name which contains the version
-            `datetime.datetime` : the version of the data that existed as_of the requested point in time
+        as_of : `Optional[VersionQueryInput]`, default=None
+            See documentation of `read` method for more details.
 
         Returns
         -------
@@ -958,24 +953,35 @@ class NativeVersionStore:
             Dictionary of symbol mapping with the versioned items
         """
         _check_batch_kwargs(NativeVersionStore.batch_read, NativeVersionStore.read, kwargs)
+        throw_on_missing_version = True
         versioned_items = self._batch_read_to_versioned_items(
-            symbols, as_ofs, date_ranges, columns, query_builder, kwargs
+            symbols, as_ofs, date_ranges, columns, query_builder, throw_on_missing_version, kwargs
+        )
+        check(
+            all(v is not None for v in versioned_items),
+            "Null value from _batch_read_to_versioned_items. NoDataFoundException should have been thrown instead.",
         )
         return {v.symbol: v for v in versioned_items}
 
-    def _batch_read_to_versioned_items(self, symbols, as_ofs, date_ranges, columns, query_builder, kwargs=None):
+    def _batch_read_to_versioned_items(
+        self, symbols, as_ofs, date_ranges, columns, query_builder, throw_on_missing_version, kwargs=None
+    ):
         if kwargs is None:
             kwargs = dict()
         version_queries = self._get_version_queries(len(symbols), as_ofs, **kwargs)
         read_queries = self._get_read_queries(len(symbols), date_ranges, columns, query_builder)
         read_options = self._get_read_options(**kwargs)
+        read_options.set_batch_throw_on_missing_version(throw_on_missing_version)
         read_results = self.version_store.batch_read(symbols, version_queries, read_queries, read_options)
         versioned_items = []
         for i in range(len(read_results)):
-            read_result = ReadResult(*read_results[i])
-            read_query = read_queries[i]
-            vitem = self._post_process_dataframe(read_result, read_query)
-            versioned_items.append(vitem)
+            if isinstance(read_results[i], DataError):
+                versioned_items.append(read_results[i])
+            else:
+                read_result = ReadResult(*read_results[i])
+                read_query = read_queries[i]
+                vitem = self._post_process_dataframe(read_result, read_query)
+                versioned_items.append(vitem)
         return versioned_items
 
     def batch_read_metadata(
@@ -1391,7 +1397,7 @@ class NativeVersionStore:
         read_query = _PythonVersionStoreReadQuery()
 
         if query_builder:
-            read_query.set_clause_builder(query_builder.finalize_clause_builder())
+            read_query.add_clauses(query_builder.clauses)
 
         if date_range is not None:
             read_query.row_filter = _normalize_dt_range(date_range)
@@ -1491,7 +1497,7 @@ class NativeVersionStore:
             Symbol name.
         as_of : `Optional[VersionQueryInput]`, default=None
             Return the data as it was as_of the point in time. Defaults to getting the latest version.
-            `int` : specific version number
+            `int` : specific version number. Negative indexing is supported, with -1 representing the latest version, -2 the version before that, etc.
             `str` : snapshot name which contains the version
             `datetime.datetime` : the version of the data that existed as_of the requested point in time
         date_range: `Optional[DateRangeInput]`, default=None
@@ -2233,8 +2239,26 @@ class NativeVersionStore:
             True if the symbol is pickled, False otherwise.
         """
         version_query = self._get_version_query(as_of, **kwargs)
-        _, desc = self.version_store.read_descriptor(symbol, version_query)
-        return self.is_pickled_descriptor(desc)
+        dit = self.version_store.read_descriptor(symbol, version_query)
+        return self.is_pickled_descriptor(dit.timeseries_descriptor)
+
+    def _get_time_range_from_ts(self, desc, min_ts, max_ts):
+        if min_ts == None or max_ts == None:
+            return datetime64("nat"), datetime64("nat")
+        input_type = desc.normalization.WhichOneof("input_type")
+        tz = None
+        if input_type == "df":
+            index_metadata = desc.normalization.df.common
+            tz = get_timezone_from_metadata(index_metadata)
+        if tz:
+            # If tz is provided, it is stored in UTC - hence needs to be localized to UTC before
+            # converting to the given tz
+            return (
+                _from_tz_timestamp(min_ts, "UTC").astimezone(pytz.timezone(tz)),
+                _from_tz_timestamp(max_ts, "UTC").astimezone(pytz.timezone(tz)),
+            )
+        else:
+            return _from_tz_timestamp(min_ts, None), _from_tz_timestamp(max_ts, None)
 
     def get_timerange_for_symbol(
         self, symbol: str, version: Optional[VersionQueryInput] = None
@@ -2265,23 +2289,9 @@ class NativeVersionStore:
 
         start_indices, end_indices = index_data[0], index_data[1]
         min_ts, max_ts = min(start_indices), max(end_indices)
-
         # to get timezone info
-        _, desc = self.version_store.read_descriptor(symbol, version_query)
-        input_type = desc.normalization.WhichOneof("input_type")
-        tz = None
-        if input_type == "df":
-            index_metadata = desc.normalization.df.common
-            tz = get_timezone_from_metadata(index_metadata)
-        if tz:
-            # If tz is provided, it is stored in UTC - hence needs to be localized to UTC before
-            # converting to the given tz
-            return (
-                _from_tz_timestamp(min_ts, "UTC").astimezone(pytz.timezone(tz)),
-                _from_tz_timestamp(max_ts, "UTC").astimezone(pytz.timezone(tz)),
-            )
-        else:
-            return _from_tz_timestamp(min_ts, None), _from_tz_timestamp(max_ts, None)
+        dit = self.version_store.read_descriptor(symbol, version_query)
+        return self._get_time_range_from_ts(dit.timeseries_descriptor, min_ts, max_ts)
 
     def name(self):
         return self._lib_cfg.lib_desc.name
@@ -2303,8 +2313,8 @@ class NativeVersionStore:
             The number of rows in the specified revision of the symbol.
         """
         version_query = self._get_version_query(as_of)
-        vit, desc = self.version_store.read_descriptor(symbol, version_query)
-        return desc.total_rows
+        dit = self.version_store.read_descriptor(symbol, version_query)
+        return dit.timeseries_descriptor.total_rows
 
     def lib_cfg(self):
         return self._lib_cfg
@@ -2312,19 +2322,20 @@ class NativeVersionStore:
     def open_mode(self):
         return self._open_mode
 
-    def _process_info(self, symbol: str, vit, desc, as_of: Optional[VersionQueryInput] = None) -> Dict[str, Any]:
-        columns = [f.name for f in desc.stream_descriptor.fields]
-        dtypes = [f.type_desc for f in desc.stream_descriptor.fields]
+    def _process_info(self, symbol: str, dit, as_of: Optional[VersionQueryInput] = None) -> Dict[str, Any]:
+        timeseries_descriptor = dit.timeseries_descriptor
+        columns = [f.name for f in timeseries_descriptor.stream_descriptor.fields]
+        dtypes = [f.type_desc for f in timeseries_descriptor.stream_descriptor.fields]
         index = []
         index_dtype = []
-        input_type = desc.normalization.WhichOneof("input_type")
+        input_type = timeseries_descriptor.normalization.WhichOneof("input_type")
         index_type = "NA"
         if input_type == "df":
-            index_type = desc.normalization.df.common.WhichOneof("index_type")
+            index_type = timeseries_descriptor.normalization.df.common.WhichOneof("index_type")
             if index_type == "index":
-                index_metadata = desc.normalization.df.common.index
+                index_metadata = timeseries_descriptor.normalization.df.common.index
             else:
-                index_metadata = desc.normalization.df.common.multi_index
+                index_metadata = timeseries_descriptor.normalization.df.common.multi_index
 
             if index_type == "multi_index" or (index_type == "index" and index_metadata.is_not_range_index):
                 index_name_from_store = columns.pop(0)
@@ -2356,20 +2367,22 @@ class NativeVersionStore:
                         index_name = index_name[_IDX_PREFIX_LEN:]
                     index.append(index_name)
                     index_dtype.append(dtypes.pop(0))
-            if desc.normalization.df.has_synthetic_columns:
+            if timeseries_descriptor.normalization.df.has_synthetic_columns:
                 columns = pd.RangeIndex(0, len(columns))
 
+        date_range = self._get_time_range_from_ts(timeseries_descriptor, dit.start_index, dit.end_index)
+        last_update = datetime64(dit.creation_ts, "ns")
         return {
             "col_names": {"columns": columns, "index": index, "index_dtype": index_dtype},
             "dtype": dtypes,
-            "rows": desc.total_rows,
-            "last_update": self.update_time(symbol, as_of),
+            "rows": timeseries_descriptor.total_rows,
+            "last_update": last_update,
             "input_type": input_type,
             "index_type": index_type,
-            "normalization_metadata": desc.normalization,
-            "type": self.get_arctic_style_type_info_for_norm(desc),
-            "date_range": self.get_timerange_for_symbol(symbol, vit.version),
-            "sorted": SortedValue.Name(desc.stream_descriptor.sorted),
+            "normalization_metadata": timeseries_descriptor.normalization,
+            "type": self.get_arctic_style_type_info_for_norm(timeseries_descriptor),
+            "date_range": date_range,
+            "sorted": SortedValue.Name(timeseries_descriptor.stream_descriptor.sorted),
         }
 
     def get_info(self, symbol: str, version: Optional[VersionQueryInput] = None) -> Dict[str, Any]:
@@ -2399,8 +2412,8 @@ class NativeVersionStore:
             - date_range, `tuple`
         """
         version_query = self._get_version_query(version)
-        vit, desc = self.version_store.read_descriptor(symbol, version_query)
-        return self._process_info(symbol, vit, desc, version)
+        dit = self.version_store.read_descriptor(symbol, version_query)
+        return self._process_info(symbol, dit, version)
 
     def batch_get_info(
         self, symbols: List[str], as_ofs: Optional[List[VersionQueryInput]] = None
@@ -2444,10 +2457,8 @@ class NativeVersionStore:
         list_descriptors = self.version_store.batch_read_descriptor(symbols, version_queries)
         args_list = list(zip(list_descriptors, symbols, version_queries, as_ofs_lists))
         list_infos = []
-        for descriptor, symbol, version_query, as_of in args_list:
-            vit = descriptor[0]
-            desc = descriptor[1]
-            list_infos.append(self._process_info(symbol, vit, desc, as_of))
+        for dit, symbol, version_query, as_of in args_list:
+            list_infos.append(self._process_info(symbol, dit, as_of))
         return list_infos
 
     def write_metadata(

@@ -10,7 +10,7 @@
 #include <arcticdb/storage/storage.hpp>
 #include <arcticdb/storage/storage_factory.hpp>
 #include <arcticdb/log/log.hpp>
-#include <arcticdb/storage/s3/s3_utils.hpp>
+#include <arcticdb/storage/object_store_utils.hpp>
 #include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/util/composite.hpp>
 #include <arcticdb/storage/s3/s3_client_accessor.hpp>
@@ -62,25 +62,6 @@ private:
     Aws::S3::S3Client s3_client_;
     std::string root_folder_;
     std::string bucket_name_;
-};
-
-class NfsBackedStorageFactory final : public StorageFactory<NfsBackedStorageFactory> {
-    using Parent = StorageFactory<NfsBackedStorageFactory>;
-    friend Parent;
-
-public:
-    using Config = arcticdb::proto::nfs_backed_storage::Config;
-    using StorageType = NfsBackedStorageFactory;
-
-    NfsBackedStorageFactory(const Config &conf) :
-        conf_(conf) {
-    }
-private:
-    auto do_create_storage(const LibraryPath &lib, OpenMode mode) {
-        return NfsBackedStorage(lib, mode, conf_);
-    }
-
-    Config conf_;
 };
 
 inline arcticdb::proto::storage::VariantStorage pack_config(const std::string &bucket_name) {

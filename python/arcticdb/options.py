@@ -6,6 +6,8 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 
+from arcticdb.encoding_version import EncodingVersion
+
 
 class LibraryOptions:
     """
@@ -25,7 +27,13 @@ class LibraryOptions:
     """
 
     def __init__(
-        self, *, dynamic_schema: bool = False, dedup: bool = False, rows_per_segment=100_000, columns_per_segment=127
+        self,
+        *,
+        dynamic_schema: bool = False,
+        dedup: bool = False,
+        rows_per_segment=100_000,
+        columns_per_segment=127,
+        encoding_version: EncodingVersion = EncodingVersion.V1,
     ):
         """
         Parameters
@@ -68,7 +76,7 @@ class LibraryOptions:
             fixed intervals and data is only de-duplicated if the hashes of the data segments are identical. A one row
             offset will therefore prevent this de-duplication.
 
-            Note that these conditions will also be checked with write_pickle and write_batch_pickle. However, pickled
+            Note that these conditions will also be checked with write_pickle and write_pickle_batch. However, pickled
             objects are always written as a single data segment, and so dedup will only occur if the written object is
             identical to the previous version.
 
@@ -108,6 +116,7 @@ class LibraryOptions:
         self.dedup = dedup
         self.rows_per_segment = rows_per_segment
         self.columns_per_segment = columns_per_segment
+        self.encoding_version = encoding_version
 
     def __repr__(self):
         return (
