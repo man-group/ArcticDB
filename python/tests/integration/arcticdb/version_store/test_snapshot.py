@@ -7,7 +7,9 @@ As of the Change Date specified in that file, in accordance with the Business So
 """
 import pytest
 import numpy as np
+
 from arcticdb_ext.exceptions import InternalException
+from arcticdb.util.test import distinct_timestamps
 
 
 def test_basic_snapshot_flow(lmdb_version_store):
@@ -237,55 +239,31 @@ def test_pruned_symbol_in_symbol_read_version(lmdb_version_store_tombstone_and_p
     assert lib.read("a", as_of="snap").data == 1
 
 
-import pandas as pd
-
-
-def test_read_symbol_with_ts_in_snapshot(lmdb_version_store, sym):
-    lib = lmdb_version_store
+@pytest.mark.parametrize(
+    "store", ["lmdb_version_store_v1", "lmdb_version_store_v2", "lmdb_version_store_tombstone_and_pruning"]
+)
+def test_read_symbol_with_ts_in_snapshot(store, request, sym):
+    lib = request.getfixturevalue(store)
     lib.write(sym, 0)
-    lib.write(sym, 1)
-    time_after_second_write = pd.Timestamp.utcnow()
+    with distinct_timestamps(lib) as second_write_timestamps:
+        lib.write(sym, 1)
     lib.snapshot("snap")
     # After this write only version 1 exists via the snapshot
-    lib.write(sym, 2, prune_previous_version=True)
-    time_after_third_write = pd.Timestamp.utcnow()
+    with distinct_timestamps(lib) as third_write_timestamps:
+        lib.write(sym, 2, prune_previous_version=True)
 
     assert lib.read(sym).data == 2
     versions = lib.list_versions()
     assert len(versions) == 2  # deleted for version 1
 
     assert lib.read(sym, as_of=1).data == 1
-    assert lib.read(sym, as_of=time_after_second_write).version == 1
-    assert lib.read(sym, as_of=time_after_second_write).data == 1
+    assert lib.read(sym, as_of=second_write_timestamps.after).version == 1
+    assert lib.read(sym, as_of=second_write_timestamps.after).data == 1
 
     lib.snapshot("snap1")
     lib.delete_version(sym, 2)
     assert lib.read(sym, as_of=2).data == 2  # still in snapshot
-    assert lib.read(sym, as_of=time_after_third_write).version == 2
-
-
-def test_read_symbol_with_ts_in_snapshot_with_pruning(lmdb_version_store_tombstone_and_pruning, sym):
-    lib = lmdb_version_store_tombstone_and_pruning
-    lib.write(sym, 0)
-    lib.write(sym, 1)
-    time_after_second_write = pd.Timestamp.utcnow()
-    lib.snapshot("snap")
-    # After this write only version 1 exists via the snapshot
-    lib.write(sym, 2, prune_previous_version=True)
-    time_after_third_write = pd.Timestamp.utcnow()
-
-    assert lib.read(sym).data == 2
-    versions = lib.list_versions()
-    assert len(versions) == 2  # deleted for version 1
-
-    assert lib.read(sym, as_of=1).data == 1
-    assert lib.read(sym, as_of=time_after_second_write).version == 1
-    assert lib.read(sym, as_of=time_after_second_write).data == 1
-
-    lib.snapshot("snap1")
-    lib.delete_version(sym, 2)
-    assert lib.read(sym, as_of=2).data == 2  # still in snapshot
-    assert lib.read(sym, as_of=time_after_third_write).version == 2
+    assert lib.read(sym, as_of=third_write_timestamps.after).version == 2
 
 
 def test_snapshot_random_versions_to_fail(lmdb_version_store_tombstone_and_pruning, sym):
