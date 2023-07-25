@@ -12,7 +12,7 @@ from math import inf
 import numpy as np
 import pandas as pd
 
-from typing import Dict
+from typing import Dict, Optional, Any
 
 from arcticdb.exceptions import ArcticNativeException, UserInputException
 from arcticdb.preconditions import check
@@ -273,7 +273,8 @@ class QueryBuilder:
         >>> dataframe = lib.read(symbol, query_builder=q).data
 
     For Group By and Aggregation functionality please see the documentation for the `groupby`. For projection
-    functionality, see the documentation for the `apply` method.
+    functionality, see the documentation for the `apply` method. For top k functinoality see the documentation for the
+    `top_k` method.
 
     Supported arithmetic operations when projection or filtering:
 
@@ -467,6 +468,52 @@ class QueryBuilder:
         self.clauses.append(_GroupByClause(name))
         self._python_clauses.append(PythonGroupByClause(name))
         return self
+
+    def top_k(self, vector: Any, k: int, method: Optional[str] = "euclidean"):
+        """
+        Returns the top k vectors most similar to vector according to method.
+
+        Parameters
+        ----------
+        vector: Any`
+            What should this really be? I assume `np.array` is somewhat too restrictive. Some kind of iterable?
+        k: `int`
+            The number of vectors to be returned.
+        method: `str`
+            The method by which to compute distance. Presently only
+                * "euclidean" (the Euclidean norm)
+            is supported.
+
+        Examples
+        --------
+        Points closest to the origin by Euclidean distance:
+
+        >>> df = pd.DataFrame(
+            {
+                "a": [1,2,3,4,5],
+                "b": [0,0,0,0,0],
+                "c": [10,10,10,10,10],
+                "d": [1,1,1,1,1]
+            },
+            index=np.arange(5),
+        )
+        >>> q = QueryBuilder()
+        >>> q = q.top_k(df["b"], 3)
+        >>> lib.read("symbol", query_builder=q).data
+               a  b  c
+            0  0  1  1
+            1  0  1  2
+            2  0  1  3
+            3  0  1  4
+            4  0  1  5
+
+        Returns
+        -------
+        QueryBuilder
+            Modified QueryBuilder object.
+
+        """
+        raise NotImplementedError
 
     def agg(self, aggregations: Dict[str, str]):
         # Only makes sense if previous stage is a group-by
