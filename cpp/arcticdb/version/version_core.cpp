@@ -1299,7 +1299,7 @@ VersionedItem defragment_symbol_data_impl(
             pre_defragmentation_info.append_after.value(),
             std::nullopt);
     
-    std::ignore = store->remove_keys(delete_keys);
+    store->remove_keys(delete_keys).get();
     return vit;
 }
 
