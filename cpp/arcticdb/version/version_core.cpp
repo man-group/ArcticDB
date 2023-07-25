@@ -92,7 +92,8 @@ folly::Future<entity::AtomKey> async_write_dataframe_impl(
     bool validate_index
     ) {
     ARCTICDB_SAMPLE(DoWrite, 0)
-
+    if (0 == version_id)
+        verify_stream_id(frame.desc.id());
     // Slice the frame according to the write options
     frame.set_bucketize_dynamic(options.bucketize_dynamic);
     auto slicing_arg = get_slicing_policy(options, frame);

@@ -491,8 +491,6 @@ public:
         if (!skip_compat && !has_stored_entry(store, stream_id))
             do_backwards_compat_check(store, stream_id);
 
-        verify_stream_id(store, stream_id);
-
         return storage_reload(store, stream_id, load_param, iterate_on_failure);
     }
 
@@ -565,25 +563,6 @@ private:
 
         if (validate_)
             entry->validate();
-    }
-
-    void verify_stream_id(const std::shared_ptr<Store> &store,
-                   const StreamId &stream_id) {
-        if (has_cached_entry(stream_id, LoadParameter{LoadType::LOAD_LATEST}) || has_stored_entry(store, stream_id))
-            return;
-
-        if (std::getenv("ARCTICDB_NO_STRICT_SYMBOL_CHECK"))
-        {
-            ARCTICDB_DEBUG(log::version(), "Key with stream id {} will not be strictly checked because ARCTICDB_NO_STRICT_SYMBOL_CHECK env var is set.", stream_id);
-            return;
-        }
-
-        for (unsigned char c : std::get<std::string>(stream_id)) {
-            if (c < 32 || c > 127) {
-                throw UserInputException(
-                        "The symbol key can contain only valid ASCII chars in the range 32-127 inclusive");
-            } // TODO: Use a better exception
-        }
     }
 
     bool has_cached_entry(const StreamId &stream_id, const LoadParameter load_param) const {

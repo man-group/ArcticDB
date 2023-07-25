@@ -47,7 +47,7 @@ from arcticdb.util.test import (
 )
 from arcticdb_ext.tools import AZURE_SUPPORT
 from tests.util.date import DateRange
-
+from arcticdb_ext import set_config_int, unset_config_int
 
 if sys.platform == "linux":
     SMOKE_TEST_VERSION_STORES = [
@@ -97,8 +97,40 @@ def test_simple_flow(lmdb_version_store_no_symbol_list, symbol):
     lmdb_version_store_no_symbol_list.delete(symbol)
     assert lmdb_version_store_no_symbol_list.list_symbols() == lmdb_version_store_no_symbol_list.list_versions() == []
 
-
-@pytest.mark.parametrize("special_char", ["$", ",", ":", "=", "@", "-", "_", ".", "~", ";", "/", "+", "?", " "])
+@pytest.mark.parametrize(
+    "special_char",
+    [
+        "$",
+        "@",
+        "=",
+        ";",
+        "/",
+        ":",
+        "+",
+        " ",
+        ",",
+        "?",
+        "\\",
+        "{",
+        "^",
+        "}",
+        "%",
+        "`",
+        "[",
+        "]",
+        '"',
+        "'",
+        "~",
+        "#",
+        "|",
+        "!",
+        "-",
+        "_",
+        ".",
+        "(",
+        ")",
+    ],
+)
 def test_special_chars(s3_version_store, special_char):
     """Test chars with special URI encoding under RFC 3986"""
     sym = f"prefix{special_char}postfix"
@@ -120,9 +152,9 @@ def test_s3_breaking_chars(s3_version_store, breaking_char):
     assert sym not in s3_version_store.list_symbols()
 
 
-@pytest.mark.parametrize("unhandled_char", [chr(0), chr(128)])
+@pytest.mark.parametrize("unhandled_char", [chr(0), chr(127), chr(128)])
 def test_unhandled_chars_default(s3_version_store, unhandled_char):
-    """Test that when we turn the STRICT_SYMBOL_CHECK off, the problematic \x00 is raising an exception"""
+    """Test that by default, the problematic chars are raising an exception"""
     sym = f"prefix{unhandled_char}postfix"
     df = sample_dataframe()
     with pytest.raises(UserInputException):
@@ -132,25 +164,25 @@ def test_unhandled_chars_default(s3_version_store, unhandled_char):
 
 
 @pytest.mark.parametrize("unhandled_char", [chr(0)])
-@mock.patch.dict(os.environ, {"ARCTICDB_NO_STRICT_SYMBOL_CHECK": "0"})
 def test_unhandled_chars_no_strict_check(s3_version_store, unhandled_char):
     """Test that when we turn the STRICT_SYMBOL_CHECK off, the problematic \x00 is raising an exception"""
+    set_config_int("VersionStore.NoStrictSymbolCheck", 1)
     sym = f"prefix{unhandled_char}postfix"
     df = sample_dataframe()
     s3_version_store.write(sym, df)
     with pytest.raises(InternalException):
         s3_version_store.list_symbols()
+    unset_config_int("VersionStore.NoStrictSymbolCheck")
 
 
-@pytest.mark.parametrize("unhandled_char", [chr(128)])
-@mock.patch.dict(os.environ, {"ARCTICDB_NO_STRICT_SYMBOL_CHECK": "0"})
+@pytest.mark.parametrize("unhandled_char", [chr(0), chr(127), chr(128)])
 def test_unhandled_chars_already_present(s3_version_store, unhandled_char):
     sym = f"prefix{unhandled_char}postfix"
     df = sample_dataframe()
+    set_config_int("VersionStore.NoStrictSymbolCheck", 1)
     s3_version_store.write(sym, df)
-
-    with mock.patch.dict(os.environ, clear=True):
-        s3_version_store.write(sym, df)
+    unset_config_int("VersionStore.NoStrictSymbolCheck")
+    s3_version_store.write(sym, df)
 
 
 @pytest.mark.parametrize("version_store", SMOKE_TEST_VERSION_STORES)

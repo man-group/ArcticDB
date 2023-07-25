@@ -81,12 +81,6 @@ if TYPE_CHECKING:
 
 # These chars are encoded by S3 and on doing a list_symbols they will show up as the encoded form eg. &amp
 UNSUPPORTED_S3_CHARS = {"*", "&", "<", ">"}
-
-# If we have enabled STRICT_SYMBOL_CHECK (enabled by default)
-# we will use the SUPPORTED_CHARS set for the check
-# To add more chars as supported, simply add them to the set, e.g. SUPPORTED_CHARS.add('c')
-SUPPORTED_CHARS = set([chr(c) for c in range(1, 128)])
-SUPPORTED_CHARS = SUPPORTED_CHARS.difference(UNSUPPORTED_S3_CHARS)
 MAX_SYMBOL_SIZE = (2**8) - 1
 
 

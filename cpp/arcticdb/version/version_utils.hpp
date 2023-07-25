@@ -160,6 +160,23 @@ inline void check_is_version(const AtomKey &key) {
     util::check(key.type() == KeyType::VERSION, "Expected version key type but got {}", key);
 }
 
+inline void verify_stream_id(const StreamId &stream_id) {
+    if (ConfigsMap::instance()->get_int("VersionStore.NoStrictSymbolCheck"))
+    {
+        ARCTICDB_DEBUG(log::version(), "Key with stream id {} will not be strictly checked because VersionStore.NoStrictSymbolCheck variable is set to 1.", stream_id);
+        return;
+    }
+
+    for (unsigned char c : std::get<std::string>(stream_id)) {
+        if (c < 32 || c > 126) {
+            user_input::raise<ErrorCode::E_INVALID_CHAR_IN_SYMBOL>(
+                    "The symbol key can contain only valid ASCII chars in the range 32-126 inclusive. Symbol Key: {} BadChar: {}",
+                    stream_id,
+                    c);
+        }
+    }
+}
+
 inline std::optional<RefKey> get_symbol_ref_key(
     const std::shared_ptr<StreamSource> &store,
     const StreamId &stream_id) {
