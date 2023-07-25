@@ -375,16 +375,6 @@ inline std::optional<AtomKey> find_index_key_for_version_id(
     return included_deleted || !entry->is_tombstoned(*key) ? std::make_optional(*key) : std::nullopt;
 }
 
-inline std::optional<AtomKey> find_index_key_for_version_timestamp(timestamp as_of, const std::shared_ptr<VersionMapEntry>& entry, bool included_deleted=true) {
-    auto key = std::find_if(std::begin(entry->keys_), std::end(entry->keys_), [as_of] (const auto& key) {
-        return is_index_key_type(key.type()) && key.creation_ts() == as_of;
-    });
-    if(key == std::end(entry->keys_))
-        return std::nullopt;
-
-    return included_deleted || !entry->is_tombstoned(*key) ? std::make_optional(*key) : std::nullopt;
-}
-
 inline std::optional<std::pair<AtomKey, AtomKey>> get_latest_key_pair(const std::shared_ptr<VersionMapEntry>& entry) {
     if (entry->head_ && !entry->keys_.empty()) {
         auto journal_key = entry->head_.value();
