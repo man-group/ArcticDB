@@ -12,7 +12,7 @@ from math import inf
 import numpy as np
 import pandas as pd
 
-from typing import Dict
+from typing import Dict, List
 
 from arcticdb.exceptions import ArcticNativeException, UserInputException
 from arcticdb.preconditions import check
@@ -24,6 +24,7 @@ from arcticdb_ext.version_store import FilterClause as _FilterClause
 from arcticdb_ext.version_store import ProjectClause as _ProjectClause
 from arcticdb_ext.version_store import GroupByClause as _GroupByClause
 from arcticdb_ext.version_store import AggregationClause as _AggregationClause
+from arcticdb_ext.version_store import TopKClause as _TopKClause
 from arcticdb_ext.version_store import ExpressionName as _ExpressionName
 from arcticdb_ext.version_store import ColumnName as _ColumnName
 from arcticdb_ext.version_store import ValueName as _ValueName
@@ -262,6 +263,7 @@ PythonFilterClause = namedtuple("PythonFilterClause", ["expr"])
 PythonProjectionClause = namedtuple("PythonProjectionClause", ["name", "expr"])
 PythonGroupByClause = namedtuple("PythonGroupByClause", ["name"])
 PythonAggregationClause = namedtuple("PythonAggregationClause", ["aggregations"])
+PythonTopKClause = namedtuple("TopKClause", ["vector", "k"])
 
 
 class QueryBuilder:
@@ -468,6 +470,11 @@ class QueryBuilder:
         self._python_clauses.append(PythonGroupByClause(name))
         return self
 
+    def top_k(self, vector: List[float], k: int):
+        self.clauses.append(_TopKClause(vector, k))
+        self._python_clauses.append(PythonTopKClause(vector, k))
+        return self
+
     def agg(self, aggregations: Dict[str, str]):
         # Only makes sense if previous stage is a group-by
         check(
@@ -521,6 +528,8 @@ class QueryBuilder:
                 self.clauses.append(_GroupByClause(python_clause.name))
             elif isinstance(python_clause, PythonAggregationClause):
                 self.clauses.append(_AggregationClause(self.clauses[-1].grouping_column, python_clause.aggregations))
+            elif isinstance(python_clause, PythonTopKClause):
+                self.clauses.append(_TopKClause(python_clause.vector, python_clause.k))
             else:
                 raise ArcticNativeException(
                     f"Unrecognised clause type {type(python_clause)} when unpickling QueryBuilder"

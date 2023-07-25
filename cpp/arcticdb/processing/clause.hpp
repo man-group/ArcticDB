@@ -49,6 +49,8 @@ struct ClauseInfo {
     std::optional<std::string> new_index_{std::nullopt};
     // Whether this clause modifies the output descriptor
     bool modifies_output_descriptor_{false};
+    // Whether to reorder columns as in the original DF.
+    bool follows_original_columns_order_{true};
 };
 
 // Changes how the clause behaves based on information only available after it is constructed
@@ -108,6 +110,62 @@ struct PassthroughClause {
 
     void set_processing_config(ARCTICDB_UNUSED const ProcessingConfig& processing_config) {}
 };
+
+struct TopKClause {
+    ClauseInfo clause_info_;
+    std::vector<float_t> query_vector;
+    uint8_t k;
+
+    TopKClause() = delete;
+
+    ARCTICDB_MOVE_COPY_DEFAULT(TopKClause);
+
+    TopKClause(std::vector<float_t> query_vector, uint8_t k);
+
+    [[nodiscard]] Composite<ProcessingSegment> process(
+            std::shared_ptr<Store> store,
+            Composite<ProcessingSegment> &&p
+    ) const;
+
+    [[nodiscard]] std::optional<std::vector<Composite<ProcessingSegment>>> repartition(
+            ARCTICDB_UNUSED std::vector<Composite<ProcessingSegment>> &&) const {
+        return std::nullopt;
+    }
+
+    [[nodiscard]] const ClauseInfo& clause_info() const {
+        return clause_info_;
+    }
+
+    void set_processing_config(ARCTICDB_UNUSED const ProcessingConfig& processing_config) {}
+
+
+    [[nodiscard]] std::string to_string() const;
+};
+
+struct NamedColumnSortedByDistance {
+    const double_t distance;
+    const std::shared_ptr<Column> column;
+    const std::string_view name;
+
+    explicit NamedColumnSortedByDistance(float_t similarity,
+                                         std::shared_ptr<Column> column,
+                                         std::string_view name) :
+            distance(similarity),
+            column(column),
+            name(name) {}
+
+    NamedColumnSortedByDistance() = delete;
+
+    bool operator< (const NamedColumnSortedByDistance& that) const {
+        return distance < that.distance;
+    };
+
+    bool operator== (const NamedColumnSortedByDistance& that) const {
+        return distance == that.distance && column == that.column;
+    };
+
+};
+
 
 struct FilterClause {
     ClauseInfo clause_info_;

@@ -298,6 +298,9 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
             .def(py::init<std::string, std::unordered_map<std::string, std::string>>())
             .def("__str__", &AggregationClause::to_string);
 
+    py::class_<TopKClause, std::shared_ptr<TopKClause>>(version, "TopKClause")
+            .def(py::init<std::vector<float_t>, uint8_t>());
+
     py::class_<ReadQuery>(version, "PythonVersionStoreReadQuery")
             .def(py::init())
             .def_readwrite("columns",&ReadQuery::columns)
@@ -309,7 +312,8 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
                     std::vector<std::variant<std::shared_ptr<FilterClause>,
                                 std::shared_ptr<ProjectClause>,
                                 std::shared_ptr<GroupByClause>,
-                                std::shared_ptr<AggregationClause>>> clauses) {
+                                std::shared_ptr<AggregationClause>,
+                                std::shared_ptr<TopKClause>>> clauses) {
                 std::vector<std::shared_ptr<Clause>> _clauses;
                 for (auto&& clause: clauses) {
                     util::variant_match(

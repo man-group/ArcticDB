@@ -7,6 +7,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 """
 import sys
 import os
+import string
 
 import pytz
 from arcticdb_ext.exceptions import InternalException, ErrorCode, ErrorCategory
@@ -65,6 +66,60 @@ except ImportError:
         StagedDataFinalizeMethod,
     )
 
+
+# def test_top_k(arctic_client):
+#     ac = arctic_client
+#     ac.create_library("pytest_test_top_k_lib")
+#     lib = ac["pytest_test_top_k_lib"]
+#     lib.insert_vectors(pd.DataFrame(np.random.rand(100,100)))
+#     meilleurs = lib.top_k(
+#         k=5,
+#         query=np.zeros(100),
+#         show_vectors=True,
+#         show_similarity=True
+#     )
+#     pass
+
+def test_top_k(arctic_client):
+    np.random.seed(0)
+    random.seed(0)
+    ac = arctic_client
+    ac.create_library("pytest_test_top_k")
+    lib = ac["pytest_test_top_k"]
+    i = 15
+    j = 20
+    k = 5
+    string_column_names = [''.join(random.choices(string.ascii_uppercase + string.digits, k=10)) for _ in range(j)]
+    df = pd.DataFrame(np.random.rand(i,j),columns=string_column_names)
+    qv = np.array([0]*i)
+    distances = df.apply(lambda x: np.linalg.norm(x-qv))
+    top_k_distances = distances[distances.argsort()[:k]]
+    python_result = df[top_k_distances.index].append(pd.DataFrame(top_k_distances).T)
+    python_result.index = list(range(i)) + ["similarity"]
+
+    lib.write(f"df{i}", df)
+
+    q = QueryBuilder()
+    q = q.top_k(qv, k)
+    query = str(q)
+    result = lib.read(f"df{i}", query_builder=q).data
+    result.index = list(range(i)) + ["similarity"]
+    sorted_result = result.sort_values(by="similarity", axis=1)
+    assert_frame_equal(sorted_result, result)
+    assert_frame_equal(result, python_result)
+
+def test_new(arctic_client):
+    np.random.seed(100)
+    ac = arctic_client
+    ac.create_library("pytest_test_new")
+    lib = ac["pytest_test_new"]
+    df = pd.DataFrame([[0] + [i]*99 for i in range(100)])
+    lib.write("df", df)
+
+    q = QueryBuilder()
+    q = q.groupby("0").agg({"3": "mean"})
+    result = lib.read("df", query_builder=q).data
+    pass
 
 def test_library_creation_deletion(arctic_client):
     ac = arctic_client
