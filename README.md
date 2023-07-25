@@ -142,6 +142,8 @@ Please see version conversion dates in the below table:
 | 1.2 | Business Source License 1.1 | May 22, 2025 |
 | 1.3 | Business Source License 1.1 | Jun  9, 2025 |
 | 1.4 | Business Source License 1.1 | Jun  23, 2025 |
+| 1.5 | Business Source License 1.1 | Jul  11, 2025 |
+| 1.6 | Business Source License 1.1 | Jul  25, 2025 |
 
 ## Code of Conduct
 
