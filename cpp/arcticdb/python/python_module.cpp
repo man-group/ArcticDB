@@ -257,6 +257,9 @@ void register_metrics(py::module && m){
         arcticdb::PrometheusConfigInstance::instance()->config.CopyFrom(config);
     });
 }
+
+/// Register handling of non-trivial types. For more information @see arcticdb::TypeHandlerRegistry and
+/// @see arcticdb::ITypeHandler
 void register_type_handlers() {
     arcticdb::TypeHandlerRegistry::instance()->register_handler(arcticdb::DataType::EMPTYVAL, arcticdb::EmptyHandler());
 }
