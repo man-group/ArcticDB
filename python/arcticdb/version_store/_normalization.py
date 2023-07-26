@@ -516,11 +516,11 @@ class _PandasNormalizer(Normalizer):
         else:
             n_rows = len(index)
             n_categorical_columns = len(df.select_dtypes(include="category").columns)
-            if IS_PANDAS_TWO and isinstance(index, (Index, RangeIndex)) and n_rows == 0 and n_categorical_columns == 0:
-                # In Pandas 1.0, an Index is used by default for any an empty dataframe or series is created, except if
+            if IS_PANDAS_TWO and isinstance(index, RangeIndex) and n_rows == 0 and n_categorical_columns == 0:
+                # In Pandas 1.0, an Index is used by default for any empty dataframe or series, except if
                 # there are categorical columns in which case a RangeIndex is used.
                 #
-                # In Pandas 2.0, RangeIndex is used by default for _any_ an empty dataframe or series is created.
+                # In Pandas 2.0, RangeIndex is used by default for _any_ empty dataframe or series.
                 # See: https://github.com/pandas-dev/pandas/issues/49572
                 # Yet internally, ArcticDB uses a DatetimeIndex for empty dataframes and series without categorical
                 # columns.
