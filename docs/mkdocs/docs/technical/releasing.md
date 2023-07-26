@@ -58,7 +58,7 @@ on `main`.
 
 ## 5. Update the BSL conversion table
 
-If you are releasing either a major (e.g. 2.0.0) or a minor (e.g. 1.5.0) release, please update the license conversion
+If you are releasing either a major (e.g. 2.0.0) or a minor (e.g. 1.5.0) version, please update the license conversion
 schedule table [in the readme](https://github.com/man-group/ArcticDB/blob/master/README.md).
 
 The conversion date will be two years from when the release is [published on GitHub](https://github.com/man-group/ArcticDB/releases/). This is not required if you are releasing a patch release.
