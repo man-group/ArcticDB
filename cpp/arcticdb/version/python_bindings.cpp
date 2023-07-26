@@ -304,6 +304,12 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
             .def(py::init<RowRangeClause::RowRangeType, int64_t>())
             .def("__str__", &RowRangeClause::to_string);
 
+    py::class_<DateRangeClause, std::shared_ptr<DateRangeClause>>(version, "DateRangeClause")
+            .def(py::init<timestamp, timestamp>())
+            .def_property_readonly("start", &DateRangeClause::start)
+            .def_property_readonly("end", &DateRangeClause::end)
+            .def("__str__", &DateRangeClause::to_string);
+
     py::class_<ReadQuery>(version, "PythonVersionStoreReadQuery")
             .def(py::init())
             .def_readwrite("columns",&ReadQuery::columns)
@@ -316,7 +322,8 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
                                 std::shared_ptr<ProjectClause>,
                                 std::shared_ptr<GroupByClause>,
                                 std::shared_ptr<AggregationClause>,
-                                std::shared_ptr<RowRangeClause>>> clauses) {
+                                std::shared_ptr<RowRangeClause>,
+                                std::shared_ptr<DateRangeClause>>> clauses) {
                 std::vector<std::shared_ptr<Clause>> _clauses;
                 for (auto&& clause: clauses) {
                     util::variant_match(
