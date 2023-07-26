@@ -1780,11 +1780,11 @@ def test_dynamic_schema_column_hash_update(lmdb_version_store_column_buckets):
 
     lib.update("symbol", df2)
     vit = lib.read("symbol")
+    # In Pandas < 2.0, updating a `DataFrame` uniquely storing integers with
+    # another `DataFrame` that is uniquely storing integers changes all the dtypes
+    # to float64.
     df.update(df2)
-    if not IS_PANDAS_TWO:
-        # Pandas 1.0 does not cast to float natively, but Pandas 2.0 does.
-        vit.data = vit.data.astype("float")
-
+    df = df.astype("int64", copy=False)
     assert_frame_equal(vit.data, df)
 
 
