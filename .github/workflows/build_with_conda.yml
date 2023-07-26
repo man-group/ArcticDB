@@ -131,7 +131,7 @@ jobs:
           python -m pip install --no-build-isolation --no-deps -v -e .
         env:
           ARCTICDB_USING_CONDA: 1
-          ARTICDB_BUILD_CPP_TESTS: ${{ matrix.cpp_tests }}
+          ARCTICDB_BUILD_CPP_TESTS: ${{ matrix.cpp_tests }}
 
       - name: Build C++ Tests
         if: matrix.cpp_tests == '1'
