@@ -67,7 +67,7 @@ The conversion date will be two years from when the release is [published on Git
 **Note** - instructions in this section are only to be followed if a broken build has been released that needs to be removed. 
 This section can be ignored under normal circumstances.
 
-## Conda
+## Conda-forge
 
 Conda-forge packages are immutable. As a result, packages cannot be removed entirely.
 
