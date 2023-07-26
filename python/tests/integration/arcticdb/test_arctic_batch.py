@@ -13,11 +13,11 @@ from arcticdb_ext.exceptions import ErrorCode, ErrorCategory
 
 from arcticdb.version_store import VersionedItem as PythonVersionedItem
 from arcticdb_ext.storage import KeyType
-from arcticdb_ext.version_store import DataError, VersionRequestType
+from arcticdb_ext.version_store import VersionRequestType
 
 from arcticdb.arctic import Arctic
 from arcticdb.options import LibraryOptions
-from arcticdb import QueryBuilder
+from arcticdb import QueryBuilder, DataError
 
 import pytest
 import pandas as pd
