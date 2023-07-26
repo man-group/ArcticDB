@@ -189,8 +189,25 @@ inline std::optional<AtomKey> get_key_for_version_query(
     const std::shared_ptr<VersionMapEntry>& version_map_entry, 
     const pipelines::VersionQuery& version_query) {
     return util::variant_match(version_query.content_,
-        [&version_map_entry] (const pipelines::SpecificVersionQuery& specific_version) {
-            return find_index_key_for_version_id(specific_version.version_id_, version_map_entry);
+        [&version_map_entry] (const pipelines::SpecificVersionQuery& specific_version) -> std::optional<AtomKey> {
+            auto signed_version_id = specific_version.version_id_;
+            VersionId version_id;
+            if (signed_version_id >= 0) {
+                version_id = static_cast<VersionId>(signed_version_id);
+            } else {
+                auto opt_latest = version_map_entry->get_first_index(true);
+                if (opt_latest.has_value()) {
+                    auto opt_version_id = get_version_id_negative_index(opt_latest->version_id(), signed_version_id);
+                    if (opt_version_id.has_value()) {
+                        version_id = *opt_version_id;
+                    } else {
+                        return std::nullopt;
+                    }
+                } else {
+                    return std::nullopt;
+                }
+            }
+            return find_index_key_for_version_id(version_id, version_map_entry);
         },
         [&version_map_entry] (const pipelines::TimestampVersionQuery& timestamp_version) -> std::optional<AtomKey> {
             auto version_key = get_version_key_from_time_for_versions(timestamp_version.timestamp_, version_map_entry->get_indexes(false));
