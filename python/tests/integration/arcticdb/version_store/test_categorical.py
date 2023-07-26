@@ -104,7 +104,7 @@ def test_categorical_with_integers(lmdb_version_store, sym):
     assert lib.get_info(sym)["type"] == "pandasdf"
     # should be category
     assert read_df.cat_int.dtype == "category"
-    if IS_PANDAS_TWO and (sys.maxsize <= 2**32 or sys.platform.startswith("win32")):
+    if IS_PANDAS_TWO and sys.platform.startswith("win32"):
         # Pandas 2.0.0 changed the underlying creation from numpy integral arrays:
         # "Instantiating using a numpy numeric array now follows the dtype of the numpy array.
         # Previously, all indexes created from numpy numeric arrays were forced to 64-bit.
@@ -133,7 +133,7 @@ def test_categorical_with_integers_and_strings(lmdb_version_store, sym):
     # should be category
     assert read_df.cat_int.dtype == "category"
     assert read_df.cat_str.dtype == "category"
-    if IS_PANDAS_TWO and (sys.maxsize <= 2**32 or sys.platform.startswith("win32")):
+    if IS_PANDAS_TWO and sys.platform.startswith("win32"):
         # Pandas 2.0.0 changed the underlying creation from numpy integral arrays:
         # "Instantiating using a numpy numeric array now follows the dtype of the numpy array.
         # Previously, all indexes created from numpy numeric arrays were forced to 64-bit.

@@ -317,7 +317,7 @@ def test_filter_column_not_present_dynamic(lmdb_version_store_dynamic_schema):
     lmdb_version_store_dynamic_schema.write(symbol, df)
     vit = lmdb_version_store_dynamic_schema.read(symbol, query_builder=q)
 
-    if IS_PANDAS_TWO and (sys.maxsize <= 2**32 or sys.platform.startswith("win32")):
+    if IS_PANDAS_TWO and sys.platform.startswith("win32"):
         # Pandas 2.0.0 changed the behavior of Index creation from numpy arrays:
         # "Previously, all indexes created from numpy numeric arrays were forced to 64-bit.
         # Now, for example, Index(np.array([1, 2, 3])) will be int32 on 32-bit systems,
