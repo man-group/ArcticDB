@@ -698,10 +698,15 @@ class DataFrameNormalizer(_PandasNormalizer):
         columns, denormed_columns, data = _denormalize_columns(item, norm_meta, idx_type, n_indexes)
 
         if not self._skip_df_consolidation:
-            # Specifying the column dtype since pandas might just convert the type of empty columns to something
-            # else if we don't specify explicitly cast it depending on the version.
-            columns_dtype = None if data is None else {name: np_array.dtype for name, np_array in data.items()}
-            df = DataFrame(data, index=index, columns=columns).astype(dtype=columns_dtype)
+            columns_dtype = {} if data is None else {name: np_array.dtype for name, np_array in data.items()}
+            df = DataFrame(data, index=index, columns=columns)
+
+            # Horribly setting the columns' dtype manually, since pandas might just convert the dtype of
+            # some (empty) columns to another one and since the `dtype` keyword for `pd.DataFrame` constructor
+            # does not accept a mapping such as `columns_dtype`...
+            for column_name, dtype in columns_dtype.items():
+                df[column_name] = df[column_name].astype(dtype, copy=False)
+
         else:
             if index is not None:
                 df = self.df_without_consolidation(columns, index, item, n_indexes, data)
