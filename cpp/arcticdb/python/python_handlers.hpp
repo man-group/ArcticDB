@@ -14,8 +14,7 @@ namespace arcticdb {
                 uint8_t* dest,
                 size_t dest_bytes,
                 const VariantField& encoded_field,
-                const entity::TypeDescriptor& type_descriptor,
-                std::shared_ptr<BufferHolder> buffers
+                const entity::TypeDescriptor& type_descriptor
         );
     };
 } //namespace arcticc
