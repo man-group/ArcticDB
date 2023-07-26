@@ -25,13 +25,14 @@ struct ITypeHandler {
     struct Interface : Base {
 
         void handle_type(
-                const uint8_t*& data,
-                uint8_t* dest,
-                size_t dest_bytes,
-                const VariantField& encoded_field_info,
-                const entity::TypeDescriptor& type_descriptor,
-                std::shared_ptr<BufferHolder> buffers
-            ) { folly::poly_call<0>(*this, data, dest, dest_bytes, encoded_field_info, type_descriptor, buffers); }
+            const uint8_t*& data,
+            uint8_t* dest,
+            size_t dest_bytes,
+            const VariantField& encoded_field_info,
+            const entity::TypeDescriptor& type_descriptor,
+            std::shared_ptr<BufferHolder> buffers) {
+            folly::poly_call<0>(*this, data, dest, dest_bytes, encoded_field_info, type_descriptor, buffers);
+        }
     };
 
     template<class T>
