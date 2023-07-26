@@ -441,6 +441,28 @@ def test_read_batch_as_of(arctic_library):
     assert type(batch[1]) == PythonVersionedItem
 
 
+def test_batch_methods_with_negative_as_of(arctic_library):
+    lib = arctic_library
+    sym = "test_batch_methods_with_negative_as_of"
+    data_0 = 0
+    data_1 = 1
+    metadata_0 = {"some": "metadata"}
+    metadata_1 = {"more": "metadata"}
+    lib.write_pickle(sym, data_0, metadata=metadata_0)
+    lib.write_pickle(sym, data_1, metadata=metadata_1)
+    res = lib.read_batch([ReadRequest(sym, as_of=-1), ReadRequest(sym, as_of=-2)])
+    assert res[0].data == data_1
+    assert res[1].data == data_0
+
+    res = lib.read_metadata_batch([ReadInfoRequest(sym, as_of=-1), ReadInfoRequest(sym, as_of=-2)])
+    assert res[0].metadata == metadata_1
+    assert res[1].metadata == metadata_0
+
+    res = lib.get_description_batch([ReadInfoRequest(sym, as_of=-1), ReadInfoRequest(sym, as_of=-2)])
+    assert res[0] == lib.get_description(sym)
+    assert res[1] == lib.get_description(sym, as_of=0)
+
+
 def test_read_batch_date_ranges(arctic_library):
     lib = arctic_library
     df = pd.DataFrame({"column": [1, 2, 3, 4]}, index=pd.date_range(start="1/1/2018", end="1/4/2018"))
