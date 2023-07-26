@@ -868,6 +868,9 @@ class Library:
             part of the data that falls withing the given range (inclusive). None on either end leaves that part of the
             range open-ended. Hence specifying ``(None, datetime(2025, 1, 1)`` declares that you wish to read all data up
             to and including 20250101.
+            The same effect can be achieved by using the date_range clause of the QueryBuilder class, which will be
+            slower, but return data with a smaller memory footprint. See the QueryBuilder.date_range docstring for more
+            details.
 
         columns: List[str], default=None
             Applicable only for Pandas data. Determines which columns to return data for.

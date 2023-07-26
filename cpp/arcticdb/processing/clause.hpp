@@ -484,4 +484,46 @@ struct RowRangeClause {
     [[nodiscard]] std::string to_string() const;
 };
 
+struct DateRangeClause {
+
+    ClauseInfo clause_info_;
+    // Time range to keep, inclusive of start and end
+    timestamp start_;
+    timestamp end_;
+
+    explicit DateRangeClause(timestamp start, timestamp end):
+            start_(start),
+            end_(end) {
+    }
+
+    DateRangeClause() = delete;
+
+    ARCTICDB_MOVE_COPY_DEFAULT(DateRangeClause)
+
+    [[nodiscard]] Composite<ProcessingSegment> process(std::shared_ptr<Store> store,
+                                                       Composite<ProcessingSegment> &&p) const;
+
+    [[nodiscard]] std::optional<std::vector<Composite<ProcessingSegment>>> repartition(
+            ARCTICDB_UNUSED std::vector<Composite<ProcessingSegment>> &&) const {
+        return std::nullopt;
+    }
+
+    [[nodiscard]] const ClauseInfo& clause_info() const {
+        return clause_info_;
+    }
+
+    void set_processing_config(ARCTICDB_UNUSED const ProcessingConfig& processing_config) {
+    }
+
+    [[nodiscard]] timestamp start() const {
+        return start_;
+    }
+
+    [[nodiscard]] timestamp end() const {
+        return end_;
+    }
+
+    [[nodiscard]] std::string to_string() const;
+};
+
 }//namespace arcticdb

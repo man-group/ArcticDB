@@ -631,4 +631,31 @@ std::string RowRangeClause::to_string() const {
     return fmt::format("{} {}", row_range_type_ == RowRangeType::HEAD ? "HEAD" : "TAIL", n_);
 }
 
+Composite<ProcessingSegment> DateRangeClause::process(ARCTICDB_UNUSED std::shared_ptr<Store> store,
+                                                      Composite<ProcessingSegment> &&p) const {
+    auto procs = std::move(p);
+    procs.broadcast([&store, this](ProcessingSegment &proc) {
+        // We are only interested in the index, which is in every SegmentInMemory in proc.data(), so just use the first
+        auto slice_and_key = proc.data()[0];
+        auto row_range = slice_and_key.slice_.row_range;
+        auto [start_index, end_index] = slice_and_key.key().time_range();
+        if ((start_ > start_index && start_ < end_index) || (end_ >= start_index && end_ < end_index)) {
+            size_t start_row{0};
+            size_t end_row{row_range.diff()};
+            if (start_ > start_index && start_ < end_index) {
+                start_row = slice_and_key.segment(store).column_ptr(0)->search_sorted<timestamp>(start_);
+            }
+            if (end_ >= start_index && end_ < end_index) {
+                end_row = slice_and_key.segment(store).column_ptr(0)->search_sorted<timestamp>(end_, true);
+            }
+            proc.truncate(start_row, end_row, store);
+        } // else all rows in the processing segment are required, do nothing
+    });
+    return procs;
+}
+
+std::string DateRangeClause::to_string() const {
+    return fmt::format("DATE RANGE {} - {}", start_, end_);
+}
+
 }
