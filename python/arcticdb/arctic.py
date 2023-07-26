@@ -9,6 +9,7 @@ from typing import List, Optional
 
 from arcticdb.options import LibraryOptions
 from arcticdb_ext.storage import LibraryManager, StorageOverride
+from arcticdb.exceptions import LibraryNotFound
 from arcticdb.version_store.library import Library
 from arcticdb.version_store._store import NativeVersionStore
 from arcticdb.adapters.s3_library_adapter import S3LibraryAdapter
@@ -155,6 +156,9 @@ class Arctic:
         if already_open:
             return already_open
 
+        if not self._library_manager.has_library(name):
+            raise LibraryNotFound(name)
+
         storage_override = self._library_adapter.get_storage_override()
         lib = NativeVersionStore(
             self._library_manager.get_library(name, storage_override),
@@ -239,10 +243,13 @@ class Arctic:
         already_open = self._open_libraries.pop(name, None)
         if not already_open and not self._library_manager.has_library(name):
             return
-        self._library_adapter.delete_library(
-            self[name], self._library_manager.get_library_config(name, StorageOverride())
-        )
-        self._library_manager.remove_library_config(name)
+        config = self._library_manager.get_library_config(name, StorageOverride())
+        (already_open or self[name])._nvs.version_store.clear()
+        del already_open  # essential to free resources held by the library
+        try:
+            self._library_adapter.cleanup_library(name, config)
+        finally:
+            self._library_manager.remove_library_config(name)
 
     def list_libraries(self) -> List[str]:
         """

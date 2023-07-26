@@ -28,6 +28,7 @@ from arcticdb.exceptions import (
     NoSuchVersionException,
     StreamDescriptorMismatch,
 )
+from arcticdb_ext.storage import NoDataFoundException
 from arcticdb.flattener import Flattener
 from arcticdb.version_store import NativeVersionStore
 from arcticdb.version_store._custom_normalizers import CustomNormalizer, register_normalizer
@@ -1204,19 +1205,56 @@ def test_coercion_to_str_with_dynamic_strings(lmdb_version_store_string_coercion
         sample_mock.assert_not_called()
 
 
-def test_find_version(lmdb_version_store):
-    lmdb_version_store.write("first", 1)
-    lmdb_version_store.write("second", 1)
-    lmdb_version_store.snapshot("a")
-    lmdb_version_store.write("first", 2)
-    lmdb_version_store.snapshot("b")
+def test_find_version(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    # def test_find_version(lmdb_version_store):
+    #     lib = lmdb_version_store
+    sym = "test_find_version"
 
-    assert lmdb_version_store._find_version("first", as_of=1).version == 1
-    assert lmdb_version_store._find_version("second", as_of=0).version == 0
-    # assert lmdb_version_store._find_version("second", as_of=2) is None
-    assert lmdb_version_store._find_version("first", as_of="a").version == 0
-    assert lmdb_version_store._find_version("first", as_of=datetime.utcnow()).version == 1  # Latest
-    assert lmdb_version_store._find_version("second").version == 0  # Latest
+    # Version 0 is alive and in a snapshot
+    lib.write(sym, 0)
+    lib.snapshot("snap_0")
+    time_0 = datetime.utcnow()
+
+    # Version 1 is only available in snap_1
+    lib.write(sym, 1)
+    lib.snapshot("snap_1")
+    time_1 = datetime.utcnow()
+    lib.delete_version(sym, 1)
+
+    # Version 2 is fully deleted
+    lib.write(sym, 2)
+    time_2 = datetime.utcnow()
+    lib.delete_version(sym, 2)
+
+    # Version 3 is not in any snapshots
+    lib.write(sym, 3)
+    time_3 = datetime.utcnow()
+
+    # Latest
+    assert lib._find_version(sym).version == 3
+    # By version number
+    assert lib._find_version(sym, as_of=0).version == 0
+    assert lib._find_version(sym, as_of=1).version == 1
+    assert lib._find_version(sym, as_of=2) is None
+    assert lib._find_version(sym, as_of=3).version == 3
+    assert lib._find_version(sym, as_of=1000) is None
+    # By negative version number
+    assert lib._find_version(sym, as_of=-1).version == 3
+    assert lib._find_version(sym, as_of=-2) is None
+    assert lib._find_version(sym, as_of=-3).version == 1
+    assert lib._find_version(sym, as_of=-4).version == 0
+    assert lib._find_version(sym, as_of=-1000) is None
+    # By snapshot
+    assert lib._find_version(sym, as_of="snap_0").version == 0
+    assert lib._find_version(sym, as_of="snap_1").version == 1
+    with pytest.raises(NoDataFoundException):
+        lib._find_version(sym, as_of="snap_1000")
+    # By timestamp
+    assert lib._find_version(sym, as_of=time_0).version == 0
+    assert lib._find_version(sym, as_of=time_1).version == 0
+    assert lib._find_version(sym, as_of=time_2).version == 0
+    assert lib._find_version(sym, as_of=time_3).version == 3
 
 
 def test_library_deletion_lmdb(lmdb_version_store):
@@ -1685,6 +1723,23 @@ def test_batch_read_columns(lmdb_version_store_tombstone_and_sync_passive):
     for x, sym in enumerate(result_dict.keys()):
         vit = result_dict[sym]
         assert_equal_value(vit.data, dfs[x][columns_of_interest])
+
+
+def test_batch_read_symbol_doesnt_exist(lmdb_version_store):
+    sym1 = "sym1"
+    sym2 = "sym2"
+    lmdb_version_store.write(sym1, 1)
+    with pytest.raises(NoDataFoundException):
+        _ = lmdb_version_store.batch_read([sym1, sym2])
+
+
+def test_batch_read_version_doesnt_exist(lmdb_version_store):
+    sym1 = "sym1"
+    sym2 = "sym2"
+    lmdb_version_store.write(sym1, 1)
+    lmdb_version_store.write(sym2, 2)
+    with pytest.raises(NoDataFoundException):
+        _ = lmdb_version_store.batch_read([sym1, sym2], as_ofs=[0, 1])
 
 
 def test_index_keys_start_end_index(lmdb_version_store, sym):

@@ -9,8 +9,8 @@ import sys
 import os
 
 import pytz
-from arcticdb_ext.exceptions import InternalException
-from arcticdb.exceptions import ArcticNativeNotYetImplemented
+from arcticdb_ext.exceptions import InternalException, ErrorCode, ErrorCategory
+from arcticdb.exceptions import ArcticNativeNotYetImplemented, LibraryNotFound
 from pandas import Timestamp
 
 try:
@@ -18,7 +18,8 @@ try:
 except ImportError:
     # arcticdb squashes the packages
     from arcticdb._store import VersionedItem as PythonVersionedItem
-from arcticdb_ext.storage import NoDataFoundException
+from arcticdb_ext.storage import NoDataFoundException, KeyType
+from arcticdb_ext.version_store import DataError, VersionRequestType
 
 from arcticdb.arctic import Arctic
 from arcticdb.adapters.s3_library_adapter import S3LibraryAdapter
@@ -99,7 +100,7 @@ def test_library_creation_deletion(arctic_client):
     ac.delete_library("library_that_does_not_exist")
 
     assert not ac.list_libraries()
-    with pytest.raises(Exception):  # TODO: Nicely wrap?
+    with pytest.raises(LibraryNotFound):
         _lib = ac["pytest_test_lib"]
 
 
@@ -275,7 +276,7 @@ def test_library_management_path_prefix(connection_string, client, request):
     ac.delete_library("pytest_test_lib")
 
     assert not ac.list_libraries()
-    with pytest.raises(Exception):  # TODO: Nicely wrap?
+    with pytest.raises(LibraryNotFound):
         _lib = ac["pytest_test_lib"]
 
 
@@ -823,6 +824,52 @@ def test_write_batch_dedup(library_factory):
             assert data_key_version[s] == 0
 
 
+def test_read_batch_time_stamp(arctic_library):
+    """Should be able to read data in batch mode using a timestamp."""
+    lib = arctic_library
+    sym = "sym_"
+    num_versions = 3
+    num_symbols = 3
+    for v_num in range(num_versions):
+        write_requests = []
+        for sym_num in range(num_symbols):
+            write_requests.append(
+                WritePayload(
+                    sym + str(sym_num), pd.DataFrame({"col": [sym_num + v_num, sym_num * v_num, sym_num - v_num]})
+                )
+            )
+        lib.write_batch(write_requests)
+        time.sleep(1)
+
+    data_non_batch = []
+    requests_batch = []
+    original_dataframes = []
+    for sym_num in range(num_symbols):
+        versions = lib.list_versions(sym + str(sym_num))
+        for version_info in versions:
+            date_obj = versions[version_info].date
+            date_obj += +timedelta(seconds=1)
+            as_of = datetime(
+                date_obj.year,
+                date_obj.month,
+                date_obj.day,
+                date_obj.hour,
+                date_obj.minute,
+                date_obj.second,
+                tzinfo=timezone.utc,
+            )
+            data_non_batch.append(lib.read(sym + str(sym_num), as_of=as_of))
+            requests_batch.append(ReadRequest(sym + str(sym_num), as_of=as_of))
+            v_num = version_info.version
+            original_dataframes.append(pd.DataFrame({"col": [sym_num + v_num, sym_num * v_num, sym_num - v_num]}))
+
+    data_batch = lib.read_batch(requests_batch)
+    list_data_to_compate = list(zip(data_non_batch, data_batch, original_dataframes))
+    for d1, d2, d3 in list_data_to_compate:
+        assert_frame_equal(d1.data, d2.data)
+        assert_frame_equal(d2.data, d3)
+
+
 def test_write_with_unpacking(arctic_library):
     """Check the syntactic sugar that lets us unpack WritePayload in `write` calls using *."""
     lib = arctic_library
@@ -1234,6 +1281,195 @@ def test_read_batch_unhandled_type(arctic_library):
     lib.write("1", pd.DataFrame())
     with pytest.raises(ArcticInvalidApiUsageException):
         lib.read_batch([1])
+
+
+def test_read_batch_symbol_doesnt_exist(arctic_library):
+    lib = arctic_library
+
+    # Given
+    df = pd.DataFrame({"a": [3, 5, 7]})
+    lib.write("s1", df)
+    # When
+    batch = lib.read_batch(["s1", "s2"])
+    # Then
+    assert_frame_equal(batch[0].data, df)
+    assert isinstance(batch[1], DataError)
+    assert batch[1].symbol == "s2"
+    assert batch[1].version_request_type == VersionRequestType.LATEST
+    assert batch[1].version_request_data == None
+    assert batch[1].error_code == ErrorCode.E_NO_SUCH_VERSION
+    assert batch[1].error_category == ErrorCategory.MISSING_DATA
+
+
+def test_read_batch_version_doesnt_exist(arctic_library):
+    lib = arctic_library
+
+    # Given
+    df1 = pd.DataFrame({"a": [3, 5, 7]})
+    df2 = pd.DataFrame({"a": [4, 6, 8]})
+    lib.write("s1", df1)
+    lib.write("s2", df2)
+    # When
+    batch = lib.read_batch([ReadRequest("s1", as_of=0), ReadRequest("s1", as_of=1), ReadRequest("s2", as_of=1)])
+    # Then
+    assert_frame_equal(batch[0].data, df1)
+    assert isinstance(batch[1], DataError)
+    assert batch[1].symbol == "s1"
+    assert batch[1].version_request_type == VersionRequestType.SPECIFIC
+    assert batch[1].version_request_data == 1
+    assert batch[1].error_code == ErrorCode.E_NO_SUCH_VERSION
+    assert batch[1].error_category == ErrorCategory.MISSING_DATA
+
+    assert isinstance(batch[2], DataError)
+    assert batch[2].symbol == "s2"
+    assert batch[2].version_request_type == VersionRequestType.SPECIFIC
+    assert batch[2].version_request_data == 1
+    assert batch[2].error_code == ErrorCode.E_NO_SUCH_VERSION
+    assert batch[2].error_category == ErrorCategory.MISSING_DATA
+
+
+def test_read_batch_missing_keys(arctic_library):
+    lib = arctic_library
+
+    # Given
+    df1 = pd.DataFrame({"a": [3, 5, 7]})
+    df2 = pd.DataFrame({"a": [4, 6, 8]})
+    df3 = pd.DataFrame({"a": [5, 7, 9]})
+    lib.write("s1", df1)
+    lib.write("s2", df2)
+    # Need two versions for this symbol as we're going to delete a version key, and the optimisation of storing the
+    # latest index key in the version ref key means it will still work if we just write one version key and then delete
+    # it
+    lib.write("s3", df3)
+    lib.write("s3", df3)
+    lib_tool = lib._nvs.library_tool()
+    s1_index_key = lib_tool.find_keys_for_id(KeyType.TABLE_INDEX, "s1")[0]
+    s2_data_key = lib_tool.find_keys_for_id(KeyType.TABLE_DATA, "s2")[0]
+    s3_version_keys = lib_tool.find_keys_for_id(KeyType.VERSION, "s3")
+    s3_key_to_delete = [key for key in s3_version_keys if key.version_id == 0][0]
+    lib_tool.remove(s1_index_key)
+    lib_tool.remove(s2_data_key)
+    lib_tool.remove(s3_key_to_delete)
+    # When
+    batch = lib.read_batch(["s1", "s2", ReadRequest("s3", as_of=0)])
+    # Then
+    assert isinstance(batch[0], DataError)
+    assert batch[0].symbol == "s1"
+    assert batch[0].version_request_type == VersionRequestType.LATEST
+    assert batch[0].version_request_data is None
+    assert batch[0].error_code == ErrorCode.E_KEY_NOT_FOUND
+    assert batch[0].error_category == ErrorCategory.STORAGE
+
+    assert isinstance(batch[1], DataError)
+    assert batch[1].symbol == "s2"
+    assert batch[1].version_request_type == VersionRequestType.LATEST
+    assert batch[1].version_request_data is None
+    assert batch[1].error_code == ErrorCode.E_KEY_NOT_FOUND
+    assert batch[1].error_category == ErrorCategory.STORAGE
+
+    assert isinstance(batch[2], DataError)
+    assert batch[2].symbol == "s3"
+    assert batch[2].version_request_type == VersionRequestType.SPECIFIC
+    assert batch[2].version_request_data == 0
+    assert batch[2].error_code == ErrorCode.E_KEY_NOT_FOUND
+    assert batch[2].error_category == ErrorCategory.STORAGE
+
+
+def test_read_batch_query_builder_missing_keys(arctic_library):
+    lib = arctic_library
+
+    # Given
+    df1 = pd.DataFrame({"a": [3, 5, 7]})
+    df2 = pd.DataFrame({"a": [4, 6, 8]})
+    df3 = pd.DataFrame({"a": [5, 7, 9]})
+    lib.write("s1", df1)
+    lib.write("s2", df2)
+    # Need two versions for this symbol as we're going to delete a version key, and the optimisation of storing the
+    # latest index key in the version ref key means it will still work if we just write one version key and then delete
+    # it
+    lib.write("s3", df3)
+    lib.write("s3", df3)
+    lib_tool = lib._nvs.library_tool()
+    s1_index_key = lib_tool.find_keys_for_id(KeyType.TABLE_INDEX, "s1")[0]
+    s2_data_key = lib_tool.find_keys_for_id(KeyType.TABLE_DATA, "s2")[0]
+    s3_version_keys = lib_tool.find_keys_for_id(KeyType.VERSION, "s3")
+    s3_key_to_delete = [key for key in s3_version_keys if key.version_id == 0][0]
+    lib_tool.remove(s1_index_key)
+    lib_tool.remove(s2_data_key)
+    lib_tool.remove(s3_key_to_delete)
+    q = QueryBuilder()
+    q = q[q["a"] < 5]
+    # When
+    batch = lib.read_batch(["s1", "s2", ReadRequest("s3", as_of=0)], query_builder=q)
+    # Then
+    assert isinstance(batch[0], DataError)
+    assert batch[0].symbol == "s1"
+    assert batch[0].version_request_type == VersionRequestType.LATEST
+    assert batch[0].version_request_data is None
+    assert batch[0].error_code == ErrorCode.E_KEY_NOT_FOUND
+    assert batch[0].error_category == ErrorCategory.STORAGE
+
+    assert isinstance(batch[1], DataError)
+    assert batch[1].symbol == "s2"
+    assert batch[1].version_request_type == VersionRequestType.LATEST
+    assert batch[1].version_request_data is None
+    assert batch[1].error_code == ErrorCode.E_KEY_NOT_FOUND
+    assert batch[1].error_category == ErrorCategory.STORAGE
+
+    assert isinstance(batch[2], DataError)
+    assert batch[2].symbol == "s3"
+    assert batch[2].version_request_type == VersionRequestType.SPECIFIC
+    assert batch[2].version_request_data == 0
+    assert batch[2].error_code == ErrorCode.E_KEY_NOT_FOUND
+    assert batch[2].error_category == ErrorCategory.STORAGE
+
+
+def test_read_batch_query_builder_symbol_doesnt_exist(arctic_library):
+    lib = arctic_library
+
+    # Given
+    q = QueryBuilder()
+    q = q[q["a"] < 5]
+    lib.write("s1", pd.DataFrame({"a": [3, 5, 7]}))
+    # When
+    batch = lib.read_batch(["s1", "s2"], query_builder=q)
+    # Then
+    assert_frame_equal(batch[0].data, pd.DataFrame({"a": [3]}))
+    assert isinstance(batch[1], DataError)
+    assert batch[1].symbol == "s2"
+    assert batch[1].version_request_type == VersionRequestType.LATEST
+    assert batch[1].version_request_data == None
+    assert batch[1].error_code == ErrorCode.E_NO_SUCH_VERSION
+    assert batch[1].error_category == ErrorCategory.MISSING_DATA
+
+
+def test_read_batch_query_builder_version_doesnt_exist(arctic_library):
+    lib = arctic_library
+
+    # Given
+    q = QueryBuilder()
+    q = q[q["a"] < 5]
+    lib.write("s1", pd.DataFrame({"a": [3, 5, 7]}))
+    lib.write("s2", pd.DataFrame({"a": [4, 6, 8]}))
+    # When
+    batch = lib.read_batch(
+        [ReadRequest("s1", as_of=0), ReadRequest("s1", as_of=1), ReadRequest("s2", as_of=1)], query_builder=q
+    )
+    # Then
+    assert_frame_equal(batch[0].data, pd.DataFrame({"a": [3]}))
+    assert isinstance(batch[1], DataError)
+    assert batch[1].symbol == "s1"
+    assert batch[1].version_request_type == VersionRequestType.SPECIFIC
+    assert batch[1].version_request_data == 1
+    assert batch[1].error_code == ErrorCode.E_NO_SUCH_VERSION
+    assert batch[1].error_category == ErrorCategory.MISSING_DATA
+
+    assert isinstance(batch[2], DataError)
+    assert batch[2].symbol == "s2"
+    assert batch[2].version_request_type == VersionRequestType.SPECIFIC
+    assert batch[2].version_request_data == 1
+    assert batch[2].error_code == ErrorCode.E_NO_SUCH_VERSION
+    assert batch[2].error_category == ErrorCategory.MISSING_DATA
 
 
 def test_has_symbol(arctic_library):

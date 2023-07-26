@@ -148,6 +148,7 @@ public:
         entry->head_ = ref_entry.head_;
         auto loaded_until = std::numeric_limits<VersionId>::max();
         VersionId oldest_loaded_index_version = std::numeric_limits<VersionId>::max();
+        std::optional<VersionId> latest_version;
 
         if ((load_params.load_type_ == LoadType::LOAD_LATEST || load_params.load_type_ == LoadType::LOAD_LATEST_UNDELETED)
             && is_index_key_type(ref_entry.keys_[0].type()))
@@ -156,10 +157,16 @@ public:
         } else {
             do {
                 auto [key, seg] = store->read_sync(next_key.value());
-                std::tie(next_key, loaded_until) = read_segment_with_keys(seg, entry);
+                next_key = read_segment_with_keys(seg, entry, loaded_until);
                 oldest_loaded_index_version = std::min(oldest_loaded_index_version, loaded_until);
+                if (!latest_version.has_value()) {
+                    auto latest = entry->get_first_index(true);
+                    if (latest.has_value()) {
+                        latest_version = latest->version_id();
+                    }
+                }
             } while (next_key
-            && need_to_load_further(load_params, loaded_until)
+            && need_to_load_further(load_params, loaded_until, latest_version)
             && load_latest_ongoing(load_params, entry)
             && looking_for_undeleted(load_params, entry, oldest_loaded_index_version));
 
@@ -176,7 +183,7 @@ public:
         load_params.validate();
         static const auto max_trial_config = ConfigsMap::instance()->get_int("VersionMap.MaxReadRefTrials", 2);
         auto max_trials = max_trial_config;
-        while (max_trials--) {
+        while (true) {
             try {
                 VersionMapEntry ref_entry;
                 read_symbol_ref(store, stream_id, ref_entry);
@@ -186,6 +193,9 @@ public:
                 follow_version_chain(store, ref_entry, entry, load_params);
                 break;
             } catch (const std::exception &err) {
+                if (--max_trials <= 0) {
+                    throw;
+                }
                 // We retry to read via ref key because it could have been modified by someone else (e.g. compaction)
                 log::version().warn(
                         "Loading versions from storage via ref key failed with error: {} for stream {}. Retrying",
@@ -195,8 +205,6 @@ public:
                 continue;
             }
         }
-        util::check_rte(max_trials >= 0,"Couldn't read via ref key {} even after multiple trials", stream_id);
-
         if (validate_)
             entry->validate();
     }
@@ -579,16 +587,36 @@ private:
             return false;
         }
 
+        // TODO: Fix #587
         if (entry->second->load_type_ < load_param.load_type_) {
             ARCTICDB_DEBUG(log::version(), "Required load type {} exceeds existing load type {}, will reload", load_param.load_type_, entry->second->load_type_);
             return false;
         }
 
-        if(entry->second->load_type_ == LoadType::LOAD_DOWNTO && ((
-            load_param.load_type_ == LoadType::LOAD_DOWNTO && entry->second->loaded_until_ > load_param.load_until_.value())
-            || load_param.load_type_ == LoadType::LOAD_UNDELETED)) {
-            ARCTICDB_DEBUG(log::version(), "Not loaded as far as required value {}, only have {}", load_param.load_until_.value(), entry->second->loaded_until_);
-            return false;
+        if(entry->second->load_type_ == LoadType::LOAD_DOWNTO) {
+            if (load_param.load_type_ == LoadType::LOAD_UNDELETED) {
+                return false;
+            }
+            if (load_param.load_type_ == LoadType::LOAD_DOWNTO ) {
+                if (load_param.load_until_.value() >= 0) {
+                    if (entry->second->loaded_until_ > static_cast<VersionId>(load_param.load_until_.value())) {
+                        ARCTICDB_DEBUG(log::version(), "Not loaded as far as required value {}, only have {}",
+                                       load_param.load_until_.value(), entry->second->loaded_until_);
+                        return false;
+                    }
+                } else {
+                    auto opt_latest = entry->second->get_first_index(true);
+                    if (opt_latest.has_value()) {
+                        auto opt_version_id = get_version_id_negative_index(opt_latest->version_id(), *load_param.load_until_);
+                        if (opt_version_id.has_value() && entry->second->loaded_until_ > *opt_version_id) {
+                            ARCTICDB_DEBUG(log::version(), "Not loaded as far as required value {}, only have {} and there are {} total versions",
+                                           load_param.load_until_.value(), entry->second->loaded_until_, opt_latest->version_id());
+                            return false;
+                        }
+                    }
+                }
+
+            }
         }
 
         if(load_param.load_type_ == LoadType::LOAD_UNDELETED && !entry->second->tombstone_all_ &&

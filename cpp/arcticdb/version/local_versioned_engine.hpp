@@ -20,6 +20,7 @@
 #include <arcticdb/version/version_core.hpp>
 #include <arcticdb/version/versioned_engine.hpp>
 #include <arcticdb/entity/descriptor_item.hpp>
+#include <arcticdb/entity/data_error.hpp>
 
 #include <sstream>
 namespace arcticdb::version_store {
@@ -93,7 +94,7 @@ public:
 
     std::optional<VersionedItem> get_specific_version(
         const StreamId &stream_id,
-        VersionId version_id,
+        SignedVersionId signed_version_id,
         const VersionQuery& version_query);
 
     std::optional<VersionedItem> get_version_at_time(
@@ -120,7 +121,7 @@ public:
         ReadQuery& read_query,
         const ReadOptions& read_options) override;
 
-    std::pair<VersionedItem, FrameAndDescriptor> read_dataframe_version_internal(
+    ReadVersionOutput read_dataframe_version_internal(
         const StreamId &stream_id,
         const VersionQuery& version_query,
         ReadQuery& read_query,
@@ -223,7 +224,7 @@ public:
     FrameAndDescriptor read_column_stats_internal(
         const VersionedItem& versioned_item);
 
-    std::pair<VersionedItem, FrameAndDescriptor> read_column_stats_version_internal(
+    ReadVersionOutput read_column_stats_version_internal(
         const StreamId& stream_id,
         const VersionQuery& version_query);
 
@@ -273,18 +274,18 @@ public:
         const WriteOptions& write_options,
         bool validate_index);
 
-    std::vector<std::pair<VersionedItem, FrameAndDescriptor>> batch_read_keys(
+    std::vector<ReadVersionOutput> batch_read_keys(
         const std::vector<AtomKey> &keys,
         const std::vector<ReadQuery> &read_queries,
         const ReadOptions& read_options);
 
-    std::vector<std::pair<VersionedItem, FrameAndDescriptor>> batch_read_internal(
+    std::vector<std::variant<ReadVersionOutput, DataError>> batch_read_internal(
         const std::vector<StreamId>& stream_ids,
         const std::vector<VersionQuery>& version_queries,
         std::vector<ReadQuery>& read_queries,
         const ReadOptions& read_options);
 
-    std::vector<std::pair<VersionedItem, FrameAndDescriptor>> temp_batch_read_internal_direct(
+    std::vector<std::variant<ReadVersionOutput, DataError>> temp_batch_read_internal_direct(
         const std::vector<StreamId>& stream_ids,
         const std::vector<VersionQuery>& version_queries,
         std::vector<ReadQuery>& read_queries,
