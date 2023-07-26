@@ -61,3 +61,22 @@ If you are releasing either a major (e.g. 2.0.0) or a minor (e.g. 1.5.0) release
 - [and in the licensing documentation](https://github.com/man-group/ArcticDB/blob/master/docs/mkdocs/docs/licensing.md)
 
 The conversion date will be two years from when the release is [published on GitHub](https://github.com/man-group/ArcticDB/releases/). This is not required if you are releasing a patch release.
+
+# Removing a release
+
+**Note** - instructions in this section are only to be followed if a broken build has been released that needs to be removed. 
+This section can be ignored under normal circumstances.
+
+## Conda-forge
+
+Conda-forge packages are immutable. As a result, packages cannot be removed entirely.
+
+[They can, however, be marked as `broken`.](https://conda-forge.org/docs/maintainer/updating_pkgs.html#removing-broken-packages) 
+This adds a new label to the package, `broken`. 
+Packages with the `broken` label must be installed via a special channel (`conda install -c conda-forge/label/broken`) and thus for most users won't be visible. 
+
+To mark an ArcticDB package as broken:
+
+1. [Find all existing files for the given version](https://anaconda.org/conda-forge/arcticdb/files?version=1.6.0rc0&channel=main)
+2. Create a PR that adds a new file listing every file to be marked as broken. [Here's an example](https://github.com/conda-forge/admin-requests/pull/765).
+3. Wait for someone from the Core team to merge the PR.
