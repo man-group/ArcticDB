@@ -167,6 +167,12 @@ inline void verify_stream_id(const StreamId &stream_id) {
         return;
     }
 
+    if (std::holds_alternative<NumericId>(stream_id))
+    {
+        ARCTICDB_DEBUG(log::version(), "Nothing to verify in stream id {} as it contains a NumericId.", stream_id);
+        return;
+    }
+
     for (unsigned char c : std::get<std::string>(stream_id)) {
         if (c < 32 || c > 126) {
             user_input::raise<ErrorCode::E_INVALID_CHAR_IN_SYMBOL>(
