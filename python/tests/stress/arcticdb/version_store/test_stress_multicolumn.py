@@ -69,10 +69,6 @@ def test_stress_multicolumn(lib_type, request):
             [pd.DataFrame([dict_merge(dict(date=date), sd) for sd in sec_data]) for date in p], ignore_index=True
         )
 
-        if IS_PANDAS_TWO:
-            # Pandas 2.0 use RangeIndex for empty DataFrame instead of DatetimeIndex (behavior of Pandas 1.0).
-            test_data.index = pd.to_datetime(test_data.index, errors="coerce")
-
         dataframes.append(test_data)
 
     print("Starting arctic write")
