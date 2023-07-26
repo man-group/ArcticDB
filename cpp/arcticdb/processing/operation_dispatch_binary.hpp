@@ -54,8 +54,8 @@ VariantData binary_membership(const ColumnWithStrings& column_with_strings, Valu
             output->set();
     } else {
         entity::details::visit_type(column_with_strings.column_->type().data_type(),[&column_with_strings, &value_set, &func, &output] (auto column_desc_tag) {
-            using ColumnTagType = std::decay_t<decltype(column_desc_tag)>;
-            using ColumnType =  typename ColumnTagType::raw_type;
+            using ColumnTagType = typename std::decay_t<decltype(column_desc_tag)>;
+            using ColumnType = typename ColumnTagType::raw_type;
 
             entity::details::visit_type(value_set.base_type().data_type(),[&column_with_strings, &value_set, &func, &output] (auto value_set_desc_tag) {
                 using ValueSetBaseTypeTag = decltype(value_set_desc_tag);
