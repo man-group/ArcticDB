@@ -19,13 +19,13 @@ except ImportError:
     # arcticdb squashes the packages
     from arcticdb._store import VersionedItem as PythonVersionedItem
 from arcticdb_ext.storage import NoDataFoundException, KeyType
-from arcticdb_ext.version_store import DataError, VersionRequestType
+from arcticdb_ext.version_store import VersionRequestType
 
 from arcticdb.arctic import Arctic
 from arcticdb.adapters.s3_library_adapter import S3LibraryAdapter
 from arcticdb.options import LibraryOptions
 from arcticdb.encoding_version import EncodingVersion
-from arcticdb import QueryBuilder
+from arcticdb import QueryBuilder, DataError
 from arcticc.pb2.s3_storage_pb2 import Config as S3Config
 
 import math
