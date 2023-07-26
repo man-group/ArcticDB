@@ -142,7 +142,7 @@ class CMakeBuild(build_ext):
             preset = ("windows-cl" if platform.system() == "Windows" else platform.system().lower()) + suffix
         _log_and_run(
             cmake,
-            f"-DTEST={ARTICDB_BUILD_CPP_TESTS}",
+            f"-DTEST={ARCTICDB_BUILD_CPP_TESTS}",
             f"-DBUILD_PYTHON_VERSION={sys.version_info[0]}.{sys.version_info[1]}",
             f"-DCMAKE_INSTALL_PREFIX={os.path.dirname(dest)}",
             "--preset",
