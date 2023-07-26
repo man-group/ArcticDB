@@ -902,6 +902,9 @@ class Library:
         True
         >>> batch[3].symbol
         "s2"
+        >>> from arcticdb import DataError
+        >>> isinstance(batch[3], DataError)
+        True
         >>> batch[3].version_request_type
         VersionRequestType.SPECIFIC
         >>> batch[3].version_request_data
