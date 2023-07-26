@@ -60,8 +60,14 @@ inline std::vector<AtomKey> get_all_versions(
     bool skip_compat,
     bool iterate_on_failure) {
     ARCTICDB_SAMPLE(GetAllVersions, 0)
-    auto entry = version_map->check_reload(store, stream_id, LoadParameter{LoadType::LOAD_ALL}, skip_compat,
-                                           iterate_on_failure, __FUNCTION__);
+    const LoadParameter load_parameter(LoadType::LOAD_UNDELETED);
+    auto entry = version_map->check_reload(
+        store,
+        stream_id,
+        load_parameter,
+        skip_compat,
+        iterate_on_failure,
+        __FUNCTION__);
     return entry->get_indexes(false);
 }
 
