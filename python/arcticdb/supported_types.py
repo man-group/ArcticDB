@@ -6,7 +6,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 import datetime
-from typing import Union
+from typing import Sequence, Union, TYPE_CHECKING
 
 import numpy as np
 import pandas as pd
@@ -20,6 +20,18 @@ float_types = [np.float32, np.float64]
 numeric_types = int_types + float_types
 time_types = (pd.Timestamp, datetime.datetime, datetime.date)
 Timestamp = Union[time_types]
+
+_ExtDateRangeTypes = pd.core.indexes.datetimelike.DatetimeIndexOpsMixin
+if TYPE_CHECKING:
+    try:
+        import arctic.date
+
+        _ExtDateRangeTypes = Union[_ExtDateRangeTypes, arctic.date.DateRange]
+    except ModuleNotFoundError:
+        pass
+
+ExplicitlySupportedDates = Union[time_types]
+DateRangeInput = Union[Sequence[ExplicitlySupportedDates], _ExtDateRangeTypes]
 
 Shape = np.uint64
 

@@ -24,7 +24,7 @@ from arcticc.pb2.storage_pb2 import VersionStoreConfig
 from mmap import mmap
 from collections import Counter
 from arcticdb.exceptions import ArcticNativeException, ArcticNativeNotYetImplemented
-from arcticdb.supported_types import time_types as supported_time_types
+from arcticdb.supported_types import DateRangeInput, time_types as supported_time_types
 from arcticdb.version_store.read_result import ReadResult
 from arcticdb_ext.version_store import SortedValue as _SortedValue
 from pandas.core.internals import make_block
@@ -1271,7 +1271,7 @@ def restrict_data_to_date_range_only(data: T, *, start: Timestamp, end: Timestam
     return data
 
 
-def normalize_dt_range_to_ts(dtr: "DateRangeInput") -> Tuple[Timestamp, Timestamp]:
+def normalize_dt_range_to_ts(dtr: DateRangeInput) -> Tuple[Timestamp, Timestamp]:
     def _to_utc_ts(v: "ExplicitlySupportedDates", bound_name: str) -> Timestamp:
         if not isinstance(v, supported_time_types):
             raise TypeError(
