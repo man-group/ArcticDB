@@ -56,13 +56,15 @@ VariantData binary_membership(const ColumnWithStrings& column_with_strings, Valu
         entity::details::visit_type(column_with_strings.column_->type().data_type(),[&column_with_strings, &value_set, &func, &output] (auto column_desc_tag) {
             using ColumnTagType = typename std::decay_t<decltype(column_desc_tag)>;
             using ColumnType = typename ColumnTagType::raw_type;
+            constexpr auto column_tag_data_type = ColumnTagType::data_type;
 
-            entity::details::visit_type(value_set.base_type().data_type(),[&column_with_strings, &value_set, &func, &output] (auto value_set_desc_tag) {
+            entity::details::visit_type(value_set.base_type().data_type(),[&column_with_strings, &value_set, &func, &output, &column_tag_data_type] (auto value_set_desc_tag) {
                 using ValueSetBaseTypeTag = decltype(value_set_desc_tag);
 
-                if constexpr(is_sequence_type(ColumnTagType::data_type) && is_sequence_type(ValueSetBaseTypeTag::data_type)) {
+
+                if constexpr(is_sequence_type(column_tag_data_type) && is_sequence_type(ValueSetBaseTypeTag::data_type)) {
                     std::shared_ptr<std::unordered_set<std::string>> typed_value_set;
-                    if constexpr(is_fixed_string_type(ColumnTagType::data_type)) {
+                    if constexpr(is_fixed_string_type(column_tag_data_type)) {
                         auto width = column_with_strings.get_fixed_width_string_size();
                         if (width.has_value()) {
                             typed_value_set = value_set.get_fixed_width_string_set(*width);
@@ -85,9 +87,9 @@ VariantData binary_membership(const ColumnWithStrings& column_with_strings, Valu
                         }
                     }
                     inserter.flush();
-                } else if constexpr (is_bool_type(ColumnTagType::data_type) && is_bool_type(ValueSetBaseTypeTag::data_type)) {
+                } else if constexpr (is_bool_type(column_tag_data_type) && is_bool_type(ValueSetBaseTypeTag::data_type)) {
                     util::raise_rte("Binary membership not implemented for bools");
-                } else if constexpr (is_numeric_type(ColumnTagType::data_type) && is_numeric_type(ValueSetBaseTypeTag::data_type)) {
+                } else if constexpr (is_numeric_type(column_tag_data_type) && is_numeric_type(ValueSetBaseTypeTag::data_type)) {
                     using ValueSetBaseType =  typename decltype(value_set_desc_tag)::DataTypeTag::raw_type;
 
                     using WideType = typename type_arithmetic_promoted_type<ColumnType, ValueSetBaseType, std::remove_reference_t<Func>>::type;
