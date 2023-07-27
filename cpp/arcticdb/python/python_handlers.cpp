@@ -1,13 +1,19 @@
+/* Copyright 2023 Man Group Operations Limited
+ *
+ * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
+ *
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ */
 #include <python/python_handlers.hpp>
 #include <python/gil_lock.hpp>
 
 namespace arcticdb {
     void EmptyHandler::handle_type(
-            const uint8_t*&,
-            uint8_t* dest,
-            size_t dest_bytes,
-            const VariantField&,
-            const entity::TypeDescriptor&
+        const uint8_t*&,
+        uint8_t* dest,
+        size_t dest_bytes,
+        const VariantField&,
+        const entity::TypeDescriptor&
     ) {
         ARCTICDB_SAMPLE(HandleEmpty, 0)
         util::check(dest != nullptr, "Got null destination pointer");
