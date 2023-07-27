@@ -31,7 +31,6 @@
 #include <folly/system/ThreadName.h>
 #include <folly/portability/PThread.h>
 #include "util/type_handler.hpp"
-#include "python_handlers.hpp"
 
 namespace py = pybind11;
 
