@@ -109,7 +109,7 @@ def test_special_chars(s3_version_store, special_char):
     assert_frame_equal(vitem.data, df)
 
 
-@pytest.mark.parametrize("breaking_char", ["&", "*", "<", ">"])
+@pytest.mark.parametrize("breaking_char", [chr(0), "\0", "&", "*", "<", ">"])
 def test_s3_breaking_chars(s3_version_store, breaking_char):
     """Test that chars that are not supported are raising the appropriate exception and that we fail on write without corrupting the db
     """
@@ -121,7 +121,7 @@ def test_s3_breaking_chars(s3_version_store, breaking_char):
     assert sym not in s3_version_store.list_symbols()
 
 
-@pytest.mark.parametrize("unhandled_char", [chr(0), chr(30), chr(127), chr(128)])
+@pytest.mark.parametrize("unhandled_char", [chr(30), chr(127), chr(128)])
 def test_unhandled_chars_default(s3_version_store, unhandled_char):
     """Test that by default, the problematic chars are raising an exception"""
     sym = f"prefix{unhandled_char}postfix"
@@ -130,17 +130,6 @@ def test_unhandled_chars_default(s3_version_store, unhandled_char):
         s3_version_store.write(sym, df)
     syms = s3_version_store.list_symbols()
     assert sym not in syms
-
-
-@pytest.mark.parametrize("unhandled_char", [chr(0)])
-def test_unhandled_chars_no_strict_check(s3_version_store, unhandled_char):
-    """Test that when we turn the STRICT_SYMBOL_CHECK off, the problematic \x00 is raising an exception"""
-    with config_context("VersionStore.NoStrictSymbolCheck", 1):
-        sym = f"prefix{unhandled_char}postfix"
-        df = sample_dataframe()
-        s3_version_store.write(sym, df)
-        with pytest.raises(InternalException):
-            s3_version_store.list_symbols()
 
 
 @pytest.mark.parametrize("unhandled_char", [chr(30), chr(127), chr(128)])

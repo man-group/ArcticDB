@@ -80,7 +80,7 @@ if TYPE_CHECKING:
         pass
 
 # These chars are encoded by S3 and on doing a list_symbols they will show up as the encoded form eg. &amp
-UNSUPPORTED_S3_CHARS = {"*", "&", "<", ">"}
+UNSUPPORTED_S3_CHARS = {"\0", "*", "&", "<", ">"}
 MAX_SYMBOL_SIZE = (2**8) - 1
 
 
