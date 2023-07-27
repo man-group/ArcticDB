@@ -170,6 +170,7 @@ inline void verify_stream_id(const StreamId &stream_id) {
     util::variant_match(
         stream_id,
         [] (const NumericId& num_stream_id) {
+            (void)num_stream_id; // Suppresses -Wunused-parameter
             ARCTICDB_DEBUG(log::version(), "Nothing to verify in stream id {} as it contains a NumericId.", num_stream_id);
             return;
         },
