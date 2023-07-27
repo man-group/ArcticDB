@@ -169,16 +169,16 @@ inline void verify_stream_id(const StreamId &stream_id) {
 
     util::variant_match(
         stream_id,
-        [] (const NumericId& stream_id) {
-            ARCTICDB_DEBUG(log::version(), "Nothing to verify in stream id {} as it contains a NumericId.", stream_id);
+        [] (const NumericId& num_stream_id) {
+            ARCTICDB_DEBUG(log::version(), "Nothing to verify in stream id {} as it contains a NumericId.", num_stream_id);
             return;
         },
-        [] (const StringId& stream_id) {
-            for (unsigned char c: stream_id) {
+        [] (const StringId& str_stream_id) {
+            for (unsigned char c: str_stream_id) {
                 if (c < 32 || c > 126) {
                     user_input::raise<ErrorCode::E_INVALID_CHAR_IN_SYMBOL>(
                             "The symbol key can contain only valid ASCII chars in the range 32-126 inclusive. Symbol Key: {} BadChar: {}",
-                            stream_id,
+                            str_stream_id,
                             c);
                 }
             }
