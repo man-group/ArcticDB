@@ -15,10 +15,11 @@ namespace arcticdb {
         const VariantField&,
         const entity::TypeDescriptor&
     ) {
-        ARCTICDB_SAMPLE(HandleEmpty, 0)
+        ARCTICDB_SAMPLE(HandleEmpty, 0);
         util::check(dest != nullptr, "Got null destination pointer");
         py::none none = {};
         const size_t num_rows = dest_bytes / get_type_size(DataType::EMPTYVAL);
+        static_assert(get_type_size(DataType::EMPTYVAL) == sizeof(PyObject*));
         const PyObject** ptr_dest = reinterpret_cast<const PyObject**>(dest);
         ScopedGILLock lock;
         for(auto row = 0u; row < num_rows; ++row) {
