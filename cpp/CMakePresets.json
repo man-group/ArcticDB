@@ -37,7 +37,9 @@
       "hidden": true,
       "inherits": "common",
       "cacheVariables": {
-        "ARCTICDB_USING_CONDA": "ON"
+        "ARCTICDB_USING_CONDA": "ON",
+        "CMAKE_C_COMPILER": "$env{CC}",
+        "CMAKE_CXX_COMPILER": "$env{CXX}"
       },
       "condition": {
         "type": "allOf",
@@ -112,8 +114,6 @@
       "generator": "Unix Makefiles",
       "cacheVariables": {
         "CMAKE_MAKE_PROGRAM": "make",
-        "CMAKE_C_COMPILER": "$env{CC}",
-        "CMAKE_CXX_COMPILER": "$env{CXX}",
         "STATIC_LINK_STD_LIB": "OFF"
       },
       "environment": {"cmakepreset_expected_host_system": "Darwin"}
