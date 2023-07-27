@@ -11,10 +11,11 @@ from enum import Enum, auto
 from typing import Optional, Any, Tuple, Dict, AnyStr, Union, List, Iterable, NamedTuple
 from numpy import datetime64
 
-from arcticdb.supported_types import Timestamp
+from arcticdb.supported_types import Timestamp, numeric_types
 
 from arcticdb.version_store.processing import QueryBuilder
 from arcticdb.version_store._store import NativeVersionStore, VersionedItem, VersionQueryInput
+from arcticdb.version_store.helper import euclidean
 from arcticdb_ext.exceptions import ArcticException
 from arcticdb_ext.version_store import DataError
 import pandas as pd
@@ -29,6 +30,7 @@ AsOf = Union[int, str, datetime.datetime]
 
 NORMALIZABLE_TYPES = (pd.DataFrame, pd.Series, np.ndarray)
 
+VECTOR_DATABASE = "VECTOR_DATABASE" # this will have to be made better distinguished somehow.
 
 NormalizableType = Union[NORMALIZABLE_TYPES]
 """Types that can be normalised into Arctic's internal storage structure.
@@ -51,6 +53,8 @@ class ArcticDuplicateSymbolsInBatchException(ArcticInvalidApiUsageException):
 class ArcticUnsupportedDataTypeException(ArcticInvalidApiUsageException):
     """Exception indicating that a method does not support the type of data provided."""
 
+class ArcticWriteToDistinguishedSymbolException(ArcticInvalidApiUsageException):
+    """Exception indicating that the symbol provided has a distinguished name and may not be written to."""
 
 class SymbolVersion(NamedTuple):
     """A named tuple. A symbol name - version pair.
@@ -275,6 +279,9 @@ class Library:
     Arctic libraries support concurrent writes and reads to multiple symbols as well as concurrent reads to a single
     symbol. However, concurrent writers to a single symbol are not supported other than for primitives that
     explicitly state support for single-symbol concurrent writes.
+
+    Proof of concept for #650: each library contains a distinguished symbol working as a vector database which
+    is not exposed to the user. Instead, vector methods are directly accessed via the library.
     """
 
     def __init__(self, arctic_instance_description: str, nvs: NativeVersionStore):
@@ -290,6 +297,7 @@ class Library:
         self.arctic_instance_desc = arctic_instance_description
         self._nvs = nvs
         self._nvs._normalizer.df._skip_df_consolidation = True
+        self._vector_dimension = None
 
     def __repr__(self):
         return "Library(%s, path=%s, storage=%s)" % (
@@ -303,6 +311,146 @@ class Library:
 
     def __contains__(self, symbol: str):
         return self.has_symbol(symbol)
+
+    def insert_vectors(
+        self,
+        df: pd.DataFrame,
+        metadata: Any = None,
+        prune_previous_versions: bool = False,
+        staged=False,
+        validate_index=True,
+    ) -> None:
+        """
+        Writes vectors to a library. Takes `pandas.DataFrame`s. Once the first
+        vectors are inserted, their shape is fixed. Note that we use the column
+        names effectively as keys.
+
+        Parameters
+        ==========
+
+        df : pandas.DataFrame
+            The `pandas.DataFrame` containing the vectors to be written to the library.
+        metadata : Any, default=None
+        prune_previous_versions : bool, default=False
+        staged : bool, default=False
+        validate_index: bool, default=False
+            See write.
+
+        Returns
+        =======
+
+        None
+
+        Raises
+        ======
+
+        ArcticUnsupportedDataTypeException
+            if df is not a `pandas.dataFrame`, or  any of its columns have
+            non-numeric type.
+        ArcticException
+            if an attempt is made to insert vectors of a different shape from
+            those previously inserted.
+        """
+        if not isinstance(df, pd.DataFrame):
+            raise ArcticUnsupportedDataTypeException(
+                "To insert vectors into a library, they must be in a pandas"
+                "DataFrame with a column labelled 'vectors' containing the vectors"
+                "in numpy arrays of fixed size."
+            )
+        if any([type not in numeric_types for type in df.dtypes.unique()]):
+            raise ArcticUnsupportedDataTypeException(
+                "Vectors must comprise numeric types. You attempted to insert "
+                f"{df.dtypes.unique()}, one of which does not count."
+            )
+        if not self._vector_dimension:
+            self._vector_dimension = df.shape[0]
+        if self._vector_dimension != df.shape[0]:
+            raise ArcticException(
+                f"Library {self.name} has been initialised with vectors"
+                f"of {self._vector_dimension} dimensions, but you attempted to"
+                f"vectors of size {df.shape[0]}."
+            )
+        return self._nvs.write(
+            symbol=VECTOR_DATABASE,
+            data=df,
+            metadata=metadata,
+            prune_previous_version=prune_previous_versions,
+            pickle_on_failure=False,
+            parallel=staged,
+            validate_index=validate_index,
+        )
+
+    def top_k(
+        self,
+        k: int,
+        query: np.ndarray,
+        method: str = "euclidean",
+        show_similarity: bool = "false",
+        show_vectors: bool = "false"
+    ) -> pd.DataFrame:
+        """
+        Returns the top k most similar vectors in a library by `method`.
+
+        Parameters
+        ==========
+
+        k : int
+            The number of vectors to return.
+        query : np.ndarray
+            A numpy array representing the query.
+        method : str
+            Choice of method for computing distance. Must be "euclidean" presently.
+        show_similarity : bool
+            Choice of whether to show similarity in the output dataframe.
+        show_vectors : bool
+            Choice of whether to show the vectors themselves or merely their keys.
+
+        Returns
+        =======
+
+        pandas.DataFrame
+
+        Examples
+        ========
+
+        >>> df = pd.DataFrame(np.random.rand(10, 10))
+        >>> query = np.zeros(10)
+        >>> lib.insert_vectors(df, columns = np.arange(10))  # default made explicit here.
+        >>> lib.top_k(
+        >>>     k=5,
+        >>>     query=query,
+        >>>     method="euclidean",
+        >>>     show_similarity="True"
+        >>>     show_vectors="True"
+        >>> )
+        >>>            8    2    4    7    9
+        >>>          0 .001 .003 .004 .008 .009
+        >>>          0 .000 .000 .000 .000 .000
+        >>>          0 .000 .000 .000 .000 .000
+        >>>          0 .000 .000 .000 .000 .000
+        >>>          0 .000 .000 .000 .000 .000
+        >>>          0 .000 .000 .000 .000 .000
+        >>>          0 .000 .000 .000 .000 .000
+        >>>          0 .000 .000 .000 .000 .000
+        >>>          0 .000 .000 .000 .000 .000
+        >>>          0 .000 .000 .000 .000 .000
+        >>> similarity .001 .003 .004 .008 .009
+        """
+        if method == "euclidean":
+            def compare(x):
+                return euclidean(query,x)
+        else:
+            raise NotImplementedError(
+                "Distance methods other than 'euclidean' are unsupported."
+            )
+        df = self.read(VECTOR_DATABASE).data
+        klargest = df.apply(compare).nlargest(k).rename("similarity")
+        result = pd.DataFrame(columns=klargest.index)
+        if show_vectors:
+             result = df[klargest.index]
+        if show_similarity:
+            result = result.append(klargest)
+        return result
 
     def write(
         self,
@@ -403,6 +551,12 @@ class Library:
             raise ArcticUnsupportedDataTypeException(
                 "data is of a type that cannot be normalized. Consider using "
                 f"write_pickle instead. type(data)=[{type(data)}]"
+            )
+
+        if symbol == VECTOR_DATABASE:
+            raise ArcticWriteToDistinguishedSymbolException(
+                f"The symbol {VECTOR_DATABASE} is reserved for internal use "
+                "and may not be written to by users."
             )
 
         return self._nvs.write(

@@ -32,6 +32,8 @@ from arcticdb.exceptions import ArcticNativeException, LibraryNotFound
 from arcticdb.version_store._store import NativeVersionStore
 from arcticdb.authorization.permissions import OpenMode
 
+from numpy.linalg import norm
+
 
 def create_lib_from_config(cfg, env=Defaults.ENV, lib_name=Defaults.LIB):
     return NativeVersionStore.create_lib_from_config(cfg, env, lib_name)
@@ -402,3 +404,6 @@ def get_arctic_native_lib(lib_fqn):
         raise LibraryNotFound(lib_fqn)
     lib, path = m.group(1), m.group(2)
     return ArcticFileConfig(config_path=path)[lib]
+
+def euclidean(x, y):
+    return norm(x-y)

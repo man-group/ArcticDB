@@ -66,6 +66,19 @@ except ImportError:
     )
 
 
+def test_top_k(arctic_client):
+    ac = arctic_client
+    ac.create_library("pytest_test_top_k_lib")
+    lib = ac["pytest_test_top_k_lib"]
+    lib.insert_vectors(pd.DataFrame(np.random.rand(100,100)))
+    meilleurs = lib.top_k(
+        k=5,
+        query=np.zeros(100),
+        show_vectors=True,
+        show_similarity=True
+    )
+    pass
+
 def test_library_creation_deletion(arctic_client):
     ac = arctic_client
     assert ac.list_libraries() == []
