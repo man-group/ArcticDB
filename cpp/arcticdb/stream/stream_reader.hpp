@@ -117,15 +117,15 @@ class StreamReader {
 
     auto generate_rows() {
         return folly::gen::from(key_gen_())
-            | generate_segments_from_keys(*store_, read_timeout_, IDX_PREFETCH_WINDOW, opts_)
+            | generate_segments_from_keys(*store_, IDX_PREFETCH_WINDOW, opts_)
             | generate_keys_from_segments(*store_, entity::KeyType::TABLE_DATA, entity::KeyType::TABLE_INDEX)
-            | generate_segments_from_keys(*store_, read_timeout_, DATA_PREFETCH_WINDOW, opts_)
+            | generate_segments_from_keys(*store_, DATA_PREFETCH_WINDOW, opts_)
             | generate_rows_from_data_segments();
     }
 
     auto generate_data_keys() {
         return folly::gen::from(key_gen_())
-            | generate_segments_from_keys(*store_, read_timeout_, IDX_PREFETCH_WINDOW, opts_)
+            | generate_segments_from_keys(*store_, IDX_PREFETCH_WINDOW, opts_)
             | generate_keys_from_segments(*store_, entity::KeyType::TABLE_DATA, entity::KeyType::TABLE_INDEX);
     }
 
