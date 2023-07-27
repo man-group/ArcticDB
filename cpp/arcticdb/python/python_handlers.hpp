@@ -16,11 +16,11 @@ namespace arcticdb {
         EmptyHandler() = default;
 
         void handle_type(
-                const uint8_t*& data,
-                uint8_t* dest,
-                size_t dest_bytes,
-                const VariantField& encoded_field,
-                const entity::TypeDescriptor& type_descriptor
+            const uint8_t*& data,
+            uint8_t* dest,
+            size_t dest_bytes,
+            const VariantField& encoded_field,
+            const entity::TypeDescriptor& type_descriptor
         );
     };
 } //namespace arcticc
