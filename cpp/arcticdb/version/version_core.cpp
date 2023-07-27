@@ -79,7 +79,7 @@ VersionedItem write_dataframe_impl(
     ARCTICDB_SUBSAMPLE_DEFAULT(WaitForWriteCompletion)
     ARCTICDB_DEBUG(log::version(), "write_dataframe_impl stream_id: {} , version_id: {}, {} rows", frame.desc.id(), version_id, frame.num_rows);
     auto atom_key_fut = async_write_dataframe_impl(store, version_id, std::move(frame), options, de_dup_map, sparsify_floats, validate_index);
-    return VersionedItem(std::move(std::move(atom_key_fut).get()));
+    return VersionedItem(std::move(atom_key_fut).get());
 }
 
 folly::Future<entity::AtomKey> async_write_dataframe_impl(
@@ -1299,7 +1299,7 @@ VersionedItem defragment_symbol_data_impl(
             pre_defragmentation_info.append_after.value(),
             std::nullopt);
     
-    store->remove_keys(delete_keys);
+    store->remove_keys(delete_keys).get();
     return vit;
 }
 
