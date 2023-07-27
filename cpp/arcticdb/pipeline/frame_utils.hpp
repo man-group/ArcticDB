@@ -126,8 +126,9 @@ void aggregator_set_data(
                 auto data = const_cast<void *>(tensor.data());
                 auto ptr_data = reinterpret_cast<PyObject **>(data);
                 ptr_data += row;
-                if (!c_style)
+                if (!c_style) {
                     ptr_data = flatten_tensor<PyObject*>(flattened_buffer, rows_to_write, tensor, slice_num, regular_slice_size);
+                }
 
                 auto none = py::none{};
                 for (size_t s = 0; s < rows_to_write; ++s, ++ptr_data) {
@@ -149,9 +150,7 @@ void aggregator_set_data(
                     }
                 }
             }
-        } else if constexpr (is_empty_type(dt)) {
-
-        } else {
+        } else if constexpr (is_numeric_type(dt) || is_bool_type(dt)) {
             auto ptr = tensor.template ptr_cast<RawType>(row);
             if (sparsify_floats) {
                 if constexpr (is_floating_point_type(dt)) {
@@ -174,6 +173,8 @@ void aggregator_set_data(
                     agg.set_array(col, t);
                 }
             }
+        }  else if constexpr (!is_empty_type(dt)) {
+            static_assert(!sizeof(dt), "Unknown data type");
         }
     });
 }
