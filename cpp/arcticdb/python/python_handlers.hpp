@@ -23,4 +23,4 @@ namespace arcticdb {
             const entity::TypeDescriptor& type_descriptor
         );
     };
-} //namespace arcticc
+} //namespace arcticdb
