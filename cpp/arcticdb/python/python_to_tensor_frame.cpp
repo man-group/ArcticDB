@@ -77,10 +77,10 @@ NativeTensor obj_to_tensor(PyObject *ptr) {
                 empty = casted_col == obj + size;
                 sample = *casted_col;
             }
-            if (is_unicode(sample)) {
-                val_type = ValueType::UTF_DYNAMIC;
-            } else if(empty){
+            if (empty) {
                 val_type = ValueType::EMPTY;
+            } else if(is_unicode(sample)){
+                val_type = ValueType::UTF_DYNAMIC;
             } else if (PYBIND11_BYTES_CHECK(sample)) {
                 val_type = ValueType::ASCII_DYNAMIC;
             }
