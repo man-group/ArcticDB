@@ -1220,7 +1220,7 @@ std::vector<VersionedItem> LocalVersionedEngine::batch_write_versioned_dataframe
     for(auto&& update_info_fut : folly::enumerate(update_info_futs)) {
         auto idx = update_info_fut.index;
         version_futures.push_back(std::move(*update_info_fut)
-            .thenValue([this, &stream_id = stream_ids[idx], &write_options, idx](auto&& update_info){
+            .thenValue([this, &stream_id = stream_ids[idx], &write_options](auto&& update_info){
                 return create_version_id_and_dedup_map(std::move(update_info), stream_id, write_options);
             }).via(&async::cpu_executor())
             .thenValue([this, &stream_id = stream_ids[idx], &write_options, &validate_index, &frame = frames[idx]](

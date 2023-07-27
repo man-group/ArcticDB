@@ -198,7 +198,6 @@ class KeyRangeIterator : public IndexRangeFilter {
 
 inline auto generate_segments_from_keys(
     arcticdb::stream::StreamSource &read_store,
-    folly::Duration timeout,
     std::size_t prefetch_window,
     const storage::ReadKeyOpts opts) {
     using namespace folly::gen;
@@ -209,7 +208,7 @@ inline auto generate_segments_from_keys(
         })
             | window(prefetch_window)
             | move
-            | map([timeout, opts](auto &&key_seg) {
+            | map([opts](auto &&key_seg) {
                 try {
                     return std::make_optional(std::forward<decltype(key_seg)>(key_seg));
                 } catch(storage::KeyNotFoundException& e) {

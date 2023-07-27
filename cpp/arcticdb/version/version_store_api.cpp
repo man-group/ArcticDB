@@ -38,8 +38,6 @@ using namespace arcticdb::entity;
 namespace as = arcticdb::stream;
 using namespace arcticdb::storage;
 
-constexpr auto coarse_nano = &util::SysClock::coarse_nanos_since_epoch;
-
 PythonVersionStore::PythonVersionStore(const std::shared_ptr<storage::Library>& library, const std::optional<std::string>& license_key) :
     LocalVersionedEngine(library, license_key) {
 }
