@@ -153,7 +153,7 @@ inline void NfsBackedStorage::do_remove(Composite<VariantKey>&& ks, RemoveOpts) 
     s3::detail::do_remove_impl(std::move(enc), root_folder_, bucket_name_, s3_client_, NfsBucketizer{});
 }
 
-void NfsBackedStorage::do_iterate_type(KeyType key_type, std::function<void(VariantKey &&key)> &visitor, const std::string& prefix) {
+inline void NfsBackedStorage::do_iterate_type(KeyType key_type, std::function<void(VariantKey &&key)> &visitor, const std::string& prefix) {
     auto func = [v = std::move(visitor), prefix=prefix] (VariantKey&& k) mutable {
         auto key = unencode_object_id(k);
         if(prefix.empty() || variant_key_id(key) == StreamId{prefix})
