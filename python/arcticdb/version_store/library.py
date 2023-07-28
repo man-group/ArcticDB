@@ -14,6 +14,7 @@ from numpy import datetime64
 from arcticdb.supported_types import Timestamp
 
 from arcticdb.version_store.processing import QueryBuilder
+from arcticdb.version_store import DataError
 from arcticdb.version_store._store import NativeVersionStore, VersionedItem, VersionQueryInput
 from arcticdb_ext.exceptions import ArcticException
 import pandas as pd
@@ -861,7 +862,7 @@ class Library:
 
     def read_batch(
         self, symbols: List[Union[str, ReadRequest]], query_builder: Optional[QueryBuilder] = None
-    ) -> List[VersionedItem]:
+    ) -> List[Union[VersionedItem, DataError]]:
         """
         Reads multiple symbols.
 
