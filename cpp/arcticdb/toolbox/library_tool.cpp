@@ -43,17 +43,25 @@ void LibraryTool::clear_ref_keys() {
 
 std::vector<VariantKey> LibraryTool::find_keys(entity::KeyType kt) {
     std::vector<VariantKey> res;
-    lib_->iterate_type(kt, [&](auto &&found_key) {
+
+    const std::function<void(VariantKey &&key)>& visitor = [&](VariantKey &&found_key) {
         res.emplace_back(found_key);
-    });
+    };
+
+    // TODO: remove this ugly `const_cast`.
+    lib_->iterate_type(kt, const_cast<std::function<void(VariantKey &&key)>&>(visitor));
     return res;
 }
 
 int LibraryTool::count_keys(entity::KeyType kt) {
     int count = 0;
-    lib_->iterate_type(kt, [&](auto &&found_key ARCTICDB_UNUSED) {
+
+    const std::function<void(VariantKey &&key)>& visitor = [&](VariantKey &&) {
         count++;
-    });
+    };
+
+    // TODO: remove this ugly `const_cast`.
+    lib_->iterate_type(kt, const_cast<std::function<void(VariantKey &&key)>&>(visitor));
     return count;
 }
 
@@ -68,12 +76,16 @@ std::vector<VariantKey> LibraryTool::find_keys_for_id(entity::KeyType kt, const 
 
     std::vector<VariantKey> res;
     const auto &string_id = std::get<StringId>(stream_id);
-    lib_->iterate_type(kt, [&](auto &&found_key) {
+
+    const std::function<void(VariantKey &&key)>& visitor = [&](VariantKey &&found_key) {
         // Only S3 handles the prefix in iterate_type, the others just return everything, thus the additional check.
         if (variant_key_id(found_key) == stream_id) {
             res.emplace_back(found_key);
         }
-    }, string_id);
+    };
+
+    // TODO: remove this ugly `const_cast`.
+    lib_->iterate_type(kt, const_cast<std::function<void(VariantKey &&key)>&>(visitor), string_id);
     return res;
 }
 

@@ -223,9 +223,9 @@ inline auto default_prefix_handler() {
     };
 }
 
-template<class Visitor, class KeyBucketizer, class PrefixHandler>
+template<class KeyBucketizer, class PrefixHandler>
 void do_iterate_type_impl(KeyType key_type,
-    Visitor&& visitor,
+    std::function<void(VariantKey &&key)>& visitor,
     const std::string& root_folder,
     Azure::Storage::Blobs::BlobContainerClient& container_client,
     KeyBucketizer&& bucketizer,
@@ -311,8 +311,7 @@ inline void AzureStorage::do_remove(Composite<VariantKey>&& ks, RemoveOpts) {
 
 
 
-template<class Visitor>
-void AzureStorage::do_iterate_type(KeyType key_type, Visitor&& visitor, const std::string& prefix) {
+void do_iterate_type(KeyType key_type, std::function<void(VariantKey &&key)> &visitor, const std::string &prefix) {
     auto prefix_handler = [] (const std::string& prefix, const std::string& key_type_dir, const KeyDescriptor key_descriptor, KeyType) {
         return !prefix.empty() ? fmt::format("{}/{}*{}", key_type_dir, key_descriptor, prefix) : key_type_dir;
     };

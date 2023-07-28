@@ -18,6 +18,7 @@
 #include <type_traits>
 #include <iterator>
 #include <array>
+#include <functional>
 #include <string_view>
 #include <storage/key_segment_pair.hpp>
 #include <util/composite.hpp>
@@ -144,9 +145,8 @@ public:
         return derived().do_key_exists(key);
     }
 
-    template<class Visitor>
-    void iterate_type(KeyType key_type, Visitor &&visitor, const std::string &prefix = std::string()) {
-        derived().do_iterate_type(key_type, std::forward<Visitor>(visitor), prefix);
+    void iterate_type(KeyType key_type, std::function<void(VariantKey &&key)> &visitor, const std::string &prefix = std::string()) {
+        derived().do_iterate_type(key_type, std::forward<std::function<void(VariantKey &&key)>&>(visitor), prefix);
     }
 
     [[nodiscard]] const LibraryPath &library_path() const { return lib_path_; }

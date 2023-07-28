@@ -40,8 +40,7 @@ protected:
 
     void do_remove(Composite<VariantKey>&& ks, RemoveOpts opts);
 
-    template<class Visitor>
-    void do_iterate_type(KeyType key_type, Visitor &&visitor, const std::string &prefix);
+    void do_iterate_type(KeyType key_type, std::function<void(VariantKey &&key)> &visitor, const std::string &prefix);
 
     bool do_key_exists(const VariantKey& key);
 

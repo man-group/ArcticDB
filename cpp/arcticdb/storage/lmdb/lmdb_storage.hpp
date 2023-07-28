@@ -54,8 +54,7 @@ class LmdbStorage final : public Storage<LmdbStorage> {
 
     inline bool do_fast_delete();
 
-    template<class Visitor>
-    void do_iterate_type(KeyType key_type, Visitor &&visitor, const std::string &prefix);
+    void do_iterate_type(KeyType key_type, std::function<void(VariantKey &&key)> &visitor, const std::string &prefix);
 
     bool do_key_exists(const VariantKey & key);
 
