@@ -88,11 +88,7 @@ std::vector<VersionedItem> PythonVersionStore::batch_write_index_keys_to_version
     const std::vector<UpdateInfo>& stream_update_info_vector,
     bool prune_previous_versions) {
 
-    if(prune_previous_versions)
-        batch_write_and_prune_previous(store(), version_map(), index_keys, stream_update_info_vector);
-    else
-        batch_write_version(store(), version_map(), index_keys);
-
+    folly::collect(batch_write_version_and_prune_if_needed(index_keys, stream_update_info_vector, prune_previous_versions)).get();
     std::vector<VersionedItem> output(index_keys.size());
     for(auto key : folly::enumerate(index_keys))
         output[key.index] = *key;
@@ -375,7 +371,7 @@ void PythonVersionStore::add_to_snapshot(
     if(variant_key_type(snap_key) == KeyType::SNAPSHOT_REF && cfg().write_options().delayed_deletes()) {
         tombstone_snapshot(store(), to_ref(snap_key), std::move(snap_segment), version_map()->log_changes());
     } else {
-        delete_trees_responsibly(deleted_keys, get_master_snapshots_map(store()), snap_name);
+        delete_trees_responsibly(deleted_keys, get_master_snapshots_map(store()), snap_name).get();
         if (version_map()->log_changes()) {
             log_delete_snapshot(store(), snap_name);
         }
@@ -416,7 +412,7 @@ void PythonVersionStore::remove_from_snapshot(
     if(variant_key_type(snap_key) == KeyType::SNAPSHOT_REF && cfg().write_options().delayed_deletes()) {
         tombstone_snapshot(store(), to_ref(snap_key), std::move(snap_segment), version_map()->log_changes());
     } else {
-        delete_trees_responsibly(deleted_keys, get_master_snapshots_map(store()), snap_name);
+        delete_trees_responsibly(deleted_keys, get_master_snapshots_map(store()), snap_name).get();
         if (version_map()->log_changes()) {
             log_delete_snapshot(store(), snap_name);
         }
@@ -840,7 +836,7 @@ void PythonVersionStore::delete_snapshot_sync(const SnapshotId& snap_name, const
         delete_trees_responsibly(
             index_keys_in_current_snapshot,
             snap_map,
-            snap_name);
+            snap_name).get();
         ARCTICDB_DEBUG(log::version(), "Deleted orphaned index keys in snapshot {}", snap_name);
     } catch(const std::exception &ex) {
         log::version().warn("Garbage collection of unreachable deleted index keys failed due to: {}", ex.what());
@@ -938,7 +934,7 @@ void PythonVersionStore::prune_previous_versions(const StreamId& stream_id) {
 
     auto previous = ::arcticdb::get_specific_version(store(), version_map(), stream_id, prev_id.value(), true, false);
     auto pruned_indexes = version_map()->tombstone_from_key_or_all(store(), stream_id, previous);
-    delete_unreferenced_pruned_indexes(pruned_indexes, latest.value());
+    delete_unreferenced_pruned_indexes(pruned_indexes, latest.value()).get();
 }
 
 void PythonVersionStore::delete_all_versions(const StreamId& stream_id) {
@@ -1030,12 +1026,7 @@ std::vector<VersionedItem> PythonVersionStore::batch_write_metadata(
                                                                    std::move(user_meta_proto)}));
     }
     auto index_keys = folly::collect(fut_vec).get();
-    if(prune_previous_versions) {
-        batch_write_and_prune_previous(store(), version_map(), index_keys, stream_update_info_vector);
-    } else {
-        batch_write_version(store(), version_map(), index_keys);
-    }
-
+    folly::collect(batch_write_version_and_prune_if_needed(index_keys, stream_update_info_vector, prune_previous_versions)).get();
     std::vector<VersionedItem> output(index_keys.size());
     for(auto key : folly::enumerate(index_keys))
         output[key.index] = std::move(*key);

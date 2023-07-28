@@ -253,6 +253,13 @@ public:
                async::submit_io_task(RemoveBatchTask{keys, library_, opts});
     }
 
+    folly::Future<std::vector<RemoveKeyResultType>> remove_keys(std::vector<entity::VariantKey> &&keys,
+                                                                storage::RemoveOpts opts) override {
+        return keys.empty() ?
+               std::vector<RemoveKeyResultType>() :
+               async::submit_io_task(RemoveBatchTask{std::move(keys), library_, opts});
+    }
+
     void copy_to_results(
         std::vector<folly::Future<storage::KeySegmentPair>> &batch,
         std::vector<storage::KeySegmentPair> &res

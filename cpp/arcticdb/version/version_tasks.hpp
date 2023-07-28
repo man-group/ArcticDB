@@ -166,10 +166,9 @@ struct WriteAndPrunePreviousTask : async::BaseTask {
         maybe_prev_(std::move(maybe_prev)) {
     }
 
-    folly::Unit operator()() {
+    folly::Future<std::vector<AtomKey>> operator()() {
         ScopedLock lock(version_map_->get_lock_object(key_.id()));
-        version_map_->write_and_prune_previous(store_, key_, maybe_prev_);
-        return folly::Unit{};
+        return version_map_->write_and_prune_previous(store_, key_, maybe_prev_);
     }
 };
 
