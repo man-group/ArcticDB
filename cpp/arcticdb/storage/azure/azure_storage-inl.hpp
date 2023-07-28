@@ -121,9 +121,9 @@ void do_update_impl(
 
 struct UnexpectedAzureErrorException : public std::exception {};
 
-template<class Visitor, class KeyBucketizer>
+template<class KeyBucketizer>
 void do_read_impl(Composite<VariantKey> && ks,
-    Visitor&& visitor,
+    const ReadVisitor& visitor,
     const std::string& root_folder,
     Azure::Storage::Blobs::BlobContainerClient& container_client,
     KeyBucketizer&& bucketizer,
@@ -300,9 +300,8 @@ inline void AzureStorage::do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts)
     detail::do_update_impl(std::move(kvs), root_folder_, container_client_, FlatBucketizer{}, upload_option_, request_timeout_);
 }
 
-template<class Visitor>
-void AzureStorage::do_read(Composite<VariantKey>&& ks, Visitor&& visitor, ReadKeyOpts opts) {
-    detail::do_read_impl(std::move(ks), std::move(visitor), root_folder_, container_client_, FlatBucketizer{}, opts, download_option_, request_timeout_);
+inline void AzureStorage::do_read(Composite<VariantKey>&& ks, const ReadVisitor& visitor, ReadKeyOpts opts) {
+    detail::do_read_impl(std::move(ks), visitor, root_folder_, container_client_, FlatBucketizer{}, opts, download_option_, request_timeout_);
 }
 
 inline void AzureStorage::do_remove(Composite<VariantKey>&& ks, RemoveOpts) {

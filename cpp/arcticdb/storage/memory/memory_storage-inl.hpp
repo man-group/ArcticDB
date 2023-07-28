@@ -65,8 +65,7 @@ namespace arcticdb::storage::memory {
         });
     }
 
-    template<class Visitor>
-    void MemoryStorage::do_read(Composite<VariantKey>&& ks, Visitor &&visitor, ReadKeyOpts) {
+    inline void MemoryStorage::do_read(Composite<VariantKey>&& ks, const ReadVisitor& visitor, ReadKeyOpts) {
         ARCTICDB_SAMPLE(MemoryStorageRead, 0)
         std::lock_guard lock{*mutex_};
         auto fmt_db = [](auto &&k) { return variant_key_type(k); };

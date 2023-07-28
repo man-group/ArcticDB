@@ -50,8 +50,7 @@ inline void MongoStorage::do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts 
     });
 }
 
-template<class Visitor>
-void MongoStorage::do_read(Composite<VariantKey>&& ks, Visitor &&visitor, ReadKeyOpts) {
+inline void MongoStorage::do_read(Composite<VariantKey>&& ks, const ReadVisitor& visitor, ReadKeyOpts) {
     namespace fg = folly::gen;
     auto fmt_db = [](auto &&k) { return variant_key_type(k); };
     ARCTICDB_SAMPLE(MongoStorageRead, 0)
