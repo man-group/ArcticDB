@@ -114,11 +114,11 @@ class Library {
     KeySegmentPair read(VariantKey key, ReadKeyOpts opts = ReadKeyOpts{}) {
         KeySegmentPair res{VariantKey{key}};
         util::check(!std::holds_alternative<StringId>(variant_key_id(key)) || !std::get<StringId>(variant_key_id(key)).empty(), "Unexpected empty id");
-        const ReadVisitor& write_back = [&res](VariantKey, Segment value) {
+        const ReadVisitor& visitor = [&res](const VariantKey&, Segment value) {
             res.segment() = std::move(value);
         };
 
-        read(Composite<VariantKey>(std::move(key)), write_back, opts);
+        read(Composite<VariantKey>(std::move(key)), visitor, opts);
 
         return res;
     }

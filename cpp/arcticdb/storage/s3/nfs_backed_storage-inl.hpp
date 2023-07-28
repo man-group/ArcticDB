@@ -135,7 +135,7 @@ inline void NfsBackedStorage::do_update(Composite<KeySegmentPair>&& kvs, UpdateO
 
 inline void NfsBackedStorage::do_read(Composite<VariantKey>&& ks, const ReadVisitor& visitor, ReadKeyOpts opts) {
     auto func = [visitor] (const VariantKey& k, Segment&& seg) mutable {
-        visitor(std::move(unencode_object_id(k)), std::move(seg));
+        visitor(unencode_object_id(k), std::move(seg));
     };
 
     auto enc = ks.transform([] (auto&& key) {
