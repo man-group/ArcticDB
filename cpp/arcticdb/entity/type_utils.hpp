@@ -12,8 +12,13 @@
 namespace arcticdb {
 
 inline bool trivially_compatible_types(entity::TypeDescriptor left, entity::TypeDescriptor right) {
-    if(left == right)
+    if(left == right) {
         return true;
+    }
+
+    if(is_empty_type(left.data_type()) || is_empty_type(left.data_type())) {
+        return true;
+    }
 
     if(is_sequence_type(left.data_type()) && is_sequence_type(right.data_type())) {
         //TODO coercion of utf strings is not always safe, should allow safe conversion and reinstate the

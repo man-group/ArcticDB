@@ -97,7 +97,7 @@ public:
         template<class Callable>
         auto visit_field(Callable &&c) const {
             const auto& field = parent_->descriptor().field(column_id_);
-            return entity::visit_field(parent_->descriptor().field(column_id_), [&field, that=this, c = std::forward<Callable>(c)](auto type_desc_tag) {
+            return entity::visit_field(parent_->descriptor().field(column_id_), [&field, this, c = std::forward<Callable>(c)](auto type_desc_tag) {
                 using DataTypeTag = typename std::decay_t<decltype(type_desc_tag)>::DataTypeTag;
                 using RawType = typename DataTypeTag::raw_type;
                 if constexpr (is_sequence_type(DataTypeTag::data_type))
