@@ -861,7 +861,7 @@ class Library:
 
     def read_batch(
         self, symbols: List[Union[str, ReadRequest]], query_builder: Optional[QueryBuilder] = None
-    ) -> List[VersionedItem]:
+    ) -> List[Union[VersionedItem, DataError]]:
         """
         Reads multiple symbols.
 
