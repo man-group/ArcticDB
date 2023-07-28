@@ -80,13 +80,13 @@ class Storages {
         throw storage::KeyNotFoundException(std::move(ks));
     }
 
-    void iterate_type(KeyType key_type, IterateTypeVisitor &v, const std::string &prefix=std::string{}, bool primary_only=true) {
+    void iterate_type(KeyType key_type, const IterateTypeVisitor& visitor, const std::string &prefix=std::string{}, bool primary_only=true) {
         ARCTICDB_SAMPLE(StorageIterateType, RMTSF_Aggregate)
         if(primary_only) {
-            primary().iterate_type(key_type, v, prefix);
+            primary().iterate_type(key_type, visitor, prefix);
         } else {
             for(const auto& storage : variant_storages_) {
-                storage->iterate_type(key_type, v, prefix);
+                storage->iterate_type(key_type, visitor, prefix);
             }
         }
     }
@@ -123,8 +123,7 @@ class Storages {
             }
         };
 
-        // TODO: remove this ugly `const_cast`.
-        source.iterate_type(key_type, const_cast<IterateTypeVisitor&>(visitor));
+        source.iterate_type(key_type, visitor);
    }
 
   private:

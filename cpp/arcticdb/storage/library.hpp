@@ -62,7 +62,7 @@ class Library {
      * and code defensively.
      * @param visitor Takes one VariantKey which should be moved in but no guarantees
      */
-    void iterate_type(KeyType key_type, IterateTypeVisitor &visitor, const std::string &prefix=std::string{}) {
+    void iterate_type(KeyType key_type, const IterateTypeVisitor& visitor, const std::string &prefix=std::string{}) {
         ARCTICDB_SAMPLE(LibraryIterate, 0)
         storages_->iterate_type(key_type, visitor, prefix);
     }

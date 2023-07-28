@@ -49,7 +49,7 @@ public:
         storage_.do_remove(std::move(ks), RemoveOpts{});
     }
 
-    void do_iterate_type(KeyType key_type, IterateTypeVisitor &visitor, const std::string &prefix) {
+    void do_iterate_type(KeyType key_type, const IterateTypeVisitor& visitor, const std::string &prefix) {
         storage_.do_iterate_type(key_type, std::move(visitor), prefix);
     }
 

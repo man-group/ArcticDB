@@ -44,12 +44,9 @@ void LibraryTool::clear_ref_keys() {
 std::vector<VariantKey> LibraryTool::find_keys(entity::KeyType kt) {
     std::vector<VariantKey> res;
 
-    const IterateTypeVisitor& visitor = [&](VariantKey &&found_key) {
+    lib_->iterate_type(kt, [&](VariantKey &&found_key) {
         res.emplace_back(found_key);
-    };
-
-    // TODO: remove this ugly `const_cast`.
-    lib_->iterate_type(kt, const_cast<IterateTypeVisitor&>(visitor));
+    });
     return res;
 }
 
@@ -60,8 +57,7 @@ int LibraryTool::count_keys(entity::KeyType kt) {
         count++;
     };
 
-    // TODO: remove this ugly `const_cast`.
-    lib_->iterate_type(kt, const_cast<IterateTypeVisitor&>(visitor));
+    lib_->iterate_type(kt, visitor);
     return count;
 }
 
@@ -84,8 +80,7 @@ std::vector<VariantKey> LibraryTool::find_keys_for_id(entity::KeyType kt, const 
         }
     };
 
-    // TODO: remove this ugly `const_cast`.
-    lib_->iterate_type(kt, const_cast<IterateTypeVisitor&>(visitor), string_id);
+    lib_->iterate_type(kt, visitor, string_id);
     return res;
 }
 
