@@ -88,6 +88,7 @@ jobs:
           python -m pip install --no-build-isolation --no-deps -v -e .
         env:
           ARCTICDB_USING_CONDA: 1
+          # Using one thread to avoid swapping which might freeze the CI machine.
           CMAKE_BUILD_PARALLEL_LEVEL: 1
 
       - name: Test with pytest
