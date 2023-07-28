@@ -41,7 +41,7 @@ struct StreamSource {
 
     virtual void iterate_type(
         KeyType type,
-        std::function<void(entity::VariantKey &&)> func,
+        entity::IterateTypeVisitor func,
         const std::string &prefix = std::string{}) = 0;
 
     [[nodiscard]] virtual folly::Future<bool> key_exists(const entity::VariantKey &key) = 0;

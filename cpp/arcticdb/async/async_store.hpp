@@ -167,7 +167,7 @@ public:
         return ClockType::nanos_since_epoch();
     }
 
-    void iterate_type(KeyType type, std::function<void(entity::VariantKey &&)> func,
+    void iterate_type(KeyType type, entity::IterateTypeVisitor func,
                       const std::string &prefix) override {
         library_->iterate_type(type, func, prefix);
     }

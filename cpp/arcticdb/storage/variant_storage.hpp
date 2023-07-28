@@ -82,7 +82,7 @@ class VariantStorage final : public Storage<VariantStorage<VariantStorageType>> 
         });
     }
 
-    void do_iterate_type(KeyType key_type, std::function<void(VariantKey &&key)> &visitor, const std::string &prefix) {
+    void do_iterate_type(KeyType key_type, IterateTypeVisitor &visitor, const std::string &prefix) {
          delegate([&](auto &&impl) {
              impl.iterate_type(key_type, visitor, prefix);
         });

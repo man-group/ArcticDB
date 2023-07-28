@@ -44,24 +44,24 @@ void LibraryTool::clear_ref_keys() {
 std::vector<VariantKey> LibraryTool::find_keys(entity::KeyType kt) {
     std::vector<VariantKey> res;
 
-    const std::function<void(VariantKey &&key)>& visitor = [&](VariantKey &&found_key) {
+    const IterateTypeVisitor& visitor = [&](VariantKey &&found_key) {
         res.emplace_back(found_key);
     };
 
     // TODO: remove this ugly `const_cast`.
-    lib_->iterate_type(kt, const_cast<std::function<void(VariantKey &&key)>&>(visitor));
+    lib_->iterate_type(kt, const_cast<IterateTypeVisitor&>(visitor));
     return res;
 }
 
 int LibraryTool::count_keys(entity::KeyType kt) {
     int count = 0;
 
-    const std::function<void(VariantKey &&key)>& visitor = [&](VariantKey &&) {
+    const IterateTypeVisitor& visitor = [&](VariantKey &&) {
         count++;
     };
 
     // TODO: remove this ugly `const_cast`.
-    lib_->iterate_type(kt, const_cast<std::function<void(VariantKey &&key)>&>(visitor));
+    lib_->iterate_type(kt, const_cast<IterateTypeVisitor&>(visitor));
     return count;
 }
 
@@ -77,7 +77,7 @@ std::vector<VariantKey> LibraryTool::find_keys_for_id(entity::KeyType kt, const 
     std::vector<VariantKey> res;
     const auto &string_id = std::get<StringId>(stream_id);
 
-    const std::function<void(VariantKey &&key)>& visitor = [&](VariantKey &&found_key) {
+    const IterateTypeVisitor& visitor = [&](VariantKey &&found_key) {
         // Only S3 handles the prefix in iterate_type, the others just return everything, thus the additional check.
         if (variant_key_id(found_key) == stream_id) {
             res.emplace_back(found_key);
@@ -85,7 +85,7 @@ std::vector<VariantKey> LibraryTool::find_keys_for_id(entity::KeyType kt, const 
     };
 
     // TODO: remove this ugly `const_cast`.
-    lib_->iterate_type(kt, const_cast<std::function<void(VariantKey &&key)>&>(visitor), string_id);
+    lib_->iterate_type(kt, const_cast<IterateTypeVisitor&>(visitor), string_id);
     return res;
 }
 

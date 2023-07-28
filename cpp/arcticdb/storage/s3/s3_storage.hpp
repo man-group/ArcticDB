@@ -53,7 +53,7 @@ class S3Storage final : public Storage<S3Storage> {
 
     void do_remove(Composite<VariantKey>&& ks, RemoveOpts opts);
 
-    void do_iterate_type(KeyType key_type, std::function<void(VariantKey &&key)> &visitor, const std::string &prefix);
+    void do_iterate_type(KeyType key_type, IterateTypeVisitor &visitor, const std::string &prefix);
 
     bool do_key_exists(const VariantKey& key);
 

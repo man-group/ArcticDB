@@ -93,7 +93,7 @@ inline void MongoStorage::do_remove(Composite<VariantKey>&& ks, RemoveOpts) {
     });
 }
 
-inline void MongoStorage::do_iterate_type(KeyType key_type, std::function<void(VariantKey &&key)> &visitor, const std::string &prefix) {
+inline void MongoStorage::do_iterate_type(KeyType key_type, IterateTypeVisitor &visitor, const std::string &prefix) {
     auto collection = collection_name(key_type);
     auto func = folly::Function<void(entity::VariantKey&&)>(std::move(visitor));
     ARCTICDB_SAMPLE(MongoStorageItType, 0)

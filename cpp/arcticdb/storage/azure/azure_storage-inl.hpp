@@ -309,7 +309,7 @@ inline void AzureStorage::do_remove(Composite<VariantKey>&& ks, RemoveOpts) {
     detail::do_remove_impl(std::move(ks), root_folder_, container_client_, FlatBucketizer{}, request_timeout_);
 }
 
-inline void do_iterate_type(KeyType key_type, std::function<void(VariantKey &&key)> &visitor, const std::string &prefix) {
+inline void do_iterate_type(KeyType key_type, IterateTypeVisitor &visitor, const std::string &prefix) {
     auto prefix_handler = [] (const std::string& prefix, const std::string& key_type_dir, const KeyDescriptor key_descriptor, KeyType) {
         return !prefix.empty() ? fmt::format("{}/{}*{}", key_type_dir, key_descriptor, prefix) : key_type_dir;
     };

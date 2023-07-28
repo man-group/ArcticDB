@@ -145,8 +145,8 @@ public:
         return derived().do_key_exists(key);
     }
 
-    void iterate_type(KeyType key_type, std::function<void(VariantKey &&key)> &visitor, const std::string &prefix = std::string()) {
-        derived().do_iterate_type(key_type, std::forward<std::function<void(VariantKey &&key)>&>(visitor), prefix);
+    void iterate_type(KeyType key_type, IterateTypeVisitor &visitor, const std::string &prefix = std::string()) {
+        derived().do_iterate_type(key_type, std::forward<IterateTypeVisitor&>(visitor), prefix);
     }
 
     [[nodiscard]] const LibraryPath &library_path() const { return lib_path_; }

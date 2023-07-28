@@ -46,7 +46,7 @@ class MongoStorage final : public Storage<MongoStorage> {
 
     inline bool do_fast_delete();
 
-    void do_iterate_type(KeyType key_type, std::function<void(VariantKey &&key)> &visitor, const std::string &prefix);
+    void do_iterate_type(KeyType key_type, IterateTypeVisitor &visitor, const std::string &prefix);
 
   private:
     std::string collection_name(KeyType k);
