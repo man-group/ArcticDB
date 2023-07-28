@@ -97,13 +97,14 @@ public:
         template<class Callable>
         auto visit_field(Callable &&c) const {
             const auto& field = parent_->descriptor().field(column_id_);
-            return entity::visit_field(parent_->descriptor().field(column_id_), [&field, that=this, c = std::forward<Callable>(c)](auto type_desc_tag) {
+            return entity::visit_field(parent_->descriptor().field(column_id_), [&field, this, c = std::forward<Callable>(c)](auto type_desc_tag) {
                 using DataTypeTag = typename std::decay_t<decltype(type_desc_tag)>::DataTypeTag;
                 using RawType = typename DataTypeTag::raw_type;
-                if constexpr (is_sequence_type(DataTypeTag::data_type))
-                    return c(that->parent_->string_at(that->row_id_, position_t(that->column_id_)), std::string_view{field.name()}, field.type());
-                else
-                    return c(that->parent_->scalar_at<RawType>(that->row_id_, that->column_id_), std::string_view{field.name()}, field.type());
+                if constexpr (is_sequence_type(DataTypeTag::data_type)) {
+                    return c(this->parent_->string_at(this->row_id_, position_t(this->column_id_)), std::string_view{field.name()}, field.type());
+                } else {
+                    return c(this->parent_->scalar_at<RawType>(this->row_id_, this->column_id_), std::string_view{field.name()}, field.type());
+                }
             });
         }
 
