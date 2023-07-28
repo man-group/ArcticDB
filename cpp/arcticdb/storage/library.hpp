@@ -62,10 +62,9 @@ class Library {
      * and code defensively.
      * @param visitor Takes one VariantKey which should be moved in but no guarantees
      */
-    template<class Visitor>
-    void iterate_type(KeyType key_type, Visitor &&visitor, const std::string &prefix=std::string{}) {
+    void iterate_type(KeyType key_type, const IterateTypeVisitor& visitor, const std::string &prefix=std::string{}) {
         ARCTICDB_SAMPLE(LibraryIterate, 0)
-        storages_->iterate_type(key_type, std::forward<Visitor>(visitor), prefix);
+        storages_->iterate_type(key_type, visitor, prefix);
     }
 
     void write(Composite<KeySegmentPair>&& kvs) {

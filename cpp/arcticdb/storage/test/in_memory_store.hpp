@@ -224,7 +224,7 @@ namespace arcticdb {
         }
 
 
-        void iterate_type(KeyType kt, std::function<void(entity::VariantKey &&)> func, const std::string& prefix = "")
+        void iterate_type(KeyType kt, entity::IterateTypeVisitor func, const std::string& prefix = "")
         override {
             auto prefix_matcher = stream_id_prefix_matcher(prefix);
             auto failure_sim = StorageFailureSimulator::instance();
