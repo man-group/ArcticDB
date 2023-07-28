@@ -250,6 +250,8 @@ set(arcticdb_srcs
         storage/mongo/mongo_instance.hpp
         storage/mongo/mongo_storage.hpp
         storage/object_store_utils.hpp
+        storage/s3/uri_backed_storage.hpp
+        storage/s3/uri_backed_storage-inl.hpp
         storage/s3/nfs_backed_storage.hpp
         storage/s3/nfs_backed_storage-inl.hpp
         storage/s3/s3_client_accessor.hpp

@@ -24,11 +24,11 @@
 #include <sstream>
 #include <string>
 #include <vector>
+#include <arcticdb/storage/s3/uri_backed_storage.hpp>
 
 namespace arcticdb::storage::s3 {
 
-class S3Storage final : public Storage<S3Storage> {
-
+class S3Storage final : public Storage<S3Storage>, public arcticdb::storage::uri_backed::URIBackedMixin {
     using Parent = Storage<S3Storage>;
     friend Parent;
 
@@ -56,23 +56,6 @@ class S3Storage final : public Storage<S3Storage> {
 
     bool do_key_exists(const VariantKey& key);
 
-    bool do_supports_prefix_matching() {
-        return true;
-    }
-
-    bool do_fast_delete() {
-        return false;
-    }
-
-  private:
-    auto& client() { return s3_client_; }
-    const std::string& bucket_name() const { return bucket_name_; }
-    const std::string& root_folder() const { return root_folder_; }
-
-    std::shared_ptr<S3ApiInstance> s3_api_;
-    Aws::S3::S3Client s3_client_;
-    std::string root_folder_;
-    std::string bucket_name_;
 };
 
 inline arcticdb::proto::storage::VariantStorage pack_config(const std::string &bucket_name) {
