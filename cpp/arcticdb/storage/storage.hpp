@@ -18,7 +18,6 @@
 #include <type_traits>
 #include <iterator>
 #include <array>
-#include <functional>
 #include <string_view>
 #include <storage/key_segment_pair.hpp>
 #include <util/composite.hpp>
