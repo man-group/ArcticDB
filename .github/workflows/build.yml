@@ -189,7 +189,7 @@ jobs:
       cibw_version: ${{needs.common_config.outputs.cibuildwheel_ver}}
       cmake_preset_type: ${{needs.common_config.outputs.cmake_preset_type_resolved}}
       matrix: ${{needs.common_config.outputs.windows_matrix}}
-      real_storage: ${{ inputs.real_storage }}
+      real_storage: ${{ needs.common_config.outputs.real_storage }}
 
   can_merge:
     needs: [leader-cpp-test-linux, leader-cpp-test-windows, follower-linux, follower-windows]
