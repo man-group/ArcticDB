@@ -73,6 +73,9 @@ else:
 if AZURE_SUPPORT:
     SMOKE_TEST_VERSION_STORES.append("azure_version_store")
 
+if os.getenv("ARCTICDB_REAL_STORAGE_TESTS") == "1":
+    SMOKE_TEST_VERSION_STORES.append("real_s3_version_store")
+
 
 @pytest.fixture()
 def symbol():
