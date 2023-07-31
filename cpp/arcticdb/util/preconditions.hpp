@@ -25,7 +25,7 @@ struct Raise {
     [[noreturn]] void operator()(fmt::format_string<Args...> format, Args&&...args) const {
         std::string combo_format = fmt::format(FMT_COMPILE("{} {}"), error_code_data<code>.name_, format);
         std::string msg = fmt::format(combo_format, std::forward<Args>(args)...);
-        if (error_category == ErrorCategory::INTERNAL)
+        if constexpr(error_category == ErrorCategory::INTERNAL)
             log::root().error(msg);
         throw_error<code>(msg);
     }
@@ -34,7 +34,7 @@ struct Raise {
     [[noreturn]] void operator()(FormatString format, Args&&...args) const {
         std::string combo_format = fmt::format(FMT_COMPILE("{} {}"), error_code_data<code>.name_, format);
         std::string msg = fmt::format(combo_format, std::forward<Args>(args)...);
-        if (error_category == ErrorCategory::INTERNAL)
+        if constexpr(error_category == ErrorCategory::INTERNAL)
             log::root().error(msg);
         throw_error<code>(msg);
     }
