@@ -261,7 +261,7 @@ jobs:
           CMAKE_BUILD_PARALLEL_LEVEL: ${{vars.CMAKE_BUILD_PARALLEL_LEVEL}}
 
       - name: Set real storage variables
-        if: inputs.real_storage == "true"
+        if: inputs.real_storage == 'true'
         run: |
           echo "ARCTICDB_REAL_S3_BUCKET=arcticdb-ci-test-bucket-01" >> $GITHUB_ENV
           echo "ARCTICDB_REAL_S3_ENDPOINT=s3.eu-west-2.amazonaws.com" >> $GITHUB_ENV
