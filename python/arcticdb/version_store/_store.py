@@ -70,7 +70,6 @@ from arcticdb.version_store._normalization import (
 )
 from arcticdb.util.memory import format_bytes
 
-
 _ExtDateRangeTypes = pd.core.indexes.datetimelike.DatetimeIndexOpsMixin
 if TYPE_CHECKING:
     try:
@@ -81,7 +80,7 @@ if TYPE_CHECKING:
         pass
 
 # These chars are encoded by S3 and on doing a list_symbols they will show up as the encoded form eg. &amp
-UNSUPPORTED_S3_CHARS = {"*", "&", "<", ">"}
+UNSUPPORTED_S3_CHARS = {"\0", "*", "&", "<", ">"}
 MAX_SYMBOL_SIZE = (2**8) - 1
 
 
@@ -368,6 +367,7 @@ class NativeVersionStore:
             raise ArcticNativeNotYetImplemented(
                 f"Symbol length {len(symbol)} chars exceeds the max supported length of {MAX_SYMBOL_SIZE} chars."
             )
+
         if len(set(symbol).intersection(UNSUPPORTED_S3_CHARS)):
             raise ArcticNativeNotYetImplemented(
                 f"The symbol '{symbol}' has one or more unsupported characters({','.join(UNSUPPORTED_S3_CHARS)})."
