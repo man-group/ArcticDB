@@ -27,6 +27,7 @@ from arcticdb.exceptions import (
     InternalException,
     NoSuchVersionException,
     StreamDescriptorMismatch,
+    UserInputException,
 )
 from arcticdb_ext.storage import NoDataFoundException
 from arcticdb.flattener import Flattener
@@ -43,10 +44,11 @@ from arcticdb.util.test import (
     get_sample_dataframe,
     assert_frame_equal,
     assert_series_equal,
+    config_context,
 )
 from arcticdb_ext.tools import AZURE_SUPPORT
 from tests.util.date import DateRange
-
+from arcticdb_ext import set_config_int, unset_config_int
 
 if sys.platform == "linux":
     SMOKE_TEST_VERSION_STORES = [
@@ -97,7 +99,7 @@ def test_simple_flow(lmdb_version_store_no_symbol_list, symbol):
     assert lmdb_version_store_no_symbol_list.list_symbols() == lmdb_version_store_no_symbol_list.list_versions() == []
 
 
-@pytest.mark.parametrize("special_char", ["$", ",", ":", "=", "@", "-", "_", ".", "~"])
+@pytest.mark.parametrize("special_char", list("$@=;/:+ ,?\\{^}%`[]\"'~#|!-_.()"))
 def test_special_chars(s3_version_store, special_char):
     """Test chars with special URI encoding under RFC 3986"""
     sym = f"prefix{special_char}postfix"
@@ -105,6 +107,96 @@ def test_special_chars(s3_version_store, special_char):
     s3_version_store.write(sym, df)
     vitem = s3_version_store.read(sym)
     assert_frame_equal(vitem.data, df)
+
+
+@pytest.mark.parametrize("breaking_char", [chr(0), "\0", "&", "*", "<", ">"])
+def test_s3_breaking_chars(s3_version_store, breaking_char):
+    """Test that chars that are not supported are raising the appropriate exception and that we fail on write without corrupting the db
+    """
+    sym = f"prefix{breaking_char}postfix"
+    df = sample_dataframe()
+    with pytest.raises(ArcticNativeNotYetImplemented):
+        s3_version_store.write(sym, df)
+
+    assert sym not in s3_version_store.list_symbols()
+
+
+@pytest.mark.parametrize("unhandled_char", [chr(30), chr(127), chr(128)])
+def test_unhandled_chars_default(s3_version_store, unhandled_char):
+    """Test that by default, the problematic chars are raising an exception"""
+    sym = f"prefix{unhandled_char}postfix"
+    df = sample_dataframe()
+    with pytest.raises(UserInputException):
+        s3_version_store.write(sym, df)
+    syms = s3_version_store.list_symbols()
+    assert sym not in syms
+
+
+@pytest.mark.parametrize("unhandled_char", [chr(30), chr(127), chr(128)])
+def test_unhandled_chars_update_upsert(s3_version_store, unhandled_char):
+    df = pd.DataFrame(
+        {"col_1": ["a", "b"], "col_2": [0.1, 0.2]}, index=[pd.Timestamp("2022-01-01"), pd.Timestamp("2022-01-02")]
+    )
+    sym = f"prefix{unhandled_char}postfix"
+    with pytest.raises(UserInputException):
+        s3_version_store.update(sym, df, upsert=True)
+    syms = s3_version_store.list_symbols()
+    assert sym not in syms
+
+
+@pytest.mark.parametrize("unhandled_char", [chr(30), chr(127), chr(128)])
+def test_unhandled_chars_append(s3_version_store, unhandled_char):
+    df = pd.DataFrame(
+        {"col_1": ["a", "b"], "col_2": [0.1, 0.2]}, index=[pd.Timestamp("2022-01-01"), pd.Timestamp("2022-01-02")]
+    )
+    sym = f"prefix{unhandled_char}postfix"
+    with pytest.raises(UserInputException):
+        s3_version_store.append(sym, df)
+    syms = s3_version_store.list_symbols()
+    assert sym not in syms
+
+
+@pytest.mark.parametrize("unhandled_char", [chr(127), chr(128)])
+def test_unhandled_chars_already_present_write(s3_version_store, three_col_df, unhandled_char):
+    sym = f"prefix{unhandled_char}postfix"
+    with config_context("VersionStore.NoStrictSymbolCheck", 1):
+        s3_version_store.write(sym, three_col_df())
+    vitem = s3_version_store.read(sym)
+    s3_version_store.write(sym, three_col_df(1))
+    new_vitem = s3_version_store.read(sym)
+    assert not vitem.data.equals(new_vitem.data)
+
+
+@pytest.mark.parametrize("unhandled_char", [chr(127), chr(128)])
+def test_unhandled_chars_already_present_append(s3_version_store, three_col_df, unhandled_char):
+    sym = f"prefix{unhandled_char}postfix"
+    with config_context("VersionStore.NoStrictSymbolCheck", 1):
+        s3_version_store.write(sym, three_col_df(1))
+
+    vitem = s3_version_store.read(sym)
+    s3_version_store.append(sym, three_col_df(10))
+    new_vitem = s3_version_store.read(sym)
+    assert not vitem.data.equals(new_vitem.data)
+    assert len(vitem.data) != len(new_vitem.data)
+
+
+@pytest.mark.parametrize("unhandled_char", [chr(127), chr(128)])
+def test_unhandled_chars_already_present_update(s3_version_store, unhandled_char):
+    df = pd.DataFrame(
+        {"col_1": ["a", "b"], "col_2": [0.1, 0.2]}, index=[pd.Timestamp("2022-01-01"), pd.Timestamp("2022-01-02")]
+    )
+    update_df = pd.DataFrame(
+        {"col_1": ["c", "d"], "col_2": [0.2, 0.3]}, index=[pd.Timestamp("2022-01-01"), pd.Timestamp("2022-01-02")]
+    )
+    sym = f"prefix{unhandled_char}postfix"
+    with config_context("VersionStore.NoStrictSymbolCheck", 1):
+        s3_version_store.write(sym, df)
+
+    vitem = s3_version_store.read(sym)
+    s3_version_store.update(sym, update_df)
+    new_vitem = s3_version_store.read(sym)
+    assert not vitem.data.equals(new_vitem.data)
+    assert len(vitem.data) == len(new_vitem.data)
 
 
 @pytest.mark.parametrize("version_store", SMOKE_TEST_VERSION_STORES)
