@@ -79,8 +79,6 @@ jobs:
       cmake_preset_type_resolved: ${{inputs.cmake_preset_type != '-' && inputs.cmake_preset_type || env.CMAKE_PRESET_TYPE}}
       linux_matrix: ${{toJson(matrix.linux_matrix)}}
       windows_matrix: ${{toJson(matrix.windows_matrix)}}
-      # TODO: Uncomment when we are ready for the schedule build
-      # real_storage: ${{ inputs.real_storage || github.event.schedule }}
       real_storage: ${{ inputs.real_storage }}
 
   cibw_docker_image:
