@@ -267,7 +267,7 @@ jobs:
           echo "ARCTICDB_REAL_S3_ENDPOINT=s3.eu-west-2.amazonaws.com" >> $GITHUB_ENV
           echo "ARCTICDB_REAL_S3_REGION=eu-west-2" >> $GITHUB_ENV
           echo "ARCTICDB_REAL_STORAGE_TESTS=1" >> $GITHUB_ENV
-          echo "ARCTICDB_REAL_S3_CLEAR=0" >> $GITHUB_ENV
+          echo "ARCTICDB_REAL_S3_CLEAR=1" >> $GITHUB_ENV
           echo "ARCTICDB_REAL_S3_ACCESS_KEY=${{ secrets.AWS_S3_ACCESS_KEY }}" >> $GITHUB_ENV
           echo "ARCTICDB_REAL_S3_SECRET_KEY=${{ secrets.AWS_S3_SECRET_KEY }}" >> $GITHUB_ENV
 
