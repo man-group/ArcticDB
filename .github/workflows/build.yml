@@ -79,7 +79,7 @@ jobs:
       cmake_preset_type_resolved: ${{inputs.cmake_preset_type != '-' && inputs.cmake_preset_type || env.CMAKE_PRESET_TYPE}}
       linux_matrix: ${{toJson(matrix.linux_matrix)}}
       windows_matrix: ${{toJson(matrix.windows_matrix)}}
-      real_storage: ${{ inputs.real_storage }}
+      real_storage: ${{ inputs.real_storage || false}}
 
   cibw_docker_image:
     needs: [common_config]
