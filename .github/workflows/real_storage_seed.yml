@@ -61,6 +61,6 @@ jobs:
 
       - name: Seed the storage
         run: |
-          echo "Running seed for ${{inputs.matrix.os}}_3.${{inputs.python3}}"
-          python build_tooling/seed_storage.py "${{inputs.matrix.os}}_3.${{inputs.python3}}"
+          echo "Running seed for ${{matrix.os}}_3.${{inputs.python3}}"
+          python build_tooling/seed_storage.py "${{matrix.os}}_3.${{inputs.python3}}"
           

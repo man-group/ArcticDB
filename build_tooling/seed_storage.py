@@ -17,6 +17,8 @@ def real_s3_credentials():
 endpoint, bucket, region, access_key, secret_key, clear = real_s3_credentials()
 uri = f"s3s://{endpoint}:{bucket}?access={access_key}&secret={secret_key}&region={region}"
 
+print(f"Connecting to {uri}")
+
 ac = Arctic(uri)
 lib_name = sys.argv[1]
 test_df = pd.DataFrame()
