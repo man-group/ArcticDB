@@ -12,7 +12,25 @@ on:
       region:            {default: 'eu-west-2', type: string, description: The S3 region of the bucket}
 jobs:
   seed_storage:
+    strategy:
+      matrix:
+        # Declaring the dummy fields here to aid the Github Actions linting in VSCode and to provide documentation
+        os: [0] # Decouples the steps from any distro version changes
+        distro: [0]
+        cmake_preset_prefix: [0]
+        cibw_build_suffix: [0]
+        envs: [0]
+        build_dir: [0] # Must be an absolute path
+        symbols: [0] # Glob for symbol symbol files. Used for including in follower builds and exclusion on others.
+        do_not_archive: [0]
+        test_services: [0] # Github service containers to spin up for the pytest run
+        exclude:
+            - os: 0
+        include:
+            - ${{fromJSON(inputs.matrix)[0]}} # The items after 0 are for tests only
     runs-on: ${{matrix.distro}}
+    defaults:
+      run: {shell: bash}
     steps:
       - name: Checkout
         uses: actions/checkout@v3
