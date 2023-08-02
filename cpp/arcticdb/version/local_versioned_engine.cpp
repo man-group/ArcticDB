@@ -437,17 +437,43 @@ DescriptorItem LocalVersionedEngine::read_descriptor_internal(
     return get_descriptor(std::move(version->key_)).get();
 }
 
-std::vector<DescriptorItem> LocalVersionedEngine::batch_read_descriptor_internal(
+
+std::vector<std::variant<DescriptorItem, DataError>> LocalVersionedEngine::batch_read_descriptor_internal(
     const std::vector<StreamId>& stream_ids,
     const std::vector<VersionQuery>& version_queries,
     const ReadOptions& read_options) {
-    auto versions_fut = batch_get_versions_async(store(), version_map(), stream_ids, version_queries, read_options.read_previous_on_failure_);
-    std::vector<folly::Future<DescriptorItem>> fut_vec;
-    for(const auto& stream_id : folly::enumerate(stream_ids)) {
-        fut_vec.push_back(
-            get_descriptor_async(std::move(versions_fut[stream_id.index]), *stream_id, version_queries[stream_id.index]));
+
+    internal::check<ErrorCode::E_ASSERTION_FAILURE>(read_options.batch_throw_on_missing_version_.has_value(),
+                                                    "ReadOptions::batch_throw_on_missing_version_ should always be set here");
+
+    auto version_futures = batch_get_versions_async(store(), version_map(), stream_ids, version_queries, read_options.read_previous_on_failure_);
+    std::vector<folly::Future<DescriptorItem>> descriptor_futures;
+    for (auto&& [idx, version_fut]: folly::enumerate(version_futures)) {
+        descriptor_futures.push_back(
+            get_descriptor_async(std::move(version_fut), stream_ids[idx], version_queries[idx]));
     }
-    return folly::collect(fut_vec).get();
+    auto descriptors = folly::collectAll(descriptor_futures).get();
+    std::vector<std::variant<DescriptorItem, DataError>> descriptors_or_errors;
+    descriptors_or_errors.reserve(descriptors.size());
+    for (auto&& [idx, descriptor]: folly::enumerate(descriptors)) {
+        if (descriptor.hasValue()) {
+            descriptors_or_errors.emplace_back(std::move(descriptor.value()));
+        } else {
+            if (*read_options.batch_throw_on_missing_version_) {
+                descriptor.throwUnlessValue();
+            } else {
+                auto exception = descriptor.exception();
+                DataError data_error(stream_ids[idx], exception.what().toStdString(), version_queries[idx].content_);
+                if (exception.is_compatible_with<NoSuchVersionException>()) {
+                    data_error.set_error_code(ErrorCode::E_NO_SUCH_VERSION);
+                } else if (exception.is_compatible_with<storage::KeyNotFoundException>()) {
+                    data_error.set_error_code(ErrorCode::E_KEY_NOT_FOUND);
+                }
+                descriptors_or_errors.emplace_back(std::move(data_error));
+            }
+        }
+    }
+    return descriptors_or_errors;
 }
 
 void LocalVersionedEngine::flush_version_map() {
