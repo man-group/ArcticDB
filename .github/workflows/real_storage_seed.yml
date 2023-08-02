@@ -10,7 +10,6 @@ on:
       bucket:            {default: 'arcticdb-ci-test-bucket-01', type: string, description: The name of the S3 bucket that we will test against}
       endpoint:          {default: 's3.eu-west-2.amazonaws.com', type: string, description: The address of the S3 endpoint}
       region:            {default: 'eu-west-2', type: string, description: The S3 region of the bucket}
-      test-symbol:       {default: '${{inputs.matrix.os}}_3.${{inputs.python3}}'}
 jobs:
   seed_storage:
     runs-on: ${{matrix.distro}}
