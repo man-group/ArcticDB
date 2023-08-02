@@ -152,7 +152,6 @@ jobs:
   real_storage_seed_linux:
     # Then use the cached compilation artifacts to build other python versions concurrently in cibuildwheels
     needs: [common_config]
-    if: needs.common_config.outputs.real_storage == 'true'
     strategy:
       fail-fast: false
       matrix:
