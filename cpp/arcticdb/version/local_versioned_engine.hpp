@@ -302,7 +302,7 @@ public:
         std::vector<ReadQuery>& read_queries,
         const ReadOptions& read_options);
 
-    std::vector<DescriptorItem> batch_read_descriptor_internal(
+    std::vector<std::variant<DescriptorItem, DataError>> batch_read_descriptor_internal(
             const std::vector<StreamId>& stream_ids,
             const std::vector<VersionQuery>& version_queries,
             const ReadOptions& read_options);
