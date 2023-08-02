@@ -48,7 +48,6 @@ jobs:
       - name: Install latest release
         run: |
           pip install arcticdb
-          pip install pandas < 2
 
       - name: Set real storage variables
         run: |
