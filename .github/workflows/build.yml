@@ -100,6 +100,27 @@ jobs:
       matrix: ${{toJson(matrix.matrix_override)}}
       python_deps_ids: ${{toJson(matrix.python_deps_ids)}}
 
+  real_storage_seed_windows:
+    # Then use the cached compilation artifacts to build other python versions concurrently in cibuildwheels
+    needs: [common_config]
+    # if: needs.common_config.outputs.real_storage
+    strategy:
+      fail-fast: false
+      matrix:
+        python3: ${{fromJson(vars.WINDOWS_PYTHON_VERSIONS || '[7, 8, 9, 10, 11]')}}
+        include:
+          - python_deps_ids: [""]
+            matrix_override: ${{fromJson(needs.common_config.outputs.windows_matrix)}}
+    name: Seed Real 3.${{matrix.python3}} Windows
+    uses: ./.github/workflows/real_storage_seed.yml
+    secrets: inherit
+    permissions: {packages: write}
+    with:
+      python3: ${{matrix.python3}}
+      matrix: ${{toJson(matrix.matrix_override)}}
+      python_deps_ids: ${{toJson(matrix.python_deps_ids)}
+
+
   cibw_docker_image:
     needs: [common_config]
     uses: ./.github/workflows/cibw_docker_image.yml
