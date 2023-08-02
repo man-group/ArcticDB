@@ -845,6 +845,135 @@ def test_read_batch_query_builder_missing_keys(arctic_library):
     assert batch[2].error_category == ErrorCategory.STORAGE
 
 
+def test_get_description_batch_missing_keys(arctic_library):
+    lib = arctic_library
+
+    # Given
+    df1 = pd.DataFrame({"a": [3, 5, 7]}, index=pd.date_range(start="1/1/2018", end="1/3/2018"))
+    df2 = pd.DataFrame({"a": [5, 7, 9]}, index=pd.date_range(start="1/1/2018", end="1/3/2018"))
+    df3 = pd.DataFrame({"a": [7, 9, 11]}, index=pd.date_range(start="1/1/2018", end="1/3/2018"))
+    df3.index.rename("named_index", inplace=True)
+
+    lib.write("s1", df1)
+    # Need two versions for this symbol as we're going to delete a version key, and the optimisation of storing the
+    # latest index key in the version ref key means it will still work if we just write one version key and then delete
+    # it
+    lib.write("s2", df2)
+    lib.write("s2", df2)
+    lib.write("s3", df3)
+    lib_tool = lib._nvs.library_tool()
+    s1_index_key = lib_tool.find_keys_for_id(KeyType.TABLE_INDEX, "s1")[0]
+    s2_version_keys = lib_tool.find_keys_for_id(KeyType.VERSION, "s2")
+    s2_key_to_delete = [key for key in s2_version_keys if key.version_id == 0][0]
+    lib_tool.remove(s1_index_key)
+    lib_tool.remove(s2_key_to_delete)
+
+    # When
+    batch = lib.get_description_batch(["s1", ReadInfoRequest("s2", as_of=0), "s3"])
+
+    # Then
+    assert isinstance(batch[0], DataError)
+    assert batch[0].symbol == "s1"
+    assert batch[0].version_request_type == VersionRequestType.LATEST
+    assert batch[0].version_request_data is None
+    assert batch[0].error_code == ErrorCode.E_KEY_NOT_FOUND
+    assert batch[0].error_category == ErrorCategory.STORAGE
+
+    assert isinstance(batch[1], DataError)
+    assert batch[1].symbol == "s2"
+    assert batch[1].version_request_type == VersionRequestType.SPECIFIC
+    assert batch[1].version_request_data == 0
+    assert batch[1].error_code == ErrorCode.E_KEY_NOT_FOUND
+    assert batch[1].error_category == ErrorCategory.STORAGE
+
+    assert not isinstance(batch[2], DataError)
+    assert batch[2].date_range == tuple(
+        map(
+            lambda x: x.replace(tzinfo=timezone.utc) if not np.isnat(np.datetime64(x)) else x,
+            (datetime(2018, 1, 1), datetime(2018, 1, 3)),
+        )
+    )
+    assert [c[0] for c in batch[2].columns] == ["a"]
+    assert batch[2].index[0] == ["named_index"]
+    assert batch[2].index_type == "index"
+    assert batch[2].row_count == 3
+
+
+def test_get_description_batch_symbol_doesnt_exist(arctic_library):
+    lib = arctic_library
+
+    # Given
+    df = pd.DataFrame({"a": [3, 5, 7, 9]}, index=pd.date_range(start="1/1/2018", end="1/4/2018"))
+    df.index.rename("named_index", inplace=True)
+    lib.write("s1", df)
+
+    # When
+    batch = lib.get_description_batch(["s1", "s2"])
+
+    # Then
+    assert not isinstance(batch[0], DataError)
+    assert batch[0].date_range == tuple(
+        map(
+            lambda x: x.replace(tzinfo=timezone.utc) if not np.isnat(np.datetime64(x)) else x,
+            (datetime(2018, 1, 1), datetime(2018, 1, 4)),
+        )
+    )
+    assert [c[0] for c in batch[0].columns] == ["a"]
+    assert batch[0].index[0] == ["named_index"]
+    assert batch[0].index_type == "index"
+    assert batch[0].row_count == 4
+
+    assert isinstance(batch[1], DataError)
+    assert batch[1].symbol == "s2"
+    assert batch[1].version_request_type == VersionRequestType.LATEST
+    assert batch[1].version_request_data == None
+    assert batch[1].error_code == ErrorCode.E_NO_SUCH_VERSION
+    assert batch[1].error_category == ErrorCategory.MISSING_DATA
+
+
+def test_get_description_batch_version_doesnt_exist(arctic_library):
+    lib = arctic_library
+
+    # Given
+    df1 = pd.DataFrame({"a": [3, 5, 7, 9]}, index=pd.date_range(start="1/1/2018", end="1/4/2018"))
+    df1.index.rename("named_index", inplace=True)
+    df2 = pd.DataFrame({"a": [4, 6, 8]})
+    lib.write("s1", df1)
+    lib.write("s2", df2)
+
+    # When
+    batch = lib.get_description_batch(
+        [ReadInfoRequest("s1", as_of=0), ReadInfoRequest("s1", as_of=1), ReadInfoRequest("s2", as_of=1)]
+    )
+
+    # Then
+    assert not isinstance(batch[0], DataError)
+    assert batch[0].date_range == tuple(
+        map(
+            lambda x: x.replace(tzinfo=timezone.utc) if not np.isnat(np.datetime64(x)) else x,
+            (datetime(2018, 1, 1), datetime(2018, 1, 4)),
+        )
+    )
+    assert [c[0] for c in batch[0].columns] == ["a"]
+    assert batch[0].index[0] == ["named_index"]
+    assert batch[0].index_type == "index"
+    assert batch[0].row_count == 4
+
+    assert isinstance(batch[1], DataError)
+    assert batch[1].symbol == "s1"
+    assert batch[1].version_request_type == VersionRequestType.SPECIFIC
+    assert batch[1].version_request_data == 1
+    assert batch[1].error_code == ErrorCode.E_NO_SUCH_VERSION
+    assert batch[1].error_category == ErrorCategory.MISSING_DATA
+
+    assert isinstance(batch[2], DataError)
+    assert batch[2].symbol == "s2"
+    assert batch[2].version_request_type == VersionRequestType.SPECIFIC
+    assert batch[2].version_request_data == 1
+    assert batch[2].error_code == ErrorCode.E_NO_SUCH_VERSION
+    assert batch[2].error_category == ErrorCategory.MISSING_DATA
+
+
 def test_read_batch_query_builder_symbol_doesnt_exist(arctic_library):
     lib = arctic_library
 
