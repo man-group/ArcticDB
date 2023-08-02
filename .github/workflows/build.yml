@@ -118,7 +118,7 @@ jobs:
     with:
       python3: ${{matrix.python3}}
       matrix: ${{toJson(matrix.matrix_override)}}
-      python_deps_ids: ${{toJson(matrix.python_deps_ids)}
+      python_deps_ids: ${{toJson(matrix.python_deps_ids)}}
 
 
   cibw_docker_image:
