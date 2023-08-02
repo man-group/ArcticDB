@@ -27,8 +27,8 @@ def test_df_3_cols(start=0):
 def test_write(lib, symbol, df):
     lib.write(symbol, df)
 
-def test_append(lib, symbol, df, write_if_missing=True):
-    lib.append(symbol, df, write_if_missing=write_if_missing)
+def test_append(lib, symbol, df):
+    lib.append(symbol, df)
 
 endpoint, bucket, region, access_key, secret_key, clear = real_s3_credentials()
 uri = f"s3s://{endpoint}:{bucket}?access={access_key}&secret={secret_key}&region={region}"
