@@ -188,7 +188,7 @@ class PythonVersionStore : public LocalVersionedEngine {
         const ReadOptions& read_options
     );
 
-    std::vector<DescriptorItem> batch_read_descriptor(
+    std::vector<std::variant<DescriptorItem, DataError>> batch_read_descriptor(
         const std::vector<StreamId>& stream_ids,
         const std::vector<VersionQuery>& version_queries,
         const ReadOptions& read_options);
