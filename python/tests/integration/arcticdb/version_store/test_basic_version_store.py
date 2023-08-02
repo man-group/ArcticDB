@@ -111,8 +111,7 @@ def test_special_chars(s3_version_store, special_char):
 
 @pytest.mark.parametrize("breaking_char", [chr(0), "\0", "&", "*", "<", ">"])
 def test_s3_breaking_chars(s3_version_store, breaking_char):
-    """Test that chars that are not supported are raising the appropriate exception and that we fail on write without corrupting the db
-    """
+    """Test that chars that are not supported are raising the appropriate exception and that we fail on write without corrupting the db"""
     sym = f"prefix{breaking_char}postfix"
     df = sample_dataframe()
     with pytest.raises(ArcticNativeNotYetImplemented):
