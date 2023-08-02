@@ -78,7 +78,7 @@ jobs:
       cmake_preset_type_resolved: ${{inputs.cmake_preset_type != '-' && inputs.cmake_preset_type || env.CMAKE_PRESET_TYPE}}
       linux_matrix: ${{toJson(matrix.linux_matrix)}}
       windows_matrix: ${{toJson(matrix.windows_matrix)}}
-      real_storage: ${{inputs.real_storage || 'false'}}
+      real_storage: ${{inputs.real_storage}}
 
   cibw_docker_image:
     needs: [common_config]
@@ -152,7 +152,7 @@ jobs:
   real_storage_seed_linux:
     # Then use the cached compilation artifacts to build other python versions concurrently in cibuildwheels
     needs: [follower-linux, common_config]
-    if: needs.common_config.outputs.real_storage == true
+    if: needs.common_config.outputs.real_storage
     strategy:
       fail-fast: false
       matrix:
