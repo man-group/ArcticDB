@@ -46,7 +46,7 @@ jobs:
           python-version: "3.${{inputs.python3}}"
 
       - name: Install latest release
-        run:
+        run: |
           pip install arcticdb
           pip install pandas < 2
 
