@@ -12,7 +12,21 @@ def list_libraries():
     return libs
 
 
-LIBRARIES = list_libraries()
+LIBRARIES = [
+    # LINUX
+    "linux_3_6",
+    "linux_3_7",
+    "linux_3_8",
+    "linux_3_9",
+    "linux_3_10",
+    "linux_3_11",
+    # WINDOWS
+    "windows_3_7",
+    "windows_3_8",
+    "windows_3_9",
+    "windows_3_10",
+    "windows_3_11",
+]
 
 
 # TODO: Add a check if the real storage tests are enabled
@@ -23,7 +37,10 @@ def test_real_s3_storage_read(real_s3_credentials, library):
     ac = Arctic(uri)
     lib = ac[library]
     symbols = lib.list_symbols()
-    assert len(symbols) > 0
+    assert len(symbols) == 3
+    for sym in ["one", "two", "three"]:
+        assert sym in symbols
     for sym in symbols:
-        print(sym)
-        print(lib.read(sym).data)
+        df = lib.read(sym).data
+        column_names = df.columns.values.tolist()
+        assert column_names == ["x", "y", "z"]
