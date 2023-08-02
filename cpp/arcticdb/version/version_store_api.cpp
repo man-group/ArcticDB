@@ -1043,7 +1043,7 @@ DescriptorItem PythonVersionStore::read_descriptor(
     return read_descriptor_internal(stream_id, version_query, read_options);
 }
 
-std::vector<DescriptorItem> PythonVersionStore::batch_read_descriptor(
+std::vector<std::variant<DescriptorItem, DataError>> PythonVersionStore::batch_read_descriptor(
         const std::vector<StreamId>& stream_ids,
         const std::vector<VersionQuery>& version_queries,
         const ReadOptions& read_options){

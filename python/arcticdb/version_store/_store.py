@@ -2541,6 +2541,10 @@ class NativeVersionStore:
             - type, `str`
             - date_range, `tuple`
         """
+        throw_on_missing_version = True
+        return self._batch_read_descriptor(symbols, as_ofs, throw_on_missing_version)
+
+    def _batch_read_descriptor(self, symbols, as_ofs, throw_on_missing_version):
         as_ofs_lists = []
         if as_ofs == None:
             as_ofs_lists = [None] * len(symbols)
@@ -2552,12 +2556,16 @@ class NativeVersionStore:
             version_queries.append(self._get_version_query(as_of))
 
         read_options = _PythonVersionStoreReadOptions()
-        list_descriptors = self.version_store.batch_read_descriptor(symbols, version_queries, read_options)
-        args_list = list(zip(list_descriptors, symbols, version_queries, as_ofs_lists))
-        list_infos = []
+        read_options.set_batch_throw_on_missing_version(throw_on_missing_version)
+        descriptions_or_errors = self.version_store.batch_read_descriptor(symbols, version_queries, read_options)
+        args_list = list(zip(descriptions_or_errors, symbols, version_queries, as_ofs_lists))
+        description_results = []
         for dit, symbol, version_query, as_of in args_list:
-            list_infos.append(self._process_info(symbol, dit, as_of))
-        return list_infos
+            if isinstance(dit, DataError):
+                description_results.append(dit)
+            else:
+                description_results.append(self._process_info(symbol, dit, as_of))
+        return description_results
 
     def write_metadata(
         self, symbol: str, metadata: Any, prune_previous_version: Optional[bool] = None
