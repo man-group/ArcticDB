@@ -975,7 +975,8 @@ class Library:
         List[Union[VersionedItem, DataError]]
             A list of the read results, whose i-th element corresponds to the i-th element of the ``symbols`` parameter.
             If the specified version does not exist, a DataError object is returned, with symbol, version_request_type,
-            version_request_data properties, error_code, error_category, and exception_string properties.
+            version_request_data properties, error_code, error_category, and exception_string properties. If a key error or
+            any other internal exception occurs, the same DataError object is also returned.
 
         Raises
         ------
@@ -1520,7 +1521,9 @@ class Library:
             date_range=date_range,
         )
 
-    def get_description_batch(self, symbols: List[Union[str, ReadInfoRequest]]) -> List[SymbolDescription]:
+    def get_description_batch(
+        self, symbols: List[Union[str, ReadInfoRequest]]
+    ) -> List[Union[SymbolDescription, DataError]]:
         """
         Returns descriptive data for a list of ``symbols``.
 
@@ -1528,12 +1531,14 @@ class Library:
         ----------
         symbols : List[Union[str, ReadInfoRequest]]
             List of symbols to read.
-            Params columns, date_range and query_builder from ReadInfoRequest are not used
 
         Returns
         -------
-        List[SymbolDescription]
+        List[Union[SymbolDescription, DataError]]
             A list of the descriptive data, whose i-th element corresponds to the i-th element of the ``symbols`` parameter.
+            If the specified version does not exist, a DataError object is returned, with symbol, version_request_type,
+            version_request_data properties, error_code, error_category, and exception_string properties. If a key error or
+            any other internal exception occurs, the same DataError object is also returned.
 
         See Also
         --------
@@ -1562,29 +1567,36 @@ class Library:
                     " [ReadInfoRequest] are supported."
                 )
 
-        infos = self._nvs.batch_get_info(symbol_strings, as_ofs)
-        list_descriptions = []
-        for info in infos:
-            last_update_time = pd.to_datetime(info["last_update"], utc=True)
-            columns = tuple(NameWithDType(n, t) for n, t in zip(info["col_names"]["columns"], info["dtype"]))
-            index = NameWithDType(info["col_names"]["index"], info["col_names"]["index_dtype"])
-            date_range = tuple(
-                map(
-                    lambda x: x.replace(tzinfo=datetime.timezone.utc) if not np.isnat(np.datetime64(x)) else x,
-                    info["date_range"],
+        throw_on_missing_version = False
+        descriptions = self._nvs._batch_read_descriptor(symbol_strings, as_ofs, throw_on_missing_version)
+
+        description_results = []
+        for description in descriptions:
+            if isinstance(description, DataError):
+                description_results.append(description)
+            else:
+                last_update_time = pd.to_datetime(description["last_update"], utc=True)
+                columns = tuple(
+                    NameWithDType(n, t) for n, t in zip(description["col_names"]["columns"], description["dtype"])
                 )
-            )
-            list_descriptions.append(
-                SymbolDescription(
-                    columns=columns,
-                    index=index,
-                    row_count=info["rows"],
-                    last_update_time=last_update_time,
-                    index_type=info["index_type"],
-                    date_range=date_range,
+                index = NameWithDType(description["col_names"]["index"], description["col_names"]["index_dtype"])
+                date_range = tuple(
+                    map(
+                        lambda x: x.replace(tzinfo=datetime.timezone.utc) if not np.isnat(np.datetime64(x)) else x,
+                        description["date_range"],
+                    )
                 )
-            )
-        return list_descriptions
+                description_results.append(
+                    SymbolDescription(
+                        columns=columns,
+                        index=index,
+                        row_count=description["rows"],
+                        last_update_time=last_update_time,
+                        index_type=description["index_type"],
+                        date_range=date_range,
+                    )
+                )
+        return description_results
 
     def reload_symbol_list(self):
         """
