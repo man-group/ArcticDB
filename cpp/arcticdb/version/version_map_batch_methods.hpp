@@ -145,7 +145,7 @@ struct StreamVersionData {
             break;
         case LoadType::LOAD_DOWNTO:
             util::check(load_param_.load_until_.has_value(), "Expect LOAD_DOWNTO to have version specificed");
-            if ((specific_version.version_id_ >= 0 && load_param_.load_until_.value() >= 0) ||
+            if ((specific_version.version_id_ >= 0 && is_positive_version_query(load_param_)) ||
                     (specific_version.version_id_ < 0 && load_param_.load_until_.value() < 0)) {
                 load_param_.load_until_ = std::min(load_param_.load_until_.value(), specific_version.version_id_);
             } else {
@@ -210,7 +210,7 @@ inline std::optional<AtomKey> get_key_for_version_query(
             return find_index_key_for_version_id(version_id, version_map_entry);
         },
         [&version_map_entry] (const pipelines::TimestampVersionQuery& timestamp_version) -> std::optional<AtomKey> {
-            auto version_key = get_version_key_from_time_for_versions(timestamp_version.timestamp_, version_map_entry->get_indexes(false));
+            auto version_key = get_index_key_from_time(timestamp_version.timestamp_, version_map_entry->get_indexes(false));
             if(version_key.has_value()){
                 auto version_id = version_key.value().version_id();
                 return find_index_key_for_version_id(version_id, version_map_entry, false);
@@ -230,7 +230,8 @@ inline std::vector<folly::Future<std::optional<AtomKey>>> batch_get_versions_asy
     const std::shared_ptr<Store>& store,
     const std::shared_ptr<VersionMap>& version_map,
     const std::vector<StreamId>& symbols,
-    const std::vector<pipelines::VersionQuery>& version_queries) {
+    const std::vector<pipelines::VersionQuery>& version_queries,
+    const std::optional<bool>& use_previous_on_error) {
     ARCTICDB_SAMPLE(BatchGetVersion, 0)
     util::check(symbols.size() == version_queries.size(), "Symbol and version query list mismatch: {} != {}", symbols.size(), version_queries.size());
 
@@ -251,6 +252,10 @@ inline std::vector<folly::Future<std::optional<AtomKey>>> batch_get_versions_asy
         const auto it = version_data.find(*symbol);
         util::check(it != version_data.end(), "Missing version data for symbol {}", *symbol);
         auto version_entry_fut = folly::Future<std::shared_ptr<VersionMapEntry>>::makeEmpty();
+
+        if(use_previous_on_error.value_or(false))
+            it->second.load_param_.use_previous_ = true;
+
         if(it->second.count_ == 1) {
             version_entry_fut = async::submit_io_task(CheckReloadTask{store, version_map, *symbol, it->second.load_param_});
         } else {

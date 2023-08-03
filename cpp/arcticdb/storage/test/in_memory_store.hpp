@@ -202,7 +202,7 @@ namespace arcticdb {
             util::raise_rte("Not implemented");
         }
 
-        RemoveKeyResultType remove_key_sync(const entity::VariantKey &key, RemoveOpts opts) override {
+        RemoveKeyResultType remove_key_sync(const entity::VariantKey &key, storage::RemoveOpts opts) override {
             StorageFailureSimulator::instance()->go(FailureType::DELETE);
             std::lock_guard lock{mutex_};
             size_t removed = util::variant_match(key,
