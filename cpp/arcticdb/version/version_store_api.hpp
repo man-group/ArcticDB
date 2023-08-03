@@ -181,16 +181,19 @@ class PythonVersionStore : public LocalVersionedEngine {
 
     std::pair<VersionedItem, py::object> read_metadata(
         const StreamId& stream_id,
-        const VersionQuery& version_query
+        const VersionQuery& version_query,
+        const ReadOptions& read_options
     );
 
     std::vector<DescriptorItem> batch_read_descriptor(
         const std::vector<StreamId>& stream_ids,
-        const std::vector<VersionQuery>& version_queries);
+        const std::vector<VersionQuery>& version_queries,
+        const ReadOptions& read_options);
 
     DescriptorItem read_descriptor(
         const StreamId& stream_id,
-        const VersionQuery& version_query);
+        const VersionQuery& version_query,
+        const ReadOptions& read_options);
 
     ReadResult read_index(
         const StreamId& stream_id,
@@ -290,7 +293,8 @@ class PythonVersionStore : public LocalVersionedEngine {
 
     std::vector<std::pair<VersionedItem, py::object>> batch_read_metadata(
         const std::vector<StreamId>& stream_ids,
-        const std::vector<VersionQuery>& version_queries);
+        const std::vector<VersionQuery>& version_queries,
+        const ReadOptions& read_options);
 
     std::set<StreamId> list_streams(
         const std::optional<SnapshotId>& snap_name = std::nullopt,

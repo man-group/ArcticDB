@@ -90,17 +90,20 @@ public:
 
     std::optional<VersionedItem> get_latest_version(
         const StreamId &stream_id,
-        const VersionQuery& version_query);
+        const VersionQuery& version_query,
+        const ReadOptions& read_options);
 
     std::optional<VersionedItem> get_specific_version(
         const StreamId &stream_id,
         SignedVersionId signed_version_id,
-        const VersionQuery& version_query);
+        const VersionQuery& version_query,
+        const ReadOptions& read_options);
 
     std::optional<VersionedItem> get_version_at_time(
         const StreamId& stream_id,
         timestamp as_of,
-        const VersionQuery& version_query);
+        const VersionQuery& version_query,
+        const ReadOptions& read_options);
 
     std::optional<VersionedItem> get_version_from_snapshot(
         const StreamId& stream_id,
@@ -113,7 +116,8 @@ public:
 
     std::optional<VersionedItem> get_version_to_read(
         const StreamId& stream_id,
-        const VersionQuery& version_query
+        const VersionQuery& version_query,
+        const ReadOptions& read_options
     );
 
     FrameAndDescriptor read_dataframe_internal(
@@ -129,16 +133,15 @@ public:
 
     DescriptorItem read_descriptor_internal(
             const StreamId& stream_id,
-            const VersionQuery& version_query);
+            const VersionQuery& version_query,
+            const ReadOptions& read_options);
 
     void write_parallel_frame(
         const StreamId& stream_id,
         InputTensorFrame&& frame) const override;
 
     bool has_stream(
-        const StreamId & stream_id,
-        const std::optional<bool>& skip_compat,
-        const std::optional<bool>& iterate_on_failure
+        const StreamId & stream_id
     ) override;
 
     void delete_tree(
@@ -293,7 +296,8 @@ public:
 
     std::vector<DescriptorItem> batch_read_descriptor_internal(
             const std::vector<StreamId>& stream_ids,
-            const std::vector<VersionQuery>& version_queries);
+            const std::vector<VersionQuery>& version_queries,
+            const ReadOptions& read_options);
 
     std::vector<std::pair<VersionedItem, TimeseriesDescriptor>> batch_restore_version_internal(
         const std::vector<StreamId>& stream_ids,
@@ -307,11 +311,13 @@ public:
 
     std::vector<std::pair<std::optional<VariantKey>, std::optional<google::protobuf::Any>>> batch_read_metadata_internal(
         const std::vector<StreamId>& stream_ids,
-        const std::vector<VersionQuery>& version_queries);
+        const std::vector<VersionQuery>& version_queries,
+        const ReadOptions& read_options);
 
     std::pair<std::optional<VariantKey>, std::optional<google::protobuf::Any>> read_metadata_internal(
         const StreamId& stream_id,
-        const VersionQuery& version_query);
+        const VersionQuery& version_query,
+        const ReadOptions& read_options);
 
     bool is_symbol_fragmented(const StreamId& stream_id, std::optional<size_t> segment_size) override;
 
@@ -370,7 +376,6 @@ public:
 
     std::unordered_map<KeyType, std::pair<size_t, size_t>> scan_object_sizes();
     std::shared_ptr<Store>& _test_get_store() { return store_; }
-    AtomKey _test_write_segment(const std::string& symbol);
     void _test_set_validate_version_map() {
         version_map()->set_validate(true);
     }

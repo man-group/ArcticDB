@@ -26,12 +26,7 @@ from hypothesis.extra.pandas import column, data_frames, range_indexes
 def test_group_on_float_column_with_nans(lmdb_version_store):
     lib = lmdb_version_store
     sym = "test_group_on_float_column_with_nans"
-    df = pd.DataFrame(
-        {
-            "grouping_column": [1.0, 2.0, np.nan, 1.0, 2.0, 2.0],
-            "agg_column": [1, 2, 3, 4, 5, 6],
-        }
-    )
+    df = pd.DataFrame({"grouping_column": [1.0, 2.0, np.nan, 1.0, 2.0, 2.0], "agg_column": [1, 2, 3, 4, 5, 6]})
     lib.write(sym, df)
     expected = df.groupby("grouping_column").agg({"agg_column": "sum"})
     q = QueryBuilder()
