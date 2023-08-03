@@ -59,6 +59,7 @@ cd ..
 ```
 
 This writes build files to `./sphinxdocs/build/html`.
+Open `./sphinxdocs/build/html/index.html` in the browser of your choice to just view the Sphinx docs.
 
 ## Uploading
 

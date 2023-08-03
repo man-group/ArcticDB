@@ -1,4 +1,4 @@
-arcticdb.Arctic
+﻿arcticdb.Arctic
 ===============
 
 .. currentmodule:: arcticdb
@@ -17,6 +17,7 @@ arcticdb.Arctic
       ~Arctic.create_library
       ~Arctic.delete_library
       ~Arctic.get_library
+      ~Arctic.get_uri
       ~Arctic.list_libraries
    
    
