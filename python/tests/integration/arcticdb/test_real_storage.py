@@ -5,6 +5,7 @@ from arcticdb.arctic import Arctic
 REAL_STORAGE_TESTS_ENABLED = True if os.getenv("ARCTICDB_REAL_STORAGE_TESTS") == "1" else False
 REAL_STORAGE_LIB_NAME = os.getenv("ARCTICDB_REAL_STORAGE_LIB_NAME")
 
+
 if REAL_STORAGE_TESTS_ENABLED:
     # TODO: Maybe add a way to parametrize this
     LIBRARIES = [
@@ -30,7 +31,7 @@ else:
 @pytest.mark.parametrize("library", LIBRARIES)
 def test_real_s3_storage_read(real_s3_credentials, library):
     endpoint, bucket, region, access_key, secret_key, clear = real_s3_credentials
-    uri = f"s3s://{endpoint}:{bucket}?access={access_key}&secret={secret_key}&region={region}&&path_prefix=ci_tests/"
+    uri = f"s3s://{endpoint}:{bucket}?access={access_key}&secret={secret_key}&region={region}&path_prefix=ci_tests/"
     ac = Arctic(uri)
     lib = ac[library]
     symbols = lib.list_symbols()
@@ -46,7 +47,7 @@ def test_real_s3_storage_read(real_s3_credentials, library):
 @pytest.mark.parametrize("library_to_write_to", REAL_STORAGE_LIB_NAME)
 def test_real_s3_storage_write(real_s3_credentials, library_to_write_to, three_col_df):
     endpoint, bucket, region, access_key, secret_key, clear = real_s3_credentials
-    uri = f"s3s://{endpoint}:{bucket}?access={access_key}&secret={secret_key}&region={region}&&path_prefix=ci_tests/"
+    uri = f"s3s://{endpoint}:{bucket}?access={access_key}&secret={secret_key}&region={region}&path_prefix=ci_tests/"
     ac = Arctic(uri)
     # There shouldn't be a library with this name present
     ac.create_library(library_to_write_to)
