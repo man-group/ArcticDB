@@ -1391,8 +1391,6 @@ def test_coercion_to_str_with_dynamic_strings(lmdb_version_store_string_coercion
 
 def test_find_version(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
-    # def test_find_version(lmdb_version_store):
-    #     lib = lmdb_version_store
     sym = "test_find_version"
 
     # Version 0 is alive and in a snapshot
@@ -1435,7 +1433,7 @@ def test_find_version(lmdb_version_store_v1):
     with pytest.raises(NoDataFoundException):
         lib._find_version(sym, as_of="snap_1000")
     # By timestamp
-    # assert lib._find_version(sym, as_of=time_0).version == 0
+    assert lib._find_version(sym, as_of=time_0).version == 0
     assert lib._find_version(sym, as_of=time_1).version == 0
     assert lib._find_version(sym, as_of=time_2).version == 0
     assert lib._find_version(sym, as_of=time_3).version == 3
