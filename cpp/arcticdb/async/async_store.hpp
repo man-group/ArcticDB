@@ -8,7 +8,7 @@
 #pragma once
 
 #include <arcticdb/async/task_scheduler.hpp>
-#include <arcticdb/util/clock.hpp>#
+#include <arcticdb/util/clock.hpp>
 #include <arcticdb/storage/store.hpp>
 #include <arcticdb/entity/performance_tracing.hpp>
 #include <arcticdb/storage/library.hpp>
