@@ -50,8 +50,10 @@ branch_name = sys.argv[1]
 for lib in LIBRARIES:
     lib_name = f"{branch_name}_{lib}"
     lib = ac[lib_name]
+    print(lib_name)
 
     symbols = lib.list_symbols()
+    print(symbols)
     assert len(symbols) == 3
     for sym in ["one", "two", "three"]:
         assert sym in symbols
