@@ -23,13 +23,6 @@ def test_df_3_cols(start=0):
         },
         index=np.arange(start, start + 10, dtype=np.int64),
     )
-
-def test_write(lib, symbol, df):
-    lib.write(symbol, df)
-
-def test_append(lib, symbol, df):
-    lib.append(symbol, df)
-
 # TODO: Add support for other storages
 endpoint, bucket, region, access_key, secret_key, clear = real_s3_credentials()
 uri = f"s3s://{endpoint}:{bucket}?access={access_key}&secret={secret_key}&region={region}&path_prefix=ci_tests/"
@@ -38,23 +31,15 @@ print(f"Connecting to {uri}")
 
 ac = Arctic(uri)
 lib_name = sys.argv[1]
+lib = ac[lib_name]
 
-# TODO: Add some validation of the library, if it is there
-if lib_name not in ac.list_libraries():
-    ac.create_library(lib_name)
-    
-library = ac[lib_name]
+symbols = lib.list_symbols()
+assert len(symbols) == 3
+for sym in ["one", "two", "three"]:
+    assert sym in symbols
+for sym in symbols:
+    df = lib.read(sym).data
+    column_names = df.columns.values.tolist()
+    assert column_names == ["x", "y", "z"]
 
-one_df = test_df_3_cols()
-test_write(library, "one", one_df)
-
-two_df = test_df_3_cols(1)
-test_write(library, "two", two_df)
-two_df = test_df_3_cols(2)
-test_append(library, "two", two_df)
-
-three_df = test_df_3_cols(3)
-test_append(library, "three", three_df)
-
-if clear:
-    ac.delete_library(lib_name)
+ac.delete_library(lib_name)

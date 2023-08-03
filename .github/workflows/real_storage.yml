@@ -2,6 +2,7 @@ name: __real_storage_seed
 on:
   workflow_call:
     inputs:
+      job_type:          {required: true, type: string, description: Selects the steps to enable}
       matrix:            {required: true, type: string, description: JSON string to feed into the matrix}
       python_deps_ids:   {default: '[""]', type: string, description: Follower test matrix parameter. JSON string.}
       python3:           {default: -1, type: number, description: Python 3 minor version}
@@ -11,7 +12,7 @@ on:
       endpoint:          {default: 's3.eu-west-2.amazonaws.com', type: string, description: The address of the S3 endpoint}
       region:            {default: 'eu-west-2', type: string, description: The S3 region of the bucket}
 jobs:
-  seed_storage:
+  setup:
     strategy:
       matrix:
         # Declaring the dummy fields here to aid the Github Actions linting in VSCode and to provide documentation
@@ -58,9 +59,58 @@ jobs:
           echo "ARCTICDB_REAL_S3_CLEAR=${{ inputs.clear }}" >> $GITHUB_ENV
           echo "ARCTICDB_REAL_S3_ACCESS_KEY=${{ secrets.AWS_S3_ACCESS_KEY }}" >> $GITHUB_ENV
           echo "ARCTICDB_REAL_S3_SECRET_KEY=${{ secrets.AWS_S3_SECRET_KEY }}" >> $GITHUB_ENV
+          echo "ARCTICDB_REAL_STORAGE_LIB_NAME=${{ github.ref_name }}_${{matrix.os}}_3.${{inputs.python3}}" >> $GITHUB_ENV
 
+  seed_storage:
+    if: inputs.job_type == 'seed'
+    strategy:
+      matrix:
+        # Declaring the dummy fields here to aid the Github Actions linting in VSCode and to provide documentation
+        os: [0] # Decouples the steps from any distro version changes
+        distro: [0]
+        cmake_preset_prefix: [0]
+        cibw_build_suffix: [0]
+        envs: [0]
+        build_dir: [0] # Must be an absolute path
+        symbols: [0] # Glob for symbol symbol files. Used for including in follower builds and exclusion on others.
+        do_not_archive: [0]
+        test_services: [0] # Github service containers to spin up for the pytest run
+        exclude:
+            - os: 0
+        include:
+            - ${{fromJSON(inputs.matrix)[0]}} # The items after 0 are for tests only
+    runs-on: ${{matrix.distro}}
+    defaults:
+      run: {shell: bash}
+    steps:
       - name: Seed the storage
         run: |
           echo "Running seed for ${{matrix.os}}_3.${{inputs.python3}}"
           python build_tooling/seed_storage.py "${{matrix.os}}_3_${{inputs.python3}}"
           
+  verify_storage:
+    if: inputs.job_type == 'verify'
+    strategy:
+      matrix:
+        # Declaring the dummy fields here to aid the Github Actions linting in VSCode and to provide documentation
+        os: [0] # Decouples the steps from any distro version changes
+        distro: [0]
+        cmake_preset_prefix: [0]
+        cibw_build_suffix: [0]
+        envs: [0]
+        build_dir: [0] # Must be an absolute path
+        symbols: [0] # Glob for symbol symbol files. Used for including in follower builds and exclusion on others.
+        do_not_archive: [0]
+        test_services: [0] # Github service containers to spin up for the pytest run
+        exclude:
+            - os: 0
+        include:
+            - ${{fromJSON(inputs.matrix)[0]}} # The items after 0 are for tests only
+    runs-on: ${{matrix.distro}}
+    defaults:
+      run: {shell: bash}
+    steps:
+      - name: verify the storage
+        run: |
+          echo "Running verify for ${{env.ARCTICDB_REAL_STORAGE_LIB_NAME}}"
+          python build_tooling/verify_storage.py "${{env.ARCTICDB_REAL_STORAGE_LIB_NAME}}"
