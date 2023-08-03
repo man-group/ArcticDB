@@ -109,23 +109,20 @@ struct CheckReloadTask : async::BaseTask {
     const std::shared_ptr<VersionMap> version_map_;
     const StreamId stream_id_;
     const LoadParameter load_param_;
-    const bool iterate_on_failure_;
 
     CheckReloadTask(
         std::shared_ptr<Store> store,
         std::shared_ptr<VersionMap> version_map,
         StreamId stream_id,
-        LoadParameter load_param,
-        bool iterate_on_failure = false) :
+        LoadParameter load_param) :
         store_(std::move(store)),
         version_map_(std::move(version_map)),
         stream_id_(std::move(stream_id)),
-        load_param_(load_param),
-        iterate_on_failure_(iterate_on_failure){
+        load_param_(load_param) {
     }
 
     std::shared_ptr<VersionMapEntry> operator()() const {
-        return version_map_->check_reload(store_, stream_id_, load_param_, true, iterate_on_failure_, __FUNCTION__);
+        return version_map_->check_reload(store_, stream_id_, load_param_, __FUNCTION__);
     }
 };
 

@@ -1045,12 +1045,7 @@ def test_filter_numeric_isnotin_empty_set(lmdb_version_store, df):
 def test_filter_nones_and_nans_retained_in_string_column(lmdb_version_store):
     lib = lmdb_version_store
     sym = "test_filter_nones_and_nans_retained_in_string_column"
-    df = pd.DataFrame(
-        {
-            "filter_column": [1, 2, 1, 2, 1, 2],
-            "string_column": ["1", "2", np.nan, "4", None, "6"],
-        },
-    )
+    df = pd.DataFrame({"filter_column": [1, 2, 1, 2, 1, 2], "string_column": ["1", "2", np.nan, "4", None, "6"]})
     lib.write(sym, df)
     q = QueryBuilder()
     q = q[q["filter_column"] == 1]
