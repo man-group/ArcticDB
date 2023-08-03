@@ -1,33 +1,29 @@
 import pytest
+import os
 from arcticdb.arctic import Arctic
 
 
-def list_libraries():
-    OSes = ["linux"]
-    py_vers = ["3_6", "3_7", "3_8", "3_9", "3_10", "3_11"]
-    libs = list()
-    for os in OSes:
-        for ver in py_vers:
-            libs.append(f"{os}_{ver}")
-    return libs
+REAL_STORAGE_TESTS_ENABLED = True if os.getenv("ARCTICDB_REAL_STORAGE_TESTS") == "1" else False
 
-
-LIBRARIES = [
-    # LINUX
-    "linux_3_6",
-    "linux_3_7",
-    "linux_3_8",
-    "linux_3_9",
-    "linux_3_10",
-    "linux_3_11",
-    # WINDOWS
-    "windows_3_7",
-    "windows_3_8",
-    "windows_3_9",
-    "windows_3_10",
-    "windows_3_11",
-]
-
+if REAL_STORAGE_TESTS_ENABLED:
+    # TODO: Maybe add a way to parametrize this
+    LIBRARIES = [
+        # LINUX
+        "linux_3_6",
+        "linux_3_7",
+        "linux_3_8",
+        "linux_3_9",
+        "linux_3_10",
+        "linux_3_11",
+        # WINDOWS
+        "windows_3_7",
+        "windows_3_8",
+        "windows_3_9",
+        "windows_3_10",
+        "windows_3_11",
+    ]
+else:
+    LIBRARIES = []
 
 # TODO: Add a check if the real storage tests are enabled
 @pytest.mark.parametrize("library", LIBRARIES)
