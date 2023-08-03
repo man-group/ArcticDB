@@ -4,6 +4,22 @@ import numpy as np
 import os 
 import sys
 
+LIBRARIES = [
+    # LINUX
+    "linux_3_6",
+    "linux_3_7",
+    "linux_3_8",
+    "linux_3_9",
+    "linux_3_10",
+    "linux_3_11",
+    # WINDOWS
+    "windows_3_7",
+    "windows_3_8",
+    "windows_3_9",
+    "windows_3_10",
+    "windows_3_11",
+]
+
 def real_s3_credentials():
     endpoint = os.getenv("ARCTICDB_REAL_S3_ENDPOINT")
     bucket = os.getenv("ARCTICDB_REAL_S3_BUCKET")
@@ -30,16 +46,18 @@ uri = f"s3s://{endpoint}:{bucket}?access={access_key}&secret={secret_key}&region
 print(f"Connecting to {uri}")
 
 ac = Arctic(uri)
-lib_name = sys.argv[1]
-lib = ac[lib_name]
+branch_name = sys.argv[1]
+for lib in LIBRARIES:
+    lib_name = f"{branch_name}_{lib}"
+    lib = ac[lib_name]
 
-symbols = lib.list_symbols()
-assert len(symbols) == 3
-for sym in ["one", "two", "three"]:
-    assert sym in symbols
-for sym in symbols:
-    df = lib.read(sym).data
-    column_names = df.columns.values.tolist()
-    assert column_names == ["x", "y", "z"]
+    symbols = lib.list_symbols()
+    assert len(symbols) == 3
+    for sym in ["one", "two", "three"]:
+        assert sym in symbols
+    for sym in symbols:
+        df = lib.read(sym).data
+        column_names = df.columns.values.tolist()
+        assert column_names == ["x", "y", "z"]
 
-ac.delete_library(lib_name)
+    ac.delete_library(lib_name)
