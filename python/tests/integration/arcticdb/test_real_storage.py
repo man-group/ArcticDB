@@ -57,6 +57,8 @@ def test_real_s3_storage_write(real_s3_credentials, three_col_df):
     one_df = three_col_df()
     lib.write("one", one_df)
     val = lib.read("one")
+    print(one_df)
+    print(val.data)
     assert one_df.equals(val.data)
 
     two_df_1 = three_col_df(1)
