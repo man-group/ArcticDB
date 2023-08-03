@@ -25,6 +25,7 @@ if REAL_STORAGE_TESTS_ENABLED:
 else:
     LIBRARIES = []
 
+
 # TODO: Add a check if the real storage tests are enabled
 @pytest.mark.parametrize("library", LIBRARIES)
 def test_real_s3_storage_read(real_s3_credentials, library):
