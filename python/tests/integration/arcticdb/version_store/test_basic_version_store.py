@@ -111,7 +111,8 @@ def test_special_chars(s3_version_store, special_char):
 
 @pytest.mark.parametrize("breaking_char", [chr(0), "\0", "&", "*", "<", ">"])
 def test_s3_breaking_chars(s3_version_store, breaking_char):
-    """Test that chars that are not supported are raising the appropriate exception and that we fail on write without corrupting the db"""
+    """Test that chars that are not supported are raising the appropriate exception and that we fail on write without corrupting the db
+    """
     sym = f"prefix{breaking_char}postfix"
     df = sample_dataframe()
     with pytest.raises(ArcticNativeNotYetImplemented):
@@ -302,7 +303,8 @@ def test_prune_previous_versions_multiple_times(lmdb_version_store, symbol):
 
 
 def test_prune_previous_versions_write_batch(lmdb_version_store):
-    """Verify that the batch write method correctly prunes previous versions when the corresponding option is specified."""
+    """Verify that the batch write method correctly prunes previous versions when the corresponding option is specified.
+    """
     # Given
     lib = lmdb_version_store
     lib_tool = lib.library_tool()
@@ -332,7 +334,8 @@ def test_prune_previous_versions_write_batch(lmdb_version_store):
 
 
 def test_prune_previous_versions_batch_write_metadata(lmdb_version_store):
-    """Verify that the batch write metadata method correctly prunes previous versions when the corresponding option is specified."""
+    """Verify that the batch write metadata method correctly prunes previous versions when the corresponding option is specified.
+    """
     # Given
     lib = lmdb_version_store
     lib_tool = lib.library_tool()
@@ -362,7 +365,8 @@ def test_prune_previous_versions_batch_write_metadata(lmdb_version_store):
 
 
 def test_prune_previous_versions_append_batch(lmdb_version_store):
-    """Verify that the batch append method correctly prunes previous versions when the corresponding option is specified."""
+    """Verify that the batch append method correctly prunes previous versions when the corresponding option is specified.
+    """
     # Given
     lib = lmdb_version_store
     lib_tool = lib.library_tool()
