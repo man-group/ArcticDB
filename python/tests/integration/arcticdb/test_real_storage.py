@@ -44,8 +44,8 @@ def test_real_s3_storage_read(real_s3_credentials, library):
         assert column_names == ["x", "y", "z"]
 
 
-@pytest.mark.parametrize("library_to_write_to", REAL_STORAGE_LIB_NAME)
-def test_real_s3_storage_write(real_s3_credentials, library_to_write_to, three_col_df):
+def test_real_s3_storage_write(real_s3_credentials, three_col_df):
+    library_to_write_to = REAL_STORAGE_LIB_NAME
     endpoint, bucket, region, access_key, secret_key, clear = real_s3_credentials
     uri = f"s3s://{endpoint}:{bucket}?access={access_key}&secret={secret_key}&region={region}&path_prefix=ci_tests/"
     ac = Arctic(uri)
