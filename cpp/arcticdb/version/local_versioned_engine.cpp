@@ -1588,17 +1588,34 @@ folly::Future<std::pair<std::optional<VariantKey>, std::optional<google::protobu
     });
 }
 
-std::vector<std::pair<std::optional<VariantKey>, std::optional<google::protobuf::Any>>> LocalVersionedEngine::batch_read_metadata_internal(
+ 
+std::vector<std::variant<std::pair<std::optional<VariantKey>, std::optional<google::protobuf::Any>>, DataError>> LocalVersionedEngine::batch_read_metadata_internal(
     const std::vector<StreamId>& stream_ids,
     const std::vector<VersionQuery>& version_queries,
     const ReadOptions& read_options
     ) {
-    auto versions_fut = batch_get_versions_async(store(), version_map(), stream_ids, version_queries, read_options.read_previous_on_failure_);
-    std::vector<folly::Future<std::pair<std::optional<VariantKey>, std::optional<google::protobuf::Any>>>> fut_vec;
-    for (auto&& version: versions_fut){
-        fut_vec.push_back(get_metadata_async(std::move(version)));
+    auto version_futures = batch_get_versions_async(store(), version_map(), stream_ids, version_queries, read_options.read_previous_on_failure_);
+    std::vector<folly::Future<std::pair<std::optional<VariantKey>, std::optional<google::protobuf::Any>>>> metadata_futures;
+    for (auto&& version: version_futures){
+        metadata_futures.push_back(get_metadata_async(std::move(version)));
     }
-    return folly::collect(fut_vec).get();
+
+    auto metadatas = folly::collectAll(metadata_futures).get();
+    std::vector<std::variant<std::pair<std::optional<VariantKey>, std::optional<google::protobuf::Any>>, DataError>> metadatas_or_errors;
+    metadatas_or_errors.reserve(metadatas.size());
+    for (auto&& [idx, metadata]: folly::enumerate(metadatas)) {
+        if (metadata.hasValue()) {
+            metadatas_or_errors.emplace_back(std::move(metadata.value()));
+        } else {
+            auto exception = metadata.exception();
+            DataError data_error(stream_ids[idx], exception.what().toStdString(), version_queries[idx].content_);
+            if (exception.is_compatible_with<storage::KeyNotFoundException>()) {
+                data_error.set_error_code(ErrorCode::E_KEY_NOT_FOUND);
+            }
+            metadatas_or_errors.emplace_back(std::move(data_error));
+        }
+    }
+    return metadatas_or_errors;
 }
 
 std::pair<std::optional<VariantKey>, std::optional<google::protobuf::Any>> LocalVersionedEngine::read_metadata_internal(

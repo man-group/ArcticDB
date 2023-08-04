@@ -1014,23 +1014,28 @@ std::vector<std::pair<VersionedItem, TimeseriesDescriptor>> PythonVersionStore::
     return batch_restore_version_internal(stream_ids, version_queries);
 }
 
-std::vector<std::pair<VersionedItem, py::object>> PythonVersionStore::batch_read_metadata(
+std::vector<std::variant<std::pair<VersionedItem, py::object>, DataError>> PythonVersionStore::batch_read_metadata(
     const std::vector<StreamId>& stream_ids,
     const std::vector<VersionQuery>& version_queries,
     const ReadOptions& read_options) {
     ARCTICDB_SAMPLE(BatchReadMetadata, 0)
-    auto metadata = batch_read_metadata_internal(stream_ids, version_queries, read_options);
+    auto metadatas_or_errors = batch_read_metadata_internal(stream_ids, version_queries, read_options);
 
-    std::vector<std::pair<VersionedItem, py::object>> results;
-    for (auto [key, meta_proto]: metadata) {
+    std::vector<std::variant<std::pair<VersionedItem, py::object>, DataError>> results;
+    for (auto&& metadata_or_error: metadatas_or_errors) {
+        if (std::holds_alternative<std::pair<std::optional<VariantKey>, std::optional<google::protobuf::Any>>>(metadata_or_error)) {
+            auto&& [key, meta_proto] = std::get<std::pair<std::optional<VariantKey>, std::optional<google::protobuf::Any>>>(metadata_or_error);
             if(meta_proto.has_value()) {
                 VersionedItem version{std::move(to_atom(*key))};
-                auto res = std::make_pair(version, metadata_protobuf_to_pyobject(meta_proto));
-                results.push_back(res);
+                auto res = std::make_pair(std::move(version), metadata_protobuf_to_pyobject(std::move(meta_proto)));
+                results.push_back(std::move(res));
             }else{
                 auto res = std::make_pair(VersionedItem(), py::none());
-                results.push_back(res);   
+                results.push_back(std::move(res));   
             }
+        } else {
+            results.push_back(std::get<DataError>(std::move(metadata_or_error)));   
+        }
     }
     return results;
 }

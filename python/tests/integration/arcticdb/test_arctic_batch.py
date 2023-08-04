@@ -241,6 +241,50 @@ def test_write_metadata_batch_with_none(arctic_library):
         assert results_read[sym].version == 0
 
 
+def test_read_metadata_batch_missing_keys(arctic_library):
+    lib = arctic_library
+
+    # Given
+    df1 = pd.DataFrame({"a": [3, 5, 7]})
+    lib.write("s1", df1, metadata={"some": "metadata_s1"})
+    # Need two versions for this symbol as we're going to delete a version key, and the optimisation of storing the
+    # latest index key in the version ref key means it will still work if we just write one version key and then delete
+    # it
+    df2 = pd.DataFrame({"a": [5, 7, 9]})
+    lib.write("s2", df2, metadata={"some": "metadata_s2"})
+    lib.write("s2", df2, metadata={"some": "metadata_s2"})
+    df3 = pd.DataFrame({"a": [7, 9, 11]})
+    lib.write("s3", df3, metadata={"some": "metadata_s3"})
+
+    lib_tool = lib._nvs.library_tool()
+    s1_index_key = lib_tool.find_keys_for_id(KeyType.TABLE_INDEX, "s1")[0]
+    s2_version_keys = lib_tool.find_keys_for_id(KeyType.VERSION, "s2")
+    s2_key_to_delete = [key for key in s2_version_keys if key.version_id == 0][0]
+    lib_tool.remove(s1_index_key)
+    lib_tool.remove(s2_key_to_delete)
+
+    # When
+    batch = lib.read_metadata_batch(["s1", ReadInfoRequest("s2", as_of=0), "s3"])
+
+    # Then
+    assert isinstance(batch[0], DataError)
+    assert batch[0].symbol == "s1"
+    assert batch[0].version_request_type == VersionRequestType.LATEST
+    assert batch[0].version_request_data is None
+    assert batch[0].error_code == ErrorCode.E_KEY_NOT_FOUND
+    assert batch[0].error_category == ErrorCategory.STORAGE
+
+    assert isinstance(batch[1], DataError)
+    assert batch[1].symbol == "s2"
+    assert batch[1].version_request_type == VersionRequestType.SPECIFIC
+    assert batch[1].version_request_data == 0
+    assert batch[1].error_code == ErrorCode.E_KEY_NOT_FOUND
+    assert batch[1].error_category == ErrorCategory.STORAGE
+
+    assert not isinstance(batch[2], DataError)
+    assert batch[2].metadata == {"some": "metadata_s3"}
+
+
 class A:
     """A dummy user defined type that requires pickling to serialize."""
 

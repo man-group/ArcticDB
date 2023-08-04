@@ -1021,28 +1021,32 @@ class NativeVersionStore:
     def _batch_read_meta_to_versioned_items(self, symbols, as_ofs, kwargs=None):
         if kwargs is None:
             kwargs = dict()
-        meta_data_list = []
+        metadatas_results = []
         version_queries = self._get_version_queries(len(symbols), as_ofs, **kwargs)
         read_options = self._get_read_options(**kwargs)
-        result = self.version_store.batch_read_metadata(symbols, version_queries, read_options)
-        result_list = list(zip(symbols, result))
-        for original_symbol, result in result_list:
-            vitem, udm = result
-            if original_symbol != vitem.symbol:
-                meta_data_list.append(None)
+        metadatas_or_errors = self.version_store.batch_read_metadata(symbols, version_queries, read_options)
+        metadatas_args = list(zip(symbols, metadatas_or_errors))
+        for original_symbol, metadata in metadatas_args:
+            if isinstance(metadata, DataError):
+                metadatas_results.append(metadata)
             else:
-                meta = denormalize_user_metadata(udm, self._normalizer) if udm else None
-                meta_data_list.append(
-                    VersionedItem(
-                        symbol=vitem.symbol,
-                        library=self._library.library_path,
-                        data=None,
-                        version=vitem.version,
-                        metadata=meta,
-                        host=self.env,
+                vitem, udm = metadata
+                if original_symbol != vitem.symbol:
+                    metadatas_results.append(None)
+                else:
+                    meta = denormalize_user_metadata(udm, self._normalizer) if udm else None
+                    metadatas_results.append(
+                        VersionedItem(
+                            symbol=vitem.symbol,
+                            library=self._library.library_path,
+                            data=None,
+                            version=vitem.version,
+                            metadata=meta,
+                            host=self.env,
+                        )
                     )
-                )
-        return meta_data_list
+
+        return metadatas_results
 
     def batch_read_metadata_multi(
         self, symbols: List[str], as_ofs: Optional[List[VersionQueryInput]] = None, **kwargs

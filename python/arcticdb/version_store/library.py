@@ -1074,7 +1074,9 @@ class Library:
         """
         return self._nvs.read_metadata(symbol, as_of)
 
-    def read_metadata_batch(self, symbols: List[Union[str, ReadInfoRequest]]) -> List[VersionedItem]:
+    def read_metadata_batch(
+        self, symbols: List[Union[str, ReadInfoRequest]]
+    ) -> List[Union[SymbolDescription, DataError]]:
         """
         Reads the metadata of multiple symbols.
 
@@ -1085,11 +1087,13 @@ class Library:
 
         Returns
         -------
-        List[VersionedItem]
+        List[Union[SymbolDescription, DataError]]
             A list of the read results, whose i-th element corresponds to the i-th element of the ``symbols`` parameter.
             A VersionedItem object with the metadata field set as None will be returned if the requested version of the
-                symbol exists but there is no metadata
+            symbol exists but there is no metadata
             A None object will be returned if the requested version of the symbol does not exist
+            If a key error or any other internal exception occurs, a DataError object is returned, with symbol, version_request_type,
+            version_request_data properties, error_code, error_category, and exception_string properties.
 
         See Also
         --------
