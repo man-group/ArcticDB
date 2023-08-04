@@ -583,7 +583,7 @@ def lmdb_version_store_dynamic_schema_v2(version_store_factory, lib_name):
 
 @pytest.fixture
 def lmdb_version_store_dynamic_schema(
-    lmdb_version_store_dynamic_schema_v1, lmdb_version_store_dynamic_schema_v2, encoding_version
+        lmdb_version_store_dynamic_schema_v1, lmdb_version_store_dynamic_schema_v2, encoding_version
 ):
     if encoding_version == EncodingVersion.V1:
         return lmdb_version_store_dynamic_schema_v1

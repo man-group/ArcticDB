@@ -44,7 +44,9 @@ enum class LoggerId {
     MEMORY,
     TIMINGS,
     LOCK,
-    SCHEDULE
+    SCHEDULE,
+    SYMBOL,
+    SNAPSHOT
 };
 
 void initialize_folly() {
@@ -77,6 +79,8 @@ void register_log(py::module && log) {
              .value("TIMINGS", LoggerId::TIMINGS)
              .value("LOCK", LoggerId::LOCK)
              .value("SCHEDULE", LoggerId::SCHEDULE)
+             .value("SYMBOL", LoggerId::SYMBOL)
+             .value("SNAPSHOT", LoggerId::SNAPSHOT)
              .export_values()
     ;
     auto choose_logger = [&](LoggerId log_id) -> decltype(arcticdb::log::storage()) /* logger ref */{
@@ -99,6 +103,10 @@ void register_log(py::module && log) {
                 return arcticdb::log::lock();
             case LoggerId::SCHEDULE:
                 return arcticdb::log::schedule();
+            case LoggerId::SYMBOL:
+                return arcticdb::log::symbol();
+            case LoggerId::SNAPSHOT:
+                return arcticdb::log::snapshot();
             default:
                 arcticdb::util::raise_rte("Unsupported logger id");
         }

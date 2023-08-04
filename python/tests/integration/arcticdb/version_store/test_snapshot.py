@@ -101,15 +101,17 @@ def test_list_symbols_with_snaps(object_version_store):
 
 
 def test_list_versions(object_version_store):
+    lib = object_version_store
     original_data = [1, 2, 3]
 
-    object_version_store.write("t1", original_data)
-    object_version_store.write("t2", original_data)
+    lib.write("t1", original_data)
+    lib.write("t2", original_data)
 
-    object_version_store.snapshot("snap_versions")
-    object_version_store.write("t1", original_data)
+    lib.snapshot("snap_versions")
+    lib.write("t1", original_data)
 
-    all_versions = object_version_store.list_versions()
+    all_versions = lib.list_versions()
+    print(all_versions)
 
     assert sorted([v["version"] for v in all_versions if v["symbol"] == "t1" and not v["deleted"]]) == sorted([0, 1])
 

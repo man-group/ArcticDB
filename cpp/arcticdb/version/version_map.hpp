@@ -474,8 +474,9 @@ public:
         const char* function ARCTICDB_UNUSED) {
         ARCTICDB_DEBUG(log::version(), "Check reload in function {}", function);
 
-        if (has_cached_entry(stream_id, load_param))
+        if (has_cached_entry(stream_id, load_param)) {
             return get_entry(stream_id);
+        }
 
         if (!load_param.skip_compat_ && !has_stored_entry(store, stream_id))
             do_backwards_compat_check(store, stream_id);

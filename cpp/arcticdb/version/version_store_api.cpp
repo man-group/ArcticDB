@@ -28,6 +28,7 @@
 #include <arcticdb/version/version_utils.hpp>
 #include <arcticdb/pipeline/pipeline_utils.hpp>
 #include <arcticdb/pipeline/frame_utils.hpp>
+#include <arcticdb/version/snapshot.hpp>
 
 #include <regex>
 
@@ -303,7 +304,40 @@ VersionResultVector PythonVersionStore::list_versions(
        return get_all_versions_for_symbols(store(), version_map(), stream_ids, snapshots_for_symbol, creation_ts_for_version_symbol);
 }
 
-std::vector<std::pair<SnapshotId, py::object>> PythonVersionStore::list_snapshots(const std::optional<bool> load_metadata) {
+namespace {
+
+py::object get_metadata_from_segment(
+    const SegmentInMemory& segment
+) {
+    auto metadata_proto = segment.metadata();
+    py::object pyobj;
+    if (metadata_proto) {
+        arcticdb::proto::descriptors::UserDefinedMetadata user_meta_proto;
+        metadata_proto->UnpackTo(&user_meta_proto);
+        pyobj = python_util::pb_to_python(user_meta_proto);
+    } else {
+        pyobj = pybind11::none();
+    }
+    return pyobj;
+}
+
+py::object get_metadata_for_snapshot(const std::shared_ptr<Store> &store, const VariantKey &snap_key) {
+    auto seg = store->read_sync(snap_key).second;
+    return get_metadata_from_segment(seg);
+}
+
+std::pair<std::vector<AtomKey>, py::object> get_versions_and_metadata_from_snapshot(
+    const std::shared_ptr<Store>& store,
+    const VariantKey& vk
+) {
+    auto snapshot_segment = store->read_sync(vk).second;
+    return {get_versions_from_segment(snapshot_segment), get_metadata_from_segment(snapshot_segment)};
+}
+
+} //namespace
+
+
+std::vector<std::pair<SnapshotId, py::object>> PythonVersionStore::list_snapshots(std::optional<bool> load_metadata) {
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: list_snapshots");
     auto snap_ids = std::vector<std::pair<SnapshotId, py::object>>();
     auto fetch_metadata = opt_false(load_metadata);
@@ -436,6 +470,7 @@ void PythonVersionStore::snapshot(
         // User did not provide explicit versions to snapshot, get latest of all filtered symbols.
         auto skip_symbols_set = std::set<StreamId>(skip_symbols.begin(), skip_symbols.end());
         auto all_symbols = list_streams();
+
         std::vector<StreamId> filtered_symbols;
         std::set_difference(all_symbols.begin(), all_symbols.end(), skip_symbols_set.begin(),
                 skip_symbols_set.end(), std::back_inserter(filtered_symbols));

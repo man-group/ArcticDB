@@ -15,6 +15,10 @@ from multiprocessing import Process, Value
 from arcticdb_ext import set_config_int
 from arcticdb import log
 
+from arcticdb.config import set_log_level
+
+# set_log_level("DEBUG")
+
 
 def write_data(lib, sym, done, error):
     set_config_int("VersionMap.ReloadInterval", 1)
@@ -27,9 +31,11 @@ def write_data(lib, sym, done, error):
             for idx2 in range(40):
                 if idx2 % 4 == 3:
                     lib.delete_version(sym, delete_version_id)
+                    print("Doing delete {}/{}".format(idx1, idx2))
                     delete_version_id += 1
                 else:
                     number_of_writes += 1
+                    print("Doing write {}/{}".format(idx1, idx2))
                     lib.write(sym, idx2)
             vs = set([v["version"] for v in lib.list_versions(sym)])
             assert len(vs) == number_of_writes - delete_version_id
@@ -41,6 +47,8 @@ def write_data(lib, sym, done, error):
     except Exception as e:
         print(e)
         error.value = 1
+
+    print("Setting done")
     done.value = 1
 
 

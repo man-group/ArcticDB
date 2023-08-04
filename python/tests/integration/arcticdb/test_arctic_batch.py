@@ -18,7 +18,9 @@ from arcticdb_ext.version_store import VersionRequestType
 from arcticdb.arctic import Arctic
 from arcticdb.options import LibraryOptions
 from arcticdb import QueryBuilder, DataError
+from arcticdb_ext.version_store import AtomKey, RefKey
 
+import time
 import pytest
 import pandas as pd
 from datetime import datetime, date, timezone, timedelta
@@ -1305,49 +1307,122 @@ def test_read_description_batch_empty_nat(arctic_library):
         assert np.isnat(results_list[sym].date_range[1]) == True
 
 
-def test_mutlithread_read(library_factory):
-    set_config_int("VersionStore.NumCPUThreads", 2)
-    set_config_int("VersionStore.NumIOThreads", 2)
-    num_days = 2
+def test_read_batch_mixed_with_snapshots(arctic_library):
     num_symbols = 10
-    dt = datetime(2019, 4, 8, 0, 0, 0)
-    num_columns = 10
-    num_rows_per_day = 5
-    write_requests = []
-    read_requests = []
-    list_dataframes = {}
-    columns = random_strings_of_length(num_columns, num_columns, True)
-    df = generate_dataframe(random.sample(columns, num_columns), dt, num_days, num_rows_per_day)
-    for sym in range(num_symbols):
-        write_requests.append(WritePayload("sym_" + str(sym), df, metadata="great_metadata" + str(sym)))
-        read_requests.append("sym_" + str(sym))
-        list_dataframes[sym] = df
-    lib = library_factory(LibraryOptions(rows_per_segment=10, dedup=True))
-    lib.write_batch(write_requests)
-    q = queue.Queue()
+    num_versions = 10
 
-    def read_batch():
-        try:
-            read_batch_result = lib.read_batch(read_requests)
-            for sym in range(num_symbols):
-                assert read_batch_result[sym].metadata == "great_metadata" + str(sym)
-                assert_frame_equal(read_batch_result[sym].data, list_dataframes[sym])
-        except Exception as e:
-            q.put(e)
+    def dataframe_for_offset(version_num, symbol_num):
+        offset = (version_num * num_versions) + symbol_num
+        return pd.DataFrame({"x": np.arange(offset, offset + 10)})
 
-    def read():
-        try:
-            for sym in range(num_symbols):
-                assert_frame_equal(lib.read("sym_" + str(sym)).data, list_dataframes[sym])
-        except Exception as e:
-            q.put(e)
+    def dataframe_and_symbol(version_num, symbol_num):
+        symbol_name = "symbol_{}".format(symbol_num)
+        dataframe = dataframe_for_offset(version_num, symbol_num)
+        return symbol_name, dataframe
 
-    read_th_count = 1
-    batch_read_th_count = 1
-    thread_list = []
-    [thread_list.append(threading.Thread(target=read)) for _ in range(read_th_count)]
-    [thread_list.append(threading.Thread(target=read_batch)) for _ in range(batch_read_th_count)]
-    [thread.start() for thread in thread_list]
-    [thread.join() for thread in thread_list]
-    if not q.empty():
-        raise Exception([e for e in q.queue])
+    lib = arctic_library
+    version_write_times = []
+
+    for version in range(num_versions):
+        version_write_times.append(pd.Timestamp.now())
+        time.sleep(1)
+        for sym in range(num_symbols):
+            symbol, df = dataframe_and_symbol(version, sym)
+            lib.write(symbol, df)
+
+        lib.snapshot("snap_{}".format(version))
+
+    read_requests = [
+        ReadRequest("symbol_1", as_of=None),
+        ReadRequest("symbol_1", as_of=4),
+        ReadRequest("symbol_1", as_of="snap_7"),
+        ReadRequest("symbol_2", as_of="snap_7"),
+        ReadRequest("symbol_2", as_of=None),
+        ReadRequest("symbol_2", as_of=4),
+        ReadRequest("symbol_3", as_of="snap_7"),
+        ReadRequest("symbol_3", as_of="snap_3"),
+        ReadRequest("symbol_3", as_of="snap_1"),
+        ReadRequest("symbol_3", as_of=None),
+        ReadRequest("symbol_3", as_of=3),
+    ]
+
+    vits = lib.read_batch(read_requests)
+
+    expected = dataframe_for_offset(9, 1)
+    assert_frame_equal(vits[0].data, expected)
+    expected = dataframe_for_offset(4, 1)
+    assert_frame_equal(vits[1].data, expected)
+    expected = dataframe_for_offset(7, 1)
+    assert_frame_equal(vits[2].data, expected)
+
+    expected = dataframe_for_offset(7, 2)
+    assert_frame_equal(vits[3].data, expected)
+    expected = dataframe_for_offset(9, 2)
+    assert_frame_equal(vits[4].data, expected)
+    expected = dataframe_for_offset(4, 2)
+    assert_frame_equal(vits[5].data, expected)
+
+    expected = dataframe_for_offset(7, 3)
+    assert_frame_equal(vits[6].data, expected)
+    expected = dataframe_for_offset(3, 3)
+    assert_frame_equal(vits[7].data, expected)
+    expected = dataframe_for_offset(1, 3)
+    assert_frame_equal(vits[8].data, expected)
+    expected = dataframe_for_offset(9, 3)
+    assert_frame_equal(vits[9].data, expected)
+    expected = dataframe_for_offset(3, 3)
+    assert_frame_equal(vits[10].data, expected)
+
+    # Trigger iteration of old-style snapshot keys
+    library_tool = lib._nvs.library_tool()
+    snap_key = RefKey("snap_8", KeyType.SNAPSHOT_REF)
+    snap_segment = library_tool.read_to_segment(snap_key)
+    old_style_snap_key = AtomKey("snap_8", 1, 2, 3, 4, 5, KeyType.SNAPSHOT)
+    library_tool.write(old_style_snap_key, snap_segment)
+    assert library_tool.count_keys(KeyType.SNAPSHOT_REF) == 10
+    library_tool.remove(snap_key)
+    assert library_tool.count_keys(KeyType.SNAPSHOT_REF) == 9
+    assert library_tool.count_keys(KeyType.SNAPSHOT) == 1
+
+    read_requests = [
+        ReadRequest("symbol_7", as_of=None),
+        ReadRequest("symbol_8", as_of=4),
+        ReadRequest("symbol_2", as_of="snap_8"),
+        ReadRequest("symbol_3", as_of="snap_7"),
+        ReadRequest("symbol_1", as_of=4),
+    ]
+
+    vits = lib.read_batch(read_requests)
+    expected = dataframe_for_offset(9, 7)
+    assert_frame_equal(vits[0].data, expected)
+    expected = dataframe_for_offset(4, 8)
+    assert_frame_equal(vits[1].data, expected)
+    expected = dataframe_for_offset(8, 2)
+    assert_frame_equal(vits[2].data, expected)
+    expected = dataframe_for_offset(7, 3)
+    assert_frame_equal(vits[3].data, expected)
+    expected = dataframe_for_offset(4, 1)
+    assert_frame_equal(vits[4].data, expected)
+
+    read_requests = [
+        ReadRequest("symbol_6", as_of="snap_1"),
+        ReadRequest("symbol_6", as_of="snap_3"),
+        ReadRequest("symbol_6", as_of="snap_2"),
+        ReadRequest("symbol_6", as_of="snap_7"),
+        ReadRequest("symbol_6", as_of="snap_9"),
+        ReadRequest("symbol_6", as_of="snap_4"),
+    ]
+
+    vits = lib.read_batch(read_requests)
+    expected = dataframe_for_offset(1, 6)
+    assert_frame_equal(vits[0].data, expected)
+    expected = dataframe_for_offset(3, 6)
+    assert_frame_equal(vits[1].data, expected)
+    expected = dataframe_for_offset(2, 6)
+    assert_frame_equal(vits[2].data, expected)
+    expected = dataframe_for_offset(7, 6)
+    assert_frame_equal(vits[3].data, expected)
+    expected = dataframe_for_offset(9, 6)
+    assert_frame_equal(vits[4].data, expected)
+    expected = dataframe_for_offset(4, 6)
+    assert_frame_equal(vits[5].data, expected)
