@@ -15,7 +15,9 @@ Click `Run Workflow` on the right hand side.
 
 > [!IMPORTANT]  
 > **Pre-release, mainline, or hotfix?**
+> 
 > We create pre-release versions for _major_ and _minor_ releases. That is, if incrementing X.y.z or x.Y.z we will release a pre-release version prior to a main release.
+> 
 > If you're about to tag a new _major_ or _minor_ release, please use a pre-release versioning scheme (X.Y.ZrcN). Otherwise, tag a full relese (X.Y.Z).
 
 If creating a new release off master:
