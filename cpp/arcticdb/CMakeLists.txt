@@ -435,6 +435,7 @@ set(arcticdb_srcs
         version/version_store_api.cpp
         version/version_utils.cpp
         version/symbol_list.cpp
+        version/version_map_batch_methods.cpp
         )
 
 if(${ARCTICDB_INCLUDE_ROCKSDB})

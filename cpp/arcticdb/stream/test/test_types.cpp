@@ -14,6 +14,29 @@
 #include <iostream>
 #include <type_traits>
 
+#define GTEST_COUT std::cerr << "[          ] [ INFO ]"
+#define PRINT_TYPE(TYPE) GTEST_COUT << fmt::format("{}: {}", datatype_to_str(DataType::TYPE), static_cast<int>(DataType::TYPE)) << std::endl;
+
+TEST(Types, Print) {
+    using namespace arcticdb;
+    PRINT_TYPE(UINT8)
+    PRINT_TYPE(UINT16)
+    PRINT_TYPE(UINT32)
+    PRINT_TYPE(UINT64)
+    PRINT_TYPE(INT8)
+    PRINT_TYPE(INT16)
+    PRINT_TYPE(INT32)
+    PRINT_TYPE(INT64)
+    PRINT_TYPE(FLOAT32)
+    PRINT_TYPE(FLOAT64)
+    PRINT_TYPE(BOOL8)
+    PRINT_TYPE(NANOSECONDS_UTC64)
+    PRINT_TYPE(ASCII_FIXED64)
+    PRINT_TYPE(ASCII_DYNAMIC64)
+    PRINT_TYPE(UTF_FIXED64)
+    PRINT_TYPE(UTF_DYNAMIC64)
+}
+
 TEST(TickStreamDesc, FromFields) {
     using namespace arcticdb::entity;
     using namespace arcticdb;
@@ -33,7 +56,7 @@ TEST(DataTypeVisit, VisitTag) {
     using namespace arcticdb;
     TypeDescriptor td(DataType::UINT8, 1);
     td.visit_tag([&](auto type_desc_tag) {
-        TypeDescriptor td2 = static_cast<TypeDescriptor>(type_desc_tag);
+        auto td2 = static_cast<TypeDescriptor>(type_desc_tag);
         ASSERT_EQ(td, td2);
         using TD=TypeDescriptorTag<DataTypeTag<DataType::UINT8>, DimensionTag<Dimension::Dim1>>;
         bool b = std::is_same_v<TD, std::decay_t<decltype(type_desc_tag)>>;

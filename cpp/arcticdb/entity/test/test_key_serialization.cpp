@@ -16,7 +16,7 @@ namespace arcticdb {
                            key.version_id(),
                            key.creation_ts(),
                            key.content_hash(),
-                           stream::get_index_value_type(key),
+                           int(stream::get_index_value_type(key)),
                            key.start_index(),
                            key.end_index());
     }
