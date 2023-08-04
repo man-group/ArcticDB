@@ -1015,34 +1015,35 @@ class NativeVersionStore:
             Dictionary of symbol mapping with the versioned items. The data attribute will be None.
         """
         _check_batch_kwargs(NativeVersionStore.batch_read_metadata, NativeVersionStore.read_metadata, kwargs)
-        meta_items = self._batch_read_meta_to_versioned_items(symbols, as_ofs, kwargs)
-        return {v.symbol: v for v in meta_items if v is not None}
+        include_errors_and_none_meta = False
+        meta_items = self._batch_read_metadata_to_versioned_items(
+            symbols, as_ofs, include_errors_and_none_meta, **kwargs
+        )
+        return {v.symbol: v for v in meta_items}
 
-    def _batch_read_meta_to_versioned_items(self, symbols, as_ofs, kwargs=None):
-        if kwargs is None:
-            kwargs = dict()
-        meta_data_list = []
+    def _batch_read_metadata_to_versioned_items(self, symbols, as_ofs, include_errors_and_none_meta, **kwargs):
         version_queries = self._get_version_queries(len(symbols), as_ofs, **kwargs)
         read_options = self._get_read_options(**kwargs)
-        result = self.version_store.batch_read_metadata(symbols, version_queries, read_options)
-        result_list = list(zip(symbols, result))
-        for original_symbol, result in result_list:
-            vitem, udm = result
-            if original_symbol != vitem.symbol:
-                meta_data_list.append(None)
-            else:
-                meta = denormalize_user_metadata(udm, self._normalizer) if udm else None
-                meta_data_list.append(
-                    VersionedItem(
-                        symbol=vitem.symbol,
-                        library=self._library.library_path,
-                        data=None,
-                        version=vitem.version,
-                        metadata=meta,
-                        host=self.env,
+        metadatas_or_errors = self.version_store.batch_read_metadata(symbols, version_queries, read_options)
+        meta_items = []
+        for metadata in metadatas_or_errors:
+            if isinstance(metadata, DataError) and include_errors_and_none_meta:
+                meta_items.append(metadata)
+            if not isinstance(metadata, DataError):
+                vitem, udm = metadata
+                if udm is not None or include_errors_and_none_meta:
+                    meta = denormalize_user_metadata(udm, self._normalizer) if udm is not None else None
+                    meta_items.append(
+                        VersionedItem(
+                            symbol=vitem.symbol,
+                            library=self._library.library_path,
+                            data=None,
+                            version=vitem.version,
+                            metadata=meta,
+                            host=self.env,
+                        )
                     )
-                )
-        return meta_data_list
+        return meta_items
 
     def batch_read_metadata_multi(
         self, symbols: List[str], as_ofs: Optional[List[VersionQueryInput]] = None, **kwargs

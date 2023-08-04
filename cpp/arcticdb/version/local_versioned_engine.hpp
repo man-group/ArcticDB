@@ -195,8 +195,10 @@ public:
     folly::Future<std::pair<std::optional<VariantKey>, std::optional<google::protobuf::Any>>> get_metadata(
         std::optional<AtomKey>&& key);
 
-    folly::Future<std::pair<std::optional<VariantKey>, std::optional<google::protobuf::Any>>> get_metadata_async(
-        folly::Future<std::optional<AtomKey>>&& version_fut);
+    folly::Future<std::pair<VariantKey, std::optional<google::protobuf::Any>>> get_metadata_async(
+        folly::Future<std::optional<AtomKey>>&& version_fut,
+        const StreamId& stream_id,
+        const VersionQuery& version_query);
 
     folly::Future<DescriptorItem> get_descriptor(
         AtomKey&& key);
@@ -316,7 +318,7 @@ public:
             const std::vector<StreamId>& stream_ids,
             const std::vector<VersionQuery>& version_queries);
 
-    std::vector<std::pair<std::optional<VariantKey>, std::optional<google::protobuf::Any>>> batch_read_metadata_internal(
+    std::vector<std::variant<std::pair<VariantKey, std::optional<google::protobuf::Any>>, DataError>> batch_read_metadata_internal(
         const std::vector<StreamId>& stream_ids,
         const std::vector<VersionQuery>& version_queries,
         const ReadOptions& read_options);
