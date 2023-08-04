@@ -6,18 +6,18 @@ import sys
 
 LIBRARIES = [
     # LINUX
-    "linux_3_6",
-    "linux_3_7",
-    "linux_3_8",
-    "linux_3_9",
-    "linux_3_10",
-    "linux_3_11",
+    "linux_cp36",
+    "linux_cp37",
+    "linux_cp38",
+    "linux_cp39",
+    "linux_cp310",
+    "linux_cp311",
     # WINDOWS
-    "windows_3_7",
-    "windows_3_8",
-    "windows_3_9",
-    "windows_3_10",
-    "windows_3_11",
+    "windows_cp37",
+    "windows_cp38",
+    "windows_cp39",
+    "windows_cp310",
+    "windows_cp311",
 ]
 
 def real_s3_credentials():
