@@ -9,13 +9,24 @@ Check Man Group's internal tests against the release candidate. See "ArcticDB - 
 
 ## 1. Create a new tag
 
-Navigate to the [Tag Release](https://github.com/man-group/ArcticDB/actions/workflows/tag.yml) Github Action.
+Navigate to the [Tag and Release](https://github.com/man-group/ArcticDB/actions/workflows/tag.yml) Github Action.
 
-Click `Run Workflow` on the right hand side:
-1. Type in the new version number eg `1.6.0`.
+Click `Run Workflow` on the right hand side.
+
+If creating a new release off master:
+1. Type in the new version number eg `1.6.0` or `1.6.0rc0` (for a pre-release).
 2. Click `Run workflow`.
 
-Leave `Bump branch to the next version` as `No`.
+If promoting a pre-release:
+1. Type in the new version number eg `1.6.0rc1` or `1.6.0`
+2. Select the workflow off the source tag (e.g. `1.6.0rc0`)
+3. Click `Run workflow`
+
+If hotfixing an existing release, first branch off the previously-released tag, apply the necessary changes (cherry-picking from master if commits are on master)and:
+1. Type in the new version number eg `1.6.1`
+2. Select the workflow off the source tag (e.g. `1.6.0`)
+2. Click `Run workflow`.
+
 This will create a branch off of `master` incrementing the version in `setup.cfg` but we ignore it for now.
 
 The [build will now be running for the tag.](https://github.com/man-group/ArcticDB/actions/workflows/build.yml)
@@ -39,6 +50,10 @@ You will need to update:
 
 A PR is generally open with a todo-list summarizing all the required steps to perform,
 before an update to the feedstock.
+
+> [!IMPORTANT]  
+> If releasing a pre-release version, you **must** merge the created PR into the `pr` branch and not the `main` branch. 
+> This will require modifying the base branch of the created PR.
 
 ## 3. Release to PyPi
 
