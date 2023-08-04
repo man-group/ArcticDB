@@ -14,14 +14,21 @@ Navigate to the [Tag and Release](https://github.com/man-group/ArcticDB/actions/
 Click `Run Workflow` on the right hand side.
 
 > [!IMPORTANT]  
-> **Pre-release, mainline, or hotfix?**
-> 
-> We create pre-release versions for _major_ and _minor_ releases. That is, if incrementing X.y.z or x.Y.z we will release a pre-release version prior to a main release.
-> 
-> If you're about to tag a new _major_ or _minor_ release, please use a pre-release versioning scheme (X.Y.ZrcN). Otherwise, tag a full relese (X.Y.Z).
+> **Release candidate, full release, or hotfix?**
+>
+> We release a new version of ArcticDB on a [regular schedule](https://github.com/man-group/ArcticDB/milestones?direction=asc&sort=due_date&state=open). 
+> This may involve promoting a release candidate to a full release as well as releasing a new release candidate.
+>
+> If preparing a release for a new _major_ or _minor_ version ([SemVer versioning](http://semver.org)), create a pre-release version (X.Y.ZrcN).
+>
+> If preparing a release for a new _patch_ version, create a full release (X.Y.Z).
+>
+> If there is an outstanding release candidate and no issues have been found, promote the release candidate to a full release (X.Y.Z).
+>
+> We will create a new release candidate for an existing pre-release version only to correct an issue that has been found with the additional functionality included in the prior pre-release version. In other words, we will promote rc1 to rc2 only if a bug has been found in functionality added in rc1, and not to provide a bugfix to functionality present prior to rc1.  
 
-If creating a new release off master:
-1. Type in the new version number eg `1.6.0` or `1.6.0rc0` (for a pre-release).
+If creating a new release off master (pre-release or release version):
+1. Type in the new version number eg `1.6.0` or `1.6.0rc0`.
 2. Click `Run workflow`.
 
 If promoting a pre-release:
