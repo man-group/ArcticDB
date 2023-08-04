@@ -139,6 +139,7 @@ jobs:
         run: pipx run cibuildwheel==${{inputs.cibw_version}}
         env:
           CIBW_MANYLINUX_X86_64_IMAGE: ${{inputs.cibw_image_tag}}
+          CIBW_REPAIR_WHEEL_COMMAND: auditwheel repair --exclude libcurl-* -w {dest_dir} {wheel}
 
       - name: Store wheel artifact
         if: inputs.job_type == 'follower'
