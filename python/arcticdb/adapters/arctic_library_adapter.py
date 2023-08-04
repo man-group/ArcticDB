@@ -10,6 +10,7 @@ from arcticc.pb2.storage_pb2 import LibraryConfig
 from arcticdb_ext.storage import Library, StorageOverride
 from arcticdb.encoding_version import EncodingVersion
 from arcticdb.version_store._store import NativeVersionStore
+from typing import Optional
 from abc import ABC, abstractmethod
 
 
