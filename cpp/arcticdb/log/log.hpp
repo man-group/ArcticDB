@@ -62,6 +62,7 @@ class Loggers : public std::enable_shared_from_this<Loggers> {
     spdlog::logger &schedule();
     spdlog::logger &message();
     spdlog::logger &symbol();
+    spdlog::logger &snapshot();
 
     void flush_all();
 
@@ -88,6 +89,7 @@ class Loggers : public std::enable_shared_from_this<Loggers> {
     std::unique_ptr<spdlog::logger> schedule_;
     std::unique_ptr<spdlog::logger> message_;
     std::unique_ptr<spdlog::logger> symbol_;
+    std::unique_ptr<spdlog::logger> snapshot_;
     std::shared_ptr<spdlog::details::thread_pool> thread_pool_;
     std::unique_ptr<spdlog::details::periodic_worker> periodic_worker_;
 };
@@ -105,6 +107,7 @@ spdlog::logger &lock();
 spdlog::logger &schedule();
 spdlog::logger &message();
 spdlog::logger &symbol();
+spdlog::logger &snapshot();
 
 inline std::unordered_map<std::string, spdlog::logger*> get_loggers_by_name() {
     return {
@@ -118,7 +121,8 @@ inline std::unordered_map<std::string, spdlog::logger*> get_loggers_by_name() {
         {"lock", &lock()},
         {"schedule", &schedule()},
         {"message", &message()},
-        {"symbol", &symbol()}
+        {"symbol", &symbol()},
+        {"snapshot", &snapshot()}
     };
 }
 
