@@ -92,7 +92,8 @@
       "hidden": true,
       "generator": "Unix Makefiles",
       "cacheVariables": {
-        "CMAKE_MAKE_PROGRAM": "make"
+        "CMAKE_MAKE_PROGRAM": "make",
+        "VCPKG_TARGET_TRIPLET": "x64-linux-custom"
       },
       "environment": {"cmakepreset_expected_host_system": "Linux"}
     },
@@ -135,7 +136,7 @@
     {"name": "windows-cl-release",        "configurePreset": "windows-cl-release",        "targets": "arcticdb_ext" },
     {"name": "windows-cl-conda-debug",    "configurePreset": "windows-cl-conda-debug",    "targets": "arcticdb_ext" },
     {"name": "windows-cl-conda-release",  "configurePreset": "windows-cl-conda-release",  "targets": "arcticdb_ext" },
-    {"name": "linux-debug",               "configurePreset": "linux-debug",               "targets": "arcticdb_ext" },
+    {"name": "linux-debug",               "configurePreset": "linux-debug",               "targets": "arcticdb_ext", "jobs": 8 },
     {"name": "linux-release",             "configurePreset": "linux-release",             "targets": "arcticdb_ext" },
     {"name": "linux-conda-debug",         "configurePreset": "linux-conda-debug",         "targets": "arcticdb_ext" },
     {"name": "linux-conda-release",       "configurePreset": "linux-conda-release",       "targets": "arcticdb_ext" },
