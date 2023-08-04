@@ -275,6 +275,13 @@ jobs:
     
   real_storage_cleanup:
     needs: [real_storage_verify_windows, real_storage_verify_linux]
+    name: Cleanup real storages
+    uses: ./.github/workflows/real_storage.yml
+    secrets: inherit
+    permissions: {packages: write}
+    with:
+      job_type: cleanup
+
   can_merge:
     needs: [leader-cpp-test-linux, leader-cpp-test-windows, follower-linux, follower-windows]
     runs-on: ubuntu-latest
