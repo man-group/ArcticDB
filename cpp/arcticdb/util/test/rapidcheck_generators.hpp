@@ -38,11 +38,11 @@ inline rc::Gen <arcticdb::entity::Dimension> gen_dimension() {
 }
 
 struct TestDataFrame {
-    size_t num_columns_;
-    size_t num_rows_;
+    size_t num_columns_ = 0UL;
+    size_t num_rows_ = 0UL;
     std::vector<arcticdb::entity::TypeDescriptor> types_;
     std::vector<std::vector<int>> data_;
-    arcticdb::entity::timestamp start_ts_;
+    arcticdb::entity::timestamp start_ts_ = 0U;
     std::vector<uint8_t> timestamp_increments_;
     std::vector<std::string> column_names_;
 };
@@ -71,7 +71,7 @@ struct Arbitrary<arcticdb::entity::StreamDescriptor> {
         for (const auto& field_name: field_names) {
             field_descriptors.add_field(arcticdb::entity::scalar_field(*gen_numeric_datatype(), field_name));
         }
-        auto desc =stream_descriptor(arcticdb::entity::StreamId{id}, RowCountIndex{}, arcticdb::fields_from_range(field_descriptors));
+        auto desc =stream_descriptor(arcticdb::entity::StreamId{id}, arcticdb::stream::RowCountIndex{}, arcticdb::fields_from_range(field_descriptors));
         return gen::build<StreamDescriptor>(
             gen::set(&StreamDescriptor::data_, gen::just(desc.data_)),
             gen::set(&StreamDescriptor::fields_, gen::just(desc.fields_))
@@ -107,22 +107,22 @@ struct Arbitrary<TestDataFrame> {
 
 }
 
+namespace ac = arcticdb;
 namespace as = arcticdb::stream;
-namespace ac = arcticdb::entity;
 
-inline as::FixedSchema schema_from_test_frame(const TestDataFrame &data_frame, StreamId stream_id) {
+inline as::FixedSchema schema_from_test_frame(const TestDataFrame &data_frame, ac::StreamId stream_id) {
     arcticdb::FieldCollection fields;
     for (size_t i = 0; i < data_frame.num_columns_; ++i)
         fields.add_field(arcticdb::entity::scalar_field(data_frame.types_[i].data_type(), data_frame.column_names_[i]));
 
     const auto index = as::TimeseriesIndex::default_index();
     return as::FixedSchema{
-        index.create_stream_descriptor(stream_id, fields), index
+        index.create_stream_descriptor(std::move(stream_id), fields), index
     };
 }
 
-inline IndexRange test_frame_range(const TestDataFrame &data_frame) {
-    return IndexRange{data_frame.start_ts_, std::accumulate(data_frame.timestamp_increments_.begin(),
+inline ac::IndexRange test_frame_range(const TestDataFrame &data_frame) {
+    return ac::IndexRange{data_frame.start_ts_, std::accumulate(data_frame.timestamp_increments_.begin(),
                                                             data_frame.timestamp_increments_.end(),
                                                             data_frame.start_ts_)};
 }
@@ -150,19 +150,19 @@ folly::Future<arcticdb::entity::VariantKey> write_frame_data(const TestDataFrame
     return writer.commit();
 }
 
-inline folly::Future<arcticdb::entity::VariantKey> write_test_frame(StreamId stream_id,
-                                                                const TestDataFrame &data_frame,
-                                                                std::shared_ptr<StreamSink> store) {
-    auto schema = schema_from_test_frame(data_frame, stream_id);
+inline folly::Future<arcticdb::entity::VariantKey> write_test_frame(ac::StreamId stream_id,
+                                                                    const TestDataFrame &data_frame,
+                                                                std::shared_ptr<ac::StreamSink> store) {
+    auto schema = schema_from_test_frame(data_frame, std::move(stream_id));
     auto start_end = test_frame_range(data_frame);
     auto gen_id = arcticdb::VersionId(0);
 
-    StreamWriter<TimeseriesIndex, FixedSchema> writer{
+    ac::StreamWriter<ac::TimeseriesIndex, ac::FixedSchema> writer{
         std::move(schema),
-        store,
+        std::move(store),
         gen_id,
         start_end,
-        RowCountSegmentPolicy{4}
+        ac::RowCountSegmentPolicy{4}
     };
 
     return write_frame_data(data_frame, writer);
@@ -178,14 +178,14 @@ bool check_read_frame(const TestDataFrame &data_frame, ReaderType &reader, std::
         timestamp += data_frame.timestamp_increments_[row];
         for (size_t col = 0; col < data_frame.num_columns_; ++col) {
             data_frame.types_[col].visit_tag([&](auto type_desc_tag) {
-                arcticdb::entity::DataType dt = TypeDescriptor(type_desc_tag).data_type();
+                arcticdb::entity::DataType dt = ac::TypeDescriptor(type_desc_tag).data_type();
                 arcticdb::entity::DataType
                     stored_dt = row_ref.segment().column_descriptor(col + 1).type().data_type();
                 if (dt != stored_dt) {
                     errors.push_back(fmt::format("Type mismatch {} != {} at pos {}:{}", dt, stored_dt, col, row));
                     success = false;
                 }
-                auto dimension = static_cast<uint64_t>(TypeDescriptor(type_desc_tag).dimension());
+                auto dimension = static_cast<uint64_t>(ac::TypeDescriptor(type_desc_tag).dimension());
                 auto stored_dimension = row_ref.segment().column_descriptor(col + 1).type().dimension();
                 if (dimension != static_cast<uint64_t>(stored_dimension)) {
                     errors.push_back(fmt::format("Dimension mismatch {} != {} at pos {}:{}",
@@ -216,11 +216,11 @@ bool check_read_frame(const TestDataFrame &data_frame, ReaderType &reader, std::
 
 inline bool check_test_frame(const TestDataFrame &data_frame,
                              const arcticdb::entity::AtomKey &key,
-                             std::shared_ptr<StreamSource> store,
+                             std::shared_ptr<ac::StreamSource> store,
                              std::vector<std::string> &errors) {
-    StreamReader<arcticdb::entity::AtomKey, folly::Function<std::vector<arcticdb::entity::AtomKey>()>, arcticdb::SegmentInMemory::Row> stream_reader{
+    ac::StreamReader<arcticdb::entity::AtomKey, folly::Function<std::vector<arcticdb::entity::AtomKey>()>, arcticdb::SegmentInMemory::Row> stream_reader{
         [&]() { return std::vector<arcticdb::entity::AtomKey>{key}; },
-        store
+        std::move(store)
     };
 
     return check_read_frame(data_frame, stream_reader, errors);

@@ -19,25 +19,12 @@
 #include <arcticdb/storage/store.hpp>
 #include <arcticdb/util/variant.hpp>
 
-using namespace arcticdb::entity;
-using namespace arcticdb::stream;
 
 namespace arcticdb {
 
-struct SnapshotRefData {
-    explicit SnapshotRefData(SegmentInMemory&& snapshot_segment,
-                             std::unordered_set<VariantKey>&& index_keys):
-                             snapshot_segment_(std::move(snapshot_segment)),
-                             index_keys_(std::move(index_keys)) {
-
-    }
-    SegmentInMemory snapshot_segment_;
-    std::unordered_set<VariantKey> index_keys_;
-};
-
 void write_snapshot_entry(
-    std::shared_ptr <StreamSink> store,
-    std::vector <AtomKey> &keys,
+    std::shared_ptr<stream::StreamSink> store,
+    std::vector<AtomKey> &keys,
     const SnapshotId &snapshot_id,
     const py::object &user_meta,
     bool log_changes,
@@ -45,54 +32,46 @@ void write_snapshot_entry(
 );
 
 void tombstone_snapshot(
-    std::shared_ptr<StreamSink> store,
+    const std::shared_ptr<stream::StreamSink>& store,
     const RefKey& key,
     SegmentInMemory&& segment_in_memory,
     bool log_changes
 );
 
 void tombstone_snapshot(
-        std::shared_ptr<StreamSink> store,
+        const std::shared_ptr<stream::StreamSink>& store,
         storage::KeySegmentPair&& key_segment_pair,
         bool log_changes
         );
 
-void tombstone_snapshot(
-        std::shared_ptr<Store> store,
-        const RefKey& key,
-        bool log_changes
-        );
-
-
-void iterate_snapshots(std::shared_ptr <Store> store, folly::Function<void(entity::VariantKey & )> visitor);
+void iterate_snapshots(const std::shared_ptr<Store>& store, folly::Function<void(entity::VariantKey & )> visitor);
 
 std::optional<size_t> row_id_for_stream_in_snapshot_segment(
     SegmentInMemory &seg,
     bool using_ref_key,
-    StreamId stream_id);
+    const StreamId& stream_id);
 
 // Get a set of the index keys of a particular symbol that exist in any snapshot
 std::unordered_set<entity::AtomKey> get_index_keys_in_snapshots(
-    std::shared_ptr <Store> store,
+    const std::shared_ptr<Store>& store,
     const StreamId &stream_id);
 
 std::pair<std::vector<AtomKey>, std::unordered_set<AtomKey>> get_index_keys_partitioned_by_inclusion_in_snapshots(
-    std::shared_ptr <Store> store,
+    const std::shared_ptr<Store>& store,
     const StreamId& stream_id,
     const std::vector<entity::AtomKey> &all_index_keys
 );
 
-std::pair<std::vector<AtomKey>, py::object> get_versions_and_metadata_from_snapshot(
-    const std::shared_ptr<Store>& store,
-    const VariantKey& vk
-    );
+std::vector<AtomKey> get_versions_from_segment(
+    const SegmentInMemory& snapshot_segment
+);
 
 std::optional<VariantKey> get_snapshot_key(
-    std::shared_ptr <Store> store,
+    const std::shared_ptr<Store>& store,
     const SnapshotId &snap_name);
 
 std::optional<std::pair<VariantKey, SegmentInMemory>> get_snapshot(
-    std::shared_ptr <Store> store,
+    const std::shared_ptr<Store>& store,
     const SnapshotId &snap_name);
 
 std::set<StreamId> list_streams_in_snapshot(
@@ -105,12 +84,9 @@ SnapshotMap get_versions_from_snapshots(
     const std::shared_ptr<Store>& store
     );
 
-// Returns a map from snapshot keys to it's associated segment, and the [multi-]index keys in that segment
-std::unordered_map<VariantKey, SnapshotRefData> get_snapshots_and_index_keys(
-    const std::shared_ptr<Store>& store
-    );
-
-py::object get_metadata_for_snapshot(std::shared_ptr <Store> store, VariantKey& snap_key);
+std::unordered_map<SnapshotId, std::optional<VariantKey>> get_keys_for_snapshots(
+    const std::shared_ptr<Store>& store,
+    const std::vector<SnapshotId>& snap_names);
 
 /**
  * Stream id (symbol) -> all index keys in snapshots -> which snapshot contained that key.

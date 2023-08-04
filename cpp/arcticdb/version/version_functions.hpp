@@ -144,7 +144,8 @@ inline bool has_undeleted_version(
     pipelines::VersionQuery version_query;
     version_query.set_skip_compat(true),
     version_query.set_iterate_on_failure(false);
-    return static_cast<bool>(get_latest_undeleted_version(store, version_map, id, version_query, ReadOptions{}));
+    auto maybe_undeleted = get_latest_undeleted_version(store, version_map, id, version_query, ReadOptions{});
+    return static_cast<bool>(maybe_undeleted);
 }
 
 inline void insert_if_undeleted(

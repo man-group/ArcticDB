@@ -65,6 +65,14 @@ spdlog::logger &message() {
     return Loggers::instance()->message();
 }
 
+spdlog::logger &symbol() {
+    return Loggers::instance()->symbol();
+}
+
+spdlog::logger &snapshot() {
+    return Loggers::instance()->snapshot();
+}
+
 namespace fs = std::filesystem;
 
 using SinkConf = arcticdb::proto::logger::SinkConfig;
@@ -117,6 +125,14 @@ spdlog::logger &Loggers::message() {
     return logger_ref(message_);
 }
 
+spdlog::logger &Loggers::symbol() {
+    return logger_ref(symbol_);
+}
+
+spdlog::logger &Loggers::snapshot() {
+    return logger_ref(snapshot_);
+}
+
 spdlog::logger &Loggers::root() {
     return logger_ref(root_);
 }
@@ -132,6 +148,8 @@ void Loggers::flush_all() {
     lock().flush();
     schedule().flush();
     message().flush();
+    symbol().flush();
+    snapshot().flush();
 }
 
 
@@ -245,6 +263,9 @@ bool Loggers::configure(const arcticdb::proto::logger::LoggersConfig &conf, bool
     check_and_configure("lock", "root", lock_);
     check_and_configure("schedule", "root", schedule_);
     check_and_configure("message", "root", message_);
+    check_and_configure("symbol", "root", symbol_);
+    check_and_configure("snapshot", "root", snapshot_);
+
 
     auto flush_sec = util::as_opt(conf.flush_interval_seconds()).value_or(1);
     if (flush_sec != 0) {

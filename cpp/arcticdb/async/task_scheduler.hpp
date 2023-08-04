@@ -47,11 +47,11 @@ struct TaskSchedulerPtrWrapper{
         ptr_ = ptr;
     }
 
-    TaskScheduler* operator->() {
+    TaskScheduler* operator->() const {
         return ptr_;
     }
 
-    TaskScheduler& operator*() {
+    TaskScheduler& operator*() const {
         return *ptr_;
     }
 };
@@ -61,6 +61,7 @@ public:
     explicit InstrumentedNamedFactory(folly::StringPiece prefix) : named_factory_(prefix){}
 
     std::thread newThread(folly::Func&& func) override {
+        std::lock_guard lock{mutex_};
         return named_factory_.newThread(
                 [func = std::move(func)]() mutable {
                 ARCTICDB_SAMPLE_THREAD();
@@ -76,6 +77,7 @@ public:
 #endif
 
 private:
+    std::mutex mutex_;
     folly::NamedThreadFactory named_factory_;
 };
 
@@ -102,8 +104,7 @@ struct SchedulerWrapper : public SchedulerType {
 };
 
 inline int64_t get_cgroup_value(const std::string& cgroup_file) {
-    const auto path = std::filesystem::path{fmt::format("/sys/fs/cgroup/{}",cgroup_file)};
-    if(std::filesystem::exists(path)){
+    if(const auto path = std::filesystem::path{fmt::format("/sys/fs/cgroup/{}",cgroup_file)}; std::filesystem::exists(path)){
         std::ifstream strm(path.string());
         util::check(static_cast<bool>(strm), "Failed to open cgroups cpu file for read at path '{}': {}", path.string(), std::strerror(errno));
         std::string str;
@@ -118,20 +119,14 @@ inline auto get_default_num_cpus() {
     #ifdef _WIN32
         return static_cast<int64_t>(cpu_count);
     #else
-        auto quota_count = 0;
-        auto limit_count = 0;
+        auto quota_count = 0UL;
         auto quota = get_cgroup_value("cpu/cpu.cfs_quota_us");
         auto period = get_cgroup_value("cpu/cpu.cfs_period_us");
 
-        if (quota > -1 && period > 0) {
-            quota_count = ceil(static_cast<double>(quota) / static_cast<double>(period));
-        }
+        if (quota > -1 && period > 0)
+            quota_count = static_cast<int64_t>(ceil(static_cast<double>(quota) / static_cast<double>(period)));
 
-        if (quota_count != 0) {
-            limit_count = quota_count;
-        } else {
-            limit_count = cpu_count;
-        }
+        auto limit_count = quota_count != 0 ? quota_count : cpu_count;
         return std::min(static_cast<int64_t>(cpu_count), static_cast<int64_t>(limit_count));
     #endif
 }
@@ -146,6 +141,10 @@ inline auto get_default_num_cpus() {
  * 4/ Throttling: (similar to priority) how to absorb work spikes and apply memory backpressure
  */
 
+inline int64_t default_io_thread_count(uint64_t cpu_count) {
+    return std::min(int64_t(100L), static_cast<int64_t>(static_cast<double>(cpu_count) * 1.5));
+}
+
 class TaskScheduler {
   public:
     using CPUSchedulerType = folly::FutureExecutor<folly::CPUThreadPoolExecutor>;
@@ -156,22 +155,27 @@ class TaskScheduler {
         io_thread_count_(io_thread_count ? io_thread_count.value() : ConfigsMap::instance()->get_int("VersionStore.NumIOThreads", std::min(100, (int) (cpu_thread_count_ * 1.5)))),
         cpu_exec_(cpu_thread_count_, std::make_shared<InstrumentedNamedFactory>("CPUPool")) ,
         io_exec_(io_thread_count_,  std::make_shared<InstrumentedNamedFactory>("IOPool")){
+        util::check(cpu_thread_count_ > 0 && io_thread_count_ > 0, "Zero IO or CPU threads: {} {}", io_thread_count_, cpu_thread_count_);
         ARCTICDB_RUNTIME_DEBUG(log::schedule(), "Task scheduler created with {:d} {:d}", cpu_thread_count_, io_thread_count_);
     }
 
     ~TaskScheduler() = default;
 
     template<class Task>
-    auto submit_cpu_task(Task &&task) {
+    auto submit_cpu_task(Task &&t) {
+        auto task = std::forward<decltype(t)>(t);
         static_assert(std::is_base_of_v<BaseTask, std::decay_t<Task>>, "Only supports Task derived from BaseTask");
         ARCTICDB_DEBUG(log::schedule(), "{} Submitting CPU task {}: {} of {}", uintptr_t(this), typeid(task).name(), cpu_exec_.getTaskQueueSize(), cpu_exec_.kDefaultMaxQueueSize);
+        std::lock_guard lock{cpu_mutex_};
         return cpu_exec_.addFuture(std::move(task));
     }
 
     template<class Task>
-    auto submit_io_task(Task &&task) {
+    auto submit_io_task(Task &&t) {
+        auto task = std::forward<decltype(t)>(t);
         static_assert(std::is_base_of_v<BaseTask, std::decay_t<Task>>, "Only support Tasks derived from BaseTask");
         ARCTICDB_DEBUG(log::schedule(), "{} Submitting IO task {}: {}", uintptr_t(this), typeid(task).name(), io_exec_.getPendingTaskCount());
+        std::lock_guard lock{io_mutex_};
         return io_exec_.addFuture(std::move(task));
     }
 
@@ -248,6 +252,8 @@ private:
     size_t io_thread_count_;
     SchedulerWrapper<CPUSchedulerType> cpu_exec_;
     SchedulerWrapper<IOSchedulerType> io_exec_;
+    std::mutex cpu_mutex_;
+    std::mutex io_mutex_;
 };
 
 
@@ -261,40 +267,13 @@ inline auto& io_executor() {
 
 template <typename Task>
 inline auto submit_cpu_task(Task&& task) {
-    return TaskScheduler::instance()->submit_cpu_task(std::move(task));
+    return TaskScheduler::instance()->submit_cpu_task(std::forward<decltype(task)>(task));
 }
 
 
 template <typename Task>
 inline auto submit_io_task(Task&& task) {
-    return TaskScheduler::instance()->submit_io_task(std::move(task));
-}
-
-template <typename Inputs, typename TaskSubmitter, typename ResultHandler>
-inline void submit_tasks_for_range(const Inputs& inputs, TaskSubmitter submitter, ResultHandler result_handler) {
-    using TaskReturn = decltype(submitter(std::declval<std::add_const_t<std::add_lvalue_reference_t<typename Inputs::value_type>>>()));
-
-    std::vector<TaskReturn> futs;
-    futs.reserve(inputs.size());
-    try {
-        for (const auto& input : inputs) {
-            futs.emplace_back(submitter(input));
-        }
-    } catch(...) { // Clean up the Futures that have already been submitted
-        folly::collectAll(futs).wait();
-        throw;
-    }
-
-    auto fut_itr = futs.begin();
-    try {
-        for(const auto& input : inputs) {
-            auto&& resolved = std::move(*(fut_itr++)).get();
-            result_handler(input, std::move(resolved));
-        }
-    } catch(...) {
-        folly::collectAll(fut_itr, futs.end()).wait();
-        throw;
-    }
+    return TaskScheduler::instance()->submit_io_task(std::forward<decltype(task)>(task));
 }
 
 void print_scheduler_stats();
