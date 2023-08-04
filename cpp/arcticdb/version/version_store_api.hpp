@@ -297,7 +297,7 @@ class PythonVersionStore : public LocalVersionedEngine {
         std::vector<ReadQuery>& read_queries,
         const ReadOptions& read_options);
 
-    std::vector<std::pair<VersionedItem, py::object>> batch_read_metadata(
+    std::vector<std::variant<std::pair<VersionedItem, py::object>, DataError>> batch_read_metadata(
         const std::vector<StreamId>& stream_ids,
         const std::vector<VersionQuery>& version_queries,
         const ReadOptions& read_options);
