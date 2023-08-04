@@ -18,6 +18,7 @@ from arcticdb.util._versions import IS_PANDAS_TWO
 
 from arcticdb.version_store.processing import QueryBuilder
 from arcticdb.version_store._store import NativeVersionStore, VersionedItem, VersionQueryInput
+from arcticdb.version_store._normalization import denormalize_user_metadata
 from arcticdb_ext.exceptions import ArcticException
 from arcticdb_ext.version_store import DataError
 import pandas as pd
@@ -1101,22 +1102,24 @@ class Library:
         """
         return self._nvs.read_metadata(symbol, as_of)
 
-    def read_metadata_batch(self, symbols: List[Union[str, ReadInfoRequest]]) -> List[VersionedItem]:
+    def read_metadata_batch(self, symbols: List[Union[str, ReadInfoRequest]]) -> List[Union[VersionedItem, DataError]]:
         """
         Reads the metadata of multiple symbols.
 
         Parameters
         ----------
         symbols : List[Union[str, ReadInfoRequest]]
-            List of symbols to read.
+            List of symbols to read metadata.
 
         Returns
         -------
-        List[VersionedItem]
-            A list of the read results, whose i-th element corresponds to the i-th element of the ``symbols`` parameter.
+        List[Union[VersionedItem, DataError]]
+            A list of the read metadata results, whose i-th element corresponds to the i-th element of the ``symbols`` parameter.
             A VersionedItem object with the metadata field set as None will be returned if the requested version of the
-                symbol exists but there is no metadata
-            A None object will be returned if the requested version of the symbol does not exist
+            symbol exists but there is no metadata
+            If the specified version does not exist, a DataError object is returned, with symbol, version_request_type,
+            version_request_data properties, error_code, error_category, and exception_string properties. If a key error or
+            any other internal exception occurs, the same DataError object is also returned.
 
         See Also
         --------
@@ -1142,7 +1145,9 @@ class Library:
                 raise ArcticInvalidApiUsageException(
                     f"Invalid symbol type s=[{s}] type(s)=[{type(s)}]. Only [str] and [ReadInfoRequest] are supported."
                 )
-        return self._nvs._batch_read_meta_to_versioned_items(symbol_strings, as_ofs)
+
+        include_errors_and_none_meta = True
+        return self._nvs._batch_read_metadata_to_versioned_items(symbol_strings, as_ofs, include_errors_and_none_meta)
 
     def write_metadata(self, symbol: str, metadata: Any) -> VersionedItem:
         """
