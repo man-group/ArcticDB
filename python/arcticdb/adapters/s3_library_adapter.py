@@ -73,7 +73,7 @@ class S3LibraryAdapter(ArcticLibraryAdapter):
         return "S3(endpoint=%s, bucket=%s)" % (self._endpoint, self._bucket)
 
     @property
-    def config_library(self) -> Library:
+    def config_library(self):
         env_cfg = EnvironmentConfigsMap()
         _name = self._query_params.access if not self._query_params.aws_auth else USE_AWS_CRED_PROVIDERS_TOKEN
         _key = self._query_params.secret if not self._query_params.aws_auth else USE_AWS_CRED_PROVIDERS_TOKEN
@@ -97,9 +97,9 @@ class S3LibraryAdapter(ArcticLibraryAdapter):
 
         lib = NativeVersionStore.create_store_from_config(
             env_cfg, _DEFAULT_ENV, self.CONFIG_LIBRARY_NAME, encoding_version=self._encoding_version
-        )._library
+        )
 
-        return lib
+        return lib._library
 
     def _parse_query(self, query: str) -> ParsedQuery:
         if query and query.startswith("?"):
@@ -151,7 +151,7 @@ class S3LibraryAdapter(ArcticLibraryAdapter):
 
         return storage_override
 
-    def create_library_config(self, name, library_options: LibraryOptions) -> LibraryConfig:
+    def create_library(self, name, library_options: LibraryOptions):
         env_cfg = EnvironmentConfigsMap()
 
         _name = self._query_params.access if not self._query_params.aws_auth else USE_AWS_CRED_PROVIDERS_TOKEN
@@ -183,10 +183,7 @@ class S3LibraryAdapter(ArcticLibraryAdapter):
             env_cfg, _DEFAULT_ENV, name, encoding_version=self._encoding_version
         )
 
-        return lib._lib_cfg
-
-    def initialize_library(self, name: str, config: LibraryConfig):
-        pass
+        return lib
 
     def _configure_aws(self):
         if not self._query_params.region:

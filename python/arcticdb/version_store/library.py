@@ -16,6 +16,7 @@ from arcticdb.supported_types import Timestamp
 from arcticdb.version_store.processing import QueryBuilder
 from arcticdb.version_store._store import NativeVersionStore, VersionedItem, VersionQueryInput
 from arcticdb_ext.exceptions import ArcticException
+from arcticdb_ext.version_store import DataError
 import pandas as pd
 import numpy as np
 import logging
@@ -813,7 +814,7 @@ class Library:
         as_of : AsOf, default=None
             Return the data as it was as of the point in time. ``None`` means that the latest version should be read. The
             various types of this parameter mean:
-           - ``int``: specific version number
+           - ``int``: specific version number. Negative indexing is supported, with -1 representing the latest version, -2 the version before that, etc.
            - ``str``: snapshot name which contains the version
            - ``datetime.datetime`` : the version of the data that existed ``as_of`` the requested point in time
 
@@ -861,7 +862,7 @@ class Library:
 
     def read_batch(
         self, symbols: List[Union[str, ReadRequest]], query_builder: Optional[QueryBuilder] = None
-    ) -> List[VersionedItem]:
+    ) -> List[Union[VersionedItem, DataError]]:
         """
         Reads multiple symbols.
 
@@ -876,8 +877,10 @@ class Library:
 
         Returns
         -------
-        List[VersionedItem]
+        List[Union[VersionedItem, DataError]]
             A list of the read results, whose i-th element corresponds to the i-th element of the ``symbols`` parameter.
+            If the specified version does not exist, a DataError object is returned, with symbol, version_request_type,
+            version_request_data properties, error_code, error_category, and exception_string properties.
 
         Raises
         ------
@@ -891,11 +894,26 @@ class Library:
         >>> lib.write("s2", pd.DataFrame({"col": [1, 2, 3]}))
         >>> lib.write("s2", pd.DataFrame(), prune_previous_versions=False)
         >>> lib.write("s3", pd.DataFrame())
-        >>> batch = lib.read_batch(["s1", ReadRequest("s2", as_of=0), "s3"])
+        >>> batch = lib.read_batch(["s1", ReadRequest("s2", as_of=0), "s3", ReadRequest("s2", as_of=1000)])
         >>> batch[0].data.empty
         True
         >>> batch[1].data.empty
         False
+        >>> batch[2].data.empty
+        True
+        >>> batch[3].symbol
+        "s2"
+        >>> from arcticdb import DataError
+        >>> isinstance(batch[3], DataError)
+        True
+        >>> batch[3].version_request_type
+        VersionRequestType.SPECIFIC
+        >>> batch[3].version_request_data
+        1000
+        >>> batch[3].error_code
+        ErrorCode.E_NO_SUCH_VERSION
+        >>> batch[3].error_category
+        ErrorCategory.MISSING_DATA
 
         See Also
         --------
@@ -935,9 +953,9 @@ class Library:
                     f"Unsupported item in the symbols argument s=[{s}] type(s)=[{type(s)}]. Only [str] and"
                     " [ReadRequest] are supported."
                 )
-
+        throw_on_missing_version = False
         return self._nvs._batch_read_to_versioned_items(
-            symbol_strings, as_ofs, date_ranges, columns, query_builder or query_builders
+            symbol_strings, as_ofs, date_ranges, columns, query_builder or query_builders, throw_on_missing_version
         )
 
     def read_metadata(self, symbol: str, as_of: Optional[AsOf] = None) -> VersionedItem:

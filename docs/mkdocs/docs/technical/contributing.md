@@ -332,3 +332,83 @@ To override that, use one of the following CMake variables*:
 
    (Only) `Python_ROOT_DIR` can also be set as an environment variable.
    Setting the others in the environment might have no effect.)
+
+Development Guidelines
+======================
+
+ArcticDB has a lot of write-time options to configure how the data is stored on disk.
+When adding new features, it is important to test not only the simplest case, but also how the new feature interacts with these various options.
+This section serves as a guide as to what should be considered when adding a new feature.
+
+## Backwards compatibility
+
+### Data stored on disk
+
+Due to ArcticDB being a purely client-side database, it is possible for data to be written by clients that are of later versions than clients that need to read the same data.
+If the change is breaking, such that older clients will not be able to read the data, then this should be clearly documented both in the PR and in the online documentation.
+If possible, a version number should also be added such that future changes in the same area will display a more clear error message.
+
+### API
+
+Any changes to the API (including when exceptions are thrown and the type of the exception) must be weighed up against the change breaking behaviour for existing users.
+Please make this as clear to reviewers as possible by ensuring **API changes are clearly described in the PR description**. 
+If the change is breaking, please also ensure that that is appropriately highlighted in the PR description as well.
+This is particularly true of the `NativeVersionStore` API, as this has many users inside Man Group.
+
+### Snapshots
+
+Symbols are almost completely decoupled from one another in ArcticDB.
+The major feature for which this is not the case is snapshots.
+Whenever a change involves deleting any keys from the storage, care must be taken that those keys are not in fact still needed by a snapshot.
+Similarly, any operation that modifies a snapshot, including deleting it, must ensure that any keys for which this snapshot was the last reference are also deleted.
+See the [tutorial](https://docs.arcticdb.io/tutorials/snapshots/) and [API documentation](https://docs.arcticdb.io/api/library#arcticdb.version_store.library.Library.snapshot) for more details.
+
+## Batch methods
+
+Almost all of the major reading and writing methods have batch equivalents.
+If a feature is added for the non-batch version, it should almost always work with the batch version as well.
+We should also strive for consistency of behaviour across the batch methods in circumstances that could be encountered by any of them.
+e.g. `read_batch` and `read_metadata_batch` should have the same behaviour if the specified version does not exist.
+
+## Dynamic schema
+
+Static schema is much simpler than dynamic schema, and so features added and only tested with static schema may not "just work" with dynamic schema.
+In particular, the following cases should be considered:
+
+* A column that **is not** present in an initial call to `write` **is** present in a subsequent call to `append`.
+* A column that **is** present in an initial call to `write` **is not** present in a subsequent call to `append`.
+* A numeric column with a "small" type (e.g. `uint8`) is appended to with a numeric column of a larger type (e.g. int16), and vice versa.
+
+## Segmentation
+
+Most tests are written with small amounts of data to keep the runtime down as low as possible.
+However, many bugs are only exposed when data being written is column-sliced and/or row-sliced.
+Using test fixtures configured to slice into small data segments (e.g. 2x2) can help to catch these issues early.
+
+## Data sub-selection
+
+Many use cases of ArcticDB involve writing huge symbols with hundreds of thousands of columns or billions of rows.
+In these cases, methods for reading data will almost never be called without some parameters to cut down the amount of data returned to the user. The most commonly used are:
+
+* The stand-alone methods `head` and `tail`*
+* `columns` - select only a subset of the columns
+* `date_range` and `row_range` - select a contiguous range of rows
+* `query_builder` - see section on processing pipeline
+
+## Processing pipeline
+
+Reading data using only `columns`, `date_range`, and `row_range` arguments is heavily optimised to avoid copying data in memory unnecessarily.
+ Any read-like method provided with the `query_builder` optional argument takes quite a different code path, as we do not know the shape of the output data a priori.
+ While it is not necessary to exhaustively test all new features against every possible `query_builder` argument, it is generally worth having a test using a simple filter that excludes some of the data that would otherwise be returned to the user.
+
+## Sparse columns
+
+The majority of data written into ArcticDB uses dense columns, meaning that within a given row-slice, every row has an associated value in every column (even if that value is `NaN`).
+The concept of sparse columns is implemented as well, where columns may have values missing for none, some, or all rows within a row-slice.
+Any read-like method should be able to handle both types of stored column.
+
+## Pickling
+
+When data that cannot be normalized to a supported data type in ArcticDB, it can still be stored using `write_pickle` and similar.
+There are many operations that cannot be performed on pickled data, such as `append`, `update`, `date_range` search, and many more.
+It is important that if a user attempts an operation that is not supported with pickled data, that they receive a helpful error message.

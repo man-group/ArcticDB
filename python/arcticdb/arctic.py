@@ -5,11 +5,11 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
-import enum
 from typing import List, Optional
 
 from arcticdb.options import LibraryOptions
 from arcticdb_ext.storage import LibraryManager, StorageOverride
+from arcticdb.exceptions import LibraryNotFound
 from arcticdb.version_store.library import Library
 from arcticdb.version_store._store import NativeVersionStore
 from arcticdb.adapters.s3_library_adapter import S3LibraryAdapter
@@ -151,10 +151,18 @@ class Arctic:
         self._library_adapter = _cls(uri, self._encoding_version)
         self._library_manager = LibraryManager(self._library_adapter.config_library)
         self._uri = uri
+        self._open_libraries = dict()
 
         self._library_adapter.check_storage_access()
 
     def __getitem__(self, name: str) -> Library:
+        already_open = self._open_libraries.get(name)
+        if already_open:
+            return already_open
+
+        if not self._library_manager.has_library(name):
+            raise LibraryNotFound(name)
+
         storage_override = self._library_adapter.get_storage_override()
         lib = NativeVersionStore(
             self._library_manager.get_library(name, storage_override),
@@ -212,15 +220,17 @@ class Arctic:
         >>> arctic.create_library('test.library')
         >>> my_library = arctic['test.library']
         """
-        if self._library_manager.has_library(name):
-            raise ValueError(f"{name} already exists as a library. Please delete prior to re-creating.")
+        if name in self._open_libraries or self._library_manager.has_library(name):
+            raise ValueError(f"Library [{name}] already exists.")
 
         if library_options is None:
             library_options = LibraryOptions()
 
-        library_config = self._library_adapter.create_library_config(name, library_options)
-        self._library_adapter.initialize_library(name, library_config)
-        self._library_manager.write_library_config(library_config, name)
+        library = self._library_adapter.create_library(name, library_options)
+        library.env = repr(self._library_adapter)
+        lib = Library(repr(self), library)
+        self._open_libraries[name] = lib
+        self._library_manager.write_library_config(library._lib_cfg, name)
 
     def delete_library(self, name: str) -> None:
         """
@@ -234,12 +244,16 @@ class Arctic:
         name: `str`
             Name of the library to delete.
         """
-        if not self._library_manager.has_library(name):
+        already_open = self._open_libraries.pop(name, None)
+        if not already_open and not self._library_manager.has_library(name):
             return
-        self._library_adapter.delete_library(
-            self[name], self._library_manager.get_library_config(name, StorageOverride())
-        )
-        self._library_manager.remove_library_config(name)
+        config = self._library_manager.get_library_config(name, StorageOverride())
+        (already_open or self[name])._nvs.version_store.clear()
+        del already_open  # essential to free resources held by the library
+        try:
+            self._library_adapter.cleanup_library(name, config)
+        finally:
+            self._library_manager.remove_library_config(name)
 
     def list_libraries(self) -> List[str]:
         """

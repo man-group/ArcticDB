@@ -7,17 +7,22 @@ As of the Change Date specified in that file, in accordance with the Business So
 """
 import re
 import os
-
-from typing import Optional
+import shutil
+from arcticdb.log import storage as log
 
 from arcticdb.options import LibraryOptions
 from arcticc.pb2.storage_pb2 import EnvironmentConfigsMap, LibraryConfig
+from arcticc.pb2.lmdb_storage_pb2 import Config as LmdbConfig
 from arcticdb.version_store.helper import add_lmdb_library_to_env
 from arcticdb.config import _DEFAULT_ENV
 from arcticdb.version_store._store import NativeVersionStore
 from arcticdb.adapters.arctic_library_adapter import ArcticLibraryAdapter, set_library_options
-from arcticdb_ext.storage import Library, StorageOverride
+from arcticdb_ext.storage import StorageOverride
 from arcticdb.encoding_version import EncodingVersion
+
+
+def _rmtree_errorhandler(func, path, exc_info):
+    log.warn("Error removing LMDB tree at path=[{}]", path, exc_info=exc_info)
 
 
 class LMDBLibraryAdapter(ArcticLibraryAdapter):
@@ -47,21 +52,18 @@ class LMDBLibraryAdapter(ArcticLibraryAdapter):
         return "LMDB(path=%s)" % self._path
 
     @property
-    def config_library(self) -> Library:
+    def config_library(self):
         env_cfg = EnvironmentConfigsMap()
 
         add_lmdb_library_to_env(env_cfg, lib_name=self.CONFIG_LIBRARY_NAME, env_name=_DEFAULT_ENV, db_dir=self._path)
 
         lib = NativeVersionStore.create_store_from_config(
             env_cfg, _DEFAULT_ENV, self.CONFIG_LIBRARY_NAME, encoding_version=self._encoding_version
-        )._library
+        )
 
-        return lib
+        return lib._library
 
-    def get_storage_override(self) -> StorageOverride:
-        return StorageOverride()
-
-    def create_library_config(self, name, library_options: LibraryOptions) -> LibraryConfig:
+    def create_library(self, name, library_options: LibraryOptions):
         env_cfg = EnvironmentConfigsMap()
 
         add_lmdb_library_to_env(env_cfg, lib_name=name, env_name=_DEFAULT_ENV, db_dir=self._path)
@@ -72,7 +74,13 @@ class LMDBLibraryAdapter(ArcticLibraryAdapter):
             env_cfg, _DEFAULT_ENV, name, encoding_version=self._encoding_version
         )
 
-        return lib._lib_cfg
+        return lib
 
-    def initialize_library(self, name: str, config: LibraryConfig):
-        pass
+    def cleanup_library(self, library_name: str, library_config: LibraryConfig):
+        for k, v in library_config.storage_by_id.items():
+            lmdb_config = LmdbConfig()
+            v.config.Unpack(lmdb_config)
+            shutil.rmtree(os.path.join(lmdb_config.path, library_name), onerror=_rmtree_errorhandler)
+
+    def get_storage_override(self) -> StorageOverride:
+        return StorageOverride()

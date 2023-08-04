@@ -56,26 +56,6 @@ namespace arcticdb::storage::memory {
         std::unique_ptr<MutexType> mutex_;  // Methods taking functions pointers may call back into the storage
     };
 
-    class MemoryStorageFactory final : public StorageFactory<MemoryStorageFactory> {
-
-        using Parent = StorageFactory<MemoryStorageFactory>;
-        friend Parent;
-
-    public:
-        using Config = arcticdb::proto::memory_storage::Config;
-        using StorageType = MemoryStorage;
-
-        MemoryStorageFactory(Config conf) :
-                conf_(std::move(conf)) {}
-
-    private:
-        auto do_create_storage(LibraryPath lib, OpenMode mode) {
-            return MemoryStorage(std::move(lib), mode, conf_);
-        }
-
-        Config conf_;
-    };
-
     inline arcticdb::proto::storage::VariantStorage pack_config(uint64_t cache_size) {
         arcticdb::proto::storage::VariantStorage output;
         arcticdb::proto::memory_storage::Config cfg;

@@ -71,10 +71,7 @@ def test_querybuilder_filter_then_groupby(lmdb_version_store_tiny_segment):
     lib = lmdb_version_store_tiny_segment
     symbol = "test_querybuilder_filter_then_groupby"
     df = pd.DataFrame(
-        {
-            "col1": ["a", "b", "c", "a", "b", "c", "a", "b", "c", "d"],
-            "col2": [1, 2, 3, 2, 1, 3, 1, 1, 3, 4],
-        },
+        {"col1": ["a", "b", "c", "a", "b", "c", "a", "b", "c", "d"], "col2": [1, 2, 3, 2, 1, 3, 1, 1, 3, 4]},
         index=np.arange(10),
     )
     lib.write(symbol, df)
@@ -129,11 +126,7 @@ def test_querybuilder_project_then_groupby(lmdb_version_store_tiny_segment):
     lib = lmdb_version_store_tiny_segment
     symbol = "test_querybuilder_project_then_groupby"
     df = pd.DataFrame(
-        {
-            "col1": [1, 2, 2, 3, 3, 3, 4, 4, 4, 4],
-            "col2": np.arange(0, 1, 0.1, dtype=np.float64),
-        },
-        index=np.arange(10),
+        {"col1": [1, 2, 2, 3, 3, 3, 4, 4, 4, 4], "col2": np.arange(0, 1, 0.1, dtype=np.float64)}, index=np.arange(10)
     )
     lib.write(symbol, df)
     q = QueryBuilder()
@@ -153,10 +146,7 @@ def test_querybuilder_groupby_then_filter(lmdb_version_store_tiny_segment):
     lib = lmdb_version_store_tiny_segment
     symbol = "test_querybuilder_groupby_then_filter"
     df = pd.DataFrame(
-        {
-            "col1": ["a", "b", "c", "a", "b", "c", "a", "b", "c", "d"],
-            "col2": [1, 2, 3, 2, 1, 3, 1, 1, 3, 4],
-        },
+        {"col1": ["a", "b", "c", "a", "b", "c", "a", "b", "c", "d"], "col2": [1, 2, 3, 2, 1, 3, 1, 1, 3, 4]},
         index=np.arange(10),
     )
     lib.write(symbol, df)
@@ -173,11 +163,7 @@ def test_querybuilder_groupby_then_project(lmdb_version_store_tiny_segment):
     lib = lmdb_version_store_tiny_segment
     symbol = "test_querybuilder_groupby_then_project"
     df = pd.DataFrame(
-        {
-            "col1": [5, 23, 42, 5, 23, 42, 5, 23, 42, 0],
-            "col2": [1, 2, 3, 2, 1, 3, 1, 1, 3, 4],
-        },
-        index=np.arange(10),
+        {"col1": [5, 23, 42, 5, 23, 42, 5, 23, 42, 0], "col2": [1, 2, 3, 2, 1, 3, 1, 1, 3, 4]}, index=np.arange(10)
     )
     lib.write(symbol, df)
     q = QueryBuilder()

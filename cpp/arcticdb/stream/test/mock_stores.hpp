@@ -112,6 +112,10 @@ class NullStore :
         util::raise_rte("Not implemented");
     }
 
+    folly::Future<std::vector<RemoveKeyResultType>> remove_keys(std::vector<entity::VariantKey>&&) override {
+        util::raise_rte("Not implemented");
+    }
+
     folly::Future<std::vector<AtomKey>> batch_write(
         std::vector<std::pair<PartialKey, SegmentInMemory>> &&,
         const std::unordered_map<ContentHash, AtomKey>&,

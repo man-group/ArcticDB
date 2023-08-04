@@ -7,6 +7,7 @@
 
 #pragma once
 
+#include <arcticdb/entity/data_error.hpp>
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/stream/index.hpp>
 #include <arcticdb/util/timeouts.hpp>
@@ -180,16 +181,19 @@ class PythonVersionStore : public LocalVersionedEngine {
 
     std::pair<VersionedItem, py::object> read_metadata(
         const StreamId& stream_id,
-        const VersionQuery& version_query
+        const VersionQuery& version_query,
+        const ReadOptions& read_options
     );
 
     std::vector<DescriptorItem> batch_read_descriptor(
         const std::vector<StreamId>& stream_ids,
-        const std::vector<VersionQuery>& version_queries);
+        const std::vector<VersionQuery>& version_queries,
+        const ReadOptions& read_options);
 
     DescriptorItem read_descriptor(
         const StreamId& stream_id,
-        const VersionQuery& version_query);
+        const VersionQuery& version_query,
+        const ReadOptions& read_options);
 
     ReadResult read_index(
         const StreamId& stream_id,
@@ -281,7 +285,7 @@ class PythonVersionStore : public LocalVersionedEngine {
         const std::vector<StreamId>& id,
         const std::vector<VersionQuery>& version_query);
 
-    std::vector<ReadResult> batch_read(
+    std::vector<std::variant<ReadResult, DataError>> batch_read(
         const std::vector<StreamId>& stream_ids,
         const std::vector<VersionQuery>& version_queries,
         std::vector<ReadQuery>& read_queries,
@@ -289,7 +293,8 @@ class PythonVersionStore : public LocalVersionedEngine {
 
     std::vector<std::pair<VersionedItem, py::object>> batch_read_metadata(
         const std::vector<StreamId>& stream_ids,
-        const std::vector<VersionQuery>& version_queries);
+        const std::vector<VersionQuery>& version_queries,
+        const ReadOptions& read_options);
 
     std::set<StreamId> list_streams(
         const std::optional<SnapshotId>& snap_name = std::nullopt,
@@ -334,16 +339,16 @@ private:
     void delete_snapshot_sync(const SnapshotId& snap_name, const VariantKey& snap_key);
 };
 
-inline std::vector<ReadResult> frame_to_read_result(std::vector<std::pair<VersionedItem, FrameAndDescriptor>>&& keys_frame_and_descriptors) {
-    std::vector<ReadResult> read_results;
+inline std::vector<std::variant<ReadResult, DataError>> frame_to_read_result(std::vector<ReadVersionOutput>&& keys_frame_and_descriptors) {
+    std::vector<std::variant<ReadResult, DataError>> read_results;
     read_results.reserve(keys_frame_and_descriptors.size());
-    for (auto [item, fd] : keys_frame_and_descriptors) {
+    for (auto& read_version_output : keys_frame_and_descriptors) {
         read_results.emplace_back(ReadResult(
-            item,
-            PythonOutputFrame{fd.frame_, fd.buffers_},
-            fd.desc_.proto().normalization(),
-            fd.desc_.proto().user_meta(),
-            fd.desc_.proto().multi_key_meta(),
+            read_version_output.versioned_item_,
+            PythonOutputFrame{read_version_output.frame_and_descriptor_.frame_, read_version_output.frame_and_descriptor_.buffers_},
+            read_version_output.frame_and_descriptor_.desc_.proto().normalization(),
+            read_version_output.frame_and_descriptor_.desc_.proto().user_meta(),
+            read_version_output.frame_and_descriptor_.desc_.proto().multi_key_meta(),
             std::vector<AtomKey>{}));
     }
     return read_results;

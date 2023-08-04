@@ -177,7 +177,7 @@ inline auto get_test_config_data() {
  * See also python_version_store_in_memory() and stream_test_common.hpp for alternatives using LMDB.
  */
 template<typename VerStoreType = version_store::LocalVersionedEngine>
-inline VerStoreType get_test_engine(LibraryDescriptor::VariantStoreConfig cfg = {}) {
+inline VerStoreType get_test_engine(storage::LibraryDescriptor::VariantStoreConfig cfg = {}) {
     auto [path, storages] = get_test_config_data();
     auto library = std::make_shared<arcticdb::storage::Library>(path, std::move(storages), std::move(cfg));
     return VerStoreType(library);

@@ -19,13 +19,15 @@ from pandas import DataFrame
 import pandas as pd
 import pytest
 from pytz import timezone
+from packaging.version import Version
 import random
 import string
 
 from arcticdb.exceptions import ArcticNativeException
+from arcticdb_ext.storage import NoDataFoundException
 from arcticdb.version_store.processing import QueryBuilder
 from arcticdb_ext.exceptions import InternalException, UserInputException
-from arcticdb.util.test import assert_frame_equal, IS_PANDAS_ZERO
+from arcticdb.util.test import assert_frame_equal, PANDAS_VERSION
 from arcticdb.util.hypothesis import (
     use_of_function_scoped_fixtures_in_hypothesis_checked,
     integral_type_strategies,
@@ -39,15 +41,20 @@ from arcticdb.util.hypothesis import (
 from arcticdb_ext import set_config_int
 
 
+@pytest.fixture(scope="module", autouse=True)
+def _restrict_to(only_test_encoding_version_v1):
+    pass
+
+
 def generic_filter_test(version_store, symbol, df, arctic_query, pandas_query, dynamic_strings=True):
     version_store.write(symbol, df, dynamic_strings=dynamic_strings)
     expected = df.query(pandas_query)
     received = version_store.read(symbol, query_builder=arctic_query).data
     if not np.array_equal(expected, received):
-        print("Original dataframe\n{}".format(df))
-        print("Pandas query\n{}".format(pandas_query))
-        print("Expected\n{}".format(expected))
-        print("Received\n{}".format(received))
+        print(f"\nOriginal dataframe:\n{df}\ndtypes:\n{df.dtypes}")
+        print(f"\nPandas query: {pandas_query}")
+        print(f"\nPandas returns:\n{expected}")
+        print(f"\nQueryBuilder returns:\n{received}")
         assert False
     assert True
 
@@ -895,12 +902,6 @@ def test_filter_isin_clashing_sets(lmdb_version_store):
     generic_filter_test(lmdb_version_store, "test_filter_isin_clashing_sets", df, q, pandas_query)
 
 
-def numeric_isin_asumptions(df, vals):
-    assume(not df.empty)
-    # If df values need a uint64 to hold them then we only support unsigned vals
-    assume(df["a"].between(-(2**63), 2**63 - 1).all() or all(v >= 0 for v in vals))
-
-
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
@@ -908,7 +909,7 @@ def numeric_isin_asumptions(df, vals):
     vals=st.frozensets(signed_integral_type_strategies(), min_size=1),
 )
 def test_filter_numeric_isin_signed(lmdb_version_store, df, vals):
-    numeric_isin_asumptions(df, vals)
+    assume(not df.empty)
     q = QueryBuilder()
     q = q[q["a"].isin(vals)]
     pandas_query = "a in {}".format(list(vals))
@@ -922,7 +923,7 @@ def test_filter_numeric_isin_signed(lmdb_version_store, df, vals):
     vals=st.frozensets(unsigned_integral_type_strategies(), min_size=1),
 )
 def test_filter_numeric_isin_unsigned(lmdb_version_store, df, vals):
-    numeric_isin_asumptions(df, vals)
+    assume(not df.empty)
     q = QueryBuilder()
     q = q[q["a"].isin(vals)]
     pandas_query = "a in {}".format(list(vals))
@@ -968,9 +969,9 @@ def test_filter_numeric_isin_unsigned(lmdb_version_store):
     df=dataframes_with_names_and_dtypes(["a"], integral_type_strategies()),
     vals=st.frozensets(unsigned_integral_type_strategies(), min_size=1),
 )
-@pytest.mark.skipif(IS_PANDAS_ZERO, reason="Early Pandas filtering does not handle unsigned well")
+@pytest.mark.skipif(PANDAS_VERSION < Version("1.2"), reason="Early Pandas filtering does not handle unsigned well")
 def test_filter_numeric_isnotin_unsigned(lmdb_version_store, df, vals):
-    numeric_isin_asumptions(df, vals)
+    assume(not df.empty)
     q = QueryBuilder()
     q = q[q["a"].isnotin(vals)]
     pandas_query = "a not in {}".format(list(vals))
@@ -984,7 +985,7 @@ def test_filter_numeric_isnotin_unsigned(lmdb_version_store, df, vals):
     vals=st.frozensets(signed_integral_type_strategies(), min_size=1),
 )
 def test_filter_numeric_isnotin_signed(lmdb_version_store, df, vals):
-    numeric_isin_asumptions(df, vals)
+    assume(not df.empty)
     q = QueryBuilder()
     q = q[q["a"].isnotin(vals)]
     pandas_query = "a not in {}".format(list(vals))
@@ -1010,6 +1011,25 @@ def test_filter_numeric_isnotin_hashing_overflow(lmdb_version_store):
     assert_frame_equal(df, result)
 
 
+_uint64_max = np.iinfo(np.uint64).max
+
+
+@pytest.mark.parametrize("op", ("in", "not in"))
+@pytest.mark.parametrize("signed_type", (np.int8, np.int16, np.int32, np.int64))
+@pytest.mark.parametrize("uint64_in", ("df", "vals") if PANDAS_VERSION >= Version("1.2") else ("vals",))
+def test_filter_numeric_membership_mixing_int64_and_uint64(lmdb_version_store, op, signed_type, uint64_in):
+    signed = signed_type(-1)
+    if uint64_in == "df":
+        df, vals = pd.DataFrame({"a": [_uint64_max]}), [signed]
+    else:
+        df, vals = pd.DataFrame({"a": [signed]}), [_uint64_max]
+
+    q = QueryBuilder()
+    q = q[q["a"].isin(vals) if op == "in" else q["a"].isnotin(vals)]
+    pandas_query = f"a {op} {vals}"
+    generic_filter_test(lmdb_version_store, "test_filter_numeric_mixing", df, q, pandas_query)
+
+
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(df=dataframes_with_names_and_dtypes(["a"], integral_type_strategies()))
@@ -1025,12 +1045,7 @@ def test_filter_numeric_isnotin_empty_set(lmdb_version_store, df):
 def test_filter_nones_and_nans_retained_in_string_column(lmdb_version_store):
     lib = lmdb_version_store
     sym = "test_filter_nones_and_nans_retained_in_string_column"
-    df = pd.DataFrame(
-        {
-            "filter_column": [1, 2, 1, 2, 1, 2],
-            "string_column": ["1", "2", np.nan, "4", None, "6"],
-        },
-    )
+    df = pd.DataFrame({"filter_column": [1, 2, 1, 2, 1, 2], "string_column": ["1", "2", np.nan, "4", None, "6"]})
     lib.write(sym, df)
     q = QueryBuilder()
     q = q[q["filter_column"] == 1]
@@ -2027,6 +2042,32 @@ def test_filter_batch_incorrect_query_count(lmdb_version_store):
         batch_res = lmdb_version_store.batch_read([sym1, sym2], query_builder=[q])
     with pytest.raises(ArcticNativeException):
         batch_res = lmdb_version_store.batch_read([sym1, sym2], query_builder=[q, q, q])
+
+
+def test_filter_batch_symbol_doesnt_exist(lmdb_version_store):
+    sym1 = "sym1"
+    sym2 = "sym2"
+    df1 = DataFrame({"a": [1, 2]}, index=np.arange(2))
+    lmdb_version_store.write(sym1, df1)
+    q = QueryBuilder()
+    q = q[q["a"] == 2]
+    with pytest.raises(NoDataFoundException):
+        batch_res = lmdb_version_store.batch_read([sym1, sym2], query_builder=q)
+
+
+def test_filter_batch_version_doesnt_exist(lmdb_version_store):
+    sym1 = "sym1"
+    sym2 = "sym2"
+    df1 = DataFrame({"a": [1, 2]}, index=np.arange(2))
+    df2 = DataFrame({"a": [2, 3]}, index=np.arange(2))
+    lmdb_version_store.write(sym1, df1)
+    lmdb_version_store.write(sym2, df2)
+
+    q = QueryBuilder()
+    q = q[q["a"] == 2]
+    # pandas_query = "a == 2"
+    with pytest.raises(NoDataFoundException):
+        batch_res = lmdb_version_store.batch_read([sym1, sym2], as_ofs=[0, 1], query_builder=q)
 
 
 def test_filter_numeric_membership_equivalence():
