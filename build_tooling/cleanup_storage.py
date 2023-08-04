@@ -30,15 +30,6 @@ def real_s3_credentials():
     
     return endpoint, bucket, region, access_key, secret_key, clear
 
-def test_df_3_cols(start=0):
-    return pd.DataFrame(
-        {
-            "x": np.arange(start, start + 10, dtype=np.int64),
-            "y": np.arange(start + 10, start + 20, dtype=np.int64),
-            "z": np.arange(start + 20, start + 30, dtype=np.int64),
-        },
-        index=np.arange(start, start + 10, dtype=np.int64),
-    )
 # TODO: Add support for other storages
 endpoint, bucket, region, access_key, secret_key, clear = real_s3_credentials()
 uri = f"s3s://{endpoint}:{bucket}?access={access_key}&secret={secret_key}&region={region}&path_prefix=ci_tests/"
@@ -49,15 +40,5 @@ ac = Arctic(uri)
 branch_name = sys.argv[1]
 for lib in LIBRARIES:
     lib_name = f"{branch_name}_{lib}"
-    lib = ac[lib_name]
-    print(lib_name)
 
-    symbols = lib.list_symbols()
-    print(symbols)
-    assert len(symbols) == 3
-    for sym in ["one", "two", "three"]:
-        assert sym in symbols
-    for sym in symbols:
-        df = lib.read(sym).data
-        column_names = df.columns.values.tolist()
-        assert column_names == ["x", "y", "z"]
+    ac.delete_library(lib_name)
