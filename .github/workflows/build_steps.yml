@@ -9,7 +9,7 @@ on:
       cibw_version:      {required: false, type: string, description: Follower only. Must match the cibw_image_tag}
       python_deps_ids:   {default: '[""]', type: string, description: Follower test matrix parameter. JSON string.}
       python3:           {default: -1, type: number, description: Python 3 minor version}
-      real_storage:      {required: false, default: "false", type: string, description: Specifies wheather the python tests should tests against real storages e.g. AWS S3  }
+      real_storage:      {required: false, default: "false", type: string, description: Specifies whether the python tests should tests against real storages e.g. AWS S3  }
 jobs:
   compile:
     strategy:

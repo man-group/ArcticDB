@@ -30,6 +30,9 @@ else:
 
 # TODO: Add a check if the real storage tests are enabled
 @pytest.mark.parametrize("library", LIBRARIES)
+@pytest.mark.skipif(
+    not REAL_STORAGE_TESTS_ENABLED, reason="This test should run only if the real storage tests are enabled"
+)
 def test_real_s3_storage_read(real_s3_credentials, library):
     endpoint, bucket, region, access_key, secret_key, clear = real_s3_credentials
     uri = f"s3s://{endpoint}:{bucket}?access={access_key}&secret={secret_key}&region={region}&path_prefix=ci_tests/"
@@ -45,6 +48,9 @@ def test_real_s3_storage_read(real_s3_credentials, library):
         assert column_names == ["x", "y", "z"]
 
 
+@pytest.mark.skipif(
+    not REAL_STORAGE_TESTS_ENABLED, reason="This test should run only if the real storage tests are enabled"
+)
 def test_real_s3_storage_write(real_s3_credentials, three_col_df):
     library_to_write_to = REAL_STORAGE_LIB_NAME
     endpoint, bucket, region, access_key, secret_key, clear = real_s3_credentials
