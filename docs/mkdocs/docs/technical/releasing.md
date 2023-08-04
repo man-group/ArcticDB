@@ -23,7 +23,7 @@ Click `Run Workflow` on the right hand side.
 >
 > If preparing a release for a new _patch_ version, create a full release (X.Y.Z).
 >
-> If there is an outstanding release candidate and no issues have been found, promote the release candidate to a full release (X.Y.Z).
+> If there is an outstanding release candidate (look [here](https://pypi.org/project/arcticdb/#history)) and no issues have been found, promote the release candidate to a full release (X.Y.Z).
 >
 > We will create a new release candidate for an existing pre-release version only to correct an issue that has been found with the additional functionality included in the prior pre-release version. In other words, we will promote rc1 to rc2 only if a bug has been found in functionality added in rc1, and not to provide a bugfix to functionality present prior to rc1.  
 
