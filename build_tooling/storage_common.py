@@ -32,7 +32,7 @@ def real_s3_credentials():
 def get_real_s3_uri():
     endpoint, bucket, region, access_key, secret_key, clear = real_s3_credentials()
     uri = f"s3s://{endpoint}:{bucket}?access={access_key}&secret={secret_key}&region={region}&path_prefix=ci_tests/"
-    return
+    return uri
 
 def test_df_3_cols(start=0):
     return pd.DataFrame(
