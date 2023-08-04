@@ -13,6 +13,11 @@ Navigate to the [Tag and Release](https://github.com/man-group/ArcticDB/actions/
 
 Click `Run Workflow` on the right hand side.
 
+> [!IMPORTANT]  
+> **Pre-release, mainline, or hotfix?**
+> We create pre-release versions for _major_ and _minor_ releases. That is, if incrementing X.y.z or x.Y.z we will release a pre-release version prior to a main release.
+> If you're about to tag a new _major_ or _minor_ release, please use a pre-release versioning scheme (X.Y.ZrcN). Otherwise, tag a full relese (X.Y.Z).
+
 If creating a new release off master:
 1. Type in the new version number eg `1.6.0` or `1.6.0rc0` (for a pre-release).
 2. Click `Run workflow`.
@@ -27,7 +32,7 @@ If hotfixing an existing release, first branch off the previously-released tag, 
 2. Select the workflow off the source tag (e.g. `1.6.0`)
 2. Click `Run workflow`.
 
-This will create a branch off of `master` incrementing the version in `setup.cfg` but we ignore it for now.
+This will create a branch off of `master`, incrementing the version specified in code. 
 
 The [build will now be running for the tag.](https://github.com/man-group/ArcticDB/actions/workflows/build.yml)
 
