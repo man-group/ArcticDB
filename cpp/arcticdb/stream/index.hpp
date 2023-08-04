@@ -306,7 +306,7 @@ inline Index index_type_from_descriptor(const StreamDescriptor &desc) {
         return TableIndex::make_from_descriptor(desc);
     case IndexDescriptor::ROWCOUNT:
         return RowCountIndex{};
-    default:util::raise_rte("Data obtained from storage refers to an index type that this build of ArcticDB doesn't understand ({}).", desc.index().proto().kind());
+    default:util::raise_rte("Data obtained from storage refers to an index type that this build of ArcticDB doesn't understand ({}).", int(desc.index().proto().kind()));
     }
 }
 
@@ -319,7 +319,7 @@ inline Index default_index_type_from_descriptor(const IndexDescriptor::Proto &de
     case IndexDescriptor::ROWCOUNT:
         return RowCountIndex::default_index();
     default:
-        util::raise_rte("Unknown index type {} trying to generate index type", desc.kind());
+        util::raise_rte("Unknown index type {} trying to generate index type", int(desc.kind()));
     }
 }
 
@@ -333,7 +333,7 @@ inline Index variant_index_from_type(IndexDescriptor::Type type) {
     case IndexDescriptor::ROWCOUNT:
         return RowCountIndex{};
     default:
-        util::raise_rte("Unknown index type {} trying to generate index type", type);
+        util::raise_rte("Unknown index type {} trying to generate index type", int(type));
     }
 }
 

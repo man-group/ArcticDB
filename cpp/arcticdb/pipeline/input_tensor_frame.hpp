@@ -62,12 +62,16 @@ struct InputTensorFrame {
     void set_index_range() {
             // Fill index range
             // Note RowCountIndex will normally have an index field count of 0
-            if (desc.index().field_count() == 1) {
+            if(num_rows == 0) {
+                index_range.start_  = IndexValue{0};
+                index_range.end_ = IndexValue{0};
+            } else if (desc.index().field_count() == 1) {
                 visit_field(desc.field(0), [&](auto &&tag) {
                     using DT = std::decay_t<decltype(tag)>;
                     using RawType = typename DT::DataTypeTag::raw_type;
                     if constexpr (std::is_integral_v<RawType> || std::is_floating_point_v<RawType>) {
                         util::check(static_cast<bool>(index_tensor), "Got null index tensor in set_index_range");
+                        util::check(index_tensor->nbytes() > 0, "Empty index tensor");
                         auto &tensor = index_tensor.value();
                         auto start_t = tensor.ptr_cast<RawType>(0);
                         auto end_t = tensor.ptr_cast<RawType>(static_cast<size_t>(tensor.shape(0) - 1));
