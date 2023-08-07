@@ -81,8 +81,7 @@ class VariantStorage final : public Storage<VariantStorage<VariantStorageType>> 
         });
     }
 
-    template<class Visitor>
-    void do_iterate_type(KeyType key_type, Visitor &&visitor, const std::string &prefix) {
+    void do_iterate_type(KeyType key_type, const IterateTypeVisitor& visitor, const std::string &prefix) {
          delegate([&](auto &&impl) {
              impl.iterate_type(key_type, visitor, prefix);
         });

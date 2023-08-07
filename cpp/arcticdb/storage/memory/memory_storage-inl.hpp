@@ -120,8 +120,7 @@ inline bool MemoryStorage::do_key_exists(const VariantKey& key) {
         return false;
     }
 
-    template<class Visitor>
-    void MemoryStorage::do_iterate_type(KeyType key_type, Visitor &&visitor, const std::string &/*prefix*/) {
+    inline void MemoryStorage::do_iterate_type(KeyType key_type, const IterateTypeVisitor& visitor, const std::string &/*prefix*/) {
         ARCTICDB_SAMPLE(MemoryStorageItType, 0)
         std::lock_guard lock{*mutex_};
         auto& key_vec = data_[key_type];
