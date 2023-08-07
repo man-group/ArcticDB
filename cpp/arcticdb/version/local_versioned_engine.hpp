@@ -45,9 +45,11 @@ struct IndexKeyAndUpdateInfo{
 class LocalVersionedEngine : public VersionedEngine {
 
 public:
+    template<class ClockType = util::SysClock>
     explicit LocalVersionedEngine(
         const std::shared_ptr<storage::Library>& library,
-        const std::optional<std::string>& license_key = std::nullopt);
+        const ClockType& = util::SysClock{} // Only used to allow the template variable to be inferred
+        );
 
     virtual ~LocalVersionedEngine() = default;
 
@@ -90,17 +92,20 @@ public:
 
     std::optional<VersionedItem> get_latest_version(
         const StreamId &stream_id,
-        const VersionQuery& version_query);
+        const VersionQuery& version_query,
+        const ReadOptions& read_options);
 
     std::optional<VersionedItem> get_specific_version(
         const StreamId &stream_id,
         SignedVersionId signed_version_id,
-        const VersionQuery& version_query);
+        const VersionQuery& version_query,
+        const ReadOptions& read_options);
 
     std::optional<VersionedItem> get_version_at_time(
         const StreamId& stream_id,
         timestamp as_of,
-        const VersionQuery& version_query);
+        const VersionQuery& version_query,
+        const ReadOptions& read_options);
 
     std::optional<VersionedItem> get_version_from_snapshot(
         const StreamId& stream_id,
@@ -113,7 +118,8 @@ public:
 
     std::optional<VersionedItem> get_version_to_read(
         const StreamId& stream_id,
-        const VersionQuery& version_query
+        const VersionQuery& version_query,
+        const ReadOptions& read_options
     );
 
     FrameAndDescriptor read_dataframe_internal(
@@ -129,16 +135,15 @@ public:
 
     DescriptorItem read_descriptor_internal(
             const StreamId& stream_id,
-            const VersionQuery& version_query);
+            const VersionQuery& version_query,
+            const ReadOptions& read_options);
 
     void write_parallel_frame(
         const StreamId& stream_id,
         InputTensorFrame&& frame) const override;
 
     bool has_stream(
-        const StreamId & stream_id,
-        const std::optional<bool>& skip_compat,
-        const std::optional<bool>& iterate_on_failure
+        const StreamId & stream_id
     ) override;
 
     void delete_tree(
@@ -146,7 +151,7 @@ public:
         const PreDeleteChecks& checks = default_pre_delete_checks
     ) override {
         auto snapshot_map = get_master_snapshots_map(store());
-        delete_trees_responsibly(idx_to_be_deleted, snapshot_map, std::nullopt, checks);
+        delete_trees_responsibly(idx_to_be_deleted, snapshot_map, std::nullopt, checks).get();
     };
 
     /**
@@ -157,7 +162,7 @@ public:
      * to exclude it from shared data check
      * @param dry_run Only do the check, but don't actually delete anything.
      */
-    void delete_trees_responsibly(
+    folly::Future<folly::Unit> delete_trees_responsibly(
         const std::vector<IndexTypeKey>& idx_to_be_deleted,
         const arcticdb::MasterSnapshotMap& snapshot_map,
         const std::optional<SnapshotId>& snapshot_being_deleted = std::nullopt,
@@ -293,7 +298,8 @@ public:
 
     std::vector<DescriptorItem> batch_read_descriptor_internal(
             const std::vector<StreamId>& stream_ids,
-            const std::vector<VersionQuery>& version_queries);
+            const std::vector<VersionQuery>& version_queries,
+            const ReadOptions& read_options);
 
     std::vector<std::pair<VersionedItem, TimeseriesDescriptor>> batch_restore_version_internal(
         const std::vector<StreamId>& stream_ids,
@@ -307,11 +313,13 @@ public:
 
     std::vector<std::pair<std::optional<VariantKey>, std::optional<google::protobuf::Any>>> batch_read_metadata_internal(
         const std::vector<StreamId>& stream_ids,
-        const std::vector<VersionQuery>& version_queries);
+        const std::vector<VersionQuery>& version_queries,
+        const ReadOptions& read_options);
 
     std::pair<std::optional<VariantKey>, std::optional<google::protobuf::Any>> read_metadata_internal(
         const StreamId& stream_id,
-        const VersionQuery& version_query);
+        const VersionQuery& version_query,
+        const ReadOptions& read_options);
 
     bool is_symbol_fragmented(const StreamId& stream_id, std::optional<size_t> segment_size) override;
 
@@ -351,6 +359,11 @@ public:
         const UpdateInfo& stream_update_info,
         bool prune_previous_versions);
 
+    std::vector<folly::Future<folly::Unit>> batch_write_version_and_prune_if_needed(
+        const std::vector<AtomKey>& index_keys,
+        const std::vector<UpdateInfo>& stream_update_info_vector,
+        bool prune_previous_versions);
+
     std::vector<VersionedItem> batch_write_versioned_dataframe_internal(
         const std::vector<StreamId>& stream_ids,
         std::vector<InputTensorFrame>&& frames,
@@ -365,12 +378,17 @@ public:
 
     std::unordered_map<KeyType, std::pair<size_t, size_t>> scan_object_sizes();
     std::shared_ptr<Store>& _test_get_store() { return store_; }
-    AtomKey _test_write_segment(const std::string& symbol);
     void _test_set_validate_version_map() {
         version_map()->set_validate(true);
     }
     void _test_set_store(std::shared_ptr<Store> store);
     std::shared_ptr<VersionMap> _test_get_version_map();
+
+    /** Get the time used by the Store (e.g. that would be used in the AtomKey).
+        For testing purposes only. */
+    entity::timestamp get_store_current_timestamp_for_tests() {
+        return store()->current_timestamp();
+    }
 
 protected:
     VersionedItem compact_incomplete_dynamic(
@@ -387,7 +405,7 @@ protected:
      *
      * @param pruned_indexes Must all share the same id() and should be tombstoned.
      */
-    void delete_unreferenced_pruned_indexes(
+    folly::Future<folly::Unit> delete_unreferenced_pruned_indexes(
             const std::vector<AtomKey> &pruned_indexes,
             const AtomKey& key_to_keep
     );

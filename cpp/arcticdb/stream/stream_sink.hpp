@@ -121,6 +121,9 @@ struct StreamSink {
     [[nodiscard]] virtual folly::Future<std::vector<RemoveKeyResultType>> remove_keys(
         const std::vector<entity::VariantKey> &keys, storage::RemoveOpts opts = storage::RemoveOpts{}) = 0;
 
+    [[nodiscard]] virtual folly::Future<std::vector<RemoveKeyResultType>> remove_keys(
+        std::vector<entity::VariantKey> &&keys, storage::RemoveOpts opts = storage::RemoveOpts{}) = 0;
+
     virtual timestamp current_timestamp() = 0;
 };
 

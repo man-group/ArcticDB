@@ -18,15 +18,13 @@ namespace arcticdb::storage {
      * not contain any positioning information for the contained data.
      */
     class KeySegmentPair {
-
         struct KeySegmentData {
             VariantKey key_;
             Segment segment_;
-            size_t id_;
 
             KeySegmentData() = default;
-            explicit KeySegmentData(VariantKey &&key) : key_(std::move(key)), segment_(), id_(0) {}
-            KeySegmentData(VariantKey &&key, Segment &&segment, size_t id) : key_(std::move(key)), segment_(std::move(segment)), id_(id) {}
+            explicit KeySegmentData(VariantKey &&key) : key_(std::move(key)), segment_() {}
+            KeySegmentData(VariantKey &&key, Segment &&segment) : key_(std::move(key)), segment_(std::move(segment)) {}
 
             ARCTICDB_NO_MOVE_OR_COPY(KeySegmentData)
         };
@@ -35,9 +33,7 @@ namespace arcticdb::storage {
         KeySegmentPair() : data_(std::make_shared<KeySegmentData>()) {}
         explicit KeySegmentPair(VariantKey &&key) : data_(std::make_shared<KeySegmentData>(std::move(key))) {}
         KeySegmentPair(VariantKey &&key, Segment&& segment) :
-            data_(std::make_shared<KeySegmentData>(std::move(key), std::move(segment), 0)) {}
-        KeySegmentPair(VariantKey &&key, Segment&& segment, size_t id) :
-            data_(std::make_shared<KeySegmentData>(std::move(key), std::move(segment), id)) {}
+            data_(std::make_shared<KeySegmentData>(std::move(key), std::move(segment))) {}
 
         ARCTICDB_MOVE_COPY_DEFAULT(KeySegmentPair)
 
@@ -54,7 +50,7 @@ namespace arcticdb::storage {
             return std::get<AtomKey >(variant_key());
         }
 
-        const AtomKey &atom_key() const {
+        [[nodiscard]] const AtomKey &atom_key() const {
             util::check(std::holds_alternative<AtomKey>(variant_key()), "Expected atom key access");
             return std::get<AtomKey >(variant_key());
         }
@@ -64,7 +60,7 @@ namespace arcticdb::storage {
             return std::get<RefKey >(variant_key());
         }
 
-        const RefKey &ref_key() const {
+        [[nodiscard]] const RefKey &ref_key() const {
             util::check(std::holds_alternative<RefKey>(variant_key()), "Expected ref key access");
             return std::get<RefKey >(variant_key());
         }
@@ -73,29 +69,26 @@ namespace arcticdb::storage {
             return data_->key_;
         }
 
-        const VariantKey& variant_key() const {
+        [[nodiscard]] const VariantKey& variant_key() const {
             return data_->key_;
         }
 
-        const Segment &segment() const {
+        [[nodiscard]] const Segment &segment() const {
             return data_->segment_;
         }
 
-        bool has_segment() const {
+        [[nodiscard]] bool has_segment() const {
             return !segment().is_empty();
         }
 
-        std::string_view key_view() const {
+        [[nodiscard]] std::string_view key_view() const {
             return variant_key_view(variant_key());
         }
 
-        KeyType key_type() const {
+        [[nodiscard]] KeyType key_type() const {
             return variant_key_type(variant_key());
         }
 
-        size_t id() {
-            return data_->id_;
-        }
     private:
         std::shared_ptr<KeySegmentData> data_;
     };

@@ -344,6 +344,7 @@ set(arcticdb_srcs
         version/version_store_objects.hpp
         version/version_utils.hpp
         # CPP files
+        async/async_store.cpp
         async/task_scheduler.cpp
         async/tasks.cpp
         codec/codec.cpp
@@ -422,7 +423,7 @@ set(arcticdb_srcs
         version/version_core.cpp
         version/version_store_api.cpp
         version/version_utils.cpp
-        version/symbol_list.cpp)
+        version/symbol_list.cpp )
 
 # Exclude vendored sources when using conda.
 if(NOT ${ARCTICDB_USING_CONDA}) #Awaiting Azure sdk support in conda https://github.com/man-group/ArcticDB/issues/519

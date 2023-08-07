@@ -31,6 +31,14 @@ enum class LoadType :
     LOAD_ALL = 6
 };
 
+inline constexpr bool is_latest_load_type(LoadType load_type) {
+    return load_type == LoadType::LOAD_LATEST || load_type == LoadType::LOAD_LATEST_UNDELETED;
+}
+
+inline constexpr bool is_partial_load_type(LoadType load_type) {
+    return load_type == LoadType::LOAD_DOWNTO || load_type == LoadType::LOAD_FROM_TIME;
+}
+
 struct LoadParameter {
     explicit LoadParameter(LoadType load_type) :
         load_type_(load_type) {
@@ -55,6 +63,9 @@ struct LoadParameter {
     LoadType load_type_ = LoadType::NOT_LOADED;
     std::optional<SignedVersionId> load_until_ = std::nullopt;
     std::optional<timestamp> load_from_time_ = std::nullopt;
+    bool use_previous_ = false;
+    bool skip_compat_ = true;
+    bool iterate_on_failure_ = false;
 
     void validate() const {
         util::check(load_type_ == LoadType::LOAD_DOWNTO ? static_cast<bool>(load_until_) : !static_cast<bool>(load_until_),
@@ -368,16 +379,6 @@ inline std::optional<AtomKey> find_index_key_for_version_id(
     bool included_deleted=true) {
     auto key = std::find_if(std::begin(entry->keys_), std::end(entry->keys_), [version_id] (const auto& key) {
         return is_index_key_type(key.type()) && key.version_id() == version_id;
-    });
-    if(key == std::end(entry->keys_))
-        return std::nullopt;
-
-    return included_deleted || !entry->is_tombstoned(*key) ? std::make_optional(*key) : std::nullopt;
-}
-
-inline std::optional<AtomKey> find_index_key_for_version_timestamp(timestamp as_of, const std::shared_ptr<VersionMapEntry>& entry, bool included_deleted=true) {
-    auto key = std::find_if(std::begin(entry->keys_), std::end(entry->keys_), [as_of] (const auto& key) {
-        return is_index_key_type(key.type()) && key.creation_ts() == as_of;
     });
     if(key == std::end(entry->keys_))
         return std::nullopt;

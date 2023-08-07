@@ -11,9 +11,8 @@ import pandas as pd
 import pytest
 import random
 from itertools import chain, product
+from datetime import datetime
 
-from arcticdb.config import Defaults
-from arcticdb.version_store.helper import ArcticMemoryConfig
 from arcticdb_ext.storage import KeyType, NoDataFoundException
 from arcticdb.util.test import config_context, random_string, assert_frame_equal
 from arcticdb_ext.tools import AZURE_SUPPORT
@@ -78,7 +77,8 @@ def test_version_missing(object_version_store):
 
 
 @pytest.mark.parametrize("idx", [0, 1, 2])
-def test_delete_version_basic(object_version_store, idx, sym):
+def test_delete_version_basic(s3_version_store, idx, sym):
+    object_version_store = s3_version_store
     symbol = sym
     df1 = pd.DataFrame({"x": np.arange(10, dtype=np.int64)})
     object_version_store.write(symbol, df1)
@@ -579,3 +579,17 @@ def test_delete_date_range_remove_everything(version_store_factory, map_timeout)
 
         vit = lmdb_version_store.read(symbol)
         assert_frame_equal(vit.data, df)
+
+
+def test_delete_read_from_timestamp(lmdb_version_store):
+    sym = "test_from_timestamp_with_delete"
+    lib = lmdb_version_store
+    lib.write(sym, 1)
+    lib.write(sym, 2)
+
+    lib.delete_version(sym, 0)
+    ts = datetime.utcnow()
+    lib.write(sym, 3)
+    lib.write(sym, 4)
+    assert lib.read(sym, as_of=ts).data == 2
+    assert lib.batch_read([sym], as_ofs=[ts])[sym].data == 2
