@@ -44,8 +44,7 @@ namespace arcticdb::storage::memory {
 
         inline bool do_fast_delete();
 
-        template<class Visitor>
-        void do_iterate_type(KeyType key_type, Visitor &&visitor, const std::string &prefix);
+        void do_iterate_type(KeyType key_type, const IterateTypeVisitor& visitor, const std::string & prefix);
 
     private:
         using KeyMap = std::unordered_map<VariantKey, Segment>;

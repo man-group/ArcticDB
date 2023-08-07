@@ -19,6 +19,8 @@ using Range = folly::Range<It>;
 
 using VariantKey = std::variant<entity::AtomKey, entity::RefKey>;
 
+using IterateTypeVisitor = std::function<void(VariantKey &&key)>;
+
 // Aliases to clarify usage and allow more detailed typing in the future, similar to aliases for AtomKey:
 /** Should be a SNAPSHOT_REF key or the legacy SNAPSHOT AtomKey. */
 using SnapshotVariantKey = VariantKey;
