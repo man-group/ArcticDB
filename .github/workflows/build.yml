@@ -18,6 +18,7 @@ on:
   workflow_dispatch:
     inputs:
       real_storage:
+        description: Specifies whether we should run the real storage tests or not
         type: boolean
       pypi_publish:
         type: boolean
@@ -78,12 +79,11 @@ jobs:
       cmake_preset_type_resolved: ${{inputs.cmake_preset_type != '-' && inputs.cmake_preset_type || env.CMAKE_PRESET_TYPE}}
       linux_matrix: ${{toJson(matrix.linux_matrix)}}
       windows_matrix: ${{toJson(matrix.windows_matrix)}}
-      real_storage: ${{inputs.real_storage}}
 
   real_storage_seed_linux:
     # Then use the cached compilation artifacts to build other python versions concurrently in cibuildwheels
     needs: [common_config]
-    if: needs.common_config.outputs.real_storage == true
+    if: inputs.real_storage == true
     strategy:
       fail-fast: false
       matrix:
@@ -104,7 +104,7 @@ jobs:
   real_storage_seed_windows:
     # Then use the cached compilation artifacts to build other python versions concurrently in cibuildwheels
     needs: [common_config]
-    if: needs.common_config.outputs.real_storage == true
+    if: inputs.real_storage == true
     strategy:
       fail-fast: false
       matrix:
@@ -190,7 +190,7 @@ jobs:
       cmake_preset_type: ${{needs.common_config.outputs.cmake_preset_type_resolved}}
       matrix: ${{toJson(matrix.matrix_override)}}
       python_deps_ids: ${{toJson(matrix.python_deps_ids)}}
-      real_storage: ${{needs.common_config.outputs.real_storage}}
+      real_storage: ${{inputs.real_storage}}
   
   leader-compile-windows:
     needs: [common_config]
@@ -229,12 +229,12 @@ jobs:
       cibw_version: ${{needs.common_config.outputs.cibuildwheel_ver}}
       cmake_preset_type: ${{needs.common_config.outputs.cmake_preset_type_resolved}}
       matrix: ${{needs.common_config.outputs.windows_matrix}}
-      real_storage: ${{ needs.common_config.outputs.real_storage }}
+      real_storage: ${{ inputs.real_storage }}
 
   real_storage_verify_linux:
     # Then use the cached compilation artifacts to build other python versions concurrently in cibuildwheels
     needs: [common_config, follower-linux]
-    if: needs.common_config.outputs.real_storage == true
+    if: inputs.real_storage == true
     strategy:
       fail-fast: false
       matrix:
@@ -255,7 +255,7 @@ jobs:
   real_storage_verify_windows:
     # Then use the cached compilation artifacts to build other python versions concurrently in cibuildwheels
     needs: [common_config, follower-windows]
-    if: needs.common_config.outputs.real_storage == true
+    if: inputs.real_storage == true
     strategy:
       fail-fast: false
       matrix:
@@ -275,7 +275,7 @@ jobs:
     
   real_storage_cleanup:
     needs: [common_config, real_storage_verify_windows, real_storage_verify_linux]
-    if: needs.common_config.outputs.real_storage == true
+    if: inputs.real_storage == true
     name: Cleanup real storages
     uses: ./.github/workflows/real_storage.yml
     secrets: inherit

@@ -5,12 +5,9 @@ from storage_common import *
 
 # TODO: Add support for other storages
 uri = get_real_s3_uri()
-print(f"Connecting to {uri}")
 
 ac = Arctic(uri)
 lib_name = sys.argv[1]
-
-print(f"Connecting to {uri}")
 
 ac = Arctic(uri)
 branch_name = sys.argv[1]

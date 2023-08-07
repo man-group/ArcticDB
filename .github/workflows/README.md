@@ -7,11 +7,11 @@ CI system guide
 
 # Introduction
 
-This is the documentation of CI system that is used to build and publish ArcticDB. \
+This is the documentation of CI system that is used to build and publish ArcticDB.
 It aims to provide an overview of the system and the general steps.
 
-Currently, the CI system is based on GitHub Actions. \
-It can be triggered automatically on push to any branch or manually [here](https://github.com/man-group/ArcticDB/actions/workflows/build.yml). \
+Currently, the CI system is based on GitHub Actions.
+It can be triggered automatically on push to any branch or manually [here](https://github.com/man-group/ArcticDB/actions/workflows/build.yml).
 There is also a scheduled build of the master branch that runs every night and tests against real, persistent storages (e.g. AWS S3, Azure Cloud, etc) (**NOT YET IMPLEMENTED**).
 
 # Overview
@@ -40,7 +40,7 @@ flowchart LR
         cpp_tests_windows_compile --> cpp_tests_windows
         cpp_tests_linux_compile --> cpp_tests_linux
     end
-    subgraph NOT YET IMPLEMETED
+    subgraph NOT YET IMPLEMENTED
         subgraph real_storage_tests
             direction LR
             pre_real_storages_test --> real_storages_test
@@ -56,16 +56,16 @@ flowchart LR
     can_merge --> pub_check{publish_env} --> publish
 ```
 
-This diagram overviews the structure of the main CI system. \
-The system is outlined in the [build.yml](build.yml) file. \
-The concrete steps are implemented in [build_steps.yml](build_steps.yml) file. \
+This diagram overviews the structure of the main CI system.
+The system is outlined in the [build.yml](build.yml) file.
+The concrete steps are implemented in [build_steps.yml](build_steps.yml) file.
 For more information, see the [Description of the YML files](#description-of-the-yml-files) section.
 
 ## Common config job
 
-This job is used to configure the CI run. \
-It sets up what subsequent jobs, their structure where they will be execute, etc. \
-This is where environemt variables are set and also some of the variables that are used by the later jobs. \
+This job is used to configure the CI run.
+It sets up what subsequent jobs, their structure where they will be execute, etc.
+This is where environment variables are set and also some of the variables that are used by the later jobs.
 You can see them in the outputs part and they are used by the other jobs by calling *needs.common_config.outputs...*.
 
 ## CI Build Wheel Docker Image
@@ -74,45 +74,47 @@ TODO
 
 ## Leader jobs
 
-The leader jobs are designed to do the C++ core compilation using one Python version to seed the compilation caches. \
+The leader jobs are designed to do the C++ core compilation using one Python version to seed the compilation caches.
 This way, if there is a general problem with the build, it can fail quicker, without having to way for the different versions.
 There are leader jobs for both Linux and Windows.
 
 ## C++ Tests jobs
 
-These jobs compile the C++ code and run the C++ tests. \
-They are designed to run concurently with the Follower jobs, which test against the different versions of Python.
+These jobs compile and run the C++ tests.
+They are designed to run concurrently with the Follower jobs, which test against the different versions of Python.
 
 ## Follower jobs
 
-After we the leader jobs have passed succesfully, we run Follower jobs that compile and test against the rest of the Python versions that are supported.
+After the leader jobs have passed successfully, we run Follower jobs that compile and test against the all of the supported Python versions.
 
 ## Docs job
 
-The Docs job compiles and publishes the latest docs. \
-It needs a valid ArcticDB wheel to run, so it depedns on the Linux jobs. \
-Also currently, the automatic builds trigger only from cahnges in the code. \
+The Docs job compiles and publishes the latest docs.
+It needs a valid ArcticDB wheel to run, so it depends on the Linux jobs.
+Also currently, the automatic builds trigger only from changes in the code.
 **So if you make changes that are only in the docs, you will need to start a manual build and supply a valid ArcticDB wheel.**
 
 ## can_merge check
 
-This is a simple check that is used by GitHub to determine, if a PR can be merged. \
+This is a simple check that is used by GitHub to determine, if a PR can be merged.
 It is also used as a gate to check, if we can publish a new release.
 
 ## Publish
 
-In this step, we prepare the release notes and publish to PyPi. \
-This step cannot run on automatic builds, because it requires the *pypi_publish* argument to be enable, which can be done only with a manual build.
+In this step, we prepare the release notes and publish to PyPi.
+This step cannot run on automatic builds (except for [version tag builds](https://github.com/man-group/ArcticDB/blob/master/.github/workflows/build.yml#L59)), because it requires the *pypi_publish* argument to be enable, which can be done only with a manual build.
 
 # Build Inputs
 
-When a manual build is trigger, the user can specify the following input arguments:
+When a manual build is triggered, the user can specify the following input arguments:
 
 - Use workflow from - this can be used to select the branch that needs to be built
-- pypi_publish - a boolean option on wheather or not the build should publish to PyPi
+- pypi_publish - a boolean option on whether or not the build should publish to PyPi
 - Environment to publish to - to select where to publish to (e.g. ProdPypi or Test Pypi)
+    - used for publishing both the docs and the wheels
+    - has not effect, unless pypi_publish=true
 - Override CMAKE preset type - to override the build type (e.g. release vs debug)
-- real_store - wheather the built should execute tests that rely on real storages (e.g. AWS S3), normally it is enabled only on nightly/scheduled builds **(NOT YET IMPLEMENTED)**
+- real_storage - whether the built should execute tests that rely on real storages (e.g. AWS S3), normally it is enabled only on nightly/scheduled builds **(NOT YET IMPLEMENTED)**
 
 # Description of the YML files
 
@@ -137,7 +139,7 @@ The logic for the steps is implemented in [build_steps.yml](build_steps.yml).
 
 ## [build-steps.yml](build-steps.yml)
 
-This is where the actual logic for the build steps is implemented. \
+This is where the actual logic for the build steps is implemented.
 This logic is used in [build.yml](build.yml).
 
 ### Settings
@@ -177,7 +179,7 @@ environment's protection rules.
 * Gathers the wheels and uploads them to Pypi
 * Generates a draft GitHub Release and attaches debug artifacts
 
-**Runs on forks**: Yes. Must create two environments named `TestPypi` and `ProdPypi` with Pypi creds.
+**Runs on forks**: Yes. Must create two environments named `TestPypi` and `ProdPypi` with Pypi credentials.
 
 ### Call patterns
 * Called at the end of a `build.yml` build with `pypi_publish` explicit set or resolved to true (e.g. version tag build)
@@ -191,7 +193,7 @@ See also: [`twine` docs](https://twine.readthedocs.io/en/stable/#environment-var
 <tr><th>inputs.run_id</th><td>For manual runs, specify the GitHub Action run ID to gather artifacts from</td>
 <tr><th>vars.TWINE_USERNAME<br>or secrets.TWINE_USERNAME</th><td colspan="2">Please set API tokens, not real user names and passwords.</td>
 <tr><th>secrets.TWINE_PASSWORD</th>
-<tr><th>vars.TWINE_REPOSITORY</th><td>Well know repos like pypi OR testpypi</code>
+<tr><th>vars.TWINE_REPOSITORY</th><td>Well know repos like pypi OR TestPypi</code>
 <tr><th>vars.TWINE_REPOSITORY_URL</th><td>Alternatively specify the URL of the repo</td>
 <tr><th>vars.TWINE_CERT</th><td>SSL CA</td>
 </table>

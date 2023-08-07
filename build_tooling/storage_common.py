@@ -43,9 +43,3 @@ def test_df_3_cols(start=0):
         },
         index=np.arange(start, start + 10, dtype=np.int64),
     )
-
-def test_write(lib, symbol, df):
-    lib.write(symbol, df)
-
-def test_append(lib, symbol, df):
-    lib.append(symbol, df)
