@@ -61,7 +61,7 @@ inline void MongoStorage::do_read(Composite<VariantKey>&& ks, const ReadVisitor&
                 auto collection = collection_name(variant_key_type(k));
                 auto kv = client_->read_segment(db_, collection, k);
                 if(kv.has_segment())
-                    visitor(k, kv.segment());
+                    visitor(k, std::move(kv.segment()));
                 else
                    failed_reads.push_back(k);
         }

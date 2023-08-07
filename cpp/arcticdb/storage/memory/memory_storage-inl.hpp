@@ -78,7 +78,7 @@ namespace arcticdb::storage::memory {
                 if(it != key_vec.end()) {
                     ARCTICDB_DEBUG(log::storage(), "Read key {}: {}", variant_key_type(k), variant_key_view(k));
                     auto seg = it->second;
-                    visitor(k, seg);
+                    visitor(k, std::move(seg));
                 } else {
                     throw KeyNotFoundException(std::move(ks));
                 }
