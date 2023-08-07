@@ -132,13 +132,47 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
         .def_property_readonly("names", &PythonOutputFrame::names, py::return_value_policy::reference)
         .def_property_readonly("index_columns", &PythonOutputFrame::index_columns, py::return_value_policy::reference);
 
-    py::enum_<VersionRequestType>(version, "VersionRequestType")
-            .value("SNAPSHOT", VersionRequestType::SNAPSHOT)
-            .value("TIMESTAMP", VersionRequestType::TIMESTAMP)
-            .value("SPECIFIC", VersionRequestType::SPECIFIC)
-            .value("LATEST", VersionRequestType::LATEST);
+    py::enum_<VersionRequestType>(version, "VersionRequestType", R"pbdoc(
+        Enum of possible version request types passed to as_of.
+    )pbdoc")
+            .value("SNAPSHOT", VersionRequestType::SNAPSHOT, R"pbdoc(
+            Request the version of the symbol contained in the specified snapshot.
+    )pbdoc")
+            .value("TIMESTAMP", VersionRequestType::TIMESTAMP, R"pbdoc(
+            Request the version of the symbol as it was at the specified timestamp.
+    )pbdoc")
+            .value("SPECIFIC", VersionRequestType::SPECIFIC, R"pbdoc(
+            Request a specific version of the symbol.
+    )pbdoc")
+            .value("LATEST", VersionRequestType::LATEST, R"pbdoc(
+            Request the latest undeleted version of the symbol.
+    )pbdoc");
 
-    py::class_<DataError, std::shared_ptr<DataError>>(version, "DataError")
+    py::class_<DataError, std::shared_ptr<DataError>>(version, "DataError", R"pbdoc(
+        Return value for batch methods which fail in some way.
+
+        Attributes
+        ----------
+        symbol: str
+            Read or modified symbol.
+        version_request_type: Optional[VersionRequestType]
+            For operations that support as_of, the type of version query provided. `None` otherwise.
+        version_request_data: Optional[Union[str, int]]
+            For operations that support as_of, the value provided in the version query:
+                None - Operation does not support as_of, or latest version was requested
+                str - The name of the snapshot provided to as_of
+                int - The specific version requested if version_request_type == VersionRequestType::SPECIFIC, or
+                      nanoseconds since epoch if version_request_type == VersionRequestType::TIMESTAMP
+        error_code: Optional[ErrorCode]
+            For the most common error types, the ErrorCode is included here.
+            e.g. ErrorCode.E_NO_SUCH_VERSION if the version requested has been deleted
+            Please see the Error Messages section of the docs for more detail.
+        error_category: Optional[ErrorCategory]
+            If error_code is provided, the category is also provided.
+            e.g.  ErrorCategory.MISSING_DATA if error_code is ErrorCode.E_NO_SUCH_VERSION
+        exception_string: str
+            The string associated with the exception that was originally raised.
+    )pbdoc")
             .def_property_readonly("symbol", &DataError::symbol)
             .def_property_readonly("version_request_type", &DataError::version_request_type)
             .def_property_readonly("version_request_data", &DataError::version_request_data)
@@ -361,7 +395,9 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
             .def_readwrite("row_filter",&UpdateQuery::row_filter);
 
     py::class_<PythonVersionStore>(version, "PythonVersionStore")
-        .def(py::init<std::shared_ptr<storage::Library>, std::optional<std::string>>(),
+        .def(py::init([](const std::shared_ptr<storage::Library>& library, std::optional<std::string>) {
+                return PythonVersionStore(library);
+             }),
              py::arg("library"),
              py::arg("license_key") = std::nullopt)
         .def("write_partitioned_dataframe",
@@ -649,7 +685,17 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
         .def("latest_timestamp",
              &PythonVersionStore::latest_timestamp,
              "Returns latest timestamp of a symbol")
+        .def("get_store_current_timestamp_for_tests",
+             &PythonVersionStore::get_store_current_timestamp_for_tests,
+             "For testing purposes only")
         ;
+
+    py::class_<ManualClockVersionStore, PythonVersionStore>(version, "ManualClockVersionStore")
+        .def(py::init<const std::shared_ptr<storage::Library>&>())
+        .def_property_static("time",
+            []() { return util::ManualClock::time_.load(); },
+            [](const py::class_<ManualClockVersionStore>&, entity::timestamp ts) { util::ManualClock::time_ = ts; })
+         ;
 
     py::class_<LocalVersionedEngine>(version, "VersionedEngine")
       .def(py::init<std::shared_ptr<storage::Library>>())

@@ -58,7 +58,7 @@ jobs:
       - name: Black Python formatting
         uses: psf/black@stable
         with:
-          options: "--check --line-length 120"
+          options: "--check --diff --line-length 120"
           version: "~= 22.8"
           src: "./python"
 

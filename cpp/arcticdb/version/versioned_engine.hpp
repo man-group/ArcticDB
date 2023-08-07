@@ -84,9 +84,7 @@ public:
         InputTensorFrame&& frame) const = 0;
 
     virtual bool has_stream(
-        const StreamId & stream_id,
-        const std::optional<bool>& skip_compat,
-        const std::optional<bool>& iterate_on_failure
+        const StreamId & stream_id
     ) = 0;
 
     /**

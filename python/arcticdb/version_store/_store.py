@@ -70,7 +70,6 @@ from arcticdb.version_store._normalization import (
 )
 from arcticdb.util.memory import format_bytes
 
-
 _ExtDateRangeTypes = pd.core.indexes.datetimelike.DatetimeIndexOpsMixin
 if TYPE_CHECKING:
     try:
@@ -81,7 +80,7 @@ if TYPE_CHECKING:
         pass
 
 # These chars are encoded by S3 and on doing a list_symbols they will show up as the encoded form eg. &amp
-UNSUPPORTED_S3_CHARS = {"*", "&", "<", ">"}
+UNSUPPORTED_S3_CHARS = {"\0", "*", "&", "<", ">"}
 MAX_SYMBOL_SIZE = (2**8) - 1
 
 
@@ -368,6 +367,7 @@ class NativeVersionStore:
             raise ArcticNativeNotYetImplemented(
                 f"Symbol length {len(symbol)} chars exceeds the max supported length of {MAX_SYMBOL_SIZE} chars."
             )
+
         if len(set(symbol).intersection(UNSUPPORTED_S3_CHARS)):
             raise ArcticNativeNotYetImplemented(
                 f"The symbol '{symbol}' has one or more unsupported characters({','.join(UNSUPPORTED_S3_CHARS)})."
@@ -1023,7 +1023,8 @@ class NativeVersionStore:
             kwargs = dict()
         meta_data_list = []
         version_queries = self._get_version_queries(len(symbols), as_ofs, **kwargs)
-        result = self.version_store.batch_read_metadata(symbols, version_queries)
+        read_options = self._get_read_options(**kwargs)
+        result = self.version_store.batch_read_metadata(symbols, version_queries, read_options)
         result_list = list(zip(symbols, result))
         for original_symbol, result in result_list:
             vitem, udm = result
@@ -1079,7 +1080,8 @@ class NativeVersionStore:
         _check_batch_kwargs(NativeVersionStore.batch_read_metadata, NativeVersionStore.read_metadata, kwargs)
         results_dict = {}
         version_queries = self._get_version_queries(len(symbols), as_ofs, **kwargs)
-        for result in self.version_store.batch_read_metadata(symbols, version_queries):
+        read_options = self._get_read_options(**kwargs)
+        for result in self.version_store.batch_read_metadata(symbols, version_queries, read_options):
             vitem, udm = result
             meta = denormalize_user_metadata(udm, self._normalizer) if udm else None
             if vitem.symbol not in results_dict:
@@ -1466,7 +1468,6 @@ class NativeVersionStore:
         read_options.set_set_tz(self.resolve_defaults("set_tz", proto_cfg, global_default=False, **kwargs))
         read_options.set_allow_sparse(self.resolve_defaults("allow_sparse", proto_cfg, global_default=False, **kwargs))
         read_options.set_incompletes(self.resolve_defaults("incomplete", proto_cfg, global_default=False, **kwargs))
-
         return read_options
 
     def _get_queries(self, as_of, date_range, row_range, columns, query_builder, **kwargs):
@@ -1634,8 +1635,8 @@ class NativeVersionStore:
         self, symbol: str, as_of: Optional[VersionQueryInput] = None, raise_on_missing: Optional[bool] = False, **kwargs
     ) -> Optional[VersionedItem]:
         version_query = self._get_version_query(as_of, **kwargs)
-
-        version_handle = self.version_store.find_version(symbol, version_query)
+        read_options = self._get_read_options(**kwargs)
+        version_handle = self.version_store.find_version(symbol, version_query, read_options)
 
         if version_handle is None and raise_on_missing:
             raise KeyError(f"Cannot find version for symbol={symbol},as_of={as_of}")
@@ -2162,7 +2163,8 @@ class NativeVersionStore:
             The data attribute will not be populated.
         """
         version_query = self._get_version_query(as_of, **kwargs)
-        version_item, udm = self.version_store.read_metadata(symbol, version_query)
+        read_options = self._get_read_options(**kwargs)
+        version_item, udm = self.version_store.read_metadata(symbol, version_query, read_options)
         meta = denormalize_user_metadata(udm, self._normalizer) if udm else None
 
         return VersionedItem(
@@ -2239,7 +2241,8 @@ class NativeVersionStore:
             True if the symbol is pickled, False otherwise.
         """
         version_query = self._get_version_query(as_of, **kwargs)
-        dit = self.version_store.read_descriptor(symbol, version_query)
+        read_options = self._get_read_options(**kwargs)
+        dit = self.version_store.read_descriptor(symbol, version_query, read_options)
         return self.is_pickled_descriptor(dit.timeseries_descriptor)
 
     def _get_time_range_from_ts(self, desc, min_ts, max_ts):
@@ -2261,7 +2264,7 @@ class NativeVersionStore:
             return _from_tz_timestamp(min_ts, None), _from_tz_timestamp(max_ts, None)
 
     def get_timerange_for_symbol(
-        self, symbol: str, version: Optional[VersionQueryInput] = None
+        self, symbol: str, version: Optional[VersionQueryInput] = None, **kwargs
     ) -> Tuple[datetime, datetime]:
         """
         Query the earliest and latest timestamp in the index of the specified revision of the symbol.
@@ -2280,6 +2283,7 @@ class NativeVersionStore:
         """
         given_version = max([v["version"] for v in self.list_versions(symbol)]) if version is None else version
         version_query = self._get_version_query(given_version)
+        read_options = self._get_read_options(**kwargs)
 
         i = self.version_store.read_index(symbol, version_query)
         frame_data = ReadResult(*i).frame_data
@@ -2290,7 +2294,7 @@ class NativeVersionStore:
         start_indices, end_indices = index_data[0], index_data[1]
         min_ts, max_ts = min(start_indices), max(end_indices)
         # to get timezone info
-        dit = self.version_store.read_descriptor(symbol, version_query)
+        dit = self.version_store.read_descriptor(symbol, version_query, read_options)
         return self._get_time_range_from_ts(dit.timeseries_descriptor, min_ts, max_ts)
 
     def name(self):
@@ -2412,7 +2416,8 @@ class NativeVersionStore:
             - date_range, `tuple`
         """
         version_query = self._get_version_query(version)
-        dit = self.version_store.read_descriptor(symbol, version_query)
+        read_options = _PythonVersionStoreReadOptions()
+        dit = self.version_store.read_descriptor(symbol, version_query, read_options)
         return self._process_info(symbol, dit, version)
 
     def batch_get_info(
@@ -2454,7 +2459,9 @@ class NativeVersionStore:
         version_queries = []
         for as_of in as_ofs_lists:
             version_queries.append(self._get_version_query(as_of))
-        list_descriptors = self.version_store.batch_read_descriptor(symbols, version_queries)
+
+        read_options = _PythonVersionStoreReadOptions()
+        list_descriptors = self.version_store.batch_read_descriptor(symbols, version_queries, read_options)
         args_list = list(zip(list_descriptors, symbols, version_queries, as_ofs_lists))
         list_infos = []
         for dit, symbol, version_query, as_of in args_list:
