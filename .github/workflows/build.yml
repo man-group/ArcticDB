@@ -83,7 +83,7 @@ jobs:
   real_storage_seed_linux:
     # Then use the cached compilation artifacts to build other python versions concurrently in cibuildwheels
     needs: [common_config]
-    if: needs.common_config.outputs.real_storage
+    if: needs.common_config.outputs.real_storage == true
     strategy:
       fail-fast: false
       matrix:
@@ -104,7 +104,7 @@ jobs:
   real_storage_seed_windows:
     # Then use the cached compilation artifacts to build other python versions concurrently in cibuildwheels
     needs: [common_config]
-    if: needs.common_config.outputs.real_storage
+    if: needs.common_config.outputs.real_storage == true
     strategy:
       fail-fast: false
       matrix:
@@ -274,7 +274,8 @@ jobs:
       python_deps_ids: ${{toJson(matrix.python_deps_ids)}}
     
   real_storage_cleanup:
-    needs: [real_storage_verify_windows, real_storage_verify_linux]
+    needs: [common_config, real_storage_verify_windows, real_storage_verify_linux]
+    if: needs.common_config.outputs.real_storage
     name: Cleanup real storages
     uses: ./.github/workflows/real_storage.yml
     secrets: inherit
