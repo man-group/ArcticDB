@@ -85,11 +85,7 @@ std::vector<VariantKey> LibraryTool::find_keys_for_id(entity::KeyType kt, const 
 }
 
 std::string LibraryTool::get_key_path(const VariantKey& key) {
-    std::string out;
-    lib_->storage_specific([&out, &key](const storage::s3::S3Storage& s3) {
-        out = s3.get_key_path(key);
-    });
-    return out;
+    return lib_->storage_specific(key);
 }
 
 } // namespace arcticdb::toolbox::apy

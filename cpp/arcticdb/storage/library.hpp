@@ -123,9 +123,8 @@ class Library {
     }
 
     /** Calls VariantStorage::do_storage_specific on the primary storage */
-    template<class Visitor>
-    void storage_specific(Visitor&& visitor) {
-        storages_->storage_specific(std::forward<Visitor>(visitor));
+    std::string storage_specific(const VariantKey& key) {
+        return storages_->storage_specific(key);
     }
 
     void move_storage(KeyType key_type, timestamp horizon, size_t storage_index = 0) {

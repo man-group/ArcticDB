@@ -9,6 +9,10 @@
 
 #include <arcticdb/storage/storage.hpp>
 #include <arcticdb/storage/storage_factory.hpp>
+#include <aws/core/Aws.h>
+#include <aws/s3/S3Client.h>
+#include <aws/s3/model/PutObjectRequest.h>
+#include <aws/core/auth/AWSCredentialsProvider.h>
 #include <arcticdb/log/log.hpp>
 #include <arcticdb/storage/object_store_utils.hpp>
 #include <arcticdb/entity/protobufs.hpp>
@@ -17,12 +21,11 @@
 #include <arcticdb/storage/s3/s3_storage.hpp>
 #include <arcticdb/storage/s3/s3_api.hpp>
 
+#include <arcticdb/storage/s3/detail-inl.hpp>
+
 namespace arcticdb::storage::nfs_backed {
 
-class NfsBackedStorage final : public Storage<NfsBackedStorage> {
-    using Parent = Storage<NfsBackedStorage>;
-    friend Parent;
-
+class NfsBackedStorage final : public Storage {
 public:
     friend class S3TestForwarder<NfsBackedStorage>;
     friend class S3TestClientAccessor<NfsBackedStorage>;
@@ -31,25 +34,27 @@ public:
     NfsBackedStorage(const LibraryPath &lib, OpenMode mode, const Config &conf);
 
 protected:
-    void do_write(Composite<KeySegmentPair>&& kvs);
+    void do_write(Composite<KeySegmentPair>&& kvs) final;
 
-    void do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts opts);
+    void do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts opts) final;
 
-    void do_read(Composite<VariantKey>&& ks, const ReadVisitor& visitor, ReadKeyOpts opts);
+    void do_read(Composite<VariantKey>&& ks, const ReadVisitor& visitor, ReadKeyOpts opts) final;
 
-    void do_remove(Composite<VariantKey>&& ks, RemoveOpts opts);
+    void do_remove(Composite<VariantKey>&& ks, RemoveOpts opts) final;
 
-    void do_iterate_type(KeyType key_type, const IterateTypeVisitor& visitor, const std::string &prefix);
+    void do_iterate_type(KeyType key_type, const IterateTypeVisitor& visitor, const std::string &prefix) final;
 
-    bool do_key_exists(const VariantKey& key);
+    bool do_key_exists(const VariantKey& key) final;
 
-    bool do_supports_prefix_matching() {
+    bool do_supports_prefix_matching() final {
         return true;
     }
 
-    bool do_fast_delete() {
+    bool do_fast_delete() final {
         return false;
     }
+
+    std::string do_storage_specific(const VariantKey&) final { return {}; };
 
 private:
     auto& client() { return s3_client_; }

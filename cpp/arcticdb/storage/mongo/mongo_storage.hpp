@@ -18,34 +18,32 @@ namespace arcticdb::storage::mongo {
 class MongoInstance;
 class MongoClient;
 
-class MongoStorage final : public Storage<MongoStorage> {
-
-    using Parent = Storage<MongoStorage>;
-    friend Parent;
-
+class MongoStorage final : public Storage {
   public:
     using Config = arcticdb::proto::mongo_storage::Config;
 
     MongoStorage(const LibraryPath &lib, OpenMode mode, const Config &conf);
 
   protected:
-    void do_write(Composite<KeySegmentPair>&& kvs);
+    void do_write(Composite<KeySegmentPair>&& kvs) final;
 
-    void do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts opts);
+    void do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts opts) final;
 
-    void do_read(Composite<VariantKey>&& ks, const ReadVisitor& visitor, ReadKeyOpts opts);
+    void do_read(Composite<VariantKey>&& ks, const ReadVisitor& visitor, ReadKeyOpts opts) final;
 
-    void do_remove(Composite<VariantKey>&& ks, RemoveOpts opts);
+    void do_remove(Composite<VariantKey>&& ks, RemoveOpts opts) final;
 
-    bool do_key_exists(const VariantKey& key);
+    bool do_key_exists(const VariantKey& key) final;
 
-    bool do_supports_prefix_matching() {
+    bool do_supports_prefix_matching() final {
         return false;
     }
 
-    inline bool do_fast_delete();
+    inline bool do_fast_delete() final;
 
-    void do_iterate_type(KeyType key_type, const IterateTypeVisitor& visitor, const std::string &prefix);
+    void do_iterate_type(KeyType key_type, const IterateTypeVisitor& visitor, const std::string &prefix) final;
+
+    std::string do_storage_specific(const VariantKey&) final { return {}; };
 
   private:
     std::string collection_name(KeyType k);

@@ -9,7 +9,7 @@
 
 namespace arcticdb::storage::memory {
     MemoryStorage::MemoryStorage(const LibraryPath &library_path, OpenMode mode, const Config&) :
-        Parent(library_path, mode),
+        Storage(library_path, mode),
         mutex_(std::make_unique<MutexType>()) {
     }
 } // arcticdb::storage::memory

@@ -28,36 +28,34 @@ namespace fs = std::filesystem;
 
 namespace arcticdb::storage::lmdb {
 
-class LmdbStorage final : public Storage<LmdbStorage> {
-
-    using Parent = Storage<LmdbStorage>;
-    friend Parent;
-
+class LmdbStorage final : public Storage {
   public:
     using Config = arcticdb::proto::lmdb_storage::Config;
 
     LmdbStorage(const LibraryPath &lib, OpenMode mode, const Config &conf);
 
   protected:
-    void do_write(Composite<KeySegmentPair>&& kvs);
+    void do_write(Composite<KeySegmentPair>&& kvs) final;
 
-    void do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts opts);
+    void do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts opts) final;
 
-    void do_read(Composite<VariantKey>&& ks, const ReadVisitor& visitor, storage::ReadKeyOpts opts);
+    void do_read(Composite<VariantKey>&& ks, const ReadVisitor& visitor, storage::ReadKeyOpts opts) final;
 
-    void do_remove(Composite<VariantKey>&& ks, RemoveOpts opts);
+    void do_remove(Composite<VariantKey>&& ks, RemoveOpts opts) final;
 
-    bool do_supports_prefix_matching() {
+    bool do_supports_prefix_matching() final {
         return false;
     };
 
-    inline bool do_fast_delete();
+    inline bool do_fast_delete() final;
 
-    void do_iterate_type(KeyType key_type, const IterateTypeVisitor& visitor, const std::string &prefix);
+    void do_iterate_type(KeyType key_type, const IterateTypeVisitor& visitor, const std::string &prefix) final;
 
-    bool do_key_exists(const VariantKey & key);
+    bool do_key_exists(const VariantKey & key) final;
 
     ::lmdb::env& env() { return *env_;  }
+
+    std::string do_storage_specific(const VariantKey&) final { return {}; };
 
 private:
     // _internal methods assume the write mutex is already held
