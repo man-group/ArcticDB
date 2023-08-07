@@ -10,12 +10,12 @@
 namespace arcticdb {
 
 std::deque<AtomKey> backwards_compat_delete_all_versions(
-    const std::shared_ptr<Store> store,
+    const std::shared_ptr<Store>& store,
     std::shared_ptr<VersionMap>& version_map,
     const StreamId& stream_id
     ) {
     std::deque<AtomKey> output;
-    auto entry = version_map->check_reload(store, stream_id, LoadParameter{LoadType::LOAD_ALL}, true, false, __FUNCTION__);
+    auto entry = version_map->check_reload(store, stream_id, LoadParameter{LoadType::LOAD_ALL}, __FUNCTION__);
     auto indexes = entry->get_indexes(false);
     output.assign(std::begin(indexes), std::end(indexes));
 
@@ -27,11 +27,11 @@ std::deque<AtomKey> backwards_compat_delete_all_versions(
     return output;
 }
 
-std::vector<AtomKey> backwards_compat_write_and_prune_previous(std::shared_ptr<Store> store, std::shared_ptr<VersionMap>& version_map, const AtomKey &key) {
+std::vector<AtomKey> backwards_compat_write_and_prune_previous(std::shared_ptr<Store>& store, std::shared_ptr<VersionMap>& version_map, const AtomKey &key) {
     log::version().debug("Version map pruning previous versions for stream {}", key.id());
 
     std::vector<AtomKey> output;
-    auto entry = version_map->check_reload(store, key.id(), LoadParameter{LoadType::LOAD_ALL}, true, false, __FUNCTION__);
+    auto entry = version_map->check_reload(store, key.id(), LoadParameter{LoadType::LOAD_ALL},  __FUNCTION__);
 
     auto old_entry = *entry;
     entry->clear();

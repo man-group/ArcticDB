@@ -27,7 +27,7 @@ print(f"Prepended root={root} to path")
 # -- Project information -----------------------------------------------------
 
 project = "ArcticDB"
-copyright = "2022, Man Group"
+copyright = "2023, Man Group"
 author = "Man Group"
 
 

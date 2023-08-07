@@ -685,9 +685,9 @@ def spawn_azurite(azurite_port):
 
 @pytest.fixture(
     scope="function",
-    params=["moto_s3_uri_incl_bucket", "azurite_azure_uri_incl_bucket"]
-    if AZURE_SUPPORT
-    else ["moto_s3_uri_incl_bucket"],
+    params=(
+        ["moto_s3_uri_incl_bucket", "azurite_azure_uri_incl_bucket"] if AZURE_SUPPORT else ["moto_s3_uri_incl_bucket"]
+    ),
 )
 def object_storage_uri_incl_bucket(request):
     yield request.getfixturevalue(request.param)
