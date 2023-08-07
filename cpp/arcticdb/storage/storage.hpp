@@ -27,7 +27,7 @@ namespace arcticdb::storage {
 
 struct StorageBase {}; // marker class for type checking
 
-using ReadVisitor = std::function<void(const VariantKey&, Segment)>;
+using ReadVisitor = std::function<void(const VariantKey&, const Segment&)>;
 
 class DuplicateKeyException : public ArcticSpecificException<ErrorCode::E_DUPLICATE_KEY> {
 public:
@@ -117,7 +117,7 @@ public:
     template<class KeyType>
     KeySegmentPair read(KeyType&& key, ReadKeyOpts opts) {
         KeySegmentPair key_seg;
-        const ReadVisitor& visitor = [&key_seg](const VariantKey & vk, Segment value) {
+        const ReadVisitor& visitor = [&key_seg](const VariantKey & vk, const Segment& value) {
             key_seg.variant_key() = vk;
             key_seg.segment() = value;
         };
