@@ -53,6 +53,7 @@ def test_real_s3_storage_read(real_s3_credentials, library):
 )
 def test_real_s3_storage_write(real_s3_credentials, three_col_df):
     library_to_write_to = REAL_STORAGE_LIB_NAME
+    library_to_write_to = library_to_write_to.replace("-", "_")
     endpoint, bucket, region, access_key, secret_key, clear = real_s3_credentials
     uri = f"s3s://{endpoint}:{bucket}?access={access_key}&secret={secret_key}&region={region}&path_prefix=ci_tests/"
     ac = Arctic(uri)
