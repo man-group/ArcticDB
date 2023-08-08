@@ -1111,6 +1111,66 @@ public:
         set_metadata(std::move(any));
     }
 
+    // Partitions the segment into n new segments. Each row in the starting segment is mapped to one of the output segments
+    // by the row_to_segment vector (std::nullopt means the row is not included in any output segment).
+    // segment_counts is the length of the number of output segments, and should be greater than or equal to the max value
+    // in row_to_segment
+    inline std::vector<std::shared_ptr<SegmentInMemoryImpl>> partition(const std::vector<std::optional<uint8_t>>& row_to_segment,
+                                                       const std::vector<uint64_t>& segment_counts) const {
+        schema::check<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>(!is_sparse(),
+                                                            "SegmentInMemory::partition not supported with sparse columns");
+        internal::check<ErrorCode::E_ASSERTION_FAILURE>(row_count() == row_to_segment.size(),
+                    "row_to_segment size does not match segment row count: {} != {}", row_to_segment.size(), row_count());
+        std::vector<std::shared_ptr<SegmentInMemoryImpl>> output(segment_counts.size());
+        if(std::all_of(segment_counts.begin(), segment_counts.end(), [](const size_t& segment_count) { return segment_count == 0; })) {
+            return output;
+        }
+
+        for (const auto& segment_count: folly::enumerate(segment_counts)) {
+            if (*segment_count > 0) {
+                auto& seg = output.at(segment_count.index);
+                seg = get_output_segment(*segment_count);
+                seg->set_row_data(*segment_count - 1);
+                seg->set_string_pool(string_pool_);
+                seg->set_compacted(compacted_);
+                if (metadata_) {
+                    google::protobuf::Any metadata;
+                    metadata.CopyFrom(*metadata_);
+                    seg->set_metadata(std::move(metadata));
+                }
+            }
+        }
+
+        for(const auto& column : folly::enumerate(columns())) {
+            (*column)->type().visit_tag([&] (auto type_desc_tag){
+                using TypeDescriptorTag = decltype(type_desc_tag);
+                using ColumnTagType = typename TypeDescriptorTag::DataTypeTag;
+                using RawType = typename ColumnTagType::raw_type;
+
+                auto output_col_idx = column.index;
+                std::vector<RawType*> output_ptrs{output.size(), nullptr};
+                for (const auto& segment: folly::enumerate(output)) {
+                    if (static_cast<bool>(*segment)) {
+                        output_ptrs.at(segment.index) = reinterpret_cast<RawType*>((*segment)->column(output_col_idx).ptr());
+                    }
+                }
+
+                auto input_data =  (*column)->data();
+                size_t overall_idx = 0;
+                while(auto block = input_data.next<TypeDescriptorTag>()) {
+                    auto input_ptr = reinterpret_cast<const RawType*>(block.value().data());
+                    for (size_t block_idx = 0; block_idx < block.value().row_count(); ++block_idx, ++input_ptr, ++overall_idx) {
+                        auto opt_output_segment_idx = row_to_segment[overall_idx];
+                        if (opt_output_segment_idx.has_value()) {
+                            *(output_ptrs[*opt_output_segment_idx]++) = *input_ptr;
+                        }
+                    }
+                }
+            });
+        }
+        return output;
+    }
+
     std::vector<std::shared_ptr<SegmentInMemoryImpl>> split(size_t rows) const{
         std::vector<std::shared_ptr<SegmentInMemoryImpl>> output;
         util::check(rows > 0, "rows supplied in SegmentInMemoryImpl.split() is non positive");

@@ -12,9 +12,7 @@ Once a version of ArcticDB has converted to the Apache 2.0 license, it may be us
 
 ## License conversion timeline
 
-| ArcticDB version | License | Converts to Apache 2.0 |
-|------------------|---------|------------------------|
-| 1.0              | BSL     | March 16, 2025         |
+This is stored in the [README.md](https://github.com/man-group/ArcticDB/blob/master/README.md) of the project.
 
 ## Production usage of a BSL-licensed version
 

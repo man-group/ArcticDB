@@ -23,6 +23,18 @@ namespace arcticdb::version_store {
 using namespace arcticdb::entity;
 using namespace arcticdb::pipelines;
 
+struct ReadVersionOutput {
+    ReadVersionOutput() = delete;
+    ReadVersionOutput(VersionedItem&& versioned_item, FrameAndDescriptor&& frame_and_descriptor):
+            versioned_item_(std::move(versioned_item)),
+            frame_and_descriptor_(std::move(frame_and_descriptor)) {}
+
+    ARCTICDB_MOVE_ONLY_DEFAULT(ReadVersionOutput)
+
+    VersionedItem versioned_item_;
+    FrameAndDescriptor frame_and_descriptor_;
+};
+
 /**
  * The VersionedEngine interface contains methods that are portable between languages.
  *
@@ -72,9 +84,7 @@ public:
         InputTensorFrame&& frame) const = 0;
 
     virtual bool has_stream(
-        const StreamId & stream_id,
-        const std::optional<bool>& skip_compat,
-        const std::optional<bool>& iterate_on_failure
+        const StreamId & stream_id
     ) = 0;
 
     /**
@@ -97,7 +107,7 @@ public:
         ReadQuery& read_query,
         const ReadOptions& read_options) = 0;
 
-    virtual std::pair<VersionedItem, FrameAndDescriptor> read_dataframe_version_internal(
+    virtual ReadVersionOutput read_dataframe_version_internal(
         const StreamId &stream_id,
         const VersionQuery& version_query,
         ReadQuery& read_query,

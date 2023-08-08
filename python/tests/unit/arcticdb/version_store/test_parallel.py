@@ -108,7 +108,7 @@ def test_sort_merge_write(lmdb_version_store):
         new_df = pd.DataFrame(data=vals, index=index)
 
         dataframes.append(new_df)
-        df = df.append(new_df)
+        df = pd.concat((df, new_df))
         dt = dt + datetime.timedelta(days=1)
 
     random.shuffle(dataframes)
@@ -139,7 +139,7 @@ def test_sort_merge_append(lmdb_version_store_dynamic_schema):
         vals = {c: random_floats(num_rows_per_day) for c in cols}
         new_df = pd.DataFrame(data=vals, index=index)
         dataframes.append(new_df)
-        df = df.append(new_df)
+        df = pd.concat((df, new_df))
         dt = dt + datetime.timedelta(days=1)
 
     half_way = len(dataframes) / 2

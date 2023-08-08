@@ -345,10 +345,12 @@ TEST_F(VersionStoreTest, StressBatchReadUncompressed) {
     }
 
     std::vector<ReadQuery> read_queries;
-    auto latest_versions = test_store_->batch_read(symbols, std::vector<VersionQuery>(10), read_queries, ReadOptions{});
-    for(auto version : folly::enumerate(latest_versions)) {
-        auto expected = get_test_simple_frame(version->item.symbol(), 10, version.index);
-        bool equal = expected.segment_ == version->frame_data.frame();
+    ReadOptions read_options;
+    read_options.set_batch_throw_on_missing_version(true);
+    auto latest_versions = test_store_->batch_read(symbols, std::vector<VersionQuery>(10), read_queries, read_options);
+    for(auto&& [idx, version] : folly::enumerate(latest_versions)) {
+        auto expected = get_test_simple_frame(std::get<ReadResult>(version).item.symbol(), 10, idx);
+        bool equal = expected.segment_ == std::get<ReadResult>(version).frame_data.frame();
         ASSERT_EQ(equal, true);
     }
 }
@@ -377,21 +379,21 @@ TEST(VersionStore, TestReadTimestampAt) {
 
   auto version_map = version_store._test_get_version_map();
   version_map->write_version(mock_store, key1);
-  auto key = get_version_key_from_time(mock_store, version_map, id, timestamp(0), true, false);
+  auto key = load_index_key_from_time(mock_store, version_map, id, timestamp(0), pipelines::VersionQuery{}, ReadOptions{});
   ASSERT_EQ(key.value().content_hash(), 3);
 
   version_map->write_version(mock_store, key2);
-  key = get_version_key_from_time(mock_store, version_map, id, timestamp(0), true, false);
+  key = load_index_key_from_time(mock_store, version_map, id, timestamp(0), pipelines::VersionQuery{}, ReadOptions{});
   ASSERT_EQ(key.value().content_hash(), 3);
-  key = get_version_key_from_time(mock_store, version_map, id, timestamp(1), true, false);
+  key = load_index_key_from_time(mock_store, version_map, id, timestamp(1), pipelines::VersionQuery{}, ReadOptions{});
   ASSERT_EQ(key.value().content_hash(), 4);
 
   version_map->write_version(mock_store, key3);
-  key = get_version_key_from_time(mock_store, version_map, id, timestamp(0), true, false);
+  key = load_index_key_from_time(mock_store, version_map, id, timestamp(0), pipelines::VersionQuery{}, ReadOptions{});
   ASSERT_EQ(key.value().content_hash(), 3);
-  key = get_version_key_from_time(mock_store, version_map, id, timestamp(1), true, false);
+  key = load_index_key_from_time(mock_store, version_map, id, timestamp(1), pipelines::VersionQuery{}, ReadOptions{});
   ASSERT_EQ(key.value().content_hash(), 4);
-  key = get_version_key_from_time(mock_store, version_map, id, timestamp(2), true, false);
+  key = load_index_key_from_time(mock_store, version_map, id, timestamp(2), pipelines::VersionQuery{}, ReadOptions{});
   ASSERT_EQ(key.value().content_hash(), 5);
 }
 
@@ -409,7 +411,7 @@ TEST(VersionStore, TestReadTimestampAtInequality) {
 
   auto version_map = version_store._test_get_version_map();
   version_map->write_version(mock_store, key1);
-  auto key = get_version_key_from_time(mock_store, version_map, id, timestamp(1), true, false);
+  auto key = load_index_key_from_time(mock_store, version_map, id, timestamp(1), pipelines::VersionQuery{}, ReadOptions{});
   ASSERT_EQ(static_cast<bool>(key), true);
   ASSERT_EQ(key.value().content_hash(), 3);
 }
@@ -446,7 +448,7 @@ TEST(VersionStore, UpdateWithin) {
 
     ReadQuery read_query;
     auto read_result = version_store.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, ReadOptions{});
-    const auto& seg = read_result.second.frame_;
+    const auto& seg = read_result.frame_and_descriptor_.frame_;
 
     for(auto i = 0u; i < num_rows; ++i) {
         auto expected = i;
@@ -488,7 +490,7 @@ TEST(VersionStore, UpdateBefore) {
 
     ReadQuery read_query;
     auto read_result = version_store.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, ReadOptions{});
-    const auto& seg = read_result.second.frame_;
+    const auto& seg = read_result.frame_and_descriptor_.frame_;
 
     for(auto i = 0u; i < num_rows + update_range.diff(); ++i) {
         auto expected = i;
@@ -530,7 +532,7 @@ TEST(VersionStore, UpdateAfter) {
 
     ReadQuery read_query;
     auto read_result = version_store.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, ReadOptions{});
-    const auto& seg = read_result.second.frame_;
+    const auto& seg = read_result.frame_and_descriptor_.frame_;
 
     for(auto i = 0u; i < num_rows + update_range.diff(); ++i) {
         auto expected = i;
@@ -572,9 +574,8 @@ TEST(VersionStore, UpdateIntersectBefore) {
     version_store.update_internal(symbol, UpdateQuery{}, std::move(update_frame.frame_), false, false, false);
 
     ReadQuery read_query;
-    auto
-        read_result = version_store.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, ReadOptions{});
-    const auto &seg = read_result.second.frame_;
+    auto read_result = version_store.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, ReadOptions{});
+    const auto &seg = read_result.frame_and_descriptor_.frame_;
 
     for (auto i = 0u; i < num_rows + 5; ++i) {
         auto expected = i;
@@ -616,9 +617,8 @@ TEST(VersionStore, UpdateIntersectAfter) {
     version_store.update_internal(symbol, UpdateQuery{}, std::move(update_frame.frame_), false, false, false);
 
     ReadQuery read_query;
-    auto
-        read_result = version_store.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, ReadOptions{});
-    const auto &seg = read_result.second.frame_;
+    auto read_result = version_store.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, ReadOptions{});
+    const auto &seg = read_result.frame_and_descriptor_.frame_;
 
     for (auto i = 0u; i < num_rows + 5; ++i) {
         auto expected = i;
@@ -671,7 +671,7 @@ TEST(VersionStore, UpdateWithinSchemaChange) {
     read_options.set_dynamic_schema(true);
     ReadQuery read_query;
     auto read_result = version_store.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, read_options);
-    const auto &seg = read_result.second.frame_;
+    const auto &seg = read_result.frame_and_descriptor_.frame_;
 
     for (auto i = 0u;i < num_rows; ++i) {
         auto expected = i;
@@ -732,7 +732,7 @@ TEST(VersionStore, UpdateWithinTypeAndSchemaChange) {
     read_options.set_dynamic_schema(true);
     ReadQuery read_query;
     auto read_result = version_store.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, read_options);
-    const auto &seg = read_result.second.frame_;
+    const auto &seg = read_result.frame_and_descriptor_.frame_;
 
     for (auto i = 0u;i < num_rows; ++i) {
         auto expected = i;

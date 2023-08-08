@@ -35,6 +35,7 @@ def write_data(lib, sym, done, error):
                 assert lib.has_symbol(sym, vid)
             for d_id in range(delete_version_id):
                 assert d_id not in vs
+
     except Exception as e:
         print(e)
         error.value = 1
@@ -55,10 +56,10 @@ def read_data(lib, sym, done):
             assert vs[idx]["version"] == vs[idx + 1]["version"] + 1
 
 
-def test_stress_version_map_compact(s3_version_store, sym, capsys):
+def test_stress_version_map_compact(object_version_store, sym, capsys):
     done = Value("b", 0)
     error = Value("b", 0)
-    lib = s3_version_store
+    lib = object_version_store
     lib.version_store._set_validate_version_map()
     with capsys.disabled():
         try:

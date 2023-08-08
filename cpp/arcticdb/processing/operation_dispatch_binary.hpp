@@ -54,10 +54,10 @@ VariantData binary_membership(const ColumnWithStrings& column_with_strings, Valu
             output->set();
     } else {
         entity::details::visit_type(column_with_strings.column_->type().data_type(),[&column_with_strings, &value_set, &func, &output] (auto column_desc_tag) {
-            using ColumnTagType = std::decay_t<decltype(column_desc_tag)>;
-            using ColumnType =  typename ColumnTagType::raw_type;
+            using ColumnTagType = typename std::decay_t<decltype(column_desc_tag)>;
+            using ColumnType = typename ColumnTagType::raw_type;
 
-            entity::details::visit_type(value_set.base_type().data_type(),[&column_with_strings, &value_set, &func, &output, &column_desc_tag] (auto value_set_desc_tag) {
+            entity::details::visit_type(value_set.base_type().data_type(), [&] (auto value_set_desc_tag) {
                 using ValueSetBaseTypeTag = decltype(value_set_desc_tag);
 
                 if constexpr(is_sequence_type(ColumnTagType::data_type) && is_sequence_type(ValueSetBaseTypeTag::data_type)) {
@@ -100,8 +100,14 @@ VariantData binary_membership(const ColumnWithStrings& column_with_strings, Valu
                         auto ptr = reinterpret_cast<const ColumnType*>(block.value().data());
                         const auto row_count = block.value().row_count();
                         for (auto i = 0u; i < row_count; ++i, ++pos) {
-                            if(func(static_cast<WideType>(*ptr++), *typed_value_set))
-                                inserter = pos;
+                            if constexpr (MembershipOperator::needs_uint64_special_handling<ColumnType, ValueSetBaseType>) {
+                                // Avoid narrowing conversion on *ptr:
+                                if (func(*ptr++, *typed_value_set, UInt64SpecialHandlingTag{}))
+                                    inserter = pos;
+                            } else {
+                                if (func(static_cast<WideType>(*ptr++), *typed_value_set))
+                                    inserter = pos;
+                            }
                         }
                     }
                     inserter.flush();

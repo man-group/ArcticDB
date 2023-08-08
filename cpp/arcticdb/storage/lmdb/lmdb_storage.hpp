@@ -68,29 +68,7 @@ private:
 
     std::unique_ptr<std::mutex> write_mutex_;
     std::unique_ptr<::lmdb::env> env_;
-};
-
-class LmdbStorageFactory final : public StorageFactory<LmdbStorageFactory> {
-    using Parent = StorageFactory<LmdbStorageFactory>;
-    friend Parent;
-
-  public:
-    using Config = arcticdb::proto::lmdb_storage::Config;
-    using StorageType = LmdbStorage;
-
-    explicit LmdbStorageFactory(const Config &conf) :
-            conf_(conf), root_path_(conf.path().c_str()) {
-        if (!fs::exists(root_path_)) {
-            fs::create_directories(root_path_);
-        }
-    }
-  private:
-    auto do_create_storage(const LibraryPath &lib, OpenMode mode) {
-        return LmdbStorage(lib, mode, conf_);
-    }
-
-    Config conf_;
-    fs::path root_path_;
+    std::unordered_map<std::string, ::lmdb::dbi> dbi_by_key_type_;
 };
 
 inline arcticdb::proto::storage::VariantStorage pack_config(const std::string& path) {

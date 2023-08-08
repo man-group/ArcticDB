@@ -7,7 +7,9 @@ As of the Change Date specified in that file, in accordance with the Business So
 """
 import pytest
 import numpy as np
+
 from arcticdb_ext.exceptions import InternalException
+from arcticdb.util.test import distinct_timestamps
 
 
 def test_basic_snapshot_flow(lmdb_version_store):
@@ -35,38 +37,38 @@ def test_re_snapshot_with_same_name(lmdb_version_store):
         lmdb_version_store.snapshot("snap_1")
 
 
-def test_read_old_snapshot_data(s3_version_store):
+def test_read_old_snapshot_data(object_version_store):
     original_data = [1, 2, 3]
     modified_data = [1, 2, 3, 4]
-    s3_version_store.write("c", original_data)
-    s3_version_store.snapshot("snap_3")
-    s3_version_store.write("c", modified_data)
-    s3_version_store.snapshot("snap_4")
-    assert s3_version_store.read("c", as_of="snap_3").data == original_data
-    assert s3_version_store.read("c").data == modified_data
+    object_version_store.write("c", original_data)
+    object_version_store.snapshot("snap_3")
+    object_version_store.write("c", modified_data)
+    object_version_store.snapshot("snap_4")
+    assert object_version_store.read("c", as_of="snap_3").data == original_data
+    assert object_version_store.read("c").data == modified_data
 
 
-def test_snapshot_metadata(s3_version_store):
+def test_snapshot_metadata(object_version_store):
     original_data = [1, 2, 3]
     metadata = {"metadata": "Because why not?"}
     snap_name = "meta_snap"
-    s3_version_store.write(snap_name, original_data)
-    s3_version_store.snapshot(snap_name, metadata=metadata)
+    object_version_store.write(snap_name, original_data)
+    object_version_store.snapshot(snap_name, metadata=metadata)
 
-    assert s3_version_store.read(snap_name).data == original_data
-    all_snaps = s3_version_store.list_snapshots()
+    assert object_version_store.read(snap_name).data == original_data
+    all_snaps = object_version_store.list_snapshots()
     metadata_for_snap = [meta for snap, meta in all_snaps.items() if snap == snap_name][0]
     assert metadata_for_snap == metadata
 
 
-def test_snapshots_skip_symbol(s3_version_store):
+def test_snapshots_skip_symbol(object_version_store):
     original_data = [1, 2, 3]
-    s3_version_store.write("f", original_data)
-    s3_version_store.write("g", original_data)
-    s3_version_store.snapshot("snap_5", metadata=None, skip_symbols=["f"])
-    assert s3_version_store.read("g", as_of="snap_5").data == original_data
+    object_version_store.write("f", original_data)
+    object_version_store.write("g", original_data)
+    object_version_store.snapshot("snap_5", metadata=None, skip_symbols=["f"])
+    assert object_version_store.read("g", as_of="snap_5").data == original_data
     with pytest.raises(Exception):
-        s3_version_store.read("f", as_of="snap_5")
+        object_version_store.read("f", as_of="snap_5")
 
 
 def test_snapshot_explicit_versions(lmdb_version_store):
@@ -85,29 +87,29 @@ def test_snapshot_explicit_versions(lmdb_version_store):
     assert lib.read("j", as_of="snap_8").data == modified_data
 
 
-def test_list_symbols_with_snaps(s3_version_store):
+def test_list_symbols_with_snaps(object_version_store):
     original_data = [1, 2, 3]
 
-    s3_version_store.write("s1", original_data)
-    s3_version_store.write("s2", original_data)
+    object_version_store.write("s1", original_data)
+    object_version_store.write("s2", original_data)
 
-    s3_version_store.snapshot("snap_9")
-    s3_version_store.write("s3", original_data)
+    object_version_store.snapshot("snap_9")
+    object_version_store.write("s3", original_data)
 
-    assert "s3" not in s3_version_store.list_symbols(snapshot="snap_9")
-    assert "s3" in s3_version_store.list_symbols()
+    assert "s3" not in object_version_store.list_symbols(snapshot="snap_9")
+    assert "s3" in object_version_store.list_symbols()
 
 
-def test_list_versions(s3_version_store):
+def test_list_versions(object_version_store):
     original_data = [1, 2, 3]
 
-    s3_version_store.write("t1", original_data)
-    s3_version_store.write("t2", original_data)
+    object_version_store.write("t1", original_data)
+    object_version_store.write("t2", original_data)
 
-    s3_version_store.snapshot("snap_versions")
-    s3_version_store.write("t1", original_data)
+    object_version_store.snapshot("snap_versions")
+    object_version_store.write("t1", original_data)
 
-    all_versions = s3_version_store.list_versions()
+    all_versions = object_version_store.list_versions()
 
     assert sorted([v["version"] for v in all_versions if v["symbol"] == "t1" and not v["deleted"]]) == sorted([0, 1])
 
@@ -237,55 +239,31 @@ def test_pruned_symbol_in_symbol_read_version(lmdb_version_store_tombstone_and_p
     assert lib.read("a", as_of="snap").data == 1
 
 
-import pandas as pd
-
-
-def test_read_symbol_with_ts_in_snapshot(lmdb_version_store, sym):
-    lib = lmdb_version_store
+@pytest.mark.parametrize(
+    "store", ["lmdb_version_store_v1", "lmdb_version_store_v2", "lmdb_version_store_tombstone_and_pruning"]
+)
+def test_read_symbol_with_ts_in_snapshot(store, request, sym):
+    lib = request.getfixturevalue(store)
     lib.write(sym, 0)
-    lib.write(sym, 1)
-    time_after_second_write = pd.Timestamp.utcnow()
+    with distinct_timestamps(lib) as second_write_timestamps:
+        lib.write(sym, 1)
     lib.snapshot("snap")
     # After this write only version 1 exists via the snapshot
-    lib.write(sym, 2, prune_previous_version=True)
-    time_after_third_write = pd.Timestamp.utcnow()
+    with distinct_timestamps(lib) as third_write_timestamps:
+        lib.write(sym, 2, prune_previous_version=True)
 
     assert lib.read(sym).data == 2
     versions = lib.list_versions()
     assert len(versions) == 2  # deleted for version 1
 
     assert lib.read(sym, as_of=1).data == 1
-    assert lib.read(sym, as_of=time_after_second_write).version == 1
-    assert lib.read(sym, as_of=time_after_second_write).data == 1
+    assert lib.read(sym, as_of=second_write_timestamps.after).version == 1
+    assert lib.read(sym, as_of=second_write_timestamps.after).data == 1
 
     lib.snapshot("snap1")
     lib.delete_version(sym, 2)
     assert lib.read(sym, as_of=2).data == 2  # still in snapshot
-    assert lib.read(sym, as_of=time_after_third_write).version == 2
-
-
-def test_read_symbol_with_ts_in_snapshot_with_pruning(lmdb_version_store_tombstone_and_pruning, sym):
-    lib = lmdb_version_store_tombstone_and_pruning
-    lib.write(sym, 0)
-    lib.write(sym, 1)
-    time_after_second_write = pd.Timestamp.utcnow()
-    lib.snapshot("snap")
-    # After this write only version 1 exists via the snapshot
-    lib.write(sym, 2, prune_previous_version=True)
-    time_after_third_write = pd.Timestamp.utcnow()
-
-    assert lib.read(sym).data == 2
-    versions = lib.list_versions()
-    assert len(versions) == 2  # deleted for version 1
-
-    assert lib.read(sym, as_of=1).data == 1
-    assert lib.read(sym, as_of=time_after_second_write).version == 1
-    assert lib.read(sym, as_of=time_after_second_write).data == 1
-
-    lib.snapshot("snap1")
-    lib.delete_version(sym, 2)
-    assert lib.read(sym, as_of=2).data == 2  # still in snapshot
-    assert lib.read(sym, as_of=time_after_third_write).version == 2
+    assert lib.read(sym, as_of=third_write_timestamps.after).version == 2
 
 
 def test_snapshot_random_versions_to_fail(lmdb_version_store_tombstone_and_pruning, sym):

@@ -19,7 +19,11 @@ def generate_symbol(lib, sym):
     lib.write(sym, df0)
     lib.append(sym, df1)
     expected_column_stats = lib.read_index(sym)
-    expected_column_stats.drop(expected_column_stats.columns.difference(["start_index", "end_index"]), 1, inplace=True)
+    expected_column_stats.drop(
+        expected_column_stats.columns.difference(["start_index", "end_index"]),
+        axis=1,
+        inplace=True,
+    )
     expected_column_stats = expected_column_stats.iloc[[0, 1]]
     expected_column_stats["v1.0_MIN(col_1)"] = [df0["col_1"].min(), df1["col_1"].min()]
     expected_column_stats["v1.0_MAX(col_1)"] = [df0["col_1"].max(), df1["col_1"].max()]
@@ -41,7 +45,7 @@ def test_column_stats_basic_flow(lmdb_version_store_tiny_segment):
     expected_column_stats = generate_symbol(lib, sym)
     expected_column_stats.drop(
         expected_column_stats.columns.difference(["start_index", "end_index", "v1.0_MIN(col_1)", "v1.0_MAX(col_1)"]),
-        1,
+        axis=1,
         inplace=True,
     )
 
@@ -74,7 +78,11 @@ def test_column_stats_infinity(lmdb_version_store_tiny_segment):
     lib.append(sym, df1)
     lib.append(sym, df2)
     expected_column_stats = lib.read_index(sym)
-    expected_column_stats.drop(expected_column_stats.columns.difference(["start_index", "end_index"]), 1, inplace=True)
+    expected_column_stats.drop(
+        expected_column_stats.columns.difference(["start_index", "end_index"]),
+        axis=1,
+        inplace=True,
+    )
     expected_column_stats = expected_column_stats.iloc[[0, 1, 2]]
     expected_column_stats["v1.0_MIN(col_1)"] = [df0["col_1"].min(), df1["col_1"].min(), df2["col_1"].min()]
     expected_column_stats["v1.0_MAX(col_1)"] = [df0["col_1"].max(), df1["col_1"].max(), df2["col_1"].max()]
@@ -94,7 +102,7 @@ def test_column_stats_as_of(lmdb_version_store_tiny_segment):
     expected_column_stats = expected_column_stats.iloc[[0]]
     expected_column_stats.drop(
         expected_column_stats.columns.difference(["start_index", "end_index", "v1.0_MIN(col_1)", "v1.0_MAX(col_1)"]),
-        1,
+        axis=1,
         inplace=True,
     )
 
@@ -150,7 +158,7 @@ def test_column_stats_multiple_indexes_different_columns(lmdb_version_store_tiny
 
     expected_column_stats.drop(
         expected_column_stats.columns.difference(["start_index", "end_index", "v1.0_MIN(col_1)", "v1.0_MAX(col_1)"]),
-        1,
+        axis=1,
         inplace=True,
     )
     column_stats = lib.read_column_stats(sym)
@@ -251,7 +259,7 @@ def test_column_stats_multiple_creates(lmdb_version_store_tiny_segment):
     expected_column_stats = base_expected_column_stats.copy()
     expected_column_stats.drop(
         expected_column_stats.columns.difference(["start_index", "end_index", "v1.0_MIN(col_1)", "v1.0_MAX(col_1)"]),
-        1,
+        axis=1,
         inplace=True,
     )
     column_stats = lib.read_column_stats(sym)
@@ -287,10 +295,14 @@ def test_column_stats_duplicated_primary_index(lmdb_version_store_tiny_segment):
     lib = lmdb_version_store_tiny_segment
     sym = "test_column_stats_duplicated_primary_index"
 
-    total_df = df0.append(df1)
+    total_df = pd.concat((df0, df1))
     lib.write(sym, total_df)
     expected_column_stats = lib.read_index(sym)
-    expected_column_stats.drop(expected_column_stats.columns.difference(["start_index", "end_index"]), 1, inplace=True)
+    expected_column_stats.drop(
+        expected_column_stats.columns.difference(["start_index", "end_index"]),
+        axis=1,
+        inplace=True,
+    )
     expected_column_stats = expected_column_stats.iloc[[0, 1]]
     expected_column_stats["v1.0_MIN(col_1)"] = [df0["col_1"].min(), df1["col_1"].min()]
     expected_column_stats["v1.0_MAX(col_1)"] = [df0["col_1"].max(), df1["col_1"].max()]
@@ -324,7 +336,11 @@ def test_column_stats_dynamic_schema_missing_data(lmdb_version_store_tiny_segmen
     df = lib.read(sym).data
 
     expected_column_stats = lib.read_index(sym)
-    expected_column_stats.drop(expected_column_stats.columns.difference(["start_index", "end_index"]), 1, inplace=True)
+    expected_column_stats.drop(
+        expected_column_stats.columns.difference(["start_index", "end_index"]),
+        axis=1,
+        inplace=True,
+    )
     expected_column_stats = expected_column_stats.iloc[[0, 1, 2, 3, 4]]
     expected_column_stats["v1.0_MIN(col_1)"] = [
         df0["col_1"].min(),
@@ -395,7 +411,11 @@ def test_column_stats_dynamic_schema_types_changing(lmdb_version_store_tiny_segm
     lib.append(sym, df1)
 
     expected_column_stats = lib.read_index(sym)
-    expected_column_stats.drop(expected_column_stats.columns.difference(["start_index", "end_index"]), 1, inplace=True)
+    expected_column_stats.drop(
+        expected_column_stats.columns.difference(["start_index", "end_index"]),
+        axis=1,
+        inplace=True,
+    )
     expected_column_stats = expected_column_stats.iloc[[0, 1]]
     expected_column_stats["v1.0_MIN(int_widening)"] = [df0["int_widening"].min(), df1["int_widening"].min()]
     expected_column_stats["v1.0_MAX(int_widening)"] = [df0["int_widening"].max(), df1["int_widening"].max()]

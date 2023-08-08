@@ -5,7 +5,6 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
-import time
 import numpy as np
 from pandas import DataFrame, Timestamp
 import pytest
@@ -13,18 +12,15 @@ import pytest
 from arcticdb.version_store import NativeVersionStore, VersionedItem
 from arcticdb.exceptions import ArcticNativeNotYetImplemented
 from arcticdb_ext.storage import NoDataFoundException
-from arcticdb.util.test import assert_frame_equal
+from arcticdb.util.test import assert_frame_equal, distinct_timestamps
 
 
 # In the following lines, the naming convention is
 # test_rt_df stands for roundtrip dataframe (implicitly pandas given file name)
 
 
-@pytest.mark.parametrize(
-    "lib_type", ["lmdb_version_store_v1", "lmdb_version_store_v2", "s3_version_store_v1", "s3_version_store_v2"]
-)
-def test_rt_df_with_small_meta(lib_type, request):
-    lib = request.getfixturevalue(lib_type)
+def test_rt_df_with_small_meta(object_and_lmdb_version_store):
+    lib = object_and_lmdb_version_store
     #  type: (NativeVersionStore)->None
     df = DataFrame(data=["A", "B", "C"])
     meta = {"abc": "def", "xxx": "yyy"}
@@ -34,28 +30,21 @@ def test_rt_df_with_small_meta(lib_type, request):
     assert meta == vit.metadata
 
 
-@pytest.mark.parametrize(
-    "lib_type", ["lmdb_version_store_v1", "lmdb_version_store_v2", "s3_version_store_v1", "s3_version_store_v2"]
-)
-def test_rt_df_with_humonguous_meta(lib_type, request):
+def test_rt_df_with_humonguous_meta(object_and_lmdb_version_store):
     with pytest.raises(ArcticNativeNotYetImplemented):
         from arcticdb.version_store._normalization import _MAX_USER_DEFINED_META as MAX
 
-        lib = request.getfixturevalue(lib_type)
         df = DataFrame(data=["A", "B", "C"])
         meta = {"a": "x" * (MAX)}
-        lib.write("pandas", df, metadata=meta)
+        object_and_lmdb_version_store.write("pandas", df, metadata=meta)
 
-        vit = lib.read("pandas")
+        vit = object_and_lmdb_version_store.read("pandas")
         assert_frame_equal(df, vit)
         assert meta == vit.metadata
 
 
-@pytest.mark.parametrize(
-    "lib_type", ["lmdb_version_store_v1", "lmdb_version_store_v2", "s3_version_store_v1", "s3_version_store_v2"]
-)
-def test_read_metadata(lib_type, request):
-    lib = request.getfixturevalue(lib_type)
+def test_read_metadata(object_and_lmdb_version_store):
+    lib = object_and_lmdb_version_store
     original_data = [1, 2, 3]
     snap_name = "metadata_snap_1"
     symbol = "test_symbol"
@@ -65,11 +54,8 @@ def test_read_metadata(lib_type, request):
     assert lib.read_metadata("test_symbol").metadata == metadata
 
 
-@pytest.mark.parametrize(
-    "lib_type", ["lmdb_version_store_v1", "lmdb_version_store_v2", "s3_version_store_v1", "s3_version_store_v2"]
-)
-def test_read_metadata_by_version(lib_type, request):
-    lib = request.getfixturevalue(lib_type)
+def test_read_metadata_by_version(object_and_lmdb_version_store):
+    lib = object_and_lmdb_version_store
     data_v1 = [1, 2, 3]
     data_v2 = [10, 20, 30]
     symbol = "test_symbol"
@@ -97,22 +83,21 @@ def test_read_metadata_by_timestamp(lmdb_version_store):
     symbol = "test_symbol"
 
     metadata_v0 = {"something": 1}
-    lmdb_version_store.write(symbol, 1, metadata=metadata_v0)  # v0
-    time_after_first_write = Timestamp.utcnow()
-    time.sleep(0.1)
+    with distinct_timestamps(lmdb_version_store) as first_write_timestamps:
+        lmdb_version_store.write(symbol, 1, metadata=metadata_v0)  # v0
 
     with pytest.raises(NoDataFoundException):
         lmdb_version_store.read(symbol, as_of=Timestamp(0))
 
-    assert lmdb_version_store.read_metadata(symbol, as_of=time_after_first_write).metadata == metadata_v0
+    assert lmdb_version_store.read_metadata(symbol, as_of=first_write_timestamps.after).metadata == metadata_v0
 
     metadata_v1 = {"something more": 2}
-    lmdb_version_store.write(symbol, 2, metadata=metadata_v1)  # v1
-    time.sleep(0.11)
+    with distinct_timestamps(lmdb_version_store):
+        lmdb_version_store.write(symbol, 2, metadata=metadata_v1)  # v1
 
     metadata_v2 = {"something else": 3}
-    lmdb_version_store.write(symbol, 3, metadata=metadata_v2)  # v2
-    time.sleep(0.1)
+    with distinct_timestamps(lmdb_version_store):
+        lmdb_version_store.write(symbol, 3, metadata=metadata_v2)  # v2
 
     metadata_v3 = {"nothing": 4}
     lmdb_version_store.write(symbol, 4, metadata=metadata_v3)  # v3
@@ -121,7 +106,7 @@ def test_read_metadata_by_timestamp(lmdb_version_store):
     assert len(versions) == 4
     sorted_versions_for_a = sorted([v for v in versions if v["symbol"] == symbol], key=lambda x: x["version"])
 
-    assert lmdb_version_store.read_metadata(symbol, as_of=time_after_first_write).metadata == metadata_v0
+    assert lmdb_version_store.read_metadata(symbol, as_of=first_write_timestamps.after).metadata == metadata_v0
 
     ts_for_v1 = sorted_versions_for_a[1]["date"]
     assert lmdb_version_store.read_metadata(symbol, as_of=ts_for_v1).metadata == metadata_v1
