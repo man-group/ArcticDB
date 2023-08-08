@@ -5,5 +5,6 @@ set(VCPKG_LIBRARY_LINKAGE static)
 set(VCPKG_CMAKE_SYSTEM_NAME Linux)
 
 if(PORT MATCHES "curl")
-    set(VCPKG_LIBRARY_LINKAGE "dynamic")
-endif()
+    set(VCPKG_LIBRARY_LINKAGE dynamic)
+    set(VCPKG_FIXUP_ELF_RPATH ON)
+endif() 
