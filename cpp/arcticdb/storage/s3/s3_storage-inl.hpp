@@ -231,9 +231,9 @@ auto head_object(
 }
 
 
-template<class Visitor, class S3ClientType, class KeyBucketizer>
+template<class S3ClientType, class KeyBucketizer>
 void do_read_impl(Composite<VariantKey> && ks,
-                  Visitor&& visitor,
+                  const ReadVisitor& visitor,
                   const std::string& root_folder,
                   const std::string& bucket_name,
                   S3ClientType& s3_client,
@@ -443,9 +443,8 @@ inline void S3Storage::do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts) {
     detail::do_update_impl(std::move(kvs), root_folder_, bucket_name_, s3_client_, FlatBucketizer{});
 }
 
-template<class Visitor>
-void S3Storage::do_read(Composite<VariantKey>&& ks, Visitor&& visitor, ReadKeyOpts opts) {
-    detail::do_read_impl(std::move(ks), std::move(visitor), root_folder_, bucket_name_, s3_client_, FlatBucketizer{}, opts);
+inline void S3Storage::do_read(Composite<VariantKey>&& ks, const ReadVisitor& visitor, ReadKeyOpts opts) {
+    detail::do_read_impl(std::move(ks), visitor, root_folder_, bucket_name_, s3_client_, FlatBucketizer{}, opts);
 }
 
 inline void S3Storage::do_remove(Composite<VariantKey>&& ks, RemoveOpts) {
