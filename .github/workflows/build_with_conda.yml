@@ -89,9 +89,6 @@ jobs:
       matrix:
         include:
           - os: macos-latest
-            cpp_tests: "1"
-            python_tests: "0"
-            
 
       fail-fast: false
     runs-on: ${{ matrix.os }}
@@ -106,7 +103,6 @@ jobs:
         id: cpu-cores
 
       - name: Append to environment_unix.yml
-        if: matrix.cpp_tests == '1'
         shell: bash -l {0}
         run: |
             echo "  - cxx-compiler" >> environment_unix.yml
@@ -128,10 +124,9 @@ jobs:
           python -m pip install --no-build-isolation --no-deps -v -e .
         env:
           ARCTICDB_USING_CONDA: 1
-          ARCTICDB_BUILD_CPP_TESTS: ${{ matrix.cpp_tests }}
+          ARCTICDB_BUILD_CPP_TESTS: 1
 
       - name: Build C++ Tests
-        if: matrix.cpp_tests == '1'
         shell: bash -l {0}
         run: |
           cd cpp/out/darwin-conda-release-build/
@@ -139,17 +134,8 @@ jobs:
           make -j ${{ steps.cpu-cores.outputs.count }} test_unit_arcticdb
   
       - name: Run C++ Tests
-        if: matrix.cpp_tests == '1'
         shell: bash -l {0}
         run: |
           cd cpp/out/darwin-conda-release-build/
           make test
 
-      - name: Test with pytest
-        if: matrix.python_tests == '1'
-        shell: bash -l {0}
-        run: |
-          cd python
-          python -m pytest tests
-        env:
-          ARCTICDB_USING_CONDA: 1
