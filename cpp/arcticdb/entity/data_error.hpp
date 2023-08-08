@@ -25,30 +25,32 @@ enum class VersionRequestType: uint32_t {
 class DataError {
 public:
     DataError(const StreamId& symbol,
-              const pipelines::VersionQueryType& version_query_type,
               std::string&& exception_string,
+              const std::optional<pipelines::VersionQueryType>& version_query_type=std::nullopt,
               std::optional<ErrorCode> error_code=std::nullopt) :
         symbol_(symbol),
         exception_string_(exception_string),
         error_code_(error_code){
-        util::variant_match(
-                version_query_type,
-                [this] (const pipelines::SnapshotVersionQuery& query) {
-                    version_request_type_ = VersionRequestType::SNAPSHOT;
-                    version_request_data_ = query.name_;
-                },
-                [this] (const pipelines::TimestampVersionQuery& query) {
-                    version_request_type_ = VersionRequestType::TIMESTAMP;
-                    version_request_data_ = query.timestamp_;
-                },
-                [this] (const pipelines::SpecificVersionQuery& query) {
-                    version_request_type_ = VersionRequestType::SPECIFIC;
-                    version_request_data_ = query.version_id_;
-                },
-                [this] (const std::monostate&) {
-                    version_request_type_ = VersionRequestType::LATEST;
-                }
-        );
+        if (version_query_type.has_value()){
+            util::variant_match(
+                    *version_query_type,
+                    [this] (const pipelines::SnapshotVersionQuery& query) {
+                        version_request_type_ = VersionRequestType::SNAPSHOT;
+                        version_request_data_ = query.name_;
+                    },
+                    [this] (const pipelines::TimestampVersionQuery& query) {
+                        version_request_type_ = VersionRequestType::TIMESTAMP;
+                        version_request_data_ = query.timestamp_;
+                    },
+                    [this] (const pipelines::SpecificVersionQuery& query) {
+                        version_request_type_ = VersionRequestType::SPECIFIC;
+                        version_request_data_ = query.version_id_;
+                    },
+                    [this] (const std::monostate&) {
+                        version_request_type_ = VersionRequestType::LATEST;
+                    }
+            );
+        }
     }
 
     DataError() = delete;
@@ -63,11 +65,11 @@ public:
         return fmt::format("{}", symbol_);
     }
 
-    VersionRequestType version_request_type() const {
+    std::optional<VersionRequestType>  version_request_type() const {
         return version_request_type_;
     }
 
-    std::variant<std::monostate, int64_t, std::string> version_request_data() const {
+    std::optional<std::variant<std::monostate, int64_t, std::string>> version_request_data() const {
         return version_request_data_;
     }
 
@@ -84,24 +86,26 @@ public:
     }
 
     std::string to_string() const {
-        std::string version_request_explanation;
-        switch (version_request_type_) {
-            case VersionRequestType::SNAPSHOT:
-                version_request_explanation = fmt::format("in snapshot '{}'", std::get<std::string>(version_request_data_));
-                break;
-            case VersionRequestType::TIMESTAMP:
-                version_request_explanation = fmt::format("at time '{}'", std::get<int64_t>(version_request_data_));
-                break;
-            case VersionRequestType::SPECIFIC:
-                version_request_explanation = fmt::format("with specified version '{}'", std::get<int64_t>(version_request_data_));
-                break;
-            case VersionRequestType::LATEST:
-                version_request_explanation = fmt::format("with specified version 'latest'");
-                break;
-            default:
-                internal::raise<ErrorCode::E_ASSERTION_FAILURE>(
-                        "Unexpected enum value in DataError::to_string: {}",
-                        static_cast<uint32_t>(version_request_type_));
+        std::string version_request_explanation = "UNKNOWN";
+        if (version_request_type_.has_value()) {
+            switch (*version_request_type_) {
+                case VersionRequestType::SNAPSHOT:
+                    version_request_explanation = fmt::format("in snapshot '{}'", std::get<std::string>(*version_request_data_));
+                    break;
+                case VersionRequestType::TIMESTAMP:
+                    version_request_explanation = fmt::format("at time '{}'", std::get<int64_t>(*version_request_data_));
+                    break;
+                case VersionRequestType::SPECIFIC:
+                    version_request_explanation = fmt::format("with specified version '{}'", std::get<int64_t>(*version_request_data_));
+                    break;
+                case VersionRequestType::LATEST:
+                    version_request_explanation = fmt::format("with specified version 'latest'");
+                    break;
+                default:
+                    internal::raise<ErrorCode::E_ASSERTION_FAILURE>(
+                            "Unexpected enum value in DataError::to_string: {}",
+                            static_cast<uint32_t>(*version_request_type_));
+            }
         }
         return fmt::format(
                 "Version {} of symbol '{}' unable to be retrieved: Error Category: '{}' Exception String: '{}'",
@@ -112,9 +116,9 @@ public:
     }
 private:
     StreamId symbol_;
-    VersionRequestType version_request_type_{VersionRequestType::LATEST};
+    std::optional<VersionRequestType> version_request_type_;
     // int64_t for timestamp and SignedVersionId
-    std::variant<std::monostate, int64_t, std::string> version_request_data_;
+    std::optional<std::variant<std::monostate, int64_t, std::string>> version_request_data_;
     std::string exception_string_;
     std::optional<ErrorCode> error_code_;
 };
