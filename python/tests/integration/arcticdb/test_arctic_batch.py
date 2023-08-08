@@ -13,11 +13,11 @@ from arcticdb_ext.exceptions import ErrorCode, ErrorCategory
 
 from arcticdb.version_store import VersionedItem as PythonVersionedItem
 from arcticdb_ext.storage import KeyType
-from arcticdb_ext.version_store import DataError, VersionRequestType
+from arcticdb_ext.version_store import VersionRequestType
 
 from arcticdb.arctic import Arctic
 from arcticdb.options import LibraryOptions
-from arcticdb import QueryBuilder
+from arcticdb import QueryBuilder, DataError
 
 import pytest
 import pandas as pd
@@ -440,6 +440,28 @@ def test_read_batch_as_of(arctic_library):
     assert batch[0].data.empty
     assert not batch[1].data.empty
     assert type(batch[1]) == PythonVersionedItem
+
+
+def test_batch_methods_with_negative_as_of(arctic_library):
+    lib = arctic_library
+    sym = "test_batch_methods_with_negative_as_of"
+    data_0 = 0
+    data_1 = 1
+    metadata_0 = {"some": "metadata"}
+    metadata_1 = {"more": "metadata"}
+    lib.write_pickle(sym, data_0, metadata=metadata_0)
+    lib.write_pickle(sym, data_1, metadata=metadata_1)
+    res = lib.read_batch([ReadRequest(sym, as_of=-1), ReadRequest(sym, as_of=-2)])
+    assert res[0].data == data_1
+    assert res[1].data == data_0
+
+    res = lib.read_metadata_batch([ReadInfoRequest(sym, as_of=-1), ReadInfoRequest(sym, as_of=-2)])
+    assert res[0].metadata == metadata_1
+    assert res[1].metadata == metadata_0
+
+    res = lib.get_description_batch([ReadInfoRequest(sym, as_of=-1), ReadInfoRequest(sym, as_of=-2)])
+    assert res[0] == lib.get_description(sym)
+    assert res[1] == lib.get_description(sym, as_of=0)
 
 
 def test_read_batch_date_ranges(arctic_library):

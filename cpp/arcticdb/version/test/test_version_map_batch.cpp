@@ -59,7 +59,7 @@ TEST_F(VersionMapBatchStore, SimpleVersionIdQueries) {
     }
 
     // do batch versions read
-    auto versions = folly::collect(batch_get_versions_async(store, version_map, stream_ids, version_queries)).get();
+    auto versions = folly::collect(batch_get_versions_async(store, version_map, stream_ids, version_queries, false)).get();
     
     // Do the checks
     for(uint64_t i = 0; i < num_streams; i++){
@@ -101,7 +101,7 @@ TEST_F(VersionMapBatchStore, SimpleTimestampQueries) {
     }
 
     // do batch versions read
-    auto versions = folly::collect(batch_get_versions_async(store, version_map, stream_ids, version_queries)).get();
+    auto versions = folly::collect(batch_get_versions_async(store, version_map, stream_ids, version_queries, false)).get();
 
     //Secondly, once we have the timestamps in hand, we are going to query them
     version_queries.clear();
@@ -113,7 +113,7 @@ TEST_F(VersionMapBatchStore, SimpleTimestampQueries) {
     }
 
     // Now we can perform the actual batch query per timestamps
-    auto versions_querying_with_timestamp = folly::collect(batch_get_versions_async(store, version_map, stream_ids, version_queries)).get();
+    auto versions_querying_with_timestamp = folly::collect(batch_get_versions_async(store, version_map, stream_ids, version_queries, false)).get();
 
     // Do the checks
     for(uint64_t i = 0; i < num_streams; i++){
@@ -150,7 +150,7 @@ TEST_F(VersionMapBatchStore, MultipleVersionsSameSymbolVersionIdQueries) {
     }
 
     // Do query
-    auto versions = folly::collect(batch_get_versions_async(store, version_map, stream_ids, version_queries)).get();
+    auto versions = folly::collect(batch_get_versions_async(store, version_map, stream_ids, version_queries, false)).get();
     
     // Check results
     for(uint64_t i = 0; i < num_versions; i++){
@@ -183,7 +183,7 @@ TEST_F(VersionMapBatchStore, MultipleVersionsSameSymbolTimestampQueries) {
     }
 
     // Do query
-    auto versions = folly::collect(batch_get_versions_async(store, version_map, stream_ids, version_queries)).get();
+    auto versions = folly::collect(batch_get_versions_async(store, version_map, stream_ids, version_queries, false)).get();
 
     //Secondly, once we have the timestamps in hand, we are going to query them
     version_queries.clear();
@@ -192,7 +192,7 @@ TEST_F(VersionMapBatchStore, MultipleVersionsSameSymbolTimestampQueries) {
     }
 
     // Now we can perform the actual batch query per timestamps
-    auto versions_querying_with_timestamp = folly::collect(batch_get_versions_async(store, version_map, stream_ids, version_queries)).get();
+    auto versions_querying_with_timestamp = folly::collect(batch_get_versions_async(store, version_map, stream_ids, version_queries, false)).get();
 
     // Do the checks
     for(uint64_t i = 0; i < num_versions; i++){
@@ -231,7 +231,7 @@ TEST_F(VersionMapBatchStore, CombinedQueries) {
     }
 
     // do batch versions read
-    auto versions = folly::collect(batch_get_versions_async(store, version_map, stream_ids, version_queries)).get();
+    auto versions = folly::collect(batch_get_versions_async(store, version_map, stream_ids, version_queries, false)).get();
 
     //Secondly, once we have the timestamps in hand, we are going to query them
     version_queries.clear();
@@ -249,7 +249,7 @@ TEST_F(VersionMapBatchStore, CombinedQueries) {
         }
     }
 
-    auto versions_querying_with_mix_types = folly::collect(batch_get_versions_async(store, version_map, stream_ids, version_queries)).get();
+    auto versions_querying_with_mix_types = folly::collect(batch_get_versions_async(store, version_map, stream_ids, version_queries, false)).get();
 
     // Do the checks
     for(uint64_t i = 0; i < num_streams; i++){

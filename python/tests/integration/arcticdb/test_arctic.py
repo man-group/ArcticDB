@@ -19,13 +19,13 @@ except ImportError:
     # arcticdb squashes the packages
     from arcticdb._store import VersionedItem as PythonVersionedItem
 from arcticdb_ext.storage import NoDataFoundException, KeyType
-from arcticdb_ext.version_store import DataError, VersionRequestType
+from arcticdb_ext.version_store import VersionRequestType
 
 from arcticdb.arctic import Arctic
 from arcticdb.adapters.s3_library_adapter import S3LibraryAdapter
 from arcticdb.options import LibraryOptions
 from arcticdb.encoding_version import EncodingVersion
-from arcticdb import QueryBuilder
+from arcticdb import QueryBuilder, DataError
 from arcticc.pb2.s3_storage_pb2 import Config as S3Config
 
 import math
@@ -37,14 +37,9 @@ import numpy as np
 
 from arcticdb_ext.tools import AZURE_SUPPORT
 from numpy import datetime64
-from arcticdb.util.test import (
-    assert_frame_equal,
-    random_strings_of_length,
-    random_floats,
-)
 from arcticdb.util._versions import IS_PANDAS_TWO
+from arcticdb.util.test import assert_frame_equal, random_strings_of_length, random_floats
 import random
-
 
 if AZURE_SUPPORT:
     from azure.storage.blob import BlobServiceClient

@@ -13,6 +13,8 @@ import pandas as pd
 import pytest
 import string
 import random
+import time
+import attr
 from six import PY3
 from copy import deepcopy
 from functools import wraps
@@ -20,6 +22,7 @@ from functools import wraps
 from arcticdb.config import Defaults
 from arcticdb.log import configure, logger_by_name
 from arcticdb.util._versions import PANDAS_VERSION, CHECK_FREQ_VERSION
+from arcticdb.version_store import NativeVersionStore
 from arcticdb.version_store._custom_normalizers import CustomNormalizer
 from arcticc.pb2.descriptors_pb2 import NormalizationMetadata
 from arcticc.pb2.logger_pb2 import LoggerConfig, LoggersConfig
@@ -485,3 +488,31 @@ def regularize_dataframe(df):
     output = output.reset_index(drop=True)
     output = output.astype("float", errors="ignore")
     return output
+
+
+@attr.s(slots=True, auto_attribs=True)
+class BeforeAfterTimestamp:
+    before: pd.Timestamp
+    after: Optional[pd.Timestamp]
+
+
+@contextmanager
+def distinct_timestamps(lib: NativeVersionStore):
+    """Ensures the timestamp used by ArcticDB operations before, during and leaving the context are all different.
+
+    Yields
+    ------
+    BeforeAfterTimestamp
+    """
+    get_ts = lib.version_store.get_store_current_timestamp_for_tests
+    before = get_ts()
+    while get_ts() == before:
+        time.sleep(0.000001)  # 1us - The worst resolution in our clock implementations
+    out = BeforeAfterTimestamp(pd.Timestamp(before, unit="ns"), None)
+    try:
+        yield out
+    finally:
+        right_after = get_ts()
+        while get_ts() == right_after:
+            time.sleep(0.000001)
+        out.after = pd.Timestamp(get_ts(), unit="ns")

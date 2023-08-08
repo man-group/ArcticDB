@@ -16,6 +16,7 @@ from arcticdb.supported_types import Timestamp
 from arcticdb.version_store.processing import QueryBuilder
 from arcticdb.version_store._store import NativeVersionStore, VersionedItem, VersionQueryInput
 from arcticdb_ext.exceptions import ArcticException
+from arcticdb_ext.version_store import DataError
 import pandas as pd
 import numpy as np
 import logging
@@ -861,7 +862,7 @@ class Library:
 
     def read_batch(
         self, symbols: List[Union[str, ReadRequest]], query_builder: Optional[QueryBuilder] = None
-    ) -> List[VersionedItem]:
+    ) -> List[Union[VersionedItem, DataError]]:
         """
         Reads multiple symbols.
 
@@ -902,6 +903,9 @@ class Library:
         True
         >>> batch[3].symbol
         "s2"
+        >>> from arcticdb import DataError
+        >>> isinstance(batch[3], DataError)
+        True
         >>> batch[3].version_request_type
         VersionRequestType.SPECIFIC
         >>> batch[3].version_request_data

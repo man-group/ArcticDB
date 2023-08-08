@@ -51,9 +51,10 @@ namespace as = arcticdb::stream;
 class PythonVersionStore : public LocalVersionedEngine {
 
   public:
-    explicit PythonVersionStore(
-        const std::shared_ptr<storage::Library>& library,
-        const std::optional<std::string>& license_key = std::nullopt);
+    template<class ClockType = util::SysClock>
+    explicit PythonVersionStore(const std::shared_ptr<storage::Library>& library, const ClockType& ct = util::SysClock{}) :
+        LocalVersionedEngine(library, ct) {
+    }
 
     VersionedItem write_dataframe_specific_version(
         const StreamId& stream_id,
@@ -181,16 +182,19 @@ class PythonVersionStore : public LocalVersionedEngine {
 
     std::pair<VersionedItem, py::object> read_metadata(
         const StreamId& stream_id,
-        const VersionQuery& version_query
+        const VersionQuery& version_query,
+        const ReadOptions& read_options
     );
 
     std::vector<DescriptorItem> batch_read_descriptor(
         const std::vector<StreamId>& stream_ids,
-        const std::vector<VersionQuery>& version_queries);
+        const std::vector<VersionQuery>& version_queries,
+        const ReadOptions& read_options);
 
     DescriptorItem read_descriptor(
         const StreamId& stream_id,
-        const VersionQuery& version_query);
+        const VersionQuery& version_query,
+        const ReadOptions& read_options);
 
     ReadResult read_index(
         const StreamId& stream_id,
@@ -290,7 +294,8 @@ class PythonVersionStore : public LocalVersionedEngine {
 
     std::vector<std::pair<VersionedItem, py::object>> batch_read_metadata(
         const std::vector<StreamId>& stream_ids,
-        const std::vector<VersionQuery>& version_queries);
+        const std::vector<VersionQuery>& version_queries,
+        const ReadOptions& read_options);
 
     std::set<StreamId> list_streams(
         const std::optional<SnapshotId>& snap_name = std::nullopt,
@@ -333,6 +338,11 @@ private:
         bool prune_previous_versions);
 
     void delete_snapshot_sync(const SnapshotId& snap_name, const VariantKey& snap_key);
+};
+
+struct ManualClockVersionStore : PythonVersionStore {
+    ManualClockVersionStore(const std::shared_ptr<storage::Library>& library) :
+            PythonVersionStore(library, util::ManualClock{}) {}
 };
 
 inline std::vector<std::variant<ReadResult, DataError>> frame_to_read_result(std::vector<ReadVersionOutput>&& keys_frame_and_descriptors) {

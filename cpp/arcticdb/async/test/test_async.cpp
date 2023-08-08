@@ -43,7 +43,7 @@ TEST(Async, SinkBasic) {
 
     auto seg = ac::SegmentInMemory();
     aa::EncodeAtomTask enc{
-        ac::entity::KeyType::GENERATION, 6, 123, 456, 457, 999, std::move(seg), codec_opt, size_t(0), ac::EncodingVersion::V2
+        ac::entity::KeyType::GENERATION, 6, 123, 456, 457, 999, std::move(seg), codec_opt, ac::EncodingVersion::V2
     };
 
     auto v = sched.submit_cpu_task(enc).via(&aa::io_executor()).thenValue(aa::WriteSegmentTask{lib}).get();

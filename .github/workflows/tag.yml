@@ -1,14 +1,10 @@
-name: Tag Release
+name: Tag and Release
 on:
   workflow_dispatch:
     inputs:
       version:
         type: string
         required: true
-      bump:
-        description: Bump branch to the next version
-        type: choice
-        options: ["No", minor, patch, prerelease, build] # Major must be changed by hand
       overwrite:
         description: Force push tag
         type: boolean
@@ -35,11 +31,6 @@ jobs:
           git push origin HEAD:$3 $4
         }
     steps:
-      - name: Validate
-        run: |
-          pip3 install semver>=3
-          python3 -m semver check '${{inputs.version}}'
-
       - name: Checkout
         uses: actions/checkout@v3.3.0
         with:
@@ -53,10 +44,3 @@ jobs:
           # Remove the build status badge from a version tag
           sed -i 's#<img src="https://github.com/man-group/ArcticDB/actions/workflows/build.yml/badge.svg"/>##' README.md || true
           tag_and_push "Tagging" ${{inputs.version}} refs/tags/v${{inputs.version}} ${{inputs.overwrite && '-f' || ''}}
-
-      - name: Bump ${{github.ref_name}} to the next version
-        if: inputs.bump != 'No'
-        run: |
-          git switch -C bumping ${{github.ref}}
-          new_ver=`python3 -m semver bump ${{inputs.bump}} '${{inputs.version}}'`
-          tag_and_push "Bumping to" $new_ver ${{github.ref}}

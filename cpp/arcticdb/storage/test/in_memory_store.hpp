@@ -202,7 +202,7 @@ namespace arcticdb {
             util::raise_rte("Not implemented");
         }
 
-        RemoveKeyResultType remove_key_sync(const entity::VariantKey &key, RemoveOpts opts) override {
+        RemoveKeyResultType remove_key_sync(const entity::VariantKey &key, storage::RemoveOpts opts) override {
             StorageFailureSimulator::instance()->go(FailureType::DELETE);
             std::lock_guard lock{mutex_};
             size_t removed = util::variant_match(key,
@@ -296,6 +296,16 @@ namespace arcticdb {
 
         folly::Future<std::vector<RemoveKeyResultType>>
         remove_keys(const std::vector<entity::VariantKey> &keys, storage::RemoveOpts opts) override {
+            std::vector<RemoveKeyResultType> output;
+            for (const auto &key: keys) {
+                output.emplace_back(remove_key_sync(key, opts));
+            }
+
+            return output;
+        }
+
+        folly::Future<std::vector<RemoveKeyResultType>>
+        remove_keys(std::vector<entity::VariantKey> &&keys, storage::RemoveOpts opts) override {
             std::vector<RemoveKeyResultType> output;
             for (const auto &key: keys) {
                 output.emplace_back(remove_key_sync(key, opts));
