@@ -373,7 +373,9 @@ class NativeVersionStore:
                 f"The symbol '{symbol}' has one or more unsupported characters({','.join(UNSUPPORTED_S3_CHARS)})."
             )
 
-    def try_flatten_and_write_composite_object(self, symbol, data, metadata, pickle_on_failure, dynamic_strings):
+    def _try_flatten_and_write_composite_object(
+        self, symbol, data, metadata, pickle_on_failure, dynamic_strings, prune_previous
+    ):
         fl = Flattener()
         if fl.can_flatten(data):
             metastruct, to_write = fl.create_meta_structure(data, symbol)
@@ -390,7 +392,13 @@ class NativeVersionStore:
                 normalized_udm = normalize_metadata(metadata) if metadata is not None else None
                 normalized_metastruct = normalize_metadata(metastruct)
                 vit_composite = self.version_store.write_versioned_composite_data(
-                    symbol, normalized_metastruct, list(to_write.keys()), items, norm_metas, normalized_udm
+                    symbol,
+                    normalized_metastruct,
+                    list(to_write.keys()),
+                    items,
+                    norm_metas,
+                    normalized_udm,
+                    prune_previous,
                 )
                 return VersionedItem(
                     symbol=vit_composite.symbol,
@@ -555,8 +563,8 @@ class NativeVersionStore:
 
         # Do a multi_key write if the structured is nested and is not trivially normalizable via msgpack.
         if recursive_normalizers:
-            vit = self.try_flatten_and_write_composite_object(
-                symbol, data, metadata, pickle_on_failure, dynamic_strings
+            vit = self._try_flatten_and_write_composite_object(
+                symbol, data, metadata, pickle_on_failure, dynamic_strings, prune_previous_version
             )
             if isinstance(vit, VersionedItem):
                 return vit
@@ -1713,6 +1721,7 @@ class NativeVersionStore:
         via_iteration: Optional[bool] = True,
         sparsify: Optional[bool] = False,
         metadata: Optional[Any] = None,
+        prune_previous_version: Optional[bool] = None,
     ):
         """
         Compact previously written un-indexed chunks of data, produced by a tick collector or parallel
@@ -1735,13 +1744,21 @@ class NativeVersionStore:
             Convert data to sparse format (for tick data only)
         metadata : `Optional[Any]`, default=None
             Add user-defined metadata in the same way as write etc
+        prune_previous_version
+            Removes the previous versions from the database after a successful compaction
+            (unless the previous version is in a snapshot).
         Returns
         -------
         VersionedItem
             The data attribute will be None.
         """
+        prune_previous_version = self.resolve_defaults(
+            "prune_previous_version", self._write_options(), global_default=False, existing_value=prune_previous_version
+        )
         udm = normalize_metadata(metadata) if metadata is not None else None
-        return self.version_store.compact_incomplete(symbol, append, convert_int_to_float, via_iteration, sparsify, udm)
+        return self.version_store.compact_incomplete(
+            symbol, append, convert_int_to_float, via_iteration, sparsify, udm, prune_previous_version
+        )
 
     @staticmethod
     def _get_index_columns_from_descriptor(descriptor):
