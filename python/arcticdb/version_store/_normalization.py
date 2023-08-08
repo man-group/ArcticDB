@@ -109,7 +109,10 @@ if PY3:
     def _accept_array_string(v):
         # TODO remove this once arctic keeps the string type under the hood
         # and does not transform string into bytes
-        return isinstance(v, string_types) or isinstance(v, binary_type)
+        # string_types and binary_type can be a single type or a tuple
+        supported_string_types = string_types if isinstance(string_types, tuple) else (string_types,)
+        supported_binary_types = binary_type if isinstance(binary_type, tuple) else (binary_type,)
+        return type(v) in supported_string_types or type(v) in supported_binary_types
 
 else:
 
