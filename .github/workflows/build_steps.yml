@@ -260,6 +260,18 @@ jobs:
         env:
           CMAKE_BUILD_PARALLEL_LEVEL: ${{vars.CMAKE_BUILD_PARALLEL_LEVEL}}
 
+      - name: Set real storage variables
+        if: inputs.real_storage == 'true'
+        run: |
+          echo "ARCTICDB_REAL_S3_BUCKET=arcticdb-ci-test-bucket-01" >> $GITHUB_ENV
+          echo "ARCTICDB_REAL_S3_ENDPOINT=s3.eu-west-2.amazonaws.com" >> $GITHUB_ENV
+          echo "ARCTICDB_REAL_S3_REGION=eu-west-2" >> $GITHUB_ENV
+          echo "ARCTICDB_REAL_STORAGE_TESTS=1" >> $GITHUB_ENV
+          echo "ARCTICDB_REAL_S3_CLEAR=1" >> $GITHUB_ENV
+          echo "ARCTICDB_REAL_S3_ACCESS_KEY=${{ secrets.AWS_S3_ACCESS_KEY }}" >> $GITHUB_ENV
+          echo "ARCTICDB_REAL_S3_SECRET_KEY=${{ secrets.AWS_S3_SECRET_KEY }}" >> $GITHUB_ENV
+          echo "ARCTICDB_REAL_STORAGE_LIB_NAME=${{ github.ref_name }}_${{matrix.os}}_${{env.python_impl_name}}" >> $GITHUB_ENV
+          
       - name: Run test
         run: build_tooling/parallel_test.sh tests/${{matrix.type}}
         env:
