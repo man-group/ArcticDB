@@ -1,0 +1,26 @@
+# Build Tooling
+
+## Introduction
+
+This page aims to provide instructions on working with the scripts in the *build_tooling* folder.
+Normally, the scripts are designed to be ran as part of the CI / build process.
+This page looks into how they are used and how to run them locally, when needed (e.g. for testing).
+
+## Python scripts related to the Real Storage testing
+
+The Python scripts related to the real_storage contain *storage* in their name.
+They implement the following steps:
+1. Seed - seeding some libraries in the real storages
+    - the libraries names are predetermined from this pattern **seed**_{branch_name}\_{os}\_{python_version}
+    - in order to access this, you need to set the **ARCTICDB_REAL_STORAGE_LIB_NAME** environment variable 
+    - these libraries are used to test that the versions that we are building can read data from previous versions
+    - the libraries are used in the following test python\tests\integration\arcticdb\test_real_storage.py::test_real_s3_storage_read
+2. Verify - verifying libraries that were written by the pytests
+    - **important** - these libraries are not the same as the ones from steps one
+    - normally these libraries are written by the following test python\tests\integration\arcticdb\test_real_storage.py::test_real_s3_storage_write
+    - the libraries names are predetermined from this pattern **test**_{branch_name}\_{os}\_{python_version}
+    - to test the script locally you need to set the **ARCTICDB_REAL_STORAGE_BRANCH_NAME** environment variable
+    - and you need to have data written in a real storage (e.g. S3) in libraries that follow the format above
+3. Cleanup - cleans up all of the libraries that were created for testing
+    - test the script locally you need to set the **ARCTICDB_REAL_STORAGE_BRANCH_NAME** environment variable
+    - the script will then attempt to clean all of the **seed** and **test** libraries that were created for the given *branch_name*
