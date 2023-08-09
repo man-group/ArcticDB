@@ -2,25 +2,25 @@
 
 There are detailed guides on the AWS website on S3 configuration.  You can start with the [Creating your first bucket](https://docs.aws.amazon.com/AmazonS3/latest/userguide/creating-bucket.html) page.
 
-Best practice can depend on your situation.  If your looking to try our ArcticDB on AWS S3 then a reasonably simple approach is the following.
+Best practices with AWS S3 can depend on your situation.  If your looking to try our ArcticDB on AWS S3 then a reasonably simple approach is the following.
 
 ### 1. Create an IAM user
 
-Best practice is to manage and access S3 buckets with a Non-root IAM account in AWS.   It's not nessecery, but ideally create one just for trialling ArcticDB.
+Best practice is to manage and access S3 buckets with a Non-root IAM account in AWS.   Ideally create a new account just for trialling ArcticDB.
 
 You can create an IAM account at [IAM > Users](https://console.aws.amazon.com/iamv2/home#/users).
-- Come up with a username, e.g. `arcticdbtrial`
-- Attach the `AmazonS3FullAccess` policy to that account.
-- Click create.
+- Click `Add users`.
+- Come up with a username, e.g. `arcticdbtrial`, then click `Next`.
+- Select `Attach policies directly` and attach the `AmazonS3FullAccess` policy to that account, then click `Next`.
+- Click `Create user`.
 
-### 2. Create the Access key
+### 2. Create the access key
 
-Create a new access key,
-- Click on the IAM user account from the [IAM > Users](https://console.aws.amazon.com/iamv2/home#/users) table.
-- Go to Security credentials > Access keys and click `Create access Key`
-- Select `Local code` option, ArcticDB is the local code.
+- Click on the IAM user account in the [IAM > Users](https://console.aws.amazon.com/iamv2/home#/users) table.
+- Go to `Security credentials` > `Access keys` and click `Create access Key`
+- Select the `Local code` option, ArcticDB is the local code.
 - Check `I understand...` and click `Next`.
-- Click `Create Access Key`.
+- Click `Create access Key`.
 - Record the Access key and Secret access key somewhere secure.
 
 ### 3. Create the bucket
@@ -47,7 +47,7 @@ from arcticdb import Arctic
 arctic = Arctic('s3://s3.eu-west-2.amazonaws.com:arcticdbtrial?aws_auth=true')
 ```
 
-## Checking connectivity for your S3 bucket.
+## Checking connectivity to your S3 bucket.
 
 ArcticDB currently uses five S3 methods, those are:
 - GetObject
