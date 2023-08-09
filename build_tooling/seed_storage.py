@@ -1,5 +1,5 @@
 from arcticdb import Arctic
-import sys
+import os
 
 from storage_common import *
 
@@ -32,5 +32,5 @@ if __name__ == "__main__":
     uri = get_real_s3_uri()
 
     ac = Arctic(uri)
-    lib_name = sys.argv[1]
+    lib_name = os.getenv("ARCTICDB_REAL_STORAGE_LIB_NAME")
     seed_library(lib_name)
