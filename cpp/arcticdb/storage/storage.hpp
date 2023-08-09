@@ -27,6 +27,8 @@ namespace arcticdb::storage {
 
 using ReadVisitor = std::function<void(const VariantKey&, Segment &&)>;
 
+using ReadVisitor = std::function<void(const VariantKey&, Segment &&)>;
+
 class DuplicateKeyException : public ArcticSpecificException<ErrorCode::E_DUPLICATE_KEY> {
 public:
     explicit DuplicateKeyException(VariantKey key) :

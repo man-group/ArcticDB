@@ -30,8 +30,8 @@ class Storages {
 
     using StorageVector = std::vector<std::unique_ptr<Storage>>;
 
-    Storages(StorageVector&& variant_storages, OpenMode mode) :
-        storages_(std::move(variant_storages)), mode_(mode) {
+    Storages(StorageVector&& storages, OpenMode mode) :
+        storages_(std::move(storages)), mode_(mode) {
     }
 
     void write(Composite<KeySegmentPair>&& kvs) {

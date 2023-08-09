@@ -271,6 +271,11 @@ public:
         bool validate_index
     );
 
+    std::vector<std::variant<VersionedItem, DataError>> batch_write_versioned_metadata_internal(
+        const std::vector<StreamId>& stream_ids,
+        bool prune_previous_versions,
+        std::vector<arcticdb::proto::descriptors::UserDefinedMetadata>&& user_meta_protos);
+
     std::vector<AtomKey> batch_append_internal(
         std::vector<VersionId> version_ids,
         const std::vector<StreamId>& stream_ids,
@@ -355,9 +360,10 @@ public:
 
     folly::Future<VersionedItem> write_index_key_to_version_map_async(
         const std::shared_ptr<VersionMap> &version_map,
-        const AtomKey&& index_key,
-        const UpdateInfo& stream_update_info,
-        bool prune_previous_versions);
+        AtomKey&& index_key,
+        UpdateInfo&& stream_update_info,
+        bool prune_previous_versions,
+        bool add_new_symbol);
 
     std::vector<folly::Future<folly::Unit>> batch_write_version_and_prune_if_needed(
         const std::vector<AtomKey>& index_keys,
