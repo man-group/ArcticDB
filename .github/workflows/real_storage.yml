@@ -67,7 +67,7 @@ jobs:
       - name: Seed the storage
         if: inputs.job_type == 'seed'
         run: |
-          echo "Running seed for ${{matrix.os}}_${{env.python_impl_name}}"
+          echo "Running seed for ${{ github.ref_name }} on ${{matrix.os}}_${{env.python_impl_name}}"
           python build_tooling/seed_storage.py "seed_${{ github.ref_name }}_${{matrix.os}}_${{env.python_impl_name}}"
 
       - name: Verify the storage
