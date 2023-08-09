@@ -22,10 +22,12 @@ std::pair<size_t, size_t> ColumnEncoder::max_compressed_size(
         const arcticdb::proto::encoding::VariantCodec &codec_opts,
         ColumnData &column_data) {
     return column_data.type().visit_tag([&codec_opts, &column_data](auto type_desc_tag) {
-        size_t max_compressed_bytes = 0;
-        size_t uncompressed_bytes = 0;
         using TDT = decltype(type_desc_tag);
         using Encoder = BlockEncoder<TDT>;
+
+        size_t max_compressed_bytes = 0;
+        size_t uncompressed_bytes = 0;
+
         ARCTICDB_TRACE(log::codec(), "Column data has {} blocks", column_data.num_blocks());
 
         while (auto block = column_data.next<TDT>()) {

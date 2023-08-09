@@ -16,7 +16,7 @@ inline bool trivially_compatible_types(entity::TypeDescriptor left, entity::Type
         return true;
     }
 
-    if(is_empty_type(left.data_type()) || is_empty_type(left.data_type())) {
+    if(is_empty_type(left.data_type()) || is_empty_type(right.data_type())) {
         return true;
     }
 

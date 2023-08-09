@@ -1128,10 +1128,10 @@ folly::Future<std::vector<VariantKey>> fetch_data(
             continuations.emplace_back([
                 row = row,
                 frame = frame,
-                dynamic_schema=dynamic_schema,
+                dynamic_schema,
                 buffers](auto &&ks) mutable {
                 auto key_seg = std::forward<storage::KeySegmentPair>(ks);
-                if(dynamic_schema)
+                if(dynamic_schema) {
                     decode_into_frame_dynamic(frame, row, std::move(key_seg.segment()), buffers);
                 else
                     decode_into_frame_static(frame, row, std::move(key_seg.segment()), buffers);
