@@ -1745,8 +1745,7 @@ class NativeVersionStore:
         metadata : `Optional[Any]`, default=None
             Add user-defined metadata in the same way as write etc
         prune_previous_version
-            Removes the previous versions from the database after a successful compaction
-            (unless the previous version is in a snapshot).
+            Removes previous (non-snapshotted) versions from the database.
         Returns
         -------
         VersionedItem
