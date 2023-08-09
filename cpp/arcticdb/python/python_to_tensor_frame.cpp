@@ -90,7 +90,7 @@ NativeTensor obj_to_tensor(PyObject *ptr) {
             }
             if (empty) {
                 val_type = ValueType::EMPTY;
-            } else if(is_unicode(sample) || all_nans){
+            } else if(all_nans || is_unicode(sample)){
                 val_type = ValueType::UTF_DYNAMIC;
             } else if (PYBIND11_BYTES_CHECK(sample)) {
                 val_type = ValueType::ASCII_DYNAMIC;
