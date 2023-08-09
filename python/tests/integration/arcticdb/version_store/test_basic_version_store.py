@@ -1390,24 +1390,24 @@ def test_find_version(lmdb_version_store_v1):
     sym = "test_find_version"
 
     # Version 0 is alive and in a snapshot
-    lib.write(sym, 0)
+    with distinct_timestamps(lmdb_version_store_v1) as v0_time:
+        lib.write(sym, 0)
     lib.snapshot("snap_0")
-    time_0 = datetime.utcnow()
 
     # Version 1 is only available in snap_1
-    lib.write(sym, 1)
+    with distinct_timestamps(lmdb_version_store_v1) as v1_time:
+        lib.write(sym, 1)
     lib.snapshot("snap_1")
-    time_1 = datetime.utcnow()
     lib.delete_version(sym, 1)
 
     # Version 2 is fully deleted
-    lib.write(sym, 2)
-    time_2 = datetime.utcnow()
+    with distinct_timestamps(lmdb_version_store_v1) as v2_time:
+        lib.write(sym, 2)
     lib.delete_version(sym, 2)
 
     # Version 3 is not in any snapshots
-    lib.write(sym, 3)
-    time_3 = datetime.utcnow()
+    with distinct_timestamps(lmdb_version_store_v1) as v3_time:
+        lib.write(sym, 3)
 
     # Latest
     assert lib._find_version(sym).version == 3
@@ -1429,10 +1429,10 @@ def test_find_version(lmdb_version_store_v1):
     with pytest.raises(NoDataFoundException):
         lib._find_version(sym, as_of="snap_1000")
     # By timestamp
-    assert lib._find_version(sym, as_of=time_0).version == 0
-    assert lib._find_version(sym, as_of=time_1).version == 0
-    assert lib._find_version(sym, as_of=time_2).version == 0
-    assert lib._find_version(sym, as_of=time_3).version == 3
+    assert lib._find_version(sym, as_of=v0_time.after).version == 0
+    assert lib._find_version(sym, as_of=v1_time.after).version == 0
+    assert lib._find_version(sym, as_of=v2_time.after).version == 0
+    assert lib._find_version(sym, as_of=v3_time.after).version == 3
 
 
 def test_library_deletion_lmdb(lmdb_version_store):
