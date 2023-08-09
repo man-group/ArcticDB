@@ -12,7 +12,7 @@ from math import inf
 import numpy as np
 import pandas as pd
 
-from typing import Dict, Optional, Any
+from typing import Dict, List
 
 from arcticdb.exceptions import ArcticNativeException, UserInputException
 from arcticdb.preconditions import check
@@ -24,6 +24,7 @@ from arcticdb_ext.version_store import FilterClause as _FilterClause
 from arcticdb_ext.version_store import ProjectClause as _ProjectClause
 from arcticdb_ext.version_store import GroupByClause as _GroupByClause
 from arcticdb_ext.version_store import AggregationClause as _AggregationClause
+from arcticdb_ext.version_store import TopKClause as _TopKClause
 from arcticdb_ext.version_store import ExpressionName as _ExpressionName
 from arcticdb_ext.version_store import ColumnName as _ColumnName
 from arcticdb_ext.version_store import ValueName as _ValueName
@@ -262,6 +263,7 @@ PythonFilterClause = namedtuple("PythonFilterClause", ["expr"])
 PythonProjectionClause = namedtuple("PythonProjectionClause", ["name", "expr"])
 PythonGroupByClause = namedtuple("PythonGroupByClause", ["name"])
 PythonAggregationClause = namedtuple("PythonAggregationClause", ["aggregations"])
+PythonTopKClause = namedtuple("TopKClause", ["vector", "k"])
 
 
 class QueryBuilder:
@@ -273,8 +275,7 @@ class QueryBuilder:
         >>> dataframe = lib.read(symbol, query_builder=q).data
 
     For Group By and Aggregation functionality please see the documentation for the `groupby`. For projection
-    functionality, see the documentation for the `apply` method. For top k functinoality see the documentation for the
-    `top_k` method.
+    functionality, see the documentation for the `apply` method.
 
     Supported arithmetic operations when projection or filtering:
 
@@ -469,51 +470,10 @@ class QueryBuilder:
         self._python_clauses.append(PythonGroupByClause(name))
         return self
 
-    def top_k(self, vector: Any, k: int, method: Optional[str] = "euclidean"):
-        """
-        Returns the top k vectors most similar to vector according to method.
-
-        Parameters
-        ----------
-        vector: Any`
-            What should this really be? I assume `np.array` is somewhat too restrictive. Some kind of iterable?
-        k: `int`
-            The number of vectors to be returned.
-        method: `str`
-            The method by which to compute distance. Presently only
-                * "euclidean" (the Euclidean norm)
-            is supported.
-
-        Examples
-        --------
-        Points closest to the origin by Euclidean distance:
-
-        >>> df = pd.DataFrame(
-            {
-                "a": [1,2,3,4,5],
-                "b": [0,0,0,0,0],
-                "c": [10,10,10,10,10],
-                "d": [1,1,1,1,1]
-            },
-            index=np.arange(5),
-        )
-        >>> q = QueryBuilder()
-        >>> q = q.top_k(df["b"], 3)
-        >>> lib.read("symbol", query_builder=q).data
-               a  b  c
-            0  0  1  1
-            1  0  1  2
-            2  0  1  3
-            3  0  1  4
-            4  0  1  5
-
-        Returns
-        -------
-        QueryBuilder
-            Modified QueryBuilder object.
-
-        """
-        raise NotImplementedError
+    def top_k(self, vector: List[float], k: int):
+        self.clauses.append(_TopKClause(vector, k))
+        self._python_clauses.append(PythonTopKClause(vector, k))
+        return self
 
     def agg(self, aggregations: Dict[str, str]):
         # Only makes sense if previous stage is a group-by
@@ -568,6 +528,8 @@ class QueryBuilder:
                 self.clauses.append(_GroupByClause(python_clause.name))
             elif isinstance(python_clause, PythonAggregationClause):
                 self.clauses.append(_AggregationClause(self.clauses[-1].grouping_column, python_clause.aggregations))
+            elif isinstance(python_clause, PythonTopKClause):
+                self.clauses.append(_TopKClause(python_clause.vector, python_clause.k))
             else:
                 raise ArcticNativeException(
                     f"Unrecognised clause type {type(python_clause)} when unpickling QueryBuilder"

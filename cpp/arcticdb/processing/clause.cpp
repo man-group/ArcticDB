@@ -599,4 +599,107 @@ Composite<ProcessingSegment> RowNumberLimitClause::process(std::shared_ptr<Store
     return procs;
 }
 
+
+
+TopKClause::TopKClause(std::vector<float_t> query_vector, uint8_t k) :
+            query_vector(std::move(query_vector)),
+            k(k) {
+        clause_info_.modifies_output_descriptor_ = true;
+        clause_info_.follows_original_columns_order_ = false;
+    } // Do we want/need to move?
+
+Composite<ProcessingSegment> TopKClause::process(std::shared_ptr<Store> store,
+                                                 Composite<ProcessingSegment> &&p) const {
+    auto procs = std::move(p);
+    std::set<NamedColumnSortedByDistance> top_k;
+    double_t furthest_distance = std::numeric_limits<double_t>::infinity();
+    // We expect a vector in each column.
+    // top_k is updated as we read more vectors. We want to efficiently remove
+    // the 'worst' (least similar) vector as we go along to ensure we have the
+    // top k, not the top k+1.
+    auto lp = 2;
+    // Let's pretend that only the lp-norms exist. We'll use p=2 for now as a default.
+
+    procs.broadcast(
+            [&, lp] (ProcessingSegment &proc) { // todo: cleanup references
+                std::for_each(
+                        proc.data().begin(),
+                        proc.data().end(),
+                        [&] (pipelines::SliceAndKey s) {
+                            std::vector<std::shared_ptr<Column>> columns = s.segment(store).columns();
+                            for (auto column : folly::enumerate(columns)) {
+                                column.element->type().visit_tag([&, lp] (auto type_desc_tag) {
+                                    using TypeDescriptorTag = decltype(type_desc_tag);
+                                    using RawType = typename TypeDescriptorTag::DataTypeTag::raw_type;
+
+                                    ColumnData col_data = column.element->data();
+                                    double_t sum_differences_exponentiated = 0;
+
+                                    while (auto block = col_data.next<TypeDescriptorTag>()) {
+                                        auto ptr = reinterpret_cast<const RawType *>(block.value().data());
+                                        for (auto j = 0u; j < block.value().row_count(); ++j, ++ptr) {
+                                            sum_differences_exponentiated += pow(abs(RawType(*ptr)-query_vector[j]), lp);
+                                        }
+                                    }
+
+                                    if (sum_differences_exponentiated < furthest_distance) {
+                                        top_k.insert(NamedColumnSortedByDistance(
+                                                sum_differences_exponentiated,
+                                                column.element,
+                                                s.segment(store).field(column.index).name()));
+
+
+                                        if (top_k.size() > k) {
+                                            top_k.erase(*top_k.rbegin());
+                                        }
+                                    }
+                                });
+                            }
+                        }
+                        );
+            }
+            );
+    // By this time we should have iterated through each block of each SegmentInMemory of each ProcessingSegment;
+    // and in each case read a vector and inserted it if more similar than the running top_k. Now we write to a new
+    // segment.
+    SegmentInMemory seg;
+    seg.descriptor().set_index(IndexDescriptor(0, IndexDescriptor::ROWCOUNT));
+    seg.set_row_id(query_vector.size() - 1 + 1);
+    // -1 because of zero-indexing, +1 because we want to add the distance on at the end.
+    for (const auto& column : top_k) {
+        // What's below is the natural way of doing things. However:
+        // it writes non-contiguous blocks. When the result of a query is read
+        // we use a read method that expects a pointer to a contiguous block
+        // rather than something else that will put non-contiguous blocks onto memory.
+        // Instead we make a copy.
+//        seg.add_column(scalar_field(DataType::FLOAT64,
+//                                    column.name),
+//                       column.column);
+        column.column->type().visit_tag([&, lp] (auto type_desc_tag) {
+            using TypeDescriptorTag = decltype(type_desc_tag);
+            using RawType = typename TypeDescriptorTag::DataTypeTag::raw_type;
+
+            auto write_col = std::make_shared<Column>(column.column->type(), query_vector.size()+1, true, false);
+
+
+            auto col_data = column.column->data();
+            auto write_ptr = reinterpret_cast<RawType *>(write_col->ptr());
+            while (auto block = col_data.next<TypeDescriptorTag>()) {
+                auto ptr = reinterpret_cast<const RawType *>(block.value().data());
+                for (auto i = 0u; i < block.value().row_count(); ++i, ++ptr) {
+                    *write_ptr = RawType(*ptr);
+                    ++write_ptr;
+                }
+            }
+            *write_ptr = RawType(pow(column.distance, 1/static_cast<float>(lp)));
+            write_col->set_row_data(query_vector.size());
+            seg.add_column(scalar_field(DataType::FLOAT64, column.name), write_col);
+        });
+        }
+    Composite<ProcessingSegment> output;
+    ProcessingSegment segment = ProcessingSegment{std::move(seg)};
+    auto descriptor = segment.data().at(0); // now empty
+    output.push_back(segment);
+    return output;
+}
 }

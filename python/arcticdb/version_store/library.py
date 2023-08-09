@@ -264,6 +264,7 @@ class StagedDataFinalizeMethod(Enum):
     APPEND = auto()
 
 
+
 class Library:
     """
     The main interface exposing read/write functionality within a given Arctic instance.
@@ -279,9 +280,6 @@ class Library:
     Arctic libraries support concurrent writes and reads to multiple symbols as well as concurrent reads to a single
     symbol. However, concurrent writers to a single symbol are not supported other than for primitives that
     explicitly state support for single-symbol concurrent writes.
-
-    Proof of concept for #650: each library contains a distinguished symbol working as a vector database which
-    is not exposed to the user. Instead, vector methods are directly accessed via the library.
     """
 
     def __init__(self, arctic_instance_description: str, nvs: NativeVersionStore):
