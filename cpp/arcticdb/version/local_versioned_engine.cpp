@@ -983,8 +983,6 @@ VersionedItem LocalVersionedEngine::compact_incomplete_dynamic(
             store_, stream_id, user_meta, update_info,
             append, convert_int_to_float, via_iteration, sparsify, get_write_options());
 
-    version_map_->write_version(store_, versioned_item.key_);
-
     write_version_and_prune_previous_if_needed(
         prune_previous_versions, versioned_item.key_, update_info.previous_index_key_);
 
