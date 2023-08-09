@@ -20,7 +20,6 @@ namespace arcticdb {
         const size_t num_rows = dest_bytes / get_type_size(DataType::EMPTYVAL);
         static_assert(get_type_size(DataType::EMPTYVAL) == sizeof(PyObject*));
         const PyObject** ptr_dest = reinterpret_cast<const PyObject**>(dest);
-        ScopedGILLock lock;
         py::none none = {};
         for(auto row = 0u; row < num_rows; ++row) {
             none.inc_ref();

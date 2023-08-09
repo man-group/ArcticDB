@@ -67,8 +67,12 @@ struct Lz4Decoder {
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 
     template<typename T>
-    static void decode_block([[maybe_unused]] std::uint32_t encoder_version, const std::uint8_t *in, std::size_t in_bytes, T *t_out,
-                             std::size_t out_bytes) {
+    static void decode_block(
+        [[maybe_unused]] std::uint32_t encoder_version,
+        const std::uint8_t *in,
+        std::size_t in_bytes,
+        T *t_out,
+        std::size_t out_bytes) {
 
         ARCTICDB_TRACE(log::codec(), "Lz4 decoder reading block: {} {}", in_bytes, out_bytes);
         int real_decomp = LZ4_decompress_safe(
