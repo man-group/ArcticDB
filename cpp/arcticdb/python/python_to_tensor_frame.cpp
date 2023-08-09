@@ -67,19 +67,30 @@ NativeTensor obj_to_tensor(PyObject *ptr) {
         if (!is_fixed_string_type(val_type) && size > 0) {
             auto none = py::none{};
             auto obj = reinterpret_cast<PyObject **>(arr->data);
-            bool empty = false;
+            bool empty = true;
+            bool all_nans = true;
             PyObject *sample = *obj;
             if (sample == none.ptr() || is_py_nan(sample)) {
-                // Iterate till we find the first non null element, the frontend ensures there is at least one.
+                // Iterate till we find the first non-null element, the frontend ensures there is at least one.
                 util::check(c_style, "Non contiguous columns with first element as None not supported yet.");
-                auto casted_col =
-                    std::find_if(obj, obj + size, [&none](auto val) { return val != none.ptr() && !is_py_nan(val); });
-                empty = casted_col == obj + size;
-                sample = *casted_col;
+                PyObject** current_object = obj;
+                while(current_object < obj + size) {
+                    if(*current_object == none.ptr()) {
+                        all_nans = false;
+                    } else if(is_py_nan(*current_object)) {
+                        empty = false;
+                    } else {
+                        all_nans = false;
+                        empty = false;
+                        break;
+                    }
+                    ++current_object;
+                }
+                sample = *current_object;
             }
             if (empty) {
                 val_type = ValueType::EMPTY;
-            } else if(is_unicode(sample)){
+            } else if(is_unicode(sample) || all_nans){
                 val_type = ValueType::UTF_DYNAMIC;
             } else if (PYBIND11_BYTES_CHECK(sample)) {
                 val_type = ValueType::ASCII_DYNAMIC;
