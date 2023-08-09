@@ -5,6 +5,8 @@ from storage_common import *
 
 
 def seed_library(lib_name):
+    lib_name = normalize_lib_name(lib_name)
+
     # Each branch should create its own seed and it should be fresh on each run
     # so delete the library, if it exists / wasn't cleaned on a previous run
     ac.delete_library(lib_name)

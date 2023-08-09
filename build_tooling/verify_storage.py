@@ -28,4 +28,5 @@ if __name__ == "__main__":
     branch_name = sys.argv[1]
     for lib in LIBRARIES:
         lib_name = f"test_{branch_name}_{lib}"
+        lib_name = normalize_lib_name(lib_name)
         verify_library(lib_name)
