@@ -23,6 +23,7 @@ extra_css:
 
 nav:
 - Getting Started: 'index.md'
+    - Getting Started with AWS S3: 'aws.md'
 - Overview:
     - History of ArcticDB: 'history.md'
     - Frequently Asked Questions: 'faq.md'
