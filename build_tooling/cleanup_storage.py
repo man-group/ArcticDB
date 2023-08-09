@@ -11,5 +11,5 @@ if __name__ == "__main__":
     for lib in LIBRARIES:
         for lib_type in ["seed", "test"]:
             lib_name = f"{lib_type}_{BRANCH_NAME}_{lib}"
-
+            lib_name = normalize_lib_name(lib_name)
             ac.delete_library(lib_name)

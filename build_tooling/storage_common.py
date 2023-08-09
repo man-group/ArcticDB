@@ -20,6 +20,13 @@ LIBRARIES = [
 ]
 
 
+def normalize_lib_name(lib_name):
+    lib_name = lib_name.replace(".", "_")
+    lib_name = lib_name.replace("-", "_")
+
+    return lib_name
+
+
 def real_s3_credentials():
     endpoint = os.getenv("ARCTICDB_REAL_S3_ENDPOINT")
     bucket = os.getenv("ARCTICDB_REAL_S3_BUCKET")

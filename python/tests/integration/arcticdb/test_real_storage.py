@@ -5,27 +5,34 @@ from arcticdb.arctic import Arctic
 
 REAL_STORAGE_TESTS_ENABLED = os.getenv("ARCTICDB_REAL_STORAGE_TESTS") == "1"
 REAL_STORAGE_LIB_NAME = os.getenv("ARCTICDB_REAL_STORAGE_LIB_NAME")
-
+BRANCH_NAME = os.getenv("ARCTICDB_REAL_STORAGE_BRANCH_NAME")
 
 if REAL_STORAGE_TESTS_ENABLED:
     # TODO: Maybe add a way to parametrize this
     LIBRARIES = [
         # LINUX
-        "linux_3_6",
-        "linux_3_7",
-        "linux_3_8",
-        "linux_3_9",
-        "linux_3_10",
-        "linux_3_11",
+        "linux_cp36",
+        "linux_cp37",
+        "linux_cp38",
+        "linux_cp39",
+        "linux_cp310",
+        "linux_cp311",
         # WINDOWS
-        "windows_3_7",
-        "windows_3_8",
-        "windows_3_9",
-        "windows_3_10",
-        "windows_3_11",
+        "windows_cp37",
+        "windows_cp38",
+        "windows_cp39",
+        "windows_cp310",
+        "windows_cp311",
     ]
 else:
     LIBRARIES = []
+
+
+def normalize_lib_name(lib_name):
+    lib_name = lib_name.replace(".", "_")
+    lib_name = lib_name.replace("-", "_")
+
+    return lib_name
 
 
 # TODO: Add a check if the real storage tests are enabled
@@ -34,10 +41,12 @@ else:
     not REAL_STORAGE_TESTS_ENABLED, reason="This test should run only if the real storage tests are enabled"
 )
 def test_real_s3_storage_read(real_s3_credentials, library):
-    endpoint, bucket, region, access_key, secret_key, clear = real_s3_credentials
+    endpoint, bucket, region, access_key, secret_key, _ = real_s3_credentials
     uri = f"s3s://{endpoint}:{bucket}?access={access_key}&secret={secret_key}&region={region}&path_prefix=ci_tests/"
     ac = Arctic(uri)
-    lib = ac[library]
+    lib_name = f"seed_{BRANCH_NAME}_{library}"
+    lib_name = normalize_lib_name(lib_name)
+    lib = ac[lib_name]
     symbols = lib.list_symbols()
     assert len(symbols) == 3
     for sym in ["one", "two", "three"]:
@@ -54,7 +63,8 @@ def test_real_s3_storage_read(real_s3_credentials, library):
 def test_real_s3_storage_write(real_s3_credentials, three_col_df):
     library_to_write_to = REAL_STORAGE_LIB_NAME
     library_to_write_to = library_to_write_to.replace("-", "_")
-    endpoint, bucket, region, access_key, secret_key, clear = real_s3_credentials
+    library_to_write_to = normalize_lib_name(library_to_write_to)
+    endpoint, bucket, region, access_key, secret_key, _ = real_s3_credentials
     uri = f"s3s://{endpoint}:{bucket}?access={access_key}&secret={secret_key}&region={region}&path_prefix=ci_tests/"
     ac = Arctic(uri)
     # There shouldn't be a library with this name present, so delete just in case
@@ -64,9 +74,6 @@ def test_real_s3_storage_write(real_s3_credentials, three_col_df):
     one_df = three_col_df()
     lib.write("one", one_df)
     val = lib.read("one")
-    print()
-    print(one_df)
-    print(val.data)
     # TODO: assert one_df.equals(val.data)
     assert len(val.data) == 10
 
