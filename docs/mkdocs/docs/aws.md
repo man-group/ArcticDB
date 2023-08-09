@@ -2,7 +2,7 @@
 
 There are detailed guides on the AWS website on S3 configuration.  You can start with the [Creating your first bucket](https://docs.aws.amazon.com/AmazonS3/latest/userguide/creating-bucket.html) page.
 
-Best practices with AWS S3 can depend on your situation.  If your looking to try our ArcticDB on AWS S3 then a reasonably simple approach is the following.
+Best practices with AWS S3 can depend on your situation.  If you're looking to try ArcticDB on AWS S3 then a reasonably simple approach is the following.
 
 ### 1. Create an IAM user
 
@@ -16,12 +16,12 @@ You can create an IAM account at [IAM > Users](https://console.aws.amazon.com/ia
 
 ### 2. Create the access key
 
-- Click on the IAM user account in the [IAM > Users](https://console.aws.amazon.com/iamv2/home#/users) table.
+- Click on the new user in the [IAM > Users](https://console.aws.amazon.com/iamv2/home#/users) table.
 - Go to `Security credentials` > `Access keys` and click `Create access Key`
 - Select the `Local code` option, ArcticDB is the local code.
 - Check `I understand...` and click `Next`.
 - Click `Create access Key`.
-- Record the Access key and Secret access key somewhere secure.
+- Record the Access key and Secret access key somewhere securely.
 
 ### 3. Create the bucket
 
@@ -47,7 +47,7 @@ from arcticdb import Arctic
 arctic = Arctic('s3://s3.eu-west-2.amazonaws.com:arcticdbtrial?aws_auth=true')
 ```
 
-## Checking connectivity to your S3 bucket.
+## Checking connectivity to the S3 bucket.
 
 ArcticDB currently uses five S3 methods, those are:
 - GetObject
