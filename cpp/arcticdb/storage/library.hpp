@@ -89,10 +89,9 @@ class Library {
         ARCTICDB_TRACE(log::storage(), "{} kv updated, {} bytes", kv_count, total_size);
     }
 
-    template<class Visitor>
-    void read(Composite<VariantKey>&& ks, Visitor &&visitor, ReadKeyOpts opts) {
+    void read(Composite<VariantKey>&& ks, const ReadVisitor& visitor, ReadKeyOpts opts) {
         ARCTICDB_SAMPLE(LibraryRead, 0)
-        storages_->read(std::move(ks), std::forward<Visitor>(visitor), opts, !storage_fallthrough_);
+        storages_->read(std::move(ks), visitor, opts, !storage_fallthrough_);
     }
 
     void remove(Composite<VariantKey>&& ks, storage::RemoveOpts opts) {
@@ -114,9 +113,11 @@ class Library {
     KeySegmentPair read(VariantKey key, ReadKeyOpts opts = ReadKeyOpts{}) {
         KeySegmentPair res{VariantKey{key}};
         util::check(!std::holds_alternative<StringId>(variant_key_id(key)) || !std::get<StringId>(variant_key_id(key)).empty(), "Unexpected empty id");
-        read(Composite<VariantKey>(std::move(key)), [&res](auto &&, auto &&value) {
+        const ReadVisitor& visitor = [&res](const VariantKey&, Segment&& value) {
             res.segment() = std::move(value);
-        }, opts);
+        };
+
+        read(Composite<VariantKey>(std::move(key)), visitor, opts);
 
         return res;
     }

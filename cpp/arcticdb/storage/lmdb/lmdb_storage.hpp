@@ -43,8 +43,7 @@ class LmdbStorage final : public Storage<LmdbStorage> {
 
     void do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts opts);
 
-    template<class Visitor>
-    void do_read(Composite<VariantKey>&& ks, Visitor &&visitor, storage::ReadKeyOpts opts);
+    void do_read(Composite<VariantKey>&& ks, const ReadVisitor& visitor, storage::ReadKeyOpts opts);
 
     void do_remove(Composite<VariantKey>&& ks, RemoveOpts opts);
 

@@ -27,6 +27,8 @@ namespace arcticdb::storage {
 
 struct StorageBase {}; // marker class for type checking
 
+using ReadVisitor = std::function<void(const VariantKey&, Segment &&)>;
+
 class DuplicateKeyException : public ArcticSpecificException<ErrorCode::E_DUPLICATE_KEY> {
 public:
     explicit DuplicateKeyException(VariantKey key) :
@@ -104,24 +106,24 @@ public:
         return update(Composite<KeySegmentPair>{std::move(kv)}, opts);
     }
 
-    template<class Visitor>
-    void read(Composite<VariantKey> &&ks, Visitor &&visitor, ReadKeyOpts opts) {
-        return derived().do_read(std::move(ks), std::forward<Visitor>(visitor), opts);
+    void read(Composite<VariantKey> &&ks, const ReadVisitor& visitor, ReadKeyOpts opts) {
+        return derived().do_read(std::move(ks), visitor, opts);
     }
 
-    template<class Visitor>
-    void read(VariantKey&& key, Visitor &&visitor, ReadKeyOpts opts) {
-        return read(Composite<VariantKey>{std::move(key)}, std::forward<Visitor>(visitor), opts);
+    void read(VariantKey&& key, const ReadVisitor& visitor, ReadKeyOpts opts) {
+        return read(Composite<VariantKey>{std::move(key)}, visitor, opts);
     }
 
     template<class KeyType>
     KeySegmentPair read(KeyType&& key, ReadKeyOpts opts) {
         KeySegmentPair key_seg;
-         read(std::forward<KeyType>(key), [&key_seg](auto && vk, auto &&value) {
-             key_seg.variant_key() = std::forward<VariantKey>(vk);
-             key_seg.segment() = std::forward<Segment>(value);
-        }, opts);
-         return key_seg;
+        const ReadVisitor& visitor = [&key_seg](const VariantKey & vk, Segment&& value) {
+            key_seg.variant_key() = vk;
+            key_seg.segment() = value;
+        };
+
+        read(std::forward<KeyType>(key), visitor, opts);
+        return key_seg;
     }
 
     void remove(Composite<VariantKey> &&ks, RemoveOpts opts) {
