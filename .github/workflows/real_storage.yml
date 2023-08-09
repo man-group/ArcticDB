@@ -31,6 +31,8 @@ jobs:
         include:
             - ${{fromJSON(inputs.matrix)[0]}} # The items after 0 are for tests only
     runs-on: ${{matrix.distro}}
+    env:
+      python_impl_name: ${{inputs.python3 > 0 && format('cp3{0}', inputs.python3) || 'default'}}
     defaults:
       run: {shell: bash}
     steps:
