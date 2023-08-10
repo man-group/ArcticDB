@@ -23,7 +23,7 @@ inline auto get_test_environment_config(
     using MemoryConfig = storage::details::InMemoryConfigResolver::MemoryConfig;
     MemoryConfig mem_config = {};
 
-    arcticdb::proto::storage::VariantStorage storage_conf;
+    arcticdb::proto::storage::StorageConfig storage_conf;
     arcticdb::proto::lmdb_storage::Config cfg;
     cfg.set_path("./"); //TODO local path is a bit annoying. TMPDIR?
     cfg.set_recreate_if_exists(true);

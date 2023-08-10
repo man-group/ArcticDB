@@ -69,8 +69,8 @@ private:
     std::unordered_map<std::string, ::lmdb::dbi> dbi_by_key_type_;
 };
 
-inline arcticdb::proto::storage::VariantStorage pack_config(const std::string& path) {
-    arcticdb::proto::storage::VariantStorage output;
+inline arcticdb::proto::storage::StorageConfig pack_config(const std::string& path) {
+    arcticdb::proto::storage::StorageConfig output;
     arcticdb::proto::lmdb_storage::Config cfg;
     cfg.set_path(path);
     util::pack_to_any(cfg, *output.mutable_config());

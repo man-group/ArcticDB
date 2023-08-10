@@ -45,7 +45,7 @@ using VariantStorage = variant::VariantStorage<VariantStorageTypes>;
 std::unique_ptr<VariantStorage> create_storage(
     const LibraryPath& library_path,
     OpenMode mode,
-    const arcticdb::proto::storage::VariantStorage &storage_config);
+    const arcticdb::proto::storage::StorageConfig &storage_config);
 
 } // namespace storage
 } // namespace arcticdb

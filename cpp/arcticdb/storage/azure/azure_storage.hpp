@@ -70,19 +70,19 @@ class AzureStorage final : public Storage<AzureStorage> {
     Azure::Storage::Blobs::BlobClientOptions get_client_options(const Config &conf);
 };
 
-inline arcticdb::proto::storage::VariantStorage pack_config(const std::string &container_name) {
-    arcticdb::proto::storage::VariantStorage output;
+inline arcticdb::proto::storage::StorageConfig pack_config(const std::string &container_name) {
+    arcticdb::proto::storage::StorageConfig output;
     arcticdb::proto::azure_storage::Config cfg;
     cfg.set_container_name(container_name);
     util::pack_to_any(cfg, *output.mutable_config());
     return output;
 }
 
-inline arcticdb::proto::storage::VariantStorage pack_config(
+inline arcticdb::proto::storage::StorageConfig pack_config(
         const std::string &container_name,
         const std::string &endpoint
         ) {
-    arcticdb::proto::storage::VariantStorage output;
+    arcticdb::proto::storage::StorageConfig output;
     arcticdb::proto::azure_storage::Config cfg;
     cfg.set_container_name(container_name);
     cfg.set_endpoint(endpoint);

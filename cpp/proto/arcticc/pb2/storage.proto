@@ -19,11 +19,11 @@ message EnvironmentConfigsMap {
 // TODO Add Task scheduler configuration
 
 message EnvironmentConfig {
-    map<string, VariantStorage> storage_by_id = 1;
+    map<string, StorageConfig> storage_by_id = 1;
     map<string, LibraryDescriptor> lib_by_path = 2;
 }
 
-message VariantStorage {
+message StorageConfig {
     google.protobuf.Any config = 2;
     string storage = 3;
 }
@@ -184,7 +184,7 @@ message LibraryConfig {
     Portable library configuration which is sufficient to recreate a library
     */
     LibraryDescriptor lib_desc = 1;
-    map<string, VariantStorage> storage_by_id = 2;
+    map<string, StorageConfig> storage_by_id = 2;
 }
 
 

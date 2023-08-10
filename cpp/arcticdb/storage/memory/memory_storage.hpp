@@ -54,8 +54,8 @@ namespace arcticdb::storage::memory {
         std::unique_ptr<MutexType> mutex_;  // Methods taking functions pointers may call back into the storage
     };
 
-    inline arcticdb::proto::storage::VariantStorage pack_config(uint64_t cache_size) {
-        arcticdb::proto::storage::VariantStorage output;
+    inline arcticdb::proto::storage::StorageConfig pack_config(uint64_t cache_size) {
+        arcticdb::proto::storage::StorageConfig output;
         arcticdb::proto::memory_storage::Config cfg;
         cfg.set_cache_size(cache_size);
         util::pack_to_any(cfg, *output.mutable_config());

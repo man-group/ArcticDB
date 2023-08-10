@@ -155,7 +155,7 @@ class Library {
     bool storage_fallthrough_ = false;
 };
 
-inline Library create_library(const LibraryPath& library_path, OpenMode mode, const std::vector<arcticdb::proto::storage::VariantStorage>& storage_configs) {
+inline Library create_library(const LibraryPath& library_path, OpenMode mode, const std::vector<arcticdb::proto::storage::StorageConfig>& storage_configs) {
     return Library{library_path, create_storages(library_path, mode, storage_configs)};
 }
 

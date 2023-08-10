@@ -62,21 +62,21 @@ private:
     std::string bucket_name_;
 };
 
-inline arcticdb::proto::storage::VariantStorage pack_config(const std::string &bucket_name) {
-    arcticdb::proto::storage::VariantStorage output;
+inline arcticdb::proto::storage::StorageConfig pack_config(const std::string &bucket_name) {
+    arcticdb::proto::storage::StorageConfig output;
     arcticdb::proto::nfs_backed_storage::Config cfg;
     cfg.set_bucket_name(bucket_name);
     util::pack_to_any(cfg, *output.mutable_config());
     return output;
 }
 
-inline arcticdb::proto::storage::VariantStorage pack_config(
+inline arcticdb::proto::storage::StorageConfig pack_config(
     const std::string &bucket_name,
     const std::string &credential_name,
     const std::string &credential_key,
     const std::string &endpoint
 ) {
-    arcticdb::proto::storage::VariantStorage output;
+    arcticdb::proto::storage::StorageConfig output;
     arcticdb::proto::nfs_backed_storage::Config cfg;
     cfg.set_bucket_name(bucket_name);
     cfg.set_credential_name(credential_name);

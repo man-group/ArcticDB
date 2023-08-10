@@ -53,8 +53,8 @@ class ConfigCache {
         descriptor_map_.emplace(path, desc);
     }
 
-    void add_storage(const StorageName& storage_name, const arcticdb::proto::storage::VariantStorage storage) {
-        config_resolver_->add_storage(environment_name_, storage_name, storage);
+    void add_storage(const StorageName& storage_name, const arcticdb::proto::storage::StorageConfig storage_config) {
+        config_resolver_->add_storage(environment_name_, storage_name, storage_config);
     }
 
     std::vector<LibraryPath> list_libraries(const std::string_view &prefix) {
@@ -81,7 +81,7 @@ class ConfigCache {
         std::vector<std::unique_ptr<VariantStorage>> variants;
         for (const auto& storage_name : descriptor.storage_ids_) {
             // Otherwise see if we have the storage config.
-            arcticdb::proto::storage::VariantStorage storage_conf;
+            arcticdb::proto::storage::StorageConfig storage_conf;
             auto storage_conf_pos = storage_configs_.find(storage_name);
             if(storage_conf_pos != storage_configs_.end())
                 storage_conf = storage_conf_pos->second;
@@ -122,7 +122,7 @@ class ConfigCache {
 
     EnvironmentName environment_name_;
     std::unordered_map<LibraryPath, LibraryDescriptor> descriptor_map_;
-    std::unordered_map<StorageName, arcticdb::proto::storage::VariantStorage> storage_configs_;
+    std::unordered_map<StorageName, arcticdb::proto::storage::StorageConfig> storage_configs_;
     std::shared_ptr<ConfigResolver> config_resolver_;
     mutable std::mutex mutex_;
 };

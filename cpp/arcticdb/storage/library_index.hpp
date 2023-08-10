@@ -50,8 +50,8 @@ class LibraryIndex {
         return get_library_internal(path, mode);
     }
 
-    void add_storage(const StorageName& storage_name, const arcticdb::proto::storage::VariantStorage& storage) {
-        config_cache_.add_storage(storage_name, storage);
+    void add_storage(const StorageName& storage_name, const arcticdb::proto::storage::StorageConfig& storage_config) {
+        config_cache_.add_storage(storage_name, storage_config);
     }
 
   private:

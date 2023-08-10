@@ -55,7 +55,7 @@ public:
         region_ = region;
     }
 
-    void modify_storage_credentials(arcticdb::proto::storage::VariantStorage& storage) const {
+    void modify_storage_credentials(arcticdb::proto::storage::StorageConfig& storage) const {
         if(storage.config().Is<arcticdb::proto::s3_storage::Config>()) {
             arcticdb::proto::s3_storage::Config s3_storage;
             storage.config().UnpackTo(&s3_storage);

@@ -56,8 +56,8 @@ class MongoStorage final : public Storage<MongoStorage> {
     std::string prefix_;
 };
 
-inline arcticdb::proto::storage::VariantStorage pack_config(InstanceUri uri) {
-    arcticdb::proto::storage::VariantStorage output;
+inline arcticdb::proto::storage::StorageConfig pack_config(InstanceUri uri) {
+    arcticdb::proto::storage::StorageConfig output;
     arcticdb::proto::mongo_storage::Config cfg;
     cfg.set_uri(uri.value);
     util::pack_to_any(cfg, *output.mutable_config());

@@ -66,11 +66,11 @@ namespace arcticdb::storage {
         [[nodiscard]] std::shared_ptr<Library> get_library(const LibraryPath& path, const StorageOverride& storage_override = StorageOverride{}) const {
             arcticdb::proto::storage::LibraryConfig config = get_config_internal(path, storage_override);
 
-            std::vector<arcticdb::proto::storage::VariantStorage> st;
+            std::vector<arcticdb::proto::storage::StorageConfig> storage_configs;
             for(const auto& storage: config.storage_by_id()){
-                st.emplace_back(storage.second);
+                storage_configs.emplace_back(storage.second);
             }
-            auto storages = create_storages(path, OpenMode::DELETE, st);
+            auto storages = create_storages(path, OpenMode::DELETE, storage_configs);
 
             return std::make_shared<Library>(path, std::move(storages), config.lib_desc().version());
         }
