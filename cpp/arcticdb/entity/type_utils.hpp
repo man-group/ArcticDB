@@ -12,9 +12,8 @@
 namespace arcticdb {
 
 inline bool trivially_compatible_types(entity::TypeDescriptor left, entity::TypeDescriptor right) {
-    if(left == right) {
+    if(left == right)
         return true;
-    }
 
     if(is_empty_type(left.data_type()) || is_empty_type(right.data_type())) {
         return true;
