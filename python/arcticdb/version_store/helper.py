@@ -21,7 +21,7 @@ from arcticc.pb2.storage_pb2 import (
     EnvironmentConfig,
     LibraryConfig,
     LibraryDescriptor,
-    VariantStorage,
+    StorageConfig,
     Permissions,
     NoCredentialsStore,
 )
@@ -137,13 +137,13 @@ def add_library_config_to_env(cfg, lib_cfg, env_name):
 
 
 def get_storage_for_lib_name(lib_name, env):
-    # type: (LibName, EnvironmentConfigsMap)->(StorageId, VariantStorage)
+    # type: (LibName, EnvironmentConfigsMap)->(StorageId, StorageConfig)
     sid = "{}_store".format(lib_name)
     return sid, env.storage_by_id[sid]
 
 
 def get_secondary_storage_for_lib_name(lib_name, env):
-    # type: (LibName, EnvironmentConfigsMap)->(StorageId, VariantStorage)
+    # type: (LibName, EnvironmentConfigsMap)->(StorageId, StorageConfig)
     sid = "{}_store_2".format(lib_name)
     return sid, env.storage_by_id[sid]
 
