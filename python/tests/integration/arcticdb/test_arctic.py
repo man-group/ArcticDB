@@ -27,6 +27,7 @@ from arcticdb.adapters.s3_library_adapter import S3LibraryAdapter
 from arcticdb.options import LibraryOptions
 from arcticdb.encoding_version import EncodingVersion
 from arcticdb import QueryBuilder, DataError
+from arcticdb.version_store.vector_db import VectorDB
 from arcticc.pb2.s3_storage_pb2 import Config as S3Config
 
 import math
@@ -84,29 +85,27 @@ def test_top_k(arctic_client):
     np.random.seed(0)
     random.seed(0)
     ac = arctic_client
+
+    dimensions, number_of_vectors, k = 15, 20, 5
+    string_column_names = [''.join(random.choices(
+            string.ascii_uppercase + string.digits,
+            k=10))
+        for _ in range(number_of_vectors)]
+
     ac.create_library("pytest_test_top_k")
-    lib = ac["pytest_test_top_k"]
-    i = 15
-    j = 20
-    k = 5
-    string_column_names = [''.join(random.choices(string.ascii_uppercase + string.digits, k=10)) for _ in range(j)]
-    df = pd.DataFrame(np.random.rand(i,j),columns=string_column_names)
-    qv = np.array([0]*i)
+    vector_db = VectorDB(ac["pytest_test_top_k"])
+
+    df = pd.DataFrame(np.random.rand(dimensions,number_of_vectors),columns=string_column_names)
+    qv = np.array([0]*dimensions)
     distances = df.apply(lambda x: np.linalg.norm(x-qv))
     top_k_distances = distances[distances.argsort()[:k]]
     python_result = df[top_k_distances.index].append(pd.DataFrame(top_k_distances).T)
-    python_result.index = list(range(i)) + ["similarity"]
+    python_result.index = list(range(dimensions)) + ["similarity"]
 
-    lib.write(f"df{i}", df)
+    vector_db.upsert(f"df{dimensions}", df)
+    cpp_result = vector_db.top_k(f"df{dimensions}", 5, qv)
 
-    q = QueryBuilder()
-    q = q.top_k(qv, k)
-    query = str(q)
-    result = lib.read(f"df{i}", query_builder=q).data
-    result.index = list(range(i)) + ["similarity"]
-    sorted_result = result.sort_values(by="similarity", axis=1)
-    assert_frame_equal(sorted_result, result)
-    assert_frame_equal(result, python_result)
+    assert_frame_equal(python_result, cpp_result)
 
 def test_new(arctic_client):
     np.random.seed(100)
