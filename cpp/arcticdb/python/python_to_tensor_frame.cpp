@@ -67,11 +67,12 @@ NativeTensor obj_to_tensor(PyObject *ptr) {
         if (!is_fixed_string_type(val_type) && size > 0) {
             auto none = py::none{};
             auto obj = reinterpret_cast<PyObject **>(arr->data);
-            bool empty = true;
-            bool all_nans = true;
+            bool empty = false;
+            bool all_nans = false;
             PyObject *sample = *obj;
             if (sample == none.ptr() || is_py_nan(sample)) {
-                // Iterate till we find the first non-null element, the frontend ensures there is at least one.
+                empty = true;
+                all_nans = true;
                 util::check(c_style, "Non contiguous columns with first element as None not supported yet.");
                 PyObject** current_object = obj;
                 while(current_object < obj + size) {

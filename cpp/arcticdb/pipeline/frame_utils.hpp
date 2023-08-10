@@ -134,16 +134,13 @@ void aggregator_set_data(
                 for (size_t s = 0; s < rows_to_write; ++s, ++ptr_data) {
                     if (*ptr_data == none.ptr()) {
                         agg.set_no_string_at(col, s, not_a_string());
-                    }
-                    else if(is_py_nan(*ptr_data)){
+                    } else if(is_py_nan(*ptr_data)){
                         agg.set_no_string_at(col, s, nan_placeholder());
-                    }
-                    else {
+                    } else {
                         if constexpr (is_utf_type(slice_value_type(dt))) {
                             auto wrapper= convert::py_unicode_to_buffer(*ptr_data);
                             agg.set_string_at(col, s, wrapper.buffer_, wrapper.length_);
-                        }
-                        else {
+                        } else {
                             auto wrapper = convert::pystring_to_buffer(*ptr_data);
                             agg.set_string_at(col, s, wrapper.buffer_, wrapper.length_);
                         }
