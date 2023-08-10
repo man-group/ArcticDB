@@ -160,11 +160,7 @@ INSTANTIATE_TEST_SUITE_P(, SymbolListWithReadFailures, Values(
         FailSimParam{{FailureType::READ, {fault(), fault(), fault(), fault(), no_op}}},
         FailSimParam{{FailureType::READ, {fault(0.4), no_op}}}, // 40% chance of exception
         FailSimParam{{FailureType::ITERATE, RAISE_ONCE}, {FailureType::READ, {no_op, fault(), no_op}}}
-),
-[](auto & info) {
-      return std::string("Value")+ std::to_string(info.index);
-    }
-);
+));
 
 TEST_F(SymbolListSuite, MultipleWrites) {
     write_initial_compaction_key();
@@ -548,14 +544,6 @@ TEST_P(SymbolListRace, Run) {
 }
 
 // For symbol list source (which is used for subsequent compactions), all flag combinations are valid:
-INSTANTIATE_TEST_SUITE_P(SymbolListSource, SymbolListRace, Combine(Values('S'), Bool(), Bool(), Bool()),
-    [](auto & info) {
-      return std::string("Value")+ std::to_string(info.index);
-    }
-);
+INSTANTIATE_TEST_SUITE_P(SymbolListSource, SymbolListRace, Combine(Values('S'), Bool(), Bool(), Bool()));
 // For version keys source (initial compaction), there's no old compaction key to remove:
-INSTANTIATE_TEST_SUITE_P(VersionKeysSource, SymbolListRace, Combine(Values('V'), Values(false), Bool(), Bool()),
-    [](auto & info) {
-      return std::string("Value")+ std::to_string(info.index);
-    }
-);
+INSTANTIATE_TEST_SUITE_P(VersionKeysSource, SymbolListRace, Combine(Values('V'), Values(false), Bool(), Bool()));
