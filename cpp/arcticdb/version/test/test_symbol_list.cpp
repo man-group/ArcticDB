@@ -250,8 +250,7 @@ INSTANTIATE_TEST_SUITE_P(, SymbolListWithWriteFailures, Values(
         WriteFailuresParams{{{FailureType::WRITE, RAISE_ONCE}}, CompactOutcome::NOT_WRITTEN}, // Interferes with locking
         WriteFailuresParams{{{FailureType::WRITE, RAISE_ON_2ND_CALL}}, CompactOutcome::NOT_WRITTEN},
         WriteFailuresParams{{{FailureType::DELETE, RAISE_ONCE}}, CompactOutcome::NOT_CLEANED_UP}
-)
-);
+));
 
 template <typename T, typename U>
 std::optional<T> random_choice(const std::set<T>& set, U& gen) {
