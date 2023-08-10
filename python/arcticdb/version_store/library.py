@@ -722,7 +722,7 @@ class Library:
             ``data``. This allows the user to update with data that might only be a subset of the stored value. Leaving
             any part of the tuple as None leaves that part of the range open ended. Only data with date_range will be
             modified, even if ``data`` covers a wider date range.
-        prune_previous_versions, default=False
+        prune_previous_versions
             Removes previous (non-snapshotted) versions from the database when True.
 
         Examples
@@ -765,7 +765,10 @@ class Library:
         )
 
     def finalize_staged_data(
-        self, symbol: str, mode: Optional[StagedDataFinalizeMethod] = StagedDataFinalizeMethod.WRITE
+        self,
+        symbol: str,
+        mode: Optional[StagedDataFinalizeMethod] = StagedDataFinalizeMethod.WRITE,
+        prune_previous_versions: Optional[bool] = False,
     ):
         """
         Finalises staged data, making it available for reads.
@@ -778,13 +781,20 @@ class Library:
         mode : `StagedDataFinalizeMethod`, default=StagedDataFinalizeMethod.WRITE
             Finalise mode. Valid options are WRITE or APPEND. Write collects the staged data and writes them to a
             new timeseries. Append collects the staged data and appends them to the latest version.
+        prune_previous_versions
+            Removes previous (non-snapshotted) versions from the database.
 
         See Also
         --------
         write
             Documentation on the ``staged`` parameter explains the concept of staged data in more detail.
         """
-        self._nvs.compact_incomplete(symbol, mode == StagedDataFinalizeMethod.APPEND, False)
+        self._nvs.compact_incomplete(
+            symbol,
+            append=mode == StagedDataFinalizeMethod.APPEND,
+            convert_int_to_float=False,
+            prune_previous_version=prune_previous_versions,
+        )
 
     def sort_and_finalize_staged_data(
         self, symbol: str, mode: Optional[StagedDataFinalizeMethod] = StagedDataFinalizeMethod.WRITE

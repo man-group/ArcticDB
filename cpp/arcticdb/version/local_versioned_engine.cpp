@@ -53,17 +53,22 @@ folly::Future<folly::Unit> LocalVersionedEngine::delete_unreferenced_pruned_inde
 ) {
     try {
         if (!pruned_indexes.empty() && !cfg().write_options().delayed_deletes()) {
+            // TODO: the following function will load all snapshots, which will be horrifyingly inefficient when called
+            // multiple times from batch_*
             auto [not_in_snaps, in_snaps] = get_index_keys_partitioned_by_inclusion_in_snapshots(
                     store(),
                     pruned_indexes.begin()->id(),
                     pruned_indexes);
             in_snaps.insert(key_to_keep);
-            PreDeleteChecks checks{false, false, false, false, in_snaps};
-            return delete_trees_responsibly(not_in_snaps, {}, {}, checks);
+            PreDeleteChecks checks{false, false, false, false, std::move(in_snaps)};
+            return delete_trees_responsibly(not_in_snaps, {}, {}, checks)
+                    .thenError(folly::tag_t<std::exception>{}, [](auto const& ex) {
+                        log::version().warn("Failed to clean up pruned previous versions due to: {}", ex.what());
+                    });
         }
     } catch (const std::exception &ex) {
         // Best-effort so deliberately swallow
-        log::version().warn("Could not prune previous versions due to: {}", ex.what());
+        log::version().warn("Failed to clean up pruned previous versions due to: {}", ex.what());
     }
     return folly::Unit();
 }
@@ -552,12 +557,8 @@ VersionedItem LocalVersionedEngine::update_internal(
                                           std::move(frame),
                                           get_write_options(),
                                           dynamic_schema);
-        if (prune_previous_versions) {
-            auto pruned_indexes = version_map()->write_and_prune_previous(store(), versioned_item.key_, update_info.previous_index_key_);
-            delete_unreferenced_pruned_indexes(pruned_indexes, versioned_item.key_).get();
-        } else {
-            version_map()->write_version(store(), versioned_item.key_);
-        }
+        write_version_and_prune_previous_if_needed(
+            prune_previous_versions, versioned_item.key_, update_info.previous_index_key_);
         return versioned_item;
     } else {
         if (upsert) {
@@ -598,16 +599,8 @@ VersionedItem LocalVersionedEngine::write_versioned_metadata_internal(
                                             update_info,
                                             std::move(user_meta)}();
 
-        if(prune_previous_versions) {
-            auto versioned_item = VersionedItem{index_key};
-            auto pruned_indexes = version_map()->write_and_prune_previous(store(), index_key, update_info.previous_index_key_);
-            delete_unreferenced_pruned_indexes(pruned_indexes, versioned_item.key_).get();
-            return versioned_item;
-        }
-        else {
-            version_map()->write_version(store(), index_key);
-            return VersionedItem{index_key};
-        }
+        write_version_and_prune_previous_if_needed(prune_previous_versions, index_key, update_info.previous_index_key_);
+        return VersionedItem{ std::move(index_key) };
     } else {
         auto frame = convert::py_none_to_frame();
         frame.desc.set_id(stream_id);
@@ -698,15 +691,8 @@ VersionedItem LocalVersionedEngine::write_versioned_dataframe_internal(
         allow_sparse,
         validate_index);
 
-    if(prune_previous_versions) {
-        auto pruned_indexes = version_map()->write_and_prune_previous(store(), versioned_item.key_, maybe_prev);
-        delete_unreferenced_pruned_indexes(pruned_indexes, versioned_item.key_).get();
-        return versioned_item;
-    }
-    else {
-        version_map()->write_version(store(), versioned_item.key_);
-        return versioned_item;
-    }
+    write_version_and_prune_previous_if_needed(prune_previous_versions, versioned_item.key_, maybe_prev);
+    return versioned_item;
 }
 
 std::pair<VersionedItem, TimeseriesDescriptor> LocalVersionedEngine::restore_version(
@@ -722,7 +708,7 @@ std::pair<VersionedItem, TimeseriesDescriptor> LocalVersionedEngine::restore_ver
     return AsyncRestoreVersionTask{store(), version_map(), stream_id, version_to_restore->key_, maybe_prev}().get();
 }
 
-std::pair<VersionedItem, std::vector<AtomKey>> LocalVersionedEngine::write_individual_segment(
+VersionedItem LocalVersionedEngine::write_individual_segment(
     const StreamId& stream_id,
     SegmentInMemory&& segment,
     bool prune_previous_versions
@@ -747,14 +733,8 @@ std::pair<VersionedItem, std::vector<AtomKey>> LocalVersionedEngine::write_indiv
     auto index_key_fut = index::write_index(index, std::move(descriptor), std::move(sk), IndexPartialKey{stream_id, version_id}, store_);
     auto versioned_item = VersionedItem{to_atom(std::move(index_key_fut).get())};
 
-    if(prune_previous_versions) {
-        auto pruned_indexes = version_map()->write_and_prune_previous(store(), versioned_item.key_, maybe_prev);
-        return std::make_pair(versioned_item, std::move(pruned_indexes));
-    }
-    else {
-        version_map()->write_version(store(), versioned_item.key_);
-        return std::make_pair(versioned_item, std::vector<AtomKey>{});
-    }
+    write_version_and_prune_previous_if_needed(prune_previous_versions, versioned_item.key_, maybe_prev);
+    return versioned_item;
 }
 
 // Steps of delete_trees_responsibly:
@@ -994,7 +974,8 @@ VersionedItem LocalVersionedEngine::compact_incomplete_dynamic(
     bool append,
     bool convert_int_to_float,
     bool via_iteration,
-    bool sparsify) {
+    bool sparsify,
+    bool prune_previous_versions) {
     log::version().info("Compacting incomplete symbol {}", stream_id);
 
     auto update_info = get_latest_undeleted_version_and_next_version_id(store(), version_map(), stream_id, VersionQuery{}, ReadOptions{});
@@ -1002,7 +983,8 @@ VersionedItem LocalVersionedEngine::compact_incomplete_dynamic(
             store_, stream_id, user_meta, update_info,
             append, convert_int_to_float, via_iteration, sparsify, get_write_options());
 
-    version_map_->write_version(store_, versioned_item.key_);
+    write_version_and_prune_previous_if_needed(
+        prune_previous_versions, versioned_item.key_, update_info.previous_index_key_);
 
     if(cfg_.symbol_list())
         symbol_list().add_symbol(store_, stream_id);
@@ -1218,6 +1200,19 @@ std::vector<std::variant<ReadVersionOutput, DataError>> LocalVersionedEngine::ba
     return read_versions_or_errors;
 }
 
+void LocalVersionedEngine::write_version_and_prune_previous_if_needed(
+        bool prune_previous_versions,
+        const AtomKey& new_version,
+        const std::optional<IndexTypeKey>& previous_key) {
+    if (prune_previous_versions) {
+        auto pruned_indexes = version_map()->write_and_prune_previous(store(), new_version, previous_key);
+        delete_unreferenced_pruned_indexes(pruned_indexes, new_version).get();
+    }
+    else {
+        version_map()->write_version(store(), new_version);
+    }
+}
+
 std::vector<folly::Future<folly::Unit>> LocalVersionedEngine::batch_write_version_and_prune_if_needed(
     const std::vector<AtomKey>& index_keys,
     const std::vector<UpdateInfo>& stream_update_info_vector,
@@ -1370,12 +1365,8 @@ VersionedItem LocalVersionedEngine::append_internal(
                                           std::move(frame),
                                           get_write_options(),
                                           validate_index);
-        if (prune_previous_versions) {
-            auto pruned_indexes = version_map()->write_and_prune_previous(store(), versioned_item.key_, update_info.previous_index_key_);
-            delete_unreferenced_pruned_indexes(pruned_indexes, versioned_item.key_).get();
-        } else {
-            version_map()->write_version(store(), versioned_item.key_);
-        }
+        write_version_and_prune_previous_if_needed(
+            prune_previous_versions, versioned_item.key_, update_info.previous_index_key_);
         return versioned_item;
     } else {
         if(upsert) {
