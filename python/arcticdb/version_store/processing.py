@@ -24,7 +24,6 @@ from arcticdb_ext.version_store import FilterClause as _FilterClause
 from arcticdb_ext.version_store import ProjectClause as _ProjectClause
 from arcticdb_ext.version_store import GroupByClause as _GroupByClause
 from arcticdb_ext.version_store import AggregationClause as _AggregationClause
-from arcticdb_ext.version_store import TopKClause as _TopKClause
 from arcticdb_ext.version_store import ExpressionName as _ExpressionName
 from arcticdb_ext.version_store import ColumnName as _ColumnName
 from arcticdb_ext.version_store import ValueName as _ValueName
@@ -468,11 +467,6 @@ class QueryBuilder:
         """
         self.clauses.append(_GroupByClause(name))
         self._python_clauses.append(PythonGroupByClause(name))
-        return self
-
-    def top_k(self, vector: List[float], k: int):
-        self.clauses.append(_TopKClause(vector, k))
-        self._python_clauses.append(PythonTopKClause(vector, k))
         return self
 
     def agg(self, aggregations: Dict[str, str]):
