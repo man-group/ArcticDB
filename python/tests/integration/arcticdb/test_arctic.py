@@ -34,10 +34,8 @@ import pytest
 import pandas as pd
 from datetime import datetime, date, timezone, timedelta
 import numpy as np
-
 from arcticdb_ext.tools import AZURE_SUPPORT
 from numpy import datetime64
-from arcticdb.util._versions import IS_PANDAS_TWO
 from arcticdb.util.test import assert_frame_equal, random_strings_of_length, random_floats
 import random
 
@@ -45,6 +43,7 @@ if AZURE_SUPPORT:
     from azure.storage.blob import BlobServiceClient
 from botocore.client import BaseClient as BotoClient
 import time
+
 
 try:
     from arcticdb.version_store.library import (
@@ -865,8 +864,7 @@ def test_get_description(arctic_library):
     assert info.row_count == 6
     assert original_info.row_count == 4
     assert info.last_update_time > original_info.last_update_time
-    utc_implementation = timezone.utc if IS_PANDAS_TWO else pytz.UTC
-    assert info.last_update_time.tz == utc_implementation
+    assert info.last_update_time.tz == pytz.UTC
 
 
 def test_tail(arctic_library):

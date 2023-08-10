@@ -7,11 +7,13 @@ As of the Change Date specified in that file, in accordance with the Business So
 """
 
 import datetime
+import pytz
 from enum import Enum, auto
 from typing import Optional, Any, Tuple, Dict, AnyStr, Union, List, Iterable, NamedTuple
 from numpy import datetime64
 
 from arcticdb.supported_types import Timestamp
+from arcticdb.util._versions import IS_PANDAS_TWO
 
 from arcticdb.version_store.processing import QueryBuilder
 from arcticdb.version_store._store import NativeVersionStore, VersionedItem, VersionQueryInput
@@ -1357,6 +1359,11 @@ class Library:
         """
         info = self._nvs.get_info(symbol, as_of)
         last_update_time = pd.to_datetime(info["last_update"], utc=True)
+        if IS_PANDAS_TWO:
+            # Pandas 2.0.0 now uses `datetime.timezone.utc` instead of `pytz.UTC`.
+            # See: https://github.com/pandas-dev/pandas/issues/34916
+            # We enforce the use of `pytz.UTC` for consistency.
+            last_update_time = last_update_time.replace(tzinfo=pytz.UTC)
         columns = tuple(NameWithDType(n, t) for n, t in zip(info["col_names"]["columns"], info["dtype"]))
         index = NameWithDType(info["col_names"]["index"], info["col_names"]["index_dtype"])
         date_range = tuple(

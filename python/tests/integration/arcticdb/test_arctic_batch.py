@@ -30,7 +30,6 @@ from arcticdb.util.test import (
     random_strings_of_length,
     random_floats,
 )
-from arcticdb.util._versions import IS_PANDAS_TWO
 import random
 
 
@@ -916,10 +915,7 @@ def test_read_description_batch_high_amount(arctic_library):
             assert results_list[idx].date_range == date_range_comp_with_utc
             if version > 0:
                 assert results_list[idx].last_update_time > results_list[idx - 1].last_update_time
-                # Pandas 2.0.0 now uses `datetime.timezone.utc` instead of `pytz.UTC`.
-                # See: https://github.com/pandas-dev/pandas/issues/34916
-                # TODO: is there a better way to handle this edge case?
-                assert results_list[idx].last_update_time.tz == timezone.utc if IS_PANDAS_TWO else pytz.UTC
+                assert results_list[idx].last_update_time.tz == pytz.UTC
 
 
 def test_read_description_batch_empty_nat(arctic_library):
