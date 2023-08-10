@@ -160,7 +160,7 @@ public:
     [[nodiscard]] const LibraryPath &library_path() const { return lib_path_; }
     [[nodiscard]] OpenMode open_mode() const { return mode_; }
 
-protected:
+private:
     virtual void do_write(Composite<KeySegmentPair>&& kvs) = 0;
 
     virtual void do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts opts) = 0;
@@ -179,7 +179,6 @@ protected:
 
     virtual std::string do_storage_specific(const VariantKey& key) = 0;
 
-private:
     LibraryPath lib_path_;
     OpenMode mode_;
 };

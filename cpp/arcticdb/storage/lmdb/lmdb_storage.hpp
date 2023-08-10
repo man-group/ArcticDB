@@ -34,7 +34,7 @@ class LmdbStorage final : public Storage {
 
     LmdbStorage(const LibraryPath &lib, OpenMode mode, const Config &conf);
 
-  protected:
+  private:
     void do_write(Composite<KeySegmentPair>&& kvs) final;
 
     void do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts opts) final;
@@ -57,7 +57,6 @@ class LmdbStorage final : public Storage {
 
     std::string do_storage_specific(const VariantKey&) final { return {}; };
 
-private:
     // _internal methods assume the write mutex is already held
     void do_write_internal(Composite<KeySegmentPair>&& kvs, ::lmdb::txn& txn);
     std::vector<VariantKey> do_remove_internal(Composite<VariantKey>&& ks, ::lmdb::txn& txn, RemoveOpts opts);

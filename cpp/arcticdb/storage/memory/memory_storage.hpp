@@ -22,7 +22,7 @@ namespace arcticdb::storage::memory {
 
         MemoryStorage(const LibraryPath &lib, OpenMode mode, const Config &conf);
 
-    protected:
+    private:
         void do_write(Composite<KeySegmentPair>&& kvs) final;
 
         void do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts opts) final;
@@ -43,7 +43,6 @@ namespace arcticdb::storage::memory {
 
         std::string do_storage_specific(const VariantKey&) final { return {}; };
 
-    private:
         using KeyMap = std::unordered_map<VariantKey, Segment>;
         using TypeMap = std::unordered_map<KeyType, KeyMap>;
         using MutexType = std::recursive_mutex;

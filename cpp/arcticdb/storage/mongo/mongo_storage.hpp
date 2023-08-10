@@ -24,7 +24,7 @@ class MongoStorage final : public Storage {
 
     MongoStorage(const LibraryPath &lib, OpenMode mode, const Config &conf);
 
-  protected:
+  private:
     void do_write(Composite<KeySegmentPair>&& kvs) final;
 
     void do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts opts) final;
@@ -45,7 +45,6 @@ class MongoStorage final : public Storage {
 
     std::string do_storage_specific(const VariantKey&) final { return {}; };
 
-  private:
     std::string collection_name(KeyType k);
 
     std::shared_ptr<MongoInstance> instance_;
