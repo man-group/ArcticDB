@@ -7,6 +7,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 """
 import re
 import time
+import certifi
 from typing import Optional
 
 from arcticdb.options import LibraryOptions
@@ -56,6 +57,8 @@ class AzureLibraryAdapter(ArcticLibraryAdapter):
         )
         self._container = self._query_params.Container
         self._ca_cert_path = self._query_params.CA_cert_path
+        if not self._ca_cert_path:
+            self._ca_cert_path = certifi.where()
 
         super().__init__(uri, EncodingVersion.V1)
 
