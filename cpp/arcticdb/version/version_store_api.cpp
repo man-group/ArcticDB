@@ -535,7 +535,8 @@ VersionedItem PythonVersionStore::write_versioned_composite_data(
     const std::vector<StreamId> &sub_keys,
     const std::vector<py::tuple> &items,
     const std::vector<py::object> &norm_metas,
-    const py::object &user_meta
+    const py::object &user_meta,
+    bool prune_previous_versions
     ) {
     ARCTICDB_SAMPLE(WriteVersionedMultiKey, 0)
 
@@ -559,8 +560,8 @@ VersionedItem PythonVersionStore::write_versioned_composite_data(
     auto frames = create_input_tensor_frames(sub_keys, items, norm_metas, user_metas);
     auto index_keys = folly::collect(batch_write_internal(std::move(version_ids), sub_keys, std::move(frames), std::move(de_dup_maps), false)).get();
     auto multi_key = write_multi_index_entry(store(), index_keys, stream_id, metastruct, user_meta, version_id);
-    auto versioned_item = VersionedItem(to_atom(multi_key));
-    version_map()->write_version(store(), versioned_item.key_);
+    auto versioned_item = VersionedItem(to_atom(std::move(multi_key)));
+    write_version_and_prune_previous_if_needed(prune_previous_versions, versioned_item.key_, maybe_prev);
 
     if(cfg().symbol_list())
         symbol_list().add_symbol(store(), stream_id);
@@ -680,13 +681,15 @@ VersionedItem PythonVersionStore::compact_incomplete(
         bool convert_int_to_float,
         bool via_iteration /*= true */,
         bool sparsify /*= false */,
-        const std::optional<py::object>& user_meta /* = std::nullopt */) {
+        const std::optional<py::object>& user_meta /* = std::nullopt */,
+        bool prune_previous_versions) {
     std::optional<arcticdb::proto::descriptors::UserDefinedMetadata> meta;
     if (user_meta && !user_meta->is_none()) {
         meta = std::make_optional<arcticdb::proto::descriptors::UserDefinedMetadata>();
         python_util::pb_from_python(*user_meta, *meta);
     }
-    return compact_incomplete_dynamic(stream_id, meta, append, convert_int_to_float, via_iteration, sparsify);
+    return compact_incomplete_dynamic(stream_id, meta, append, convert_int_to_float, via_iteration, sparsify,
+        prune_previous_versions);
 }
 
 VersionedItem PythonVersionStore::sort_merge(

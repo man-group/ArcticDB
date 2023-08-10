@@ -78,7 +78,8 @@ class PythonVersionStore : public LocalVersionedEngine {
         const std::vector<StreamId> &sub_keys,  // TODO: make this optional?
         const std::vector<py::tuple> &items,
         const std::vector<py::object> &norm_metas,
-        const py::object &user_meta);
+        const py::object &user_meta,
+        bool prune_previous_versions);
 
     VersionedItem write_partitioned_dataframe(
         const StreamId& stream_id,
@@ -127,7 +128,8 @@ class PythonVersionStore : public LocalVersionedEngine {
             bool convert_int_to_float,
             bool via_iteration = true,
             bool sparsify = false,
-            const std::optional<py::object>& user_meta = std::nullopt);
+            const std::optional<py::object>& user_meta = std::nullopt,
+            bool prune_previous_versions = false);
 
     void write_parallel(
         const StreamId& stream_id,
