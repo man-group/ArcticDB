@@ -28,7 +28,7 @@ inline auto get_test_environment_config(
     cfg.set_path("./"); //TODO local path is a bit annoying. TMPDIR?
     cfg.set_recreate_if_exists(true);
     util::pack_to_any(cfg, *storage_conf.mutable_config());
-    mem_config.storages_.insert(std::make_pair(storage_name, storage_conf));
+    mem_config.storage_configs_.insert(std::make_pair(storage_name, storage_conf));
 
     arcticdb::proto::storage::LibraryDescriptor library_descriptor;
     library_descriptor.add_storage_ids(storage_name.value);
