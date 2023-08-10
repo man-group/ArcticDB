@@ -56,18 +56,15 @@ inline void check_normalization_index_match(NormalizationOperation operation,
 }
 
 inline bool columns_match(const StreamDescriptor &left, const StreamDescriptor &right) {
-    if (left.fields().size() != right.fields().size()) {
+    if (left.fields().size() != right.fields().size())
         return false;
-    }
 
     for (auto i = 0; i < int(left.fields().size()); ++i) {
-        if (left.fields(i).name() != right.fields(i).name()) {
+        if (left.fields(i).name() != right.fields(i).name())
             return false;
-        }
 
-        if (!trivially_compatible_types(left.fields(i).type(), right.fields(i).type())) {
+        if (!trivially_compatible_types(left.fields(i).type(), right.fields(i).type()))
             return false;
-        }
     }
     return true;
 }

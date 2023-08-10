@@ -115,8 +115,7 @@ enum class ValueType : uint8_t {
 
     UTF_DYNAMIC = 11,
     ASCII_DYNAMIC = 12,
-    /// Used to represent Python's None. Each type can be converted to Empty and Empty can be
-    /// converted to each type.
+    /// Used to represent null types. Each type can be converted to Empty and Empty can be converted to each type.
     EMPTY = 13,
     COUNT // Not a real value type, should not be added to proto descriptor. Used to count the number of items in the enum
 };

@@ -225,9 +225,7 @@ struct Buffer : public BaseBuffer<Buffer, true> {
   private:
     inline void resize(size_t alloc_bytes) {
         const size_t bytes = alloc_bytes - preamble_bytes_;
-#ifdef DEBUG_BUILD
         util::check(alloc_bytes >= preamble_bytes_, "The requested size of a resizes call is less than the preamble bytes");
-#endif
         auto [mem_ptr, ts] = ptr_ ?
                              Allocator::realloc(std::make_pair(data_, ts_), alloc_bytes)
                                   :

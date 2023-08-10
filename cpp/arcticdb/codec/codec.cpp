@@ -36,7 +36,7 @@ std::pair<size_t, size_t> ColumnEncoder::max_compressed_size(
             // encoder specific data to the buffer, thus the uncompressed size will be 0 but the max_compressed_bytes
             // might be non-zero.
             if constexpr(!is_empty_type(TDT::DataTypeTag::data_type)) {
-                util::check(nbytes, "Zero-sized block");
+                util::check(nbytes > 0, "Zero-sized block");
                 uncompressed_bytes += nbytes;
             }
             max_compressed_bytes += Encoder::max_compressed_size(codec_opts, block.value());
