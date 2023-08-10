@@ -1,10 +1,5 @@
 name: Build and Test
 on:
-  # TODO: Uncomment when we are ready for the schedule build
-  # schedule:
-  #   # This schedule job serves as a nightly at 2 AM every night
-  #   # It runs only on the default branch - master
-  #   - cron:  '0 2 * * *'
   push:
     branches: ["**"]
     tags: [v**]
