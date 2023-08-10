@@ -91,19 +91,10 @@ class Arctic:
                 +---------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------+
                 | Path_prefix               | Path within Azure container to use for data storage                                                                                                           |
                 +---------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------+
-                | CA_cert_path              | Azure CA certificate path. If not set, default path will be used.                                                                                             |
-                |                           | Note: For Linux distribution, default path is set to `/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem`.                                                     |
+                | CA_cert_path              | Azure CA certificate path. If not set, python library ``certifi`` function ``where()`` will be called to provide the default certificate.                     |
                 |                           | If the certificate cannot be found in the provided path, an Azure exception with no meaningful error code will be thrown.                                     |
                 |                           | For more details, please see https://github.com/Azure/azure-sdk-for-cpp/issues/4738.                                                                          |
                 |                           | For example, ``Failed to iterate azure blobs 'C' 0:``.                                                                                                        |
-                |                           |                                                                                                                                                               |
-                |                           | Default certificate path in various Linux distributions:                                                                                                      |
-                |                           | "/etc/ssl/certs/ca-certificates.crt"                  Debian/Ubuntu/Gentoo etc.                                                                               |
-                |                           | "/etc/pki/tls/certs/ca-bundle.crt"                    Fedora/RHEL 6                                                                                           |
-                |                           | "/etc/ssl/ca-bundle.pem"                              OpenSUSE                                                                                                |
-                |                           | "/etc/pki/tls/cacert.pem"                             OpenELEC                                                                                                |
-                |                           | "/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem"   CentOS/RHEL 7                                                                                           |
-                |                           | "/etc/ssl/cert.pem"                                   Alpine Linux                                                                                            |
                 +---------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------+
 
                 Note: Support for Azure Blob Storage is currently only available in *non-Conda* binaries distribution.
