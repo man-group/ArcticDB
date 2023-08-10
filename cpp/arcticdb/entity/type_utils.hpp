@@ -32,16 +32,14 @@ inline bool trivially_compatible_types(entity::TypeDescriptor left, entity::Type
 }
 
 inline std::optional<entity::TypeDescriptor> has_valid_type_promotion(entity::TypeDescriptor source, entity::TypeDescriptor target) {
-    if (source == target) {
+    if(source.dimension() != target.dimension())
+        return std::nullopt;
+
+    if (source == target)
         return target;
-    }
 
     if(is_empty_type(source.data_type()) || is_empty_type(target.data_type())) {
         return target;
-    }
-
-    if(source.dimension() != target.dimension()) {
-        return std::nullopt;
     }
 
     auto source_type = source.data_type();

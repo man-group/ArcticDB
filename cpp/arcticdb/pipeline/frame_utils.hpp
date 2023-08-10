@@ -126,9 +126,8 @@ void aggregator_set_data(
                 auto data = const_cast<void *>(tensor.data());
                 auto ptr_data = reinterpret_cast<PyObject **>(data);
                 ptr_data += row;
-                if (!c_style) {
+                if (!c_style)
                     ptr_data = flatten_tensor<PyObject*>(flattened_buffer, rows_to_write, tensor, slice_num, regular_slice_size);
-                }
 
                 auto none = py::none{};
                 for (size_t s = 0; s < rows_to_write; ++s, ++ptr_data) {
