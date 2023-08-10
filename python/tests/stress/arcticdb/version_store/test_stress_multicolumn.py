@@ -15,8 +15,6 @@ import sys
 from arcticdb.util.test import assert_frame_equal
 from arcticdb_ext.tools import AZURE_SUPPORT
 
-from arcticdb.util._versions import IS_PANDAS_TWO
-
 
 def id_generator(size=75, chars=string.ascii_uppercase + string.digits):
     return "".join(random.choice(chars) for _ in range(size))

@@ -46,7 +46,6 @@ from arcticdb.util.test import (
     config_context,
     distinct_timestamps,
 )
-from arcticdb.util._versions import IS_PANDAS_TWO
 from arcticdb_ext.tools import AZURE_SUPPORT
 from tests.util.date import DateRange
 
