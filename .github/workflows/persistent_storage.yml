@@ -1,4 +1,4 @@
-name: __real_storage_seed
+name: __persistent_storage_seed
 on:
   workflow_call:
     inputs:
@@ -72,7 +72,7 @@ jobs:
           echo "Running seed for ${{ github.ref_name }} on ${{matrix.os}}_${{env.python_impl_name}}"
           python build_tooling/seed_storage.py
         env:
-          ARCTICDB_REAL_STORAGE_LIB_NAME: 'seed_${{ github.ref_name }}_${{matrix.os}}_${{env.python_impl_name}}'
+          ARCTICDB_PERSISTENT_STORAGE_LIB_NAME: 'seed_${{ github.ref_name }}_${{matrix.os}}_${{env.python_impl_name}}'
 
       - name: Verify the storage
         if: inputs.job_type == 'verify'
@@ -99,8 +99,8 @@ jobs:
       - name: Set real storage variables
         run: |
           # General
-          echo "ARCTICDB_REAL_STORAGE_TESTS=1" >> $GITHUB_ENV
-          echo "ARCTICDB_REAL_STORAGE_BRANCH_NAME=${{ github.ref_name }}" >> $GITHUB_ENV
+          echo "ARCTICDB_PERSISTENT_STORAGE_TESTS=1" >> $GITHUB_ENV
+          echo "ARCTICDB_PERSISTENT_STORAGE_BRANCH_NAME=${{ github.ref_name }}" >> $GITHUB_ENV
           # S3 Specific
           echo "ARCTICDB_REAL_S3_BUCKET=${{ inputs.bucket }}" >> $GITHUB_ENV
           echo "ARCTICDB_REAL_S3_ENDPOINT=${{ inputs.endpoint }}" >> $GITHUB_ENV
