@@ -7,10 +7,10 @@ CI system guide
 
 # Introduction
 
-This is the documentation of CI system that is used to build and publish ArcticDB.
+This is the documentation of the CI system that is used to build and publish ArcticDB.
 It aims to provide an overview of the system and the general steps.
 
-Currently, the CI system is based on GitHub Actions.
+The CI system is based on GitHub Actions.
 It can be triggered automatically on push to any branch or manually [here](https://github.com/man-group/ArcticDB/actions/workflows/build.yml).
 There is also a scheduled build of the master branch that runs every night and tests against real, persistent storages (e.g. AWS S3, Azure Cloud, etc) (**NOT YET IMPLEMENTED**).
 
@@ -41,24 +41,24 @@ flowchart LR
         cpp_tests_linux_compile --> cpp_tests_linux
     end
     subgraph NOT YET IMPLEMENTED
-        subgraph real_storage_tests
+        subgraph persistent_storage_tests
             direction LR
-            pre_real_storages_test --> real_storages_test
-            real_storages_test --> post_real_storages_test
+            pre_persistent_storages_test --> persistent_storages_test
+            persistent_storages_test --> post_persistent_storages_test
         end
     end
     leader --> follower
     leader --> cpp_tests
-    leader --> real_storage{Should test against real storages?} --> real_storage_tests --> can_merge
+    leader --> persistent_storage{Should test against real storages?} --> persistent_storage_tests --> can_merge
     follower --> docs
     docs --> can_merge
     cpp_tests --> can_merge
     can_merge --> pub_check{publish_env} --> publish
 ```
 
-This diagram overviews the structure of the main CI system.
-The system is outlined in the [build.yml](build.yml) file.
-The concrete steps are implemented in [build_steps.yml](build_steps.yml) file.
+This diagram shows the structure of the CI system.
+The system is defined in the [build.yml](build.yml) file.
+The concrete steps are implemented in the [build_steps.yml](build_steps.yml) and [persistent_storage.yml](persistent_storage.yml) files.
 For more information, see the [Description of the YML files](#description-of-the-yml-files) section.
 
 ## Common config job
@@ -75,7 +75,7 @@ TODO
 ## Leader jobs
 
 The leader jobs are designed to do the C++ core compilation using one Python version to seed the compilation caches.
-This way, if there is a general problem with the build, it can fail quicker, without having to way for the different versions.
+This way, if there is a general problem with the build, it can fail quicker, without having to wait for the different versions.
 There are leader jobs for both Linux and Windows.
 
 ## C++ Tests jobs
@@ -114,7 +114,7 @@ When a manual build is triggered, the user can specify the following input argum
     - used for publishing both the docs and the wheels
     - has not effect, unless pypi_publish=true
 - Override CMAKE preset type - to override the build type (e.g. release vs debug)
-- real_storage - whether the built should execute tests that rely on real storages (e.g. AWS S3), normally it is enabled only on nightly/scheduled builds **(NOT YET IMPLEMENTED)**
+- persistent_storage - whether the built should execute tests that rely on real storages (e.g. AWS S3)
 
 # Description of the YML files
 
@@ -124,7 +124,6 @@ When a manual build is triggered, the user can specify the following input argum
 * Sets up the main triggers for the build:
     * on push
     * manual
-    * scheduled nightly (**NOT YET IMPLEMENTED**)
 * Sets up the general structure of the build
 
 The logic for the steps is implemented in [build_steps.yml](build_steps.yml).
@@ -134,7 +133,7 @@ The logic for the steps is implemented in [build_steps.yml](build_steps.yml).
 <tr><th>inputs.pypi_publish</th><td>Specifies if the build should publish a new PyPi release</td>
 <tr><th>inputs.publish_env</th><td>Environment to publish to, if <code>inputs.pypi_publish</code> is enabled</td>
 <tr><th>inputs.cmake_preset_type</th><td>Override CMAKE preset type with release or debug</td>
-<tr><th>inputs.real_storage</th><td>Specifies if the build should run the tests that use real storage (e.g. AWS S3) (<b>NOT YET IMPLEMENTED</b>)</td>
+<tr><th>inputs.persistent_storage</th><td>Specifies if the build should run the tests that use real storage (e.g. AWS S3) (<b>NOT YET IMPLEMENTED</b>)</td>
 </table>
 
 ## [build-steps.yml](build-steps.yml)
@@ -144,7 +143,7 @@ This logic is used in [build.yml](build.yml).
 
 ### Settings
 <table>
-<tr><th>inputs.job_type</th><td>Selects the steps to enable based on the job type (e.g. leader, follower, cpp-test, real_storage</td>
+<tr><th>inputs.job_type</th><td>Selects the steps to enable based on the job type (e.g. leader, follower, cpp-test, persistent_storage</td>
 <tr><th>inputs.cmake_preset_type</th><td>release or debug</code> is enabled</td>
 <tr><th>inputs.matrix</th><td>JSON string to feed into the build matrix</td>
 <tr><th>inputs.cibw_image_tag</th><td>Linux only. As built by cibw_docker_image.yml workflow</td>

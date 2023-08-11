@@ -3,17 +3,19 @@ import os
 import pandas as pd
 from arcticdb.arctic import Arctic
 
-REAL_STORAGE_TESTS_ENABLED = os.getenv("ARCTICDB_REAL_STORAGE_TESTS") == "1"
-REAL_STORAGE_LIB_NAME = os.getenv("ARCTICDB_REAL_STORAGE_LIB_NAME")
-BRANCH_NAME = os.getenv("ARCTICDB_REAL_STORAGE_BRANCH_NAME")
+PERSISTENT_STORAGE_TESTS_ENABLED = os.getenv("ARCTICDB_PERSISTENT_STORAGE_TESTS") == "1"
+PERSISTENT_STORAGE_LIB_NAME = os.getenv("ARCTICDB_PERSISTENT_STORAGE_LIB_NAME")
+BRANCH_NAME = os.getenv("ARCTICDB_PERSISTENT_STORAGE_BRANCH_NAME")
 
-if REAL_STORAGE_TESTS_ENABLED:
+if PERSISTENT_STORAGE_TESTS_ENABLED:
     # TODO: Maybe add a way to parametrize this
     LIBRARIES = [
         # LINUX
         "linux_cp36",
+        "linux_cp36_compat36",
         "linux_cp37",
         "linux_cp38",
+        "linux_cp38_compat38",
         "linux_cp39",
         "linux_cp310",
         "linux_cp311",
@@ -38,7 +40,7 @@ def normalize_lib_name(lib_name):
 # TODO: Add a check if the real storage tests are enabled
 @pytest.mark.parametrize("library", LIBRARIES)
 @pytest.mark.skipif(
-    not REAL_STORAGE_TESTS_ENABLED, reason="This test should run only if the real storage tests are enabled"
+    not PERSISTENT_STORAGE_TESTS_ENABLED, reason="This test should run only if the persistent storage tests are enabled"
 )
 def test_real_s3_storage_read(real_s3_credentials, library):
     endpoint, bucket, region, access_key, secret_key, _ = real_s3_credentials
@@ -58,11 +60,10 @@ def test_real_s3_storage_read(real_s3_credentials, library):
 
 
 @pytest.mark.skipif(
-    not REAL_STORAGE_TESTS_ENABLED, reason="This test should run only if the real storage tests are enabled"
+    not PERSISTENT_STORAGE_TESTS_ENABLED, reason="This test should run only if the persistent storage tests are enabled"
 )
 def test_real_s3_storage_write(real_s3_credentials, three_col_df):
-    library_to_write_to = REAL_STORAGE_LIB_NAME
-    library_to_write_to = library_to_write_to.replace("-", "_")
+    library_to_write_to = PERSISTENT_STORAGE_LIB_NAME
     library_to_write_to = normalize_lib_name(library_to_write_to)
     endpoint, bucket, region, access_key, secret_key, _ = real_s3_credentials
     uri = f"s3s://{endpoint}:{bucket}?access={access_key}&secret={secret_key}&region={region}&path_prefix=ci_tests/"
