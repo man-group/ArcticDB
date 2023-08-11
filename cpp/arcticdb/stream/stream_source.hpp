@@ -70,7 +70,7 @@ struct StreamSource {
 
     using DecodeContinuation = folly::Function<folly::Unit(SegmentInMemory &&)>;
 
-    virtual std::vector<Composite<ProcessingSegment>> batch_read_uncompressed(
+    virtual std::vector<Composite<ProcessingUnit>> batch_read_uncompressed(
         std::vector<Composite<pipelines::SliceAndKey>> &&keys,
         const std::vector<std::shared_ptr<Clause>>& clauses,
         const std::shared_ptr<std::unordered_set<std::string>>& filter_columns,

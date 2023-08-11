@@ -403,16 +403,16 @@ FrameAndDescriptor read_multi_key(
     return {res.frame_, multi_key_desc, keys, std::shared_ptr<BufferHolder>{}};
 }
 
-Composite<ProcessingSegment> process_remaining_clauses(
+Composite<ProcessingUnit> process_remaining_clauses(
         const std::shared_ptr<Store>& store,
-        std::vector<Composite<ProcessingSegment>>&& procs,
+        std::vector<Composite<ProcessingUnit>>&& procs,
         std::vector<std::shared_ptr<Clause>> clauses ) { // pass by copy deliberately as we don't want to modify read_query
     while (!clauses.empty()) {
         if (clauses[0]->clause_info().requires_repartition_) {
-            std::vector<Composite<ProcessingSegment>> repartitioned_procs = clauses[0]->repartition(std::move(procs)).value();
+            std::vector<Composite<ProcessingUnit>> repartitioned_procs = clauses[0]->repartition(std::move(procs)).value();
             // Erasing from front of vector not ideal, but they're just shared_ptr and there shouldn't be loads of clauses
             clauses.erase(clauses.begin());
-            std::vector<folly::Future<Composite<ProcessingSegment>>> fut_procs;
+            std::vector<folly::Future<Composite<ProcessingUnit>>> fut_procs;
             for (auto&& proc : repartitioned_procs) {
                 fut_procs.emplace_back(
                         async::submit_cpu_task(
@@ -432,7 +432,7 @@ Composite<ProcessingSegment> process_remaining_clauses(
 }
 
 void set_output_descriptors(
-        const Composite<ProcessingSegment>& merged_procs,
+        const Composite<ProcessingUnit>& merged_procs,
         const std::vector<std::shared_ptr<Clause>>& clauses,
         const std::shared_ptr<PipelineContext>& pipeline_context) {
     std::optional<std::string> index_column;
@@ -498,8 +498,9 @@ void set_output_descriptors(
 /*
  * Processes the slices in the given pipeline_context.
  *
- * Slices are processed in order, with slices corresponding to the same row group collected into a single
- * Composite<SliceAndKey>. Slices contained within a single Composite<SliceAndKey> are processed within a single thread.
+ * Slices are processed in an order defined by the first clause in the pipeline, with slices corresponding to the same
+ * processing unit collected into a single Composite<SliceAndKey>. Slices contained within a single
+ * Composite<SliceAndKey> are processed within a single thread.
  *
  * The processing of a Composite<SliceAndKey> is scheduled via the Async Store. Within a single thread, the
  * segments will be retrieved from storage and decompressed before being passed to a MemSegmentProcessingTask which
@@ -546,11 +547,12 @@ std::vector<SliceAndKey> read_and_process(
         clause->set_processing_config(processing_config);
     }
 
-    // At this stage, each Composite contains a single ProcessingSegment, which holds a row-slice
-    // Different row-slices are held in different elements of the vector
+    // At this stage, each Composite contains a single ProcessingUnit, which may hold a row-slice, a column-slice, a
+    // general rectangular slice, or some more exotic collection of segments based on the clause's processing
+    // parallelisation.
     // All clauses that do not require repartitioning (e.g. filters and projections) will have already been applied
-    // to these processing segments
-    std::vector<Composite<ProcessingSegment>> procs = store->batch_read_uncompressed(
+    // to these processing units
+    std::vector<Composite<ProcessingUnit>> procs = store->batch_read_uncompressed(
             std::move(rows),
             read_query.clauses_,
             filter_columns,
