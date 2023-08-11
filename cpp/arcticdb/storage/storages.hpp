@@ -134,16 +134,14 @@ class Storages {
 };
 
 inline std::shared_ptr<Storages> create_storages(const LibraryPath& library_path, OpenMode mode, const arcticdb::proto::storage::VariantStorage &storage_config) {
-    using StorageVec = std::vector<std::unique_ptr<Storage>>;
-    StorageVec storages;
+    Storages::StorageVector storages;
     storages.push_back(create_storage(library_path, mode, storage_config));
 
     return std::make_shared<Storages>(std::move(storages), mode);
 }
 
 inline std::shared_ptr<Storages> create_storages(const LibraryPath& library_path, OpenMode mode, const std::vector<arcticdb::proto::storage::VariantStorage> &storage_configs) {
-    using StorageVec = std::vector<std::unique_ptr<Storage>>;
-    StorageVec storages;
+    Storages::StorageVector storages;
     for (const auto& storage_config: storage_configs) {
         storages.push_back(create_storage(library_path, mode, storage_config));
     }
