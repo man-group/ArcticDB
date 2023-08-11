@@ -57,6 +57,9 @@ jobs:
           # Protocol buffers compilation require not using build isolation.
           python -m pip install --no-build-isolation --no-deps -v -e .
         env:
+          # Compiling ArcticDB with all cores might freeze machines due to swapping.
+          # We build with only 1 process to prevent these freezes from happening.
+          CMAKE_BUILD_PARALLEL_LEVEL: 1
           ARCTICDB_USING_CONDA: 1
           ARCTICDB_BUILD_CPP_TESTS: ${{ matrix.cpp_tests }}
 
