@@ -41,7 +41,7 @@ namespace arcticdb::storage::memory {
 
         void do_iterate_type(KeyType key_type, const IterateTypeVisitor& visitor, const std::string & prefix) final;
 
-        std::string do_storage_specific(const VariantKey&) final { return {}; };
+        std::string do_key_path(const VariantKey&) final { return {}; };
 
         using KeyMap = std::unordered_map<VariantKey, Segment>;
         using TypeMap = std::unordered_map<KeyType, KeyMap>;

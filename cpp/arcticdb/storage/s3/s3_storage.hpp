@@ -60,7 +60,7 @@ class S3Storage final : public Storage {
         return false;
     }
 
-    std::string do_storage_specific(const VariantKey& key) final { return get_key_path(key); };
+    std::string do_key_path(const VariantKey& key) final { return get_key_path(key); };
 
     auto& client() { return s3_client_; }
     const std::string& bucket_name() const { return bucket_name_; }

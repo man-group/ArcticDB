@@ -89,9 +89,9 @@ class Storages {
         }
     }
 
-    /** Calls Storage::do_storage_specific on the primary storage. Remember to check the open mode. */
-    std::string storage_specific(const VariantKey& key) {
-        return primary().storage_specific(key);
+    /** Calls Storage::do_key_path on the primary storage. Remember to check the open mode. */
+    std::string key_path(const VariantKey& key) {
+        return primary().key_path(key);
     }
 
     void remove(Composite<VariantKey>&& ks, storage::RemoveOpts opts) {

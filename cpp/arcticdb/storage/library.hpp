@@ -122,9 +122,9 @@ class Library {
         return res;
     }
 
-    /** Calls VariantStorage::do_storage_specific on the primary storage */
-    std::string storage_specific(const VariantKey& key) {
-        return storages_->storage_specific(key);
+    /** Calls VariantStorage::do_key_path on the primary storage */
+    std::string key_path(const VariantKey& key) {
+        return storages_->key_path(key);
     }
 
     void move_storage(KeyType key_type, timestamp horizon, size_t storage_index = 0) {

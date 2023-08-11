@@ -153,8 +153,8 @@ public:
         do_iterate_type(key_type, visitor, prefix);
     }
 
-    std::string storage_specific(const VariantKey& key) {
-        return do_storage_specific(key);
+    std::string key_path(const VariantKey& key) {
+        return do_key_path(key);
     }
 
     [[nodiscard]] const LibraryPath &library_path() const { return lib_path_; }
@@ -177,7 +177,7 @@ private:
 
     virtual void do_iterate_type(KeyType key_type, const IterateTypeVisitor& visitor, const std::string & prefix) = 0;
 
-    virtual std::string do_storage_specific(const VariantKey& key) = 0;
+    virtual std::string do_key_path(const VariantKey& key) = 0;
 
     LibraryPath lib_path_;
     OpenMode mode_;
