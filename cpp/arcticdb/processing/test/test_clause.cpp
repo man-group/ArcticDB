@@ -13,7 +13,7 @@
 #include <arcticdb/pipeline/frame_slice.hpp>
 
 template<typename T>
-void segment_scalar_assert_all_values_equal(const arcticdb::ProcessingSegment& segment, const arcticdb::ColumnName& name, const std::unordered_set<T>& expected, size_t expected_row_count) {
+void segment_scalar_assert_all_values_equal(const arcticdb::ProcessingUnit& segment, const arcticdb::ColumnName& name, const std::unordered_set<T>& expected, size_t expected_row_count) {
     const arcticdb::pipelines::SliceAndKey& slice_and_key = segment.data().front();
     std::shared_ptr<arcticdb::Store> empty;
     slice_and_key.ensure_segment(empty);
@@ -31,7 +31,7 @@ void segment_scalar_assert_all_values_equal(const arcticdb::ProcessingSegment& s
     ASSERT_EQ(expected_row_count, row_counter);
 }
 
-void segment_string_assert_all_values_equal(const arcticdb::ProcessingSegment& segment, const arcticdb::ColumnName& name, std::string_view expected, size_t expected_row_count) {
+void segment_string_assert_all_values_equal(const arcticdb::ProcessingUnit& segment, const arcticdb::ColumnName& name, std::string_view expected, size_t expected_row_count) {
     const arcticdb::pipelines::SliceAndKey& slice_and_key = segment.data().front();
     std::shared_ptr<arcticdb::Store> empty;
     slice_and_key.ensure_segment(empty);
@@ -56,10 +56,10 @@ TEST(Clause, Partition) {
 
     ScopedConfig num_buckets("Partition.NumBuckets", 16);
     std::shared_ptr<Store> empty;
-    auto proc_seg = ProcessingSegment{std::move(seg), pipelines::FrameSlice{}};
+    auto proc_seg = ProcessingUnit{std::move(seg), pipelines::FrameSlice{}};
     auto col = std::get<ColumnWithStrings>(proc_seg.get(ColumnName("int8"), empty));
     proc_seg.computed_data_.try_emplace("int8", col);
-    Composite<ProcessingSegment> comp;
+    Composite<ProcessingUnit> comp;
     comp.push_back(std::move(proc_seg));
 
     PartitionClause<arcticdb::grouping::HashingGroupers, arcticdb::grouping::ModuloBucketizer> partition{"int8"};
@@ -80,10 +80,10 @@ TEST(Clause, PartitionString) {
     auto seg = get_groupable_timeseries_segment("groupable", 30, {1,1,3,3,1,1});
     ScopedConfig num_buckets("Partition.NumBuckets", 16);
     std::shared_ptr<Store> empty;
-    auto proc_seg = ProcessingSegment{std::move(seg), pipelines::FrameSlice{}};
+    auto proc_seg = ProcessingUnit{std::move(seg), pipelines::FrameSlice{}};
     auto col = std::get<ColumnWithStrings>(proc_seg.get(ColumnName("strings"), empty));
     proc_seg.computed_data_.try_emplace("strings", col);
-    Composite<ProcessingSegment> comp;
+    Composite<ProcessingUnit> comp;
     comp.push_back(std::move(proc_seg));
 
     PartitionClause<arcticdb::grouping::HashingGroupers, arcticdb::grouping::ModuloBucketizer> partition{"strings"};
@@ -104,8 +104,8 @@ TEST(Clause, Passthrough) {
     auto seg = get_standard_timeseries_segment("passthrough");
 
     PassthroughClause passthrough;
-    auto proc_seg = ProcessingSegment{std::move(seg), pipelines::FrameSlice{}};
-    Composite<ProcessingSegment> comp;
+    auto proc_seg = ProcessingUnit{std::move(seg), pipelines::FrameSlice{}};
+    Composite<ProcessingUnit> comp;
     comp.push_back(std::move(proc_seg));
     std::shared_ptr<Store> empty;
     auto ret = passthrough.process(empty, std::move(comp));
@@ -120,12 +120,12 @@ TEST(Clause, Sort) {
     std::shuffle(seg.begin(), seg.end(), urng);
     std::shared_ptr<Store> empty;
     SortClause sort_clause("time");
-    auto proc_seg = ProcessingSegment{std::move(seg), pipelines::FrameSlice{}};
-    Composite<ProcessingSegment> comp;
+    auto proc_seg = ProcessingUnit{std::move(seg), pipelines::FrameSlice{}};
+    Composite<ProcessingUnit> comp;
     comp.push_back(std::move(proc_seg));
     auto res = sort_clause.process(empty, std::move(comp));
     ASSERT_EQ(res.size(), 1);
-    bool equal = std::get<ProcessingSegment>(res[0]).data_[0].segment(empty) == copied;
+    bool equal = std::get<ProcessingUnit>(res[0]).data_[0].segment(empty) == copied;
     ASSERT_EQ(equal, true);
 }
 
@@ -135,8 +135,8 @@ TEST(Clause, Split) {
     auto seg = get_standard_timeseries_segment(symbol, 100);
     auto copied = seg.clone();
     SplitClause split_clause(10);
-    auto proc_seg = ProcessingSegment{std::move(seg)};
-    Composite<ProcessingSegment> comp;
+    auto proc_seg = ProcessingUnit{std::move(seg)};
+    Composite<ProcessingUnit> comp;
     comp.push_back(std::move(proc_seg));
     std::shared_ptr<Store> empty;
     auto res = split_clause.process(empty, std::move(comp));
@@ -153,7 +153,7 @@ TEST(Clause, Split) {
     SegmentSinkWrapper seg_wrapper(symbol, TimeseriesIndex::default_index(), std::move(desc));
 
     for(auto i = 0u; i < res.level_1_size(); ++i ) {
-        auto item =  std::move(std::get<ProcessingSegment>(res[i]));
+        auto item =  std::move(std::get<ProcessingUnit>(res[i]));
         pipelines::FrameSlice slice(item.data_[0].segment(empty));
         seg_wrapper.aggregator_.add_segment(std::move(item.data_[0].segment(empty)), slice, false);
     }
@@ -169,7 +169,7 @@ TEST(Clause, Merge) {
     using namespace arcticdb;
     const auto seg_size = 5;
     ScopedConfig max_blocks("Merge.SegmentSize", seg_size);
-    Composite<ProcessingSegment> comp;
+    Composite<ProcessingUnit> comp;
     std::vector<SegmentInMemory> copies;
     const auto num_segs = 2;
     const auto num_rows = 5;
@@ -177,7 +177,7 @@ TEST(Clause, Merge) {
         auto symbol = fmt::format("merge_{}", x);
         auto seg = get_standard_timeseries_segment(symbol, 10);
         copies.emplace_back(seg.clone());
-        auto proc_seg = ProcessingSegment{std::move(seg)};
+        auto proc_seg = ProcessingUnit{std::move(seg)};
         comp.push_back(std::move(proc_seg));
     }
 
@@ -189,7 +189,7 @@ TEST(Clause, Merge) {
     auto res = merge_clause.process(empty, std::move(comp));
     ASSERT_EQ(res.size(), 4u);
     for(auto i = 0; i < num_rows * num_segs; ++i) {
-        auto& output_seg = std::get<ProcessingSegment>(res[i / seg_size]).data_[0].segment(empty);
+        auto& output_seg = std::get<ProcessingUnit>(res[i / seg_size]).data_[0].segment(empty);
         auto output_row = i % seg_size;
         const auto& expected_seg = copies[i % num_segs];
         auto expected_row = i / num_segs;
