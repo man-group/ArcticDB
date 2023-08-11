@@ -131,7 +131,7 @@ class Library {
         storages_->move_storage(key_type, horizon, storage_index);
     }
 
-    bool supports_prefix_matching() { return storages_->supports_prefix_matching(); }
+    bool supports_prefix_matching() const { return storages_->supports_prefix_matching(); }
 
     const LibraryPath &library_path() const { return library_path_; }
 

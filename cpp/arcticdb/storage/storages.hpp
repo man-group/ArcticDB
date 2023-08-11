@@ -44,7 +44,7 @@ class Storages {
         primary().update(std::move(kvs), opts);
     }
 
-    bool supports_prefix_matching() {
+    bool supports_prefix_matching() const {
         return primary().supports_prefix_matching();
     }
 

@@ -226,7 +226,7 @@ public:
         return KeyExistsTask{&key, library_}();
     }
 
-    bool supports_prefix_matching() override {
+    bool supports_prefix_matching() const override {
         return library_->supports_prefix_matching();
     }
 

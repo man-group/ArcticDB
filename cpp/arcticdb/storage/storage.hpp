@@ -137,7 +137,7 @@ public:
         return remove(Composite<VariantKey>{std::move(key)}, opts);
     }
 
-    bool supports_prefix_matching() {
+    bool supports_prefix_matching() const {
         return do_supports_prefix_matching();
     }
 
@@ -171,7 +171,7 @@ private:
 
     virtual bool do_key_exists(const VariantKey& key) = 0;
 
-    virtual bool do_supports_prefix_matching() = 0;
+    virtual bool do_supports_prefix_matching() const = 0;
 
     virtual bool do_fast_delete() = 0;
 

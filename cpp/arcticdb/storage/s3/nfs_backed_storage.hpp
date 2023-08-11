@@ -46,7 +46,7 @@ private:
 
     bool do_key_exists(const VariantKey& key) final;
 
-    bool do_supports_prefix_matching() final {
+    bool do_supports_prefix_matching() const final {
         return true;
     }
 

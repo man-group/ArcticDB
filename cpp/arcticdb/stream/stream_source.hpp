@@ -46,7 +46,7 @@ struct StreamSource {
 
     [[nodiscard]] virtual folly::Future<bool> key_exists(const entity::VariantKey &key) = 0;
     virtual bool key_exists_sync(const entity::VariantKey &key) = 0;
-    virtual bool supports_prefix_matching() = 0;
+    virtual bool supports_prefix_matching() const = 0;
     virtual bool fast_delete() = 0;
 
     virtual std::vector<storage::KeySegmentPair> batch_read_compressed(

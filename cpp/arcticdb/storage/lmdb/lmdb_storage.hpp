@@ -43,7 +43,7 @@ class LmdbStorage final : public Storage {
 
     void do_remove(Composite<VariantKey>&& ks, RemoveOpts opts) final;
 
-    bool do_supports_prefix_matching() final {
+    bool do_supports_prefix_matching() const final {
         return false;
     };
 
