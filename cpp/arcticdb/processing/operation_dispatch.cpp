@@ -12,8 +12,8 @@ namespace arcticdb {
 
 VariantData transform_to_placeholder(VariantData data) {
     // There is a further optimization we can do here which is to return FullResult
-    // when the number of set bits is the same as the processing segments row-count,
-    // however that would need to be maintained by the processing segment and
+    // when the number of set bits is the same as the processing units row-count,
+    // however that would need to be maintained by the processing unit and
     // modified with each transformation. It would be worth it in the scenario
     // where a true result is very common, but is a premature change to make at this point.
     return util::variant_match(data,
