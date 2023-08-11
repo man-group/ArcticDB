@@ -3,6 +3,7 @@ channels:
   - conda-forge
 dependencies:
   # Build tools
+  - cxx-compiler
   - cmake
   - gtest
   - gflags

@@ -102,11 +102,6 @@ jobs:
         uses: SimenB/github-actions-cpu-cores@v1
         id: cpu-cores
 
-      - name: Append to environment_unix.yml
-        shell: bash -l {0}
-        run: |
-            echo "  - cxx-compiler" >> environment_unix.yml
-
       - name: Install Conda environment from environment_unix.yml
         uses: mamba-org/setup-micromamba@v1
         with:
