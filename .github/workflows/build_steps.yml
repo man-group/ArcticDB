@@ -9,7 +9,7 @@ on:
       cibw_version:      {required: false, type: string, description: Follower only. Must match the cibw_image_tag}
       python_deps_ids:   {default: '[""]', type: string, description: Follower test matrix parameter. JSON string.}
       python3:           {default: -1, type: number, description: Python 3 minor version}
-      real_storage:      {default: "false", type: string, description: Specifies whether the python tests should tests against real storages e.g. AWS S3  }
+      persistent_storage:      {default: "false", type: string, description: Specifies whether the python tests should tests against real storages e.g. AWS S3  }
       # TODO: Maybe we should add these as GitHub variables
       bucket:            {default: 'arcticdb-ci-test-bucket-01', type: string, description: The name of the S3 bucket that we will test against}
       endpoint:          {default: 's3.eu-west-2.amazonaws.com', type: string, description: The address of the S3 endpoint}
@@ -266,11 +266,11 @@ jobs:
           CMAKE_BUILD_PARALLEL_LEVEL: ${{vars.CMAKE_BUILD_PARALLEL_LEVEL}}
 
       - name: Set real storage variables
-        if: inputs.real_storage == 'true'
+        if: inputs.persistent_storage == 'true'
         run: |
           # Common
-          echo "ARCTICDB_REAL_STORAGE_TESTS=1" >> $GITHUB_ENV
-          echo "ARCTICDB_REAL_STORAGE_BRANCH_NAME=${{ github.ref_name }}" >> $GITHUB_ENV
+          echo "ARCTICDB_PERSISTENT_STORAGE_TESTS=1" >> $GITHUB_ENV
+          echo "ARCTICDB_PERSISTENT_STORAGE_BRANCH_NAME=${{ github.ref_name }}" >> $GITHUB_ENV
           # S3 Specific
           echo "ARCTICDB_REAL_S3_BUCKET=${{ inputs.bucket }}" >> $GITHUB_ENV
           echo "ARCTICDB_REAL_S3_ENDPOINT=${{ inputs.endpoint }}" >> $GITHUB_ENV
@@ -285,7 +285,7 @@ jobs:
           TEST_OUTPUT_DIR: ${{runner.temp}}
           # Use the Mongo created in the service container above to test against
           CI_MONGO_HOST: mongodb
-          ARCTICDB_REAL_STORAGE_LIB_NAME: 'test_${{ github.ref_name }}_${{matrix.os}}_${{env.python_impl_name}}${{matrix.python_deps_id}}'
+          ARCTICDB_PERSISTENT_STORAGE_LIB_NAME: 'test_${{ github.ref_name }}_${{matrix.os}}_${{env.python_impl_name}}${{matrix.python_deps_id}}'
   
 
       - name: Collect crash dumps (Windows)
