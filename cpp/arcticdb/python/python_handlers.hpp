@@ -15,12 +15,13 @@ namespace arcticdb {
 
         EmptyHandler() = default;
 
+        /// @see arcticdb::ITypeHandler
         void handle_type(
             const uint8_t*& data,
             uint8_t* dest,
-            size_t dest_bytes,
             const VariantField& encoded_field,
-            const entity::TypeDescriptor& type_descriptor
-        );
+            const entity::TypeDescriptor& type_descriptor,
+            size_t dest_bytes,
+            std::shared_ptr<BufferHolder> buffers);
     };
 } //namespace arcticdb

@@ -11,9 +11,10 @@ namespace arcticdb {
     void EmptyHandler::handle_type(
         const uint8_t*&,
         uint8_t* dest,
-        size_t dest_bytes,
         const VariantField&,
-        const entity::TypeDescriptor&
+        const entity::TypeDescriptor&,
+        size_t dest_bytes,
+        std::shared_ptr<BufferHolder>
     ) {
         ARCTICDB_SAMPLE(HandleEmpty, 0);
         util::check(dest != nullptr, "Got null destination pointer");

@@ -31,10 +31,11 @@ struct ITypeHandler {
         void handle_type(
             const uint8_t*& source,
             uint8_t* dest,
-            size_t dest_bytes,
             const VariantField& encoded_field_info,
-            const entity::TypeDescriptor& type_descriptor) {
-            folly::poly_call<0>(*this, source, dest, dest_bytes, encoded_field_info, type_descriptor);
+            const entity::TypeDescriptor& type_descriptor,
+            size_t dest_bytes,
+            std::shared_ptr<BufferHolder> buffers) {
+            folly::poly_call<0>(*this, source, dest, encoded_field_info, type_descriptor, dest_bytes, buffers);
         }
     };
 

@@ -70,6 +70,13 @@ NativeTensor obj_to_tensor(PyObject *ptr) {
             bool empty = false;
             bool all_nans = false;
             PyObject *sample = *obj;
+            // Arctic allows both None and NaN to represent a string with no value. We have 3 options:
+            // * In case all values are None we can mark this column segment as EmptyType and avoid allocating storage
+            //      memory for it
+            // * In case all values are NaN we can't sample the value to check if it's UTF or ASCII (since NaN is not
+            //      UTF nor ASCII). In that case we choose to save it as UTF
+            // * In case there is at least one actual string we can sample it and decide the type of the column segment
+            //      based on it
             if (sample == none.ptr() || is_py_nan(sample)) {
                 empty = true;
                 all_nans = true;

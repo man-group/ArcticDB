@@ -25,12 +25,12 @@
 #include <arcticdb/util/global_lifetimes.hpp>
 #include <arcticdb/util/configs_map.hpp>
 #include <arcticdb/util/error_code.hpp>
+#include <arcticdb/util/type_handler.hpp>
 #include <arcticdb/python/python_handlers.hpp>
 
 #include <pybind11/pybind11.h>
 #include <folly/system/ThreadName.h>
 #include <folly/portability/PThread.h>
-#include "util/type_handler.hpp"
 
 namespace py = pybind11;
 
@@ -325,4 +325,3 @@ PYBIND11_MODULE(arcticdb_ext, m) {
     m.attr("__version__") = "dev";
 #endif
 }
-

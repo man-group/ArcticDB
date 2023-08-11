@@ -370,7 +370,7 @@ DATA_TYPE_TAG(ASCII_FIXED64, std::uint64_t)
 DATA_TYPE_TAG(ASCII_DYNAMIC64, std::uint64_t)
 DATA_TYPE_TAG(UTF_FIXED64, std::uint64_t)
 DATA_TYPE_TAG(UTF_DYNAMIC64, std::uint64_t)
-DATA_TYPE_TAG(EMPTYVAL, uintptr_t)
+DATA_TYPE_TAG(EMPTYVAL, std::uint64_t)
 #undef DATA_TYPE_TAG
 
 enum class Dimension : uint8_t {

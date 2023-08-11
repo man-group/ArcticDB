@@ -206,14 +206,10 @@ void decode_or_expand_impl(
     uint8_t* dest,
     const EncodedFieldType& encoded_field_info,
     const TypeDescriptor& type_descriptor,
-    size_t dest_bytes) {
-    const std::shared_ptr<TypeHandler>& handler = TypeHandlerRegistry::instance()->get_handler(type_descriptor.data_type());
-    if(handler) {
-        handler->handle_type(data,
-            dest,
-            dest_bytes,
-            VariantField{&encoded_field_info},
-            type_descriptor);
+    size_t dest_bytes,
+    std::shared_ptr<BufferHolder> buffers) {
+    if(auto handler = TypeHandlerRegistry::instance()->get_handler(type_descriptor.data_type()); handler) {
+        handler->handle_type(data, dest, VariantField{&encoded_field_info}, type_descriptor, dest_bytes, buffers);
     } else {
         std::optional<util::BitMagic> bv;
         if (encoded_field_info.has_ndarray() && encoded_field_info.ndarray().sparse_map_bytes() > 0) {
@@ -263,9 +259,10 @@ void decode_or_expand(
     uint8_t* dest,
     const VariantField& field,
     const TypeDescriptor& type_descriptor,
-    size_t dest_bytes) {
+    size_t dest_bytes,
+    std::shared_ptr<BufferHolder> buffers) {
     util::variant_match(field, [&] (auto field) {
-        decode_or_expand_impl(data, dest, *field, type_descriptor, dest_bytes);
+        decode_or_expand_impl(data, dest, *field, type_descriptor, dest_bytes, buffers);
     });
 }
 
@@ -311,7 +308,8 @@ bool remaining_fields_empty(IteratorType it, const PipelineContextRow& context) 
 void decode_into_frame_static(
     SegmentInMemory &frame,
     PipelineContextRow &context,
-    Segment &&s) {
+    Segment &&s,
+    const std::shared_ptr<BufferHolder> buffers) {
     auto seg = std::move(s);
     ARCTICDB_SAMPLE_DEFAULT(DecodeIntoFrame)
     const uint8_t *data = seg.buffer().data();
@@ -353,7 +351,7 @@ void decode_into_frame_static(
                         m.frame_field_descriptor_.name());
 
             util::check(data != end || remaining_fields_empty(it, context), "Reached end of input block with {} fields to decode", it.remaining_fields());
-            decode_or_expand(data, buffer.data() + m.offset_bytes_, encoded_field, m.source_type_desc_,  m.dest_bytes_);
+            decode_or_expand(data, buffer.data() + m.offset_bytes_, encoded_field, m.source_type_desc_,  m.dest_bytes_, buffers);
             ARCTICDB_TRACE(log::codec(), "Decoded column {} to position {}", field_name, data - begin);
 
             it.advance();
@@ -417,7 +415,7 @@ void decode_into_frame_dynamic(
                             if constexpr(std::is_arithmetic_v<SourceType> && std::is_arithmetic_v<DestinationType>) {
                                 const auto src_bytes = sizeof_datatype(m.source_type_desc_) * m.num_rows_;
                                 Buffer tmp_buf{src_bytes};
-                                decode_or_expand(data, tmp_buf.data(), encoded_field, m.source_type_desc_, src_bytes);
+                                decode_or_expand(data, tmp_buf.data(), encoded_field, m.source_type_desc_, src_bytes, buffers);
                                 auto src_ptr = reinterpret_cast<SourceType *>(tmp_buf.data());
                                 auto dest_ptr = reinterpret_cast<DestinationType *>(buffer.data() + m.offset_bytes_);
                                 for (auto i = 0u; i < m.num_rows_; ++i) {
@@ -437,7 +435,7 @@ void decode_into_frame_dynamic(
                             "Reached end of input block with {} fields to decode",
                             field_count - field_col);
 
-                decode_or_expand(data, buffer.data() + m.offset_bytes_, encoded_field, m.source_type_desc_, m.dest_bytes_);
+                decode_or_expand(data, buffer.data() + m.offset_bytes_, encoded_field, m.source_type_desc_, m.dest_bytes_, buffers);
             }
             ARCTICDB_TRACE(log::codec(), "Decoded column {} to position {}", frame.field(dst_col).name(), data - begin);
         }
@@ -1128,13 +1126,13 @@ folly::Future<std::vector<VariantKey>> fetch_data(
             continuations.emplace_back([
                 row = row,
                 frame = frame,
-                dynamic_schema,
+                dynamic_schema=dynamic_schema,
                 buffers](auto &&ks) mutable {
                 auto key_seg = std::forward<storage::KeySegmentPair>(ks);
                 if(dynamic_schema)
                     decode_into_frame_dynamic(frame, row, std::move(key_seg.segment()), buffers);
                 else
-                    decode_into_frame_static(frame, row, std::move(key_seg.segment()));
+                    decode_into_frame_static(frame, row, std::move(key_seg.segment()), buffers);
                 return std::get<AtomKey>(key_seg.variant_key());
             });
         }
