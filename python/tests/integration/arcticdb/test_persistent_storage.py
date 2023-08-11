@@ -12,10 +12,8 @@ if PERSISTENT_STORAGE_TESTS_ENABLED:
     LIBRARIES = [
         # LINUX
         "linux_cp36",
-        "linux_cp36_compat36",
         "linux_cp37",
         "linux_cp38",
-        "linux_cp38_compat38",
         "linux_cp39",
         "linux_cp310",
         "linux_cp311",
