@@ -123,7 +123,7 @@ class Library {
     }
 
     /** Calls VariantStorage::do_key_path on the primary storage */
-    std::string key_path(const VariantKey& key) {
+    std::string key_path(const VariantKey& key) const {
         return storages_->key_path(key);
     }
 

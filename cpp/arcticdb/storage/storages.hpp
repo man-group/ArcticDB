@@ -90,7 +90,7 @@ class Storages {
     }
 
     /** Calls Storage::do_key_path on the primary storage. Remember to check the open mode. */
-    std::string key_path(const VariantKey& key) {
+    std::string key_path(const VariantKey& key) const {
         return primary().key_path(key);
     }
 

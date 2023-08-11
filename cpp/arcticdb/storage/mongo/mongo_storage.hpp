@@ -43,7 +43,7 @@ class MongoStorage final : public Storage {
 
     void do_iterate_type(KeyType key_type, const IterateTypeVisitor& visitor, const std::string &prefix) final;
 
-    std::string do_key_path(const VariantKey&) final { return {}; };
+    std::string do_key_path(const VariantKey&) const final { return {}; };
 
     std::string collection_name(KeyType k);
 

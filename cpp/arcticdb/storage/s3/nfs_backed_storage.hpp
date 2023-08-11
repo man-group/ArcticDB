@@ -54,7 +54,7 @@ private:
         return false;
     }
 
-    std::string do_key_path(const VariantKey&) final { return {}; };
+    std::string do_key_path(const VariantKey&) const final { return {}; };
 
     auto& client() { return s3_client_; }
     const std::string& bucket_name() const { return bucket_name_; }

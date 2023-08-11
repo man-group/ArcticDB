@@ -56,7 +56,7 @@ class AzureStorage final : public Storage {
         return false;
     }
 
-    std::string do_key_path(const VariantKey&) final { return {}; };
+    std::string do_key_path(const VariantKey&) const final { return {}; };
 
   private:
     Azure::Storage::Blobs::BlobContainerClient container_client_;

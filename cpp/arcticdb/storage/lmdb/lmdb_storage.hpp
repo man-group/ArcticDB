@@ -55,7 +55,7 @@ class LmdbStorage final : public Storage {
 
     ::lmdb::env& env() { return *env_;  }
 
-    std::string do_key_path(const VariantKey&) final { return {}; };
+    std::string do_key_path(const VariantKey&) const final { return {}; };
 
     // _internal methods assume the write mutex is already held
     void do_write_internal(Composite<KeySegmentPair>&& kvs, ::lmdb::txn& txn);

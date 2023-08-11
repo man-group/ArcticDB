@@ -153,7 +153,7 @@ public:
         do_iterate_type(key_type, visitor, prefix);
     }
 
-    std::string key_path(const VariantKey& key) {
+    std::string key_path(const VariantKey& key) const {
         return do_key_path(key);
     }
 
@@ -177,7 +177,7 @@ private:
 
     virtual void do_iterate_type(KeyType key_type, const IterateTypeVisitor& visitor, const std::string & prefix) = 0;
 
-    virtual std::string do_key_path(const VariantKey& key) = 0;
+    virtual std::string do_key_path(const VariantKey& key) const = 0;
 
     LibraryPath lib_path_;
     OpenMode mode_;
