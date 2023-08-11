@@ -22,7 +22,7 @@ if __name__ == "__main__":
     uri = get_real_s3_uri()
 
     ac = Arctic(uri)
-    branch_name = os.getenv("ARCTICDB_REAL_STORAGE_BRANCH_NAME")
+    branch_name = os.getenv("ARCTICDB_PERSISTENT_STORAGE_BRANCH_NAME")
     for lib in LIBRARIES:
         lib_name = f"test_{branch_name}_{lib}"
         lib_name = normalize_lib_name(lib_name)

@@ -32,5 +32,5 @@ if __name__ == "__main__":
     uri = get_real_s3_uri()
 
     ac = Arctic(uri)
-    lib_name = os.getenv("ARCTICDB_REAL_STORAGE_LIB_NAME")
+    lib_name = os.getenv("ARCTICDB_PERSISTENT_STORAGE_LIB_NAME")
     seed_library(lib_name)
