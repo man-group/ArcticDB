@@ -129,6 +129,11 @@ class Storages {
         return *storages_[0];
     }
 
+    const Storage& primary() const {
+        util::check(!storages_.empty(), "No storages configured");
+        return *storages_[0];
+    }
+
     std::vector<std::unique_ptr<Storage>> storages_;
     OpenMode mode_;
 };
