@@ -16,36 +16,33 @@
 
 namespace arcticdb::storage::memory {
 
-    class MemoryStorage final : public Storage<MemoryStorage> {
-
-        using Parent = Storage<MemoryStorage>;
-        friend Parent;
-
+    class MemoryStorage final : public Storage {
     public:
         using Config = arcticdb::proto::memory_storage::Config;
 
         MemoryStorage(const LibraryPath &lib, OpenMode mode, const Config &conf);
 
-    protected:
-        void do_write(Composite<KeySegmentPair>&& kvs);
+    private:
+        void do_write(Composite<KeySegmentPair>&& kvs) final;
 
-        void do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts opts);
+        void do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts opts) final;
 
-        void do_read(Composite<VariantKey>&& ks, const ReadVisitor& visitor, ReadKeyOpts opts);
+        void do_read(Composite<VariantKey>&& ks, const ReadVisitor& visitor, ReadKeyOpts opts) final;
 
-        void do_remove(Composite<VariantKey>&& ks, RemoveOpts opts);
+        void do_remove(Composite<VariantKey>&& ks, RemoveOpts opts) final;
 
-        bool do_key_exists(const VariantKey& key);
+        bool do_key_exists(const VariantKey& key) final;
 
-        bool do_supports_prefix_matching() {
+        bool do_supports_prefix_matching() const final {
             return false;
         }
 
-        inline bool do_fast_delete();
+        inline bool do_fast_delete() final;
 
-        void do_iterate_type(KeyType key_type, const IterateTypeVisitor& visitor, const std::string & prefix);
+        void do_iterate_type(KeyType key_type, const IterateTypeVisitor& visitor, const std::string & prefix) final;
 
-    private:
+        std::string do_key_path(const VariantKey&) const final { return {}; };
+
         using KeyMap = std::unordered_map<VariantKey, Segment>;
         using TypeMap = std::unordered_map<KeyType, KeyMap>;
         using MutexType = std::recursive_mutex;

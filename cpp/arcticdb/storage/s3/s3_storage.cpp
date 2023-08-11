@@ -33,7 +33,7 @@ std::streamsize S3StreamBuffer::xsputn(const char_type* s, std::streamsize n) {
 }
 
 S3Storage::S3Storage(const LibraryPath &library_path, OpenMode mode, const Config &conf) :
-    Parent(library_path, mode),
+    Storage(library_path, mode),
     s3_api_(S3ApiInstance::instance()),
     root_folder_(object_store_utils::get_root_folder(library_path)),
     bucket_name_(conf.bucket_name()) {

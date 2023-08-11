@@ -27,11 +27,7 @@
 
 namespace arcticdb::storage::s3 {
 
-class S3Storage final : public Storage<S3Storage> {
-
-    using Parent = Storage<S3Storage>;
-    friend Parent;
-
+class S3Storage final : public Storage {
   public:
     friend class S3TestClientAccessor<S3Storage>;
     using Config = arcticdb::proto::s3_storage::Config;
@@ -43,28 +39,29 @@ class S3Storage final : public Storage<S3Storage> {
      */
     std::string get_key_path(const VariantKey& key) const;
 
-  protected:
-    void do_write(Composite<KeySegmentPair>&& kvs);
+  private:
+    void do_write(Composite<KeySegmentPair>&& kvs) final;
 
-    void do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts opts);
+    void do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts opts) final;
 
-    void do_read(Composite<VariantKey>&& ks, const ReadVisitor& visitor, ReadKeyOpts opts);
+    void do_read(Composite<VariantKey>&& ks, const ReadVisitor& visitor, ReadKeyOpts opts) final;
 
-    void do_remove(Composite<VariantKey>&& ks, RemoveOpts opts);
+    void do_remove(Composite<VariantKey>&& ks, RemoveOpts opts) final;
 
-    void do_iterate_type(KeyType key_type, const IterateTypeVisitor& visitor, const std::string &prefix);
+    void do_iterate_type(KeyType key_type, const IterateTypeVisitor& visitor, const std::string &prefix) final;
 
-    bool do_key_exists(const VariantKey& key);
+    bool do_key_exists(const VariantKey& key) final;
 
-    bool do_supports_prefix_matching() {
+    bool do_supports_prefix_matching() const final {
         return true;
     }
 
-    bool do_fast_delete() {
+    bool do_fast_delete() final {
         return false;
     }
 
-  private:
+    std::string do_key_path(const VariantKey& key) const final { return get_key_path(key); };
+
     auto& client() { return s3_client_; }
     const std::string& bucket_name() const { return bucket_name_; }
     const std::string& root_folder() const { return root_folder_; }
@@ -239,7 +236,8 @@ Aws::Auth::AWSCredentials get_aws_credentials(const ConfigType& conf) {
     return Aws::Auth::AWSCredentials(conf.credential_name().c_str(), conf.credential_key().c_str());
 }
 
-} //namespace arcticdb::s3
+} //namespace arcticdb::storage::s3
+
 
 #define ARCTICDB_S3_STORAGE_H_
 #include <arcticdb/storage/s3/s3_storage-inl.hpp>

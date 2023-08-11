@@ -33,7 +33,7 @@ namespace arcticdb {
             util::raise_rte("Not implemented");
         }
 
-        bool supports_prefix_matching() override {
+        bool supports_prefix_matching() const override {
             return false;
         }
 

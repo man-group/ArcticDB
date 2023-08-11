@@ -261,7 +261,6 @@ set(arcticdb_srcs
         storage/storage.hpp
         storage/storage_override.hpp
         storage/store.hpp
-        storage/variant_storage.hpp
         stream/aggregator.hpp
         stream/aggregator-inl.hpp
         stream/append_map.hpp

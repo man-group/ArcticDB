@@ -122,17 +122,16 @@ class Library {
         return res;
     }
 
-    /** Calls VariantStorage::do_storage_specific on the primary storage */
-    template<class Visitor>
-    void storage_specific(Visitor&& visitor) {
-        storages_->storage_specific(std::forward<Visitor>(visitor));
+    /** Calls VariantStorage::do_key_path on the primary storage */
+    std::string key_path(const VariantKey& key) const {
+        return storages_->key_path(key);
     }
 
     void move_storage(KeyType key_type, timestamp horizon, size_t storage_index = 0) {
         storages_->move_storage(key_type, horizon, storage_index);
     }
 
-    bool supports_prefix_matching() { return storages_->supports_prefix_matching(); }
+    bool supports_prefix_matching() const { return storages_->supports_prefix_matching(); }
 
     const LibraryPath &library_path() const { return library_path_; }
 

@@ -10,7 +10,7 @@
 namespace arcticdb::storage::nfs_backed {
 
 NfsBackedStorage::NfsBackedStorage(const LibraryPath &library_path, OpenMode mode, const Config &conf) :
-    Parent(library_path, mode),
+    Storage(library_path, mode),
     s3_api_(s3::S3ApiInstance::instance()),
     s3_client_(s3::get_aws_credentials(conf), s3::get_s3_config(conf), Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never, false),
     root_folder_(object_store_utils::get_root_folder(library_path)),
