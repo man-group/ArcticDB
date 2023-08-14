@@ -228,7 +228,7 @@ jobs:
 
   persistent_storage_verify_linux:
     # Then use the cached compilation artifacts to build other python versions concurrently in cibuildwheels
-    needs: [common_config, follower-linux]
+    needs: [common_config, follower-linux, follower-windows]
     if: inputs.persistent_storage == true
     strategy:
       fail-fast: false
@@ -249,7 +249,7 @@ jobs:
 
   persistent_storage_verify_windows:
     # Then use the cached compilation artifacts to build other python versions concurrently in cibuildwheels
-    needs: [common_config, follower-windows]
+    needs: [common_config, follower-windows, follower-linux]
     if: inputs.persistent_storage == true
     strategy:
       fail-fast: false
