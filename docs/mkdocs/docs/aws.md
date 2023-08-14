@@ -25,7 +25,7 @@ You can create an IAM account at [IAM > Users](https://console.aws.amazon.com/ia
 
 ### 3. Create the bucket
 
-The rest of the steps can be performed using commands on your client machine.  Install the [AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html) if needed.
+The rest of the steps can be performed using commands on your client machine. Install the [AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html) if you do not already have it installed.
 
 Configure your client machine to use the new account with the Access key and Secret access key.
 You will also need to select an [AWS region](https://docs.aws.amazon.com/general/latest/gr/rande.html).
