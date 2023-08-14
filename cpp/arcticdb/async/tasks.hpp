@@ -19,7 +19,7 @@
 #include <arcticdb/stream/stream_sink.hpp>
 #include <arcticdb/async/base_task.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>
-#include <arcticdb/processing/processing_segment.hpp>
+#include <arcticdb/processing/processing_unit.hpp>
 #include <arcticdb/util/constructors.hpp>
 
 #include <type_traits>

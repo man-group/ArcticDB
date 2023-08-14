@@ -6,7 +6,7 @@
  */
 
 #include <arcticdb/processing/expression_node.hpp>
-#include <arcticdb/processing/processing_segment.hpp>
+#include <arcticdb/processing/processing_unit.hpp>
 #include <arcticdb/processing/operation_types.hpp>
 #include <arcticdb/processing/operation_dispatch_binary.hpp>
 #include <arcticdb/processing/operation_dispatch_unary.hpp>

@@ -8,7 +8,7 @@
 #include <gtest/gtest.h>
 #include <arcticdb/processing/expression_context.hpp>
 #include <arcticdb/processing/expression_node.hpp>
-#include <arcticdb/processing/processing_segment.hpp>
+#include <arcticdb/processing/processing_unit.hpp>
 #include <arcticdb/util/test/generators.hpp>
 
 TEST(ExpressionNode, AddBasic) {
