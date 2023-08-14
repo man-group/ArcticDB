@@ -12,6 +12,7 @@ import string
 import pytz
 from arcticdb_ext.exceptions import InternalException, ErrorCode, ErrorCategory
 from arcticdb.exceptions import ArcticNativeNotYetImplemented, LibraryNotFound
+from arcticdb_ext.version_store import NoSuchVersionException
 from pandas import Timestamp
 
 try:
@@ -67,58 +68,6 @@ except ImportError:
         StagedDataFinalizeMethod,
     )
 
-
-# def test_top_k(arctic_client):
-#     ac = arctic_client
-#     ac.create_library("pytest_test_top_k_lib")
-#     lib = ac["pytest_test_top_k_lib"]
-#     lib.insert_vectors(pd.DataFrame(np.random.rand(100,100)))
-#     meilleurs = lib.top_k(
-#         k=5,
-#         query=np.zeros(100),
-#         show_vectors=True,
-#         show_similarity=True
-#     )
-#     pass
-
-def test_top_k(arctic_client):
-    np.random.seed(0)
-    random.seed(0)
-    ac = arctic_client
-
-    dimensions, number_of_vectors, k = 15, 20, 5
-    string_column_names = [''.join(random.choices(
-            string.ascii_uppercase + string.digits,
-            k=10))
-        for _ in range(number_of_vectors)]
-
-    ac.create_library("pytest_test_top_k")
-    vector_db = VectorDB(ac["pytest_test_top_k"])
-
-    df = pd.DataFrame(np.random.rand(dimensions,number_of_vectors),columns=string_column_names)
-    qv = np.array([0]*dimensions)
-    distances = df.apply(lambda x: np.linalg.norm(x-qv))
-    top_k_distances = distances[distances.argsort()[:k]]
-    python_result = df[top_k_distances.index].append(pd.DataFrame(top_k_distances).T)
-    python_result.index = list(range(dimensions)) + ["similarity"]
-
-    vector_db.upsert(f"df{dimensions}", df)
-    cpp_result = vector_db.top_k(f"df{dimensions}", 5, qv)
-
-    assert_frame_equal(python_result, cpp_result)
-
-def test_new(arctic_client):
-    np.random.seed(100)
-    ac = arctic_client
-    ac.create_library("pytest_test_new")
-    lib = ac["pytest_test_new"]
-    df = pd.DataFrame([[0] + [i]*99 for i in range(100)])
-    lib.write("df", df)
-
-    q = QueryBuilder()
-    q = q.groupby("0").agg({"3": "mean"})
-    result = lib.read("df", query_builder=q).data
-    pass
 
 def test_library_creation_deletion(arctic_client):
     ac = arctic_client
