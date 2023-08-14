@@ -36,3 +36,5 @@ CMakeUserPresets.json
 
 *_pb2.py
 *.mdb
+
+.DS_Store
