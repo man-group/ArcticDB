@@ -141,7 +141,11 @@ TEST(HasValidTypePromotion, EverythingToEmpty) {
     for(int value_type = int(ValueType::UNKNOWN_VALUE_TYPE); value_type < int(ValueType::COUNT); ++value_type) {
         for(int size_bits = int(SizeBits::UNKNOWN_SIZE_BITS); size_bits < int(SizeBits::COUNT); ++size_bits) {
             const TypeDescriptor source(ValueType(value_type), SizeBits(size_bits), Dimension::Dim0);
-            ASSERT_EQ(has_valid_type_promotion(source, target), target);
+            if(!is_empty_type(source.data_type())) {
+                ASSERT_FALSE(has_valid_type_promotion(source, target).has_value());
+            } else {
+                ASSERT_EQ(has_valid_type_promotion(source, target), target);
+            }
             ASSERT_TRUE(trivially_compatible_types(source, target));
         }
     }
