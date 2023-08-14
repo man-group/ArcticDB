@@ -36,9 +36,9 @@ If promoting a pre-release:
 2. Select the workflow off the source tag (e.g. `1.6.0rc0`)
 3. Click `Run workflow`
 
-If hotfixing an existing release then branch off the previously-released tag, apply the necessary changes (cherry-picking from master if commits are on master), and:
-1. Type in the new version number eg `1.6.1`
-2. Select the workflow off the source tag (e.g. `1.6.0`)
+If hotfixing an existing release (or pre-release) then branch off the previously-released tag, apply the necessary changes (cherry-picking from master if commits are on master), and:
+1. Type in the new version number eg `1.6.1` (or `1.6.0rc2` as an example of a pre-release version)
+2. Select the workflow off the source tag (e.g. `1.6.0` or `1.6.0rc1`)
 2. Click `Run workflow`.
 
 This will create a branch off of `master`, incrementing the version specified in code. 
