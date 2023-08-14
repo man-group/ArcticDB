@@ -27,24 +27,30 @@ You can create an IAM account at [IAM > Users](https://console.aws.amazon.com/ia
 
 The rest of the steps can be performed using commands on your client machine. Install the [AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html) if you do not already have it installed.
 
-Configure your client machine to use the new account with the Access key and Secret access key.
+Use the AWS CLI to configure your client machine with the Access key and Secret access key.
 You will also need to select an [AWS region](https://docs.aws.amazon.com/general/latest/gr/rande.html).
 Selecting a region that is local to your ArcticDB client will improve performance.
-```
-aws configure
+```bash
+$ aws configure
+AWS Access Key ID [None]: <ACCESS_KEY>
+AWS Secret Access Key [None]: <SECRET_KEY>
+Default region name [None]: <REGION>
+Default output format [None]:
 ```
 
 Create a new bucket.  Bucket names must be globally unique so you will need to come up with your own.
-```
-aws s3 mb s3://arcticdbtrial
+```bash
+$ aws s3 mb s3://<BUCKET_NAME>
 ```
 
 ### 4. Connect to the bucket
 
-Using the example of `eu-west-2` for the region and `arcticdbtrial` for the bucket with authentication setup provided by `aws configure`.
+- [Install ArcticDB](https://github.com/man-group/ArcticDB#readme).
+- Use your `<REGION>` and `<BUCKET_NAME>`.
+- Setup `~/.aws/credentials` with `aws configure`, as above.
 ```python
 from arcticdb import Arctic
-arctic = Arctic('s3://s3.eu-west-2.amazonaws.com:arcticdbtrial?aws_auth=true')
+arctic = Arctic('s3://s3.<REGION>.amazonaws.com:<BUCKET_NAME>?aws_auth=true')
 ```
 
 ## Checking connectivity to the S3 bucket.
@@ -58,12 +64,14 @@ ArcticDB currently uses five S3 methods, those are:
 
 Here is a short script you can use to check connectivity to a bucket from your client.  If this works, then the configuration should be correct for read and write with ArcticDB.
 
-Replace `YOUR_BUCKET_NAME` below.  This script assumes you've setup `~/.aws/credentials` with `aws configure`.  
+- Use your `<BUCKET_NAME>` below.  
+- Install [boto3](https://boto3.amazonaws.com/v1/documentation/api/latest/guide/quickstart.html#installation).
+- Setup `~/.aws/credentials` with `aws configure`, as above.  
 ```python
 import io
 import boto3
 s3 = boto3.client('s3')
-bucket = 'YOUR_BUCKET_NAME'
+bucket = '<BUCKET_NAME>'
 s3.put_object(Bucket=bucket, Key='_arctic_check/check.txt', Body=io.BytesIO(b'check file contents'))
 s3.list_objects_v2(Bucket=bucket, Prefix='_arctic_check/')
 s3.head_object(Bucket=bucket, Key='_arctic_check/check.txt')
