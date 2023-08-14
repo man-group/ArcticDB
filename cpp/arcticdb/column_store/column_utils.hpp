@@ -35,7 +35,14 @@ inline py::array array_at(const SegmentInMemory& frame, std::size_t col_pos, py:
             } else {
                 constexpr auto dim = TypeTag::DimensionTag::value;
                 util::check(dim == Dimension::Dim0, "Only scalars supported, {}", data_type);
-                if constexpr (data_type == DataType::MICROS_UTC64) {
+                if constexpr (data_type == DataType::NANOSECONDS_UTC64) {
+                    // NOTE: this is safe as of Pandas < 2.0 because `datetime64` _always_ has been using nanosecond resolution,
+                    // i.e. Pandas < 2.0 _always_ provides `datetime64[ns]` and ignores any other resolution.
+                    // Yet, this has changed in Pandas 2.0 and other resolution can be used,
+                    // i.e. Pandas >= 2.0 will also provides `datetime64[us]`, `datetime64[ms]` and `datetime64[s]`.
+                    // See: https://pandas.pydata.org/docs/dev/whatsnew/v2.0.0.html#construction-with-datetime64-or-timedelta64-dtype-with-unsupported-resolution
+                    // TODO: for the support of Pandas>=2.0, convert any `datetime` to `datetime64[ns]` before-hand and do not
+                    // rely uniquely on the resolution-less 'M' specifier if it this doable.
                     dtype = "datetime64[ns]";
                 } else {
                     dtype = fmt::format("{}{:d}", get_dtype_specifier(data_type), esize);
@@ -67,7 +74,14 @@ inline py::array array_at(const SegmentInMemory& frame, std::size_t col_pos, py:
         } else {
             constexpr auto dim = TypeTag::DimensionTag::value;
             util::check(dim == Dimension::Dim0, "Only scalars supported, {}", frame.field(col_pos));
-            if constexpr (dt == DataType::MICROS_UTC64) {
+            if constexpr (dt == DataType::NANOSECONDS_UTC64) {
+                // NOTE: this is safe as of Pandas < 2.0 because `datetime64` _always_ has been using nanosecond resolution,
+                // i.e. Pandas < 2.0 _always_ provides `datetime64[ns]` and ignores any other resolution.
+                // Yet, this has changed in Pandas 2.0 and other resolution can be used,
+                // i.e. Pandas >= 2.0 will also provides `datetime64[us]`, `datetime64[ms]` and `datetime64[s]`.
+                // See: https://pandas.pydata.org/docs/dev/whatsnew/v2.0.0.html#construction-with-datetime64-or-timedelta64-dtype-with-unsupported-resolution
+                // TODO: for the support of Pandas>=2.0, convert any `datetime` to `datetime64[ns]` before-hand and do not
+                // rely uniquely on the resolution-less 'M' specifier if it this doable.
                 dtype = "datetime64[ns]";
             } else {
                 dtype = fmt::format("{}{:d}", get_dtype_specifier(dt), esize);

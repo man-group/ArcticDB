@@ -24,7 +24,7 @@ from arcticdb.util.test import assert_frame_equal
 
 
 def test_vl_string_simple():
-    fields = [FieldDescriptor(TypeDescriptor(DataType.MICROS_UTC64, Dimension.Dim0), "time")]
+    fields = [FieldDescriptor(TypeDescriptor(DataType.NANOSECONDS_UTC64, Dimension.Dim0), "time")]
     dim = Dimension.Dim0
     fields.append(FieldDescriptor(TypeDescriptor(DataType.ASCII_DYNAMIC64, dim), "string"))
     tsd = StreamDescriptor(123, IndexDescriptor(1, IndexKind.TIMESTAMP), fields)
@@ -71,7 +71,7 @@ def test_vl_string_simple():
 
 
 def test_dynamic_string_list():
-    fields = [FieldDescriptor(TypeDescriptor(DataType.MICROS_UTC64, Dimension.Dim0), "time")]
+    fields = [FieldDescriptor(TypeDescriptor(DataType.NANOSECONDS_UTC64, Dimension.Dim0), "time")]
     dim = Dimension.Dim1
     fields.append(FieldDescriptor(TypeDescriptor(DataType.ASCII_DYNAMIC64, dim), "string"))
     tsd = StreamDescriptor(123, IndexDescriptor(1, IndexKind.TIMESTAMP), fields)
@@ -121,7 +121,7 @@ def test_fixed_string_simple():
     # TODO these are not the same in python3
     if platform.python_version_tuple()[0] == "2":
         a = np.array(["abc", "xy"])
-        fields = [FieldDescriptor(TypeDescriptor(DataType.MICROS_UTC64, Dimension.Dim0), "time")]
+        fields = [FieldDescriptor(TypeDescriptor(DataType.NANOSECONDS_UTC64, Dimension.Dim0), "time")]
         dim = Dimension.Dim1
         fields.append(FieldDescriptor(TypeDescriptor(DataType.ASCII_FIXED64, dim), "string"))
         tsd = StreamDescriptor(123, IndexDescriptor(1, IndexKind.TIMESTAMP), fields)
