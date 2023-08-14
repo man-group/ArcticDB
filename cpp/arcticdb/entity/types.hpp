@@ -105,7 +105,7 @@ enum class ValueType : uint8_t {
     FLOAT = 3,
 
     BOOL = 4,
-    MICROS_UTC = 5,
+    NANOSECONDS_UTC = 5,
 
 //    SYMBOL = 6, // categorical string of low cardinality suitable for dictionary encoding
     ASCII_FIXED = 7, // fixed size string when dim > 1, inputs of type uint8_t, no encoding
@@ -124,7 +124,7 @@ constexpr bool is_sequence_type(ValueType v){
 }
 
 constexpr bool is_numeric_type(ValueType v){
-    return v == ValueType::MICROS_UTC ||
+    return v == ValueType::NANOSECONDS_UTC ||
     (uint8_t(v) >= uint8_t(ValueType::UINT) &&
     uint8_t(v) <= uint8_t(ValueType::FLOAT));
 }
@@ -134,7 +134,7 @@ constexpr bool is_floating_point_type(ValueType v){
 }
 
 constexpr bool is_time_type(ValueType v){
-    return uint8_t(v) == uint8_t(ValueType::MICROS_UTC);
+    return uint8_t(v) == uint8_t(ValueType::NANOSECONDS_UTC);
 }
 
 constexpr bool is_integer_type(ValueType v){
@@ -190,7 +190,7 @@ enum class DataType : uint8_t {
     FLOAT32 = detail::combine_val_bits(ValueType::FLOAT, SizeBits::S32),
     FLOAT64 = detail::combine_val_bits(ValueType::FLOAT, SizeBits::S64),
     BOOL8 = detail::combine_val_bits(ValueType::BOOL, SizeBits::S8),
-    MICROS_UTC64 = detail::combine_val_bits(ValueType::MICROS_UTC, SizeBits::S64),
+    NANOSECONDS_UTC64 = detail::combine_val_bits(ValueType::NANOSECONDS_UTC, SizeBits::S64),
     ASCII_FIXED64 = detail::combine_val_bits(ValueType::ASCII_FIXED, SizeBits::S64),
     ASCII_DYNAMIC64 = detail::combine_val_bits(ValueType::ASCII_DYNAMIC, SizeBits::S64),
     UTF_FIXED64 = detail::combine_val_bits(ValueType::UTF8_FIXED, SizeBits::S64),
@@ -292,7 +292,14 @@ constexpr  ValueType get_value_type(char specifier) noexcept {
         case 'i': return ValueType::INT; //  signed integer
         case 'f': return ValueType::FLOAT; //  floating-point
         case 'b': return ValueType::BOOL; //  boolean
-        case 'M': return ValueType::MICROS_UTC; //  datetime // numpy doesn't support the buffer protocol for datetime64
+        // NOTE: this is safe as of Pandas < 2.0 because `datetime64` _always_ has been using nanosecond resolution,
+        // i.e. Pandas < 2.0 _always_ provides `datetime64[ns]` and ignores any other resolution.
+        // Yet, this has changed in Pandas 2.0 and other resolution can be used,
+        // i.e. Pandas >= 2.0 will also provides `datetime64[us]`, `datetime64[ms]` and `datetime64[s]`.
+        // See: https://pandas.pydata.org/docs/dev/whatsnew/v2.0.0.html#construction-with-datetime64-or-timedelta64-dtype-with-unsupported-resolution
+        // TODO: for the support of Pandas>=2.0, convert any `datetime` to `datetime64[ns]` before-hand and do not
+        // rely uniquely on the resolution-less 'M' specifier if it this doable.
+        case 'M': return ValueType::NANOSECONDS_UTC; //  datetime // numpy doesn't support the buffer protocol for datetime64
         case 'U': return ValueType::UTF8_FIXED; //  Unicode
         case 'S': return ValueType::ASCII_FIXED; //  (byte-)string
         case 'O': return ValueType::BYTES; // Fishy, an actual type might be better
@@ -307,7 +314,14 @@ constexpr char get_dtype_specifier(ValueType vt){
         case ValueType::INT:  return 'i';
         case ValueType::FLOAT: return 'f';
         case ValueType::BOOL: return 'b';
-        case ValueType::MICROS_UTC: return 'M';
+        // NOTE: this is safe as of Pandas < 2.0 because `datetime64` _always_ has been using nanosecond resolution,
+        // i.e. Pandas < 2.0 _always_ provides `datetime64[ns]` and ignores any other resolution.
+        // Yet, this has changed in Pandas 2.0 and other resolution can be used,
+        // i.e. Pandas >= 2.0 will also provides `datetime64[us]`, `datetime64[ms]` and `datetime64[s]`.
+        // See: https://pandas.pydata.org/docs/dev/whatsnew/v2.0.0.html#construction-with-datetime64-or-timedelta64-dtype-with-unsupported-resolution
+        // TODO: for the support of Pandas>=2.0, convert any `datetime` to `datetime64[ns]` before-hand and do not
+        // rely uniquely on the resolution-less 'M' specifier if it this doable.
+        case ValueType::NANOSECONDS_UTC: return 'M';
         case ValueType::UTF8_FIXED: return 'U';
         case ValueType::ASCII_FIXED: return 'S';
         case ValueType::BYTES: return 'O';
@@ -352,7 +366,7 @@ DATA_TYPE_TAG(INT64, std::int64_t)
 DATA_TYPE_TAG(FLOAT32, float)
 DATA_TYPE_TAG(FLOAT64, double)
 DATA_TYPE_TAG(BOOL8, bool)
-DATA_TYPE_TAG(MICROS_UTC64, timestamp)
+DATA_TYPE_TAG(NANOSECONDS_UTC64, timestamp)
 DATA_TYPE_TAG(ASCII_FIXED64, std::uint64_t)
 DATA_TYPE_TAG(ASCII_DYNAMIC64, std::uint64_t)
 DATA_TYPE_TAG(UTF_FIXED64, std::uint64_t)
