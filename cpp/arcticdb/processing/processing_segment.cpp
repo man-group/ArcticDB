@@ -29,6 +29,21 @@ void ProcessingSegment::apply_filter(
     }
 }
 
+// Inclusive of start_row, exclusive of end_row
+void ProcessingSegment::truncate(size_t start_row, size_t end_row, const std::shared_ptr<Store>& store) {
+    for (auto& slice_and_key: data_) {
+        auto seg = truncate_segment(slice_and_key.segment(store), start_row, end_row);
+        if(!seg.is_null()) {
+            slice_and_key.slice_.adjust_rows(seg.row_count());
+            slice_and_key.slice_.adjust_columns(seg.descriptor().field_count() - seg.descriptor().index().field_count());
+        } else {
+            slice_and_key.slice_.adjust_rows(0u);
+            slice_and_key.slice_.adjust_columns(0u);
+        }
+        slice_and_key.segment_ = std::move(seg);
+    }
+}
+
 VariantData ProcessingSegment::get(const VariantNode &name, const std::shared_ptr<Store> &store) {
     return util::variant_match(name,
         [&](const ColumnName &column_name) {

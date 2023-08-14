@@ -29,6 +29,7 @@ from arcticdb.exceptions import (
     StreamDescriptorMismatch,
     UserInputException,
 )
+from arcticdb import QueryBuilder
 from arcticdb.flattener import Flattener
 from arcticdb.version_store import NativeVersionStore
 from arcticdb.version_store._custom_normalizers import CustomNormalizer, register_normalizer
@@ -489,45 +490,73 @@ def test_range_index(lmdb_version_store, sym):
     assert_frame_equal(expected, vit.data)
 
 
-def test_date_range(lmdb_version_store):
+@pytest.mark.parametrize("use_date_range_clause", [True, False])
+def test_date_range(lmdb_version_store, use_date_range_clause):
     initial_timestamp = pd.Timestamp("2019-01-01")
     df = pd.DataFrame(data=np.arange(100), index=pd.date_range(initial_timestamp, periods=100))
     sym = "date_test"
     lmdb_version_store.write(sym, df)
     start_offset = 2
     end_offset = 5
+
     query_start_ts = initial_timestamp + pd.DateOffset(start_offset)
     query_end_ts = initial_timestamp + pd.DateOffset(end_offset)
 
     # Should return everything from given start to end of the index
-    data_start = lmdb_version_store.read(sym, date_range=(query_start_ts, None)).data
+    date_range = (query_start_ts, None)
+    if use_date_range_clause:
+        q = QueryBuilder()
+        q = q.date_range(date_range)
+        data_start = lmdb_version_store.read(sym, query_builder=q).data
+    else:
+        data_start = lmdb_version_store.read(sym, date_range=date_range).data
     assert query_start_ts == data_start.index[0]
     assert data_start[data_start.columns[0]][0] == start_offset
 
     # Should return everything from start of index to the given end.
-    data_end = lmdb_version_store.read(sym, date_range=(None, query_end_ts)).data
+    date_range = (None, query_end_ts)
+    if use_date_range_clause:
+        q = QueryBuilder()
+        q = q.date_range(date_range)
+        data_end = lmdb_version_store.read(sym, query_builder=q).data
+    else:
+        data_end = lmdb_version_store.read(sym, date_range=date_range).data
     assert query_end_ts == data_end.index[-1]
     assert data_end[data_end.columns[0]][-1] == end_offset
 
-    data_closed = lmdb_version_store.read(sym, date_range=(query_start_ts, query_end_ts)).data
+    date_range = (query_start_ts, query_end_ts)
+    if use_date_range_clause:
+        q = QueryBuilder()
+        q = q.date_range(date_range)
+        data_closed = lmdb_version_store.read(sym, query_builder=q).data
+    else:
+        data_closed = lmdb_version_store.read(sym, date_range=date_range).data
     assert query_start_ts == data_closed.index[0]
     assert query_end_ts == data_closed.index[-1]
     assert data_closed[data_closed.columns[0]][0] == start_offset
     assert data_closed[data_closed.columns[0]][-1] == end_offset
 
 
-def test_date_range_none(lmdb_version_store):
+@pytest.mark.parametrize("use_date_range_clause", [True, False])
+def test_date_range_none(lmdb_version_store, use_date_range_clause):
     sym = "date_test2"
     rows = 100
     initial_timestamp = pd.Timestamp("2019-01-01")
     df = pd.DataFrame(data=np.arange(rows), index=pd.date_range(initial_timestamp, periods=100))
     lmdb_version_store.write(sym, df)
+    date_range = (None, None)
     # Should just return everything
-    data = lmdb_version_store.read(sym, date_range=(None, None)).data
+    if use_date_range_clause:
+        q = QueryBuilder()
+        q = q.date_range(date_range)
+        data = lmdb_version_store.read(sym, query_builder=q).data
+    else:
+        data = lmdb_version_store.read(sym, date_range=(None, None)).data
     assert len(data) == rows
 
 
-def test_date_range_start_equals_end(lmdb_version_store):
+@pytest.mark.parametrize("use_date_range_clause", [True, False])
+def test_date_range_start_equals_end(lmdb_version_store, use_date_range_clause):
     sym = "date_test2"
     rows = 100
     initial_timestamp = pd.Timestamp("2019-01-01")
@@ -535,10 +564,45 @@ def test_date_range_start_equals_end(lmdb_version_store):
     lmdb_version_store.write(sym, df)
     start_offset = 2
     query_start_ts = initial_timestamp + pd.DateOffset(start_offset)
+    date_range = (query_start_ts, query_start_ts)
     # Should just return everything
-    data = lmdb_version_store.read(sym, date_range=(query_start_ts, query_start_ts)).data
+    if use_date_range_clause:
+        q = QueryBuilder()
+        q = q.date_range(date_range)
+        data = lmdb_version_store.read(sym, query_builder=q).data
+    else:
+        data = lmdb_version_store.read(sym, date_range=date_range).data
     assert len(data) == 1
     assert data[data.columns[0]][0] == start_offset
+
+
+@pytest.mark.parametrize("use_date_range_clause", [True, False])
+def test_date_range_row_sliced(lmdb_version_store_tiny_segment, use_date_range_clause):
+    lib = lmdb_version_store_tiny_segment
+    sym = "test_date_range_row_sliced"
+    # lmdb_version_store_tiny_segment produces 2x2 segments
+    num_rows = 6
+    index = pd.date_range("2000-01-01", periods=num_rows, freq="D")
+    df = pd.DataFrame({"col": np.arange(num_rows)}, index=index)
+    lib.write(sym, df)
+
+    expected = df.iloc[1:-1]
+
+    date_range = (index[1], index[-2])
+    if use_date_range_clause:
+        q = QueryBuilder()
+        q = q.date_range(date_range)
+        received = lib.read(sym, query_builder=q).data
+    else:
+        received = lib.read(sym, date_range=date_range).data
+    assert_frame_equal(expected, received)
+
+    date_range = (index[0] + pd.Timedelta(12, unit="h"), index[-1] - pd.Timedelta(12, unit="h"))
+    if use_date_range_clause:
+        received = lib.read(sym, query_builder=q).data
+    else:
+        received = lib.read(sym, date_range=date_range).data
+    assert_frame_equal(expected, received)
 
 
 def test_get_info(lmdb_version_store):
@@ -1390,24 +1454,24 @@ def test_find_version(lmdb_version_store_v1):
     sym = "test_find_version"
 
     # Version 0 is alive and in a snapshot
-    lib.write(sym, 0)
+    with distinct_timestamps(lmdb_version_store_v1) as v0_time:
+        lib.write(sym, 0)
     lib.snapshot("snap_0")
-    time_0 = datetime.utcnow()
 
     # Version 1 is only available in snap_1
-    lib.write(sym, 1)
+    with distinct_timestamps(lmdb_version_store_v1) as v1_time:
+        lib.write(sym, 1)
     lib.snapshot("snap_1")
-    time_1 = datetime.utcnow()
     lib.delete_version(sym, 1)
 
     # Version 2 is fully deleted
-    lib.write(sym, 2)
-    time_2 = datetime.utcnow()
+    with distinct_timestamps(lmdb_version_store_v1) as v2_time:
+        lib.write(sym, 2)
     lib.delete_version(sym, 2)
 
     # Version 3 is not in any snapshots
-    lib.write(sym, 3)
-    time_3 = datetime.utcnow()
+    with distinct_timestamps(lmdb_version_store_v1) as v3_time:
+        lib.write(sym, 3)
 
     # Latest
     assert lib._find_version(sym).version == 3
@@ -1429,10 +1493,10 @@ def test_find_version(lmdb_version_store_v1):
     with pytest.raises(NoDataFoundException):
         lib._find_version(sym, as_of="snap_1000")
     # By timestamp
-    assert lib._find_version(sym, as_of=time_0).version == 0
-    assert lib._find_version(sym, as_of=time_1).version == 0
-    assert lib._find_version(sym, as_of=time_2).version == 0
-    assert lib._find_version(sym, as_of=time_3).version == 3
+    assert lib._find_version(sym, as_of=v0_time.after).version == 0
+    assert lib._find_version(sym, as_of=v1_time.after).version == 0
+    assert lib._find_version(sym, as_of=v2_time.after).version == 0
+    assert lib._find_version(sym, as_of=v3_time.after).version == 3
 
 
 def test_library_deletion_lmdb(lmdb_version_store):
@@ -1850,7 +1914,18 @@ def test_batch_append(lmdb_version_store_tombstone, three_col_df):
         assert vit.metadata == append_metadata[sym]
 
 
-def test_batch_read_date_range(lmdb_version_store_tombstone_and_sync_passive):
+def test_batch_append_with_throw_exception(lmdb_version_store, three_col_df):
+    multi_data = {"sym1": three_col_df(), "sym2": three_col_df(1)}
+    with pytest.raises(NoSuchVersionException):
+        lmdb_version_store.batch_append(
+            list(multi_data.keys()),
+            list(multi_data.values()),
+            write_if_missing=False,
+        )
+
+
+@pytest.mark.parametrize("use_date_range_clause", [True, False])
+def test_batch_read_date_range(lmdb_version_store_tombstone_and_sync_passive, use_date_range_clause):
     lmdb_version_store = lmdb_version_store_tombstone_and_sync_passive
     symbols = []
     for i in range(5):
@@ -1872,7 +1947,15 @@ def test_batch_read_date_range(lmdb_version_store_tombstone_and_sync_passive):
         date_range = pd.date_range(base_date + pd.DateOffset(j + 100), periods=500)
         date_ranges.append(date_range)
 
-    result_dict = lmdb_version_store.batch_read(symbols, date_ranges=date_ranges)
+    if use_date_range_clause:
+        qbs = []
+        for date_range in date_ranges:
+            q = QueryBuilder()
+            q = q.date_range(date_range)
+            qbs.append(q)
+        result_dict = lmdb_version_store.batch_read(symbols, query_builder=qbs)
+    else:
+        result_dict = lmdb_version_store.batch_read(symbols, date_ranges=date_ranges)
     for x, sym in enumerate(result_dict.keys()):
         vit = result_dict[sym]
         date_range = date_ranges[x]
@@ -2063,6 +2146,7 @@ def test_modification_methods_dont_return_input_data(lmdb_version_store, batch, 
             pytest.skip(str(e))
 
 
+@pytest.mark.skipif(sys.platform == "darwin", reason="Test broken on MacOS (issue #692)")
 @pytest.mark.parametrize("method", ("append", "update"))
 @pytest.mark.parametrize("num", (5, 50, 1001))
 def test_diff_long_stream_descriptor_mismatch(lmdb_version_store, method, num):

@@ -24,7 +24,7 @@ from arcticc.pb2.storage_pb2 import VersionStoreConfig
 from mmap import mmap
 from collections import Counter
 from arcticdb.exceptions import ArcticNativeException, ArcticNativeNotYetImplemented
-from arcticdb.supported_types import time_types as supported_time_types
+from arcticdb.supported_types import DateRangeInput, time_types as supported_time_types
 from arcticdb.version_store.read_result import ReadResult
 from arcticdb_ext.version_store import SortedValue as _SortedValue
 from pandas.core.internals import make_block
@@ -109,7 +109,10 @@ if PY3:
     def _accept_array_string(v):
         # TODO remove this once arctic keeps the string type under the hood
         # and does not transform string into bytes
-        return isinstance(v, string_types) or isinstance(v, binary_type)
+        # string_types and binary_type can be a single type or a tuple
+        supported_string_types = string_types if isinstance(string_types, tuple) else (string_types,)
+        supported_binary_types = binary_type if isinstance(binary_type, tuple) else (binary_type,)
+        return type(v) in supported_string_types or type(v) in supported_binary_types
 
 else:
 
@@ -1268,7 +1271,7 @@ def restrict_data_to_date_range_only(data: T, *, start: Timestamp, end: Timestam
     return data
 
 
-def normalize_dt_range_to_ts(dtr: "DateRangeInput") -> Tuple[Timestamp, Timestamp]:
+def normalize_dt_range_to_ts(dtr: DateRangeInput) -> Tuple[Timestamp, Timestamp]:
     def _to_utc_ts(v: "ExplicitlySupportedDates", bound_name: str) -> Timestamp:
         if not isinstance(v, supported_time_types):
             raise TypeError(

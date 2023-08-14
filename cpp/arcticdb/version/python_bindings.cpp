@@ -237,8 +237,6 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
         .def_property_readonly("end", &pipelines::ColRange::end)
         .def_property_readonly("diff", &pipelines::ColRange::diff);
 
-
-
     auto adapt_read_dfs = [](std::vector<std::variant<ReadResult, DataError>> && ret) -> py::list {
         py::list lst;
         for (auto &res: ret) {
@@ -298,6 +296,20 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
             .def(py::init<std::string, std::unordered_map<std::string, std::string>>())
             .def("__str__", &AggregationClause::to_string);
 
+    py::enum_<RowRangeClause::RowRangeType>(version, "RowRangeType")
+            .value("HEAD", RowRangeClause::RowRangeType::HEAD)
+            .value("TAIL", RowRangeClause::RowRangeType::TAIL);
+
+    py::class_<RowRangeClause, std::shared_ptr<RowRangeClause>>(version, "RowRangeClause")
+            .def(py::init<RowRangeClause::RowRangeType, int64_t>())
+            .def("__str__", &RowRangeClause::to_string);
+
+    py::class_<DateRangeClause, std::shared_ptr<DateRangeClause>>(version, "DateRangeClause")
+            .def(py::init<timestamp, timestamp>())
+            .def_property_readonly("start", &DateRangeClause::start)
+            .def_property_readonly("end", &DateRangeClause::end)
+            .def("__str__", &DateRangeClause::to_string);
+
     py::class_<ReadQuery>(version, "PythonVersionStoreReadQuery")
             .def(py::init())
             .def_readwrite("columns",&ReadQuery::columns)
@@ -309,7 +321,9 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
                     std::vector<std::variant<std::shared_ptr<FilterClause>,
                                 std::shared_ptr<ProjectClause>,
                                 std::shared_ptr<GroupByClause>,
-                                std::shared_ptr<AggregationClause>>> clauses) {
+                                std::shared_ptr<AggregationClause>,
+                                std::shared_ptr<RowRangeClause>,
+                                std::shared_ptr<DateRangeClause>>> clauses) {
                 std::vector<std::shared_ptr<Clause>> _clauses;
                 for (auto&& clause: clauses) {
                     util::variant_match(
@@ -458,6 +472,7 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
              py::arg("via_iteration") = true,
              py::arg("sparsify") = false,
              py::arg("user_meta") = std::nullopt,
+             py::arg("prune_previous_versions") = false,
              "Compact incomplete segments")
          .def("sort_merge",
              &PythonVersionStore::sort_merge,

@@ -54,6 +54,7 @@ struct ClauseInfo {
 // Changes how the clause behaves based on information only available after it is constructed
 struct ProcessingConfig {
     bool dynamic_schema_{false};
+    uint64_t total_rows_;
 };
 
 
@@ -440,21 +441,31 @@ struct ColumnStatsGenerationClause {
     }
 };
 
-/**
- * Hacky short-cut to reduce memory usage for head(). Very similar to how FilterClause above works.
- * Limitations:
- * - Must be the only Clause (otherwise may return wrong results)
- * - If the n is so big that multiple RowRanges/ProcessingSegments are passed in then much more state tracking is
- * required than what is reasonable for a stop-gap, so this optimisation just disables itself.
- */
-struct RowNumberLimitClause {
+// Used by head and tail to discard rows not requested by the user
+struct RowRangeClause {
+    enum class RowRangeType: uint8_t {
+        HEAD,
+        TAIL
+    };
+
     ClauseInfo clause_info_;
-    size_t n;
-    mutable bool warning_shown = false; // folly::Poly can't deal with atomic_bool
+    RowRangeType row_range_type_;
+    // As passed into head or tail
+    int64_t n_;
 
-    explicit RowNumberLimitClause(size_t n) : n(n) {}
+    // Row range to keep. Zero-indexed, inclusive of start, exclusive of end
+    // Calculated from n, whether the RowRangeType is head or tail, and the total rows as passed in by set_processing_config
+    uint64_t start_{0};
+    uint64_t end_{0};
 
-    ARCTICDB_MOVE_COPY_DEFAULT(RowNumberLimitClause)
+    explicit RowRangeClause(RowRangeType row_range_type, int64_t n):
+            row_range_type_(row_range_type),
+            n_(n) {
+    }
+
+    RowRangeClause() = delete;
+
+    ARCTICDB_MOVE_COPY_DEFAULT(RowRangeClause)
 
     [[nodiscard]] Composite<ProcessingSegment> process(std::shared_ptr<Store> store,
                                                        Composite<ProcessingSegment> &&p) const;
@@ -468,7 +479,51 @@ struct RowNumberLimitClause {
         return clause_info_;
     }
 
-    void set_processing_config(ARCTICDB_UNUSED const ProcessingConfig& processing_config) {}
+    void set_processing_config(const ProcessingConfig& processing_config);
+
+    [[nodiscard]] std::string to_string() const;
+};
+
+struct DateRangeClause {
+
+    ClauseInfo clause_info_;
+    // Time range to keep, inclusive of start and end
+    timestamp start_;
+    timestamp end_;
+
+    explicit DateRangeClause(timestamp start, timestamp end):
+            start_(start),
+            end_(end) {
+    }
+
+    DateRangeClause() = delete;
+
+    ARCTICDB_MOVE_COPY_DEFAULT(DateRangeClause)
+
+    [[nodiscard]] Composite<ProcessingSegment> process(std::shared_ptr<Store> store,
+                                                       Composite<ProcessingSegment> &&p) const;
+
+    [[nodiscard]] std::optional<std::vector<Composite<ProcessingSegment>>> repartition(
+            ARCTICDB_UNUSED std::vector<Composite<ProcessingSegment>> &&) const {
+        return std::nullopt;
+    }
+
+    [[nodiscard]] const ClauseInfo& clause_info() const {
+        return clause_info_;
+    }
+
+    void set_processing_config(ARCTICDB_UNUSED const ProcessingConfig& processing_config) {
+    }
+
+    [[nodiscard]] timestamp start() const {
+        return start_;
+    }
+
+    [[nodiscard]] timestamp end() const {
+        return end_;
+    }
+
+    [[nodiscard]] std::string to_string() const;
 };
 
 }//namespace arcticdb
