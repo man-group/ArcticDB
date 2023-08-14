@@ -40,17 +40,15 @@ public:
         storage_.do_update(std::move(kvs), opts);
     }
 
-    template<class Visitor>
-        void do_read(Composite<VariantKey>&& ks, Visitor &&visitor) {
-        storage_.do_read(std::move(ks), std::move(visitor), ReadKeyOpts{});
+    void do_read(Composite<VariantKey>&& ks, const ReadVisitor& visitor) {
+        storage_.do_read(std::move(ks), visitor, ReadKeyOpts{});
     }
 
     void do_remove(Composite<VariantKey>&& ks) {
         storage_.do_remove(std::move(ks), RemoveOpts{});
     }
 
-    template<class Visitor>
-        void do_iterate_type(KeyType key_type, Visitor &&visitor, const std::string &prefix) {
+    void do_iterate_type(KeyType key_type, const IterateTypeVisitor& visitor, const std::string &prefix) {
         storage_.do_iterate_type(key_type, std::move(visitor), prefix);
     }
 

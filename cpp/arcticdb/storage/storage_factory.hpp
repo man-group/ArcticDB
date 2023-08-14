@@ -8,8 +8,23 @@
 #pragma once
 
 #include <arcticdb/storage/common.hpp>
+#include <arcticdb/storage/storage.hpp>
 #include <arcticdb/storage/library_path.hpp>
 #include <arcticdb/storage/open_mode.hpp>
 
-#include <optional>
-#include <vector>
+
+namespace arcticdb {
+#ifdef ARCTICDB_USING_CONDA
+    static const bool AZURE_SUPPORT = false;
+#else
+    static const bool AZURE_SUPPORT = true;
+#endif
+    namespace storage {
+
+        std::unique_ptr<Storage> create_storage(
+                const LibraryPath& library_path,
+                OpenMode mode,
+                const arcticdb::proto::storage::VariantStorage &storage_config);
+
+    } // namespace storage
+} // namespace arcticdb

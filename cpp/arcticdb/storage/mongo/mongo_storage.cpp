@@ -26,7 +26,7 @@ MongoStorage::MongoStorage(
     const LibraryPath &lib,
     OpenMode mode,
     const Config &config) :
-    Parent(lib, mode),
+    Storage(lib, mode),
     instance_(MongoInstance::instance()),
     client_(std::make_unique<MongoClient>(
         config,
