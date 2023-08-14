@@ -7,10 +7,12 @@ As of the Change Date specified in that file, in accordance with the Business So
 """
 import sys
 import os
+import string
 
 import pytz
 from arcticdb_ext.exceptions import InternalException, ErrorCode, ErrorCategory
 from arcticdb.exceptions import ArcticNativeNotYetImplemented, LibraryNotFound
+from arcticdb_ext.version_store import NoSuchVersionException
 from pandas import Timestamp
 
 try:
@@ -26,6 +28,7 @@ from arcticdb.adapters.s3_library_adapter import S3LibraryAdapter
 from arcticdb.options import LibraryOptions
 from arcticdb.encoding_version import EncodingVersion
 from arcticdb import QueryBuilder, DataError
+from arcticdb.version_store.vector_db import VectorDB
 from arcticc.pb2.s3_storage_pb2 import Config as S3Config
 
 import math

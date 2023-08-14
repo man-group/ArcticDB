@@ -296,6 +296,9 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
             .def(py::init<std::string, std::unordered_map<std::string, std::string>>())
             .def("__str__", &AggregationClause::to_string);
 
+    py::class_<TopKClause, std::shared_ptr<TopKClause>>(version, "TopKClause")
+            .def(py::init<std::vector<float_t>, uint8_t>());
+
     py::enum_<RowRangeClause::RowRangeType>(version, "RowRangeType")
             .value("HEAD", RowRangeClause::RowRangeType::HEAD)
             .value("TAIL", RowRangeClause::RowRangeType::TAIL);
@@ -315,24 +318,26 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
             .def_readwrite("columns",&ReadQuery::columns)
             .def_readwrite("row_range",&ReadQuery::row_range)
             .def_readwrite("row_filter",&ReadQuery::row_filter)
-            // Unsurprisingly, pybind11 doesn't understand folly::poly, so use vector of variants here
+                    // Unsurprisingly, pybind11 doesn't understand folly::poly, so use vector of variants here
             .def("add_clauses",
                  [](ReadQuery& self,
                     std::vector<std::variant<std::shared_ptr<FilterClause>,
-                                std::shared_ptr<ProjectClause>,
-                                std::shared_ptr<GroupByClause>,
-                                std::shared_ptr<AggregationClause>,
-                                std::shared_ptr<RowRangeClause>,
-                                std::shared_ptr<DateRangeClause>>> clauses) {
-                std::vector<std::shared_ptr<Clause>> _clauses;
-                for (auto&& clause: clauses) {
-                    util::variant_match(
-                        clause,
-                        [&](auto&& clause) {_clauses.emplace_back(std::make_shared<Clause>(*clause));}
-                    );
-                }
-                self.add_clauses(_clauses);
-            });
+                            std::shared_ptr<ProjectClause>,
+                            std::shared_ptr<GroupByClause>,
+                            std::shared_ptr<AggregationClause>,
+                            std::shared_ptr<RowRangeClause>,
+                            std::shared_ptr<DateRangeClause>,
+                            std::shared_ptr<TopKClause>>> clauses) {
+                     std::vector<std::shared_ptr<Clause>> _clauses;
+                     for (auto&& clause: clauses) {
+                         util::variant_match(
+                                 clause,
+                                 [&](auto&& clause) {_clauses.emplace_back(std::make_shared<Clause>(*clause));}
+                         );
+                     }
+                     self.add_clauses(_clauses);
+                 });
+
 
     py::enum_<OperationType>(version, "OperationType")
             .value("ABS", OperationType::ABS)

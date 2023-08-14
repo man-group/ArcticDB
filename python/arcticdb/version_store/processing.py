@@ -28,6 +28,7 @@ from arcticdb_ext.version_store import AggregationClause as _AggregationClause
 from arcticdb_ext.version_store import RowRangeClause as _RowRangeClause
 from arcticdb_ext.version_store import DateRangeClause as _DateRangeClause
 from arcticdb_ext.version_store import RowRangeType as _RowRangeType
+from arcticdb_ext.version_store import TopKClause as _TopKClause
 from arcticdb_ext.version_store import ExpressionName as _ExpressionName
 from arcticdb_ext.version_store import ColumnName as _ColumnName
 from arcticdb_ext.version_store import ValueName as _ValueName
@@ -266,6 +267,7 @@ PythonFilterClause = namedtuple("PythonFilterClause", ["expr"])
 PythonProjectionClause = namedtuple("PythonProjectionClause", ["name", "expr"])
 PythonGroupByClause = namedtuple("PythonGroupByClause", ["name"])
 PythonAggregationClause = namedtuple("PythonAggregationClause", ["aggregations"])
+PythonTopKClause = namedtuple("TopKClause", ["vector", "k"])
 PythonRowRangeClause = namedtuple("PythonRowRangeClause", ["row_range_type", "n"])
 PythonDateRangeClause = namedtuple("PythonDateRangeClause", ["start", "end"])
 
@@ -592,6 +594,8 @@ class QueryBuilder:
                 self.clauses.append(_GroupByClause(python_clause.name))
             elif isinstance(python_clause, PythonAggregationClause):
                 self.clauses.append(_AggregationClause(self.clauses[-1].grouping_column, python_clause.aggregations))
+            elif isinstance(python_clause, PythonTopKClause):
+                self.clauses.append(_TopKClause(python_clause.vector, python_clause.k))
             else:
                 raise ArcticNativeException(
                     f"Unrecognised clause type {type(python_clause)} when unpickling QueryBuilder"
