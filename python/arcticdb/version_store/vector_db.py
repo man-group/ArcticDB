@@ -1,31 +1,134 @@
 import warnings
-from typing import Union, Dict, Optional, Iterable
-
-
 import pandas as pd
 import numpy as np
 
-from collections.abc import Mapping
 from collections import namedtuple
+from pandas import RangeIndex
+from typing import Union, Optional, Collection, List, Mapping
 
 from arcticdb.supported_types import Timestamp, numeric_types
 from arcticdb.version_store.library import Library, ArcticUnsupportedDataTypeException
-
 from arcticdb.version_store.processing import QueryBuilder
 from arcticdb_ext.version_store import TopKClause as _TopKClause
 
 VECTOR_DB_DISTINGUISHED_PREFIX = "vector_db_"
 
-VECTOR_VALUE_ERROR = "Vectors uploaded as dictionaries must be " \
-                     "in the form of dictionaries with keys that are " \
+VECTOR_VALUE_ERROR = "Vectors uploaded as mappings must be " \
+                     "in the form of mappings with keys that are " \
                      "string identifiers and values that are " \
-                     "dictionaries containing in turn " \
+                     "mappings containing in turn " \
                      "at least an entry under 'values' containing " \
                      "something that can be coerced to an `np.ndarray` " \
                      "of floats of one dimension."
 
 PythonTopKClause = namedtuple("TopKClause", ["vector", "k"])
 
+
+def _generate_dataframe_from_ndarray(
+        vectors: np.ndarray,
+        identifiers: Collection[str],
+        expected_dimensions: Optional[int] = None,
+        metadata: Optional[Mapping[str, Mapping[str, any]]] = None
+) -> pd.DataFrame:
+    if vectors.ndim != 2:
+        raise ValueError("Upsertion of vectors in an `np.ndarray` takes "
+                         "two-dimensional arrays; the parameter `vector` had "
+                         f"{vectors.ndim} instead.")
+    if vectors.dtype not in numeric_types:
+        raise ArcticUnsupportedDataTypeException(
+            "Vectors inserted must all have a numeric type. You attempted to "
+            f"insert {vectors.dtype}, which does "
+            "count."
+        )
+    if identifiers is None:
+        raise ValueError("Upsertion of vectors in an `np.ndarray` requires "
+                         "a list of identifiers.")
+    if len(identifiers) != len(vectors):
+        raise ValueError(f"You gave {len(identifiers)} identifiers but "
+                         f"{len(vectors)} vectors.")
+    if any([type(identifier) is not str for identifier in identifiers]):
+        raise ValueError(f"All identifiers must be strings.")
+    if expected_dimensions and expected_dimensions != vectors.shape[1]:
+        raise ValueError(f"Expected vectors of {expected_dimensions} "
+                         f"dimensions; got vectors of {vectors.shape[1]} "
+                         "dimensions.")
+    return pd.DataFrame(
+        vectors.astype(np.float32).T,
+        columns=identifiers
+    )
+
+
+def _generate_dataframe_from_mapping(
+        vectors: Mapping[str, Mapping[str, any]],
+        expected_dimensions: Optional[int] = None,
+        metadata: Optional[Mapping[str, Mapping]] = None,
+) -> pd.DataFrame:
+    data_frame_to_upsert = pd.DataFrame()
+    for k, v in vectors.items():
+        if type(k) is not str:
+            raise ArcticUnsupportedDataTypeException(VECTOR_VALUE_ERROR)
+        if "vector" not in v.keys():
+            raise ValueError()
+        column = np.array(v["vector"])
+        if column.ndim != 1:
+            raise ValueError(VECTOR_VALUE_ERROR)
+        if column.dtype not in numeric_types:
+            raise ArcticUnsupportedDataTypeException(
+                "Vectors inserted must all have a numeric type. You attempted to "
+                f"insert a vector that as an np.array has dtype {column.dtype}, "
+                "which does count."
+            )
+        if not expected_dimensions:
+            expected_dimensions = column.shape[0]
+        elif column.shape[0] != expected_dimensions:
+            raise ValueError("The vectors must all have the same number "
+                             "of dimensions.")
+        data_frame_to_upsert[k] = column.astype(np.float32)
+    return data_frame_to_upsert
+
+
+def _generate_dataframe(
+        vectors: Union[
+            Mapping[str, Mapping[str, any]],
+            pd.DataFrame, np.ndarray
+        ],
+        expected_dimensions: Optional[int] = None,
+        identifiers: Optional[Collection[str]] = None,
+        metadata: Optional[Mapping[str, Mapping]] = None
+) -> pd.DataFrame:
+    if isinstance(vectors, Mapping):
+        df_to_upsert = _generate_dataframe_from_mapping(
+            vectors,
+            expected_dimensions,
+            metadata
+        )
+    elif isinstance(vectors, np.ndarray):
+        df_to_upsert = _generate_dataframe_from_ndarray(
+            vectors,
+            identifiers,
+            expected_dimensions,
+            metadata
+        )
+    elif isinstance(vectors, pd.DataFrame):
+        if any([t not in numeric_types for t in vectors.dtypes.unique()]):
+            raise ArcticUnsupportedDataTypeException(
+                "Vectors inserted must all have a numeric type. You attempted to "
+                f"insert {vectors.dtypes.unique()}, at least one of which does "
+                "count."
+            )
+        elif expected_dimensions and vectors.shape[1] != expected_dimensions:
+            raise ValueError(f"Expected vectors of {expected_dimensions} "
+                             f"dimensions; got vectors of {len(vectors)} "
+                             "dimensions.")
+        else:
+            df_to_upsert = vectors.astype(np.float32)
+    else:
+        raise ArcticUnsupportedDataTypeException(
+            f"Upsertion of vectors of type {type(vectors)} is unsupported."
+        )
+    if isinstance(df_to_upsert.columns, RangeIndex):
+        df_to_upsert.columns = df_to_upsert.columns.astype(str)
+    return df_to_upsert
 
 class VectorDB:
     """
@@ -44,8 +147,13 @@ class VectorDB:
         dimensions
             The number of dimensions those vectors should have.
         """
+        if type(library) is not Library:
+            raise ArcticUnsupportedDataTypeException(
+                "Vector databases must be initialised on libraries. "
+                f"You tried to initialise from a {type(library)}."
+            )
         self._lib = library
-        self._dimensions = dict()  # dimensionality of vectors in each sym
+        self._dimensions = dict()  # dimensionality of vectors in each symbol
 
     def __repr__(self):
         return f"VectorDB({str(self._lib)})"
@@ -53,12 +161,15 @@ class VectorDB:
     def __contains__(self, namespace: str):
         return f"{VECTOR_DB_DISTINGUISHED_PREFIX}{namespace}" in self._lib
 
+    def __getitem__(self, item: str):
+        return _VectorSymbol(item, self)
+
     def upsert(
             self,
             namespace: str,
-            vectors: Union[Dict[str, Dict[str, any]], pd.DataFrame, np.ndarray],
-            identifiers: Optional[Iterable[str]] = None,
-            metadata: Optional[Dict[str, Dict]] = None
+            vectors: Union[Mapping[str, Mapping[str, any]], pd.DataFrame, np.ndarray],
+            identifiers: Optional[Collection[str]] = None,
+            metadata: Optional[Mapping[str, Mapping]] = None
     ) -> None:
         """
         Parameters
@@ -66,8 +177,8 @@ class VectorDB:
         namespace
             The namespace to which `vectors` should be upserted.
         vectors
-            In the case of a dictionary, we expect a dictionary whose keys are strings
-            (taken as identifiers of vectors), and whose values are in turn dictionaries
+            In the case of a mapping, we expect a mapping whose keys are strings
+            (taken as identifiers of vectors), and whose values are in turn mapping
             minimally containing a key-value pair 'value' pointing to something that
             yields a one-dimensional `np.ndarray` of numeric types corresponding to a
             vector. Each vector must have the same dimensionality.
@@ -91,78 +202,33 @@ class VectorDB:
         """
         if metadata:
             warnings.warn("Metadata are presently ignored.")
-        data_frame_to_upsert = None
         symbol_name = f"{VECTOR_DB_DISTINGUISHED_PREFIX}{namespace}"
-        dimensions = self._dimensions.get(namespace)
+        data_frame_to_upsert = _generate_dataframe(
+            vectors,
+            self._dimensions.get(namespace),
+            identifiers,
+            metadata
+        )
+        self._dimensions[namespace] = data_frame_to_upsert.shape[0]
         if symbol_name in self._lib:
-            raise NotImplementedError
-        else:  # namespace not in self.lib
-            if isinstance(vectors, Mapping):
-                data_frame_to_upsert = pd.DataFrame()
-                for k, v in vectors.items():
-                    if type(k) is not str:
-                        raise ArcticUnsupportedDataTypeException(VECTOR_VALUE_ERROR)
-                    if "vectors" not in v.keys():
-                        raise ValueError()
-                    column = np.array(v)
-                    if column.ndim != 1:
-                        raise ValueError(VECTOR_VALUE_ERROR)
-                    if column.dtype not in numeric_types:
-                        raise ArcticUnsupportedDataTypeException(
-                            "Vectors inserted must all have a numeric type. You attempted to "
-                            f"insert a vector that as an np.array has dtype {column.dtype}, "
-                            "which does count."
-                        )
-                    if not dimensions:
-                        self._dimensions[namespace] = column.shape[0]
-                        dimensions = column.shape[0]
-                    elif column.shape[0] != dimensions:
-                        raise ValueError("The vectors must all have the same number "
-                                         "of dimensions.")
-                    data_frame_to_upsert[k] = column.astype(np.float32)
-            elif isinstance(vectors, pd.DataFrame):
-                if any([t not in numeric_types for t in vectors.dtypes.unique()]):
-                    raise ArcticUnsupportedDataTypeException(
-                        "Vectors inserted must all have a numeric type. You attempted to "
-                        f"insert {vectors.dtypes.unique()}, at least one of which does "
-                        "count."
-                    )
-                self._dimensions[namespace] = vectors.shape[0]
-                data_frame_to_upsert = vectors.astype(np.float32)
-            elif isinstance(vectors, np.ndarray):
-                if vectors.ndim != 2:
-                    raise ValueError("Upsertion of vectors in an `np.ndarray` takes "
-                                     "two-dimensional arrays; the parameter `vector` had "
-                                     f"{vectors.ndim} instead.")
-                if any([type not in numeric_types for type in vectors.dtypes.unique()]):
-                    raise ArcticUnsupportedDataTypeException(
-                        "Vectors inserted must all have a numeric type. You attempted to "
-                        f"insert {vectors.dtypes.unique()}, at least one of which does "
-                        "count."
-                    )
-                if not identifiers:
-                    raise ValueError("Upsertion of vectors in an `np.ndarray` requires "
-                                     "a list of identifiers.")
-                if len(identifiers) != len(vectors):
-                    raise ValueError(f"You gave {len(identifiers)} identifiers but "
-                                     f"{len(vectors)} vectors.")
-                if any([type(identifier) is not str for identifier in identifiers]):
-                    raise ValueError(f"All identifiers must be strings.")
-                self._dimensions[namespace] = vectors.shape[1]
-                data_frame_to_upsert = pd.DataFrame(vectors.T, columns=identifiers)
-            else:
-                raise ArcticUnsupportedDataTypeException(
-                    f"Upsertion of vectors of type {type(vectors)} is unsupported."
-                )
-        self._lib.write(
-            symbol_name,
-            data_frame_to_upsert)
+            warnings.warn("This is extremely memory-inefficient!")
+            old_df = self.read(namespace)
+            updated_df = old_df.combine_first(data_frame_to_upsert)
+            self._lib.write(
+                symbol_name,
+                updated_df
+            )
+        else: # symbol_name not in self._lib
+            self._lib.write(
+                symbol_name,
+                data_frame_to_upsert
+            )
 
     def top_k(
             self,
             namespace: str,
             k: int,
-            query_vector: Iterable[float],
+            query_vector: Collection[float],
             norm: Optional[str] = None,
             index: Optional[str] = None
     ) -> pd.DataFrame:
@@ -186,3 +252,54 @@ class VectorDB:
         result = self._lib.read(f"{VECTOR_DB_DISTINGUISHED_PREFIX}{namespace}", query_builder=q).data
         result.index = list(result.index[:-1]) + ["similarity"]
         return result
+
+    def read(
+            self,
+            namespace: str,
+            identifiers: Optional[List[str]] = None
+    ) -> pd.DataFrame:
+        return self._lib.read(f"{VECTOR_DB_DISTINGUISHED_PREFIX}{namespace}", identifiers).data
+
+
+class _VectorSymbol:
+    def __init__(
+            self,
+            namespace: str,
+            vector_db: VectorDB
+    ):
+        self.namespace = namespace
+        self.vector_db = vector_db
+
+    def upsert(
+            self,
+            vectors: Union[Mapping[str, Mapping[str, any]], pd.DataFrame, np.ndarray],
+            identifiers: Optional[Collection[str]] = None,
+            metadata: Optional[Mapping[str, Mapping]] = None
+    ) -> None:
+        self.vector_db.upsert(
+            self.namespace,
+            vectors,
+            identifiers,
+            metadata
+        )
+
+    def top_k(
+            self,
+            k: int,
+            query_vector: Collection[float],
+            norm: Optional[str] = None,
+            index: Optional[str] = None
+    ) -> pd.DataFrame:
+        return self.vector_db.top_k(
+            self.namespace,
+            k,
+            query_vector,
+            norm,
+            index
+        )
+
+    def read(
+            self,
+            identifiers: Optional[List[str]] = None
+    ) -> pd.DataFrame:
+        return self.vector_db.read(self.namespace, identifiers)
