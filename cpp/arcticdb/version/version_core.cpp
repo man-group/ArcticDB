@@ -513,25 +513,6 @@ std::vector<SliceAndKey> read_and_process(
     const ReadOptions& read_options,
     size_t start_from
     ) {
-    std::sort(std::begin(pipeline_context->slice_and_keys_), std::end(pipeline_context->slice_and_keys_), [] (const SliceAndKey& left, const SliceAndKey& right) {
-        return std::tie(left.slice().row_range.first, left.slice().col_range.first) < std::tie(right.slice().row_range.first, right.slice().col_range.first);
-    });
-
-    std::vector<Composite<SliceAndKey>> rows;
-    auto sk_it = std::begin(pipeline_context->slice_and_keys_);
-    std::advance(sk_it, start_from);
-    while(sk_it != std::end(pipeline_context->slice_and_keys_)) {
-        RowRange row_range{sk_it->slice().row_range};
-        auto sk = Composite{std::move(*sk_it)};
-        // Iterate through all SliceAndKeys that contain data for the same RowRange - i.e., iterate along column segments
-        // for same row group
-        while(++sk_it != std::end(pipeline_context->slice_and_keys_) && sk_it->slice().row_range == row_range) {
-            sk.push_back(std::move(*sk_it));
-        }
-
-        util::check(!sk.empty(), "Should not push empty slice/key pairs to the pipeline");
-        rows.emplace_back(std::move(sk));
-    }
     std::shared_ptr<std::unordered_set<std::string>> filter_columns;
     if(pipeline_context->overall_column_bitset_) {
         filter_columns = std::make_shared<std::unordered_set<std::string>>();
@@ -547,13 +528,16 @@ std::vector<SliceAndKey> read_and_process(
         clause->set_processing_config(processing_config);
     }
 
+    std::vector<Composite<SliceAndKey>> processing_groups = read_query.clauses_[0]->structure_for_processing(
+            pipeline_context->slice_and_keys_, start_from);
+
     // At this stage, each Composite contains a single ProcessingUnit, which may hold a row-slice, a column-slice, a
     // general rectangular slice, or some more exotic collection of segments based on the clause's processing
     // parallelisation.
     // All clauses that do not require repartitioning (e.g. filters and projections) will have already been applied
     // to these processing units
     std::vector<Composite<ProcessingUnit>> procs = store->batch_read_uncompressed(
-            std::move(rows),
+            std::move(processing_groups),
             read_query.clauses_,
             filter_columns,
             BatchReadArgs{}

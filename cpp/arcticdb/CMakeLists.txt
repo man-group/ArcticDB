@@ -231,7 +231,7 @@ set(arcticdb_srcs
         processing/operation_dispatch_unary.hpp
         processing/operation_types.hpp
         processing/signed_unsigned_comparison.hpp
-        processing/processing_segment.hpp
+        processing/processing_unit.hpp
         processing/bucketizer.hpp
         processing/clause.hpp
         processing/expression_context.hpp
@@ -376,7 +376,7 @@ set(arcticdb_srcs
         pipeline/value_set.cpp
         pipeline/write_frame.cpp
         python/normalization_checks.cpp
-        processing/processing_segment.cpp
+        processing/processing_unit.cpp
         processing/aggregation.cpp
         processing/clause.cpp
         processing/expression_node.cpp
