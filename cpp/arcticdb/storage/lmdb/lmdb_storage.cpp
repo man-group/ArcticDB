@@ -24,7 +24,7 @@ T or_else(T val, T or_else_val, T def = T()) {
 } // anonymous
 
 LmdbStorage::LmdbStorage(const LibraryPath &library_path, OpenMode mode, const Config &conf) :
-        Parent(library_path, mode),
+        Storage(library_path, mode),
         write_mutex_(new std::mutex{}),
         env_(std::make_unique<::lmdb::env>(::lmdb::env::create(conf.flags()))),
         dbi_by_key_type_() {

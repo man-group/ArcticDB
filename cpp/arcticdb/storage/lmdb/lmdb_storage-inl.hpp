@@ -92,8 +92,7 @@ inline void LmdbStorage::do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts o
     txn.commit();
 }
 
-template<class Visitor>
-    void LmdbStorage::do_read(Composite<VariantKey>&& ks, Visitor &&visitor, storage::ReadKeyOpts) {
+inline void LmdbStorage::do_read(Composite<VariantKey>&& ks, const ReadVisitor& visitor, storage::ReadKeyOpts) {
     ARCTICDB_SAMPLE(LmdbStorageRead, 0)
     auto txn = ::lmdb::txn::begin(env(), nullptr, MDB_RDONLY);
 
@@ -222,8 +221,7 @@ bool LmdbStorage::do_fast_delete() {
     return true;
 }
 
-template<class Visitor>
-void LmdbStorage::do_iterate_type(KeyType key_type, Visitor &&visitor, const std::string &prefix) {
+inline void LmdbStorage::do_iterate_type(KeyType key_type, const IterateTypeVisitor& visitor, const std::string &prefix) {
     ARCTICDB_SAMPLE(LmdbStorageItType, 0);
     auto txn = ::lmdb::txn::begin(env(), nullptr, MDB_RDONLY); // scoped abort on
     std::string type_db = fmt::format("{}", key_type);
