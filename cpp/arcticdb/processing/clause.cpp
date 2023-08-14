@@ -7,7 +7,7 @@
 
 #include <vector>
 #include <variant>
-#include <arcticdb/processing/processing_segment.hpp>
+#include <arcticdb/processing/processing_unit.hpp>
 #include <folly/Poly.h>
 #include <arcticdb/util/composite.hpp>
 #include <arcticdb/processing/clause.hpp>
@@ -19,6 +19,51 @@
 #include <arcticdb/stream/segment_aggregator.hpp>
 
 namespace arcticdb {
+
+std::vector<Composite<SliceAndKey>> structure_by_row_slice(std::vector<SliceAndKey>& slice_and_keys, size_t start_from) {
+    std::sort(std::begin(slice_and_keys), std::end(slice_and_keys), [] (const SliceAndKey& left, const SliceAndKey& right) {
+        return std::tie(left.slice().row_range.first, left.slice().col_range.first) < std::tie(right.slice().row_range.first, right.slice().col_range.first);
+    });
+
+    std::vector<Composite<SliceAndKey>> rows;
+    auto sk_it = std::begin(slice_and_keys);
+    std::advance(sk_it, start_from);
+    while(sk_it != std::end(slice_and_keys)) {
+        pipelines::RowRange row_range{sk_it->slice().row_range};
+        auto sk = Composite{std::move(*sk_it)};
+        // Iterate through all SliceAndKeys that contain data for the same RowRange - i.e., iterate along column segments
+        // for same row group
+        while(++sk_it != std::end(slice_and_keys) && sk_it->slice().row_range == row_range) {
+            sk.push_back(std::move(*sk_it));
+        }
+
+        util::check(!sk.empty(), "Should not push empty slice/key pairs to the pipeline");
+        rows.emplace_back(std::move(sk));
+    }
+    return rows;
+}
+
+std::vector<Composite<SliceAndKey>> structure_by_column_slice(std::vector<SliceAndKey>& slice_and_keys) {
+    std::sort(std::begin(slice_and_keys), std::end(slice_and_keys), [] (const SliceAndKey& left, const SliceAndKey& right) {
+        return std::tie(left.slice().col_range.first, left.slice().row_range.first) < std::tie(right.slice().col_range.first, right.slice().row_range.first);
+    });
+
+    std::vector<Composite<SliceAndKey>> cols;
+    auto sk_it = std::begin(slice_and_keys);
+    while(sk_it != std::end(slice_and_keys)) {
+        pipelines::ColRange col_range{sk_it->slice().col_range};
+        auto sk = Composite{std::move(*sk_it)};
+        // Iterate through all SliceAndKeys that contain data for the same ColRange - i.e., iterate along row segments
+        // for same column group
+        while(++sk_it != std::end(slice_and_keys) && sk_it->slice().col_range == col_range) {
+            sk.push_back(std::move(*sk_it));
+        }
+
+        util::check(!sk.empty(), "Should not push empty slice/key pairs to the pipeline");
+        cols.emplace_back(std::move(sk));
+    }
+    return cols;
+}
 
 std::vector<Composite<ProcessingUnit>> single_partition(std::vector<Composite<ProcessingUnit>> &&comps) {
     std::vector<Composite<ProcessingUnit>> v;
@@ -581,23 +626,37 @@ Composite<ProcessingUnit> ColumnStatsGenerationClause::process(std::shared_ptr<S
     return Composite{ProcessingUnit{std::move(seg)}};
 }
 
+std::vector<Composite<SliceAndKey>> RowRangeClause::structure_for_processing(
+        std::vector<SliceAndKey>& slice_and_keys, ARCTICDB_UNUSED size_t start_from) const {
+    slice_and_keys.erase(std::remove_if(slice_and_keys.begin(), slice_and_keys.end(), [this](const SliceAndKey& slice_and_key) {
+        return slice_and_key.slice_.row_range.start() >= end_ || slice_and_key.slice_.row_range.end() <= start_;
+    }), slice_and_keys.end());
+    return structure_by_column_slice(slice_and_keys);
+}
+
 Composite<ProcessingUnit> RowRangeClause::process(std::shared_ptr<Store> store,
                                                   Composite<ProcessingUnit> &&p) const {
     auto procs = std::move(p);
     procs.broadcast([&store, this](ProcessingUnit &proc) {
-        auto row_range = proc.data()[0].slice_.row_range;
-        if ((start_ > row_range.start() && start_ < row_range.end()) || (end_ > row_range.start() && end_ < row_range.end())) {
-            // Zero-indexed within this ProcessingUnit
-            size_t start_row{0};
-            size_t end_row{row_range.diff()};
-            if (start_ > row_range.start() && start_ < row_range.end()) {
-                start_row = start_ - row_range.start();
-            }
-            if (end_ > row_range.start() && end_ < row_range.end()) {
-                end_row = end_ - (row_range.start());
-            }
-            proc.truncate(start_row, end_row, store);
-        } // else all rows in the processing unit are required, do nothing
+        for (auto& slice_and_key: proc.data()) {
+            auto row_range = slice_and_key.slice_.row_range;
+            if ((start_ > row_range.start() && start_ < row_range.end()) ||
+                (end_ > row_range.start() && end_ < row_range.end())) {
+                // Zero-indexed within this slice
+                size_t start_row{0};
+                size_t end_row{row_range.diff()};
+                if (start_ > row_range.start() && start_ < row_range.end()) {
+                    start_row = start_ - row_range.start();
+                }
+                if (end_ > row_range.start() && end_ < row_range.end()) {
+                    end_row = end_ - (row_range.start());
+                }
+                auto seg = truncate_segment(slice_and_key.segment(store), start_row, end_row);
+                slice_and_key.slice_.adjust_rows(seg.row_count());
+                slice_and_key.slice_.adjust_columns(seg.descriptor().field_count() - seg.descriptor().index().field_count());
+                slice_and_key.segment_ = std::move(seg);
+            } // else all rows in the slice and key are required, do nothing
+        }
     });
     return procs;
 }
@@ -628,6 +687,15 @@ void RowRangeClause::set_processing_config(const ProcessingConfig& processing_co
 
 std::string RowRangeClause::to_string() const {
     return fmt::format("{} {}", row_range_type_ == RowRangeType::HEAD ? "HEAD" : "TAIL", n_);
+}
+
+std::vector<Composite<SliceAndKey>> DateRangeClause::structure_for_processing(
+        std::vector<SliceAndKey>& slice_and_keys, size_t start_from) const {
+    slice_and_keys.erase(std::remove_if(slice_and_keys.begin(), slice_and_keys.end(), [this](const SliceAndKey& slice_and_key) {
+        auto [start_index, end_index] = slice_and_key.key().time_range();
+        return start_index > end_ || end_index <= start_;
+    }), slice_and_keys.end());
+    return structure_by_row_slice(slice_and_keys, start_from);
 }
 
 Composite<ProcessingUnit> DateRangeClause::process(ARCTICDB_UNUSED std::shared_ptr<Store> store,

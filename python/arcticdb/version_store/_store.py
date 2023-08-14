@@ -38,8 +38,6 @@ from arcticdb_ext.storage import (
 from arcticdb.version_store.read_result import ReadResult
 from arcticdb_ext.version_store import IndexRange as _IndexRange
 from arcticdb_ext.version_store import RowRange as _RowRange
-from arcticdb_ext.version_store import HeadRange as _HeadRange
-from arcticdb_ext.version_store import TailRange as _TailRange
 from arcticdb_ext.version_store import SignedRowRange as _SignedRowRange
 from arcticdb_ext.version_store import PythonVersionStore as _PythonVersionStore
 from arcticdb_ext.version_store import PythonVersionStoreReadQuery as _PythonVersionStoreReadQuery
@@ -1416,9 +1414,6 @@ class NativeVersionStore:
 
         if date_range is not None:
             read_query.row_filter = _normalize_dt_range(date_range)
-        elif query_builder and query_builder.has_date_range_clause():
-            start, end = query_builder.date_range_boundaries()
-            read_query.row_filter = _IndexRange(start, end)
 
         if row_range is not None:
             read_query.row_range = row_range
@@ -1577,10 +1572,9 @@ class NativeVersionStore:
         VersionedItem
         """
 
-        row_range = _HeadRange(n)
         q = QueryBuilder()
         q = q._head(n)
-        version_query, read_options, read_query = self._get_queries(as_of, None, row_range, columns, q, **kwargs)
+        version_query, read_options, read_query = self._get_queries(as_of, None, None, columns, q, **kwargs)
         read_result = self._read_dataframe(symbol, version_query, read_query, read_options)
         return self._post_process_dataframe(read_result, read_query, q)
 
@@ -1607,10 +1601,9 @@ class NativeVersionStore:
         VersionedItem
         """
 
-        row_range = _TailRange(n)
         q = QueryBuilder()
         q = q._tail(n)
-        version_query, read_options, read_query = self._get_queries(as_of, None, row_range, columns, q, **kwargs)
+        version_query, read_options, read_query = self._get_queries(as_of, None, None, columns, q, **kwargs)
         read_result = self._read_dataframe(symbol, version_query, read_query, read_options)
         return self._post_process_dataframe(read_result, read_query, q)
 
