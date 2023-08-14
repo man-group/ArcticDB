@@ -15,6 +15,7 @@ inline bool trivially_compatible_types(entity::TypeDescriptor left, entity::Type
     if(left == right)
         return true;
 
+    // Empty type is coercible to any type, and any type is coercible to the empty type.
     if(is_empty_type(left.data_type()) || is_empty_type(right.data_type())) {
         return true;
     }
@@ -38,6 +39,7 @@ inline std::optional<entity::TypeDescriptor> has_valid_type_promotion(entity::Ty
     if (source == target)
         return target;
 
+    // Empty type is coercible to any type, and any type is coercible to the empty type.
     if(is_empty_type(source.data_type()) || is_empty_type(target.data_type())) {
         return target;
     }
