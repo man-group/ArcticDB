@@ -52,7 +52,7 @@ on [ArcticDB's feedstock](https://github.com/conda-forge/arcticdb-feedstock)
 for each new release of ArcticDB upstream.
 
 > [!IMPORTANT]  
-> **Do not commit directly to this repository.**
+> **Do not commit directly to the feedstock repository.**
 > Commits to the repository release new versions to conda-forge. Instead, changes must be made via personal forks or via the PR
 > created by the [`regro-cf-autotick-bot`](https://github.com/regro-cf-autotick-bot) as described above.
 
