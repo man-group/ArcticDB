@@ -77,6 +77,8 @@ NativeTensor obj_to_tensor(PyObject *ptr) {
             //      UTF nor ASCII). In that case we choose to save it as UTF
             // * In case there is at least one actual string we can sample it and decide the type of the column segment
             //      based on it
+            // Note: ValueType::ASCII_DYNAMIC was used when Python 2 was supported. It is no longer supported, and
+            //  we're not expected to enter that branch.
             if (sample == none.ptr() || is_py_nan(sample)) {
                 empty = true;
                 all_nans = true;
