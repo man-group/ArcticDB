@@ -43,9 +43,9 @@ az storage container create  --name data --account-name <STORAGE_NAME>
 
 - Get the connection string.
 ```sh
-az storage account show-connection-string -g arcticdb -n <STORAGE_NAME>
+az storage account show-connection-string -g arcticdb --query connectionString -n <STORAGE_NAME>
 ```
-The connection string includes secrets, particularly the `AccountKey`, and so you should store it securely.
+The connection string includes the `AccountKey` for authentication and so you should store it securely.
 
 - [Install ArcticDB](https://github.com/man-group/ArcticDB#readme).
 - Find your CA_CERT_PATH path. See the [`Arctic` API docs](https://docs.arcticdb.io/api/arcticdb/arcticdb.Arctic#arcticdb.Arctic) for more information.
