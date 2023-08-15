@@ -15,9 +15,6 @@ Open `docs/doxygen/docs/html/index.html` in the browser of your choice to just v
 Note that we currently set the `Doxyfile` in such a way that **everything** is documented
 and diagrams are generated, even undocumented classes / functions. This gives about 400 MB of documentation (including diagrams).
 
-```
-
-
 ### mkdocs
 
 To build mkdocs (to `/tmp/docs_build/` as an example):
