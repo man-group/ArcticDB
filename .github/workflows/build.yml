@@ -227,7 +227,6 @@ jobs:
       persistent_storage: ${{ inputs.persistent_storage }}
 
   persistent_storage_verify_linux:
-    # Then use the cached compilation artifacts to build other python versions concurrently in cibuildwheels
     needs: [common_config, follower-linux, follower-windows]
     if: inputs.persistent_storage == true
     strategy:
@@ -248,7 +247,6 @@ jobs:
       python_deps_ids: ${{toJson(matrix.python_deps_ids)}}
 
   persistent_storage_verify_windows:
-    # Then use the cached compilation artifacts to build other python versions concurrently in cibuildwheels
     needs: [common_config, follower-windows, follower-linux]
     if: inputs.persistent_storage == true
     strategy:

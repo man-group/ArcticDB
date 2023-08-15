@@ -12,7 +12,7 @@ It aims to provide an overview of the system and the general steps.
 
 The CI system is based on GitHub Actions.
 It can be triggered automatically on push to any branch or manually [here](https://github.com/man-group/ArcticDB/actions/workflows/build.yml).
-There is also a scheduled build of the master branch that runs every night and tests against real, persistent storages (e.g. AWS S3, Azure Cloud, etc) (**NOT YET IMPLEMENTED**).
+There is also a scheduled build of the master branch that runs every night and tests against real, persistent storages (e.g. AWS S3, Azure Cloud, etc).
 
 # Overview
 
@@ -64,7 +64,7 @@ For more information, see the [Description of the YML files](#description-of-the
 ## Common config job
 
 This job is used to configure the CI run.
-It sets up what subsequent jobs, their structure where they will be execute, etc.
+It sets up the subsequent jobs and where they will be executed.
 This is where environment variables are set and also some of the variables that are used by the later jobs.
 You can see them in the outputs part and they are used by the other jobs by calling *needs.common_config.outputs...*.
 
@@ -102,7 +102,7 @@ It is also used as a gate to check, if we can publish a new release.
 ## Publish
 
 In this step, we prepare the release notes and publish to PyPi.
-This step cannot run on automatic builds (except for [version tag builds](https://github.com/man-group/ArcticDB/blob/master/.github/workflows/build.yml#L59)), because it requires the *pypi_publish* argument to be enable, which can be done only with a manual build.
+This step cannot run on automatic builds (except for [version tag builds](https://github.com/man-group/ArcticDB/blob/master/.github/workflows/build.yml#L59)), because it requires the *pypi_publish* argument to be enabled, which can be done only with a manual build.
 
 # Build Inputs
 
@@ -112,7 +112,7 @@ When a manual build is triggered, the user can specify the following input argum
 - pypi_publish - a boolean option on whether or not the build should publish to PyPi
 - Environment to publish to - to select where to publish to (e.g. ProdPypi or Test Pypi)
     - used for publishing both the docs and the wheels
-    - has not effect, unless pypi_publish=true
+    - has no effect, unless pypi_publish=true
 - Override CMAKE preset type - to override the build type (e.g. release vs debug)
 - persistent_storage - whether the built should execute tests that rely on real storages (e.g. AWS S3)
 
@@ -133,7 +133,7 @@ The logic for the steps is implemented in [build_steps.yml](build_steps.yml).
 <tr><th>inputs.pypi_publish</th><td>Specifies if the build should publish a new PyPi release</td>
 <tr><th>inputs.publish_env</th><td>Environment to publish to, if <code>inputs.pypi_publish</code> is enabled</td>
 <tr><th>inputs.cmake_preset_type</th><td>Override CMAKE preset type with release or debug</td>
-<tr><th>inputs.persistent_storage</th><td>Specifies if the build should run the tests that use real storage (e.g. AWS S3) (<b>NOT YET IMPLEMENTED</b>)</td>
+<tr><th>inputs.persistent_storage</th><td>Specifies if the build should run the tests that use real storage (e.g. AWS S3)</td>
 </table>
 
 ## [build-steps.yml](build-steps.yml)
