@@ -9,6 +9,11 @@
 #error "This should only be included by file_storage.hpp"
 #endif
 
+#include <aws/s3/model/ListObjectsV2Request.h>
+#include <aws/s3/model/GetObjectRequest.h>
+#include <aws/s3/model/DeleteObjectRequest.h>
+#include <aws/s3/model/HeadObjectRequest.h>
+
 namespace arcticdb::storage::s3 {
 
 template<class Visitor>

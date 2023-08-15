@@ -6,9 +6,10 @@
  */
 
 #ifndef ARCTICDB_LMDB_STORAGE_H_
-#error "This should only be included by lmdb_storage.hpp"
+#error "This should only be included by lmdb_storage.cpp"
 #endif
 
+#include <arcticdb/storage/lmdb/lmdb_storage.hpp>
 #include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/util/pb_util.hpp>
 #include <arcticdb/log/log.hpp>
