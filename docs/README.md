@@ -1,6 +1,22 @@
 ## Building
 
-Work in this directory.
+Work in this directory, except for the `doxygen` documentation.
+The `doxygen` documentation needs to be build from `docs/doxygen`
+
+### doxygen
+
+The doxygen documentation is built from the `docs/doxygen` directory.
+Doxygen does not need articdb installed, or built, to build the documentation.
+The only requirement are `doxygen` itself and `graphviz` for the diagrams.
+Both can be installed via `conda` / `mamba` or other package managers.
+To build the documentation, run `doxygen` from the `docs/doxygen` directory.
+This will create a `docs/doxygen/docs/html`  directory with the documentation.
+Open `docs/doxygen/docs/html/index.html` in the browser of your choice to just view the doxygen docs.
+Note that we currently set the `Doxyfile` in such a way that **everything** is documented
+and diagrams are generated, even undocumented classes / functions. This gives about 400 MB of documentation (including diagrams).
+
+```
+
 
 ### mkdocs
 
