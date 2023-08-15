@@ -1,6 +1,10 @@
 name: Build with analysis tools
 on:
   workflow_dispatch:
+
+  push:
+    branches:
+        - "analysis_workflow"
 jobs:
   code_coverage:
     strategy:
