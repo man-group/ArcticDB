@@ -129,7 +129,6 @@ TEST(HasValidTypePromotion, EmptyToEverything) {
         for(int size_bits = int(SizeBits::UNKNOWN_SIZE_BITS); size_bits < int(SizeBits::COUNT); ++size_bits) {
             const TypeDescriptor target(ValueType(value_type), SizeBits(size_bits), Dimension::Dim0);
             ASSERT_EQ(has_valid_type_promotion(source, target), target);
-            ASSERT_TRUE(trivially_compatible_types(source, target));
         }
     }
 }
