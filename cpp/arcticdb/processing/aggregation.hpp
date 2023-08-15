@@ -54,8 +54,14 @@ struct OutputType<DataTypeTag<DataType::EMPTYVAL>, void> {
 };
 
 template<>
-struct OutputType<DataTypeTag<DataType::EMPTYVAL>, void> {
-    using type = ScalarTagType<DataTypeTag<DataType::EMPTYVAL>>;
+struct OutputType<DataTypeTag<DataType::PYBOOL8>, void> {
+    using type = ScalarTagType<DataTypeTag<DataType::PYBOOL8>>;
+};
+
+template<>
+struct OutputType<DataTypeTag<DataType::PYBOOL64>, void> {
+    using type = ScalarTagType<DataTypeTag<DataType::PYBOOL64>>;
+
 };
 
 void add_data_type_impl(DataType data_type, std::optional<DataType>& current_data_type);

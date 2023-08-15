@@ -185,7 +185,31 @@ std::optional<convert::StringEncodingError> aggregator_set_data(
                     agg.set_array(col, t);
                 }
             }
-        }  else if constexpr (!is_empty_type(dt)) {
+        } else if constexpr(is_py_bool_type(dt)) {
+            auto data = const_cast<void *>(tensor.data());
+            auto ptr_data = reinterpret_cast<PyObject **>(data);
+            ptr_data += row;
+
+            if (!c_style)
+                ptr_data = flatten_tensor<PyObject*>(flattened_buffer, rows_to_write, tensor, slice_num, regular_slice_size);
+
+            util::BitSet bitset;
+            util::scan_object_type_to_sparse(ptr_data, rows_to_write, bitset);
+
+            const auto num_values = bitset.count();
+            auto bool_buffer = ChunkedBuffer::presized(num_values * sizeof(uint8_t));
+            auto en = bitset.first();
+            auto en_end = bitset.end();
+            auto bool_ptr = bool_buffer.ptr_cast<uint8_t>(0u, num_values);
+            while (en < en_end) {
+                *bool_ptr = static_cast<uint8_t>(PyObject_IsTrue(ptr_data[*en]));
+                ++en;
+                ++bool_ptr;
+            }
+            if(bitset.count() > 0)
+                agg.set_sparse_block(col, std::move(bool_buffer), std::move(bitset));
+
+        } else if constexpr (!is_empty_type(dt)) {
             static_assert(!sizeof(dt), "Unknown data type");
         }
         return std::optional<convert::StringEncodingError>();

@@ -24,11 +24,31 @@ bool is_unicode(PyObject *obj) {
     return PyUnicode_Check(obj);
 }
 
+
 std::variant<StringEncodingError, PyStringWrapper> pystring_to_buffer(PyObject *obj, bool is_owned) {
     if(is_unicode(obj)) {
         return StringEncodingError(
                 fmt::format("Unexpected unicode in Python object with type {}", obj->ob_type->tp_name));
     }
+
+bool is_py_boolean(PyObject* obj) {
+    return PyBool_Check(obj);
+}
+
+std::tuple<ValueType, uint8_t, ssize_t> determine_python_object_type(PyObject* obj) {
+    /*if(is_py_decimal(obj))
+        return {ValueType::DECIMAL, 16, 1};
+
+    if(is_py_array(obj))
+        return {ValueType::ARRAY, 8, 2};*/
+
+    if(is_py_boolean(obj))
+        return {ValueType::PYBOOL, 1, 1};
+
+    return {ValueType::BYTES, 8, 1};
+}
+
+PyStringWrapper pystring_to_buffer(PyObject *obj, py::handle handle) {
     char *buffer;
     ssize_t length;
     if (PYBIND11_BYTES_AS_STRING_AND_SIZE(obj, &buffer, &length)) {

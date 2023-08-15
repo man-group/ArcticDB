@@ -24,4 +24,41 @@ namespace arcticdb {
             size_t dest_bytes,
             std::shared_ptr<BufferHolder> buffers);
     };
-} //namespace arcticdb
+
+    struct BoolHandler {
+        void handle_type(
+                const uint8_t *&data,
+                uint8_t *dest,
+                const VariantField &encoded_field,
+                const entity::TypeDescriptor &type_descriptor,
+                size_t dest_bytes,
+                std::shared_ptr<BufferHolder> buffers
+        );
+    };
+
+    struct DecimalHandler {
+        void handle_type(
+                const uint8_t*& data,
+                uint8_t* dest,
+                const VariantField& encoded_field,
+                const entity::TypeDescriptor& type_descriptor,
+                size_t dest_bytes,
+                std::shared_ptr<BufferHolder> buffers
+        );
+
+        std::shared_ptr<std::mutex> mutex_ = std::make_shared<std::mutex>();
+        std::shared_ptr<py::object> decimal_ = std::make_shared<py::object>(py::module_::import("decimal").attr("Decimal"));
+    };
+
+    struct ArrayHandler {
+        void handle_type(
+                const uint8_t*& data,
+                uint8_t* dest,
+                const VariantField& encoded_field,
+                const entity::TypeDescriptor& type_descriptor,
+                size_t dest_bytes,
+                std::shared_ptr<BufferHolder> buffers
+        );
+    };
+
+    } //namespace arcticdb

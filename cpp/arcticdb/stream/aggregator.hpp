@@ -224,6 +224,14 @@ class Aggregator {
         segment_.set_sparse_block(pos, val,  rows_to_write);
     }
 
+    void set_sparse_block(position_t idx, ChunkedBuffer&& buffer, util::BitSet&& bitset) {
+        segment_.set_sparse_block(idx, std::move(buffer), std::move(bitset));
+    }
+
+    void set_sparse_block(position_t idx, ChunkedBuffer&& buffer, Buffer&& shapes, util::BitSet&& bitset) {
+        segment_.set_sparse_block(idx, std::move(buffer), std::move(shapes), std::move(bitset));
+    }
+
     void set_string_at(position_t col, position_t row, const char* val, size_t size) {
         segment_.set_string_at(col, row, val, size);
     }
