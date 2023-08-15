@@ -15,11 +15,6 @@ inline bool trivially_compatible_types(entity::TypeDescriptor left, entity::Type
     if(left == right)
         return true;
 
-    // Empty type is coercible to any type, and any type is coercible to the empty type.
-    if(is_empty_type(left.data_type()) || is_empty_type(right.data_type())) {
-        return true;
-    }
-
     if(is_sequence_type(left.data_type()) && is_sequence_type(right.data_type())) {
         //TODO coercion of utf strings is not always safe, should allow safe conversion and reinstate the
         //stronger requirement for trivial conversion below.
