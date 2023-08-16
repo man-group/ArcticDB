@@ -15,13 +15,9 @@ jobs:
 
   code_coverage:
     needs: [cibw_docker_image]  
-    strategy:
-      matrix:
-        include:
-          - os: ubuntu-latest
-      fail-fast: false
-    runs-on: ${{ matrix.os }}
-    container: ${{ (matrix.os == 'linux') }}
+    runs-on: "ubuntu-latest"
+    container:
+        image: ${{needs.cibw_docker_image.outputs.tag}}
     steps:
       - uses: actions/checkout@v3
         with:
