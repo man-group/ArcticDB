@@ -10,7 +10,6 @@ You will need an azure account with permission to create storage-accounts.
 - If you installed Azure CLI then you will also need to [login](https://learn.microsoft.com/en-us/cli/azure/authenticate-azure-cli).
 
 ### 1. Select a region.  
-
 A region close to your client will mean greater performance.
 You can list your available regions with.
 ```sh
@@ -19,9 +18,8 @@ az account list-locations -o table
 
 ### 2. Create a resource-group
 
-This is not required but best practice would be to create a new resource-group to try out arcticdb.
-Set your chosen `<REGION>` here.
-If you use an existing resource-group then replace that in the examples below.
+This is not required but best practice would be to create a new resource-group to try out arcticdb.  Resource groups are there to help you collect together and manage related resources in Azure.
+Set your chosen `<REGION>` here.  If you use an existing resource-group then replace that in the examples below.
 ```sh
 az group create --name arcticdb --location <REGION>
 ```
@@ -29,8 +27,9 @@ az group create --name arcticdb --location <REGION>
 ### 3. Create a blob storage account 
 This is created within your resource-group.  Choose a <STORAGE_NAME>, it needs to be globally unique across all of Azure.
 ```sh
-az storage account create -g arcticdb -n <STORAGE_NAME> --allow-blob-public-access=false
+az storage account create -g arcticdb --allow-blob-public-access false --sku Standard_LRS -n <STORAGE_NAME>
 ```
+`-g arcticdb` is the resource-group you created in the last step.
 
 ### 4. Create a container
 Create a container within the storage account.  Depending on your account and CLI setup you may need to provide [authorization](https://learn.microsoft.com/en-us/azure/storage/blobs/authorize-data-operations-cli) for this step.
@@ -38,12 +37,11 @@ Create a container within the storage account.  Depending on your account and CL
 az storage container create  --name data --account-name <STORAGE_NAME>
 ```
 
-
 ### 5. Connect to the storage account
 
 - Get the connection string.
 ```sh
-az storage account show-connection-string -g arcticdb --query connectionString -n <STORAGE_NAME>
+az storage account show-connection-string -g arcticdb --query connectionString -n <STORAGE_NAME> | sed 's,",,g'
 ```
 The connection string includes the `AccountKey` for authentication and so you should store it securely.
 
