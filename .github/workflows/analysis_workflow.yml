@@ -62,11 +62,14 @@ jobs:
           test_unit_arcticdb
           ctest
 
+      - name: Generate a code coverage report pre-pytests
+        uses: threeal/gcovr-action@latest
+
       - name: Test with pytest
         shell: bash -l {0}
         run: |
           cd python
           python3 -m coverage run -m pytest tests
 
-      - name: Generate a code coverage report
+      - name: Generate a code coverage report post-pytests
         uses: threeal/gcovr-action@latest
