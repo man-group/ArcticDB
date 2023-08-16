@@ -329,7 +329,7 @@ def test_write_batch(library_factory):
     lib = library_factory(LibraryOptions(rows_per_segment=10))
     assert lib._nvs._lib_cfg.lib_desc.version.write_options.segment_row_size == 10
     num_days = 40
-    num_symbols = 40
+    num_symbols = 2
     dt = datetime(2019, 4, 8, 0, 0, 0)
     column_length = 4
     num_columns = 5
@@ -355,12 +355,12 @@ def test_write_batch(library_factory):
 
 
 def test_write_batch_dedup(library_factory):
-    """Should be able to write different size of batch of data."""
+    """Should be able to write different size of batch of data reusing deduplicated data from previous versions."""
     lib = library_factory(LibraryOptions(rows_per_segment=10, dedup=True))
     assert lib._nvs._lib_cfg.lib_desc.version.write_options.segment_row_size == 10
     assert lib._nvs._lib_cfg.lib_desc.version.write_options.de_duplication == True
     num_days = 40
-    num_symbols = 10
+    num_symbols = 2
     num_versions = 4
     dt = datetime(2019, 4, 8, 0, 0, 0)
     column_length = 4
@@ -392,6 +392,48 @@ def test_write_batch_dedup(library_factory):
         data_key_version = lib._nvs.read_index("symbol_" + str(sym))["version_id"]
         for s in range(num_segments):
             assert data_key_version[s] == 0
+
+
+def test_write_batch_missing_keys_dedup(library_factory):
+    """When there is duplicate data to reuse for the current write, we need to access the index key of the previous
+    versions in order to refer to the corresponding keys for the deduplicated data."""
+    lib = library_factory(LibraryOptions(dedup=True))
+    assert lib._nvs._lib_cfg.lib_desc.version.write_options.de_duplication == True
+
+    num_days = 2
+    num_rows_per_day = 1
+
+    # Given
+    dt = datetime(2019, 4, 8, 0, 0, 0)
+    df1 = generate_dataframe(["a", "b", "c"], dt, num_days, num_rows_per_day)
+    df2 = generate_dataframe(["a", "b", "c"], dt, num_days, num_rows_per_day)
+    lib.write("s1", df1)
+    lib.write("s2", df2)
+
+    lib_tool = lib._nvs.library_tool()
+    s1_index_key = lib_tool.find_keys_for_id(KeyType.TABLE_INDEX, "s1")[0]
+    lib_tool.remove(s1_index_key)
+
+    # When
+    batch = lib.write_batch(
+        [
+            WritePayload("s1", df1, metadata="great_metadata_s1"),
+            WritePayload("s2", df2, metadata="great_metadata_s2"),
+        ]
+    )
+
+    # Then
+    assert isinstance(batch[0], DataError)
+    assert batch[0].symbol == "s1"
+    assert batch[0].version_request_type is None
+    assert batch[0].version_request_data is None
+    assert batch[0].error_code == ErrorCode.E_KEY_NOT_FOUND
+    assert batch[0].error_category == ErrorCategory.STORAGE
+
+    assert not isinstance(batch[1], DataError)
+    read_dataframe = lib.read("s2")
+    assert read_dataframe.metadata == "great_metadata_s2"
+    assert_frame_equal(read_dataframe.data, df2)
 
 
 def test_append_batch(library_factory):
