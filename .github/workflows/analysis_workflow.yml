@@ -17,9 +17,16 @@ jobs:
       - uses: actions/checkout@v3
         with:
           submodules: recursive
+
       - name: Get number of CPU cores
         uses: SimenB/github-actions-cpu-cores@v1
         id: cpu-cores
+
+      - name: Configure sccache
+        uses: mozilla-actions/sccache-action@v0.0.3
+        with:
+          version: "v0.4.0"
+    
       - name: Install Python Deps
         shell: bash -l {0}
         run: |
@@ -27,8 +34,10 @@ jobs:
           python -m pip install arcticdb[Testing] pytest-split coverage
           python -m pip uninstall -y pytest-cpp || true # No longer works on 3.6
           python -m pip list
+
       - name: Prepare C++ compilation env
-        run: . build_tooling/prep_cpp_build.sh # Also applies to Windows
+        run: . build_tooling/prep_cpp_build.sh 
+      
       - name: CMake compile
         uses: lukka/run-cmake@v10
         with:
@@ -37,16 +46,19 @@ jobs:
           buildPreset: linux-debug
         env:
           ARCTICDB_CODE_COVERAGE_BUILD: 1
+
       - name: Run C++ Tests
         shell: bash -l {0}
         run: |
           cd cpp/out/linux-debug-build/
           make -j ${{ steps.cpu-cores.outputs.count }} arcticdb_rapidcheck_tests
           make -j ${{ steps.cpu-cores.outputs.count }} test_unit_arcticdb
+
       - name: Test with pytest
         shell: bash -l {0}
         run: |
           cd python
           coverage run -m pytest tests
+          
       - name: Generate a code coverage report
         uses: threeal/gcovr-action@latest
