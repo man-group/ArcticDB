@@ -13,6 +13,8 @@ jobs:
           - os: ubuntu-latest
       fail-fast: false
     runs-on: ${{ matrix.os }}
+    container: 
+        image: arcticdb_manylinux:2.12.1
     steps:
       - uses: actions/checkout@v3
         with:
@@ -59,6 +61,6 @@ jobs:
         run: |
           cd python
           coverage run -m pytest tests
-          
+
       - name: Generate a code coverage report
         uses: threeal/gcovr-action@latest
