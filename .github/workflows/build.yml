@@ -13,7 +13,11 @@ on:
   workflow_dispatch:
     inputs:
       persistent_storage:
+<<<<<<< HEAD
         description: Run the persistent storage tests or not
+=======
+        description: Specifies whether we should run the real storage tests or not
+>>>>>>> 3dfbce874e9c914327592cfc0d38b7e18f335f1d
         type: boolean
       pypi_publish:
         type: boolean

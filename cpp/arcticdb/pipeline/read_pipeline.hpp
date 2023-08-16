@@ -138,7 +138,6 @@ inline std::optional<util::BitSet> clause_column_bitset(const StreamDescriptor::
             }
         }
     }
-    // If only needed because the hacky clause for head memory usage doesn't specify columns
     if (!column_set.empty()) {
         return build_column_bitset(desc, column_set);
     } else {

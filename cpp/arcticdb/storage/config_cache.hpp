@@ -12,7 +12,7 @@
 #include <arcticdb/storage/library.hpp>
 #include <arcticdb/storage/library_path.hpp>
 #include <arcticdb/storage/protobuf_mappings.hpp>
-#include <arcticdb/storage/variant_storage_factory.hpp>
+#include <arcticdb/storage/storage_factory.hpp>
 #include <arcticdb/storage/storages.hpp>
 
 #include <optional>
@@ -78,7 +78,7 @@ class ConfigCache {
         auto &descriptor = maybe_descriptor.value();
 
         util::check(!descriptor.storage_ids_.empty(), "Can't configure library with no storage ids");
-        std::vector<std::unique_ptr<VariantStorage>> variants;
+        std::vector<std::unique_ptr<Storage>> storages;
         for (const auto& storage_name : descriptor.storage_ids_) {
             // Otherwise see if we have the storage config.
             arcticdb::proto::storage::VariantStorage storage_conf;
@@ -92,9 +92,9 @@ class ConfigCache {
             if(storage_conf_pos != storage_configs_.end())
                 storage_conf = storage_conf_pos->second;
 
-            variants.emplace_back(create_storage(path, mode, storage_conf));
+            storages.emplace_back(create_storage(path, mode, storage_conf));
         }
-        return std::make_shared<Storages>(std::move(variants), mode);
+        return std::make_shared<Storages>(std::move(storages), mode);
     }
 
   private:

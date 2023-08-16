@@ -68,7 +68,7 @@ public:
     }
 
     using TypeDescTag = TypeDescriptorTag<
-        DataTypeTag<DataType::MICROS_UTC64>,
+        DataTypeTag<DataType::NANOSECONDS_UTC64>,
         DimensionTag<Dimension::Dim0>>;
 
     static constexpr size_t field_count() {
@@ -235,7 +235,7 @@ private:
 class RowCountIndex : public BaseIndex<RowCountIndex> {
   public:
     using TypeDescTag = TypeDescriptorTag<
-        DataTypeTag<DataType::MICROS_UTC64>,
+        DataTypeTag<DataType::NANOSECONDS_UTC64>,
         DimensionTag<Dimension::Dim0>>;
 
     RowCountIndex() = default;

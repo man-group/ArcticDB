@@ -33,7 +33,7 @@ namespace arcticdb {
             util::raise_rte("Not implemented");
         }
 
-        bool supports_prefix_matching() override {
+        bool supports_prefix_matching() const override {
             return false;
         }
 
@@ -202,7 +202,7 @@ namespace arcticdb {
             util::raise_rte("Not implemented");
         }
 
-        RemoveKeyResultType remove_key_sync(const entity::VariantKey &key, RemoveOpts opts) override {
+        RemoveKeyResultType remove_key_sync(const entity::VariantKey &key, storage::RemoveOpts opts) override {
             StorageFailureSimulator::instance()->go(FailureType::DELETE);
             std::lock_guard lock{mutex_};
             size_t removed = util::variant_match(key,
@@ -224,7 +224,7 @@ namespace arcticdb {
         }
 
 
-        void iterate_type(KeyType kt, std::function<void(entity::VariantKey &&)> func, const std::string& prefix = "")
+        void iterate_type(KeyType kt, entity::IterateTypeVisitor func, const std::string& prefix = "")
         override {
             auto prefix_matcher = stream_id_prefix_matcher(prefix);
             auto failure_sim = StorageFailureSimulator::instance();

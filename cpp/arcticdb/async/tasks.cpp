@@ -44,6 +44,7 @@ namespace arcticdb::async {
         auto &hdr = seg.header();
         auto desc = StreamDescriptor(std::make_shared<StreamDescriptor::Proto>(std::move(*hdr.mutable_stream_descriptor())), seg.fields_ptr());
         auto descriptor = async::get_filtered_descriptor(desc, filter_columns_);
+        sk.slice_.adjust_columns(descriptor.field_count() - descriptor.index().field_count());
 
         ARCTICDB_TRACE(log::codec(), "Creating segment");
         SegmentInMemory res(std::move(descriptor));

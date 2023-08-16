@@ -564,8 +564,8 @@ Composite<ProcessingSegment> ColumnStatsGenerationClause::process(std::shared_pt
             std::holds_alternative<NumericIndex>(start_index) && std::holds_alternative<NumericIndex>(end_index),
             "Cannot build column stats over string-indexed symbol"
     );
-    auto start_index_col = std::make_shared<Column>(make_scalar_type(DataType::MICROS_UTC64), true);
-    auto end_index_col = std::make_shared<Column>(make_scalar_type(DataType::MICROS_UTC64), true);
+    auto start_index_col = std::make_shared<Column>(make_scalar_type(DataType::NANOSECONDS_UTC64), true);
+    auto end_index_col = std::make_shared<Column>(make_scalar_type(DataType::NANOSECONDS_UTC64), true);
     start_index_col->template push_back<NumericIndex>(std::get<NumericIndex>(start_index));
     end_index_col->template push_back<NumericIndex>(std::get<NumericIndex>(end_index));
     start_index_col->set_row_data(0);
@@ -573,8 +573,8 @@ Composite<ProcessingSegment> ColumnStatsGenerationClause::process(std::shared_pt
 
     SegmentInMemory seg;
     seg.descriptor().set_index(IndexDescriptor(0, IndexDescriptor::ROWCOUNT));
-    seg.add_column(scalar_field(DataType::MICROS_UTC64, start_index_column_name), start_index_col);
-    seg.add_column(scalar_field(DataType::MICROS_UTC64, end_index_column_name), end_index_col);
+    seg.add_column(scalar_field(DataType::NANOSECONDS_UTC64, start_index_column_name), start_index_col);
+    seg.add_column(scalar_field(DataType::NANOSECONDS_UTC64, end_index_column_name), end_index_col);
     for (const auto& agg_data: folly::enumerate(aggregators_data)) {
         seg.concatenate(agg_data->finalize(column_stats_aggregators_->at(agg_data.index).get_output_column_names()));
     }
@@ -582,21 +582,80 @@ Composite<ProcessingSegment> ColumnStatsGenerationClause::process(std::shared_pt
     return Composite{ProcessingSegment{std::move(seg)}};
 }
 
-Composite<ProcessingSegment> RowNumberLimitClause::process(std::shared_ptr<Store> store,
+Composite<ProcessingSegment> RowRangeClause::process(std::shared_ptr<Store> store,
                                                            Composite<ProcessingSegment> &&p) const {
     auto procs = std::move(p);
     procs.broadcast([&store, this](ProcessingSegment &proc) {
         auto row_range = proc.data()[0].slice_.row_range;
-        if (row_range.start() == 0ULL && row_range.end() > n) {
-            util::BitSet bv(static_cast<util::BitSet::size_type>(row_range.diff()));
-            bv.set_range(0, bv_size(n));
-            proc.apply_filter(bv, store, PipelineOptimisation::MEMORY);
-        } else if (!warning_shown) {
-            warning_shown = true;
-            log::version().info("RowNumberLimitFilter bypassed because rows.start() == {}", row_range.start());
-        }
+        if ((start_ > row_range.start() && start_ < row_range.end()) || (end_ > row_range.start() && end_ < row_range.end())) {
+            // Zero-indexed within this ProcessingSegment
+            size_t start_row{0};
+            size_t end_row{row_range.diff()};
+            if (start_ > row_range.start() && start_ < row_range.end()) {
+                start_row = start_ - row_range.start();
+            }
+            if (end_ > row_range.start() && end_ < row_range.end()) {
+                end_row = end_ - (row_range.start());
+            }
+            proc.truncate(start_row, end_row, store);
+        } // else all rows in the processing segment are required, do nothing
     });
     return procs;
+}
+
+void RowRangeClause::set_processing_config(const ProcessingConfig& processing_config) {
+    auto total_rows = static_cast<int64_t>(processing_config.total_rows_);
+    switch(row_range_type_) {
+        case RowRangeType::HEAD:
+            if (n_ >= 0) {
+                end_ = std::min(n_, total_rows);
+            } else {
+                end_ = std::max(static_cast<int64_t>(0), total_rows + n_);
+            }
+            break;
+        case RowRangeType::TAIL:
+            if (n_ >= 0) {
+                start_ = std::max(static_cast<int64_t>(0), total_rows - n_);
+                end_ = total_rows;
+            } else {
+                start_ = std::min(-n_, total_rows);
+                end_ = total_rows;
+            }
+            break;
+        default:
+            internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Unrecognised RowRangeType {}", static_cast<uint8_t>(row_range_type_));
+    }
+}
+
+std::string RowRangeClause::to_string() const {
+    return fmt::format("{} {}", row_range_type_ == RowRangeType::HEAD ? "HEAD" : "TAIL", n_);
+}
+
+Composite<ProcessingSegment> DateRangeClause::process(ARCTICDB_UNUSED std::shared_ptr<Store> store,
+                                                      Composite<ProcessingSegment> &&p) const {
+    auto procs = std::move(p);
+    procs.broadcast([&store, this](ProcessingSegment &proc) {
+        // We are only interested in the index, which is in every SegmentInMemory in proc.data(), so just use the first
+        auto slice_and_key = proc.data()[0];
+        auto row_range = slice_and_key.slice_.row_range;
+        auto [start_index, end_index] = slice_and_key.key().time_range();
+        if ((start_ > start_index && start_ < end_index) || (end_ >= start_index && end_ < end_index)) {
+            size_t start_row{0};
+            size_t end_row{row_range.diff()};
+            if (start_ > start_index && start_ < end_index) {
+                start_row = slice_and_key.segment(store).column_ptr(0)->search_sorted<timestamp>(start_);
+            }
+            if (end_ >= start_index && end_ < end_index) {
+                end_row = slice_and_key.segment(store).column_ptr(0)->search_sorted<timestamp>(end_, true);
+            }
+            proc.truncate(start_row, end_row, store);
+        } // else all rows in the processing segment are required, do nothing
+    });
+    return procs;
+}
+
+std::string DateRangeClause::to_string() const {
+    return fmt::format("DATE RANGE {} - {}", start_, end_);
 }
 
 }

@@ -16,6 +16,7 @@
 #include <pybind11/numpy.h>
 
 namespace arcticdb::convert {
+const char none_char[8] = {'\300', '\000', '\000', '\000', '\000', '\000', '\000', '\000'};
 
 using namespace arcticdb::pipelines;
 
@@ -119,7 +120,7 @@ InputTensorFrame py_ndf_to_frame(
         std::string index_column_name = !idx_names.empty() ? idx_names[0] : "index";
         res.num_rows = index_tensor.shape(0);
         //TODO handle string indexes
-        if (index_tensor.data_type() == DataType::MICROS_UTC64) {
+        if (index_tensor.data_type() == DataType::NANOSECONDS_UTC64) {
 
             res.desc.set_index_field_count(1);
             res.desc.set_index_type(IndexDescriptor::TIMESTAMP);
@@ -149,6 +150,39 @@ InputTensorFrame py_ndf_to_frame(
         res.desc.add_field(scalar_field(tensor.data_type(), col_names[i]));
         res.field_tensors.push_back(std::move(tensor));
     }
+
+    ARCTICDB_DEBUG(log::version(), "Received frame with descriptor {}", res.desc);
+    res.set_index_range();
+    return res;
+}
+
+InputTensorFrame py_none_to_frame() {
+    ARCTICDB_SUBSAMPLE_DEFAULT(NormalizeNoneFrame)
+    InputTensorFrame res;
+    res.num_rows = 0u;
+
+    arcticdb::proto::descriptors::NormalizationMetadata::MsgPackFrame msg;
+    msg.set_size_bytes(1);
+    msg.set_version(1);
+    res.norm_meta.mutable_msg_pack_frame()->CopyFrom(msg);
+
+    // Fill index
+    res.index = stream::RowCountIndex();
+    res.desc.set_index_type(IndexDescriptor::ROWCOUNT);
+
+    // Fill tensors
+    auto col_name = "bytes";
+    auto sorted = SortedValue::UNKNOWN;
+
+    res.set_sorted(sorted);
+
+    ssize_t strides = 8;
+    ssize_t shapes = 1;
+
+    auto tensor = NativeTensor{8, 1, &strides, &shapes, DataType::UINT64, 8, none_char};
+    res.num_rows = std::max(res.num_rows, tensor.shape(0));
+    res.desc.add_field(scalar_field(tensor.data_type(), col_name));
+    res.field_tensors.push_back(std::move(tensor));
 
     ARCTICDB_DEBUG(log::version(), "Received frame with descriptor {}", res.desc);
     res.set_index_range();

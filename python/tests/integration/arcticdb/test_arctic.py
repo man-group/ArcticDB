@@ -36,13 +36,8 @@ from datetime import datetime, date, timezone, timedelta
 import numpy as np
 from arcticdb_ext.tools import AZURE_SUPPORT
 from numpy import datetime64
-from arcticdb.util.test import (
-    assert_frame_equal,
-    random_strings_of_length,
-    random_floats,
-)
+from arcticdb.util.test import assert_frame_equal, random_strings_of_length, random_floats
 import random
-
 
 if AZURE_SUPPORT:
     from azure.storage.blob import BlobServiceClient
@@ -307,6 +302,25 @@ def test_basic_write_read_update_and_append(arctic_library):
     lib.write("meta", df, metadata={"goodbye": "cruel world"})
     read_metadata = lib.read_metadata("meta")
     assert read_metadata.version == 1
+
+
+def test_write_metadata_with_none(arctic_library):
+    lib = arctic_library
+    symbol = "symbol"
+    meta = {"meta_" + str(symbol): 0}
+
+    result_write = lib.write_metadata(symbol, meta)
+    assert result_write.version == 0
+
+    read_meta_symbol = lib.read_metadata(symbol)
+    assert read_meta_symbol.data is None
+    assert read_meta_symbol.metadata == meta
+    assert read_meta_symbol.version == 0
+
+    read_symbol = lib.read(symbol)
+    assert read_symbol.data is None
+    assert read_symbol.metadata == meta
+    assert read_symbol.version == 0
 
 
 def staged_write(sym, arctic_library):

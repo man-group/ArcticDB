@@ -84,9 +84,7 @@ public:
         InputTensorFrame&& frame) const = 0;
 
     virtual bool has_stream(
-        const StreamId & stream_id,
-        const std::optional<bool>& skip_compat,
-        const std::optional<bool>& iterate_on_failure
+        const StreamId & stream_id
     ) = 0;
 
     /**
@@ -123,7 +121,8 @@ public:
         bool validate_index
     ) = 0;
 
-    virtual std::pair<VersionedItem, std::vector<AtomKey>> write_individual_segment(
+    /** Test-specific cut-down version of write_versioned_dataframe_internal */
+    virtual VersionedItem write_individual_segment(
         const StreamId& stream_id,
         SegmentInMemory&& segment,
         bool prune_previous_versions
@@ -148,14 +147,6 @@ public:
     virtual std::set<StreamId> get_active_incomplete_refs() = 0;
 
     virtual void push_incompletes_to_symbol_list(const std::set<StreamId>& incompletes) = 0;
-
-    virtual VersionedItem compact_incomplete_dynamic(
-        const StreamId& stream_id,
-        const std::optional<arcticdb::proto::descriptors::UserDefinedMetadata>& user_meta,
-        bool append,
-        bool convert_int_to_float,
-        bool via_iteration,
-        bool sparsify) = 0;
 
     virtual bool is_symbol_fragmented(const StreamId& stream_id, std::optional<size_t> segment_size) = 0;
 

@@ -182,7 +182,7 @@ TEST(Clause, Merge) {
     }
 
     StreamDescriptor descriptor{};
-    descriptor.add_field(FieldRef{make_scalar_type(DataType::MICROS_UTC64),"time"});
+    descriptor.add_field(FieldRef{make_scalar_type(DataType::NANOSECONDS_UTC64),"time"});
     auto stream_id = StreamId("Merge");
     MergeClause merge_clause{TimeseriesIndex{"time"}, DenseColumnPolicy{}, stream_id, descriptor};
     std::shared_ptr<Store> empty;
