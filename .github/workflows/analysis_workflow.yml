@@ -6,7 +6,15 @@ on:
     branches:
         - "analysis_workflow"
 jobs:
+  cibw_docker_image:
+    uses: ./.github/workflows/cibw_docker_image.yml
+    permissions: {packages: write}
+    with:
+        cibuildwheel_ver: "2.12.1"
+        force_update: false
+
   code_coverage:
+    needs: [cibw_docker_image]  
     strategy:
       matrix:
         include:
