@@ -378,7 +378,7 @@ public:
         const std::vector<UpdateInfo>& stream_update_info_vector,
         bool prune_previous_versions);
 
-    std::vector<VersionedItem> batch_write_versioned_dataframe_internal(
+    std::vector<std::variant<VersionedItem, DataError>> batch_write_versioned_dataframe_internal(
         const std::vector<StreamId>& stream_ids,
         std::vector<InputTensorFrame>&& frames,
         bool prune_previous_versions,
