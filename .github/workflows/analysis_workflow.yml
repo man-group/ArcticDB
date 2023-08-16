@@ -32,13 +32,13 @@ jobs:
         with:
           version: "v0.4.0"
     
-    #   - name: Install Python Deps
-    #     shell: bash -l {0}
-    #     run: |
-    #       npm install -g azurite
-    #       python -m pip install arcticdb[Testing] pytest-split coverage
-    #       python -m pip uninstall -y pytest-cpp || true # No longer works on 3.6
-    #       python -m pip list
+      - name: Install Python Deps
+        shell: bash -l {0}
+        run: |
+          npm install -g azurite
+          python3 -m pip3 install arcticdb[Testing] pytest-split coverage
+          python3 -m pip3 uninstall -y pytest-cpp || true # No longer works on 3.6
+          python3 -m pip3 list
 
       - name: Prepare C++ compilation env
         run: . build_tooling/prep_cpp_build.sh 
@@ -60,12 +60,13 @@ jobs:
           arcticdb_rapidcheck_tests
           make -j ${{ steps.cpu-cores.outputs.count }} test_unit_arcticdb
           test_unit_arcticdb
+          ctest
 
-    #   - name: Test with pytest
-    #     shell: bash -l {0}
-    #     run: |
-    #       cd python
-    #       coverage run -m pytest tests
+      - name: Test with pytest
+        shell: bash -l {0}
+        run: |
+          cd python
+          coverage run -m pytest tests
 
       - name: Generate a code coverage report
         uses: threeal/gcovr-action@latest
