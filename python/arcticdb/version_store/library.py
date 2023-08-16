@@ -490,7 +490,7 @@ class Library:
 
     def write_batch(
         self, payloads: List[WritePayload], prune_previous_versions: bool = False, staged=False, validate_index=True
-    ) -> List[VersionedItem]:
+    ) -> List[Union[VersionedItem, DataError]]:
         """
         Write a batch of multiple symbols.
 
@@ -509,9 +509,13 @@ class Library:
 
         Returns
         -------
-        List[VersionedItem]
-            Structure containing metadata and version number of the written symbols in the store, in the
+        List[Union[VersionedItem, DataError]]
+            List of versioned items. The data attribute will be None for each versioned item.
+            i-th entry corresponds to i-th element of `payloads`. Each result correspond to
+            a structure containing metadata and version number of the written symbols in the store, in the
             same order as `payload`.
+            If a key error or any other internal exception is raised, a DataError object is returned, with symbol,
+            error_code, error_category, and exception_string properties.
 
         Raises
         ------
@@ -519,8 +523,6 @@ class Library:
             When duplicate symbols appear in payload.
         ArcticUnsupportedDataTypeException
             If data that is not of NormalizableType appears in any of the payloads.
-        UnsortedDataException
-            If data is unsorted, when validate_index is set to True.
 
         See Also
         --------
@@ -713,7 +715,7 @@ class Library:
         List[Union[VersionedItem, DataError]]
             List of versioned items. i-th entry corresponds to i-th element of `append_payloads`.
             Each result correspond to a structure containing metadata and version number of the affected
-            symbol in the store. If any internal exception is raised, a DataError object is returned, with symbol,
+            symbol in the store. If a key error or any other internal exception is raised, a DataError object is returned, with symbol,
             error_code, error_category, and exception_string properties.
 
         Raises

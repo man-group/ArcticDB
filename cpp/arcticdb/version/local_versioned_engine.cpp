@@ -1326,7 +1326,7 @@ VersionIdAndDedupMapInfo LocalVersionedEngine::create_version_id_and_dedup_map(
     }
 }
 
-std::vector<VersionedItem> LocalVersionedEngine::batch_write_versioned_dataframe_internal(
+std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_write_versioned_dataframe_internal(
     const std::vector<StreamId>& stream_ids,
     std::vector<InputTensorFrame>&& frames,
     bool prune_previous_versions,
@@ -1368,7 +1368,22 @@ std::vector<VersionedItem> LocalVersionedEngine::batch_write_versioned_dataframe
             })
         );
     }
-    return folly::collect(version_futures).get();
+    auto write_versions = folly::collectAll(version_futures).get();
+    std::vector<std::variant<VersionedItem, DataError>> write_versions_or_errors;
+    write_versions_or_errors.reserve(write_versions.size());
+    for (auto&& [idx, write_version]: folly::enumerate(write_versions)) {
+        if (write_version.hasValue()) {
+            write_versions_or_errors.emplace_back(std::move(write_version.value()));
+        } else {
+            auto exception = write_version.exception();
+            DataError data_error(stream_ids[idx], exception.what().toStdString());
+            if (exception.is_compatible_with<storage::KeyNotFoundException>()) {
+                data_error.set_error_code(ErrorCode::E_KEY_NOT_FOUND);
+            }
+            write_versions_or_errors.emplace_back(std::move(data_error));
+        }
+    }
+    return write_versions_or_errors;
 }
 
 

@@ -263,7 +263,7 @@ class PythonVersionStore : public LocalVersionedEngine {
         const std::optional<bool>& skip_snapshots);
 
     // Batch methods
-    std::vector<VersionedItem> batch_write(
+    std::vector<std::variant<VersionedItem, DataError>> batch_write(
         const std::vector<StreamId> &stream_ids,
         const std::vector<py::tuple> &items,
         const std::vector<py::object> &norms,

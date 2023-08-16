@@ -101,7 +101,7 @@ std::vector<VersionedItem> PythonVersionStore::batch_write_index_keys_to_version
     return output;
 }
 
-std::vector<VersionedItem> PythonVersionStore::batch_write(
+std::vector<std::variant<VersionedItem, DataError>> PythonVersionStore::batch_write(
     const std::vector<StreamId>& stream_ids,
     const std::vector<py::tuple> &items,
     const std::vector<py::object> &norms,

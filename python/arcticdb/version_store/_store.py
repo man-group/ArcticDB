@@ -1205,7 +1205,13 @@ class NativeVersionStore:
         cxx_versioned_items = self.version_store.batch_write(
             symbols, items, norm_metas, udms, prune_previous_version, validate_index
         )
-        return [self._convert_thin_cxx_item_to_python(v) for v in cxx_versioned_items]
+        write_results = []
+        for result in cxx_versioned_items:
+            if isinstance(result, DataError):
+                write_results.append(result)
+            else:
+                write_results.append(self._convert_thin_cxx_item_to_python(result))
+        return write_results
 
     def _batch_write_metadata_to_versioned_items(
         self, symbols: List[str], metadata_vector: List[Any], prune_previous_version
