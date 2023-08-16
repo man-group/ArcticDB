@@ -62,10 +62,9 @@ class Library {
      * and code defensively.
      * @param visitor Takes one VariantKey which should be moved in but no guarantees
      */
-    template<class Visitor>
-    void iterate_type(KeyType key_type, Visitor &&visitor, const std::string &prefix=std::string{}) {
+    void iterate_type(KeyType key_type, const IterateTypeVisitor& visitor, const std::string &prefix=std::string{}) {
         ARCTICDB_SAMPLE(LibraryIterate, 0)
-        storages_->iterate_type(key_type, std::forward<Visitor>(visitor), prefix);
+        storages_->iterate_type(key_type, visitor, prefix);
     }
 
     void write(Composite<KeySegmentPair>&& kvs) {
@@ -90,10 +89,9 @@ class Library {
         ARCTICDB_TRACE(log::storage(), "{} kv updated, {} bytes", kv_count, total_size);
     }
 
-    template<class Visitor>
-    void read(Composite<VariantKey>&& ks, Visitor &&visitor, ReadKeyOpts opts) {
+    void read(Composite<VariantKey>&& ks, const ReadVisitor& visitor, ReadKeyOpts opts) {
         ARCTICDB_SAMPLE(LibraryRead, 0)
-        storages_->read(std::move(ks), std::forward<Visitor>(visitor), opts, !storage_fallthrough_);
+        storages_->read(std::move(ks), visitor, opts, !storage_fallthrough_);
     }
 
     void remove(Composite<VariantKey>&& ks, storage::RemoveOpts opts) {
@@ -115,24 +113,25 @@ class Library {
     KeySegmentPair read(VariantKey key, ReadKeyOpts opts = ReadKeyOpts{}) {
         KeySegmentPair res{VariantKey{key}};
         util::check(!std::holds_alternative<StringId>(variant_key_id(key)) || !std::get<StringId>(variant_key_id(key)).empty(), "Unexpected empty id");
-        read(Composite<VariantKey>(std::move(key)), [&res](auto &&, auto &&value) {
+        const ReadVisitor& visitor = [&res](const VariantKey&, Segment&& value) {
             res.segment() = std::move(value);
-        }, opts);
+        };
+
+        read(Composite<VariantKey>(std::move(key)), visitor, opts);
 
         return res;
     }
 
-    /** Calls VariantStorage::do_storage_specific on the primary storage */
-    template<class Visitor>
-    void storage_specific(Visitor&& visitor) {
-        storages_->storage_specific(std::forward<Visitor>(visitor));
+    /** Calls VariantStorage::do_key_path on the primary storage */
+    std::string key_path(const VariantKey& key) const {
+        return storages_->key_path(key);
     }
 
     void move_storage(KeyType key_type, timestamp horizon, size_t storage_index = 0) {
         storages_->move_storage(key_type, horizon, storage_index);
     }
 
-    bool supports_prefix_matching() { return storages_->supports_prefix_matching(); }
+    bool supports_prefix_matching() const { return storages_->supports_prefix_matching(); }
 
     const LibraryPath &library_path() const { return library_path_; }
 

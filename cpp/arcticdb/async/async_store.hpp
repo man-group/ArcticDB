@@ -171,7 +171,7 @@ public:
         return ClockType::nanos_since_epoch();
     }
 
-    void iterate_type(KeyType type, std::function<void(entity::VariantKey &&)> func,
+    void iterate_type(KeyType type, entity::IterateTypeVisitor func,
                       const std::string &prefix) override {
         library_->iterate_type(type, func, prefix);
     }
@@ -226,7 +226,7 @@ public:
         return KeyExistsTask{&key, library_}();
     }
 
-    bool supports_prefix_matching() override {
+    bool supports_prefix_matching() const override {
         return library_->supports_prefix_matching();
     }
 

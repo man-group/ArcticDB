@@ -25,7 +25,7 @@ from contextlib import contextmanager
 from arcticc.pb2.descriptors_pb2 import TypeDescriptor, SortedValue
 from arcticc.pb2.storage_pb2 import LibraryConfig, EnvironmentConfigsMap
 from arcticdb.preconditions import check
-from arcticdb.supported_types import time_types as supported_time_types
+from arcticdb.supported_types import DateRangeInput, ExplicitlySupportedDates
 from arcticdb.toolbox.library_tool import LibraryTool
 from arcticdb.version_store.processing import QueryBuilder
 from arcticdb_ext.storage import OpenMode as _OpenMode
@@ -69,15 +69,6 @@ from arcticdb.version_store._normalization import (
     normalize_dt_range_to_ts,
 )
 from arcticdb.util.memory import format_bytes
-
-_ExtDateRangeTypes = pd.core.indexes.datetimelike.DatetimeIndexOpsMixin
-if TYPE_CHECKING:
-    try:
-        import arctic.date
-
-        _ExtDateRangeTypes = Union[_ExtDateRangeTypes, arctic.date.DateRange]
-    except ModuleNotFoundError:
-        pass
 
 # These chars are encoded by S3 and on doing a list_symbols they will show up as the encoded form eg. &amp
 UNSUPPORTED_S3_CHARS = {"\0", "*", "&", "<", ">"}
@@ -136,9 +127,7 @@ def _env_config_from_lib_config(lib_cfg, env):
     return cfg
 
 
-ExplicitlySupportedDates = Union[supported_time_types]
 VersionQueryInput = Union[int, str, ExplicitlySupportedDates, None]
-DateRangeInput = Union[Sequence[ExplicitlySupportedDates], _ExtDateRangeTypes]
 
 
 def _normalize_dt_range(dtr: DateRangeInput) -> _IndexRange:
@@ -1152,7 +1141,7 @@ class NativeVersionStore:
         pickle_on_failure : `Optional[bool]`, default=None
             Pickle results if normalization fails. Uses library default if left as None.
         validate_index: bool, default=False
-            If True, will verify for each entry in the batch hat the index of `data` supports date range searches and update operations.
+            If set to True, it will verify for each entry in the batch whether the index of the data supports date range searches and update operations.
             This in effect tests that the data is sorted in ascending order. ArcticDB relies on Pandas to detect if data is sorted -
             you can call DataFrame.index.is_monotonic_increasing on your input DataFrame to see if Pandas believes the data to be sorted
         kwargs :
@@ -1297,7 +1286,7 @@ class NativeVersionStore:
         prune_previous_version : `Optional[bool]`, default=None
             Remove previous versions from version list. Uses library default if left as None.
         validate_index: bool, default=False
-            If True, will verify for each entry in the batch hat the index of `data` supports date range searches and update operations.
+            If set to True, it will verify for each entry in the batch whether the index of the data supports date range searches and update operations.
             This in effect tests that the data is sorted in ascending order. ArcticDB relies on Pandas to detect if data is sorted -
             you can call DataFrame.index.is_monotonic_increasing on your input DataFrame to see if Pandas believes the data to be sorted
         kwargs :
@@ -1314,8 +1303,28 @@ class NativeVersionStore:
         UnsortedDataException
             If data is unsorted, when validate_index is set to True.
         """
+        throw_on_missing_version = True
         _check_batch_kwargs(NativeVersionStore.batch_append, NativeVersionStore.append, kwargs)
+        return self._batch_append_to_versioned_items(
+            symbols,
+            data_vector,
+            metadata_vector,
+            prune_previous_version,
+            validate_index,
+            throw_on_missing_version,
+            **kwargs,
+        )
 
+    def _batch_append_to_versioned_items(
+        self,
+        symbols,
+        data_vector,
+        metadata_vector,
+        prune_previous_version,
+        validate_index,
+        throw_on_missing_version,
+        **kwargs,
+    ):
         for symbol in symbols:
             self.check_symbol_validity(symbol)
 
@@ -1347,10 +1356,26 @@ class NativeVersionStore:
         udms = [info[0] for info in normalized_infos]
         items = [info[1] for info in normalized_infos]
         norm_metas = [info[2] for info in normalized_infos]
+
+        write_if_missing = kwargs.get("write_if_missing", True)
+
         cxx_versioned_items = self.version_store.batch_append(
-            symbols, items, norm_metas, udms, prune_previous_version, validate_index
+            symbols,
+            items,
+            norm_metas,
+            udms,
+            prune_previous_version,
+            validate_index,
+            write_if_missing,
+            throw_on_missing_version,
         )
-        return [self._convert_thin_cxx_item_to_python(v) for v in cxx_versioned_items]
+        append_results = []
+        for result in cxx_versioned_items:
+            if isinstance(result, DataError):
+                append_results.append(result)
+            else:
+                append_results.append(self._convert_thin_cxx_item_to_python(result))
+        return append_results
 
     def batch_restore_version(
         self, symbols: List[str], as_ofs: Optional[List[VersionQueryInput]] = None, **kwargs
@@ -1427,6 +1452,9 @@ class NativeVersionStore:
 
         if date_range is not None:
             read_query.row_filter = _normalize_dt_range(date_range)
+        elif query_builder and query_builder.has_date_range_clause():
+            start, end = query_builder.date_range_boundaries()
+            read_query.row_filter = _IndexRange(start, end)
 
         if row_range is not None:
             read_query.row_range = row_range
@@ -1527,7 +1555,9 @@ class NativeVersionStore:
             `datetime.datetime` : the version of the data that existed as_of the requested point in time
         date_range: `Optional[DateRangeInput]`, default=None
             DateRange to read data for.  Applicable only for Pandas data with a DateTime index. Returns only the part
-            of the data that falls within the given range.
+            of the data that falls within the given range. The same effect can be achieved by using the date_range
+            clause of the QueryBuilder class, which will be slower, but return data with a smaller memory footprint.
+            See the QueryBuilder.date_range docstring for more details.
         row_range: `Optional[Tuple[int, int]]`, default=None
             Row range to read data for. Inclusive of the lower bound, exclusive of the upper bound
             lib.read(symbol, row_range=(start, end)).data should behave the same as df.iloc[start:end], including in
@@ -1546,6 +1576,9 @@ class NativeVersionStore:
 
         if row_range is not None:
             row_range = _SignedRowRange(row_range[0], row_range[1])
+        if date_range is not None and query_builder is not None:
+            q = QueryBuilder()
+            query_builder = q.date_range(date_range).then(query_builder)
         version_query, read_options, read_query = self._get_queries(
             as_of, date_range, row_range, columns, query_builder, **kwargs
         )

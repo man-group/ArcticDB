@@ -113,28 +113,17 @@ std::vector<VersionedItem> PythonVersionStore::batch_write(
     return batch_write_versioned_dataframe_internal(stream_ids, std::move(frames), prune_previous_versions, validate_index);
 }
 
-std::vector<VersionedItem> PythonVersionStore::batch_append(
+std::vector<std::variant<VersionedItem, DataError>> PythonVersionStore::batch_append(
     const std::vector<StreamId> &stream_ids,
     const std::vector<py::tuple> &items,
     const std::vector<py::object> &norms,
     const std::vector<py::object> &user_metas,
     bool prune_previous_versions,
-    bool validate_index) {
-    auto write_options = get_write_options();
-    auto stream_update_info_vector_fut = batch_get_latest_undeleted_version_and_next_version_id_async(store(),
-                                                                                                      version_map(),
-                                                                                                      stream_ids);
-    
-    auto stream_update_info_vector = folly::collect(stream_update_info_vector_fut).via(&async::io_executor()).get();
-    std::vector<VersionId> version_ids;
-    std::vector<AtomKey> existing_keys;
-    for (const auto& update_info: stream_update_info_vector) {
-        version_ids.push_back(update_info.next_version_id_);
-        existing_keys.push_back(*(update_info.previous_index_key_));
-    }
+    bool validate_index,
+    bool upsert,
+    bool throw_on_missing_version) {
     auto frames = create_input_tensor_frames(stream_ids, items, norms, user_metas);
-    auto index_keys = batch_append_internal(std::move(version_ids), stream_ids, std::move(existing_keys), std::move(frames), write_options, validate_index);
-    return batch_write_index_keys_to_version_map(index_keys, stream_update_info_vector, prune_previous_versions);
+    return batch_append_internal(stream_ids, std::move(frames), prune_previous_versions, validate_index, upsert, throw_on_missing_version);
 }
 
 void PythonVersionStore::_clear_symbol_list_keys() {

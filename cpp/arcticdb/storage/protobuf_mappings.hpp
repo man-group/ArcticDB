@@ -16,7 +16,6 @@
 #include <arcticdb/storage/memory/memory_storage.hpp>
 #include <arcticdb/storage/lmdb/lmdb_storage.hpp>
 #include <arcticdb/storage/mongo/mongo_storage.hpp>
-#include <arcticdb/storage/variant_storage.hpp>
 #include <arcticdb/util/pb_util.hpp>
 
 #include <vector>

@@ -147,4 +147,41 @@ RC_GTEST_PROP(Column, TruncateSparse, (const std::vector<int64_t> &input)) {
     }
 }
 
+RC_GTEST_PROP(Column, SearchSorted, (const std::vector<int64_t>& input, const int64_t& value_to_find)) {
+    using namespace arcticdb;
+    RC_PRE(input.size() > 0u);
+    auto sorted_input = input;
+    std::sort(sorted_input.begin(), sorted_input.end());
+    auto n = sorted_input.size();
+    auto smallest_value = sorted_input[0];
+    auto largest_value = sorted_input[n - 1];
+    using TDT = TypeDescriptorTag<DataTypeTag<DataType::INT64>, DimensionTag<Dimension::Dim0>>;
+    Column column(static_cast<TypeDescriptor>(TDT{}), 0, false, false);
+    for (size_t idx = 0; idx < n; ++idx) {
+        column.set_scalar<int64_t>(idx, sorted_input[idx]);
+    }
+    auto left_idx = column.search_sorted<int64_t>(value_to_find, false);
+    auto right_idx = column.search_sorted<int64_t>(value_to_find, true);
+    RC_ASSERT(left_idx >= 0);
+    RC_ASSERT(left_idx <= n);
+    RC_ASSERT(right_idx >= 0);
+    RC_ASSERT(right_idx <= n);
+    if (left_idx == 0) {
+        RC_ASSERT(value_to_find <= smallest_value);
+    } else if (left_idx == n) {
+        RC_ASSERT(value_to_find > largest_value);
+    } else {
+        RC_ASSERT(value_to_find > sorted_input[left_idx - 1]);
+        RC_ASSERT(value_to_find <= sorted_input[left_idx]);
+    }
+    if (right_idx == 0) {
+        RC_ASSERT(value_to_find <= smallest_value);
+    } else if (right_idx == n) {
+        RC_ASSERT(value_to_find >= largest_value);
+    } else {
+        RC_ASSERT(value_to_find >= sorted_input[right_idx - 1]);
+        RC_ASSERT(value_to_find < sorted_input[right_idx]);
+    }
+}
+
 #pragma GCC diagnostic pop

@@ -21,6 +21,10 @@ ARCTICDB_USING_CONDA = os.environ.get("ARCTICDB_USING_CONDA", "0")
 ARCTICDB_USING_CONDA = ARCTICDB_USING_CONDA != "0"
 print(f"ARCTICDB_USING_CONDA={ARCTICDB_USING_CONDA}")
 
+# flag to indicate if we want to build the tests
+ARCTICDB_BUILD_CPP_TESTS = os.environ.get("ARCTICDB_BUILD_CPP_TESTS", "0")
+ARCTICDB_BUILD_CPP_TESTS = ARCTICDB_BUILD_CPP_TESTS != "0"
+print(f"ARCTICDB_BUILD_CPP_TESTS={ARCTICDB_BUILD_CPP_TESTS}")
 
 def _log_and_run(*cmd, **kwargs):
     print("Running " + " ".join(cmd))
@@ -138,7 +142,7 @@ class CMakeBuild(build_ext):
             preset = ("windows-cl" if platform.system() == "Windows" else platform.system().lower()) + suffix
         _log_and_run(
             cmake,
-            "-DTEST=NO",
+            f"-DTEST={ARCTICDB_BUILD_CPP_TESTS}",
             f"-DBUILD_PYTHON_VERSION={sys.version_info[0]}.{sys.version_info[1]}",
             f"-DCMAKE_INSTALL_PREFIX={os.path.dirname(dest)}",
             "--preset",

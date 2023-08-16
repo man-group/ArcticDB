@@ -144,7 +144,7 @@ InputTensorFrame py_ndf_to_frame(
         std::string index_column_name = !idx_names.empty() ? idx_names[0] : "index";
         res.num_rows = index_tensor.shape(0);
         //TODO handle string indexes
-        if (index_tensor.data_type() == DataType::MICROS_UTC64) {
+        if (index_tensor.data_type() == DataType::NANOSECONDS_UTC64) {
 
             res.desc.set_index_field_count(1);
             res.desc.set_index_type(IndexDescriptor::TIMESTAMP);
