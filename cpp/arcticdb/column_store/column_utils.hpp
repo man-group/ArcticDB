@@ -72,7 +72,7 @@ inline py::array array_at(const SegmentInMemory& frame, std::size_t col_pos, py:
         } else if constexpr(is_numeric_type(data_type) || is_bool_type(data_type)) {
             constexpr auto dim = TypeTag::DimensionTag::value;
             util::check(dim == Dimension::Dim0, "Only scalars supported, {}", frame.field(col_pos));
-            if constexpr (dt == DataType::NANOSECONDS_UTC64) {
+            if constexpr (data_type == DataType::NANOSECONDS_UTC64) {
                 // NOTE: this is safe as of Pandas < 2.0 because `datetime64` _always_ has been using nanosecond resolution,
                 // i.e. Pandas < 2.0 _always_ provides `datetime64[ns]` and ignores any other resolution.
                 // Yet, this has changed in Pandas 2.0 and other resolution can be used,
