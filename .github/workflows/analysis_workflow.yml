@@ -57,7 +57,9 @@ jobs:
         run: |
           cd cpp/out/linux-debug-build/
           make -j ${{ steps.cpu-cores.outputs.count }} arcticdb_rapidcheck_tests
+          arcticdb_rapidcheck_tests
           make -j ${{ steps.cpu-cores.outputs.count }} test_unit_arcticdb
+          test_unit_arcticdb
 
     #   - name: Test with pytest
     #     shell: bash -l {0}
