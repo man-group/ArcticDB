@@ -13,7 +13,7 @@ on:
   workflow_dispatch:
     inputs:
       persistent_storage:
-        description: Specifies whether we should run the real storage tests or not
+        description: Run the persistent storage tests or not
         type: boolean
       pypi_publish:
         type: boolean
@@ -75,9 +75,16 @@ jobs:
       linux_matrix: ${{toJson(matrix.linux_matrix)}}
       windows_matrix: ${{toJson(matrix.windows_matrix)}}
 
+  pre_seed_cleanup:
+    if: inputs.persistent_storage == true
+    name: Cleanup persistent storages
+    uses: ./.github/workflows/persistent_storage.yml
+    secrets: inherit
+    with:
+      job_type: cleanup
+
   persistent_storage_seed_linux:
-    # Then use the cached compilation artifacts to build other python versions concurrently in cibuildwheels
-    needs: [common_config]
+    needs: [common_config, pre_seed_cleanup]
     if: inputs.persistent_storage == true
     strategy:
       fail-fast: false
@@ -97,8 +104,7 @@ jobs:
       python_deps_ids: ${{toJson(matrix.python_deps_ids)}}
 
   persistent_storage_seed_windows:
-    # Then use the cached compilation artifacts to build other python versions concurrently in cibuildwheels
-    needs: [common_config]
+    needs: [common_config, pre_seed_cleanup]
     if: inputs.persistent_storage == true
     strategy:
       fail-fast: false
@@ -266,18 +272,17 @@ jobs:
       matrix: ${{toJson(matrix.matrix_override)}}
       python_deps_ids: ${{toJson(matrix.python_deps_ids)}}
     
-  persistent_storage_cleanup:
-    needs: [common_config, persistent_storage_verify_windows, persistent_storage_verify_linux]
+  post_verify_cleanup:
+    needs: [persistent_storage_verify_windows, persistent_storage_verify_linux]
     if: inputs.persistent_storage == true
     name: Cleanup persistent storages
     uses: ./.github/workflows/persistent_storage.yml
     secrets: inherit
-    permissions: {packages: write}
     with:
       job_type: cleanup
 
   can_merge:
-    needs: [leader-cpp-test-linux, leader-cpp-test-windows, follower-linux, follower-windows, persistent_storage_cleanup]
+    needs: [leader-cpp-test-linux, leader-cpp-test-windows, follower-linux, follower-windows, persistent_storage_verify_linux, persistent_storage_verify_windows]
     runs-on: ubuntu-latest
     steps:
       - run: echo Dummy job to simplify PR merge checks configuration
