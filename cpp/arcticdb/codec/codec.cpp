@@ -30,8 +30,13 @@ std::pair<size_t, size_t> ColumnEncoder::max_compressed_size(
 
         while (auto block = column_data.next<TDT>()) {
             const auto nbytes = block.value().nbytes();
-            util::check(nbytes, "Zero-sized block");
-            uncompressed_bytes += nbytes;
+            if constexpr(!is_empty_type(TDT::DataTypeTag::data_type)) {
+                util::check(nbytes > 0, "Zero-sized block");
+                uncompressed_bytes += nbytes;
+            }
+            // For the empty type the column will contain 0 size of user data however the encoder might need add some
+            // encoder specific data to the buffer, thus the uncompressed size will be 0 but the max_compressed_bytes
+            // might be non-zero.
             max_compressed_bytes += Encoder::max_compressed_size(codec_opts, block.value());
         }
 

@@ -68,19 +68,43 @@ NativeTensor obj_to_tensor(PyObject *ptr) {
             auto none = py::none{};
             auto obj = reinterpret_cast<PyObject **>(arr->data);
             bool empty = false;
+            bool all_nans = false;
             PyObject *sample = *obj;
+            // Arctic allows both None and NaN to represent a string with no value. We have 3 options:
+            // * In case all values are None we can mark this column segment as EmptyType and avoid allocating storage
+            //      memory for it
+            // * In case all values are NaN we can't sample the value to check if it's UTF or ASCII (since NaN is not
+            //      UTF nor ASCII). In that case we choose to save it as UTF
+            // * In case there is at least one actual string we can sample it and decide the type of the column segment
+            //      based on it
+            // Note: ValueType::ASCII_DYNAMIC was used when Python 2 was supported. It is no longer supported, and
+            //  we're not expected to enter that branch.
             if (sample == none.ptr() || is_py_nan(sample)) {
-                // Iterate till we find the first non null element, the frontend ensures there is at least one.
+                empty = true;
+                all_nans = true;
                 util::check(c_style, "Non contiguous columns with first element as None not supported yet.");
-                auto casted_col =
-                    std::find_if(obj, obj + size, [&none](auto val) { return val != none.ptr() && !is_py_nan(val); });
-                empty = casted_col == obj + size;
-                sample = *casted_col;
+                PyObject** current_object = obj;
+                while(current_object < obj + size) {
+                    if(*current_object == none.ptr()) {
+                        all_nans = false;
+                    } else if(is_py_nan(*current_object)) {
+                        empty = false;
+                    } else {
+                        all_nans = false;
+                        empty = false;
+                        break;
+                    }
+                    ++current_object;
+                }
+                sample = *current_object;
             }
-            if (empty || is_unicode(sample)) {
+            if (empty) {
+                val_type = ValueType::EMPTY;
+            } else if(all_nans || is_unicode(sample)){
                 val_type = ValueType::UTF_DYNAMIC;
-            } else if (PYBIND11_BYTES_CHECK(sample))
+            } else if (PYBIND11_BYTES_CHECK(sample)) {
                 val_type = ValueType::ASCII_DYNAMIC;
+            }
         }
     }
 
