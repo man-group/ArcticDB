@@ -14,8 +14,9 @@ from arcticdb.version_store.library import ArcticInvalidApiUsageException, Libra
 from arcticdb.version_store._store import NativeVersionStore
 from arcticdb.adapters.s3_library_adapter import S3LibraryAdapter
 from arcticdb.adapters.lmdb_library_adapter import LMDBLibraryAdapter
-from arcticdb.encoding_version import EncodingVersion
 from arcticdb.adapters.azure_library_adapter import AzureLibraryAdapter
+from arcticdb.adapters.mongo_library_adapter import MongoLibraryAdapter
+from arcticdb.encoding_version import EncodingVersion
 
 
 class Arctic:
@@ -24,7 +25,7 @@ class Arctic:
     creation, deletion and retrieval of Arctic libraries.
     """
 
-    _LIBRARY_ADAPTERS = [S3LibraryAdapter, LMDBLibraryAdapter, AzureLibraryAdapter]
+    _LIBRARY_ADAPTERS = [S3LibraryAdapter, LMDBLibraryAdapter, AzureLibraryAdapter, MongoLibraryAdapter]
 
     def __init__(self, uri: str, encoding_version: EncodingVersion = DEFAULT_ENCODING_VERSION):
         """

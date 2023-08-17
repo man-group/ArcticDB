@@ -33,6 +33,7 @@ import subprocess
 from pathlib import Path
 import socket
 import tempfile
+import pymongo
 
 import requests
 from pytest_server_fixtures.base import get_ephemeral_port
@@ -45,7 +46,7 @@ from arcticdb.version_store.helper import (
     create_test_azure_cfg,
 )
 from arcticdb.config import Defaults
-from arcticdb.util.test import configure_test_logger, apply_lib_cfg
+from arcticdb.util.test import configure_test_logger, apply_lib_cfg, RUN_MONGO_TEST
 from arcticdb.util.storage_test import get_real_s3_uri, real_s3_credentials
 from arcticdb.version_store.helper import ArcticMemoryConfig
 from arcticdb.version_store import NativeVersionStore
@@ -149,28 +150,15 @@ def moto_s3_uri_incl_bucket(moto_s3_endpoint_and_credentials):
     ] + ":" + bucket + "?access=" + aws_access_key + "&secret=" + aws_secret_key + "&port=" + port
 
 
-@pytest.fixture(scope="function")
-def shared_real_s3_uri():
-    """
-    Path to persistent s3 that is shared between the tests in whole workflow run
-    """
-    yield get_real_s3_uri(shared_path=True)
-
-
-@pytest.fixture(scope="function")
-def unique_real_s3_uri():
-    """
-    Path to persistent s3 that is unique for the current test type (e.g. windows_cp37_integration)
-    """
-    yield get_real_s3_uri(shared_path=False)
-
-
 @pytest.fixture(
     scope="function",
     params=[
         "S3",
         "LMDB",
-        pytest.param("Azure", marks=pytest.mark.skipif(not AZURE_SUPPORT, reason="Pending Azure Storge Conda support")),
+        pytest.param(
+            "Azure",
+            marks=pytest.mark.skipif(not AZURE_SUPPORT, reason="Pending Azure Storage Conda support"),
+        ),
         pytest.param(
             "REAL_S3",
             marks=pytest.mark.skipif(
@@ -178,9 +166,13 @@ def unique_real_s3_uri():
                 reason="This store can be used only if the persistent storage tests are enabled",
             ),
         ),
+        pytest.param(
+            "Mongo",
+            marks=pytest.mark.skipif(not RUN_MONGO_TEST, reason="Mongo test on windows is fiddly"),
+        ),
     ],
 )
-def arctic_client(request, moto_s3_uri_incl_bucket, tmpdir, unique_real_s3_uri, encoding_version):
+def arctic_client(request, moto_s3_uri_incl_bucket, tmpdir, encoding_version):
     if request.param == "S3":
         ac = Arctic(moto_s3_uri_incl_bucket, encoding_version)
     elif request.param == "Azure":
@@ -189,6 +181,8 @@ def arctic_client(request, moto_s3_uri_incl_bucket, tmpdir, unique_real_s3_uri, 
         ac = Arctic(unique_real_s3_uri)
     elif request.param == "LMDB":
         ac = Arctic(f"lmdb://{tmpdir}", encoding_version)
+    elif request.param == "Mongo":
+        ac = Arctic(request.getfixturevalue("mongo_test_uri"), encoding_version)
     else:
         raise NotImplementedError()
     ac.delete_library("pytest_test_lib")
@@ -225,13 +219,12 @@ def azurite_azure_uri_incl_bucket(azurite_azure_uri, azure_client_and_create_con
 
 
 @pytest.fixture(scope="function")
-def arctic_library(request, arctic_client):
+def arctic_library(request, arctic_client, lib_name):
     if AZURE_SUPPORT:
         request.getfixturevalue("azure_client_and_create_container")
 
-    arctic_client.create_library("pytest_test_lib")
-
-    yield arctic_client["pytest_test_lib"]
+    arctic_client.create_library(lib_name)
+    return arctic_client[lib_name]
 
 
 @pytest.fixture()
@@ -483,9 +476,11 @@ def azure_store_factory(lib_name, arcticdb_test_azure_config, azure_client_and_c
 
 
 @pytest.fixture
-def mongo_store_factory(request, lib_name):
+def mongo_test_uri(request):
     """Similar capability to `s3_store_factory`, but uses a mongo store."""
     # Use MongoDB if it's running (useful in CI), otherwise spin one up with pytest-server-fixtures.
+    # mongodb does not support prefix to differentiate different tests and the server is session-scoped
+    # therefore lib_name is needed to be used to avoid reusing library name or list_versions check will fail
     mongo_host = os.getenv("CI_MONGO_HOST", "localhost")
     mongo_port = os.getenv("CI_MONGO_PORT", 27017)
     mongo_path = f"{mongo_host}:{mongo_port}"
@@ -498,10 +493,15 @@ def mongo_store_factory(request, lib_name):
     if have_running_mongo:
         uri = f"mongodb://{mongo_path}"
     else:
-        mongo_server_sess = request.getfixturevalue("mongo_server_sess")
+        mongo_server_sess = request.getfixturevalue("mongo_server")
         uri = f"mongodb://{mongo_server_sess.hostname}:{mongo_server_sess.port}"
 
-    cfg_maker = functools.partial(create_test_mongo_cfg, uri=uri)
+    return uri
+
+
+@pytest.fixture
+def mongo_store_factory(request, lib_name, mongo_test_uri):
+    cfg_maker = functools.partial(create_test_mongo_cfg, uri=mongo_test_uri)
     used = {}
     try:
         yield functools.partial(_version_store_factory_impl, used, cfg_maker, lib_name)
@@ -999,14 +999,18 @@ def spawn_azurite(azurite_port):
         [
             "moto_s3_uri_incl_bucket",
             pytest.param(
-                "azurite_azure_uri_incl_bucket",
-                marks=pytest.mark.skipif(not AZURE_SUPPORT, reason="Pending Azure Storge Conda support"),
+                "mongo_test_uri",
+                marks=pytest.mark.skipif(not RUN_MONGO_TEST, reason="Mongo test on windows is fiddly"),
             ),
             pytest.param(
                 "unique_real_s3_uri",
                 marks=pytest.mark.skipif(
                     not PERSISTENT_STORAGE_TESTS_ENABLED, reason="Can be used only when persistent storage is enabled"
                 ),
+            ),
+            pytest.param(
+                "azurite_azure_uri_incl_bucket",
+                marks=pytest.mark.skipif(not AZURE_SUPPORT, reason="Pending Azure Storge Conda support"),
             ),
         ]
     ),
