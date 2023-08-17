@@ -25,6 +25,7 @@ nav:
 - Introduction: 'index.md'
 - Storage Guides:
     - Getting started with AWS S3: 'aws.md'
+    - Getting started with Azure Blob Storage: 'azure.md'
 - Overview:
     - History of ArcticDB: 'history.md'
     - Frequently Asked Questions: 'faq.md'
