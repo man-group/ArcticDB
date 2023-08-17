@@ -44,9 +44,13 @@ jobs:
         with:
           version: "v0.4.0"
 
-      - name: LS ROOT
+      - name: LS opt
         run: |
-          ls /root/
+          ls /opt/
+
+      - name: LS opt
+        run: |
+          ls /opt/arcticdb
 
       - name: Extra envs
         run: |
