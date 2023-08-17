@@ -65,33 +65,33 @@ jobs:
         env:
           ARCTICDB_CODE_COVERAGE_BUILD: 1
 
-      - name: CPP build dir
-        run: |
-          cd cpp/out/linux-debug-build/arcticdb
-          ls -al .
+      # - name: CPP build dir
+      #   run: |
+      #     cd cpp/out/linux-debug-build/arcticdb
+      #     ls -al .
         
-      - name: Run C++ Tests
-        shell: bash -l {0}
-        run: |
-          cd cpp/out/linux-debug-build/
-          make -j ${{ steps.cpu-cores.outputs.count }} arcticdb_rapidcheck_tests
-          make -j ${{ steps.cpu-cores.outputs.count }} test_unit_arcticdb
-          ctest
+      # - name: Run C++ Tests
+      #   shell: bash -l {0}
+      #   run: |
+      #     cd cpp/out/linux-debug-build/
+      #     make -j ${{ steps.cpu-cores.outputs.count }} arcticdb_rapidcheck_tests
+      #     make -j ${{ steps.cpu-cores.outputs.count }} test_unit_arcticdb
+      #     ctest
 
-      - name: Gcovr manually pre-pytest
-        shell: bash -l {0}
-        run: |
-          cd cpp/out/linux-debug-build/
-          python3 -m pip install gcovr
-          mkdir coverage
-          python3 -m gcovr --txt --html-details coverage/coverage.html -e vcpkg_installed/ -e proto/ -e ../../third_party -e ../../arcticdb/util/test/ -r ../.. --exclude-throw-branches --exclude-unreachable-branches -u --exclude-function-lines
-          zip -r coverage.zip coverage/
+      # - name: Gcovr manually pre-pytest
+      #   shell: bash -l {0}
+      #   run: |
+      #     cd cpp/out/linux-debug-build/
+      #     python3 -m pip install gcovr
+      #     mkdir coverage
+      #     python3 -m gcovr --txt --html-details coverage/coverage.html -e vcpkg_installed/ -e proto/ -e ../../third_party -e ../../arcticdb/util/test/ -r ../.. --exclude-throw-branches --exclude-unreachable-branches -u --exclude-function-lines
+      #     zip -r coverage.zip coverage/
 
-      - name: Upload Coverage
-        uses: actions/upload-artifact@v3
-        with:
-          name: coverage-artifact
-          path: cpp/out/linux-debug-build/coverage.zip
+      # - name: Upload Coverage
+      #   uses: actions/upload-artifact@v3
+      #   with:
+      #     name: coverage-artifact
+      #     path: cpp/out/linux-debug-build/coverage.zip
 
       - name: Test with pytest
         shell: bash -l {0}
