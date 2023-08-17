@@ -18,6 +18,7 @@ import attr
 from six import PY3
 from copy import deepcopy
 from functools import wraps
+import sys
 
 from arcticdb.config import Defaults
 from arcticdb.log import configure, logger_by_name
@@ -30,6 +31,11 @@ from arcticc.pb2.storage_pb2 import LibraryDescriptor, VersionStoreConfig
 from arcticdb.version_store.helper import ArcticFileConfig
 from arcticdb.config import _DEFAULT_ENVS_PATH
 from arcticdb_ext import set_config_int, get_config_int, unset_config_int
+
+# leave out Mongo as spinning up a Mongo instance in Windows CI is fiddly, and Mongo support is only
+# currently required for Linux for internal use.
+# We also skip it on Mac as github actions containers don't work with macos
+RUN_MONGO_TEST = True if sys.platform == "linux" else False
 
 
 def maybe_not_check_freq(f):
