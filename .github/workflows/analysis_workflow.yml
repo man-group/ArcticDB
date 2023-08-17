@@ -78,9 +78,6 @@ jobs:
           make -j ${{ steps.cpu-cores.outputs.count }} test_unit_arcticdb
           ctest
 
-      - name: Wait 1 hour
-        run: sleep 3600
-
       - name: Gcovr manually pre-pytest
         shell: bash -l {0}
         run: |
