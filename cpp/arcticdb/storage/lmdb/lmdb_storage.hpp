@@ -75,6 +75,3 @@ inline arcticdb::proto::storage::VariantStorage pack_config(const std::string& p
 }
 
 }
-
-#define ARCTICDB_LMDB_STORAGE_H_
-#include <arcticdb/storage/lmdb/lmdb_storage-inl.hpp>

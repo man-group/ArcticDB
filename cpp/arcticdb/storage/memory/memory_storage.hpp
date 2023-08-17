@@ -60,7 +60,3 @@ namespace arcticdb::storage::memory {
     }
 
 }//namespace arcticdbx::storage
-
-#define ARCTICDB_MEMORY_STORAGE_H_
-#include <arcticdb/storage/memory/memory_storage-inl.hpp>
-#undef ARCTICDB_MEMORY_STORAGE_H_

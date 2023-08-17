@@ -6,7 +6,7 @@
  */
 
 #ifndef ARCTICDB_S3_STORAGE_H_
-#error "This should only be included by s3_storage.hpp"
+#error "This should only be included by s3_storage.cpp"
 #endif
 
 #include <arcticdb/util/preconditions.hpp>
@@ -16,6 +16,7 @@
 
 #include <google/protobuf/io/zero_copy_stream_impl_lite.h>
 #include <folly/gen/Base.h>
+#include <arcticdb/storage/s3/s3_storage.hpp>
 #include <arcticdb/storage/object_store_utils.hpp>
 #include <arcticdb/storage/storage_options.hpp>
 #include <arcticdb/storage/storage_utils.hpp>

@@ -245,7 +245,7 @@ set(arcticdb_srcs
         storage/lmdb/lmdb_storage.hpp
         storage/lmdb/lmdb_storage-inl.hpp
         storage/memory/memory_storage.hpp
-        storage/memory/memory_storage-inl.hpp
+        storage/memory/memory_storage.cpp
         storage/mongo/mongo_client.hpp
         storage/mongo/mongo_instance.hpp
         storage/mongo/mongo_storage.hpp
@@ -391,7 +391,6 @@ set(arcticdb_srcs
         storage/config_resolvers.cpp
         storage/failure_simulation.cpp
         storage/lmdb/lmdb_storage.cpp
-        storage/memory/memory_storage.cpp
         storage/mongo/mongo_client.cpp
         storage/mongo/mongo_instance.cpp
         storage/mongo/mongo_storage.cpp

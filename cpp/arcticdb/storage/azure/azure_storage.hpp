@@ -94,6 +94,3 @@ std::shared_ptr<Azure::Storage::StorageSharedKeyCredential> get_azure_credential
 }
 
 } //namespace arcticdb::azure
-
-#define ARCTICDB_AZURE_STORAGE_H_
-#include <arcticdb/storage/azure/azure_storage-inl.hpp>

@@ -7,9 +7,6 @@
 
 #pragma once
 
-#include <arcticdb/storage/memory/memory_storage.hpp>
-#include <arcticdb/storage/mongo/mongo_storage.hpp>
-#include <arcticdb/storage/lmdb/lmdb_storage.hpp>
 #include <arcticdb/storage/storage_factory.hpp>
 #include <arcticdb/storage/open_mode.hpp>
 #include <arcticdb/storage/failure_simulation.hpp>
