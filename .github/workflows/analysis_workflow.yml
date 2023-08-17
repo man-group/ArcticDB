@@ -43,17 +43,11 @@ jobs:
         uses: mozilla-actions/sccache-action@v0.0.3
         with:
           version: "v0.4.0"
-    
-      - name: Install Python Deps
-        shell: bash -l {0}
-        run: |
-          npm install -g azurite
-          python3 -m pip install arcticdb[Testing] pytest-split coverage
-          python3 -m pip uninstall -y pytest-cpp || true # No longer works on 3.6
-          python3 -m pip list
 
       - name: Extra envs
         run: |
+          ls /root
+          ls ~
           . build_tooling/vcpkg_caching.sh # Linux follower needs another call in CIBW
           echo -e "VCPKG_BINARY_SOURCES=$VCPKG_BINARY_SOURCES
           VCPKG_ROOT=$PLATFORM_VCPKG_ROOT" | tee -a $GITHUB_ENV
@@ -100,6 +94,7 @@ jobs:
         shell: bash -l {0}
         run: |
           ln -s ../cpp/out/linux-release-build/arcticdb/arcticdb_ext.cpython-36m-x86_64-linux-gnu.so
+          source ~/pyenvs/dev/bin/activate
           python3 -m pip install --upgrade pip
           python3 -m pip install coverage pytest pytest-cpp pytest-timeout packaging future pytest-server-fixtures mock boto3 moto flask flask-cors hypothesis pymongo azure-storage-blob azure-identity numpy pandas
           cd python
