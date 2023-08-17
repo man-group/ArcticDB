@@ -44,13 +44,8 @@ jobs:
         with:
           version: "v0.4.0"
 
-      - name: ls ~
-        run: |
-          ls ~
-
-      - name: ls /
-        run: |
-          ls /
+      - name: Setup upterm session
+        uses: lhotari/action-upterm@v1
 
       - name: Extra envs
         run: |
@@ -83,6 +78,9 @@ jobs:
           make -j ${{ steps.cpu-cores.outputs.count }} test_unit_arcticdb
           ctest
 
+      - name: Wait 1 hour
+        run: sleep 3600
+        
       - name: Gcovr manually pre-pytest
         shell: bash -l {0}
         run: |
