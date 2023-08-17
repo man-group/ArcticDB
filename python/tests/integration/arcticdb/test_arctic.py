@@ -534,6 +534,15 @@ def test_delete_date_range(arctic_library):
     assert lib["symbol"].version == 1
 
 
+def test_mongo_repr(mongo_test_uri):
+    max_pool_size = 10
+    min_pool_size = 100
+    selection_timeout_ms = 1000
+    uri = f"{mongo_test_uri}/?maxPoolSize={max_pool_size}&minPoolSize={min_pool_size}&serverSelectionTimeoutMS={selection_timeout_ms}"
+    ac = Arctic(uri)
+    assert repr(ac) == f"Arctic(config=mongodb(endpoint={mongo_test_uri[len('mongodb://'):]}))"
+
+
 def test_s3_repr(moto_s3_uri_incl_bucket):
     ac = Arctic(moto_s3_uri_incl_bucket)
 

@@ -33,6 +33,7 @@ import subprocess
 from pathlib import Path
 import socket
 import tempfile
+import pymongo
 
 import requests
 from pytest_server_fixtures.base import get_ephemeral_port
@@ -146,7 +147,7 @@ def moto_s3_uri_incl_bucket(moto_s3_endpoint_and_credentials):
     ] + ":" + bucket + "?access=" + aws_access_key + "&secret=" + aws_secret_key + "&port=" + port
 
 
-@pytest.fixture(scope="function", params=["S3", "LMDB", "Azure"] if AZURE_SUPPORT else ["S3", "LMDB"])
+@pytest.fixture(scope="function", params=["S3", "LMDB", "MONGO", "Azure"] if AZURE_SUPPORT else ["S3", "LMDB", "MONGO"])
 def arctic_client(request, moto_s3_uri_incl_bucket, tmpdir, encoding_version):
     if request.param == "S3":
         ac = Arctic(moto_s3_uri_incl_bucket, encoding_version)
@@ -154,6 +155,8 @@ def arctic_client(request, moto_s3_uri_incl_bucket, tmpdir, encoding_version):
         ac = Arctic(request.getfixturevalue("azurite_azure_uri_incl_bucket"), encoding_version)
     elif request.param == "LMDB":
         ac = Arctic(f"lmdb://{tmpdir}", encoding_version)
+    elif request.param == "MONGO":
+        ac = Arctic(request.getfixturevalue("mongo_test_uri"), encoding_version)
     else:
         raise NotImplementedError()
 
@@ -416,7 +419,7 @@ def azure_store_factory(lib_name, arcticdb_test_azure_config, azure_client_and_c
 
 
 @pytest.fixture
-def mongo_store_factory(request, lib_name):
+def mongo_test_uri(request, lib_name):
     """Similar capability to `s3_store_factory`, but uses a mongo store."""
     # Use MongoDB if it's running (useful in CI), otherwise spin one up with pytest-server-fixtures.
     mongo_host = os.getenv("CI_MONGO_HOST", "localhost")
@@ -434,7 +437,18 @@ def mongo_store_factory(request, lib_name):
         mongo_server_sess = request.getfixturevalue("mongo_server_sess")
         uri = f"mongodb://{mongo_server_sess.hostname}:{mongo_server_sess.port}"
 
-    cfg_maker = functools.partial(create_test_mongo_cfg, uri=uri)
+    yield uri
+
+    # mongodb does not support prefix to differentiate different tests and the server is session-scoped
+    mongo_client = pymongo.MongoClient(uri)
+    for db_name in mongo_client.list_database_names():
+        if db_name not in ["local", "admin", "apiomat", "config"]:
+            mongo_client.drop_database(db_name)
+
+
+@pytest.fixture
+def mongo_store_factory(request, lib_name, mongo_test_uri):
+    cfg_maker = functools.partial(create_test_mongo_cfg, uri=mongo_test_uri)
     used = {}
     try:
         yield functools.partial(_version_store_factory_impl, used, cfg_maker, lib_name)
@@ -723,7 +737,9 @@ def spawn_azurite(azurite_port):
 @pytest.fixture(
     scope="function",
     params=(
-        ["moto_s3_uri_incl_bucket", "azurite_azure_uri_incl_bucket"] if AZURE_SUPPORT else ["moto_s3_uri_incl_bucket"]
+        ["moto_s3_uri_incl_bucket", "azurite_azure_uri_incl_bucket", "mongo_test_uri"]
+        if AZURE_SUPPORT
+        else ["moto_s3_uri_incl_bucket", "mongo_test_uri"]
     ),
 )
 def object_storage_uri_incl_bucket(request):
