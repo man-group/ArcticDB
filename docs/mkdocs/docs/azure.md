@@ -25,7 +25,7 @@ az group create --name arcticdb --location <REGION>
 ```
 
 ### 3. Create a blob storage account 
-This is created within your resource-group.  Choose a <STORAGE_NAME>, it needs to be globally unique across all of Azure.
+This is created within your resource-group.  Choose a `<STORAGE_NAME>`, it needs to be globally unique across all of Azure.
 ```sh
 az storage account create -g arcticdb --allow-blob-public-access false --sku Standard_LRS -n <STORAGE_NAME>
 ```
@@ -46,8 +46,8 @@ az storage account show-connection-string -g arcticdb --query connectionString -
 The connection string includes the `AccountKey` for authentication and so you should store it securely.
 
 - [Install ArcticDB](https://github.com/man-group/ArcticDB#readme).
-- Find your CA_CERT_PATH path. See the [`Arctic` API docs](https://docs.arcticdb.io/api/arcticdb/arcticdb.Arctic#arcticdb.Arctic) for more information.
-- Replace <CONNECTION_STRING> and <CA_CERT_PATH> in the following example.
+- Find your CA_CERT_PATH path. See the [ArcticAB API docs](https://docs.arcticdb.io/api/arcticdb/arcticdb.Arctic#arcticdb.Arctic) for more information.
+- Replace `<CONNECTION_STRING>` and `<CA_CERT_PATH>` in the following example.
 ```python
 from arcticdb import Arctic
 connection_string = '<CONNECTION_STRING>'
