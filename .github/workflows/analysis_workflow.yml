@@ -44,13 +44,12 @@ jobs:
         with:
           version: "v0.4.0"
 
-      - name: Setup upterm session
-        uses: lhotari/action-upterm@v1
+      - name: LS ROOT
+        run: |
+          ls /root/
 
       - name: Extra envs
         run: |
-          ls /root
-          ls ~
           . build_tooling/vcpkg_caching.sh # Linux follower needs another call in CIBW
           echo -e "VCPKG_BINARY_SOURCES=$VCPKG_BINARY_SOURCES
           VCPKG_ROOT=$PLATFORM_VCPKG_ROOT" | tee -a $GITHUB_ENV
@@ -80,7 +79,7 @@ jobs:
 
       - name: Wait 1 hour
         run: sleep 3600
-        
+
       - name: Gcovr manually pre-pytest
         shell: bash -l {0}
         run: |
