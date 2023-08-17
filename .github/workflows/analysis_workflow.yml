@@ -44,15 +44,9 @@ jobs:
         with:
           version: "v0.4.0"
 
-      - name: LS opt
+      - name: FIND
         run: |
-          ls /opt/
-          echo end
-          ls /opt/_internal
-          echo end
-          ls /opt/python
-          echo end
-          ls /opt/rh
+          find / -type d -name "pyenvs" 2>/dev/null
 
       - name: LS opt
         run: |
