@@ -365,6 +365,23 @@ def test_prune_previous_versions_batch_write_metadata(lmdb_version_store):
     assert len(lib_tool.find_keys(KeyType.SYMBOL_LIST)) == 2
 
 
+def test_batch_write_segfault(s3_version_store_v1):
+    lib = s3_version_store_v1
+    syms = ["opt_hard_upper_posbounds", "estimated_wave_volume_usd"]
+
+    index1 = [f"AST{i}" for i in range(586)]
+    index2 = [f"AST{i}" for i in range(585)]
+
+    vals1 = np.random.randn(586).astype('float64')
+    vals2 = np.random.randn(585).astype('float64')
+
+    data = [pd.Series(data=vals1, index=index1), pd.Series(data=vals2, index=index2)]
+
+    # sometimes segfaults the first time, sometimes doesn't, so run in a loop and it is very likely to crash
+    for i in range(5):
+        lib.batch_write(syms, data)
+
+
 def test_prune_previous_versions_append_batch(lmdb_version_store):
     """Verify that the batch append method correctly prunes previous versions when the corresponding option is specified.
     """
