@@ -100,7 +100,7 @@ jobs:
         shell: bash -l {0}
         run: |
           python3 -m pip install --upgrade pip
-          python3 -m pip install coverage pytest pytest-cpp pytest-timeout packaging future pytest-server-fixtures mock boto3 moto flask flask-cors hypothesis pymongo azure-storage-blob azure-identity 
+          python3 -m pip install coverage pytest pytest-cpp pytest-timeout packaging future pytest-server-fixtures mock boto3 moto flask flask-cors hypothesis pymongo azure-storage-blob azure-identity numpy pandas
           cd python
           python3 -m pytest tests
           python3 -m coverage run -m pytest tests
