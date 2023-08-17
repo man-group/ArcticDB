@@ -21,6 +21,7 @@
 #include <arcticdb/pipeline/slicing.hpp>
 #include <arcticdb/pipeline/input_tensor_frame.hpp>
 #include <arcticdb/storage/library.hpp>
+#include <arcticdb/storage/lmdb/lmdb_storage.hpp>
 #include <arcticdb/version/version_store_api.hpp>
 #include <arcticdb/stream/index.hpp>
 #include <filesystem>

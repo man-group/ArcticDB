@@ -5,7 +5,10 @@
  * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
  */
 
-#include <arcticdb/storage/azure/azure_storage.hpp>
+#define ARCTICDB_AZURE_STORAGE_H_
+#include <arcticdb/storage/azure/azure_storage-inl.hpp>
+
+
 #include <arcticdb/log/log.hpp>
 #include <azure/core/http/curl_transport.hpp>
 

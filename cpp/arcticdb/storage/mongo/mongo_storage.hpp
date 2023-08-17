@@ -62,7 +62,3 @@ inline arcticdb::proto::storage::VariantStorage pack_config(InstanceUri uri) {
 }
 
 }
-
-#define ARCTICDB_MONGO_STORAGE_H_
-#include <arcticdb/storage/mongo/mongo_storage-inl.hpp>
-#undef ARCTICDB_MONGO_STORAGE_H_

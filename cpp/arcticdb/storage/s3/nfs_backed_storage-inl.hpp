@@ -6,10 +6,11 @@
  */
 
 #ifndef ARCTICDB_NFS_BACKED_STORAGE_H_
-#error "This should only be included by nfs_backed_storage.hpp"
+#error "This should only be included by nfs_backed_storage.cpp"
 #endif
 
 #include <arcticdb/util/simple_string_hash.hpp>
+#include <arcticdb/storage/s3/nfs_backed_storage.hpp>
 #include <arcticdb/storage/s3/s3_storage.hpp>
 
 namespace arcticdb::storage::nfs_backed {

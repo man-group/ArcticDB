@@ -5,7 +5,8 @@
  * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
  */
 
-#include <arcticdb/storage/s3/s3_storage.hpp>
+#define ARCTICDB_S3_STORAGE_H_
+#include <arcticdb/storage/s3/s3_storage-inl.hpp>
 #include <aws/core/auth/AWSCredentialsProvider.h>
 #include <arcticdb/storage/s3/s3_api.hpp>
 #include <arcticdb/log/log.hpp>

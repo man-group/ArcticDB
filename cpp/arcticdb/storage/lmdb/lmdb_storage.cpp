@@ -5,7 +5,8 @@
  * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
  */
 
-#include <arcticdb/storage/lmdb/lmdb_storage.hpp>
+#define ARCTICDB_LMDB_STORAGE_H_ 1
+#include <arcticdb/storage/lmdb/lmdb_storage-inl.hpp>
 #include <arcticdb/log/log.hpp>
 #include <arcticdb/entity/atom_key.hpp>
 #include <arcticdb/storage/library_path.hpp>
