@@ -86,9 +86,7 @@ class AzureLibraryAdapter(ArcticLibraryAdapter):
         return lib._library
 
     def _parse_query(self, query: str) -> ParsedQuery:
-        if query and query.startswith("?"):
-            query = query.strip("?")
-        elif not query:
+        if not query:
             raise ValueError(f"Invalid Azure URI. Missing query parameter")
 
         parsed_query = re.split("[;]", query)
