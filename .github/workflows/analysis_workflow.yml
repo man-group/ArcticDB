@@ -97,7 +97,7 @@ jobs:
         shell: bash -l {0}
         run: |
           /opt/python/cp36-cp36m/bin/python -m pip install --upgrade pip
-          /opt/python/cp36-cp36m/bin/python -m pip install coverage pytest pytest-cpp pytest-timeout packaging future pytest-server-fixtures mock boto3 moto flask flask-cors hypothesis pymongo azure-storage-blob azure-identity numpy pandas
+          /opt/python/cp36-cp36m/bin/python -m pip install coverage pytest pytest-cpp pytest-timeout packaging future pytest-server-fixtures mock boto3 moto flask flask-cors hypothesis pymongo azure-storage-blob azure-identity numpy pandas google
           cd python
           ln -s ../cpp/out/linux-debug-build/arcticdb/arcticdb_ext.cpython-36m-x86_64-linux-gnu.so
           /opt/python/cp36-cp36m/bin/python -m pytest tests
