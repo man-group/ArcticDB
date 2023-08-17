@@ -99,7 +99,7 @@ jobs:
       - name: Test with pytest
         shell: bash -l {0}
         run: |
-          python3 -m pip install -e .[Testing]
+          source ~/pyenvs/dev/bin/activate
           python3 -m pip install coverage
           cd python
           python3 -m pytest tests
