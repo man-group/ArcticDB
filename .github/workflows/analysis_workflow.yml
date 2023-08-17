@@ -47,6 +47,12 @@ jobs:
       - name: LS opt
         run: |
           ls /opt/
+          echo end
+          ls /opt/_internal
+          echo end
+          ls /opt/python
+          echo end
+          ls /opt/rh
 
       - name: LS opt
         run: |
