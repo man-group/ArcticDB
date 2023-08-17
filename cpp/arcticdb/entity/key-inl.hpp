@@ -236,16 +236,119 @@ enum class VariantType : char {
     UNKNOWN_TYPE = 'u'
 };
 
-VariantType variant_type_from_key_type(KeyType key_type);
-
 inline bool is_index_key_type(KeyType key_type) {
     // TODO: Change name probably.
     return (key_type == KeyType::TABLE_INDEX) || (key_type == KeyType::MULTI_KEY);
 }
 
-bool is_string_key_type(KeyType k);
+template<typename KeyTag>
+struct KeyData {
+    static const KeyType key_type_ = KeyTag::key_type;
+    static const char * long_name_;
+    static const char short_name_;
+    static const VariantType variant_type_;
+    static const KeyClass key_class_;
+    static const char* description_;
+};
 
-bool is_ref_key_class(KeyType k);
+
+template<KeyType kt>
+struct KeyTagType {
+    static const KeyType key_type = kt;
+};
+
+template <typename Callable>
+auto visit_key_type(KeyType key_type, Callable&& c) {
+    switch (key_type) {
+#define KEY_CASE(__T__) case __T__: \
+    return c(KeyData<KeyTagType<__T__>>());
+        KEY_CASE(KeyType::TABLE_DATA)
+        KEY_CASE(KeyType::TABLE_INDEX)
+        KEY_CASE(KeyType::VERSION)
+        KEY_CASE(KeyType::SYMBOL_LIST)
+        KEY_CASE(KeyType::VERSION_REF)
+        KEY_CASE(KeyType::TOMBSTONE)
+        KEY_CASE(KeyType::APPEND_DATA)
+        KEY_CASE(KeyType::LOG)
+        KEY_CASE(KeyType::TOMBSTONE_ALL)
+        KEY_CASE(KeyType::SNAPSHOT)
+        KEY_CASE(KeyType::STORAGE_INFO)
+        KEY_CASE(KeyType::APPEND_REF)
+        KEY_CASE(KeyType::MULTI_KEY)
+        KEY_CASE(KeyType::LOCK)
+        KEY_CASE(KeyType::SNAPSHOT_REF)
+        KEY_CASE(KeyType::SNAPSHOT_TOMBSTONE)
+        KEY_CASE(KeyType::PARTITION)
+        KEY_CASE(KeyType::LOG_COMPACTED)
+        KEY_CASE(KeyType::OFFSET)
+        KEY_CASE(KeyType::BACKUP_SNAPSHOT_REF)
+        KEY_CASE(KeyType::LIBRARY_CONFIG)
+        KEY_CASE(KeyType::COLUMN_STATS)
+        KEY_CASE(KeyType::STREAM_GROUP)
+        KEY_CASE(KeyType::GENERATION)
+        KEY_CASE(KeyType::VERSION_JOURNAL)
+        KEY_CASE(KeyType::METRICS)
+#undef KEY_CASE
+    default:
+        util::raise_rte("Unknown key type {}", key_type);
+    }
+}
+
+template<KeyType key_type>
+constexpr KeyData<KeyTagType<key_type>> get_key_data(KeyType) {
+    return KeyData<KeyTagType<key_type>>{};
+}
+
+template<KeyType key_type>
+constexpr const char* key_type_long_name(KeyType kt) {
+    return get_key_data<key_type>(kt).long_name_;
+}
+
+template<KeyType key_type>
+constexpr char key_type_short_name(KeyType kt) {
+    return get_key_data<key_type>(kt).short_name_;
+}
+
+template<KeyType key_type>
+constexpr VariantType variant_type_from_key_type(KeyType kt) {
+    return get_key_data<key_type>(kt).variant_type_;
+}
+
+template<KeyType key_type>
+constexpr KeyClass key_class_from_key_type(KeyType kt) {
+    return get_key_data<key_type>(kt).key_class_;
+}
+
+inline bool is_string_key_type(KeyType kt){
+    return visit_key_type(kt, [kt] (auto key_type_tag) {
+        return variant_type_from_key_type<decltype(key_type_tag)::key_type_>(kt) == VariantType::STRING_TYPE;
+    });
+}
+
+
+inline const char* key_type_long_name(KeyType kt){
+    return visit_key_type(kt, [kt] (auto key_type_tag) {
+        return get_key_data<decltype(key_type_tag)::key_type_>(kt).long_name_;
+    });
+}
+
+inline char key_type_short_name(KeyType kt){
+    return visit_key_type(kt, [kt] (auto key_type_tag) {
+        return get_key_data<decltype(key_type_tag)::key_type_>(kt).short_name_;
+    });
+}
+
+inline VariantType variant_type_from_key_type(KeyType kt) {
+    return visit_key_type(kt, [kt] (auto key_type_tag) {
+        return variant_type_from_key_type<decltype(key_type_tag)::key_type_>(kt);
+    });
+}
+
+inline bool is_ref_key_class(KeyType kt) {
+    return visit_key_type(kt, [kt] (auto key_type_tag) {
+        return key_class_from_key_type<decltype(key_type_tag)::key_type_>(kt) == KeyClass::REF_KEY;
+    });
+}
 
 inline KeyType get_key_type_for_data_stream(const StreamId &) {
     return KeyType::TABLE_DATA;
