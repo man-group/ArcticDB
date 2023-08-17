@@ -49,6 +49,8 @@ struct ClauseInfo {
     std::optional<std::string> new_index_{std::nullopt};
     // Whether this clause modifies the output descriptor
     bool modifies_output_descriptor_{false};
+    // Whether to reorder columns as in the original DF.
+    bool follows_original_columns_order_{true};
 };
 
 // Changes how the clause behaves based on information only available after it is constructed
