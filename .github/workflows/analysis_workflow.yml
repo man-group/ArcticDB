@@ -18,6 +18,18 @@ jobs:
     runs-on: "ubuntu-latest"
     container:
         image: ${{needs.cibw_docker_image.outputs.tag}}
+    env:
+      SCCACHE_GHA_VERSION: ${{vars.SCCACHE_GHA_VERSION || 1}} # Setting this env var enables the caching
+      VCPKG_NUGET_USER: ${{secrets.VCPKG_NUGET_USER || github.repository_owner}}
+      VCPKG_NUGET_TOKEN: ${{secrets.VCPKG_NUGET_TOKEN || secrets.GITHUB_TOKEN}}
+      VCPKG_MAN_NUGET_USER: ${{secrets.VCPKG_MAN_NUGET_USER}} # For forks to download pre-compiled dependencies from the Man repo
+      VCPKG_MAN_NUGET_TOKEN: ${{secrets.VCPKG_MAN_NUGET_TOKEN}}
+      CMAKE_C_COMPILER_LAUNCHER: sccache
+      CMAKE_CXX_COMPILER_LAUNCHER: sccache
+      ARCTIC_CMAKE_PRESET: linux-debug
+      CIBW_ENVIRONMENT_PASS_LINUX: SCCACHE_GHA_VERSION ACTIONS_CACHE_URL ACTIONS_RUNTIME_TOKEN VCPKG_INSTALLATION_ROOT
+        VCPKG_BINARY_SOURCES VCPKG_NUGET_USER VCPKG_NUGET_TOKEN VCPKG_MAN_NUGET_USER VCPKG_MAN_NUGET_TOKEN
+        CMAKE_C_COMPILER_LAUNCHER CMAKE_CXX_COMPILER_LAUNCHER CMAKE_BUILD_PARALLEL_LEVEL ARCTIC_CMAKE_PRESET
     steps:
       - uses: actions/checkout@v3
         with:
@@ -40,6 +52,15 @@ jobs:
           python3 -m pip uninstall -y pytest-cpp || true # No longer works on 3.6
           python3 -m pip list
 
+      - name: Extra envs
+        run: |
+          . build_tooling/vcpkg_caching.sh # Linux follower needs another call in CIBW
+          echo -e "VCPKG_BINARY_SOURCES=$VCPKG_BINARY_SOURCES
+          VCPKG_ROOT=$PLATFORM_VCPKG_ROOT" | tee -a $GITHUB_ENV
+          cmake -P cpp/CMake/CpuCount.cmake | sed 's/^-- //' | tee -a $GITHUB_ENV
+        env:
+          CMAKE_BUILD_PARALLEL_LEVEL: ${{vars.CMAKE_BUILD_PARALLEL_LEVEL}}
+
       - name: Prepare C++ compilation env
         run: . build_tooling/prep_cpp_build.sh 
       
@@ -47,8 +68,8 @@ jobs:
         uses: lukka/run-cmake@v10
         with:
           cmakeListsTxtPath: ${{github.workspace}}/cpp/CMakeLists.txt
-          configurePreset: linux-debug
-          buildPreset: linux-debug
+          configurePreset: ${{env.ARCTIC_CMAKE_PRESET}}
+          buildPreset: ${{env.ARCTIC_CMAKE_PRESET}}
         env:
           ARCTICDB_CODE_COVERAGE_BUILD: 1
 
@@ -67,6 +88,7 @@ jobs:
         run: |
           cd cpp/out/linux-debug-build/
           python3 -m pip install gcovr
+          mkdir coverage
           python3 -m gcovr --html-details coverage/coverage.html -e vcpkg_installed/ -e proto/ -e ../../third_party -e ../../arcticdb/util/test/ -r ../.. --exclude-throw-branches --exclude-unreachable-branches -u --exclude-function-lines
           zip -r coverage.zip coverage/
 
