@@ -44,6 +44,14 @@ jobs:
         with:
           version: "v0.4.0"
 
+      - name: ls ~
+        run: |
+          ls ~
+
+      - name: ls /
+        run: |
+          ls /
+
       - name: Extra envs
         run: |
           ls /root
