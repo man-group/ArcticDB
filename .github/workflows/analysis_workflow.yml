@@ -62,6 +62,20 @@ jobs:
           test_unit_arcticdb
           ctest
 
+      - name: Gcovr manually
+        shell: bash -l {0}
+        run: |
+          cd cpp/out/linux-debug-build/
+          python3 -m pip install gcovr
+          python3 -m gcovr --html-details coverage/coverage.html -e vcpkg_installed/ -e proto/ -e ../../third_party -e ../../arcticdb/util/test/ -r ../.. --exclude-throw-branches --exclude-unreachable-branches -u --exclude-function-lines
+          zip -r coverage.zip coverage/
+
+      - name: Upload Coverage
+        uses: actions/upload-artifact@v3
+        with:
+          name: coverage-artifact
+          path: cpp/out/linux-debug-build/coverage.zip
+
       - name: Generate a code coverage report pre-pytests - cpp
         uses: threeal/gcovr-action@latest
         with:
@@ -84,7 +98,7 @@ jobs:
         shell: bash -l {0}
         run: |
           cd python
-          python3 -m pip install pytest coverage
+          python3 -m pip install arcticdb[Testing] pytest-split coverage
           python3 -m pytest tests
           python3 -m coverage run -m pytest tests
 
