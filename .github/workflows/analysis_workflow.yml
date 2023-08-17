@@ -78,18 +78,16 @@ jobs:
         run: |
           cd cpp/out/linux-debug-build/
           make -j ${{ steps.cpu-cores.outputs.count }} arcticdb_rapidcheck_tests
-          arcticdb_rapidcheck_tests
           make -j ${{ steps.cpu-cores.outputs.count }} test_unit_arcticdb
-          test_unit_arcticdb
           ctest
 
-      - name: Gcovr manually
+      - name: Gcovr manually pre-pytest
         shell: bash -l {0}
         run: |
           cd cpp/out/linux-debug-build/
           python3 -m pip install gcovr
           mkdir coverage
-          python3 -m gcovr --html-details coverage/coverage.html -e vcpkg_installed/ -e proto/ -e ../../third_party -e ../../arcticdb/util/test/ -r ../.. --exclude-throw-branches --exclude-unreachable-branches -u --exclude-function-lines
+          python3 -m gcovr --txt --html-details coverage/coverage.html -e vcpkg_installed/ -e proto/ -e ../../third_party -e ../../arcticdb/util/test/ -r ../.. --exclude-throw-branches --exclude-unreachable-branches -u --exclude-function-lines
           zip -r coverage.zip coverage/
 
       - name: Upload Coverage
@@ -98,29 +96,11 @@ jobs:
           name: coverage-artifact
           path: cpp/out/linux-debug-build/coverage.zip
 
-      - name: Generate a code coverage report pre-pytests - cpp
-        uses: threeal/gcovr-action@latest
-        with:
-          root:
-            cpp
-      
-      - name: Generate a code coverage report pre-pytests - out
-        uses: threeal/gcovr-action@latest
-        with:
-          root:
-            cpp/out
-
-      - name: Generate a code coverage report pre-pytests - linux-debug
-        uses: threeal/gcovr-action@latest
-        with:
-          root:
-            cpp/out/linux-debug-build
-
       - name: Test with pytest
         shell: bash -l {0}
         run: |
-          cd python
           python3 -m pip install arcticdb[Testing] pytest-split coverage
+          cd python
           python3 -m pytest tests
           python3 -m coverage run -m pytest tests
 
