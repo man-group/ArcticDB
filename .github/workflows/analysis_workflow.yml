@@ -102,6 +102,8 @@ jobs:
           ln -s ../cpp/out/linux-debug-build/arcticdb/arcticdb_ext.cpython-36m-x86_64-linux-gnu.so
           /opt/python/cp36-cp36m/bin/python -m pytest tests
           /opt/python/cp36-cp36m/bin/python -m coverage run -m pytest tests
+        env:
+          MAN_ARCTICDB_USE_ARCTICDB: true
 
       - name: Generate a code coverage report post-pytests
         uses: threeal/gcovr-action@latest
