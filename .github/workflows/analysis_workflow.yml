@@ -92,7 +92,7 @@ jobs:
           export MAN_ARCTICDB_USE_ARCTICDB=True
           ln -s ../cpp/out/linux-debug-build/arcticdb/arcticdb_ext.cpython-36m-x86_64-linux-gnu.so
           ls -al .
-          /opt/python/cp36-cp36m/bin/python -m pytest tests/integration -v -n ${{ steps.cpu-cores.outputs.count }}
+          /opt/python/cp36-cp36m/bin/python -m pytest tests/unit -v -n ${{ steps.cpu-cores.outputs.count }}
 
       - name: Gcovr manually pre-pytest
         shell: bash -l {0}
