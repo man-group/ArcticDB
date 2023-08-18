@@ -22,8 +22,9 @@ from arcticdb_ext.storage import NoDataFoundException, KeyType
 from arcticdb_ext.version_store import VersionRequestType
 
 from arcticdb.arctic import Arctic
+from arcticdb.exceptions import MismatchingLibraryOptions
 from arcticdb.adapters.s3_library_adapter import S3LibraryAdapter
-from arcticdb.options import LibraryOptions
+from arcticdb.options import DEFAULT_ENCODING_VERSION, LibraryOptions
 from arcticdb.encoding_version import EncodingVersion
 from arcticdb import QueryBuilder, DataError
 from arcticc.pb2.s3_storage_pb2 import Config as S3Config
@@ -74,6 +75,7 @@ def test_library_creation_deletion(arctic_client):
         ac.create_library("pytest_test_lib")
 
     assert ac.list_libraries() == ["pytest_test_lib"]
+    assert ac.has_library("pytest_test_lib")
     assert ac["pytest_test_lib"].name == "pytest_test_lib"
 
     ac.delete_library("pytest_test_lib")
@@ -83,6 +85,35 @@ def test_library_creation_deletion(arctic_client):
     assert not ac.list_libraries()
     with pytest.raises(LibraryNotFound):
         _lib = ac["pytest_test_lib"]
+    assert not ac.has_library("pytest_test_lib")
+
+
+def test_get_library(arctic_client):
+    ac = arctic_client
+    assert ac.list_libraries() == []
+    # Throws if library doesn't exist
+    with pytest.raises(LibraryNotFound):
+        _ = ac.get_library("pytest_test_lib")
+    # Creates library with default options if just create_if_missing set to True
+    lib = ac.get_library("pytest_test_lib_default_options", create_if_missing=True)
+    assert lib.options() == LibraryOptions(encoding_version=ac._encoding_version)
+    # Creates library with the specified options if create_if_missing set to True and options provided
+    library_options = LibraryOptions(
+        dynamic_schema=True,
+        dedup=True,
+        rows_per_segment=10,
+        columns_per_segment=10,
+        encoding_version=EncodingVersion.V1 if ac._encoding_version == EncodingVersion.V2 else EncodingVersion.V2,
+    )
+    lib = ac.get_library("pytest_test_lib_specified_options", create_if_missing=True, library_options=library_options)
+    assert lib.options() == library_options
+    # If the library already exists, create_if_missing is True, and options are provided, then the provided options must match the existing library
+    library_options.dynamic_schema = False
+    with pytest.raises(MismatchingLibraryOptions):
+        _ = ac.get_library("pytest_test_lib_specified_options", create_if_missing=True, library_options=library_options)
+    # Throws if library_options are provided but create_if_missing is False
+    with pytest.raises(ArcticInvalidApiUsageException):
+        _ = ac.get_library("pytest_test_lib", create_if_missing=False, library_options=library_options)
 
 
 def test_uri_override(moto_s3_uri_incl_bucket):
@@ -131,28 +162,35 @@ def test_uri_override(moto_s3_uri_incl_bucket):
     assert s3_storage.region == "blah"
 
 
-def test_library_options(object_storage_uri_incl_bucket):
-    ac = Arctic(object_storage_uri_incl_bucket)
+def test_library_options(arctic_client):
+    ac = arctic_client
     assert ac.list_libraries() == []
     ac.create_library("pytest_default_options")
     lib = ac["pytest_default_options"]
+    assert lib.options() == LibraryOptions(encoding_version=ac._encoding_version)
     write_options = lib._nvs._lib_cfg.lib_desc.version.write_options
     assert not write_options.dynamic_schema
     assert not write_options.de_duplication
     assert write_options.segment_row_size == 100_000
     assert write_options.column_group_size == 127
+    assert lib._nvs._lib_cfg.lib_desc.version.encoding_version == ac._encoding_version
 
+    library_options = LibraryOptions(
+        dynamic_schema=True, dedup=True, rows_per_segment=20, columns_per_segment=3, encoding_version=EncodingVersion.V2
+    )
     ac.create_library(
         "pytest_explicit_options",
-        LibraryOptions(dynamic_schema=True, dedup=True, rows_per_segment=20, columns_per_segment=3),
+        library_options,
     )
     lib = ac["pytest_explicit_options"]
+    assert lib.options() == library_options
     write_options = lib._nvs._lib_cfg.lib_desc.version.write_options
     assert write_options.dynamic_schema
     assert write_options.de_duplication
     assert write_options.segment_row_size == 20
     assert write_options.column_group_size == 3
     assert write_options.dynamic_strings
+    assert lib._nvs._lib_cfg.lib_desc.version.encoding_version == EncodingVersion.V2
 
 
 def test_separation_between_libraries(object_storage_uri_incl_bucket):
