@@ -346,10 +346,12 @@ def get_azure_proto(
     container_name,
     endpoint,
     with_prefix: Optional[bool] = True,
-    ca_cert_path: Optional[str] = None,
+    ca_cert_path: Optional[str] = "",
 ):
     env = cfg.env_by_id[env_name]
     azure = AzureConfig()
+    if not container_name:
+        raise UserInputException("Container needs to be specified")
     azure.container_name = container_name
     azure.endpoint = endpoint
     if with_prefix:
