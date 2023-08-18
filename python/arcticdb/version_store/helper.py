@@ -28,7 +28,7 @@ from arcticc.pb2.storage_pb2 import (
 
 from arcticdb.config import *  # for backward compat after moving to config
 from arcticdb.config import _expand_path
-from arcticdb.exceptions import ArcticNativeException, LibraryNotFound
+from arcticdb.exceptions import ArcticNativeException, LibraryNotFound, UserInputException
 from arcticdb.version_store._store import NativeVersionStore
 from arcticdb.authorization.permissions import OpenMode
 
@@ -337,10 +337,12 @@ def get_azure_proto(
     container_name,
     endpoint,
     with_prefix: Optional[bool] = True,
-    ca_cert_path: Optional[str] = None,
+    ca_cert_path: Optional[str] = "",
 ):
     env = cfg.env_by_id[env_name]
     azure = AzureConfig()
+    if not container_name:
+        raise UserInputException("Container needs to be specified")
     azure.container_name = container_name
     azure.endpoint = endpoint
     if with_prefix:
