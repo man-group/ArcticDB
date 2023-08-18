@@ -17,3 +17,7 @@ class ArcticNativeNotYetImplemented(ArcticException):
 
 class LibraryNotFound(ArcticException):
     pass
+
+
+class MismatchingLibraryOptions(ArcticException):
+    pass

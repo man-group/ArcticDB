@@ -11,6 +11,7 @@ from enum import Enum, auto
 from typing import Optional, Any, Tuple, Dict, AnyStr, Union, List, Iterable, NamedTuple
 from numpy import datetime64
 
+from arcticdb.options import LibraryOptions
 from arcticdb.supported_types import Timestamp
 
 from arcticdb.version_store.processing import QueryBuilder
@@ -303,6 +304,16 @@ class Library:
 
     def __contains__(self, symbol: str):
         return self.has_symbol(symbol)
+
+    def options(self) -> LibraryOptions:
+        write_options = self._nvs.lib_cfg().lib_desc.version.write_options
+        return LibraryOptions(
+            dynamic_schema=write_options.dynamic_schema,
+            dedup=write_options.de_duplication,
+            rows_per_segment=write_options.segment_row_size,
+            columns_per_segment=write_options.column_group_size,
+            encoding_version=self._nvs.lib_cfg().lib_desc.version.encoding_version,
+        )
 
     def write(
         self,
