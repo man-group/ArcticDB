@@ -84,7 +84,9 @@ jobs:
       - name: Test with pytest
         shell: bash -l {0}
         run: |
-          npm install -g azurite
+          yum install nodejs npm
+          npm config set strict-ssl false
+          withproxy npm install -g azurite
           /opt/python/cp36-cp36m/bin/python -m pip install --upgrade pip
           /opt/python/cp36-cp36m/bin/python -m pip install pycparser six cffi urllib3 python-dateutil PyJWT jmespath idna cryptography charset-normalizer certifi requests py pluggy path oauthlib MarkupSafe iniconfig dataclasses botocore attrs Werkzeug termcolor s3transfer requests-oauthlib pytz pytest protobuf portalocker path.py numpy msal mock Jinja2 itsdangerous isodate grpcio execnet decorator contextlib2 click azure-core xxhash xmltodict sortedcontainers retry responses pyyaml pytest-shutil pytest-fixture-config psutil prometheus-client pandas msrest msgpack msal-extensions grpcio-tools future flask colorama boto3 pytest-timeout pytest-server-fixtures pytest-cpp pymongo moto hypothesis flask-cors azure-storage-blob azure-identity coverage pytest-xdist
           /opt/python/cp36-cp36m/bin/python -m grpc_tools.protoc -Icpp/proto --python_out=./python cpp/proto/arcticc/pb2/*.proto
@@ -92,7 +94,7 @@ jobs:
           export MAN_ARCTICDB_USE_ARCTICDB=True
           ln -s ../cpp/out/linux-debug-build/arcticdb/arcticdb_ext.cpython-36m-x86_64-linux-gnu.so
           ls -al .
-          /opt/python/cp36-cp36m/bin/python -m pytest tests/unit -v -n ${{ steps.cpu-cores.outputs.count }}
+          /opt/python/cp36-cp36m/bin/python -m pytest tests/integration -v -n ${{ steps.cpu-cores.outputs.count }}
 
       - name: Gcovr manually pre-pytest
         shell: bash -l {0}
