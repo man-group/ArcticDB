@@ -1,6 +1,9 @@
 name: Build with analysis tools
 on:
   workflow_dispatch:
+    inputs:
+      run:
+        type: boolean
 
   push:
     branches:
