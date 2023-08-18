@@ -489,7 +489,7 @@ class Library:
         raise ArcticUnsupportedDataTypeException(error_message)
 
     def write_batch(
-        self, payloads: List[WritePayload], prune_previous_versions: bool = False, staged=False, validate_index=True
+        self, payloads: List[WritePayload], prune_previous_versions: bool = False, validate_index=True
     ) -> List[VersionedItem]:
         """
         Write a batch of multiple symbols.
@@ -499,8 +499,6 @@ class Library:
         payloads : `List[WritePayload]`
             Symbols and their corresponding data. There must not be any duplicate symbols in `payload`.
         prune_previous_versions: `bool`, default=False
-            See `write`.
-        staged: `bool`, default=False
             See `write`.
         validate_index: bool, default=False
             If set to True, it will verify for each entry in the batch whether the index of the data supports date range searches and update operations.
@@ -558,7 +556,6 @@ class Library:
             [p.metadata for p in payloads],
             prune_previous_version=prune_previous_versions,
             pickle_on_failure=False,
-            parallel=staged,
             validate_index=validate_index,
         )
 
