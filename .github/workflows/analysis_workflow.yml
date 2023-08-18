@@ -99,11 +99,10 @@ jobs:
           /opt/python/cp36-cp36m/bin/python -m pip install --upgrade pip
           /opt/python/cp36-cp36m/bin/python -m pip install coverage pytest pytest-cpp pytest-timeout packaging future pytest-server-fixtures mock boto3 moto flask flask-cors hypothesis pymongo azure-storage-blob azure-identity numpy pandas protobuf
           cd python
+          export MAN_ARCTICDB_USE_ARCTICDB=True
           ln -s ../cpp/out/linux-debug-build/arcticdb/arcticdb_ext.cpython-36m-x86_64-linux-gnu.so
           /opt/python/cp36-cp36m/bin/python -m pytest tests
           /opt/python/cp36-cp36m/bin/python -m coverage run -m pytest tests
-        env:
-          MAN_ARCTICDB_USE_ARCTICDB: true
 
       - name: Generate a code coverage report post-pytests
         uses: threeal/gcovr-action@latest
