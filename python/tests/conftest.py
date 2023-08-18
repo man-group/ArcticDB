@@ -36,7 +36,7 @@ import tempfile
 
 import requests
 from pytest_server_fixtures.base import get_ephemeral_port
-
+import arcticc
 from arcticdb.arctic import Arctic
 from arcticdb.version_store.helper import (
     create_test_lmdb_cfg,
