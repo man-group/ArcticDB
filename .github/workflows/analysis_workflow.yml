@@ -86,6 +86,14 @@ jobs:
           make -j ${{ steps.cpu-cores.outputs.count }} test_unit_arcticdb
           ctest
 
+      - name: Select Python 3.6
+        run: echo /opt/python/cp36-cp36m/bin >> $GITHUB_PATH
+
+      - name: Discover test directory names
+        # There are so few nonreg tests, run them in the hypothesis runner
+        run: find python/tests/* -maxdepth 0 -type d ! -regex '.*\(__pycache__\|util\|nonreg\)' -printf '"%f",' |
+              sed 's/^/test_dirs=[/ ; s/"hypothesis"/"{hypothesis,nonreg}"/ ; s/,$/]/' | tee -a $GITHUB_ENV
+
       - name: Test with pytest
         shell: bash -l {0}
         run: |
@@ -98,9 +106,9 @@ jobs:
           cd python
           export MAN_ARCTICDB_USE_ARCTICDB=True
           ln -s ../cpp/out/linux-debug-build/arcticdb/arcticdb_ext.cpython-36m-x86_64-linux-gnu.so
-          ls -al .
-          /opt/python/cp36-cp36m/bin/python -m pytest tests -v
+          build_tooling/parallel_test.sh tests/${{env.test_dirs}}
         env:
+          TEST_OUTPUT_DIR: ${{runner.temp}}
           # Use the Mongo created in the service container above to test against
           CI_MONGO_HOST: mongodb
 
