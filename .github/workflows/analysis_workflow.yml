@@ -21,6 +21,8 @@ jobs:
     runs-on: "ubuntu-latest"
     container:
         image: ${{needs.cibw_docker_image.outputs.tag}}
+    services: 
+      mongodb: { image: "mongo:4.4" }
     env:
       SCCACHE_GHA_VERSION: ${{vars.SCCACHE_GHA_VERSION || 1}} # Setting this env var enables the caching
       VCPKG_NUGET_USER: ${{secrets.VCPKG_NUGET_USER || github.repository_owner}}
