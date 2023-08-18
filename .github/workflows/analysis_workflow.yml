@@ -21,8 +21,11 @@ jobs:
     runs-on: "ubuntu-latest"
     container:
         image: ${{needs.cibw_docker_image.outputs.tag}}
-    services: 
-      mongodb: { image: "mongo:4.4" }
+    services:
+      mongodb:
+        image: mongo:4.4
+        ports:
+          - 27017:27017
     env:
       SCCACHE_GHA_VERSION: ${{vars.SCCACHE_GHA_VERSION || 1}} # Setting this env var enables the caching
       VCPKG_NUGET_USER: ${{secrets.VCPKG_NUGET_USER || github.repository_owner}}
@@ -97,6 +100,9 @@ jobs:
           ln -s ../cpp/out/linux-debug-build/arcticdb/arcticdb_ext.cpython-36m-x86_64-linux-gnu.so
           ls -al .
           /opt/python/cp36-cp36m/bin/python -m pytest tests/integration -v -n ${{ steps.cpu-cores.outputs.count }}
+        env:
+          # Use the Mongo created in the service container above to test against
+          CI_MONGO_HOST: mongodb
 
       - name: Gcovr manually pre-pytest
         shell: bash -l {0}
