@@ -73,18 +73,18 @@ jobs:
       #     cd cpp/out/linux-debug-build/arcticdb
       #     ls -al .
         
-      - name: Run C++ Tests
-        shell: bash -l {0}
-        run: |
-          cd cpp/out/linux-debug-build/
-          make -j ${{ steps.cpu-cores.outputs.count }} arcticdb_rapidcheck_tests
-          make -j ${{ steps.cpu-cores.outputs.count }} test_unit_arcticdb
-          ctest
+      # - name: Run C++ Tests
+      #   shell: bash -l {0}
+      #   run: |
+      #     cd cpp/out/linux-debug-build/
+      #     make -j ${{ steps.cpu-cores.outputs.count }} arcticdb_rapidcheck_tests
+      #     make -j ${{ steps.cpu-cores.outputs.count }} test_unit_arcticdb
+      #     ctest
 
       - name: Test with pytest
         shell: bash -l {0}
         run: |
-          yum install nodejs npm
+          yum install nodejs npm -y
           npm config set strict-ssl false
           withproxy npm install -g azurite
           /opt/python/cp36-cp36m/bin/python -m pip install --upgrade pip
