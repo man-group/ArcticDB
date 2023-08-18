@@ -20,6 +20,7 @@
 #include <arcticdb/pipeline/string_pool_utils.hpp>
 #include <util/flatten_utils.hpp>
 #include <arcticdb/entity/timeseries_descriptor.hpp>
+#include <arcticdb/python/gil_lock.hpp>
 
 namespace arcticdb {
 
@@ -139,6 +140,7 @@ void aggregator_set_data(
                     }
                     else {
                         if constexpr (is_utf_type(slice_value_type(dt))) {
+                            ScopedGILLock gil_lock;
                             auto wrapper= convert::py_unicode_to_buffer(*ptr_data);
                             agg.set_string_at(col, s, wrapper.buffer_, wrapper.length_);
                         }

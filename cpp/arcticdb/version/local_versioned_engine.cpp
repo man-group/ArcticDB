@@ -543,6 +543,7 @@ VersionedItem LocalVersionedEngine::update_internal(
     bool upsert,
     bool dynamic_schema,
     bool prune_previous_versions) {
+    py::gil_scoped_release release_gil;
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: update");
     auto frame = std::move(frame_ref);
     auto update_info = get_latest_undeleted_version_and_next_version_id(store(),
@@ -953,6 +954,7 @@ void LocalVersionedEngine::push_incompletes_to_symbol_list(const std::set<Stream
 void LocalVersionedEngine::append_incomplete_frame(
     const StreamId& stream_id,
     InputTensorFrame&& frame) const {
+    py::gil_scoped_release release_gil;
     arcticdb::append_incomplete(store_, stream_id, std::move(frame));
 }
 
@@ -965,6 +967,7 @@ void LocalVersionedEngine::append_incomplete_segment(
 void LocalVersionedEngine::write_parallel_frame(
     const StreamId& stream_id,
     InputTensorFrame&& frame) const {
+    py::gil_scoped_release release_gil;
     write_parallel(store_, stream_id, std::move(frame));
 }
 
@@ -1272,6 +1275,7 @@ std::vector<folly::Future<AtomKey>> LocalVersionedEngine::batch_write_internal(
     std::vector<std::shared_ptr<DeDupMap>> de_dup_maps,
     bool validate_index
 ) {
+    py::gil_scoped_release release_gil;
     ARCTICDB_SAMPLE(WriteDataFrame, 0)
     ARCTICDB_DEBUG(log::version(), "Batch writing {} dataframes", stream_ids.size());
     std::vector<folly::Future<entity::AtomKey>> results_fut;
@@ -1306,6 +1310,7 @@ std::vector<VersionedItem> LocalVersionedEngine::batch_write_versioned_dataframe
     bool prune_previous_versions,
     bool validate_index
 ) {
+    py::gil_scoped_release release_gil;
     auto write_options = get_write_options();
     auto update_info_futs = batch_get_latest_undeleted_version_and_next_version_id_async(store(),
                                                                                          version_map(),
@@ -1352,7 +1357,7 @@ VersionedItem LocalVersionedEngine::append_internal(
     bool upsert,
     bool prune_previous_versions,
     bool validate_index) {
-
+    py::gil_scoped_release release_gil;
     auto update_info = get_latest_undeleted_version_and_next_version_id(store(),
                                                                         version_map(),
                                                                         stream_id,
@@ -1398,7 +1403,8 @@ std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_
     bool validate_index,
     bool upsert,
     bool throw_on_missing_version) {
-
+    
+    py::gil_scoped_release release_gil;
     auto stream_update_info_futures = batch_get_latest_undeleted_version_and_next_version_id_async(store(),
                                                                                                     version_map(),
                                                                                                     stream_ids);

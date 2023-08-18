@@ -76,6 +76,7 @@ VersionedItem write_dataframe_impl(
     bool sparsify_floats,
     bool validate_index
     ) {
+    py::gil_scoped_release release_gil;
     ARCTICDB_SUBSAMPLE_DEFAULT(WaitForWriteCompletion)
     ARCTICDB_DEBUG(log::version(), "write_dataframe_impl stream_id: {} , version_id: {}, {} rows", frame.desc.id(), version_id, frame.num_rows);
     auto atom_key_fut = async_write_dataframe_impl(store, version_id, std::move(frame), options, de_dup_map, sparsify_floats, validate_index);

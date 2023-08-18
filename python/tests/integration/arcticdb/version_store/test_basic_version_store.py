@@ -1553,6 +1553,26 @@ def test_batch_read_meta_with_missing(lmdb_version_store_tombstone_and_sync_pass
     assert "sym_doesnotexist" not in results_dict
 
 
+@pytest.mark.parametrize(
+    "lib_type", ["lmdb_version_store_v1", "lmdb_version_store_v2", "s3_version_store_v1", "s3_version_store_v2"]
+)
+def test_batch_write_string_indexes(request, lib_type):
+    lib = request.getfixturevalue(lib_type)
+    sym1 = "test_symbol1"
+    sym2 = "test_symbol2"
+
+    index1 = [i for i in range(586)]
+    index2 = [f"AST{i}" for i in range(585)]
+
+    vals1 = np.random.randn(586).astype('float64')
+    vals2 = np.random.randn(585).astype('float64')
+
+    data1 = pd.Series(data=vals1, index=index1)
+    data2 = pd.Series(data=vals2, index=index2)
+
+    lib.batch_write([sym1, sym2], [data1, data2])
+
+
 def test_list_versions_with_deleted_symbols(lmdb_version_store_tombstone_and_pruning):
     lib = lmdb_version_store_tombstone_and_pruning
     lib.write("a", 1)
