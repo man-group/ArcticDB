@@ -97,7 +97,7 @@ jobs:
         shell: bash -l {0}
         run: |
           /opt/python/cp36-cp36m/bin/python -m pip install --upgrade pip
-          /opt/python/cp36-cp36m/bin/python -m pip install coverage pytest pytest-cpp pytest-timeout packaging future pytest-server-fixtures mock boto3 moto flask flask-cors hypothesis pymongo azure-storage-blob azure-identity numpy pandas protobuf grpc_tools
+          /opt/python/cp36-cp36m/bin/python -m pip install coverage pytest pytest-cpp pytest-timeout packaging future pytest-server-fixtures mock boto3 moto flask flask-cors hypothesis pymongo azure-storage-blob azure-identity numpy pandas protobuf grpcio grpcio-tools
 
           /opt/python/cp36-cp36m/bin/python -m grpc_tools.protoc -Icpp/proto --python_out=./python cpp/proto/arcticc/pb2/*.proto
           cd python
