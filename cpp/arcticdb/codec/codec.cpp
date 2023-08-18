@@ -358,6 +358,9 @@ Segment encode_v2(SegmentInMemory&& s, const arcticdb::proto::encoding::VariantC
             auto column_field = new(encoded_fields_buffer.data() + encoded_field_pos) EncodedField;
             ARCTICDB_TRACE(log::codec(), "Beginning encoding of column {}: ({}) to position {}", c, in_mem_seg.descriptor().field(c).name(), pos);
             encoder.encode(codec_opts, col, *column_field, *out_buffer, pos);
+            if(in_mem_seg.column(c).has_secondary_type()) {
+                *(column_field->mutable_ndarray()->mutable_arr_desc()) = in_mem_seg.column(c).secondary_type();
+            }
             ARCTICDB_TRACE(log::codec(), "Encoded column {}: ({}) to position {}", c, in_mem_seg.descriptor().field(c).name(), pos);
             encoded_field_pos += encoded_field_bytes(*column_field);
             util::check(encoded_field_pos <= encoded_fields_buffer.bytes(), "Encoded field buffer overflow {} > {}", encoded_field_pos, encoded_fields_buffer.bytes());

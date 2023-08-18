@@ -98,6 +98,7 @@ message NDArrayEncodedField {
     repeated Block shapes = 2;
     repeated Block values = 3;
     uint32 sparse_map_bytes = 4;
+    arcticc.pb2.descriptors_pb2.TypeDescriptor arr_desc = 5;
 }
 
 message DictionaryEncodedField {
@@ -116,6 +117,3 @@ message DictionaryEncodedField {
     NDArrayEncodedField values = 1; // aka level in pandas multi index
     NDArrayEncodedField positions = 2; // aka label in pandas multi index
 }
-
-
-
