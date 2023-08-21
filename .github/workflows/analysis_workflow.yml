@@ -43,7 +43,7 @@ jobs:
       python_deps_ids: ${{toJson(matrix.python_deps_ids)}}
 
   code_coverage:
-    needs: [cibw_docker_image]  
+    needs: [cibw_docker_image, persistent_storage_seed_linux]  
     runs-on: "ubuntu-latest"
     container:
         image: ${{needs.cibw_docker_image.outputs.tag}}
@@ -98,11 +98,6 @@ jobs:
           buildPreset: ${{env.ARCTIC_CMAKE_PRESET}}
         env:
           ARCTICDB_CODE_COVERAGE_BUILD: 1
-
-      # - name: CPP build dir
-      #   run: |
-      #     cd cpp/out/linux-debug-build/arcticdb
-      #     ls -al .
         
       - name: Run C++ Tests
         shell: bash -l {0}
@@ -124,7 +119,7 @@ jobs:
         run: |
           # Common
           echo "ARCTICDB_PERSISTENT_STORAGE_TESTS=1" >> $GITHUB_ENV
-          echo "ARCTICDB_PERSISTENT_STORAGE_BRANCH_NAME=${{ github.ref_name }}" >> $GITHUB_ENV
+          echo "ARCTICDB_PERSISTENT_STORAGE_BRANCH_NAME=${{ github.run_id }}" >> $GITHUB_ENV
           # S3 Specific
           # TODO: Add these as GitHub variables
           echo "ARCTICDB_REAL_S3_BUCKET='arcticdb-ci-test-bucket-01" >> $GITHUB_ENV
@@ -151,22 +146,52 @@ jobs:
           TEST_OUTPUT_DIR: ${{runner.temp}}
           # Use the Mongo created in the service container above to test against
           CI_MONGO_HOST: mongodb
-          ARCTICDB_PERSISTENT_STORAGE_LIB_NAME: 'test_${{ github.ref_name }}_${{matrix.os}}_${{env.python_impl_name}}${{matrix.python_deps_id}}'
+          ARCTICDB_PERSISTENT_STORAGE_LIB_NAME: 'test_${{ github.run_id }}_${{matrix.os}}_${{env.python_impl_name}}${{matrix.python_deps_id}}'
 
-      - name: Gcovr manually pre-pytest
+      - name: Run Gcovr manually post-pytest
         shell: bash -l {0}
         run: |
           cd cpp/out/linux-debug-build/
           python3 -m pip install gcovr
           mkdir coverage
-          python3 -m gcovr --txt --html-details coverage/coverage.html -e vcpkg_installed/ -e proto/ -e ../../third_party -e ../../arcticdb/util/test/ -r ../.. --exclude-throw-branches --exclude-unreachable-branches -u --exclude-function-lines
+          python3 -m gcovr --txt --html-details coverage/coverage.html -e vcpkg_installed/ -e proto/ -e ../../third_party -e ../../arcticdb/util/test/ -r ../.. --exclude-throw-branches --exclude-unreachable-branches -u --exclude-function-lines | tee output.txt
           zip -r coverage.zip coverage/
+
+          echo "PERCENT=$(cat output.txt | grep 'TOTAL' | awk '{print $NF}' | tr -d '%')" >> $GITHUB_ENV
 
       - name: Upload Coverage
         uses: actions/upload-artifact@v3
         with:
           name: coverage-artifact
           path: cpp/out/linux-debug-build/coverage.zip
+
+      - name: Restore cache
+        id: cache
+        uses: actions/cache@v2
+        with:
+          path: coverage.txt
+          key: coverage
+      
+      - name: Get and compare coverage if cache was restored
+        run: |
+          # if cache was restored, compare coverage
+          if [ -f coverage.txt ]; then
+            PREV_COVERAGE=$(cat coverage.txt | cut -d' ' -f2)
+            echo "Previous coverage: $PREV_COVERAGE"
+            CURR_COVERAGE=${{env.PERCENT}}
+            echo "Current coverage: $CURR_COVERAGE"
+            if [ $CURR_COVERAGE -gt $PREV_COVERAGE ]; then
+              echo "Coverage increased"
+            elif [ $CURR_COVERAGE -lt $PREV_COVERAGE ]; then
+              echo "Coverage decreased"
+            else
+              echo "Coverage unchanged"
+            fi
+          fi
+
+      - name: Save coverage percentage to file
+        run: |
+          echo "Coverage: ${{ env.PERCENT }}" > coverage.txt
 
   persistent_storages_cleanup:
     needs: [code_coverage]
