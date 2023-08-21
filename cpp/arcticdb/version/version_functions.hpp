@@ -59,8 +59,9 @@ inline version_store::UpdateInfo get_latest_undeleted_version_and_next_version_i
     auto entry = version_map->check_reload(store, stream_id, load_param, __FUNCTION__);
     auto latest_version = entry->get_first_index(true);
     auto latest_undeleted_version = entry->get_first_index(false);
+    auto reference_timestamp = entry->get_head_timestamp();
     VersionId next_version_id = latest_version.has_value() ? latest_version->version_id() + 1 : 0;
-    return {latest_undeleted_version, next_version_id};
+    return {latest_undeleted_version, next_version_id, reference_timestamp};
 }
 
 inline std::vector<AtomKey> get_all_versions(

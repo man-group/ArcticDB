@@ -73,14 +73,14 @@ class SymbolList {
         return load(store, false);
     }
 
-    void add_symbol(const std::shared_ptr<Store>& store, const StreamId& symbol) {
+    void add_symbol(const std::shared_ptr<Store>& store, const StreamId& symbol, std::optional<timestamp> reference_timestamp) {
         SYMBOL_LIST_RUNTIME_LOG_VAL("{}", symbol);
-        write_symbol(store, symbol);
+        write_symbol(store, symbol, reference_timestamp);
     }
 
-    void remove_symbol(const std::shared_ptr<Store>& store, const StreamId& symbol) {
+    void remove_symbol(const std::shared_ptr<Store>& store, const StreamId& symbol, std::optional<timestamp> reference_timestamp) {
         SYMBOL_LIST_RUNTIME_LOG_VAL("{}", symbol);
-        delete_symbol(store, symbol);
+        delete_symbol(store, symbol, reference_timestamp);
     }
 
     void clear(const std::shared_ptr<Store>& store) {
@@ -96,15 +96,15 @@ private:
             const std::shared_ptr<Store>& store,
             const std::optional<KeyVectorItr>& last_compaction);
 
-    void write_symbol(const std::shared_ptr<Store>& store, const StreamId& symbol) {
-        write_journal(store, symbol, AddSymbol);
+    void write_symbol(const std::shared_ptr<Store>& store, const StreamId& symbol, std::optional<timestamp> reference_timestamp) {
+        write_journal(store, symbol, AddSymbol, reference_timestamp);
     }
 
-    void delete_symbol(const std::shared_ptr<Store>& store, const StreamId& symbol) {
-        write_journal(store, symbol, DeleteSymbol);
+    void delete_symbol(const std::shared_ptr<Store>& store, const StreamId& symbol, std::optional<timestamp> reference_timestamp) {
+        write_journal(store, symbol, DeleteSymbol, reference_timestamp);
     }
 
-    void write_journal(const std::shared_ptr<Store>& store, const StreamId& symbol, std::string action);
+    void write_journal(const std::shared_ptr<Store>& store, const StreamId& symbol, std::string action, std::optional<timestamp> reference_timestamp);
 
     [[nodiscard]] CollectionType load_from_version_keys(const std::shared_ptr<Store>& store);
 
@@ -150,18 +150,21 @@ struct WriteSymbolTask : async::BaseTask {
     const std::shared_ptr<Store> store_;
     std::shared_ptr<SymbolList> symbol_list_;
     const StreamId stream_id_;
+    const std::optional<timestamp> reference_timestamp_;
 
     WriteSymbolTask(
             std::shared_ptr<Store> store,
             std::shared_ptr<SymbolList> symbol_list,
-            StreamId stream_id) :
+            StreamId stream_id,
+            std::optional<timestamp> reference_timestamp) :
             store_(std::move(store)),
             symbol_list_(std::move(symbol_list)),
-            stream_id_(std::move(stream_id)) {
+            stream_id_(std::move(stream_id)),
+            reference_timestamp_(reference_timestamp){
     }
 
     folly::Future<folly::Unit> operator()() {
-        symbol_list_->add_symbol(store_, stream_id_);
+        symbol_list_->add_symbol(store_, stream_id_, reference_timestamp_);
         return folly::Unit{};
     }
 

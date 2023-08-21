@@ -246,7 +246,7 @@ TEST_P(SymbolListWithWriteFailures, InitialCompact) {
 }
 
 INSTANTIATE_TEST_SUITE_P(, SymbolListWithWriteFailures, Values(
-        WriteFailuresParams{FailSimParam{}, CompactOutcome::WRITTEN}, // No failures
+        WriteFailuresParams{{}, CompactOutcome::WRITTEN}, // No failures
         WriteFailuresParams{{{FailureType::WRITE, RAISE_ONCE}}, CompactOutcome::NOT_WRITTEN}, // Interferes with locking
         WriteFailuresParams{{{FailureType::WRITE, RAISE_ON_2ND_CALL}}, CompactOutcome::NOT_WRITTEN},
         WriteFailuresParams{{{FailureType::DELETE, RAISE_ONCE}}, CompactOutcome::NOT_CLEANED_UP}
@@ -271,7 +271,6 @@ public:
             gen_(42) {}
 
     void do_action(std::shared_ptr<SymbolList> symbol_list) {
-        std::scoped_lock<std::mutex> lock{mutex_};
         std::uniform_int_distribution<> dis(0, 10);
         auto action = dis(gen_);
         switch(action) {
@@ -291,38 +290,60 @@ public:
         assert_invariants(symbol_list);
     };
     void do_list_symbols(std::shared_ptr<SymbolList> symbol_list) {
-        ASSERT_EQ(symbol_list->get_symbol_set(store_), live_symbols_);
+        std::lock_guard lock{mutex_};
+        auto returned_symbols = symbol_list->get_symbol_set(store_);
+        if(returned_symbols != live_symbols_) {
+            std::vector<StreamId> diff;
+            std::set_difference(std::begin(returned_symbols), std::end(returned_symbols), std::begin(live_symbols_), std::end(live_symbols_), std::back_inserter(diff));
+            log::version().warn("Got differing symbols: {}", diff);
+        }
+        ASSERT_EQ(returned_symbols, live_symbols_);
     };
 private:
     void do_add(std::shared_ptr<SymbolList> symbol_list) {
         std::uniform_int_distribution<> dis(0);
         int id = dis(gen_);
         auto symbol = fmt::format("sym-{}", id);
-        if (live_symbols_.count(symbol) == 0) {
-            live_symbols_.insert(symbol);
-            symbol_list->add_symbol(store_, symbol);
-            ARCTICDB_DEBUG(log::version(), "Adding {}", symbol);
+        {
+            std::scoped_lock<std::mutex> lock{mutex_};
+            if (live_symbols_.count(symbol) == 0) {
+                live_symbols_.insert(symbol);
+                symbol_list->add_symbol(store_, symbol);
+                ARCTICDB_DEBUG(log::version(), "Adding {}", symbol);
+            }
         }
     };
+
     void do_delete(std::shared_ptr<SymbolList> symbol_list) {
-        auto symbol = random_choice(live_symbols_, gen_);
-        if (symbol.has_value()) {
-            live_symbols_.erase(*symbol);
-            deleted_symbols_.insert(*symbol);
-            symbol_list->remove_symbol(store_, *symbol);
-            ARCTICDB_DEBUG(log::version(), "Removing {}", *symbol);
+        std::optional<StreamId> symbol;
+        {
+            std::scoped_lock<std::mutex> lock{mutex_};
+            symbol = random_choice(live_symbols_, gen_);
+            if (symbol.has_value()) {
+                live_symbols_.erase(*symbol);
+                deleted_symbols_.insert(*symbol);
+                symbol_list->remove_symbol(store_, *symbol);
+                ARCTICDB_DEBUG(log::version(), "Removing {}", *symbol);
+            }
         }
     };
+
     void do_readd(std::shared_ptr<SymbolList> symbol_list) {
-        auto symbol = random_choice(deleted_symbols_, gen_);
-        if (symbol.has_value()) {
-            deleted_symbols_.erase(*symbol);
-            live_symbols_.insert(*symbol);
-            symbol_list->add_symbol(store_, *symbol);
-            ARCTICDB_DEBUG(log::version(), "Re-adding {}", *symbol);
+        std::optional<StreamId> symbol;
+        {
+            std::scoped_lock<std::mutex> lock{mutex_};
+            symbol = random_choice(deleted_symbols_, gen_);
+            if (symbol.has_value()) {
+                deleted_symbols_.erase(*symbol);
+                   live_symbols_.insert(*symbol);
+                    symbol_list->add_symbol(store_, *symbol);
+                    ARCTICDB_DEBUG(log::version(), "Re-adding {}", *symbol);
+            }
         }
-    };
+    }
+
     void assert_invariants(std::shared_ptr<SymbolList> symbol_list) {
+        std::scoped_lock<std::mutex> lock{mutex_};
         for(const auto& symbol: live_symbols_) {
             ASSERT_EQ(deleted_symbols_.count(symbol), 0);
         }
@@ -331,6 +352,11 @@ private:
         }
         auto symbol_list_symbols_vec = symbol_list->get_symbols(store_, true);
         std::set<StreamId> symbol_list_symbols_set{symbol_list_symbols_vec.begin(), symbol_list_symbols_vec.end()};
+        if(symbol_list_symbols_set != live_symbols_) {
+            std::vector<StreamId> diff;
+            std::set_difference(std::begin(symbol_list_symbols_set), std::end(symbol_list_symbols_set), std::begin(live_symbols_), std::end(live_symbols_), std::back_inserter(diff));
+            log::version().warn("Got differing symbols: {}", diff);
+        }
         ASSERT_EQ(symbol_list_symbols_set, live_symbols_);
     }
 
@@ -365,7 +391,7 @@ struct TestSymbolListTask {
             symbol_list_(symbol_list) {}
 
     Future<Unit> operator()() {
-        for (size_t i = 0; i < 10; ++i) {
+        for (size_t i = 0; i < 1000; ++i) {
             state_->do_action(symbol_list_);
         }
         return makeFuture(Unit{});

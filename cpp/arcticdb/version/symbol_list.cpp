@@ -96,7 +96,7 @@ bool SymbolList::can_update_symbol_list(const std::shared_ptr<Store>& store,
     return (!maybe_last_compaction || found_last) && !has_newer;
 }
 
-    void SymbolList::write_journal(const std::shared_ptr<Store>& store, const StreamId& symbol, std::string action) {
+    void SymbolList::write_journal(const std::shared_ptr<Store>& store, const StreamId& symbol, std::string action, std::optional<timestamp> reference_timestamp) {
         SegmentInMemory seg{journal_stream_descriptor(action, symbol)};
         util::variant_match(symbol,
             [&seg] (const StringId& id) {
@@ -107,13 +107,8 @@ bool SymbolList::can_update_symbol_list(const std::shared_ptr<Store>& store,
             });
 
         seg.end_row();
-        try {
-            store->write_sync(KeyType::SYMBOL_LIST, 0, StreamId{ action }, IndexValue{ symbol }, IndexValue{ symbol },
+        store->write_sync(KeyType::SYMBOL_LIST, reference_timestamp.value_or(0), StreamId{action}, IndexValue{symbol}, IndexValue{symbol},
                 std::move(seg));
-        } catch ([[maybe_unused]] const arcticdb::storage::DuplicateKeyException& e)  {
-            // Both version and content hash are fixed, so collision is possible
-            ARCTICDB_DEBUG(log::storage(), "Symbol list DuplicateKeyException: {}", e.what());
-        }
     }
 
     SymbolList::CollectionType SymbolList::load_from_version_keys(const std::shared_ptr<Store>& store) {

@@ -55,7 +55,8 @@ inline std::vector<folly::Future<version_store::UpdateInfo>> batch_get_latest_un
             auto latest_version = entry->get_first_index(true);
             auto latest_undeleted_version = entry->get_first_index(false);
             VersionId next_version_id = latest_version.has_value() ? latest_version->version_id() + 1 : 0;
-            return version_store::UpdateInfo{latest_undeleted_version, next_version_id};
+            auto reference_timestamp = entry->get_head_timestamp();
+            return version_store::UpdateInfo{latest_undeleted_version, next_version_id, reference_timestamp};
         }));
     }
     return vector_fut;

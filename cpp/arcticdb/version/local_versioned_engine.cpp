@@ -573,7 +573,7 @@ VersionedItem LocalVersionedEngine::update_internal(
                                                         true);
 
             if(cfg_.symbol_list())
-                symbol_list().add_symbol(store_, stream_id);
+                symbol_list().add_symbol(store_, stream_id, vers);
 
             version_map()->write_version(store(), versioned_item.key_);
             return versioned_item;

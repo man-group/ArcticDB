@@ -246,6 +246,10 @@ struct VersionMapEntry {
         return output;
     }
 
+    std::optional<timestamp> get_head_timestamp() const {
+        return head_ ? std::make_optional(head_->creation_ts()) : std::nullopt;
+    }
+
     std::optional<AtomKey> get_first_index(bool include_deleted) const {
         std::optional<AtomKey> output;
         for (const auto &key: keys_) {

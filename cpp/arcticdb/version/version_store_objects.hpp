@@ -86,6 +86,10 @@ struct UpdateInfo {
      * The smallest version ID not in use (live or deleted). Zero iff no versions exist for the specified symbol
      */
     VersionId next_version_id_;
+    /*
+     * The timestamp of the most recent entry in the version list
+     */
+    std::optional<timestamp> reference_timestamp_;
 };
 
 } // namespace
