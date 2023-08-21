@@ -107,6 +107,7 @@ jobs:
           export MAN_ARCTICDB_USE_ARCTICDB=True
           ln -s ../cpp/out/linux-debug-build/arcticdb/arcticdb_ext.cpython-36m-x86_64-linux-gnu.so
           cp ../build_tooling/parallel_test.sh .
+          cp ../build_tooling/pytest-durations.json .
           ./parallel_test.sh tests/${{env.test_dirs}}
         env:
           TEST_OUTPUT_DIR: ${{runner.temp}}
