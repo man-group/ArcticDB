@@ -237,7 +237,3 @@ Aws::Auth::AWSCredentials get_aws_credentials(const ConfigType& conf) {
 }
 
 } //namespace arcticdb::storage::s3
-
-
-#define ARCTICDB_S3_STORAGE_H_
-#include <arcticdb/storage/s3/s3_storage-inl.hpp>

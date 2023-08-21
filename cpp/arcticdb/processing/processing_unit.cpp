@@ -5,10 +5,10 @@
  * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
  */
 
-#include <arcticdb/processing/processing_segment.hpp>
+#include <arcticdb/processing/processing_unit.hpp>
 
 namespace arcticdb {
-void ProcessingSegment::apply_filter(
+void ProcessingUnit::apply_filter(
     const util::BitSet& bitset,
     const std::shared_ptr<Store>& store,
     PipelineOptimisation optimisation) {
@@ -30,7 +30,7 @@ void ProcessingSegment::apply_filter(
 }
 
 // Inclusive of start_row, exclusive of end_row
-void ProcessingSegment::truncate(size_t start_row, size_t end_row, const std::shared_ptr<Store>& store) {
+void ProcessingUnit::truncate(size_t start_row, size_t end_row, const std::shared_ptr<Store>& store) {
     for (auto& slice_and_key: data_) {
         auto seg = truncate_segment(slice_and_key.segment(store), start_row, end_row);
         if(!seg.is_null()) {
@@ -44,7 +44,7 @@ void ProcessingSegment::truncate(size_t start_row, size_t end_row, const std::sh
     }
 }
 
-VariantData ProcessingSegment::get(const VariantNode &name, const std::shared_ptr<Store> &store) {
+VariantData ProcessingUnit::get(const VariantNode &name, const std::shared_ptr<Store> &store) {
     return util::variant_match(name,
         [&](const ColumnName &column_name) {
         for (auto &slice_and_key: data_) {
@@ -95,7 +95,7 @@ VariantData ProcessingSegment::get(const VariantNode &name, const std::shared_pt
         }
         },
         [&]([[maybe_unused]] const std::monostate &unused) -> VariantData {
-        util::raise_rte("ProcessingSegment::get called with monostate VariantNode");
+        util::raise_rte("ProcessingUnit::get called with monostate VariantNode");
     }
     );
     util::raise_rte("Unexpected value, or expression");

@@ -30,6 +30,7 @@ message TypeDescriptor {
         PICKLE = 10; // BYTES + pickle specific encoding
         DYNAMIC_STRING = 11; // offset reference to deduplicated string pool
         DYNAMIC_UTF8 = 12;
+        EMPTY = 13;
     }
 
     enum SizeBits {

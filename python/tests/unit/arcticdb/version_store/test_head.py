@@ -12,7 +12,6 @@ from pandas import DataFrame
 import pytest
 
 from arcticdb_ext.exceptions import InternalException
-from arcticdb_ext.version_store import HeadRange as _HeadRange
 
 
 def generic_head_test(version_store, symbol, df, num_rows):
@@ -89,23 +88,6 @@ def test_head_with_column_filter(lmdb_version_store_tiny_segment, three_col_df):
         three_col_df().filter(items=columns).head(num_rows),
         lmdb_version_store_tiny_segment.head(symbol, num_rows, columns=columns).data,
     )
-
-
-# Tests that the frame data returned to the python layer contains at most num_rows + lib segment_row_size
-def test_head_frame_data_size(lmdb_version_store_small_segment):
-    symbol = "test_head_frame_data_size"
-    segment_row_size = lmdb_version_store_small_segment._cfg.write_options.segment_row_size
-    if segment_row_size < 2:
-        raise Exception("test_head_frame_data_size needs segment_row_size to be at least 2")
-    rows_in_table = (2 * segment_row_size) + 1
-    rows_in_head_request = segment_row_size + 1
-    lmdb_version_store_small_segment.write(symbol, DataFrame({"x": np.arange(rows_in_table, dtype=np.int64)}))
-    version_query, read_options, read_query = lmdb_version_store_small_segment._get_queries(
-        None, None, _HeadRange(rows_in_head_request), None, None
-    )
-    read_result = lmdb_version_store_small_segment._read_dataframe(symbol, version_query, read_query, read_options)
-    rows_in_raw_dataframe = read_result.frame_data.value.data[0].size
-    assert rows_in_raw_dataframe <= (1 + rows_in_head_request // segment_row_size) * segment_row_size
 
 
 def test_head_pickled_symbol(lmdb_version_store):

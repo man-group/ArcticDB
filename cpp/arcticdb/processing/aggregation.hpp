@@ -8,7 +8,7 @@
 #pragma once
 
 #include <arcticdb/processing/expression_node.hpp>
-#include <arcticdb/processing/processing_segment.hpp>
+#include <arcticdb/processing/processing_unit.hpp>
 #include <arcticdb/processing/bucketizer.hpp>
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/entity/type_utils.hpp>
@@ -46,6 +46,11 @@ struct OutputType<DataTypeTag<DataType::BOOL8>, void> {
 template<>
 struct OutputType<DataTypeTag<DataType::NANOSECONDS_UTC64>, void> {
     using type = ScalarTagType<DataTypeTag<DataType::NANOSECONDS_UTC64>>;
+};
+
+template<>
+struct OutputType<DataTypeTag<DataType::EMPTYVAL>, void> {
+    using type = ScalarTagType<DataTypeTag<DataType::EMPTYVAL>>;
 };
 
 void add_data_type_impl(DataType data_type, std::optional<DataType>& current_data_type);

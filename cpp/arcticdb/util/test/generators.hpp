@@ -13,6 +13,7 @@
 #include <arcticdb/stream/aggregator.hpp>
 #include <arcticdb/version/version_store_api.hpp>
 #include <arcticdb/storage/storages.hpp>
+#include <arcticdb/storage/memory/memory_storage.hpp>
 #include <arcticdb/storage/test/in_memory_store.hpp>
 #include <arcticdb/stream/segment_aggregator.hpp>
 #include <arcticdb/python/python_to_tensor_frame.hpp>

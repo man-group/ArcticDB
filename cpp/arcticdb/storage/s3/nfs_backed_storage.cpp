@@ -6,6 +6,8 @@
  */
 
 #include <arcticdb/storage/s3/nfs_backed_storage.hpp>
+#define ARCTICDB_NFS_BACKED_STORAGE_H_
+#include <arcticdb/storage/s3/nfs_backed_storage-inl.hpp>
 
 namespace arcticdb::storage::nfs_backed {
 

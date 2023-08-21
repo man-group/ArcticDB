@@ -7,8 +7,10 @@
 
 #include <folly/gen/Base.h>
 #ifndef ARCTICDB_MONGO_STORAGE_H_
-#error "This should only be included by mongo_storage.hpp"
+#error "This should only be included by mongo_storage.cpp"
 #endif
+
+#include <arcticdb/storage/mongo/mongo_storage.hpp>
 
 #include <folly/gen/Base.h>
 #include <arcticdb/storage/mongo/mongo_client.hpp>
