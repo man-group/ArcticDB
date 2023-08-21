@@ -9,6 +9,26 @@ on:
     branches:
         - "analysis_workflow"
 jobs:
+  common_config:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          # Use a matrix to build the common hierarchical structure used by multiple matrix jobs in build_steps.yaml
+          # Please declare any key you added below in build_steps.yaml's dummy matrix as well to aid the linting tools
+          - linux_matrix:
+              - os: linux
+                distro: ubuntu-latest
+                cmake_preset_prefix: linux
+                cibw_build_suffix: manylinux_x86_64
+                build_dir: /tmp/cpp_build
+                symbols: "*.gz" # Please update publish.yml when changing this!!
+                do_not_archive: ["*.so", "*.[ao]", "vcpkg_installed"]
+                test_services:
+                  mongodb: { image: "mongo:4.4" }
+    outputs:
+      linux_matrix: ${{toJson(matrix.linux_matrix)}}
+
   cibw_docker_image:
     uses: ./.github/workflows/cibw_docker_image.yml
     permissions: {packages: write}
@@ -24,7 +44,7 @@ jobs:
       job_type: cleanup
 
   persistent_storage_seed_linux:
-    needs: [pre_seed_cleanup]
+    needs: [pre_seed_cleanup, common_config]
     strategy:
       fail-fast: false
       matrix:
