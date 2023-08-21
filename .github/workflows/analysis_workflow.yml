@@ -26,9 +26,9 @@ jobs:
                 do_not_archive: ["*.so", "*.[ao]", "vcpkg_installed"]
                 test_services:
                   mongodb: { image: "mongo:4.4" }
-        steps:
-          - run: |
-              echo "Configuring"
+    steps:
+      - run: |
+          echo "Configuring"
     outputs:
       linux_matrix: ${{toJson(matrix.linux_matrix)}}
 
