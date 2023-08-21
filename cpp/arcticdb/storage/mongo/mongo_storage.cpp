@@ -6,12 +6,10 @@
  */
 
 #include <arcticdb/storage/mongo/mongo_storage.hpp>
-#include <arcticdb/storage/common.hpp>
+#define ARCTICDB_MONGO_STORAGE_H_
+#include <arcticdb/storage/mongo/mongo_storage-inl.hpp>
 #include <arcticdb/storage/mongo/mongo_instance.hpp>
-#include <mongocxx/client.hpp>
-
 #include <arcticdb/entity/index_range.hpp>
-#include <arcticdb/storage/mongo/mongo_instance.hpp>
 #include <arcticdb/storage/mongo/mongo_client.hpp>
 
 #include <google/protobuf/io/zero_copy_stream_impl_lite.h>
@@ -26,7 +24,7 @@ MongoStorage::MongoStorage(
     const LibraryPath &lib,
     OpenMode mode,
     const Config &config) :
-    Parent(lib, mode),
+    Storage(lib, mode),
     instance_(MongoInstance::instance()),
     client_(std::make_unique<MongoClient>(
         config,

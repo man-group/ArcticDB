@@ -78,7 +78,8 @@ class PythonVersionStore : public LocalVersionedEngine {
         const std::vector<StreamId> &sub_keys,  // TODO: make this optional?
         const std::vector<py::tuple> &items,
         const std::vector<py::object> &norm_metas,
-        const py::object &user_meta);
+        const py::object &user_meta,
+        bool prune_previous_versions);
 
     VersionedItem write_partitioned_dataframe(
         const StreamId& stream_id,
@@ -127,7 +128,8 @@ class PythonVersionStore : public LocalVersionedEngine {
             bool convert_int_to_float,
             bool via_iteration = true,
             bool sparsify = false,
-            const std::optional<py::object>& user_meta = std::nullopt);
+            const std::optional<py::object>& user_meta = std::nullopt,
+            bool prune_previous_versions = false);
 
     void write_parallel(
         const StreamId& stream_id,
@@ -269,18 +271,20 @@ class PythonVersionStore : public LocalVersionedEngine {
         bool prune_previous_versions,
         bool validate_index);
 
-    std::vector<VersionedItem> batch_write_metadata(
-        std::vector<StreamId> stream_ids,
+    std::vector<std::variant<VersionedItem, DataError>> batch_write_metadata(
+        const std::vector<StreamId>& stream_ids,
         const std::vector<py::object>& user_meta,
         bool prune_previous_versions);
 
-    std::vector<VersionedItem> batch_append(
+    std::vector<std::variant<VersionedItem, DataError>> batch_append(
         const std::vector<StreamId> &stream_ids,
         const std::vector<py::tuple> &items,
         const std::vector<py::object> &norms,
         const std::vector<py::object> &user_metas,
         bool prune_previous_versions,
-        bool ensre_sorted);
+        bool validate_index,
+        bool upsert,
+        bool throw_on_missing_version);
 
     std::vector<std::pair<VersionedItem, TimeseriesDescriptor>> batch_restore_version(
         const std::vector<StreamId>& id,

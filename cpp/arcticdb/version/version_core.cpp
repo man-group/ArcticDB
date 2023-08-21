@@ -403,16 +403,16 @@ FrameAndDescriptor read_multi_key(
     return {res.frame_, multi_key_desc, keys, std::shared_ptr<BufferHolder>{}};
 }
 
-Composite<ProcessingSegment> process_remaining_clauses(
+Composite<ProcessingUnit> process_remaining_clauses(
         const std::shared_ptr<Store>& store,
-        std::vector<Composite<ProcessingSegment>>&& procs,
+        std::vector<Composite<ProcessingUnit>>&& procs,
         std::vector<std::shared_ptr<Clause>> clauses ) { // pass by copy deliberately as we don't want to modify read_query
     while (!clauses.empty()) {
         if (clauses[0]->clause_info().requires_repartition_) {
-            std::vector<Composite<ProcessingSegment>> repartitioned_procs = clauses[0]->repartition(std::move(procs)).value();
+            std::vector<Composite<ProcessingUnit>> repartitioned_procs = clauses[0]->repartition(std::move(procs)).value();
             // Erasing from front of vector not ideal, but they're just shared_ptr and there shouldn't be loads of clauses
             clauses.erase(clauses.begin());
-            std::vector<folly::Future<Composite<ProcessingSegment>>> fut_procs;
+            std::vector<folly::Future<Composite<ProcessingUnit>>> fut_procs;
             for (auto&& proc : repartitioned_procs) {
                 fut_procs.emplace_back(
                         async::submit_cpu_task(
@@ -432,7 +432,7 @@ Composite<ProcessingSegment> process_remaining_clauses(
 }
 
 void set_output_descriptors(
-        const Composite<ProcessingSegment>& merged_procs,
+        const Composite<ProcessingUnit>& merged_procs,
         const std::vector<std::shared_ptr<Clause>>& clauses,
         const std::shared_ptr<PipelineContext>& pipeline_context) {
     std::optional<std::string> index_column;
@@ -498,8 +498,9 @@ void set_output_descriptors(
 /*
  * Processes the slices in the given pipeline_context.
  *
- * Slices are processed in order, with slices corresponding to the same row group collected into a single
- * Composite<SliceAndKey>. Slices contained within a single Composite<SliceAndKey> are processed within a single thread.
+ * Slices are processed in an order defined by the first clause in the pipeline, with slices corresponding to the same
+ * processing unit collected into a single Composite<SliceAndKey>. Slices contained within a single
+ * Composite<SliceAndKey> are processed within a single thread.
  *
  * The processing of a Composite<SliceAndKey> is scheduled via the Async Store. Within a single thread, the
  * segments will be retrieved from storage and decompressed before being passed to a MemSegmentProcessingTask which
@@ -512,25 +513,6 @@ std::vector<SliceAndKey> read_and_process(
     const ReadOptions& read_options,
     size_t start_from
     ) {
-    std::sort(std::begin(pipeline_context->slice_and_keys_), std::end(pipeline_context->slice_and_keys_), [] (const SliceAndKey& left, const SliceAndKey& right) {
-        return std::tie(left.slice().row_range.first, left.slice().col_range.first) < std::tie(right.slice().row_range.first, right.slice().col_range.first);
-    });
-
-    std::vector<Composite<SliceAndKey>> rows;
-    auto sk_it = std::begin(pipeline_context->slice_and_keys_);
-    std::advance(sk_it, start_from);
-    while(sk_it != std::end(pipeline_context->slice_and_keys_)) {
-        RowRange row_range{sk_it->slice().row_range};
-        auto sk = Composite{std::move(*sk_it)};
-        // Iterate through all SliceAndKeys that contain data for the same RowRange - i.e., iterate along column segments
-        // for same row group
-        while(++sk_it != std::end(pipeline_context->slice_and_keys_) && sk_it->slice().row_range == row_range) {
-            sk.push_back(std::move(*sk_it));
-        }
-
-        util::check(!sk.empty(), "Should not push empty slice/key pairs to the pipeline");
-        rows.emplace_back(std::move(sk));
-    }
     std::shared_ptr<std::unordered_set<std::string>> filter_columns;
     if(pipeline_context->overall_column_bitset_) {
         filter_columns = std::make_shared<std::unordered_set<std::string>>();
@@ -541,17 +523,21 @@ std::vector<SliceAndKey> read_and_process(
         }
     }
 
-    ProcessingConfig processing_config{opt_false(read_options.dynamic_schema_)};
+    ProcessingConfig processing_config{opt_false(read_options.dynamic_schema_), pipeline_context->rows_};
     for (auto& clause: read_query.clauses_) {
         clause->set_processing_config(processing_config);
     }
 
-    // At this stage, each Composite contains a single ProcessingSegment, which holds a row-slice
-    // Different row-slices are held in different elements of the vector
+    std::vector<Composite<SliceAndKey>> processing_groups = read_query.clauses_[0]->structure_for_processing(
+            pipeline_context->slice_and_keys_, start_from);
+
+    // At this stage, each Composite contains a single ProcessingUnit, which may hold a row-slice, a column-slice, a
+    // general rectangular slice, or some more exotic collection of segments based on the clause's processing
+    // parallelisation.
     // All clauses that do not require repartitioning (e.g. filters and projections) will have already been applied
-    // to these processing segments
-    std::vector<Composite<ProcessingSegment>> procs = store->batch_read_uncompressed(
-            std::move(rows),
+    // to these processing units
+    std::vector<Composite<ProcessingUnit>> procs = store->batch_read_uncompressed(
+            std::move(processing_groups),
             read_query.clauses_,
             filter_columns,
             BatchReadArgs{}
@@ -669,6 +655,7 @@ void read_indexed_keys_to_pipeline(
 
     pipeline_context->slice_and_keys_ = filter_index(index_segment_reader, combine_filter_functions(queries));
     pipeline_context->total_rows_ = pipeline_context->calc_rows();
+    pipeline_context->rows_ = index_segment_reader.tsd().proto().total_rows();
     pipeline_context->norm_meta_ = std::make_unique<arcticdb::proto::descriptors::NormalizationMetadata>(std::move(*index_segment_reader.mutable_tsd().mutable_proto().mutable_normalization()));
     pipeline_context->user_meta_ = std::make_unique<arcticdb::proto::descriptors::UserDefinedMetadata>(std::move(*index_segment_reader.mutable_tsd().mutable_proto().mutable_user_meta()));
     pipeline_context->bucketize_dynamic_ = bucketize_dynamic;
@@ -775,6 +762,10 @@ void copy_segments_to_frame(const std::shared_ptr<Store>& store, const std::shar
         }
 
         auto field_count = context_row->slice_and_key().slice_.col_range.diff() + index_field_count;
+        internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+                field_count == segment.descriptor().field_count(),
+                "Column range does not match segment descriptor field count in copy_segments_to_frame: {} != {}",
+                field_count, segment.descriptor().field_count());
         for (auto field_col = index_field_count; field_col < field_count; ++field_col) {
             const auto& field_name = context_row->descriptor().fields(field_col).name();
             auto frame_loc_opt = frame.column_index(field_name);

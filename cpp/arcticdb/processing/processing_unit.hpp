@@ -29,28 +29,28 @@ namespace arcticdb {
     };
 
     /*
-     * A processing segment is designed to be used in conjunction with the clause processing framework.
-     * Each clause will execute in turn and will be passed the same mutable ProcessingSegment which it will have free
+     * A processing unit is designed to be used in conjunction with the clause processing framework.
+     * Each clause will execute in turn and will be passed the same mutable ProcessingUnit which it will have free
      * rein to modify prior to passing off to the next clause. In contract, clauses and the expression trees contained
      * within are immutable as they represent predefined behaviour.
      *
-     * ProcessingSegment contains two main member attributes:
+     * ProcessingUnit contains two main member attributes:
      *
      * ExpressionContext: This contains the expression tree for the currently running clause - each clause contains an
      * expression tree containing nodes that map to columns, constant values or other nodes in the tree. This allows
      * for the processing of expressions such as `(df['a'] + 4) < df['b']`. One instance of an expression context can be
-     * shared across many ProcessingSegment's. See ExpressionContext class for more documentation.
+     * shared across many ProcessingUnit's. See ExpressionContext class for more documentation.
      *
      * computed_data_: This contains a map from node name to previously computed result. Should an expression such as
      * df['col1'] + 1 appear multiple times in the tree this allows us to only perform the computation once and spill
      * the result to disk.
      */
-    struct ProcessingSegment {
+    struct ProcessingUnit {
         // We want a collection of SliceAndKeys here so that we have all of the columns for a given row present in a single
-        // ProcessingSegment, for 2 reasons:
+        // ProcessingUnit, for 2 reasons:
         // 1: For binary operations in ExpressionNode involving 2 columns, we need both available in a single processing
         //    segment in order for "get" calls to make sense
-        // 2: As "get" uses cached results where possible, it is not obvious which processing segment should hold the
+        // 2: As "get" uses cached results where possible, it is not obvious which processing unit should hold the
         //    cached result for operations involving 2 columns (probably both). By moving these cached results up a level
         //    to contain all the information for a given row, this becomes unambiguous.
         std::vector<pipelines::SliceAndKey> data_;
@@ -60,29 +60,29 @@ namespace arcticdb {
         // Set by PartitioningClause
         std::optional<size_t> bucket_;
 
-        ProcessingSegment() = default;
+        ProcessingUnit() = default;
 
-        ProcessingSegment(SegmentInMemory &&seg,
-                          pipelines::FrameSlice&& slice,
-                          std::optional<size_t> bucket = std::nullopt) :
+        ProcessingUnit(SegmentInMemory &&seg,
+                       pipelines::FrameSlice&& slice,
+                       std::optional<size_t> bucket = std::nullopt) :
                 bucket_(bucket) {
             data_.emplace_back(pipelines::SliceAndKey{std::move(seg), std::move(slice)});
         }
 
-        explicit ProcessingSegment(pipelines::SliceAndKey &&sk,
-                                   std::optional<size_t> bucket = std::nullopt) :
+        explicit ProcessingUnit(pipelines::SliceAndKey &&sk,
+                                std::optional<size_t> bucket = std::nullopt) :
                 bucket_(bucket) {
             data_.emplace_back(pipelines::SliceAndKey{std::move(sk)});
         }
 
-        explicit ProcessingSegment(std::vector<pipelines::SliceAndKey> &&sk,
-                                   std::optional<size_t> bucket = std::nullopt) :
+        explicit ProcessingUnit(std::vector<pipelines::SliceAndKey> &&sk,
+                                std::optional<size_t> bucket = std::nullopt) :
                 bucket_(bucket) {
             data_ = std::move(sk);
         }
 
-        explicit ProcessingSegment(SegmentInMemory &&seg,
-                                   std::optional<size_t> bucket = std::nullopt) :
+        explicit ProcessingUnit(SegmentInMemory &&seg,
+                                std::optional<size_t> bucket = std::nullopt) :
                 bucket_(bucket) {
             data_.emplace_back(pipelines::SliceAndKey{std::move(seg)});
         }
@@ -99,13 +99,13 @@ namespace arcticdb {
             return data_;
         }
 
-        ProcessingSegment &self() {
+        ProcessingUnit &self() {
             return *this;
         }
 
         size_t get_bucket(){
             internal::check<ErrorCode::E_ASSERTION_FAILURE>(bucket_.has_value(),
-                                                            "ProcessingSegment::get_bucket called, but bucket_ has no value");
+                                                            "ProcessingUnit::get_bucket called, but bucket_ has no value");
             return *bucket_;
         }
 
@@ -114,6 +114,8 @@ namespace arcticdb {
         }
 
         void apply_filter(const util::BitSet& bitset, const std::shared_ptr<Store>& store, PipelineOptimisation optimisation);
+
+        void truncate(size_t start_row, size_t end_row, const std::shared_ptr<Store>& store);
 
         void set_expression_context(const std::shared_ptr<ExpressionContext>& expression_context) {
             expression_context_ = expression_context;
@@ -125,12 +127,12 @@ namespace arcticdb {
         VariantData get(const VariantNode &name, const std::shared_ptr<Store> &store);
     };
 
-    inline std::vector<pipelines::SliceAndKey> collect_segments(Composite<ProcessingSegment>&& p) {
+    inline std::vector<pipelines::SliceAndKey> collect_segments(Composite<ProcessingUnit>&& p) {
         auto procs = std::move(p);
         std::vector<pipelines::SliceAndKey> output;
 
         procs.broadcast([&output] (auto&& p) {
-            auto proc = std::forward<ProcessingSegment>(p);
+            auto proc = std::forward<ProcessingUnit>(p);
             auto slice_and_keys = proc.release_data();
             std::move(std::begin(slice_and_keys), std::end(slice_and_keys), std::back_inserter(output));
         });
@@ -151,7 +153,7 @@ namespace arcticdb {
         std::vector<std::optional<uint8_t>> row_to_bucket;
         row_to_bucket.reserve(col.column_->row_count());
         // Tracks how many rows are in each bucket
-        // Use to skip empty buckets, and presize columns in the output ProcessingSegments
+        // Use to skip empty buckets, and presize columns in the output ProcessingUnit
         std::vector<uint64_t> bucket_counts(bucketizer.num_buckets(), 0);
 
         using TypeDescriptorTag = typename Grouper::GrouperDescriptor;
@@ -177,13 +179,13 @@ namespace arcticdb {
     }
 
     template<typename GrouperType, typename BucketizerType>
-    Composite<ProcessingSegment> partition_processing_segment(
+    Composite<ProcessingUnit> partition_processing_segment(
             const std::shared_ptr<Store>& store,
-            ProcessingSegment& input,
+            ProcessingUnit& input,
             const ColumnName& grouping_column_name,
             bool dynamic_schema) {
 
-        Composite<ProcessingSegment> output;
+        Composite<ProcessingUnit> output;
         auto get_result = input.get(ColumnName(grouping_column_name), store);
         if (std::holds_alternative<ColumnWithStrings>(get_result)) {
             auto partitioning_column = std::get<ColumnWithStrings>(get_result);
@@ -199,7 +201,7 @@ namespace arcticdb {
                                         num_buckets);
                     num_buckets = std::numeric_limits<uint8_t>::max();
                 }
-                std::vector<ProcessingSegment> procs{static_cast<size_t>(num_buckets)};
+                std::vector<ProcessingUnit> procs{static_cast<size_t>(num_buckets)};
                 BucketizerType bucketizer(num_buckets);
                 auto [row_to_bucket, bucket_counts] = get_buckets(partitioning_column, grouper, bucketizer);
                 for (auto& seg_slice_and_key : input.data()) {

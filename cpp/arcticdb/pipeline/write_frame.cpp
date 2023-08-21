@@ -178,7 +178,7 @@ folly::Future<entity::AtomKey> append_frame(
                             util::check(static_cast<bool>(frame.index_tensor), "Got null index tensor in append_frame");
                             auto& frame_index = frame.index_tensor.value();
                             util::check(frame_index.size() > 0, "Cannot append empty frame");
-                            util::check(frame_index.data_type() == DataType::MICROS_UTC64,
+                            util::check(frame_index.data_type() == DataType::NANOSECONDS_UTC64,
                                         "Expected timestamp index in append, got type {}", frame_index.data_type());
                             if (index_segment_reader.tsd().proto().total_rows() != 0) {
                                 auto first_index = NumericIndex{*frame_index.ptr_cast<timestamp>(0)};
@@ -195,23 +195,22 @@ folly::Future<entity::AtomKey> append_frame(
 
     auto existing_slices = unfiltered_index(index_segment_reader);
     auto keys_fut = slice_and_write(frame, slicing, get_partial_key_gen(frame, key), store);
-
-    auto slice_and_keys_to_append = keys_fut.wait().value();
-
-    auto slices_to_write = std::move(existing_slices);
-    slices_to_write.insert(std::end(slices_to_write), std::begin(slice_and_keys_to_append), std::end(slice_and_keys_to_append));
-    std::sort(std::begin(slices_to_write), std::end(slices_to_write));
-    if(dynamic_schema) {
-        auto merged_descriptor =
-            merge_descriptors(frame.desc, std::vector< std::shared_ptr<FieldCollection>>{ index_segment_reader.tsd().fields_ptr()}, {});
-        merged_descriptor.set_sorted(deduce_sorted(index_segment_reader.get_sorted(), frame.desc.get_sorted()));
-        auto tsd =
-            make_timeseries_descriptor(frame.num_rows + frame.offset, std::move(merged_descriptor), std::move(frame.norm_meta), std::move(frame.user_meta), std::nullopt, std::nullopt, frame.bucketize_dynamic);
-        return index::write_index(stream::index_type_from_descriptor(frame.desc), std::move(tsd), std::move(slices_to_write), key, store);
-    } else {
-        frame.desc.set_sorted(deduce_sorted(index_segment_reader.get_sorted(), frame.desc.get_sorted()));
-        return index::write_index(std::move(frame), std::move(slices_to_write), key, store);
-    }
+    return std::move(keys_fut)
+    .thenValue([dynamic_schema, slices_to_write = std::move(existing_slices), frame = std::move(frame), index_segment_reader = std::move(index_segment_reader), key = std::move(key), &store](auto&& slice_and_keys_to_append) mutable {
+        slices_to_write.insert(std::end(slices_to_write), std::make_move_iterator(std::begin(slice_and_keys_to_append)), std::make_move_iterator(std::end(slice_and_keys_to_append)));
+        std::sort(std::begin(slices_to_write), std::end(slices_to_write));
+        if(dynamic_schema) {
+            auto merged_descriptor =
+                merge_descriptors(frame.desc, std::vector< std::shared_ptr<FieldCollection>>{ index_segment_reader.tsd().fields_ptr()}, {});
+            merged_descriptor.set_sorted(deduce_sorted(index_segment_reader.get_sorted(), frame.desc.get_sorted()));
+            auto tsd =
+                make_timeseries_descriptor(frame.num_rows + frame.offset, std::move(merged_descriptor), std::move(frame.norm_meta), std::move(frame.user_meta), std::nullopt, std::nullopt, frame.bucketize_dynamic);
+            return index::write_index(stream::index_type_from_descriptor(frame.desc), std::move(tsd), std::move(slices_to_write), key, store);
+        } else {
+            frame.desc.set_sorted(deduce_sorted(index_segment_reader.get_sorted(), frame.desc.get_sorted()));
+            return index::write_index(std::move(frame), std::move(slices_to_write), key, store);
+        }
+    });
 }
 
 void update_string_columns(const SegmentInMemory& original, SegmentInMemory output) {

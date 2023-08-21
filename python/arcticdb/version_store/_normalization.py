@@ -24,7 +24,7 @@ from arcticc.pb2.storage_pb2 import VersionStoreConfig
 from mmap import mmap
 from collections import Counter
 from arcticdb.exceptions import ArcticNativeException, ArcticNativeNotYetImplemented
-from arcticdb.supported_types import time_types as supported_time_types
+from arcticdb.supported_types import DateRangeInput, time_types as supported_time_types
 from arcticdb.util._versions import IS_PANDAS_TWO
 from arcticdb.version_store.read_result import ReadResult
 from arcticdb_ext.version_store import SortedValue as _SortedValue
@@ -98,6 +98,13 @@ class FrameData(
             return FrameData(fd.value.data, fd.names, fd.index_columns)
 
 
+# NOTE: When using Pandas < 2.0, `datetime64` _always_ uses nanosecond resolution,
+# i.e. Pandas < 2.0 _always_ provides `datetime64[ns]` and ignores any other resolution.
+# Yet, this has changed in Pandas 2.0 and other resolution can be used,
+# i.e. Pandas >= 2.0 will also provides `datetime64[us]`, `datetime64[ms]` and `datetime64[s]`.
+# See: https://pandas.pydata.org/docs/dev/whatsnew/v2.0.0.html#construction-with-datetime64-or-timedelta64-dtype-with-unsupported-resolution  # noqa: E501
+# TODO: for the support of Pandas>=2.0, convert any `datetime` to `datetime64[ns]` before-hand and do not
+# rely uniquely on the resolution-less 'M' specifier if it this doable.
 DTN64_DTYPE = "datetime64[ns]"
 NP_OBJECT_DTYPE = np.dtype("O")
 
@@ -110,7 +117,10 @@ if PY3:
     def _accept_array_string(v):
         # TODO remove this once arctic keeps the string type under the hood
         # and does not transform string into bytes
-        return isinstance(v, string_types) or isinstance(v, binary_type)
+        # string_types and binary_type can be a single type or a tuple
+        supported_string_types = string_types if isinstance(string_types, tuple) else (string_types,)
+        supported_binary_types = binary_type if isinstance(binary_type, tuple) else (binary_type,)
+        return type(v) in supported_string_types or type(v) in supported_binary_types
 
 else:
 
@@ -1314,7 +1324,7 @@ def restrict_data_to_date_range_only(data: T, *, start: Timestamp, end: Timestam
     return data
 
 
-def normalize_dt_range_to_ts(dtr: "DateRangeInput") -> Tuple[Timestamp, Timestamp]:
+def normalize_dt_range_to_ts(dtr: DateRangeInput) -> Tuple[Timestamp, Timestamp]:
     def _to_utc_ts(v: "ExplicitlySupportedDates", bound_name: str) -> Timestamp:
         if not isinstance(v, supported_time_types):
             raise TypeError(

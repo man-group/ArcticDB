@@ -41,12 +41,12 @@ struct StreamSource {
 
     virtual void iterate_type(
         KeyType type,
-        std::function<void(entity::VariantKey &&)> func,
+        entity::IterateTypeVisitor func,
         const std::string &prefix = std::string{}) = 0;
 
     [[nodiscard]] virtual folly::Future<bool> key_exists(const entity::VariantKey &key) = 0;
     virtual bool key_exists_sync(const entity::VariantKey &key) = 0;
-    virtual bool supports_prefix_matching() = 0;
+    virtual bool supports_prefix_matching() const = 0;
     virtual bool fast_delete() = 0;
 
     virtual std::vector<storage::KeySegmentPair> batch_read_compressed(
@@ -70,7 +70,7 @@ struct StreamSource {
 
     using DecodeContinuation = folly::Function<folly::Unit(SegmentInMemory &&)>;
 
-    virtual std::vector<Composite<ProcessingSegment>> batch_read_uncompressed(
+    virtual std::vector<Composite<ProcessingUnit>> batch_read_uncompressed(
         std::vector<Composite<pipelines::SliceAndKey>> &&keys,
         const std::vector<std::shared_ptr<Clause>>& clauses,
         const std::shared_ptr<std::unordered_set<std::string>>& filter_columns,

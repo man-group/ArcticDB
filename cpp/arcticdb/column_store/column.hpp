@@ -851,7 +851,66 @@ public:
         return data_.buffer().blocks();
     }
 
+    // Only works if column is of numeric type and is monotonically increasing
+    // Returns the index such that if val were inserted before that index, the order would be preserved
+    // By default returns the lowest index satisfying this property. If from_right=true, returns the highest such index
+    template<class T, std::enable_if_t<std::is_integral_v<T> || std::is_floating_point_v<T>, int> = 0>
+    size_t search_sorted(T val, bool from_right=false) const {
+        // There will not necessarily be a unique answer for sparse columns
+        internal::check<ErrorCode::E_ASSERTION_FAILURE>(!is_sparse(),
+                                                        "Column::search_sorted not supported with sparse columns");
+        std::optional<size_t> res;
+        type().visit_tag([this, &res, val, from_right](auto type_desc_tag){
+            using TDT = decltype(type_desc_tag);
+            using RawType = typename TDT::DataTypeTag::raw_type;
+            if constexpr(std::is_same_v<T, RawType>) {
+                int64_t low{0};
+                int64_t high{row_count() -1};
+                while (!res.has_value()) {
+                    auto mid{low + (high - low) / 2};
+                    auto mid_value = *scalar_at<RawType>(mid);
+                    if (val == mid_value) {
+                        // At least one value in the column exactly matches the input val
+                        // Search to the right/left for the last/first such value
+                        if (from_right) {
+                            while (++mid <= high && val == *scalar_at<RawType>(mid)) {}
+                            res = mid;
+                        } else {
+                            while (--mid >= low && val == *scalar_at<RawType>(mid)) {}
+                            res = mid + 1;
+                        }
+                    } else if (val > mid_value) {
+                        if (mid + 1 <= high && val >= *scalar_at<RawType>(mid + 1)) {
+                            // Narrow the search interval
+                            low = mid + 1;
+                        } else {
+                            // val is less than the next value, so we have found the right interval
+                            res = mid + 1;
+                        }
+                    } else { // val < mid_value
+                        if (mid - 1 >= low && val <= *scalar_at<RawType>(mid + 1)) {
+                            // Narrow the search interval
+                            high = mid - 1;
+                        } else {
+                            // val is greater than the previous value, so we have found the right interval
+                            res = mid;
+                        }
+                    }
+                }
+            } else {
+                // TODO: Could relax this requirement using something like has_valid_common_type
+                internal::raise<ErrorCode::E_ASSERTION_FAILURE>(
+                        "Column::search_sorted requires input value to be of same type as column");
+            }
+        });
+        internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+                res.has_value(), "Column::search_sorted should always find an index");
+        return *res;
+    }
+
     static std::vector<std::shared_ptr<Column>> split(const std::shared_ptr<Column>& column, size_t num_rows);
+
+    static std::shared_ptr<Column> truncate(const std::shared_ptr<Column>& column, size_t start_row, size_t end_row);
 
 private:
     position_t last_offset() const {
@@ -918,7 +977,7 @@ private:
 
     util::BitMagic& sparse_map() {
         if(!sparse_map_)
-            sparse_map_ = std::make_optional<util::BitMagic>();
+            sparse_map_ = std::make_optional<util::BitMagic>(0);
 
         return sparse_map_.value();
     }

@@ -46,7 +46,7 @@ TEST(Append, MergeDescriptorsPromote) {
     IndexDescriptor idx{1u, IndexDescriptor::TIMESTAMP};
 
     std::vector<FieldRef> fields {
-        scalar_field(DataType::MICROS_UTC64, "time"),
+        scalar_field(DataType::NANOSECONDS_UTC64, "time"),
         scalar_field(DataType::INT8, "int8"),
         scalar_field(DataType::INT16, "int16"),
         scalar_field(DataType::UINT8, "uint8"),
@@ -59,7 +59,7 @@ TEST(Append, MergeDescriptorsPromote) {
 
     auto get_new_fields = [] () {
         std::vector<std::vector<FieldRef>> new_fields {{
-            scalar_field(DataType::MICROS_UTC64, "time"),
+            scalar_field(DataType::NANOSECONDS_UTC64, "time"),
             scalar_field(DataType::INT16, "int8"),
             scalar_field(DataType::INT32, "int16"),
             scalar_field(DataType::UINT16, "uint8"),
@@ -87,7 +87,7 @@ TEST(Append, MergeDescriptorsNoPromote) {
     IndexDescriptor idx{1u, IndexDescriptor::TIMESTAMP};
 
     std::vector<FieldRef> fields {
-        scalar_field(DataType::MICROS_UTC64, "time"),
+        scalar_field(DataType::NANOSECONDS_UTC64, "time"),
         scalar_field(DataType::INT8, "int8"),
         scalar_field(DataType::INT16, "int16"),
         scalar_field(DataType::UINT8, "uint8"),
@@ -99,7 +99,7 @@ TEST(Append, MergeDescriptorsNoPromote) {
     };
 
     std::vector<std::vector<FieldRef>> new_fields {{
-      scalar_field(DataType::MICROS_UTC64, "time"),
+      scalar_field(DataType::NANOSECONDS_UTC64, "time"),
       scalar_field(DataType::INT8, "int8"),
       scalar_field(DataType::INT16, "int16"),
       scalar_field(DataType::UINT8, "uint8"),

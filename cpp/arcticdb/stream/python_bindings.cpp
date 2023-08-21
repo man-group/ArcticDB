@@ -38,7 +38,7 @@ void register_types(py::module &m) {
         DATA_TYPE(FLOAT32)
         DATA_TYPE(FLOAT64)
         DATA_TYPE(BOOL8)
-        DATA_TYPE(MICROS_UTC64)
+        DATA_TYPE(NANOSECONDS_UTC64)
         DATA_TYPE(ASCII_FIXED64)
         DATA_TYPE(ASCII_DYNAMIC64)
         //DATA_TYPE(UTF8_STRING)

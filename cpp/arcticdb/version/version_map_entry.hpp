@@ -45,8 +45,7 @@ struct LoadParameter {
     }
 
     LoadParameter(LoadType load_type, int64_t load_from_time_or_until) :
-        load_type_(load_type),
-        load_from_time_(load_from_time_or_until) {
+        load_type_(load_type) {
         switch(load_type_) {
             case LoadType::LOAD_FROM_TIME:
                 load_from_time_ = load_from_time_or_until;
@@ -68,8 +67,10 @@ struct LoadParameter {
     bool iterate_on_failure_ = false;
 
     void validate() const {
-        util::check(load_type_ == LoadType::LOAD_DOWNTO ? static_cast<bool>(load_until_) : !static_cast<bool>(load_until_),
+        util::check((load_type_ == LoadType::LOAD_DOWNTO) == load_until_.has_value(),
                     "Invalid load parameter: load_type {} with load_util {}", int(load_type_), load_until_.value_or(VersionId{}));
+        util::check((load_type_ == LoadType::LOAD_FROM_TIME) == load_from_time_.has_value(),
+            "Invalid load parameter: load_type {} with load_from_time_ {}", int(load_type_), load_from_time_.value_or(timestamp{}));
     }
 };
 
@@ -296,7 +297,7 @@ struct VersionMapEntry {
     void check_stream_id() const {
         if (empty())
             return;
-        
+
         std::unordered_map<StreamId, std::vector<VersionId>> id_to_version_id;
         if (head_)
             id_to_version_id[head_.value().id()].push_back(head_.value().version_id());
