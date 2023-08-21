@@ -70,9 +70,15 @@ You will need to update:
 A PR is generally open with a todo-list summarizing all the required steps to perform,
 before an update to the feedstock.
 
+If the bot does not create a PR, you can create one yourself by following these steps:
+
+1. If fork not already created, navigate to https://github.com/conda-forge/arcticdb-feedstock and click Fork -> Create Fork
+2. On your repo, create a new branch for your change: `Branches`, `New Branch`, `conda-forge/arcticdb-feedstock`, `rc` or `main`
+3. Make your changes on your branch
+4. When creating the PR, make sure the correct base repository and branch are set. 
+
 > [!IMPORTANT]  
 > If releasing a pre-release version, you **must** merge the created PR into the `pr` branch and not the `main` branch. 
-> This will require modifying the base branch of the created PR.
 
 ## 3. Release to PyPi
 
