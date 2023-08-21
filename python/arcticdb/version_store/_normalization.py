@@ -186,7 +186,7 @@ def _to_primitive(arr, arr_name, dynamic_strings, string_max_len=None, coerce_co
         # See: https://pandas.pydata.org/docs/dev/whatsnew/v2.0.0.html#construction-with-datetime64-or-timedelta64-dtype-with-unsupported-resolution  # noqa: E501
         # We want to maintain consistent behaviour, so we convert any other resolution
         # to `datetime64[ns]`.
-        arr = arr.astype(DTN64_DTYPE, copy=False)
+        arr = arr.astype(DTN64_DTYPE, casting="safe", copy=False)
 
     if arr.dtype.hasobject is False and not (
         dynamic_strings and arr.dtype == "float" and coerce_column_type in obj_tokens
@@ -203,13 +203,13 @@ def _to_primitive(arr, arr_name, dynamic_strings, string_max_len=None, coerce_co
                 # We want to maintain consistent behaviour, so we treat empty series as containing floats.
                 # val_type = ValueType::FLOAT;
                 coerce_column_type = float
-                return arr.astype(coerce_column_type)
+                return arr.astype(coerce_column_type, casting="safe", copy=False)
             else:
                 raise ArcticNativeNotYetImplemented(
                     "coercing column type is required when empty column of object type, Column type={} for column={}"
                     .format(arr.dtype, arr_name)
                 )
-        return arr.astype(coerce_column_type)
+        return arr.astype(coerce_column_type, casting="safe", copy=False)
 
     # Coerce column allows us to force a column to the given type, which means we can skip expensive iterations in
     # Python with the caveat that if the user gave an invalid type it's going to blow up in the core.

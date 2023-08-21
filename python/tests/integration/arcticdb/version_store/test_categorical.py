@@ -115,8 +115,8 @@ def test_categorical_with_integers(lmdb_version_store, sym):
         # See: https://pandas.pydata.org/docs/dev/whatsnew/v2.0.0.html#index-can-now-hold-numpy-numeric-dtypes
         # We have not control over the underlying integral array storing code for categorical columns
         # so we replace the categorical column with its codes to perform the comparison with indentical dtypes.
-        df.cat_int = df.cat_int.cat.codes.astype(np.int32)
-        read_df.cat_int = read_df.cat_int.cat.codes.astype(np.int32)
+        df.cat_int = df.cat_int.cat.codes.astype(np.int32, casting="safe", copy=False)
+        read_df.cat_int = read_df.cat_int.cat.codes.astype(np.int32, casting="safe", copy=False)
 
     assert_frame_equal(df, read_df)
 
