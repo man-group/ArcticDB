@@ -16,6 +16,32 @@ jobs:
         cibuildwheel_ver: "2.12.1"
         force_update: false
 
+  pre_seed_cleanup:
+    name: Cleanup persistent storages
+    uses: ./.github/workflows/persistent_storage.yml
+    secrets: inherit
+    with:
+      job_type: cleanup
+
+  persistent_storage_seed_linux:
+    needs: [pre_seed_cleanup]
+    strategy:
+      fail-fast: false
+      matrix:
+        python3: ${{fromJson(vars.LINUX_PYTHON_VERSIONS || '[6, 7, 8, 9, 10, 11]')}}
+        include:
+          - python_deps_ids: [""]
+            matrix_override: ${{fromJson(needs.common_config.outputs.linux_matrix)}}
+    name: Seed Persistent Storage for 3.${{matrix.python3}} Linux
+    uses: ./.github/workflows/persistent_storage.yml
+    secrets: inherit
+    permissions: {packages: write}
+    with:
+      job_type: seed
+      python3: ${{matrix.python3}}
+      matrix: ${{toJson(matrix.matrix_override)}}
+      python_deps_ids: ${{toJson(matrix.python_deps_ids)}}
+
   code_coverage:
     needs: [cibw_docker_image]  
     runs-on: "ubuntu-latest"
@@ -85,7 +111,7 @@ jobs:
           make -j ${{ steps.cpu-cores.outputs.count }} arcticdb_rapidcheck_tests
           make -j ${{ steps.cpu-cores.outputs.count }} test_unit_arcticdb
           ctest
-
+      
       - name: Select Python 3.6
         run: echo /opt/python/cp36-cp36m/bin >> $GITHUB_PATH
 
@@ -93,6 +119,20 @@ jobs:
         # There are so few nonreg tests, run them in the hypothesis runner
         run: find python/tests/* -maxdepth 0 -type d ! -regex '.*\(__pycache__\|util\|nonreg\)' -printf '"%f",' |
               sed 's/^/test_dirs=[/ ; s/"hypothesis"/"{hypothesis,nonreg}"/ ; s/,$/]/' | tee -a $GITHUB_ENV
+
+      - name: Set real storage variables
+        run: |
+          # Common
+          echo "ARCTICDB_PERSISTENT_STORAGE_TESTS=1" >> $GITHUB_ENV
+          echo "ARCTICDB_PERSISTENT_STORAGE_BRANCH_NAME=${{ github.ref_name }}" >> $GITHUB_ENV
+          # S3 Specific
+          # TODO: Add these as GitHub variables
+          echo "ARCTICDB_REAL_S3_BUCKET='arcticdb-ci-test-bucket-01" >> $GITHUB_ENV
+          echo "ARCTICDB_REAL_S3_ENDPOINT='s3.eu-west-2.amazonaws.com'" >> $GITHUB_ENV
+          echo "ARCTICDB_REAL_S3_REGION='eu-west-2'" >> $GITHUB_ENV
+          echo "ARCTICDB_REAL_S3_CLEAR=1" >> $GITHUB_ENV
+          echo "ARCTICDB_REAL_S3_ACCESS_KEY=${{ secrets.AWS_S3_ACCESS_KEY }}" >> $GITHUB_ENV
+          echo "ARCTICDB_REAL_S3_SECRET_KEY=${{ secrets.AWS_S3_SECRET_KEY }}" >> $GITHUB_ENV
 
       - name: Test with pytest
         shell: bash -l {0}
@@ -106,11 +146,12 @@ jobs:
           cd python
           export MAN_ARCTICDB_USE_ARCTICDB=True
           ln -s ../cpp/out/linux-debug-build/arcticdb/arcticdb_ext.cpython-36m-x86_64-linux-gnu.so
-          python -m coverage run -m pytest tests
+          python -m pytest tests
         env:
           TEST_OUTPUT_DIR: ${{runner.temp}}
           # Use the Mongo created in the service container above to test against
           CI_MONGO_HOST: mongodb
+          ARCTICDB_PERSISTENT_STORAGE_LIB_NAME: 'test_${{ github.ref_name }}_${{matrix.os}}_${{env.python_impl_name}}${{matrix.python_deps_id}}'
 
       - name: Gcovr manually pre-pytest
         shell: bash -l {0}
@@ -126,3 +167,11 @@ jobs:
         with:
           name: coverage-artifact
           path: cpp/out/linux-debug-build/coverage.zip
+
+  persistent_storages_cleanup:
+    needs: [code_coverage]
+    name: Cleanup persistent storages
+    uses: ./.github/workflows/persistent_storage.yml
+    secrets: inherit
+    with:
+      job_type: cleanup

@@ -6,6 +6,7 @@ on:
       matrix:            {type: string, description: JSON string to feed into the matrix}
       python_deps_ids:   {default: '[""]', type: string, description: Follower test matrix parameter. JSON string.}
       python3:           {default: -1, type: number, description: Python 3 minor version}
+      storage_prefix:    {default: "", type: string, description: Sets a prefix for the libraries that will be written by the seed storage job}
       # TODO: Maybe we should add these as GitHub variables
       bucket:            {default: 'arcticdb-ci-test-bucket-01', type: string, description: The name of the S3 bucket that we will test against}
       endpoint:          {default: 's3.eu-west-2.amazonaws.com', type: string, description: The address of the S3 endpoint}
