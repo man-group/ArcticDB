@@ -810,6 +810,22 @@ class Library:
             prune_previous_version=prune_previous_versions,
         )
 
+    def delete_staged_data(self, symbol: str):
+        """
+        Removes staged data.
+
+        Parameters
+        ----------
+        symbol : `str`
+            Symbol to remove staged data for.
+
+        See Also
+        --------
+        write
+            Documentation on the ``staged`` parameter explains the concept of staged data in more detail.
+        """
+        self._nvs.remove_incomplete(symbol)
+
     def finalize_staged_data(
         self,
         symbol: str,
@@ -881,7 +897,7 @@ class Library:
         write
             Documentation on the ``staged`` parameter explains the concept of staged data in more detail.
         """
-        return self._nvs.version_store.get_incomplete_symbols()
+        return self._nvs.list_symbols_with_incomplete_data()
 
     def read(
         self,

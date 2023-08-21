@@ -18,11 +18,47 @@ from arcticdb.util.test import (
     random_floats,
     random_dates,
 )
+from arcticdb_ext.storage import KeyType
+
+
+def test_remove_incomplete(lmdb_version_store):
+    lib = lmdb_version_store
+    lib_tool = lib.library_tool()
+    assert lib_tool.find_keys(KeyType.APPEND_DATA) == []
+    assert lib.list_symbols_with_incomplete_data() == []
+
+    sym1 = "test_remove_incomplete_1"
+    sym2 = "test_remove_incomplete_2"
+    num_chunks = 10
+    df1 = pd.DataFrame({"col": np.arange(10)}, index=pd.date_range("2000-01-01", periods=num_chunks))
+    df2 = pd.DataFrame({"col": np.arange(100, 110)}, index=pd.date_range("2001-01-01", periods=num_chunks))
+    for idx in range(num_chunks):
+        lib.write(sym1, df1.iloc[idx : idx + 1, :], parallel=True)
+        lib.write(sym2, df2.iloc[idx : idx + 1, :], parallel=True)
+
+    assert len(lib_tool.find_keys_for_symbol(KeyType.APPEND_DATA, sym1)) == num_chunks
+    assert len(lib_tool.find_keys_for_symbol(KeyType.APPEND_DATA, sym2)) == num_chunks
+    assert sorted(lib.list_symbols_with_incomplete_data()) == [sym1, sym2]
+
+    lib.remove_incomplete(sym1)
+    assert lib_tool.find_keys_for_symbol(KeyType.APPEND_DATA, sym1) == []
+    assert len(lib_tool.find_keys_for_symbol(KeyType.APPEND_DATA, sym2)) == num_chunks
+    assert lib.list_symbols_with_incomplete_data() == [sym2]
+
+    lib.remove_incomplete(sym2)
+    assert lib_tool.find_keys(KeyType.APPEND_DATA) == []
+    assert lib.list_symbols_with_incomplete_data() == []
+
+    # Removing incompletes from a symbol that doesn't exist, or a symbol with no incompletes, is a no-op
+    lib.remove_incomplete("non-existent-symbol")
+    sym3 = "test_remove_incomplete_3"
+    lib.write(sym3, df1)
+    lib.remove_incomplete(sym3)
 
 
 def test_parallel_write(lmdb_version_store):
     sym = "parallel"
-    lmdb_version_store.version_store.remove_incomplete(sym)
+    lmdb_version_store.remove_incomplete(sym)
 
     num_rows = 1111
     dtidx = pd.date_range("1970-01-01", periods=num_rows)
