@@ -13,6 +13,7 @@ import pytest
 import sys
 
 from arcticdb.util.test import assert_frame_equal
+from arcticdb.util._versions import IS_PANDAS_TWO
 from arcticdb_ext.tools import AZURE_SUPPORT
 
 
@@ -80,5 +81,10 @@ def test_stress_multicolumn(lib_type, request):
         now = pd.Timestamp("now")
         output_df = lib.read(name).data
         print("reading from arctic native: {}".format(pd.Timestamp("now") - now))
+
+        if IS_PANDAS_TWO:
+            # In Pandas 2.0, RangeIndex is used by default when an empty dataframe or series is created.
+            # The index has to be converted to a DatetimeIndex by ArcticDB to perform updates.
+            test_data.index = test_data.index.astype("datetime64[ns]")
 
         assert_frame_equal(test_data, output_df)
