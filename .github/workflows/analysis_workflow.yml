@@ -26,6 +26,15 @@ jobs:
                 do_not_archive: ["*.so", "*.[ao]", "vcpkg_installed"]
                 test_services:
                   mongodb: { image: "mongo:4.4" }
+                  windows_matrix:
+              - os: windows
+                distro: windows-latest
+                cmake_preset_prefix: windows-cl
+                cibw_build_suffix: win_amd64
+                build_dir: C:\cpp_build
+                symbols: "*.pdb" # Please update publish.yml when changing this!!
+                do_not_archive: ["*.lib", "*.ilk", "*.pyd", "*.dll", "CMakeFiles/*.dir", "vcpkg_installed"]
+                test_services: {}
     steps:
       - run: |
           echo "Configuring"
