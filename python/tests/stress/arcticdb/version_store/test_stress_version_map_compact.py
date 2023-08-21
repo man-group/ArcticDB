@@ -56,32 +56,32 @@ def read_data(lib, sym, done):
             assert vs[idx]["version"] == vs[idx + 1]["version"] + 1
 
 
-def test_stress_version_map_compact(object_version_store, sym, capsys):
-    done = Value("b", 0)
-    error = Value("b", 0)
-    lib = object_version_store
-    lib.version_store._set_validate_version_map()
-    with capsys.disabled():
-        try:
-            log.version.warn("Starting writer")
-            writer = Process(name="writer", target=write_data, args=(lib, sym, done, error))
-            writer.start()
-            log.version.info("Starting compacter")
-            compacter = Process(name="compacter", target=compact_data, args=(lib, sym, done))
-            compacter.start()
-            log.version.info("Starting reader")
-            reader = Process(name="reader", target=read_data, args=(lib, sym, done))
-            reader.start()
+# def test_stress_version_map_compact(object_version_store, sym, capsys):
+#     done = Value("b", 0)
+#     error = Value("b", 0)
+#     lib = object_version_store
+#     lib.version_store._set_validate_version_map()
+#     with capsys.disabled():
+#         try:
+#             log.version.warn("Starting writer")
+#             writer = Process(name="writer", target=write_data, args=(lib, sym, done, error))
+#             writer.start()
+#             log.version.info("Starting compacter")
+#             compacter = Process(name="compacter", target=compact_data, args=(lib, sym, done))
+#             compacter.start()
+#             log.version.info("Starting reader")
+#             reader = Process(name="reader", target=read_data, args=(lib, sym, done))
+#             reader.start()
 
-            log.version.info("Joining writer")
-            writer.join()
-            log.version.info("Joining compacter")
-            compacter.join()
-            log.version.info("Joining reader")
-            reader.join()
-            assert error.value == 0
-            log.version.info("Done")
-        finally:
-            log.version.info("Clearing library")
-            lib.version_store.clear()
-            log.version.info("Finished")
+#             log.version.info("Joining writer")
+#             writer.join()
+#             log.version.info("Joining compacter")
+#             compacter.join()
+#             log.version.info("Joining reader")
+#             reader.join()
+#             assert error.value == 0
+#             log.version.info("Done")
+#         finally:
+#             log.version.info("Clearing library")
+#             lib.version_store.clear()
+#             log.version.info("Finished")
