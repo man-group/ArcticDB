@@ -191,6 +191,15 @@ jobs:
           CI_MONGO_HOST: mongodb
           ARCTICDB_PERSISTENT_STORAGE_LIB_NAME: 'test_${{ github.run_id }}_${{matrix.os}}_${{env.python_impl_name}}${{matrix.python_deps_id}}'
 
+      - name: Get python Coverage report
+        shell: bash -l {0}
+        run: |
+          cd python
+          /opt/python/cp36-cp36m/bin/python -m coverage report -m
+          /opt/python/cp36-cp36m/bin/python -m coverage html
+          ls
+          zip -r python_cov.zip htmlcov/
+
       - name: Run Gcovr manually post-pytest
         shell: bash -l {0}
         run: |
@@ -205,8 +214,14 @@ jobs:
       - name: Upload Coverage
         uses: actions/upload-artifact@v3
         with:
-          name: coverage-artifact
+          name: cpp-coverage-artifact
           path: cpp/out/linux-debug-build/coverage.zip
+
+      - name: Upload Python Coverage
+        uses: actions/upload-artifact@v3
+        with:
+          name: python-coverage-artifact
+          path: python/python_cov.zip
 
       - name: Restore cache
         id: cache
