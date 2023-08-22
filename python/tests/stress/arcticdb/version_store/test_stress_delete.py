@@ -36,7 +36,8 @@ def check_no_keys(library):
         pytest.param(
             "real_s3_store_factory",
             marks=pytest.mark.skipif(
-                not PERSISTENT_STORAGE_TESTS_ENABLED, reason="Can be used only when persistent storage is enabled"),
+                not PERSISTENT_STORAGE_TESTS_ENABLED, reason="Can be used only when persistent storage is enabled"
+            ),
         ),
     ],
 )

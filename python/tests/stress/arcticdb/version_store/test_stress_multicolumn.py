@@ -18,6 +18,7 @@ from arcticdb_ext.tools import AZURE_SUPPORT
 
 from tests.conftest import PERSISTENT_STORAGE_TESTS_ENABLED
 
+
 def id_generator(size=75, chars=string.ascii_uppercase + string.digits):
     return "".join(random.choice(chars) for _ in range(size))
 
