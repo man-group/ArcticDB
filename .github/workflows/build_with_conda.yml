@@ -58,6 +58,8 @@ jobs:
           python -m pip install --no-build-isolation --no-deps -v -e .
         env:
           ARCTICDB_USING_CONDA: 1
+          # Using one thread to avoid swapping which might freeze CI machines.
+          CMAKE_BUILD_PARALLEL_LEVEL: 1
           ARCTICDB_BUILD_CPP_TESTS: ${{ matrix.cpp_tests }}
 
       - name: Build C++ Tests
@@ -124,6 +126,8 @@ jobs:
           python -m pip install --no-build-isolation --no-deps -v -e .
         env:
           ARCTICDB_USING_CONDA: 1
+          # Using one thread to avoid swapping which might freeze the CI machine.
+          CMAKE_BUILD_PARALLEL_LEVEL: 1
           ARCTICDB_BUILD_CPP_TESTS: 1
 
       - name: Build C++ Tests
