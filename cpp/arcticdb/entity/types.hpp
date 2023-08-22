@@ -117,7 +117,10 @@ enum class ValueType : uint8_t {
     ASCII_DYNAMIC = 12,
     /// Used to represent null types. Each type can be converted to Empty and Empty can be converted to each type.
     EMPTY = 13,
+    /// Nullable booleans
     PYBOOL = 14,
+    /// Numpy arrays
+    ARRAY = 15,
     COUNT // Not a real value type, should not be added to proto descriptor. Used to count the number of items in the enum
 };
 
@@ -207,6 +210,7 @@ enum class DataType : uint8_t {
     EMPTYVAL = detail::combine_val_bits(ValueType::EMPTY, SizeBits::S64),
     PYBOOL8 = detail::combine_val_bits(ValueType::PYBOOL, SizeBits::S8),
     PYBOOL64 = detail::combine_val_bits(ValueType::PYBOOL, SizeBits::S64),
+    ARRAY64 = detail::combine_val_bits(ValueType::ARRAY, SizeBits::S64),
 #undef DT_COMBINE
     UNKNOWN = 0,
 };
@@ -301,11 +305,15 @@ constexpr bool is_empty_type(DataType v){
     return is_empty_type(slice_value_type(v));
 }
 
+constexpr bool is_array_type(DataType dt) {
+    return slice_value_type(dt) == ValueType::ARRAY;
+}
+
 constexpr bool is_pyobject_type(DataType v) {
     return is_dynamic_string_type(slice_value_type(v)) ||
-        slice_value_type(v) == ValueType::PYBOOL;// ||
+        slice_value_type(v) == ValueType::PYBOOL ||
         //v == DataType::DECIMAL64 ||
-        //slice_value_type(v) == ValueType::ARRAY;
+        slice_value_type(v) == ValueType::ARRAY;
 }
 
 static_assert(slice_value_type((DataType::UINT16)) == ValueType(1));
@@ -401,6 +409,7 @@ DATA_TYPE_TAG(UTF_DYNAMIC64, std::uint64_t)
 DATA_TYPE_TAG(EMPTYVAL, std::uint64_t)
 DATA_TYPE_TAG(PYBOOL8, uint8_t)
 DATA_TYPE_TAG(PYBOOL64, std::uint64_t)
+DATA_TYPE_TAG(ARRAY64, std::uint64_t)
 #undef DATA_TYPE_TAG
 
 enum class Dimension : uint8_t {
@@ -484,6 +493,10 @@ struct TypeDescriptor {
         set_data_type(data_type_, output);
 
         return output;
+    }
+
+    void set_size_bits(SizeBits new_size_bits) {
+        data_type_ = combine_data_type(slice_value_type(data_type_), new_size_bits);
     }
 };
 
@@ -706,6 +719,10 @@ public:
 
     const TypeDescriptor& type() const {
         return type_;
+    }
+
+    [[nodiscard]] TypeDescriptor* mutable_type_desc() {
+        return &type_;
     }
 
     TypeDescriptor& mutable_type() {

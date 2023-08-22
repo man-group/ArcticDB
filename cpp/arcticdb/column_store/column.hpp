@@ -379,6 +379,14 @@ public:
         sparse_map_ = std::move(bitset);
     }
 
+    ChunkedBuffer&& release_buffer() {
+        return std::move(data_.buffer());
+    }
+
+    Buffer&& release_shapes() {
+        return std::move(shapes_.buffer());
+    }
+
     template<class T, template<class> class Tensor, std::enable_if_t<
             std::is_integral_v<T> || std::is_floating_point_v<T>,
             int> = 0>

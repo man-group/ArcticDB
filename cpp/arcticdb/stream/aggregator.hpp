@@ -232,6 +232,10 @@ class Aggregator {
         segment_.set_sparse_block(idx, std::move(buffer), std::move(shapes), std::move(bitset));
     }
 
+    void set_secondary_type(position_t idx, TypeDescriptor type) {
+        segment_.set_secondary_type(idx, type);
+    }
+
     void set_string_at(position_t col, position_t row, const char* val, size_t size) {
         segment_.set_string_at(col, row, val, size);
     }

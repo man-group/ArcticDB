@@ -228,16 +228,18 @@ struct StreamDescriptor {
         util::check(field < position_t(fields().size()), "Column index out of range in drop_column");
         fields_->erase_field(field);
     }
-/*
+
+    /*
     std::optional<Field> field_at(size_t pos) {
         if (UNLIKELY(pos >= static_cast<size_t>(fields().size()))) return std::nullopt;
         return fields(pos);
     }
+     */
 
     FieldCollection& mutable_fields() {
         return *fields_;
     }
-*/
+
     [[nodiscard]] const Field& fields(size_t pos) const {
         return fields_->at(pos);
     }

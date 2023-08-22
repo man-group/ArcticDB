@@ -209,6 +209,46 @@ std::optional<convert::StringEncodingError> aggregator_set_data(
             if(bitset.count() > 0)
                 agg.set_sparse_block(col, std::move(bool_buffer), std::move(bitset));
 
+        } else if constexpr(is_array_type(dt)) {
+            auto data = const_cast<void *>(tensor.data());
+            auto ptr_data = reinterpret_cast<PyObject**>(data);
+            ptr_data += row;
+
+            if (!c_style)
+                ptr_data = flatten_tensor<PyObject*>(flattened_buffer, rows_to_write, tensor, slice_num, regular_slice_size);
+
+            util::BitSet bitset;
+            util::scan_object_type_to_sparse(ptr_data, rows_to_write, bitset);
+
+            const auto num_values = bitset.count();
+            if(num_values == 0)
+                return;
+
+            auto en = bitset.first();
+            auto tensor = convert::obj_to_tensor(ptr_data[*en]);
+            ssize_t row{0};
+            auto arr_td = TypeDescriptor{tensor.data_type(), Dimension{static_cast<uint8_t>(tensor.ndim())}};
+            Column arr_col{arr_td, true};
+            auto en_end = bitset.end();
+            std::optional<DataType> arr_data_type;
+            while (en < en_end) {
+                const auto arr_pos = *en;
+                tensor = convert::obj_to_tensor(ptr_data[arr_pos]);
+                auto current_td = TypeDescriptor{tensor.data_type(), Dimension{static_cast<uint8_t>(tensor.ndim())}};
+                util::check(current_td == arr_td, "Type descriptor mismatch in array type: {} != {}", current_td, arr_td);
+                arr_td.template visit_tag([&arr_col, &tensor, &row] (auto tdt) {
+                    using ArrayType = typename decltype(tdt)::DataTypeTag::raw_type;
+                    if constexpr(std::is_integral_v<ArrayType> || std::is_floating_point_v<ArrayType>){
+                        TypedTensor<ArrayType> typed_tensor{tensor};
+                        arr_col.set_array(row++, typed_tensor);
+                    } else
+                        util::raise_rte("Non-numeric types not supported in array values");
+                });
+
+                ++en;
+            }
+            agg.set_sparse_block(col, std::move(arr_col.release_buffer()), std::move(arr_col.release_shapes()), std::move(bitset));
+            agg.set_secondary_type(col, arr_td);
         } else if constexpr (!is_empty_type(dt)) {
             static_assert(!sizeof(dt), "Unknown data type");
         }

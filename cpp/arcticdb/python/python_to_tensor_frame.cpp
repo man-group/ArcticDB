@@ -35,12 +35,14 @@ bool is_py_boolean(PyObject* obj) {
     return PyBool_Check(obj);
 }
 
-std::tuple<ValueType, uint8_t, ssize_t> determine_python_object_type(PyObject* obj) {
-    /*if(is_py_decimal(obj))
-        return {ValueType::DECIMAL, 16, 1};
+[[nodiscard]] static inline bool is_py_array(PyObject* obj) {
+    const auto& api = pybind11::detail::npy_api::get();
+    return api.PyArray_Check_(obj);
+}
 
+std::tuple<ValueType, uint8_t, ssize_t> determine_python_object_type(PyObject* obj) {
     if(is_py_array(obj))
-        return {ValueType::ARRAY, 8, 2};*/
+        return {ValueType::ARRAY, 8, 2};
 
     if(is_py_boolean(obj))
         return {ValueType::PYBOOL, 1, 1};
@@ -102,7 +104,7 @@ NativeTensor obj_to_tensor(PyObject *ptr) {
         val_bytes = 8;
 
         // If Numpy has type 'O' then get_value_type above will return type 'BYTES'
-        // If there is no value and we can't deduce a type then leave it that way,
+        // If there is no value, and we can't deduce a type then leave it that way,
         // otherwise try to work out whether it was a bytes (string) type or unicode
         if (!is_fixed_string_type(val_type) && size > 0) {
             auto none = py::none{};
@@ -144,6 +146,8 @@ NativeTensor obj_to_tensor(PyObject *ptr) {
                 val_type = ValueType::UTF_DYNAMIC;
             } else if (PYBIND11_BYTES_CHECK(sample)) {
                 val_type = ValueType::ASCII_DYNAMIC;
+            } else {
+                std::tie(val_type, val_bytes, ndim) = determine_python_object_type(sample);
             }
         }
     }
@@ -214,7 +218,10 @@ InputTensorFrame py_ndf_to_frame(
     for (auto i = 0u; i < col_vals.size(); ++i) {
         auto tensor = obj_to_tensor(col_vals[i].ptr());
         res.num_rows = std::max(res.num_rows, tensor.shape(0));
-        res.desc.add_field(scalar_field(tensor.data_type(), col_names[i]));
+        if(tensor.ndim() == 1)
+            res.desc.add_field(scalar_field(tensor.data_type(), col_names[i]));
+        else
+            res.desc.add_field(FieldRef{TypeDescriptor{tensor.data_type(), Dimension::Dim1}, col_names[i]});
         res.field_tensors.push_back(std::move(tensor));
     }
 

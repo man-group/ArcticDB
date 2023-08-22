@@ -260,6 +260,9 @@ void register_metrics(py::module && m){
 /// @see arcticdb::ITypeHandler
 void register_type_handlers() {
     arcticdb::TypeHandlerRegistry::instance()->register_handler(arcticdb::DataType::EMPTYVAL, arcticdb::EmptyHandler());
+    arcticdb::TypeHandlerRegistry::instance()->register_handler(arcticdb::DataType::ARRAY64, arcticdb::ArrayHandler());
+    arcticdb::TypeHandlerRegistry::instance()->register_handler(arcticdb::DataType::PYBOOL64, arcticdb::BoolHandler());
+    arcticdb::TypeHandlerRegistry::instance()->register_handler(arcticdb::DataType::PYBOOL8, arcticdb::BoolHandler());
 }
 
 /// Register handling of non-trivial types. For more information @see arcticdb::TypeHandlerRegistry and

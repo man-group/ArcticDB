@@ -50,6 +50,15 @@ void mark_index_slices(
         column_groups).value();
 }
 
+StreamDescriptor modify_output_sizes(StreamDescriptor&& desc) {
+    for(auto& field : desc.mutable_fields()) {
+        if(is_py_bool_type(field.type().data_type())) {
+            field.mutable_type_desc()->set_size_bits(SizeBits::S64);
+        }
+    }
+    return std::move(desc);
+}
+
 StreamDescriptor get_filtered_descriptor(StreamDescriptor&& descriptor, const std::shared_ptr<FieldCollection>& filter_columns) {
     // We assume here that filter_columns_ will always contain the index.
 
@@ -57,10 +66,10 @@ StreamDescriptor get_filtered_descriptor(StreamDescriptor&& descriptor, const st
     auto index = stream::index_type_from_descriptor(desc);
     return util::variant_match(index, [&desc, &filter_columns] (const auto& idx) {
         if(filter_columns) {
-            return StreamDescriptor{index_descriptor(desc.id(), idx, *filter_columns)};
+            return modify_output_sizes(StreamDescriptor{index_descriptor(desc.id(), idx, *filter_columns)});
         }
         else {
-            return StreamDescriptor{index_descriptor(desc.id(), idx, *desc.fields_ptr())};
+            return modify_output_sizes(StreamDescriptor{index_descriptor(desc.id(), idx, *desc.fields_ptr())});
         }
     });
 }
@@ -309,7 +318,7 @@ void decode_into_frame_static(
     SegmentInMemory &frame,
     PipelineContextRow &context,
     Segment &&s,
-    const std::shared_ptr<BufferHolder> buffers) {
+    const std::shared_ptr<BufferHolder>& buffers) {
     auto seg = std::move(s);
     ARCTICDB_SAMPLE_DEFAULT(DecodeIntoFrame)
     const uint8_t *data = seg.buffer().data();

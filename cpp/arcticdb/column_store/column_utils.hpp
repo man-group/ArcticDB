@@ -44,7 +44,7 @@ inline py::array array_at(const SegmentInMemory& frame, std::size_t col_pos, py:
                 } else {
                     dtype = fmt::format("{}{:d}", get_dtype_specifier(data_type), esize);
                 }
-            } else if constexpr (is_empty_type(data_type) || is_py_bool_type(data_type)) {
+            } else if constexpr (is_empty_type(data_type) || is_py_bool_type(data_type) || is_array_type(data_type)) {
                 dtype= "O";
             } else {
                 static_assert(!sizeof(data_type), "Unhandled data type");
@@ -84,7 +84,7 @@ inline py::array array_at(const SegmentInMemory& frame, std::size_t col_pos, py:
             } else {
                 dtype = fmt::format("{}{:d}", get_dtype_specifier(data_type), esize);
             }
-        } else if constexpr (is_empty_type(data_type) || is_py_bool_type(data_type)) {
+        } else if constexpr (is_empty_type(data_type) || is_py_bool_type(data_type) || is_array_type(data_type)) {
             dtype = "O";
         } else {
             static_assert(!sizeof(data_type), "Unhandled data type");

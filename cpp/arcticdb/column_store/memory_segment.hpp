@@ -267,6 +267,10 @@ public:
         impl_->sparsify();
     }
 
+    void set_secondary_type(position_t idx, TypeDescriptor type) {
+        impl_->set_secondary_type(idx, type);
+    }
+
     template<class T, std::enable_if_t<std::is_integral_v<T> || std::is_floating_point_v<T>, int> = 0>
     void set_external_block(position_t idx, T *val, size_t size) {
         impl_->set_external_block(idx, val, size);
@@ -283,10 +287,6 @@ public:
 
     void set_sparse_block(position_t idx, ChunkedBuffer&& buffer, util::BitSet&& bitset) {
         impl_->set_sparse_block(idx, std::move(buffer), std::move(bitset));
-    }
-
-    void set_secondary_type(position_t idx, TypeDescriptor type) {
-        impl_->set_secondary_type(idx, type);
     }
 
     void set_offset(ssize_t offset) {

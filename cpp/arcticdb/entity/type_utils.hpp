@@ -24,6 +24,10 @@ inline bool trivially_compatible_types(entity::TypeDescriptor left, entity::Type
         return is_utf_type(slice_value_type(left.data_type()))  == is_utf_type(slice_value_type(right.data_type()));
     }
 
+    if(is_py_bool_type(right.data_type()) && is_py_bool_type(right.data_type())) {
+        return true;
+    }
+
     return false;
 }
 

@@ -64,6 +64,11 @@ struct OutputType<DataTypeTag<DataType::PYBOOL64>, void> {
 
 };
 
+template<>
+struct OutputType<DataTypeTag<DataType::ARRAY64>, void> {
+    using type = ScalarTagType<DataTypeTag<DataType::ARRAY64>>;
+};
+
 void add_data_type_impl(DataType data_type, std::optional<DataType>& current_data_type);
 
 struct MinMaxAggregatorData {
