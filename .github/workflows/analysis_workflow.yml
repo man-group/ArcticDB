@@ -6,8 +6,15 @@ on:
         type: boolean
 
   push:
-    branches:
-        - "analysis_workflow"
+    branches: ["**"]
+    tags: [v**]
+    paths:
+      - .github/workflows/*.yml
+      - build_tooling/**
+      - cpp/**
+      - python/**
+      - setup.*
+      - pyproject.toml
 jobs:
   common_config:
     runs-on: ubuntu-latest
