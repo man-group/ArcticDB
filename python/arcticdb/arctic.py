@@ -67,8 +67,6 @@ class Arctic:
                 +---------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------+
                 | aws_auth                  | If true, authentication to endpoint will be computed via AWS environment vars/config files. If no options are provided `aws_auth` will be assumed to be true. |
                 +---------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------+
-                | force_uri_lib_config      | Override the credentials and endpoint of an S3 storage with the URI of the Arctic object. Use if accessing a replicated (to different region/bucket) library. |
-                +---------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------+
 
                 Note: When connecting to AWS, `region` can be automatically deduced from the endpoint if the given endpoint
                 specifies the region and `region` is not set.
@@ -267,7 +265,7 @@ class Arctic:
         library.env = repr(self._library_adapter)
         lib = Library(repr(self), library)
         self._open_libraries[name] = lib
-        self._library_manager.write_library_config(library._lib_cfg, name)
+        self._library_manager.write_library_config(library._lib_cfg, name, self._library_adapter.get_masking_override())
         return self.get_library(name)
 
     def delete_library(self, name: str) -> None:
@@ -285,7 +283,7 @@ class Arctic:
         already_open = self._open_libraries.pop(name, None)
         if not already_open and not self._library_manager.has_library(name):
             return
-        config = self._library_manager.get_library_config(name, StorageOverride())
+        config = self._library_manager.get_library_config(name)
         (already_open or self[name])._nvs.version_store.clear()
         del already_open  # essential to free resources held by the library
         try:

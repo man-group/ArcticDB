@@ -9,7 +9,6 @@ import numpy as np
 import pandas as pd
 import random
 import datetime
-import pytest
 
 from arcticdb.util.test import (
     assert_frame_equal,

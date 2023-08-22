@@ -67,3 +67,7 @@ class ArcticLibraryAdapter(ABC):
 
     def get_storage_override(self) -> StorageOverride:
         return StorageOverride()
+
+    def get_masking_override(self) -> StorageOverride:
+        """Override that clears any storage config that should not be persisted."""
+        return StorageOverride()
