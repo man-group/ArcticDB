@@ -27,7 +27,7 @@ PARSED_QUERY = namedtuple("PARSED_QUERY", ["region"])
 @dataclass
 class ParsedQuery:
     Path_prefix: Optional[str] = None
-    CA_cert_path: Optional[str] = ""
+    CA_cert_path: str = ""
     Container: Optional[str] = None
 
 
