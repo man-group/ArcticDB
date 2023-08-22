@@ -711,9 +711,17 @@ class DataFrameNormalizer(_PandasNormalizer):
             columns_dtype = {} if data is None else {name: np_array.dtype for name, np_array in data.items()}
             df = DataFrame(data, index=index, columns=columns)
 
-            # Horribly setting the columns' dtype manually, since pandas might just convert the dtype of
-            # some (empty) columns to another one and since the `dtype` keyword for `pd.DataFrame` constructor
-            # does not accept a mapping such as `columns_dtype`...
+            # Setting the columns' dtype manually, since pandas might just convert the dtype of some
+            # (empty) columns to another one and since the `dtype` keyword for `pd.DataFrame` constructor
+            # does not accept a mapping such as `columns_dtype`.
+            # For instance the following code has been tried but returns a pandas.DataFrame full of NaNs:
+            #
+            #       columns_mapping = {} if data is None else {
+            #           name: pd.Series(np_array, index=index, dtype=np_array.dtype)
+            #           for name, np_array in data.items()
+            #       }
+            #       df = DataFrame(index=index, columns=columns_mapping, copy=False)
+            #
             for column_name, dtype in columns_dtype.items():
                 df[column_name] = df[column_name].astype(dtype, copy=False)
 
