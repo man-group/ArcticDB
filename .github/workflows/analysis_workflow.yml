@@ -74,6 +74,25 @@ jobs:
       matrix: ${{toJson(matrix.matrix_override)}}
       python_deps_ids: ${{toJson(matrix.python_deps_ids)}}
 
+  persistent_storage_seed_windows:
+    needs: [pre_seed_cleanup, common_config]
+    strategy:
+      fail-fast: false
+      matrix:
+        python3: ${{fromJson(vars.WINDOWS_PYTHON_VERSIONS || '[7, 8, 9, 10, 11]')}}
+        include:
+          - python_deps_ids: [""]
+            matrix_override: ${{fromJson(needs.common_config.outputs.windows_matrix)}}
+    name: Seed Persistent Storage for 3.${{matrix.python3}} Windows
+    uses: ./.github/workflows/persistent_storage.yml
+    secrets: inherit
+    permissions: {packages: write}
+    with:
+      job_type: seed
+      python3: ${{matrix.python3}}
+      matrix: ${{toJson(matrix.matrix_override)}}
+      python_deps_ids: ${{toJson(matrix.python_deps_ids)}}
+
   code_coverage:
     needs: [cibw_docker_image, persistent_storage_seed_linux]  
     runs-on: "ubuntu-latest"
