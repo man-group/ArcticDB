@@ -15,6 +15,7 @@ import sys
 from arcticdb.util.test import assert_frame_equal
 from arcticdb_ext.tools import AZURE_SUPPORT
 
+from tests.conftest import PERSISTENT_STORAGE_TESTS_ENABLED
 
 def id_generator(size=75, chars=string.ascii_uppercase + string.digits):
     return "".join(random.choice(chars) for _ in range(size))
@@ -49,6 +50,12 @@ def make_periods(start_date, end_date, freq, range_type="b"):
         pytest.param(
             "azure_version_store",
             marks=pytest.mark.skipif(not AZURE_SUPPORT, reason="Pending Azure Storge Conda support"),
+        ),
+        pytest.param(
+            "real_s3_version_store",
+            marks=pytest.mark.skipif(
+                not PERSISTENT_STORAGE_TESTS_ENABLED, reason="Can be used only when persistent storage is enabled"
+            ),
         ),
     ],
 )

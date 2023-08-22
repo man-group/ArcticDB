@@ -2,8 +2,8 @@ import pytest
 import os
 import pandas as pd
 from arcticdb.arctic import Arctic
+from tests.conftest import PERSISTENT_STORAGE_TESTS_ENABLED
 
-PERSISTENT_STORAGE_TESTS_ENABLED = os.getenv("ARCTICDB_PERSISTENT_STORAGE_TESTS") == "1"
 PERSISTENT_STORAGE_LIB_NAME = os.getenv("ARCTICDB_PERSISTENT_STORAGE_LIB_NAME")
 BRANCH_NAME = os.getenv("ARCTICDB_PERSISTENT_STORAGE_BRANCH_NAME")
 
@@ -40,10 +40,8 @@ def normalize_lib_name(lib_name):
 @pytest.mark.skipif(
     not PERSISTENT_STORAGE_TESTS_ENABLED, reason="This test should run only if the persistent storage tests are enabled"
 )
-def test_real_s3_storage_read(real_s3_credentials, library):
-    endpoint, bucket, region, access_key, secret_key, _ = real_s3_credentials
-    uri = f"s3s://{endpoint}:{bucket}?access={access_key}&secret={secret_key}&region={region}&path_prefix=ci_tests/"
-    ac = Arctic(uri)
+def test_real_s3_storage_read(real_s3_uri, library):
+    ac = Arctic(real_s3_uri)
     lib_name = f"seed_{BRANCH_NAME}_{library}"
     lib_name = normalize_lib_name(lib_name)
     lib = ac[lib_name]
@@ -60,12 +58,10 @@ def test_real_s3_storage_read(real_s3_credentials, library):
 @pytest.mark.skipif(
     not PERSISTENT_STORAGE_TESTS_ENABLED, reason="This test should run only if the persistent storage tests are enabled"
 )
-def test_real_s3_storage_write(real_s3_credentials, three_col_df):
+def test_real_s3_storage_write(real_s3_uri, three_col_df):
     library_to_write_to = PERSISTENT_STORAGE_LIB_NAME
     library_to_write_to = normalize_lib_name(library_to_write_to)
-    endpoint, bucket, region, access_key, secret_key, _ = real_s3_credentials
-    uri = f"s3s://{endpoint}:{bucket}?access={access_key}&secret={secret_key}&region={region}&path_prefix=ci_tests/"
-    ac = Arctic(uri)
+    ac = Arctic(real_s3_uri)
     # There shouldn't be a library with this name present, so delete just in case
     ac.delete_library(library_to_write_to)
     ac.create_library(library_to_write_to)

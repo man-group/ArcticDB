@@ -45,6 +45,9 @@ def gen_params_store_and_timeout():
     ]
     if AZURE_SUPPORT:
         p[0].append("azure_version_store")
+
+    if PERSISTENT_STORAGE_TESTS_ENABLED:
+        p[0].append("real_s3_version_store")
     return list(product(*p))
 
 

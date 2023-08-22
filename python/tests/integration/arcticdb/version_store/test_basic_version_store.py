@@ -73,7 +73,7 @@ else:
 if AZURE_SUPPORT:
     SMOKE_TEST_VERSION_STORES.append("azure_version_store")
 
-if os.getenv("ARCTICDB_REAL_STORAGE_TESTS") == "1":
+if PERSISTENT_STORAGE_TESTS_ENABLED:
     SMOKE_TEST_VERSION_STORES.append("real_s3_version_store")
 
 

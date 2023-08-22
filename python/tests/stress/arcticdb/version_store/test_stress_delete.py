@@ -9,7 +9,7 @@ from pandas.testing import assert_frame_equal
 from arcticdb.util.test import sample_dataframe
 from arcticdb_ext.storage import KeyType
 from arcticdb_ext.tools import AZURE_SUPPORT
-
+from tests.conftest import PERSISTENT_STORAGE_TESTS_ENABLED
 import pytest
 
 
@@ -32,6 +32,11 @@ def check_no_keys(library):
         pytest.param(
             "azure_store_factory",
             marks=pytest.mark.skipif(not AZURE_SUPPORT, reason="Pending Azure Storge Conda support"),
+        ),
+        pytest.param(
+            "real_s3_store_factory",
+            marks=pytest.mark.skipif(
+                not PERSISTENT_STORAGE_TESTS_ENABLED, reason="Can be used only when persistent storage is enabled"),
         ),
     ],
 )

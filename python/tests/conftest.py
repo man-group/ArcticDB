@@ -53,6 +53,8 @@ from arcticdb.options import LibraryOptions
 from arcticdb_ext.storage import Library
 from arcticdb_ext.tools import AZURE_SUPPORT
 
+PERSISTENT_STORAGE_TESTS_ENABLED = os.getenv("ARCTICDB_PERSISTENT_STORAGE_TESTS") == "1"
+
 if AZURE_SUPPORT:
     from azure.storage.blob import BlobServiceClient
 
@@ -146,7 +148,20 @@ def moto_s3_uri_incl_bucket(moto_s3_endpoint_and_credentials):
     ] + ":" + bucket + "?access=" + aws_access_key + "&secret=" + aws_secret_key + "&port=" + port
 
 
-@pytest.fixture(scope="function", params=["S3", "LMDB", "Azure"] if AZURE_SUPPORT else ["S3", "LMDB"])
+@pytest.fixture(
+    scope="function",
+    params=[
+        "S3",
+        "LMDB",
+        pytest.param("Azure", marks=pytest.mark.skipif(not AZURE_SUPPORT, reason="Pending Azure Storge Conda support")),
+        pytest.param(
+            "Real_S3",
+            marks=pytest.mark.skipif(
+                not PERSISTENT_STORAGE_TESTS_ENABLED, reason="Can be used only when persistent storage is enabled"
+            ),
+        ),
+    ],
+)
 def arctic_client(request, moto_s3_uri_incl_bucket, tmpdir, encoding_version):
     if request.param == "S3":
         ac = Arctic(moto_s3_uri_incl_bucket, encoding_version)
@@ -154,6 +169,8 @@ def arctic_client(request, moto_s3_uri_incl_bucket, tmpdir, encoding_version):
         ac = Arctic(request.getfixturevalue("azurite_azure_uri_incl_bucket"), encoding_version)
     elif request.param == "LMDB":
         ac = Arctic(f"lmdb://{tmpdir}", encoding_version)
+    elif request.param == "Real_S3":
+        ac = Arctic(request.getfixturevalue("real_s3_uri"), encoding_version)
     else:
         raise NotImplementedError()
 
@@ -375,6 +392,13 @@ def real_s3_credentials():
     yield endpoint, bucket, region, access_key, secret_key, clear
 
 
+@pytest.fixture(scope="function")
+def real_s3_uri(real_s3_credentials):
+    endpoint, bucket, region, access_key, secret_key, _ = real_s3_credentials
+    uri = f"s3s://{endpoint}:{bucket}?access={access_key}&secret={secret_key}&region={region}&path_prefix=ci_tests/"
+    yield uri
+
+
 @pytest.fixture
 def real_s3_store_factory(lib_name, real_s3_credentials):
     endpoint, bucket, region, aws_access_key, aws_secret_key, clear = real_s3_credentials
@@ -483,7 +507,21 @@ def mongo_version_store(mongo_store_factory):
 
 
 @pytest.fixture(
-    scope="function", params=["s3_store_factory", "azure_store_factory"] if AZURE_SUPPORT else ["s3_store_factory"]
+    scope="function",
+    params=[
+        "s3_store_factory",
+        pytest.param(
+            "azure_store_factory",
+            marks=pytest.mark.skipif(not AZURE_SUPPORT, reason="Pending Azure Storge Conda support"),
+        ),
+        pytest.param(
+            "real_s3_store_factory",
+            marks=pytest.mark.skipif(
+                not PERSISTENT_STORAGE_TESTS_ENABLED,
+                reason="This store can be used only if the persistent storage tests are enabled",
+            ),
+        ),
+    ],
 )
 def object_store_factory(request):
     store_factory = request.getfixturevalue(request.param)
@@ -723,7 +761,19 @@ def spawn_azurite(azurite_port):
 @pytest.fixture(
     scope="function",
     params=(
-        ["moto_s3_uri_incl_bucket", "azurite_azure_uri_incl_bucket"] if AZURE_SUPPORT else ["moto_s3_uri_incl_bucket"]
+        [
+            "moto_s3_uri_incl_bucket",
+            pytest.param(
+                "azurite_azure_uri_incl_bucket",
+                marks=pytest.mark.skipif(not AZURE_SUPPORT, reason="Pending Azure Storge Conda support"),
+            ),
+            pytest.param(
+                "real_s3_uri",
+                marks=pytest.mark.skipif(
+                    not PERSISTENT_STORAGE_TESTS_ENABLED, reason="Can be used only when persistent storage is enabled"
+                ),
+            ),
+        ]
     ),
 )
 def object_storage_uri_incl_bucket(request):
@@ -743,10 +793,17 @@ def object_version_store(object_store_factory):
             "lmdb_version_store_v2",
             "s3_version_store_v1",
             "s3_version_store_v2",
-            "azure_version_store",
+            pytest.param(
+                "azure_version_store",
+                marks=pytest.mark.skipif(not AZURE_SUPPORT, reason="Pending Azure Storge Conda support"),
+            ),
+            pytest.param(
+                "real_s3_version_store",
+                marks=pytest.mark.skipif(
+                    not PERSISTENT_STORAGE_TESTS_ENABLED, reason="Can be used only when persistent storage is enabled"
+                ),
+            ),
         ]
-        if AZURE_SUPPORT
-        else ["lmdb_version_store_v1", "lmdb_version_store_v2", "s3_version_store_v1", "s3_version_store_v2"]
     ),
 )
 def object_and_lmdb_version_store(request):
