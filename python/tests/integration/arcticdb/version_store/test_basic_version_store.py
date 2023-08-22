@@ -2046,8 +2046,12 @@ def test_dynamic_schema_column_hash_update(lmdb_version_store_column_buckets):
 
     lib.update("symbol", df2)
     vit = lib.read("symbol")
+    # In Pandas < 2.0, updating a `DataFrame` uniquely storing integers with
+    # another `DataFrame` that is uniquely storing integers changes all the dtypes
+    # to float64.
     df.update(df2)
-    assert_frame_equal(vit.data.astype("float"), df)
+    df = df.astype("int64", copy=False)
+    assert_frame_equal(vit.data, df)
 
 
 def test_dynamic_schema_column_hash_append(lmdb_version_store_column_buckets):
