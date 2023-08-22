@@ -109,7 +109,7 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
         .def("set_incompletes", &ReadOptions::set_incompletes)
         .def("set_set_tz", &ReadOptions::set_set_tz)
         .def("set_optimise_string_memory", &ReadOptions::set_optimise_string_memory)
-        .def("set_batch_throw_on_missing_version", &ReadOptions::set_batch_throw_on_missing_version)
+        .def("set_batch_throw_on_error", &ReadOptions::set_batch_throw_on_error)
         .def_property_readonly("incompletes", &ReadOptions::get_incompletes);
 
     using FrameDataWrapper = arcticdb::pipelines::FrameDataWrapper;
