@@ -17,6 +17,7 @@ from arcticdb_ext.storage import KeyType, NoDataFoundException
 from arcticdb.util.test import config_context, random_string, assert_frame_equal, distinct_timestamps
 from arcticdb_ext.tools import AZURE_SUPPORT
 
+from tests.conftest import PERSISTENT_STORAGE_TESTS_ENABLED
 
 def eprint(*args, **kwargs):
     print(*args, file=sys.stderr, **kwargs)

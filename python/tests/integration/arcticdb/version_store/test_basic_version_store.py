@@ -50,6 +50,7 @@ from arcticdb.util.test import (
 from arcticdb_ext.tools import AZURE_SUPPORT
 from tests.util.date import DateRange
 
+from tests.conftest import PERSISTENT_STORAGE_TESTS_ENABLED
 
 if sys.platform == "linux":
     SMOKE_TEST_VERSION_STORES = [
