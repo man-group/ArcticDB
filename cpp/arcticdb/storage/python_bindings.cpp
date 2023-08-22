@@ -189,4 +189,3 @@ void register_bindings(py::module& storage, py::exception<arcticdb::ArcticExcept
 }
 
 } // namespace arcticdb::storage::apy
-

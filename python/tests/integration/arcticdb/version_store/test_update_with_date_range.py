@@ -21,22 +21,22 @@ from arcticdb.version_store._custom_normalizers import (
 from arcticc.pb2.descriptors_pb2 import NormalizationMetadata
 
 
-def test_update_date_range_dataframe(lmdb_version_store):
+def test_update_date_range_dataframe(basic_store):
     """Restrictive update - when date_range is specified ensure that we only touch values in that range."""
     # given
     dtidx = pd.date_range("2022-06-01", "2022-06-05")
     df = pd.DataFrame(index=dtidx, data={"a": [1, 2, 3, 4, 5]})
-    lmdb_version_store.write("sym_1", df)
+    basic_store.write("sym_1", df)
 
     dtidx = pd.date_range("2022-05-01", "2022-06-10")
     a = np.arange(dtidx.shape[0])
     update_df = pd.DataFrame(index=dtidx, data={"a": a}, dtype=np.int64)
 
     # when
-    lmdb_version_store.update("sym_1", update_df, date_range=(datetime(2022, 6, 2), datetime(2022, 6, 4)))
+    basic_store.update("sym_1", update_df, date_range=(datetime(2022, 6, 2), datetime(2022, 6, 4)))
 
     # then
-    result = lmdb_version_store.read("sym_1").data
+    result = basic_store.read("sym_1").data
     np.testing.assert_array_equal(result["a"].values, [1, 32, 33, 34, 5])
 
 
@@ -95,21 +95,21 @@ class CustomTimeseriesNormalizer(CustomNormalizer):
 
 
 @pytest.fixture
-def lmdb_version_store_custom_norm(version_store_factory):
+def basic_store_custom_norm(basic_store_factory):
     try:
         register_normalizer(CustomTimeseriesNormalizer())
-        yield version_store_factory()
+        yield basic_store_factory()
     finally:
         clear_registered_normalizers()
 
 
 @pytest.mark.parametrize("with_timezone_attr,timezone_", [(True, None), (True, timezone.utc), (False, None)])
-def test_update_date_range_non_pandas_dataframe(lmdb_version_store_custom_norm, with_timezone_attr, timezone_):
+def test_update_date_range_non_pandas_dataframe(basic_store_custom_norm, with_timezone_attr, timezone_):
     """Check that updates with a daterange work for a simple non-Pandas timeseries.
 
     This simulates a legacy DataFrame equivalent still used occasionally in Man.
     """
-    version_store = lmdb_version_store_custom_norm
+    version_store = basic_store_custom_norm
 
     # given
     dtidx = pd.date_range("2022-06-01", "2022-06-05")
@@ -136,7 +136,7 @@ def test_update_date_range_non_pandas_dataframe(lmdb_version_store_custom_norm, 
     np.testing.assert_array_equal(result["a"].values, [1, 32, 33, 34, 5])
 
 
-def test_update_date_range_dataframe_multiindex(lmdb_version_store):
+def test_update_date_range_dataframe_multiindex(basic_store):
     """Similar to the test_update_date_range_dataframe, but with a multiindex."""
     # given
     dtidx = pd.date_range("2022-06-01", "2022-06-05")
@@ -144,7 +144,7 @@ def test_update_date_range_dataframe_multiindex(lmdb_version_store):
     a = np.arange(1, 6)
     multi_df = pd.DataFrame({"a": a}, index=pd.MultiIndex.from_arrays([dtidx, second_level]))
     sym = "update_date_range_dataframe_multiindex"
-    lmdb_version_store.write(sym, multi_df)
+    basic_store.write(sym, multi_df)
 
     dtidx = pd.date_range("2022-05-01", "2022-06-10")
     second_level = np.arange(dtidx.shape[0])
@@ -152,8 +152,8 @@ def test_update_date_range_dataframe_multiindex(lmdb_version_store):
     update_df = pd.DataFrame(index=pd.MultiIndex.from_arrays([dtidx, second_level]), data={"a": a})
 
     # when
-    lmdb_version_store.update(sym, update_df, date_range=(datetime(2022, 6, 2), datetime(2022, 6, 4)))
+    basic_store.update(sym, update_df, date_range=(datetime(2022, 6, 2), datetime(2022, 6, 4)))
 
     # then
-    result = lmdb_version_store.read(sym).data
+    result = basic_store.read(sym).data
     np.testing.assert_array_equal(result["a"].values, [1, 32, 33, 34, 5])
