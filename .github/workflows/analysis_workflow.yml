@@ -165,7 +165,7 @@ jobs:
           cd python
           export MAN_ARCTICDB_USE_ARCTICDB=True
           ln -s ../cpp/out/linux-debug-build/arcticdb/arcticdb_ext.cpython-36m-x86_64-linux-gnu.so
-          /opt/python/cp36-cp36m/bin/python -m pytest tests
+          /opt/python/cp36-cp36m/bin/python -m coverage run -m pytest tests
         env:
           TEST_OUTPUT_DIR: ${{runner.temp}}
           # Use the Mongo created in the service container above to test against
