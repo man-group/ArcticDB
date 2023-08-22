@@ -1080,3 +1080,10 @@ def test_lmdb(tmpdir):
         lib.write_pickle("test", d)
         lib = arc.get_library("model")
         lib.read("test").data
+
+
+def test_azure_no_ca_path(azurite_azure_test_connection_setting):
+    (endpoint, container, credential_name, credential_key, ca_cert_path) = azurite_azure_test_connection_setting
+    ac = Arctic(
+        f"azure://DefaultEndpointsProtocol=http;AccountName={credential_name};AccountKey={credential_key};BlobEndpoint={endpoint}/{credential_name};Container={container}"
+    )
