@@ -159,7 +159,7 @@ struct MaxOrMinAggregatorData {
         add_data_type_impl(data_type, data_type_);
     }
     void aggregate(const std::optional<ColumnWithStrings>& input_column, const std::vector<size_t>& groups, size_t unique_values) {
-        if(data_type_.has_value() && input_column.has_value()) {
+        if(data_type_.has_value() && *data_type_ != DataType::EMPTYVAL && input_column.has_value()) {
             entity::details::visit_type(*data_type_, [&input_column, unique_values, &groups, that=this] (auto global_type_desc_tag) {
                 using GlobalInputType = decltype(global_type_desc_tag);
                 if constexpr(!is_sequence_type(GlobalInputType::DataTypeTag::data_type)) {
