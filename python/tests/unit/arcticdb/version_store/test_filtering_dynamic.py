@@ -5,11 +5,15 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+import sys
+
 from hypothesis import assume, given, settings
 from hypothesis.extra.pandas import column, data_frames, range_indexes
 import hypothesis.strategies as st
 import numpy as np
 import pandas as pd
+
+from arcticdb.util._versions import IS_PANDAS_TWO
 
 try:
     from pandas.errors import UndefinedVariableError
@@ -312,7 +316,20 @@ def test_filter_column_not_present_dynamic(lmdb_version_store_dynamic_schema):
     symbol = "test_filter_column_not_present_static"
     lmdb_version_store_dynamic_schema.write(symbol, df)
     vit = lmdb_version_store_dynamic_schema.read(symbol, query_builder=q)
-    expected = pd.DataFrame({"a": pd.Series(dtype="int64")}, index=pd.Index([], dtype="int64"))
+
+    if IS_PANDAS_TWO and sys.platform.startswith("win32"):
+        # Pandas 2.0.0 changed the behavior of Index creation from numpy arrays:
+        # "Previously, all indexes created from numpy numeric arrays were forced to 64-bit.
+        # Now, for example, Index(np.array([1, 2, 3])) will be int32 on 32-bit systems,
+        # where it previously would have been int64 even on 32-bit systems.
+        # Instantiating Index using a list of numbers will still return 64bit dtypes,
+        # e.g. Index([1, 2, 3]) will have a int64 dtype, which is the same as previously."
+        # See: https://pandas.pydata.org/docs/dev/whatsnew/v2.0.0.html#index-can-now-hold-numpy-numeric-dtypes
+        index_dtype = "int32"
+    else:
+        index_dtype = "int64"
+
+    expected = pd.DataFrame({"a": pd.Series(dtype="int64")}, index=pd.Index([], dtype=index_dtype))
     assert_frame_equal(vit.data, expected)
 
 

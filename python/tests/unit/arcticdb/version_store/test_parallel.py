@@ -19,6 +19,8 @@ from arcticdb.util.test import (
     random_dates,
 )
 
+from arcticdb.util._versions import IS_PANDAS_TWO
+
 
 def test_parallel_write(lmdb_version_store):
     sym = "parallel"
@@ -182,7 +184,6 @@ def test_datetimes_to_nats(lmdb_version_store):
         index = pd.Index([dt + datetime.timedelta(seconds=s) for s in range(num_rows_per_day)])
         vals = {c: random_dates(num_rows_per_day) for c in cols}
         new_df = pd.DataFrame(data=vals, index=index)
-
         dataframes.append(new_df)
         df = pd.concat((df, new_df))
         dt = dt + datetime.timedelta(days=1)
@@ -196,4 +197,12 @@ def test_datetimes_to_nats(lmdb_version_store):
     df.sort_index(axis=1, inplace=True)
     result = vit.data
     result.sort_index(axis=1, inplace=True)
-    assert_frame_equal(vit.data, df)
+
+    if IS_PANDAS_TWO:
+        # In Pandas < 2.0, `datetime64[ns]` was _always_ used. `datetime64[ns]` is also used by ArcticDB.
+        # In Pandas >= 2.0, the `datetime64` can be used with other resolutions (namely 's', 'ms', and 'us').
+        # See: https://pandas.pydata.org/docs/dev/whatsnew/v2.0.0.html#construction-with-datetime64-or-timedelta64-dtype-with-unsupported-resolution  # noqa
+        # Hence, we convert to the largest resolution (which is guaranteed to be the ones of the original `df`).
+        result = result.astype(df.dtypes)
+
+    assert_frame_equal(result, df)
