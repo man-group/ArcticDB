@@ -254,7 +254,7 @@ jobs:
           echo "Coverage: ${{ env.PERCENT }}" > coverage.txt
 
       - name: Check percentage and send Slack notification
-        if: ${{ env.PREV_PERCENT && env.PERCENT && env.PERCENT < env.PREV_PERCENT }}
+        if: ${{ env.PREV_PERCENT && env.PERCENT && env.PERCENT <= env.PREV_PERCENT }}
         uses: slackapi/slack-github-action@v1.24.0
         with:
           # For posting a rich message using Block Kit
