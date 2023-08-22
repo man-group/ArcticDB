@@ -996,7 +996,8 @@ std::pair<VersionedItem, py::object> PythonVersionStore::read_metadata(
 std::vector<std::variant<VersionedItem, DataError>> PythonVersionStore::batch_write_metadata(
     const std::vector<StreamId>& stream_ids,
     const std::vector<py::object>& user_meta,
-    bool prune_previous_versions) {
+    bool prune_previous_versions,
+    bool throw_on_error) {
     std::vector<arcticdb::proto::descriptors::UserDefinedMetadata> user_meta_protos;
     user_meta_protos.reserve(user_meta.size());
     for(const auto& user_meta_item : user_meta) {
@@ -1004,7 +1005,7 @@ std::vector<std::variant<VersionedItem, DataError>> PythonVersionStore::batch_wr
         python_util::pb_from_python(user_meta_item, user_meta_proto);
         user_meta_protos.emplace_back(std::move(user_meta_proto));
     }
-    return batch_write_versioned_metadata_internal(stream_ids, prune_previous_versions, std::move(user_meta_protos));
+    return batch_write_versioned_metadata_internal(stream_ids, prune_previous_versions, throw_on_error, std::move(user_meta_protos));
 }
 
 std::vector<std::pair<VersionedItem, TimeseriesDescriptor>> PythonVersionStore::batch_restore_version(

@@ -1047,9 +1047,9 @@ class Library:
                     f"Unsupported item in the symbols argument s=[{s}] type(s)=[{type(s)}]. Only [str] and"
                     " [ReadRequest] are supported."
                 )
-        throw_on_missing_version = False
+        throw_on_error = False
         return self._nvs._batch_read_to_versioned_items(
-            symbol_strings, as_ofs, date_ranges, columns, query_builder or query_builders, throw_on_missing_version
+            symbol_strings, as_ofs, date_ranges, columns, query_builder or query_builders, throw_on_error
         )
 
     def read_metadata(self, symbol: str, as_of: Optional[AsOf] = None) -> VersionedItem:
@@ -1185,10 +1185,12 @@ class Library:
         """
 
         self._raise_if_duplicate_symbols_in_batch(write_metadata_payloads)
+        throw_on_error = False
         return self._nvs._batch_write_metadata_to_versioned_items(
             [p.symbol for p in write_metadata_payloads],
             [p.metadata for p in write_metadata_payloads],
             prune_previous_version=prune_previous_versions,
+            throw_on_error=throw_on_error,
         )
 
     def snapshot(
