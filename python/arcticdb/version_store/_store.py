@@ -1746,6 +1746,30 @@ class NativeVersionStore:
             host=self.env,
         )
 
+    def list_symbols_with_incomplete_data(self) -> List[str]:
+        """
+        List all symbols with previously written un-indexed chunks of data, produced by a tick collector or parallel
+        writes/appends.
+
+        Returns
+        -------
+        List[str]
+            A list of the symbols with incomplete data segments.
+        """
+        return list(self.version_store.get_incomplete_symbols())
+
+    def remove_incomplete(self, symbol: str):
+        """
+        Remove previously written un-indexed chunks of data, produced by a tick collector or parallel
+        writes/appends.
+
+        Parameters
+        ----------
+        symbol : `str`
+            Symbol name.
+        """
+        self.version_store.remove_incomplete(symbol)
+
     def compact_incomplete(
         self,
         symbol: str,

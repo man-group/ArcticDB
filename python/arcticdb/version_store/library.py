@@ -7,11 +7,14 @@ As of the Change Date specified in that file, in accordance with the Business So
 """
 
 import datetime
+import pytz
 from enum import Enum, auto
 from typing import Optional, Any, Tuple, Dict, AnyStr, Union, List, Iterable, NamedTuple
 from numpy import datetime64
 
+from arcticdb.options import LibraryOptions
 from arcticdb.supported_types import Timestamp
+from arcticdb.util._versions import IS_PANDAS_TWO
 
 from arcticdb.version_store.processing import QueryBuilder
 from arcticdb.version_store._store import NativeVersionStore, VersionedItem, VersionQueryInput
@@ -303,6 +306,16 @@ class Library:
 
     def __contains__(self, symbol: str):
         return self.has_symbol(symbol)
+
+    def options(self) -> LibraryOptions:
+        write_options = self._nvs.lib_cfg().lib_desc.version.write_options
+        return LibraryOptions(
+            dynamic_schema=write_options.dynamic_schema,
+            dedup=write_options.de_duplication,
+            rows_per_segment=write_options.segment_row_size,
+            columns_per_segment=write_options.column_group_size,
+            encoding_version=self._nvs.lib_cfg().lib_desc.version.encoding_version,
+        )
 
     def write(
         self,
@@ -810,6 +823,22 @@ class Library:
             prune_previous_version=prune_previous_versions,
         )
 
+    def delete_staged_data(self, symbol: str):
+        """
+        Removes staged data.
+
+        Parameters
+        ----------
+        symbol : `str`
+            Symbol to remove staged data for.
+
+        See Also
+        --------
+        write
+            Documentation on the ``staged`` parameter explains the concept of staged data in more detail.
+        """
+        self._nvs.remove_incomplete(symbol)
+
     def finalize_staged_data(
         self,
         symbol: str,
@@ -881,7 +910,7 @@ class Library:
         write
             Documentation on the ``staged`` parameter explains the concept of staged data in more detail.
         """
-        return self._nvs.version_store.get_incomplete_symbols()
+        return self._nvs.list_symbols_with_incomplete_data()
 
     def read(
         self,
@@ -1500,6 +1529,11 @@ class Library:
         """
         info = self._nvs.get_info(symbol, as_of)
         last_update_time = pd.to_datetime(info["last_update"], utc=True)
+        if IS_PANDAS_TWO:
+            # Pandas 2.0.0 now uses `datetime.timezone.utc` instead of `pytz.UTC`.
+            # See: https://github.com/pandas-dev/pandas/issues/34916
+            # We enforce the use of `pytz.UTC` for consistency.
+            last_update_time = last_update_time.replace(tzinfo=pytz.UTC)
         columns = tuple(NameWithDType(n, t) for n, t in zip(info["col_names"]["columns"], info["dtype"]))
         index = NameWithDType(info["col_names"]["index"], info["col_names"]["index_dtype"])
         date_range = tuple(
