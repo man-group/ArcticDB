@@ -171,7 +171,7 @@ public:
         return ClockType::nanos_since_epoch();
     }
 
-    void iterate_type(KeyType type, std::function<void(entity::VariantKey &&)> func,
+    void iterate_type(KeyType type, entity::IterateTypeVisitor func,
                       const std::string &prefix) override {
         library_->iterate_type(type, func, prefix);
     }
@@ -226,7 +226,7 @@ public:
         return KeyExistsTask{&key, library_}();
     }
 
-    bool supports_prefix_matching() override {
+    bool supports_prefix_matching() const override {
         return library_->supports_prefix_matching();
     }
 
@@ -345,15 +345,15 @@ public:
         return folly::collect(result).via(&async::io_executor());
     }
 
-    std::vector<Composite<ProcessingSegment>> batch_read_uncompressed(
+    std::vector<Composite<ProcessingUnit>> batch_read_uncompressed(
         std::vector<Composite<pipelines::SliceAndKey>> &&sks,
         const std::vector<std::shared_ptr<Clause>>& clauses,
         const std::shared_ptr<std::unordered_set<std::string>>& filter_columns,
         const BatchReadArgs & args) override {
         auto slice_and_keys = std::move(sks);
-        std::vector<Composite<ProcessingSegment>> res;
+        std::vector<Composite<ProcessingUnit>> res;
         res.reserve(slice_and_keys.size());
-        std::vector<folly::Future<Composite<ProcessingSegment>>> batch;
+        std::vector<folly::Future<Composite<ProcessingUnit>>> batch;
         size_t current_size = 0;
         for (auto &&s : slice_and_keys) {
             auto sk = std::move(s);

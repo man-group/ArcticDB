@@ -25,7 +25,7 @@ from contextlib import contextmanager
 from arcticc.pb2.descriptors_pb2 import TypeDescriptor, SortedValue
 from arcticc.pb2.storage_pb2 import LibraryConfig, EnvironmentConfigsMap
 from arcticdb.preconditions import check
-from arcticdb.supported_types import time_types as supported_time_types
+from arcticdb.supported_types import DateRangeInput, ExplicitlySupportedDates
 from arcticdb.toolbox.library_tool import LibraryTool
 from arcticdb.version_store.processing import QueryBuilder
 from arcticdb_ext.storage import OpenMode as _OpenMode
@@ -38,8 +38,6 @@ from arcticdb_ext.storage import (
 from arcticdb.version_store.read_result import ReadResult
 from arcticdb_ext.version_store import IndexRange as _IndexRange
 from arcticdb_ext.version_store import RowRange as _RowRange
-from arcticdb_ext.version_store import HeadRange as _HeadRange
-from arcticdb_ext.version_store import TailRange as _TailRange
 from arcticdb_ext.version_store import SignedRowRange as _SignedRowRange
 from arcticdb_ext.version_store import PythonVersionStore as _PythonVersionStore
 from arcticdb_ext.version_store import PythonVersionStoreReadQuery as _PythonVersionStoreReadQuery
@@ -69,15 +67,6 @@ from arcticdb.version_store._normalization import (
     normalize_dt_range_to_ts,
 )
 from arcticdb.util.memory import format_bytes
-
-_ExtDateRangeTypes = pd.core.indexes.datetimelike.DatetimeIndexOpsMixin
-if TYPE_CHECKING:
-    try:
-        import arctic.date
-
-        _ExtDateRangeTypes = Union[_ExtDateRangeTypes, arctic.date.DateRange]
-    except ModuleNotFoundError:
-        pass
 
 # These chars are encoded by S3 and on doing a list_symbols they will show up as the encoded form eg. &amp
 UNSUPPORTED_S3_CHARS = {"\0", "*", "&", "<", ">"}
@@ -136,9 +125,7 @@ def _env_config_from_lib_config(lib_cfg, env):
     return cfg
 
 
-ExplicitlySupportedDates = Union[supported_time_types]
 VersionQueryInput = Union[int, str, ExplicitlySupportedDates, None]
-DateRangeInput = Union[Sequence[ExplicitlySupportedDates], _ExtDateRangeTypes]
 
 
 def _normalize_dt_range(dtr: DateRangeInput) -> _IndexRange:
@@ -373,7 +360,9 @@ class NativeVersionStore:
                 f"The symbol '{symbol}' has one or more unsupported characters({','.join(UNSUPPORTED_S3_CHARS)})."
             )
 
-    def try_flatten_and_write_composite_object(self, symbol, data, metadata, pickle_on_failure, dynamic_strings):
+    def _try_flatten_and_write_composite_object(
+        self, symbol, data, metadata, pickle_on_failure, dynamic_strings, prune_previous
+    ):
         fl = Flattener()
         if fl.can_flatten(data):
             metastruct, to_write = fl.create_meta_structure(data, symbol)
@@ -390,7 +379,13 @@ class NativeVersionStore:
                 normalized_udm = normalize_metadata(metadata) if metadata is not None else None
                 normalized_metastruct = normalize_metadata(metastruct)
                 vit_composite = self.version_store.write_versioned_composite_data(
-                    symbol, normalized_metastruct, list(to_write.keys()), items, norm_metas, normalized_udm
+                    symbol,
+                    normalized_metastruct,
+                    list(to_write.keys()),
+                    items,
+                    norm_metas,
+                    normalized_udm,
+                    prune_previous,
                 )
                 return VersionedItem(
                     symbol=vit_composite.symbol,
@@ -555,8 +550,8 @@ class NativeVersionStore:
 
         # Do a multi_key write if the structured is nested and is not trivially normalizable via msgpack.
         if recursive_normalizers:
-            vit = self.try_flatten_and_write_composite_object(
-                symbol, data, metadata, pickle_on_failure, dynamic_strings
+            vit = self._try_flatten_and_write_composite_object(
+                symbol, data, metadata, pickle_on_failure, dynamic_strings, prune_previous_version
             )
             if isinstance(vit, VersionedItem):
                 return vit
@@ -980,7 +975,10 @@ class NativeVersionStore:
             else:
                 read_result = ReadResult(*read_results[i])
                 read_query = read_queries[i]
-                vitem = self._post_process_dataframe(read_result, read_query)
+                query = None
+                if query_builder is not None:
+                    query = query_builder if isinstance(query_builder, QueryBuilder) else query_builder[i]
+                vitem = self._post_process_dataframe(read_result, read_query, query)
                 versioned_items.append(vitem)
         return versioned_items
 
@@ -1141,7 +1139,7 @@ class NativeVersionStore:
         pickle_on_failure : `Optional[bool]`, default=None
             Pickle results if normalization fails. Uses library default if left as None.
         validate_index: bool, default=False
-            If True, will verify for each entry in the batch hat the index of `data` supports date range searches and update operations.
+            If set to True, it will verify for each entry in the batch whether the index of the data supports date range searches and update operations.
             This in effect tests that the data is sorted in ascending order. ArcticDB relies on Pandas to detect if data is sorted -
             you can call DataFrame.index.is_monotonic_increasing on your input DataFrame to see if Pandas believes the data to be sorted
         kwargs :
@@ -1286,7 +1284,7 @@ class NativeVersionStore:
         prune_previous_version : `Optional[bool]`, default=None
             Remove previous versions from version list. Uses library default if left as None.
         validate_index: bool, default=False
-            If True, will verify for each entry in the batch hat the index of `data` supports date range searches and update operations.
+            If set to True, it will verify for each entry in the batch whether the index of the data supports date range searches and update operations.
             This in effect tests that the data is sorted in ascending order. ArcticDB relies on Pandas to detect if data is sorted -
             you can call DataFrame.index.is_monotonic_increasing on your input DataFrame to see if Pandas believes the data to be sorted
         kwargs :
@@ -1303,8 +1301,28 @@ class NativeVersionStore:
         UnsortedDataException
             If data is unsorted, when validate_index is set to True.
         """
+        throw_on_missing_version = True
         _check_batch_kwargs(NativeVersionStore.batch_append, NativeVersionStore.append, kwargs)
+        return self._batch_append_to_versioned_items(
+            symbols,
+            data_vector,
+            metadata_vector,
+            prune_previous_version,
+            validate_index,
+            throw_on_missing_version,
+            **kwargs,
+        )
 
+    def _batch_append_to_versioned_items(
+        self,
+        symbols,
+        data_vector,
+        metadata_vector,
+        prune_previous_version,
+        validate_index,
+        throw_on_missing_version,
+        **kwargs,
+    ):
         for symbol in symbols:
             self.check_symbol_validity(symbol)
 
@@ -1336,10 +1354,26 @@ class NativeVersionStore:
         udms = [info[0] for info in normalized_infos]
         items = [info[1] for info in normalized_infos]
         norm_metas = [info[2] for info in normalized_infos]
+
+        write_if_missing = kwargs.get("write_if_missing", True)
+
         cxx_versioned_items = self.version_store.batch_append(
-            symbols, items, norm_metas, udms, prune_previous_version, validate_index
+            symbols,
+            items,
+            norm_metas,
+            udms,
+            prune_previous_version,
+            validate_index,
+            write_if_missing,
+            throw_on_missing_version,
         )
-        return [self._convert_thin_cxx_item_to_python(v) for v in cxx_versioned_items]
+        append_results = []
+        for result in cxx_versioned_items:
+            if isinstance(result, DataError):
+                append_results.append(result)
+            else:
+                append_results.append(self._convert_thin_cxx_item_to_python(result))
+        return append_results
 
     def batch_restore_version(
         self, symbols: List[str], as_ofs: Optional[List[VersionQueryInput]] = None, **kwargs
@@ -1516,7 +1550,9 @@ class NativeVersionStore:
             `datetime.datetime` : the version of the data that existed as_of the requested point in time
         date_range: `Optional[DateRangeInput]`, default=None
             DateRange to read data for.  Applicable only for Pandas data with a DateTime index. Returns only the part
-            of the data that falls within the given range.
+            of the data that falls within the given range. The same effect can be achieved by using the date_range
+            clause of the QueryBuilder class, which will be slower, but return data with a smaller memory footprint.
+            See the QueryBuilder.date_range docstring for more details.
         row_range: `Optional[Tuple[int, int]]`, default=None
             Row range to read data for. Inclusive of the lower bound, exclusive of the upper bound
             lib.read(symbol, row_range=(start, end)).data should behave the same as df.iloc[start:end], including in
@@ -1535,11 +1571,14 @@ class NativeVersionStore:
 
         if row_range is not None:
             row_range = _SignedRowRange(row_range[0], row_range[1])
+        if date_range is not None and query_builder is not None:
+            q = QueryBuilder()
+            query_builder = q.date_range(date_range).then(query_builder)
         version_query, read_options, read_query = self._get_queries(
             as_of, date_range, row_range, columns, query_builder, **kwargs
         )
         read_result = self._read_dataframe(symbol, version_query, read_query, read_options)
-        return self._post_process_dataframe(read_result, read_query)
+        return self._post_process_dataframe(read_result, read_query, query_builder)
 
     def head(
         self,
@@ -1569,10 +1608,11 @@ class NativeVersionStore:
         VersionedItem
         """
 
-        row_range = _HeadRange(n)
-        version_query, read_options, read_query = self._get_queries(as_of, None, row_range, columns, None, **kwargs)
+        q = QueryBuilder()
+        q = q._head(n)
+        version_query, read_options, read_query = self._get_queries(as_of, None, None, columns, q, **kwargs)
         read_result = self._read_dataframe(symbol, version_query, read_query, read_options)
-        return self._post_process_dataframe(read_result, read_query)
+        return self._post_process_dataframe(read_result, read_query, q)
 
     def tail(
         self, symbol: str, n: int = 5, as_of: VersionQueryInput = None, columns: Optional[List[str]] = None, **kwargs
@@ -1597,18 +1637,19 @@ class NativeVersionStore:
         VersionedItem
         """
 
-        row_range = _TailRange(n)
-        version_query, read_options, read_query = self._get_queries(as_of, None, row_range, columns, None, **kwargs)
+        q = QueryBuilder()
+        q = q._tail(n)
+        version_query, read_options, read_query = self._get_queries(as_of, None, None, columns, q, **kwargs)
         read_result = self._read_dataframe(symbol, version_query, read_query, read_options)
-        return self._post_process_dataframe(read_result, read_query)
+        return self._post_process_dataframe(read_result, read_query, q)
 
     def _read_dataframe(self, symbol, version_query, read_query, read_options):
         return ReadResult(*self.version_store.read_dataframe_version(symbol, version_query, read_query, read_options))
 
-    def _post_process_dataframe(self, read_result, read_query):
-        # post filter
-        start_idx = end_idx = None
-        if read_query.row_filter is not None:
+    def _post_process_dataframe(self, read_result, read_query, query_builder):
+        if read_query.row_filter is not None and (query_builder is None or query_builder.needs_post_processing()):
+            # post filter
+            start_idx = end_idx = None
             if isinstance(read_query.row_filter, _RowRange):
                 start_idx = read_query.row_filter.start - read_result.frame_data.offset
                 end_idx = read_query.row_filter.end - read_result.frame_data.offset
@@ -1713,6 +1754,7 @@ class NativeVersionStore:
         via_iteration: Optional[bool] = True,
         sparsify: Optional[bool] = False,
         metadata: Optional[Any] = None,
+        prune_previous_version: Optional[bool] = None,
     ):
         """
         Compact previously written un-indexed chunks of data, produced by a tick collector or parallel
@@ -1735,13 +1777,20 @@ class NativeVersionStore:
             Convert data to sparse format (for tick data only)
         metadata : `Optional[Any]`, default=None
             Add user-defined metadata in the same way as write etc
+        prune_previous_version
+            Removes previous (non-snapshotted) versions from the database.
         Returns
         -------
         VersionedItem
             The data attribute will be None.
         """
+        prune_previous_version = self.resolve_defaults(
+            "prune_previous_version", self._write_options(), global_default=False, existing_value=prune_previous_version
+        )
         udm = normalize_metadata(metadata) if metadata is not None else None
-        return self.version_store.compact_incomplete(symbol, append, convert_int_to_float, via_iteration, sparsify, udm)
+        return self.version_store.compact_incomplete(
+            symbol, append, convert_int_to_float, via_iteration, sparsify, udm, prune_previous_version
+        )
 
     @staticmethod
     def _get_index_columns_from_descriptor(descriptor):

@@ -7,8 +7,10 @@
 
 #include <folly/gen/Base.h>
 #ifndef ARCTICDB_MONGO_STORAGE_H_
-#error "This should only be included by mongo_storage.hpp"
+#error "This should only be included by mongo_storage.cpp"
 #endif
+
+#include <arcticdb/storage/mongo/mongo_storage.hpp>
 
 #include <folly/gen/Base.h>
 #include <arcticdb/storage/mongo/mongo_client.hpp>
@@ -50,8 +52,7 @@ inline void MongoStorage::do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts 
     });
 }
 
-template<class Visitor>
-void MongoStorage::do_read(Composite<VariantKey>&& ks, Visitor &&visitor, ReadKeyOpts) {
+inline void MongoStorage::do_read(Composite<VariantKey>&& ks, const ReadVisitor& visitor, ReadKeyOpts) {
     namespace fg = folly::gen;
     auto fmt_db = [](auto &&k) { return variant_key_type(k); };
     ARCTICDB_SAMPLE(MongoStorageRead, 0)
@@ -62,7 +63,7 @@ void MongoStorage::do_read(Composite<VariantKey>&& ks, Visitor &&visitor, ReadKe
                 auto collection = collection_name(variant_key_type(k));
                 auto kv = client_->read_segment(db_, collection, k);
                 if(kv.has_segment())
-                    visitor(k, kv.segment());
+                    visitor(k, std::move(kv.segment()));
                 else
                    failed_reads.push_back(k);
         }
@@ -93,10 +94,9 @@ inline void MongoStorage::do_remove(Composite<VariantKey>&& ks, RemoveOpts) {
     });
 }
 
-template<class Visitor>
-void MongoStorage::do_iterate_type(KeyType key_type, Visitor &&visitor, const std::string &prefix) {
+inline void MongoStorage::do_iterate_type(KeyType key_type, const IterateTypeVisitor& visitor, const std::string &prefix) {
     auto collection = collection_name(key_type);
-    auto func = folly::Function<void(entity::VariantKey&&)>(std::move(visitor));
+    auto func = folly::Function<void(entity::VariantKey&&)>(visitor);
     ARCTICDB_SAMPLE(MongoStorageItType, 0)
     client_->iterate_type(db_, collection, key_type, std::move(func), prefix);
 }

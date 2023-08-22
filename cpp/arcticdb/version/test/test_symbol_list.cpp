@@ -246,7 +246,7 @@ TEST_P(SymbolListWithWriteFailures, InitialCompact) {
 }
 
 INSTANTIATE_TEST_SUITE_P(, SymbolListWithWriteFailures, Values(
-        WriteFailuresParams{{}, CompactOutcome::WRITTEN}, // No failures
+        WriteFailuresParams{FailSimParam{}, CompactOutcome::WRITTEN}, // No failures
         WriteFailuresParams{{{FailureType::WRITE, RAISE_ONCE}}, CompactOutcome::NOT_WRITTEN}, // Interferes with locking
         WriteFailuresParams{{{FailureType::WRITE, RAISE_ON_2ND_CALL}}, CompactOutcome::NOT_WRITTEN},
         WriteFailuresParams{{{FailureType::DELETE, RAISE_ONCE}}, CompactOutcome::NOT_CLEANED_UP}

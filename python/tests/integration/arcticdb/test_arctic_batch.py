@@ -30,8 +30,9 @@ from arcticdb.util.test import (
     random_strings_of_length,
     random_floats,
 )
-import random
+from arcticdb.util._versions import IS_PANDAS_TWO
 
+import random
 
 if AZURE_SUPPORT:
     from azure.storage.blob import BlobServiceClient
@@ -380,6 +381,95 @@ def test_write_batch_dedup(library_factory):
         data_key_version = lib._nvs.read_index("symbol_" + str(sym))["version_id"]
         for s in range(num_segments):
             assert data_key_version[s] == 0
+
+
+def test_append_batch(library_factory):
+    lib = library_factory(LibraryOptions(rows_per_segment=10))
+    assert lib._nvs._lib_cfg.lib_desc.version.write_options.segment_row_size == 10
+    num_days = 50
+    num_symbols = 2
+    dt = datetime(2019, 4, 8, 0, 0, 0)
+    num_rows_per_day = 1
+
+    # Given
+    list_append_requests = []
+    list_dataframes = {}
+    for sym in range(num_symbols):
+        df = generate_dataframe(["a", "b", "c"], dt, num_days, num_rows_per_day)
+        list_append_requests.append(WritePayload("symbol_" + str(sym), df, metadata="great_metadata" + str(sym)))
+        list_dataframes[sym] = df
+
+    # When a symbol doesn't exist, we expect it to be created. In effect, append_batch functions as write_batch
+    batch = lib.append_batch(list_append_requests)
+    assert all(type(w) == PythonVersionedItem for w in batch)
+
+    # Then
+    for sym in range(num_symbols):
+        original_dataframe = list_dataframes[sym]
+        read_dataframe = lib.read("symbol_" + str(sym))
+        assert read_dataframe.metadata == "great_metadata" + str(sym)
+        assert_frame_equal(read_dataframe.data, original_dataframe)
+
+    # Given
+    dt = datetime(2020, 4, 8, 0, 0, 0)
+    list_append_requests = []
+    for sym in range(num_symbols):
+        df = generate_dataframe(["a", "b", "c"], dt, num_days, num_rows_per_day)
+        list_append_requests.append(WritePayload("symbol_" + str(sym), df, metadata="great_metadata" + str(sym)))
+        list_dataframes[sym] = pd.concat([list_dataframes[sym], df])
+
+    # When the symbol already exists, we expect the current dataframe to be appended to the previous dataframe
+    batch = lib.append_batch(list_append_requests)
+    assert all(type(w) == PythonVersionedItem for w in batch)
+
+    # Then
+    for sym in range(num_symbols):
+        original_dataframe = list_dataframes[sym]
+        read_dataframe = lib.read("symbol_" + str(sym))
+        assert read_dataframe.metadata == "great_metadata" + str(sym)
+        assert_frame_equal(read_dataframe.data, original_dataframe)
+
+
+def test_append_batch_missing_keys(arctic_library):
+    lib = arctic_library
+
+    num_days = 2
+    num_rows_per_day = 1
+
+    # Given
+    dt = datetime(2019, 4, 8, 0, 0, 0)
+    df1_write = generate_dataframe(["a", "b", "c"], dt, num_days, num_rows_per_day)
+    df2_write = generate_dataframe(["a", "b", "c"], dt, num_days, num_rows_per_day)
+    lib.write("s1", df1_write)
+    lib.write("s2", df2_write)
+
+    lib_tool = lib._nvs.library_tool()
+    s1_index_key = lib_tool.find_keys_for_id(KeyType.TABLE_INDEX, "s1")[0]
+    lib_tool.remove(s1_index_key)
+
+    # When
+    dt = datetime(2020, 4, 8, 0, 0, 0)
+    df1_append = generate_dataframe(["a", "b", "c"], dt, num_days, num_rows_per_day)
+    df2_append = generate_dataframe(["a", "b", "c"], dt, num_days, num_rows_per_day)
+    batch = lib.append_batch(
+        [
+            WritePayload("s1", df1_append, metadata="great_metadata_s1"),
+            WritePayload("s2", df2_append, metadata="great_metadata_s2"),
+        ]
+    )
+
+    # Then
+    assert isinstance(batch[0], DataError)
+    assert batch[0].symbol == "s1"
+    assert batch[0].version_request_type is None
+    assert batch[0].version_request_data is None
+    assert batch[0].error_code == ErrorCode.E_KEY_NOT_FOUND
+    assert batch[0].error_category == ErrorCategory.STORAGE
+
+    assert not isinstance(batch[1], DataError)
+    read_dataframe = lib.read("s2")
+    assert read_dataframe.metadata == "great_metadata_s2"
+    assert_frame_equal(read_dataframe.data, pd.concat([df2_write, df2_append]))
 
 
 def test_read_batch_time_stamp(arctic_library):
@@ -1005,7 +1095,18 @@ def test_read_description_batch_high_amount(arctic_library):
             assert results_list[idx].date_range == date_range_comp_with_utc
             if version > 0:
                 assert results_list[idx].last_update_time > results_list[idx - 1].last_update_time
-                assert results_list[idx].last_update_time.tz == pytz.UTC
+
+                result_last_update_time = results_list[idx].last_update_time
+                tz = result_last_update_time.tz
+
+                if IS_PANDAS_TWO:
+                    # Pandas 2.0.0 now uses `datetime.timezone.utc` instead of `pytz.UTC`.
+                    # See: https://github.com/pandas-dev/pandas/issues/34916
+                    # TODO: is there a better way to handle this edge case?
+                    assert tz == timezone.utc
+                else:
+                    assert isinstance(tz, pytz.BaseTzInfo)
+                    assert tz == pytz.UTC
 
 
 def test_read_description_batch_empty_nat(arctic_library):

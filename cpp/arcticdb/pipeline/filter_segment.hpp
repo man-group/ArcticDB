@@ -21,6 +21,12 @@ inline SegmentInMemory filter_segment(const SegmentInMemory& input,
     return input.filter(filter_bitset, filter_down_stringpool, validate);
 }
 
+inline SegmentInMemory truncate_segment(const SegmentInMemory& input,
+                                        size_t start,
+                                        size_t end) {
+    return input.truncate(start, end);
+}
+
 inline std::vector<SegmentInMemory> partition_segment(const SegmentInMemory& input,
                                       const std::vector<std::optional<uint8_t>>& row_to_segment,
                                       const std::vector<uint64_t>& segment_counts) {

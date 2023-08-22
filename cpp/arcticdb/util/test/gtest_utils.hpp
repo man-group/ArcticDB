@@ -29,3 +29,10 @@ MAKE_GTEST_FMT(arcticdb::entity::VariantId, "VariantId({})")
 #else
 #define SKIP_WIN(REASON) (void)0
 #endif
+
+// Macro to skip tests when running on Mac
+#ifdef __APPLE__
+#define SKIP_MAC(REASON) GTEST_SKIP() << "Skipping test on Mac, reason: " << '[' << #REASON << ']'
+#else
+#define SKIP_MAC(REASON) (void)0
+#endif

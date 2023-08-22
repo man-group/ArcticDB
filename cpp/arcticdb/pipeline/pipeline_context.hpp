@@ -113,6 +113,8 @@ struct PipelineContext : public std::enable_shared_from_this<PipelineContext> {
     // Used to keep track of the total number of rows when compacting incomplete segments and
     // in sort merge
     size_t total_rows_ = 0;
+    // The number of rows according to the timeseries descriptor
+    size_t rows_ = 0;
     std::shared_ptr<arcticdb::proto::descriptors::NormalizationMetadata> norm_meta_;
     std::unique_ptr<arcticdb::proto::descriptors::UserDefinedMetadata> user_meta_;
     std::vector<SliceAndKey> slice_and_keys_;

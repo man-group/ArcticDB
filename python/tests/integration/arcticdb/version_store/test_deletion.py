@@ -14,7 +14,7 @@ from itertools import chain, product
 from datetime import datetime
 
 from arcticdb_ext.storage import KeyType, NoDataFoundException
-from arcticdb.util.test import config_context, random_string, assert_frame_equal
+from arcticdb.util.test import config_context, random_string, assert_frame_equal, distinct_timestamps
 from arcticdb_ext.tools import AZURE_SUPPORT
 
 
@@ -587,9 +587,10 @@ def test_delete_read_from_timestamp(lmdb_version_store):
     lib.write(sym, 1)
     lib.write(sym, 2)
 
-    lib.delete_version(sym, 0)
-    ts = datetime.utcnow()
-    lib.write(sym, 3)
+    with distinct_timestamps(lmdb_version_store) as deletion_time:
+        lib.delete_version(sym, 0)
+    with distinct_timestamps(lmdb_version_store):
+        lib.write(sym, 3)
     lib.write(sym, 4)
-    assert lib.read(sym, as_of=ts).data == 2
-    assert lib.batch_read([sym], as_ofs=[ts])[sym].data == 2
+    assert lib.read(sym, as_of=deletion_time.after).data == 2
+    assert lib.batch_read([sym], as_ofs=[deletion_time.after])[sym].data == 2

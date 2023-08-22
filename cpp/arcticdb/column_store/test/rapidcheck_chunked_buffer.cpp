@@ -74,6 +74,30 @@ RC_GTEST_PROP(ChunkedBuffer, SplitBuffer, (const std::vector<uint8_t> &input, ui
     }
 }
 
+RC_GTEST_PROP(ChunkedBuffer, TruncateBuffer, (const std::vector<uint8_t> &input)) {
+    using namespace arcticdb;
+    RC_PRE(input.size() > 0u);
+    auto n = input.size();
+    const auto chunk_size = *rc::gen::inRange(size_t(1), n);
+    auto top = n - (n % chunk_size);
+    const auto start_byte = *rc::gen::inRange(size_t(0), top - 1);
+    const auto end_byte = *rc::gen::inRange(start_byte + 1, top);
+    CursoredBuffer<ChunkedBufferImpl<64>> cb;
+    for (size_t i = 0; i < top; i += chunk_size) {
+        cb.ensure_bytes(chunk_size);
+        memcpy(cb.cursor(), &input[i], chunk_size);
+        cb.commit();
+    }
+
+    auto buffer = ::arcticdb::truncate(cb.buffer(), start_byte, end_byte);
+    auto buffer_idx = 0;
+    for (auto input_idx = start_byte; input_idx < end_byte; input_idx++, buffer_idx++) {
+        auto left = buffer.cast<uint8_t>(buffer_idx);
+        auto right = input[input_idx];
+        RC_ASSERT(left == right);
+    }
+}
+
 RC_GTEST_PROP(ChunkedBuffer, ReadWriteIrregular, (const std::vector<std::vector<uint64_t>> &inputs)) {
     using namespace arcticdb;
     CursoredBuffer<ChunkedBufferImpl<64>> cb;

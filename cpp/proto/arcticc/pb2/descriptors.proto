@@ -20,7 +20,7 @@ message TypeDescriptor {
         FLOAT = 3;
 
         BOOL = 4;
-        MICROS_UTC = 5;
+        NANOSECONDS_UTC = 5;
         
         SYMBOL = 6; // categorical string of low cardinality suitable for dictionary encoding
         ASCII_STRING = 7; // fixed size string when dim > 1, inputs of type uint8_t, no encoding
@@ -30,6 +30,7 @@ message TypeDescriptor {
         PICKLE = 10; // BYTES + pickle specific encoding
         DYNAMIC_STRING = 11; // offset reference to deduplicated string pool
         DYNAMIC_UTF8 = 12;
+        EMPTY = 13;
     }
 
     enum SizeBits {

@@ -5,7 +5,10 @@
  * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
  */
 
-#include <arcticdb/storage/azure/azure_storage.hpp>
+#define ARCTICDB_AZURE_STORAGE_H_
+#include <arcticdb/storage/azure/azure_storage-inl.hpp>
+
+
 #include <arcticdb/log/log.hpp>
 #include <azure/core/http/curl_transport.hpp>
 
@@ -16,7 +19,7 @@ using namespace Azure::Storage::Blobs;
 
 
 AzureStorage::AzureStorage(const LibraryPath &library_path, OpenMode mode, const Config &conf) :
-    Parent(library_path, mode),
+    Storage(library_path, mode),
     container_client_(BlobContainerClient::CreateFromConnectionString(conf.endpoint(), conf.container_name(), get_client_options(conf))),
     root_folder_(object_store_utils::get_root_folder(library_path)),
     request_timeout_(conf.request_timeout() == 0 ? 60000 : conf.request_timeout()){

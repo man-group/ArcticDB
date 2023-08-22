@@ -240,7 +240,7 @@ public:
         const StreamId& stream_id,
         const VersionQuery& version_query);
 
-    std::pair<VersionedItem, std::vector<AtomKey>> write_individual_segment(
+    VersionedItem write_individual_segment(
         const StreamId& stream_id,
         SegmentInMemory&& segment,
         bool prune_previous_versions
@@ -276,13 +276,13 @@ public:
         bool prune_previous_versions,
         std::vector<arcticdb::proto::descriptors::UserDefinedMetadata>&& user_meta_protos);
 
-    std::vector<AtomKey> batch_append_internal(
-        std::vector<VersionId> version_ids,
+    std::vector<std::variant<VersionedItem, DataError>> batch_append_internal(
         const std::vector<StreamId>& stream_ids,
-        std::vector<AtomKey> prevs,
-        std::vector<InputTensorFrame> frames,
-        const WriteOptions& write_options,
-        bool validate_index);
+        std::vector<InputTensorFrame>&& frames,
+        bool prune_previous_versions,
+        bool validate_index,
+        bool upsert,
+        bool throw_on_missing_version);
 
     std::vector<ReadVersionOutput> batch_read_keys(
         const std::vector<AtomKey> &keys,
@@ -365,6 +365,11 @@ public:
         bool prune_previous_versions,
         bool add_new_symbol);
 
+    void write_version_and_prune_previous_if_needed(
+        bool prune_previous_versions,
+        const AtomKey& new_version,
+        const std::optional<IndexTypeKey>& previous_key);
+
     std::vector<folly::Future<folly::Unit>> batch_write_version_and_prune_if_needed(
         const std::vector<AtomKey>& index_keys,
         const std::vector<UpdateInfo>& stream_update_info_vector,
@@ -403,7 +408,8 @@ protected:
             bool append,
             bool convert_int_to_float,
             bool via_iteration,
-            bool sparsify) override;
+            bool sparsify,
+            bool prune_previous_versions);
 
     /**
      * Take tombstoned indexes that have been pruned in the version map and perform the actual deletion

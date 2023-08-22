@@ -285,7 +285,9 @@ def create_test_s3_cfg(
     bucket_name: str,
     endpoint: str,
     *,
+    is_https: bool = False,
     with_prefix: Union[str, bool, None] = True,
+    region: str = None,
 ) -> EnvironmentConfigsMap:
     cfg = EnvironmentConfigsMap()
     add_s3_library_to_env(
@@ -297,6 +299,8 @@ def create_test_s3_cfg(
         bucket_name=bucket_name,
         endpoint=endpoint,
         with_prefix=with_prefix,
+        is_https=is_https,
+        region=region,
     )
     return cfg
 

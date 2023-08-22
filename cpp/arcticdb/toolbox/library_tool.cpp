@@ -43,7 +43,8 @@ void LibraryTool::clear_ref_keys() {
 
 std::vector<VariantKey> LibraryTool::find_keys(entity::KeyType kt) {
     std::vector<VariantKey> res;
-    lib_->iterate_type(kt, [&](auto &&found_key) {
+
+    lib_->iterate_type(kt, [&](VariantKey &&found_key) {
         res.emplace_back(found_key);
     });
     return res;
@@ -51,9 +52,12 @@ std::vector<VariantKey> LibraryTool::find_keys(entity::KeyType kt) {
 
 int LibraryTool::count_keys(entity::KeyType kt) {
     int count = 0;
-    lib_->iterate_type(kt, [&](auto &&found_key ARCTICDB_UNUSED) {
+
+    const IterateTypeVisitor& visitor = [&](VariantKey &&) {
         count++;
-    });
+    };
+
+    lib_->iterate_type(kt, visitor);
     return count;
 }
 
@@ -68,21 +72,20 @@ std::vector<VariantKey> LibraryTool::find_keys_for_id(entity::KeyType kt, const 
 
     std::vector<VariantKey> res;
     const auto &string_id = std::get<StringId>(stream_id);
-    lib_->iterate_type(kt, [&](auto &&found_key) {
+
+    const IterateTypeVisitor& visitor = [&](VariantKey &&found_key) {
         // Only S3 handles the prefix in iterate_type, the others just return everything, thus the additional check.
         if (variant_key_id(found_key) == stream_id) {
             res.emplace_back(found_key);
         }
-    }, string_id);
+    };
+
+    lib_->iterate_type(kt, visitor, string_id);
     return res;
 }
 
 std::string LibraryTool::get_key_path(const VariantKey& key) {
-    std::string out;
-    lib_->storage_specific([&out, &key](const storage::s3::S3Storage& s3) {
-        out = s3.get_key_path(key);
-    });
-    return out;
+    return lib_->key_path(key);
 }
 
 } // namespace arcticdb::toolbox::apy

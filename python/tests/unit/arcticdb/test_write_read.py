@@ -60,7 +60,7 @@ def params(func, generator, label):
     ),
 )
 def test_simple_round_trip(a):
-    fields = [FieldDescriptor(TypeDescriptor(DataType.MICROS_UTC64, Dimension.Dim0), "time")]
+    fields = [FieldDescriptor(TypeDescriptor(DataType.NANOSECONDS_UTC64, Dimension.Dim0), "time")]
     dim = None
     if len(a.shape) == 1:
         dim = Dimension.Dim1
