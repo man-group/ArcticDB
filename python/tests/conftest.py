@@ -174,7 +174,8 @@ def arctic_client(request, moto_s3_uri_incl_bucket, tmpdir, encoding_version):
     else:
         raise NotImplementedError()
 
-    assert not ac.list_libraries()
+    if request.param != "Real_S3":
+        assert not ac.list_libraries()
     yield ac
 
 
@@ -205,6 +206,7 @@ def arctic_library(request, arctic_client):
     if AZURE_SUPPORT:
         request.getfixturevalue("azure_client_and_create_container")
 
+    arctic_client.delete_library("pytest_test_lib")
     arctic_client.create_library("pytest_test_lib")
     return arctic_client["pytest_test_lib"]
 
@@ -509,6 +511,7 @@ def mongo_version_store(mongo_store_factory):
 @pytest.fixture(
     scope="function",
     params=[
+        "version_store_factory",
         "s3_store_factory",
         pytest.param(
             "azure_store_factory",
