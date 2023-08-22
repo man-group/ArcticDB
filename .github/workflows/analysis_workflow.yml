@@ -253,14 +253,6 @@ jobs:
         run: |
           echo "Coverage: ${{ env.PERCENT }}" > coverage.txt
 
-          - name: Check percentage and send Slack notification
-          if: ${{ env.PREV_PERCENT && env.PERCENT < env.PREV_PERCENT }}
-          uses: slack/send-message@v3
-          with:
-            channel: ${{ secrets.SLACK_CHANNEL }}
-            text: "Coverage decreased from ${{ env.PREV_PERCENT }}% to ${{ env.PERCENT }}%"
-            color: danger
-
       - name: Check percentage and send Slack notification
         if: ${{ env.PREV_PERCENT && env.PERCENT && env.PERCENT < env.PREV_PERCENT }}
         uses: slackapi/slack-github-action@v1.24.0
