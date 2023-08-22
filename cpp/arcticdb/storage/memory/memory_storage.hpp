@@ -22,6 +22,10 @@ namespace arcticdb::storage::memory {
 
         MemoryStorage(const LibraryPath &lib, OpenMode mode, const Config &conf);
 
+        CheckAccessibilityResult check_accessibility() override {
+            return {spdlog::level::trace, "No storage access check necessary"};
+        }
+
     private:
         void do_write(Composite<KeySegmentPair>&& kvs) final;
 

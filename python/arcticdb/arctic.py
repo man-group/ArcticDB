@@ -26,7 +26,7 @@ class Arctic:
 
     _LIBRARY_ADAPTERS = [S3LibraryAdapter, LMDBLibraryAdapter, AzureLibraryAdapter]
 
-    def __init__(self, uri: str, encoding_version: EncodingVersion = EncodingVersion.V1):
+    def __init__(self, uri: str, encoding_version=EncodingVersion.V1, check_storage_access=True):
         """
         Initializes a top-level Arctic library management instance.
 
@@ -122,6 +122,9 @@ class Arctic:
 
                 The LMDB URI connection scheme has the form ``lmdb:///<path to store LMDB files>``. There are no options
                 available for the LMDB URI connection scheme.
+        check_storage_access: bool
+            Where supported by the storage, check if the storage is accessible.
+            See :py:meth:`arcticdb.adapters.arctic_library_adapter.ArcticLibraryAdapter.check_storage_access`
 
         Examples
         --------
@@ -150,6 +153,9 @@ class Arctic:
         self._library_manager = LibraryManager(self._library_adapter.config_library)
         self._uri = uri
         self._open_libraries = dict()
+
+        if check_storage_access:
+            self._library_adapter.check_storage_access()
 
     def __getitem__(self, name: str) -> Library:
         already_open = self._open_libraries.get(name)

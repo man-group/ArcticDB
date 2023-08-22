@@ -57,6 +57,11 @@ class Library {
     Library& operator=(const Library&) = delete;
     Library& operator=(Library&&) = delete;
 
+    /** Calls check_accessibility() on the primary Storage. */
+    CheckAccessibilityResult check_accessibility_of_primary_storage() {
+        return storages_->check_accessibility_of_primary_storage();
+    }
+
     /**
      * Tries to get every key of the given type (and prefix if not empty). Please assume this can skip keys sometimes
      * and code defensively.
@@ -122,7 +127,7 @@ class Library {
         return res;
     }
 
-    /** Calls VariantStorage::do_key_path on the primary storage */
+    /** Calls Storage::do_key_path on the primary storage */
     std::string key_path(const VariantKey& key) const {
         return storages_->key_path(key);
     }

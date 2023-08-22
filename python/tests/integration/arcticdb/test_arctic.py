@@ -6,64 +6,49 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 import sys
-import os
-
 import pytz
-from arcticdb_ext.exceptions import InternalException, ErrorCode, ErrorCategory
+import math
+import re
+import pytest
+import time
+import pandas as pd
+import numpy as np
+from datetime import datetime, timezone
+from botocore.client import BaseClient as BotoClient
+
 from arcticdb.exceptions import ArcticNativeNotYetImplemented, LibraryNotFound
-from pandas import Timestamp
-
-try:
-    from arcticdb.version_store import VersionedItem as PythonVersionedItem
-except ImportError:
-    # arcticdb squashes the packages
-    from arcticdb._store import VersionedItem as PythonVersionedItem
-from arcticdb_ext.storage import NoDataFoundException, KeyType
-from arcticdb_ext.version_store import VersionRequestType
-
 from arcticdb.arctic import Arctic
 from arcticdb.adapters.s3_library_adapter import S3LibraryAdapter
 from arcticdb.options import LibraryOptions
 from arcticdb.encoding_version import EncodingVersion
 from arcticdb import QueryBuilder, DataError
 from arcticc.pb2.s3_storage_pb2 import Config as S3Config
-
-import math
-import re
-import pytest
-import pandas as pd
-from datetime import datetime, date, timezone, timedelta
-import numpy as np
+from arcticdb.util.test import assert_frame_equal
+from arcticdb.adapters.s3_storage_fixture import S3Bucket
+from arcticdb.version_store.library import (
+    WritePayload,
+    ArcticUnsupportedDataTypeException,
+    ReadRequest,
+    StagedDataFinalizeMethod,
+)
 from arcticdb_ext.tools import AZURE_SUPPORT
-from numpy import datetime64
-from arcticdb.util.test import assert_frame_equal, random_strings_of_length, random_floats
-import random
-
-if AZURE_SUPPORT:
-    from azure.storage.blob import BlobServiceClient
-from botocore.client import BaseClient as BotoClient
-import time
+from arcticdb_ext.storage import NoDataFoundException
+from arcticdb_ext.exceptions import InternalException
 
 
-try:
-    from arcticdb.version_store.library import (
-        WritePayload,
-        ArcticUnsupportedDataTypeException,
-        ReadRequest,
-        ReadInfoRequest,
-        ArcticInvalidApiUsageException,
-        StagedDataFinalizeMethod,
-    )
-except ImportError:
-    # arcticdb squashes the packages
-    from arcticdb.library import (
-        WritePayload,
-        ArcticUnsupportedDataTypeException,
-        ReadRequest,
-        ReadInfoRequest,
-        ArcticInvalidApiUsageException,
-        StagedDataFinalizeMethod,
-    )
+@pytest.fixture
+def boto_client(s3_bucket):
+    return s3_bucket.make_boto_client()
+
+
+@pytest.fixture
+def moto_s3_uri_incl_bucket(s3_bucket):
+    return s3_bucket.arctic_uri
+
+
+@pytest.fixture
+def object_storage_uri_incl_bucket(object_storage_fixture):
+    return object_storage_fixture.arctic_uri
 
 
 def test_library_creation_deletion(arctic_client):
@@ -171,11 +156,11 @@ def test_separation_between_libraries(object_storage_uri_incl_bucket):
     assert ac["pytest_test_lib_2"].list_symbols() == ["test_2"]
 
 
-def get_path_prefix_option(uri):
+def add_path_prefix(uri, prefix):
     if "azure" in uri:  # azure connection string has a different format
-        return ";Path_prefix"
+        return f"{uri};Path_prefix={prefix}"
     else:
-        return "&path_prefix"
+        return f"{uri}&path_prefix={prefix}"
 
 
 def test_separation_between_libraries_with_prefixes(object_storage_uri_incl_bucket):
@@ -184,12 +169,11 @@ def test_separation_between_libraries_with_prefixes(object_storage_uri_incl_buck
     creating a new bucket is time-consuming, for example due to organisational issues.
     """
 
-    option = get_path_prefix_option(object_storage_uri_incl_bucket)
-    mercury_uri = f"{object_storage_uri_incl_bucket}{option}=/planet/mercury"
+    mercury_uri = add_path_prefix(object_storage_uri_incl_bucket, "/planet/mercury")
     ac_mercury = Arctic(mercury_uri)
     assert ac_mercury.list_libraries() == []
 
-    mars_uri = f"{object_storage_uri_incl_bucket}{option}=/planet/mars"
+    mars_uri = add_path_prefix(object_storage_uri_incl_bucket, "/planet/mars")
     ac_mars = Arctic(mars_uri)
     assert ac_mars.list_libraries() == []
 
@@ -205,32 +189,17 @@ def test_separation_between_libraries_with_prefixes(object_storage_uri_incl_buck
     assert ac_mars["pytest_test_lib"].list_symbols() == ["test_2"]
 
 
-def object_storage_uri_and_client():
-    return [
-        ("moto_s3_uri_incl_bucket", "boto_client"),
-        pytest.param(
-            "azurite_azure_uri_incl_bucket",
-            "azure_client_and_create_container",
-            marks=pytest.mark.skipif(not AZURE_SUPPORT, reason="Pending Azure Storge Conda support"),
-        ),
-    ]
+def _get_objects_in_storage(object_storage_fixture):
+    if isinstance(object_storage_fixture, S3Bucket):
+        client = object_storage_fixture.make_boto_client()
+        return [d["Key"] for d in client.list_objects(Bucket=object_storage_fixture.bucket)["Contents"]]
+    else:  # AzureContainer
+        return [blob["name"] for blob in object_storage_fixture.client.list_blobs()]
 
 
-@pytest.mark.parametrize("connection_string, client", object_storage_uri_and_client())
-def test_library_management_path_prefix(connection_string, client, request):
-    connection_string = request.getfixturevalue(request.getfixturevalue("connection_string"))
-    client = request.getfixturevalue(request.getfixturevalue("client"))
-
-    if isinstance(client, BotoClient):
-        test_bucket = sorted(client.list_buckets()["Buckets"], key=lambda bucket_meta: bucket_meta["CreationDate"])[-1][
-            "Name"
-        ]
-    else:
-        time.sleep(1)  # Azurite is slow....
-        test_bucket = list(client.list_containers())
-
-    URI = f"{connection_string}{get_path_prefix_option(connection_string)}=hello/world"
-    ac = Arctic(URI)
+def test_library_management_path_prefix(object_storage_fixture):
+    uri = add_path_prefix(object_storage_fixture.arctic_uri, "hello/world")
+    ac = Arctic(uri)
     assert ac.list_libraries() == []
 
     ac.create_library("pytest_test_lib")
@@ -243,13 +212,7 @@ def test_library_management_path_prefix(connection_string, client, request):
     ac["pytest_test_lib"].snapshot("test_snapshot")
     assert ac["pytest_test_lib"].list_snapshots() == {"test_snapshot": None}
 
-    if isinstance(client, BotoClient):
-        keys = [d["Key"] for d in client.list_objects(Bucket=test_bucket)["Contents"]]
-    else:
-        REGEX = r".*Container=(?P<container>[^;]+).*"
-        match = re.match(REGEX, connection_string)
-        container = match.groupdict()["container"]
-        keys = [blob["name"] for blob in client.get_container_client(container).list_blobs()]
+    keys = _get_objects_in_storage(object_storage_fixture)
     assert all(k.startswith("hello/world") for k in keys)
     assert any(k.startswith("hello/world/_arctic_cfg") for k in keys)
     assert any(k.startswith("hello/world/pytest_test_lib") for k in keys)
@@ -951,41 +914,19 @@ def test_segment_slicing(object_storage_uri_incl_bucket):
     assert num_data_segments == math.ceil(rows / rows_per_segment) * math.ceil(columns / columns_per_segment)
 
 
-@pytest.mark.parametrize("connection_string, client", object_storage_uri_and_client())
-def test_reload_symbol_list(connection_string, client, request):
-    connection_string = request.getfixturevalue(request.getfixturevalue("connection_string"))
-    client = request.getfixturevalue(request.getfixturevalue("client"))
+def test_reload_symbol_list(object_storage_fixture):
 
     def get_symbol_list_keys():
-        if isinstance(client, BotoClient):
-            keys = [
-                d["Key"] for d in client.list_objects(Bucket=test_bucket)["Contents"] if d["Key"].startswith(lib_name)
-            ]
-        else:
-            time.sleep(1)  # Azurite is slow....
-            REGEX = r".*Container=(?P<container>[^;]+).*"
-            match = re.match(REGEX, connection_string)
-            container = match.groupdict()["container"]
-            keys = [
-                blob["name"]
-                for blob in client.get_container_client(container).list_blobs()
-                if blob["name"].startswith(lib_name)
-            ]
+        keys = _get_objects_in_storage(object_storage_fixture)
         symbol_list_keys = []
         for key in keys:
-            path_components = key.split("/")
-            if path_components[1] == "sl":
-                symbol_list_keys.append(path_components[2])
+            if key.startswith(lib_name):
+                path_components = key.split("/")
+                if path_components[1] == "sl":
+                    symbol_list_keys.append(path_components[2])
         return symbol_list_keys
 
-    if isinstance(client, BotoClient):
-        test_bucket = sorted(client.list_buckets()["Buckets"], key=lambda bucket_meta: bucket_meta["CreationDate"])[-1][
-            "Name"
-        ]
-    else:
-        test_bucket = list(client.list_containers())
-
-    ac = Arctic(connection_string)
+    ac = Arctic(object_storage_fixture.arctic_uri)
     assert ac.list_libraries() == []
 
     lib_name = "pytest_test_lib"

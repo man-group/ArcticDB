@@ -78,6 +78,21 @@ private:
     mutable std::string msg_;
 };
 
+struct CheckAccessibilityResult {
+    /** Suggested levels:
+     * err - access is conclusively not possible, e.g. server indicates the container don't exist
+     * warn - the check failed, but cannot conclusively determine access, e.g. user may lack the permission to perform
+     *        the check, but may otherwise be able to read data
+     * info - check inconclusive
+     * debug - check passed or checking is not supported
+     */
+    spdlog::level::level_enum log_level_;
+
+    // These are often set by different code paths, so keep them separate to avoid another string concatenation:
+    std::string user_friendly_description_ = "";
+    std::string technical_details_ = "";
+};
+
 class Storage {
 public:
 
@@ -90,6 +105,14 @@ public:
     Storage& operator=(const Storage&) = delete;
     Storage(Storage&&) = default;
     Storage& operator=(Storage&&) = delete;
+
+    /**
+     * Check if (at least) read access is possible on this Storage and return the check result.
+     * Ideally should not throw unless the function is certain no subsequent call on this Storage will ever work.
+     *
+     * Optional feature. Only implement if the check is cheap and fast (returns within 2s).
+     */
+    virtual CheckAccessibilityResult check_accessibility() = 0;
 
     void write(Composite<KeySegmentPair> &&kvs) {
         ARCTICDB_SAMPLE(StorageWrite, 0)

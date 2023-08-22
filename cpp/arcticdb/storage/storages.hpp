@@ -31,6 +31,10 @@ class Storages {
         storages_(std::move(storages)), mode_(mode) {
     }
 
+    CheckAccessibilityResult check_accessibility_of_primary_storage() {
+        return primary().check_accessibility();
+    }
+
     void write(Composite<KeySegmentPair>&& kvs) {
         ARCTICDB_SAMPLE(StoragesWrite, 0)
         primary().write(std::move(kvs));
