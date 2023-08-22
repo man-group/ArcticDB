@@ -99,6 +99,51 @@ TEST(Clause, PartitionString) {
     }
 }
 
+TEST(Clause, PartitionEmptyColumn) {
+    using namespace arcticdb;
+
+    auto seg = generate_groupby_testing_segment(100, 10);
+    ProcessingUnit processing_unit(std::move(seg), pipelines::FrameSlice{});
+    Composite<ProcessingUnit> comp;
+    comp.push_back(std::move(processing_unit));
+    PartitionClause<arcticdb::grouping::HashingGroupers, arcticdb::grouping::ModuloBucketizer> partition{"empty_sum"};
+
+    auto partitioned = partition.process(std::shared_ptr<Store>(), std::move(comp));
+    ASSERT_TRUE(partitioned.empty());
+}
+
+TEST(Clause, AggregationEmptyColumn) {
+    using namespace arcticdb;
+
+    std::shared_ptr<Store> empty_store;
+    size_t num_rows{100};
+    size_t unique_grouping_values{10};
+    auto seg = generate_groupby_testing_segment(num_rows, unique_grouping_values);
+    ProcessingUnit processing_unit(std::move(seg), pipelines::FrameSlice{});
+    Composite<ProcessingUnit> comp;
+    comp.push_back(std::move(processing_unit));
+    AggregationClause aggregation("int_repeated_values", {{"empty_sum", "sum"}, {"empty_min", "min"}, {"empty_max", "max"}, {"empty_mean", "mean"}});
+
+    auto aggregated = aggregation.process(std::shared_ptr<Store>(), std::move(comp)).as_range();
+    ASSERT_EQ(1, aggregated.size());
+    auto slice_and_keys = aggregated[0].data();
+    ASSERT_EQ(1, slice_and_keys.size());
+
+    // Sum aggregations should produce a float64 column full of zeros
+    auto sum_column_index = slice_and_keys[0].segment_->column_index("empty_sum");
+    ASSERT_TRUE(sum_column_index.has_value());
+    auto& sum_column = slice_and_keys[0].segment_->column(*sum_column_index);
+    ASSERT_EQ(DataType::FLOAT64, sum_column.type().data_type());
+    for (size_t idx = 0; idx < unique_grouping_values; idx++) {
+        ASSERT_EQ(double(0), sum_column.scalar_at<double>(idx));
+    }
+
+    // Min, max, and mean aggregations should not be present in the output segment
+    ASSERT_FALSE(slice_and_keys[0].segment_->column_index("empty_min").has_value());
+    ASSERT_FALSE(slice_and_keys[0].segment_->column_index("empty_max").has_value());
+    ASSERT_FALSE(slice_and_keys[0].segment_->column_index("empty_mean").has_value());
+}
+
 TEST(Clause, Passthrough) {
     using namespace arcticdb;
     auto seg = get_standard_timeseries_segment("passthrough");

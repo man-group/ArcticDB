@@ -191,34 +191,41 @@ namespace arcticdb {
             auto partitioning_column = std::get<ColumnWithStrings>(get_result);
             partitioning_column.column_->type().visit_tag([&output, &input, &partitioning_column, &store](auto type_desc_tag) {
                 using TypeDescriptorTag = decltype(type_desc_tag);
+                using DescriptorType = std::decay_t<TypeDescriptorTag>;
+                using TagType =  typename DescriptorType::DataTypeTag;
                 using ResolvedGrouperType = typename GrouperType::template Grouper<TypeDescriptorTag>;
 
-                ResolvedGrouperType grouper;
-                auto num_buckets = ConfigsMap::instance()->get_int("Partition.NumBuckets", async::TaskScheduler::instance()->cpu_thread_count());
-                if (num_buckets > std::numeric_limits<uint8_t>::max()) {
-                    log::version().warn("GroupBy partitioning buckets capped at {} (received {})",
-                                        std::numeric_limits<uint8_t>::max(),
-                                        num_buckets);
-                    num_buckets = std::numeric_limits<uint8_t>::max();
-                }
-                std::vector<ProcessingUnit> procs{static_cast<size_t>(num_buckets)};
-                BucketizerType bucketizer(num_buckets);
-                auto [row_to_bucket, bucket_counts] = get_buckets(partitioning_column, grouper, bucketizer);
-                for (auto& seg_slice_and_key : input.data()) {
-                    const SegmentInMemory& seg = seg_slice_and_key.segment(store);
-                    auto new_segs = partition_segment(seg, row_to_bucket, bucket_counts);
-                    for (auto&& new_seg: folly::enumerate(new_segs)) {
-                        if (bucket_counts.at(new_seg.index) > 0) {
-                            pipelines::FrameSlice new_slice{seg_slice_and_key.slice()};
-                            new_slice.adjust_rows(new_seg->row_count());
-                            procs.at(new_seg.index).data().emplace_back(pipelines::SliceAndKey{std::move(*new_seg), std::move(new_slice)});
+                // Partitioning on an empty column should return an empty composite
+                if constexpr(!is_empty_type(TagType::data_type)) {
+                    ResolvedGrouperType grouper;
+                    auto num_buckets = ConfigsMap::instance()->get_int("Partition.NumBuckets",
+                                                                       async::TaskScheduler::instance()->cpu_thread_count());
+                    if (num_buckets > std::numeric_limits<uint8_t>::max()) {
+                        log::version().warn("GroupBy partitioning buckets capped at {} (received {})",
+                                            std::numeric_limits<uint8_t>::max(),
+                                            num_buckets);
+                        num_buckets = std::numeric_limits<uint8_t>::max();
+                    }
+                    std::vector<ProcessingUnit> procs{static_cast<size_t>(num_buckets)};
+                    BucketizerType bucketizer(num_buckets);
+                    auto [row_to_bucket, bucket_counts] = get_buckets(partitioning_column, grouper, bucketizer);
+                    for (auto &seg_slice_and_key: input.data()) {
+                        const SegmentInMemory &seg = seg_slice_and_key.segment(store);
+                        auto new_segs = partition_segment(seg, row_to_bucket, bucket_counts);
+                        for (auto &&new_seg: folly::enumerate(new_segs)) {
+                            if (bucket_counts.at(new_seg.index) > 0) {
+                                pipelines::FrameSlice new_slice{seg_slice_and_key.slice()};
+                                new_slice.adjust_rows(new_seg->row_count());
+                                procs.at(new_seg.index).data().emplace_back(
+                                        pipelines::SliceAndKey{std::move(*new_seg), std::move(new_slice)});
+                            }
                         }
                     }
-                }
-                for (auto&& proc: folly::enumerate(procs)) {
-                    if (bucket_counts.at(proc.index) > 0) {
-                        proc->set_bucket(proc.index);
-                        output.push_back(std::move(*proc));
+                    for (auto &&proc: folly::enumerate(procs)) {
+                        if (bucket_counts.at(proc.index) > 0) {
+                            proc->set_bucket(proc.index);
+                            output.push_back(std::move(*proc));
+                        }
                     }
                 }
             });
