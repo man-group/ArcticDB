@@ -64,6 +64,47 @@ namespace arcticdb {
         });
     }
 
+    ValueSet::ValueSet(NumericSetType&& value_set):
+    numeric_base_set_(std::move(value_set)) {
+        util::variant_match(
+                numeric_base_set_,
+                [this](const std::shared_ptr<std::unordered_set<uint8_t>>&) {
+                    base_type_ = make_scalar_type(combine_data_type(entity::ValueType::UINT, entity::SizeBits::S8));
+                },
+                [this](const std::shared_ptr<std::unordered_set<uint16_t>>&) {
+                    base_type_ = make_scalar_type(combine_data_type(entity::ValueType::UINT, entity::SizeBits::S16));
+                },
+                [this](const std::shared_ptr<std::unordered_set<uint32_t>>&) {
+                    base_type_ = make_scalar_type(combine_data_type(entity::ValueType::UINT, entity::SizeBits::S32));
+                },
+                [this](const std::shared_ptr<std::unordered_set<uint64_t>>&) {
+                    base_type_ = make_scalar_type(combine_data_type(entity::ValueType::UINT, entity::SizeBits::S64));
+                },
+                [this](const std::shared_ptr<std::unordered_set<int8_t>>&) {
+                    base_type_ = make_scalar_type(combine_data_type(entity::ValueType::INT, entity::SizeBits::S8));
+                },
+                [this](const std::shared_ptr<std::unordered_set<int16_t>>&) {
+                    base_type_ = make_scalar_type(combine_data_type(entity::ValueType::INT, entity::SizeBits::S16));
+                },
+                [this](const std::shared_ptr<std::unordered_set<int32_t>>&) {
+                    base_type_ = make_scalar_type(combine_data_type(entity::ValueType::INT, entity::SizeBits::S32));
+                },
+                [this](const std::shared_ptr<std::unordered_set<int64_t>>&) {
+                    base_type_ = make_scalar_type(combine_data_type(entity::ValueType::INT, entity::SizeBits::S64));
+                },
+                [this](const std::shared_ptr<std::unordered_set<float>>&) {
+                    base_type_ = make_scalar_type(combine_data_type(entity::ValueType::FLOAT, entity::SizeBits::S32));
+                },
+                [this](const std::shared_ptr<std::unordered_set<double>>&) {
+                    base_type_ = make_scalar_type(combine_data_type(entity::ValueType::FLOAT, entity::SizeBits::S64));
+                }
+                );
+        util::variant_match(numeric_base_set_,
+                            [&](const auto& numeric_base_set) {
+                                empty_ = numeric_base_set->empty();
+                            });
+    }
+
     bool ValueSet::empty() const {
         return empty_;
     }
