@@ -278,6 +278,7 @@ jobs:
 
   persistent_storages_cleanup:
     needs: [code_coverage]
+    if: always()
     name: Cleanup persistent storages
     uses: ./.github/workflows/persistent_storage.yml
     secrets: inherit
