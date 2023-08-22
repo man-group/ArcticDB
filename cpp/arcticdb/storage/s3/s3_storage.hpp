@@ -27,6 +27,8 @@
 
 namespace arcticdb::storage::s3 {
 
+const std::string USE_AWS_CRED_PROVIDERS_TOKEN = "_RBAC_";
+
 class S3Storage final : public Storage {
   public:
     friend class S3TestClientAccessor<S3Storage>;
@@ -213,13 +215,14 @@ auto get_s3_config(const ConfigType& conf) {
     Aws::Client::ClientConfiguration client_configuration = get_proxy_config(endpoint_scheme);
     client_configuration.scheme = endpoint_scheme;
 
-    if (!conf.region().empty())
+    if (!conf.region().empty()) {
         client_configuration.region = conf.region();
+    }
 
+    if (!conf.endpoint().empty()) {
+        client_configuration.endpointOverride = conf.endpoint();
+    }
 
-    auto endpoint = conf.endpoint();
-    util::check_arg(!endpoint.empty(), "S3 Endpoint must be specified");
-    client_configuration.endpointOverride = endpoint;
     const bool verify_ssl = ConfigsMap::instance()->get_int("S3Storage.VerifySSL", conf.ssl());
     ARCTICDB_RUNTIME_DEBUG(log::storage(), "Verify ssl: {}", verify_ssl);
     client_configuration.verifySSL = verify_ssl;
