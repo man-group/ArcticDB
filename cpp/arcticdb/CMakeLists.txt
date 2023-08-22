@@ -712,6 +712,7 @@ if(${TEST})
             processing/test/test_clause.cpp
             processing/test/test_expression.cpp
             processing/test/test_has_valid_type_promotion.cpp
+            processing/test/test_operation_dispatch.cpp
             processing/test/test_set_membership.cpp
             processing/test/test_signed_unsigned_comparison.cpp
             processing/test/test_type_comparison.cpp
