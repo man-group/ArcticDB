@@ -257,14 +257,23 @@ jobs:
         if: ${{ env.PREV_PERCENT && env.PERCENT && env.PERCENT < env.PREV_PERCENT }}
         uses: slackapi/slack-github-action@v1.24.0
         with:
-          # Slack channel id, channel name, or user id to post message.
-          # See also: https://api.slack.com/methods/chat.postMessage#channels
-          # You can pass in multiple channels to post to by providing a comma-delimited list of channel IDs.
-          channel-id: 'C05N1TPQNTY'
-          # For posting a simple plain text message
-          slack-message: "The CPP Code Coverage from the current run(${{ env.PERCENT }}%) is lower the previous one(${{ env.PREV_PERCENT }}%)."
+          # For posting a rich message using Block Kit
+          payload: |
+            {
+              "text": "The CPP Code Coverage has been reduced",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "The CPP Code Coverage from the current run(${{ env.PERCENT }}%) is lower the previous one(${{ env.PREV_PERCENT }}%)."
+                  }
+                }
+              ]
+            }
         env:
-          SLACK_BOT_TOKEN: ${{ secrets.TEST_WEBHOOK_URL }}
+          SLACK_WEBHOOK_URL: ${{ secrets.TEST_WEBHOOK_URL }}
+          SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
 
   persistent_storages_cleanup:
     needs: [code_coverage]
