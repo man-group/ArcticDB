@@ -25,8 +25,24 @@ def check_no_keys(library):
         assert len(lib_tool.find_keys(key_type)) == 0
 
 
-def test_stress_delete(object_store_factory, request):
-    store_factory = request.getfixturevalue(object_store_factory)
+@pytest.mark.parametrize(
+    "store_factory",
+    [
+        "s3_store_factory",
+        pytest.param(
+            "azure_store_factory",
+            marks=pytest.mark.skipif(not AZURE_SUPPORT, reason="Pending Azure Storge Conda support"),
+        ),
+        pytest.param(
+            "real_s3_store_factory",
+            marks=pytest.mark.skipif(
+                not PERSISTENT_STORAGE_TESTS_ENABLED, reason="Can be used only when persistent storage is enabled"
+            ),
+        ),
+    ],
+)
+def test_stress_delete(store_factory, request):
+    store_factory = request.getfixturevalue(store_factory)
     lib1 = store_factory(name=f"delete_me_{datetime.utcnow().isoformat()}")
     lib2 = store_factory(name=f"leave_me_{datetime.utcnow().isoformat()}")
     num_tests = 100
