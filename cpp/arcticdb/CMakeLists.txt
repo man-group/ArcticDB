@@ -421,7 +421,9 @@ set(arcticdb_srcs
         version/version_core.cpp
         version/version_store_api.cpp
         version/version_utils.cpp
-        version/symbol_list.cpp )
+        version/symbol_list.cpp
+        vector_db/vector_db.hpp
+        vector_db/vector_db.cpp)
 
 # Exclude vendored sources when using conda.
 if(NOT ${ARCTICDB_USING_CONDA}) #Awaiting Azure sdk support in conda https://github.com/man-group/ArcticDB/issues/519

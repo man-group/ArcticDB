@@ -436,6 +436,9 @@ void set_output_descriptors(
         const std::vector<std::shared_ptr<Clause>>& clauses,
         const std::shared_ptr<PipelineContext>& pipeline_context) {
     std::optional<std::string> index_column;
+    // Ordinarily we rearrange output columns by the order of their names
+    // in the input dataframe.
+    bool follow_original_column_order = true;
     for (auto clause = clauses.rbegin(); clause != clauses.rend(); ++clause) {
         if (auto new_index = (*clause)->clause_info().new_index_; new_index.has_value()) {
             index_column = new_index;
@@ -444,6 +447,9 @@ void set_output_descriptors(
             pipeline_context->norm_meta_->mutable_df()->mutable_common()->mutable_index()->set_is_not_range_index(
                     true);
             break;
+        };
+        if (!(*clause)->clause_info().follows_original_columns_order_) {
+            follow_original_column_order = false;
         }
     }
     std::optional<StreamDescriptor> new_stream_descriptor;
@@ -481,11 +487,13 @@ void set_output_descriptors(
             final_stream_descriptor.add_field(new_stream_descriptor->field(*opt_idx));
             new_stream_descriptor->erase_field(*opt_idx);
         }
-        for (const auto& field: original_stream_descriptor.fields()) {
-            if (auto position = new_stream_descriptor->find_field(field.name()); position.has_value()) {
-                final_stream_descriptor.add_field(new_stream_descriptor->field(*position));
+        if (follow_original_column_order) {
+            for (const auto& field: original_stream_descriptor.fields()) {
+                if (auto position = new_stream_descriptor->find_field(field.name()); position.has_value()) {
+                    final_stream_descriptor.add_field(new_stream_descriptor->field(*position));
 
-                new_stream_descriptor->erase_field(*position);
+                    new_stream_descriptor->erase_field(*position);
+                }
             }
         }
         for (const auto& field: new_stream_descriptor->fields()) {
