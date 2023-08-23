@@ -155,7 +155,10 @@ class Segment {
 
     [[nodiscard]] std::size_t total_segment_size(std::size_t hdr_size) const {
         auto total = FIXED_HEADER_SIZE + hdr_size + buffer_bytes();
-        ARCTICDB_TRACE(log::storage(), "Total segment size {} + {} + {} = {}", FIXED_HEADER_SIZE, hdr_size, buffer_bytes(), total);
+        ARCTICDB_TRACE(
+                log::storage(),
+                "Total segment size (fixed header size + header size + buffer size = total) {} + {} + {} = {}",
+                FIXED_HEADER_SIZE, hdr_size, buffer_bytes(), total);
         return total;
     }
 
