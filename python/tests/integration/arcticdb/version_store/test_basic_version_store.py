@@ -1373,8 +1373,8 @@ def test_dataframe_with_nan_and_nat_only(basic_store):
     assert_frame_equal(basic_store.read("nan_nat").data, pd.DataFrame({"col": [pd.NaT, pd.NaT, pd.NaT]}))
 
 
-def test_coercion_to_float(basic_store_string_coercion):
-    lib = basic_store_string_coercion
+def test_coercion_to_float(basic_store_factory):
+    lib = basic_store_factory
     df = pd.DataFrame({"col": [np.NaN, "1", np.NaN]})
     # col is now an Object column with all NaNs
     df["col"][1] = np.NaN
@@ -1619,8 +1619,8 @@ def test_batch_read_meta_with_tombstones(basic_store_tombstone_and_sync_passive)
     assert lib.read_metadata("sym1").metadata == results_dict["sym1"].metadata
 
 
-def test_batch_read_meta_with_pruning(badic_store_factory):
-    lib = badic_store_factory(use_tombstones=True, prune_previous_version=True, sync_passive=True)
+def test_batch_read_meta_with_pruning(basic_store_factory):
+    lib = basic_store_factory(use_tombstones=True, prune_previous_version=True, sync_passive=True)
     lib.write("sym1", 1, {"meta1": 1})
     lib.write("sym1", 1, {"meta1": 2})
     lib.write("sym1", 3, {"meta1": 3})

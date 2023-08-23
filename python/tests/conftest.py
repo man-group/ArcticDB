@@ -665,14 +665,111 @@ def basic_store_delayed_deletes_v2(basic_store_factory, lib_name):
         dynamic_strings=True, delayed_deletes=True, encoding_version=int(EncodingVersion.V2), override_name=library_name
     )
 
-@pytest.fixture(
-    params=[
-        "basic_store_delayed_deletes_v1",
-        "basic_store_delayed_deletes_v2",
-    ],
-)
-def basic_store_delayed_deletes(request):
-    yield request.getfixturevalue(request.param)
+# TODO: Remove these
+@pytest.fixture
+def lmdb_version_store_tombstones_no_symbol_list(lmdb_version_store_factory):
+    return lmdb_version_store_factory(use_tombstones=True, dynamic_schema=True, symbol_list=False, dynamic_strings=True)
+
+
+@pytest.fixture
+def lmdb_version_store_allows_pickling(lmdb_version_store_factory, lib_name):
+    return lmdb_version_store_factory(use_norm_failure_handler_known_types=True, dynamic_strings=True)
+
+
+@pytest.fixture
+def lmdb_version_store_no_symbol_list(lmdb_version_store_factory):
+    return lmdb_version_store_factory(col_per_group=None, row_per_segment=None, symbol_list=False)
+
+
+@pytest.fixture
+def lmdb_version_store_tombstone_and_pruning(lmdb_version_store_factory):
+    return lmdb_version_store_factory(use_tombstones=True, prune_previous_version=True)
+
+
+@pytest.fixture
+def lmdb_version_store_tombstone(lmdb_version_store_factory):
+    return lmdb_version_store_factory(use_tombstones=True)
+
+
+@pytest.fixture
+def lmdb_version_store_tombstone_and_sync_passive(lmdb_version_store_factory):
+    return lmdb_version_store_factory(use_tombstones=True, sync_passive=True)
+
+
+@pytest.fixture
+def lmdb_version_store_ignore_order(lmdb_version_store_factory):
+    return lmdb_version_store_factory(ignore_sort_order=True)
+
+
+@pytest.fixture
+def lmdb_version_store_small_segment(lmdb_version_store_factory):
+    return lmdb_version_store_factory(column_group_size=1000, segment_row_size=1000, lmdb_config={"map_size": 2**30})
+
+
+@pytest.fixture
+def lmdb_version_store_tiny_segment(lmdb_version_store_factory):
+    return lmdb_version_store_factory(column_group_size=2, segment_row_size=2, lmdb_config={"map_size": 2**30})
+
+
+@pytest.fixture
+def lmdb_version_store_tiny_segment_dynamic(lmdb_version_store_factory):
+    return lmdb_version_store_factory(column_group_size=2, segment_row_size=2, dynamic_schema=True)
+
+## TODO: Remove these
+
+@pytest.fixture
+def basic_store_prune_previous(basic_store_factory):
+    return basic_store_factory(dynamic_strings=True, prune_previous_version=True, use_tombstones=True)
+
+
+@pytest.fixture
+def basic_store_big_map(basic_store_factory):
+    return basic_store_factory(lmdb_config={"map_size": 2**30})
+
+
+@pytest.fixture
+def basic_store_column_buckets(basic_store_factory):
+    return basic_store_factory(dynamic_schema=True, column_group_size=3, segment_row_size=2, bucketize_dynamic=True)
+
+
+@pytest.fixture
+def basic_store_dynamic_schema_v1(basic_store_factory, lib_name):
+    return basic_store_factory(dynamic_schema=True, dynamic_strings=True)
+
+
+@pytest.fixture
+def basic_store_dynamic_schema_v2(basic_store_factory, lib_name):
+    library_name = lib_name + "_v2"
+    return basic_store_factory(
+        dynamic_schema=True, dynamic_strings=True, encoding_version=int(EncodingVersion.V2), override_name=library_name
+    )
+
+
+@pytest.fixture
+def basic_store_dynamic_schema(
+    basic_store_dynamic_schema_v1, basic_store_dynamic_schema_v2, encoding_version
+):
+    if encoding_version == EncodingVersion.V1:
+        return basic_store_dynamic_schema_v1
+    elif encoding_version == EncodingVersion.V2:
+        return basic_store_dynamic_schema_v2
+    else:
+        raise ValueError(f"Unexpected encoding version: {encoding_version}")
+
+
+@pytest.fixture
+def basic_store_delayed_deletes_v1(basic_store_factory):
+    return basic_store_factory(delayed_deletes=True, dynamic_strings=True, prune_previous_version=True)
+
+
+@pytest.fixture
+def basic_store_delayed_deletes_v2(basic_store_factory, lib_name):
+    library_name = lib_name + "_v2"
+    return basic_store_factory(
+        dynamic_strings=True, delayed_deletes=True, encoding_version=int(EncodingVersion.V2), override_name=library_name
+    )
+
+
 @pytest.fixture
 def basic_store_tombstones_no_symbol_list(basic_store_factory):
     return basic_store_factory(use_tombstones=True, dynamic_schema=True, symbol_list=False, dynamic_strings=True)
