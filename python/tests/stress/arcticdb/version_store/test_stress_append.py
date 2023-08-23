@@ -97,7 +97,7 @@ def test_write_parallel_stress_schema_change(object_version_store):
     assert_frame_equal(vit.data, df)
 
 
-def test_write_parallel_stress_schema_change_strings(basic7_store_big_map):
+def test_write_parallel_stress_schema_change_strings(basic_store_big_map):
     num_rows_per_day = 1000
     num_days = 100
     num_columns = 8
