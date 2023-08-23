@@ -6,6 +6,7 @@ on:
       matrix:            {type: string, description: JSON string to feed into the matrix}
       python_deps_ids:   {default: '[""]', type: string, description: Follower test matrix parameter. JSON string.}
       python3:           {default: -1, type: number, description: Python 3 minor version}
+      storage_prefix:    {default: "", type: string, description: Sets a prefix for the libraries that will be written by the seed storage job}
       # TODO: Maybe we should add these as GitHub variables
       bucket:            {default: 'arcticdb-ci-test-bucket-01', type: string, description: The name of the S3 bucket that we will test against}
       endpoint:          {default: 's3.eu-west-2.amazonaws.com', type: string, description: The address of the S3 endpoint}
@@ -57,7 +58,7 @@ jobs:
         run: |
           # General
           echo "ARCTICDB_PERSISTENT_STORAGE_TESTS=1" >> $GITHUB_ENV
-          echo "ARCTICDB_PERSISTENT_STORAGE_BRANCH_NAME=${{ github.ref_name }}" >> $GITHUB_ENV
+          echo "ARCTICDB_PERSISTENT_STORAGE_BRANCH_NAME=${{ github.run_id }}" >> $GITHUB_ENV
           # S3 Specific
           echo "ARCTICDB_REAL_S3_BUCKET=${{ inputs.bucket }}" >> $GITHUB_ENV
           echo "ARCTICDB_REAL_S3_ENDPOINT=${{ inputs.endpoint }}" >> $GITHUB_ENV
@@ -69,15 +70,15 @@ jobs:
       - name: Seed the storage
         if: inputs.job_type == 'seed'
         run: |
-          echo "Running seed for ${{ github.ref_name }} on ${{matrix.os}}_${{env.python_impl_name}}"
+          echo "Running seed for ${{ github.run_id }} on ${{matrix.os}}_${{env.python_impl_name}}"
           python build_tooling/seed_storage.py
         env:
-          ARCTICDB_PERSISTENT_STORAGE_LIB_NAME: 'seed_${{ github.ref_name }}_${{matrix.os}}_${{env.python_impl_name}}'
+          ARCTICDB_PERSISTENT_STORAGE_LIB_NAME: 'seed_${{ github.run_id }}_${{matrix.os}}_${{env.python_impl_name}}'
 
       - name: Verify the storage
         if: inputs.job_type == 'verify'
         run: |
-          echo "Running verify for ${{ github.ref_name }} on ${{matrix.os}}_${{env.python_impl_name}}"
+          echo "Running verify for ${{ github.run_id }} on ${{matrix.os}}_${{env.python_impl_name}}"
           python build_tooling/verify_storage.py
         
   cleanup:
@@ -100,7 +101,7 @@ jobs:
         run: |
           # General
           echo "ARCTICDB_PERSISTENT_STORAGE_TESTS=1" >> $GITHUB_ENV
-          echo "ARCTICDB_PERSISTENT_STORAGE_BRANCH_NAME=${{ github.ref_name }}" >> $GITHUB_ENV
+          echo "ARCTICDB_PERSISTENT_STORAGE_BRANCH_NAME=${{ github.run_id }}" >> $GITHUB_ENV
           # S3 Specific
           echo "ARCTICDB_REAL_S3_BUCKET=${{ inputs.bucket }}" >> $GITHUB_ENV
           echo "ARCTICDB_REAL_S3_ENDPOINT=${{ inputs.endpoint }}" >> $GITHUB_ENV
@@ -111,5 +112,5 @@ jobs:
       
       - name: Clean the storage
         run: |
-          echo "Running cleanup for ${{ github.ref_name }}"
+          echo "Running cleanup for ${{ github.run_id }}"
           python build_tooling/cleanup_storage.py

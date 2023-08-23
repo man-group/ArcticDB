@@ -1,0 +1,293 @@
+name: Build with analysis tools
+on:
+  workflow_dispatch:
+    inputs:
+      run:
+        type: boolean
+
+  push:
+    branches: ["**"]
+    tags: [v**]
+    paths:
+      - .github/workflows/*.yml
+      - build_tooling/**
+      - cpp/**
+      - python/**
+      - setup.*
+      - pyproject.toml
+jobs:
+  common_config:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          # Use a matrix to build the common hierarchical structure used by multiple matrix jobs in build_steps.yaml
+          # Please declare any key you added below in build_steps.yaml's dummy matrix as well to aid the linting tools
+          - linux_matrix:
+              - os: linux
+                distro: ubuntu-latest
+                cmake_preset_prefix: linux
+                cibw_build_suffix: manylinux_x86_64
+                build_dir: /tmp/cpp_build
+                symbols: "*.gz" # Please update publish.yml when changing this!!
+                do_not_archive: ["*.so", "*.[ao]", "vcpkg_installed"]
+                test_services:
+                  mongodb: { image: "mongo:4.4" }
+            windows_matrix:
+              - os: windows
+                distro: windows-latest
+                cmake_preset_prefix: windows-cl
+                cibw_build_suffix: win_amd64
+                build_dir: C:\cpp_build
+                symbols: "*.pdb" # Please update publish.yml when changing this!!
+                do_not_archive: ["*.lib", "*.ilk", "*.pyd", "*.dll", "CMakeFiles/*.dir", "vcpkg_installed"]
+                test_services: {}
+    steps:
+      - run: |
+          echo "Configuring"
+    outputs:
+      linux_matrix: ${{toJson(matrix.linux_matrix)}}
+      windows_matrix: ${{toJson(matrix.windows_matrix)}}
+
+  cibw_docker_image:
+    uses: ./.github/workflows/cibw_docker_image.yml
+    permissions: {packages: write}
+    with:
+        cibuildwheel_ver: "2.12.1"
+        force_update: false
+
+  pre_seed_cleanup:
+    name: Cleanup persistent storages
+    uses: ./.github/workflows/persistent_storage.yml
+    secrets: inherit
+    with:
+      job_type: cleanup
+
+  persistent_storage_seed_linux:
+    needs: [pre_seed_cleanup, common_config]
+    strategy:
+      fail-fast: false
+      matrix:
+        python3: ${{fromJson(vars.LINUX_PYTHON_VERSIONS || '[6, 7, 8, 9, 10, 11]')}}
+        include:
+          - python_deps_ids: [""]
+            matrix_override: ${{fromJson(needs.common_config.outputs.linux_matrix)}}
+    name: Seed Persistent Storage for 3.${{matrix.python3}} Linux
+    uses: ./.github/workflows/persistent_storage.yml
+    secrets: inherit
+    permissions: {packages: write}
+    with:
+      job_type: seed
+      python3: ${{matrix.python3}}
+      matrix: ${{toJson(matrix.matrix_override)}}
+      python_deps_ids: ${{toJson(matrix.python_deps_ids)}}
+
+  persistent_storage_seed_windows:
+    needs: [pre_seed_cleanup, common_config]
+    strategy:
+      fail-fast: false
+      matrix:
+        python3: ${{fromJson(vars.WINDOWS_PYTHON_VERSIONS || '[7, 8, 9, 10, 11]')}}
+        include:
+          - python_deps_ids: [""]
+            matrix_override: ${{fromJson(needs.common_config.outputs.windows_matrix)}}
+    name: Seed Persistent Storage for 3.${{matrix.python3}} Windows
+    uses: ./.github/workflows/persistent_storage.yml
+    secrets: inherit
+    permissions: {packages: write}
+    with:
+      job_type: seed
+      python3: ${{matrix.python3}}
+      matrix: ${{toJson(matrix.matrix_override)}}
+      python_deps_ids: ${{toJson(matrix.python_deps_ids)}}
+
+  code_coverage:
+    needs: [cibw_docker_image, persistent_storage_seed_linux]  
+    runs-on: "ubuntu-latest"
+    container:
+        image: ${{needs.cibw_docker_image.outputs.tag}}
+    services:
+      mongodb:
+        image: mongo:4.4
+        ports:
+          - 27017:27017
+    env:
+      SCCACHE_GHA_VERSION: ${{vars.SCCACHE_GHA_VERSION || 1}} # Setting this env var enables the caching
+      VCPKG_NUGET_USER: ${{secrets.VCPKG_NUGET_USER || github.repository_owner}}
+      VCPKG_NUGET_TOKEN: ${{secrets.VCPKG_NUGET_TOKEN || secrets.GITHUB_TOKEN}}
+      VCPKG_MAN_NUGET_USER: ${{secrets.VCPKG_MAN_NUGET_USER}} # For forks to download pre-compiled dependencies from the Man repo
+      VCPKG_MAN_NUGET_TOKEN: ${{secrets.VCPKG_MAN_NUGET_TOKEN}}
+      CMAKE_C_COMPILER_LAUNCHER: sccache
+      CMAKE_CXX_COMPILER_LAUNCHER: sccache
+      ARCTIC_CMAKE_PRESET: linux-debug
+      CIBW_ENVIRONMENT_PASS_LINUX: SCCACHE_GHA_VERSION ACTIONS_CACHE_URL ACTIONS_RUNTIME_TOKEN VCPKG_INSTALLATION_ROOT
+        VCPKG_BINARY_SOURCES VCPKG_NUGET_USER VCPKG_NUGET_TOKEN VCPKG_MAN_NUGET_USER VCPKG_MAN_NUGET_TOKEN
+        CMAKE_C_COMPILER_LAUNCHER CMAKE_CXX_COMPILER_LAUNCHER CMAKE_BUILD_PARALLEL_LEVEL ARCTIC_CMAKE_PRESET
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: recursive
+
+      - name: Get number of CPU cores
+        uses: SimenB/github-actions-cpu-cores@v1
+        id: cpu-cores
+
+      - name: Configure sccache
+        uses: mozilla-actions/sccache-action@v0.0.3
+        with:
+          version: "v0.4.0"
+
+      - name: Extra envs
+        run: |
+          . build_tooling/vcpkg_caching.sh # Linux follower needs another call in CIBW
+          echo -e "VCPKG_BINARY_SOURCES=$VCPKG_BINARY_SOURCES
+          VCPKG_ROOT=$PLATFORM_VCPKG_ROOT" | tee -a $GITHUB_ENV
+          cmake -P cpp/CMake/CpuCount.cmake | sed 's/^-- //' | tee -a $GITHUB_ENV
+        env:
+          CMAKE_BUILD_PARALLEL_LEVEL: ${{vars.CMAKE_BUILD_PARALLEL_LEVEL}}
+
+      - name: Prepare C++ compilation env
+        run: . build_tooling/prep_cpp_build.sh 
+      
+      - name: CMake compile
+        uses: lukka/run-cmake@v10
+        with:
+          cmakeListsTxtPath: ${{github.workspace}}/cpp/CMakeLists.txt
+          configurePreset: ${{env.ARCTIC_CMAKE_PRESET}}
+          buildPreset: ${{env.ARCTIC_CMAKE_PRESET}}
+        env:
+          ARCTICDB_CODE_COVERAGE_BUILD: 1
+        
+      - name: Run C++ Tests
+        shell: bash -l {0}
+        run: |
+          cd cpp/out/linux-debug-build/
+          make -j ${{ steps.cpu-cores.outputs.count }} arcticdb_rapidcheck_tests
+          make -j ${{ steps.cpu-cores.outputs.count }} test_unit_arcticdb
+          ctest
+
+      - name: Set real storage variables
+        run: |
+          # Common
+          echo "ARCTICDB_PERSISTENT_STORAGE_TESTS=1" >> $GITHUB_ENV
+          echo "ARCTICDB_PERSISTENT_STORAGE_BRANCH_NAME=${{ github.run_id }}" >> $GITHUB_ENV
+          # S3 Specific
+          # TODO: Add these as GitHub variables
+          echo "ARCTICDB_REAL_S3_BUCKET=arcticdb-ci-test-bucket-01" >> $GITHUB_ENV
+          echo "ARCTICDB_REAL_S3_ENDPOINT=s3.eu-west-2.amazonaws.com" >> $GITHUB_ENV
+          echo "ARCTICDB_REAL_S3_REGION=eu-west-2" >> $GITHUB_ENV
+          echo "ARCTICDB_REAL_S3_CLEAR=1" >> $GITHUB_ENV
+          echo "ARCTICDB_REAL_S3_ACCESS_KEY=${{ secrets.AWS_S3_ACCESS_KEY }}" >> $GITHUB_ENV
+          echo "ARCTICDB_REAL_S3_SECRET_KEY=${{ secrets.AWS_S3_SECRET_KEY }}" >> $GITHUB_ENV
+
+      - name: Test with pytest
+        shell: bash -l {0}
+        run: |
+          yum install nodejs npm -y
+          npm config set strict-ssl false
+          npm install -g azurite
+          /opt/python/cp36-cp36m/bin/python -m pip install --upgrade pip
+          /opt/python/cp36-cp36m/bin/python -m pip install pycparser six cffi urllib3 python-dateutil PyJWT jmespath idna cryptography charset-normalizer certifi requests py pluggy path oauthlib MarkupSafe iniconfig dataclasses botocore attrs Werkzeug termcolor s3transfer requests-oauthlib pytz pytest protobuf portalocker path.py numpy msal mock Jinja2 itsdangerous isodate grpcio execnet decorator contextlib2 click azure-core xxhash xmltodict sortedcontainers retry responses pyyaml pytest-shutil pytest-fixture-config psutil prometheus-client pandas msrest msgpack msal-extensions grpcio-tools future flask colorama boto3 pytest-timeout pytest-server-fixtures pytest-cpp pymongo moto hypothesis flask-cors azure-storage-blob azure-identity coverage pytest-xdist
+          /opt/python/cp36-cp36m/bin/python -m grpc_tools.protoc -Icpp/proto --python_out=./python cpp/proto/arcticc/pb2/*.proto
+          cd python
+          export MAN_ARCTICDB_USE_ARCTICDB=True
+          ln -s ../cpp/out/linux-debug-build/arcticdb/arcticdb_ext.cpython-36m-x86_64-linux-gnu.so
+          /opt/python/cp36-cp36m/bin/python -m coverage run -m pytest tests
+        env:
+          TEST_OUTPUT_DIR: ${{runner.temp}}
+          # Use the Mongo created in the service container above to test against
+          CI_MONGO_HOST: mongodb
+          ARCTICDB_PERSISTENT_STORAGE_LIB_NAME: 'test_${{ github.run_id }}_${{matrix.os}}_${{env.python_impl_name}}${{matrix.python_deps_id}}'
+
+      - name: Get python Coverage report
+        shell: bash -l {0}
+        run: |
+          cd python
+          /opt/python/cp36-cp36m/bin/python -m coverage report -m | tee output.txt
+          /opt/python/cp36-cp36m/bin/python -m coverage html
+          zip -r python_cov.zip htmlcov/
+
+          echo "PYTHON_COV_PERCENT=$(cat output.txt | grep 'TOTAL' | awk '{print $NF}' | tr -d '%')" >> $GITHUB_ENV
+
+      - name: Run Gcovr manually post-pytest
+        shell: bash -l {0}
+        run: |
+          cd cpp/out/linux-debug-build/
+          python3 -m pip install gcovr
+          mkdir coverage
+          python3 -m gcovr --txt --html-details coverage/index.html -e vcpkg_installed/ -e proto/ -e ../../third_party -e ../../arcticdb/util/test/ -r ../.. --exclude-throw-branches --exclude-unreachable-branches -u --exclude-function-lines | tee output.txt
+          zip -r coverage.zip coverage/
+
+          echo "CPP_COV_PERCENT=$(cat output.txt | grep 'TOTAL' | awk '{print $NF}' | tr -d '%')" >> $GITHUB_ENV
+
+      - name: Upload Coverage
+        uses: actions/upload-artifact@v3
+        with:
+          name: cpp-coverage-artifact
+          path: cpp/out/linux-debug-build/coverage.zip
+
+      - name: Upload Python Coverage
+        uses: actions/upload-artifact@v3
+        with:
+          name: python-coverage-artifact
+          path: python/python_cov.zip
+
+      - name: Restore cpp cache
+        id: cache
+        uses: actions/cache@v2
+        with:
+          path: coverage.txt
+          key: coverage
+      
+      - name: Get and compare coverage if cache was restored
+        run: |
+          # if cache was restored, compare coverage
+          if [ -f coverage.txt ]; then
+            PREV_COVERAGE=$(cat coverage.txt | cut -d' ' -f2)
+            echo "Previous coverage: $PREV_COVERAGE"
+            CURR_COVERAGE=${{env.CPP_COV_PERCENT}}
+            echo "CPP_COV_PREV_PERCENT=$PREV_COVERAGE" >> $GITHUB_ENV
+            echo "Current coverage: $CURR_COVERAGE"
+            if [ $CURR_COVERAGE -gt $PREV_COVERAGE ]; then
+              echo "Coverage increased"
+            elif [ $CURR_COVERAGE -lt $PREV_COVERAGE ]; then
+              echo "Coverage decreased"
+            else
+              echo "Coverage unchanged"
+            fi
+          fi
+
+      - name: Save coverage percentage to file
+        run: |
+          echo "Coverage: ${{ env.CPP_COV_PERCENT }}" > coverage.txt
+
+      - name: Check percentage and send Slack notification
+        if: ${{ env.CPP_COV_PREV_PERCENT && env.CPP_COV_PERCENT && env.CPP_COV_PERCENT <= env.CPP_COV_PREV_PERCENT }}
+        uses: slackapi/slack-github-action@v1.24.0
+        with:
+          # For posting a rich message using Block Kit
+          payload: |
+            {
+              "text": "The CPP Code Coverage has been reduced",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "The CPP Code Coverage from the current run(${{ env.CPP_COV_PERCENT }}%) is lower the previous one(${{ env.CPP_COV_PREV_PERCENT }}%)."
+                  }
+                }
+              ]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.TEST_WEBHOOK_URL }}
+          SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
+
+  persistent_storages_cleanup:
+    needs: [code_coverage]
+    if: always()
+    name: Cleanup persistent storages
+    uses: ./.github/workflows/persistent_storage.yml
+    secrets: inherit
+    with:
+      job_type: cleanup
