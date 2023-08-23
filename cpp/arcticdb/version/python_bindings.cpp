@@ -23,6 +23,7 @@
 #include <arcticdb/pipeline/value_set.hpp>
 #include <arcticdb/python/adapt_read_dataframe.hpp>
 #include <arcticdb/version/schema_checks.hpp>
+#include <arcticdb/vector_db/vector_db.hpp>
 
 namespace arcticdb::version_store {
 
@@ -286,6 +287,9 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
             .def(py::init<std::string, std::unordered_map<std::string, std::string>>())
             .def("__str__", &AggregationClause::to_string);
 
+    py::class_<TopKClause, std::shared_ptr<TopKClause>>(version, "TopKClause")
+            .def(py::init<std::vector<double>, uint8_t>());
+
     py::enum_<RowRangeClause::RowRangeType>(version, "RowRangeType")
             .value("HEAD", RowRangeClause::RowRangeType::HEAD)
             .value("TAIL", RowRangeClause::RowRangeType::TAIL);
@@ -313,7 +317,8 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
                                 std::shared_ptr<GroupByClause>,
                                 std::shared_ptr<AggregationClause>,
                                 std::shared_ptr<RowRangeClause>,
-                                std::shared_ptr<DateRangeClause>>> clauses) {
+                                std::shared_ptr<DateRangeClause>,
+                                std::shared_ptr<TopKClause>>> clauses) {
                 std::vector<std::shared_ptr<Clause>> _clauses;
                 for (auto&& clause: clauses) {
                     util::variant_match(
