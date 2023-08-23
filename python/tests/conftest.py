@@ -662,7 +662,7 @@ def lmdb_version_store_delayed_deletes_v1(lmdb_version_store_factory):
 @pytest.fixture
 def lmdb_version_store_delayed_deletes_v2(lmdb_version_store_factory, lib_name):
     library_name = lib_name + "_v2"
-    return basic_store_factory(
+    return lmdb_version_store_factory(
         dynamic_strings=True, delayed_deletes=True, encoding_version=int(EncodingVersion.V2), override_name=library_name
     )
 
