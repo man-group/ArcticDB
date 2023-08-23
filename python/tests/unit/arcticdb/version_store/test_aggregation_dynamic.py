@@ -46,8 +46,8 @@ def assert_equal_value(data, expected):
         index=range_indexes(),
     )
 )
-def test_hypothesis_mean_agg_dynamic(basic_store_dynamic_schema_v1, df):
-    lib = basic_store_dynamic_schema_v1
+def test_hypothesis_mean_agg_dynamic(lmdb_version_store_dynamic_schema_v1, df):
+    lib = lmdb_version_store_dynamic_schema_v1
     assume(not df.empty)
 
     symbol = f"mean_agg-{uuid.uuid4().hex}"
@@ -110,8 +110,8 @@ def test_hypothesis_sum_agg_dynamic(s3_version_store_dynamic_schema_v2, df):
         index=range_indexes(),
     )
 )
-def test_hypothesis_max_agg_dynamic(basic_store_dynamic_schema_v1, df):
-    lib = basic_store_dynamic_schema_v1
+def test_hypothesis_max_agg_dynamic(lmdb_version_store_dynamic_schema_v1, df):
+    lib = lmdb_version_store_dynamic_schema_v1
     assume(not df.empty)
 
     symbol = f"max_agg-{uuid.uuid4().hex}"
@@ -150,8 +150,8 @@ def test_sum_aggregation_dynamic(s3_version_store_dynamic_schema_v2):
     assert_equal_value(received, expected)
 
 
-def test_sum_aggregation_with_range_index_dynamic(basic_store_dynamic_schema_v1):
-    lib = basic_store_dynamic_schema_v1
+def test_sum_aggregation_with_range_index_dynamic(lmdb_version_store_dynamic_schema_v1):
+    lib = lmdb_version_store_dynamic_schema_v1
     df = DataFrame(
         {"grouping_column": ["group_1", "group_1", "group_1", "group_2", "group_2"], "to_sum": [1, 1, 2, 2, 2]}
     )
@@ -168,36 +168,36 @@ def test_sum_aggregation_with_range_index_dynamic(basic_store_dynamic_schema_v1)
     assert_equal_value(received, expected)
 
 
-def test_group_empty_dataframe_dynamic(basic_store_dynamic_schema):
+def test_group_empty_dataframe_dynamic(lmdb_version_store_dynamic_schema):
     df = DataFrame({"grouping_column": [], "to_mean": []})
     q = QueryBuilder()
 
     q = q.groupby("grouping_column").agg({"to_mean": "mean"})
 
     symbol = "test_group_empty_dataframe"
-    basic_store_dynamic_schema.write(symbol, df)
+    lmdb_version_store_dynamic_schema.write(symbol, df)
     with pytest.raises(SchemaException):
-        _ = basic_store_dynamic_schema.read(symbol, query_builder=q)
+        _ = lmdb_version_store_dynamic_schema.read(symbol, query_builder=q)
 
 
-def test_group_pickled_symbol_dynamic(basic_store_dynamic_schema):
+def test_group_pickled_symbol_dynamic(lmdb_version_store_dynamic_schema):
     symbol = "test_group_pickled_symbol"
-    basic_store_dynamic_schema.write(symbol, np.arange(100).tolist())
-    assert basic_store_dynamic_schema.is_symbol_pickled(symbol)
+    lmdb_version_store_dynamic_schema.write(symbol, np.arange(100).tolist())
+    assert lmdb_version_store_dynamic_schema.is_symbol_pickled(symbol)
     q = QueryBuilder()
     q = q.groupby("grouping_column").agg({"to_mean": "mean"})
     with pytest.raises(InternalException):
-        _ = basic_store_dynamic_schema.read(symbol, query_builder=q)
+        _ = lmdb_version_store_dynamic_schema.read(symbol, query_builder=q)
 
 
-def test_group_column_not_present_dynamic(basic_store_dynamic_schema):
+def test_group_column_not_present_dynamic(lmdb_version_store_dynamic_schema):
     df = DataFrame({"a": np.arange(2)}, index=np.arange(2))
     q = QueryBuilder()
     q = q.groupby("grouping_column").agg({"to_mean": "mean"})
     symbol = "test_group_column_not_present"
-    basic_store_dynamic_schema.write(symbol, df)
+    lmdb_version_store_dynamic_schema.write(symbol, df)
     with pytest.raises(SchemaException):
-        _ = basic_store_dynamic_schema.read(symbol, query_builder=q)
+        _ = lmdb_version_store_dynamic_schema.read(symbol, query_builder=q)
 
 
 def test_group_column_splitting_dynamic(basic_store_tiny_segment_dynamic):
@@ -250,8 +250,8 @@ def test_group_column_splitting_strings_dynamic(basic_store_tiny_segment_dynamic
     assert_equal_value(vit.data, expected)
 
 
-def test_segment_without_aggregation_column(basic_store_dynamic_schema):
-    lib = basic_store_dynamic_schema
+def test_segment_without_aggregation_column(lmdb_version_store_dynamic_schema):
+    lib = lmdb_version_store_dynamic_schema
     sym = "test_segment_without_aggregation_column"
 
     write_df = pd.DataFrame({"grouping_column": ["group_0"], "aggregation_column": [10330.0]})
@@ -268,8 +268,8 @@ def test_segment_without_aggregation_column(basic_store_dynamic_schema):
         assert_equal_value(received, expected)
 
 
-def test_minimal_repro_type_change(basic_store_dynamic_schema):
-    lib = basic_store_dynamic_schema
+def test_minimal_repro_type_change(lmdb_version_store_dynamic_schema):
+    lib = lmdb_version_store_dynamic_schema
     sym = "test_minimal_repro_type_change"
 
     write_df = pd.DataFrame({"grouping_column": ["group_1"], "to_sum": [np.uint8(1)]})
@@ -285,8 +285,8 @@ def test_minimal_repro_type_change(basic_store_dynamic_schema):
     assert_equal_value(received, expected)
 
 
-def test_minimal_repro_type_change_max(basic_store_dynamic_schema):
-    lib = basic_store_dynamic_schema
+def test_minimal_repro_type_change_max(lmdb_version_store_dynamic_schema):
+    lib = lmdb_version_store_dynamic_schema
     sym = "test_minimal_repro_type_change_max"
 
     write_df = pd.DataFrame({"grouping_column": ["group_1"], "to_max": [np.uint8(1)]})
@@ -304,8 +304,8 @@ def test_minimal_repro_type_change_max(basic_store_dynamic_schema):
     assert_equal_value(received, expected)
 
 
-def test_minimal_repro_type_sum_similar_string_group_values(basic_store_dynamic_schema):
-    lib = basic_store_dynamic_schema
+def test_minimal_repro_type_sum_similar_string_group_values(lmdb_version_store_dynamic_schema):
+    lib = lmdb_version_store_dynamic_schema
     sym = "test_minimal_repro_type_change_max"
 
     write_df = pd.DataFrame({"grouping_column": ["0", "000"], "to_sum": [1.0, 1.0]})
@@ -318,8 +318,8 @@ def test_minimal_repro_type_sum_similar_string_group_values(basic_store_dynamic_
     assert_equal_value(received, expected)
 
 
-def test_aggregation_grouping_column_missing_from_row_group(basic_store_dynamic_schema):
-    lib = basic_store_dynamic_schema
+def test_aggregation_grouping_column_missing_from_row_group(lmdb_version_store_dynamic_schema):
+    lib = lmdb_version_store_dynamic_schema
     df0 = DataFrame(
         {"to_sum": [1, 2], "grouping_column": ["group_1", "group_2"]},
         index=np.arange(2),
