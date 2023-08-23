@@ -39,11 +39,11 @@ namespace arcticdb {
     };
 
     struct TopK {
-        uint64_t _k;
+        uint64_t k_;
         std::set<NamedColumnSortedByDistance> top_k_;
-        double _furthest_distance{std::numeric_limits<double>::infinity()};
+        double furthest_distance_{std::numeric_limits<double>::infinity()};
 
-        explicit TopK(int k) : _k(k) {}
+        explicit TopK(int k) : k_(k) {}
 
         TopK() = delete;
 
@@ -64,27 +64,27 @@ namespace arcticdb {
             // NB We require <= so that the vector name acts as the tiebreaker when the distance is the same.
             // This is not guaranteed to the user but is useful for testing.
             bool inserted = false;
-            if (col.distance_ < _furthest_distance || (col.distance_ == _furthest_distance && col < *top_k_.rbegin())) {
+            if (col.distance_ < furthest_distance_ || (col.distance_ == furthest_distance_ && col < *top_k_.rbegin())) {
                 top_k_.insert(col);
                 inserted = true;
             }
-            // Obviously if col.distance_ < _furthest_distance then we've got a closer vector so we insert it.
-            // Where col.distance_ == _furthest_distance, the latter cannot be infinity, since in Python we require that
+            // Obviously if col.distance_ < furthest_distance_ then we've got a closer vector so we insert it.
+            // Where col.distance_ == furthest_distance_, the latter cannot be infinity, since in Python we require that
             // all vectors should be within the n-cube centred about the origin whose long diagonal has length
-            // std::numeric_limits<double>::max(). Therefore, _furthest_distance is finite. Therefore, it's been
+            // std::numeric_limits<double>::max(). Therefore, furthest_distance_ is finite. Therefore, it's been
             // altered, and so we have at least member of top_k_. So top_k_ is nonempty and we can compare
             // col < *top_k_.rbegin().
-            if (top_k_.size() > _k) {
+            if (top_k_.size() > k_) {
                 top_k_.erase(*top_k_.rbegin());
-                _furthest_distance = top_k_.rbegin()->distance_;
-            } else if (inserted && top_k_.size() == _k) {
-                _furthest_distance = top_k_.rbegin()->distance_;
+                furthest_distance_ = top_k_.rbegin()->distance_;
+            } else if (inserted && top_k_.size() == k_) {
+                furthest_distance_ = top_k_.rbegin()->distance_;
             }
             // There are three cases here.
             // - top_k.size() < k. Then we don't need to erase anything or refresh the furthest distance. When there are
             //   fewer than k elements in top_k_, we want to add any new vector we see; we may remove it later of course.
             // - top_k_.size() is exactly k. Then we don't need to erase anything. But we might have just inserted
-            //   something so we need to reload the _furthest_distance if we inserted something.
+            //   something so we need to reload the furthest_distance_ if we inserted something.
             // - top_k.size() = k+1. Then we do need to erase the furthest element. We also need to refresh the largest
             //   element.
             return inserted;

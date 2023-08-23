@@ -31,7 +31,7 @@ namespace arcticdb {
         procs.broadcast(
                 [&store, &top_k, lp, this](const ProcessingSegment &proc) {
                     for (const auto& slice_and_key: proc.data()) {
-                        std::vector <std::shared_ptr<Column>> columns = slice_and_key.segment(store).columns();
+                        const std::vector<std::shared_ptr<Column>>& columns = slice_and_key.segment(store).columns();
                         for (auto&& [idx, col]: folly::enumerate(columns)) {
                             internal::check<ErrorCode::E_ASSERTION_FAILURE>(
                                     static_cast<long unsigned>(col->row_count()) == this->query_vector_.size(),
@@ -67,9 +67,8 @@ namespace arcticdb {
                     }
                 }
         );
-        // By this time we should have iterated through each block of each SegmentInMemory of each ProcessingSegment;
-        // and in each case read a vector and inserted it if more similar than the running top_k_. Now we write to a new
-        // segment.
+        // By this time we've read each vector, keeping a running count of the top-k vectors closest to the query vector
+        // of the vectors read so far. Now we write to a new segment.
         SegmentInMemory seg;
         seg.descriptor().set_index(IndexDescriptor(0, IndexDescriptor::ROWCOUNT));
         seg.set_row_id(query_vector_.size() - 1 + 1);
