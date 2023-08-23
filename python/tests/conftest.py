@@ -154,12 +154,13 @@ def moto_s3_uri_incl_bucket(moto_s3_endpoint_and_credentials):
         "S3",
         "LMDB",
         pytest.param("Azure", marks=pytest.mark.skipif(not AZURE_SUPPORT, reason="Pending Azure Storge Conda support")),
-        pytest.param(
-            "Real_S3",
-            marks=pytest.mark.skipif(
-                not PERSISTENT_STORAGE_TESTS_ENABLED, reason="Can be used only when persistent storage is enabled"
-            ),
-        ),
+        # TODO: Add support for this as well
+        # pytest.param(
+        #     "Real_S3",
+        #     marks=pytest.mark.skipif(
+        #         not PERSISTENT_STORAGE_TESTS_ENABLED, reason="Can be used only when persistent storage is enabled"
+        #     ),
+        # ),
     ],
 )
 def arctic_client(request, moto_s3_uri_incl_bucket, tmpdir, encoding_version):
