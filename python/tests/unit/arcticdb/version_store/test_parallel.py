@@ -18,6 +18,7 @@ from arcticdb.util.test import (
     random_floats,
     random_dates,
 )
+from arcticdb.util._versions import IS_PANDAS_TWO
 from arcticdb_ext.storage import KeyType
 
 
@@ -54,9 +55,6 @@ def test_remove_incomplete(lmdb_version_store):
     sym3 = "test_remove_incomplete_3"
     lib.write(sym3, df1)
     lib.remove_incomplete(sym3)
-
-
-from arcticdb.util._versions import IS_PANDAS_TWO
 
 
 def test_parallel_write(lmdb_version_store):
