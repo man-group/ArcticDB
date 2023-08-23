@@ -62,6 +62,11 @@ namespace arcticdb {
                                             col,
                                             slice_and_key.segment(store).field(idx).name()));
                                 }
+                                else {
+                                    internal::raise<ErrorCode::E_INVALID_ARGUMENT>(
+                                            "Vectors should exclusively comprise floats; the Python layer should otherwise raise an error and prevent upsertion of vectors containing non-float components."
+                                            );
+                                }
                             });
                         }
                     }
@@ -94,6 +99,11 @@ namespace arcticdb {
                     write_col->set_row_data(this->query_vector_.size());
                     seg.add_column(scalar_field(DataType::FLOAT64, column.name_), write_col);
                     }
+                else {
+                    internal::raise<ErrorCode::E_INVALID_ARGUMENT>(
+                            "Vectors should exclusively comprise floats; the Python layer should otherwise raise an error and prevent upsertion of vectors containing non-float components."
+                    );
+                }
             });
         }
         return Composite{ProcessingSegment{std::move(seg)}};
