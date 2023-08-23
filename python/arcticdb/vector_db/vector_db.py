@@ -9,7 +9,7 @@ from arcticdb import Arctic
 from arcticdb.options import LibraryOptions
 from arcticdb.version_store.library import Library, ArcticUnsupportedDataTypeException
 from arcticdb.version_store.processing import QueryBuilder
-from arcticdb_ext.version_store import TopKClause as _TopKClause, NoSuchVersionException
+from arcticdb_ext.version_store import NoSuchVersionException
 from arcticdb_ext.storage import NoDataFoundException
 
 VECTOR_DB_DISTINGUISHED_SUFFIX = "_vector_db"
@@ -20,7 +20,8 @@ Vectors uploaded as mappings must have the following form.
 - The value should be another mapping.
     - The keys of these mappings should be strings.
     - They should include a value under "vector".
-    - The value under "vector" should be something that can be turned into a one-dimensional ndarray of floats.
+    - The value under "vector" should be something that is turned into a one-dimensional ndarray of floats by the method
+    np.array, e.g., a one-dimensional list of floats.
     - That array should have the right number of values (i.e. correspond to the number of dimensions of the other
     vectors in the namespace.)
 Attempts to upsert mappings not in this form should cause errors.
@@ -65,7 +66,7 @@ def _generate_dataframe_from_ndarray(
     """
     if vectors.ndim != 2:
         raise ValueError(
-            "Upsertion of vectors in an `np.ndarray` takes two-dimensional arrays; "
+            "Upsertion of vectors in an np.ndarray takes two-dimensional arrays; "
             f"the vector given had {vectors.ndim} instead."
         )
     if not np.issubdtype(vectors.dtype, float):
@@ -77,7 +78,7 @@ def _generate_dataframe_from_ndarray(
                 f"You attempted to insert {vectors.dtype}, which doesn't count."
             )
     if identifiers is None:
-        raise ValueError("Upsertion of vectors in an `np.ndarray` requires a list of identifiers.")
+        raise ValueError("Upsertion of vectors in an np.ndarray requires a list of identifiers.")
     if len(identifiers) != len(vectors):
         raise ValueError(f"You gave {len(identifiers)} identifiers but {len(vectors)} vectors.")
     if any([type(identifier) is not str for identifier in identifiers]):
@@ -303,7 +304,8 @@ class VectorDB:
             (taken as identifiers of vectors), and whose values are in turn mapping
             minimally containing a key-value pair 'value' pointing to something that
             yields a one-dimensional `np.ndarray` of numeric types corresponding to a
-            vector. Each vector must have the same dimensionality.
+            vector. That could, for example, be a one-dimensional list of floats.
+            Each vector must have the same dimensionality.
 
             In the case of a pandas DataFrame, we expect string columns and the entries to
             all be of a numeric type.
