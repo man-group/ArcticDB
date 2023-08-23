@@ -412,9 +412,9 @@ def test_delete_mixed(object_version_store, sym):
     assert object_version_store.has_symbol(symbol) is False
 
 
-def tests_with_pruning_and_tombstones(basic_tombstone_and_pruning, sym):
+def tests_with_pruning_and_tombstones(basic_store_tombstone_and_pruning, sym):
     symbol = sym
-    lib = basic_tombstone_and_pruning
+    lib = basic_store_tombstone_and_pruning
 
     df1 = pd.DataFrame({"x": np.arange(10, dtype=np.int64)})
     lib.write(symbol, df1)
@@ -429,10 +429,10 @@ def tests_with_pruning_and_tombstones(basic_tombstone_and_pruning, sym):
 
 
 @pytest.mark.parametrize("map_timeout", get_map_timeouts())
-def test_with_snapshot_pruning_tombstones(basic_tombstone_and_pruning, map_timeout, sym):
+def test_with_snapshot_pruning_tombstones(basic_store_tombstone_and_pruning, map_timeout, sym):
     with config_context("VersionMap.ReloadInterval", map_timeout):
         symbol = sym
-        lib = basic_tombstone_and_pruning
+        lib = basic_store_tombstone_and_pruning
 
         df1 = pd.DataFrame({"x": np.arange(10, dtype=np.int64)})
         lib.write(symbol, df1)
@@ -462,12 +462,12 @@ def test_with_snapshot_pruning_tombstones(basic_tombstone_and_pruning, map_timeo
 
 
 @pytest.mark.parametrize("map_timeout", get_map_timeouts())
-def test_normal_flow_with_snapshot_and_pruning(basic_tombstone_and_pruning, map_timeout, sym):
+def test_normal_flow_with_snapshot_and_pruning(basic_store_tombstone_and_pruning, map_timeout, sym):
     with config_context("VersionMap.ReloadInterval", map_timeout):
         symbol = sym
-        lib = basic_tombstone_and_pruning
+        lib = basic_store_tombstone_and_pruning
 
-        lib_tool = basic_tombstone_and_pruning.library_tool()
+        lib_tool = basic_store_tombstone_and_pruning.library_tool()
         lib.write("sym1", 1)
         lib.write("sym2", 1)
 
@@ -490,8 +490,8 @@ def test_normal_flow_with_snapshot_and_pruning(basic_tombstone_and_pruning, map_
         assert len([ver for ver in lib.list_versions() if not ver["deleted"]]) == 2
 
 
-def test_deleting_tombstoned_versions(basic_tombstone_and_pruning, sym):
-    lib = basic_tombstone_and_pruning
+def test_deleting_tombstoned_versions(basic_store_tombstone_and_pruning, sym):
+    lib = basic_store_tombstone_and_pruning
     lib.write(sym, 1)
     lib.write(sym, 1)
     lib.write(sym, 1)

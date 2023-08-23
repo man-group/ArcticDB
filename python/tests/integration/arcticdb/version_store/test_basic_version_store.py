@@ -1373,8 +1373,8 @@ def test_dataframe_with_nan_and_nat_only(basic_store):
     assert_frame_equal(basic_store.read("nan_nat").data, pd.DataFrame({"col": [pd.NaT, pd.NaT, pd.NaT]}))
 
 
-def test_coercion_to_float(basic_store_factory):
-    lib = basic_store_factory
+def test_coercion_to_float(basic_store):
+    lib = basic_store
     df = pd.DataFrame({"col": [np.NaN, "1", np.NaN]})
     # col is now an Object column with all NaNs
     df["col"][1] = np.NaN
@@ -1392,9 +1392,9 @@ def test_coercion_to_float(basic_store_factory):
     assert returned["col"].dtype != np.object_
 
 
-def test_coercion_to_str_with_dynamic_strings(basic_store_factory):
+def test_coercion_to_str_with_dynamic_strings(basic_store):
     # assert that the getting sample function is not called
-    lib = basic_store_factory
+    lib = basic_store
     df = pd.DataFrame({"col": [None, None, "hello", "world"]})
     assert df["col"].dtype == np.object_
 
@@ -1733,8 +1733,8 @@ def test_simple_recursive_normalizer(object_version_store):
     )
 
 
-def test_dynamic_schema_similar_index_column(lmdb_version_store_dynamic_schema):
-    lib = lmdb_version_store_dynamic_schema
+def test_dynamic_schema_similar_index_column(basic_store_dynamic_schema):
+    lib = basic_store_dynamic_schema
     dr = pd.date_range("2020-01-01", "2020-01-31", name="date")
     date_series = pd.Series(dr, index=dr)
     lib.write("date_series", date_series)
