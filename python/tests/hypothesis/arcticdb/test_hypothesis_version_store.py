@@ -312,9 +312,8 @@ class VersionStoreComparison(RuleBasedStateMachine):
         self._check_batch_read(list(snap.sym_vers), list(snap.sym_vers.values()))
 
 
-@pytest.mark.parametrize("lib_type", ["lmdb_version_store_delayed_deletes_v1", "lmdb_version_store_delayed_deletes_v2"])
-def test_stateful(lib_type, request):
-    VersionStoreComparison._lib = request.getfixturevalue(lib_type)
+def test_stateful_v1(basic_store_delayed_deletes_v1):
+    VersionStoreComparison._lib = basic_store_delayed_deletes_v1
     run_state_machine_as_test(
         VersionStoreComparison,
         settings=settings(  # Note: timeout is a legacy parameter
@@ -326,8 +325,21 @@ def test_stateful(lib_type, request):
     )
 
 
-def test_single(lmdb_version_store_delayed_deletes_v1):
-    VersionStoreComparison._lib = lmdb_version_store_delayed_deletes_v1
+def test_stateful_v2(basic_store_delayed_deletes_v2):
+    VersionStoreComparison._lib = basic_store_delayed_deletes_v2
+    run_state_machine_as_test(
+        VersionStoreComparison,
+        settings=settings(  # Note: timeout is a legacy parameter
+            max_examples=int(os.getenv("HYPOTHESIS_EXAMPLES", 100)),
+            deadline=None,
+            stateful_step_count=100,
+            suppress_health_check=[HealthCheck.filter_too_much],
+        ),
+    )
+
+
+def test_single(basic_store_delayed_deletes_v1):
+    VersionStoreComparison._lib = basic_store_delayed_deletes_v1
     state = VersionStoreComparison()
     # Copy and paste the reproduction script hypothesis generated below:
     # print("Press enter to continue"); import sys; sys.stdin.readline()

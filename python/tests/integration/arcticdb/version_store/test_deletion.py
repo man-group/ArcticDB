@@ -412,9 +412,9 @@ def test_delete_mixed(object_version_store, sym):
     assert object_version_store.has_symbol(symbol) is False
 
 
-def tests_with_pruning_and_tombstones(lmdb_version_store_tombstone_and_pruning, sym):
+def tests_with_pruning_and_tombstones(basic_tombstone_and_pruning, sym):
     symbol = sym
-    lib = lmdb_version_store_tombstone_and_pruning
+    lib = basic_tombstone_and_pruning
 
     df1 = pd.DataFrame({"x": np.arange(10, dtype=np.int64)})
     lib.write(symbol, df1)
@@ -429,10 +429,10 @@ def tests_with_pruning_and_tombstones(lmdb_version_store_tombstone_and_pruning, 
 
 
 @pytest.mark.parametrize("map_timeout", get_map_timeouts())
-def test_with_snapshot_pruning_tombstones(lmdb_version_store_tombstone_and_pruning, map_timeout, sym):
+def test_with_snapshot_pruning_tombstones(basic_tombstone_and_pruning, map_timeout, sym):
     with config_context("VersionMap.ReloadInterval", map_timeout):
         symbol = sym
-        lib = lmdb_version_store_tombstone_and_pruning
+        lib = basic_tombstone_and_pruning
 
         df1 = pd.DataFrame({"x": np.arange(10, dtype=np.int64)})
         lib.write(symbol, df1)
@@ -462,12 +462,12 @@ def test_with_snapshot_pruning_tombstones(lmdb_version_store_tombstone_and_pruni
 
 
 @pytest.mark.parametrize("map_timeout", get_map_timeouts())
-def test_normal_flow_with_snapshot_and_pruning(lmdb_version_store_tombstone_and_pruning, map_timeout, sym):
+def test_normal_flow_with_snapshot_and_pruning(basic_tombstone_and_pruning, map_timeout, sym):
     with config_context("VersionMap.ReloadInterval", map_timeout):
         symbol = sym
-        lib = lmdb_version_store_tombstone_and_pruning
+        lib = basic_tombstone_and_pruning
 
-        lib_tool = lmdb_version_store_tombstone_and_pruning.library_tool()
+        lib_tool = basic_tombstone_and_pruning.library_tool()
         lib.write("sym1", 1)
         lib.write("sym2", 1)
 
@@ -490,8 +490,8 @@ def test_normal_flow_with_snapshot_and_pruning(lmdb_version_store_tombstone_and_
         assert len([ver for ver in lib.list_versions() if not ver["deleted"]]) == 2
 
 
-def test_deleting_tombstoned_versions(lmdb_version_store_tombstone_and_pruning, sym):
-    lib = lmdb_version_store_tombstone_and_pruning
+def test_deleting_tombstoned_versions(basic_tombstone_and_pruning, sym):
+    lib = basic_tombstone_and_pruning
     lib.write(sym, 1)
     lib.write(sym, 1)
     lib.write(sym, 1)
@@ -517,20 +517,20 @@ def test_delete_multi_keys(object_version_store, sym):
 
 
 @pytest.mark.parametrize("map_timeout", get_map_timeouts())
-def test_delete_multi_keys_snapshot(lmdb_version_store, map_timeout, sym):
+def test_delete_multi_keys_snapshot(basic_store, map_timeout, sym):
     data = {"e": np.arange(1000), "f": np.arange(8000), "g": None}
-    lmdb_version_store.write(sym, data=data, metadata="realyolo2", recursive_normalizers=True)
-    lmdb_version_store.snapshot("mysnap1")
-    lmdb_version_store.delete(sym)
+    basic_store.write(sym, data=data, metadata="realyolo2", recursive_normalizers=True)
+    basic_store.snapshot("mysnap1")
+    basic_store.delete(sym)
 
     with pytest.raises(Exception):
-        lmdb_version_store.read(sym)
+        basic_store.read(sym)
 
-    comp_dict(data, lmdb_version_store.read(sym, as_of="mysnap1").data)
+    comp_dict(data, basic_store.read(sym, as_of="mysnap1").data)
 
-    lmdb_version_store.delete_snapshot("mysnap1")
+    basic_store.delete_snapshot("mysnap1")
 
-    lt = lmdb_version_store.library_tool()
+    lt = basic_store.library_tool()
     assert len(lt.find_keys(KeyType.MULTI_KEY)) == 0
     assert len(lt.find_keys(KeyType.TABLE_INDEX)) == 0
     assert len(lt.find_keys(KeyType.TABLE_DATA)) == 0
@@ -538,13 +538,13 @@ def test_delete_multi_keys_snapshot(lmdb_version_store, map_timeout, sym):
 
 @pytest.mark.parametrize("index_start", range(10))
 def test_delete_date_range_with_strings(version_store_factory, index_start):
-    lmdb_version_store = version_store_factory(column_group_size=3, segment_row_size=3)
+    lib = version_store_factory(column_group_size=3, segment_row_size=3)
 
     symbol = "delete_daterange"
     periods = 100
     idx = pd.date_range("1970-01-01", periods=periods, freq="D")
     df = pd.DataFrame({"a": [random_string(10) for _ in range(len(idx))]}, index=idx)
-    lmdb_version_store.write(symbol, df)
+    lib.write(symbol, df)
 
     start = random.randrange(index_start, periods - 2)
     end = random.randrange(start, periods - 1)
@@ -553,23 +553,23 @@ def test_delete_date_range_with_strings(version_store_factory, index_start):
     end_time = idx[end]
 
     range_to_delete = pd.date_range(start=start_time, end=end_time)
-    lmdb_version_store.delete(symbol, date_range=range_to_delete)
+    lib.delete(symbol, date_range=range_to_delete)
     df = df.drop(df.index[start : end + 1])  # Arctic is end date inclusive
 
-    vit = lmdb_version_store.read(symbol)
+    vit = lib.read(symbol)
     assert_frame_equal(vit.data, df)
 
 
 @pytest.mark.parametrize("map_timeout", get_map_timeouts())
 def test_delete_date_range_remove_everything(version_store_factory, map_timeout):
     with config_context("VersionMap.ReloadInterval", map_timeout):
-        lmdb_version_store = version_store_factory(column_group_size=3, segment_row_size=3)
+        lib = version_store_factory(column_group_size=3, segment_row_size=3)
 
         symbol = "delete_daterange"
         periods = 100
         idx = pd.date_range("1970-01-01", periods=periods, freq="D")
         df = pd.DataFrame({"a": [random_string(10) for _ in range(len(idx))]}, index=idx)
-        lmdb_version_store.write(symbol, df)
+        lib.write(symbol, df)
 
         start = 0
         end = 99
@@ -578,22 +578,22 @@ def test_delete_date_range_remove_everything(version_store_factory, map_timeout)
         end_time = idx[end]
 
         range_to_delete = pd.date_range(start=start_time, end=end_time)
-        lmdb_version_store.delete(symbol, date_range=range_to_delete)
+        lib.delete(symbol, date_range=range_to_delete)
         df = df.drop(df.index[start : end + 1])  # Arctic is end date inclusive
 
-        vit = lmdb_version_store.read(symbol)
+        vit = lib.read(symbol)
         assert_frame_equal(vit.data, df)
 
 
-def test_delete_read_from_timestamp(lmdb_version_store):
+def test_delete_read_from_timestamp(basic_store):
     sym = "test_from_timestamp_with_delete"
-    lib = lmdb_version_store
+    lib = basic_store
     lib.write(sym, 1)
     lib.write(sym, 2)
 
-    with distinct_timestamps(lmdb_version_store) as deletion_time:
+    with distinct_timestamps(basic_store) as deletion_time:
         lib.delete_version(sym, 0)
-    with distinct_timestamps(lmdb_version_store):
+    with distinct_timestamps(basic_store):
         lib.write(sym, 3)
     lib.write(sym, 4)
     assert lib.read(sym, as_of=deletion_time.after).data == 2

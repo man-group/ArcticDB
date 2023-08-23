@@ -155,9 +155,9 @@ def test_fixed_string_simple():
         assert_equal(s2, rs2)
 
 
-def test_write_fixed_coerce_dynamic(lmdb_version_store):
+def test_write_fixed_coerce_dynamic(basic_store):
     row = pd.Series(["Aaba", "A", "B", "C", "Baca", "CABA", "dog", "cat"])
     df = pd.DataFrame({"x": row})
-    lmdb_version_store.write("strings", df, dynamic_strings=False)
-    vit = lmdb_version_store.read("strings", force_string_to_object=True)
+    basic_store.write("strings", df, dynamic_strings=False)
+    vit = basic_store.read("strings", force_string_to_object=True)
     assert_frame_equal(df, vit.data)

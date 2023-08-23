@@ -97,7 +97,7 @@ def test_write_parallel_stress_schema_change(object_version_store):
     assert_frame_equal(vit.data, df)
 
 
-def test_write_parallel_stress_schema_change_strings(lmdb_version_store_big_map):
+def test_write_parallel_stress_schema_change_strings(basic7_store_big_map):
     num_rows_per_day = 1000
     num_days = 100
     num_columns = 8
@@ -121,17 +121,17 @@ def test_write_parallel_stress_schema_change_strings(lmdb_version_store_big_map)
 
     random.shuffle(dataframes)
     for d in dataframes:
-        lmdb_version_store_big_map.write(symbol, d, parallel=True)
+        basic_store_big_map.write(symbol, d, parallel=True)
 
-    lmdb_version_store_big_map.version_store.compact_incomplete(symbol, False, False)
-    vit = lmdb_version_store_big_map.read(symbol)
+    basic_store_big_map.version_store.compact_incomplete(symbol, False, False)
+    vit = basic_store_big_map.read(symbol)
     df.sort_index(axis=1, inplace=True)
     result = vit.data
     result.sort_index(axis=1, inplace=True)
     assert_frame_equal(vit.data, df)
 
 
-def test_write_parallel_stress_schema_change_strings_with_nan(lmdb_version_store_big_map):
+def test_write_parallel_stress_schema_change_strings_with_nan(basic_store_big_map):
     num_rows_per_day = 1000
     num_days = 100
     num_columns = 8
@@ -155,10 +155,10 @@ def test_write_parallel_stress_schema_change_strings_with_nan(lmdb_version_store
 
     random.shuffle(dataframes)
     for d in dataframes:
-        lmdb_version_store_big_map.write(symbol, d, parallel=True)
+        basic_store_big_map.write(symbol, d, parallel=True)
 
-    lmdb_version_store_big_map.version_store.compact_incomplete(symbol, False, False)
-    vit = lmdb_version_store_big_map.read(symbol)
+    basic_store_big_map.version_store.compact_incomplete(symbol, False, False)
+    vit = basic_store_big_map.read(symbol)
     df.sort_index(axis=1, inplace=True)
     result = vit.data
     result.sort_index(axis=1, inplace=True)

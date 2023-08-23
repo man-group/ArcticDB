@@ -403,7 +403,7 @@ def real_s3_uri(real_s3_credentials):
 
 
 @pytest.fixture
-def real_s3_store_factory(lib_name, real_s3_credentials):
+def real_s3_store_factory(lib_name, real_s3_credentials, **kwargs):
     endpoint, bucket, region, aws_access_key, aws_secret_key, clear = real_s3_credentials
 
     # Not exposing the config factory to discourage people from creating libs that won't get cleaned up
@@ -512,7 +512,6 @@ def mongo_version_store(mongo_store_factory):
 @pytest.fixture(
     scope="function",
     params=[
-        "version_store_factory",
         "s3_store_factory",
         pytest.param(
             "azure_store_factory",
@@ -528,14 +527,58 @@ def mongo_version_store(mongo_store_factory):
     ],
 )
 def object_store_factory(request):
+    """
+        Designed to test all object stores and their simulations
+        Doesn't support LMDB
+    """
     store_factory = request.getfixturevalue(request.param)
     return store_factory
 
+@pytest.fixture
+def object_version_store(object_store_factory):
+    """
+        Designed to test all object stores and their simulations
+        Doesn't support LMDB
+    """
+    return object_store_factory()
 
 @pytest.fixture
 def object_version_store_prune_previous(object_store_factory):
+    """
+        Designed to test all object stores and their simulations
+        Doesn't support LMDB
+    """
     return object_store_factory(prune_previous_version=True)
 
+@pytest.fixture(
+    params=[
+        "version_store_factory",
+        pytest.param(
+            "real_s3_store_factory",
+            marks=pytest.mark.skipif(
+                not PERSISTENT_STORAGE_TESTS_ENABLED,
+                reason="This store can be used only if the persistent storage tests are enabled",
+            ),
+        ),
+    ],
+)
+def basic_store_factory(request):
+    """
+        Designed to test the bare minimum of stores
+         - LMDB for local storage
+         - AWS S3 for persistent storage, if enabled
+    """
+    store_factory = request.getfixturevalue(request.param)
+    return store_factory
+
+@pytest.fixture
+def basic_store(basic_store_factory):
+    """
+        Designed to test the bare minimum of stores
+         - LMDB for local storage
+         - AWS S3 for persistent storage, if enabled
+    """
+    return basic_store_factory()
 
 @pytest.fixture
 def azure_version_store(azure_store_factory):
@@ -567,110 +610,117 @@ def lmdb_version_store(lmdb_version_store_v1, lmdb_version_store_v2, encoding_ve
     elif encoding_version == EncodingVersion.V2:
         return lmdb_version_store_v2
     else:
-        raise ValueError(f"Unexoected encoding version: {encoding_version}")
+        raise ValueError(f"Unexpected encoding version: {encoding_version}")
 
 
 @pytest.fixture
-def lmdb_version_store_prune_previous(version_store_factory):
-    return version_store_factory(dynamic_strings=True, prune_previous_version=True, use_tombstones=True)
+def basic_store_prune_previous(basic_store_factory):
+    return basic_store_factory(dynamic_strings=True, prune_previous_version=True, use_tombstones=True)
 
 
 @pytest.fixture
-def lmdb_version_store_big_map(version_store_factory):
-    return version_store_factory(lmdb_config={"map_size": 2**30})
+def basic_store_big_map(basic_store_factory):
+    return basic_store_factory(lmdb_config={"map_size": 2**30})
 
 
 @pytest.fixture
-def lmdb_version_store_column_buckets(version_store_factory):
-    return version_store_factory(dynamic_schema=True, column_group_size=3, segment_row_size=2, bucketize_dynamic=True)
+def basic_store_column_buckets(basic_store_factory):
+    return basic_store_factory(dynamic_schema=True, column_group_size=3, segment_row_size=2, bucketize_dynamic=True)
 
 
 @pytest.fixture
-def lmdb_version_store_dynamic_schema_v1(version_store_factory, lib_name):
-    return version_store_factory(dynamic_schema=True, dynamic_strings=True)
+def basic_store_dynamic_schema_v1(basic_store_factory, lib_name):
+    return basic_store_factory(dynamic_schema=True, dynamic_strings=True)
 
 
 @pytest.fixture
-def lmdb_version_store_dynamic_schema_v2(version_store_factory, lib_name):
+def basic_store_dynamic_schema_v2(basic_store_factory, lib_name):
     library_name = lib_name + "_v2"
-    return version_store_factory(
+    return basic_store_factory(
         dynamic_schema=True, dynamic_strings=True, encoding_version=int(EncodingVersion.V2), override_name=library_name
     )
 
 
 @pytest.fixture
-def lmdb_version_store_dynamic_schema(
-    lmdb_version_store_dynamic_schema_v1, lmdb_version_store_dynamic_schema_v2, encoding_version
+def basic_store_dynamic_schema(
+    basic_store_dynamic_schema_v1, basic_store_dynamic_schema_v2, encoding_version
 ):
     if encoding_version == EncodingVersion.V1:
-        return lmdb_version_store_dynamic_schema_v1
+        return basic_store_dynamic_schema_v1
     elif encoding_version == EncodingVersion.V2:
-        return lmdb_version_store_dynamic_schema_v2
+        return basic_store_dynamic_schema_v2
     else:
-        raise ValueError(f"Unexoected encoding version: {encoding_version}")
+        raise ValueError(f"Unexpected encoding version: {encoding_version}")
 
 
 @pytest.fixture
-def lmdb_version_store_delayed_deletes_v1(version_store_factory):
-    return version_store_factory(delayed_deletes=True, dynamic_strings=True, prune_previous_version=True)
+def basic_store_delayed_deletes_v1(basic_store_factory):
+    return basic_store_factory(delayed_deletes=True, dynamic_strings=True, prune_previous_version=True)
 
 
 @pytest.fixture
-def lmdb_version_store_delayed_deletes_v2(version_store_factory, lib_name):
+def basic_store_delayed_deletes_v2(basic_store_factory, lib_name):
     library_name = lib_name + "_v2"
-    return version_store_factory(
+    return basic_store_factory(
         dynamic_strings=True, delayed_deletes=True, encoding_version=int(EncodingVersion.V2), override_name=library_name
     )
 
-
+@pytest.fixture(
+    params=[
+        "basic_store_delayed_deletes_v1",
+        "basic_store_delayed_deletes_v2",
+    ],
+)
+def basic_store_delayed_deletes(request):
+    yield request.getfixturevalue(request.param)
 @pytest.fixture
-def lmdb_version_store_tombstones_no_symbol_list(version_store_factory):
-    return version_store_factory(use_tombstones=True, dynamic_schema=True, symbol_list=False, dynamic_strings=True)
-
-
-@pytest.fixture
-def lmdb_version_store_allows_pickling(version_store_factory, lib_name):
-    return version_store_factory(use_norm_failure_handler_known_types=True, dynamic_strings=True)
-
-
-@pytest.fixture
-def lmdb_version_store_no_symbol_list(version_store_factory):
-    return version_store_factory(col_per_group=None, row_per_segment=None, symbol_list=False)
+def basic_store_tombstones_no_symbol_list(basic_store_factory):
+    return basic_store_factory(use_tombstones=True, dynamic_schema=True, symbol_list=False, dynamic_strings=True)
 
 
 @pytest.fixture
-def lmdb_version_store_tombstone_and_pruning(version_store_factory):
-    return version_store_factory(use_tombstones=True, prune_previous_version=True)
+def basic_store_allows_pickling(basic_store_factory, lib_name):
+    return basic_store_factory(use_norm_failure_handler_known_types=True, dynamic_strings=True)
 
 
 @pytest.fixture
-def lmdb_version_store_tombstone(version_store_factory):
-    return version_store_factory(use_tombstones=True)
+def basic_store_no_symbol_list(basic_store_factory):
+    return basic_store_factory(col_per_group=None, row_per_segment=None, symbol_list=False)
 
 
 @pytest.fixture
-def lmdb_version_store_tombstone_and_sync_passive(version_store_factory):
-    return version_store_factory(use_tombstones=True, sync_passive=True)
+def basic_store_tombstone_and_pruning(basic_store_factory):
+    return basic_store_factory(use_tombstones=True, prune_previous_version=True)
 
 
 @pytest.fixture
-def lmdb_version_store_ignore_order(version_store_factory):
-    return version_store_factory(ignore_sort_order=True)
+def basic_store_tombstone(basic_store_factory):
+    return basic_store_factory(use_tombstones=True)
 
 
 @pytest.fixture
-def lmdb_version_store_small_segment(version_store_factory):
-    return version_store_factory(column_group_size=1000, segment_row_size=1000, lmdb_config={"map_size": 2**30})
+def basic_store_tombstone_and_sync_passive(basic_store_factory):
+    return basic_store_factory(use_tombstones=True, sync_passive=True)
 
 
 @pytest.fixture
-def lmdb_version_store_tiny_segment(version_store_factory):
-    return version_store_factory(column_group_size=2, segment_row_size=2, lmdb_config={"map_size": 2**30})
+def basic_store_ignore_order(basic_store_factory):
+    return basic_store_factory(ignore_sort_order=True)
 
 
 @pytest.fixture
-def lmdb_version_store_tiny_segment_dynamic(version_store_factory):
-    return version_store_factory(column_group_size=2, segment_row_size=2, dynamic_schema=True)
+def basic_store_small_segment(basic_store_factory):
+    return basic_store_factory(column_group_size=1000, segment_row_size=1000, lmdb_config={"map_size": 2**30})
+
+
+@pytest.fixture
+def basic_store_tiny_segment(basic_store_factory):
+    return basic_store_factory(column_group_size=2, segment_row_size=2, lmdb_config={"map_size": 2**30})
+
+
+@pytest.fixture
+def basic_store_tiny_segment_dynamic(basic_store_factory):
+    return basic_store_factory(column_group_size=2, segment_row_size=2, dynamic_schema=True)
 
 
 @pytest.fixture
@@ -784,11 +834,6 @@ def object_storage_uri_incl_bucket(request):
     yield request.getfixturevalue(request.param)
 
 
-@pytest.fixture
-def object_version_store(object_store_factory):
-    return object_store_factory()
-
-
 @pytest.fixture(
     scope="function",
     params=(
@@ -798,8 +843,12 @@ def object_version_store(object_store_factory):
             "s3_version_store_v1",
             "s3_version_store_v2",
             pytest.param(
+                "mongo_version_store",
+                marks=pytest.mark.skipif(sys.platform != "linux", reason="The mongo store is only supported on Linux"),
+            ),
+            pytest.param(
                 "azure_version_store",
-                marks=pytest.mark.skipif(not AZURE_SUPPORT, reason="Pending Azure Storge Conda support"),
+                marks=pytest.mark.skipif(not AZURE_SUPPORT, reason="Pending Azure Storage Conda support"),
             ),
             pytest.param(
                 "real_s3_version_store",
@@ -811,4 +860,7 @@ def object_version_store(object_store_factory):
     ),
 )
 def object_and_lmdb_version_store(request):
+    """
+        Designed to test all supported stores
+    """
     yield request.getfixturevalue(request.param)

@@ -46,8 +46,8 @@ def assert_equal_value(data, expected):
         index=range_indexes(),
     )
 )
-def test_hypothesis_mean_agg_dynamic(lmdb_version_store_dynamic_schema_v1, df):
-    lib = lmdb_version_store_dynamic_schema_v1
+def test_hypothesis_mean_agg_dynamic(basic_store_dynamic_schema_v1, df):
+    lib = basic_store_dynamic_schema_v1
     assume(not df.empty)
 
     symbol = f"mean_agg-{uuid.uuid4().hex}"
@@ -110,8 +110,8 @@ def test_hypothesis_sum_agg_dynamic(s3_version_store_dynamic_schema_v2, df):
         index=range_indexes(),
     )
 )
-def test_hypothesis_max_agg_dynamic(lmdb_version_store_dynamic_schema_v1, df):
-    lib = lmdb_version_store_dynamic_schema_v1
+def test_hypothesis_max_agg_dynamic(basic_store_dynamic_schema_v1, df):
+    lib = basic_store_dynamic_schema_v1
     assume(not df.empty)
 
     symbol = f"max_agg-{uuid.uuid4().hex}"
@@ -150,8 +150,8 @@ def test_sum_aggregation_dynamic(s3_version_store_dynamic_schema_v2):
     assert_equal_value(received, expected)
 
 
-def test_sum_aggregation_with_range_index_dynamic(lmdb_version_store_dynamic_schema_v1):
-    lib = lmdb_version_store_dynamic_schema_v1
+def test_sum_aggregation_with_range_index_dynamic(basic_store_dynamic_schema_v1):
+    lib = basic_store_dynamic_schema_v1
     df = DataFrame(
         {"grouping_column": ["group_1", "group_1", "group_1", "group_2", "group_2"], "to_sum": [1, 1, 2, 2, 2]}
     )

@@ -39,15 +39,15 @@ def make_read_only(lib):
     return NativeVersionStore.create_store_from_lib_config(lib.lib_cfg(), Defaults.ENV, OpenMode.READ)
 
 
-def test_with_symbol_list(lmdb_version_store):
+def test_with_symbol_list(basic_store):
     syms = []
     for i in range(100):
         df = sample_dataframe(100, i)
         sym = "sym_{}".format(i)
-        lmdb_version_store.write(sym, df)
+        basic_store.write(sym, df)
         syms.append(sym)
 
-    list_syms = lmdb_version_store.list_symbols()
+    list_syms = basic_store.list_symbols()
     assert len(list_syms) == len(syms)
 
     for sym in syms:
@@ -58,14 +58,14 @@ def test_with_symbol_list(lmdb_version_store):
 
     for j in range(0, 100, 2):
         sym = "sym_{}".format(j)
-        lmdb_version_store.delete(sym)
+        basic_store.delete(sym)
 
     expected_syms = []
     for k in range(1, 100, 2):
         sym = "sym_{}".format(k)
         expected_syms.append(sym)
 
-    list_syms = lmdb_version_store.list_symbols()
+    list_syms = basic_store.list_symbols()
     assert len(list_syms) == len(expected_syms)
 
     for sym in expected_syms:
@@ -75,17 +75,17 @@ def test_with_symbol_list(lmdb_version_store):
         assert sym in expected_syms
 
 
-def test_symbol_list_with_rec_norm(lmdb_version_store):
-    lmdb_version_store.write(
+def test_symbol_list_with_rec_norm(basic_store):
+    basic_store.write(
         "rec_norm", data={"a": np.arange(5), "b": np.arange(8), "c": None}, recursive_normalizers=True
     )
-    assert not lmdb_version_store.is_symbol_pickled("rec_norm")
-    assert lmdb_version_store.list_symbols() == ["rec_norm"]
+    assert not basic_store.is_symbol_pickled("rec_norm")
+    assert basic_store.list_symbols() == ["rec_norm"]
 
 
-def test_interleaved_store_read(version_store_factory):
-    vs1 = version_store_factory()
-    vs2 = version_store_factory(reuse_name=True)
+def test_interleaved_store_read(basic_store_factory):
+    vs1 = basic_store_factory()
+    vs2 = basic_store_factory(reuse_name=True)
 
     vs1.write("a", 1)
     vs2.delete("a")
@@ -121,8 +121,8 @@ def test_symbol_list_read_only_compaction_needed(small_max_delta, object_version
     assert new_compaction != old_compaction
 
 
-def test_symbol_list_delete(lmdb_version_store):
-    lib = lmdb_version_store
+def test_symbol_list_delete(basic_store):
+    lib = basic_store
     lib.write("a", 1)
     assert lib.list_symbols() == ["a"]
     lib.write("b", 1)
@@ -130,8 +130,8 @@ def test_symbol_list_delete(lmdb_version_store):
     assert lib.list_symbols() == ["b"]
 
 
-def test_symbol_list_delete_incremental(lmdb_version_store):
-    lib = lmdb_version_store
+def test_symbol_list_delete_incremental(basic_store):
+    lib = basic_store
     lib.write("a", 1)
     lib.write("a", 2, prune_previous=False)
     lib.write("b", 1)
@@ -141,8 +141,8 @@ def test_symbol_list_delete_incremental(lmdb_version_store):
     assert lib.list_symbols() == ["b"]
 
 
-def test_deleted_symbol_with_tombstones(lmdb_version_store_tombstones_no_symbol_list):
-    lib = lmdb_version_store_tombstones_no_symbol_list
+def test_deleted_symbol_with_tombstones(basic_store_tombstones_no_symbol_list):
+    lib = basic_store_tombstones_no_symbol_list
     lib.write("a", 1)
     assert lib.list_symbols() == ["a"]
     lib.write("b", 1)
@@ -150,15 +150,15 @@ def test_deleted_symbol_with_tombstones(lmdb_version_store_tombstones_no_symbol_
     assert lib.list_symbols() == ["b"]
 
 
-def test_empty_lib(lmdb_version_store):
-    lib = lmdb_version_store
+def test_empty_lib(basic_store):
+    lib = basic_store
     assert lib.list_symbols() == []
     lt = lib.library_tool()
     assert len(lt.find_keys(KeyType.SYMBOL_LIST)) == 1
 
 
-def test_no_active_symbols(lmdb_version_store_prune_previous):
-    lib = lmdb_version_store_prune_previous
+def test_no_active_symbols(basic_store_prune_previous):
+    lib = basic_store_prune_previous
     for idx in range(20):
         lib.write(str(idx), idx)
     for idx in range(20):
@@ -170,8 +170,8 @@ def test_no_active_symbols(lmdb_version_store_prune_previous):
     assert lib.list_symbols() == []
 
 
-def test_only_latest_compaction_key_is_used(lmdb_version_store):
-    lib: NativeVersionStore = lmdb_version_store
+def test_only_latest_compaction_key_is_used(basic_store):
+    lib: NativeVersionStore = basic_store
     lt = lib.library_tool()
 
     # Preserve an old compacted segment
@@ -198,14 +198,14 @@ def test_only_latest_compaction_key_is_used(lmdb_version_store):
 
 
 @pytest.mark.parametrize("write_another", [False, True])
-def test_turning_on_symbol_list_after_a_symbol_written(s3_store_factory, write_another):
+def test_turning_on_symbol_list_after_a_symbol_written(object_version_store, write_another):
     # The if(!maybe_last_compaction) case
-    lib: NativeVersionStore = s3_store_factory(symbol_list=False)
+    lib: NativeVersionStore = object_version_store(symbol_list=False)
 
     lib.write("a", 1)
     assert not lib.library_tool().find_keys(KeyType.SYMBOL_LIST)
 
-    lib = s3_store_factory(reuse_name=True, symbol_list=True)
+    lib = object_version_store(reuse_name=True, symbol_list=True)
     lt = lib.library_tool()
     if write_another:
         lib.write("b", 2)
@@ -228,8 +228,8 @@ def test_turning_on_symbol_list_after_a_symbol_written(s3_store_factory, write_a
 
 
 @pytest.mark.parametrize("mode", ["conflict", "normal"])
-def test_lock_contention(small_max_delta, lmdb_version_store, mode):
-    lib = lmdb_version_store
+def test_lock_contention(small_max_delta, basic_store, mode):
+    lib = basic_store
     lt = lib.library_tool()
     lock = lib.version_store.get_storage_lock(CompactionLockName)
 

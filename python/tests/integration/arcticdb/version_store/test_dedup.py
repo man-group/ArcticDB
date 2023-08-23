@@ -34,8 +34,8 @@ def comp_dict(d1, d2):
             assert d1[k] == d2[k]
 
 
-def test_basic_de_dup(version_store_factory):
-    lib = version_store_factory(column_group_size=2, segment_row_size=2, de_duplication=True)
+def test_basic_de_dup(basic_store_factory):
+    lib = basic_store_factory(column_group_size=2, segment_row_size=2, de_duplication=True)
     symbol = "test_basic_de_dup"
 
     num_elements = 100
@@ -59,8 +59,8 @@ def test_basic_de_dup(version_store_factory):
     assert len(get_data_keys(lib, symbol)) == num_elements
 
 
-def test_de_dup_same_value_written(version_store_factory):
-    lib = version_store_factory(column_group_size=2, segment_row_size=2, de_duplication=True)
+def test_de_dup_same_value_written(basic_store_factory):
+    lib = basic_store_factory(column_group_size=2, segment_row_size=2, de_duplication=True)
     symbol = "test_de_dup_same_value_written"
 
     # This will insert 50 data keys
@@ -82,8 +82,8 @@ def test_de_dup_same_value_written(version_store_factory):
     assert len(get_data_keys(lib, symbol)) == num_keys
 
 
-def test_de_dup_with_delete(version_store_factory):
-    lib = version_store_factory(column_group_size=2, segment_row_size=2, de_duplication=True)
+def test_de_dup_with_delete(basic_store_factory):
+    lib = basic_store_factory(column_group_size=2, segment_row_size=2, de_duplication=True)
     symbol = "test_de_dup_with_delete"
 
     num_elements = 100
@@ -138,8 +138,8 @@ def test_de_dup_with_delete(version_store_factory):
     assert len(get_data_keys(lib, symbol)) == num_elements
 
 
-def test_de_dup_with_snapshot(version_store_factory):
-    lib = version_store_factory(column_group_size=2, segment_row_size=2, de_duplication=True)
+def test_de_dup_with_snapshot(basic_store_factory):
+    lib = basic_store_factory(column_group_size=2, segment_row_size=2, de_duplication=True)
     symbol = "test_de_dup_with_snapshot"
 
     num_elements = 100
@@ -179,8 +179,8 @@ def test_de_dup_with_snapshot(version_store_factory):
     assert_frame_equal(lib.read(symbol, as_of="my_snap").data, new_df)
 
 
-def test_de_dup_with_tombstones(version_store_factory):
-    lib = version_store_factory(column_group_size=2, segment_row_size=2, de_duplication=True, use_tombstones=True)
+def test_de_dup_with_tombstones(basic_store_factory):
+    lib = basic_store_factory(column_group_size=2, segment_row_size=2, de_duplication=True, use_tombstones=True)
     symbol = "test_de_dup_with_tombstones"
 
     num_elements = 100
@@ -238,8 +238,8 @@ def test_de_dup_with_tombstones(version_store_factory):
     assert len(get_data_keys(lib, symbol)) == 3 * num_elements / 2
 
 
-def test_snapshot_dedup_basic(version_store_factory):
-    lib = version_store_factory(
+def test_snapshot_dedup_basic(basic_store_factory):
+    lib = basic_store_factory(
         column_group_size=2, segment_row_size=2, de_duplication=True, use_tombstones=True, snapshot_dedup=True
     )
     symbol = "test_snapshot_dedup_basic"
@@ -280,8 +280,8 @@ def test_snapshot_dedup_basic(version_store_factory):
     assert len(get_data_keys(lib, symbol)) == num_elements
 
 
-def test_snapshot_dedup_multiple1(version_store_factory):
-    lib = version_store_factory(
+def test_snapshot_dedup_multiple1(basic_store_factory):
+    lib = basic_store_factory(
         column_group_size=2, segment_row_size=2, de_duplication=True, use_tombstones=True, snapshot_dedup=True
     )
     symbol = "test_snapshot_dedup_multiple1"
@@ -348,8 +348,8 @@ def test_snapshot_dedup_multiple1(version_store_factory):
     assert len(get_data_keys(lib, symbol)) == 3 * num_elements / 2
 
 
-def test_snapshot_dedup_multiple2(version_store_factory):
-    lib = version_store_factory(
+def test_snapshot_dedup_multiple2(basic_store_factory):
+    lib = basic_store_factory(
         column_group_size=2, segment_row_size=2, de_duplication=True, use_tombstones=True, snapshot_dedup=True
     )
     symbol = "test_snapshot_dedup_multiple2"
@@ -404,8 +404,8 @@ def test_snapshot_dedup_multiple2(version_store_factory):
     assert len(get_data_keys(lib, symbol)) == 3 * num_elements / 2
 
 
-def test_dedup_multi_keys(version_store_factory):
-    lib = version_store_factory(
+def test_dedup_multi_keys(basic_store_factory):
+    lib = basic_store_factory(
         column_group_size=2, segment_row_size=2, de_duplication=True, use_tombstones=True, snapshot_dedup=True
     )
     symbol = "test_dedup_multi_keys"
@@ -452,8 +452,8 @@ def test_dedup_multi_keys(version_store_factory):
     comp_dict(data3, lib.read(symbol).data)
 
 
-def test_dedup_multi_keys_snapshot(version_store_factory):
-    lib = version_store_factory(
+def test_dedup_multi_keys_snapshot(basic_store_factory):
+    lib = basic_store_factory(
         column_group_size=2, segment_row_size=2, de_duplication=True, use_tombstones=True, snapshot_dedup=True
     )
     symbol = "test_dedup_multi_keys"
