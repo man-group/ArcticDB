@@ -17,10 +17,10 @@ from arcticdb.util.test import assert_frame_equal
     [(10, 5, 20, 500, 20), (10, 5, 450, 500, 20), (10, 5, 200, 1000, 20), (128, 100000, 30000, 40000, 4)],
 )
 def test_dynamic_bucketize_append_variable_width(
-    get_wide_df, sym, object_store_factory, colnum, rownum, initial_col_width, max_col_width, total_rows
+    get_wide_df, sym, version_store_factory, colnum, rownum, initial_col_width, max_col_width, total_rows
 ):
     symbol = sym
-    lmdb_version_store = object_store_factory(
+    lmdb_version_store = version_store_factory(
         col_per_group=colnum,
         row_per_segment=rownum,
         dynamic_schema=True,

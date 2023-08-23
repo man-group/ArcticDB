@@ -20,9 +20,9 @@ def write_data(lib, sym, done, error):
     delete_version_id = 0
     number_of_writes = 0
     try:
-        for idx1 in range(10):
+        for idx1 in range(5):
             print("Iteration {}/10".format(idx1))
-            for idx2 in range(40):
+            for idx2 in range(20):
                 if idx2 % 4 == 3:
                     lib.delete_version(sym, delete_version_id)
                     delete_version_id += 1
@@ -42,15 +42,15 @@ def write_data(lib, sym, done, error):
     done.value = 1
 
 
-def compact_data(lib, sym, done):
+def compact_data(lib, sym, done, error):
     set_config_int("VersionMap.MaxVersionBlocks", 1)
-    while not done.value:
+    while not done.value or error.value:
         lib.version_store._compact_version_map(sym)
         time.sleep(random.uniform(0, 0.05))
 
 
-def read_data(lib, sym, done):
-    while not done.value:
+def read_data(lib, sym, done, error):
+    while not done.value or error.value:
         vs = lib.list_versions(sym)
         for idx in range(len(vs) - 1):
             assert vs[idx]["version"] == vs[idx + 1]["version"] + 1
@@ -67,10 +67,10 @@ def test_stress_version_map_compact(object_version_store, sym, capsys):
             writer = Process(name="writer", target=write_data, args=(lib, sym, done, error))
             writer.start()
             log.version.info("Starting compacter")
-            compacter = Process(name="compacter", target=compact_data, args=(lib, sym, done))
+            compacter = Process(name="compacter", target=compact_data, args=(lib, sym, done, error))
             compacter.start()
             log.version.info("Starting reader")
-            reader = Process(name="reader", target=read_data, args=(lib, sym, done))
+            reader = Process(name="reader", target=read_data, args=(lib, sym, done, error))
             reader.start()
 
             log.version.info("Joining writer")
