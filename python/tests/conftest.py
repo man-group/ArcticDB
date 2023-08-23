@@ -611,61 +611,61 @@ def lmdb_version_store(lmdb_version_store_v1, lmdb_version_store_v2, encoding_ve
         return lmdb_version_store_v2
     else:
         raise ValueError(f"Unexpected encoding version: {encoding_version}")
+        
+
+# TODO: Remove these
+@pytest.fixture
+def lmdb_version_store_prune_previous(lmdb_version_store_factory):
+    return lmdb_version_store_factory(dynamic_strings=True, prune_previous_version=True, use_tombstones=True)
 
 
 @pytest.fixture
-def basic_store_prune_previous(basic_store_factory):
-    return basic_store_factory(dynamic_strings=True, prune_previous_version=True, use_tombstones=True)
+def lmdb_version_store_big_map(lmdb_version_store_factory):
+    return lmdb_version_store_factory(lmdb_config={"map_size": 2**30})
 
 
 @pytest.fixture
-def basic_store_big_map(basic_store_factory):
-    return basic_store_factory(lmdb_config={"map_size": 2**30})
+def lmdb_version_store_column_buckets(lmdb_version_store_factory):
+    return lmdb_version_store_factory(dynamic_schema=True, column_group_size=3, segment_row_size=2, bucketize_dynamic=True)
 
 
 @pytest.fixture
-def basic_store_column_buckets(basic_store_factory):
-    return basic_store_factory(dynamic_schema=True, column_group_size=3, segment_row_size=2, bucketize_dynamic=True)
+def lmdb_version_store_dynamic_schema_v1(lmdb_version_store_factory, lib_name):
+    return lmdb_version_store_factory(dynamic_schema=True, dynamic_strings=True)
 
 
 @pytest.fixture
-def basic_store_dynamic_schema_v1(basic_store_factory, lib_name):
-    return basic_store_factory(dynamic_schema=True, dynamic_strings=True)
-
-
-@pytest.fixture
-def basic_store_dynamic_schema_v2(basic_store_factory, lib_name):
+def lmdb_version_store_dynamic_schema_v2(lmdb_version_store_factory, lib_name):
     library_name = lib_name + "_v2"
-    return basic_store_factory(
+    return lmdb_version_store_factory(
         dynamic_schema=True, dynamic_strings=True, encoding_version=int(EncodingVersion.V2), override_name=library_name
     )
 
 
 @pytest.fixture
-def basic_store_dynamic_schema(
-    basic_store_dynamic_schema_v1, basic_store_dynamic_schema_v2, encoding_version
+def lmdb_version_store_dynamic_schema(
+    lmdb_version_store_dynamic_schema_v1, lmdb_version_store_dynamic_schema_v2, encoding_version
 ):
     if encoding_version == EncodingVersion.V1:
-        return basic_store_dynamic_schema_v1
+        return lmdb_version_store_dynamic_schema_v1
     elif encoding_version == EncodingVersion.V2:
-        return basic_store_dynamic_schema_v2
+        return lmdb_version_store_dynamic_schema_v2
     else:
         raise ValueError(f"Unexpected encoding version: {encoding_version}")
 
 
 @pytest.fixture
-def basic_store_delayed_deletes_v1(basic_store_factory):
-    return basic_store_factory(delayed_deletes=True, dynamic_strings=True, prune_previous_version=True)
+def lmdb_version_store_delayed_deletes_v1(lmdb_version_store_factory):
+    return lmdb_version_store_factory(delayed_deletes=True, dynamic_strings=True, prune_previous_version=True)
 
 
 @pytest.fixture
-def basic_store_delayed_deletes_v2(basic_store_factory, lib_name):
+def lmdb_version_store_delayed_deletes_v2(lmdb_version_store_factory, lib_name):
     library_name = lib_name + "_v2"
     return basic_store_factory(
         dynamic_strings=True, delayed_deletes=True, encoding_version=int(EncodingVersion.V2), override_name=library_name
     )
 
-# TODO: Remove these
 @pytest.fixture
 def lmdb_version_store_tombstones_no_symbol_list(lmdb_version_store_factory):
     return lmdb_version_store_factory(use_tombstones=True, dynamic_schema=True, symbol_list=False, dynamic_strings=True)
