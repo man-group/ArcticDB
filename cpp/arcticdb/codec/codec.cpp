@@ -28,16 +28,13 @@ std::pair<size_t, size_t> ColumnEncoder::max_compressed_size(
         using Encoder = BlockEncoder<TDT>;
         ARCTICDB_TRACE(log::codec(), "Column data has {} blocks", column_data.num_blocks());
 
-        while (auto block = column_data.next<TDT>()) {
-            const auto nbytes = block.value().nbytes();
-            if constexpr(!is_empty_type(TDT::DataTypeTag::data_type)) {
+        if constexpr(!is_empty_type(TDT::DataTypeTag::data_type)) {
+            while (auto block = column_data.next<TDT>()) {
+                const auto nbytes = block.value().nbytes();
                 util::check(nbytes > 0, "Zero-sized block");
                 uncompressed_bytes += nbytes;
+                max_compressed_bytes += Encoder::max_compressed_size(codec_opts, block.value());
             }
-            // For the empty type the column will contain 0 size of user data however the encoder might need add some
-            // encoder specific data to the buffer, thus the uncompressed size will be 0 but the max_compressed_bytes
-            // might be non-zero.
-            max_compressed_bytes += Encoder::max_compressed_size(codec_opts, block.value());
         }
 
         if (column_data.bit_vector() != nullptr && column_data.bit_vector()->count() > 0)   {
