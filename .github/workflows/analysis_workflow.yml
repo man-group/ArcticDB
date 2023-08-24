@@ -138,7 +138,10 @@ jobs:
           version: "v0.4.0"
 
       - name: Select Python (Linux)
-        run: echo /opt/python/cp311-cp311/bin >> $GITHUB_PATH
+        shell: bash -l {0}
+        run: |
+          echo /opt/python/cp311-cp311/bin >> $GITHUB_PATH
+          which python
 
       - name: Extra envs
         run: |
