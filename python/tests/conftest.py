@@ -809,7 +809,7 @@ def basic_store_allows_pickling(basic_store_factory, lib_name):
 
 @pytest.fixture
 def basic_store_no_symbol_list(basic_store_factory):
-    return basic_store_factory(column_group_size=None, segment_row_size=None, symbol_list=False)
+    return basic_store_factory(symbol_list=False)
 
 
 @pytest.fixture
