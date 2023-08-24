@@ -55,6 +55,7 @@ def test_remove_incomplete(lmdb_version_store):
     lib.write(sym3, df1)
     lib.remove_incomplete(sym3)
 
+
 from arcticdb.util._versions import IS_PANDAS_TWO
 
 

@@ -13,12 +13,13 @@ namespace arcticdb {
             query_vector_(std::move(query_vector)),
             k_(k) {
         clause_info_.modifies_output_descriptor_ = true;
+        clause_info_.requires_repartition_ = true;
         clause_info_.follows_original_columns_order_ = false;
         clause_info_.can_combine_with_column_selection_ = false;
     }
 
-    Composite<ProcessingSegment> TopKClause::process(std::shared_ptr<Store> store,
-                                                     Composite<ProcessingSegment> &&p) const {
+    Composite<ProcessingUnit> TopKClause::process(std::shared_ptr<Store> store,
+                                                     Composite<ProcessingUnit> &&p) const {
         auto procs = std::move(p);
         TopK top_k(k_);
         // We expect a vector in each column.
@@ -29,7 +30,7 @@ namespace arcticdb {
         // Let's pretend that only the lp-norms exist. We'll use p=2 for now as a default.
 
         procs.broadcast(
-                [&store, &top_k, lp, this](const ProcessingSegment &proc) {
+                [&store, &top_k, lp, this](const ProcessingUnit &proc) {
                     for (const auto& slice_and_key: proc.data()) {
                         const std::vector<std::shared_ptr<Column>>& columns = slice_and_key.segment(store).columns();
                         for (auto&& [idx, col]: folly::enumerate(columns)) {
@@ -78,7 +79,7 @@ namespace arcticdb {
         seg.descriptor().set_index(IndexDescriptor(0, IndexDescriptor::ROWCOUNT));
         seg.set_row_id(query_vector_.size() - 1 + 1);
         // -1 because of zero-indexing, +1 because we want to add the distance on at the end.
-            for (const auto &column: top_k.top_k_) {
+        for (const auto &column: top_k.top_k_) {
             // todo: replace (mem)cpying of columns' contents with holding of pointers in top_k_ and addition of pointers to seg
             // this doesn't work presently because the columns can have >1 block.
             column.column_->type().visit_tag([&column, &seg, lp, this](auto type_desc_tag) {
@@ -106,6 +107,6 @@ namespace arcticdb {
                 }
             });
         }
-        return Composite{ProcessingSegment{std::move(seg)}};
+        return Composite{ProcessingUnit{std::move(seg)}};
     }
 }
