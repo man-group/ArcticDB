@@ -137,10 +137,14 @@ jobs:
         with:
           version: "v0.4.0"
 
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.11' 
+
       - name: Select Python (Linux)
         shell: bash -l {0}
         run: |
-          echo /opt/python/cp311-cp311/bin >> $GITHUB_PATH
+          # echo /opt/python/cp311-cp311/bin >> $GITHUB_PATH
           which python
           python -v
           which python3
