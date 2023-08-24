@@ -171,6 +171,8 @@ jobs:
           buildPreset: ${{env.ARCTIC_CMAKE_PRESET}}
         env:
           ARCTICDB_CODE_COVERAGE_BUILD: 1
+          ARCTICDB_DEBUG_FIND_PYTHON: ${{vars.ARCTICDB_DEBUG_FIND_PYTHON}}
+          python_impl_name: 'cp311'
         
       - name: Run C++ Tests
         shell: bash -l {0}
