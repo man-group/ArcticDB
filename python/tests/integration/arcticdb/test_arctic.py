@@ -1082,6 +1082,7 @@ def test_lmdb(tmpdir):
         lib.read("test").data
 
 
+@pytest.mark.skipif(not AZURE_SUPPORT, reason="Pending Azure Storge Conda support")
 def test_azure_no_ca_path(azurite_azure_test_connection_setting):
     (endpoint, container, credential_name, credential_key, ca_cert_path) = azurite_azure_test_connection_setting
     ac = Arctic(
