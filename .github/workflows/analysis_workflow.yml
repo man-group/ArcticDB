@@ -9,7 +9,7 @@ on:
     branches: ["**"]
     tags: [v**]
     paths:
-      - .github/workflows/*.yml
+      - .github/**
       - build_tooling/**
       - cpp/**
       - python/**
