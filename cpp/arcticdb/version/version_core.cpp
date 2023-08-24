@@ -409,7 +409,7 @@ Composite<ProcessingUnit> process_remaining_clauses(
         std::vector<std::shared_ptr<Clause>> clauses ) { // pass by copy deliberately as we don't want to modify read_query
     while (!clauses.empty()) {
         if (clauses[0]->clause_info().requires_repartition_) {
-            std::vector<Composite<ProcessingUnit>> repartitioned_procs = clauses[0]->repartition(std::move(procs)).value();
+            std::vector<Composite<ProcessingUnit>> repartitioned_procs = clauses[0]->repartition(store, std::move(procs)).value();
             // Erasing from front of vector not ideal, but they're just shared_ptr and there shouldn't be loads of clauses
             clauses.erase(clauses.begin());
             std::vector<folly::Future<Composite<ProcessingUnit>>> fut_procs;

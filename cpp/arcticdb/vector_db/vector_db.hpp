@@ -103,15 +103,19 @@ namespace arcticdb {
 
         TopKClause(std::vector<double> query_vector, uint8_t k);
 
-        [[nodiscard]] Composite<ProcessingSegment> process(
+        [[nodiscard]] Composite<ProcessingUnit> process(
                 std::shared_ptr<Store> store,
-                Composite<ProcessingSegment> &&p
+                Composite<ProcessingUnit> &&p
         ) const;
 
-        [[nodiscard]] std::optional<std::vector<Composite<ProcessingSegment>>> repartition(
-                ARCTICDB_UNUSED std::vector<Composite<ProcessingSegment>> &&) const {
-            return std::nullopt;
+        [[nodiscard]] std::vector<Composite<SliceAndKey>> structure_for_processing(
+                std::vector<SliceAndKey>& slice_and_keys, ARCTICDB_UNUSED size_t) const {
+            return structure_by_column_slice(slice_and_keys);
         }
+
+        std::optional<std::vector<Composite<ProcessingUnit>>> repartition(
+                const std::shared_ptr<Store>& store,
+                std::vector<Composite<ProcessingUnit>> &&c) const;
 
         [[nodiscard]] const ClauseInfo &clause_info() const {
             return clause_info_;

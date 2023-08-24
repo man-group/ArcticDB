@@ -553,6 +553,7 @@ Composite<ProcessingUnit> MergeClause::process(std::shared_ptr<Store> store,
 }
 
 std::optional<std::vector<Composite<ProcessingUnit>>> MergeClause::repartition(
+        ARCTICDB_UNUSED const std::shared_ptr<Store>&,
         std::vector<Composite<ProcessingUnit>> &&comps) const {
     std::vector<Composite<ProcessingUnit>> v;
     v.push_back(merge_composites_shallow(std::move(comps)));

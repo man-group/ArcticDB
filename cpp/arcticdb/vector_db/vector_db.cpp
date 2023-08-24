@@ -13,12 +13,63 @@ namespace arcticdb {
             query_vector_(std::move(query_vector)),
             k_(k) {
         clause_info_.modifies_output_descriptor_ = true;
+        clause_info_.requires_repartition_ = true;
         clause_info_.follows_original_columns_order_ = false;
         clause_info_.can_combine_with_column_selection_ = false;
     }
 
-    Composite<ProcessingSegment> TopKClause::process(std::shared_ptr<Store> store,
-                                                     Composite<ProcessingSegment> &&p) const {
+    std::optional<std::vector<Composite<ProcessingUnit>>> TopKClause::repartition(
+            const std::shared_ptr<Store> &store,
+            std::vector<Composite<ProcessingUnit>> &&c) const {
+        auto comps = std::move(c);
+        TopK top_k(k_);
+        for (auto &comp: comps) {
+            comp.broadcast([&store, &top_k](auto &proc) {
+                for (const auto &slice_and_key: proc.data()) {
+                    const std::vector<std::shared_ptr<Column>> &columns = slice_and_key.segment(store).columns();
+                    for (auto &&[idx, col]: folly::enumerate(columns)) {
+                        col->type().visit_tag(
+                                [&top_k, &col = col, &slice_and_key, &store, idx = idx](auto type_desc_tag) {
+                                    using TDT = decltype(type_desc_tag);
+                                    using raw_type = typename TDT::DataTypeTag::raw_type;
+
+                                    if constexpr (is_floating_point_type(TDT::DataTypeTag::data_type)) {
+                                        top_k.try_insert(
+                                                col->template scalar_at<raw_type>(col->last_row()).value(),
+                                                col,
+                                                slice_and_key.segment(store).field(idx).name()
+                                        );
+                                        // In each column, we store the distance from the query vector in the last row.
+                                        // So col->template scalar_at<raw_type>(col->last_row()).value() gets the
+                                        // distance.
+                                        //
+                                        // We have the top-k from each segment and we want the top-k in the entire
+                                        // symbol. We therefore run top-k over the top-k from each segment again to
+                                        // obtain the top-k overall.
+                                    } else {
+                                        internal::raise<ErrorCode::E_INVALID_ARGUMENT>(
+                                                "Vectors should exclusively comprise floats; the Python layer should otherwise raise an error and prevent upsertion of vectors containing non-float components."
+                                        );
+                                    }
+                                });
+                    }
+                }
+            });
+        }
+        SegmentInMemory seg;
+        seg.descriptor().set_index(IndexDescriptor(0, IndexDescriptor::ROWCOUNT));
+        seg.set_row_id(query_vector_.size() - 1 + 1);
+        for (const auto &column: top_k.top_k_) {
+            seg.add_column(scalar_field(DataType::FLOAT64, column.name_), column.column_);
+        }
+        std::vector<Composite<ProcessingUnit>> output;
+        output.emplace_back(ProcessingUnit{std::move(seg)});
+        return output;
+    }
+
+
+    Composite<ProcessingUnit> TopKClause::process(std::shared_ptr<Store> store,
+                                                  Composite<ProcessingUnit> &&p) const {
         auto procs = std::move(p);
         TopK top_k(k_);
         // We expect a vector in each column.
@@ -29,16 +80,17 @@ namespace arcticdb {
         // Let's pretend that only the lp-norms exist. We'll use p=2 for now as a default.
 
         procs.broadcast(
-                [&store, &top_k, lp, this](const ProcessingSegment &proc) {
-                    for (const auto& slice_and_key: proc.data()) {
-                        const std::vector<std::shared_ptr<Column>>& columns = slice_and_key.segment(store).columns();
-                        for (auto&& [idx, col]: folly::enumerate(columns)) {
+                [&store, &top_k, lp, this](const ProcessingUnit &proc) {
+                    for (const auto &slice_and_key: proc.data()) {
+                        const std::vector<std::shared_ptr<Column>> &columns = slice_and_key.segment(store).columns();
+                        for (auto &&[idx, col]: folly::enumerate(columns)) {
                             internal::check<ErrorCode::E_ASSERTION_FAILURE>(
                                     static_cast<long unsigned>(col->row_count()) == this->query_vector_.size(),
                                     "Expected vector of length {}, got vector of length {}.",
                                     col->row_count(),
                                     this->query_vector_.size());
-                            col->type().visit_tag([&top_k, &slice_and_key, &store, &col=col, idx=idx, lp, this](auto type_desc_tag) {
+                            col->type().visit_tag([&top_k, &slice_and_key, &store, &col = col, idx = idx, lp, this](
+                                    auto type_desc_tag) {
                                 using TypeDescriptorTag = decltype(type_desc_tag);
                                 using RawType = typename TypeDescriptorTag::DataTypeTag::raw_type;
 
@@ -61,11 +113,10 @@ namespace arcticdb {
                                             sum_differences_exponentiated,
                                             col,
                                             slice_and_key.segment(store).field(idx).name()));
-                                }
-                                else {
+                                } else {
                                     internal::raise<ErrorCode::E_INVALID_ARGUMENT>(
                                             "Vectors should exclusively comprise floats; the Python layer should otherwise raise an error and prevent upsertion of vectors containing non-float components."
-                                            );
+                                    );
                                 }
                             });
                         }
@@ -78,7 +129,7 @@ namespace arcticdb {
         seg.descriptor().set_index(IndexDescriptor(0, IndexDescriptor::ROWCOUNT));
         seg.set_row_id(query_vector_.size() - 1 + 1);
         // -1 because of zero-indexing, +1 because we want to add the distance on at the end.
-            for (const auto &column: top_k.top_k_) {
+        for (const auto &column: top_k.top_k_) {
             // todo: replace (mem)cpying of columns' contents with holding of pointers in top_k_ and addition of pointers to seg
             // this doesn't work presently because the columns can have >1 block.
             column.column_->type().visit_tag([&column, &seg, lp, this](auto type_desc_tag) {
@@ -86,7 +137,8 @@ namespace arcticdb {
                 using RawType = typename TypeDescriptorTag::DataTypeTag::raw_type;
 
                 if constexpr (is_floating_point_type(TypeDescriptorTag::DataTypeTag::data_type)) {
-                    auto write_col = std::make_shared<Column>(column.column_->type(), this->query_vector_.size() + 1, true, false);
+                    auto write_col = std::make_shared<Column>(column.column_->type(), this->query_vector_.size() + 1,
+                                                              true, false);
 
                     auto col_data = column.column_->data();
                     auto write_ptr = reinterpret_cast<RawType *>(write_col->ptr());
@@ -98,14 +150,13 @@ namespace arcticdb {
                     *write_ptr = RawType(pow(column.distance_, 1 / static_cast<double>(lp)));
                     write_col->set_row_data(this->query_vector_.size());
                     seg.add_column(scalar_field(DataType::FLOAT64, column.name_), write_col);
-                    }
-                else {
+                } else {
                     internal::raise<ErrorCode::E_INVALID_ARGUMENT>(
                             "Vectors should exclusively comprise floats; the Python layer should otherwise raise an error and prevent upsertion of vectors containing non-float components."
                     );
                 }
             });
         }
-        return Composite{ProcessingSegment{std::move(seg)}};
+        return Composite{ProcessingUnit{std::move(seg)}};
     }
 }

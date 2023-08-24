@@ -26,6 +26,7 @@ ARCTICDB_BUILD_CPP_TESTS = os.environ.get("ARCTICDB_BUILD_CPP_TESTS", "0")
 ARCTICDB_BUILD_CPP_TESTS = ARCTICDB_BUILD_CPP_TESTS != "0"
 print(f"ARCTICDB_BUILD_CPP_TESTS={ARCTICDB_BUILD_CPP_TESTS}")
 
+
 def _log_and_run(*cmd, **kwargs):
     print("Running " + " ".join(cmd))
     subprocess.check_call(cmd, **kwargs)

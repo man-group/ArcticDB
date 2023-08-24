@@ -79,8 +79,9 @@ struct IClause {
         }
 
         [[nodiscard]] std::optional<std::vector<Composite<ProcessingUnit>>> repartition(
+                [[maybe_unused]] const std::shared_ptr<Store>& store,
                 [[maybe_unused]] std::vector<Composite<ProcessingUnit>> &&comps) const {
-            return folly::poly_call<2>(*this, std::move(comps));
+            return folly::poly_call<2>(*this, store, std::move(comps));
         }
 
         [[nodiscard]] const ClauseInfo& clause_info() const { return folly::poly_call<3>(*this); };
@@ -120,7 +121,8 @@ struct PassthroughClause {
             ) const;
 
     [[nodiscard]] std::optional<std::vector<Composite<ProcessingUnit>>> repartition(
-            ARCTICDB_UNUSED std::vector<Composite<ProcessingUnit>> &&comps) const {
+            ARCTICDB_UNUSED const std::shared_ptr<Store>&,
+            ARCTICDB_UNUSED std::vector<Composite<ProcessingUnit>> &&) const {
         return std::nullopt;
     }
 
@@ -159,6 +161,7 @@ struct FilterClause {
             ) const;
 
     [[nodiscard]] std::optional<std::vector<Composite<ProcessingUnit>>> repartition(
+            ARCTICDB_UNUSED const std::shared_ptr<Store>&,
             ARCTICDB_UNUSED std::vector<Composite<ProcessingUnit>> &&) const {
         return std::nullopt;
     }
@@ -205,7 +208,8 @@ struct ProjectClause {
     process(std::shared_ptr<Store> store, Composite<ProcessingUnit> &&p) const;
 
     [[nodiscard]] std::optional<std::vector<Composite<ProcessingUnit>>> repartition(
-            ARCTICDB_UNUSED std::vector<Composite<ProcessingUnit>> &&comps) const {
+            ARCTICDB_UNUSED const std::shared_ptr<Store>&,
+            ARCTICDB_UNUSED std::vector<Composite<ProcessingUnit>> &&) const {
         return std::nullopt;
     }
 
@@ -255,6 +259,7 @@ struct PartitionClause {
     }
 
     [[nodiscard]] std::optional<std::vector<Composite<ProcessingUnit>>> repartition(
+            ARCTICDB_UNUSED const std::shared_ptr<Store>&,
             ARCTICDB_UNUSED std::vector<Composite<ProcessingUnit>> &&c) const {
         auto comps = std::move(c);
         std::unordered_map<size_t, Composite<ProcessingUnit>> partition_map;
@@ -330,8 +335,8 @@ struct AggregationClause {
                                                     Composite<ProcessingUnit> &&p) const;
 
     [[nodiscard]] std::optional<std::vector<Composite<ProcessingUnit>>> repartition(
-            ARCTICDB_UNUSED std::vector<Composite<ProcessingUnit>> &&comps
-            ) const {
+            ARCTICDB_UNUSED const std::shared_ptr<Store>&,
+            ARCTICDB_UNUSED std::vector<Composite<ProcessingUnit>> &&) const {
         return std::nullopt;
     }
 
@@ -364,6 +369,7 @@ struct RemoveColumnPartitioningClause {
                                                     Composite<ProcessingUnit> &&p) const;
 
     [[nodiscard]] std::optional<std::vector<Composite<ProcessingUnit>>> repartition(
+            ARCTICDB_UNUSED const std::shared_ptr<Store>&,
             ARCTICDB_UNUSED std::vector<Composite<ProcessingUnit>> &&) const {
         return std::nullopt;
     }
@@ -393,7 +399,8 @@ struct SplitClause {
                                                     Composite<ProcessingUnit> &&procs) const;
 
     [[nodiscard]] std::optional<std::vector<Composite<ProcessingUnit>>> repartition(
-            ARCTICDB_UNUSED std::vector<Composite<ProcessingUnit>> &&comps) const {
+            ARCTICDB_UNUSED const std::shared_ptr<Store>&,
+            ARCTICDB_UNUSED std::vector<Composite<ProcessingUnit>> &&) const {
         return std::nullopt;
     }
 
@@ -421,7 +428,8 @@ struct SortClause {
                                                     Composite<ProcessingUnit> &&p) const;
 
     [[nodiscard]] std::optional<std::vector<Composite<ProcessingUnit>>> repartition(
-            ARCTICDB_UNUSED std::vector<Composite<ProcessingUnit>> &&comps) const {
+            ARCTICDB_UNUSED const std::shared_ptr<Store>&,
+            ARCTICDB_UNUSED std::vector<Composite<ProcessingUnit>> &&) const {
         return std::nullopt;
     }
 
@@ -462,6 +470,7 @@ struct MergeClause {
                                                     Composite<ProcessingUnit> &&p) const;
 
     [[nodiscard]] std::optional<std::vector<Composite<ProcessingUnit>>> repartition(
+            const std::shared_ptr<Store>& store,
             std::vector<Composite<ProcessingUnit>> &&comps) const;
 
     [[nodiscard]] const ClauseInfo& clause_info() const {
@@ -496,6 +505,7 @@ struct ColumnStatsGenerationClause {
                                                     Composite<ProcessingUnit> &&p) const;
 
     [[nodiscard]] std::optional<std::vector<Composite<ProcessingUnit>>> repartition(
+            ARCTICDB_UNUSED const std::shared_ptr<Store>&,
             ARCTICDB_UNUSED std::vector<Composite<ProcessingUnit>> &&) const {
         return std::nullopt;
     }
@@ -542,6 +552,7 @@ struct RowRangeClause {
                                                     Composite<ProcessingUnit> &&p) const;
 
     [[nodiscard]] std::optional<std::vector<Composite<ProcessingUnit>>> repartition(
+            ARCTICDB_UNUSED const std::shared_ptr<Store>&,
             ARCTICDB_UNUSED std::vector<Composite<ProcessingUnit>> &&) const {
         return std::nullopt;
     }
@@ -578,6 +589,7 @@ struct DateRangeClause {
                                                     Composite<ProcessingUnit> &&p) const;
 
     [[nodiscard]] std::optional<std::vector<Composite<ProcessingUnit>>> repartition(
+            ARCTICDB_UNUSED const std::shared_ptr<Store>&,
             ARCTICDB_UNUSED std::vector<Composite<ProcessingUnit>> &&) const {
         return std::nullopt;
     }
