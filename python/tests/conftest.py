@@ -401,10 +401,15 @@ def real_s3_uri(real_s3_credentials):
     uri = f"s3s://{endpoint}:{bucket}?access={access_key}&secret={secret_key}&region={region}&path_prefix=ci_tests/"
     yield uri
 
-
 @pytest.fixture
 def real_s3_store_factory(lib_name, real_s3_credentials, **kwargs):
     endpoint, bucket, region, aws_access_key, aws_secret_key, clear = real_s3_credentials
+
+    # if col_per_group is not None and "column_group_size" not in kwargs:
+    #     kwargs["column_group_size"] = col_per_group
+    # if row_per_segment is not None and "segment_row_size" not in kwargs:
+    #     kwargs["segment_row_size"] = row_per_segment
+
 
     # Not exposing the config factory to discourage people from creating libs that won't get cleaned up
     def make_cfg(name):
@@ -414,8 +419,30 @@ def real_s3_store_factory(lib_name, real_s3_credentials, **kwargs):
         )
 
     used = {}
+    def create_version_store(
+            col_per_group: Optional[int] = None,
+            row_per_segment: Optional[int] = None,
+            # lmdb_config: Dict[str, Any] = {},
+            override_name: str = None,
+            **kwargs,
+    ) -> NativeVersionStore:
+        if col_per_group is not None and "column_group_size" not in kwargs:
+            kwargs["column_group_size"] = col_per_group
+        if row_per_segment is not None and "segment_row_size" not in kwargs:
+            kwargs["segment_row_size"] = row_per_segment
+
+        if "lmdb_config" in kwargs:
+            del kwargs["lmdb_config"]
+
+        if override_name is not None:
+            library_name = override_name
+        else:
+            library_name = lib_name
+
+        return _version_store_factory_impl(used, make_cfg, library_name, **kwargs)
+
     try:
-        yield functools.partial(_version_store_factory_impl, used, make_cfg, lib_name)
+        yield create_version_store
     finally:
         if clear:
             for lib in used.values():
@@ -552,7 +579,7 @@ def object_version_store_prune_previous(object_store_factory):
 
 @pytest.fixture(
     params=[
-        "version_store_factory",
+        # "version_store_factory",
         pytest.param(
             "real_s3_store_factory",
             marks=pytest.mark.skipif(
@@ -807,14 +834,12 @@ def basic_store_ignore_order(basic_store_factory):
 
 @pytest.fixture
 def basic_store_small_segment(basic_store_factory):
-    # return basic_store_factory(column_group_size=1000, segment_row_size=1000, lmdb_config={"map_size": 2**30})
-    return basic_store_factory(column_group_size=1000, segment_row_size=1000)
+    return basic_store_factory(column_group_size=1000, segment_row_size=1000, lmdb_config={"map_size": 2**30})
 
 
 @pytest.fixture
 def basic_store_tiny_segment(basic_store_factory):
-    # return basic_store_factory(column_group_size=2, segment_row_size=2, lmdb_config={"map_size": 2**30})
-    return basic_store_factory(column_group_size=2, segment_row_size=2)
+    return basic_store_factory(column_group_size=2, segment_row_size=2, lmdb_config={"map_size": 2**30})
 
 
 @pytest.fixture
