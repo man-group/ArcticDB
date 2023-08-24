@@ -16,7 +16,7 @@ try:
 except ImportError:
     # arcticdb squashes the packages
     from arcticdb._store import VersionedItem as PythonVersionedItem
-from arcticdb.vector_db.vector_db import VectorDB, new_vector_db
+from arcticdb.vector_db.vector_db import VectorDB, new_vector_db, _process_raw_top_k_result
 
 import pytest
 import pandas as pd
@@ -74,7 +74,7 @@ def test_top_k_simple(arctic_client):
     python_result.index = list(range(dimensions)) + ["similarity"]
 
     vector_db.upsert(f"df{dimensions}", df)
-    cpp_result = vector_db.top_k(f"df{dimensions}", qv, k)
+    cpp_result = vector_db._top_k(f"df{dimensions}", qv, k)
 
     assert_frame_equal(python_result, cpp_result)
 
@@ -223,6 +223,22 @@ def test_vector_db_upsertion(arctic_client):
     assert_frame_equal(vector_db.read("first_is_first"), vector_db.read("second_is_first"), check_like=True)
 
 
+def test_output_formatting():
+    raw_frame = pd.DataFrame({"A": [5, 6, 7], "B": [8, 9, 10]})
+    raw_frame.index = [0, 1, "similarity"]
+    correct_result_sans_vectors = [{"id": "A", "distance": 7}, {"id": "B", "distance": 10}]
+    assert correct_result_sans_vectors == _process_raw_top_k_result(raw_frame, False)
+    correct_result_with_vectors = [
+        {"id": "A", "distance": 7, "vector": pd.Series([5, 6], name="A").sort_index()},
+        {"id": "B", "distance": 10, "vector": pd.Series([8, 9], name="B").sort_index()},
+    ]
+    result_with_vectors = _process_raw_top_k_result(raw_frame, True)
+    for correct, actual in zip(correct_result_with_vectors, result_with_vectors):
+        assert correct["id"] == actual["id"]
+        assert correct["distance"] == actual["distance"]
+        assert_series_equal(correct["vector"], actual["vector"])
+
+
 @st.composite
 def dataframe_and_query_vector_and_k_and_repeats(draw):
     vectors = draw(st.integers(min_value=1, max_value=10))
@@ -303,5 +319,5 @@ def test_top_k(arctic_client, dataframe_and_query_vector_and_k_and_repeats):
                 python_result = df.iloc[:, indices].append(pd.DataFrame(top_k_distances).T)
                 python_result.index = list(range(dimensions)) + ["similarity"]
 
-                cpp_result = vector_db.top_k(f"df{dimensions}", qv, k)
+                cpp_result = vector_db._top_k(f"df{dimensions}", qv, k)
                 assert_frame_equal(python_result, cpp_result)
