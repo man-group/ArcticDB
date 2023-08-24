@@ -11,6 +11,7 @@ runs:
   using: "composite"
   steps:
     - name: Set real storage variables
+      shell: bash
       run: |
         # Common
         echo "ARCTICDB_PERSISTENT_STORAGE_TESTS=1" >> $GITHUB_ENV
