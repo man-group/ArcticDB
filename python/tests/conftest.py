@@ -154,13 +154,6 @@ def moto_s3_uri_incl_bucket(moto_s3_endpoint_and_credentials):
         "S3",
         "LMDB",
         pytest.param("Azure", marks=pytest.mark.skipif(not AZURE_SUPPORT, reason="Pending Azure Storge Conda support")),
-        # TODO: Add support for this as well
-        # pytest.param(
-        #     "Real_S3",
-        #     marks=pytest.mark.skipif(
-        #         not PERSISTENT_STORAGE_TESTS_ENABLED, reason="Can be used only when persistent storage is enabled"
-        #     ),
-        # ),
     ],
 )
 def arctic_client(request, moto_s3_uri_incl_bucket, tmpdir, encoding_version):
@@ -170,13 +163,10 @@ def arctic_client(request, moto_s3_uri_incl_bucket, tmpdir, encoding_version):
         ac = Arctic(request.getfixturevalue("azurite_azure_uri_incl_bucket"), encoding_version)
     elif request.param == "LMDB":
         ac = Arctic(f"lmdb://{tmpdir}", encoding_version)
-    elif request.param == "Real_S3":
-        ac = Arctic(request.getfixturevalue("real_s3_uri"), encoding_version)
     else:
         raise NotImplementedError()
 
-    if request.param != "Real_S3":
-        assert not ac.list_libraries()
+    assert not ac.list_libraries()
     yield ac
 
 
@@ -390,41 +380,45 @@ def real_s3_credentials():
     region = os.getenv("ARCTICDB_REAL_S3_REGION")
     access_key = os.getenv("ARCTICDB_REAL_S3_ACCESS_KEY")
     secret_key = os.getenv("ARCTICDB_REAL_S3_SECRET_KEY")
+    path_prefix = os.getenv("ARCTICDB_PERSISTENT_STORAGE_PATH_PREFIX")
     clear = True if str(os.getenv("ARCTICDB_REAL_S3_CLEAR")).lower() in ["true", "1"] else False
 
-    yield endpoint, bucket, region, access_key, secret_key, clear
+    yield endpoint, bucket, region, access_key, secret_key, path_prefix, clear
 
 
 @pytest.fixture(scope="function")
 def real_s3_uri(real_s3_credentials):
-    endpoint, bucket, region, access_key, secret_key, _ = real_s3_credentials
-    uri = f"s3s://{endpoint}:{bucket}?access={access_key}&secret={secret_key}&region={region}&path_prefix=ci_tests/"
+    endpoint, bucket, region, access_key, secret_key, path_prefix, _ = real_s3_credentials
+    uri = f"s3s://{endpoint}:{bucket}?access={access_key}&secret={secret_key}&region={region}&path_prefix={path_prefix}"
     yield uri
+
 
 @pytest.fixture
 def real_s3_store_factory(lib_name, real_s3_credentials, **kwargs):
-    endpoint, bucket, region, aws_access_key, aws_secret_key, clear = real_s3_credentials
-
-    # if col_per_group is not None and "column_group_size" not in kwargs:
-    #     kwargs["column_group_size"] = col_per_group
-    # if row_per_segment is not None and "segment_row_size" not in kwargs:
-    #     kwargs["segment_row_size"] = row_per_segment
-
+    endpoint, bucket, region, aws_access_key, aws_secret_key, path_prefix, clear = real_s3_credentials
 
     # Not exposing the config factory to discourage people from creating libs that won't get cleaned up
     def make_cfg(name):
         # with_prefix=False to allow reuse_name to work correctly
         return create_test_s3_cfg(
-            name, aws_access_key, aws_secret_key, bucket, endpoint, with_prefix=False, is_https=True, region=region
+            name,
+            aws_access_key,
+            aws_secret_key,
+            bucket,
+            endpoint,
+            with_prefix=path_prefix,
+            is_https=True,
+            region=region,
         )
 
     used = {}
+
     def create_version_store(
-            col_per_group: Optional[int] = None,
-            row_per_segment: Optional[int] = None,
-            # lmdb_config: Dict[str, Any] = {},
-            override_name: str = None,
-            **kwargs,
+        col_per_group: Optional[int] = None,
+        row_per_segment: Optional[int] = None,
+        # lmdb_config: Dict[str, Any] = {},
+        override_name: str = None,
+        **kwargs,
     ) -> NativeVersionStore:
         if col_per_group is not None and "column_group_size" not in kwargs:
             kwargs["column_group_size"] = col_per_group
@@ -555,27 +549,30 @@ def mongo_version_store(mongo_store_factory):
 )
 def object_store_factory(request):
     """
-        Designed to test all object stores and their simulations
-        Doesn't support LMDB
+    Designed to test all object stores and their simulations
+    Doesn't support LMDB
     """
     store_factory = request.getfixturevalue(request.param)
     return store_factory
 
+
 @pytest.fixture
 def object_version_store(object_store_factory):
     """
-        Designed to test all object stores and their simulations
-        Doesn't support LMDB
+    Designed to test all object stores and their simulations
+    Doesn't support LMDB
     """
     return object_store_factory()
+
 
 @pytest.fixture
 def object_version_store_prune_previous(object_store_factory):
     """
-        Designed to test all object stores and their simulations
-        Doesn't support LMDB
+    Designed to test all object stores and their simulations
+    Doesn't support LMDB
     """
     return object_store_factory(prune_previous_version=True)
+
 
 @pytest.fixture(
     params=[
@@ -591,21 +588,23 @@ def object_version_store_prune_previous(object_store_factory):
 )
 def basic_store_factory(request):
     """
-        Designed to test the bare minimum of stores
-         - LMDB for local storage
-         - AWS S3 for persistent storage, if enabled
+    Designed to test the bare minimum of stores
+     - LMDB for local storage
+     - AWS S3 for persistent storage, if enabled
     """
     store_factory = request.getfixturevalue(request.param)
     return store_factory
 
+
 @pytest.fixture
 def basic_store(basic_store_factory):
     """
-        Designed to test the bare minimum of stores
-         - LMDB for local storage
-         - AWS S3 for persistent storage, if enabled
+    Designed to test the bare minimum of stores
+     - LMDB for local storage
+     - AWS S3 for persistent storage, if enabled
     """
     return basic_store_factory()
+
 
 @pytest.fixture
 def azure_version_store(azure_store_factory):
@@ -638,7 +637,7 @@ def lmdb_version_store(lmdb_version_store_v1, lmdb_version_store_v2, encoding_ve
         return lmdb_version_store_v2
     else:
         raise ValueError(f"Unexpected encoding version: {encoding_version}")
-        
+
 
 # TODO: Remove these
 @pytest.fixture
@@ -693,6 +692,7 @@ def lmdb_version_store_delayed_deletes_v2(version_store_factory, lib_name):
         dynamic_strings=True, delayed_deletes=True, encoding_version=int(EncodingVersion.V2), override_name=library_name
     )
 
+
 @pytest.fixture
 def lmdb_version_store_tombstones_no_symbol_list(version_store_factory):
     return version_store_factory(use_tombstones=True, dynamic_schema=True, symbol_list=False, dynamic_strings=True)
@@ -742,7 +742,9 @@ def lmdb_version_store_tiny_segment(version_store_factory):
 def lmdb_version_store_tiny_segment_dynamic(version_store_factory):
     return version_store_factory(column_group_size=2, segment_row_size=2, dynamic_schema=True)
 
+
 ## TODO: Remove these
+
 
 @pytest.fixture
 def basic_store_prune_previous(basic_store_factory):
@@ -750,7 +752,7 @@ def basic_store_prune_previous(basic_store_factory):
 
 
 @pytest.fixture
-def basic_store_big_map(basic_store_factory):
+def basic_store_large_data(basic_store_factory):
     return basic_store_factory(lmdb_config={"map_size": 2**30})
 
 
@@ -773,9 +775,7 @@ def basic_store_dynamic_schema_v2(basic_store_factory, lib_name):
 
 
 @pytest.fixture
-def basic_store_dynamic_schema(
-    basic_store_dynamic_schema_v1, basic_store_dynamic_schema_v2, encoding_version
-):
+def basic_store_dynamic_schema(basic_store_dynamic_schema_v1, basic_store_dynamic_schema_v2, encoding_version):
     if encoding_version == EncodingVersion.V1:
         return basic_store_dynamic_schema_v1
     elif encoding_version == EncodingVersion.V2:
@@ -985,6 +985,6 @@ def object_storage_uri_incl_bucket(request):
 )
 def object_and_lmdb_version_store(request):
     """
-        Designed to test all supported stores
+    Designed to test all supported stores
     """
     yield request.getfixturevalue(request.param)

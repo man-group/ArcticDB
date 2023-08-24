@@ -35,14 +35,15 @@ def real_s3_credentials():
     region = os.getenv("ARCTICDB_REAL_S3_REGION")
     access_key = os.getenv("ARCTICDB_REAL_S3_ACCESS_KEY")
     secret_key = os.getenv("ARCTICDB_REAL_S3_SECRET_KEY")
+    path_prefix = os.getenv("ARCTICDB_PERSISTENT_STORAGE_PATH_PREFIX")
     clear = True if str(os.getenv("ARCTICDB_REAL_S3_CLEAR")).lower() in ["true", "1"] else False
 
     return endpoint, bucket, region, access_key, secret_key, clear
 
 
 def get_real_s3_uri():
-    endpoint, bucket, region, access_key, secret_key, clear = real_s3_credentials()
-    uri = f"s3s://{endpoint}:{bucket}?access={access_key}&secret={secret_key}&region={region}&path_prefix=ci_tests/"
+    endpoint, bucket, region, access_key, secret_key, path_prefix, _ = real_s3_credentials()
+    uri = f"s3s://{endpoint}:{bucket}?access={access_key}&secret={secret_key}&region={region}&path_prefix={path_prefix}"
     return uri
 
 

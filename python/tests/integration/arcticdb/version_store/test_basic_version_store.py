@@ -50,6 +50,7 @@ from arcticdb.util.test import (
 from arcticdb_ext.tools import AZURE_SUPPORT
 from tests.util.date import DateRange
 
+
 @pytest.fixture()
 def symbol():
     return "sym" + str(random.randint(0, 10000))
@@ -88,7 +89,8 @@ def test_special_chars(object_version_store, special_char):
 
 @pytest.mark.parametrize("breaking_char", [chr(0), "\0", "&", "*", "<", ">"])
 def test_s3_breaking_chars(object_version_store, breaking_char):
-    """Test that chars that are not supported are raising the appropriate exception and that we fail on write without corrupting the db"""
+    """Test that chars that are not supported are raising the appropriate exception and that we fail on write without corrupting the db
+    """
     sym = f"prefix{breaking_char}postfix"
     df = sample_dataframe()
     with pytest.raises(ArcticNativeNotYetImplemented):
@@ -278,7 +280,8 @@ def test_prune_previous_versions_multiple_times(basic_store, symbol):
 
 
 def test_prune_previous_versions_write_batch(basic_store):
-    """Verify that the batch write method correctly prunes previous versions when the corresponding option is specified."""
+    """Verify that the batch write method correctly prunes previous versions when the corresponding option is specified.
+    """
     # Given
     lib = basic_store
     lib_tool = lib.library_tool()
@@ -308,7 +311,8 @@ def test_prune_previous_versions_write_batch(basic_store):
 
 
 def test_prune_previous_versions_batch_write_metadata(basic_store):
-    """Verify that the batch write metadata method correctly prunes previous versions when the corresponding option is specified."""
+    """Verify that the batch write metadata method correctly prunes previous versions when the corresponding option is specified.
+    """
     # Given
     lib = basic_store
     lib_tool = lib.library_tool()
@@ -338,7 +342,8 @@ def test_prune_previous_versions_batch_write_metadata(basic_store):
 
 
 def test_prune_previous_versions_append_batch(basic_store):
-    """Verify that the batch append method correctly prunes previous versions when the corresponding option is specified."""
+    """Verify that the batch append method correctly prunes previous versions when the corresponding option is specified.
+    """
     # Given
     lib = basic_store
     lib_tool = lib.library_tool()
@@ -397,6 +402,7 @@ def test_negative_cases(basic_store, symbol):
         basic_store.delete_snapshot("does_not_exist")
     basic_store.write(symbol, df)
     basic_store.delete(symbol)
+
 
 # TODO: Do we really need to call this with these exact params?
 # @pytest.mark.parametrize(
@@ -1046,9 +1052,7 @@ def test_dynamic_strings_with_all_nones_update(basic_store):
     assert data.data["col_1"][pd.Timestamp("2022-01-02")] == "b"
 
     basic_store.write("strings", df, dynamic_strings=True)
-    basic_store.update(
-        "strings", update_df, dynamic_strings=True, coerce_columns={"col_1": object, "col_2": "float"}
-    )
+    basic_store.update("strings", update_df, dynamic_strings=True, coerce_columns={"col_1": object, "col_2": "float"})
 
     data = basic_store.read("strings")
     assert math.isnan(data.data["col_1"][pd.Timestamp("2022-01-01")])

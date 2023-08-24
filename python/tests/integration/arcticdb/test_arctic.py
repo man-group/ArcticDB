@@ -69,8 +69,7 @@ except ImportError:
 
 def test_library_creation_deletion(arctic_client):
     ac = arctic_client
-    # assert ac.list_libraries() == []
-    ac.delete_library("pytest_test_lib")
+    assert ac.list_libraries() == []
     ac.create_library("pytest_test_lib")
     with pytest.raises(ValueError):
         ac.create_library("pytest_test_lib")
@@ -83,7 +82,7 @@ def test_library_creation_deletion(arctic_client):
     # Want this to be silent.
     ac.delete_library("library_that_does_not_exist")
 
-    # assert not ac.list_libraries()
+    assert not ac.list_libraries()
     with pytest.raises(LibraryNotFound):
         _lib = ac["pytest_test_lib"]
     assert not ac.has_library("pytest_test_lib")
@@ -91,18 +90,13 @@ def test_library_creation_deletion(arctic_client):
 
 def test_get_library(arctic_client):
     ac = arctic_client
-    # assert ac.list_libraries() == []
-    ac.delete_library("pytest_test_lib")
-    ac.delete_library("pytest_test_lib_default_options")
-    ac.delete_library("pytest_test_lib_specified_options")
+    assert ac.list_libraries() == []
     # Throws if library doesn't exist
     with pytest.raises(LibraryNotFound):
         _ = ac.get_library("pytest_test_lib")
     # Creates library with default options if just create_if_missing set to True
     lib = ac.get_library("pytest_test_lib_default_options", create_if_missing=True)
-    # TODO: Looks into this
-    # LibraryOptions(dynamic_schema=False, dedup=False, rows_per_segment=100000, columns_per_segment=127, encoding_version=0)
-    # LibraryOptions(dynamic_schema=False, dedup=False, rows_per_segment=100000, columns_per_segment=127, encoding_version=1)
+
     assert lib.options() == LibraryOptions(encoding_version=ac._encoding_version)
     # Creates library with the specified options if create_if_missing set to True and options provided
     library_options = LibraryOptions(
@@ -171,8 +165,7 @@ def test_uri_override(moto_s3_uri_incl_bucket):
 
 def test_library_options(arctic_client):
     ac = arctic_client
-    # assert ac.list_libraries() == []
-    ac.delete_library("pytest_default_options")
+    assert ac.list_libraries() == []
     ac.create_library("pytest_default_options")
     lib = ac["pytest_default_options"]
     assert lib.options() == LibraryOptions(encoding_version=ac._encoding_version)
@@ -205,10 +198,8 @@ def test_library_options(arctic_client):
 def test_separation_between_libraries(object_storage_uri_incl_bucket):
     """Validate that symbols in one library are not exposed in another."""
     ac = Arctic(object_storage_uri_incl_bucket)
-    # assert ac.list_libraries() == []
+    assert ac.list_libraries() == []
 
-    ac.delete_library("pytest_test_lib")
-    ac.delete_library("pytest_test_lib_2")
     ac.create_library("pytest_test_lib")
     ac.create_library("pytest_test_lib_2")
 
@@ -282,9 +273,8 @@ def test_library_management_path_prefix(connection_string, client, request):
 
     URI = f"{connection_string}{get_path_prefix_option(connection_string)}=hello/world"
     ac = Arctic(URI)
-    # assert ac.list_libraries() == []
+    assert ac.list_libraries() == []
 
-    ac.delete_library("pytest_test_lib")
     ac.create_library("pytest_test_lib")
 
     ac["pytest_test_lib"].write("test_1", pd.DataFrame())
@@ -972,8 +962,7 @@ def test_tail(arctic_library):
 @pytest.mark.parametrize("dedup", [True, False])
 def test_dedup(object_storage_uri_incl_bucket, dedup):
     ac = Arctic(object_storage_uri_incl_bucket)
-    # assert ac.list_libraries() == []
-    ac.delete_library("pytest_test_library")
+    assert ac.list_libraries() == []
     ac.create_library("pytest_test_library", LibraryOptions(dedup=dedup))
     lib = ac["pytest_test_library"]
     symbol = "test_dedup"
@@ -985,8 +974,7 @@ def test_dedup(object_storage_uri_incl_bucket, dedup):
 
 def test_segment_slicing(object_storage_uri_incl_bucket):
     ac = Arctic(object_storage_uri_incl_bucket)
-    # assert ac.list_libraries() == []
-    ac.delete_library("pytest_test_library")
+    assert ac.list_libraries() == []
     rows_per_segment = 5
     columns_per_segment = 2
     ac.create_library(
@@ -1040,11 +1028,10 @@ def test_reload_symbol_list(connection_string, client, request):
         test_bucket = list(client.list_containers())
 
     ac = Arctic(connection_string)
-    # assert ac.list_libraries() == []
+    assert ac.list_libraries() == []
 
     lib_name = "pytest_test_lib"
 
-    ac.delete_library(lib_name)
     ac.create_library(lib_name)
     lib = ac[lib_name]
 

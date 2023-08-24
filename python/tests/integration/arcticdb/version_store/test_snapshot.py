@@ -238,6 +238,7 @@ def test_pruned_symbol_in_symbol_read_version(basic_store_tombstone_and_pruning)
     assert lib.read("a", as_of=0).data == 1  # Should be in snapshot
     assert lib.read("a", as_of="snap").data == 1
 
+
 # TODO: Fix this with lazy-fixture
 @pytest.mark.parametrize(
     "store", ["lmdb_version_store_v1", "lmdb_version_store_v2", "lmdb_version_store_tombstone_and_pruning"]

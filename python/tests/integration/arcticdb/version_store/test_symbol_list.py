@@ -76,9 +76,7 @@ def test_with_symbol_list(basic_store):
 
 
 def test_symbol_list_with_rec_norm(basic_store):
-    basic_store.write(
-        "rec_norm", data={"a": np.arange(5), "b": np.arange(8), "c": None}, recursive_normalizers=True
-    )
+    basic_store.write("rec_norm", data={"a": np.arange(5), "b": np.arange(8), "c": None}, recursive_normalizers=True)
     assert not basic_store.is_symbol_pickled("rec_norm")
     assert basic_store.list_symbols() == ["rec_norm"]
 
@@ -198,7 +196,7 @@ def test_only_latest_compaction_key_is_used(basic_store):
 
 
 @pytest.mark.parametrize("write_another", [False, True])
-# TODO: look into why this doesn't work with azure 
+# TODO: look into why this doesn't work with azure
 # def test_turning_on_symbol_list_after_a_symbol_written(object_store_factory, write_another):
 def test_turning_on_symbol_list_after_a_symbol_written(s3_store_factory, write_another):
     # The if(!maybe_last_compaction) case

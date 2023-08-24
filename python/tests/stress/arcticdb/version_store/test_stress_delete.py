@@ -24,6 +24,7 @@ def check_no_keys(library):
     for key_type in all_keys_types:
         assert len(lib_tool.find_keys(key_type)) == 0
 
+
 def test_stress_delete(object_store_factory, request):
     store_factory = object_store_factory
     lib1 = store_factory(name=f"delete_me_{datetime.utcnow().isoformat()}")

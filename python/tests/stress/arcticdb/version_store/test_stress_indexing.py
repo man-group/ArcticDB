@@ -37,9 +37,9 @@ def append_to_arctic(df, symbol, version_store, count):
     return vit
 
 
-def test_stress_indexing(basic_store_big_map):
+def test_stress_indexing(basic_store_large_data):
     symbol = "symbol"
 
     for x in range(1000):
         df = generate_data(2, 11)
-        append_to_arctic(df, symbol, basic_store_big_map, x)
+        append_to_arctic(df, symbol, basic_store_large_data, x)

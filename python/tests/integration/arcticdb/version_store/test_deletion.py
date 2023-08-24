@@ -19,6 +19,7 @@ from arcticdb_ext.tools import AZURE_SUPPORT
 
 from tests.conftest import PERSISTENT_STORAGE_TESTS_ENABLED
 
+
 def eprint(*args, **kwargs):
     print(*args, file=sys.stderr, **kwargs)
 
