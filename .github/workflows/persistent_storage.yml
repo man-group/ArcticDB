@@ -54,18 +54,11 @@ jobs:
         run: |
           pip install arcticdb
 
-      - name: Set real storage variables
-        run: |
-          # General
-          echo "ARCTICDB_PERSISTENT_STORAGE_TESTS=1" >> $GITHUB_ENV
-          echo "ARCTICDB_PERSISTENT_STORAGE_BRANCH_NAME=${{ github.run_id }}" >> $GITHUB_ENV
-          # S3 Specific
-          echo "ARCTICDB_REAL_S3_BUCKET=${{ inputs.bucket }}" >> $GITHUB_ENV
-          echo "ARCTICDB_REAL_S3_ENDPOINT=${{ inputs.endpoint }}" >> $GITHUB_ENV
-          echo "ARCTICDB_REAL_S3_REGION=${{ inputs.region }}" >> $GITHUB_ENV
-          echo "ARCTICDB_REAL_S3_CLEAR=${{ inputs.clear }}" >> $GITHUB_ENV
-          echo "ARCTICDB_REAL_S3_ACCESS_KEY=${{ secrets.AWS_S3_ACCESS_KEY }}" >> $GITHUB_ENV
-          echo "ARCTICDB_REAL_S3_SECRET_KEY=${{ secrets.AWS_S3_SECRET_KEY }}" >> $GITHUB_ENV
+      - name: composite
+        uses: ./.github/actions/set_persistent_storage_env_vars
+        with:
+          aws_access_key: "${{ secrets.AWS_S3_ACCESS_KEY }}"
+          aws_secret_key: "${{ secrets.AWS_S3_SECRET_KEY }}"
         
       - name: Seed the storage
         if: inputs.job_type == 'seed'
@@ -97,18 +90,11 @@ jobs:
         run: |
           pip install arcticdb
 
-      - name: Set real storage variables
-        run: |
-          # General
-          echo "ARCTICDB_PERSISTENT_STORAGE_TESTS=1" >> $GITHUB_ENV
-          echo "ARCTICDB_PERSISTENT_STORAGE_BRANCH_NAME=${{ github.run_id }}" >> $GITHUB_ENV
-          # S3 Specific
-          echo "ARCTICDB_REAL_S3_BUCKET=${{ inputs.bucket }}" >> $GITHUB_ENV
-          echo "ARCTICDB_REAL_S3_ENDPOINT=${{ inputs.endpoint }}" >> $GITHUB_ENV
-          echo "ARCTICDB_REAL_S3_REGION=${{ inputs.region }}" >> $GITHUB_ENV
-          echo "ARCTICDB_REAL_S3_CLEAR=${{ inputs.clear }}" >> $GITHUB_ENV
-          echo "ARCTICDB_REAL_S3_ACCESS_KEY=${{ secrets.AWS_S3_ACCESS_KEY }}" >> $GITHUB_ENV
-          echo "ARCTICDB_REAL_S3_SECRET_KEY=${{ secrets.AWS_S3_SECRET_KEY }}" >> $GITHUB_ENV
+      - name: composite
+        uses: ./.github/actions/set_persistent_storage_env_vars
+        with:
+          aws_access_key: "${{ secrets.AWS_S3_ACCESS_KEY }}"
+          aws_secret_key: "${{ secrets.AWS_S3_SECRET_KEY }}"
       
       - name: Clean the storage
         run: |

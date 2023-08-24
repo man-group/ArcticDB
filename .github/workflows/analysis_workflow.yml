@@ -183,19 +183,25 @@ jobs:
           make -j ${{ steps.cpu-cores.outputs.count }} test_unit_arcticdb
           ctest
 
-      - name: Set real storage variables
-        run: |
-          # Common
-          echo "ARCTICDB_PERSISTENT_STORAGE_TESTS=1" >> $GITHUB_ENV
-          echo "ARCTICDB_PERSISTENT_STORAGE_BRANCH_NAME=${{ github.run_id }}" >> $GITHUB_ENV
-          # S3 Specific
-          # TODO: Add these as GitHub variables
-          echo "ARCTICDB_REAL_S3_BUCKET=arcticdb-ci-test-bucket-01" >> $GITHUB_ENV
-          echo "ARCTICDB_REAL_S3_ENDPOINT=s3.eu-west-2.amazonaws.com" >> $GITHUB_ENV
-          echo "ARCTICDB_REAL_S3_REGION=eu-west-2" >> $GITHUB_ENV
-          echo "ARCTICDB_REAL_S3_CLEAR=1" >> $GITHUB_ENV
-          echo "ARCTICDB_REAL_S3_ACCESS_KEY=${{ secrets.AWS_S3_ACCESS_KEY }}" >> $GITHUB_ENV
-          echo "ARCTICDB_REAL_S3_SECRET_KEY=${{ secrets.AWS_S3_SECRET_KEY }}" >> $GITHUB_ENV
+      # - name: Set real storage variables
+      #   run: |
+      #     # Common
+      #     echo "ARCTICDB_PERSISTENT_STORAGE_TESTS=1" >> $GITHUB_ENV
+      #     echo "ARCTICDB_PERSISTENT_STORAGE_BRANCH_NAME=${{ github.run_id }}" >> $GITHUB_ENV
+      #     # S3 Specific
+      #     # TODO: Add these as GitHub variables
+      #     echo "ARCTICDB_REAL_S3_BUCKET=arcticdb-ci-test-bucket-01" >> $GITHUB_ENV
+      #     echo "ARCTICDB_REAL_S3_ENDPOINT=s3.eu-west-2.amazonaws.com" >> $GITHUB_ENV
+      #     echo "ARCTICDB_REAL_S3_REGION=eu-west-2" >> $GITHUB_ENV
+      #     echo "ARCTICDB_REAL_S3_CLEAR=1" >> $GITHUB_ENV
+      #     echo "ARCTICDB_REAL_S3_ACCESS_KEY=${{ secrets.AWS_S3_ACCESS_KEY }}" >> $GITHUB_ENV
+      #     echo "ARCTICDB_REAL_S3_SECRET_KEY=${{ secrets.AWS_S3_SECRET_KEY }}" >> $GITHUB_ENV
+      - name: composite
+        uses: ./.github/actions/set_persistent_storage_env_vars
+        with:
+          aws_access_key: "${{ secrets.AWS_S3_ACCESS_KEY }}"
+          aws_secret_key: "${{ secrets.AWS_S3_SECRET_KEY }}"
+
 
       - name: Test with pytest
         shell: bash -l {0}
