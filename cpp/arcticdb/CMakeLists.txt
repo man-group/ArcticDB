@@ -689,7 +689,8 @@ endif()
 ## Unit Tests ##
 if(${TEST})
     unset(Python_USE_STATIC_LIBS)
-    find_package(Python 3 COMPONENTS Interpreter Development REQUIRED)
+    # find_package(Python 3 COMPONENTS Interpreter Development REQUIRED)
+    find_package(Python 3 COMPONENTS Interpreter REQUIRED)
     find_package(Arrow REQUIRED)
     python_utils_dump_vars_if_enabled("Python for test compilation")
 
