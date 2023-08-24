@@ -113,46 +113,9 @@ namespace arcticdb {
             return structure_by_column_slice(slice_and_keys);
         }
 
-        [[nodiscard]] std::optional<std::vector<Composite<ProcessingUnit>>> repartition(
-                std::vector<Composite<ProcessingUnit>> &&c,
-                const std::shared_ptr<Store>& store) const {
-            auto comps = std::move(c);
-            TopK top_k(k_);
-            for (auto &comp : comps) {
-                comp.broadcast([&store, &top_k](auto &proc) {
-                    for (const auto& slice_and_key: proc.data()) {
-                        const std::vector<std::shared_ptr<Column>>& columns = slice_and_key.segment(store).columns();
-                        for (auto&& [idx, col]: folly::enumerate(columns)) {
-                            col->type().visit_tag([&top_k, &col=col, &slice_and_key, &store, idx=idx](auto type_desc_tag) {
-                                using TDT = decltype(type_desc_tag);
-                                using raw_type = typename TDT::DataTypeTag::raw_type;
-
-                                if constexpr (is_floating_point_type(TDT::DataTypeTag::data_type)) {
-                                    top_k.try_insert(
-                                            col->template scalar_at<raw_type>(col->last_row()).value(),
-                                            col,
-                                            slice_and_key.segment(store).field(idx).name()
-                                    );
-                                } else {
-                                    internal::raise<ErrorCode::E_INVALID_ARGUMENT>(
-                                            "Vectors should exclusively comprise floats; the Python layer should otherwise raise an error and prevent upsertion of vectors containing non-float components."
-                                    );
-                                }
-                            });
-                        }
-                    }
-                });
-            }
-            SegmentInMemory seg;
-            seg.descriptor().set_index(IndexDescriptor(0, IndexDescriptor::ROWCOUNT));
-            seg.set_row_id(query_vector_.size() - 1 + 1);
-            for (const auto &column: top_k.top_k_) {
-                seg.add_column(scalar_field(DataType::FLOAT64, column.name_), column.column_);
-            }
-            std::vector<Composite<ProcessingUnit>> output;
-            output.emplace_back(ProcessingUnit{std::move(seg)});
-            return output;
-        }
+        std::optional<std::vector<Composite<ProcessingUnit>>> repartition(
+                const std::shared_ptr<Store>& store,
+                std::vector<Composite<ProcessingUnit>> &&c) const;
 
         [[nodiscard]] const ClauseInfo &clause_info() const {
             return clause_info_;
