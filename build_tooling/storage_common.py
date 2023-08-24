@@ -38,7 +38,7 @@ def real_s3_credentials():
     path_prefix = os.getenv("ARCTICDB_PERSISTENT_STORAGE_PATH_PREFIX")
     clear = True if str(os.getenv("ARCTICDB_REAL_S3_CLEAR")).lower() in ["true", "1"] else False
 
-    return endpoint, bucket, region, access_key, secret_key, clear
+    return endpoint, bucket, region, access_key, secret_key, path_prefix, clear
 
 
 def get_real_s3_uri():
