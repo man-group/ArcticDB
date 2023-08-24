@@ -1760,8 +1760,8 @@ def test_dynamic_schema_similar_index_column_dataframe_multiple_col(basic_store_
     assert_frame_equal(returned, date_series)
 
 
-def test_restore_version(basic_store_factory):
-    lmdb_version_store = basic_store_factory(col_per_group=2, row_per_segment=2)
+def test_restore_version(basic_store_tiny_segment):
+    lmdb_version_store = basic_store_tiny_segment
     # Triggers bug https://github.com/man-group/ArcticDB/issues/469 by freezing time
     lmdb_version_store.version_store = ManualClockVersionStore(lmdb_version_store._library)
     symbol = "test_restore_version"

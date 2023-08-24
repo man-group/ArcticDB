@@ -782,7 +782,7 @@ def basic_store_allows_pickling(basic_store_factory, lib_name):
 
 @pytest.fixture
 def basic_store_no_symbol_list(basic_store_factory):
-    return basic_store_factory(col_per_group=None, row_per_segment=None, symbol_list=False)
+    return basic_store_factory(column_group_size=None, segment_row_size=None, symbol_list=False)
 
 
 @pytest.fixture
@@ -807,12 +807,14 @@ def basic_store_ignore_order(basic_store_factory):
 
 @pytest.fixture
 def basic_store_small_segment(basic_store_factory):
-    return basic_store_factory(column_group_size=1000, segment_row_size=1000, lmdb_config={"map_size": 2**30})
+    # return basic_store_factory(column_group_size=1000, segment_row_size=1000, lmdb_config={"map_size": 2**30})
+    return basic_store_factory(column_group_size=1000, segment_row_size=1000)
 
 
 @pytest.fixture
 def basic_store_tiny_segment(basic_store_factory):
-    return basic_store_factory(column_group_size=2, segment_row_size=2, lmdb_config={"map_size": 2**30})
+    # return basic_store_factory(column_group_size=2, segment_row_size=2, lmdb_config={"map_size": 2**30})
+    return basic_store_factory(column_group_size=2, segment_row_size=2)
 
 
 @pytest.fixture
