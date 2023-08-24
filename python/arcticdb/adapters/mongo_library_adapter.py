@@ -48,7 +48,9 @@ class MongoLibraryAdapter(ArcticLibraryAdapter):
 
         add_mongo_library_to_env(cfg=env_cfg, lib_name=self.CONFIG_LIBRARY_NAME, env_name=_DEFAULT_ENV, uri=self._uri)
 
-        lib = NativeVersionStore.create_store_from_config(env_cfg, _DEFAULT_ENV, self.CONFIG_LIBRARY_NAME, encoding_version=self._encoding_version)
+        lib = NativeVersionStore.create_store_from_config(
+            env_cfg, _DEFAULT_ENV, self.CONFIG_LIBRARY_NAME, encoding_version=self._encoding_version
+        )
 
         return lib._library
 
@@ -61,6 +63,8 @@ class MongoLibraryAdapter(ArcticLibraryAdapter):
         )
         set_library_options(env_cfg.env_by_id[_DEFAULT_ENV].lib_by_path[name], library_options)
 
-        lib = NativeVersionStore.create_store_from_config(env_cfg, _DEFAULT_ENV, name, encoding_version=library_options.encoding_version)
+        lib = NativeVersionStore.create_store_from_config(
+            env_cfg, _DEFAULT_ENV, name, encoding_version=library_options.encoding_version
+        )
 
         return lib
