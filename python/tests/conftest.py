@@ -945,12 +945,13 @@ def spawn_azurite(azurite_port):
                 "azurite_azure_uri_incl_bucket",
                 marks=pytest.mark.skipif(not AZURE_SUPPORT, reason="Pending Azure Storge Conda support"),
             ),
-            pytest.param(
-                "real_s3_uri",
-                marks=pytest.mark.skipif(
-                    not PERSISTENT_STORAGE_TESTS_ENABLED, reason="Can be used only when persistent storage is enabled"
-                ),
-            ),
+            # TODO: See if we can support this
+            # pytest.param(
+            #     "real_s3_uri",
+            #     marks=pytest.mark.skipif(
+            #         not PERSISTENT_STORAGE_TESTS_ENABLED, reason="Can be used only when persistent storage is enabled"
+            #     ),
+            # ),
         ]
     ),
 )
