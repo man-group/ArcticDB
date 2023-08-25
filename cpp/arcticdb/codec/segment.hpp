@@ -32,7 +32,7 @@ enum class EncodingVersion : uint16_t {
 
 static constexpr uint16_t HEADER_VERSION_V1 = 1;
 
-inline EncodingVersion encoding_version(const storage::LibraryDescriptor::VariantStoreConfig cfg) {
+inline EncodingVersion encoding_version(const storage::LibraryDescriptor::VariantStoreConfig& cfg) {
     return util::variant_match(cfg,
                                [](const arcticdb::proto::storage::VersionStoreConfig &version_config) {
                                    return EncodingVersion(version_config.encoding_version());
@@ -112,7 +112,7 @@ class Segment {
                             [&b](const std::shared_ptr<Buffer>& buf) { buf->copy_to(*b); }
                             );
         buffer_ = std::move(b);
-        fields_ = std::move(that.fields_);
+        fields_ = that.fields_;
         return *this;
     }
 

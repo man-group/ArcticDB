@@ -22,7 +22,7 @@ struct FrameSliceMap {
     robin_hood::unordered_flat_map<std::string_view, std::map<RowRange, ContextData>> columns_;
     std::shared_ptr<PipelineContext> context_;
 
-    FrameSliceMap(const std::shared_ptr<PipelineContext>& context, bool dynamic_schema) :
+    FrameSliceMap(std::shared_ptr<PipelineContext> context, bool dynamic_schema) :
         context_(std::move(context)) {
 
         for (const auto &context_row: *context_) {

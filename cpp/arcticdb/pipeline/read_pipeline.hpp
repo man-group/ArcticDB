@@ -43,8 +43,7 @@ std::optional<CombinedQuery<ContainerType>> combine_filter_functions(std::vector
 
     return [&](const ContainerType &container) mutable {
         auto filter = filters.begin();
-        std::unique_ptr<util::BitSet> orig;
-        auto bitset = (*filter)(container, std::move(orig));
+        auto bitset = (*filter)(container, std::unique_ptr<util::BitSet>{});
         for(++filter; filter!=filters.end(); ++filter) {
             bitset = (*filter)(container, std::move(bitset));
         }
@@ -58,7 +57,7 @@ inline SliceAndKey get_row(const index::IndexSegmentReader& isr, size_t row) {
 
 template<class C>
 void foreach_active_bit(const util::BitSet &bs, C &&visitor) {
-    for (auto r = bs.first(); r != bs.end(); r++) {
+    for (auto r = bs.first(); r != bs.end(); ++r) {
         visitor(*r);
     }
 }
@@ -73,12 +72,12 @@ std::vector<SliceAndKey> filter_index(const ContainerType &container, std::optio
             ARCTICDB_DEBUG(log::version(), "Row bitset has {} bits set of {}", row_bitset->count(), row_bitset->size());
             output.reserve(row_bitset->count());
             foreach_active_bit(*row_bitset, [&](auto r) {
-                output.push_back(get_row(container, r));
+                output.emplace_back(get_row(container, r));
             });
         } else {
             output.reserve(container.size());
             for(auto i = 0u; i < container.size(); ++i) {
-                output.push_back(get_row(container, i));
+                output.emplace_back(get_row(container, i));
             }
         }
     }

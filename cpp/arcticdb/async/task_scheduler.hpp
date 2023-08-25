@@ -152,8 +152,8 @@ class TaskScheduler {
     using IOSchedulerType = folly::FutureExecutor<folly::IOThreadPoolExecutor>;
 
      explicit TaskScheduler(const std::optional<size_t>& cpu_thread_count = std::nullopt, const std::optional<size_t>& io_thread_count = std::nullopt) :
-     cpu_thread_count_(cpu_thread_count ? cpu_thread_count.value() : ConfigsMap::instance()->get_int("VersionStore.NumCPUThreads", get_default_num_cpus())),
-        io_thread_count_(io_thread_count ? io_thread_count.value() : ConfigsMap::instance()->get_int("VersionStore.NumIOThreads", std::min(100, (int) (cpu_thread_count_ * 1.5)))),
+        cpu_thread_count_(cpu_thread_count ? *cpu_thread_count : ConfigsMap::instance()->get_int("VersionStore.NumCPUThreads", get_default_num_cpus())),
+        io_thread_count_(io_thread_count ? *io_thread_count : ConfigsMap::instance()->get_int("VersionStore.NumIOThreads", std::min(100, (int) (cpu_thread_count_ * 1.5)))),
         cpu_exec_(cpu_thread_count_, std::make_shared<InstrumentedNamedFactory>("CPUPool")) ,
         io_exec_(io_thread_count_,  std::make_shared<InstrumentedNamedFactory>("IOPool")){
         ARCTICDB_RUNTIME_DEBUG(log::schedule(), "Task scheduler created with {:d} {:d}", cpu_thread_count_, io_thread_count_);

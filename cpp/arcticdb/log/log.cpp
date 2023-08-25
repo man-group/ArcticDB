@@ -65,19 +65,22 @@ spdlog::logger &message() {
     return Loggers::instance()->message();
 }
 
+spdlog::logger &symbol() {
+    return Loggers::instance()->symbol();
+}
+
 namespace fs = std::filesystem;
 
 using SinkConf = arcticdb::proto::logger::SinkConfig;
 
-Loggers::Loggers() : config_mutex_(), sink_by_id_(),
-                     unconfigured_(std::make_unique<spdlog::logger>("arcticdb",
-                                                                    std::make_shared<spdlog::sinks::stderr_sink_mt>())),
-                     root_(), storage_(), inmem_(), codec_(), version_(), thread_pool_(), periodic_worker_() {
+Loggers::Loggers() {
     unconfigured_->set_level(get_default_log_level());
 }
 
-spdlog::logger &Loggers::logger_ref(std::unique_ptr<spdlog::logger>  &src) {
-    if (ARCTICDB_LIKELY(bool(src))) return *src;
+spdlog::logger &Loggers::logger_ref(std::unique_ptr<spdlog::logger> &src) {
+    if (ARCTICDB_LIKELY(bool(src)))
+        return *src;
+
     return *unconfigured_;
 }
 
@@ -117,6 +120,10 @@ spdlog::logger &Loggers::message() {
     return logger_ref(message_);
 }
 
+spdlog::logger &Loggers::symbol() {
+    return logger_ref(symbol_);
+}
+
 spdlog::logger &Loggers::root() {
     return logger_ref(root_);
 }
@@ -153,7 +160,7 @@ std::shared_ptr<Loggers> Loggers::instance_;
 std::once_flag Loggers::init_flag_;
 
 namespace {
-std::string make_parent_dir(const std::string &p_str, const std::string_view &def_p_str) {
+std::string make_parent_dir(const std::string &p_str, std::string_view def_p_str) {
     fs::path p;
     if (p_str.empty()) {
         p = fs::path(def_p_str);
@@ -185,32 +192,32 @@ bool Loggers::configure(const arcticdb::proto::logger::LoggersConfig &conf, bool
             case SinkConf::kConsole:
                 if (sink_conf.console().has_color()) {
                     if (sink_conf.console().std_err()) {
-                        sink_by_id_.emplace(sink_id, std::make_shared<spdlog::sinks::stderr_color_sink_mt>());
+                        sink_by_id_.try_emplace(sink_id, std::make_shared<spdlog::sinks::stderr_color_sink_mt>());
                     } else {
-                        sink_by_id_.emplace(sink_id, std::make_shared<spdlog::sinks::stdout_color_sink_mt>());
+                        sink_by_id_.try_emplace(sink_id, std::make_shared<spdlog::sinks::stdout_color_sink_mt>());
                     }
                 } else {
                     if (sink_conf.console().std_err()) {
-                        sink_by_id_.emplace(sink_id, std::make_shared<spdlog::sinks::stderr_sink_mt>());
+                        sink_by_id_.try_emplace(sink_id, std::make_shared<spdlog::sinks::stderr_sink_mt>());
                     } else {
-                        sink_by_id_.emplace(sink_id, std::make_shared<spdlog::sinks::stdout_sink_mt>());
+                        sink_by_id_.try_emplace(sink_id, std::make_shared<spdlog::sinks::stdout_sink_mt>());
                     }
                 }
                 break;
             case SinkConf::kFile:
-                sink_by_id_.emplace(sink_id, std::make_shared<spdlog::sinks::basic_file_sink_mt>(
+                sink_by_id_.try_emplace(sink_id, std::make_shared<spdlog::sinks::basic_file_sink_mt>(
                     make_parent_dir(sink_conf.file().path(), "./arcticdb.basic.log")
                 ));
                 break;
             case SinkConf::kRotFile:
-                sink_by_id_.emplace(sink_id, std::make_shared<spdlog::sinks::rotating_file_sink_mt>(
+                sink_by_id_.try_emplace(sink_id, std::make_shared<spdlog::sinks::rotating_file_sink_mt>(
                     make_parent_dir(sink_conf.rot_file().path(), "./arcticdb.rot.log"),
                     util::as_opt(sink_conf.rot_file().max_size_bytes()).value_or(64ULL* (1ULL<< 20)),
                     util::as_opt(sink_conf.rot_file().max_file_count()).value_or(8)
                 ));
                 break;
             case SinkConf::kDailyFile:
-                sink_by_id_.emplace(sink_id, std::make_shared<spdlog::sinks::daily_file_sink_mt>(
+                sink_by_id_.try_emplace(sink_id, std::make_shared<spdlog::sinks::daily_file_sink_mt>(
                     make_parent_dir(sink_conf.daily_file().path(), "./arcticdb.daily.log"),
                     util::as_opt(sink_conf.daily_file().utc_rotation_hour()).value_or(0),
                     util::as_opt(sink_conf.daily_file().utc_rotation_minute()).value_or(0)
@@ -225,13 +232,14 @@ bool Loggers::configure(const arcticdb::proto::logger::LoggersConfig &conf, bool
         const std::string &name,
         const std::string &fallback,
         std::unique_ptr<spdlog::logger> &logger) {
-        if (auto it = conf.logger_by_id().find(name); it != conf.logger_by_id().end()) {
+        const auto& logger_by_id = conf.logger_by_id();
+        if (auto it = logger_by_id.find(name); it != logger_by_id.end()) {
             configure_logger(it->second, name, logger);
         } else {
             if (fallback.empty())
                 throw std::invalid_argument(fmt::format(
                     "missing conf for logger {} without fallback", name));
-            configure_logger(conf.logger_by_id().find(fallback)->second, name, logger);
+            configure_logger(logger_by_id.find(fallback)->second, name, logger);
         }
     };
 
@@ -246,8 +254,7 @@ bool Loggers::configure(const arcticdb::proto::logger::LoggersConfig &conf, bool
     check_and_configure("schedule", "root", schedule_);
     check_and_configure("message", "root", message_);
 
-    auto flush_sec = util::as_opt(conf.flush_interval_seconds()).value_or(1);
-    if (flush_sec != 0) {
+    if (auto flush_sec = util::as_opt(conf.flush_interval_seconds()).value_or(1); flush_sec != 0) {
         periodic_worker_ = std::make_unique<typename decltype(periodic_worker_)::element_type>(
             [loggers = weak_from_this()]() {
                 if (auto l = loggers.lock()) {

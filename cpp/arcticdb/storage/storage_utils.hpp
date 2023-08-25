@@ -46,7 +46,7 @@ inline void filter_keys_on_existence(std::vector<AtomKey>& keys, const std::shar
         bool resolved = key_existence[i].wait().value();
         if (resolved == pred) {
             *keys_itr = std::move(std::get<AtomKey>(var_vector[i]));
-            keys_itr++;
+            ++keys_itr;
         }
     }
     keys.erase(keys_itr, keys.end());

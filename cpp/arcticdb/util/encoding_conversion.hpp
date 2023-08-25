@@ -36,7 +36,7 @@ class PortableEncodingConversion {
     public:
     PortableEncodingConversion(const char*, const char*) { }
 
-        static bool convert(const char* input, size_t input_size, uint8_t* output, size_t& output_size) {
+        static bool convert(const char* input, size_t input_size, uint8_t* output, const size_t& output_size) {
             memset(output, 0, output_size);
             auto pos = output;
             for (auto c = 0u; c < input_size; ++c) {

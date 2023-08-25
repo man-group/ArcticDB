@@ -52,7 +52,7 @@ inline arcticc::pb2::descriptors_pb2::SortedValue sorted_value_to_proto(SortedVa
     }
 }
 
-inline SortedValue sorted_value_from_proto(const arcticc::pb2::descriptors_pb2::SortedValue &sorted_proto) {
+inline SortedValue sorted_value_from_proto(arcticc::pb2::descriptors_pb2::SortedValue sorted_proto) {
     switch (sorted_proto) {
     case arcticc::pb2::descriptors_pb2::SortedValue::UNSORTED:
         return SortedValue::UNSORTED;
@@ -79,9 +79,8 @@ using stride_t = ssize_t;
 using position_t = ssize_t;
 
 /** The VariantId holds int64 (NumericId) but is also used to store sizes up to uint64, so needs safe conversion */
-inline NumericId safe_convert_to_numeric_id(uint64_t input, const char* input_name) {
-    util::check(input <= static_cast<uint64_t>(std::numeric_limits<NumericId>::max()),
-        "{} greater than 2^63 is not supported.", input_name);
+inline NumericId safe_convert_to_numeric_id(uint64_t input) {
+    util::check(input <= static_cast<uint64_t>(std::numeric_limits<NumericId>::max()), "Numeric symbol greater than 2^63 is not supported.");
     return static_cast<NumericId>(input);
 }
 
@@ -507,7 +506,7 @@ inline TypeDescriptor type_desc_from_proto(const arcticdb::proto::descriptors::T
     };
 }
 
-inline DataType data_type_from_proto(const arcticdb::proto::descriptors::TypeDescriptor type_desc) {
+inline DataType data_type_from_proto(const arcticdb::proto::descriptors::TypeDescriptor& type_desc) {
     return type_desc_from_proto((type_desc)).data_type();
 }
 
@@ -519,11 +518,12 @@ inline arcticdb::proto::descriptors::StreamDescriptor_FieldDescriptor field_prot
     if(!name.empty())
         output.set_name(name.data(), name.size());
 
-    output.mutable_type_desc()->set_dimension(static_cast<uint32_t>(dim));
-    output.mutable_type_desc()->set_size_bits(static_cast<arcticdb::proto::descriptors::TypeDescriptor_SizeBits>(
+    auto output_desc = output.mutable_type_desc();
+    output_desc->set_dimension(static_cast<uint32_t>(dim));
+    output_desc->set_size_bits(static_cast<arcticdb::proto::descriptors::TypeDescriptor_SizeBits>(
                                                   static_cast<std::uint8_t>(slice_bit_size(dt))));
 
-    output.mutable_type_desc()->set_value_type(
+    output_desc->set_value_type(
         static_cast<arcticdb::proto::descriptors::TypeDescriptor_ValueType>(
             static_cast<std::uint8_t>(slice_value_type(dt))));
 
@@ -792,7 +792,7 @@ struct formatter<FieldRef> {
     constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
 
     template<typename FormatContext>
-    auto format(const FieldRef f, FormatContext &ctx) const {
+    auto format(const FieldRef& f, FormatContext &ctx) const {
         auto out = ctx.out();
         return format_to(ctx.out(), "{}: {}", f.type_, f.name_);
         return out;

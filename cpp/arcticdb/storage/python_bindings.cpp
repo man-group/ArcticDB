@@ -165,7 +165,7 @@ void register_bindings(py::module& storage, py::exception<arcticdb::ArcticExcept
         .def("list_libraries", [](const LibraryManager& library_manager){
             std::vector<std::string> res;
             for(auto & lp:library_manager.get_library_paths()){
-                res.push_back(lp.to_delim_path());
+                res.emplace_back(lp.to_delim_path());
             }
             return res;
         });
@@ -182,7 +182,7 @@ void register_bindings(py::module& storage, py::exception<arcticdb::ArcticExcept
         .def("list_libraries", [](LibraryIndex &library_index, std::string_view prefix = ""){
             std::vector<std::string> res;
             for(const auto& lp:library_index.list_libraries(prefix)){
-                res.push_back(lp.to_delim_path());
+                res.emplace_back(lp.to_delim_path());
             }
             return res;
         } )

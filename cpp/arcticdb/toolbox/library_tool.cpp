@@ -12,14 +12,23 @@
 #include <arcticdb/entity/atom_key.hpp>
 #include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/entity/types.hpp>
+#include <arcticdb/pipeline/pipeline_utils.hpp>
 #include <arcticdb/storage/library.hpp>
 #include <arcticdb/util/clock.hpp>
 #include <arcticdb/util/key_utils.hpp>
 #include <arcticdb/util/variant.hpp>
+#include <arcticdb/version/version_utils.hpp>
 
 namespace arcticdb::toolbox::apy {
 
 using namespace arcticdb::entity;
+
+ReadResult LibraryTool::read(const VariantKey& key) {
+    auto segment = read_to_segment(key);
+    auto segment_in_memory = decode_segment(std::move(segment));
+    auto frame_and_descriptor = frame_and_descriptor_from_segment(std::move(segment_in_memory));
+    return pipelines::make_read_result_from_frame(frame_and_descriptor, to_atom(key));
+}
 
 Segment LibraryTool::read_to_segment(const VariantKey& key) {
     auto kv = std::visit([lib=lib_](const auto &k) { return lib->read(k); }, key);

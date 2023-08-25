@@ -24,11 +24,7 @@ py::buffer_info StringPool::as_buffer_info() const {
     };
 }
 
-bool StringPool::string_exists(const std::string_view& str) {
-    return map_.find(str)  != map_.end();
-}
-
-OffsetString StringPool::get(const std::string_view &s, bool deduplicate) {
+OffsetString StringPool::get(std::string_view s, bool deduplicate) {
     if(deduplicate) {
         if (auto it = map_.find(s); it != map_.end())
             return OffsetString(it->second, this);
@@ -56,11 +52,11 @@ OffsetString StringPool::get(const char *data, size_t size, bool deduplicate) {
     return str;
 }
 
-std::string_view StringPool::get_view(const offset_t &o) {
+std::string_view StringPool::get_view(offset_t o) {
     return block_.at(o);
 }
 
-std::string_view StringPool::get_const_view(const offset_t &o) const {
+std::string_view StringPool::get_const_view(offset_t o) const {
     return block_.const_at(o);
 }
 

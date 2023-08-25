@@ -91,31 +91,31 @@ VariantData visit_binary_boolean(const VariantData& left, const VariantData& rig
     auto left_transformed = transform_to_bitset(left);
     auto right_transformed = transform_to_bitset(right);
     return std::visit(util::overload {
-            [&operation] (const std::shared_ptr<util::BitSet>& l, const std::shared_ptr<util::BitSet>& r) {
+            [operation] (const std::shared_ptr<util::BitSet>& l, const std::shared_ptr<util::BitSet>& r) {
                 return transform_to_placeholder(binary_boolean(l, r, operation));
             },
-            [&operation] (const std::shared_ptr<util::BitSet>& l, EmptyResult r) {
+            [operation] (const std::shared_ptr<util::BitSet>& l, EmptyResult r) {
                 return transform_to_placeholder(binary_boolean(l, r, operation));
             },
-            [&operation] (const std::shared_ptr<util::BitSet>& l, FullResult r) {
+            [operation] (const std::shared_ptr<util::BitSet>& l, FullResult r) {
                 return transform_to_placeholder(binary_boolean(l, r, operation));
             },
-            [&operation] (EmptyResult l, const std::shared_ptr<util::BitSet>& r) {
+            [operation] (EmptyResult l, const std::shared_ptr<util::BitSet>& r) {
                 return binary_boolean(r, l, operation);
             },
-            [&operation] (FullResult l, const std::shared_ptr<util::BitSet>& r) {
+            [operation] (FullResult l, const std::shared_ptr<util::BitSet>& r) {
                 return transform_to_placeholder(binary_boolean(r, l, operation));
             },
-            [&operation] (FullResult l, EmptyResult r) {
+            [operation] (FullResult l, EmptyResult r) {
                 return binary_boolean(r, l, operation);
             },
-            [&operation] (EmptyResult l, FullResult r) {
+            [operation] (EmptyResult l, FullResult r) {
                 return binary_boolean(l, r, operation);
             },
-            [&operation] (FullResult l, FullResult r) {
+            [operation] (FullResult l, FullResult r) {
                 return binary_boolean(l, r, operation);
             },
-            [&operation] (EmptyResult l, EmptyResult r) {
+            [operation] (EmptyResult l, EmptyResult r) {
                 return binary_boolean(r, l, operation);
             },
             [](const auto &, const auto&) -> VariantData {

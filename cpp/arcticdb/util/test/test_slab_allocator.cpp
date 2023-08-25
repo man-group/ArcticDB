@@ -198,7 +198,7 @@ TEST(SlabAlloc, MultipleThreads) {
         ASSERT_EQ(mc.get_approx_free_blocks(), cap);
         std::vector<std::future<std::vector<SlabAllocType::pointer>>> res;
         for (size_t i = 0; i < num_thds; i++) {
-            res.push_back(std::async(std::launch::async, perform_allocations, std::ref(mc), cap / num_thds));
+            res.emplace_back(std::async(std::launch::async, perform_allocations, std::ref(mc), cap / num_thds));
         }
 
         for (size_t i = 0; i < num_thds; i++) {
@@ -218,11 +218,11 @@ TEST(SlabAlloc, Callbacks) {
     mc.add_cb_when_full([&cb_called](){cb_called.fetch_add(1);});
     std::vector<std::future<std::vector<SlabAllocType::pointer>>> res;
     for (size_t i = 0; i < num_thds; i++) {
-        res.push_back(std::async(std::launch::async, perform_allocations, std::ref(mc), cap / num_thds));
+        res.emplace_back(std::async(std::launch::async, perform_allocations, std::ref(mc), cap / num_thds));
     }
     std::vector<std::vector<SlabAllocType::pointer>> res2;
     for (size_t i = 0; i < num_thds; i++) {
-        res2.push_back(res[i].get());
+        res2.emplace_back(res[i].get());
     }
     ASSERT_EQ(mc.get_approx_free_blocks(), 0);
     for (size_t i = 0; i < num_thds; i++) {

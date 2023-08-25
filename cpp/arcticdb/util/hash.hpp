@@ -28,10 +28,7 @@
 namespace arcticdb {
 
 using HashedValue = XXH64_hash_t;
-
-namespace {
 constexpr std::size_t DEFAULT_SEED = 0x42;
-}
 
 template<class T, std::size_t seed = DEFAULT_SEED>
 HashedValue hash(T *d, std::size_t count = 1) {

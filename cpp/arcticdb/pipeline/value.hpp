@@ -34,7 +34,7 @@ struct ValueIterator {
 struct Value {
     Value() = default;
     DataType data_type_;
-    char data_[8];
+    char data_[8] = {};
     size_t len_ = 0;
 
     template <typename T>
@@ -43,12 +43,22 @@ struct Value {
         *reinterpret_cast<T*>(&data_) = t;
     }
 
-    Value(const Value& other) :
-        data_type_(other.data_type_){
+    void assign(const Value& other) {
         if(is_sequence_type(other.data_type_))
             assign_string(*other.str_data(), other.len_);
         else
             memcpy(data_, other.data_, 8);
+    }
+
+    Value(const Value& other) :
+        data_type_(other.data_type_) {
+        assign(other);
+    }
+
+    Value& operator==(const Value& other) {
+        data_type_ = other.data_type_;
+        assign(other);
+        return *this;
     }
 
     ValueIterator get_iterator() {

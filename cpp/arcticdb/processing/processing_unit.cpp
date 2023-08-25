@@ -48,12 +48,12 @@ VariantData ProcessingUnit::get(const VariantNode &name, const std::shared_ptr<S
     return util::variant_match(name,
         [&](const ColumnName &column_name) {
         for (auto &slice_and_key: data_) {
-            slice_and_key.segment(store).init_column_map();
-            if (auto opt_idx = slice_and_key.segment(store).column_index(column_name.value)) {
+            auto segment = slice_and_key.segment(store);
+            segment.init_column_map();
+            if (auto opt_idx = segment.column_index(column_name.value)) {
                 return VariantData(ColumnWithStrings(
-                        slice_and_key.segment(store).column_ptr(
-                        position_t(position_t(opt_idx.value()))),
-                        slice_and_key.segment(store).string_pool_ptr()));
+                    segment.column_ptr(position_t(*opt_idx)),
+                    segment.string_pool_ptr()));
             }
         }
         // Try multi-index column names
@@ -63,7 +63,7 @@ VariantData ProcessingUnit::get(const VariantNode &name, const std::shared_ptr<S
             if (auto opt_idx = slice_and_key.segment(store).column_index(multi_index_column_name)) {
                 return VariantData(ColumnWithStrings(
                         slice_and_key.segment(store).column_ptr(
-                        position_t(opt_idx.value())),
+                        position_t(*opt_idx)),
                         slice_and_key.segment(store).string_pool_ptr()));
             }
         }

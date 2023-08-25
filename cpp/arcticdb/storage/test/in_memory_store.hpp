@@ -273,10 +273,10 @@ namespace arcticdb {
             for(const auto& key : keys) {
                 util::variant_match(key,
                                     [&output, &refs=seg_by_ref_key_] (const RefKey& ref) {
-                    output.push_back(folly::makeFuture<bool>(refs.find(ref) != refs.end()));
+                    output.emplace_back(folly::makeFuture<bool>(refs.find(ref) != refs.end()));
                 },
                 [&output, &atoms=seg_by_atom_key_] (const AtomKey& atom) {
-                    output.push_back(folly::makeFuture<bool>(atoms.find(atom) != atoms.end()));
+                    output.emplace_back(folly::makeFuture<bool>(atoms.find(atom) != atoms.end()));
                 });
             }
             return output;
@@ -318,10 +318,6 @@ namespace arcticdb {
             }
 
             return output;
-        }
-
-        void insert_atom_key(const AtomKey &key) {
-            seg_by_atom_key_.insert(std::make_pair(key, std::make_unique<SegmentInMemory>()));
         }
 
         size_t num_atom_keys() const { return seg_by_atom_key_.size(); }

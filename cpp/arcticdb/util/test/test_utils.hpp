@@ -143,7 +143,7 @@ struct TestRow {
         values_() {
         std::iota(std::begin(starts_), std::end(starts_), start_val);
         for (auto &s : starts_)
-            values_.push_back(TestValue<TDT>{s, num_vals});
+            values_.emplace_back(TestValue<TDT>{s, num_vals});
         auto prev_size = bitset_.size();
         bitset_.resize(num_columns + 1);
         bitset_.set_range(prev_size, bitset_.size() - 1, true);

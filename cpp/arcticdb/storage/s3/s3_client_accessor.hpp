@@ -49,7 +49,7 @@ public:
     }
 
     void do_iterate_type(KeyType key_type, const IterateTypeVisitor& visitor, const std::string &prefix) {
-        storage_.do_iterate_type(key_type, std::move(visitor), prefix);
+        storage_.do_iterate_type(key_type, visitor, prefix);
     }
 
     bool do_key_exists(const VariantKey& key) {

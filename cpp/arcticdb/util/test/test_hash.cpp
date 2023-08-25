@@ -34,7 +34,6 @@ TEST(HashComm, Commutative) {
     using namespace arcticdb;
     using namespace folly::hash;
 
-    std::vector<int> v = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
     auto h = commutative_hash_combine(1, 2, 3, 4, 5, 6, 7, 8, 9, 10);
 
     EXPECT_EQ(h, commutative_hash_combine(10, 9, 8, 7, 6, 5, 4, 3, 2, 1));

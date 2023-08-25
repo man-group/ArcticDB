@@ -79,11 +79,11 @@ static_assert(sizeof(TurboPforCodec) == encoding_size);
 struct Lz4Codec {
     static constexpr Codec type_ = Codec::Lz4;
 
-    void MergeFrom(arcticdb::proto::encoding::VariantCodec::Lz4 lz4) {
+    void MergeFrom(const arcticdb::proto::encoding::VariantCodec::Lz4& lz4) {
         acceleration_ = lz4.acceleration();
     }
 
-    int32_t acceleration_;
+    int32_t acceleration_ = 1;
     int16_t padding_ = 0;
 };
 
@@ -205,10 +205,6 @@ struct EncodedBlock {
 
     uint32_t in_bytes() const {
         return in_bytes_;
-    }
-
-    void set_version(uint16_t version) {
-        encoder_version_ = version;
     }
 
     BlockCodec *mutable_codec() {

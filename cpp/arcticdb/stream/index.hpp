@@ -60,7 +60,7 @@ class TimeseriesIndex : public BaseIndex<TimeseriesIndex> {
 public:
     static constexpr const char* DefaultName = "time" ;
 
-    explicit TimeseriesIndex(const std::string name) :
+    explicit TimeseriesIndex(const std::string& name) :
         name_(name) {
     }
 
@@ -324,7 +324,7 @@ inline Index default_index_type_from_descriptor(const IndexDescriptor::Proto &de
 }
 
 // Only to be used for visitation to get field count etc as the name is not set
-inline Index variant_index_from_type(const IndexDescriptor::Type &type) {
+inline Index variant_index_from_type(IndexDescriptor::Type type) {
     switch (type) {
     case IndexDescriptor::TIMESTAMP:
         return TimeseriesIndex{TimeseriesIndex::DefaultName};

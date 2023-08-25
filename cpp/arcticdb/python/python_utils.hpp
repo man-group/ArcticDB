@@ -10,6 +10,8 @@
 #include <pybind11/pybind11.h>
 #include <arcticdb/util/pb_util.hpp>
 #include <arcticdb/entity/types.hpp>
+#include <arcticdb/entity/data_error.hpp>
+#include <arcticdb/entity/read_result.hpp>
 #include <arcticdb/entity/index_range.hpp>
 #include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/stream/stream_reader.hpp>
@@ -20,51 +22,44 @@ namespace py = pybind11;
 
 namespace arcticdb::python_util {
 
-using namespace arcticdb::entity;
-using namespace arcticdb::stream;
-
-template<class C, class...Args>
-auto shptr_class(Args...args) {
-    return py::class_<C, std::shared_ptr<C>>(std::forward<Args>(args)...);
-}
-
 class ARCTICDB_VISIBILITY_HIDDEN PyRowRef : public py::tuple {
-  public:
   PYBIND11_OBJECT_DEFAULT(PyRowRef, py::tuple, PyTuple_Check)
 
-    PyRowRef(RowRef row_ref) : py::tuple(row_ref.col_count()), row_ref_(row_ref) {
+    explicit PyRowRef(const RowRef& row_ref) :
+        py::tuple(row_ref.col_count()),
+        row_ref_(row_ref) {
         // tuple is still mutable while ref count is 1
         py::list res;
         auto &segment = row_ref_.segment();
         segment.check_magic();
-        auto row_pos_ = row_ref_.row_pos();
-        for (std::size_t col = 0; col < segment.num_columns(); ++col) {
-            visit_field(segment.column_descriptor(col), [&](auto &&impl) {
+        auto row_pos = static_cast<position_t>(row_ref_.row_pos());
+        for (position_t col = 0; col < position_t(segment.num_columns()); ++col) {
+            visit_field(segment.column_descriptor(col), [this, &segment, &col, row_pos](auto impl) {
                 using T= std::decay_t<decltype(impl)>;
                 using RawType = typename T::DataTypeTag::raw_type;
                 if constexpr (T::DimensionTag::value == Dimension::Dim0) {
                     if constexpr (T::DataTypeTag::data_type == DataType::ASCII_DYNAMIC64
                         || T::DataTypeTag::data_type == DataType::ASCII_FIXED64) {
-                        set_col(col, segment.string_at(row_pos_, col).value());
+                        set_col(col, segment.string_at(row_pos, col).value());
                     } else {
-                        set_col(col, segment.scalar_at<RawType>(row_pos_, col).value()); // TODO handle sparse
+                        set_col(col, segment.scalar_at<RawType>(row_pos, col).value()); // TODO handle sparse
                     }
                 } else {
                     // TODO handle utf too
                     if (T::DataTypeTag::data_type == DataType::ASCII_FIXED64) {
-                        auto str_arr = segment.string_array_at(row_pos_, col).value();
+                        auto str_arr = segment.string_array_at(row_pos, col).value();
                         set_col(col, py::array(from_string_array(str_arr)));
                     } else if (T::DataTypeTag::data_type == DataType::ASCII_DYNAMIC64) {
-                        auto string_refs = segment.tensor_at<OffsetString::offset_t>(row_pos_, col).value();
+                        auto string_refs = segment.tensor_at<OffsetString::offset_t>(row_pos, col).value();
                         std::vector<std::string_view> output;
                         for (ssize_t i = 0; i < string_refs.size(); ++i)
-                            output.push_back(view_at(string_refs.at(i)));
+                            output.emplace_back(view_at(string_refs.at(i)));
 
                         set_col(col, output);
                     } else {
-                        auto opt_tensor = segment.tensor_at<RawType>(row_pos_, col);
+                        auto opt_tensor = segment.tensor_at<RawType>(row_pos, col);
                         if(opt_tensor.has_value()){
-                            set_col(col, to_py_array(opt_tensor.value()));
+                            set_col(col, to_py_array(*opt_tensor));
                         }
                     }
                 }
@@ -91,7 +86,7 @@ class ARCTICDB_VISIBILITY_HIDDEN PyRowRef : public py::tuple {
         };
     }
     template<class O>
-    void set_col(std::size_t col, O &&o) {
+    void set_col(std::size_t col, O &&o) const {
         (*this)[col] = std::forward<O>(o);
     }
 
@@ -119,7 +114,7 @@ py::object pb_to_python(const Msg & out){
 
 template<typename Msg>
 void pb_from_python(const py::object & py_msg, Msg & out){
-    std::string s = py_msg.attr("SerializeToString")().cast<std::string>();
+    auto s = py_msg.attr("SerializeToString")().cast<std::string>();
     out.ParseFromString(s);
 }
 
@@ -199,16 +194,37 @@ class PyTimestampRange {
         util::check_arg(start_ <= end_, "expected star <= end, actual {}, {}", start_, end_);
     }
 
-    operator entity::TimestampRange() const {
+    explicit operator entity::TimestampRange() const {
         return {start_, end_};
     }
 
-    timestamp start_nanos_utc() const { return start_; }
-    timestamp end_nanos_utc() const { return end_; }
+    [[nodiscard]] timestamp start_nanos_utc() const { return start_; }
+    [[nodiscard]] timestamp end_nanos_utc() const { return end_; }
 
   private:
     timestamp start_;
     timestamp end_;
 };
+
+inline py::list adapt_read_dfs(std::vector<std::variant<ReadResult, DataError>>&& r) {
+    auto ret = std::move(r);
+    py::list lst;
+    for (auto &res: ret) {
+        util::variant_match(
+            res,
+            [&lst] (ReadResult& read_result) {
+                auto pynorm = python_util::pb_to_python(read_result.norm_meta);
+                auto pyuser_meta = python_util::pb_to_python(read_result.user_meta);
+                auto multi_key_meta = python_util::pb_to_python(read_result.multi_key_meta);
+                lst.append(py::make_tuple(read_result.item, std::move(read_result.frame_data), pynorm, pyuser_meta, multi_key_meta,
+                                          read_result.multi_keys));
+            },
+            [&lst] (DataError& data_error) {
+                lst.append(data_error);
+            }
+        );
+    }
+    return lst;
+}
 
 } // namespace arcticdb::python_util

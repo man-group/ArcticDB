@@ -18,7 +18,7 @@ RC_GTEST_PROP(StringPool, WriteAndRead, (const std::map<size_t, std::string> &in
     StringPool pool;
     std::unordered_map<size_t, OffsetString> strings;
     for (auto &item : input) {
-        strings.insert(std::make_pair(item.first, pool.get(item.second)));
+        strings.try_emplace(item.first, pool.get(item.second));
     }
 
     for (auto &stored : strings) {

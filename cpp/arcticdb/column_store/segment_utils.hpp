@@ -30,7 +30,7 @@ robin_hood::unordered_set<StringPool::offset_t> unique_values_for_string_column(
             output.reserve(column.row_count() / map_reserve_ratio);
 
             while (auto block = column_data.next<TDT>()) {
-                auto ptr = reinterpret_cast<const RawType *>(block.value().data());
+                auto ptr = reinterpret_cast<const RawType *>(block->data());
                 const auto row_count = block->row_count();
                 for (auto i = 0u; i < row_count; ++i) {
                     output.insert(*ptr++);

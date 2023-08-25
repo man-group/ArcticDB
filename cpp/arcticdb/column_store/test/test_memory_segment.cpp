@@ -40,7 +40,7 @@ void test_segment_type(size_t num_values = 20, size_t num_tests = 50, size_t num
     const Dimension dimensions = TDT::DimensionTag::value;
 
     TypeDescriptorTag typeDescriptorTag;
-    const auto tsd = create_tsd<DTT, Dimension::Dim0>();
+    auto tsd = create_tsd<DTT, Dimension::Dim0>();
     SegmentInMemory s(StreamDescriptor{std::move(tsd)});
     for (size_t i = 0; i < num_tests; ++i) {
         auto ts = timestamp(i);
@@ -71,7 +71,7 @@ void test_segment_type(size_t num_values = 20, size_t num_tests = 50, size_t num
                 ASSERT_EQ(v.value(), test_row[j - 1].get_scalar());
             } else {
                 auto t = s.tensor_at<raw_type>(i, j);
-                ASSERT_FALSE(t = std::nullopt);
+                ASSERT_FALSE(t == std::nullopt);
                 ASSERT_TRUE(test_row.check(j - 1, t.value()));
             }
         }
@@ -469,7 +469,7 @@ TEST(MemSegment, Filter) {
     seg.set_row_id(num_rows - 1);
 
     util::BitSet filter_bitset(num_rows);
-    std::vector<size_t> retained_rows{0, 4, num_rows - 1};
+    std::array<size_t, 3> retained_rows{0, 4, num_rows - 1};
     for (auto retained_row: retained_rows) {
         filter_bitset.set_bit(retained_row);
     }
