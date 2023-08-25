@@ -566,13 +566,15 @@ class Library:
         self._raise_if_duplicate_symbols_in_batch(payloads)
         self._raise_if_unsupported_type_in_write_batch(payloads)
 
-        return self._nvs.batch_write(
+        throw_on_error = False
+        return self._nvs._batch_write_internal(
             [p.symbol for p in payloads],
             [p.data for p in payloads],
             [p.metadata for p in payloads],
             prune_previous_version=prune_previous_versions,
             pickle_on_failure=False,
             validate_index=validate_index,
+            throw_on_error=throw_on_error,
         )
 
     def write_pickle_batch(
@@ -739,7 +741,7 @@ class Library:
 
         self._raise_if_duplicate_symbols_in_batch(append_payloads)
         self._raise_if_unsupported_type_in_write_batch(append_payloads)
-        throw_on_missing_version = False
+        throw_on_error = False
 
         return self._nvs._batch_append_to_versioned_items(
             [p.symbol for p in append_payloads],
@@ -747,7 +749,7 @@ class Library:
             [p.metadata for p in append_payloads],
             prune_previous_version=prune_previous_versions,
             validate_index=validate_index,
-            throw_on_missing_version=throw_on_missing_version,
+            throw_on_error=throw_on_error,
         )
 
     def update(
@@ -1607,8 +1609,8 @@ class Library:
                     " [ReadInfoRequest] are supported."
                 )
 
-        throw_on_missing_version = False
-        descriptions = self._nvs._batch_read_descriptor(symbol_strings, as_ofs, throw_on_missing_version)
+        throw_on_error = False
+        descriptions = self._nvs._batch_read_descriptor(symbol_strings, as_ofs, throw_on_error)
 
         description_results = []
         for description in descriptions:
