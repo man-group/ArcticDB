@@ -1022,6 +1022,10 @@ class NativeVersionStore:
     def _batch_read_metadata_to_versioned_items(self, symbols, as_ofs, include_errors_and_none_meta, **kwargs):
         version_queries = self._get_version_queries(len(symbols), as_ofs, **kwargs)
         read_options = self._get_read_options(**kwargs)
+        # For historical reasons, NativeVersionStore.batch_read_metadata returns None if the requested version does not
+        # exist, but should throw an exception for other errors. Library.read_metadata_batch should get DataError
+        # objects if exceptions are thrown.
+        read_options.set_batch_throw_on_error(not include_errors_and_none_meta)
         metadatas_or_errors = self.version_store.batch_read_metadata(symbols, version_queries, read_options)
         meta_items = []
         for metadata in metadatas_or_errors:
@@ -1080,6 +1084,7 @@ class NativeVersionStore:
         results_dict = {}
         version_queries = self._get_version_queries(len(symbols), as_ofs, **kwargs)
         read_options = self._get_read_options(**kwargs)
+        read_options.set_batch_throw_on_error(True)
         for result in self.version_store.batch_read_metadata(symbols, version_queries, read_options):
             vitem, udm = result
             meta = denormalize_user_metadata(udm, self._normalizer) if udm else None
@@ -1166,7 +1171,29 @@ class NativeVersionStore:
             If data is unsorted, when validate_index is set to True.
         """
         _check_batch_kwargs(NativeVersionStore.batch_write, NativeVersionStore.write, kwargs)
+        throw_on_error = True
+        return self._batch_write_internal(
+            symbols,
+            data_vector,
+            metadata_vector,
+            prune_previous_version,
+            pickle_on_failure,
+            validate_index,
+            throw_on_error,
+            **kwargs,
+        )
 
+    def _batch_write_internal(
+        self,
+        symbols: List[str],
+        data_vector: List[Any],
+        metadata_vector: Optional[List[Any]] = None,
+        prune_previous_version=None,
+        pickle_on_failure=None,
+        validate_index: bool = False,
+        throw_on_error: bool = True,
+        **kwargs,
+    ) -> List[VersionedItem]:
         for symbol in symbols:
             self.check_symbol_validity(symbol)
 
@@ -1202,7 +1229,7 @@ class NativeVersionStore:
         items = [info[1] for info in normalized_infos]
         norm_metas = [info[2] for info in normalized_infos]
         cxx_versioned_items = self.version_store.batch_write(
-            symbols, items, norm_metas, udms, prune_previous_version, validate_index
+            symbols, items, norm_metas, udms, prune_previous_version, validate_index, throw_on_error
         )
         write_results = []
         for result in cxx_versioned_items:
@@ -1313,7 +1340,7 @@ class NativeVersionStore:
         UnsortedDataException
             If data is unsorted, when validate_index is set to True.
         """
-        throw_on_missing_version = True
+        throw_on_error = True
         _check_batch_kwargs(NativeVersionStore.batch_append, NativeVersionStore.append, kwargs)
         return self._batch_append_to_versioned_items(
             symbols,
@@ -1321,7 +1348,7 @@ class NativeVersionStore:
             metadata_vector,
             prune_previous_version,
             validate_index,
-            throw_on_missing_version,
+            throw_on_error,
             **kwargs,
         )
 
@@ -1332,7 +1359,7 @@ class NativeVersionStore:
         metadata_vector,
         prune_previous_version,
         validate_index,
-        throw_on_missing_version,
+        throw_on_error,
         **kwargs,
     ):
         for symbol in symbols:
@@ -1377,7 +1404,7 @@ class NativeVersionStore:
             prune_previous_version,
             validate_index,
             write_if_missing,
-            throw_on_missing_version,
+            throw_on_error,
         )
         append_results = []
         for result in cxx_versioned_items:
@@ -2549,10 +2576,10 @@ class NativeVersionStore:
             - type, `str`
             - date_range, `tuple`
         """
-        throw_on_missing_version = True
-        return self._batch_read_descriptor(symbols, as_ofs, throw_on_missing_version)
+        throw_on_error = True
+        return self._batch_read_descriptor(symbols, as_ofs, throw_on_error)
 
-    def _batch_read_descriptor(self, symbols, as_ofs, throw_on_missing_version):
+    def _batch_read_descriptor(self, symbols, as_ofs, throw_on_error):
         as_ofs_lists = []
         if as_ofs == None:
             as_ofs_lists = [None] * len(symbols)
@@ -2564,7 +2591,7 @@ class NativeVersionStore:
             version_queries.append(self._get_version_query(as_of))
 
         read_options = _PythonVersionStoreReadOptions()
-        read_options.set_batch_throw_on_missing_version(throw_on_missing_version)
+        read_options.set_batch_throw_on_error(throw_on_error)
         descriptions_or_errors = self.version_store.batch_read_descriptor(symbols, version_queries, read_options)
         args_list = list(zip(descriptions_or_errors, symbols, version_queries, as_ofs_lists))
         description_results = []

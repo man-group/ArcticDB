@@ -106,10 +106,11 @@ std::vector<std::variant<VersionedItem, DataError>> PythonVersionStore::batch_wr
     const std::vector<py::object> &norms,
     const std::vector<py::object> &user_metas,
     bool prune_previous_versions,
-    bool validate_index) {
+    bool validate_index,
+    bool throw_on_error) {
 
     auto frames = create_input_tensor_frames(stream_ids, items, norms, user_metas);
-    return batch_write_versioned_dataframe_internal(stream_ids, std::move(frames), prune_previous_versions, validate_index);
+    return batch_write_versioned_dataframe_internal(stream_ids, std::move(frames), prune_previous_versions, validate_index, throw_on_error);
 }
 
 std::vector<std::variant<VersionedItem, DataError>> PythonVersionStore::batch_append(
@@ -120,9 +121,9 @@ std::vector<std::variant<VersionedItem, DataError>> PythonVersionStore::batch_ap
     bool prune_previous_versions,
     bool validate_index,
     bool upsert,
-    bool throw_on_missing_version) {
+    bool throw_on_error) {
     auto frames = create_input_tensor_frames(stream_ids, items, norms, user_metas);
-    return batch_append_internal(stream_ids, std::move(frames), prune_previous_versions, validate_index, upsert, throw_on_missing_version);
+    return batch_append_internal(stream_ids, std::move(frames), prune_previous_versions, validate_index, upsert, throw_on_error);
 }
 
 void PythonVersionStore::_clear_symbol_list_keys() {
