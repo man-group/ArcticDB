@@ -41,8 +41,8 @@ def normalize_lib_name(lib_name):
     not PERSISTENT_STORAGE_TESTS_ENABLED, reason="This test should run only if the persistent storage tests are enabled"
 )
 def test_real_s3_storage_read(real_s3_credentials, library):
-    endpoint, bucket, region, access_key, secret_key, path_prefix, _ = real_s3_credentials
-    uri = f"s3s://{endpoint}:{bucket}?access={access_key}&secret={secret_key}&region={region}&path_prefix={path_prefix}"
+    endpoint, bucket, region, access_key, secret_key, _ = real_s3_credentials
+    uri = f"s3s://{endpoint}:{bucket}?access={access_key}&secret={secret_key}&region={region}&path_prefix=ci_tests/"
     ac = Arctic(uri)
     lib_name = f"seed_{BRANCH_NAME}_{library}"
     lib_name = normalize_lib_name(lib_name)
@@ -63,8 +63,8 @@ def test_real_s3_storage_read(real_s3_credentials, library):
 def test_real_s3_storage_write(real_s3_credentials, three_col_df):
     library_to_write_to = PERSISTENT_STORAGE_LIB_NAME
     library_to_write_to = normalize_lib_name(library_to_write_to)
-    endpoint, bucket, region, access_key, secret_key, path_prefix, _ = real_s3_credentials
-    uri = f"s3s://{endpoint}:{bucket}?access={access_key}&secret={secret_key}&region={region}&path_prefix={path_prefix}"
+    endpoint, bucket, region, access_key, secret_key, _ = real_s3_credentials
+    uri = f"s3s://{endpoint}:{bucket}?access={access_key}&secret={secret_key}&region={region}&path_prefix=ci_tests/"
     ac = Arctic(uri)
     # There shouldn't be a library with this name present, so delete just in case
     ac.delete_library(library_to_write_to)
