@@ -1310,8 +1310,27 @@ def test_batch_write_then_list_symbol_without_cache(basic_store_factory):
         assert set(lib.list_symbols()) == set(symbols)
 
 
-def test_batch_roundtrip_metadata(basic_store_tombstone_and_sync_passive):
-    lib = basic_store_tombstone_and_sync_passive
+def test_batch_write_missing_keys_dedup(basic_store_factory):
+    """When there is duplicate data to reuse for the current write, we need to access the index key of the previous
+    versions in order to refer to the corresponding keys for the deduplicated data."""
+    lib = basic_store_factory(de_duplication=True)
+    assert lib.lib_cfg().lib_desc.version.write_options.de_duplication
+
+    df1 = pd.DataFrame({"a": [3, 5, 7]})
+    df2 = pd.DataFrame({"a": [4, 6, 8]})
+    lib.write("s1", df1)
+    lib.write("s2", df2)
+
+    lib_tool = lib.library_tool()
+    s1_index_key = lib_tool.find_keys_for_id(KeyType.TABLE_INDEX, "s1")[0]
+    lib_tool.remove(s1_index_key)
+
+    with pytest.raises(StorageException):
+        lib.batch_write(["s1", "s2"], [df1, df2])
+
+
+def test_batch_roundtrip_metadata(lmdb_version_store_tombstone_and_sync_passive):
+    lmdb_version_store = lmdb_version_store_tombstone_and_sync_passive
     metadatas = {}
     for x in range(10):
         symbol = "Sym_{}".format(x)
@@ -1502,14 +1521,14 @@ def test_library_deletion_lmdb(lmdb_version_store):
     assert lib_tool.count_keys(KeyType.TABLE_INDEX) == 0
 
 
-def test_resolve_defaults(version_store_factory):
-    lib = version_store_factory()
+def test_resolve_defaults(basic_store_factory):
+    lib = basic_store_factory()
     proto_cfg = lib._lib_cfg.lib_desc.version.write_options
     assert lib.resolve_defaults("recursive_normalizers", proto_cfg, False) is False
     os.environ["recursive_normalizers"] = "True"
     assert lib.resolve_defaults("recursive_normalizers", proto_cfg, False, uppercase=False) is True
 
-    lib2 = version_store_factory(dynamic_strings=True, reuse_name=True)
+    lib2 = basic_store_factory(dynamic_strings=True, reuse_name=True)
     proto_cfg = lib2._lib_cfg.lib_desc.version.write_options
     assert lib2.resolve_defaults("dynamic_strings", proto_cfg, False) is True
     del os.environ["recursive_normalizers"]
@@ -1530,8 +1549,8 @@ def test_batch_read_meta(basic_store_tombstone_and_sync_passive):
     assert results_dict["sym2"].data is None
 
 
-def test_batch_read_meta_with_missing(basic_store_tombstone_and_sync_passive):
-    lmdb_version_store = basic_store_tombstone_and_sync_passive
+def test_batch_read_metadata_symbol_doesnt_exist(lmdb_version_store_tombstone_and_sync_passive):
+    lmdb_version_store = lmdb_version_store_tombstone_and_sync_passive
     lib = lmdb_version_store
     for idx in range(10):
         lib.write("sym" + str(idx), idx, metadata={"meta": idx})
@@ -1542,13 +1561,46 @@ def test_batch_read_meta_with_missing(basic_store_tombstone_and_sync_passive):
     assert "sym_doesnotexist" not in results_dict
 
 
+def test_batch_read_metadata_missing_keys(basic_store):
+    lib = basic_store
+    lib.write("s1", df1, metadata={"s1": "metadata"})
+    # Need two versions for this symbol as we're going to delete a version key, and the optimisation of storing the
+    # latest index key in the version ref key means it will still work if we just write one version key and then delete
+    # it
+    lib.write("s2", df2, metadata={"s2": "metadata"})
+    lib.write("s2", df2, metadata={"s2": "more_metadata"})
+    lib_tool = lib.library_tool()
+    s1_index_key = lib_tool.find_keys_for_id(KeyType.TABLE_INDEX, "s1")[0]
+    s2_version_keys = lib_tool.find_keys_for_id(KeyType.VERSION, "s2")
+    s2_key_to_delete = [key for key in s2_version_keys if key.version_id == 0][0]
+    lib_tool.remove(s1_index_key)
+    lib_tool.remove(s2_key_to_delete)
+
+    with pytest.raises(StorageException):
+        _ = lib.batch_read_metadata(["s1"], [None])
+    with pytest.raises(StorageException):
+        _ = lib.batch_read_metadata(["s2"], [0])
+
+
+def test_batch_read_metadata_multi_missing_keys(basic_store):
+    lib = basic_store
+    lib_tool = lib.library_tool()
+
+    lib.write("s1", 0, metadata={"s1": "metadata"})
+    key_to_delete = lib_tool.find_keys_for_id(KeyType.TABLE_INDEX, "s1")[0]
+    lib_tool.remove(key_to_delete)
+
+    with pytest.raises(StorageException):
+        _ = lib.batch_read_metadata_multi(["s1"], [None])
+
+
 def test_list_versions_with_deleted_symbols(basic_store_tombstone_and_pruning):
     lib = basic_store_tombstone_and_pruning
     lib.write("a", 1)
     lib.snapshot("snap")
     lib.write("a", 2)
-    # At this point version 0 of 'a' is pruned but is still in the snapshot.
     versions = lib.list_versions()
+    # At this point version 0 of 'a' is pruned but is still in the snapshot.
     assert len(versions) == 2
     deleted = [v for v in versions if v["deleted"]]
     not_deleted = [v for v in versions if not v["deleted"]]
@@ -2020,6 +2072,30 @@ def test_batch_read_missing_keys(basic_store):
     # processed first
     with pytest.raises((NoDataFoundException, StorageException)):
         _ = lib.batch_read(["s1", "s2", "s3"], [None, None, 0])
+
+
+def test_batch_get_info_missing_keys(basic_store):
+    lib = basic_store
+
+    df1 = pd.DataFrame({"a": [3, 5, 7]})
+    df2 = pd.DataFrame({"a": [5, 7, 9]})
+    lib.write("s1", df1)
+    # Need two versions for this symbol as we're going to delete a version key, and the optimisation of storing the
+    # latest index key in the version ref key means it will still work if we just write one version key and then delete
+    # it
+    lib.write("s2", df2)
+    lib.write("s2", df2)
+    lib_tool = lib.library_tool()
+    s1_index_key = lib_tool.find_keys_for_id(KeyType.TABLE_INDEX, "s1")[0]
+    s2_version_keys = lib_tool.find_keys_for_id(KeyType.VERSION, "s2")
+    s2_key_to_delete = [key for key in s2_version_keys if key.version_id == 0][0]
+    lib_tool.remove(s1_index_key)
+    lib_tool.remove(s2_key_to_delete)
+
+    with pytest.raises(StorageException):
+        _ = lib.batch_get_info(["s1"], [None])
+    with pytest.raises(StorageException):
+        _ = lib.batch_get_info(["s2"], [0])
 
 
 def test_index_keys_start_end_index(basic_store, sym):
