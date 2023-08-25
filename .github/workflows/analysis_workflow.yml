@@ -42,9 +42,6 @@ jobs:
       CMAKE_C_COMPILER_LAUNCHER: sccache
       CMAKE_CXX_COMPILER_LAUNCHER: sccache
       ARCTIC_CMAKE_PRESET: linux-debug
-      CIBW_ENVIRONMENT_PASS_LINUX: SCCACHE_GHA_VERSION ACTIONS_CACHE_URL ACTIONS_RUNTIME_TOKEN VCPKG_INSTALLATION_ROOT
-        VCPKG_BINARY_SOURCES VCPKG_NUGET_USER VCPKG_NUGET_TOKEN VCPKG_MAN_NUGET_USER VCPKG_MAN_NUGET_TOKEN
-        CMAKE_C_COMPILER_LAUNCHER CMAKE_CXX_COMPILER_LAUNCHER CMAKE_BUILD_PARALLEL_LEVEL ARCTIC_CMAKE_PRESET
     steps:
       - uses: actions/checkout@v3
         with:
@@ -53,11 +50,6 @@ jobs:
       - name: Get number of CPU cores
         uses: SimenB/github-actions-cpu-cores@v1
         id: cpu-cores
-
-      - name: Configure sccache
-        uses: mozilla-actions/sccache-action@v0.0.3
-        with:
-          version: "v0.4.0"
 
       - name: Extra envs
         run: |
@@ -91,18 +83,23 @@ jobs:
           make -j ${{ steps.cpu-cores.outputs.count }} test_unit_arcticdb
           ctest
 
+      # We are chainging the python here because we want to use the default python to build (it is devel version)
+      # and this python for the rest of the testing
+      - name: Select Python (Linux)
+        run: echo /opt/python/cp36-cp36m/bin >> $GITHUB_PATH
+      
       - name: Test with pytest
         shell: bash -l {0}
         run: |
           yum install nodejs npm -y
           npm config set strict-ssl false
           npm install -g azurite
-          /opt/python/cp36-cp36m/bin/python -m pip install --upgrade pip
-          /opt/python/cp36-cp36m/bin/python -m pip install pycparser six cffi urllib3 python-dateutil PyJWT jmespath idna cryptography charset-normalizer certifi requests py pluggy path oauthlib MarkupSafe iniconfig dataclasses botocore attrs Werkzeug termcolor s3transfer requests-oauthlib pytz pytest protobuf portalocker path.py numpy msal mock Jinja2 itsdangerous isodate grpcio execnet decorator contextlib2 click azure-core xxhash xmltodict sortedcontainers retry responses pyyaml pytest-shutil pytest-fixture-config psutil prometheus-client pandas msrest msgpack msal-extensions grpcio-tools future flask colorama boto3 pytest-timeout pytest-server-fixtures pytest-cpp pymongo moto hypothesis flask-cors azure-storage-blob azure-identity coverage pytest-xdist
-          /opt/python/cp36-cp36m/bin/python -m grpc_tools.protoc -Icpp/proto --python_out=./python cpp/proto/arcticc/pb2/*.proto
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-analysis-workflow.txt
+          python -m grpc_tools.protoc -Icpp/proto --python_out=./python cpp/proto/arcticc/pb2/*.proto
           cd python
           ln -s ../cpp/out/linux-debug-build/arcticdb/arcticdb_ext.cpython-36m-x86_64-linux-gnu.so
-          /opt/python/cp36-cp36m/bin/python -m coverage run -m pytest tests
+          python -m coverage run -m pytest tests
         env:
           TEST_OUTPUT_DIR: ${{runner.temp}}
           # Use the Mongo created in the service container above to test against
@@ -113,7 +110,7 @@ jobs:
         shell: bash -l {0}
         run: |
           cd python
-          /opt/python/cp36-cp36m/bin/python -m coverage report -m | tee output.txt
+          python -m coverage report -m | tee output.txt
           python -m coverage html
           zip -r python_cov.zip htmlcov/
 
