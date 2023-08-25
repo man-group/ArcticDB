@@ -5,7 +5,7 @@ from arcticdb.arctic import Arctic
 from tests.conftest import PERSISTENT_STORAGE_TESTS_ENABLED
 
 PERSISTENT_STORAGE_LIB_NAME = os.getenv("ARCTICDB_PERSISTENT_STORAGE_LIB_NAME")
-BRANCH_NAME = os.getenv("ARCTICDB_PERSISTENT_STORAGE_BRANCH_NAME")
+UNIQUE_ID = os.getenv("ARCTICDB_PERSISTENT_STORAGE_UNIQUE_ID")
 
 if PERSISTENT_STORAGE_TESTS_ENABLED:
     # TODO: Maybe add a way to parametrize this
@@ -42,7 +42,7 @@ def normalize_lib_name(lib_name):
 )
 def test_real_s3_storage_read(real_s3_uri, library):
     ac = Arctic(real_s3_uri)
-    lib_name = f"seed_{BRANCH_NAME}_{library}"
+    lib_name = f"seed_{UNIQUE_ID}_{library}"
     lib_name = normalize_lib_name(lib_name)
     lib = ac[lib_name]
     symbols = lib.list_symbols()

@@ -278,7 +278,7 @@ jobs:
           TEST_OUTPUT_DIR: ${{runner.temp}}
           # Use the Mongo created in the service container above to test against
           CI_MONGO_HOST: mongodb
-          ARCTICDB_PERSISTENT_STORAGE_LIB_NAME: 'test_${{ github.ref_name }}_${{matrix.os}}_${{env.python_impl_name}}${{matrix.python_deps_id}}'
+          ARCTICDB_PERSISTENT_STORAGE_LIB_NAME: 'test_${{ env.ARCTICDB_PERSISTENT_STORAGE_UNIQUE_ID }}_${{matrix.os}}_${{env.python_impl_name}}${{matrix.python_deps_id}}'
   
 
       - name: Collect crash dumps (Windows)
