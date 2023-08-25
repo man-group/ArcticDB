@@ -5,6 +5,17 @@ on:
       run:
         type: boolean
 
+  push:
+    branches: ["**"]
+    tags: [v**]
+    paths:
+      - .github/**
+      - build_tooling/**
+      - cpp/**
+      - python/**
+      - setup.*
+      - pyproject.toml
+
   schedule: # Schdeule the job to run at 12 a.m. daily
     - cron: '0 0 * * *'
 jobs:
@@ -87,7 +98,7 @@ jobs:
           npm config set strict-ssl false
           npm install -g azurite
           python -m pip install --upgrade pip
-          python -m pip install -r requirements-analysis-workflow.txt
+          python -m pip install -r build_tooling/requirements-analysis-workflow.txt
           python -m grpc_tools.protoc -Icpp/proto --python_out=./python cpp/proto/arcticc/pb2/*.proto
           cd python
           ln -s ../cpp/out/linux-debug-build/arcticdb/arcticdb_ext.cpython-36m-x86_64-linux-gnu.so
