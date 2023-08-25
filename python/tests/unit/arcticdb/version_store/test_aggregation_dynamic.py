@@ -200,8 +200,8 @@ def test_group_column_not_present_dynamic(lmdb_version_store_dynamic_schema):
         _ = lmdb_version_store_dynamic_schema.read(symbol, query_builder=q)
 
 
-def test_group_column_splitting_dynamic(basic_store_tiny_segment_dynamic):
-    lib = basic_store_tiny_segment_dynamic
+def test_group_column_splitting_dynamic(lmdb_version_store_tiny_segment_dynamic):
+    lib = lmdb_version_store_tiny_segment_dynamic
     symbol = "test_group_column_splitting"
     df = DataFrame(
         {
@@ -225,8 +225,8 @@ def test_group_column_splitting_dynamic(basic_store_tiny_segment_dynamic):
     assert_equal_value(vit.data, expected)
 
 
-def test_group_column_splitting_strings_dynamic(basic_store_tiny_segment_dynamic):
-    lib = basic_store_tiny_segment_dynamic
+def test_group_column_splitting_strings_dynamic(lmdb_version_store_tiny_segment_dynamic):
+    lib = lmdb_version_store_tiny_segment_dynamic
     symbol = "test_group_column_splitting"
     df = DataFrame(
         {

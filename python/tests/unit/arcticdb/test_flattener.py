@@ -90,20 +90,20 @@ def test_dict_like_structure():
     clear_registered_normalizers()
 
 
-def test_pandas_series(basic_store):
+def test_pandas_series(lmdb_version_store):
     test_data = [pd.Series(["hello", "good morning"])]
     meta, flattened = fl.create_meta_structure(test_data, "sym")
 
     assert fl.create_original_obj_from_metastruct_new(meta, flattened)[0].equals(test_data[0])
 
-    lib = basic_store
+    lib = lmdb_version_store
     lib.write("sym", test_data, recursive_normalizers=True)
     assert lib.read("sym").data[0].equals(test_data[0])
 
 
-def test_multiindex_recursive_normalizer(basic_store):
+def test_multiindex_recursive_normalizer(lmdb_version_store):
     dtidx = pd.date_range(pd.Timestamp("2016-01-01"), periods=2)
     vals = ["a", "b", "c"]
     df = pd.DataFrame(data=np.arange(6), index=pd.MultiIndex.from_product([dtidx, vals], names=["a", "b"]))
-    basic_store.write("df", {"data": df}, recursive_normalizers=True)
-    assert basic_store.read("df").data["data"].equals(df)
+    lmdb_version_store.write("df", {"data": df}, recursive_normalizers=True)
+    assert lmdb_version_store.read("df").data["data"].equals(df)

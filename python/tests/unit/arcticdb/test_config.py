@@ -11,8 +11,8 @@ from arcticc.pb2.config_pb2 import RuntimeConfig
 from arcticdb_ext import read_runtime_config, get_config_int, set_config_int
 
 
-def test_config_roundtrip(basic_store_factory):
-    vs = basic_store_factory(column_group_size=23, segment_row_size=42)
+def test_config_roundtrip(version_store_factory):
+    vs = version_store_factory(column_group_size=23, segment_row_size=42)
 
     dumped = dumps(vs)
     loaded = loads(dumped)

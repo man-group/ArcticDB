@@ -43,43 +43,43 @@ def test_compat_exception():
         assert issubclass(e, _ArcticLegacyCompatibilityException)
 
 
-def test_pickling_error(basic_store):
-    basic_store.write("sym", [1, 2, 3])
+def test_pickling_error(lmdb_version_store):
+    lmdb_version_store.write("sym", [1, 2, 3])
     with pytest.raises(InternalException):
-        basic_store.append("sym", [4, 5, 6])
+        lmdb_version_store.append("sym", [4, 5, 6])
 
 
-def test_internal_error_is_compat_exception(basic_store):
-    basic_store.write("sym", [1, 2, 3])
+def test_internal_error_is_compat_exception(lmdb_version_store):
+    lmdb_version_store.write("sym", [1, 2, 3])
     try:
-        basic_store.append("sym", [4, 5, 6])
+        lmdb_version_store.append("sym", [4, 5, 6])
     except _ArcticLegacyCompatibilityException:
         pass
     except Exception:
         pytest.fail("Should have raised a compat exception")
 
 
-def test_snapshot_error(basic_store):
-    basic_store.write("sym", [1, 2, 3])
-    basic_store.snapshot("snap")
+def test_snapshot_error(lmdb_version_store):
+    lmdb_version_store.write("sym", [1, 2, 3])
+    lmdb_version_store.snapshot("snap")
     with pytest.raises(InternalException) as e:
-        basic_store.snapshot("snap")
+        lmdb_version_store.snapshot("snap")
 
 
-def test_symbol_not_found_exception(basic_store):
+def test_symbol_not_found_exception(lmdb_version_store):
     """Check we match the legacy behaviour where this is not an _ArcticLegacyCompatibilityException"""
     with pytest.raises(NoDataFoundException) as e:
-        basic_store.read("non_existent_symbol")
+        lmdb_version_store.read("non_existent_symbol")
 
     assert not issubclass(e.type, _ArcticLegacyCompatibilityException)
     assert issubclass(e.type, ArcticException)
 
 
-def test_no_such_version_exception(basic_store):
+def test_no_such_version_exception(lmdb_version_store):
     """Check we match the legacy behaviour where this is not an _ArcticLegacyCompatibilityException"""
-    basic_store.write("sym", [1, 2, 3])
+    lmdb_version_store.write("sym", [1, 2, 3])
     with pytest.raises(NoSuchVersionException) as e:
-        basic_store.restore_version("sym", as_of=999)
+        lmdb_version_store.restore_version("sym", as_of=999)
     assert not issubclass(e.type, _ArcticLegacyCompatibilityException)
     assert issubclass(e.type, NoDataFoundException)
     assert issubclass(e.type, ArcticException)
