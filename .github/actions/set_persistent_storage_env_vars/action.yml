@@ -5,7 +5,8 @@ inputs:
   endpoint:          {default: 's3.eu-west-2.amazonaws.com', type: string, description: The address of the S3 endpoint}
   region:            {default: 'eu-west-2', type: string, description: The S3 region of the bucket}
   aws_access_key:    {required: true, type: string, description: The value for the AWS Access key}      
-  aws_secret_key:    {required: true, type: string, description: The value for the AWS Secret key}      
+  aws_secret_key:    {required: true, type: string, description: The value for the AWS Secret key}
+  strategy_branch:   {default: 'ignore', type: string, description: a unique combination of the parameters for the given job strategy branch, e.g. linux_cp36} 
 runs:
   using: "composite"
   steps:
@@ -16,7 +17,11 @@ runs:
         # Common
         echo "ARCTICDB_PERSISTENT_STORAGE_TESTS=1" >> $GITHUB_ENV
         echo "ARCTICDB_PERSISTENT_STORAGE_UNIQUE_ID=${{ github.ref_name }}_${{ github.run_id }}" >> $GITHUB_ENV
-        echo "ARCTICDB_PERSISTENT_STORAGE_PATH_PREFIX=ci_tests/${{ github.ref_name }}_${{ github.run_id }}/" >> $GITHUB_ENV
+        echo "ARCTICDB_PERSISTENT_STORAGE_STRATEGY_BRANCH=${{ inputs.strategy_branch }}" >> $GITHUB_ENV
+        # This is the top level path for all test, this is where to write data that should be shared between jobs (e.g. seed job)
+        echo "ARCTICDB_PERSISTENT_STORAGE_SHARED_PATH_PREFIX=ci_tests/${{ github.ref_name }}_${{ github.run_id }}/" >> $GITHUB_ENV
+        # This is a path that should be used for specific job and its tests to avoid cross contamination and race conditions
+        echo "ARCTICDB_PERSISTENT_STORAGE_UNIQUE_PATH_PREFIX=ci_tests/${{ github.ref_name }}_${{ github.run_id }}/${{ inputs.strategy_branch }}" >> $GITHUB_ENV
         # S3 Specific
         echo "ARCTICDB_REAL_S3_BUCKET=${{ inputs.bucket }}" >> $GITHUB_ENV
         echo "ARCTICDB_REAL_S3_ENDPOINT=${{ inputs.endpoint }}" >> $GITHUB_ENV

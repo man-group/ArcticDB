@@ -2,28 +2,14 @@ import pytest
 import os
 import pandas as pd
 from arcticdb.arctic import Arctic
+from arcticdb.util.storage_test import get_seed_libraries, get_real_s3_uri
 from tests.conftest import PERSISTENT_STORAGE_TESTS_ENABLED
 
 PERSISTENT_STORAGE_LIB_NAME = os.getenv("ARCTICDB_PERSISTENT_STORAGE_LIB_NAME")
 UNIQUE_ID = os.getenv("ARCTICDB_PERSISTENT_STORAGE_UNIQUE_ID")
 
 if PERSISTENT_STORAGE_TESTS_ENABLED:
-    # TODO: Maybe add a way to parametrize this
-    LIBRARIES = [
-        # LINUX
-        "linux_cp36",
-        "linux_cp37",
-        "linux_cp38",
-        "linux_cp39",
-        "linux_cp310",
-        "linux_cp311",
-        # WINDOWS
-        "windows_cp37",
-        "windows_cp38",
-        "windows_cp39",
-        "windows_cp310",
-        "windows_cp311",
-    ]
+    LIBRARIES = get_seed_libraries()
 else:
     LIBRARIES = []
 
@@ -40,11 +26,11 @@ def normalize_lib_name(lib_name):
 @pytest.mark.skipif(
     not PERSISTENT_STORAGE_TESTS_ENABLED, reason="This test should run only if the persistent storage tests are enabled"
 )
-def test_real_s3_storage_read(real_s3_uri, library):
-    ac = Arctic(real_s3_uri)
+def test_real_s3_storage_read(library):
+    ac = Arctic(get_real_s3_uri())
     lib_name = f"seed_{UNIQUE_ID}_{library}"
     lib_name = normalize_lib_name(lib_name)
-    lib = ac[lib_name]
+    lib = ac[library]
     symbols = lib.list_symbols()
     assert len(symbols) == 3
     for sym in ["one", "two", "three"]:
@@ -58,10 +44,11 @@ def test_real_s3_storage_read(real_s3_uri, library):
 @pytest.mark.skipif(
     not PERSISTENT_STORAGE_TESTS_ENABLED, reason="This test should run only if the persistent storage tests are enabled"
 )
-def test_real_s3_storage_write(real_s3_uri, three_col_df):
-    library_to_write_to = PERSISTENT_STORAGE_LIB_NAME
+def test_real_s3_storage_write(three_col_df):
+    strategy_branch = os.getenv("ARCTICDB_PERSISTENT_STORAGE_STRATEGY_BRANCH")
+    library_to_write_to = f"test_{strategy_branch}"
     library_to_write_to = normalize_lib_name(library_to_write_to)
-    ac = Arctic(real_s3_uri)
+    ac = Arctic(get_real_s3_uri())
     # There shouldn't be a library with this name present, so delete just in case
     ac.delete_library(library_to_write_to)
     ac.create_library(library_to_write_to)

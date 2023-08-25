@@ -58,20 +58,19 @@ jobs:
         with:
           aws_access_key: "${{ secrets.AWS_S3_ACCESS_KEY }}"
           aws_secret_key: "${{ secrets.AWS_S3_SECRET_KEY }}"
+          strategy_branch: "${{matrix.os}}_${{env.python_impl_name}}"
         
       - name: Seed the storage
         if: inputs.job_type == 'seed'
         run: |
           echo "Running seed for ${{ env.ARCTICDB_PERSISTENT_STORAGE_UNIQUE_ID }} on ${{matrix.os}}_${{env.python_impl_name}}"
-          python build_tooling/seed_storage.py
-        env:
-          ARCTICDB_PERSISTENT_STORAGE_LIB_NAME: 'seed_${{ env.ARCTICDB_PERSISTENT_STORAGE_UNIQUE_ID }}_${{matrix.os}}_${{env.python_impl_name}}'
+          python python/arcticdb/util/storage_test.py --type seed
 
       - name: Verify the storage
         if: inputs.job_type == 'verify'
         run: |
           echo "Running verify for ${{ github.ref_name }} on ${{matrix.os}}_${{env.python_impl_name}}"
-          python build_tooling/verify_storage.py
+          python python/arcticdb/util/storage_test.py --type verify
         
   cleanup:
     if: inputs.job_type == 'cleanup'
