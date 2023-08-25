@@ -5,16 +5,8 @@ on:
       run:
         type: boolean
 
-  push:
-    branches: ["**"]
-    tags: [v**]
-    paths:
-      - .github/**
-      - build_tooling/**
-      - cpp/**
-      - python/**
-      - setup.*
-      - pyproject.toml
+  schedule: # Schdeule the job to run at 12 a.m. daily
+    - cron: '0 0 * * *'
 jobs:
   cibw_docker_image:
     uses: ./.github/workflows/cibw_docker_image.yml
