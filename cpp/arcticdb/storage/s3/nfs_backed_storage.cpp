@@ -150,7 +150,7 @@ void NfsBackedStorage::do_remove(Composite<VariantKey>&& ks, RemoveOpts) {
 }
 
 void NfsBackedStorage::do_iterate_type(KeyType key_type, const IterateTypeVisitor& visitor, const std::string& prefix) {
-    auto func = [v = std::move(visitor), prefix=prefix] (VariantKey&& k) mutable {
+    auto func = [&v = visitor, prefix=prefix] (VariantKey&& k) mutable {
         auto key = unencode_object_id(k);
         if(prefix.empty() || variant_key_id(key) == StreamId{prefix})
             v(std::move(key));

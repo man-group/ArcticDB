@@ -53,11 +53,11 @@ class ConfigCache {
         descriptor_map_.emplace(path, desc);
     }
 
-    void add_storage(const StorageName& storage_name, const arcticdb::proto::storage::VariantStorage storage) {
+    void add_storage(const StorageName& storage_name, const arcticdb::proto::storage::VariantStorage& storage) {
         config_resolver_->add_storage(environment_name_, storage_name, storage);
     }
 
-    std::vector<LibraryPath> list_libraries(const std::string_view &prefix) {
+    std::vector<LibraryPath> list_libraries(std::string_view prefix) {
         std::lock_guard<std::mutex> lock{mutex_};
         std::vector<LibraryPath> res;
         for (auto &[lib, _] : descriptor_map_) {
@@ -75,7 +75,7 @@ class ConfigCache {
         if (!maybe_descriptor.has_value())
             throw std::runtime_error(fmt::format("Library {} not found", path));
 
-        auto &descriptor = maybe_descriptor.value();
+        auto &descriptor = *maybe_descriptor;
 
         util::check(!descriptor.storage_ids_.empty(), "Can't configure library with no storage ids");
         std::vector<std::unique_ptr<Storage>> storages;
@@ -105,17 +105,17 @@ class ConfigCache {
 
         auto libraries = config_resolver_->get_libraries(environment_name_);
         for (auto& [library_path, descriptor] : libraries) {
-            descriptor_map_.emplace(library_path, decode_library_descriptor(descriptor));
+            descriptor_map_.try_emplace(library_path, decode_library_descriptor(descriptor));
         }
         auto storages = config_resolver_->get_storages(environment_name_);
         for(auto& [storage_name, config] : storages) {
-            storage_configs_.emplace(StorageName(storage_name), config);
+            storage_configs_.try_emplace(StorageName(storage_name), config);
         }
         auto default_storages = config_resolver_->get_default_storages(environment_name_);
         for(auto& [storage_name, config] : default_storages) {
             if (storage_configs_.find(storage_name) == storage_configs_.end()) {
                 config_resolver_->add_storage(environment_name_, storage_name, config);
-                storage_configs_.emplace(StorageName(storage_name), config);
+                storage_configs_.try_emplace(StorageName(storage_name), config);
             }
         }
     }

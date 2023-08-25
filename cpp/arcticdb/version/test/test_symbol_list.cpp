@@ -13,6 +13,7 @@
 #include <arcticdb/storage/test/in_memory_store.hpp>
 #include <arcticdb/util/test/generators.hpp>
 #include <arcticdb/util/test/gtest_utils.hpp>
+#include <arcticdb/version/test/symbol_list_backwards_compat.hpp>
 
 #include <shared_mutex>
 
@@ -73,25 +74,24 @@ struct SymbolListSuite : Test {
 
     std::shared_ptr<InMemoryStore> store = std::make_shared<InMemoryStore>();
     std::shared_ptr<VersionMap> version_map = std::make_shared<VersionMap>();
-    SymbolList symbol_list{version_map, };
+    std::unique_ptr<SymbolList> symbol_list = std::make_unique<SymbolList>(version_map);
 
     // Need at least one compaction key to avoid using the version keys as source
-    void write_initial_compaction_key() {
+    void write_initial_compaction_key() const {
         log::version().set_level(spdlog::level::warn);
-        symbol_list.load(store, false);
+        symbol_list->load(version_map, store, false);
         log::version().set_level(spdlog::level::debug);
     }
 
     // The max_delta_ can be set at construction time only, so to change requires a new instance:
-    void override_max_delta(int size) {
+    void override_max_delta(int64_t size) {
         ConfigsMap::instance()->set_int("SymbolList.MaxDelta", size);
-        symbol_list.~SymbolList();
-        new(&symbol_list) SymbolList(version_map);
+        symbol_list = std::make_unique<SymbolList>(version_map);
     }
 
-    auto get_symbol_list_keys(const std::string& prefix = "") {
+    [[nodiscard]] auto get_symbol_list_keys(const std::string& prefix = "") const {
         std::vector<VariantKey> keys;
-        store->iterate_type(entity::KeyType::SYMBOL_LIST, [&keys](auto&& k){keys.push_back(k);}, prefix);
+        store->iterate_type(entity::KeyType::SYMBOL_LIST, [&keys](const VariantKey& k){keys.push_back(k);}, prefix);
         return keys;
     }
 };
@@ -100,7 +100,7 @@ using FailSimParam = StorageFailureSimulator::Params;
 
 /** Adds storage failure cases to some tests. */
 struct SymbolListWithReadFailures : SymbolListSuite, testing::WithParamInterface<FailSimParam> {
-    void setup_failure_sim_if_any() {
+    static void setup_failure_sim_if_any() {
         StorageFailureSimulator::instance()->configure(GetParam());
     }
 };
@@ -109,10 +109,10 @@ TEST_P(SymbolListWithReadFailures, FromSymbolListSource) {
     write_initial_compaction_key();
     setup_failure_sim_if_any();
 
-    symbol_list.add_symbol(store, symbol_1);
-    symbol_list.add_symbol(store, symbol_2);
+    SymbolList::add_symbol(store, symbol_1, 0);
+    SymbolList::add_symbol(store, symbol_2, 1);
 
-    std::vector<StreamId> copy = symbol_list.get_symbols(store, true);
+    std::vector<StreamId> copy = symbol_list->get_symbols(store, true);
 
     ASSERT_EQ(copy.size(), 2) << fmt::format("got {}", copy);
     ASSERT_EQ(copy[0], StreamId{"aaa"});
@@ -122,8 +122,8 @@ TEST_P(SymbolListWithReadFailures, FromSymbolListSource) {
 TEST_F(SymbolListSuite, Persistence) {
     write_initial_compaction_key();
 
-    symbol_list.add_symbol(store, symbol_1);
-    symbol_list.add_symbol(store, symbol_2);
+    SymbolList::add_symbol(store, symbol_1, 0);
+    SymbolList::add_symbol(store, symbol_2, 1);
 
     SymbolList output_list{version_map};
     std::vector<StreamId> symbols = output_list.get_symbols(store, true);
@@ -149,7 +149,7 @@ TEST_P(SymbolListWithReadFailures, VersionMapSource) {
     version_map->write_version(store, key3);
 
     setup_failure_sim_if_any();
-    std::vector<StreamId> symbols = symbol_list.get_symbols(store);
+    std::vector<StreamId> symbols = symbol_list->get_symbols(store);
     ASSERT_THAT(symbols, UnorderedElementsAre(symbol_1, symbol_2, symbol_3));
 }
 
@@ -165,34 +165,34 @@ INSTANTIATE_TEST_SUITE_P(, SymbolListWithReadFailures, Values(
 TEST_F(SymbolListSuite, MultipleWrites) {
     write_initial_compaction_key();
 
-    symbol_list.add_symbol(store, symbol_1);
-    symbol_list.add_symbol(store, symbol_2);
+    SymbolList::add_symbol(store, symbol_1, 0);
+    SymbolList::add_symbol(store, symbol_2, 0);
 
     SymbolList another_instance{version_map};
-    another_instance.add_symbol(store, symbol_3);
+    SymbolList::add_symbol(store, symbol_3, 0);
 
-    std::vector<StreamId> copy = symbol_list.get_symbols(store, true);
+    std::vector<StreamId> copy = symbol_list->get_symbols(store, true);
     ASSERT_THAT(copy, UnorderedElementsAre(symbol_1, symbol_2, symbol_3));
 
     std::vector<StreamId> symbols = another_instance.get_symbols(store, true);
     ASSERT_THAT(symbols, UnorderedElementsAre(symbol_1, symbol_2, symbol_3));
 }
 
-enum CompactOutcome: size_t {
-    NOT_WRITTEN = 0, WRITTEN, NOT_CLEANED_UP
+enum class CompactOutcome : uint8_t {
+    NOT_WRITTEN = 0, WRITTEN, NOT_CLEANED_UP, UNKNOWN
 };
 
 using WriteFailuresParams = std::tuple<FailSimParam, CompactOutcome>;
 
 struct SymbolListWithWriteFailures : SymbolListSuite, testing::WithParamInterface<WriteFailuresParams> {
-    CompactOutcome expected_outcome;
+    CompactOutcome expected_outcome = CompactOutcome::UNKNOWN;
 
     void setup_failure_sim_if_any() {
         StorageFailureSimulator::instance()->configure(std::get<0>(GetParam()));
         expected_outcome = std::get<1>(GetParam());
     }
 
-    void check_num_symbol_list_keys_match_expectation(std::map<CompactOutcome, size_t> size_by_outcome) {
+    void check_num_symbol_list_keys_match_expectation(std::map<CompactOutcome, size_t> size_by_outcome) const {
         auto keys = get_symbol_list_keys();
         ASSERT_THAT(keys, SizeIs(size_by_outcome.at(expected_outcome)));
     }
@@ -204,24 +204,24 @@ TEST_P(SymbolListWithWriteFailures, SubsequentCompaction) {
     std::vector<StreamId> expected;
     for(size_t i = 0; i < 500; ++i) {
         auto symbol = fmt::format("sym{}", i);
-        symbol_list.add_symbol(store, symbol);
+        SymbolList::add_symbol(store, symbol, 0);
         expected.emplace_back(symbol);
     }
 
     setup_failure_sim_if_any();
-    std::vector<StreamId> symbols = symbol_list.get_symbols(store, false);
+    std::vector<StreamId> symbols = symbol_list->get_symbols(store, false);
     ASSERT_THAT(symbols, UnorderedElementsAreArray(expected));
 
     // Extra 1 in 501 is the initial compaction key
     // NOT_CLEANED_UP case checks that deletion happens after the compaction key is written
-    check_num_symbol_list_keys_match_expectation({{{NOT_WRITTEN, 501}, {WRITTEN, 1}, {NOT_CLEANED_UP, 502}}});
+    check_num_symbol_list_keys_match_expectation({{{CompactOutcome::NOT_WRITTEN, 501}, {CompactOutcome::WRITTEN, 1}, {CompactOutcome::NOT_CLEANED_UP, 502}}});
 
     // Retry:
-    if (expected_outcome != WRITTEN) {
-        symbols = symbol_list.get_symbols(store, false);
+    if (expected_outcome != CompactOutcome::WRITTEN) {
+        symbols = symbol_list->get_symbols(store, false);
         ASSERT_THAT(symbols, UnorderedElementsAreArray(expected));
 
-        check_num_symbol_list_keys_match_expectation({{{NOT_WRITTEN, 1}, {NOT_CLEANED_UP, 1}}});
+        check_num_symbol_list_keys_match_expectation({{{CompactOutcome::NOT_WRITTEN, 1}, {CompactOutcome::NOT_CLEANED_UP, 1}}});
     }
 }
 
@@ -239,10 +239,10 @@ TEST_P(SymbolListWithWriteFailures, InitialCompact) {
     }
 
     setup_failure_sim_if_any();
-    std::vector<StreamId> symbols = symbol_list.get_symbols(store);
+    std::vector<StreamId> symbols = symbol_list->get_symbols(store);
     ASSERT_THAT(symbols, UnorderedElementsAreArray(expected));
 
-    check_num_symbol_list_keys_match_expectation({{{NOT_WRITTEN, 0}, {WRITTEN, 1}, {NOT_CLEANED_UP, 1}}});
+    check_num_symbol_list_keys_match_expectation({{{CompactOutcome::NOT_WRITTEN, 0}, {CompactOutcome::WRITTEN, 1}, {CompactOutcome::NOT_CLEANED_UP, 1}}});
 }
 
 INSTANTIATE_TEST_SUITE_P(, SymbolListWithWriteFailures, Values(
@@ -257,7 +257,7 @@ std::optional<T> random_choice(const std::set<T>& set, U& gen) {
     if (set.empty()) {
         return std::nullopt;
     }
-    std::uniform_int_distribution<> dis(0, std::min(size_t{0}, set.size() - 1));
+    std::uniform_int_distribution dis(0, static_cast<int>(std::min(size_t{0}, set.size() - 1)));
     size_t index = dis(gen);
     auto it = set.begin();
     std::advance(it, index);
@@ -266,63 +266,68 @@ std::optional<T> random_choice(const std::set<T>& set, U& gen) {
 
 class SymbolListState {
 public:
-    SymbolListState(std::shared_ptr<Store> store) :
+    explicit SymbolListState(std::shared_ptr<Store> store, std::shared_ptr<VersionMap> version_map) :
             store_(std::move(store)),
-            gen_(42) {}
+            version_map_(std::move(version_map)){
+    }
 
-    void do_action(std::shared_ptr<SymbolList> symbol_list) {
+    void do_action(const std::shared_ptr<SymbolList>& symbol_list) {
         std::scoped_lock<std::mutex> lock{mutex_};
-        std::uniform_int_distribution<> dis(0, 10);
-        auto action = dis(gen_);
-        switch(action) {
+        std::uniform_int_distribution dis(0, 10);
+        switch(auto action = dis(gen_); action) {
             case 0:
-                do_delete(symbol_list);
+                do_delete();
                 break;
             case 1:
-                do_readd(symbol_list);
+                do_readd();
                 break;
             case 2:
                 do_list_symbols(symbol_list);
                 break;
             default:
-                do_add(symbol_list);
+                do_add();
                 break;
         }
         assert_invariants(symbol_list);
     };
-    void do_list_symbols(std::shared_ptr<SymbolList> symbol_list) {
+    void do_list_symbols(const std::shared_ptr<SymbolList>& symbol_list) const {
         ASSERT_EQ(symbol_list->get_symbol_set(store_), live_symbols_);
     };
 private:
-    void do_add(std::shared_ptr<SymbolList> symbol_list) {
-        std::uniform_int_distribution<> dis(0);
+    void do_add() {
+        std::uniform_int_distribution dis(0);
         int id = dis(gen_);
         auto symbol = fmt::format("sym-{}", id);
-        if (live_symbols_.count(symbol) == 0) {
+        if (live_symbols_.count(symbol) == 0 && deleted_symbols_.count(symbol) == 0) {
             live_symbols_.insert(symbol);
-            symbol_list->add_symbol(store_, symbol);
+            SymbolList::add_symbol(store_, symbol, 0);
+            versions_.try_emplace(symbol, 0);
+            version_map_->write_version(store_, atom_key_builder().version_id(0).build(symbol, KeyType::TABLE_INDEX));
             ARCTICDB_DEBUG(log::version(), "Adding {}", symbol);
         }
     };
-    void do_delete(std::shared_ptr<SymbolList> symbol_list) {
+    void do_delete() {
         auto symbol = random_choice(live_symbols_, gen_);
         if (symbol.has_value()) {
             live_symbols_.erase(*symbol);
             deleted_symbols_.insert(*symbol);
-            symbol_list->remove_symbol(store_, *symbol);
+            version_map_->delete_all_versions(store_, *symbol);
+            SymbolList::remove_symbol(store_, *symbol, versions_[*symbol]);
             ARCTICDB_DEBUG(log::version(), "Removing {}", *symbol);
         }
     };
-    void do_readd(std::shared_ptr<SymbolList> symbol_list) {
+    void do_readd() {
         auto symbol = random_choice(deleted_symbols_, gen_);
         if (symbol.has_value()) {
             deleted_symbols_.erase(*symbol);
             live_symbols_.insert(*symbol);
-            symbol_list->add_symbol(store_, *symbol);
-            ARCTICDB_DEBUG(log::version(), "Re-adding {}", *symbol);
+            ++versions_[*symbol];
+            SymbolList::add_symbol(store_, *symbol, versions_[*symbol]);
+            version_map_->write_version(store_, atom_key_builder().version_id(versions_[*symbol]).build(*symbol, KeyType::TABLE_INDEX));
+            ARCTICDB_DEBUG(log::version(), "Re-adding {}@{}", *symbol, versions_[*symbol]);
         }
     };
-    void assert_invariants(std::shared_ptr<SymbolList> symbol_list) {
+    void assert_invariants(const std::shared_ptr<SymbolList>& symbol_list) const {
         for(const auto& symbol: live_symbols_) {
             ASSERT_EQ(deleted_symbols_.count(symbol), 0);
         }
@@ -335,9 +340,11 @@ private:
     }
 
     std::shared_ptr<Store> store_;
-    std::mt19937 gen_;
+    std::shared_ptr<VersionMap> version_map_;
+    std::mt19937 gen_ = std::mt19937{42};
     std::set<StreamId> live_symbols_;
     std::set<StreamId> deleted_symbols_;
+    std::unordered_map<StreamId, size_t> versions_;
     std::mutex mutex_;
 };
 
@@ -345,11 +352,335 @@ TEST_F(SymbolListSuite, AddDeleteReadd) {
     auto symbol_list = std::make_shared<SymbolList>(version_map);
     write_initial_compaction_key();
 
-    SymbolListState state(store);
+    SymbolListState state(store, version_map);
     for (size_t i = 0; i < 10; ++i) {
         state.do_action(symbol_list);
     }
     state.do_list_symbols(symbol_list);
+}
+
+constexpr timestamp operator "" _s (unsigned long long t) {
+    return static_cast<timestamp>(t) * 1000'000'000;
+}
+
+bool result_equals(const ProblematicResult& got, const SymbolEntryData& expected) {
+    return got.reference_id() == expected.reference_id_ && got.action() == expected.action_ && got.time() == expected.timestamp_;
+}
+
+TEST(SymbolList, IsProblematic) {
+    const timestamp min_interval = 100000;
+
+    // No conflict - all adds
+    std::vector<SymbolEntryData> vec1{
+        {0, 0, ActionType::ADD}, {1, 1_s, ActionType::ADD}, {2, 2_s, ActionType::ADD}
+    };
+    auto result = is_problematic(vec1, min_interval);
+    ASSERT_EQ(static_cast<bool>(result), false);
+
+    // No conflict with delete
+    std::vector<SymbolEntryData> vec2{
+        {0, 0, ActionType::ADD}, {1, 1_s, ActionType::ADD}, {1, 2_s, ActionType::DELETE}
+    };
+    result = is_problematic(vec2, min_interval);
+    ASSERT_EQ(static_cast<bool>(result), false);
+
+    // Version conflict not in the most recent is okay
+    std::vector<SymbolEntryData> vec3{
+        {0, 0, ActionType::ADD}, {0, 1_s, ActionType::DELETE}, {0, 2_s, ActionType::ADD}, {1, 3_s, ActionType::ADD}
+    };
+    result = is_problematic(vec3, min_interval);
+    ASSERT_EQ(static_cast<bool>(result), false);
+
+    // Version conflict with same action also fine
+    std::vector<SymbolEntryData> vec4{
+        {0, 0, ActionType::ADD}, {0, 1_s, ActionType::DELETE}, {1, 2_s, ActionType::ADD}, {1, 3_s, ActionType::ADD}, {1, 4_s, ActionType::ADD}
+    };
+    result = is_problematic(vec4, min_interval);
+    ASSERT_EQ(static_cast<bool>(result), false);
+
+    // Version conflict at end returns latest
+    std::vector<SymbolEntryData> vec5{
+        {0, 0, ActionType::ADD}, {1, 1_s, ActionType::DELETE}, {1, 2_s, ActionType::DELETE}, {1, 3_s, ActionType::ADD}
+    };
+    result = is_problematic(vec5, min_interval);
+    SymbolEntryData expected1{1, 3_s, ActionType::ADD};
+    ASSERT_EQ(result_equals(result, expected1), true);
+
+    // As above but with the first version
+    std::vector<SymbolEntryData> vec6{
+        {0, 1_s, ActionType::DELETE}, {0, 2_s, ActionType::DELETE}, {0, 3_s, ActionType::ADD}
+    };
+    result = is_problematic(vec6, min_interval);
+    SymbolEntryData expected2{0, 3_s, ActionType::ADD};
+    ASSERT_EQ(result_equals(result, expected2), true);
+
+    // Timestamps too close but not more recent is okay
+    std::vector<SymbolEntryData> vec7{
+        {0, 0, ActionType::ADD}, {1, 100, ActionType::DELETE}, {2, 2_s, ActionType::ADD}
+    };
+    result = is_problematic(vec7, min_interval);
+    ASSERT_EQ(static_cast<bool>(result), false);
+
+    // Timestamp clash in most recent returns latest entry
+    std::vector<SymbolEntryData> vec8{
+        {0, 0, ActionType::ADD}, {0, 1_s, ActionType::DELETE}, {0, 1_s + 100, ActionType::ADD}
+    };
+    result = is_problematic(vec8, min_interval);
+    SymbolEntryData expected3{0, 1_s + 100, ActionType::ADD};
+    ASSERT_EQ(result_equals(result, expected3), true);
+
+    // Contains unknown reference ids
+    std::vector<SymbolEntryData> vec9{
+        {0, 0, ActionType::ADD}, {unknown_version_id, 1_s, ActionType::DELETE}, {2, 2_s, ActionType::ADD}
+    };
+    result = is_problematic(vec9, min_interval);
+    ASSERT_EQ(result.contains_unknown_reference_ids_, true);
+}
+
+TEST(SymbolList, IsProblematicWithStored) {
+    const timestamp min_interval = 100000;
+
+    // No conflict
+    SymbolListEntry entry1{"test", 0, 0, ActionType::ADD};
+    std::vector<SymbolEntryData> vec1{
+        {1, 1_s, ActionType::ADD}, {2, 2_s, ActionType::ADD}, {3, 3_s, ActionType::ADD}
+    };
+    auto result = is_problematic(entry1, vec1, min_interval);
+    ASSERT_EQ(static_cast<bool>(result), false);
+
+    // No conflict with delete
+    SymbolListEntry entry2{"test", 0, 0, ActionType::ADD};
+    std::vector<SymbolEntryData> vec2{
+        {0, 1_s, ActionType::DELETE}, {1, 2_s, ActionType::ADD}, {1, 3_s, ActionType::DELETE}, {2, 4_s, ActionType::ADD}, {2, 5_s, ActionType::ADD}
+    };
+    result = is_problematic(entry2, vec2, min_interval);
+    ASSERT_EQ(static_cast<bool>(result), false);
+
+    // Conflict between stored and update, but not most recent is okay
+    SymbolListEntry entry3{"test", 0, 0, ActionType::ADD};
+    std::vector<SymbolEntryData> vec3{
+        {0, 1_s, ActionType::ADD}, {0, 2_s, ActionType::DELETE}, {1, 3_s, ActionType::ADD}, {2, 4_s, ActionType::ADD}
+    };
+
+    result = is_problematic(entry3, vec3, min_interval);
+    ASSERT_EQ(static_cast<bool>(result), false);
+
+    // Version conflict but same action is fine
+    SymbolListEntry entry4{"test", 0, 0, ActionType::ADD};
+    std::vector<SymbolEntryData> vec4{
+        {0, 1_s, ActionType::ADD}, {0, 2_s, ActionType::ADD}
+    };
+    result = is_problematic(entry4, vec4, min_interval);
+    ASSERT_EQ(static_cast<bool>(result), false);
+
+    // Conflicting version in update returns most recent update
+    SymbolListEntry entry5{"test", 0, 0, ActionType::ADD};
+    std::vector<SymbolEntryData> vec5{
+        {0, 1_s, ActionType::DELETE}, {1, 2_s, ActionType::DELETE}, {1, 3_s, ActionType::ADD}, {1, 4_s, ActionType::DELETE}
+    };
+    result = is_problematic(entry5, vec5, min_interval);
+    SymbolEntryData expected{1, 4_s, ActionType::DELETE};
+    ASSERT_EQ(result_equals(result, expected), true);
+
+    // Conflict exists but there is an old-style symbol list key
+    SymbolListEntry entry6{"test", 0, 0, ActionType::ADD};
+    std::vector<SymbolEntryData> vec6{
+        {unknown_version_id, 1_s, ActionType::ADD}, {0, 2_s, ActionType::ADD}, {0, 3_s, ActionType::DELETE}
+    };
+    result = is_problematic(entry6, vec6, min_interval);
+    ASSERT_EQ(result.contains_unknown_reference_ids_, true);
+    ASSERT_EQ(static_cast<bool>(result), false);
+
+    // Simple conflict between update and existing
+    SymbolListEntry entry7{"test", 0, 0, ActionType::ADD};
+    std::vector<SymbolEntryData> vec7{
+       {0, 2_s, ActionType::ADD}, {0, 3_s, ActionType::DELETE}
+    };
+    result = is_problematic(entry7, vec7, min_interval);
+    expected = SymbolEntryData{0, 3_s, ActionType::DELETE};
+    ASSERT_EQ(result_equals(result, expected), true);
+
+    // Update conflicts with existing
+    SymbolListEntry entry8{"test", 0, 0, ActionType::DELETE};
+    std::vector<SymbolEntryData> vec8{
+        {0, 1_s, ActionType::ADD}, {0, 2_s, ActionType::ADD}
+    };
+    result = is_problematic(entry8, vec8, min_interval);
+    expected = SymbolEntryData{0, 2_s, ActionType::ADD};
+    ASSERT_EQ(result_equals(result, expected), true);
+
+    // Update and existing timestamps too close
+    SymbolListEntry entry9{"test", 0, 0, ActionType::DELETE};
+    std::vector<SymbolEntryData> vec9{
+        {1, 100, ActionType::ADD}
+    };
+
+    result = is_problematic(entry9, vec9, min_interval);
+    expected = SymbolEntryData{1, 100, ActionType::ADD};
+    ASSERT_EQ(result_equals(result, expected), true);
+
+    // Update and existing timestamps too close, same action is okay
+    SymbolListEntry entry10{"test", 0, 0, ActionType::DELETE};
+    std::vector<SymbolEntryData> vec10{
+        {1, 100, ActionType::DELETE}
+    };
+
+    result = is_problematic(entry10, vec10, min_interval);
+    ASSERT_EQ(static_cast<bool>(result), false);
+
+    // Timestamps too close, but not most recent
+    SymbolListEntry entry11{"test", 0, 0, ActionType::DELETE};
+    std::vector<SymbolEntryData> vec11{
+        {1, 100, ActionType::ADD},   {2, 2_s, ActionType::ADD},
+    };
+
+    result = is_problematic(entry11, vec11, min_interval);
+    ASSERT_EQ(static_cast<bool>(result), false);
+}
+
+TEST(Problematic, RealTimestamps2) {
+    //SymbolListEntry entry1{"test", 0, 1694701083539622714, ActionType::ADD};
+    std::vector<SymbolEntryData> vec1{
+        {0,1696255639552055287, ActionType::ADD},
+        {0,1696255639570862954, ActionType::ADD}
+    };
+
+    auto result = is_problematic(vec1, 100000);
+    ASSERT_EQ(static_cast<bool>(result), false);
+}
+
+TEST(Problematic, RealTimestamps) {
+    SymbolListEntry entry1{"test", 0, 1694701083539622714, ActionType::ADD};
+    std::vector<SymbolEntryData> vec1{
+        {0, 1694701083516771231, ActionType::ADD},
+        {0, 1694701083531817347, ActionType::ADD},
+        {0, 1694701083541496287, ActionType::ADD},
+        {0, 1694701083560192503, ActionType::ADD},
+        {0, 1694701084093532954, ActionType::DELETE},
+        {1, 1694701083552042983, ActionType::ADD}};
+
+    auto result = is_problematic(entry1, vec1, 100000);
+    auto expected = SymbolEntryData{1, 1694701083552042983, ActionType::ADD};
+    ASSERT_EQ(result_equals(result, expected), true);
+
+    SymbolListEntry entry2{"test", 2, 1694779989680380390, ActionType::ADD};
+    std::vector<SymbolEntryData> vec2{
+        {0, 1694779976040611297, ActionType::ADD},
+        {0, 1694779976054908858, ActionType::ADD},
+        {0, 1694779976062913894, ActionType::ADD},
+        {0, 1694779976086496686, ActionType::ADD},
+        {0, 1694779976095000098, ActionType::ADD},
+        {0, 1694779976098613575, ActionType::ADD},
+        {0, 1694779976107390800, ActionType::ADD},
+        {0, 1694779976111358260, ActionType::ADD},
+        {0, 1694779976143999710, ActionType::ADD},
+        {0, 1694779976168307639, ActionType::ADD},
+        {1, 1694779989420016576, ActionType::ADD},
+        {1, 1694779989444335735, ActionType::ADD},
+        {1, 1694779989498340862, ActionType::ADD},
+        {1, 1694779989512893237, ActionType::ADD},
+        {2, 1694779989574879134, ActionType::ADD},
+        {2, 1694779989620457221, ActionType::ADD},
+        {2, 1694779989677524006, ActionType::ADD},
+        {2, 1694779989686341802, ActionType::ADD},
+        {2, 1694779989705203871, ActionType::ADD},
+        {3, 1694779989698388246, ActionType::ADD}};
+
+    result = is_problematic(entry2, vec2, 100000);
+    ASSERT_EQ(static_cast<bool>(result), false);
+
+    SymbolListEntry entry3{"test", 0, 1696510154249460459, ActionType::ADD};
+    std::vector<SymbolEntryData> vec3{
+        {0, 1696510154081738353, ActionType::ADD},
+        {0, 1696510154273679131, ActionType::ADD},
+        {0, 1696510154277544441, ActionType::ADD},
+        {0, 1696510154352448935, ActionType::DELETE},
+        {1, 1696510154280568615, ActionType::ADD}
+    };
+
+    result = is_problematic(entry3, vec3, 100000);
+    expected = SymbolEntryData{1, 1696510154280568615, ActionType::ADD};
+    ASSERT_EQ(result_equals(result, expected), true);
+}
+
+bool is_compacted(const std::shared_ptr<Store>& store) {
+    std::vector<AtomKey> symbol_keys;
+    store->iterate_type(KeyType::SYMBOL_LIST, [&symbol_keys] (const auto& key){
+        symbol_keys.push_back(to_atom(key));
+    });
+    return symbol_keys.size() == 1 && symbol_keys[0].id() == StreamId{std::string{CompactionId}};
+}
+
+bool all_symbols_match(
+    const std::shared_ptr<Store>& store, 
+    SymbolList& symbol_list, 
+    std::vector<StreamId>& expected) {
+    auto symbols = symbol_list.get_symbols(store, true);
+    if(symbols != expected)
+        return false;
+    
+    auto old_symbols = backwards_compat_get_symbols(store);
+    std::set<StreamId> expected_set;
+    expected_set.insert(std::begin(expected), std::end(expected));
+    if(old_symbols != expected_set) 
+        return false;
+    
+    return true;
+}
+
+TEST_F(SymbolListSuite, BackwardsCompat) {
+    ConfigsMap::instance()->set_int("SymbolList.MaxDelta", 5);
+    auto version_store = get_test_engine();
+    const auto& store = version_store._test_get_store();
+    auto version_map = std::make_shared<VersionMap>();
+    SymbolList symbol_list{version_map};
+    std::vector<StreamId> expected;
+
+    for(auto i = 0U; i < 10; i += 2) {
+        SymbolList::add_symbol(store, fmt::format("symbol_{}", i), 0);
+        expected.emplace_back(fmt::format("symbol_{}", i));
+        backwards_compat_write_journal(store, fmt::format("symbol_{}", i + 1), std::string{AddSymbol});
+        expected.emplace_back(fmt::format("symbol_{}", i + 1));
+    }
+
+    ASSERT_EQ(all_symbols_match(store, symbol_list, expected), true);
+
+    symbol_list.get_symbols(store, false);
+    ASSERT_EQ(is_compacted(store), true);
+
+    ASSERT_EQ(all_symbols_match(store, symbol_list, expected), true);
+
+    for(auto i = 10U; i < 20; i += 2) {
+        SymbolList::add_symbol(store, fmt::format("symbol_{}", i), 0);
+        expected.emplace_back(fmt::format("symbol_{}", i));
+        backwards_compat_write_journal(store, fmt::format("symbol_{}", i + 1), std::string{AddSymbol});
+        expected.emplace_back(fmt::format("symbol_{}", i + 1));
+    }
+    
+    std::sort(std::begin(expected), std::end(expected));
+    ASSERT_EQ(all_symbols_match(store, symbol_list, expected), true);
+
+    auto old_keys = backwards_compat_get_all_symbol_list_keys(store);
+    auto old_symbols = backwards_compat_get_symbols(store);
+    backwards_compat_compact(store, std::move(old_keys), old_symbols);
+
+    ASSERT_EQ(all_symbols_match(store, symbol_list, expected), true);
+
+    for(auto i = 0U; i < 10; i += 2) {
+        SymbolList::remove_symbol(store, fmt::format("symbol_{}", i), 0);
+        backwards_compat_write_journal(store, fmt::format("symbol_{}", i + 1), std::string{DeleteSymbol});
+    }
+
+    expected.clear();
+    for(auto i = 10U; i < 20; ++i) {
+        expected.emplace_back(fmt::format("symbol_{}", i));
+    }
+
+    ASSERT_EQ(all_symbols_match(store, symbol_list, expected), true);
+
+    symbol_list.get_symbols(store, false);
+    ASSERT_EQ(is_compacted(store), true);
+    ASSERT_EQ(all_symbols_match(store, symbol_list, expected), true);
 }
 
 struct TestSymbolListTask {
@@ -357,15 +688,15 @@ struct TestSymbolListTask {
     std::shared_ptr<Store> store_;
     std::shared_ptr<SymbolList> symbol_list_;
 
-    TestSymbolListTask(const std::shared_ptr<SymbolListState> state,
-            const std::shared_ptr<Store>& store,
-            const std::shared_ptr<SymbolList> symbol_list) :
-            state_(state),
-            store_(store),
-            symbol_list_(symbol_list) {}
+    TestSymbolListTask(const std::shared_ptr<SymbolListState>& state,
+                       const std::shared_ptr<Store>& store,
+                       const std::shared_ptr<SymbolList>& symbol_list) :
+        state_(state),
+        store_(store),
+        symbol_list_(symbol_list) {}
 
     Future<Unit> operator()() {
-        for (size_t i = 0; i < 10; ++i) {
+        for (size_t i = 0; i < 20; ++i) {
             state_->do_action(symbol_list_);
         }
         return makeFuture(Unit{});
@@ -376,10 +707,10 @@ TEST_F(SymbolListSuite, MultiThreadStress) {
     ConfigsMap::instance()->set_int("SymbolList.MaxDelta", 10);
     log::version().set_pattern("%Y%m%d %H:%M:%S.%f %t %L %n | %v");
     std::vector<Future<Unit>> futures;
-    auto state = std::make_shared<SymbolListState>(store);
-    folly::FutureExecutor<folly::CPUThreadPoolExecutor> exec{10};
+    auto state = std::make_shared<SymbolListState>(store, version_map);
+    folly::FutureExecutor<folly::CPUThreadPoolExecutor> exec{20};
     write_initial_compaction_key();
-    for(size_t i = 0; i < 5; ++i) {
+    for(size_t i = 0; i < 3; ++i) {
         auto symbol_list = std::make_shared<SymbolList>(version_map);
         futures.emplace_back(exec.addFuture(TestSymbolListTask{state, store, symbol_list}));
     }
@@ -388,11 +719,11 @@ TEST_F(SymbolListSuite, MultiThreadStress) {
 
 TEST_F(SymbolListSuite, KeyHashIsDifferent) {
     auto version_store = get_test_engine();
-    auto& store = version_store._test_get_store();
+    const auto& store = version_store._test_get_store();
 
-    symbol_list.add_symbol(store, symbol_1);
-    symbol_list.add_symbol(store, symbol_2);
-    symbol_list.add_symbol(store, symbol_3);
+    SymbolList::add_symbol(store, symbol_1, 0);
+    SymbolList::add_symbol(store, symbol_2, 1);
+    SymbolList::add_symbol(store, symbol_3, 2);
 
     std::unordered_set<uint64_t> hashes;
     store->iterate_type(KeyType::SYMBOL_LIST, [&hashes] (const auto& key) {
@@ -402,21 +733,39 @@ TEST_F(SymbolListSuite, KeyHashIsDifferent) {
     ASSERT_EQ(hashes.size(), 3);
 }
 
+struct ReferenceVersionMap {
+    std::unordered_map<StreamId, VersionId> versions_;
+    std::mutex mutex_;
+
+    VersionId get_incremented(const StreamId& stream_id)  {
+        std::lock_guard lock{mutex_};
+        auto it = versions_.find(stream_id);
+        if(it == std::end(versions_)) {
+            versions_.try_emplace(stream_id, 1);
+            return 1;
+        } else {
+            return ++it->second;
+        }
+    }
+};
+
 struct WriteSymbolsTask {
     std::shared_ptr<Store> store_;
     std::shared_ptr<VersionMap> version_map_ = std::make_shared<VersionMap>();
     std::shared_ptr<SymbolList> symbol_list_;
     size_t offset_;
+    std::shared_ptr<ReferenceVersionMap> versions_;
 
-    WriteSymbolsTask(const std::shared_ptr<Store>& store, size_t offset) :
+    WriteSymbolsTask(const std::shared_ptr<Store>& store, size_t offset, const std::shared_ptr<ReferenceVersionMap>& versions) :
             store_(store),
             symbol_list_(std::make_shared<SymbolList>(version_map_)),
-            offset_(offset) {}
+            offset_(offset),
+            versions_(versions){}
 
     Future<Unit> operator()() {
         for(auto x = 0; x < 5000; ++x) {
             auto symbol = fmt::format("symbol_{}", offset_++ % 1000);
-            symbol_list_->add_symbol(store_, symbol);
+            SymbolList::add_symbol(store_, symbol, versions_->get_incremented(symbol));
         }
         return makeFuture(Unit{});
     }
@@ -427,18 +776,18 @@ struct CheckSymbolsTask {
     std::shared_ptr<VersionMap> version_map_ = std::make_shared<VersionMap>();
     std::shared_ptr<SymbolList> symbol_list_;
 
-    CheckSymbolsTask(const std::shared_ptr<Store>& store) :
+    explicit CheckSymbolsTask(const std::shared_ptr<Store>& store) :
             store_(store),
             symbol_list_(std::make_shared<SymbolList>(version_map_)){}
 
-    void body() { // gtest macros must be used in a function that returns void....
+    void body() const { // gtest macros must be used in a function that returns void....
         for(auto x = 0; x < 100; ++x) {
             auto num_symbols = symbol_list_->get_symbol_set(store_);
             ASSERT_EQ(num_symbols.size(), 1000) << "@iteration x=" << x;
         }
     }
 
-    Future<Unit> operator()() {
+    Future<Unit> operator()() const {
         body();
         return {};
     }
@@ -449,37 +798,18 @@ TEST_F(SymbolListSuite, AddAndCompact) {
     std::vector<Future<Unit>> futures;
     for(auto x = 0; x < 1000; ++x) {
         auto symbol = fmt::format("symbol_{}", x);
-        symbol_list.add_symbol(store, symbol);
+        SymbolList::add_symbol(store, symbol, 0);
         version_map->write_version(store, atom_key_builder().build(symbol, KeyType::TABLE_INDEX));
     }
+    (void)symbol_list->get_symbol_set(store);
+    auto versions = std::make_shared<ReferenceVersionMap>();
+
     folly::FutureExecutor<folly::CPUThreadPoolExecutor> exec{10};
-    futures.emplace_back(exec.addFuture(WriteSymbolsTask{store, 0}));
-    futures.emplace_back(exec.addFuture(WriteSymbolsTask{store, 500}));
+    futures.emplace_back(exec.addFuture(WriteSymbolsTask{store, 0, versions}));
+    futures.emplace_back(exec.addFuture(WriteSymbolsTask{store, 500, versions}));
     futures.emplace_back(exec.addFuture(CheckSymbolsTask{store}));
     futures.emplace_back(exec.addFuture(CheckSymbolsTask{store}));
     collect(futures).get();
-}
-
-TEST_F(SymbolListSuite, KeySortingAndLatestTimestampPreservation) {
-    write_initial_compaction_key();
-    override_max_delta(2);
-
-    symbol_list.add_symbol(store, symbol_1);
-    symbol_list.add_symbol(store, symbol_2);
-
-    timestamp saved = PilotedClock::time_;
-    symbol_list.remove_symbol(store, symbol_1);
-
-    auto symbols = symbol_list.load(store, false);
-    ASSERT_THAT(symbols, ElementsAre(symbol_2));
-
-    // Even though symbol_1 don't even appear in the result, its timestamp should be used:
-    size_t count = 0;
-    store->iterate_type(entity::KeyType::SYMBOL_LIST, [saved=saved, &count](const auto& k){
-        ASSERT_EQ(to_atom(k).creation_ts(), saved);
-        count++;
-    }, "");
-    ASSERT_EQ(count, 1);
 }
 
 struct SymbolListRace: SymbolListSuite, testing::WithParamInterface<std::tuple<char, bool, bool, bool>> {};
@@ -487,19 +817,15 @@ struct SymbolListRace: SymbolListSuite, testing::WithParamInterface<std::tuple<c
 TEST_P(SymbolListRace, Run) {
     override_max_delta(1);
     auto [source, remove_old, add_new, add_other] = GetParam();
-    timestamp expected_ts;
 
     // Set up source
     if (source == 'S') {
         write_initial_compaction_key();
-        symbol_list.add_symbol(store, symbol_1);
-        // Compaction keys should use the highest timestamp of the keys it contains (the one we just added):
-        expected_ts = PilotedClock::time_ - 1;
+        SymbolList::add_symbol(store, symbol_1, 0);
     } else {
         auto key1 = atom_key_builder().version_id(1).creation_ts(2).content_hash(3).start_index(
                 4).end_index(5).build(symbol_1, KeyType::TABLE_INDEX);
         version_map->write_version(store, key1);
-        expected_ts = PilotedClock::time_;
     }
 
     // Variables for capturing the symbol list state before compaction:
@@ -514,11 +840,11 @@ TEST_P(SymbolListRace, Run) {
                 store->remove_keys(get_symbol_list_keys(), {});
             }
             if (add_new2) {
-                store->write(KeyType::SYMBOL_LIST, 0, CompactionId, PilotedClock::nanos_since_epoch(), 0, 0,
+                store->write(KeyType::SYMBOL_LIST, 0, StringId{CompactionId}, PilotedClock::nanos_since_epoch(), 0, 0,
                         SegmentInMemory{});
             }
             if (add_other2) {
-                symbol_list.add_symbol(store, symbol_2);
+                SymbolList::add_symbol(store, symbol_2, 0);
             }
 
             before = get_symbol_list_keys();
@@ -526,13 +852,12 @@ TEST_P(SymbolListRace, Run) {
         no_op}}});
 
     // Check compaction
-    std::vector<StreamId> symbols = symbol_list.get_symbols(store);
+    std::vector<StreamId> symbols = symbol_list->get_symbols(store);
     ASSERT_THAT(symbols, ElementsAre(symbol_1));
 
     if (!remove_old && !add_new) { // A normal compaction should have happened
-        auto keys = get_symbol_list_keys(CompactionId);
+        auto keys = get_symbol_list_keys(StringId{CompactionId});
         ASSERT_THAT(keys, SizeIs(1));
-        ASSERT_THAT(to_atom(keys.at(0)).creation_ts(), Eq(expected_ts));
     } else {
         // Should not have changed any keys
         ASSERT_THAT(get_symbol_list_keys(), UnorderedElementsAreArray(before));

@@ -20,8 +20,8 @@ void MinMaxAggregatorData::aggregate(const ColumnWithStrings& input_column) {
             using RawType = typename DescriptorType::raw_type;
             auto col_data = input_column.column_->data();
             while (auto block = col_data.next<ScalarTagType<DescriptorType>>()) {
-                auto ptr = reinterpret_cast<const RawType *>(block.value().data());
-                for (auto i = 0u; i < block.value().row_count(); ++i, ++ptr) {
+                auto ptr = reinterpret_cast<const RawType *>(block->data());
+                for (auto i = 0u; i < block->row_count(); ++i, ++ptr) {
                     const auto& curr = RawType(*ptr);
                     if (UNLIKELY(!that->min_.has_value())) {
                         that->min_ = std::make_optional<Value>(curr, DescriptorType::DataTypeTag::data_type);

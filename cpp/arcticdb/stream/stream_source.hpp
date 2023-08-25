@@ -21,17 +21,15 @@
 
 namespace arcticdb::stream {
 
-using ReadKeyOutput = std::pair<entity::VariantKey, SegmentInMemory>;
-
 struct StreamSource {
 
     virtual ~StreamSource() = default;
 
-    virtual folly::Future<ReadKeyOutput> read(
+    virtual folly::Future<std::pair<entity::VariantKey, SegmentInMemory>> read(
         const entity::VariantKey &key,
         storage::ReadKeyOpts opts = storage::ReadKeyOpts{}) = 0;
 
-    virtual ReadKeyOutput read_sync(
+    virtual std::pair<entity::VariantKey, SegmentInMemory> read_sync(
         const entity::VariantKey &key,
         storage::ReadKeyOpts opts = storage::ReadKeyOpts{}) = 0;
 

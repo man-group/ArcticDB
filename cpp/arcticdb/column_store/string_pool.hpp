@@ -215,17 +215,15 @@ class StringPool {
         // Not used
     }
 
-    OffsetString get(const std::string_view &s, bool deduplicate = true);
+    OffsetString get(std::string_view s, bool deduplicate = true);
 
     const ChunkedBuffer &data() const {
         return block_.buffer();
     }
 
-    std::string_view get_view(const offset_t &o);
+    std::string_view get_view(offset_t o);
 
-    std::string_view get_const_view(const offset_t &o) const;
-
-    bool string_exists(const std::string_view& str);
+    std::string_view get_const_view(offset_t o) const;
 
     void clear() {
         map_.clear();

@@ -325,9 +325,8 @@ struct SegmentToInputFrameAdapter {
             }
         }
 
-        while (col < segment_.num_columns()) {
-            input_frame_.field_tensors.push_back(tensor_from_column(segment_.column(col++)));
-        }
+        while (col < segment_.num_columns())
+            input_frame_.field_tensors.emplace_back(tensor_from_column(segment_.column(col++)));
 
         input_frame_.set_index_range();
     }
@@ -337,7 +336,7 @@ struct SegmentToInputFrameAdapter {
             auto segment_tsd = segment_.index_descriptor();
             input_frame_.norm_meta.CopyFrom(segment_tsd.proto().normalization());
         }
-        ensure_norm_meta(input_frame_.norm_meta, input_frame_.desc.id(), false);
+        ensure_timeseries_norm_meta(input_frame_.norm_meta, input_frame_.desc.id(), false);
     }
 
 };

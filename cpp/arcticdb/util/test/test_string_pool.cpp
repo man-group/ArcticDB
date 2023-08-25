@@ -32,7 +32,7 @@ TEST(StringPool, MultipleReadWrite) {
         if ((it = positions.find(s)) != positions.end())
             ASSERT_EQ(str.offset(), it->second);
         else
-            positions.insert(std::make_pair(s, str.offset()));
+            positions.try_emplace(s, str.offset());
     }
 
     const size_t NumTests = 100;

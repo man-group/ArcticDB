@@ -78,6 +78,7 @@ void register_log(py::module && log) {
              .value("TIMINGS", LoggerId::TIMINGS)
              .value("LOCK", LoggerId::LOCK)
              .value("SCHEDULE", LoggerId::SCHEDULE)
+             .value("SYMBOL", LoggerId::SCHEDULE)
              .export_values()
     ;
     auto choose_logger = [&](LoggerId log_id) -> decltype(arcticdb::log::storage()) /* logger ref */{
@@ -236,10 +237,12 @@ void register_error_code_ecosystem(py::module& m, py::exception<arcticdb::Arctic
     py::register_exception<SchemaException>(m, "SchemaException", compat_exception.ptr());
     py::register_exception<NormalizationException>(m, "NormalizationException", compat_exception.ptr());
     py::register_exception<MissingDataException>(m, "MissingDataException", compat_exception.ptr());
-    auto sorting_exception =
-            py::register_exception<SortingException>(m, "SortingException", compat_exception.ptr());
+
+    auto sorting_exception = py::register_exception<SortingException>(m, "SortingException", compat_exception.ptr());
     py::register_exception<UnsortedDataException>(m, "UnsortedDataException", sorting_exception.ptr());
+    py::register_exception<UserInputException>(m, "UserInputException", compat_exception.ptr());
     py::register_exception<CompatibilityException>(m, "CompatibilityException", compat_exception.ptr());
+    py::register_exception<CodecException>(m, "CodecException", compat_exception.ptr());
 }
 
 void reinit_scheduler() {

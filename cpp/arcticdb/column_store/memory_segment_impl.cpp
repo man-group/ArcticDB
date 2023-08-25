@@ -90,7 +90,7 @@ position_t SegmentInMemoryImpl::add_column(FieldRef field_ref, const std::shared
     if(!column_map_)
         init_column_map();
 
-    columns_.emplace_back(std::move(column));
+    columns_.emplace_back(column);
     auto new_field_name = descriptor_->add_field(field_ref);
 
     std::lock_guard<std::mutex> lock{*column_map_mutex_};
@@ -111,10 +111,10 @@ void SegmentInMemoryImpl::change_schema(StreamDescriptor descriptor) {
         auto col_index = column_index(col_name);
         const auto& other_type = descriptor.field(col).type();
         if(col_index) {
-            auto this_type = column_unchecked(col_index.value()).type();
+            auto this_type = column_unchecked(*col_index).type();
             util::check(this_type == other_type, "Could not convert type {} to type {} for column {}, this index {}, other index {}",
-                        other_type, this_type, col_name, col_index.value(), col);
-            new_columns[col] = std::move(columns_[col_index.value()]);
+                        other_type, this_type, col_name, *col_index, col);
+            new_columns[col] = std::move(columns_[*col_index]);
         } else {
             auto new_column = std::make_shared<Column>(other_type, row_count(), false, allow_sparse_);
             new_column->default_initialize_rows(size_t{0}, row_count(), true);
@@ -139,8 +139,8 @@ std::optional<std::string_view> SegmentInMemoryImpl::string_at(position_t row, p
     } else {
 
         auto offset = col_ref.scalar_at<StringPool::offset_t>(row);
-        if (offset != std::nullopt && offset.value() != not_a_string() && offset.value() != nan_placeholder())
-            return string_pool_->get_view(offset.value());
+        if (offset != std::nullopt && *offset != not_a_string() && *offset != nan_placeholder())
+            return string_pool_->get_view(*offset);
         else
             return std::nullopt;
     }

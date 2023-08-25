@@ -211,14 +211,14 @@ inline std::pair<std::vector<SliceAndKey>, std::vector<SliceAndKey>> intersectin
         && is_before(affected_range, front_range)) {
             auto front_overlap_key = rewrite_partial_segment(affected_slice_and_key, front_range, version_id, false, store);
             if (front_overlap_key)
-                intersect_before.push_back(front_overlap_key.value());
+                intersect_before.push_back(*front_overlap_key);
         }
 
         if (intersects(affected_range, back_range) && !overlaps(affected_range, back_range)
         && is_after(affected_range, back_range)) {
             auto back_overlap_key = rewrite_partial_segment(affected_slice_and_key, back_range, version_id, true, store);
             if (back_overlap_key)
-                intersect_after.push_back(back_overlap_key.value());
+                intersect_after.push_back(*back_overlap_key);
         }
     }
     return std::make_pair(std::move(intersect_before), std::move(intersect_after));
@@ -446,10 +446,10 @@ void set_output_descriptors(
     for (auto clause = clauses.rbegin(); clause != clauses.rend(); ++clause) {
         if (auto new_index = (*clause)->clause_info().new_index_; new_index.has_value()) {
             index_column = new_index;
-            pipeline_context->norm_meta_->mutable_df()->mutable_common()->mutable_index()->set_name(*new_index);
-            pipeline_context->norm_meta_->mutable_df()->mutable_common()->mutable_index()->clear_fake_name();
-            pipeline_context->norm_meta_->mutable_df()->mutable_common()->mutable_index()->set_is_not_range_index(
-                    true);
+            auto mutable_index = pipeline_context->norm_meta_->mutable_df()->mutable_common()->mutable_index();
+            mutable_index->set_name(*new_index);
+            mutable_index->clear_fake_name();
+            mutable_index->set_is_not_range_index(true);
             break;
         }
     }
@@ -590,27 +590,18 @@ void add_index_columns_to_query(const ReadQuery& read_query, const TimeseriesDes
     }
 }
 
+FrameAndDescriptor read_segment_impl(
+    const std::shared_ptr<Store>& store,
+    const VariantKey& key) {
+    auto fut_segment = store->read(key);
+    auto [_, seg] = std::move(fut_segment).get();
+    return frame_and_descriptor_from_segment(std::move(seg));
+}
+
 FrameAndDescriptor read_index_impl(
     const std::shared_ptr<Store>& store,
     const VersionedItem& version) {
-    auto fut_index = store->read(version.key_);
-    auto [index_key, index_seg] = std::move(fut_index).get();
-    TimeseriesDescriptor tsd;
-    tsd.mutable_proto().set_total_rows(index_seg.row_count());
-    tsd.mutable_proto().mutable_stream_descriptor()->CopyFrom(index_seg.descriptor().proto());
-    return {SegmentInMemory(std::move(index_seg)), tsd, {}, {}};
-}
-
-namespace {
-
-void ensure_norm_meta(arcticdb::proto::descriptors::NormalizationMetadata& norm_meta, const StreamId& stream_id, bool set_tz) {
-    if(norm_meta.input_type_case() == arcticdb::proto::descriptors::NormalizationMetadata::INPUT_TYPE_NOT_SET)
-        norm_meta.CopyFrom(make_timeseries_norm_meta(stream_id));
-
-    if(set_tz && norm_meta.df().common().index().tz().empty())
-        norm_meta.mutable_df()->mutable_common()->mutable_index()->set_tz("UTC");
-}
-
+    return read_segment_impl(store, version.key_);
 }
 
 std::optional<pipelines::index::IndexSegmentReader> get_index_segment_reader(
@@ -649,9 +640,10 @@ void read_indexed_keys_to_pipeline(
 
     add_index_columns_to_query(read_query, index_segment_reader.tsd());
 
-    read_query.calculate_row_filter(static_cast<int64_t>(index_segment_reader.tsd().proto().total_rows()));
+    const auto& tsd = index_segment_reader.tsd();
+    read_query.calculate_row_filter(static_cast<int64_t>(tsd.proto().total_rows()));
     bool bucketize_dynamic = index_segment_reader.bucketize_dynamic();
-    pipeline_context->desc_ = index_segment_reader.tsd().as_stream_descriptor();
+    pipeline_context->desc_ = tsd.as_stream_descriptor();
 
     bool dynamic_schema = opt_false(read_options.dynamic_schema_);
     auto queries = get_column_bitset_and_query_functions<index::IndexSegmentReader>(
@@ -704,7 +696,7 @@ void read_incompletes_to_pipeline(
         pipeline_context->norm_meta_ = std::make_unique<arcticdb::proto::descriptors::NormalizationMetadata>();
         auto segment_tsd = first_seg.index_descriptor();
         pipeline_context->norm_meta_->CopyFrom(segment_tsd.proto().normalization());
-        ensure_norm_meta(*pipeline_context->norm_meta_, pipeline_context->stream_id_, sparsify);
+        ensure_timeseries_norm_meta(*pipeline_context->norm_meta_, pipeline_context->stream_id_, sparsify);
     }
 
     pipeline_context->desc_ = merge_descriptors(pipeline_context->descriptor(), incomplete_segments, read_query.columns);
@@ -762,13 +754,14 @@ void copy_frame_data_to_buffer(const SegmentInMemory& destination, size_t target
 
 void copy_segments_to_frame(const std::shared_ptr<Store>& store, const std::shared_ptr<PipelineContext>& pipeline_context, const SegmentInMemory& frame) {
     for (auto context_row : folly::enumerate(*pipeline_context)) {
-        auto& segment = context_row->slice_and_key().segment(store);
+        auto& slice_and_key = context_row->slice_and_key();
+        auto& segment = slice_and_key.segment(store);
         const auto index_field_count = get_index_field_count(frame);
         for (auto idx = 0u; idx < index_field_count && context_row->fetch_index(); ++idx) {
-            copy_frame_data_to_buffer(frame, idx, segment, idx, context_row->slice_and_key().slice_.row_range);
+            copy_frame_data_to_buffer(frame, idx, segment, idx, slice_and_key.slice_.row_range);
         }
 
-        auto field_count = context_row->slice_and_key().slice_.col_range.diff() + index_field_count;
+        auto field_count = slice_and_key.slice_.col_range.diff() + index_field_count;
         internal::check<ErrorCode::E_ASSERTION_FAILURE>(
                 field_count == segment.descriptor().field_count(),
                 "Column range does not match segment descriptor field count in copy_segments_to_frame: {} != {}",
@@ -1017,10 +1010,11 @@ VersionedItem collate_and_write(
     TimeseriesDescriptor tsd;
 
     tsd.set_stream_descriptor(pipeline_context->descriptor());
-    tsd.mutable_proto().set_total_rows(pipeline_context->total_rows_);
-    tsd.mutable_proto().mutable_normalization()->CopyFrom(*pipeline_context->norm_meta_);
+    auto& tsd_proto = tsd.mutable_proto();
+    tsd_proto.set_total_rows(pipeline_context->total_rows_);
+    tsd_proto.mutable_normalization()->CopyFrom(*pipeline_context->norm_meta_);
     if(user_meta)
-        tsd.mutable_proto().mutable_user_meta()->CopyFrom(*user_meta);
+        tsd_proto.mutable_user_meta()->CopyFrom(*user_meta);
 
     auto index = stream::index_type_from_descriptor(pipeline_context->descriptor());
     return util::variant_match(index, [&store, &pipeline_context, &slices, &keys, &append_after, &tsd] (auto idx) {
@@ -1064,8 +1058,9 @@ VersionedItem sort_merge_impl(
 
     std::vector<entity::VariantKey> delete_keys;
     for(auto sk = pipeline_context->incompletes_begin(); sk != pipeline_context->end(); ++sk) {
-        util::check(sk->slice_and_key().key().type() == KeyType::APPEND_DATA, "Deleting incorrect key type {}", sk->slice_and_key().key().type());
-        delete_keys.emplace_back(sk->slice_and_key().key());
+        const auto& slice_and_key = sk->slice_and_key();
+        util::check(slice_and_key.key().type() == KeyType::APPEND_DATA, "Deleting incorrect key type {}", slice_and_key.key().type());
+        delete_keys.emplace_back(slice_and_key.key());
     }
 
     std::vector<FrameSlice> slices;
@@ -1216,10 +1211,11 @@ PredefragmentationInfo get_pre_defragmentation_info(
 
     using CompactionStartInfo = std::pair<size_t, size_t>;//row, segment_append_after
     std::vector<CompactionStartInfo> first_col_segment_idx;
-    first_col_segment_idx.reserve(pipeline_context->slice_and_keys_.size());
+    const auto& slice_and_keys = pipeline_context->slice_and_keys_;
+    first_col_segment_idx.reserve(slice_and_keys.size());
     std::optional<CompactionStartInfo> compaction_start_info;
     size_t segment_idx = 0, num_to_segments_after_compact = 0, new_segment_row_size = 0;
-    for(auto it = pipeline_context->slice_and_keys_.begin(); it != pipeline_context->slice_and_keys_.end(); it++) {
+    for(auto it = slice_and_keys.begin(); it != slice_and_keys.end(); it++) {
         auto &slice = it->slice();
 
         if (slice.row_range.diff() < segment_size && !compaction_start_info)
@@ -1235,9 +1231,9 @@ PredefragmentationInfo get_pre_defragmentation_info(
         }
         ++segment_idx;
         if (compaction_start_info && slice.row_range.start() < compaction_start_info->first){
-            auto it = std::lower_bound(first_col_segment_idx.begin(), first_col_segment_idx.end(), slice.row_range.start(), [](auto lhs, auto rhs){return lhs.first < rhs;});
-            if (it != first_col_segment_idx.end())
-                compaction_start_info = *it;
+            auto col_it = std::lower_bound(first_col_segment_idx.begin(), first_col_segment_idx.end(), slice.row_range.start(), [](auto lhs, auto rhs){return lhs.first < rhs;});
+            if (col_it != first_col_segment_idx.end())
+                compaction_start_info = *col_it;
             else{
                 log::version().warn("Missing segment containing column 0 for row {}; Resetting compaction starting point to 0", slice.row_range.start());
                 compaction_start_info = {0u, 0u};

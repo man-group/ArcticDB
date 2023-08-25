@@ -411,9 +411,9 @@ void MongoClientImpl::iterate_type(const std::string &database_name,
     ARCTICDB_SUBSAMPLE(MongoStorageItTypeGetCol, 0)
     auto collection = client->database(database_name)[collection_name];
     ARCTICDB_SUBSAMPLE(MongoStorageItTypeFindAll, 0)
-    bool has_prefix = prefix.has_value() && (!prefix.value().empty());
+    bool has_prefix = prefix.has_value() && (!prefix->empty());
     auto cursor =  has_prefix ?
-            collection.find(document{} << "stream_id" << prefix.value() << finalize):
+            collection.find(document{} << "stream_id" << *prefix << finalize):
             collection.find({});
 
     for (auto &doc : cursor) {

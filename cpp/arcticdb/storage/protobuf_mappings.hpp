@@ -54,7 +54,7 @@ inline storage::LibraryDescriptor decode_library_descriptor(const arcticdb::prot
     output.name_ = protobuf_descriptor.name();
     output.description_ = protobuf_descriptor.description();
     for(int i = 0; i < protobuf_descriptor.storage_ids_size(); ++i)
-        output.storage_ids_.push_back(StorageName(protobuf_descriptor.storage_ids(i)));
+        output.storage_ids_.emplace_back(StorageName(protobuf_descriptor.storage_ids(i)));
 
     switch (protobuf_descriptor.store_type_case()){
         case arcticdb::proto::storage::LibraryDescriptor::StoreTypeCase::kVersion:
@@ -76,12 +76,12 @@ inline std::vector<std::pair<std::string, MemConfig>> convert_environment_config
     for (auto&[env_key, env_config] : envs.env_by_id()) {
         MemConfig current;
         for (auto &[storage_key, storage_value] : env_config.storage_by_id())
-            current.storages_.insert(std::make_pair(storage::StorageName(storage_key), storage_value));
+            current.storages_.try_emplace(storage::StorageName(storage_key), storage_value);
 
         for (auto &[library_key, library_value] : env_config.lib_by_path())
-            current.libraries_.insert(std::make_pair(LibraryPath::from_delim_path(library_key), library_value));
+            current.libraries_.try_emplace(LibraryPath::from_delim_path(library_key), library_value);
 
-        env_by_id.push_back(std::make_pair(env_key, current));
+        env_by_id.emplace_back(env_key, current);
     }
     return env_by_id;
 }

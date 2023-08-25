@@ -122,7 +122,7 @@ void do_compact(
                 pk{KeyType::TABLE_DATA, pipeline_context->version_id_, pipeline_context->stream_id_, local_index_start, local_index_end};
                 fut_vec.emplace_back(store->write(pk, std::move(segment)));
             },
-            segment_size.has_value() ? SegmentationPolicy{segment_size.value()} : SegmentationPolicy{}
+            segment_size.has_value() ? SegmentationPolicy{*segment_size} : SegmentationPolicy{}
         };
 
         for(auto it = target_start; it != target_end; ++it) {

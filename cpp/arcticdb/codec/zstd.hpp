@@ -69,10 +69,10 @@ struct ZstdDecoder {
         std::size_t out_bytes) {
 
         const std::size_t decomp_size = ZSTD_getFrameContentSize(in, in_bytes);
-        util::check_arg(decomp_size == out_bytes, "expected out_bytes == zstd deduced bytes, actual {} != {}",
+        codec::check<ErrorCode::E_DECODE_ERROR>(decomp_size == out_bytes, "expected out_bytes == zstd deduced bytes, actual {} != {}",
                         out_bytes, decomp_size);
         std::size_t real_decomp = ZSTD_decompress(t_out, out_bytes, in, in_bytes);
-        util::check_arg(real_decomp == out_bytes, "expected out_bytes == zstd decompressed bytes, actual {} != {}",
+        codec::check<ErrorCode::E_DECODE_ERROR>(real_decomp == out_bytes, "expected out_bytes == zstd decompressed bytes, actual {} != {}",
                         out_bytes, real_decomp);
     }
 #pragma GCC diagnostic pop

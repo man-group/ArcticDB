@@ -123,7 +123,7 @@ std::unordered_set<AtomKey> recurse_segment(const std::shared_ptr<stream::Stream
  * If the version_id argument is provided, the returned set will only contain keys matching that version_id. */
 inline std::unordered_set<AtomKey> recurse_index_key(const std::shared_ptr<stream::StreamSource>& store,
                                                      const IndexTypeKey& index_key,
-                                                     std::optional<VersionId> version_id=std::nullopt) {
+                                                     const std::optional<VersionId>& version_id=std::nullopt) {
     auto segment = store->read_sync(index_key).second;
     auto res = recurse_segment(store, segment, version_id);
     res.emplace(index_key);
@@ -132,7 +132,7 @@ inline std::unordered_set<AtomKey> recurse_index_key(const std::shared_ptr<strea
 
 inline std::unordered_set<AtomKey> recurse_segment(const std::shared_ptr<stream::StreamSource>& store,
                                                    SegmentInMemory segment,
-                                                   std::optional<VersionId> version_id) {
+                                                   const std::optional<VersionId>& version_id) {
     std::unordered_set<AtomKey> res;
     for (size_t idx = 0; idx < segment.row_count(); idx++) {
         auto key = stream::read_key_row(segment, idx);
@@ -158,10 +158,10 @@ inline VersionId get_next_version_from_key(const AtomKey& prev) {
     return ++version;
 }
 
-inline VersionId get_next_version_from_key(std::optional<AtomKey> maybe_prev) {
+inline VersionId get_next_version_from_key(const std::optional<AtomKey>& maybe_prev) {
     VersionId version = 0;
     if (maybe_prev) {
-       version = get_next_version_from_key(maybe_prev.value());
+       version = get_next_version_from_key(*maybe_prev);
     }
 
     return version;

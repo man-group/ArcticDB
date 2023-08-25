@@ -78,7 +78,7 @@ public:
                         auto string_refs = segment_.tensor_at<OffsetString::offset_t>(row, col).value();
                         std::vector<std::string_view > output;
                         for(ssize_t i = 0; i < string_refs.size(); ++i )
-                            output.push_back(view_at(string_refs.at(i)));
+                            output.emplace_back(view_at(string_refs.at(i)));
 
                         res.append(output);
                     }

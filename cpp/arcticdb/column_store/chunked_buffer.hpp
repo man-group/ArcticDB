@@ -345,6 +345,7 @@ class ChunkedBufferImpl {
     friend struct BufferView;
 
     BlockType &last_block() {
+        util::check(!blocks_.empty(), "There should never be no blocks");
         return **blocks_.rbegin();
     }
 

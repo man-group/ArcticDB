@@ -141,7 +141,7 @@ public:
     }
 
     void set_path(std::string path) {
-        path_ = path;
+        path_ = std::move(path);
     }
 
     void set_map_size(uint64_t map_size) {

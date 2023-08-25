@@ -18,8 +18,7 @@ TEST(BitsetForIndex, DynamicSchemaStrictlyBefore) {
     container.seg().set_range(3, 4);
     container.seg().set_range(5, 7);
     IndexRange rg(0, 2);
-    std::unique_ptr<util::BitSet> input;
-    auto bitset = build_bitset_for_index<TestContainer, TimeseriesIndex>(container, rg, true, false, std::move(input));
+    auto bitset = build_bitset_for_index<TestContainer, TimeseriesIndex>(container, rg, true, false, std::unique_ptr<util::BitSet>{});
     ASSERT_EQ(bitset->count(), 0);
 }
 
@@ -30,8 +29,7 @@ TEST(BitsetForIndex, DynamicSchemaStrictlyAfter) {
     container.seg().set_range(0, 2);
     container.seg().set_range(3, 4);
     IndexRange rg(5, 7);
-    std::unique_ptr<util::BitSet> input;
-    auto bitset = build_bitset_for_index<TestContainer, TimeseriesIndex>(container, rg, true, false, std::move(input));
+    auto bitset = build_bitset_for_index<TestContainer, TimeseriesIndex>(container, rg, true, false, std::unique_ptr<util::BitSet>{});
     ASSERT_EQ(bitset->count(), 0);
 }
 
@@ -42,8 +40,7 @@ TEST(BitsetForIndex, DynamicSchemaMiddle) {
    container.seg().set_range(0, 2);
    container.seg().set_range(5, 7);
    IndexRange rg(3, 4);
-   std::unique_ptr<util::BitSet> input;
-   auto bitset = build_bitset_for_index<TestContainer, TimeseriesIndex>(container, rg, true, false, std::move(input));
+   auto bitset = build_bitset_for_index<TestContainer, TimeseriesIndex>(container, rg, true, false, std::unique_ptr<util::BitSet>{});
    ASSERT_EQ(bitset->count(), 0);
 }
 
@@ -54,8 +51,7 @@ TEST(BitsetForIndex, DynamicSchemaOverlapBegin) {
     container.seg().set_range(2, 4);
     container.seg().set_range(5, 7);
     IndexRange rg(1, 3);
-    std::unique_ptr<util::BitSet> input;
-    auto bitset = build_bitset_for_index<TestContainer, TimeseriesIndex>(container, rg, true, false, std::move(input));
+    auto bitset = build_bitset_for_index<TestContainer, TimeseriesIndex>(container, rg, true, false, std::unique_ptr<util::BitSet>{});
     ASSERT_EQ((*bitset)[0], true);
     ASSERT_EQ(bitset->count(), 1);
 }
@@ -67,8 +63,7 @@ TEST(BitsetForIndex, DynamicSchemaOverlapEnd) {
     container.seg().set_range(2, 4);
     container.seg().set_range(5, 7);
     IndexRange rg(6, 8);
-    std::unique_ptr<util::BitSet> input;
-    auto bitset = build_bitset_for_index<TestContainer, TimeseriesIndex>(container, rg, true, false, std::move(input));
+    auto bitset = build_bitset_for_index<TestContainer, TimeseriesIndex>(container, rg, true, false, std::unique_ptr<util::BitSet>{});
     ASSERT_EQ((*bitset)[1], true);
     ASSERT_EQ(bitset->count(), 1);
 }

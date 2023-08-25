@@ -211,7 +211,7 @@ struct PipelineContext : public std::enable_shared_from_this<PipelineContext> {
     }
 
     bool is_in_filter_columns_set(std::string_view name) {
-        return !filter_columns_set_ || filter_columns_set_.value().find(name) != filter_columns_set_.value().end();
+        return !filter_columns_set_ || filter_columns_set_->find(name) != filter_columns_set_->end();
     }
 
     void clear_vectors() {

@@ -17,6 +17,49 @@
 
 namespace arcticdb {
 
+struct SymbolStatus {
+    const VersionId version_id_ = 0;
+    const bool exists_ = false;
+    const timestamp timestamp_ = 0;
+
+    SymbolStatus(VersionId version_id, bool exists, timestamp ts) :
+        version_id_(version_id),
+        exists_(exists),
+        timestamp_(ts) {
+    }
+};
+
+inline std::shared_ptr<std::unordered_map<StreamId, SymbolStatus>> batch_check_latest_id_and_status(
+    const std::shared_ptr<Store> &store,
+    const std::shared_ptr<VersionMap> &version_map,
+    std::shared_ptr<std::vector<StreamId>> &symbols) {
+    ARCTICDB_SAMPLE(BatchGetLatestVersion, 0)
+    const LoadParameter load_param{LoadType::LOAD_LATEST_UNDELETED};
+    auto output = std::make_shared<std::unordered_map<StreamId, SymbolStatus>>();
+
+    async::submit_tasks_for_range(*symbols,
+        [store, version_map, &load_param](auto &symbol) {
+          return async::submit_io_task(CheckReloadTask{store, version_map, symbol, load_param});
+        },
+        [output](const auto& id, auto &&entry) {
+          auto index_key = entry->get_first_index(false);
+          if (index_key) {
+              output->insert(std::make_pair<StreamId, SymbolStatus>(StreamId{id}, {index_key->version_id(), true, index_key->creation_ts()}));
+          } else {
+              index_key = entry->get_first_index(true);
+              if (index_key) {
+                  output->insert(std::make_pair<StreamId, SymbolStatus>(StreamId{id}, {index_key->version_id(), false, index_key->creation_ts()}));
+              } else {
+                  if (entry->head_ && entry->head_->type() == KeyType::TOMBSTONE_ALL) {
+                      const auto& head = *entry->head_;
+                      output->insert(std::make_pair<StreamId, SymbolStatus>(StreamId{id}, {head.version_id(), false, head.creation_ts()}));
+                  }
+              }
+          }});
+
+    return output;
+}
+
 inline std::shared_ptr<std::unordered_map<StreamId, AtomKey>> batch_get_latest_version(
     const std::shared_ptr<Store> &store,
     const std::shared_ptr<VersionMap> &version_map,
@@ -39,7 +82,24 @@ inline std::shared_ptr<std::unordered_map<StreamId, AtomKey>> batch_get_latest_v
     return output;
 }
 
-// The logic here is the same as get_latest_undeleted_version_and_next_version_id
+inline std::vector<folly::Future<std::pair<std::optional<AtomKey>, std::optional<AtomKey>>>> batch_get_latest_undeleted_and_latest_versions_async(
+    const std::shared_ptr<Store> &store,
+    const std::shared_ptr<VersionMap> &version_map,
+    const std::vector<StreamId> &stream_ids) {
+    ARCTICDB_SAMPLE(BatchGetLatestUndeletedVersionAndNextVersionId, 0)
+    std::vector<folly::Future<std::pair<std::optional<AtomKey>, std::optional<AtomKey>>>> vector_fut;
+    for (auto& stream_id: stream_ids){
+        vector_fut.push_back(async::submit_io_task(CheckReloadTask{store,
+                                                                   version_map,
+                                                                   stream_id,
+                                                                   LoadParameter{LoadType::LOAD_LATEST_UNDELETED}})
+                                 .thenValue([](auto&& entry){
+                                     return std::make_pair(entry->get_first_index(false), entry->get_first_index(true));
+                                 }));
+    }
+    return vector_fut;
+}
+
 inline std::vector<folly::Future<version_store::UpdateInfo>> batch_get_latest_undeleted_version_and_next_version_id_async(
         const std::shared_ptr<Store> &store,
         const std::shared_ptr<VersionMap> &version_map,
@@ -64,7 +124,8 @@ inline std::vector<folly::Future<version_store::UpdateInfo>> batch_get_latest_un
 inline std::shared_ptr<std::unordered_map<StreamId, AtomKey>> batch_get_specific_version(
     const std::shared_ptr<Store>& store,
     const std::shared_ptr<VersionMap>& version_map,
-    std::map<StreamId, VersionId>& sym_versions) {
+    std::map<StreamId, VersionId>& sym_versions,
+    bool include_deleted = true) {
     ARCTICDB_SAMPLE(BatchGetLatestVersion, 0)
     auto output = std::make_shared<std::unordered_map<StreamId, AtomKey>>();
 
@@ -73,8 +134,8 @@ inline std::shared_ptr<std::unordered_map<StreamId, AtomKey>> batch_get_specific
         LoadParameter load_param{LoadType::LOAD_DOWNTO, static_cast<SignedVersionId>(sym_version.second)};
         return async::submit_io_task(CheckReloadTask{store, version_map, sym_version.first, load_param});
         },
-        [output](auto& sym_version, auto&& entry) {
-        auto index_key = find_index_key_for_version_id(sym_version.second, entry);
+        [output, include_deleted](auto& sym_version, auto&& entry) {
+        auto index_key = find_index_key_for_version_id(sym_version.second, entry, include_deleted);
         if (index_key) {
             (*output)[sym_version.first] = *index_key;
         }
@@ -92,7 +153,8 @@ using VersionVectorType = std::vector<VersionId>;
 inline std::shared_ptr<std::unordered_map<std::pair<StreamId, VersionId>, AtomKey>> batch_get_specific_versions(
         const std::shared_ptr<Store>& store,
         const std::shared_ptr<VersionMap>& version_map,
-        std::map<StreamId, VersionVectorType>& sym_versions) {
+        std::map<StreamId, VersionVectorType>& sym_versions,
+        bool include_deleted = true) {
     ARCTICDB_SAMPLE(BatchGetLatestVersion, 0)
     auto output = std::make_shared<std::unordered_map<std::pair<StreamId, VersionId>, AtomKey>>();
 
@@ -102,12 +164,12 @@ inline std::shared_ptr<std::unordered_map<std::pair<StreamId, VersionId>, AtomKe
                 LoadParameter load_param{LoadType::LOAD_DOWNTO, static_cast<SignedVersionId>(first_version)};
                 return async::submit_io_task(CheckReloadTask{store, version_map, sym_version.first, load_param});
             },
-            [output, &sym_versions](auto& sym_version, auto&& entry) {
+            [output, &sym_versions, include_deleted](auto& sym_version, auto&& entry) {
                 auto sym_it = sym_versions.find(sym_version.first);
                 util::check(sym_it != sym_versions.end(), "Failed to find versions for symbol {}", sym_version.first);
                 const auto& versions = sym_it->second;
                 for(auto version : versions) {
-                    auto index_key = find_index_key_for_version_id(version, entry);
+                    auto index_key = find_index_key_for_version_id(version, entry, include_deleted);
                     if (index_key) {
                         (*output)[std::pair(sym_version.first, version)] = *index_key;
                     }
@@ -137,7 +199,7 @@ struct StreamVersionData {
         ++count_;
     }
 
-    void do_react(const pipelines::SpecificVersionQuery& specific_version) {
+    void do_react(pipelines::SpecificVersionQuery specific_version) {
         ++count_;
         switch(load_param_.load_type_) {
         case LoadType::LOAD_LATEST_UNDELETED:
@@ -161,7 +223,7 @@ struct StreamVersionData {
         }
     }
 
-    void do_react(const pipelines::TimestampVersionQuery& timestamp_query) {
+    void do_react(pipelines::TimestampVersionQuery timestamp_query) {
         ++count_;
         switch(load_param_.load_type_) {
         case LoadType::LOAD_LATEST_UNDELETED:
@@ -212,7 +274,7 @@ inline std::optional<AtomKey> get_key_for_version_query(
         [&version_map_entry] (const pipelines::TimestampVersionQuery& timestamp_version) -> std::optional<AtomKey> {
             auto version_key = get_index_key_from_time(timestamp_version.timestamp_, version_map_entry->get_indexes(false));
             if(version_key.has_value()){
-                auto version_id = version_key.value().version_id();
+                auto version_id = version_key->version_id();
                 return find_index_key_for_version_id(version_id, version_map_entry, false);
             }else{
                 return std::nullopt;

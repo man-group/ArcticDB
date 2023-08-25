@@ -98,8 +98,8 @@ class StorageLock {
     }
 
     void unlock(const std::shared_ptr<Store>& store) {
-        if(auto read_ts = read_timestamp(store); !read_ts || read_ts.value() != ts_) {
-            log::version().warn("Unexpected lock timestamp, {} != {}", read_ts ? read_ts.value() : 0, ts_);
+        if(auto read_ts = read_timestamp(store); !read_ts || *read_ts != ts_) {
+            log::version().warn("Unexpected lock timestamp, {} != {}", read_ts ? *read_ts : 0, ts_);
             mutex_.unlock();
             return;
         }
@@ -122,7 +122,7 @@ class StorageLock {
             auto lock_sleep = ConfigsMap::instance()->get_int("StorageLock.WaitMs", 200);
             std::this_thread::sleep_for(std::chrono::milliseconds(lock_sleep));
             auto read_ts = read_timestamp(store);
-            if(read_ts && read_ts.value() == ts_) {
+            if(read_ts && *read_ts == ts_) {
                 x.release();
                 ARCTICDB_DEBUG(log::lock(), "Storage lock: succeeded {}", get_thread_id());
                 return true;
@@ -154,13 +154,13 @@ class StorageLock {
             if (auto read_ts = read_timestamp(store); read_ts) {
                 // check TTL
                 auto ttl = ConfigsMap::instance()->get_int("StorageLock.TTL", DEFAULT_TTL_INTERVAL);
-                if (ClockType::coarse_nanos_since_epoch() - read_ts.value() > ttl) {
+                if (ClockType::coarse_nanos_since_epoch() - *read_ts > ttl) {
                     log::lock().warn("StorageLock {} taken for more than TTL (default 1 day). Force releasing", name_);
                     force_release_lock(name_, store);
                     break;
                 }
             }
-            if (timeout_ms && total_wait > timeout_ms.value()) {
+            if (timeout_ms && total_wait > *timeout_ms) {
                 ts_ = 0;
                 log::lock().info("Lock timed out, giving up after {}", wait_ms);
                 mutex_.unlock();
@@ -172,8 +172,8 @@ class StorageLock {
         auto lock_sleep = ConfigsMap::instance()->get_int("StorageLock.WaitMs", 200);
         std::this_thread::sleep_for(std::chrono::milliseconds(lock_sleep));
         auto read_ts = read_timestamp(store);
-        if(!read_ts || read_ts.value() != ts_) {
-            log::lock().info("Lock preempted, expected timestamp {} but got {}", ts_, read_ts ? read_ts.value() : 0);
+        if(!read_ts || *read_ts != ts_) {
+            log::lock().info("Lock preempted, expected timestamp {} but got {}", ts_, read_ts.value_or(0));
             ts_ = 0;
             goto do_wait;
         }

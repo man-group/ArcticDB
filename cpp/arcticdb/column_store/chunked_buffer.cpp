@@ -56,7 +56,7 @@ std::vector<ChunkedBufferImpl<BlockSize>> split(const ChunkedBufferImpl<BlockSiz
 
             if(remaining_current_bytes == 0) {
                 ARCTICDB_DEBUG(log::version(), "Pushing buffer");
-                output.push_back(std::move(current_buf.value()));
+                output.push_back(std::move(*current_buf));
                 current_buf.reset();
             }
         }

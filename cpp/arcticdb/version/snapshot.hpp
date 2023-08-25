@@ -69,7 +69,7 @@ void iterate_snapshots(std::shared_ptr <Store> store, folly::Function<void(entit
 std::optional<size_t> row_id_for_stream_in_snapshot_segment(
     SegmentInMemory &seg,
     bool using_ref_key,
-    StreamId stream_id);
+    const StreamId& stream_id);
 
 // Get a set of the index keys of a particular symbol that exist in any snapshot
 std::unordered_set<entity::AtomKey> get_index_keys_in_snapshots(
@@ -97,7 +97,7 @@ std::optional<std::pair<VariantKey, SegmentInMemory>> get_snapshot(
 
 std::set<StreamId> list_streams_in_snapshot(
     const std::shared_ptr<Store>& store,
-    SnapshotId snap_name);
+    const SnapshotId& snap_name);
 
 using SnapshotMap = std::unordered_map<SnapshotId, std::vector<AtomKey>>;
 

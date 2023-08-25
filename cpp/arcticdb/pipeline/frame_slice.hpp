@@ -227,7 +227,7 @@ struct SliceAndKey {
     }
 
     bool invalid() const {
-        return (!segment_ && !key_) || segment_->is_null();
+        return (!segment_ && !key_) || (segment_ && segment_->is_null());
     }
 
     const AtomKey& key() const {

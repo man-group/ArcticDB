@@ -24,7 +24,7 @@ namespace arcticdb {
 template<typename T>
 struct Composite {
     using CompositePtr = std::unique_ptr<Composite<T>>;
-    using ValueType = std::variant<T, std::unique_ptr<Composite<T>>>;
+    using ValueType = std::variant<T, CompositePtr>;
     using ValueVector = std::vector<ValueType>;
     ValueVector values_;
 
@@ -44,7 +44,7 @@ struct Composite {
         template<class ValueType>
         class CompositeIterator
                 : public boost::iterator_facade<Composite<ValueType>, ValueType, boost::forward_traversal_tag> {
-            Composite *parent_;
+            Composite *parent_ = nullptr;
             std::vector<RangePair> ranges_;
 
         public:
@@ -112,17 +112,13 @@ struct Composite {
             return values_.size();
         }
 
-        explicit Composite(std::vector<T> &&vec) {
+        explicit Composite(std::vector<T>&& vec) {
             util::check(!vec.empty(), "Cannot create composite with no values");
             values_.insert(std::end(values_), std::make_move_iterator(std::begin(vec)),
                            std::make_move_iterator(std::end(vec)));
         }
 
         ARCTICDB_MOVE_ONLY_DEFAULT(Composite)
-
-        [[nodiscard]] bool is_single() const {
-            return values_.size() == 1 && std::holds_alternative<T>(values_[0]);
-        }
 
         [[nodiscard]] size_t size() const {
             return std::accumulate(std::begin(values_), std::end(values_), 0, [](size_t n, const ValueType &v) {

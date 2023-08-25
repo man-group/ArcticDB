@@ -252,8 +252,6 @@ public:
     std::set<StreamId> get_incomplete_refs() override;
     std::set<StreamId> get_active_incomplete_refs() override;
 
-    void push_incompletes_to_symbol_list(const std::set<StreamId>& incompletes) override;
-
     void flush_version_map() override;
 
     VersionedItem sort_merge_internal(
@@ -266,7 +264,7 @@ public:
         );
 
     std::vector<folly::Future<AtomKey>> batch_write_internal(
-        std::vector<VersionId> version_ids,
+        const std::vector<VersionId>& version_ids,
         const std::vector<StreamId>& stream_ids,
         std::vector<InputTensorFrame>&& frames,
         std::vector<std::shared_ptr<DeDupMap>> de_dup_maps,

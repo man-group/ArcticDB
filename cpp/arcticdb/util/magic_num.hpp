@@ -16,10 +16,10 @@ namespace arcticdb::util {
 template<char a, char b, char c, char d>
 struct MagicNum {
     static constexpr uint64_t Magic =
-        a << CHAR_BIT * 0 |
-            b << CHAR_BIT * 1 |
-            c << CHAR_BIT * 2 |
-            d << CHAR_BIT * 3;
+        a << (CHAR_BIT * 0) |
+        b << (CHAR_BIT * 1) |
+        c << (CHAR_BIT * 2) |
+        d << (CHAR_BIT * 3);
 
     ~MagicNum() {
         magic_ = ~magic_;

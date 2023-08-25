@@ -274,6 +274,7 @@ set(arcticdb_srcs
         stream/aggregator.hpp
         stream/aggregator-inl.hpp
         stream/append_map.hpp
+        stream/merge_utils.hpp
         stream/index_aggregator.hpp
         stream/index.hpp
         stream/merge.hpp

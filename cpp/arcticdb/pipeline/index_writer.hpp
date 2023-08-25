@@ -52,15 +52,15 @@ public:
         // one will need to ensure that this holds, otherwise the assumptions in the read pipeline will be
         // broken.
         ARCTICDB_DEBUG(log::version(), "Wriiting key {} to the index", key);
-        util::check_arg(!current_col_.has_value() || current_col_.value() <= slice.col_range.first,
+        util::check_arg(!current_col_.has_value() || *current_col_ <= slice.col_range.first,
                         "expected increasing column group, last col range left value {}, arg {}",
                         current_col_.value_or(-1), slice.col_range
         );
 
-        bool new_col_group = !current_col_.has_value() || current_col_.value() < slice.col_range.first;
+        bool new_col_group = !current_col_.has_value() || *current_col_ < slice.col_range.first;
         util::check_arg(!current_row_.has_value() || new_col_group
                         ||
-                        (current_col_.value() == slice.col_range.first && current_row_.value() < slice.row_range.first),
+                        (*current_col_ == slice.col_range.first && *current_row_ < slice.row_range.first),
                         "expected increasing row group, last col range left value {}, arg {}",
                         current_col_.value_or(-1), slice.col_range
         );
@@ -117,7 +117,7 @@ private:
 
     void on_segment(SegmentInMemory &&s) {
         auto seg = std::move(s);
-        auto key_type = key_type_ ? key_type_.value() : get_key_type_for_index_stream(partial_key_.id);
+        auto key_type = key_type_.value_or(get_key_type_for_index_stream(partial_key_.id));
         key_being_committed_ = sink_->write(
             key_type, partial_key_.version_id, partial_key_.id,
                 segment_start(seg), segment_end(seg), std::move(seg)).thenValue([] (auto&& variant_key) {
