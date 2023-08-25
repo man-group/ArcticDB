@@ -3,12 +3,13 @@ import pandas as pd
 import numpy as np
 
 from collections import namedtuple
-from typing import Union, Optional, Collection, List, Mapping
+from typing import Union, Optional, Collection, List, Mapping, Dict
 
 from arcticdb import Arctic
 from arcticdb.options import LibraryOptions
 from arcticdb.version_store.library import Library, ArcticUnsupportedDataTypeException
 from arcticdb.version_store.processing import QueryBuilder
+from arcticdb.exceptions import ArcticNativeNotYetImplemented
 from arcticdb_ext.version_store import NoSuchVersionException
 from arcticdb_ext.storage import NoDataFoundException
 
@@ -255,6 +256,19 @@ def _generate_dataframe(
     return df_to_upsert
 
 
+def _process_raw_top_k_result(
+    raw_result: pd.DataFrame,
+    include_vectors: bool,
+) -> List[Dict[str, Union[str, pd.Series]]]:
+    result = [{"id": col, "distance": raw_result[col].iloc[-1]} for col in raw_result]
+    dim = raw_result.shape[0]
+    if include_vectors:
+        for i, col in enumerate(raw_result):
+            result[i]["vector"] = raw_result[col].iloc[:-1]
+            result[i]["vector"].index = pd.RangeIndex(0, dim - 1)
+    return result
+
+
 class VectorDB:
     """
     The main interface exposing vector database functionality in a given Arctic instance.
@@ -370,30 +384,18 @@ class VectorDB:
         except NoSuchVersionException:  # symbol_name not in self._lib
             self._lib.write(symbol_name, data_frame_to_upsert, metadata={"dimensions": data_frame_to_upsert.shape[0]})
 
-    def top_k(
+    def _top_k(
         self,
         namespace: str,
         query_vector: Collection[float],
         k: int,
         norm: Optional[str] = None,
         index: Optional[str] = None,
+        include_vectors: bool = False,
+        include_metadata: bool = False,
     ) -> pd.DataFrame:
         """
-        Returns the top `k` most similar vectors to `query_vector` in `namespace`. We use the vector ID as a tiebreaker.
-
-        Parameters
-        ----------
-        namespace
-            The namespace in which to perform the top-k search.
-        k
-            The number of vectors to return from the search.
-        query_vector
-            The vector from which distances are taken.
-        norm
-            The distance norm based on which the top k will be computed. This is presently ignored; the default
-            is Euclidean.
-        index
-            The index based on which to compute the top k. This is also ignored.
+        Utility function for top_k.
         """
         symbol_name = f"{namespace}{VECTOR_DB_DISTINGUISHED_SUFFIX}"
         if k < 1:
@@ -434,6 +436,42 @@ class VectorDB:
         result.index = list(result.index[:-1]) + ["similarity"]
         return result
 
+    def top_k(
+        self,
+        namespace: str,
+        query_vector: Collection[float],
+        k: int,
+        norm: Optional[str] = None,
+        index: Optional[str] = None,
+        include_vectors: bool = False,
+        include_metadata: bool = False,
+    ) -> List[Dict[str, Union[str, pd.Series]]]:
+        """
+        Returns the top `k` most similar vectors to `query_vector` in `namespace`. We use the vector ID as a tiebreaker.
+
+        Parameters
+        ----------
+        namespace
+            The namespace in which to perform the top-k search.
+        k
+            The number of vectors to return from the search.
+        query_vector
+            The vector from which distances are taken.
+        norm
+            The distance norm based on which the top k will be computed. This is presently ignored; the default
+            is Euclidean.
+        index
+            The index based on which to compute the top k. This is also ignored.
+        include_vectors
+            Whether to include the values of the vectors in the result.
+        include_metadata
+            Whether to include the metadata associated with those vectors in the result. Presently ignored and
+            unimplemented.
+        """
+        raw_result = self._top_k(namespace, query_vector, k, norm, index, include_metadata)
+        result = _process_raw_top_k_result(raw_result, include_vectors)
+        return result
+
     def read(self, namespace: str, identifiers: Optional[Collection[str]] = None) -> pd.DataFrame:
         """
         Reads a `namespace`.
@@ -472,9 +510,15 @@ class _VectorSymbol:
         self.vector_db.upsert(self.namespace, vectors, identifiers, metadata)
 
     def top_k(
-        self, k: int, query_vector: Collection[float], norm: Optional[str] = None, index: Optional[str] = None
+        self,
+        k: int,
+        query_vector: Collection[float],
+        norm: Optional[str] = None,
+        index: Optional[str] = None,
+        include_vectors: bool = False,
+        include_metadata: bool = False,
     ) -> pd.DataFrame:
-        return self.vector_db.top_k(self.namespace, k, query_vector, norm, index)
+        return self.vector_db.top_k(self.namespace, k, query_vector, norm, index, include_vectors, include_metadata)
 
     def read(self, identifiers: Optional[List[str]] = None) -> pd.DataFrame:
         return self.vector_db.read(self.namespace, identifiers)
