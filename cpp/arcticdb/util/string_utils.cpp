@@ -50,12 +50,10 @@ std::string safe_decode(const std::string& value) {
         auto curr = value.find(escape_char, pos)  ;
         if(curr == std::string::npos) {
             unescaped << strv_from_pos(value, pos, len - pos);
-            auto test = unescaped.str();
             break;
         }
 
         unescaped << strv_from_pos(value, pos, curr - pos);
-        auto test = unescaped.str();
 
         auto is_escaped = len - curr > 2 && std::isxdigit(value[curr + 1]) != 0 && std::isxdigit(value[curr + 2]) != 0;
         if(is_escaped) {
@@ -63,7 +61,6 @@ std::string safe_decode(const std::string& value) {
             pos = curr + 3;
         }  else {
             unescaped << escape_char;
-            test = unescaped.str();
             pos = curr + 1;
         }
 

@@ -30,13 +30,13 @@ struct WriteOptions {
 
     size_t column_group_size = 127;
     size_t segment_row_size = 100'000;
-    bool prune_previous_version;
-    bool de_duplication;
-    bool snapshot_dedup;
-    bool dynamic_schema;
-    bool ignore_sort_order;
-    bool bucketize_dynamic;
+    bool prune_previous_version = false;
+    bool de_duplication = false;
+    bool snapshot_dedup = false;
+    bool dynamic_schema = false;
+    bool ignore_sort_order = false;
+    bool bucketize_dynamic = false;
     size_t max_num_buckets = 150;
-    bool compact_incomplete_dedup_rows;
+    bool compact_incomplete_dedup_rows = false;
 };
 } //namespace arcticdb

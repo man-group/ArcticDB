@@ -46,8 +46,8 @@ namespace arcticdb {
             // IMP: This is the GROUPING_KEY - every push overwrites the previous grouping key
             auto labels = prometheus::Gateway::GetInstanceLabel(getHostName());
             mongo_instance_ = cfg.instance();
-            labels.insert(std::pair<std::string, std::string>(MONGO_INSTANCE_LABEL, mongo_instance_));
-            labels.insert(std::pair<std::string, std::string>(PROMETHEUS_ENV_LABEL, cfg.prometheus_env()));
+            labels.try_emplace(MONGO_INSTANCE_LABEL, mongo_instance_);
+            labels.try_emplace(PROMETHEUS_ENV_LABEL, cfg.prometheus_env());
             gateway_= std::make_shared<prometheus::Gateway>(cfg.host(), cfg.port(), cfg.job_name(), labels);
             registry_ = std::make_shared<prometheus::Registry>();
             gateway_->RegisterCollectable(registry_);

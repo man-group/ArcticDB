@@ -109,7 +109,7 @@ inline std::optional<AtomKey> get_specific_version(
 
 template<typename MatchingAcceptor, typename PrevAcceptor, typename NextAcceptor, typename KeyFilter>
 inline bool get_matching_prev_and_next_versions(
-        const std::shared_ptr<VersionMapEntry> entry,
+        const std::shared_ptr<VersionMapEntry>& entry,
         VersionId version_id,
         MatchingAcceptor matching_acceptor,
         PrevAcceptor prev_acceptor,
@@ -144,7 +144,13 @@ inline bool has_undeleted_version(
     pipelines::VersionQuery version_query;
     version_query.set_skip_compat(true),
     version_query.set_iterate_on_failure(false);
-    return static_cast<bool>(get_latest_undeleted_version(store, version_map, id, version_query, ReadOptions{}));
+    auto maybe_undeleted = get_latest_undeleted_version(store, version_map, id, version_query, ReadOptions{});
+    if(maybe_undeleted)
+        log::version().info("Found undeleted key {}", *maybe_undeleted);
+    else
+        log::version().info("No key for stream {}", id);
+
+    return static_cast<bool>(maybe_undeleted);
 }
 
 inline void insert_if_undeleted(
@@ -206,7 +212,7 @@ inline version_store::TombstoneVersionResult tombstone_version(
         } else {
             if (!allow_tombstoning_beyond_latest_version) {
                 auto latest_key = get_latest_version(store, version_map, stream_id, version_query, read_options);
-                if (!latest_key || latest_key.value().version_id() < version_id)
+                if (!latest_key || latest_key->version_id() < version_id)
                     util::raise_rte("Can't delete version {} for symbol {} - it's higher than the latest version",
                             stream_id, version_id);
             }
@@ -222,6 +228,7 @@ inline version_store::TombstoneVersionResult tombstone_version(
         entry->validate();
 
     res.no_undeleted_left = !entry->get_first_index(false).has_value();
+    res.latest_version_ = entry->get_first_index(true)->version_id();
     return res;
 }
 
@@ -290,7 +297,7 @@ inline std::set<StreamId> list_streams(
                                 else
                                     insert_if_undeleted(store, version_map, key, res);
                             },
-                            prefix.value());
+                            *prefix);
     } else {
         store->iterate_type(KeyType::VERSION_REF, [&store, &res, &version_map, all_symbols](auto &&vk) {
             const auto key = std::forward<VariantKey>(vk);

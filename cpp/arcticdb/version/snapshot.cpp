@@ -128,8 +128,7 @@ void iterate_snapshots(std::shared_ptr <Store> store, folly::Function<void(entit
     }
 }
 
-std::optional<size_t>
-row_id_for_stream_in_snapshot_segment(SegmentInMemory &seg, bool using_ref_key, StreamId stream_id) {
+std::optional<size_t> row_id_for_stream_in_snapshot_segment(SegmentInMemory &seg, bool using_ref_key, const StreamId& stream_id) {
     if (using_ref_key) {
         // With ref keys we are sure the snapshot segment has the index atom keys sorted by stream_id.
         auto lb = std::lower_bound(std::begin(seg), std::end(seg), stream_id,
@@ -199,7 +198,7 @@ std::unordered_set<entity::AtomKey> get_index_keys_in_snapshots(
         auto opt_idx_for_stream_id = row_id_for_stream_in_snapshot_segment(
                 snapshot_segment, snapshot_using_ref, stream_id);
         if (opt_idx_for_stream_id) {
-            auto stream_idx = opt_idx_for_stream_id.value();
+            auto stream_idx = *opt_idx_for_stream_id;
             index_keys_in_snapshots.insert(read_key_row(snapshot_segment, stream_idx));
         }
     });
@@ -231,7 +230,7 @@ std::pair<std::vector<AtomKey>, std::unordered_set<AtomKey>> get_index_keys_part
 std::optional<VariantKey> get_snapshot_key(std::shared_ptr <Store> store, const SnapshotId &snap_name) {
     ARCTICDB_SAMPLE(getSnapshot, 0)
 
-    auto maybe_ref_key = RefKey{std::move(snap_name), KeyType::SNAPSHOT_REF};
+    auto maybe_ref_key = RefKey{snap_name, KeyType::SNAPSHOT_REF};
     if(store->key_exists_sync(maybe_ref_key))
         return maybe_ref_key;
 
@@ -260,7 +259,7 @@ std::optional<std::pair<VariantKey, SegmentInMemory>> get_snapshot(std::shared_p
 
 std::set<StreamId> list_streams_in_snapshot(
         const std::shared_ptr<Store>& store,
-        SnapshotId snap_name) {
+        const SnapshotId& snap_name) {
     ARCTICDB_SAMPLE(ListStreamsInSnapshot, 0)
     std::set<StreamId> res;
     auto opt_snap_key = get_snapshot(store, snap_name);
@@ -268,7 +267,7 @@ std::set<StreamId> list_streams_in_snapshot(
     if (!opt_snap_key)
         throw storage::NoDataFoundException(snap_name);
 
-    auto& snapshot_segment = opt_snap_key.value().second;
+    auto& snapshot_segment = opt_snap_key->second;
 
     for (size_t idx = 0; idx < snapshot_segment.row_count(); idx++) {
         auto stream_index = read_key_row(snapshot_segment, idx);
@@ -353,7 +352,7 @@ MasterSnapshotMap get_master_snapshots_map(
             auto stream_index = read_key_row(snapshot_segment, idx);
             out[stream_index.id()][stream_index].insert(snapshot_id);
             if (get_keys_in_snapshot) {
-                auto[wanted_snap_key, sink] = get_keys_in_snapshot.value();
+                auto [wanted_snap_key, sink] = *get_keys_in_snapshot;
                 if (wanted_snap_key == sk) {
                     sink.push_back(stream_index);
                 }

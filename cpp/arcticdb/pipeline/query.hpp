@@ -307,12 +307,12 @@ inline std::vector<FilterQuery<ContainerType>> build_read_query_filters(
 
     util::variant_match(range,
                         [&](const RowRange &row_range) {
-                            queries.push_back(
+                            queries.emplace_back(
                                     create_row_filter<ContainerType>(RowRange{row_range.first, row_range.second}));
                         },
                         [&](const IndexRange &index_range) {
                             if (index_range.specified_) {
-                                queries.push_back(create_index_filter<ContainerType>(index_range, dynamic_schema, column_groups));
+                                queries.emplace_back(create_index_filter<ContainerType>(index_range, dynamic_schema, column_groups));
                             }
                         },
                         [](const auto &) {}
@@ -322,9 +322,9 @@ inline std::vector<FilterQuery<ContainerType>> build_read_query_filters(
         util::check(!dynamic_schema || column_groups, "Did not expect a column bitset with dynamic schema");
 
         if(column_groups)
-            queries.push_back(create_dynamic_col_filter(util::BitSet(col_bitset.value()), pipeline_context));
+            queries.emplace_back(create_dynamic_col_filter(util::BitSet(*col_bitset), pipeline_context));
         else
-            queries.push_back(create_static_col_filter(util::BitSet(col_bitset.value())));
+            queries.emplace_back(create_static_col_filter(util::BitSet(*col_bitset)));
     }
 
     return queries;
@@ -349,21 +349,21 @@ inline std::vector<FilterQuery<ContainerType>> build_update_query_filters(
     util::variant_match(range,
                         [&](const  RowRange &row_range) {
                             util::check(std::holds_alternative<stream::RowCountIndex>(index), "Cannot partition by row count when a timeseries-indexed frame was supplied");
-                            queries.push_back(
+                            queries.emplace_back(
                                     create_row_filter<ContainerType>(RowRange{row_range.first, row_range.second}));
                         },
                         [&](const IndexRange &index_range) {
                             util::check(std::holds_alternative<stream::TimeseriesIndex>(index), "Cannot partition by time when a rowcount-indexed frame was supplied");
-                            queries.push_back(create_index_filter<ContainerType>(IndexRange{index_range}, dynamic_schema, column_groups));
+                            queries.emplace_back(create_index_filter<ContainerType>(IndexRange{index_range}, dynamic_schema, column_groups));
                         },
                         [&](const auto &) {
                             util::variant_match(index,
                                                 [&](const stream::TimeseriesIndex &) {
-                                                    queries.push_back(create_index_filter<ContainerType>(IndexRange{index_range}, dynamic_schema, column_groups));
+                                                    queries.emplace_back(create_index_filter<ContainerType>(IndexRange{index_range}, dynamic_schema, column_groups));
                                                 },
                                                 [&](const stream::RowCountIndex &) {
                                                     RowRange row_range{std::get<NumericId>(index_range.start_), std::get<NumericIndex>(index_range.end_)};
-                                                    queries.push_back(create_row_filter<ContainerType>(std::move(row_range)));
+                                                    queries.emplace_back(create_row_filter<ContainerType>(std::move(row_range)));
                                                 },
                                                 [&](const auto &) {
                                                 });

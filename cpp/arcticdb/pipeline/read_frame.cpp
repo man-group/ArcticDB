@@ -88,7 +88,7 @@ SegmentInMemory allocate_frame(const std::shared_ptr<PipelineContext>& context) 
             if(!col_index)
                 continue;
 
-            auto& column = output.column(static_cast<position_t>(col_index.value()));
+            auto& column = output.column(static_cast<position_t>(*col_index));
             if(field.type().data_type() != column.type().data_type())
                 column.set_orig_type(field.type());
         }
@@ -173,12 +173,13 @@ void decode_index_field_impl(
             auto &buffer = frame.column(0).data().buffer(); // TODO assert size
             auto &frame_field_descriptor = frame.field(0); //TODO better method
             auto sz = sizeof_datatype(frame_field_descriptor.type());
-            auto offset = sz * (context.slice_and_key().slice_.row_range.first - frame.offset());
-            auto tot_size = sz * context.slice_and_key().slice_.row_range.diff();
+            const auto& slice_and_key = context.slice_and_key();
+            auto offset = sz * (slice_and_key.slice_.row_range.first - frame.offset());
+            auto tot_size = sz * slice_and_key.slice_.row_range.diff();
 
             SliceDataSink sink(buffer.data() + offset, tot_size);
             ARCTICDB_DEBUG(log::storage(), "Creating index slice with total size {} ({} - {})", tot_size, sz,
-                                 context.slice_and_key().slice_.row_range.diff());
+                           slice_and_key.slice_.row_range.diff());
 
             const auto fields_match = frame_field_descriptor.type() == context.descriptor().fields(0).type();
             util::check(fields_match, "Cannot coerce index type from {} to {}",
@@ -313,7 +314,7 @@ void decode_into_frame_static(
     SegmentInMemory &frame,
     PipelineContextRow &context,
     Segment &&s,
-    const std::shared_ptr<BufferHolder> buffers) {
+    std::shared_ptr<BufferHolder> buffers) {
     auto seg = std::move(s);
     ARCTICDB_SAMPLE_DEFAULT(DecodeIntoFrame)
     const uint8_t *data = seg.buffer().data();
@@ -406,7 +407,7 @@ void decode_into_frame_dynamic(
                 continue;
             }
 
-            auto dst_col = frame_loc_opt.value();
+            auto dst_col = *frame_loc_opt;
             auto& buffer = frame.column(static_cast<position_t>(dst_col)).data().buffer();
             if(ColumnMapping m{frame, dst_col, field_col, context};!trivially_compatible_types(m.source_type_desc_, m.dest_type_desc_)) {
                 util::check(static_cast<bool>(has_valid_type_promotion(m.source_type_desc_, m.dest_type_desc_)), "Can't promote type {} to type {} in field {}",
@@ -679,7 +680,7 @@ public:
         SegmentInMemory frame,
         const Field& frame_field,
         size_t alloc_width) :
-        StringReducer(column, std::move(context), std::move(frame), std::move(frame_field), alloc_width * UNICODE_WIDTH),
+        StringReducer(column, std::move(context), std::move(frame), frame_field, alloc_width * UNICODE_WIDTH),
         conv_("UTF32", "UTF8"),
         buf_(new uint8_t[column_width_ + UNICODE_PREFIX]) {
     }
@@ -822,10 +823,11 @@ class DynamicStringReducer : public StringReducer {
             } else {
                 auto it = local_map.find(offset);
                 if(it != local_map.end()) {
-                    *ptr_dest_ = it->second.first;
-                    LockPolicy::lock(it->second.second);
+                    auto& object_and_lock = it->second;
+                    *ptr_dest_ = object_and_lock.first;
+                    LockPolicy::lock(object_and_lock.second);
                     Py_INCREF(*ptr_dest_);
-                    LockPolicy::unlock(it->second.second);
+                    LockPolicy::unlock(object_and_lock.second);
                 } else {
                     const auto sv = get_string_from_pool(offset, string_pool);
                     LockPolicy::lock(*lock_);

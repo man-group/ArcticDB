@@ -318,7 +318,7 @@ LmdbStorage::LmdbStorage(const LibraryPath &library_path, OpenMode mode, const C
     arcticdb::entity::foreach_key_type([&txn, this](KeyType&& key_type) {
         std::string db_name = fmt::format("{}", key_type);
         ::lmdb::dbi dbi = ::lmdb::dbi::open(txn, db_name.data(), MDB_CREATE);
-        dbi_by_key_type_.insert({std::move(db_name), std::move(dbi)});
+        dbi_by_key_type_.insert(std::make_pair(std::move(db_name), std::move(dbi)));
     });
 
     txn.commit();

@@ -18,12 +18,12 @@
 
 namespace arcticdb {
 
-namespace {
+namespace detail {
 using BaseType = std::uint32_t;
 constexpr BaseType error_category_scale = 1000u;
 }
 
-enum class ErrorCategory : BaseType {
+enum class ErrorCategory : detail::BaseType {
     INTERNAL = 1,
     NORMALIZATION = 2,
     MISSING_DATA = 3,
@@ -32,6 +32,7 @@ enum class ErrorCategory : BaseType {
     SORTING = 6,
     USER_INPUT = 7,
     COMPATIBILITY = 8,
+    CODEC = 9,
     // NEW CATEGORIES MUST ALSO BE ADDED TO python_module.cpp:register_error_code_ecosystem
 };
 
@@ -46,6 +47,7 @@ inline std::unordered_map<ErrorCategory, const char*> get_error_category_names()
         {ErrorCategory::SORTING, "SORTING"},
         {ErrorCategory::USER_INPUT, "USER_INPUT"},
         {ErrorCategory::COMPATIBILITY, "COMPATIBILITY"},
+        {ErrorCategory::CODEC, "CODEC"},
     };
 }
 
@@ -78,8 +80,9 @@ inline std::unordered_map<ErrorCategory, const char*> get_error_category_names()
     ERROR_CODE(7001, E_INVALID_DECIMAL_STRING)   \
     ERROR_CODE(7002, E_INVALID_CHAR_IN_SYMBOL) \
     ERROR_CODE(8000, E_UNRECOGNISED_COLUMN_STATS_VERSION) \
+    ERROR_CODE(9000, E_DECODE_ERROR)
 
-enum class ErrorCode : BaseType {
+enum class ErrorCode : detail::BaseType {
 #define ERROR_CODE(code, Name, ...) Name = code,
     ARCTIC_ERROR_CODES
 #undef ERROR_CODE
@@ -110,7 +113,7 @@ inline std::vector<ErrorCode> get_error_codes() {
 ErrorCodeData get_error_code_data(ErrorCode code);
 
 constexpr ErrorCategory get_error_category(ErrorCode code) {
-    return static_cast<ErrorCategory>(static_cast<BaseType>(code) / error_category_scale);
+    return static_cast<ErrorCategory>(static_cast<detail::BaseType>(code) / detail::error_category_scale);
 }
 
 struct ArcticException : public std::runtime_error {
@@ -144,6 +147,7 @@ using SortingException = ArcticCategorizedException<ErrorCategory::SORTING>;
 using UnsortedDataException = ArcticSpecificException<ErrorCode::E_UNSORTED_DATA>;
 using UserInputException = ArcticCategorizedException<ErrorCategory::USER_INPUT>;
 using CompatibilityException = ArcticCategorizedException<ErrorCategory::COMPATIBILITY>;
+using CodecException = ArcticCategorizedException<ErrorCategory::CODEC>;
 
 template<ErrorCode error_code>
 [[noreturn]] void throw_error(const std::string& msg) {

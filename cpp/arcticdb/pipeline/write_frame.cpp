@@ -60,7 +60,7 @@ folly::Future<std::vector<SliceAndKey>> write_slices(
             if(!first_row)
                 first_row = slice.row_range.first;
 
-            if(slice.row_range.first == first_row.value())
+            if(slice.row_range.first == *first_row)
                 slice_num_for_column = 0;
 
             SingleSegmentAggregator agg{FixedSchema{*slice.desc(), frame.index}, [&](auto &&segment) {
@@ -202,7 +202,7 @@ folly::Future<entity::AtomKey> append_frame(
     auto existing_slices = unfiltered_index(index_segment_reader);
     auto keys_fut = slice_and_write(frame, slicing, get_partial_key_gen(frame, key), store);
     return std::move(keys_fut)
-    .thenValue([dynamic_schema, slices_to_write = std::move(existing_slices), frame = std::move(frame), index_segment_reader = std::move(index_segment_reader), key = std::move(key), &store](auto&& slice_and_keys_to_append) mutable {
+    .thenValue([dynamic_schema, slices_to_write = std::move(existing_slices), frame = std::move(frame), index_segment_reader = std::move(index_segment_reader), key = key, &store](auto&& slice_and_keys_to_append) mutable {
         slices_to_write.insert(std::end(slices_to_write), std::make_move_iterator(std::begin(slice_and_keys_to_append)), std::make_move_iterator(std::end(slice_and_keys_to_append)));
         std::sort(std::begin(slices_to_write), std::end(slices_to_write));
         if(dynamic_schema) {

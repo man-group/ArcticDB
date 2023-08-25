@@ -30,7 +30,7 @@ std::optional<InMemoryConfigResolver::MemoryConfig> InMemoryConfigResolver::get_
 InMemoryConfigResolver::MemoryConfig& InMemoryConfigResolver::get_or_add_environment(const EnvironmentName& environment_name) {
     auto env = environments_.find(environment_name);
     if(env == environments_.end()) {
-        env = environments_.insert(std::make_pair(environment_name, MemoryConfig())).first;
+        env = environments_.try_emplace(environment_name, MemoryConfig()).first;
     }
 
     return env->second;
@@ -42,7 +42,7 @@ std::vector<std::pair<LibraryPath, arcticdb::proto::storage::LibraryDescriptor>>
     if(!config.has_value())
         return output;
 
-    for(auto& pair : config.value().libraries_)
+    for(auto& pair : config->libraries_)
         output.emplace_back(pair);
 
     return output;
@@ -54,7 +54,7 @@ std::vector<std::pair<StorageName, arcticdb::proto::storage::VariantStorage>> In
     if(!config.has_value())
         return output;
 
-    for(auto& pair : config.value().storages_)
+    for(auto& pair : config->storages_)
         output.emplace_back(pair);
 
     return output;
@@ -62,12 +62,12 @@ std::vector<std::pair<StorageName, arcticdb::proto::storage::VariantStorage>> In
 
 void InMemoryConfigResolver::add_library(const EnvironmentName& environment_name, const arcticdb::proto::storage::LibraryDescriptor& library_descriptor) {
     auto& config = get_or_add_environment(environment_name);
-    config.libraries_.insert(std::make_pair(LibraryPath::from_delim_path(library_descriptor.name()), library_descriptor));
+    config.libraries_.try_emplace(LibraryPath::from_delim_path(library_descriptor.name()), library_descriptor);
 }
 
 void InMemoryConfigResolver::add_storage(const EnvironmentName& environment_name, const StorageName& storage_name, const arcticdb::proto::storage::VariantStorage& storage) {
     auto& config = get_or_add_environment(environment_name);
-    config.storages_.insert(std::make_pair(StorageName(storage_name), storage));
+    config.storages_.try_emplace(StorageName(storage_name), storage);
 }
 
 }

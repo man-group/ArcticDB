@@ -25,8 +25,8 @@ std::pair<entity::VariantKey, std::optional<Segment>> lookup_match_in_dedup_map(
     } else {
         ARCTICDB_DEBUG(log::version(),
                        "Found existing key with same contents: using existing object {}",
-                       de_dup_key.value());
-        return std::make_pair(de_dup_key.value(), std::nullopt);
+                       *de_dup_key);
+        return std::make_pair(*de_dup_key, std::nullopt);
     }
 }
 }

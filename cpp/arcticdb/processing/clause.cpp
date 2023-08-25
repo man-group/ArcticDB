@@ -69,7 +69,7 @@ std::vector<Composite<SliceAndKey>> structure_by_column_slice(std::vector<SliceA
 
 std::vector<Composite<ProcessingUnit>> single_partition(std::vector<Composite<ProcessingUnit>> &&comps) {
     std::vector<Composite<ProcessingUnit>> v;
-    v.push_back(merge_composites_shallow(std::move(comps)));
+    v.emplace_back(merge_composites_shallow(std::move(comps)));
     return v;
 }
 
@@ -407,13 +407,14 @@ Composite<ProcessingUnit> AggregationClause::process(std::shared_ptr<Store> stor
         size_t max_end_col = 0;
         std::optional<SegmentInMemory> output_seg;
         for (auto& slice_and_key: proc.data()) {
-            min_start_row = std::min(min_start_row, slice_and_key.slice().row_range.start());
-            max_end_row = std::max(max_end_row, slice_and_key.slice().row_range.end());
-            min_start_col = std::min(min_start_col, slice_and_key.slice().col_range.start());
-            max_end_col = std::max(max_end_col, slice_and_key.slice().col_range.end());
+            const auto& slice = slice_and_key.slice();
+            min_start_row = std::min(min_start_row, slice.row_range.start());
+            max_end_row = std::max(max_end_row, slice.row_range.end());
+            min_start_col = std::min(min_start_col, slice.col_range.start());
+            max_end_col = std::max(max_end_col, slice.col_range.end());
             auto segment = std::move(slice_and_key.segment(store));
             if (output_seg.has_value()) {
-                stream::merge_string_columns(segment, output_seg->string_pool_ptr(), false);
+                merge_string_columns(segment, output_seg->string_pool_ptr(), false);
                 output_seg->concatenate(std::move(segment), true);
             } else {
                 output_seg = std::make_optional<SegmentInMemory>(std::move(segment));
@@ -471,8 +472,8 @@ void merge_impl(
         QueueType &input_streams,
         bool add_symbol_column,
         StreamId stream_id,
-        const arcticdb::pipelines::RowRange row_range,
-        const arcticdb::pipelines::ColRange col_range,
+        const arcticdb::pipelines::RowRange& row_range,
+        const arcticdb::pipelines::ColRange& col_range,
         IndexType index,
         const StreamDescriptor& stream_descriptor) {
     using namespace arcticdb::pipelines;
@@ -528,13 +529,14 @@ Composite<ProcessingUnit> MergeClause::process(std::shared_ptr<Store> store,
     procs.broadcast([&input_streams, &store, &min_start_row, &max_end_row, &min_start_col, &max_end_col](auto &&proc) {
         auto slice_and_keys = proc.release_data();
         for (auto &&slice_and_key: slice_and_keys) {
-            size_t start_row = slice_and_key.slice().row_range.start();
+            const auto& slice = slice_and_key.slice();
+            size_t start_row = slice.row_range.start();
             min_start_row = start_row < min_start_row ? start_row : min_start_row;
-            size_t end_row = slice_and_key.slice().row_range.end();
+            size_t end_row = slice.row_range.end();
             max_end_row = end_row > max_end_row ? end_row : max_end_row;
-            size_t start_col = slice_and_key.slice().col_range.start();
+            size_t start_col = slice.col_range.start();
             min_start_col = start_col < min_start_col ? start_col : min_start_col;
-            size_t end_col = slice_and_key.slice().col_range.end();
+            size_t end_col = slice.col_range.end();
             max_end_col = end_col > max_end_col ? end_col : max_end_col;
             input_streams.push(
                     std::make_unique<SliceAndKeyWrapper>(std::forward<pipelines::SliceAndKey>(slice_and_key),

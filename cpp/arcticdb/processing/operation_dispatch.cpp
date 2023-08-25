@@ -56,8 +56,8 @@ VariantData transform_to_bitset(const VariantData& data) {
                         util::BitSet::bulk_insert_iterator inserter(*output);
                         auto pos = 0u;
                         while (auto block = column_data.next<ColumnDescriptorType>()) {
-                            auto ptr = reinterpret_cast<const ColumnType*>(block.value().data());
-                            const auto row_count = block.value().row_count();
+                            auto ptr = reinterpret_cast<const ColumnType*>(block->data());
+                            const auto row_count = block->row_count();
                             for (auto i = 0u; i < row_count; ++i, ++pos) {
                                 if(*ptr++)
                                     inserter = pos;

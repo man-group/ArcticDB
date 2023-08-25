@@ -58,7 +58,7 @@ struct ClauseInfo {
 // Changes how the clause behaves based on information only available after it is constructed
 struct ProcessingConfig {
     bool dynamic_schema_{false};
-    uint64_t total_rows_;
+    uint64_t total_rows_ = 0;
 };
 
 
@@ -226,6 +226,7 @@ struct PartitionClause {
     std::string grouping_column_;
 
     explicit PartitionClause(const std::string& grouping_column) :
+            processing_config_(),
             grouping_column_(grouping_column) {
         clause_info_.input_columns_ = {grouping_column_};
         clause_info_.requires_repartition_ = true;
@@ -318,8 +319,8 @@ struct AggregationClause {
                       const std::unordered_map<std::string,
                       std::string>& aggregations);
 
-    [[nodiscard]] std::vector<Composite<SliceAndKey>> structure_for_processing(
-            ARCTICDB_UNUSED const std::vector<SliceAndKey>& slice_and_keys, ARCTICDB_UNUSED size_t start_from) const {
+    [[noreturn]] std::vector<Composite<SliceAndKey>> structure_for_processing(
+        const std::vector<SliceAndKey>&, size_t) const {
         internal::raise<ErrorCode::E_ASSERTION_FAILURE>(
                 "AggregationClause::structure_for_processing should never be called"
                 );
@@ -476,8 +477,10 @@ struct ColumnStatsGenerationClause {
     ProcessingConfig processing_config_;
     std::shared_ptr<std::vector<ColumnStatsAggregator>> column_stats_aggregators_;
 
-    explicit ColumnStatsGenerationClause(std::unordered_set<std::string>&& input_columns,
-                                         std::shared_ptr<std::vector<ColumnStatsAggregator>> column_stats_aggregators) :
+    explicit ColumnStatsGenerationClause(
+        std::unordered_set<std::string>&& input_columns,
+        std::shared_ptr<std::vector<ColumnStatsAggregator>> column_stats_aggregators) :
+            processing_config_(),
             column_stats_aggregators_(std::move(column_stats_aggregators)) {
         clause_info_.input_columns_ = std::move(input_columns);
         clause_info_.can_combine_with_column_selection_ = false;

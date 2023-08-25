@@ -138,7 +138,7 @@ struct DefaultStringGenerator {
         vec.resize(num_rows * strides_);
         const char *strings[] = {"dog", "cat", "horse"};
         for (size_t i = 0; i < num_rows; ++i) {
-            memcpy(&vec[i * strides_], &strings[i % 3], sizeof(strings[i % 3]));
+            memcpy(&vec[i * strides_], &strings[i % 3], strlen(strings[i % 3]));
         }
     }
 };
@@ -219,9 +219,9 @@ void fill_test_column(arcticdb::pipelines::InputTensorFrame &frame,
     using RawType = typename decltype(data_type_tag)::raw_type;
     if (!is_index) {
         if constexpr (std::is_integral_v<RawType> || std::is_floating_point_v<RawType>)
-            frame.field_tensors.push_back(test_column(container, data_type_tag, num_rows, start_val, is_index));
+            frame.field_tensors.emplace_back(test_column(container, data_type_tag, num_rows, start_val, is_index));
         else
-            frame.field_tensors.push_back(test_string_column(container, data_type_tag, num_rows, start_val, is_index));
+            frame.field_tensors.emplace_back(test_string_column(container, data_type_tag, num_rows, start_val, is_index));
     } else {
         if constexpr (std::is_integral_v<RawType>)
             frame.index_tensor =

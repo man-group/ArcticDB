@@ -65,7 +65,7 @@ StreamDescriptor merge_descriptors(
                         }
                     }
                 } else {
-                    merged_fields.push_back(field.name());
+                    merged_fields.emplace_back(field.name());
                     merged_fields_map.try_emplace(field.name(), type_desc);
                 }
             }

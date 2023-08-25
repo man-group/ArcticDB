@@ -18,8 +18,8 @@ namespace arcticdb {
 AtomKey make_test_index_key(std::string id,
                            VersionId version_id,
                            KeyType key_type,
-                           IndexValue index_start = 0,
-                           IndexValue index_end = 0,
+                           const IndexValue& index_start = 0,
+                           const IndexValue& index_end = 0,
                            timestamp creation_ts = PilotedClock::nanos_since_epoch()) {
     return atom_key_builder().version_id(version_id).start_index(index_start).end_index(index_end).creation_ts(
             creation_ts)
@@ -37,7 +37,7 @@ struct MapStorePair {
     void write_version(const std::string &id) {
         log::version().info("MapStorePair, write version {}", id);
         auto prev = get_latest_version(store_, map_, id, pipelines::VersionQuery{}, ReadOptions{});
-        auto version_id = prev ? prev.value().version_id() + 1 : 0;
+        auto version_id = prev ? prev->version_id() + 1 : 0;
         map_->write_version(store_, make_test_index_key(id, version_id, KeyType::TABLE_INDEX));
     }
 
@@ -52,7 +52,7 @@ struct MapStorePair {
     void write_and_prune_previous(const std::string &id) {
         log::version().info("MapStorePair, write_and_prune_previous version {}", id);
         auto prev = get_latest_version(store_, map_, id, pipelines::VersionQuery{}, ReadOptions{});
-        auto version_id = prev ? prev.value().version_id() + 1 : 0;
+        auto version_id = prev ? prev->version_id() + 1 : 0;
 
         if(tombstones_)
             map_->write_and_prune_previous(store_,  make_test_index_key(id, version_id, KeyType::TABLE_INDEX), prev);
@@ -85,7 +85,7 @@ struct VersionMapModel {
 
     void write_version(const std::string &id) {
         auto prev = get_latest_version(id);
-        auto version_id = prev ? prev.value() + 1 : 0;
+        auto version_id = prev ? *prev + 1 : 0;
         data_[id].insert(version_id);
     }
 
@@ -97,7 +97,7 @@ struct VersionMapModel {
         auto prev = get_latest_version(id);
         VersionId version_id{0};
         if (prev) {
-            version_id = prev.value() + 1;
+            version_id = *prev + 1;
             data_[id].clear();
         }
         data_[id].insert(version_id);
@@ -109,8 +109,7 @@ struct VersionMapTombstonesModel {
     std::unordered_map<StringId, std::unordered_set<VersionId>> tombstones_;
     std::vector<std::string> symbols_;
 
-    VersionMapTombstonesModel() {
-    };
+    VersionMapTombstonesModel() = default;
 
     std::optional<VersionId> get_latest_version(const std::string &id) const {
         log::version().info("VersionMapTombstonesModel, get_latest_version {}", id);
@@ -148,11 +147,11 @@ struct VersionMapTombstonesModel {
     void write_version(const std::string &id) {
         log::version().info("VersionMapTombstonesModel, write version {}", id);
         auto prev = get_latest_version(id);
-        auto version_id = prev ? prev.value() + 1 : 0;
+        auto version_id = prev ? *prev + 1 : 0;
         data_[id].insert(version_id);
     }
 
-    void delete_versions(const std::vector<VersionId> versions, const std::string& id) {
+    void delete_versions(const std::vector<VersionId>& versions, const std::string& id) {
         log::version().info("VersionMapTombstonesModel, delete_versions {}", id);
         auto& tombstones = tombstones_[id];
         for(auto v : versions)
@@ -168,7 +167,7 @@ struct VersionMapTombstonesModel {
         auto prev = get_latest_version(id);
         VersionId version_id{0};
         if (prev) {
-            version_id = prev.value() + 1;
+            version_id = *prev + 1;
             delete_all_versions(id);
         }
         data_[id].insert(version_id);

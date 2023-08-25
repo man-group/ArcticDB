@@ -479,7 +479,7 @@ public:
         std::vector<SegmentInMemory> output;
         auto new_impls = impl_->split(rows);
         for(const auto& impl : new_impls)
-            output.push_back(SegmentInMemory{impl});
+            output.emplace_back(SegmentInMemory{impl});
 
         return output;
     }

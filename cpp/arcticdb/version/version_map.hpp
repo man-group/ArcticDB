@@ -102,7 +102,6 @@ class VersionMapImpl {
      *
      * Methods already declared with const& were not touched during this change.
      */
-    using StreamIdArg = const StreamId&;
     using MapType =  std::map<StreamId, std::shared_ptr<VersionMapEntry>>;
 
     static constexpr uint64_t DEFAULT_CLOCK_UNSYNC_TOLERANCE = ONE_SECOND * 2;
@@ -154,6 +153,7 @@ public:
             entry->keys_.push_back(ref_entry.keys_[0]);
         } else {
             do {
+                ARCTICDB_DEBUG(log::version(), "Loading version key {}", next_key.value());
                 auto [key, seg] = store->read_sync(next_key.value());
                 next_key = read_segment_with_keys(seg, entry, load_progress);
                 set_latest_version(entry, latest_version);
@@ -207,7 +207,7 @@ public:
 
     void load_via_iteration(
         std::shared_ptr<Store> store,
-        StreamIdArg stream_id,
+        const StreamId& stream_id,
         std::shared_ptr<VersionMapEntry>& entry,
         bool use_index_keys_for_iteration=false) const {
         ARCTICDB_DEBUG(log::version(), "Attempting to iterate version keys");
@@ -248,7 +248,7 @@ public:
      * @param first_key_to_tombstone The first key in the version chain that should be tombstoned. When empty
      * then the first index key onwards is tombstoned, so the whole chain is tombstoned.
      */
-    std::vector<AtomKey> tombstone_from_key_or_all(
+    std::pair<VersionId, std::vector<AtomKey>> tombstone_from_key_or_all(
             std::shared_ptr<Store> store,
             const StreamId& stream_id,
             std::optional<AtomKey> first_key_to_tombstone = std::nullopt
@@ -256,7 +256,7 @@ public:
         return tombstone_from_key_or_all_internal(store, stream_id, first_key_to_tombstone);
     }
 
-    std::string dump_entry(const std::shared_ptr<Store> store, const StreamId& stream_id) {
+    std::string dump_entry(const std::shared_ptr<Store>& store, const StreamId& stream_id) {
         const auto entry = check_reload(store, stream_id, LoadParameter{LoadType::LOAD_ALL}, __FUNCTION__);
         return entry->dump();
     }
@@ -271,7 +271,7 @@ public:
                 key.id(),
                 LoadParameter{LoadType::LOAD_UNDELETED},
                 __FUNCTION__);
-        auto result = tombstone_from_key_or_all_internal(store, key.id(), previous_key, entry);
+        auto [_, result] = tombstone_from_key_or_all_internal(store, key.id(), previous_key, entry);
 
         do_write(store, key, entry);
 
@@ -281,12 +281,12 @@ public:
         return result;
     }
 
-    std::deque<AtomKey> delete_all_versions(std::shared_ptr<Store> store, StreamIdArg stream_id) {
+    std::pair<VersionId, std::deque<AtomKey>> delete_all_versions(std::shared_ptr<Store> store, const StreamId& stream_id) {
         ARCTICDB_DEBUG(log::version(), "Version map deleting all versions for stream {}", stream_id);
         std::deque<AtomKey> output;
-        auto index_keys = tombstone_from_key_or_all(store, stream_id);
+        auto [version_id, index_keys] = tombstone_from_key_or_all(store, stream_id);
         output.assign(std::begin(index_keys), std::end(index_keys));
-        return output;
+        return {version_id, std::move(output)};
     }
 
     bool requires_compaction(const std::shared_ptr<VersionMapEntry>& entry) const {
@@ -303,7 +303,7 @@ public:
         }
     }
 
-    void compact_and_remove_deleted_indexes(std::shared_ptr<Store> store, StreamIdArg stream_id) {
+    void compact_and_remove_deleted_indexes(std::shared_ptr<Store> store, const StreamId& stream_id) {
         ARCTICDB_DEBUG(log::version(), "Version map compacting versions for stream {}", stream_id);
         auto entry = check_reload(store, stream_id, LoadParameter{LoadType::LOAD_ALL}, __FUNCTION__);
         if (!requires_compaction(entry))
@@ -348,11 +348,38 @@ public:
         std::swap(entry, new_entry);
     }
 
+    VariantKey journal_single_key(
+            std::shared_ptr<StreamSink> store,
+            const AtomKey &key,
+            std::optional<AtomKey> prev_journal_key) {
+        ARCTICDB_SAMPLE(WriteJournalEntry, 0)
+        ARCTICDB_DEBUG(log::version(), "Version map writing version for key {}", key);
+
+        VariantKey journal_key;
+        IndexAggregator<RowCountIndex> journal_agg(key.id(), [&store, &journal_key, &key](auto &&segment) {
+            stream::StreamSink::PartialKey pk{
+                    KeyType::VERSION,
+                    key.version_id(),
+                    key.id(),
+                    IndexValue(0),
+                    IndexValue(0)
+            };
+
+            journal_key = store->write_sync(pk, std::forward<decltype(segment)>(segment));
+        });
+        journal_agg.add_key(key);
+        if (prev_journal_key)
+            journal_agg.add_key(*prev_journal_key);
+
+        journal_agg.commit();
+        return journal_key;
+    }
+
     AtomKey update_version_key(
         std::shared_ptr<Store> store,
         const VariantKey& version_key,
         const std::vector<AtomKey>& index_keys,
-        StreamIdArg stream_id) const {
+        const StreamId& stream_id) const {
         folly::Future<VariantKey> journal_key_fut = folly::Future<VariantKey>::makeEmpty();
 
         IndexAggregator<RowCountIndex> version_agg(stream_id, [&journal_key_fut, &store, &version_key](auto &&segment) {
@@ -369,7 +396,7 @@ public:
 
     std::shared_ptr<VersionMapEntry> compact_entry(
         std::shared_ptr<Store> store,
-        StreamIdArg stream_id,
+        const StreamId& stream_id,
         const std::shared_ptr<VersionMapEntry>& entry) {
         // For compacting an entry, we compact from the second version key in the chain
         // This makes it concurrent safe (when use_tombstones is enabled)
@@ -427,7 +454,7 @@ public:
         log::version().info("Compacted {} out of {} total symbols", num_sym_compacted, total_symbols);
     }
 
-    void compact(std::shared_ptr<Store> store, StreamIdArg stream_id) {
+    void compact(std::shared_ptr<Store> store, const StreamId& stream_id) {
         ARCTICDB_DEBUG(log::version(), "Version map compacting versions for stream {}", stream_id);
         auto entry = check_reload(store, stream_id, LoadParameter{LoadType::LOAD_ALL}, __FUNCTION__);
         if (entry->empty()) {
@@ -450,7 +477,7 @@ public:
     }
 
     void overwrite_symbol_tree(
-            std::shared_ptr<Store> store, StreamIdArg stream_id, const std::vector<AtomKey>& index_keys) {
+            std::shared_ptr<Store> store, const StreamId& stream_id, const std::vector<AtomKey>& index_keys) {
         auto entry = check_reload(store, stream_id, LoadParameter{LoadType::LOAD_ALL}, __FUNCTION__);
         auto old_entry = *entry;
         if (!index_keys.empty()) {
@@ -469,10 +496,10 @@ public:
      */
     std::shared_ptr<VersionMapEntry> check_reload(
         std::shared_ptr<Store> store,
-        StreamIdArg stream_id,
+        const StreamId& stream_id,
         const LoadParameter& load_param,
         const char* function ARCTICDB_UNUSED) {
-        ARCTICDB_DEBUG(log::version(), "Check reload in function {}", function);
+        ARCTICDB_DEBUG(log::version(), "Check reload in function {} for id {}", function, stream_id);
 
         if (has_cached_entry(stream_id, load_param))
             return get_entry(stream_id);
@@ -498,7 +525,7 @@ public:
     AtomKey write_tombstone(
         std::shared_ptr<Store> store,
         const std::variant<AtomKey, VersionId>& key,
-        StreamIdArg stream_id,
+        const StreamId& stream_id,
         const std::shared_ptr<VersionMapEntry>& entry,
         const std::optional<timestamp>& creation_ts=std::nullopt) {
         if (validate_)
@@ -526,9 +553,9 @@ public:
         const VersionMapEntry& entry,
         const StreamId &stream_id) const {
         if (entry.head_) {
-            util::check(entry.head_.value().id() == stream_id, "Id mismatch for entry {} vs symbol {}",
-                        entry.head_.value().id(), stream_id);
-            store->remove_key_sync(entry.head_.value());
+            util::check(entry.head_->id() == stream_id, "Id mismatch for entry {} vs symbol {}",
+                        entry.head_->id(), stream_id);
+            store->remove_key_sync(*entry.head_);
         }
         std::vector<folly::Future<Store::RemoveKeyResultType>> key_futs;
         for (const auto &key : entry.keys_) {
@@ -566,44 +593,46 @@ private:
 
     bool has_cached_entry(const StreamId &stream_id, const LoadParameter& load_param) const {
         load_param.validate();
-        MapType::const_iterator entry;
-        if(!find_entry(entry, stream_id))
+        MapType::const_iterator entry_it;
+        if(!find_entry(entry_it, stream_id))
             return false;
 
         const timestamp reload_interval = reload_interval_.value_or(ConfigsMap::instance()->get_int("VersionMap.ReloadInterval", DEFAULT_RELOAD_INTERVAL));
 
-        if (const timestamp cache_timing = now() - entry->second->last_reload_time_; cache_timing > reload_interval) {
+        const auto& entry = entry_it->second;
+        if (const timestamp cache_timing = now() - entry->last_reload_time_; cache_timing > reload_interval) {
             ARCTICDB_DEBUG(log::version(),
-                    "Latest read time {} too long ago for last acceptable cached timing {} (cache period {})",
-                    entry->second->last_reload_time_, cache_timing, reload_interval);
+                    "Latest read time {} too long ago for last acceptable cached timing {} (cache period {}) for symbol {}",
+                    entry->last_reload_time_, cache_timing, reload_interval, stream_id);
 
             return false;
         }
 
         // TODO: Fix #587
-        if (entry->second->load_type_ < load_param.load_type_) {
-            ARCTICDB_DEBUG(log::version(), "Required load type {} exceeds existing load type {}, will reload", load_param.load_type_, entry->second->load_type_);
+        if (entry->load_type_ < load_param.load_type_) {
+            ARCTICDB_DEBUG(log::version(), "Required load type {} exceeds existing load type {}, will reload {}",
+                           load_param.load_type_, entry->load_type_, stream_id);
             return false;
         }
 
-        if(entry->second->load_type_ == LoadType::LOAD_DOWNTO) {
+        if(entry->load_type_ == LoadType::LOAD_DOWNTO) {
             if (load_param.load_type_ == LoadType::LOAD_UNDELETED) {
                 return false;
             }
             if (load_param.load_type_ == LoadType::LOAD_DOWNTO ) {
                 if (is_positive_version_query(load_param)) {
-                    if (entry->second->loaded_until_ > static_cast<VersionId>(load_param.load_until_.value())) {
+                    if (entry->loaded_until_ > static_cast<VersionId>(load_param.load_until_.value())) {
                         ARCTICDB_DEBUG(log::version(), "Not loaded as far as required value {}, only have {}",
-                                       load_param.load_until_.value(), entry->second->loaded_until_);
+                                       load_param.load_until_.value(), entry->loaded_until_);
                         return false;
                     }
                 } else {
-                    auto opt_latest = entry->second->get_first_index(true);
+                    auto opt_latest = entry->get_first_index(true);
                     if (opt_latest.has_value()) {
                         auto opt_version_id = get_version_id_negative_index(opt_latest->version_id(), *load_param.load_until_);
-                        if (opt_version_id.has_value() && entry->second->loaded_until_ > *opt_version_id) {
+                        if (opt_version_id.has_value() && entry->loaded_until_ > *opt_version_id) {
                             ARCTICDB_DEBUG(log::version(), "Not loaded as far as required value {}, only have {} and there are {} total versions",
-                                           load_param.load_until_.value(), entry->second->loaded_until_, opt_latest->version_id());
+                                           load_param.load_until_.value(), entry->loaded_until_, opt_latest->version_id());
                             return false;
                         }
                     }
@@ -612,8 +641,8 @@ private:
             }
         }
 
-        if(load_param.load_type_ == LoadType::LOAD_UNDELETED && !entry->second->tombstone_all_ &&
-           entry->second->load_type_ != LoadType::LOAD_UNDELETED)
+        if(load_param.load_type_ == LoadType::LOAD_UNDELETED && !entry->tombstone_all_ &&
+           entry->load_type_ != LoadType::LOAD_UNDELETED)
             return false;
 
         ARCTICDB_DEBUG(log::version(), "{} Using cached entry for symbol {}", uintptr_t(this), stream_id);
@@ -656,13 +685,13 @@ private:
         return journal_key;
     }
 
-    bool has_stored_entry(std::shared_ptr<StreamSource> store, const StreamId &stream_id) const {
+    bool has_stored_entry(const std::shared_ptr<StreamSource>& store, const StreamId &stream_id) const {
         return static_cast<bool>(get_symbol_ref_key(store, stream_id));
     }
 
     std::shared_ptr<VersionMapEntry> storage_reload(
         std::shared_ptr<Store> store,
-        StreamIdArg stream_id,
+        const StreamId& stream_id,
         const LoadParameter& load_param,
         bool iterate_on_failure) {
         /*
@@ -705,47 +734,22 @@ private:
         return entry;
     }
 
-    VariantKey journal_single_key(
-        std::shared_ptr<StreamSink> store,
-        const AtomKey &key,
-        std::optional<AtomKey> prev_journal_key) {
-        ARCTICDB_SAMPLE(WriteJournalEntry, 0)
-        ARCTICDB_DEBUG(log::version(), "Version map writing version for key {}", key);
-
-        VariantKey journal_key;
-        IndexAggregator<RowCountIndex> journal_agg(key.id(), [&store, &journal_key, &key](auto &&segment) {
-            stream::StreamSink::PartialKey pk{
-                KeyType::VERSION,
-                key.version_id(),
-                key.id(),
-                IndexValue(0),
-                IndexValue(0)
-            };
-
-            journal_key = store->write_sync(pk, std::forward<decltype(segment)>(segment));
-        });
-        journal_agg.add_key(key);
-        if (prev_journal_key)
-            journal_agg.add_key(prev_journal_key.value());
-
-        journal_agg.commit();
-        return journal_key;
-    }
-
     timestamp now() const {
         return Clock::nanos_since_epoch();
     }
 
     std::shared_ptr<VersionMapEntry> rewrite_entry(
         std::shared_ptr<Store> store,
-        StreamIdArg stream_id,
+        const StreamId& stream_id,
         const std::shared_ptr<VersionMapEntry>& entry) {
         auto new_entry = std::make_shared<VersionMapEntry>();
         std::copy_if(std::begin(entry->keys_), std::end(entry->keys_), std::back_inserter(new_entry->keys_),
                      [](const auto &key) {
                          return is_index_or_tombstone(key);
                      });
-        auto version_id = new_entry->get_first_index(true).value().version_id();
+        const auto first_index = new_entry->get_first_index(true);
+        util::check(static_cast<bool>(first_index), "No index exists in rewrite entry");
+        auto version_id = first_index->version_id();
         new_entry->head_ = write_entry_to_storage(store, stream_id, version_id, new_entry);
         remove_entry_version_keys(store, entry, stream_id);
 
@@ -756,7 +760,7 @@ private:
     }
 
 public:
-    bool check_ref_key(std::shared_ptr<Store> store, StreamIdArg stream_id) {
+    bool check_ref_key(std::shared_ptr<Store> store, const StreamId& stream_id) {
         auto entry_iteration = std::make_shared<VersionMapEntry>();
         load_via_iteration(store, stream_id, entry_iteration);
         auto maybe_latest_pair = get_latest_key_pair(entry_iteration);
@@ -774,12 +778,12 @@ public:
         }
 
         util::check(static_cast<bool>(ref_entry.head_), "Expected head to be set");
-        if(maybe_latest_pair.value().first != ref_entry.keys_[0] || maybe_latest_pair.value().second != ref_entry.head_.value()) {
+        if(maybe_latest_pair->first != ref_entry.keys_[0] || maybe_latest_pair->second != *ref_entry.head_) {
             log::version().warn("Ref entry is incorrect for stream {}, either {} != {} or {} != {}",
                     stream_id,
-                    maybe_latest_pair.value().first,
+                    maybe_latest_pair->first,
                     ref_entry.head_.value(),
-                    maybe_latest_pair.value().second,
+                    maybe_latest_pair->second,
                     ref_entry.keys_[0]);
             return false;
         }
@@ -797,7 +801,16 @@ public:
         return true;
     }
 
-    void scan_and_rewrite(std::shared_ptr<Store> store, StreamIdArg stream_id) {
+    bool indexes_sorted(const std::shared_ptr<Store>& store, const StreamId& stream_id) {
+        auto entry_ref = std::make_shared<VersionMapEntry>();
+        load_via_ref_key(store, stream_id, LoadParameter{LoadType::LOAD_ALL}, entry_ref);
+        auto indexes = entry_ref->get_indexes(true);
+        return std::is_sorted(std::cbegin(indexes), std::cend(indexes), [] (const auto& l, const auto& r) {
+            return l > r;
+        });
+    }
+
+    void scan_and_rewrite(const std::shared_ptr<Store>& store, const StreamId& stream_id) {
         log::version().warn("Version map scanning and rewriting  versions for stream {}", stream_id);
         auto entry = get_entry(stream_id);
         entry->clear();
@@ -807,7 +820,7 @@ public:
         (void)rewrite_entry(store, stream_id, entry);
     }
 
-    void remove_and_rewrite_version_keys(std::shared_ptr<Store> store, StreamIdArg stream_id) {
+    void remove_and_rewrite_version_keys(std::shared_ptr<Store> store, const StreamId& stream_id) {
         log::version().warn("Rewriting all index keys for {}", stream_id);
         auto entry = get_entry(stream_id);
         auto old_entry = entry;
@@ -819,7 +832,7 @@ public:
         remove_entry_version_keys(store, old_entry, stream_id);
     }
 
-    void fix_ref_key(std::shared_ptr<Store> store, StreamIdArg stream_id) {
+    void fix_ref_key(std::shared_ptr<Store> store, const StreamId& stream_id) {
         if(check_ref_key(store, stream_id)) {
             log::version().warn("Key {} is fine, not fixing", stream_id);
             return;
@@ -831,7 +844,7 @@ public:
 
     std::vector<AtomKey> find_deleted_version_keys_for_entry(
         std::shared_ptr<Store> store,
-        StreamIdArg stream_id,
+        const StreamId& stream_id,
         const std::shared_ptr<VersionMapEntry>& entry) {
         std::vector<AtomKey> missing_versions;
 
@@ -850,13 +863,13 @@ public:
         return missing_versions;
     }
 
-    std::vector<AtomKey> find_deleted_version_keys(std::shared_ptr<Store> store, StreamIdArg stream_id) {
+    std::vector<AtomKey> find_deleted_version_keys(std::shared_ptr<Store> store, const StreamId& stream_id) {
         auto entry = std::make_shared<VersionMapEntry>();
         load_via_iteration(store, stream_id, entry);
         return find_deleted_version_keys_for_entry(store, stream_id, entry);
     }
 
-    void recover_deleted(std::shared_ptr<Store> store, StreamIdArg stream_id) {
+    void recover_deleted(std::shared_ptr<Store> store, const StreamId& stream_id) {
         auto &entry = get_entry(stream_id);
         entry->clear();
         load_via_iteration(store, stream_id, entry);
@@ -893,7 +906,7 @@ private:
         return entry;
     }
 
-    std::shared_ptr<VersionMapEntry> do_backwards_compat_check(std::shared_ptr<Store> store, StreamIdArg stream_id) {
+    std::shared_ptr<VersionMapEntry> do_backwards_compat_check(std::shared_ptr<Store> store, const StreamId& stream_id) {
         ARCTICDB_TRACE(log::version(), "Didn't find a ref entry, scanning for old-style journal keys");
         auto entry = get_entry(stream_id);
         if (auto old_entry = load_from_old_journal_keys(store, stream_id); !old_entry->keys_.empty()) {
@@ -904,7 +917,8 @@ private:
         return entry;
     }
 
-    std::vector<AtomKey> tombstone_from_key_or_all_internal(std::shared_ptr<Store> store, const StreamId& stream_id,
+    std::pair<VersionId, std::vector<AtomKey>> tombstone_from_key_or_all_internal(std::shared_ptr<Store> store,
+                                                            const StreamId& stream_id,
                                                             std::optional<AtomKey> first_key_to_tombstone = std::nullopt,
                                                             std::shared_ptr<VersionMapEntry> entry = nullptr) {
         if (!entry) {
@@ -914,6 +928,7 @@ private:
                     LoadParameter{LoadType::LOAD_UNDELETED},
                     __FUNCTION__);
         }
+
         if (!first_key_to_tombstone)
             first_key_to_tombstone = entry->get_first_index(false);
 
@@ -925,13 +940,17 @@ private:
             }
         }
 
+        const auto& latest_version = entry->get_first_index(true);
+        const VersionId version_id = latest_version ? latest_version->version_id() : 0;
+
         if (!output.empty()) {
             auto tombstone_key = write_tombstone_all_key(store, first_key_to_tombstone.value(), entry);
             if(log_changes_) {
                 log_tombstone_all(store, stream_id, tombstone_key.version_id());
             }
         }
-        return output;
+
+        return {version_id, std::move(output)};
     }
 };
 

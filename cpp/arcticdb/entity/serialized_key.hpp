@@ -37,7 +37,7 @@ constexpr size_t NumOldKeyFields = size_t(OldKeyField::num_key_fields);
 constexpr size_t NumNewKeyFields = size_t(NewKeyField::num_key_fields);
 
 
-inline VariantId variant_id_from_token(const std::string_view &strv, VariantType variant_type) {
+inline VariantId variant_id_from_token(std::string_view strv, VariantType variant_type) {
     switch (variant_type) {
         case VariantType::STRING_TYPE:
             return VariantId(std::string(strv));
@@ -157,7 +157,7 @@ struct KeyDescriptor {
             format_type(format_type) {
     }
 
-    KeyDescriptor(const StringId id, IndexDescriptor::Type index_type, FormatType format_type) :
+    KeyDescriptor(const StringId& id, IndexDescriptor::Type index_type, FormatType format_type) :
             identifier(SerializedKeyIdentifier),
             id_type(variant_type_from_id(id)),
             index_type(to_type_char(index_type)),

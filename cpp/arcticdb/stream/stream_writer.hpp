@@ -47,8 +47,8 @@ folly::Future<VariantKey> collect_and_commit(
     IndexValue end_index;
 
     if(specified_range) {
-        start_index = specified_range.value().start_;
-        end_index = specified_range.value().end_;
+        start_index = specified_range->start_;
+        end_index = specified_range->end_;
     }
     else if (!keys.empty()){
         start_index = to_atom(*keys.begin()).start_index();
@@ -152,7 +152,7 @@ class StreamWriter : boost::noncopyable {
         auto seg_start = segment_start(segment);
         auto seg_end = segment_end(segment);
 
-        written_data_keys_.push_back(store_->write(
+        written_data_keys_.emplace_back(store_->write(
             get_key_type_for_data_stream(stream_id()),
             version_id_,
             stream_id(),

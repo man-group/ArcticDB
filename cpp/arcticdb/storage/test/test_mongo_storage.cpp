@@ -32,7 +32,7 @@ TEST(MongoStorage, ClientSession) {
 
     asmongo::MongoStorage storage({"testdb", "stuff"}, as::OpenMode::WRITE, cfg);
 
-    std::vector<std::string> lib_parts{"testdb", "stuff"};
+    std::array<std::string, 2> lib_parts{"testdb", "stuff"};
     ac::entity::AtomKey k = ac::entity::atom_key_builder().gen_id(1).build<ac::entity::KeyType::TABLE_DATA>("999");
 
     as::KeySegmentPair kv(k);

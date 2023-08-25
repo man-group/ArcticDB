@@ -552,7 +552,7 @@ public:
     void set_array(position_t pos, py::array_t<T>& val) {
         magic_.check();
         ARCTICDB_SAMPLE(MemorySegmentSetArray, 0)
-            column_unchecked(pos).set_array(row_id_ + 1, val);
+        column_unchecked(pos).set_array(row_id_ + 1, val);
     }
 
     void set_string(position_t pos, std::string_view str) {
@@ -842,7 +842,9 @@ public:
             return false;
 
         for(auto col = 0u; col < left.columns_.size(); ++col) {
-            if (is_sequence_type(left.column(col).type().data_type())) {
+            const auto left_data_type = left.column(col).type().data_type();
+            if (is_sequence_type(left_data_type)) {
+
                 const auto& left_col = left.column(col);
                 const auto& right_col = right.column(col);
                 if(left_col.type() != right_col.type())
@@ -854,10 +856,10 @@ public:
                 for(auto row = 0u; row < left_col.row_count(); ++row)
                     if(left.string_at(row, col) != right.string_at(row, col))
                         return false;
-            } else if (is_numeric_type(left.column(col).type().data_type()) || is_bool_type(left.column(col).type().data_type())) {
+            } else if (is_numeric_type(left_data_type) || is_bool_type(left_data_type)) {
                 if (left.column(col) != right.column(col))
                     return false;
-            } else if (is_empty_type(left.column(col).type().data_type())) {
+            } else if (is_empty_type(left_data_type)) {
                 if (!is_empty_type(right.column(col).type().data_type()))
                     return false;
             } else {
@@ -1043,9 +1045,9 @@ public:
                             } else {
                                 internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Unexpected column type in SegmentInMemoryImpl::filter");
                             }
-                            output_ptr++;
+                            ++output_ptr;
                             output_col.opt_sparse_map().value()[pos_output++] = true;
-                            bitset_iter++;
+                            ++bitset_iter;
                         }
                     } else {
                         const auto row_count = block.value().row_count();

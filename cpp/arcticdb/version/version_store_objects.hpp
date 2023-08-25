@@ -65,7 +65,11 @@ struct TombstoneVersionResult : PreDeleteChecks {
     /**
      * If the tombstoning of this version caused the entire symbol to disappear.
      */
-    bool no_undeleted_left;
+    bool no_undeleted_left = false;
+    /**
+     * The most recent version written to the version list
+     */
+     VersionId latest_version_ = 0;
 };
 
 /**

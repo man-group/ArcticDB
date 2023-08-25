@@ -30,9 +30,9 @@ TEST(ChunkedBuffer, Iterator) {
 }
 TEST(ChunkedBuffer, Split) {
     using namespace arcticdb;
-    std::vector<uint8_t> input{1, 0, 0};
-    auto chunk_size = 1;
-    auto split_size = 2;
+    std::array<uint8_t, 17> input{1, 0, 0, 2, 3, 4, 5, 1, 2, 6, 4, 5, 6, 2, 3, 4, 4};
+    auto chunk_size = 5;
+    auto split_size = 7;
     CursoredBuffer<ChunkedBufferImpl<64>> cb;
     auto n = input.size();
     auto top = n - (n % chunk_size);
@@ -44,7 +44,7 @@ TEST(ChunkedBuffer, Split) {
 
     auto buffers = ::arcticdb::split(cb.buffer(), split_size);
     auto buf = buffers.begin();
-    for (size_t i = 0; i < top; i += chunk_size) {
+    for (size_t i = 0; i < top; ++i) {
         const auto where = i % split_size;
         ASSERT_NE(buf, buffers.end());
         ASSERT_EQ(buf->cast<uint8_t>(where), input[i]);

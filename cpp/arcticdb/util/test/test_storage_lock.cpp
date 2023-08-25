@@ -131,7 +131,7 @@ struct PessimisticLockTask {
         for (auto i = size_t(0); i < data_->num_tests_; ++i) {
             try {
                 if(timeout_ms_)
-                    lock.lock_timeout(data_->store_, timeout_ms_.value());
+                    lock.lock_timeout(data_->store_, *timeout_ms_);
                 else
                     lock.lock(data_->store_);
 
@@ -202,7 +202,6 @@ TEST(StorageLock, Wait) {
 TEST(StorageLock, Timeouts) {
     SKIP_MAC("StorageLock is not supported");
     using namespace arcticdb;
-    std::unordered_map<std::string, spdlog::level::level_enum> log_levels{ {"lock", spdlog::level::debug}};
 
     auto lock_data = std::make_shared<LockData>(4);
     folly::FutureExecutor<folly::CPUThreadPoolExecutor> exec{4};
@@ -218,7 +217,6 @@ TEST(StorageLock, Timeouts) {
 TEST(StorageLock, ForceReleaseLock) {
     SKIP_MAC("StorageLock is not supported");
     using namespace arcticdb;
-    std::unordered_map<std::string, spdlog::level::level_enum> log_levels{ {"lock", spdlog::level::debug}};
 
     auto lock_data = std::make_shared<LockData>(4);
     folly::FutureExecutor<folly::CPUThreadPoolExecutor> exec{4};
