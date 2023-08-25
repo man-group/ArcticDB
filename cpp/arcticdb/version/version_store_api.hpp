@@ -269,7 +269,8 @@ class PythonVersionStore : public LocalVersionedEngine {
         const std::vector<py::object> &norms,
         const std::vector<py::object> &user_metas,
         bool prune_previous_versions,
-        bool validate_index);
+        bool validate_index,
+        bool throw_on_error);
 
     std::vector<std::variant<VersionedItem, DataError>> batch_write_metadata(
         const std::vector<StreamId>& stream_ids,
@@ -285,7 +286,7 @@ class PythonVersionStore : public LocalVersionedEngine {
         bool prune_previous_versions,
         bool validate_index,
         bool upsert,
-        bool throw_on_missing_version);
+        bool throw_on_error);
 
     std::vector<std::pair<VersionedItem, TimeseriesDescriptor>> batch_restore_version(
         const std::vector<StreamId>& id,

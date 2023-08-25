@@ -285,7 +285,7 @@ public:
         bool prune_previous_versions,
         bool validate_index,
         bool upsert,
-        bool throw_on_missing_version);
+        bool throw_on_error);
 
     std::vector<ReadVersionOutput> batch_read_keys(
         const std::vector<AtomKey> &keys,
@@ -382,7 +382,8 @@ public:
         const std::vector<StreamId>& stream_ids,
         std::vector<InputTensorFrame>&& frames,
         bool prune_previous_versions,
-        bool validate_index
+        bool validate_index,
+        bool throw_on_error
     );
 
     VersionIdAndDedupMapInfo create_version_id_and_dedup_map(
