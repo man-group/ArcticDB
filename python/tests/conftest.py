@@ -210,7 +210,7 @@ def sym():
 
 @pytest.fixture()
 def lib_name():
-    return f"local.test_{random.randint(0, 999)}_{datetime.utcnow().strftime('%Y-%m-%dT%H_%M_%S_%f')}"
+    return f"local_test_{random.randint(0, 999)}_{datetime.utcnow().strftime('%Y-%m-%dT%H_%M_%S_%f')}"
 
 
 @pytest.fixture
@@ -616,7 +616,7 @@ def local_object_version_store_prune_previous(local_object_store_factory):
 
 @pytest.fixture(
     params=[
-        # "version_store_factory",
+        "version_store_factory",
         pytest.param(
             "real_s3_store_factory",
             marks=pytest.mark.skipif(
