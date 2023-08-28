@@ -22,7 +22,7 @@ def write_data(lib, sym, done, error):
     try:
         for idx1 in range(10):
             print("Iteration {}/10".format(idx1))
-            for idx2 in range(40):
+            for idx2 in range(20):
                 if idx2 % 4 == 3:
                     lib.delete_version(sym, delete_version_id)
                     delete_version_id += 1
