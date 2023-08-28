@@ -5,20 +5,10 @@ from arcticdb.arctic import Arctic
 from arcticdb.util.storage_test import get_seed_libraries, get_real_s3_uri
 from tests.conftest import PERSISTENT_STORAGE_TESTS_ENABLED
 
-PERSISTENT_STORAGE_LIB_NAME = os.getenv("ARCTICDB_PERSISTENT_STORAGE_LIB_NAME")
-UNIQUE_ID = os.getenv("ARCTICDB_PERSISTENT_STORAGE_UNIQUE_ID")
-
 if PERSISTENT_STORAGE_TESTS_ENABLED:
     LIBRARIES = get_seed_libraries()
 else:
     LIBRARIES = []
-
-
-def normalize_lib_name(lib_name):
-    lib_name = lib_name.replace(".", "_")
-    lib_name = lib_name.replace("-", "_")
-
-    return lib_name
 
 
 # TODO: Add a check if the real storage tests are enabled
@@ -28,8 +18,6 @@ def normalize_lib_name(lib_name):
 )
 def test_real_s3_storage_read(library):
     ac = Arctic(get_real_s3_uri())
-    lib_name = f"seed_{UNIQUE_ID}_{library}"
-    lib_name = normalize_lib_name(lib_name)
     lib = ac[library]
     symbols = lib.list_symbols()
     assert len(symbols) == 3
@@ -47,7 +35,6 @@ def test_real_s3_storage_read(library):
 def test_real_s3_storage_write(three_col_df):
     strategy_branch = os.getenv("ARCTICDB_PERSISTENT_STORAGE_STRATEGY_BRANCH")
     library_to_write_to = f"test_{strategy_branch}"
-    library_to_write_to = normalize_lib_name(library_to_write_to)
     ac = Arctic(get_real_s3_uri())
     # There shouldn't be a library with this name present, so delete just in case
     ac.delete_library(library_to_write_to)

@@ -106,6 +106,14 @@ def seed_library(ac):
     library.append("three", three_df)
 
 
+def cleanup_libraries(ac):
+    for lib in get_seed_libraries(ac):
+        ac.delete_library(lib)
+
+    for lib in get_test_libraries(ac):
+        ac.delete_library(lib)
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         prog="storage_test",
@@ -124,5 +132,7 @@ if __name__ == "__main__":
         seed_library(ac)
     elif "verify" == job_type:
         verify_library(ac)
+    elif "cleanup" == job_type:
+        cleanup_libraries(ac)
     else:
         raise ValueError(f"The argument {job_type} is an unsupported job type")

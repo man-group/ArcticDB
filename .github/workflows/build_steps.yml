@@ -271,6 +271,7 @@ jobs:
         with:
           aws_access_key: "${{ secrets.AWS_S3_ACCESS_KEY }}"
           aws_secret_key: "${{ secrets.AWS_S3_SECRET_KEY }}"
+          strategy_branch: "${{matrix.os}}_${{env.python_impl_name}}${{matrix.python_deps_id}}"
       
       - name: Run test
         run: build_tooling/parallel_test.sh tests/${{matrix.type}}
