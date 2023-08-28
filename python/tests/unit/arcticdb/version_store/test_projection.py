@@ -9,6 +9,7 @@ from hypothesis import assume, given, settings
 from hypothesis.extra.pandas import column, data_frames, range_indexes
 import numpy as np
 import pandas as pd
+import time
 
 from arcticdb.version_store.processing import QueryBuilder
 from arcticdb.util.test import assert_frame_equal
@@ -19,8 +20,8 @@ from arcticdb.util.hypothesis import (
 )
 
 
-def test_project(object_version_store):
-    lib = object_version_store
+def test_project(local_object_version_store):
+    lib = local_object_version_store
     df = pd.DataFrame(
         {
             "VWAP": np.arange(0, 10, dtype=np.float64),
@@ -35,6 +36,8 @@ def test_project(object_version_store):
     df["ADJUSTED"] = df["ADJUSTED"].astype("int64")
     q = QueryBuilder()
     q = q.apply("ADJUSTED", q["ASK"] * q["ACVOL"] + 7)
+    # TODO: Bring down the sleep
+    time.sleep(1)
     vit = lib.read("expression", query_builder=q)
     assert_frame_equal(df, vit.data)
 

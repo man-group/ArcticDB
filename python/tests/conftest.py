@@ -578,6 +578,43 @@ def object_version_store_prune_previous(object_store_factory):
 
 
 @pytest.fixture(
+    scope="function",
+    params=[
+        "s3_store_factory",
+        pytest.param(
+            "azure_store_factory",
+            marks=pytest.mark.skipif(not AZURE_SUPPORT, reason="Pending Azure Storge Conda support"),
+        ),
+    ],
+)
+def local_object_store_factory(request):
+    """
+    Designed to test all local object stores and their simulations
+    Doesn't support LMDB or persistent storages
+    """
+    store_factory = request.getfixturevalue(request.param)
+    return store_factory
+
+
+@pytest.fixture
+def local_object_version_store(local_object_store_factory):
+    """
+    Designed to test all local object stores and their simulations
+    Doesn't support LMDB or persistent storages
+    """
+    return local_object_store_factory()
+
+
+@pytest.fixture
+def local_object_version_store_prune_previous(local_object_store_factory):
+    """
+    Designed to test all local object stores and their simulations
+    Doesn't support LMDB or persistent storages
+    """
+    return local_object_store_factory(prune_previous_version=True)
+
+
+@pytest.fixture(
     params=[
         # "version_store_factory",
         pytest.param(
