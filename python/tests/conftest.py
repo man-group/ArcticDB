@@ -396,9 +396,7 @@ def s3_store_factory(lib_name, moto_s3_endpoint_and_credentials):
 
 @pytest.fixture
 def real_s3_store_factory(lib_name, **kwargs):
-    endpoint, bucket, region, aws_access_key, aws_secret_key, path_prefix, clear = real_s3_credentials(
-        shared_path=False
-    )
+    endpoint, bucket, region, aws_access_key, aws_secret_key, path_prefix, clear = real_s3_credentials()
 
     # Not exposing the config factory to discourage people from creating libs that won't get cleaned up
     def make_cfg(name):
