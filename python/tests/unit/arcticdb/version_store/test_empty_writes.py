@@ -10,6 +10,7 @@ import numpy as np
 
 from arcticdb.version_store._common import TimeFrame
 from arcticdb.util.test import assert_frame_equal, assert_series_equal
+from arcticdb.util._versions import IS_PANDAS_TWO
 
 
 def test_write_no_rows(lmdb_version_store, sym):
@@ -134,6 +135,12 @@ def test_empty_series(lmdb_version_store_dynamic_schema, sym):
     ser = pd.Series([])
     lmdb_version_store_dynamic_schema.write(sym, ser)
     assert not lmdb_version_store_dynamic_schema.is_symbol_pickled(sym)
+    if IS_PANDAS_TWO:
+        # In Pandas 2.0, RangeIndex is used by default when an empty dataframe or series is created.
+        # The index is converted to a DatetimeIndex for preserving the behavior of ArcticDB with
+        # Pandas 1.0.
+        ser.index = ser.index.astype("datetime64[ns]")
+
     assert_series_equal(lmdb_version_store_dynamic_schema.read(sym).data, ser)
 
 
@@ -141,5 +148,32 @@ def test_fallback_to_pickle(lmdb_version_store, sym):
     column_names = ["a", "b", "c"]
     df = pd.DataFrame(columns=column_names)
     lmdb_version_store.write(sym, df)
-    assert lmdb_version_store.is_symbol_pickled(sym)
-    assert_frame_equal(df, lmdb_version_store.read(sym).data)
+
+    # In Pandas 2.0, RangeIndex is used by default when an empty dataframe or series is created.
+    # The index is converted to a DatetimeIndex for preserving the behavior of ArcticDB with Pandas 1.0.
+    assert isinstance(df.index, pd.RangeIndex if IS_PANDAS_TWO else pd.Index)
+
+    if IS_PANDAS_TWO:
+        # In Pandas 2.0, RangeIndex is used by default when an empty dataframe or series is created.
+        # The index has to be converted to a DatetimeIndex by ArcticDB to perform updates.
+        df.index = df.index.astype("datetime64[ns]")
+
+    # Before Pandas 2.0, empty Series' dtype was "float64" and empty DataFrames' Columns' dtype was "object".
+    # As of Pandas 2.0, empty Series' dtype is "object" and empty DataFrames' Columns' dtype remains "object".
+    # See: https://github.com/pandas-dev/pandas/issues/17261
+    # When normalizing in Pandas 2.0, we convert empty Series' dtype to float to "float64" to be consistent
+    # with the behavior of ArcticDB with Pandas 1.0.
+    # The same logic is used to normalize empty DataFrames' columns.
+
+    # Hence:
+    if IS_PANDAS_TWO:
+        # In Pandas 2.0, empty Dataframes can now be stored without being pickled.
+        assert not lmdb_version_store.is_symbol_pickled(sym)
+        # and ArcticDB returns empty DataFrames with float64 for all columns if they have not been specified.
+        df = df.astype("float64", copy=False)
+        assert_frame_equal(df, lmdb_version_store.read(sym).data)
+    else:
+        # In Pandas 1.0, empty Dataframes are pickled.
+        assert lmdb_version_store.is_symbol_pickled(sym)
+        # and ArcticDB simply deserialize empty DataFrames.
+        assert_frame_equal(df, lmdb_version_store.read(sym).data)

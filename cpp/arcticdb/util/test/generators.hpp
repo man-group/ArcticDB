@@ -13,7 +13,7 @@
 #include <arcticdb/stream/aggregator.hpp>
 #include <arcticdb/version/version_store_api.hpp>
 #include <arcticdb/storage/storages.hpp>
-#include <arcticdb/storage/variant_storage.hpp>
+#include <arcticdb/storage/memory/memory_storage.hpp>
 #include <arcticdb/storage/test/in_memory_store.hpp>
 #include <arcticdb/stream/segment_aggregator.hpp>
 #include <arcticdb/python/python_to_tensor_frame.hpp>
@@ -177,7 +177,7 @@ inline auto get_test_config_data() {
  * See also python_version_store_in_memory() and stream_test_common.hpp for alternatives using LMDB.
  */
 template<typename VerStoreType = version_store::LocalVersionedEngine>
-inline VerStoreType get_test_engine(LibraryDescriptor::VariantStoreConfig cfg = {}) {
+inline VerStoreType get_test_engine(storage::LibraryDescriptor::VariantStoreConfig cfg = {}) {
     auto [path, storages] = get_test_config_data();
     auto library = std::make_shared<arcticdb::storage::Library>(path, std::move(storages), std::move(cfg));
     return VerStoreType(library);

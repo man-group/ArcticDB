@@ -19,6 +19,10 @@
 
 namespace arcticdb::async {
 
+std::pair<VariantKey, std::optional<Segment>> lookup_match_in_dedup_map(
+    const std::shared_ptr<DeDupMap> &de_dup_map,
+    storage::KeySegmentPair&& key_seg);
+
 /*
  * AsyncStore is a wrapper around a Store that provides async methods for writing and reading data.
  * It is used by the VersionStore to write data to the Store in a non-blocking way.
@@ -51,7 +55,7 @@ public:
 
         return async::submit_cpu_task(EncodeAtomTask{
             key_type, version_id, stream_id, start_index, end_index, current_timestamp(),
-            std::move(segment), codec_, size_t(0), encoding_version_
+            std::move(segment), codec_, encoding_version_
         })
             .via(&async::io_executor())
             .thenValue(WriteSegmentTask{library_});
@@ -73,7 +77,7 @@ public:
 
         return async::submit_cpu_task(EncodeAtomTask{
             key_type, version_id, stream_id, start_index, end_index, creation_ts,
-            std::move(segment), codec_, size_t(0), encoding_version_
+            std::move(segment), codec_, encoding_version_
         })
             .via(&async::io_executor())
             .thenValue(WriteSegmentTask{library_});
@@ -110,7 +114,7 @@ public:
 
         auto encoded = EncodeAtomTask{
             key_type, version_id, stream_id, start_index, end_index, current_timestamp(),
-            std::move(segment), codec_, size_t(0), encoding_version_
+            std::move(segment), codec_, encoding_version_
         }();
         return WriteSegmentTask{library_}(std::move(encoded));
     }
@@ -146,7 +150,7 @@ public:
                     segment.descriptor().id());
 
         return async::submit_cpu_task(EncodeSegmentTask{
-            key, std::move(segment), codec_, size_t(0), encoding_version_
+            key, std::move(segment), codec_, encoding_version_
         })
             .via(&async::io_executor())
             .thenValue(UpdateSegmentTask{library_, opts});
@@ -171,7 +175,7 @@ public:
         return ClockType::nanos_since_epoch();
     }
 
-    void iterate_type(KeyType type, std::function<void(entity::VariantKey &&)> func,
+    void iterate_type(KeyType type, entity::IterateTypeVisitor func,
                       const std::string &prefix) override {
         library_->iterate_type(type, func, prefix);
     }
@@ -226,7 +230,7 @@ public:
         return KeyExistsTask{&key, library_}();
     }
 
-    bool supports_prefix_matching() override {
+    bool supports_prefix_matching() const override {
         return library_->supports_prefix_matching();
     }
 
@@ -255,6 +259,13 @@ public:
         return keys.empty() ?
                std::vector<RemoveKeyResultType>() :
                async::submit_io_task(RemoveBatchTask{keys, library_, opts});
+    }
+
+    folly::Future<std::vector<RemoveKeyResultType>> remove_keys(std::vector<entity::VariantKey> &&keys,
+                                                                storage::RemoveOpts opts) override {
+        return keys.empty() ?
+               std::vector<RemoveKeyResultType>() :
+               async::submit_io_task(RemoveBatchTask{std::move(keys), library_, opts});
     }
 
     void copy_to_results(
@@ -312,14 +323,14 @@ public:
     }
 
     folly::Future<std::vector<VariantKey>> batch_read_compressed(
-        std::vector<entity::VariantKey> &&keys,
+        std::vector<entity::VariantKey> &&ks,
         std::vector<ReadContinuation> &&continuations,
         const BatchReadArgs &args) override {
-
+        auto keys = std::move(ks);
         util::check(!keys.empty(), "Unexpected empty keys in batch_read_compressed");
 
         auto key_seg_futs = folly::window(keys, [*this](auto &&key) {
-            return async::submit_io_task(ReadCompressedTask(std::move(key), library_, storage::ReadKeyOpts{}));
+            return async::submit_io_task(ReadCompressedTask(std::forward<decltype(key)>(key), library_, storage::ReadKeyOpts{}));
         }, args.batch_size_);
 
         util::check(key_seg_futs.size() == keys.size(),
@@ -331,22 +342,22 @@ public:
         for (auto &&key_seg_fut : folly::enumerate(key_seg_futs)) {
             result.emplace_back(std::move(*key_seg_fut).thenValue([continuation =
             std::move(continuations[key_seg_fut.index])](auto &&key_seg) mutable {
-                return continuation(std::move(key_seg));
+                return continuation(std::forward<decltype(key_seg)>(key_seg));
             }));
         }
 
         return folly::collect(result).via(&async::io_executor());
     }
 
-    std::vector<Composite<ProcessingSegment>> batch_read_uncompressed(
+    std::vector<Composite<ProcessingUnit>> batch_read_uncompressed(
         std::vector<Composite<pipelines::SliceAndKey>> &&sks,
         const std::vector<std::shared_ptr<Clause>>& clauses,
         const std::shared_ptr<std::unordered_set<std::string>>& filter_columns,
         const BatchReadArgs & args) override {
         auto slice_and_keys = std::move(sks);
-        std::vector<Composite<ProcessingSegment>> res;
+        std::vector<Composite<ProcessingUnit>> res;
         res.reserve(slice_and_keys.size());
-        std::vector<folly::Future<Composite<ProcessingSegment>>> batch;
+        std::vector<folly::Future<Composite<ProcessingUnit>>> batch;
         size_t current_size = 0;
         for (auto &&s : slice_and_keys) {
             auto sk = std::move(s);
@@ -408,68 +419,38 @@ public:
         const std::shared_ptr<DeDupMap> &de_dup_map,
         const BatchWriteArgs &args) override {
         auto key_segments = std::move(key_seg_pairs);
+        std::vector<folly::Future<VariantKey>> futs;
+        futs.reserve(key_seg_pairs.size());
         std::size_t write_count = args.lib_write_count == 0 ? 16ULL : args.lib_write_count;
 
-        auto res = std::make_shared<std::vector<VariantKey>>(key_segments.size());
-        auto count = 0ULL;
-        std::vector<folly::Future<folly::Unit>> write_futures;
-        for (std::size_t start = 0ULL, nxt; start < key_segments.size(); start = nxt) {
-            nxt = std::min(start + write_count, key_segments.size());
-            auto range = folly::Range(key_segments.begin() + start, key_segments.begin() + nxt);
-            auto key_segs = std::make_shared<std::vector<storage::KeySegmentPair>>();
-            auto key_seg_mutex = std::make_shared<std::mutex>();
-            std::vector<folly::Future<folly::Unit>> futs;
-            futs.reserve(range.size());
+        auto encode_futs = folly::window(key_segments, [*this](auto &&ks) {
+            auto [key, seg] = std::forward<decltype(ks)>(ks);
+            return async::submit_cpu_task(
+                EncodeAtomTask(std::move(key),
+                               ClockType::nanos_since_epoch(),
+                               std::move(seg),
+                               codec_,
+                               encoding_version_));
+        }, write_count);
 
-            for (auto &[key, seg] : range) {
-                futs.emplace_back(async::submit_cpu_task(
-                    EncodeAtomTask(std::move(key),
-                                   ClockType::nanos_since_epoch(),
-                                   std::move(seg),
-                                   codec_,
-                                   count++,
-                                   encoding_version_))
-                                      .thenValue([de_dup_map, res](auto &&ks) {
-                                          auto key_seg = std::forward<decltype(ks)>(ks);
-                                          auto de_dup_key =
-                                              de_dup_map ? de_dup_map->get_key_if_present(key_seg.atom_key())
-                                                         : std::nullopt;
+        for (auto &&encode_fut : encode_futs) {
+            futs.emplace_back(
+                std::move(encode_fut).thenValue([de_dup_map](auto &&ks) -> std::pair<VariantKey,
+                                                                                     std::optional<Segment>> {
+                        auto key_seg = std::forward<decltype(ks)>(ks);
+                        return lookup_match_in_dedup_map(de_dup_map, std::move(key_seg));
+                    })
+                    .via(&async::io_executor()).thenValue([lib = library_](auto &&item) {
+                        auto key_opt_segment = std::forward<decltype(item)>(item);
+                        if (key_opt_segment.second)
+                            lib->write(Composite<storage::KeySegmentPair>({VariantKey{key_opt_segment.first},
+                                                                           std::move(*key_opt_segment.second)}));
 
-                                          if (de_dup_key) {
-                                              ARCTICDB_DEBUG(log::version(),
-                                                             "Found existing key with same contents: using existing object {}",
-                                                             de_dup_key.value());
-                                              (*res)[key_seg.id()] = (de_dup_key.value());
-                                              return std::make_pair(storage::KeySegmentPair{}, false);
-                                          } else {
-                                              ARCTICDB_DEBUG(log::version(),
-                                                             "No existing key with same contents: writing new object {}",
-                                                             key_seg.atom_key());
-                                              (*res)[key_seg.id()] = (key_seg.atom_key());
-                                              return std::make_pair(std::move(key_seg), true);
-                                          }
-                                      }).thenValue([key_segs = key_segs, key_seg_mutex = key_seg_mutex](auto &&pk) {
-                    auto pair_key_write = std::forward<decltype(pk)>(pk);
-                    if (pair_key_write.second) {
-                        std::lock_guard kl{*key_seg_mutex};
-                        ARCTICDB_DEBUG(log::version(), "Enqueuing {} for write", pair_key_write.first.atom_key());
-                        key_segs->emplace_back(std::move(pair_key_write.first));
-                    }
-                }));
-            }
-
-            auto write_fut = folly::collect(std::move(futs)).via(&async::io_executor()).then([lib = library_,
-                                                                                                 key_segs =
-                                                                                                 key_segs](auto &&) {
-                if (!key_segs->empty())
-                    lib->write(Composite<storage::KeySegmentPair>(std::move(*key_segs)));
-            });
-            write_futures.push_back(std::move(write_fut));
+                        return key_opt_segment.first;
+                    }));
         }
 
-        return folly::collect(std::move(write_futures)).via(&async::io_executor()).then([res](auto &&){
-            return std::move(*res);
-        });
+        return folly::collect(futs).via(&async::io_executor());
     }
 
     void set_failure_sim(const arcticdb::proto::storage::VersionStoreConfig::StorageFailureSimulator &cfg)

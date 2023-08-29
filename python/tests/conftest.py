@@ -363,6 +363,43 @@ def s3_store_factory(lib_name, moto_s3_endpoint_and_credentials):
             lib.version_store.clear()
 
 
+@pytest.fixture(scope="function")
+def real_s3_credentials():
+    endpoint = os.getenv("ARCTICDB_REAL_S3_ENDPOINT")
+    bucket = os.getenv("ARCTICDB_REAL_S3_BUCKET")
+    region = os.getenv("ARCTICDB_REAL_S3_REGION")
+    access_key = os.getenv("ARCTICDB_REAL_S3_ACCESS_KEY")
+    secret_key = os.getenv("ARCTICDB_REAL_S3_SECRET_KEY")
+    clear = True if str(os.getenv("ARCTICDB_REAL_S3_CLEAR")).lower() in ["true", "1"] else False
+
+    yield endpoint, bucket, region, access_key, secret_key, clear
+
+
+@pytest.fixture
+def real_s3_store_factory(lib_name, real_s3_credentials):
+    endpoint, bucket, region, aws_access_key, aws_secret_key, clear = real_s3_credentials
+
+    # Not exposing the config factory to discourage people from creating libs that won't get cleaned up
+    def make_cfg(name):
+        # with_prefix=False to allow reuse_name to work correctly
+        return create_test_s3_cfg(
+            name, aws_access_key, aws_secret_key, bucket, endpoint, with_prefix=False, is_https=True, region=region
+        )
+
+    used = {}
+    try:
+        yield functools.partial(_version_store_factory_impl, used, make_cfg, lib_name)
+    finally:
+        if clear:
+            for lib in used.values():
+                lib.version_store.clear()
+
+
+@pytest.fixture(scope="function")
+def real_s3_version_store(real_s3_store_factory):
+    return real_s3_store_factory()
+
+
 @pytest.fixture
 def azure_store_factory(lib_name, arcticdb_test_azure_config, azure_client_and_create_container):
     """Factory to create any number of Azure libs with the given WriteOptions or VersionStoreConfig.
@@ -685,9 +722,9 @@ def spawn_azurite(azurite_port):
 
 @pytest.fixture(
     scope="function",
-    params=["moto_s3_uri_incl_bucket", "azurite_azure_uri_incl_bucket"]
-    if AZURE_SUPPORT
-    else ["moto_s3_uri_incl_bucket"],
+    params=(
+        ["moto_s3_uri_incl_bucket", "azurite_azure_uri_incl_bucket"] if AZURE_SUPPORT else ["moto_s3_uri_incl_bucket"]
+    ),
 )
 def object_storage_uri_incl_bucket(request):
     yield request.getfixturevalue(request.param)

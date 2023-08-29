@@ -24,9 +24,11 @@ import random
 import string
 
 from arcticdb.exceptions import ArcticNativeException
+from arcticdb_ext.storage import KeyType, NoDataFoundException
 from arcticdb.version_store.processing import QueryBuilder
-from arcticdb_ext.exceptions import InternalException, UserInputException
+from arcticdb_ext.exceptions import InternalException, StorageException, UserInputException
 from arcticdb.util.test import assert_frame_equal, PANDAS_VERSION
+from arcticdb.util._versions import PANDAS_VERSION
 from arcticdb.util.hypothesis import (
     use_of_function_scoped_fixtures_in_hypothesis_checked,
     integral_type_strategies,
@@ -1044,12 +1046,7 @@ def test_filter_numeric_isnotin_empty_set(lmdb_version_store, df):
 def test_filter_nones_and_nans_retained_in_string_column(lmdb_version_store):
     lib = lmdb_version_store
     sym = "test_filter_nones_and_nans_retained_in_string_column"
-    df = pd.DataFrame(
-        {
-            "filter_column": [1, 2, 1, 2, 1, 2],
-            "string_column": ["1", "2", np.nan, "4", None, "6"],
-        },
-    )
+    df = pd.DataFrame({"filter_column": [1, 2, 1, 2, 1, 2], "string_column": ["1", "2", np.nan, "4", None, "6"]})
     lib.write(sym, df)
     q = QueryBuilder()
     q = q[q["filter_column"] == 1]
@@ -2046,6 +2043,63 @@ def test_filter_batch_incorrect_query_count(lmdb_version_store):
         batch_res = lmdb_version_store.batch_read([sym1, sym2], query_builder=[q])
     with pytest.raises(ArcticNativeException):
         batch_res = lmdb_version_store.batch_read([sym1, sym2], query_builder=[q, q, q])
+
+
+def test_filter_batch_symbol_doesnt_exist(lmdb_version_store):
+    sym1 = "sym1"
+    sym2 = "sym2"
+    df1 = DataFrame({"a": [1, 2]}, index=np.arange(2))
+    lmdb_version_store.write(sym1, df1)
+    q = QueryBuilder()
+    q = q[q["a"] == 2]
+    with pytest.raises(NoDataFoundException):
+        batch_res = lmdb_version_store.batch_read([sym1, sym2], query_builder=q)
+
+
+def test_filter_batch_version_doesnt_exist(lmdb_version_store):
+    sym1 = "sym1"
+    sym2 = "sym2"
+    df1 = DataFrame({"a": [1, 2]}, index=np.arange(2))
+    df2 = DataFrame({"a": [2, 3]}, index=np.arange(2))
+    lmdb_version_store.write(sym1, df1)
+    lmdb_version_store.write(sym2, df2)
+
+    q = QueryBuilder()
+    q = q[q["a"] == 2]
+    # pandas_query = "a == 2"
+    with pytest.raises(NoDataFoundException):
+        batch_res = lmdb_version_store.batch_read([sym1, sym2], as_ofs=[0, 1], query_builder=q)
+
+
+def test_filter_batch_missing_keys(lmdb_version_store):
+    lib = lmdb_version_store
+
+    df1 = pd.DataFrame({"a": [3, 5, 7]})
+    df2 = pd.DataFrame({"a": [4, 6, 8]})
+    df3 = pd.DataFrame({"a": [5, 7, 9]})
+    lib.write("s1", df1)
+    lib.write("s2", df2)
+    # Need two versions for this symbol as we're going to delete a version key, and the optimisation of storing the
+    # latest index key in the version ref key means it will still work if we just write one version key and then delete
+    # it
+    lib.write("s3", df3)
+    lib.write("s3", df3)
+    lib_tool = lib.library_tool()
+    s1_index_key = lib_tool.find_keys_for_id(KeyType.TABLE_INDEX, "s1")[0]
+    s2_data_key = lib_tool.find_keys_for_id(KeyType.TABLE_DATA, "s2")[0]
+    s3_version_keys = lib_tool.find_keys_for_id(KeyType.VERSION, "s3")
+    s3_key_to_delete = [key for key in s3_version_keys if key.version_id == 0][0]
+    lib_tool.remove(s1_index_key)
+    lib_tool.remove(s2_data_key)
+    lib_tool.remove(s3_key_to_delete)
+
+    q = QueryBuilder()
+    q = q[q["a"] == 2]
+
+    # The exception thrown is different for missing version keys to everything else, and so depends on which symbol is
+    # processed first
+    with pytest.raises((NoDataFoundException, StorageException)):
+        _ = lib.batch_read(["s1", "s2", "s3"], [None, None, 0], query_builder=q)
 
 
 def test_filter_numeric_membership_equivalence():

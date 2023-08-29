@@ -35,6 +35,7 @@ def write_data(lib, sym, done, error):
                 assert lib.has_symbol(sym, vid)
             for d_id in range(delete_version_id):
                 assert d_id not in vs
+
     except Exception as e:
         print(e)
         error.value = 1

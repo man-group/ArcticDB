@@ -10,6 +10,7 @@
 #include <pybind11/stl.h>
 #include <pybind11/numpy.h>
 #include <pybind11/operators.h>
+#include <arcticdb/entity/data_error.hpp>
 #include <arcticdb/version/version_store_api.hpp>
 #include <arcticdb/python/arctic_version.hpp>
 #include <arcticdb/python/python_utils.hpp>
@@ -108,6 +109,7 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
         .def("set_incompletes", &ReadOptions::set_incompletes)
         .def("set_set_tz", &ReadOptions::set_set_tz)
         .def("set_optimise_string_memory", &ReadOptions::set_optimise_string_memory)
+        .def("set_batch_throw_on_error", &ReadOptions::set_batch_throw_on_error)
         .def_property_readonly("incompletes", &ReadOptions::get_incompletes);
 
     using FrameDataWrapper = arcticdb::pipelines::FrameDataWrapper;
@@ -130,6 +132,54 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
         .def_property_readonly("names", &PythonOutputFrame::names, py::return_value_policy::reference)
         .def_property_readonly("index_columns", &PythonOutputFrame::index_columns, py::return_value_policy::reference);
 
+    py::enum_<VersionRequestType>(version, "VersionRequestType", R"pbdoc(
+        Enum of possible version request types passed to as_of.
+    )pbdoc")
+            .value("SNAPSHOT", VersionRequestType::SNAPSHOT, R"pbdoc(
+            Request the version of the symbol contained in the specified snapshot.
+    )pbdoc")
+            .value("TIMESTAMP", VersionRequestType::TIMESTAMP, R"pbdoc(
+            Request the version of the symbol as it was at the specified timestamp.
+    )pbdoc")
+            .value("SPECIFIC", VersionRequestType::SPECIFIC, R"pbdoc(
+            Request a specific version of the symbol.
+    )pbdoc")
+            .value("LATEST", VersionRequestType::LATEST, R"pbdoc(
+            Request the latest undeleted version of the symbol.
+    )pbdoc");
+
+    py::class_<DataError, std::shared_ptr<DataError>>(version, "DataError", R"pbdoc(
+        Return value for batch methods which fail in some way.
+
+        Attributes
+        ----------
+        symbol: str
+            Read or modified symbol.
+        version_request_type: Optional[VersionRequestType]
+            For operations that support as_of, the type of version query provided. `None` otherwise.
+        version_request_data: Optional[Union[str, int]]
+            For operations that support as_of, the value provided in the version query:
+                None - Operation does not support as_of, or latest version was requested
+                str - The name of the snapshot provided to as_of
+                int - The specific version requested if version_request_type == VersionRequestType::SPECIFIC, or
+                      nanoseconds since epoch if version_request_type == VersionRequestType::TIMESTAMP
+        error_code: Optional[ErrorCode]
+            For the most common error types, the ErrorCode is included here.
+            e.g. ErrorCode.E_NO_SUCH_VERSION if the version requested has been deleted
+            Please see the Error Messages section of the docs for more detail.
+        error_category: Optional[ErrorCategory]
+            If error_code is provided, the category is also provided.
+            e.g.  ErrorCategory.MISSING_DATA if error_code is ErrorCode.E_NO_SUCH_VERSION
+        exception_string: str
+            The string associated with the exception that was originally raised.
+    )pbdoc")
+            .def_property_readonly("symbol", &DataError::symbol)
+            .def_property_readonly("version_request_type", &DataError::version_request_type)
+            .def_property_readonly("version_request_data", &DataError::version_request_data)
+            .def_property_readonly("error_code", &DataError::error_code)
+            .def_property_readonly("error_category", &DataError::error_category)
+            .def_property_readonly("exception_string", &DataError::exception_string)
+            .def("__str__", &DataError::to_string);
 
     // TODO: add repr.
     py::class_<VersionedItem>(version, "VersionedItem")
@@ -167,16 +217,6 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
         .def_property_readonly("end", &pipelines::RowRange::end)
         .def_property_readonly("diff", &pipelines::RowRange::diff);
 
-    py::class_<pipelines::HeadRange, std::shared_ptr<pipelines::HeadRange>>(version, "HeadRange")
-    .def(py::init([](int64_t n){
-        return HeadRange{n};
-    }));
-
-    py::class_<pipelines::TailRange, std::shared_ptr<pipelines::TailRange>>(version, "TailRange")
-    .def(py::init([](int64_t n){
-        return TailRange{n};
-    }));
-
     py::class_<pipelines::SignedRowRange, std::shared_ptr<pipelines::SignedRowRange>>(version, "SignedRowRange")
     .def(py::init([](int64_t start, int64_t end){
         return SignedRowRange{start, end};
@@ -187,15 +227,22 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
         .def_property_readonly("end", &pipelines::ColRange::end)
         .def_property_readonly("diff", &pipelines::ColRange::diff);
 
-
-
-    auto adapt_read_dfs = [](std::vector<ReadResult> && ret) -> py::list {
+    auto adapt_read_dfs = [](std::vector<std::variant<ReadResult, DataError>> && ret) -> py::list {
         py::list lst;
         for (auto &res: ret) {
-            auto pynorm = python_util::pb_to_python(res.norm_meta);
-            auto pyuser_meta = python_util::pb_to_python(res.user_meta);
-            auto multi_key_meta = python_util::pb_to_python(res.multi_key_meta);
-            lst.append(py::make_tuple(res.item, std::move(res.frame_data), pynorm, pyuser_meta, multi_key_meta, res.multi_keys));
+            util::variant_match(
+                    res,
+                    [&lst] (ReadResult& res) {
+                        auto pynorm = python_util::pb_to_python(res.norm_meta);
+                        auto pyuser_meta = python_util::pb_to_python(res.user_meta);
+                        auto multi_key_meta = python_util::pb_to_python(res.multi_key_meta);
+                        lst.append(py::make_tuple(res.item, std::move(res.frame_data), pynorm, pyuser_meta, multi_key_meta,
+                                                  res.multi_keys));
+                    },
+                    [&lst] (DataError& data_error) {
+                        lst.append(data_error);
+                    }
+            );
         }
         return lst;
     };
@@ -239,6 +286,20 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
             .def(py::init<std::string, std::unordered_map<std::string, std::string>>())
             .def("__str__", &AggregationClause::to_string);
 
+    py::enum_<RowRangeClause::RowRangeType>(version, "RowRangeType")
+            .value("HEAD", RowRangeClause::RowRangeType::HEAD)
+            .value("TAIL", RowRangeClause::RowRangeType::TAIL);
+
+    py::class_<RowRangeClause, std::shared_ptr<RowRangeClause>>(version, "RowRangeClause")
+            .def(py::init<RowRangeClause::RowRangeType, int64_t>())
+            .def("__str__", &RowRangeClause::to_string);
+
+    py::class_<DateRangeClause, std::shared_ptr<DateRangeClause>>(version, "DateRangeClause")
+            .def(py::init<timestamp, timestamp>())
+            .def_property_readonly("start", &DateRangeClause::start)
+            .def_property_readonly("end", &DateRangeClause::end)
+            .def("__str__", &DateRangeClause::to_string);
+
     py::class_<ReadQuery>(version, "PythonVersionStoreReadQuery")
             .def(py::init())
             .def_readwrite("columns",&ReadQuery::columns)
@@ -250,7 +311,9 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
                     std::vector<std::variant<std::shared_ptr<FilterClause>,
                                 std::shared_ptr<ProjectClause>,
                                 std::shared_ptr<GroupByClause>,
-                                std::shared_ptr<AggregationClause>>> clauses) {
+                                std::shared_ptr<AggregationClause>,
+                                std::shared_ptr<RowRangeClause>,
+                                std::shared_ptr<DateRangeClause>>> clauses) {
                 std::vector<std::shared_ptr<Clause>> _clauses;
                 for (auto&& clause: clauses) {
                     util::variant_match(
@@ -336,7 +399,9 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
             .def_readwrite("row_filter",&UpdateQuery::row_filter);
 
     py::class_<PythonVersionStore>(version, "PythonVersionStore")
-        .def(py::init<std::shared_ptr<storage::Library>, std::optional<std::string>>(),
+        .def(py::init([](const std::shared_ptr<storage::Library>& library, std::optional<std::string>) {
+                return PythonVersionStore(library);
+             }),
              py::arg("library"),
              py::arg("license_key") = std::nullopt)
         .def("write_partitioned_dataframe",
@@ -397,6 +462,7 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
              py::arg("via_iteration") = true,
              py::arg("sparsify") = false,
              py::arg("user_meta") = std::nullopt,
+             py::arg("prune_previous_versions") = false,
              "Compact incomplete segments")
          .def("sort_merge",
              &PythonVersionStore::sort_merge,
@@ -624,7 +690,17 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
         .def("latest_timestamp",
              &PythonVersionStore::latest_timestamp,
              "Returns latest timestamp of a symbol")
+        .def("get_store_current_timestamp_for_tests",
+             &PythonVersionStore::get_store_current_timestamp_for_tests,
+             "For testing purposes only")
         ;
+
+    py::class_<ManualClockVersionStore, PythonVersionStore>(version, "ManualClockVersionStore")
+        .def(py::init<const std::shared_ptr<storage::Library>&>())
+        .def_property_static("time",
+            []() { return util::ManualClock::time_.load(); },
+            [](const py::class_<ManualClockVersionStore>&, entity::timestamp ts) { util::ManualClock::time_ = ts; })
+         ;
 
     py::class_<LocalVersionedEngine>(version, "VersionedEngine")
       .def(py::init<std::shared_ptr<storage::Library>>())

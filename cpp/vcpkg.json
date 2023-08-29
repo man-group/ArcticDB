@@ -61,24 +61,10 @@
     "azure-storage-blobs-cpp"
   ],
   "overrides": [
-    {
-      "name": "openssl",
-      "version-string": "1.1.1l"
-    },
-    {
-      "name": "aws-sdk-cpp",
-      "version": "1.11.4#0",
-      "$comments": "Version 1.9.220#2 from baseline e82778a does not compile. Using the version from baseline: ca9155913cf8be47cdd5675e4eada33226380689"
-    },
-    { "name": "aws-c-s3",
-      "version": "0.2.3#0",
-      "$comments": "Version 0.1.25#2 from baseline e82778a does not compile. Using the version from baseline: ca9155913cf8be47cdd5675e4eada33226380689"
-    },
-    {
-      "$comments": "All below are from the e82778a baseline. We have to use a newer baseline to pick up aws-c-sdkutils",
-      "name": "bitmagic",
-      "version": "7.12.3"
-    },
+    { "name": "openssl", "version-string": "1.1.1n#1" },
+    { "name": "aws-sdk-cpp", "version": "1.11.4#0" },
+    { "name": "aws-c-s3", "version": "0.2.3#0" },
+    { "name": "bitmagic", "version": "7.12.3" },
     { "name": "boost-algorithm", "version": "1.80.0#1" },
     { "name": "boost-align", "version": "1.80.0#1" },
     { "name": "boost-any", "version": "1.80.0#1" },
@@ -156,7 +142,7 @@
     { "name": "boost-vcpkg-helpers", "version": "1.80.0#1" },
     { "name": "boost-winapi", "version": "1.80.0#1" },
     { "name": "civetweb", "version": "1.15#2" },
-    { "name": "curl", "version": "7.86.0#1" },
+    { "name": "curl", "version": "7.88.1#1" },
     { "name": "double-conversion", "version": "3.2.1" },
     { "name": "fizz", "version-string": "2022.10.31.00" },
     { "name": "fmt", "version": "9.1.0#1" },

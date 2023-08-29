@@ -12,7 +12,7 @@
 #include <arcticdb/storage/library.hpp>
 #include <arcticdb/storage/library_path.hpp>
 #include <arcticdb/storage/protobuf_mappings.hpp>
-#include <arcticdb/storage/variant_storage_factory.hpp>
+#include <arcticdb/storage/storage_factory.hpp>
 #include <arcticdb/storage/storages.hpp>
 
 #include <optional>
@@ -78,12 +78,23 @@ class ConfigCache {
         auto &descriptor = maybe_descriptor.value();
 
         util::check(!descriptor.storage_ids_.empty(), "Can't configure library with no storage ids");
-        std::vector<std::unique_ptr<VariantStorage>> variants;
+        std::vector<std::unique_ptr<Storage>> storages;
         for (const auto& storage_name : descriptor.storage_ids_) {
-            auto factory = get_storage_factory(storage_name);
-            variants.emplace_back(factory->create_storage(path, mode));
+            // Otherwise see if we have the storage config.
+            arcticdb::proto::storage::VariantStorage storage_conf;
+            auto storage_conf_pos = storage_configs_.find(storage_name);
+            if(storage_conf_pos != storage_configs_.end())
+                storage_conf = storage_conf_pos->second;
+
+            // As a last resort, get the whole environment config from the resolver.
+            refresh_config();
+            storage_conf_pos = storage_configs_.find(storage_name);
+            if(storage_conf_pos != storage_configs_.end())
+                storage_conf = storage_conf_pos->second;
+
+            storages.emplace_back(create_storage(path, mode, storage_conf));
         }
-        return std::make_shared<Storages>(std::move(variants), mode);
+        return std::make_shared<Storages>(std::move(storages), mode);
     }
 
   private:
@@ -109,44 +120,9 @@ class ConfigCache {
         }
     }
 
-    std::shared_ptr<VariantStorageFactory> get_storage_factory_internal(const StorageName &storage_name) {
-        //See if we have previously cached the factory
-        auto factory_it = storage_factories_.find(storage_name);
-        if (factory_it != storage_factories_.end())
-            return factory_it->second;
-
-        //Otherwise see if we have the storage config
-        auto storage_conf = storage_configs_.find(storage_name);
-        if(storage_conf != storage_configs_.end())
-            return create_storage_factory(storage_conf->second);
-
-
-        //As a last resort, get the whole environment config from the resolver
-        refresh_config();
-        storage_conf = storage_configs_.find(storage_name);
-        if(storage_conf != storage_configs_.end())
-            return create_storage_factory(storage_conf->second);
-        else
-            return std::shared_ptr<VariantStorageFactory>();
-    }
-
-
-    std::shared_ptr<VariantStorageFactory> get_storage_factory(const StorageName &storage_name) {
-        auto factory = get_storage_factory_internal(storage_name);
-        util::check(factory != nullptr,
-                    "cannot create storage factory for environment_name={}, storage_name={}",
-                    environment_name_.value, storage_name.value);
-        if (auto[it, inserted] = storage_factories_.insert(std::make_pair(storage_name, factory)); !inserted) {
-            factory = it->second;
-        }
-
-        return factory;
-    }
-
     EnvironmentName environment_name_;
     std::unordered_map<LibraryPath, LibraryDescriptor> descriptor_map_;
     std::unordered_map<StorageName, arcticdb::proto::storage::VariantStorage> storage_configs_;
-    std::unordered_map<StorageName, std::shared_ptr<VariantStorageFactory>> storage_factories_;
     std::shared_ptr<ConfigResolver> config_resolver_;
     mutable std::mutex mutex_;
 };

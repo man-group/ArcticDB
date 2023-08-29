@@ -16,7 +16,7 @@ namespace arcticdb {
             scalar_field(symbol_datatype, "symbol"),
             scalar_field(DataType::UINT64, "version_id"),
             scalar_field(DataType::ASCII_DYNAMIC64, "action"),
-            scalar_field(DataType::MICROS_UTC64, "creation_ts"),
+            scalar_field(DataType::NANOSECONDS_UTC64, "creation_ts"),
             } )};
     }
 

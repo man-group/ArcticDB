@@ -23,11 +23,7 @@
 
 namespace arcticdb::storage::azure {
 
-class AzureStorage final : public Storage<AzureStorage> {
-
-    using Parent = Storage<AzureStorage>;
-    friend Parent;
-
+class AzureStorage final : public Storage {
   public:
     // friend class AzureTestClientAccessor<AzureStorage>;
     using Config = arcticdb::proto::azure_storage::Config;
@@ -40,27 +36,27 @@ class AzureStorage final : public Storage<AzureStorage> {
     std::string get_key_path(const VariantKey& key) const;
 
   protected:
-    void do_write(Composite<KeySegmentPair>&& kvs);
+    void do_write(Composite<KeySegmentPair>&& kvs) final;
 
-    void do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts opts);
+    void do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts opts) final;
 
-    template<class Visitor>
-    void do_read(Composite<VariantKey>&& ks, Visitor &&visitor, ReadKeyOpts opts);
+    void do_read(Composite<VariantKey>&& ks, const ReadVisitor& visitor, ReadKeyOpts opts) final;
 
-    void do_remove(Composite<VariantKey>&& ks, RemoveOpts opts);
+    void do_remove(Composite<VariantKey>&& ks, RemoveOpts opts) final;
 
-    template<class Visitor>
-    void do_iterate_type(KeyType key_type, Visitor &&visitor, const std::string &prefix);
+    void do_iterate_type(KeyType key_type, const IterateTypeVisitor& visitor, const std::string &prefix) final;
 
-    bool do_key_exists(const VariantKey& key);
+    bool do_key_exists(const VariantKey& key) final;
 
-    bool do_supports_prefix_matching() {
+    bool do_supports_prefix_matching() const final {
         return true;
     }
 
-    bool do_fast_delete() {
+    bool do_fast_delete() final {
         return false;
     }
+
+    std::string do_key_path(const VariantKey&) const final { return {}; };
 
   private:
     Azure::Storage::Blobs::BlobContainerClient container_client_;
@@ -70,26 +66,6 @@ class AzureStorage final : public Storage<AzureStorage> {
     Azure::Storage::Blobs::DownloadBlobToOptions download_option_;
 
     Azure::Storage::Blobs::BlobClientOptions get_client_options(const Config &conf);
-};
-
-
-class AzureStorageFactory final : public StorageFactory<AzureStorageFactory> {
-    using Parent = StorageFactory<AzureStorageFactory>;
-    friend Parent;
-
-  public:
-    using Config = arcticdb::proto::azure_storage::Config;
-    using StorageType = AzureStorage;
-
-    AzureStorageFactory(const Config &conf) :
-        conf_(conf) {
-    }
-  private:
-    auto do_create_storage(const LibraryPath &lib, OpenMode mode) {
-            return AzureStorage(lib, mode, conf_);
-    }
-
-    Config conf_;
 };
 
 inline arcticdb::proto::storage::VariantStorage pack_config(const std::string &container_name) {
@@ -118,6 +94,3 @@ std::shared_ptr<Azure::Storage::StorageSharedKeyCredential> get_azure_credential
 }
 
 } //namespace arcticdb::azure
-
-#define ARCTICDB_AZURE_STORAGE_H_
-#include <arcticdb/storage/azure/azure_storage-inl.hpp>

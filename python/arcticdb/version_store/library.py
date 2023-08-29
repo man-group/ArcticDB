@@ -7,15 +7,19 @@ As of the Change Date specified in that file, in accordance with the Business So
 """
 
 import datetime
+import pytz
 from enum import Enum, auto
 from typing import Optional, Any, Tuple, Dict, AnyStr, Union, List, Iterable, NamedTuple
 from numpy import datetime64
 
+from arcticdb.options import LibraryOptions
 from arcticdb.supported_types import Timestamp
+from arcticdb.util._versions import IS_PANDAS_TWO
 
 from arcticdb.version_store.processing import QueryBuilder
 from arcticdb.version_store._store import NativeVersionStore, VersionedItem, VersionQueryInput
 from arcticdb_ext.exceptions import ArcticException
+from arcticdb_ext.version_store import DataError
 import pandas as pd
 import numpy as np
 import logging
@@ -164,13 +168,46 @@ class WritePayload:
         self.metadata = metadata
 
     def __repr__(self):
-        return f"WriteArgs(symbol={self.symbol}, data_id={id(self.data)}, metadata={self.metadata})"
+        return f"WritePayload(symbol={self.symbol}, data_id={id(self.data)}, metadata={self.metadata})"
 
     def __iter__(self):
         yield self.symbol
         yield self.data
         if self.metadata is not None:
             yield self.metadata
+
+
+class WriteMetadataPayload:
+    """
+    WriteMetadataPayload is designed to enable batching of multiple operations with an API that mirrors the singular
+    ``write_metadata`` API.
+
+    Construction of ``WriteMetadataPayload`` objects is only required for batch write metadata operations.
+
+    One instance of ``WriteMetadataPayload`` refers to one unit that can be written through to ArcticDB.
+    """
+
+    def __init__(self, symbol: str, metadata: Any):
+        """
+        Constructor.
+
+        Parameters
+        ----------
+        symbol : str
+            Symbol name. Limited to 255 characters. The following characters are not supported in symbols:
+            ``"*", "&", "<", ">"``
+        metadata : Any
+            metadata to persist along with the symbol.
+        """
+        self.symbol = symbol
+        self.metadata = metadata
+
+    def __repr__(self):
+        return f"WriteMetadataPayload(symbol={self.symbol}, metadata={self.metadata})"
+
+    def __iter__(self):
+        yield self.symbol
+        yield self.metadata
 
 
 class ReadRequest(NamedTuple):
@@ -269,6 +306,16 @@ class Library:
 
     def __contains__(self, symbol: str):
         return self.has_symbol(symbol)
+
+    def options(self) -> LibraryOptions:
+        write_options = self._nvs.lib_cfg().lib_desc.version.write_options
+        return LibraryOptions(
+            dynamic_schema=write_options.dynamic_schema,
+            dedup=write_options.de_duplication,
+            rows_per_segment=write_options.segment_row_size,
+            columns_per_segment=write_options.column_group_size,
+            encoding_version=self._nvs.lib_cfg().lib_desc.version.encoding_version,
+        )
 
     def write(
         self,
@@ -455,7 +502,7 @@ class Library:
         raise ArcticUnsupportedDataTypeException(error_message)
 
     def write_batch(
-        self, payloads: List[WritePayload], prune_previous_versions: bool = False, staged=False, validate_index=True
+        self, payloads: List[WritePayload], prune_previous_versions: bool = False, validate_index=True
     ) -> List[VersionedItem]:
         """
         Write a batch of multiple symbols.
@@ -466,10 +513,8 @@ class Library:
             Symbols and their corresponding data. There must not be any duplicate symbols in `payload`.
         prune_previous_versions: `bool`, default=False
             See `write`.
-        staged: `bool`, default=False
-            See `write`.
         validate_index: bool, default=False
-            If True, will verify for each entry in the batch hat the index of `data` supports date range searches and update operations.
+            If set to True, it will verify for each entry in the batch whether the index of the data supports date range searches and update operations.
             This in effect tests that the data is sorted in ascending order. ArcticDB relies on Pandas to detect if data is sorted -
             you can call DataFrame.index.is_monotonic_increasing on your input DataFrame to see if Pandas believes the data to be sorted
 
@@ -524,7 +569,6 @@ class Library:
             [p.metadata for p in payloads],
             prune_previous_version=prune_previous_versions,
             pickle_on_failure=False,
-            parallel=staged,
             validate_index=validate_index,
         )
 
@@ -654,6 +698,55 @@ class Library:
             validate_index=validate_index,
         )
 
+    def append_batch(
+        self, append_payloads: List[WritePayload], prune_previous_versions: bool = False, validate_index=True
+    ) -> List[Union[VersionedItem, DataError]]:
+        """
+        Append data to multiple symbols in a batch fashion. This is more efficient than making multiple `append` calls in
+        succession as some constant-time operations can be executed only once rather than once for each element of
+        `append_payloads`.
+        Note that this isn't an atomic operation - it's possible for one symbol to be fully written and readable before
+        another symbol.
+        Parameters
+        ----------
+        append_payloads : `List[WritePayload]`
+            Symbols and their corresponding data. There must not be any duplicate symbols in `append_payloads`.
+        prune_previous_versions : bool, default=False
+            Removes previous (non-snapshotted) versions from the database.
+        validate_index: bool, default=False
+            If set to True, it will verify for each entry in the batch whether the index of the data supports date range searches and update operations.
+            This in effect tests that the data is sorted in ascending order. ArcticDB relies on Pandas to detect if data is sorted -
+            you can call DataFrame.index.is_monotonic_increasing on your input DataFrame to see if Pandas believes the data to be sorted
+
+        Returns
+        -------
+        List[Union[VersionedItem, DataError]]
+            List of versioned items. i-th entry corresponds to i-th element of `append_payloads`.
+            Each result correspond to a structure containing metadata and version number of the affected
+            symbol in the store. If any internal exception is raised, a DataError object is returned, with symbol,
+            error_code, error_category, and exception_string properties.
+
+        Raises
+        ------
+        ArcticDuplicateSymbolsInBatchException
+            When duplicate symbols appear in payload.
+        ArcticUnsupportedDataTypeException
+            If data that is not of NormalizableType appears in any of the payloads.
+        """
+
+        self._raise_if_duplicate_symbols_in_batch(append_payloads)
+        self._raise_if_unsupported_type_in_write_batch(append_payloads)
+        throw_on_missing_version = False
+
+        return self._nvs._batch_append_to_versioned_items(
+            [p.symbol for p in append_payloads],
+            [p.data for p in append_payloads],
+            [p.metadata for p in append_payloads],
+            prune_previous_version=prune_previous_versions,
+            validate_index=validate_index,
+            throw_on_missing_version=throw_on_missing_version,
+        )
+
     def update(
         self,
         symbol: str,
@@ -688,7 +781,7 @@ class Library:
             ``data``. This allows the user to update with data that might only be a subset of the stored value. Leaving
             any part of the tuple as None leaves that part of the range open ended. Only data with date_range will be
             modified, even if ``data`` covers a wider date range.
-        prune_previous_versions, default=False
+        prune_previous_versions
             Removes previous (non-snapshotted) versions from the database when True.
 
         Examples
@@ -730,8 +823,27 @@ class Library:
             prune_previous_version=prune_previous_versions,
         )
 
+    def delete_staged_data(self, symbol: str):
+        """
+        Removes staged data.
+
+        Parameters
+        ----------
+        symbol : `str`
+            Symbol to remove staged data for.
+
+        See Also
+        --------
+        write
+            Documentation on the ``staged`` parameter explains the concept of staged data in more detail.
+        """
+        self._nvs.remove_incomplete(symbol)
+
     def finalize_staged_data(
-        self, symbol: str, mode: Optional[StagedDataFinalizeMethod] = StagedDataFinalizeMethod.WRITE
+        self,
+        symbol: str,
+        mode: Optional[StagedDataFinalizeMethod] = StagedDataFinalizeMethod.WRITE,
+        prune_previous_versions: Optional[bool] = False,
     ):
         """
         Finalises staged data, making it available for reads.
@@ -744,13 +856,20 @@ class Library:
         mode : `StagedDataFinalizeMethod`, default=StagedDataFinalizeMethod.WRITE
             Finalise mode. Valid options are WRITE or APPEND. Write collects the staged data and writes them to a
             new timeseries. Append collects the staged data and appends them to the latest version.
+        prune_previous_versions
+            Removes previous (non-snapshotted) versions from the database.
 
         See Also
         --------
         write
             Documentation on the ``staged`` parameter explains the concept of staged data in more detail.
         """
-        self._nvs.compact_incomplete(symbol, mode == StagedDataFinalizeMethod.APPEND, False)
+        self._nvs.compact_incomplete(
+            symbol,
+            append=mode == StagedDataFinalizeMethod.APPEND,
+            convert_int_to_float=False,
+            prune_previous_version=prune_previous_versions,
+        )
 
     def sort_and_finalize_staged_data(
         self, symbol: str, mode: Optional[StagedDataFinalizeMethod] = StagedDataFinalizeMethod.WRITE
@@ -791,7 +910,7 @@ class Library:
         write
             Documentation on the ``staged`` parameter explains the concept of staged data in more detail.
         """
-        return self._nvs.version_store.get_incomplete_symbols()
+        return self._nvs.list_symbols_with_incomplete_data()
 
     def read(
         self,
@@ -813,7 +932,7 @@ class Library:
         as_of : AsOf, default=None
             Return the data as it was as of the point in time. ``None`` means that the latest version should be read. The
             various types of this parameter mean:
-           - ``int``: specific version number
+           - ``int``: specific version number. Negative indexing is supported, with -1 representing the latest version, -2 the version before that, etc.
            - ``str``: snapshot name which contains the version
            - ``datetime.datetime`` : the version of the data that existed ``as_of`` the requested point in time
 
@@ -824,6 +943,9 @@ class Library:
             part of the data that falls withing the given range (inclusive). None on either end leaves that part of the
             range open-ended. Hence specifying ``(None, datetime(2025, 1, 1)`` declares that you wish to read all data up
             to and including 20250101.
+            The same effect can be achieved by using the date_range clause of the QueryBuilder class, which will be
+            slower, but return data with a smaller memory footprint. See the QueryBuilder.date_range docstring for more
+            details.
 
         columns: List[str], default=None
             Applicable only for Pandas data. Determines which columns to return data for.
@@ -861,7 +983,7 @@ class Library:
 
     def read_batch(
         self, symbols: List[Union[str, ReadRequest]], query_builder: Optional[QueryBuilder] = None
-    ) -> List[VersionedItem]:
+    ) -> List[Union[VersionedItem, DataError]]:
         """
         Reads multiple symbols.
 
@@ -876,8 +998,10 @@ class Library:
 
         Returns
         -------
-        List[VersionedItem]
+        List[Union[VersionedItem, DataError]]
             A list of the read results, whose i-th element corresponds to the i-th element of the ``symbols`` parameter.
+            If the specified version does not exist, a DataError object is returned, with symbol, version_request_type,
+            version_request_data properties, error_code, error_category, and exception_string properties.
 
         Raises
         ------
@@ -891,11 +1015,26 @@ class Library:
         >>> lib.write("s2", pd.DataFrame({"col": [1, 2, 3]}))
         >>> lib.write("s2", pd.DataFrame(), prune_previous_versions=False)
         >>> lib.write("s3", pd.DataFrame())
-        >>> batch = lib.read_batch(["s1", ReadRequest("s2", as_of=0), "s3"])
+        >>> batch = lib.read_batch(["s1", ReadRequest("s2", as_of=0), "s3", ReadRequest("s2", as_of=1000)])
         >>> batch[0].data.empty
         True
         >>> batch[1].data.empty
         False
+        >>> batch[2].data.empty
+        True
+        >>> batch[3].symbol
+        "s2"
+        >>> from arcticdb import DataError
+        >>> isinstance(batch[3], DataError)
+        True
+        >>> batch[3].version_request_type
+        VersionRequestType.SPECIFIC
+        >>> batch[3].version_request_data
+        1000
+        >>> batch[3].error_code
+        ErrorCode.E_NO_SUCH_VERSION
+        >>> batch[3].error_category
+        ErrorCategory.MISSING_DATA
 
         See Also
         --------
@@ -935,9 +1074,9 @@ class Library:
                     f"Unsupported item in the symbols argument s=[{s}] type(s)=[{type(s)}]. Only [str] and"
                     " [ReadRequest] are supported."
                 )
-
+        throw_on_error = False
         return self._nvs._batch_read_to_versioned_items(
-            symbol_strings, as_ofs, date_ranges, columns, query_builder or query_builders
+            symbol_strings, as_ofs, date_ranges, columns, query_builder or query_builders, throw_on_error
         )
 
     def read_metadata(self, symbol: str, as_of: Optional[AsOf] = None) -> VersionedItem:
@@ -1027,6 +1166,59 @@ class Library:
             Structure containing metadata and version number of the affected symbol in the store.
         """
         return self._nvs.write_metadata(symbol, metadata, prune_previous_version=False)
+
+    def write_metadata_batch(
+        self, write_metadata_payloads: List[WriteMetadataPayload], prune_previous_versions=None
+    ) -> List[Union[VersionedItem, DataError]]:
+        """
+        Write metadata to multiple symbols in a batch fashion. This is more efficient than making multiple `write_metadata` calls
+        in succession as some constant-time operations can be executed only once rather than once for each element of
+        `write_metadata_payloads`.
+        Note that this isn't an atomic operation - it's possible for the metadata for one symbol to be fully written and
+        readable before another symbol.
+        Parameters
+        ----------
+        write_metadata_payloads : `List[WriteMetadataPayload]`
+            Symbols and their corresponding metadata. There must not be any duplicate symbols in `payload`.
+        prune_previous_version : `Optional[bool]`, default=None
+            Remove previous versions from version list. Uses library default if left as None.
+
+        Returns
+        -------
+        List[Union[VersionedItem, DataError]]
+            List of versioned items. The data attribute will be None for each versioned item.
+            i-th entry corresponds to i-th element of `write_metadata_payloads`. Each result correspond to
+            a structure containing metadata and version number of the affected symbol in the store.
+            If any internal exception is raised, a DataError object is returned, with symbol,
+            error_code, error_category, and exception_string properties.
+
+        Raises
+        ------
+        ArcticDuplicateSymbolsInBatchException
+            When duplicate symbols appear in write_metadata_payloads.
+
+        Examples
+        --------
+
+        Writing a simple batch:
+
+        >>> payload_1 = WriteMetadataPayload("symbol_1", {'the': 'metadata_1'})
+        >>> payload_2 = WriteMetadataPayload("symbol_2", {'the': 'metadata_2'})
+        >>> items = lib.write_metadata_batch([payload_1, payload_2])
+        >>> lib.read_metadata("symbol_1")
+        {'the': 'metadata_1'}
+        >>> lib.read_metadata("symbol_2")
+        {'the': 'metadata_2'}
+        """
+
+        self._raise_if_duplicate_symbols_in_batch(write_metadata_payloads)
+        throw_on_error = False
+        return self._nvs._batch_write_metadata_to_versioned_items(
+            [p.symbol for p in write_metadata_payloads],
+            [p.metadata for p in write_metadata_payloads],
+            prune_previous_version=prune_previous_versions,
+            throw_on_error=throw_on_error,
+        )
 
     def snapshot(
         self,
@@ -1339,6 +1531,11 @@ class Library:
         """
         info = self._nvs.get_info(symbol, as_of)
         last_update_time = pd.to_datetime(info["last_update"], utc=True)
+        if IS_PANDAS_TWO:
+            # Pandas 2.0.0 now uses `datetime.timezone.utc` instead of `pytz.UTC`.
+            # See: https://github.com/pandas-dev/pandas/issues/34916
+            # We enforce the use of `pytz.UTC` for consistency.
+            last_update_time = last_update_time.replace(tzinfo=pytz.UTC)
         columns = tuple(NameWithDType(n, t) for n, t in zip(info["col_names"]["columns"], info["dtype"]))
         index = NameWithDType(info["col_names"]["index"], info["col_names"]["index_dtype"])
         date_range = tuple(

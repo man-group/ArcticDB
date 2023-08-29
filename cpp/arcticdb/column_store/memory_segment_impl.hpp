@@ -1111,6 +1111,34 @@ public:
         set_metadata(std::move(any));
     }
 
+    // Inclusive of start_row, exclusive of end_row
+    inline std::shared_ptr<SegmentInMemoryImpl> truncate(
+            size_t start_row,
+            size_t end_row) const {
+        auto num_values = end_row - start_row;
+        internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+                is_sparse() || (start_row < row_count() && end_row <= row_count() && num_values > 0),
+                "Truncate bounds start_row={} end_row={} outside valid range {}", start_row, end_row, row_count());
+
+        auto output = std::make_shared<SegmentInMemoryImpl>();
+
+        output->set_row_data(num_values - 1);
+        output->set_string_pool(string_pool_);
+        output->set_compacted(compacted_);
+        if (metadata_) {
+            google::protobuf::Any metadata;
+            metadata.CopyFrom(*metadata_);
+            output->set_metadata(std::move(metadata));
+        }
+
+        for(const auto&& [idx, column] : folly::enumerate(columns_)) {
+            auto truncated_column = Column::truncate(column, start_row, end_row);
+            output->add_column(descriptor_->field(idx), truncated_column);
+        }
+        output->attach_descriptor(descriptor_);
+        return output;
+    }
+
     // Partitions the segment into n new segments. Each row in the starting segment is mapped to one of the output segments
     // by the row_to_segment vector (std::nullopt means the row is not included in any output segment).
     // segment_counts is the length of the number of output segments, and should be greater than or equal to the max value

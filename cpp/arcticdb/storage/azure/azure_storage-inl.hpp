@@ -6,7 +6,7 @@
  */
 
 #ifndef ARCTICDB_AZURE_STORAGE_H_
-#error "This should only be included by file_storage.hpp"
+#error "This should only be included by file_storage.cpp"
 #endif
 
 #include <arcticdb/util/preconditions.hpp>
@@ -16,6 +16,7 @@
 
 #include <google/protobuf/io/zero_copy_stream_impl_lite.h>
 #include <folly/gen/Base.h>
+#include <arcticdb/storage/azure/azure_storage.hpp>
 #include <arcticdb/storage/storage_utils.hpp>
 #include <arcticdb/storage/object_store_utils.hpp>
 #include <arcticdb/storage/storage_options.hpp>
@@ -121,9 +122,9 @@ void do_update_impl(
 
 struct UnexpectedAzureErrorException : public std::exception {};
 
-template<class Visitor, class KeyBucketizer>
+template<class KeyBucketizer>
 void do_read_impl(Composite<VariantKey> && ks,
-    Visitor&& visitor,
+    const ReadVisitor& visitor,
     const std::string& root_folder,
     Azure::Storage::Blobs::BlobContainerClient& container_client,
     KeyBucketizer&& bucketizer,
@@ -196,7 +197,7 @@ void do_remove_impl(Composite<VariantKey>&& ks,
         };
         
         (fg::from(ks.as_range()) | fg::move | fg::groupBy(fmt_db)).foreach(
-            [&container_client, &root_folder, b=std::move(bucketizer), &batch, delete_object_limit=delete_object_limit, &batch_counter, &submit_batch, &request_timeout] (auto&& group) {//bypass incorrect 'set but no used" error for delete_object_limit
+            [&root_folder, b=std::move(bucketizer), &batch, delete_object_limit=delete_object_limit, &batch_counter, &submit_batch] (auto&& group) {//bypass incorrect 'set but no used" error for delete_object_limit
                 auto key_type_dir = key_type_folder(root_folder, group.key());
                 for (auto k : folly::enumerate(group.values())) {
                     auto blob_name = object_path(b.bucketize(key_type_dir, *k), *k);
@@ -223,9 +224,9 @@ inline auto default_prefix_handler() {
     };
 }
 
-template<class Visitor, class KeyBucketizer, class PrefixHandler>
+template<class KeyBucketizer, class PrefixHandler>
 void do_iterate_type_impl(KeyType key_type,
-    Visitor&& visitor,
+    const IterateTypeVisitor& visitor,
     const std::string& root_folder,
     Azure::Storage::Blobs::BlobContainerClient& container_client,
     KeyBucketizer&& bucketizer,
@@ -300,19 +301,15 @@ inline void AzureStorage::do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts)
     detail::do_update_impl(std::move(kvs), root_folder_, container_client_, FlatBucketizer{}, upload_option_, request_timeout_);
 }
 
-template<class Visitor>
-void AzureStorage::do_read(Composite<VariantKey>&& ks, Visitor&& visitor, ReadKeyOpts opts) {
-    detail::do_read_impl(std::move(ks), std::move(visitor), root_folder_, container_client_, FlatBucketizer{}, opts, download_option_, request_timeout_);
+inline void AzureStorage::do_read(Composite<VariantKey>&& ks, const ReadVisitor& visitor, ReadKeyOpts opts) {
+    detail::do_read_impl(std::move(ks), visitor, root_folder_, container_client_, FlatBucketizer{}, opts, download_option_, request_timeout_);
 }
 
 inline void AzureStorage::do_remove(Composite<VariantKey>&& ks, RemoveOpts) {
     detail::do_remove_impl(std::move(ks), root_folder_, container_client_, FlatBucketizer{}, request_timeout_);
 }
 
-
-
-template<class Visitor>
-void AzureStorage::do_iterate_type(KeyType key_type, Visitor&& visitor, const std::string& prefix) {
+inline void AzureStorage::do_iterate_type(KeyType key_type, const IterateTypeVisitor& visitor, const std::string &prefix) {
     auto prefix_handler = [] (const std::string& prefix, const std::string& key_type_dir, const KeyDescriptor key_descriptor, KeyType) {
         return !prefix.empty() ? fmt::format("{}/{}*{}", key_type_dir, key_descriptor, prefix) : key_type_dir;
     };

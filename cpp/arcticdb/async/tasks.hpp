@@ -19,7 +19,7 @@
 #include <arcticdb/stream/stream_sink.hpp>
 #include <arcticdb/async/base_task.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>
-#include <arcticdb/processing/processing_segment.hpp>
+#include <arcticdb/processing/processing_unit.hpp>
 #include <arcticdb/util/constructors.hpp>
 
 #include <type_traits>
@@ -36,20 +36,17 @@ struct EncodeAtomTask : BaseTask {
     timestamp creation_ts_;
     SegmentInMemory segment_;
     std::shared_ptr<arcticdb::proto::encoding::VariantCodec> codec_meta_;
-    size_t id_;
     EncodingVersion encoding_version_;
 
     EncodeAtomTask(PartialKey &&pk,
                    timestamp creation_ts,
                    SegmentInMemory &&segment,
                    std::shared_ptr<arcticdb::proto::encoding::VariantCodec> codec_meta,
-                   size_t id,
                    EncodingVersion encoding_version)
         : partial_key_(std::move(pk)),
           creation_ts_(creation_ts),
           segment_(std::move(segment)),
           codec_meta_(std::move(codec_meta)),
-          id_(id),
           encoding_version_(encoding_version){}
 
     EncodeAtomTask(
@@ -61,12 +58,11 @@ struct EncodeAtomTask : BaseTask {
         timestamp creation_ts,
         SegmentInMemory &&segment,
         const std::shared_ptr<arcticdb::proto::encoding::VariantCodec> &codec_meta,
-        size_t id,
         EncodingVersion encoding_version
     )
         : EncodeAtomTask(PartialKey{key_type, gen_id, std::move(stream_id), std::move(start_index),
                                     std::move(end_index)}, creation_ts,
-                         std::move(segment), codec_meta, id, encoding_version) {
+                         std::move(segment), codec_meta, encoding_version) {
     }
 
     ARCTICDB_MOVE_ONLY_DEFAULT(EncodeAtomTask)
@@ -77,7 +73,7 @@ struct EncodeAtomTask : BaseTask {
         auto content_hash = hash_segment_header(enc_seg.header());
 
         AtomKey k = partial_key_.build_key(creation_ts_, content_hash);
-        return {std::move(k), std::move(enc_seg), id_};
+        return {std::move(k), std::move(enc_seg)};
     }
 
     storage::KeySegmentPair operator()() {
@@ -90,18 +86,15 @@ struct EncodeSegmentTask : BaseTask {
     VariantKey key_;
     SegmentInMemory segment_;
     std::shared_ptr<arcticdb::proto::encoding::VariantCodec> codec_meta_;
-    size_t id_;
     EncodingVersion encoding_version_;
 
     EncodeSegmentTask(entity::VariantKey key,
                       SegmentInMemory &&segment,
                       std::shared_ptr<arcticdb::proto::encoding::VariantCodec> codec_meta,
-                      size_t id,
                       EncodingVersion encoding_version)
             : key_(std::move(key)),
               segment_(std::move(segment)),
               codec_meta_(std::move(codec_meta)),
-              id_(id),
               encoding_version_(encoding_version){}
 
 
@@ -109,7 +102,7 @@ struct EncodeSegmentTask : BaseTask {
 
     storage::KeySegmentPair encode() {
         auto enc_seg = ::arcticdb::encode_dispatch(std::move(segment_), *codec_meta_, encoding_version_);
-        return {std::move(key_), std::move(enc_seg), size_t(id_)};
+        return {std::move(key_), std::move(enc_seg)};
     }
 
     storage::KeySegmentPair operator()() {
@@ -144,7 +137,7 @@ struct EncodeRefTask : BaseTask {
     [[nodiscard]] storage::KeySegmentPair encode() {
         auto enc_seg = ::arcticdb::encode_dispatch(std::move(segment_), *codec_meta_, encoding_version_);
         auto k = RefKey{id_, key_type_};
-        return {std::move(k), std::move(enc_seg), size_t(0)};
+        return {std::move(k), std::move(enc_seg)};
     }
 
     storage::KeySegmentPair operator()() {
@@ -251,12 +244,12 @@ struct CopyCompressedTask : BaseTask {
 
     CopyCompressedTask(entity::VariantKey source_key,
                        KeyType key_type,
-                       const StreamId& stream_id,
+                       StreamId stream_id,
                        VersionId version_id,
                        std::shared_ptr<storage::Library> lib) :
         source_key_(std::move(source_key)),
         key_type_(key_type),
-        stream_id_(stream_id),
+        stream_id_(std::move(stream_id)),
         version_id_(version_id),
         lib_(std::move(lib)) {
         ARCTICDB_DEBUG(log::storage(), "Creating copy compressed task for key {} -> {} {} {}",
@@ -304,7 +297,7 @@ struct DecodeSlicesTask : BaseTask {
 
     std::shared_ptr<std::unordered_set<std::string>> filter_columns_;
 
-    DecodeSlicesTask(
+    explicit DecodeSlicesTask(
             const std::shared_ptr<std::unordered_set<std::string>>& filter_columns)  :
                 filter_columns_(filter_columns) {
             }
@@ -312,7 +305,8 @@ struct DecodeSlicesTask : BaseTask {
     Composite<pipelines::SliceAndKey> operator()(Composite<std::pair<Segment, pipelines::SliceAndKey>> && skp) const {
         ARCTICDB_SAMPLE(DecodeAtomTask, 0)
         auto sk_pairs = std::move(skp);
-        return sk_pairs.transform([that=this] (auto&& seg_slice_pair){
+        return sk_pairs.transform([that=this] (auto&& ssp){
+            auto seg_slice_pair = std::forward<decltype(ssp)>(ssp);
             ARCTICDB_DEBUG(log::version(), "Decoding slice {}", seg_slice_pair.second.key());
             return that->decode_into_slice(std::move(seg_slice_pair));
         });
@@ -341,24 +335,24 @@ struct SegmentFunctionTask : BaseTask {
 struct MemSegmentProcessingTask : BaseTask {
     std::shared_ptr<Store> store_;
     std::vector<std::shared_ptr<Clause>> clauses_;
-    std::optional<Composite<ProcessingSegment>> procs_;
+    std::optional<Composite<ProcessingUnit>> procs_;
 
     explicit MemSegmentProcessingTask(
-           const std::shared_ptr<Store> store,
+           const std::shared_ptr<Store>& store,
            std::vector<std::shared_ptr<Clause>> clauses,
-           std::optional<Composite<ProcessingSegment>>&& procs = std::nullopt) :
+           std::optional<Composite<ProcessingUnit>>&& procs = std::nullopt) :
         store_(store),
         clauses_(std::move(clauses)),
         procs_(std::move(procs)) {
     }
 
-    ProcessingSegment slice_to_segment(Composite<pipelines::SliceAndKey>&& is) {
+   static ProcessingUnit slice_to_segment(Composite<pipelines::SliceAndKey>&& is) {
         auto inputs = std::move(is);
-        return ProcessingSegment(inputs.as_range());
+        return ProcessingUnit(inputs.as_range());
     }
 
     [[nodiscard]]
-    Composite<ProcessingSegment> process(Composite<ProcessingSegment>&& proc){
+    Composite<ProcessingUnit> process(Composite<ProcessingUnit>&& proc){
         auto procs = std::move(proc);
         for(const auto& clause : clauses_) {
             procs = clause->process(store_, std::move(procs));
@@ -371,14 +365,14 @@ struct MemSegmentProcessingTask : BaseTask {
 
     ARCTICDB_MOVE_ONLY_DEFAULT(MemSegmentProcessingTask)
 
-    Composite<ProcessingSegment> operator()(Composite<pipelines::SliceAndKey>&& sk) {
-        return process(Composite<ProcessingSegment>(slice_to_segment(std::move(sk))));
+    Composite<ProcessingUnit> operator()(Composite<pipelines::SliceAndKey>&& sk) {
+        return process(Composite<ProcessingUnit>(slice_to_segment(std::move(sk))));
     }
 
-    Composite<ProcessingSegment> operator()() {
+    Composite<ProcessingUnit> operator()() {
         internal::check<ErrorCode::E_ASSERTION_FAILURE>(
                 procs_.has_value(),
-                "MemSegmentProcessingTask () operator expects processing segments to be provided in ctor");
+                "MemSegmentProcessingTask () operator expects processing units to be provided in ctor");
         return process(std::move(*procs_));
     }
 
