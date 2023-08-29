@@ -48,7 +48,7 @@ jobs:
                   mongodb: {
                     image: "mongo:4.4",
                     ports: 
-                      {27017:27017}
+                      {"27017:27017"}
                   }
                   # mongodb_2: { #second instance
                   #   image: "mongo:4.4",
