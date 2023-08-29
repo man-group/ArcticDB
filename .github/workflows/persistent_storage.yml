@@ -6,7 +6,7 @@ on:
       matrix:            {type: string, description: JSON string to feed into the matrix}
       python_deps_ids:   {default: '[""]', type: string, description: Follower test matrix parameter. JSON string.}
       python3:           {default: -1, type: number, description: Python 3 minor version}
-      arcticdb_version:  {default: "", type: string, description: The version of ArcticDB taht will be isntalled and used for seed/verify }
+      arcticdb_version:  {default: "", type: string, description: The version of ArcticDB that will be installed and used for seed/verify }
       # TODO: Maybe we should add these as GitHub variables
       bucket:            {default: 'arcticdb-ci-test-bucket-01', type: string, description: The name of the S3 bucket that we will test against}
       endpoint:          {default: 's3.eu-west-2.amazonaws.com', type: string, description: The address of the S3 endpoint}
@@ -55,10 +55,15 @@ jobs:
         run: |
           pip install arcticdb
 
-      - name: Install oldest(1.0.0) release
-        if: inputs.arcticdb_version == 'oldest'
+      - name: Install oldest(1.0.0) release for Linux
+        if: inputs.arcticdb_version == 'oldest' && matrix.os == 'linux'
         run: |
           pip install arcticdb==1.0.0
+
+      - name: Install oldest(1.1.0) release for Windows
+        if: inputs.arcticdb_version == 'oldest' && matrix.os == 'windows'
+        run: |
+          pip install arcticdb==1.1.0
 
       - name: Set persistent storage variables
         uses: ./.github/actions/set_persistent_storage_env_vars
@@ -71,7 +76,7 @@ jobs:
         if: inputs.job_type == 'seed'
         run: |
           echo "Running seed for ${{ env.ARCTICDB_PERSISTENT_STORAGE_UNIQUE_ID }} on ${{matrix.os}}_${{env.python_impl_name}}"
-          python python/arcticdb/util/storage_test.py --type seed
+          python python/arcticdb/util/storage_test.py --type seed --version ${{inputs.arcticdb_version}}
 
       - name: Verify the storage
         if: inputs.job_type == 'verify'

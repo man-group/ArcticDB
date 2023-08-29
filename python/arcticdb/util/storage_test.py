@@ -77,13 +77,13 @@ def is_strategy_branch_valid_format(input_string):
     return bool(match)
 
 
-def seed_library(ac):
+def seed_library(ac, version: str = ""):
     strategy_branch = os.getenv("ARCTICDB_PERSISTENT_STORAGE_STRATEGY_BRANCH")
 
     if not is_strategy_branch_valid_format(strategy_branch):
         raise ValueError(f"The strategy_branch: {strategy_branch} is not formatted correctly")
 
-    lib_name = f"seed_{strategy_branch}"
+    lib_name = f"seed_{version}{strategy_branch}"
     lib_name = normalize_lib_name(lib_name)
 
     # Each branch should create its own seed and it should be fresh on each run
@@ -121,6 +121,15 @@ if __name__ == "__main__":
     )
 
     parser.add_argument("-t", "--type", required=True)
+    parser.add_argument(
+        "-v",
+        "--version",
+        required=False,
+        help=(
+            "The version of ArcticDB that is used for seed, this is to make the name of the library that is seeded"
+            " unique"
+        ),
+    )
     args = parser.parse_args()
     job_type = str(args.type).lower()
     # TODO: Add support for other storages
@@ -129,7 +138,7 @@ if __name__ == "__main__":
     ac = Arctic(uri)
 
     if "seed" == job_type:
-        seed_library(ac)
+        seed_library(ac, args.version)
     elif "verify" == job_type:
         verify_library(ac)
     elif "cleanup" == job_type:
