@@ -22,7 +22,7 @@ namespace arcticdb::storage {
  * The Storages class abstracts over multiple physical stores and controls how ArcticDB read and write to multiple
  * ones.
  *
- * Reasons for Storages to exist:
+ * Possible future use-case for Storages:
  *  - Disaster recovery for Storages: if the first storage fails we can fall back to the second one, etc.
  *  - Tiered storage: recent data goes to a fast, comparatively expensive storage and then is gradually moved
  *  into a slower, cheaper one.

@@ -25,7 +25,10 @@ std::pair<VariantKey, std::optional<Segment>> lookup_match_in_dedup_map(
 
 /*
  * AsyncStore is a wrapper around a Store that provides async methods for writing and reading data.
- * It is used by the VersionStore to write data to the Store in a non-blocking way.
+ * It is used by the VersionStore to write data to the Store asynchronously.
+ * It also can be used to write data synchronously (using the `*_sync` methods) and
+ * to write batch of data (using the `batch_*` methods).
+ * It can return both uncompressed `SegmentInMemory` or compressed `Segment` depending on the method.
  */
 template<class ClockType = util::SysClock>
 class AsyncStore : public Store {
