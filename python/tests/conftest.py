@@ -172,7 +172,7 @@ def moto_s3_uri_incl_bucket(moto_s3_endpoint_and_credentials):
         ),
     ],
 )
-def arctic_client(request, moto_s3_uri_incl_bucket, tmpdir, encoding_version):
+def arctic_client(request, moto_s3_uri_incl_bucket, tmpdir, encoding_version, lib_name):
     if request.param == "S3":
         ac = Arctic(moto_s3_uri_incl_bucket, encoding_version)
     elif request.param == "Azure":
@@ -219,12 +219,12 @@ def azurite_azure_uri_incl_bucket(azurite_azure_uri, azure_client_and_create_con
 
 
 @pytest.fixture(scope="function")
-def arctic_library(request, arctic_client, lib_name):
+def arctic_library(request, arctic_client):
     if AZURE_SUPPORT:
         request.getfixturevalue("azure_client_and_create_container")
 
-    arctic_client.create_library(lib_name)
-    return arctic_client[lib_name]
+    arctic_client.create_library("pytest_test_lib")
+    return arctic_client["pytest_test_lib"]
 
 
 @pytest.fixture()
@@ -481,8 +481,14 @@ def mongo_test_uri(request):
     # Use MongoDB if it's running (useful in CI), otherwise spin one up with pytest-server-fixtures.
     # mongodb does not support prefix to differentiate different tests and the server is session-scoped
     # therefore lib_name is needed to be used to avoid reusing library name or list_versions check will fail
-    mongo_host = os.getenv("CI_MONGO_HOST", "localhost")
-    mongo_port = os.getenv("CI_MONGO_PORT", 27017)
+    if (
+        "--group" not in sys.argv or sys.argv[sys.argv.index("--group") + 1] == "1"
+    ):  # To detect pytest-split parallelization group in use
+        mongo_host = os.getenv("CI_MONGO_HOST", "localhost")
+        mongo_port = 27017
+    else:
+        mongo_host = os.getenv("CI_MONGO_HOST_2", "localhost")
+        mongo_port = 27017
     mongo_path = f"{mongo_host}:{mongo_port}"
     try:
         res = requests.get(f"http://{mongo_path}")
@@ -493,10 +499,16 @@ def mongo_test_uri(request):
     if have_running_mongo:
         uri = f"mongodb://{mongo_path}"
     else:
-        mongo_server_sess = request.getfixturevalue("mongo_server")
-        uri = f"mongodb://{mongo_server_sess.hostname}:{mongo_server_sess.port}"
+        mongo_server = request.getfixturevalue("mongo_server")
+        uri = f"mongodb://{mongo_server.hostname}:{mongo_server.port}"
 
-    return uri
+    yield uri
+
+    # mongodb does not support prefix to differentiate different tests and the server is session-scoped
+    mongo_client = pymongo.MongoClient(uri)
+    for db_name in mongo_client.list_database_names():
+        if db_name not in ["local", "admin", "apiomat", "config"]:
+            mongo_client.drop_database(db_name)
 
 
 @pytest.fixture
