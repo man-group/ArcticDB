@@ -8,6 +8,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 import numpy as np
 from pandas import DataFrame, Timestamp
 import pytest
+from retry import retry
 
 from arcticdb.version_store import NativeVersionStore, VersionedItem
 from arcticdb.exceptions import ArcticNativeNotYetImplemented

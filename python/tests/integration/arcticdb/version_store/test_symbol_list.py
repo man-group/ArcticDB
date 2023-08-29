@@ -7,7 +7,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 """
 import numpy as np
 import pytest
-
+from retry import retry
 from arcticdb.config import Defaults
 from arcticdb.util.test import sample_dataframe
 from arcticdb.version_store._store import NativeVersionStore

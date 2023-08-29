@@ -21,6 +21,7 @@ from collections import namedtuple
 from datetime import datetime
 from numpy.testing import assert_array_equal
 from pytz import timezone
+from retry import retry
 
 from arcticdb.exceptions import (
     ArcticNativeNotYetImplemented,
