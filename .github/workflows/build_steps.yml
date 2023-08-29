@@ -274,7 +274,9 @@ jobs:
           strategy_branch: "${{ env.distinguishing_name }}"
       
       - name: Run test
-        run: build_tooling/parallel_test.sh tests/${{matrix.type}}
+        run: |
+          build_tooling/parallel_test.sh tests/${{matrix.type}}
+          ls
         env:
           TEST_OUTPUT_DIR: ${{runner.temp}}
           # Use the Mongo created in the service container above to test against
