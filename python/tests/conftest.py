@@ -60,6 +60,7 @@ if AZURE_SUPPORT:
 configure_test_logger()
 
 bucket_id = 0
+use_mongo_server_first_instance = True
 # Use a smaller memory mapped limit for all tests
 MsgPackNormalizer.MMAP_DEFAULT_SIZE = 20 * (1 << 20)
 
@@ -162,7 +163,7 @@ def moto_s3_uri_incl_bucket(moto_s3_endpoint_and_credentials):
         ),
     ],
 )
-def arctic_client(request, moto_s3_uri_incl_bucket, tmpdir, encoding_version):
+def arctic_client(request, moto_s3_uri_incl_bucket, tmpdir, encoding_version, lib_name):
     if request.param == "S3":
         ac = Arctic(moto_s3_uri_incl_bucket, encoding_version)
     elif request.param == "Azure":
@@ -174,7 +175,10 @@ def arctic_client(request, moto_s3_uri_incl_bucket, tmpdir, encoding_version):
     else:
         raise NotImplementedError()
 
-    assert not ac.list_libraries()
+    if request.param == "Mongo":
+        assert lib_name not in ac.list_libraries()
+    else:
+        assert not ac.list_libraries()
     yield ac
 
 
@@ -432,14 +436,28 @@ def azure_store_factory(lib_name, arcticdb_test_azure_config, azure_client_and_c
             lib.version_store.clear()
 
 
+def get_mongo_server_instance():
+    global use_mongo_server_first_instance
+    while True:
+        if use_mongo_server_first_instance:
+            yield os.getenv("CI_MONGO_HOST", "localhost"), 27017
+        else:
+            yield os.getenv("CI_MONGO_HOST2", "localhost"), 27018
+        use_mongo_server_first_instance = not use_mongo_server_first_instance
+
+
+@pytest.fixture(scope="module")
+def mongo_server_instance():
+    return next(get_mongo_server_instance())
+
+
 @pytest.fixture
-def mongo_test_uri(request):
+def mongo_test_uri(request, mongo_server_instance):
     """Similar capability to `s3_store_factory`, but uses a mongo store."""
     # Use MongoDB if it's running (useful in CI), otherwise spin one up with pytest-server-fixtures.
     # mongodb does not support prefix to differentiate different tests and the server is session-scoped
     # therefore lib_name is needed to be used to avoid reusing library name or list_versions check will fail
-    mongo_host = os.getenv("CI_MONGO_HOST", "localhost")
-    mongo_port = os.getenv("CI_MONGO_PORT", 27017)
+    mongo_host, mongo_port = mongo_server_instance
     mongo_path = f"{mongo_host}:{mongo_port}"
     try:
         res = requests.get(f"http://{mongo_path}")
@@ -450,8 +468,8 @@ def mongo_test_uri(request):
     if have_running_mongo:
         uri = f"mongodb://{mongo_path}"
     else:
-        mongo_server_sess = request.getfixturevalue("mongo_server")
-        uri = f"mongodb://{mongo_server_sess.hostname}:{mongo_server_sess.port}"
+        mongo_server = request.getfixturevalue("mongo_server")
+        uri = f"mongodb://{mongo_server.hostname}:{mongo_server.port}"
 
     return uri
 

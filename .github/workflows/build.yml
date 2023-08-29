@@ -45,7 +45,16 @@ jobs:
                 symbols: "*.gz" # Please update publish.yml when changing this!!
                 do_not_archive: ["*.so", "*.[ao]", "vcpkg_installed"]
                 test_services:
-                  mongodb: { image: "mongo:4.4" }
+                  mongodb: {
+                    image: "mongo:4.4",
+                    ports: 
+                      - 27017:27017
+                  } 
+                  mongodb_2: { #second instance
+                    image: "mongo:4.4",
+                    ports: 
+                      - 27018:27018
+                  }
             windows_matrix:
               - os: windows
                 distro: windows-latest
