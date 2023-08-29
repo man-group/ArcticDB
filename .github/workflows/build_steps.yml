@@ -276,14 +276,18 @@ jobs:
       - name: Run test
         run: |
           build_tooling/parallel_test.sh tests/${{matrix.type}}
-          ls
-          cat aws*
         env:
           TEST_OUTPUT_DIR: ${{runner.temp}}
           # Use the Mongo created in the service container above to test against
           CI_MONGO_HOST: mongodb
           ARCTICDB_PERSISTENT_STORAGE_LIB_NAME: 'test_${{ env.ARCTICDB_PERSISTENT_STORAGE_UNIQUE_ID }}_${{matrix.os}}_${{env.python_impl_name}}${{matrix.python_deps_id}}'
   
+      - name: Print AWS Log
+        if: failure()
+        run: |
+          ls
+          cat aws*
+          
 
       - name: Collect crash dumps (Windows)
         if: matrix.os == 'windows' && failure()
