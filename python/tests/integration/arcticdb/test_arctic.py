@@ -172,22 +172,20 @@ def test_library_options(arctic_client):
     assert lib._nvs._lib_cfg.lib_desc.version.encoding_version == EncodingVersion.V2
 
 
-def test_separation_between_libraries(object_storage_uri_incl_bucket, lib_name):
+def test_separation_between_libraries(object_storage_uri_incl_bucket):
     """Validate that symbols in one library are not exposed in another."""
     ac = Arctic(object_storage_uri_incl_bucket)
     assert ac.list_libraries() == []
 
-    lib = lib_name
-    lib2 = f"{lib_name}2"
-    ac.create_library(lib)
-    ac.create_library(lib2)
+    ac.create_library("pytest_test_lib")
+    ac.create_library("pytest_test_lib_2")
 
-    assert ac.list_libraries() == [lib, lib2]
+    assert ac.list_libraries() == ["pytest_test_lib", "pytest_test_lib_2"]
 
-    ac[lib].write("test_1", pd.DataFrame())
-    ac[lib2].write("test_2", pd.DataFrame())
-    assert ac[lib].list_symbols() == ["test_1"]
-    assert ac[lib2].list_symbols() == ["test_2"]
+    ac["pytest_test_lib"].write("test_1", pd.DataFrame())
+    ac["pytest_test_lib_2"].write("test_2", pd.DataFrame())
+    assert ac["pytest_test_lib"].list_symbols() == ["test_1"]
+    assert ac["pytest_test_lib_2"].list_symbols() == ["test_2"]
 
 
 def get_path_prefix_option(uri):
@@ -957,11 +955,11 @@ def test_tail(arctic_library):
 
 
 @pytest.mark.parametrize("dedup", [True, False])
-def test_dedup(object_storage_uri_incl_bucket, dedup, lib_name):
+def test_dedup(object_storage_uri_incl_bucket, dedup):
     ac = Arctic(object_storage_uri_incl_bucket)
     assert ac.list_libraries() == []
-    ac.create_library(lib_name, LibraryOptions(dedup=dedup))
-    lib = ac[lib_name]
+    ac.create_library("pytest_test_library", LibraryOptions(dedup=dedup))
+    lib = ac["pytest_test_library"]
     symbol = "test_dedup"
     lib.write_pickle(symbol, 1)
     lib.write_pickle(symbol, 1, prune_previous_versions=False)
@@ -969,16 +967,16 @@ def test_dedup(object_storage_uri_incl_bucket, dedup, lib_name):
     assert data_key_version == 0 if dedup else 1
 
 
-def test_segment_slicing(object_storage_uri_incl_bucket, lib_name):
+def test_segment_slicing(object_storage_uri_incl_bucket):
     ac = Arctic(object_storage_uri_incl_bucket)
     assert ac.list_libraries() == []
     rows_per_segment = 5
     columns_per_segment = 2
     ac.create_library(
-        lib_name,
+        "pytest_test_library",
         LibraryOptions(rows_per_segment=rows_per_segment, columns_per_segment=columns_per_segment),
     )
-    lib = ac[lib_name]
+    lib = ac["pytest_test_library"]
     symbol = "test_segment_slicing"
     rows = 12
     columns = 3
