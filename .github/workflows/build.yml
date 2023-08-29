@@ -50,11 +50,11 @@ jobs:
                     ports: 
                       {"27017:27017"}
                   }
-                  # mongodb_2: { #second instance
-                  #   image: "mongo:4.4",
-                  #   ports: 
-                  #     - 27017:27018
-                  # }
+                  mongodb_2: { #second instance
+                    image: "mongo:4.4",
+                    ports: 
+                      {"27017:27018"}
+                  }
             windows_matrix:
               - os: windows
                 distro: windows-latest
