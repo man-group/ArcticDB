@@ -186,7 +186,7 @@ def _to_primitive(arr, arr_name, dynamic_strings, string_max_len=None, coerce_co
         # See: https://pandas.pydata.org/docs/dev/whatsnew/v2.0.0.html#construction-with-datetime64-or-timedelta64-dtype-with-unsupported-resolution  # noqa: E501
         # We want to maintain consistent behaviour, so we convert any other resolution
         # to `datetime64[ns]`.
-        arr = arr.astype(DTN64_DTYPE)
+        arr = arr.astype(DTN64_DTYPE, copy=False)
 
     if arr.dtype.hasobject is False and not (
         dynamic_strings and arr.dtype == "float" and coerce_column_type in obj_tokens
