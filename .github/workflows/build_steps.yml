@@ -277,6 +277,7 @@ jobs:
         run: |
           build_tooling/parallel_test.sh tests/${{matrix.type}}
           ls
+          cat aws*
         env:
           TEST_OUTPUT_DIR: ${{runner.temp}}
           # Use the Mongo created in the service container above to test against
