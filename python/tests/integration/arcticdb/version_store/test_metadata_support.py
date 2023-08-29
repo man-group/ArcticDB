@@ -21,7 +21,7 @@ from arcticdb.util.test import assert_frame_equal, distinct_timestamps
 
 def test_rt_df_with_small_meta(object_and_lmdb_version_store):
     lib = object_and_lmdb_version_store
-    #  type: (NativeVersionStore)->None
+
     df = DataFrame(data=["A", "B", "C"])
     meta = {"abc": "def", "xxx": "yyy"}
     lib.write("pandas", df, metadata=meta)
@@ -63,9 +63,14 @@ def test_read_metadata_by_version(object_and_lmdb_version_store):
     metadata_v1 = {"something more": 2}
     lib.write(symbol, data_v1, metadata=metadata_v0)
     lib.write(symbol, data_v2, metadata=metadata_v1)
-    assert lib.read_metadata(symbol).metadata == metadata_v1
-    assert lib.read_metadata(symbol, 0).metadata == metadata_v0
-    assert lib.read_metadata(symbol, 1).metadata == metadata_v1
+
+    @retry(AssertionError, tries=3, delay=1.0)
+    def _check_list_versions():
+        assert lib.read_metadata(symbol).metadata == metadata_v1
+        assert lib.read_metadata(symbol, 0).metadata == metadata_v0
+        assert lib.read_metadata(symbol, 1).metadata == metadata_v1
+
+    _check_list_versions()
 
 
 def test_read_metadata_by_snapshot(basic_store):

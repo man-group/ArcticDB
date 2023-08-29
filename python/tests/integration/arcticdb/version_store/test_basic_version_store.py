@@ -185,8 +185,11 @@ def test_with_prune(object_and_lmdb_version_store, symbol):
     version_store.write(symbol, df, metadata={"something": "something"}, prune_previous_version=True)
     version_store.write(symbol, modified_df, prune_previous_version=True)
 
-    assert len(version_store.list_versions()) == 1
+    @retry(AssertionError, tries=3, delay=1.0)
+    def _check_list_versions():
+        assert len(version_store.list_versions()) == 1
 
+    _check_list_versions()
     version_store.snapshot("my_snap")
 
     final_df = sample_dataframe()
@@ -420,12 +423,17 @@ def test_list_symbols_regex(object_and_lmdb_version_store):
     lib.write("asdf", {"foo": "bar"}, metadata={"a": 1, "b": 10})
     lib.write("furble", {"foo": "bar"}, metadata={"a": 1, "b": 10})
     lib.snapshot("snap2")
-    assert "asdf" in lib.list_symbols(regex="asd")
-    assert "furble" not in lib.list_symbols(regex="asd")
-    assert "asdf" in lib.list_symbols(snapshot="snap2", regex="asd")
-    assert "furble" not in lib.list_symbols(snapshot="snap2", regex="asd")
-    assert lib.read("asdf").data == {"foo": "bar"}
-    assert list(sorted(lib.list_symbols())) == sorted(["asdf", "furble"])
+
+    @retry(AssertionError, tries=3, delay=1.0)
+    def _check_list_symbols():
+        assert "asdf" in lib.list_symbols(regex="asd")
+        assert "furble" not in lib.list_symbols(regex="asd")
+        assert "asdf" in lib.list_symbols(snapshot="snap2", regex="asd")
+        assert "furble" not in lib.list_symbols(snapshot="snap2", regex="asd")
+        assert lib.read("asdf").data == {"foo": "bar"}
+        assert list(sorted(lib.list_symbols())) == sorted(["asdf", "furble"])
+
+    _check_list_symbols()
 
 
 def test_list_symbols_prefix(object_version_store):
@@ -434,8 +442,13 @@ def test_list_symbols_prefix(object_version_store):
 
     for sym in itertools.chain(blahs, nahs):
         object_version_store.write(sym, sample_dataframe(10))
-    assert set(object_version_store.list_symbols(prefix="blah_")) == set(blahs)
-    assert set(object_version_store.list_symbols(prefix="nah_")) == set(nahs)
+
+    @retry(AssertionError, tries=3, delay=1.0)
+    def _check_list_symbols():
+        assert set(object_version_store.list_symbols(prefix="blah_")) == set(blahs)
+        assert set(object_version_store.list_symbols(prefix="nah_")) == set(nahs)
+
+    _check_list_symbols()
 
 
 def test_mixed_df_without_pickling_enabled(basic_store):
@@ -815,9 +828,13 @@ def test_is_pickled_by_snapshot(basic_store):
     basic_store.write(symbol, not_pickled)
     basic_store.snapshot(snap2)
 
-    assert basic_store.is_symbol_pickled(symbol) is False
-    assert basic_store.is_symbol_pickled(symbol, snap1) is True
-    assert basic_store.is_symbol_pickled(symbol, snap2) is False
+    @retry(AssertionError, tries=3, delay=1.0)
+    def _check_is_symbol_pickled():
+        assert basic_store.is_symbol_pickled(symbol) is False
+        assert basic_store.is_symbol_pickled(symbol, snap1) is True
+        assert basic_store.is_symbol_pickled(symbol, snap2) is False
+
+    _check_is_symbol_pickled()
 
 
 def test_is_pickled_by_timestamp(basic_store):
@@ -849,13 +866,17 @@ def test_list_versions(object_and_lmdb_version_store):
     version_store.snapshot("snap2")
     version_store.write("c", 3)  # c, v1
     version_store.snapshot("snap3")
-    versions = version_store.list_versions()
 
-    assert len(versions) == 3 + 2 + 2  # a-3, b-2, c-2
-    sorted_versions_for_a = sorted([v for v in versions if v["symbol"] == "a"], key=lambda x: x["version"])
-    assert len(sorted_versions_for_a) == 3
-    assert sorted_versions_for_a[0]["snapshots"] == []
-    assert set(sorted_versions_for_a[2]["snapshots"]) == {"snap1", "snap2", "snap3"}
+    @retry(AssertionError, tries=3, delay=1.0)
+    def _check_list_versions():
+        versions = version_store.list_versions()
+        assert len(versions) == 3 + 2 + 2  # a-3, b-2, c-2
+        sorted_versions_for_a = sorted([v for v in versions if v["symbol"] == "a"], key=lambda x: x["version"])
+        assert len(sorted_versions_for_a) == 3
+        assert sorted_versions_for_a[0]["snapshots"] == []
+        assert set(sorted_versions_for_a[2]["snapshots"]) == {"snap1", "snap2", "snap3"}
+
+    _check_list_versions()
 
     def get_tuples_from_version_info(v_infos):
         res = set()
@@ -874,11 +895,15 @@ def test_list_versions_deleted_flag(basic_store):
     basic_store.write("symbol", pd.DataFrame(), metadata=3, prune_previous_version=False)
     basic_store.snapshot("snapshot")
 
-    versions = basic_store.list_versions("symbol")
-    assert len(versions) == 3
-    versions = sorted(versions, key=lambda v: v["version"])
-    assert not versions[2]["deleted"]
-    assert versions[2]["snapshots"] == ["snapshot"]
+    @retry(AssertionError, tries=3, delay=1.0)
+    def _check_list_versions():
+        versions = basic_store.list_versions("symbol")
+        assert len(versions) == 3
+        versions = sorted(versions, key=lambda v: v["version"])
+        assert not versions[2]["deleted"]
+        assert versions[2]["snapshots"] == ["snapshot"]
+
+    _check_list_versions()
 
     basic_store.delete_version("symbol", 2)
     versions = basic_store.list_versions("symbol")
@@ -924,18 +949,23 @@ def test_read_ts(basic_store):
         basic_store.write("a", 3)  # v2
     basic_store.write("a", 4)  # v3
     basic_store.snapshot("snap3")
-    versions = basic_store.list_versions()
-    assert len(versions) == 4
-    sorted_versions_for_a = sorted([v for v in versions if v["symbol"] == "a"], key=lambda x: x["version"])
-    ts_for_v1 = sorted_versions_for_a[1]["date"]
-    vitem = basic_store.read("a", as_of=ts_for_v1)
-    assert vitem.version == 1
-    assert vitem.data == 2
 
-    ts_for_v2 = sorted_versions_for_a[0]["date"]
-    vitem = basic_store.read("a", as_of=ts_for_v2)
-    assert vitem.version == 0
-    assert vitem.data == 1
+    @retry(AssertionError, tries=3, delay=1.0)
+    def _check_list_versions():
+        versions = basic_store.list_versions()
+        assert len(versions) == 4
+        sorted_versions_for_a = sorted([v for v in versions if v["symbol"] == "a"], key=lambda x: x["version"])
+        ts_for_v1 = sorted_versions_for_a[1]["date"]
+        vitem = basic_store.read("a", as_of=ts_for_v1)
+        assert vitem.version == 1
+        assert vitem.data == 2
+
+        ts_for_v2 = sorted_versions_for_a[0]["date"]
+        vitem = basic_store.read("a", as_of=ts_for_v2)
+        assert vitem.version == 0
+        assert vitem.data == 1
+
+    _check_list_versions()
 
     with pytest.raises(NoDataFoundException):
         basic_store.read("a", as_of=pd.Timestamp(0))

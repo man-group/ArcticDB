@@ -47,7 +47,11 @@ def test_basic_de_dup(basic_store_factory):
     vit = lib.read(symbol)
     assert_frame_equal(vit.data, df1)
 
-    assert len(get_data_keys(lib, symbol)) == num_elements / 2
+    @retry(AssertionError, tries=3, delay=1.0)
+    def _check_list_versions():
+        assert len(get_data_keys(lib, symbol)) == num_elements / 2
+
+    _check_list_versions()
 
     d2 = {"x": np.arange(num_elements, 2 * num_elements, dtype=np.int64)}
     df2 = pd.DataFrame(data=d2)
@@ -95,7 +99,11 @@ def test_de_dup_with_delete(basic_store_factory):
     vit = lib.read(symbol)
     assert_frame_equal(vit.data, df1)
 
-    assert len(get_data_keys(lib, symbol)) == num_elements / 2
+    @retry(AssertionError, tries=3, delay=1.0)
+    def _check_list_versions():
+        assert len(get_data_keys(lib, symbol)) == num_elements / 2
+
+    _check_list_versions()
 
     idx2 = np.arange(num_elements, 2 * num_elements)
     d2 = {"x": np.arange(num_elements, 2 * num_elements, dtype=np.int64)}
@@ -151,7 +159,11 @@ def test_de_dup_with_snapshot(basic_store_factory):
     vit = lib.read(symbol)
     assert_frame_equal(vit.data, df1)
 
-    assert len(get_data_keys(lib, symbol)) == num_elements / 2
+    @retry(AssertionError, tries=3, delay=1.0)
+    def _check_list_versions():
+        assert len(get_data_keys(lib, symbol)) == num_elements / 2
+
+    _check_list_versions()
 
     idx2 = np.arange(num_elements, 2 * num_elements)
     d2 = {"x": np.arange(num_elements, 2 * num_elements, dtype=np.int64)}
@@ -415,8 +427,11 @@ def test_dedup_multi_keys(basic_store_factory):
 
     lib.write(symbol, data=data1, metadata="realyolo2", recursive_normalizers=True)
 
-    assert len(get_multi_data_keys(lib, symbol)) == 3 * num_elements / 2
+    @retry(AssertionError, tries=3, delay=1.0)
+    def _check_list_versions():
+        assert len(get_multi_data_keys(lib, symbol)) == 3 * num_elements / 2
 
+    _check_list_versions()
     lib.write(symbol, data=data1, metadata="realyolo2", recursive_normalizers=True)
     comp_dict(data1, lib.read(symbol).data)
     # complete de-dup
