@@ -197,18 +197,7 @@ def _to_primitive(arr, arr_name, dynamic_strings, string_max_len=None, coerce_co
 
     if len(arr) == 0:
         if coerce_column_type is None:
-            if IS_PANDAS_TWO:
-                # Before Pandas 2.0, empty series' dtype was float, but as of Pandas 2.0. empty series' dtype became object.
-                # See: https://github.com/pandas-dev/pandas/issues/17261
-                # We want to maintain consistent behaviour, so we treat empty series as containing floats.
-                # val_type = ValueType::FLOAT;
-                coerce_column_type = float
-                return arr.astype(coerce_column_type)
-            else:
-                raise ArcticNativeNotYetImplemented(
-                    "coercing column type is required when empty column of object type, Column type={} for column={}"
-                    .format(arr.dtype, arr_name)
-                )
+            return None
         return arr.astype(coerce_column_type)
 
     # Coerce column allows us to force a column to the given type, which means we can skip expensive iterations in
