@@ -46,12 +46,13 @@ from arcticdb.util.test import (
     assert_series_equal,
     config_context,
     distinct_timestamps,
+    RUN_MONGO_TEST,
 )
 from arcticdb_ext.tools import AZURE_SUPPORT
 from tests.util.date import DateRange
 
 
-if sys.platform == "linux":
+if RUN_MONGO_TEST:
     SMOKE_TEST_VERSION_STORES = [
         "lmdb_version_store_v1",
         "lmdb_version_store_v2",
@@ -60,9 +61,6 @@ if sys.platform == "linux":
         "mongo_version_store",
     ]
 else:
-    # leave out Mongo as spinning up a Mongo instance in Windows CI is fiddly, and Mongo support is only
-    # currently required for Linux for internal use.
-    # We also skip it on Mac as github actions containers don't work with macos
     SMOKE_TEST_VERSION_STORES = [
         "lmdb_version_store_v1",
         "lmdb_version_store_v2",

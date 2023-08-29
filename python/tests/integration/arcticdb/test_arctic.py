@@ -37,7 +37,7 @@ from datetime import datetime, date, timezone, timedelta
 import numpy as np
 from arcticdb_ext.tools import AZURE_SUPPORT
 from numpy import datetime64
-from arcticdb.util.test import assert_frame_equal, random_strings_of_length, random_floats
+from arcticdb.util.test import assert_frame_equal, random_strings_of_length, random_floats, RUN_MONGO_TEST
 import random
 
 if AZURE_SUPPORT:
@@ -193,20 +193,22 @@ def test_library_options(arctic_client):
     assert lib._nvs._lib_cfg.lib_desc.version.encoding_version == EncodingVersion.V2
 
 
-def test_separation_between_libraries(object_storage_uri_incl_bucket):
+def test_separation_between_libraries(object_storage_uri_incl_bucket, lib_name):
     """Validate that symbols in one library are not exposed in another."""
     ac = Arctic(object_storage_uri_incl_bucket)
     assert ac.list_libraries() == []
 
-    ac.create_library("pytest_test_lib")
-    ac.create_library("pytest_test_lib_2")
+    lib = lib_name
+    lib2 = f"{lib_name}2"
+    ac.create_library(lib)
+    ac.create_library(lib2)
 
-    assert ac.list_libraries() == ["pytest_test_lib", "pytest_test_lib_2"]
+    assert ac.list_libraries() == [lib, lib2]
 
-    ac["pytest_test_lib"].write("test_1", pd.DataFrame())
-    ac["pytest_test_lib_2"].write("test_2", pd.DataFrame())
-    assert ac["pytest_test_lib"].list_symbols() == ["test_1"]
-    assert ac["pytest_test_lib_2"].list_symbols() == ["test_2"]
+    ac[lib].write("test_1", pd.DataFrame())
+    ac[lib2].write("test_2", pd.DataFrame())
+    assert ac[lib].list_symbols() == ["test_1"]
+    assert ac[lib2].list_symbols() == ["test_2"]
 
 
 def get_path_prefix_option(uri):
@@ -216,18 +218,28 @@ def get_path_prefix_option(uri):
         return "&path_prefix"
 
 
-def test_separation_between_libraries_with_prefixes(object_storage_uri_incl_bucket):
+@pytest.mark.parametrize(
+    "lib_type",
+    [
+        "moto_s3_uri_incl_bucket",
+        pytest.param(
+            "azurite_azure_uri_incl_bucket",
+            marks=pytest.mark.skipif(not AZURE_SUPPORT, reason="Pending Azure Storge Conda support"),
+        ),
+    ],
+)
+def test_separation_between_libraries_with_prefixes(lib_type, request):
     """The motivation for the prefix feature is that separate users want to be able to create libraries
     with the same name in the same bucket without over-writing each other's work. This can be useful when
     creating a new bucket is time-consuming, for example due to organisational issues.
     """
-
-    option = get_path_prefix_option(object_storage_uri_incl_bucket)
-    mercury_uri = f"{object_storage_uri_incl_bucket}{option}=/planet/mercury"
+    lib = request.getfixturevalue(lib_type)
+    option = get_path_prefix_option(lib)
+    mercury_uri = f"{lib}{option}=/planet/mercury"
     ac_mercury = Arctic(mercury_uri)
     assert ac_mercury.list_libraries() == []
 
-    mars_uri = f"{object_storage_uri_incl_bucket}{option}=/planet/mars"
+    mars_uri = f"{lib}{option}=/planet/mars"
     ac_mars = Arctic(mars_uri)
     assert ac_mars.list_libraries() == []
 
@@ -534,6 +546,7 @@ def test_delete_date_range(arctic_library):
     assert lib["symbol"].version == 1
 
 
+@pytest.mark.skipif(not RUN_MONGO_TEST, reason="Mongo test on windows is fiddly")
 def test_mongo_repr(mongo_test_uri):
     max_pool_size = 10
     min_pool_size = 100
@@ -965,11 +978,11 @@ def test_tail(arctic_library):
 
 
 @pytest.mark.parametrize("dedup", [True, False])
-def test_dedup(object_storage_uri_incl_bucket, dedup):
+def test_dedup(object_storage_uri_incl_bucket, dedup, lib_name):
     ac = Arctic(object_storage_uri_incl_bucket)
     assert ac.list_libraries() == []
-    ac.create_library("pytest_test_library", LibraryOptions(dedup=dedup))
-    lib = ac["pytest_test_library"]
+    ac.create_library(lib_name, LibraryOptions(dedup=dedup))
+    lib = ac[lib_name]
     symbol = "test_dedup"
     lib.write_pickle(symbol, 1)
     lib.write_pickle(symbol, 1, prune_previous_versions=False)
@@ -977,16 +990,16 @@ def test_dedup(object_storage_uri_incl_bucket, dedup):
     assert data_key_version == 0 if dedup else 1
 
 
-def test_segment_slicing(object_storage_uri_incl_bucket):
+def test_segment_slicing(object_storage_uri_incl_bucket, lib_name):
     ac = Arctic(object_storage_uri_incl_bucket)
     assert ac.list_libraries() == []
     rows_per_segment = 5
     columns_per_segment = 2
     ac.create_library(
-        "pytest_test_library",
+        lib_name,
         LibraryOptions(rows_per_segment=rows_per_segment, columns_per_segment=columns_per_segment),
     )
-    lib = ac["pytest_test_library"]
+    lib = ac[lib_name]
     symbol = "test_segment_slicing"
     rows = 12
     columns = 3
