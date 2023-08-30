@@ -436,28 +436,18 @@ def azure_store_factory(lib_name, arcticdb_test_azure_config, azure_client_and_c
             lib.version_store.clear()
 
 
-def get_mongo_server_instance():
-    global use_mongo_server_first_instance
-    while True:
-        if use_mongo_server_first_instance:
-            yield os.getenv("CI_MONGO_HOST", "localhost"), 27017
-        else:
-            yield os.getenv("CI_MONGO_HOST2", "localhost"), 27018
-        use_mongo_server_first_instance = not use_mongo_server_first_instance
-
-
-@pytest.fixture(scope="module")
-def mongo_server_instance():
-    return next(get_mongo_server_instance())
-
-
 @pytest.fixture
-def mongo_test_uri(request, mongo_server_instance):
+def mongo_test_uri(request):
     """Similar capability to `s3_store_factory`, but uses a mongo store."""
     # Use MongoDB if it's running (useful in CI), otherwise spin one up with pytest-server-fixtures.
     # mongodb does not support prefix to differentiate different tests and the server is session-scoped
     # therefore lib_name is needed to be used to avoid reusing library name or list_versions check will fail
-    mongo_host, mongo_port = mongo_server_instance
+    if "--splits" not in sys.argv or sys.argv[sys.argv.index("--splits") + 1] == "1":
+        mongo_host = os.getenv("CI_MONGO_HOST", "localhost")
+        mongo_port = 27017
+    else:
+        mongo_host = os.getenv("CI_MONGO_HOST2", "localhost")
+        mongo_port = 27018
     print(f"mongo_host: {mongo_host} mongo_port: {mongo_port}")  # 20230830
     mongo_path = f"{mongo_host}:{mongo_port}"
     try:
