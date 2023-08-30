@@ -102,8 +102,12 @@ public:
                 using RawType = typename DataTypeTag::raw_type;
                 if constexpr (is_sequence_type(DataTypeTag::data_type))
                     return c(that->parent_->string_at(that->row_id_, position_t(that->column_id_)), std::string_view{field.name()}, field.type());
-                else
+                else if constexpr (is_numeric_type(DataTypeTag::data_type) || is_bool_type(DataTypeTag::data_type))
                     return c(that->parent_->scalar_at<RawType>(that->row_id_, that->column_id_), std::string_view{field.name()}, field.type());
+                else if constexpr(is_empty_type(DataTypeTag::data_type))
+                    internal::raise<ErrorCode::E_ASSERTION_FAILURE>("visit_field does not support empty-type columns");
+                else
+                    internal::raise<ErrorCode::E_ASSERTION_FAILURE>("visit_field called with unexpected column type");
             });
         }
 
@@ -285,25 +289,30 @@ public:
         }
 
         template<class S>
-            std::optional<S> scalar_at(std::size_t col) const {
+        std::optional<S> scalar_at(std::size_t col) const {
             parent_->check_magic();
             const auto& type_desc = parent_->column_descriptor(col).type();
             std::optional<S> val;
-            type_desc.visit_tag([that=this, col, &val](auto impl) {
+            type_desc.visit_tag([this, col, &val](auto impl) {
                 using T = std::decay_t<decltype(impl)>;
                 using RawType = typename T::DataTypeTag::raw_type;
                 if constexpr (T::DimensionTag::value == Dimension::Dim0) {
                     if constexpr (is_sequence_type(T::DataTypeTag::data_type)) {
                         // test only for now
-                        throw std::runtime_error("string type not implemented");
+                        internal::raise<ErrorCode::E_ASSERTION_FAILURE>("string type not implemented");
+                    } else if constexpr(is_numeric_type(T::DataTypeTag::data_type) || is_bool_type(T::DataTypeTag::data_type)) {
+                        if constexpr(std::is_same_v<RawType, S>) {
+                            val = parent_->scalar_at<RawType>(row_id_, col);
+                        } else {
+                            internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Type mismatch in scalar access");
+                        }
+                    } else if constexpr(is_empty_type(T::DataTypeTag::data_type)) {
+                        internal::raise<ErrorCode::E_ASSERTION_FAILURE>("scalar_at not supported with empty-type columns");
                     } else {
-                        if constexpr(std::is_same_v<RawType, S>)
-                        val = that->parent_->scalar_at<RawType>(that->row_id_, col);
-                        else
-                            util::raise_rte("Type mismatch in scalar access");
+                        internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Unexpected data type in scalar access");
                     }
                 } else {
-                    throw std::runtime_error("Scalar method called on multidimensional column");
+                    internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Scalar method called on multidimensional column");
                 }
             });
             return val;
@@ -646,6 +655,8 @@ public:
     template<typename T>
     std::optional<T> scalar_at(position_t row, position_t col) const {
         util::check_arg(size_t(row) < row_count(), "Segment index {} out of bounds in scalar", row);
+        internal::check<ErrorCode::E_ASSERTION_FAILURE>(!is_empty_type(column(col).type().data_type()),
+                                                        "scalar_at called with empty-type column");
         return column(col).scalar_at<T>(row);
     }
 
@@ -832,7 +843,7 @@ public:
             return false;
 
         for(auto col = 0u; col < left.columns_.size(); ++col) {
-            if(is_sequence_type(left.column(col).type().data_type())) {
+            if (is_sequence_type(left.column(col).type().data_type())) {
                 const auto& left_col = left.column(col);
                 const auto& right_col = right.column(col);
                 if(left_col.type() != right_col.type())
@@ -844,10 +855,14 @@ public:
                 for(auto row = 0u; row < left_col.row_count(); ++row)
                     if(left.string_at(row, col) != right.string_at(row, col))
                         return false;
-            }
-            else {
+            } else if (is_numeric_type(left.column(col).type().data_type()) || is_bool_type(left.column(col).type().data_type())) {
                 if (left.column(col) != right.column(col))
                     return false;
+            } else if (is_empty_type(left.column(col).type().data_type())) {
+                if (!is_empty_type(right.column(col).type().data_type()))
+                    return false;
+            } else {
+                internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Unexpected data type in SegmentInMemory equality check");
             }
         }
         return true;
@@ -954,7 +969,8 @@ public:
         for(const auto& column : folly::enumerate(columns())) {
             (*column)->type().visit_tag([&] (auto type_desc_tag){
                 using TypeDescriptorTag =  decltype(type_desc_tag);
-                using RawType = typename TypeDescriptorTag::DataTypeTag::raw_type;
+                using DataTypeTag = typename TypeDescriptorTag::DataTypeTag;
+                using RawType = typename DataTypeTag::raw_type;
                 const util::BitSet* final_bitset;
                 util::BitSet bitset_including_sparse;
 
@@ -1007,7 +1023,7 @@ public:
                             }
                             auto offset = sparse_map.value().rank(*bitset_iter, *sparse_idx) - row_count_so_far - 1;
                             auto value = *(input_ptr + offset);
-                            if constexpr(is_sequence_type(TypeDescriptorTag::DataTypeTag::data_type)) {
+                            if constexpr(is_sequence_type(DataTypeTag::data_type)) {
                                 if (filter_down_stringpool) {
                                     if (auto it = input_to_output_offsets.find(value);
                                     it != input_to_output_offsets.end()) {
@@ -1021,8 +1037,12 @@ public:
                                 } else {
                                     *output_ptr = value;
                                 }
-                            } else {
+                            } else if constexpr(is_numeric_type(DataTypeTag::data_type) || is_bool_type(DataTypeTag::data_type)){
                                 *output_ptr = value;
+                            } else if constexpr(is_empty_type(DataTypeTag::data_type)) {
+                                internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Unexpected block in empty type column in SegmentInMemoryImpl::filter");
+                            } else {
+                                internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Unexpected column type in SegmentInMemoryImpl::filter");
                             }
                             output_ptr++;
                             output_col.opt_sparse_map().value()[pos_output++] = true;
@@ -1037,7 +1057,7 @@ public:
                                 break;
 
                             auto value = *(input_ptr + offset);
-                            if constexpr(is_sequence_type(TypeDescriptorTag::DataTypeTag::data_type)) {
+                            if constexpr(is_sequence_type(DataTypeTag::data_type)) {
                                 if (filter_down_stringpool) {
                                     if (auto it = input_to_output_offsets.find(value);
                                     it != input_to_output_offsets.end()) {
@@ -1051,8 +1071,12 @@ public:
                                 } else {
                                     *output_ptr = value;
                                 }
-                            } else {
+                            } else if constexpr(is_numeric_type(DataTypeTag::data_type) || is_bool_type(DataTypeTag::data_type)){
                                 *output_ptr = value;
+                            } else if constexpr(is_empty_type(DataTypeTag::data_type)) {
+                                internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Unexpected block in empty type column in SegmentInMemoryImpl::filter");
+                            } else {
+                                internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Unexpected column type in SegmentInMemoryImpl::filter");
                             }
 
                             ++output_ptr;
