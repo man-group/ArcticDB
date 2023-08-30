@@ -26,7 +26,7 @@ function worker() {
     MSYS=winsymlinks:nativestrict ln -s "$(realpath "$tooling_dir/../python/tests")" $new_root/
     cd $new_root
 
-    $catch python -m pytest -v --show-capture=yes --log-file="$TEST_OUTPUT_DIR/pytest-logger.$group.log" \
+    $catch python -m pytest -v --show-capture=all --log-file="$TEST_OUTPUT_DIR/pytest-logger.$group.log" \
         --junitxml="$TEST_OUTPUT_DIR/pytest.$group.xml" \
         --splits $splits --group $group --durations-path="$duration_file" --store-durations \
         --basetemp="$new_root/temp-pytest-output" \
