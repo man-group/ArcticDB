@@ -28,7 +28,11 @@ def repair_library_if_necessary(ac, lib_name: str, run: bool) -> bool:
     else:
         logging.warning(f"Config NOT OK for [{lib_name}]")
         if run:
-            logging.info(f"Updating library [{lib_name}]")
+            logging.info(
+                f"Updating library [{lib_name}]. You should rotate the credentials for write users on this storage"
+                " account."
+            )
+
             try:
                 ac._library_manager.write_library_config(
                     lib._lib_cfg, lib_name, ac._library_adapter.get_masking_override()
@@ -66,7 +70,12 @@ def run(*, uri, run):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Upgrade storage config stored in an Arctic instance.")
+    parser = argparse.ArgumentParser(
+        description=(
+            "Upgrade ArcticDB storage. This script checks for and performs (with "
+            "`--run`) any data or config changes needed to support new versions of ArcticDB."
+        )
+    )
     parser.add_argument(
         "--uri",
         required=True,
@@ -76,7 +85,7 @@ def main():
         "--run",
         default=False,
         action="store_true",
-        help="Set to do a run that modifies config.",
+        help="Set to perform the storage update. This modifies the contents of your storage system.",
     )
 
     args = parser.parse_args()
