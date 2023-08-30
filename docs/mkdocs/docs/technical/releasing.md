@@ -36,9 +36,9 @@ If promoting a pre-release:
 2. Select the workflow off the source tag (e.g. `1.6.0rc0`)
 3. Click `Run workflow`
 
-If hotfixing an existing release then branch off the previously-released tag, apply the necessary changes (cherry-picking from master if commits are on master), and:
-1. Type in the new version number eg `1.6.1`
-2. Select the workflow off the source tag (e.g. `1.6.0`)
+If hotfixing an existing release (or pre-release) then branch off the previously-released tag, apply the necessary changes (cherry-picking from master if commits are on master), and:
+1. Type in the new version number eg `1.6.1` (or `1.6.0rc2` as an example of a pre-release version)
+2. Select the workflow off the source tag (e.g. `1.6.0` or `1.6.0rc1`)
 2. Click `Run workflow`.
 
 This will create a branch off of `master`, incrementing the version specified in code. 
@@ -50,6 +50,11 @@ The [build will now be running for the tag.](https://github.com/man-group/Arctic
 [`regro-cf-autotick-bot`](https://github.com/regro-cf-autotick-bot) generally opens a PR
 on [ArcticDB's feedstock](https://github.com/conda-forge/arcticdb-feedstock)
 for each new release of ArcticDB upstream.
+
+> [!IMPORTANT]  
+> **Do not commit directly to the feedstock repository.**
+> Commits to the repository release new versions to conda-forge. Instead, changes must be made via personal forks or via the PR
+> created by the [`regro-cf-autotick-bot`](https://github.com/regro-cf-autotick-bot) as described above.
 
 You can update such a PR or create a new one to release a version, updating the
 conda recipe. [Here's an example.](https://github.com/conda-forge/arcticdb-feedstock/pull/10)

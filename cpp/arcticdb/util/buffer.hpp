@@ -149,7 +149,7 @@ struct Buffer : public BaseBuffer<Buffer, true> {
     }
 
     template<typename T>
-    T *ptr_cast(size_t bytes_offset, size_t required_bytes) {
+    [[nodiscard]] T *ptr_cast(size_t bytes_offset, size_t required_bytes) {
         check_invariants();
         if (bytes_offset  + required_bytes > bytes()) {
             std::string err = fmt::format("Cursor overflow in reallocating buffer ptr_cast, cannot read {} bytes from a buffer of size {} with cursor "
@@ -172,9 +172,10 @@ struct Buffer : public BaseBuffer<Buffer, true> {
     }
 
     inline void ensure(size_t bytes) {
-        if(bytes > available())
-            resize(bytes);
-        else {
+        const size_t total_size = bytes + preamble_bytes_;
+        if(total_size > capacity_) {
+            resize(total_size);
+        } else {
             ARCTICDB_TRACE(log::version(), "Buffer {} has sufficient bytes for {}, ptr {} data {}, capacity {}",
                                 uintptr_t(this), bytes, uintptr_t(ptr_), uintptr_t(data_), capacity_, body_bytes_);
         }
@@ -197,11 +198,11 @@ struct Buffer : public BaseBuffer<Buffer, true> {
         return {ptr_, body_bytes_};
     }
 
-    uint8_t &operator[](size_t bytes_offset) {
+    [[nodiscard]] uint8_t &operator[](size_t bytes_offset) {
         return ptr_[bytes_offset];
     }
 
-    const uint8_t &operator[](size_t bytes_offset) const {
+    [[nodiscard]] const uint8_t &operator[](size_t bytes_offset) const {
         return ptr_[bytes_offset];
     }
 
@@ -213,36 +214,34 @@ struct Buffer : public BaseBuffer<Buffer, true> {
         return preamble_bytes_;
     }
 
-    uint8_t* preamble() {
+    [[nodiscard]] uint8_t* preamble() {
         return data_;
     }
     
-    size_t available() const {
+    [[nodiscard]] size_t available() const {
         return capacity_ >= preamble_bytes_ ? capacity_ - preamble_bytes_ : 0;
     }
 
   private:
-    inline void resize(size_t bytes) {
-        if (bytes == 0) {
-            reset();
-        } else {
-            auto alloc_bytes = bytes + preamble_bytes_;
-            auto [mem_ptr, ts] = ptr_ ?
-                                 Allocator::realloc(std::make_pair(data_, ts_), alloc_bytes)
-                                      :
-                                 Allocator::aligned_alloc(alloc_bytes);
+    inline void resize(size_t alloc_bytes) {
+        const size_t bytes = alloc_bytes - preamble_bytes_;
+        util::check(alloc_bytes >= preamble_bytes_, "The requested size of a resizes call is less than the preamble bytes");
+        auto [mem_ptr, ts] = ptr_ ?
+                             Allocator::realloc(std::make_pair(data_, ts_), alloc_bytes)
+                                  :
+                             Allocator::aligned_alloc(alloc_bytes);
 
-            ARCTICDB_TRACE(log::codec(), "Allocating {} bytes ({} + {} bytes preamble)", alloc_bytes, bytes, preamble_bytes_);
-            if (mem_ptr) {
-                data_ = mem_ptr;
-                ptr_ = data_ + preamble_bytes_;
-                ts_ = ts;
-                body_bytes_ = bytes;
-                capacity_ = body_bytes_ + preamble_bytes_;
-                ARCTICDB_TRACE(log::version(), "Buffer {} did realloc for {}, ptr {} data {}, capacity {}",
-                                    uintptr_t(this), bytes,  uintptr_t(ptr_), uintptr_t(data_), capacity_, body_bytes_);
-            } else
-                throw std::bad_alloc();
+        ARCTICDB_TRACE(log::codec(), "Allocating {} bytes ({} + {} bytes preamble)", alloc_bytes, bytes, preamble_bytes_);
+        if (mem_ptr) {
+            data_ = mem_ptr;
+            ptr_ = data_ + preamble_bytes_;
+            ts_ = ts;
+            body_bytes_ = bytes;
+            capacity_ = body_bytes_ + preamble_bytes_;
+            ARCTICDB_TRACE(log::version(), "Buffer {} did realloc for {}, ptr {} data {}, capacity {}",
+                                uintptr_t(this), bytes,  uintptr_t(ptr_), uintptr_t(data_), capacity_, body_bytes_);
+        } else {
+            throw std::bad_alloc();
         }
         check_invariants();
     }

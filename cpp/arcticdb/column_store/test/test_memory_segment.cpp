@@ -11,6 +11,7 @@
 #include <arcticdb/util/test/test_utils.hpp>
 #include <arcticdb/stream/test/stream_test_common.hpp>
 #include <arcticdb/util/test/generators.hpp>
+#include <arcticdb/util/bitset.hpp>
 
 #include <folly/container/Enumerate.h>
 
@@ -125,6 +126,24 @@ TEST(MemSegment, IterateAndGetValues) {
     }
 }
 
+TEST(MemSegment, IterateWithEmptyTypeColumn) {
+    SegmentInMemory seg;
+    size_t num_rows = 10;
+    auto int_column = std::make_shared<Column>(generate_int_column(num_rows));
+    seg.add_column(scalar_field(int_column->type().data_type(), "int_column"), int_column);
+
+    auto empty_column = std::make_shared<Column>(generate_empty_column());
+    seg.add_column(scalar_field(empty_column->type().data_type(), "empty_column"), empty_column);
+    seg.set_row_id(num_rows - 1);
+    for (auto&& [idx, row]: folly::enumerate(seg)) {
+        ASSERT_EQ(static_cast<int64_t>(idx), row.scalar_at<int64_t>(0));
+        // Exception should be thrown regardless of the type requested for empty type columns
+        EXPECT_THROW(row.scalar_at<int64_t>(1).has_value(), InternalException);
+        EXPECT_THROW(row.scalar_at<float>(1).has_value(), InternalException);
+        EXPECT_THROW(row.scalar_at<uint8_t>(1).has_value(), InternalException);
+    }
+}
+
 TEST(MemSegment, CopyViaIterator) {
     auto frame_wrapper = get_test_timeseries_frame("test_get_values", 100, 0);
     auto& source =frame_wrapper.segment_;
@@ -208,6 +227,20 @@ TEST(MemSegment, CloneAndCompare) {
     auto copied = segment.clone();
     bool equal = segment == copied;
     ASSERT_EQ(equal, true);
+}
+
+TEST(MemSegment, CloneAndCompareWithEmptyTypeColumn) {
+    SegmentInMemory seg;
+    size_t num_rows = 10;
+    auto int_column = std::make_shared<Column>(generate_int_column(num_rows));
+    seg.add_column(scalar_field(int_column->type().data_type(), "int_column"), int_column);
+
+    auto empty_column = std::make_shared<Column>(generate_empty_column());
+    seg.add_column(scalar_field(empty_column->type().data_type(), "empty_column"), empty_column);
+    seg.set_row_id(num_rows - 1);
+    auto copied = seg.clone();
+    bool equal = seg == copied;
+    ASSERT_TRUE(equal);
 }
 
 TEST(MemSegment, SplitSegment) {
@@ -422,6 +455,33 @@ TEST(MemSegment, Append) {
     }
     for(int row = 0; row < 20; ++row) {
         ASSERT_EQ(s1.scalar_at<uint32_t>(row, 2).value(), row + 2);
+    }
+}
+
+TEST(MemSegment, Filter) {
+    SegmentInMemory seg;
+    size_t num_rows = 10;
+    auto int_column = std::make_shared<Column>(generate_int_column(num_rows));
+    seg.add_column(scalar_field(int_column->type().data_type(), "int_column"), int_column);
+
+    auto empty_column = std::make_shared<Column>(generate_empty_column());
+    seg.add_column(scalar_field(empty_column->type().data_type(), "empty_column"), empty_column);
+    seg.set_row_id(num_rows - 1);
+
+    util::BitSet filter_bitset(num_rows);
+    std::vector<size_t> retained_rows{0, 4, num_rows - 1};
+    for (auto retained_row: retained_rows) {
+        filter_bitset.set_bit(retained_row);
+    }
+
+    auto filtered_seg = seg.filter(filter_bitset);
+
+    for (auto&& [idx, row]: folly::enumerate(filtered_seg)) {
+        ASSERT_EQ(static_cast<int64_t>(retained_rows[idx]), row.scalar_at<int64_t>(0));
+        // Exception should be thrown regardless of the type requested for empty type columns
+        EXPECT_THROW(row.scalar_at<int64_t>(1).has_value(), InternalException);
+        EXPECT_THROW(row.scalar_at<float>(1).has_value(), InternalException);
+        EXPECT_THROW(row.scalar_at<uint8_t>(1).has_value(), InternalException);
     }
 }
 

@@ -231,7 +231,7 @@ set(arcticdb_srcs
         processing/operation_dispatch_unary.hpp
         processing/operation_types.hpp
         processing/signed_unsigned_comparison.hpp
-        processing/processing_segment.hpp
+        processing/processing_unit.hpp
         processing/bucketizer.hpp
         processing/clause.hpp
         processing/expression_context.hpp
@@ -245,7 +245,7 @@ set(arcticdb_srcs
         storage/lmdb/lmdb_storage.hpp
         storage/lmdb/lmdb_storage-inl.hpp
         storage/memory/memory_storage.hpp
-        storage/memory/memory_storage-inl.hpp
+        storage/memory/memory_storage.cpp
         storage/mongo/mongo_client.hpp
         storage/mongo/mongo_instance.hpp
         storage/mongo/mongo_storage.hpp
@@ -261,7 +261,6 @@ set(arcticdb_srcs
         storage/storage.hpp
         storage/storage_override.hpp
         storage/store.hpp
-        storage/variant_storage.hpp
         stream/aggregator.hpp
         stream/aggregator-inl.hpp
         stream/append_map.hpp
@@ -377,7 +376,7 @@ set(arcticdb_srcs
         pipeline/value_set.cpp
         pipeline/write_frame.cpp
         python/normalization_checks.cpp
-        processing/processing_segment.cpp
+        processing/processing_unit.cpp
         processing/aggregation.cpp
         processing/clause.cpp
         processing/expression_node.cpp
@@ -392,7 +391,6 @@ set(arcticdb_srcs
         storage/config_resolvers.cpp
         storage/failure_simulation.cpp
         storage/lmdb/lmdb_storage.cpp
-        storage/memory/memory_storage.cpp
         storage/mongo/mongo_client.cpp
         storage/mongo/mongo_instance.cpp
         storage/mongo/mongo_storage.cpp
@@ -635,6 +633,8 @@ pybind11_add_module(arcticdb_ext MODULE
         python/arctic_version.hpp
         python/reader.hpp
         python/adapt_read_dataframe.hpp
+        python/python_handlers.hpp
+        python/python_handlers.cpp
         )
 
 set (additional_link_flags "")
@@ -712,6 +712,7 @@ if(${TEST})
             processing/test/test_clause.cpp
             processing/test/test_expression.cpp
             processing/test/test_has_valid_type_promotion.cpp
+            processing/test/test_operation_dispatch.cpp
             processing/test/test_set_membership.cpp
             processing/test/test_signed_unsigned_comparison.cpp
             processing/test/test_type_comparison.cpp

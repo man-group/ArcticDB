@@ -25,7 +25,7 @@ inline rc::Gen <arcticdb::entity::DataType> gen_numeric_datatype() {
         arcticdb::entity::DataType::UINT64,
         arcticdb::entity::DataType::FLOAT32,
         arcticdb::entity::DataType::FLOAT64,
-        arcticdb::entity::DataType::MICROS_UTC64
+        arcticdb::entity::DataType::NANOSECONDS_UTC64
     );
 }
 

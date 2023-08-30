@@ -28,7 +28,7 @@ from arcticc.pb2.storage_pb2 import (
 
 from arcticdb.config import *  # for backward compat after moving to config
 from arcticdb.config import _expand_path
-from arcticdb.exceptions import ArcticNativeException, LibraryNotFound
+from arcticdb.exceptions import ArcticNativeException, LibraryNotFound, UserInputException
 from arcticdb.version_store._store import NativeVersionStore
 from arcticdb.authorization.permissions import OpenMode
 
@@ -285,7 +285,9 @@ def create_test_s3_cfg(
     bucket_name: str,
     endpoint: str,
     *,
+    is_https: bool = False,
     with_prefix: Union[str, bool, None] = True,
+    region: str = None,
 ) -> EnvironmentConfigsMap:
     cfg = EnvironmentConfigsMap()
     add_s3_library_to_env(
@@ -297,6 +299,8 @@ def create_test_s3_cfg(
         bucket_name=bucket_name,
         endpoint=endpoint,
         with_prefix=with_prefix,
+        is_https=is_https,
+        region=region,
     )
     return cfg
 
@@ -333,10 +337,12 @@ def get_azure_proto(
     container_name,
     endpoint,
     with_prefix: Optional[bool] = True,
-    ca_cert_path: Optional[str] = None,
+    ca_cert_path: str = "",
 ):
     env = cfg.env_by_id[env_name]
     azure = AzureConfig()
+    if not container_name:
+        raise UserInputException("Container needs to be specified")
     azure.container_name = container_name
     azure.endpoint = endpoint
     if with_prefix:
@@ -361,7 +367,7 @@ def add_azure_library_to_env(
     endpoint,
     description: Optional[bool] = None,
     with_prefix: Optional[bool] = True,
-    ca_cert_path: Optional[str] = None,
+    ca_cert_path: str = "",
 ):
     env = cfg.env_by_id[env_name]
     sid, storage = get_azure_proto(

@@ -6,10 +6,11 @@
  */
 
 #ifndef ARCTICDB_NFS_BACKED_STORAGE_H_
-#error "This should only be included by nfs_backed_storage.hpp"
+#error "This should only be included by nfs_backed_storage.cpp"
 #endif
 
 #include <arcticdb/util/simple_string_hash.hpp>
+#include <arcticdb/storage/s3/nfs_backed_storage.hpp>
 #include <arcticdb/storage/s3/s3_storage.hpp>
 
 namespace arcticdb::storage::nfs_backed {
@@ -133,17 +134,16 @@ inline void NfsBackedStorage::do_update(Composite<KeySegmentPair>&& kvs, UpdateO
     s3::detail::do_update_impl(std::move(enc), root_folder_, bucket_name_, s3_client_, NfsBucketizer{});
 }
 
-template<class Visitor>
-void NfsBackedStorage::do_read(Composite<VariantKey>&& ks, Visitor&& visitor, ReadKeyOpts opts) {
-    auto func = [v = std::forward<Visitor>(visitor)] (const VariantKey& k, Segment&& seg) mutable {
-        v(unencode_object_id(k), std::move(seg));
+inline void NfsBackedStorage::do_read(Composite<VariantKey>&& ks, const ReadVisitor& visitor, ReadKeyOpts opts) {
+    auto func = [visitor] (const VariantKey& k, Segment&& seg) mutable {
+        visitor(unencode_object_id(k), std::move(seg));
     };
 
     auto enc = ks.transform([] (auto&& key) {
         return encode_object_id(key);
     });
 
-    s3::detail::do_read_impl(std::move(enc), std::move(func), root_folder_, bucket_name_, s3_client_, NfsBucketizer{}, opts);
+    s3::detail::do_read_impl(std::move(enc), func, root_folder_, bucket_name_, s3_client_, NfsBucketizer{}, opts);
 }
 
 inline void NfsBackedStorage::do_remove(Composite<VariantKey>&& ks, RemoveOpts) {
@@ -153,8 +153,7 @@ inline void NfsBackedStorage::do_remove(Composite<VariantKey>&& ks, RemoveOpts) 
     s3::detail::do_remove_impl(std::move(enc), root_folder_, bucket_name_, s3_client_, NfsBucketizer{});
 }
 
-template<class Visitor>
-void NfsBackedStorage::do_iterate_type(KeyType key_type, Visitor&& visitor, const std::string& prefix) {
+inline void NfsBackedStorage::do_iterate_type(KeyType key_type, const IterateTypeVisitor& visitor, const std::string& prefix) {
     auto func = [v = std::move(visitor), prefix=prefix] (VariantKey&& k) mutable {
         auto key = unencode_object_id(k);
         if(prefix.empty() || variant_key_id(key) == StreamId{prefix})

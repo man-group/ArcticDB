@@ -133,23 +133,20 @@ void aggregator_set_data(
                 for (size_t s = 0; s < rows_to_write; ++s, ++ptr_data) {
                     if (*ptr_data == none.ptr()) {
                         agg.set_no_string_at(col, s, not_a_string());
-                    }
-                    else if(is_py_nan(*ptr_data)){
+                    } else if(is_py_nan(*ptr_data)){
                         agg.set_no_string_at(col, s, nan_placeholder());
-                    }
-                    else {
+                    } else {
                         if constexpr (is_utf_type(slice_value_type(dt))) {
                             auto wrapper= convert::py_unicode_to_buffer(*ptr_data);
                             agg.set_string_at(col, s, wrapper.buffer_, wrapper.length_);
-                        }
-                        else {
+                        } else {
                             auto wrapper = convert::pystring_to_buffer(*ptr_data);
                             agg.set_string_at(col, s, wrapper.buffer_, wrapper.length_);
                         }
                     }
                 }
             }
-        } else {
+        } else if constexpr (is_numeric_type(dt) || is_bool_type(dt)) {
             auto ptr = tensor.template ptr_cast<RawType>(row);
             if (sparsify_floats) {
                 if constexpr (is_floating_point_type(dt)) {
@@ -172,6 +169,8 @@ void aggregator_set_data(
                     agg.set_array(col, t);
                 }
             }
+        }  else if constexpr (!is_empty_type(dt)) {
+            static_assert(!sizeof(dt), "Unknown data type");
         }
     });
 }

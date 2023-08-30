@@ -6,7 +6,7 @@ Introduction
 
 This site documents the Python API of ArcticDB.
 
-Tutorials, guides and team contact details are available `here <http://arcticdb.io/docs>`_.
+Tutorials, guides and team contact details are available `here <https://docs.arcticdb.io>`_.
 
 The API is structured into the following components:
 

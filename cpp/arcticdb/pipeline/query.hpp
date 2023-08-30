@@ -33,14 +33,6 @@ namespace arcticdb::pipelines {
 
 using FilterRange = std::variant<std::monostate, IndexRange, RowRange>;
 
-struct HeadRange {
-    int64_t num_rows_;
-};
-
-struct TailRange {
-    int64_t num_rows_;
-};
-
 struct SignedRowRange {
     int64_t start_;
     int64_t end_;
@@ -48,7 +40,7 @@ struct SignedRowRange {
 
 struct ReadQuery {
     mutable std::vector<std::string> columns; // empty <=> all columns
-    std::variant<std::monostate, HeadRange, TailRange, SignedRowRange> row_range;
+    std::optional<SignedRowRange> row_range;
     FilterRange row_filter; // no filter by default
     std::vector<std::shared_ptr<Clause>> clauses_;
 
@@ -63,32 +55,16 @@ struct ReadQuery {
     }
 
     void calculate_row_filter(int64_t total_rows) {
-        util::variant_match(row_range,
-            [&](const HeadRange &head_range) {
-            if (head_range.num_rows_ >= 0) {
-                row_filter = RowRange(0, std::min(head_range.num_rows_, total_rows));
-            } else {
-                row_filter = RowRange(0, std::max(static_cast<int64_t>(0), total_rows + head_range.num_rows_));
-            }
-            },
-            [&](const TailRange &tail_range) {
-            if (tail_range.num_rows_ >= 0) {
-                row_filter = RowRange(std::max(static_cast<int64_t>(0), total_rows - tail_range.num_rows_), total_rows);
-            } else {
-                row_filter = RowRange(std::min(-tail_range.num_rows_, total_rows), total_rows);
-            }
-            },
-            [&](const SignedRowRange &signed_row_range) {
-            size_t start = signed_row_range.start_ >= 0 ?
-                    std::min(signed_row_range.start_, total_rows) :
-                    std::max(total_rows + signed_row_range.start_, static_cast<int64_t>(0));
-            size_t end = signed_row_range.end_ >= 0 ?
-                    std::min(signed_row_range.end_, total_rows) :
-                    std::max(total_rows + signed_row_range.end_, static_cast<int64_t>(0));
+        if (row_range.has_value()) {
+            size_t start = row_range->start_ >= 0 ?
+                           std::min(row_range->start_, total_rows) :
+                           std::max(total_rows + row_range->start_,
+                                    static_cast<int64_t>(0));
+            size_t end = row_range->end_ >= 0 ?
+                         std::min(row_range->end_, total_rows) :
+                         std::max(total_rows + row_range->end_, static_cast<int64_t>(0));
             row_filter = RowRange(start, end);
-            },
-            [](const auto &) {}
-            );
+        }
     }
 };
 

@@ -6,7 +6,12 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 
+from typing import Optional
+
 from arcticdb.encoding_version import EncodingVersion
+
+
+DEFAULT_ENCODING_VERSION = EncodingVersion.V1
 
 
 class LibraryOptions:
@@ -31,9 +36,9 @@ class LibraryOptions:
         *,
         dynamic_schema: bool = False,
         dedup: bool = False,
-        rows_per_segment=100_000,
-        columns_per_segment=127,
-        encoding_version: EncodingVersion = EncodingVersion.V1,
+        rows_per_segment: int = 100_000,
+        columns_per_segment: int = 127,
+        encoding_version: Optional[EncodingVersion] = None,
     ):
         """
         Parameters
@@ -111,6 +116,10 @@ class LibraryOptions:
 
         columns_per_segment: int, default 127
             See rows_per_segment
+
+        encoding_version: Optional[EncodingVersion], default None
+            The encoding version to use when writing data to storage.
+            v2 is faster, but still experimental, so use with caution.
         """
         self.dynamic_schema = dynamic_schema
         self.dedup = dedup
@@ -118,8 +127,18 @@ class LibraryOptions:
         self.columns_per_segment = columns_per_segment
         self.encoding_version = encoding_version
 
+    def __eq__(self, right):
+        return (
+            self.dynamic_schema == right.dynamic_schema
+            and self.dedup == right.dedup
+            and self.rows_per_segment == right.rows_per_segment
+            and self.columns_per_segment == right.columns_per_segment
+            and self.encoding_version == right.encoding_version
+        )
+
     def __repr__(self):
         return (
             f"LibraryOptions(dynamic_schema={self.dynamic_schema}, dedup={self.dedup},"
-            f" rows_per_segment={self.rows_per_segment}, columns_per_segment={self.columns_per_segment})"
+            f" rows_per_segment={self.rows_per_segment}, columns_per_segment={self.columns_per_segment},"
+            f" encoding_version={self.encoding_version if self.encoding_version is not None else 'Default'})"
         )

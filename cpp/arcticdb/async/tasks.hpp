@@ -19,7 +19,7 @@
 #include <arcticdb/stream/stream_sink.hpp>
 #include <arcticdb/async/base_task.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>
-#include <arcticdb/processing/processing_segment.hpp>
+#include <arcticdb/processing/processing_unit.hpp>
 #include <arcticdb/util/constructors.hpp>
 
 #include <type_traits>
@@ -335,24 +335,24 @@ struct SegmentFunctionTask : BaseTask {
 struct MemSegmentProcessingTask : BaseTask {
     std::shared_ptr<Store> store_;
     std::vector<std::shared_ptr<Clause>> clauses_;
-    std::optional<Composite<ProcessingSegment>> procs_;
+    std::optional<Composite<ProcessingUnit>> procs_;
 
     explicit MemSegmentProcessingTask(
            const std::shared_ptr<Store>& store,
            std::vector<std::shared_ptr<Clause>> clauses,
-           std::optional<Composite<ProcessingSegment>>&& procs = std::nullopt) :
+           std::optional<Composite<ProcessingUnit>>&& procs = std::nullopt) :
         store_(store),
         clauses_(std::move(clauses)),
         procs_(std::move(procs)) {
     }
 
-   static ProcessingSegment slice_to_segment(Composite<pipelines::SliceAndKey>&& is) {
+   static ProcessingUnit slice_to_segment(Composite<pipelines::SliceAndKey>&& is) {
         auto inputs = std::move(is);
-        return ProcessingSegment(inputs.as_range());
+        return ProcessingUnit(inputs.as_range());
     }
 
     [[nodiscard]]
-    Composite<ProcessingSegment> process(Composite<ProcessingSegment>&& proc){
+    Composite<ProcessingUnit> process(Composite<ProcessingUnit>&& proc){
         auto procs = std::move(proc);
         for(const auto& clause : clauses_) {
             procs = clause->process(store_, std::move(procs));
@@ -365,14 +365,14 @@ struct MemSegmentProcessingTask : BaseTask {
 
     ARCTICDB_MOVE_ONLY_DEFAULT(MemSegmentProcessingTask)
 
-    Composite<ProcessingSegment> operator()(Composite<pipelines::SliceAndKey>&& sk) {
-        return process(Composite<ProcessingSegment>(slice_to_segment(std::move(sk))));
+    Composite<ProcessingUnit> operator()(Composite<pipelines::SliceAndKey>&& sk) {
+        return process(Composite<ProcessingUnit>(slice_to_segment(std::move(sk))));
     }
 
-    Composite<ProcessingSegment> operator()() {
+    Composite<ProcessingUnit> operator()() {
         internal::check<ErrorCode::E_ASSERTION_FAILURE>(
                 procs_.has_value(),
-                "MemSegmentProcessingTask () operator expects processing segments to be provided in ctor");
+                "MemSegmentProcessingTask () operator expects processing units to be provided in ctor");
         return process(std::move(*procs_));
     }
 

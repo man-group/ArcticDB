@@ -34,6 +34,16 @@ inline std::optional<entity::TypeDescriptor> has_valid_type_promotion(entity::Ty
     if (source == target)
         return target;
 
+    // Empty type is coercible to any type
+    if(is_empty_type(source.data_type())) {
+        return target;
+    }
+
+    // Nothing is coercible to the empty type.
+    if(is_empty_type(target.data_type())) {
+        return std::nullopt;
+    }
+
     auto source_type = source.data_type();
     auto target_type = target.data_type();
     auto source_size = slice_bit_size(source_type);
