@@ -15,6 +15,7 @@
 #include <arcticdb/pipeline/input_tensor_frame.hpp>
 #include <arcticdb/stream/protobuf_mappings.hpp>
 #include <arcticdb/entity/protobuf_mappings.hpp>
+#include <arcticdb/python/gil_lock.hpp>
 #include <arcticdb/python/python_types.hpp>
 #include <arcticdb/python/python_to_tensor_frame.hpp>
 #include <arcticdb/pipeline/string_pool_utils.hpp>
@@ -130,6 +131,11 @@ void aggregator_set_data(
                     ptr_data = flatten_tensor<PyObject*>(flattened_buffer, rows_to_write, tensor, slice_num, regular_slice_size);
 
                 auto none = py::none{};
+                // GIL will be acquired if there is a string that is not pure ASCII/UTF-8
+                // In this case a PyObject will be allocated by convert::py_unicode_to_buffer
+                // If such a string is encountered in a column, then the GIL will be held until that whole column has
+                // been processed, on the assumption that if a column has one such string it will probably have many.
+                std::optional<ScopedGILLock> scoped_gil_lock;
                 for (size_t s = 0; s < rows_to_write; ++s, ++ptr_data) {
                     if (*ptr_data == none.ptr()) {
                         agg.set_no_string_at(col, s, not_a_string());
@@ -137,7 +143,7 @@ void aggregator_set_data(
                         agg.set_no_string_at(col, s, nan_placeholder());
                     } else {
                         if constexpr (is_utf_type(slice_value_type(dt))) {
-                            auto wrapper= convert::py_unicode_to_buffer(*ptr_data);
+                            auto wrapper= convert::py_unicode_to_buffer(*ptr_data, scoped_gil_lock);
                             agg.set_string_at(col, s, wrapper.buffer_, wrapper.length_);
                         } else {
                             auto wrapper = convert::pystring_to_buffer(*ptr_data);
