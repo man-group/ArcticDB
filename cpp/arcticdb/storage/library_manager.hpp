@@ -128,12 +128,17 @@ namespace {
                 storage_override.variant(),
                 [&lib_cfg_proto] (const S3Override& credentials_override) {
                     for(auto& storage: *lib_cfg_proto.mutable_storage_by_id()){
-                        credentials_override.modify_storage_credentials(storage.second);
+                        credentials_override.modify_storage_config(storage.second);
                     }
                 },
                 [&lib_cfg_proto] (const AzureOverride& credentials_override) {
                     for(auto& storage: *lib_cfg_proto.mutable_storage_by_id()){
-                        credentials_override.modify_storage_credentials(storage.second);
+                        credentials_override.modify_storage_config(storage.second);
+                    }
+                },
+                [&lib_cfg_proto] (const LmdbOverride& credentials_override) {
+                    for(auto& storage: *lib_cfg_proto.mutable_storage_by_id()){
+                        credentials_override.modify_storage_config(storage.second);
                     }
                 },
                 [] (const auto&) {

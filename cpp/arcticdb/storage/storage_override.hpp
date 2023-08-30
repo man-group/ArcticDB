@@ -64,7 +64,7 @@ public:
         use_virtual_addressing_ = use_virtual_addressing;
     }
 
-    void modify_storage_credentials(arcticdb::proto::storage::VariantStorage& storage) const {
+    void modify_storage_config(arcticdb::proto::storage::VariantStorage& storage) const {
         if(storage.config().Is<arcticdb::proto::s3_storage::Config>()) {
             arcticdb::proto::s3_storage::Config s3_storage;
             storage.config().UnpackTo(&s3_storage);
@@ -111,7 +111,7 @@ public:
         ca_cert_path_ = ca_cert_path;
     }
 
-    void modify_storage_credentials(arcticdb::proto::storage::VariantStorage& storage) const {
+    void modify_storage_config(arcticdb::proto::storage::VariantStorage& storage) const {
         if(storage.config().Is<arcticdb::proto::azure_storage::Config>()) {
             arcticdb::proto::azure_storage::Config azure_storage;
             storage.config().UnpackTo(&azure_storage);
@@ -125,7 +125,31 @@ public:
     }
 };
 
-using VariantStorageOverride = std::variant<std::monostate, S3Override, AzureOverride>;
+class LmdbOverride {
+    uint64_t map_size_;
+
+public:
+    [[nodiscard]] uint64_t map_size() const {
+        return map_size_;
+    }
+
+    void set_map_size(uint64_t map_size) {
+        map_size_ = map_size;
+    }
+
+    void modify_storage_config(arcticdb::proto::storage::VariantStorage& storage) const {
+        if(storage.config().Is<arcticdb::proto::lmdb_storage::Config>()) {
+            arcticdb::proto::lmdb_storage::Config lmdb_storage;
+            storage.config().UnpackTo(&lmdb_storage);
+
+            lmdb_storage.set_map_size(map_size_);
+
+            util::pack_to_any(lmdb_storage, *storage.mutable_config());
+        }
+    }
+};
+
+using VariantStorageOverride = std::variant<std::monostate, S3Override, AzureOverride, LmdbOverride>;
 
 class StorageOverride {
     VariantStorageOverride override_;
@@ -135,12 +159,16 @@ public:
         return override_;
     }
 
-    void set_s3_override(const S3Override& credentials_override) {
-        override_ = credentials_override;
+    void set_s3_override(const S3Override& storage_override) {
+        override_ = storage_override;
     }
 
-    void set_azure_override(const AzureOverride& credentials_override) {
-        override_ = credentials_override;
+    void set_azure_override(const AzureOverride& storage_override) {
+        override_ = storage_override;
+    }
+
+    void set_lmdb_override(const LmdbOverride& storage_override) {
+        override_ = storage_override;
     }
 };
 
