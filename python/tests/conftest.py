@@ -458,6 +458,7 @@ def mongo_test_uri(request, mongo_server_instance):
     # mongodb does not support prefix to differentiate different tests and the server is session-scoped
     # therefore lib_name is needed to be used to avoid reusing library name or list_versions check will fail
     mongo_host, mongo_port = mongo_server_instance
+    print(f"mongo_host: {mongo_host} mongo_port: {mongo_port}")  # 20230830
     mongo_path = f"{mongo_host}:{mongo_port}"
     try:
         res = requests.get(f"http://{mongo_path}")
