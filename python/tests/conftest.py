@@ -471,7 +471,13 @@ def mongo_test_uri(request, mongo_server_instance):
         mongo_server = request.getfixturevalue("mongo_server")
         uri = f"mongodb://{mongo_server.hostname}:{mongo_server.port}"
 
-    return uri
+    yield uri
+
+    # mongodb does not support prefix to differentiate different tests and the server is session-scoped
+    mongo_client = pymongo.MongoClient(uri)
+    for db_name in mongo_client.list_database_names():
+        if db_name not in ["local", "admin", "apiomat", "config"]:
+            mongo_client.drop_database(db_name)
 
 
 @pytest.fixture
