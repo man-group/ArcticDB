@@ -447,7 +447,7 @@ def mongo_test_uri(request):
         mongo_port = 27017
     else:
         mongo_host = os.getenv("CI_MONGO_HOST2", "localhost")
-        mongo_port = 27018
+        mongo_port = 27712
     print(f"mongo_host: {mongo_host} mongo_port: {mongo_port}")  # 20230830
     mongo_path = f"{mongo_host}:{mongo_port}"
     try:

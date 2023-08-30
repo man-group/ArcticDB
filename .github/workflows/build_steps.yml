@@ -209,11 +209,21 @@ jobs:
       mongodb:
         image: "mongo:4.4"
         ports: 
-          - "27017:27017"
+          - 27017:27017
+        options: >-
+          --health-cmd mongo
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
       mongodb_2:
         image: "mongo:4.4"
         ports: 
-          - "27018:27017"
+          - 27712:27017
+        options: >-
+          --health-cmd mongo
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     env:
       python_impl_name: ${{needs.compile.outputs.python_impl_name}}
       distinguishing_name: ${{matrix.os}}-${{needs.compile.outputs.python_impl_name}}-${{matrix.type}}${{matrix.python_deps_id}}
