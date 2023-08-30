@@ -7,7 +7,6 @@
 
 #pragma once
 
-
 #include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/util/magic_num.hpp>
 #include <arcticdb/util/allocator.hpp>
