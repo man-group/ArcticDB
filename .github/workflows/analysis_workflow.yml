@@ -98,6 +98,18 @@ jobs:
           npm config set strict-ssl false
           npm install -g azurite
           python -m pip install --upgrade pip
+
+          python >build_tooling/requirements-analysis-workflow.txt <<END
+          from configparser import ConfigParser
+          cf = ConfigParser()
+          cf.read("../arcticdb_link/setup.cfg");
+
+          # setup_requires is not needed
+          print(cf['options']['setup_requires'])
+          print(cf['options']['install_requires'])
+          print(cf['options.extras_require']['Testing'])
+          END
+
           python -m pip install -r build_tooling/requirements-analysis-workflow.txt
           python -m grpc_tools.protoc -Icpp/proto --python_out=./python cpp/proto/arcticc/pb2/*.proto
           cd python
