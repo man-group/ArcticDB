@@ -126,9 +126,9 @@ void register_bindings(py::module& storage, py::exception<arcticdb::ArcticExcept
     py::class_<LibraryManager, std::shared_ptr<LibraryManager>>(storage, "LibraryManager")
         .def(py::init<std::shared_ptr<storage::Library>>())
         .def("write_library_config", [](const LibraryManager& library_manager, py::object& lib_cfg,
-                std::string_view library_path, const StorageOverride& override, const bool validate) {
+                                        std::string_view library_path, const StorageOverride& storage_override, const bool validate) {
             LibraryPath lib_path{library_path, '.'};
-            return library_manager.write_library_config(lib_cfg, lib_path, override, validate);
+            return library_manager.write_library_config(lib_cfg, lib_path, storage_override, validate);
         },
              py::arg("lib_cfg"),
              py::arg("library_path"),
