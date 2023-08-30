@@ -455,6 +455,12 @@ def mongo_test_uri(request):
         print(f"res.status_code: {res.status_code} res.text: {res.text}")
         have_running_mongo = res.status_code == 200 and "mongodb" in res.text.lower()
     except requests.exceptions.ConnectionError:
+        mongo_host = os.getenv("CI_MONGO_HOST", "localhost")
+        mongo_port = 27017
+        print(f"mongo_host: {mongo_host} mongo_port: {mongo_port}")  # 20230830
+        mongo_path = f"{mongo_host}:{mongo_port}"
+        res = requests.get(f"http://{mongo_path}")
+        print(f"res.status_code: {res.status_code} res.text: {res.text}")
         print("requests.exceptions.ConnectionError")
         have_running_mongo = False
 
