@@ -462,3 +462,18 @@ def test_columns_names_series_dynamic(lmdb_version_store_dynamic_schema, sym):
 
     lmdb_version_store_dynamic_schema.write(sym + "dynamic_schema", date_series)
     assert_series_equal(lmdb_version_store_dynamic_schema.read(sym + "dynamic_schema").data, date_series)
+
+
+@pytest.mark.skipif(not IS_PANDAS_TWO, reason="pandas 2.0-specific test")
+@pytest.mark.parametrize("datetime64_dtype", ["datetime64[s]", "datetime64[ms]", "datetime64[us]", "datetime64[ns]"])
+@pytest.mark.parametrize("PandasContainer", [pd.DataFrame, pd.Series])
+def test_no_inplace_index_array_modification(lmdb_version_store, sym, datetime64_dtype, PandasContainer):
+    # Normalization must not modify Series' or DataFrames' index array in-place.
+    pandas_container = PandasContainer(
+        data={"a": [1, 2, 3]},
+        index=pd.DatetimeIndex(["2020-01-01", "2020-01-02", "2020-01-03"], dtype=datetime64_dtype),
+    )
+    original_index_array = pandas_container.index
+    lmdb_version_store.write(sym, pandas_container)
+    assert pandas_container.index is original_index_array
+    assert pandas_container.index.dtype == datetime64_dtype

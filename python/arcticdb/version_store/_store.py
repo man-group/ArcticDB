@@ -2391,7 +2391,7 @@ class NativeVersionStore:
     def name(self):
         return self._lib_cfg.lib_desc.name
 
-    def get_num_rows(self, symbol: str, as_of: Optional[VersionQueryInput] = None) -> int:
+    def get_num_rows(self, symbol: str, as_of: Optional[VersionQueryInput] = None, **kwargs) -> int:
         """
         Query the number of rows in the specified revision of the symbol.
 
@@ -2407,8 +2407,9 @@ class NativeVersionStore:
         `int`
             The number of rows in the specified revision of the symbol.
         """
+        read_options = self._get_read_options(**kwargs)
         version_query = self._get_version_query(as_of)
-        dit = self.version_store.read_descriptor(symbol, version_query)
+        dit = self.version_store.read_descriptor(symbol, version_query, read_options)
         return dit.timeseries_descriptor.total_rows
 
     def lib_cfg(self):

@@ -15,7 +15,6 @@
 #include <arcticdb/stream/stream_sink.hpp>
 #include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/util/storage_lock.hpp>
-#include <arcticdb/util/test/generators.hpp>
 #include <arcticdb/entity/metrics.hpp>
 #include <arcticdb/version/version_tasks.hpp>
 #include <arcticdb/pipeline/index_utils.hpp>
