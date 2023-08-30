@@ -36,7 +36,7 @@ namespace arcticdb::storage {
 namespace {
     const std::string BAD_CONFIG_IN_STORAGE_ERROR = "Current library config is unsupported in this version of ArcticDB. "
                                                     "Please ask an administrator for your storage to follow the instructions in "
-                                                    "https://github.com/man-group/ArcticDB/blob/master/docs/mkdocs/docs/technical/upgrade_storage_config_v0.md";
+                                                    "https://github.com/man-group/ArcticDB/blob/master/docs/mkdocs/docs/technical/upgrade_storage.md";
 
     const std::string BAD_CONFIG_IN_ATTEMPTED_WRITE = "Attempting to write forbidden storage config. This indicates a "
                                                       "bug in ArcticDB.";
@@ -49,7 +49,7 @@ namespace {
                     encoding_version(library->config()))){
         }
 
-        void write_library_config(const py::object& lib_cfg, const LibraryPath& path, const StorageOverride& override,
+        void write_library_config(const py::object& lib_cfg, const LibraryPath& path, const StorageOverride& storage_override,
                                   const bool validate) const {
             SegmentInMemory segment;
 
@@ -57,7 +57,7 @@ namespace {
             google::protobuf::Any output = {};
             python_util::pb_from_python(lib_cfg, lib_cfg_proto);
 
-            apply_storage_override(override, lib_cfg_proto);
+            apply_storage_override(storage_override, lib_cfg_proto);
 
             output.PackFrom(lib_cfg_proto);
 
