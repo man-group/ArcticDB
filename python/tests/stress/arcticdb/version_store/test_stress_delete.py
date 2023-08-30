@@ -25,8 +25,9 @@ def check_no_keys(library):
         assert len(lib_tool.find_keys(key_type)) == 0
 
 
-def test_stress_delete(object_store_factory, request):
-    store_factory = object_store_factory
+# TODO: Fix this to use the regular object_store_factory when we fix the issue #806
+def test_stress_delete(local_object_store_factory):
+    store_factory = local_object_store_factory
     lib1 = store_factory(name=f"delete_me_{datetime.utcnow().isoformat()}")
     lib2 = store_factory(name=f"leave_me_{datetime.utcnow().isoformat()}")
     num_tests = 100
