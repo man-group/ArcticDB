@@ -227,8 +227,8 @@ def get_s3_proto(
             s3.prefix = with_prefix
         else:
             s3.prefix = f"{lib_name}{time.time() * 1e9:.0f}"
-    else:
-        s3.prefix = lib_name
+    # else:
+    #     s3.prefix = lib_name
 
     if region:
         s3.region = region

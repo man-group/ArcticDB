@@ -8,8 +8,7 @@ from pandas.testing import assert_frame_equal
 
 from arcticdb.util.test import sample_dataframe
 from arcticdb_ext.storage import KeyType
-from arcticdb_ext.tools import AZURE_SUPPORT
-from tests.conftest import PERSISTENT_STORAGE_TESTS_ENABLED
+from arcticdb.exceptions import NoDataFoundException
 import pytest
 
 
@@ -26,8 +25,8 @@ def check_no_keys(library):
 
 
 # TODO: Fix this to use the regular object_store_factory when we fix the issue #806
-def test_stress_delete(local_object_store_factory):
-    store_factory = local_object_store_factory
+def test_stress_delete(object_store_factory):
+    store_factory = object_store_factory
     lib1 = store_factory(name=f"delete_me_{datetime.utcnow().isoformat()}")
     lib2 = store_factory(name=f"leave_me_{datetime.utcnow().isoformat()}")
     num_tests = 100
@@ -46,6 +45,11 @@ def test_stress_delete(local_object_store_factory):
     lib1.version_store.clear()
     print("Delete took {}".format(datetime.now() - start_time))
 
+    # Make sure that the symbols are deleted
+    for x in range(num_tests):
+        with pytest.raises(NoDataFoundException) as e:
+            lib1.read(f"symbol_{x}")
+
     for x in range(num_tests):
         symbol = "symbol_{}".format(x)
         assert_frame_equal(lib2.read(symbol).data, written_dfs[x])
@@ -54,3 +58,8 @@ def test_stress_delete(local_object_store_factory):
 
     lib2.version_store.clear()
     check_no_keys(lib2)
+
+    # Make sure that the symbols are deleted
+    for x in range(num_tests):
+        with pytest.raises(NoDataFoundException) as e:
+            lib2.read(f"symbol_{x}")

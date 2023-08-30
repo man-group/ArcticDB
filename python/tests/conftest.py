@@ -374,26 +374,6 @@ def s3_store_factory(lib_name, moto_s3_endpoint_and_credentials):
             lib.version_store.clear()
 
 
-# @pytest.fixture(scope="function")
-# def real_s3_credentials():
-#     endpoint = os.getenv("ARCTICDB_REAL_S3_ENDPOINT")
-#     bucket = os.getenv("ARCTICDB_REAL_S3_BUCKET")
-#     region = os.getenv("ARCTICDB_REAL_S3_REGION")
-#     access_key = os.getenv("ARCTICDB_REAL_S3_ACCESS_KEY")
-#     secret_key = os.getenv("ARCTICDB_REAL_S3_SECRET_KEY")
-#     path_prefix = os.getenv("ARCTICDB_PERSISTENT_STORAGE_PATH_PREFIX")
-#     clear = True if str(os.getenv("ARCTICDB_REAL_S3_CLEAR")).lower() in ["true", "1"] else False
-
-#     yield endpoint, bucket, region, access_key, secret_key, path_prefix, clear
-
-
-# @pytest.fixture(scope="function")
-# def real_s3_uri(real_s3_credentials):
-#     endpoint, bucket, region, access_key, secret_key, path_prefix, _ = real_s3_credentials
-#     uri = f"s3s://{endpoint}:{bucket}?access={access_key}&secret={secret_key}&region={region}&path_prefix={path_prefix}"
-#     yield uri
-
-
 @pytest.fixture
 def real_s3_store_factory(lib_name, **kwargs):
     endpoint, bucket, region, aws_access_key, aws_secret_key, path_prefix, clear = real_s3_credentials(
@@ -539,7 +519,7 @@ def mongo_version_store(mongo_store_factory):
         "s3_store_factory",
         pytest.param(
             "azure_store_factory",
-            marks=pytest.mark.skipif(not AZURE_SUPPORT, reason="Pending Azure Storge Conda support"),
+            marks=pytest.mark.skipif(not AZURE_SUPPORT, reason="Pending Azure Storage Conda support"),
         ),
         pytest.param(
             "real_s3_store_factory",
@@ -583,7 +563,7 @@ def object_version_store_prune_previous(object_store_factory):
         "s3_store_factory",
         pytest.param(
             "azure_store_factory",
-            marks=pytest.mark.skipif(not AZURE_SUPPORT, reason="Pending Azure Storge Conda support"),
+            marks=pytest.mark.skipif(not AZURE_SUPPORT, reason="Pending Azure Storage Conda support"),
         ),
     ],
 )
@@ -628,7 +608,7 @@ def local_object_version_store_prune_previous(local_object_store_factory):
 )
 def basic_store_factory(request):
     """
-    Designed to test the bare minimum of stores
+    Designed to test the bare minimum of stores in integration/stress tests
      - LMDB for local storage
      - AWS S3 for persistent storage, if enabled
     """
