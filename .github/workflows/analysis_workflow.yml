@@ -102,7 +102,7 @@ jobs:
           python >build_tooling/requirements-analysis-workflow.txt <<END
           from configparser import ConfigParser
           cf = ConfigParser()
-          cf.read("../arcticdb_link/setup.cfg");
+          cf.read("setup.cfg");
 
           # setup_requires is not needed
           print(cf['options']['setup_requires'])
