@@ -76,8 +76,8 @@ def parse_query(query: str) -> ParsedQuery:
     parsed_query = {t.split("=", 1)[0]: t.split("=", 1)[1] for t in parsed_query}
 
     result = dict()
+    field_dict = {field.name: field for field in fields(ParsedQuery)}
     for key in parsed_query.keys():
-        field_dict = {field.name: field for field in fields(ParsedQuery)}
         if key not in field_dict.keys():
             raise LmdbOptionsError(
                 "Invalid LMDB URI. "
