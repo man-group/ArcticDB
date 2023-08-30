@@ -84,6 +84,3 @@ class LMDBLibraryAdapter(ArcticLibraryAdapter):
             lmdb_config = LmdbConfig()
             v.config.Unpack(lmdb_config)
             shutil.rmtree(os.path.join(lmdb_config.path, library_name), onerror=_rmtree_errorhandler)
-
-    def get_storage_override(self) -> StorageOverride:
-        return StorageOverride()
