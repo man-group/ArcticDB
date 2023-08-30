@@ -1337,6 +1337,8 @@ std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_
     bool validate_index,
     bool throw_on_error
 ) {
+    py::gil_scoped_release release_gil;
+
     auto write_options = get_write_options();
     auto update_info_futs = batch_get_latest_undeleted_version_and_next_version_id_async(store(),
                                                                                          version_map(),
@@ -1447,6 +1449,7 @@ std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_
     bool validate_index,
     bool upsert,
     bool throw_on_error) {
+    py::gil_scoped_release release_gil;
 
     auto stream_update_info_futures = batch_get_latest_undeleted_version_and_next_version_id_async(store(),
                                                                                                     version_map(),
