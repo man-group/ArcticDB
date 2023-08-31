@@ -37,9 +37,10 @@ def append_to_arctic(df, symbol, version_store, count):
     return vit
 
 
-def test_stress_indexing(basic_store_large_data):
+# This test is running only against LMDB because it is **very** slow, if ran against a persistent storage
+def test_stress_indexing(lmdb_version_store_big_map):
     symbol = "symbol"
 
     for x in range(1000):
         df = generate_data(2, 11)
-        append_to_arctic(df, symbol, basic_store_large_data, x)
+        append_to_arctic(df, symbol, lmdb_version_store_big_map, x)

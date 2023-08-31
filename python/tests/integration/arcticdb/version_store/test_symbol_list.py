@@ -95,12 +95,9 @@ def test_interleaved_store_read(basic_store_factory):
 # Using S3 because LMDB does not allow OpenMode to be changed
 def test_symbol_list_read_only_compaction_needed(small_max_delta, object_version_store, compact_first):
     lib_write = object_version_store
-    try:
-        lib_read = make_read_only(lib_write)
-    except Exception as ex:
-        if "E_INVALID_ARGUMENT Flags 0 and operating mode r are conflicting" == str(ex):
-            return
-        raise ex
+
+    lib_read = make_read_only(lib_write)
+
     lt = lib_write.library_tool()
     old_compaction = []
     if compact_first:

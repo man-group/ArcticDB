@@ -926,22 +926,18 @@ def test_read_ts(basic_store):
     basic_store.write("a", 4)  # v3
     basic_store.snapshot("snap3")
 
-    @retry(AssertionError, tries=3, delay=1.0)
-    def _check_list_versions():
-        versions = basic_store.list_versions()
-        assert len(versions) == 4
-        sorted_versions_for_a = sorted([v for v in versions if v["symbol"] == "a"], key=lambda x: x["version"])
-        ts_for_v1 = sorted_versions_for_a[1]["date"]
-        vitem = basic_store.read("a", as_of=ts_for_v1)
-        assert vitem.version == 1
-        assert vitem.data == 2
+    versions = basic_store.list_versions()
+    assert len(versions) == 4
+    sorted_versions_for_a = sorted([v for v in versions if v["symbol"] == "a"], key=lambda x: x["version"])
+    ts_for_v1 = sorted_versions_for_a[1]["date"]
+    vitem = basic_store.read("a", as_of=ts_for_v1)
+    assert vitem.version == 1
+    assert vitem.data == 2
 
-        ts_for_v2 = sorted_versions_for_a[0]["date"]
-        vitem = basic_store.read("a", as_of=ts_for_v2)
-        assert vitem.version == 0
-        assert vitem.data == 1
-
-    _check_list_versions()
+    ts_for_v2 = sorted_versions_for_a[0]["date"]
+    vitem = basic_store.read("a", as_of=ts_for_v2)
+    assert vitem.version == 0
+    assert vitem.data == 1
 
     with pytest.raises(NoDataFoundException):
         basic_store.read("a", as_of=pd.Timestamp(0))

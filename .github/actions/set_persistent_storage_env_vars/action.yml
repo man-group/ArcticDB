@@ -1,5 +1,5 @@
 name: 'Set Persistent storages env variables'
-description: 'Set the necessary '
+description: 'Set the necessary variables for Persistent storage tests'
 inputs:
   bucket:            {default: 'arcticdb-ci-test-bucket-01', type: string, description: The name of the S3 bucket that we will test against}
   endpoint:          {default: 's3.eu-west-2.amazonaws.com', type: string, description: The address of the S3 endpoint}

@@ -232,9 +232,11 @@ def test_separation_between_libraries_with_prefixes(object_storage_uri_incl_buck
 
     assert ac_mars.list_libraries() == []
     ac_mercury.create_library("pytest_test_lib")
+    ac_mercury.create_library("pytest_test_lib_2")
     ac_mars.create_library("pytest_test_lib")
-    assert ac_mercury.list_libraries() == ["pytest_test_lib"]
-    assert ac_mars.list_libraries() == ["pytest_test_lib"]
+    ac_mars.create_library("pytest_test_lib_2")
+    assert ac_mercury.list_libraries() == ["pytest_test_lib", "pytest_test_lib_2"]
+    assert ac_mars.list_libraries() == ["pytest_test_lib", "pytest_test_lib_2"]
 
     ac_mercury["pytest_test_lib"].write("test_1", pd.DataFrame())
     ac_mars["pytest_test_lib"].write("test_2", pd.DataFrame())
@@ -243,7 +245,10 @@ def test_separation_between_libraries_with_prefixes(object_storage_uri_incl_buck
     assert ac_mars["pytest_test_lib"].list_symbols() == ["test_2"]
 
     ac_mercury.delete_library("pytest_test_lib")
+    ac_mercury.delete_library("pytest_test_lib_2")
+
     ac_mars.delete_library("pytest_test_lib")
+    ac_mars.delete_library("pytest_test_lib_2")
 
 
 def object_storage_uri_and_client():

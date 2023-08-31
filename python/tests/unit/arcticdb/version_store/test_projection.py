@@ -9,7 +9,6 @@ from hypothesis import assume, given, settings
 from hypothesis.extra.pandas import column, data_frames, range_indexes
 import numpy as np
 import pandas as pd
-import time
 
 from arcticdb.version_store.processing import QueryBuilder
 from arcticdb.util.test import assert_frame_equal
