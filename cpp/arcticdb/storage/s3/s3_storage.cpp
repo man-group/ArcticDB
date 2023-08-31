@@ -10,7 +10,6 @@
 #include <aws/core/auth/AWSCredentialsProvider.h>
 #include <arcticdb/storage/s3/s3_api.hpp>
 #include <arcticdb/log/log.hpp>
-#include <arcticdb/util/error_code.hpp>
 #include <locale>
 
 namespace arcticdb::storage::s3 {
@@ -52,13 +51,8 @@ S3Storage::S3Storage(const LibraryPath &library_path, OpenMode mode, const Confi
 
     if (!conf.prefix().empty()) {
         ARCTICDB_RUNTIME_DEBUG(log::storage(), "S3 prefix found, using: {}", conf.prefix());
-        if ('/' == conf.prefix().back()) {
-            throw ArcticCategorizedException<ErrorCategory::USER_INPUT>("path_prefix cannot end with a /");
-        }
-        auto prefix = conf.prefix();
-        auto full_library_path_str = conf.prefix() + "/" + library_path.to_delim_path();
-        auto full_library_path = LibraryPath::from_delim_path(full_library_path_str, '.');
-        root_folder_ = object_store_utils::get_root_folder(full_library_path);
+        auto prefix_path = LibraryPath::from_delim_path(conf.prefix(), '.');
+        root_folder_ = object_store_utils::get_root_folder(prefix_path);
     } else {
         ARCTICDB_RUNTIME_DEBUG(log::storage(), "S3 prefix not found, will use {}", root_folder_);
     }

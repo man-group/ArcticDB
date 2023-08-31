@@ -76,7 +76,9 @@ class S3LibraryAdapter(ArcticLibraryAdapter):
         env_cfg = EnvironmentConfigsMap()
         _name = self._query_params.access if not self._query_params.aws_auth else USE_AWS_CRED_PROVIDERS_TOKEN
         _key = self._query_params.secret if not self._query_params.aws_auth else USE_AWS_CRED_PROVIDERS_TOKEN
-        with_prefix = self._query_params.path_prefix if self._query_params.path_prefix else False
+        with_prefix = (
+            f"{self._query_params.path_prefix}/{self.CONFIG_LIBRARY_NAME}" if self._query_params.path_prefix else False
+        )
 
         add_s3_library_to_env(
             env_cfg,

@@ -28,7 +28,7 @@ from arcticc.pb2.storage_pb2 import (
 
 from arcticdb.config import *  # for backward compat after moving to config
 from arcticdb.config import _expand_path
-from arcticdb.exceptions import ArcticNativeException, LibraryNotFound
+from arcticdb.exceptions import ArcticNativeException, LibraryNotFound, UserInputException
 from arcticdb.version_store._store import NativeVersionStore
 from arcticdb.authorization.permissions import OpenMode
 
@@ -227,8 +227,8 @@ def get_s3_proto(
             s3.prefix = with_prefix
         else:
             s3.prefix = f"{lib_name}{time.time() * 1e9:.0f}"
-    # else:
-    #     s3.prefix = lib_name
+    else:
+        s3.prefix = lib_name
 
     if region:
         s3.region = region
@@ -255,6 +255,12 @@ def add_s3_library_to_env(
 ):
     # type: (EnvironmentConfigsMap, LibName, EnvName, AnyStr, AnyStr, Optional[AnyStr], Optional[AnyStr], Optional[AnyStr], Optional[AnyStr], bool, Optional[AnyStr], bool)->None
     env = cfg.env_by_id[env_name]
+    if with_prefix and isinstance(with_prefix, str) and (with_prefix.endswith("/") or "//" in with_prefix):
+        raise UserInputException(
+            "path_prefix cannot contain // or end with a / because this breaks some S3 API calls, path_prefix was"
+            f" [{with_prefix}]"
+        )
+
     sid, storage = get_s3_proto(
         cfg=cfg,
         lib_name=lib_name,
@@ -290,6 +296,9 @@ def create_test_s3_cfg(
     region: str = None,
 ) -> EnvironmentConfigsMap:
     cfg = EnvironmentConfigsMap()
+    if with_prefix and isinstance(with_prefix, str):
+        with_prefix = f"{with_prefix}/{lib_name}"
+
     add_s3_library_to_env(
         cfg,
         lib_name=lib_name,
