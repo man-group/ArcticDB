@@ -23,7 +23,7 @@ from arcticc.pb2.descriptors_pb2 import UserDefinedMetadata, NormalizationMetada
 from arcticc.pb2.storage_pb2 import VersionStoreConfig
 from mmap import mmap
 from collections import Counter
-from arcticdb.exceptions import ArcticNativeException, ArcticNativeNotYetImplemented
+from arcticdb.exceptions import ArcticNativeException, ArcticDbNotYetImplemented
 from arcticdb.supported_types import DateRangeInput, time_types as supported_time_types
 from arcticdb.util._versions import IS_PANDAS_TWO
 from arcticdb.version_store.read_result import ReadResult
@@ -205,7 +205,7 @@ def _to_primitive(arr, arr_name, dynamic_strings, string_max_len=None, coerce_co
                 coerce_column_type = float
                 return arr.astype(coerce_column_type)
             else:
-                raise ArcticNativeNotYetImplemented(
+                raise ArcticDbNotYetImplemented(
                     "coercing column type is required when empty column of object type, Column type={} for column={}"
                     .format(arr.dtype, arr_name)
                 )
@@ -245,7 +245,7 @@ def _to_primitive(arr, arr_name, dynamic_strings, string_max_len=None, coerce_co
     elif dynamic_strings and sample is None:  # arr is entirely empty
         return arr
     else:
-        raise ArcticNativeNotYetImplemented(
+        raise ArcticDbNotYetImplemented(
             "Support for arbitrary objects in an array is not implemented apart from string, unicode, Timestamp. "
             "Column type={} for column={}. Do you have mixed dtypes in your column?".format(arr.dtype, arr_name)
         )
@@ -255,12 +255,12 @@ def _to_primitive(arr, arr_name, dynamic_strings, string_max_len=None, coerce_co
         return casted_arr
     else:
         if None in arr:
-            raise ArcticNativeNotYetImplemented(
+            raise ArcticDbNotYetImplemented(
                 "You have a None object in the numpy array at positions={} Column type={} for column={} "
                 "which cannot be normalized.".format(np.where(arr is None)[0], arr.dtype, arr_name)
             )
         else:
-            raise ArcticNativeNotYetImplemented(
+            raise ArcticDbNotYetImplemented(
                 "Could not convert this column={} of type 'O' to a primitive type. ".format(arr_name)
             )
 
@@ -609,7 +609,7 @@ class NdArrayNormalizer(Normalizer):
 
     def normalize(self, item, **kwargs):
         if IS_WINDOWS and item.dtype.char == "U":
-            raise ArcticNativeNotYetImplemented("Numpy strings are not yet implemented on Windows")  # SKIP_WIN
+            raise ArcticDbNotYetImplemented("Numpy strings are not yet implemented on Windows")  # SKIP_WIN
         norm_meta = NormalizationMetadata()
         norm_meta.np.shape.extend(item.shape)
 
@@ -697,7 +697,7 @@ class DataFrameNormalizer(_PandasNormalizer):
         # type: (_FrameData, NormalizationMetadata.PandaDataFrame)->DataFrame
 
         if norm_meta.HasField("multi_columns"):
-            raise ArcticNativeNotYetImplemented(
+            raise ArcticDbNotYetImplemented(
                 "MultiColumns are not implemented. Normalization meta: {}".format(str(norm_meta))
             )
 
@@ -826,7 +826,7 @@ class DataFrameNormalizer(_PandasNormalizer):
             item = item.copy()
 
         if isinstance(item.columns, MultiIndex):
-            raise ArcticNativeNotYetImplemented("MultiIndex column are not supported yet")
+            raise ArcticDbNotYetImplemented("MultiIndex column are not supported yet")
 
         index_names, ix_vals = self._index_to_records(
             item, norm_meta.df.common, dynamic_strings, string_max_len=string_max_len
@@ -928,9 +928,7 @@ class MsgPackNormalizer(Normalizer):
             self._msgpack_pack(obj, buffer)
         except ValueError as e:
             if str(e) == "data out of range":
-                raise ArcticNativeNotYetImplemented(
-                    "Fallback normalized msgpack size cannot exceed {}B".format(self._size)
-                )
+                raise ArcticDbNotYetImplemented("Fallback normalized msgpack size cannot exceed {}B".format(self._size))
             else:
                 raise
 
@@ -1021,7 +1019,7 @@ class MsgPackNormalizer(Normalizer):
 
         if code == MsgPackSerialization.PY_PICKLE_3:
             if not PY3:
-                raise ArcticNativeNotYetImplemented("Data has been pickled in Py3. Reading from Py2 is not supported.")
+                raise ArcticDbNotYetImplemented("Data has been pickled in Py3. Reading from Py2 is not supported.")
             data = MsgPackNormalizer._nested_msgpack_unpackb(data, raw=False)
             return Pickler.read(data, pickled_in_python2=False)
 
@@ -1278,7 +1276,7 @@ def normalize_metadata(d):
     try:
         _msgpack_metadata._msgpack_pack(d, m)
     except ValueError:
-        raise ArcticNativeNotYetImplemented("User defined metadata cannot exceed {}B".format(_MAX_USER_DEFINED_META))
+        raise ArcticDbNotYetImplemented("User defined metadata cannot exceed {}B".format(_MAX_USER_DEFINED_META))
 
     udm = UserDefinedMetadata()
     udm.inline_payload = memoryview(m[: m.tell()]).tobytes()
@@ -1293,7 +1291,7 @@ def denormalize_user_metadata(udm, ext_obj=None):
     elif storage_type is None:
         return None
     else:
-        raise ArcticNativeNotYetImplemented("Extra object reference is not supported yet")
+        raise ArcticDbNotYetImplemented("Extra object reference is not supported yet")
 
 
 def denormalize_dataframe(ret):

@@ -16,7 +16,7 @@ import pytz
 from numpy.testing import assert_equal, assert_array_equal
 from arcticdb_ext.version_store import SortedValue as _SortedValue
 
-from arcticdb.exceptions import ArcticNativeNotYetImplemented
+from arcticdb.exceptions import ArcticDbNotYetImplemented
 from arcticdb.version_store._custom_normalizers import (
     register_normalizer,
     get_custom_normalizer,
@@ -73,7 +73,7 @@ def test_user_meta_and_msg_pack(d):
 
 
 def test_fails_humongous_meta():
-    with pytest.raises(ArcticNativeNotYetImplemented):
+    with pytest.raises(ArcticDbNotYetImplemented):
         from arcticdb.version_store._normalization import _MAX_USER_DEFINED_META as MAX
 
         meta = {"a": "x" * (MAX)}
@@ -82,7 +82,7 @@ def test_fails_humongous_meta():
 
 def test_fails_humongous_data():
     norm = test_msgpack_normalizer
-    with pytest.raises(ArcticNativeNotYetImplemented):
+    with pytest.raises(ArcticDbNotYetImplemented):
         big = [1] * (norm.MMAP_DEFAULT_SIZE + 1)
         norm.normalize(big)
 
@@ -198,7 +198,7 @@ def test_timestamp_without_tz():
 
 def test_column_with_mixed_types():
     df = pd.DataFrame({"col": [1, "a"]})
-    with pytest.raises(ArcticNativeNotYetImplemented):
+    with pytest.raises(ArcticDbNotYetImplemented):
         DataFrameNormalizer().normalize(df)
 
 
@@ -305,7 +305,7 @@ def test_force_pickle_on_norm_failure():
     _d, _meta = norm.normalize(normal_df)
 
     # This should fail as the df has mixed type
-    with pytest.raises(ArcticNativeNotYetImplemented):
+    with pytest.raises(ArcticDbNotYetImplemented):
         norm.normalize(mixed_type_df)
 
     # Explicitly passing in pickle settings without global pickle flag being set should work

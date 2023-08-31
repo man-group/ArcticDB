@@ -48,7 +48,7 @@ from arcticdb_ext.version_store import ColumnStats as _ColumnStats
 from arcticdb_ext.version_store import StreamDescriptorMismatch
 from arcticdb_ext.version_store import DataError
 from arcticdb.authorization.permissions import OpenMode
-from arcticdb.exceptions import ArcticNativeNotYetImplemented, ArcticNativeException
+from arcticdb.exceptions import ArcticDbNotYetImplemented, ArcticNativeException
 from arcticdb.flattener import Flattener
 from arcticdb.log import version as log
 from arcticdb.version_store._custom_normalizers import get_custom_normalizer, CompositeCustomNormalizer
@@ -150,7 +150,7 @@ def _handle_categorical_columns(symbol, data, throw=True):
                 " columns: {}".format(symbol, categorical_columns)
             )
             if throw:
-                raise ArcticNativeNotYetImplemented(message)
+                raise ArcticDbNotYetImplemented(message)
             else:
                 log.warn(message)
 
@@ -233,7 +233,7 @@ class NativeVersionStore:
                 MsgPackNormalizer(nfh), use_norm_failure_handler_known_types=use_norm_failure_handler_known_types
             )
         else:
-            raise ArcticNativeNotYetImplemented("No other normalization failure handler")
+            raise ArcticDbNotYetImplemented("No other normalization failure handler")
 
     def _initialize(self, library, env, lib_cfg, custom_normalizer, open_mode):
         self._library = library
@@ -336,7 +336,7 @@ class NativeVersionStore:
                     dynamic_schema=dynamic_schema,
                     **kwargs,
                 )
-        except ArcticNativeNotYetImplemented as ex:
+        except ArcticDbNotYetImplemented as ex:
             log.error("Not supported: normalizing symbol={}, data={}, metadata={}, {}", symbol, dataframe, metadata, ex)
             raise
         except Exception as ex:
@@ -351,12 +351,12 @@ class NativeVersionStore:
     @staticmethod
     def check_symbol_validity(symbol):
         if not len(symbol) < MAX_SYMBOL_SIZE:
-            raise ArcticNativeNotYetImplemented(
+            raise ArcticDbNotYetImplemented(
                 f"Symbol length {len(symbol)} chars exceeds the max supported length of {MAX_SYMBOL_SIZE} chars."
             )
 
         if len(set(symbol).intersection(UNSUPPORTED_S3_CHARS)):
-            raise ArcticNativeNotYetImplemented(
+            raise ArcticDbNotYetImplemented(
                 f"The symbol '{symbol}' has one or more unsupported characters({','.join(UNSUPPORTED_S3_CHARS)})."
             )
 
@@ -2691,9 +2691,7 @@ class NativeVersionStore:
         """
 
         if self._lib_cfg.lib_desc.version.write_options.bucketize_dynamic:
-            raise ArcticNativeNotYetImplemented(
-                f"Support for library with 'bucketize_dynamic' ON is not implemented yet"
-            )
+            raise ArcticDbNotYetImplemented(f"Support for library with 'bucketize_dynamic' ON is not implemented yet")
 
         result = self.version_store.defragment_symbol_data(symbol, segment_size)
         return VersionedItem(
