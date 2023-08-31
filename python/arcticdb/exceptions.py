@@ -21,3 +21,7 @@ class LibraryNotFound(ArcticException):
 
 class MismatchingLibraryOptions(ArcticException):
     pass
+
+
+class LmdbOptionsError(ArcticException):
+    pass
