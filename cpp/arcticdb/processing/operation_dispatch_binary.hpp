@@ -46,6 +46,15 @@ VariantData visit_binary_boolean(const VariantData& left, const VariantData& rig
 
 template <typename Func>
 VariantData binary_membership(const ColumnWithStrings& column_with_strings, ValueSet& value_set, Func&& func) {
+    if (is_empty_type(column_with_strings.column_->type().data_type())) {
+        if constexpr(std::is_same_v<Func, IsInOperator&&>) {
+            return EmptyResult{};
+        } else if constexpr(std::is_same_v<Func, IsNotInOperator&&>) {
+            return FullResult{};
+        } else {
+            internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Unexpected operator passed to binary_membership");
+        }
+    }
     auto output = std::make_shared<util::BitSet>(column_with_strings.column_->row_count());
     // If the value set is empty, then for IsInOperator, we are done
     // For the IsNotInOperator, set all bits to 1
@@ -155,6 +164,9 @@ VariantData visit_binary_membership(const VariantData &left, const VariantData &
 
 template <typename Func>
 VariantData binary_comparator(const Value& val, const ColumnWithStrings& column_with_strings, Func&& func) {
+    if (is_empty_type(column_with_strings.column_->type().data_type())) {
+        return EmptyResult{};
+    }
     auto output = std::make_shared<util::BitSet>(static_cast<util::BitSetSizeType>(column_with_strings.column_->row_count()));
 
     column_with_strings.column_->type().visit_tag([&val, &column_with_strings, &func, &output] (auto column_desc_tag) {
@@ -193,7 +205,8 @@ VariantData binary_comparator(const Value& val, const ColumnWithStrings& column_
                     }
                 }
                 inserter.flush();
-            } else if constexpr (is_numeric_type(ColumnTagType::data_type) && is_numeric_type(DataTypeTag::data_type)) {
+            } else if constexpr ((is_numeric_type(ColumnTagType::data_type) && is_numeric_type(DataTypeTag::data_type)) ||
+                                 (is_bool_type(ColumnTagType::data_type) && is_bool_type(DataTypeTag::data_type))) {
                 using RawType =  typename decltype(value_desc_tag)::DataTypeTag::raw_type;
                 using comp = typename arcticdb::Comparable<RawType, ColumnType>;
                 auto value = static_cast<typename comp::left_type>(*reinterpret_cast<const RawType*>(val.data_));
@@ -222,6 +235,9 @@ VariantData binary_comparator(const Value& val, const ColumnWithStrings& column_
 
 template <typename Func>
 VariantData binary_comparator(const ColumnWithStrings& left, const ColumnWithStrings& right, Func&& func) {
+    if (is_empty_type(left.column_->type().data_type()) || is_empty_type(right.column_->type().data_type())) {
+        return EmptyResult{};
+    }
     util::check(left.column_->row_count() == right.column_->row_count(), "Columns with different row counts ({} and {}) in binary comparator", left.column_->row_count(), right.column_->row_count());
     auto output = std::make_shared<util::BitSet>(static_cast<util::BitSetSizeType>(left.column_->row_count()));
 
@@ -255,7 +271,8 @@ VariantData binary_comparator(const ColumnWithStrings& left, const ColumnWithStr
                     }
                 }
                 inserter.flush();
-            } else if constexpr (is_numeric_type(LeftTagType::data_type) && is_numeric_type(RightTagType::data_type)) {
+            } else if constexpr ((is_numeric_type(LeftTagType::data_type) && is_numeric_type(RightTagType::data_type)) ||
+                                 (is_bool_type(LeftTagType::data_type) && is_bool_type(RightTagType::data_type))) {
                 using comp = typename arcticdb::Comparable<LeftType, RightType>;
 
                 auto left_column_data = left.column_->data();
@@ -286,6 +303,9 @@ VariantData binary_comparator(const ColumnWithStrings& left, const ColumnWithStr
 
 template <typename Func>
 VariantData binary_comparator(const ColumnWithStrings& column_with_strings, const Value& val, Func&& func) {
+    if (is_empty_type(column_with_strings.column_->type().data_type())) {
+        return EmptyResult{};
+    }
     auto output = std::make_shared<util::BitSet>(static_cast<util::BitSetSizeType>(column_with_strings.column_->row_count()));
 
     column_with_strings.column_->type().visit_tag([&val, &column_with_strings, &func, &output] (auto column_desc_tag) {
@@ -326,18 +346,18 @@ VariantData binary_comparator(const ColumnWithStrings& column_with_strings, cons
                 inserter.flush();
             } else if constexpr ((is_numeric_type(ColumnTagType::data_type) && is_numeric_type(DataTypeTag::data_type)) ||
                                  (is_bool_type(ColumnTagType::data_type) && is_bool_type(DataTypeTag::data_type))) {
-                using RawType =  typename decltype(value_desc_tag)::DataTypeTag::raw_type;
+                using RawType = typename decltype(value_desc_tag)::DataTypeTag::raw_type;
                 using comp = typename arcticdb::Comparable<RawType, ColumnType>;
-                auto value = static_cast<typename comp::left_type>(*reinterpret_cast<const RawType*>(val.data_));
+                auto value = static_cast<typename comp::left_type>(*reinterpret_cast<const RawType *>(val.data_));
                 auto column_data = column_with_strings.column_->data();
 
                 util::BitSet::bulk_insert_iterator inserter(*output);
                 auto pos = 0u;
                 while (auto block = column_data.next<ColumnDescriptorType>()) {
-                    auto ptr = reinterpret_cast<const ColumnType*>(block.value().data());
+                    auto ptr = reinterpret_cast<const ColumnType *>(block.value().data());
                     const auto row_count = block.value().row_count();
                     for (auto i = 0u; i < row_count; ++i, ++pos) {
-                        if(func(static_cast<typename comp::right_type>(*ptr++), value))
+                        if (func(static_cast<typename comp::right_type>(*ptr++), value))
                             inserter = pos;
                     }
                 }
@@ -409,6 +429,9 @@ VariantData binary_operator(const Value& left, const Value& right, Func&& func) 
 
 template <typename Func>
 VariantData binary_operator(const Value& val, const Column& col, Func&& func) {
+    schema::check<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>(
+            !is_empty_type(col.type().data_type()),
+            "Empty column provided to binary operator");
     std::unique_ptr<Column> output;
 
     details::visit_type(col.type().data_type(), [&](auto right_desc_tag) {
@@ -450,6 +473,9 @@ VariantData binary_operator(const Value& val, const Column& col, Func&& func) {
 
 template <typename Func>
 VariantData binary_operator(const Column& left, const Column& right, Func&& func) {
+    schema::check<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>(
+            !is_empty_type(left.type().data_type()) && !is_empty_type(right.type().data_type()),
+            "Empty column provided to binary operator");
     util::check(left.row_count() == right.row_count(), "Columns with different row counts ({} and {}) in binary operator", left.row_count(), right.row_count());
     std::unique_ptr<Column> output;
 
@@ -496,6 +522,9 @@ VariantData binary_operator(const Column& left, const Column& right, Func&& func
 
 template <typename Func>
 VariantData binary_operator(const Column& col, const Value& val, Func&& func) {
+    schema::check<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>(
+            !is_empty_type(col.type().data_type()),
+            "Empty column provided to binary operator");
     std::unique_ptr<Column> output;
 
     details::visit_type(col.type().data_type(), [&](auto left_desc_tag) {
