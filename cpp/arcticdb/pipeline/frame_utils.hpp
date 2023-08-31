@@ -109,7 +109,7 @@ std::optional<convert::StringEncodingError> aggregator_set_data(
         util::check(type_desc.data_type() == tensor.data_type(), "Type desc {} != {} tensor type", type_desc.data_type(),
                     tensor.data_type());
         util::check(type_desc.data_type() == dt, "Type desc {} != {} static type", type_desc.data_type(), dt);
-        auto c_style = util::is_cstyle_array<RawType>(tensor);
+        const auto c_style = util::is_cstyle_array<RawType>(tensor);
         std::optional<ChunkedBuffer> flattened_buffer;
         if constexpr (is_sequence_type(dt)) {
             ARCTICDB_SUBSAMPLE_AGG(SetDataString)
@@ -210,7 +210,7 @@ std::optional<convert::StringEncodingError> aggregator_set_data(
                 agg.set_sparse_block(col, std::move(bool_buffer), std::move(bitset));
 
         } else if constexpr(is_array_type(dt)) {
-            auto data = const_cast<void *>(tensor.data());
+            auto data = const_cast<void*>(tensor.data());
             auto ptr_data = reinterpret_cast<PyObject**>(data);
             ptr_data += row;
 

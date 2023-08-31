@@ -207,8 +207,7 @@ struct TypedTensor : public NativeTensor {
             auto divisor = calc_elements(shape(), ndim()) / nvalues;
             shapes_[0] /= divisor;
             stride_offset = strides(0) * (shape(0));
-        }
-        else {
+        } else {
             shapes_[0] = nvalues;
             stride_offset = regular_slice_size * strides(0);
         }
