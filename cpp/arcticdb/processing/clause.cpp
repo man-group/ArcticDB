@@ -339,7 +339,11 @@ Composite<ProcessingUnit> AggregationClause::process(std::shared_ptr<Store> stor
                                                     auto input_column = proc_.get(input_column_name, store);
                                                     std::optional<ColumnWithStrings> opt_input_column;
                                                     if (std::holds_alternative<ColumnWithStrings>(input_column)) {
-                                                        opt_input_column.emplace(std::get<ColumnWithStrings>(input_column));
+                                                        auto column_with_strings = std::get<ColumnWithStrings>(input_column);
+                                                        // Empty columns don't contribute to aggregations
+                                                        if (!is_empty_type(column_with_strings.column_->type().data_type())) {
+                                                            opt_input_column.emplace(std::move(column_with_strings));
+                                                        }
                                                     }
                                                     agg_data->aggregate(opt_input_column, row_to_group, num_unique);
                                                 }

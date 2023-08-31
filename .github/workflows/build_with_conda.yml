@@ -58,6 +58,8 @@ jobs:
           python -m pip install --no-build-isolation --no-deps -v -e .
         env:
           ARCTICDB_USING_CONDA: 1
+          # Using one thread to avoid swapping which might freeze CI machines.
+          CMAKE_BUILD_PARALLEL_LEVEL: 1
           ARCTICDB_BUILD_CPP_TESTS: ${{ matrix.cpp_tests }}
 
       - name: Build C++ Tests
@@ -102,11 +104,6 @@ jobs:
         uses: SimenB/github-actions-cpu-cores@v1
         id: cpu-cores
 
-      - name: Append to environment_unix.yml
-        shell: bash -l {0}
-        run: |
-            echo "  - cxx-compiler" >> environment_unix.yml
-
       - name: Install Conda environment from environment_unix.yml
         uses: mamba-org/setup-micromamba@v1
         with:
@@ -124,6 +121,8 @@ jobs:
           python -m pip install --no-build-isolation --no-deps -v -e .
         env:
           ARCTICDB_USING_CONDA: 1
+          # Using one thread to avoid swapping which might freeze the CI machine.
+          CMAKE_BUILD_PARALLEL_LEVEL: 1
           ARCTICDB_BUILD_CPP_TESTS: 1
 
       - name: Build C++ Tests
@@ -132,7 +131,7 @@ jobs:
           cd cpp/out/darwin-conda-release-build/
           make -j ${{ steps.cpu-cores.outputs.count }} arcticdb_rapidcheck_tests
           make -j ${{ steps.cpu-cores.outputs.count }} test_unit_arcticdb
-  
+
       - name: Run C++ Tests
         shell: bash -l {0}
         run: |

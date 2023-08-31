@@ -7,10 +7,10 @@ As of the Change Date specified in that file, in accordance with the Business So
 """
 from typing import List, Optional
 
-from arcticdb.options import LibraryOptions
+from arcticdb.options import DEFAULT_ENCODING_VERSION, LibraryOptions
 from arcticdb_ext.storage import LibraryManager, StorageOverride
-from arcticdb.exceptions import LibraryNotFound
-from arcticdb.version_store.library import Library
+from arcticdb.exceptions import LibraryNotFound, MismatchingLibraryOptions
+from arcticdb.version_store.library import ArcticInvalidApiUsageException, Library
 from arcticdb.version_store._store import NativeVersionStore
 from arcticdb.adapters.s3_library_adapter import S3LibraryAdapter
 from arcticdb.adapters.lmdb_library_adapter import LMDBLibraryAdapter
@@ -26,7 +26,7 @@ class Arctic:
 
     _LIBRARY_ADAPTERS = [S3LibraryAdapter, LMDBLibraryAdapter, AzureLibraryAdapter]
 
-    def __init__(self, uri: str, encoding_version: EncodingVersion = EncodingVersion.V1):
+    def __init__(self, uri: str, encoding_version: EncodingVersion = DEFAULT_ENCODING_VERSION):
         """
         Initializes a top-level Arctic library management instance.
 
@@ -66,8 +66,6 @@ class Arctic:
                 | path_prefix               | Path within S3 bucket to use for data storage                                                                                                                 |
                 +---------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------+
                 | aws_auth                  | If true, authentication to endpoint will be computed via AWS environment vars/config files. If no options are provided `aws_auth` will be assumed to be true. |
-                +---------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------+
-                | force_uri_lib_config      | Override the credentials and endpoint of an S3 storage with the URI of the Arctic object. Use if accessing a replicated (to different region/bucket) library. |
                 +---------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------+
 
                 Note: When connecting to AWS, `region` can be automatically deduced from the endpoint if the given endpoint
@@ -123,6 +121,10 @@ class Arctic:
                 The LMDB URI connection scheme has the form ``lmdb:///<path to store LMDB files>``. There are no options
                 available for the LMDB URI connection scheme.
 
+        encoding_version: EncodingVersion, default DEFAULT_ENCODING_VERSION
+            When creating new libraries with this Arctic instance, the defaul encoding version to use.
+            Can be overridden by specifying the encoding version in the LibraryOptions argument to create_library.
+
         Examples
         --------
 
@@ -170,12 +172,29 @@ class Arctic:
     def __repr__(self):
         return "Arctic(config=%r)" % self._library_adapter
 
-    def get_library(self, library: str) -> Library:
+    def get_library(
+        self, name: str, create_if_missing: Optional[bool] = False, library_options: Optional[LibraryOptions] = None
+    ) -> Library:
         """
-        Returns the library named `library`.
+        Returns the library named `name`.
 
         This method can also be invoked through subscripting. ``Arctic('bucket').get_library("test")`` is equivalent to
         ``Arctic('bucket')["test"]``.
+
+        Parameters
+        ----------
+        name: str
+            The name of the library that you wish to retrieve.
+
+        create_if_missing: Optional[bool], default = False
+            If True, and the library does not exist, then create it.
+
+        library_options: Optional[LibraryOptions], default = None
+            If create_if_missing is True, and the library does not already exist, then it will be created with these
+            options, or the defaults if not provided.
+            If create_if_missing is True, and the library already exists, ensures that the existing library options
+            match these.
+            Unused if create_if_missing is False.
 
         Examples
         --------
@@ -188,9 +207,25 @@ class Arctic:
         -------
         Library
         """
-        return self[library]
+        if library_options and not create_if_missing:
+            raise ArcticInvalidApiUsageException(
+                "In get_library, library_options must be falsey if create_if_missing is falsey"
+            )
+        try:
+            lib = self[name]
+            if create_if_missing and library_options:
+                if library_options.encoding_version is None:
+                    library_options.encoding_version = self._encoding_version
+                if lib.options() != library_options:
+                    raise MismatchingLibraryOptions(f"{name}: {lib.options()} != {library_options}")
+            return lib
+        except LibraryNotFound as e:
+            if create_if_missing:
+                return self.create_library(name, library_options)
+            else:
+                raise e
 
-    def create_library(self, name: str, library_options: Optional[LibraryOptions] = None) -> None:
+    def create_library(self, name: str, library_options: Optional[LibraryOptions] = None) -> Library:
         """
         Creates the library named ``name``.
 
@@ -215,8 +250,12 @@ class Arctic:
         >>> arctic = Arctic('s3://MY_ENDPOINT:MY_BUCKET')
         >>> arctic.create_library('test.library')
         >>> my_library = arctic['test.library']
+
+        Returns
+        -------
+        Library that was just created
         """
-        if name in self._open_libraries or self._library_manager.has_library(name):
+        if self.has_library(name):
             raise ValueError(f"Library [{name}] already exists.")
 
         if library_options is None:
@@ -226,7 +265,8 @@ class Arctic:
         library.env = repr(self._library_adapter)
         lib = Library(repr(self), library)
         self._open_libraries[name] = lib
-        self._library_manager.write_library_config(library._lib_cfg, name)
+        self._library_manager.write_library_config(library._lib_cfg, name, self._library_adapter.get_masking_override())
+        return self.get_library(name)
 
     def delete_library(self, name: str) -> None:
         """
@@ -243,13 +283,28 @@ class Arctic:
         already_open = self._open_libraries.pop(name, None)
         if not already_open and not self._library_manager.has_library(name):
             return
-        config = self._library_manager.get_library_config(name, StorageOverride())
+        config = self._library_manager.get_library_config(name)
         (already_open or self[name])._nvs.version_store.clear()
         del already_open  # essential to free resources held by the library
         try:
             self._library_adapter.cleanup_library(name, config)
         finally:
             self._library_manager.remove_library_config(name)
+
+    def has_library(self, name: str) -> bool:
+        """
+        Query if the given library exists
+
+        Parameters
+        ----------
+        name: `str`
+            Name of the library to check the existence of.
+
+        Returns
+        -------
+        True if the library exists, False otherwise.
+        """
+        return name in self._open_libraries or self._library_manager.has_library(name)
 
     def list_libraries(self) -> List[str]:
         """

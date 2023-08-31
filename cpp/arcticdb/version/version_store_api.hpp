@@ -274,7 +274,8 @@ class PythonVersionStore : public LocalVersionedEngine {
     std::vector<std::variant<VersionedItem, DataError>> batch_write_metadata(
         const std::vector<StreamId>& stream_ids,
         const std::vector<py::object>& user_meta,
-        bool prune_previous_versions);
+        bool prune_previous_versions,
+        bool throw_on_error);
 
     std::vector<std::variant<VersionedItem, DataError>> batch_append(
         const std::vector<StreamId> &stream_ids,

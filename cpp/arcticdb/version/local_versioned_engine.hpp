@@ -274,6 +274,7 @@ public:
     std::vector<std::variant<VersionedItem, DataError>> batch_write_versioned_metadata_internal(
         const std::vector<StreamId>& stream_ids,
         bool prune_previous_versions,
+        bool throw_on_error,
         std::vector<arcticdb::proto::descriptors::UserDefinedMetadata>&& user_meta_protos);
 
     std::vector<std::variant<VersionedItem, DataError>> batch_append_internal(

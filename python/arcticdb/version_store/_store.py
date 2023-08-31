@@ -948,9 +948,9 @@ class NativeVersionStore:
             Dictionary of symbol mapping with the versioned items
         """
         _check_batch_kwargs(NativeVersionStore.batch_read, NativeVersionStore.read, kwargs)
-        throw_on_missing_version = True
+        throw_on_error = True
         versioned_items = self._batch_read_to_versioned_items(
-            symbols, as_ofs, date_ranges, columns, query_builder, throw_on_missing_version, kwargs
+            symbols, as_ofs, date_ranges, columns, query_builder, throw_on_error, kwargs
         )
         check(
             all(v is not None for v in versioned_items),
@@ -959,14 +959,14 @@ class NativeVersionStore:
         return {v.symbol: v for v in versioned_items}
 
     def _batch_read_to_versioned_items(
-        self, symbols, as_ofs, date_ranges, columns, query_builder, throw_on_missing_version, kwargs=None
+        self, symbols, as_ofs, date_ranges, columns, query_builder, throw_on_error, kwargs=None
     ):
         if kwargs is None:
             kwargs = dict()
         version_queries = self._get_version_queries(len(symbols), as_ofs, **kwargs)
         read_queries = self._get_read_queries(len(symbols), date_ranges, columns, query_builder)
         read_options = self._get_read_options(**kwargs)
-        read_options.set_batch_throw_on_missing_version(throw_on_missing_version)
+        read_options.set_batch_throw_on_error(throw_on_error)
         read_results = self.version_store.batch_read(symbols, version_queries, read_queries, read_options)
         versioned_items = []
         for i in range(len(read_results)):
@@ -1206,7 +1206,7 @@ class NativeVersionStore:
         return [self._convert_thin_cxx_item_to_python(v) for v in cxx_versioned_items]
 
     def _batch_write_metadata_to_versioned_items(
-        self, symbols: List[str], metadata_vector: List[Any], prune_previous_version
+        self, symbols: List[str], metadata_vector: List[Any], prune_previous_version, throw_on_error
     ):
         for symbol in symbols:
             self.check_symbol_validity(symbol)
@@ -1216,7 +1216,9 @@ class NativeVersionStore:
             "prune_previous_version", proto_cfg, global_default=False, existing_value=prune_previous_version
         )
         normalized_meta = [normalize_metadata(metadata_vector[idx]) for idx in range(len(symbols))]
-        cxx_versioned_items = self.version_store.batch_write_metadata(symbols, normalized_meta, prune_previous_version)
+        cxx_versioned_items = self.version_store.batch_write_metadata(
+            symbols, normalized_meta, prune_previous_version, throw_on_error
+        )
         write_metadata_results = []
         for result in cxx_versioned_items:
             if isinstance(result, DataError):
@@ -1253,7 +1255,10 @@ class NativeVersionStore:
             If any internal exception is raised, a DataError object is returned, with symbol,
             error_code, error_category, and exception_string properties.
         """
-        return self._batch_write_metadata_to_versioned_items(symbols, metadata_vector, prune_previous_version)
+        throw_on_error = True
+        return self._batch_write_metadata_to_versioned_items(
+            symbols, metadata_vector, prune_previous_version, throw_on_error
+        )
 
     def batch_append(
         self,
@@ -1745,6 +1750,30 @@ class NativeVersionStore:
             metadata=meta,
             host=self.env,
         )
+
+    def list_symbols_with_incomplete_data(self) -> List[str]:
+        """
+        List all symbols with previously written un-indexed chunks of data, produced by a tick collector or parallel
+        writes/appends.
+
+        Returns
+        -------
+        List[str]
+            A list of the symbols with incomplete data segments.
+        """
+        return list(self.version_store.get_incomplete_symbols())
+
+    def remove_incomplete(self, symbol: str):
+        """
+        Remove previously written un-indexed chunks of data, produced by a tick collector or parallel
+        writes/appends.
+
+        Parameters
+        ----------
+        symbol : `str`
+            Symbol name.
+        """
+        self.version_store.remove_incomplete(symbol)
 
     def compact_incomplete(
         self,
@@ -2362,7 +2391,7 @@ class NativeVersionStore:
     def name(self):
         return self._lib_cfg.lib_desc.name
 
-    def get_num_rows(self, symbol: str, as_of: Optional[VersionQueryInput] = None) -> int:
+    def get_num_rows(self, symbol: str, as_of: Optional[VersionQueryInput] = None, **kwargs) -> int:
         """
         Query the number of rows in the specified revision of the symbol.
 
@@ -2378,8 +2407,9 @@ class NativeVersionStore:
         `int`
             The number of rows in the specified revision of the symbol.
         """
+        read_options = self._get_read_options(**kwargs)
         version_query = self._get_version_query(as_of)
-        dit = self.version_store.read_descriptor(symbol, version_query)
+        dit = self.version_store.read_descriptor(symbol, version_query, read_options)
         return dit.timeseries_descriptor.total_rows
 
     def lib_cfg(self):
