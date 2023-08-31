@@ -30,7 +30,5 @@ runs:
         echo "ARCTICDB_REAL_S3_ACCESS_KEY=${{ inputs.aws_access_key }}" >> $GITHUB_ENV
         echo "ARCTICDB_REAL_S3_SECRET_KEY=${{ inputs.aws_secret_key }}" >> $GITHUB_ENV
         # Enable all debug logs
-        echo "ARCTICDB_all_loglevel=debug" >> $GITHUB_ENV
-        echo "ARCTICDB_AWS_LogLevel_int=6" >> $GITHUB_ENV
-        
-
+        # echo "ARCTICDB_all_loglevel=debug" >> $GITHUB_ENV
+        # echo "ARCTICDB_AWS_LogLevel_int=6" >> $GITHUB_ENV
