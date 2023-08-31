@@ -9,7 +9,7 @@ import sys
 
 import pytz
 from arcticdb_ext.exceptions import InternalException
-from arcticdb.exceptions import ArcticNativeNotYetImplemented, LibraryNotFound
+from arcticdb.exceptions import ArcticDbNotYetImplemented, LibraryNotFound
 
 from arcticdb_ext.storage import NoDataFoundException
 
@@ -891,7 +891,7 @@ def test_numpy_string(arctic_library):
 
 @pytest.mark.skipif(sys.platform != "win32", reason="SKIP_WIN Numpy strings not supported yet")
 def test_numpy_string_fails_on_windows(arctic_library):
-    with pytest.raises(ArcticNativeNotYetImplemented):
+    with pytest.raises(ArcticDbNotYetImplemented):
         arctic_library.write("symbol", np.array(["ab", "cd", "efg"]))
 
 

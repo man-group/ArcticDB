@@ -23,10 +23,9 @@ from numpy.testing import assert_array_equal
 from pytz import timezone
 
 from arcticdb.exceptions import (
+    ArcticDbNotYetImplemented,
     ArcticNativeNotYetImplemented,
     InternalException,
-    NoSuchVersionException,
-    StreamDescriptorMismatch,
     UserInputException,
 )
 from arcticdb import QueryBuilder
@@ -93,7 +92,7 @@ def test_s3_breaking_chars(object_version_store, breaking_char):
     """
     sym = f"prefix{breaking_char}postfix"
     df = sample_dataframe()
-    with pytest.raises(ArcticNativeNotYetImplemented):
+    with pytest.raises(ArcticDbNotYetImplemented):
         object_version_store.write(sym, df)
 
     assert sym not in object_version_store.list_symbols()
@@ -737,7 +736,7 @@ def test_empty_ndarr(basic_store):
 
 # See AN-765 for why we need no_symbol_list fixture
 def test_large_symbols(basic_store_no_symbol_list):
-    with pytest.raises(ArcticNativeNotYetImplemented):
+    with pytest.raises(ArcticDbNotYetImplemented):
         basic_store_no_symbol_list.write("a" * (MAX_SYMBOL_SIZE + 1), 1)
 
     for _ in range(5):
@@ -756,7 +755,7 @@ def test_large_symbols(basic_store_no_symbol_list):
 
 def test_unsupported_chars_in_symbols(basic_store):
     for ch in UNSUPPORTED_S3_CHARS:
-        with pytest.raises(ArcticNativeNotYetImplemented):
+        with pytest.raises(ArcticDbNotYetImplemented):
             basic_store.write(ch, 1)
 
     for _ in range(5):
@@ -1424,7 +1423,7 @@ def test_coercion_to_float(basic_store):
     assert df["col"].dtype == np.object_
 
     if sys.platform != "win32":  # SKIP_WIN Windows always uses dynamic strings
-        with pytest.raises(ArcticNativeNotYetImplemented):
+        with pytest.raises(ArcticDbNotYetImplemented):
             # Needs pickling due to the obj column
             lib.write("test", df)
 
@@ -1441,7 +1440,7 @@ def test_coercion_to_str_with_dynamic_strings(basic_store):
     assert df["col"].dtype == np.object_
 
     if sys.platform != "win32":  # SKIP_WIN Windows always uses dynamic strings
-        with pytest.raises(ArcticNativeNotYetImplemented):
+        with pytest.raises(ArcticDbNotYetImplemented):
             lib.write("sym", df)
 
     with mock.patch(
