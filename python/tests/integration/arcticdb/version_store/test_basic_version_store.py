@@ -414,8 +414,8 @@ def test_negative_cases(basic_store, symbol):
         "s3_version_store_v2",
     ],
 )
-def test_list_symbols_regex(object_and_lmdb_version_store):
-    lib = object_and_lmdb_version_store
+def test_list_symbols_regex(request, lib_type):
+    lib = request.getfixturevalue(lib_type)
     lib.write("asdf", {"foo": "bar"}, metadata={"a": 1, "b": 10})
     lib.write("furble", {"foo": "bar"}, metadata={"a": 1, "b": 10})
     lib.snapshot("snap2")
