@@ -23,10 +23,9 @@ from numpy.testing import assert_array_equal
 from pytz import timezone
 
 from arcticdb.exceptions import (
+    ArcticDbNotYetImplemented,
     ArcticNativeNotYetImplemented,
     InternalException,
-    NoSuchVersionException,
-    StreamDescriptorMismatch,
     UserInputException,
 )
 from arcticdb import QueryBuilder
@@ -114,15 +113,28 @@ def test_special_chars(s3_version_store, special_char):
 
 
 @pytest.mark.parametrize("breaking_char", [chr(0), "\0", "&", "*", "<", ">"])
-def test_s3_breaking_chars(s3_version_store, breaking_char):
+def test_s3_breaking_chars(s3_version_store_v2, breaking_char):
     """Test that chars that are not supported are raising the appropriate exception and that we fail on write without corrupting the db
     """
     sym = f"prefix{breaking_char}postfix"
     df = sample_dataframe()
-    with pytest.raises(ArcticNativeNotYetImplemented):
-        s3_version_store.write(sym, df)
+    with pytest.raises(ArcticDbNotYetImplemented):
+        s3_version_store_v2.write(sym, df)
 
-    assert sym not in s3_version_store.list_symbols()
+    assert sym not in s3_version_store_v2.list_symbols()
+
+
+def test_s3_breaking_chars_exception_compat(s3_version_store_v2):
+    """Test that chars that are not supported are raising the appropriate exception and that we fail on write without corrupting the db
+    """
+    sym = "prefix*postfix"
+    df = sample_dataframe()
+    # Check that ArcticNativeNotYetImplemented is aliased correctly as ArcticDbNotYetImplemented for backwards compat
+    with pytest.raises(ArcticNativeNotYetImplemented) as e_info:
+        s3_version_store_v2.write(sym, df)
+
+    assert isinstance(e_info.value, ArcticNativeNotYetImplemented)
+    assert sym not in s3_version_store_v2.list_symbols()
 
 
 @pytest.mark.parametrize("unhandled_char", [chr(30), chr(127), chr(128)])
@@ -765,7 +777,7 @@ def test_empty_ndarr(lmdb_version_store):
 
 # See AN-765 for why we need no_symbol_list fixture
 def test_large_symbols(lmdb_version_store_no_symbol_list):
-    with pytest.raises(ArcticNativeNotYetImplemented):
+    with pytest.raises(ArcticDbNotYetImplemented):
         lmdb_version_store_no_symbol_list.write("a" * (MAX_SYMBOL_SIZE + 1), 1)
 
     for _ in range(5):
@@ -784,7 +796,7 @@ def test_large_symbols(lmdb_version_store_no_symbol_list):
 
 def test_unsupported_chars_in_symbols(lmdb_version_store):
     for ch in UNSUPPORTED_S3_CHARS:
-        with pytest.raises(ArcticNativeNotYetImplemented):
+        with pytest.raises(ArcticDbNotYetImplemented):
             lmdb_version_store.write(ch, 1)
 
     for _ in range(5):
@@ -1455,7 +1467,7 @@ def test_coercion_to_float(lmdb_version_store_string_coercion):
     assert df["col"].dtype == np.object_
 
     if sys.platform != "win32":  # SKIP_WIN Windows always uses dynamic strings
-        with pytest.raises(ArcticNativeNotYetImplemented):
+        with pytest.raises(ArcticDbNotYetImplemented):
             # Needs pickling due to the obj column
             lib.write("test", df)
 
@@ -1472,7 +1484,7 @@ def test_coercion_to_str_with_dynamic_strings(lmdb_version_store_string_coercion
     assert df["col"].dtype == np.object_
 
     if sys.platform != "win32":  # SKIP_WIN Windows always uses dynamic strings
-        with pytest.raises(ArcticNativeNotYetImplemented):
+        with pytest.raises(ArcticDbNotYetImplemented):
             lib.write("sym", df)
 
     with mock.patch(

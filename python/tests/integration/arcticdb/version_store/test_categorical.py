@@ -12,7 +12,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from arcticdb.exceptions import ArcticNativeNotYetImplemented
+from arcticdb.exceptions import ArcticDbNotYetImplemented
 from arcticdb.util._versions import IS_PANDAS_TWO
 from arcticdb.util.test import assert_frame_equal
 
@@ -168,7 +168,7 @@ def test_categorical_append(lmdb_version_store):
     original_df = pd.DataFrame({"a": ["hello", "hi", "hello"]}, dtype="category")
     lib.write(symbol, original_df)
     append_df = pd.DataFrame({"a": ["hi", "hi", "hello"]}, dtype="category")
-    with pytest.raises(ArcticNativeNotYetImplemented) as e_info:
+    with pytest.raises(ArcticDbNotYetImplemented):
         lib.append(symbol, append_df)
 
 
@@ -178,7 +178,7 @@ def test_categorical_update(lmdb_version_store):
     original_df = pd.DataFrame({"a": ["hello", "hi", "hello"]}, dtype="category")
     lib.write(symbol, original_df)
     append_df = pd.DataFrame({"a": ["hi", "hi", "hello"]}, dtype="category")
-    with pytest.raises(ArcticNativeNotYetImplemented) as e_info:
+    with pytest.raises(ArcticDbNotYetImplemented):
         lib.update(symbol, append_df)
 
 
@@ -188,7 +188,7 @@ def test_categorical_series(lmdb_version_store):
     original_series = pd.Series(["hello", "hi", "hello"], dtype="category")
     lib.write(symbol, original_series)
     append_series = pd.Series(["hi", "hi", "hello"], dtype="category")
-    with pytest.raises(ArcticNativeNotYetImplemented) as e_info:
+    with pytest.raises(ArcticDbNotYetImplemented):
         lib.append(symbol, append_series)
 
 
@@ -213,5 +213,5 @@ def test_categorical_multi_index(lmdb_version_store):
         dtype="category",
         index=pd.MultiIndex.from_arrays([arr1, arr2], names=["datetime", "level"]),
     )
-    with pytest.raises(ArcticNativeNotYetImplemented) as e_info:
+    with pytest.raises(ArcticDbNotYetImplemented):
         lib.append(symbol, append_df)

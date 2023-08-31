@@ -22,7 +22,7 @@ from arcticdb.version_store._store import NativeVersionStore
 from arcticdb.adapters.arctic_library_adapter import ArcticLibraryAdapter, set_library_options
 from arcticdb_ext.storage import StorageOverride, LmdbOverride
 from arcticdb.encoding_version import EncodingVersion
-from arcticdb.exceptions import ArcticNativeNotYetImplemented, LmdbOptionsError
+from arcticdb.exceptions import ArcticDbNotYetImplemented, LmdbOptionsError
 
 
 def _rmtree_errorhandler(func, path, exc_info):
@@ -91,7 +91,7 @@ def parse_query(query: str) -> ParsedQuery:
             map_size_bytes = convert_size_str_to_bytes(value)
             result["map_size"] = map_size_bytes
         else:
-            raise ArcticNativeNotYetImplemented(
+            raise ArcticDbNotYetImplemented(
                 "Support for option {key} not implemented correctly. This is a bug in "
                 "ArcticDB. Please report on ArcticDB Github."
             )
