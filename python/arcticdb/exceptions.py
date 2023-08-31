@@ -11,8 +11,12 @@ from arcticdb_ext.storage import DuplicateKeyException, NoDataFoundException, Pe
 from arcticdb_ext.version_store import NoSuchVersionException, StreamDescriptorMismatch
 
 
-class ArcticNativeNotYetImplemented(ArcticException):
+class ArcticDbNotYetImplemented(ArcticException):
     pass
+
+
+# Backwards compat - this is the old name of ArcticDbNotYetImplemented
+ArcticNativeNotYetImplemented = ArcticDbNotYetImplemented
 
 
 class LibraryNotFound(ArcticException):
