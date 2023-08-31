@@ -140,9 +140,7 @@ namespace {
                 StorageVisitor<S3Override>{lib_cfg_proto},
                 StorageVisitor<AzureOverride>{lib_cfg_proto},
                 StorageVisitor<LmdbOverride>{lib_cfg_proto},
-                [] (const auto&) {
-                    //std::monostate
-                });
+                [] (const std::monostate&) {});
         }
 
         static bool is_storage_config_ok(const arcticdb::proto::storage::VariantStorage& storage, const std::string& error_message, bool throw_on_failure) {
