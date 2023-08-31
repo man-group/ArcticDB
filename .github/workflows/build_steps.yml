@@ -204,12 +204,7 @@ jobs:
     container: ${{matrix.os == 'linux' && needs.compile.outputs.manylinux_image || null}}
     defaults:
       run: {shell: bash}
-    services: ${{fromJSON(matrix.test_services)}}
-    # services:
-    #   mongodb:
-    #     image: "mongo:4.4"
-    #   mongodb_2:
-    #     image: "mongo:4.4"
+    services: ${{matrix.test_services}}
     env:
       python_impl_name: ${{needs.compile.outputs.python_impl_name}}
       distinguishing_name: ${{matrix.os}}-${{needs.compile.outputs.python_impl_name}}-${{matrix.type}}${{matrix.python_deps_id}}
