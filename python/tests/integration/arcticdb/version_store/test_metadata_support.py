@@ -8,7 +8,6 @@ As of the Change Date specified in that file, in accordance with the Business So
 import numpy as np
 from pandas import DataFrame, Timestamp
 import pytest
-from retry import retry
 
 from arcticdb.version_store import NativeVersionStore, VersionedItem
 from arcticdb.exceptions import ArcticNativeNotYetImplemented
@@ -22,6 +21,7 @@ from arcticdb.util.test import assert_frame_equal, distinct_timestamps
 
 def test_rt_df_with_small_meta(object_and_lmdb_version_store):
     lib = object_and_lmdb_version_store
+    #  type: (NativeVersionStore)->None
 
     df = DataFrame(data=["A", "B", "C"])
     meta = {"abc": "def", "xxx": "yyy"}
@@ -65,13 +65,9 @@ def test_read_metadata_by_version(object_and_lmdb_version_store):
     lib.write(symbol, data_v1, metadata=metadata_v0)
     lib.write(symbol, data_v2, metadata=metadata_v1)
 
-    @retry(AssertionError, tries=3, delay=1.0)
-    def _check_list_versions():
-        assert lib.read_metadata(symbol).metadata == metadata_v1
-        assert lib.read_metadata(symbol, 0).metadata == metadata_v0
-        assert lib.read_metadata(symbol, 1).metadata == metadata_v1
-
-    _check_list_versions()
+    assert lib.read_metadata(symbol).metadata == metadata_v1
+    assert lib.read_metadata(symbol, 0).metadata == metadata_v0
+    assert lib.read_metadata(symbol, 1).metadata == metadata_v1
 
 
 def test_read_metadata_by_snapshot(basic_store):

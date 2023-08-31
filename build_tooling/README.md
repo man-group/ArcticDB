@@ -14,7 +14,7 @@ This is also a callable script, that can be used to perform the operations descr
 
 The file contains implementations for the following steps:
 1. Seed - seeding some libraries in the real storages
-    - in order to access this, you need to set the **ARCTICDB_PERSISTENT_STORAGE_LIB_NAME** environment variable 
+    - in order to access this, you need to set the **ARCTICDB_PERSISTENT_STORAGE_SHARED_PATH_PREFIX** environment variable 
     - these libraries are used to test that the versions that we are building can read data from previous versions
     - the libraries are used in the following test python\tests\integration\arcticdb\test_persistent_storage.py::test_real_s3_storage_read
     - the libraries' names are predetermined from this pattern:

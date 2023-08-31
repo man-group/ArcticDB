@@ -149,12 +149,24 @@ def moto_s3_uri_incl_bucket(moto_s3_endpoint_and_credentials):
     ] + ":" + bucket + "?access=" + aws_access_key + "&secret=" + aws_secret_key + "&port=" + port
 
 
+@pytest.fixture(scope="function")
+def real_s3_uri():
+    yield get_real_s3_uri()
+
+
 @pytest.fixture(
     scope="function",
     params=[
         "S3",
         "LMDB",
         pytest.param("Azure", marks=pytest.mark.skipif(not AZURE_SUPPORT, reason="Pending Azure Storge Conda support")),
+        pytest.param(
+            "REAL_S3",
+            marks=pytest.mark.skipif(
+                not PERSISTENT_STORAGE_TESTS_ENABLED,
+                reason="This store can be used only if the persistent storage tests are enabled",
+            ),
+        ),
     ],
 )
 def arctic_client(request, moto_s3_uri_incl_bucket, tmpdir, encoding_version):
@@ -162,13 +174,21 @@ def arctic_client(request, moto_s3_uri_incl_bucket, tmpdir, encoding_version):
         ac = Arctic(moto_s3_uri_incl_bucket, encoding_version)
     elif request.param == "Azure":
         ac = Arctic(request.getfixturevalue("azurite_azure_uri_incl_bucket"), encoding_version)
+    elif request.param == "REAL_S3":
+        ac = Arctic(get_real_s3_uri())
     elif request.param == "LMDB":
         ac = Arctic(f"lmdb://{tmpdir}", encoding_version)
     else:
         raise NotImplementedError()
-
+    ac.delete_library("pytest_test_lib")
+    ac.delete_library("pytest_test_lib_2")
     assert not ac.list_libraries()
-    yield ac
+    try:
+        yield ac
+    finally:
+        libs = ac.list_libraries()
+        for lib in libs:
+            ac.delete_library(lib)
 
 
 @pytest.fixture
@@ -198,9 +218,9 @@ def arctic_library(request, arctic_client):
     if AZURE_SUPPORT:
         request.getfixturevalue("azure_client_and_create_container")
 
-    arctic_client.delete_library("pytest_test_lib")
     arctic_client.create_library("pytest_test_lib")
-    return arctic_client["pytest_test_lib"]
+
+    yield arctic_client["pytest_test_lib"]
 
 
 @pytest.fixture()
@@ -431,6 +451,11 @@ def real_s3_version_store(real_s3_store_factory):
     return real_s3_store_factory()
 
 
+@pytest.fixture(scope="function")
+def real_s3_version_store_dynamic_schema(real_s3_store_factory):
+    return real_s3_store_factory(dynamic_strings=True, dynamic_schema=True)
+
+
 @pytest.fixture
 def azure_store_factory(lib_name, arcticdb_test_azure_config, azure_client_and_create_container):
     """Factory to create any number of Azure libs with the given WriteOptions or VersionStoreConfig.
@@ -632,6 +657,11 @@ def azure_version_store(azure_store_factory):
 
 
 @pytest.fixture
+def azure_version_store_dynamic_schema(azure_store_factory):
+    return azure_store_factory(dynamic_schema=True, dynamic_strings=True)
+
+
+@pytest.fixture
 def lmdb_version_store_string_coercion(version_store_factory):
     return version_store_factory()
 
@@ -659,7 +689,6 @@ def lmdb_version_store(lmdb_version_store_v1, lmdb_version_store_v2, encoding_ve
         raise ValueError(f"Unexpected encoding version: {encoding_version}")
 
 
-# TODO: Remove these
 @pytest.fixture
 def lmdb_version_store_prune_previous(version_store_factory):
     return version_store_factory(dynamic_strings=True, prune_previous_version=True, use_tombstones=True)
@@ -761,9 +790,6 @@ def lmdb_version_store_tiny_segment(version_store_factory):
 @pytest.fixture
 def lmdb_version_store_tiny_segment_dynamic(version_store_factory):
     return version_store_factory(column_group_size=2, segment_row_size=2, dynamic_schema=True)
-
-
-## TODO: Remove these
 
 
 @pytest.fixture
@@ -965,13 +991,12 @@ def spawn_azurite(azurite_port):
                 "azurite_azure_uri_incl_bucket",
                 marks=pytest.mark.skipif(not AZURE_SUPPORT, reason="Pending Azure Storge Conda support"),
             ),
-            # TODO: See if we can support this
-            # pytest.param(
-            #     "real_s3_uri",
-            #     marks=pytest.mark.skipif(
-            #         not PERSISTENT_STORAGE_TESTS_ENABLED, reason="Can be used only when persistent storage is enabled"
-            #     ),
-            # ),
+            pytest.param(
+                "real_s3_uri",
+                marks=pytest.mark.skipif(
+                    not PERSISTENT_STORAGE_TESTS_ENABLED, reason="Can be used only when persistent storage is enabled"
+                ),
+            ),
         ]
     ),
 )
@@ -1005,6 +1030,34 @@ def object_storage_uri_incl_bucket(request):
     ),
 )
 def object_and_lmdb_version_store(request):
+    """
+    Designed to test all supported stores
+    """
+    yield request.getfixturevalue(request.param)
+
+
+@pytest.fixture(
+    scope="function",
+    params=(
+        [
+            "lmdb_version_store_dynamic_schema_v1",
+            "lmdb_version_store_dynamic_schema_v2",
+            "s3_version_store_dynamic_schema_v1",
+            "s3_version_store_dynamic_schema_v2",
+            pytest.param(
+                "azure_version_store_dynamic_schema",
+                marks=pytest.mark.skipif(not AZURE_SUPPORT, reason="Pending Azure Storage Conda support"),
+            ),
+            pytest.param(
+                "real_s3_version_store_dynamic_schema",
+                marks=pytest.mark.skipif(
+                    not PERSISTENT_STORAGE_TESTS_ENABLED, reason="Can be used only when persistent storage is enabled"
+                ),
+            ),
+        ]
+    ),
+)
+def object_and_lmdb_version_store_dynamic_schema(request):
     """
     Designed to test all supported stores
     """

@@ -312,21 +312,9 @@ class VersionStoreComparison(RuleBasedStateMachine):
         self._check_batch_read(list(snap.sym_vers), list(snap.sym_vers.values()))
 
 
-def test_stateful_v1(lmdb_version_store_delayed_deletes_v1):
-    VersionStoreComparison._lib = lmdb_version_store_delayed_deletes_v1
-    run_state_machine_as_test(
-        VersionStoreComparison,
-        settings=settings(  # Note: timeout is a legacy parameter
-            max_examples=int(os.getenv("HYPOTHESIS_EXAMPLES", 100)),
-            deadline=None,
-            stateful_step_count=100,
-            suppress_health_check=[HealthCheck.filter_too_much],
-        ),
-    )
-
-
-def test_stateful_v2(lmdb_version_store_delayed_deletes_v2):
-    VersionStoreComparison._lib = lmdb_version_store_delayed_deletes_v2
+@pytest.mark.parametrize("lib_type", ["lmdb_version_store_delayed_deletes_v1", "lmdb_version_store_delayed_deletes_v2"])
+def test_stateful(lib_type, request):
+    VersionStoreComparison._lib = request.getfixturevalue(lib_type)
     run_state_machine_as_test(
         VersionStoreComparison,
         settings=settings(  # Note: timeout is a legacy parameter

@@ -74,7 +74,7 @@ def test_library_creation_deletion(arctic_client):
     with pytest.raises(ValueError):
         ac.create_library("pytest_test_lib")
 
-    assert "pytest_test_lib" in ac.list_libraries()
+    assert ac.list_libraries() == ["pytest_test_lib"]
     assert ac.has_library("pytest_test_lib")
     assert ac["pytest_test_lib"].name == "pytest_test_lib"
 
@@ -179,7 +179,6 @@ def test_library_options(arctic_client):
     library_options = LibraryOptions(
         dynamic_schema=True, dedup=True, rows_per_segment=20, columns_per_segment=3, encoding_version=EncodingVersion.V2
     )
-    ac.delete_library("pytest_explicit_options")
     ac.create_library(
         "pytest_explicit_options",
         library_options,
@@ -195,16 +194,15 @@ def test_library_options(arctic_client):
     assert lib._nvs._lib_cfg.lib_desc.version.encoding_version == EncodingVersion.V2
 
 
-def test_separation_between_libraries(object_storage_uri_incl_bucket):
+def test_separation_between_libraries(arctic_client):
     """Validate that symbols in one library are not exposed in another."""
-    ac = Arctic(object_storage_uri_incl_bucket)
+    ac = arctic_client
     assert ac.list_libraries() == []
 
     ac.create_library("pytest_test_lib")
     ac.create_library("pytest_test_lib_2")
 
-    assert "pytest_test_lib" in ac.list_libraries()
-    assert "pytest_test_lib_2" in ac.list_libraries()
+    assert ac.list_libraries() == ["pytest_test_lib", "pytest_test_lib_2"]
 
     ac["pytest_test_lib"].write("test_1", pd.DataFrame())
     ac["pytest_test_lib_2"].write("test_2", pd.DataFrame())
@@ -222,19 +220,17 @@ def get_path_prefix_option(uri):
 def test_separation_between_libraries_with_prefixes(object_storage_uri_incl_bucket):
     """The motivation for the prefix feature is that separate users want to be able to create libraries
     with the same name in the same bucket without over-writing each other's work. This can be useful when
-    creating a new bucket is time-consuming, for example due to organisational issues.
+    creating a new bucket is time-consuming, for example due to organizational issues.
     """
 
     option = get_path_prefix_option(object_storage_uri_incl_bucket)
     mercury_uri = f"{object_storage_uri_incl_bucket}{option}=/planet/mercury"
     ac_mercury = Arctic(mercury_uri)
-    # assert ac_mercury.list_libraries() == []
 
     mars_uri = f"{object_storage_uri_incl_bucket}{option}=/planet/mars"
     ac_mars = Arctic(mars_uri)
-    # assert ac_mars.list_libraries() == []
-    ac_mercury.delete_library("pytest_test_lib")
-    ac_mars.delete_library("pytest_test_lib")
+
+    assert ac_mars.list_libraries() == []
     ac_mercury.create_library("pytest_test_lib")
     ac_mars.create_library("pytest_test_lib")
     assert ac_mercury.list_libraries() == ["pytest_test_lib"]
@@ -245,6 +241,9 @@ def test_separation_between_libraries_with_prefixes(object_storage_uri_incl_buck
 
     assert ac_mercury["pytest_test_lib"].list_symbols() == ["test_1"]
     assert ac_mars["pytest_test_lib"].list_symbols() == ["test_2"]
+
+    ac_mercury.delete_library("pytest_test_lib")
+    ac_mars.delete_library("pytest_test_lib")
 
 
 def object_storage_uri_and_client():
@@ -960,8 +959,8 @@ def test_tail(arctic_library):
 
 
 @pytest.mark.parametrize("dedup", [True, False])
-def test_dedup(object_storage_uri_incl_bucket, dedup):
-    ac = Arctic(object_storage_uri_incl_bucket)
+def test_dedup(arctic_client, dedup):
+    ac = arctic_client
     assert ac.list_libraries() == []
     ac.create_library("pytest_test_library", LibraryOptions(dedup=dedup))
     lib = ac["pytest_test_library"]
@@ -972,8 +971,8 @@ def test_dedup(object_storage_uri_incl_bucket, dedup):
     assert data_key_version == 0 if dedup else 1
 
 
-def test_segment_slicing(object_storage_uri_incl_bucket):
-    ac = Arctic(object_storage_uri_incl_bucket)
+def test_segment_slicing(arctic_client):
+    ac = arctic_client
     assert ac.list_libraries() == []
     rows_per_segment = 5
     columns_per_segment = 2

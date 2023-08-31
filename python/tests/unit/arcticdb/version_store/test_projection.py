@@ -36,8 +36,6 @@ def test_project(local_object_version_store):
     df["ADJUSTED"] = df["ADJUSTED"].astype("int64")
     q = QueryBuilder()
     q = q.apply("ADJUSTED", q["ASK"] * q["ACVOL"] + 7)
-    # TODO: Bring down the sleep
-    time.sleep(1)
     vit = lib.read("expression", query_builder=q)
     assert_frame_equal(df, vit.data)
 
