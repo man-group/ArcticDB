@@ -118,10 +118,15 @@ void register_bindings(py::module& storage, py::exception<arcticdb::ArcticExcept
         .def_property("endpoint", &AzureOverride::endpoint, &AzureOverride::set_endpoint)
         .def_property("ca_cert_path", &AzureOverride::ca_cert_path, &AzureOverride::set_ca_cert_path);
 
+    py::class_<LmdbOverride>(storage, "LmdbOverride")
+            .def(py::init<>())
+            .def_property("map_size", &LmdbOverride::map_size, &LmdbOverride::set_map_size);
+
     py::class_<StorageOverride>(storage, "StorageOverride")
         .def(py::init<>())
         .def("set_s3_override", &StorageOverride::set_s3_override)
-        .def("set_azure_override", &StorageOverride::set_azure_override);
+        .def("set_azure_override", &StorageOverride::set_azure_override)
+        .def("set_lmdb_override", &StorageOverride::set_lmdb_override);
 
     py::class_<LibraryManager, std::shared_ptr<LibraryManager>>(storage, "LibraryManager")
         .def(py::init<std::shared_ptr<storage::Library>>())
