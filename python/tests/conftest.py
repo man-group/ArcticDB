@@ -442,12 +442,12 @@ def mongo_test_uri(request):
     # Use MongoDB if it's running (useful in CI), otherwise spin one up with pytest-server-fixtures.
     # mongodb does not support prefix to differentiate different tests and the server is session-scoped
     # therefore lib_name is needed to be used to avoid reusing library name or list_versions check will fail
-    if "--splits" not in sys.argv or sys.argv[sys.argv.index("--splits") + 1] == "1":
+    if "--group" not in sys.argv or sys.argv[sys.argv.index("--group") + 1] == "1":
         mongo_host = os.getenv("CI_MONGO_HOST", "localhost")
         mongo_port = 27017
     else:
         mongo_host = os.getenv("CI_MONGO_HOST_2", "localhost")
-        mongo_port = 27712
+        mongo_port = 27017
     print(f"mongo_host: {mongo_host} mongo_port: {mongo_port}")  # 20230830
     mongo_path = f"{mongo_host}:{mongo_port}"
     try:
@@ -455,8 +455,8 @@ def mongo_test_uri(request):
         print(f"res.status_code: {res.status_code} res.text: {res.text}")
         have_running_mongo = res.status_code == 200 and "mongodb" in res.text.lower()
     except requests.exceptions.ConnectionError:
-        mongo_host = os.getenv("CI_MONGO_HOST", "localhost")
-        mongo_port = 27017
+        mongo_host = "localhost"
+        mongo_port = 42069
         print(f"mongo_host: {mongo_host} mongo_port: {mongo_port}")  # 20230830
         mongo_path = f"{mongo_host}:{mongo_port}"
         res = requests.get(f"http://{mongo_path}")

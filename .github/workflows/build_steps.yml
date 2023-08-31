@@ -283,6 +283,12 @@ jobs:
           echo "ARCTICDB_REAL_S3_CLEAR=${{ inputs.clear }}" >> $GITHUB_ENV
           echo "ARCTICDB_REAL_S3_ACCESS_KEY=${{ secrets.AWS_S3_ACCESS_KEY }}" >> $GITHUB_ENV
           echo "ARCTICDB_REAL_S3_SECRET_KEY=${{ secrets.AWS_S3_SECRET_KEY }}" >> $GITHUB_ENV
+      
+      - name: Start MongoDB
+        uses: supercharge/mongodb-github-action@1.10.0
+        with:
+          mongodb-version: "4.4"
+          mongodb-port: 42069
           
       - name: Run test
         run: build_tooling/parallel_test.sh tests/${{matrix.type}}
