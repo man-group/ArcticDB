@@ -40,6 +40,17 @@ namespace {
 
     const std::string BAD_CONFIG_IN_ATTEMPTED_WRITE = "Attempting to write forbidden storage config. This indicates a "
                                                       "bug in ArcticDB.";
+
+    template<typename T>
+    struct StorageVisitor {
+        arcticdb::proto::storage::LibraryConfig& lib_cfg_proto;
+
+        void operator()(const T& storage_override) {
+            for(auto& storage: *lib_cfg_proto.mutable_storage_by_id()){
+                storage_override.modify_storage_config(storage.second);
+            }
+        }
+    };
 }
 
     class LibraryManager {
@@ -126,21 +137,9 @@ namespace {
                                            arcticdb::proto::storage::LibraryConfig& lib_cfg_proto) {
             util::variant_match(
                 storage_override.variant(),
-                [&lib_cfg_proto] (const S3Override& credentials_override) {
-                    for(auto& storage: *lib_cfg_proto.mutable_storage_by_id()){
-                        credentials_override.modify_storage_config(storage.second);
-                    }
-                },
-                [&lib_cfg_proto] (const AzureOverride& credentials_override) {
-                    for(auto& storage: *lib_cfg_proto.mutable_storage_by_id()){
-                        credentials_override.modify_storage_config(storage.second);
-                    }
-                },
-                [&lib_cfg_proto] (const LmdbOverride& credentials_override) {
-                    for(auto& storage: *lib_cfg_proto.mutable_storage_by_id()){
-                        credentials_override.modify_storage_config(storage.second);
-                    }
-                },
+                StorageVisitor<S3Override>{lib_cfg_proto},
+                StorageVisitor<AzureOverride>{lib_cfg_proto},
+                StorageVisitor<LmdbOverride>{lib_cfg_proto},
                 [] (const auto&) {
                     //std::monostate
                 });

@@ -7,6 +7,7 @@
 #include <arcticdb/util/pb_util.hpp>
 
 namespace arcticdb::storage {
+
 class S3Override {
     std::string credential_name_;
     std::string credential_key_;
