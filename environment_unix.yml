@@ -5,7 +5,9 @@ dependencies:
   # Build tools
   - cxx-compiler
   - c-compiler
-  - cmake
+  # See: https://github.com/man-group/ArcticDB/actions/runs/6035269959/job/16375303050
+  # See: https://github.com/conda-forge/cmake-feedstock/issues/192
+  - cmake < 3.27.4
   - gtest
   - gflags
   - doxygen
