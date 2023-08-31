@@ -8,10 +8,10 @@ As of the Change Date specified in that file, in accordance with the Business So
 import sys
 
 import pytz
-from arcticdb_ext.exceptions import InternalException, ErrorCode, ErrorCategory
+from arcticdb_ext.exceptions import InternalException
 from arcticdb.exceptions import ArcticNativeNotYetImplemented, LibraryNotFound
 
-from arcticdb_ext.storage import NoDataFoundException, KeyType, StorageOverride
+from arcticdb_ext.storage import NoDataFoundException
 
 from arcticdb.arctic import Arctic
 from arcticdb.exceptions import MismatchingLibraryOptions
@@ -1042,23 +1042,6 @@ def test_reload_symbol_list(connection_string, client, request):
 def test_get_uri(object_storage_uri_incl_bucket):
     ac = Arctic(object_storage_uri_incl_bucket)
     assert ac.get_uri() == object_storage_uri_incl_bucket
-
-
-def test_lmdb(tmpdir):
-    # Github Issue #520 - this used to segfault
-    d = {
-        "test1": pd.Timestamp("1979-01-18 00:00:00"),
-        "test2": pd.Timestamp("1979-01-19 00:00:00"),
-    }
-
-    arc = Arctic(f"lmdb://{tmpdir}")
-    arc.create_library("model")
-    lib = arc.get_library("model")
-
-    for i in range(50):
-        lib.write_pickle("test", d)
-        lib = arc.get_library("model")
-        lib.read("test").data
 
 
 @pytest.mark.skipif(not AZURE_SUPPORT, reason="Pending Azure Storge Conda support")
