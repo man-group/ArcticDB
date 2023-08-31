@@ -5,6 +5,17 @@ on:
       run:
         type: boolean
 
+  push:
+    branches: ["**"]
+    tags: [v**]
+    paths:
+      - .github/workflows/*.yml
+      - build_tooling/**
+      - cpp/**
+      - python/**
+      - setup.*
+      - pyproject.toml
+
   schedule: # Schdeule the job to run at 12 a.m. daily
     - cron: '0 0 * * *'
 jobs:
@@ -108,7 +119,6 @@ jobs:
           TEST_OUTPUT_DIR: ${{runner.temp}}
           # Use the Mongo created in the service container above to test against
           CI_MONGO_HOST: mongodb
-          ARCTICDB_PERSISTENT_STORAGE_LIB_NAME: 'test_${{ github.run_id }}_${{matrix.os}}_${{env.python_impl_name}}${{matrix.python_deps_id}}'
 
       - name: Get python Coverage report
         shell: bash -l {0}
@@ -143,18 +153,18 @@ jobs:
           name: python-coverage-artifact
           path: python/python_cov.zip
 
-      - name: Restore cpp cache
-        id: cache
-        uses: actions/cache@v2
+      - name: Restore cached CPP Coverage Percentage from the previous run
+        id: cache-cov-restore
+        uses: actions/cache/restore@v3
         with:
-          path: coverage.txt
+          path: prev_coverage.txt
           key: coverage
       
       - name: Get and compare coverage if cache was restored
         run: |
           # if cache was restored, compare coverage
           if [ -f coverage.txt ]; then
-            PREV_COVERAGE=$(cat coverage.txt | cut -d' ' -f2)
+            PREV_COVERAGE=$(cat prev_coverage.txt | cut -d' ' -f2)
             echo "Previous coverage: $PREV_COVERAGE"
             CURR_COVERAGE=${{env.CPP_COV_PERCENT}}
             echo "CPP_COV_PREV_PERCENT=$PREV_COVERAGE" >> $GITHUB_ENV
@@ -168,9 +178,16 @@ jobs:
             fi
           fi
 
-      - name: Save coverage percentage to file
+      - name: Save CPP Coverage Percentage to file
         run: |
-          echo "Coverage: ${{ env.CPP_COV_PERCENT }}" > coverage.txt
+          echo "Coverage: ${{ env.CPP_COV_PERCENT }}" > current_coverage.txt
+
+      - name: Save the current CPP Coverage Percentage to the cache
+        id: cache-cov-save
+        uses: actions/cache/save@v3
+        with:
+          path: current_coverage.txt
+          key: coverage
 
       - name: Check percentage and send Slack notification
         if: ${{ env.CPP_COV_PREV_PERCENT && env.CPP_COV_PERCENT && env.CPP_COV_PERCENT < env.CPP_COV_PREV_PERCENT }}
