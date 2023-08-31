@@ -626,13 +626,6 @@ class QueryBuilder:
     def needs_post_processing(self):
         return not any(isinstance(clause, (_RowRangeClause, _DateRangeClause)) for clause in self.clauses)
 
-    def has_date_range_clause(self):
-        return len(self.clauses) and isinstance(self.clauses[0], _DateRangeClause)
-
-    def date_range_boundaries(self):
-        check(self.has_date_range_clause(), "QueryBuilder has no date_range clause")
-        return self.clauses[0].start, self.clauses[0].end
-
 
 CONSTRUCTOR_MAP = {
     "u": {1: ValueUint8, 2: ValueUint16, 4: ValueUint32, 8: ValueUint64},

@@ -23,7 +23,7 @@ std::pair<TimeseriesDescriptor , std::vector<SliceAndKey>> get_sample_slice_and_
         IndexDescriptor{1, IndexDescriptor::TIMESTAMP}
     };
 
-    stream_desc.add_field(scalar_field(DataType::MICROS_UTC64, "time"));
+    stream_desc.add_field(scalar_field(DataType::NANOSECONDS_UTC64, "time"));
 
     const auto step = 10;
     auto start_col = 1;

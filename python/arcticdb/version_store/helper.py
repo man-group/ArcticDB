@@ -28,7 +28,7 @@ from arcticc.pb2.storage_pb2 import (
 
 from arcticdb.config import *  # for backward compat after moving to config
 from arcticdb.config import _expand_path
-from arcticdb.exceptions import ArcticNativeException, LibraryNotFound
+from arcticdb.exceptions import ArcticNativeException, LibraryNotFound, UserInputException
 from arcticdb.version_store._store import NativeVersionStore
 from arcticdb.authorization.permissions import OpenMode
 
@@ -216,11 +216,18 @@ def get_s3_proto(
 ):
     env = cfg.env_by_id[env_name]
     s3 = S3Config()
-    s3.bucket_name = bucket_name
-    s3.credential_name = credential_name
-    s3.credential_key = credential_key
-    s3.endpoint = endpoint
-    s3.https = is_https
+    if bucket_name is not None:
+        s3.bucket_name = bucket_name
+    if credential_name is not None:
+        s3.credential_name = credential_name
+    if credential_key is not None:
+        s3.credential_key = credential_key
+    if endpoint is not None:
+        s3.endpoint = endpoint
+    if is_https is not None:
+        s3.https = is_https
+    if use_virtual_addressing is not None:
+        s3.use_virtual_addressing = use_virtual_addressing
     # adding time to prefix - so that the s3 root folder is unique and we can delete and recreate fast
     if with_prefix:
         if isinstance(with_prefix, str):
@@ -233,7 +240,6 @@ def get_s3_proto(
     if region:
         s3.region = region
 
-    s3.use_virtual_addressing = use_virtual_addressing
     sid, storage = get_storage_for_lib_name(s3.prefix, env)
     storage.config.Pack(s3, type_url_prefix="cxx.arctic.org")
     return sid, storage
@@ -253,7 +259,6 @@ def add_s3_library_to_env(
     region=None,
     use_virtual_addressing=False,
 ):
-    # type: (EnvironmentConfigsMap, LibName, EnvName, AnyStr, AnyStr, Optional[AnyStr], Optional[AnyStr], Optional[AnyStr], Optional[AnyStr], bool, Optional[AnyStr], bool)->None
     env = cfg.env_by_id[env_name]
     sid, storage = get_s3_proto(
         cfg=cfg,
@@ -285,7 +290,9 @@ def create_test_s3_cfg(
     bucket_name: str,
     endpoint: str,
     *,
+    is_https: bool = False,
     with_prefix: Union[str, bool, None] = True,
+    region: str = None,
 ) -> EnvironmentConfigsMap:
     cfg = EnvironmentConfigsMap()
     add_s3_library_to_env(
@@ -297,6 +304,8 @@ def create_test_s3_cfg(
         bucket_name=bucket_name,
         endpoint=endpoint,
         with_prefix=with_prefix,
+        is_https=is_https,
+        region=region,
     )
     return cfg
 
@@ -333,10 +342,12 @@ def get_azure_proto(
     container_name,
     endpoint,
     with_prefix: Optional[bool] = True,
-    ca_cert_path: Optional[str] = None,
+    ca_cert_path: str = "",
 ):
     env = cfg.env_by_id[env_name]
     azure = AzureConfig()
+    if not container_name:
+        raise UserInputException("Container needs to be specified")
     azure.container_name = container_name
     azure.endpoint = endpoint
     if with_prefix:
@@ -361,7 +372,7 @@ def add_azure_library_to_env(
     endpoint,
     description: Optional[bool] = None,
     with_prefix: Optional[bool] = True,
-    ca_cert_path: Optional[str] = None,
+    ca_cert_path: str = "",
 ):
     env = cfg.env_by_id[env_name]
     sid, storage = get_azure_proto(

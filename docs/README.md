@@ -85,3 +85,12 @@ cp -r ./sphinxdocs/build/html/* /tmp/mkdocs_build/api
 
 Then `/tmp/docs_build/` forms the docs site.
 
+## Deploying to `docs.arcticdb.io`
+
+Run the `Docs` github action.
+- Branch: Master
+- Environment: ProdPypi
+- Override: arcticdb
+
+This will generate both the mkdocs and sphinx pages.
+

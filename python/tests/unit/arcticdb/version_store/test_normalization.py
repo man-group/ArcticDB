@@ -42,10 +42,9 @@ from arcticdb.util.test import (
     TestCustomNormalizer,
     assert_frame_equal,
     assert_series_equal,
-    IS_PANDAS_ZERO,
 )
+from arcticdb.util._versions import IS_PANDAS_ZERO, IS_PANDAS_TWO
 from arcticdb.exceptions import ArcticNativeException
-
 
 params = {
     "simple_dict": {"a": "1", "b": 2, "c": 3.0, "d": True},
@@ -171,7 +170,19 @@ def test_empty_df_with_multiindex_with_tz(tz):
     assert sliced_denorm_df.index.names == orig_df.index.names
 
     for index_level_num in [0, 1]:
-        assert sliced_denorm_df.index.levels[index_level_num].tz.zone == orig_df.index.levels[index_level_num].tz.zone
+        sliced_denorm_df_index_level_num = sliced_denorm_df.index.levels[index_level_num]
+        orig_df_index_level_num = orig_df.index.levels[index_level_num]
+        if IS_PANDAS_TWO and tz is pytz.UTC:
+            # Pandas 2.0.0 now uses `datetime.timezone.utc` instead of `pytz.UTC`.
+            # See: https://github.com/pandas-dev/pandas/issues/34916
+            # TODO: is there a better way to handle this edge case?
+            assert sliced_denorm_df_index_level_num.tz == datetime.timezone.utc
+            assert isinstance(orig_df_index_level_num.tz, pytz.BaseTzInfo)
+            assert sliced_denorm_df_index_level_num.dtype == orig_df_index_level_num.dtype == "datetime64[ns, UTC]"
+        else:
+            assert isinstance(sliced_denorm_df_index_level_num.tz, pytz.BaseTzInfo)
+            assert isinstance(orig_df_index_level_num.tz, pytz.BaseTzInfo)
+            assert sliced_denorm_df_index_level_num.tz.zone == orig_df_index_level_num.tz.zone
 
 
 def test_timestamp_without_tz():
@@ -451,3 +462,18 @@ def test_columns_names_series_dynamic(lmdb_version_store_dynamic_schema, sym):
 
     lmdb_version_store_dynamic_schema.write(sym + "dynamic_schema", date_series)
     assert_series_equal(lmdb_version_store_dynamic_schema.read(sym + "dynamic_schema").data, date_series)
+
+
+@pytest.mark.skipif(not IS_PANDAS_TWO, reason="pandas 2.0-specific test")
+@pytest.mark.parametrize("datetime64_dtype", ["datetime64[s]", "datetime64[ms]", "datetime64[us]", "datetime64[ns]"])
+@pytest.mark.parametrize("PandasContainer", [pd.DataFrame, pd.Series])
+def test_no_inplace_index_array_modification(lmdb_version_store, sym, datetime64_dtype, PandasContainer):
+    # Normalization must not modify Series' or DataFrames' index array in-place.
+    pandas_container = PandasContainer(
+        data={"a": [1, 2, 3]},
+        index=pd.DatetimeIndex(["2020-01-01", "2020-01-02", "2020-01-03"], dtype=datetime64_dtype),
+    )
+    original_index_array = pandas_container.index
+    lmdb_version_store.write(sym, pandas_container)
+    assert pandas_container.index is original_index_array
+    assert pandas_container.index.dtype == datetime64_dtype

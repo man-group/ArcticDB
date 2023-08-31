@@ -112,8 +112,6 @@
       "generator": "Unix Makefiles",
       "cacheVariables": {
         "CMAKE_MAKE_PROGRAM": "make",
-        "CMAKE_C_COMPILER": "clang",
-        "CMAKE_CXX_COMPILER": "clang",
         "STATIC_LINK_STD_LIB": "OFF"
       },
       "environment": {"cmakepreset_expected_host_system": "Darwin"}

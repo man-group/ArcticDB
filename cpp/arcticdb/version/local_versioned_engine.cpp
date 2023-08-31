@@ -15,7 +15,6 @@
 #include <arcticdb/stream/stream_sink.hpp>
 #include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/util/storage_lock.hpp>
-#include <arcticdb/util/test/generators.hpp>
 #include <arcticdb/entity/metrics.hpp>
 #include <arcticdb/version/version_tasks.hpp>
 #include <arcticdb/pipeline/index_utils.hpp>
@@ -615,6 +614,7 @@ VersionedItem LocalVersionedEngine::write_versioned_metadata_internal(
 std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_write_versioned_metadata_internal(
     const std::vector<StreamId>& stream_ids,
     bool prune_previous_versions,
+    bool throw_on_error,
     std::vector<arcticdb::proto::descriptors::UserDefinedMetadata>&& user_meta_protos) {
     auto stream_update_info_futures = batch_get_latest_undeleted_version_and_next_version_id_async(store(),
                                                                                                    version_map(),
@@ -655,12 +655,16 @@ std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_
         if (write_metadata_version.hasValue()) {
             write_metadata_versions_or_errors.emplace_back(std::move(write_metadata_version.value()));
         } else {
-            auto exception = write_metadata_version.exception();
-            DataError data_error(stream_ids[idx], exception.what().toStdString());
-            if (exception.is_compatible_with<storage::KeyNotFoundException>()) {
-                data_error.set_error_code(ErrorCode::E_KEY_NOT_FOUND);
+            if (throw_on_error) {
+                write_metadata_version.throwUnlessValue();
+            } else {
+                auto exception = write_metadata_version.exception();
+                DataError data_error(stream_ids[idx], exception.what().toStdString());
+                if (exception.is_compatible_with<storage::KeyNotFoundException>()) {
+                    data_error.set_error_code(ErrorCode::E_KEY_NOT_FOUND);
+                }
+                write_metadata_versions_or_errors.emplace_back(std::move(data_error));
             }
-            write_metadata_versions_or_errors.emplace_back(std::move(data_error));
         }
     }
     return write_metadata_versions_or_errors;
@@ -1119,7 +1123,7 @@ std::vector<std::variant<ReadVersionOutput, DataError>> LocalVersionedEngine::te
         if (read_version.hasValue()) {
             read_versions_or_errors.emplace_back(std::move(read_version.value()));
         } else {
-            if (*read_options.batch_throw_on_missing_version_) {
+            if (*read_options.batch_throw_on_error_) {
                 read_version.throwUnlessValue();
             } else {
                 auto exception = read_version.exception();
@@ -1142,8 +1146,8 @@ std::vector<std::variant<ReadVersionOutput, DataError>> LocalVersionedEngine::ba
     std::vector<ReadQuery>& read_queries,
     const ReadOptions& read_options) {
     // This read option should always be set when calling batch_read
-    internal::check<ErrorCode::E_ASSERTION_FAILURE>(read_options.batch_throw_on_missing_version_.has_value(),
-                                                    "ReadOptions::batch_throw_on_missing_version_ should always be set here");
+    internal::check<ErrorCode::E_ASSERTION_FAILURE>(read_options.batch_throw_on_error_.has_value(),
+                                                    "ReadOptions::batch_throw_on_error_ should always be set here");
 
     if(std::none_of(std::begin(read_queries), std::end(read_queries), [] (const auto& read_query) {
         return !read_query.clauses_.empty();
@@ -1165,7 +1169,7 @@ std::vector<std::variant<ReadVersionOutput, DataError>> LocalVersionedEngine::ba
                                                                 read_options);
             read_versions_or_errors.emplace_back(std::move(read_version));
         } catch (const NoSuchVersionException& e) {
-            if (*read_options.batch_throw_on_missing_version_) {
+            if (*read_options.batch_throw_on_error_) {
                 throw;
             }
             read_versions_or_errors.emplace_back(DataError(stream_ids[idx],
@@ -1173,7 +1177,7 @@ std::vector<std::variant<ReadVersionOutput, DataError>> LocalVersionedEngine::ba
                                                            version_query.content_,
                                                            ErrorCode::E_NO_SUCH_VERSION));
         } catch (const storage::NoDataFoundException& e) {
-            if (*read_options.batch_throw_on_missing_version_) {
+            if (*read_options.batch_throw_on_error_) {
                 throw;
             }
             read_versions_or_errors.emplace_back(DataError(stream_ids[idx],
@@ -1181,7 +1185,7 @@ std::vector<std::variant<ReadVersionOutput, DataError>> LocalVersionedEngine::ba
                                                            version_query.content_,
                                                            ErrorCode::E_KEY_NOT_FOUND));
         } catch (const storage::KeyNotFoundException& e) {
-            if (*read_options.batch_throw_on_missing_version_) {
+            if (*read_options.batch_throw_on_error_) {
                 throw;
             }
             read_versions_or_errors.emplace_back(DataError(stream_ids[idx],
@@ -1189,7 +1193,7 @@ std::vector<std::variant<ReadVersionOutput, DataError>> LocalVersionedEngine::ba
                                                            version_query.content_,
                                                            ErrorCode::E_KEY_NOT_FOUND));
         } catch (const std::exception& e) {
-            if (*read_options.batch_throw_on_missing_version_) {
+            if (*read_options.batch_throw_on_error_) {
                 throw;
             }
             read_versions_or_errors.emplace_back(DataError(stream_ids[idx],

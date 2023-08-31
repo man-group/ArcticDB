@@ -25,10 +25,23 @@ namespace arcticdb {
 
 namespace py = pybind11;
 
+using NumericSetType = std::variant<
+        std::shared_ptr<std::unordered_set<uint8_t>>,
+        std::shared_ptr<std::unordered_set<uint16_t>>,
+        std::shared_ptr<std::unordered_set<uint32_t>>,
+        std::shared_ptr<std::unordered_set<uint64_t>>,
+        std::shared_ptr<std::unordered_set<int8_t>>,
+        std::shared_ptr<std::unordered_set<int16_t>>,
+        std::shared_ptr<std::unordered_set<int32_t>>,
+        std::shared_ptr<std::unordered_set<int64_t>>,
+        std::shared_ptr<std::unordered_set<float>>,
+        std::shared_ptr<std::unordered_set<double>>>;
+
 class ValueSet {
 public:
     explicit ValueSet(std::vector<std::string>&& value_list);
     explicit ValueSet(py::array value_list);
+    explicit ValueSet(NumericSetType&& value_set);
 
     bool empty() const;
 
@@ -42,18 +55,6 @@ public:
     std::shared_ptr<std::unordered_set<std::string>> get_fixed_width_string_set(size_t width);
 
 private:
-    using NumericSetType = std::variant<
-            std::shared_ptr<std::unordered_set<uint8_t>>,
-            std::shared_ptr<std::unordered_set<uint16_t>>,
-            std::shared_ptr<std::unordered_set<uint32_t>>,
-            std::shared_ptr<std::unordered_set<uint64_t>>,
-            std::shared_ptr<std::unordered_set<int8_t>>,
-            std::shared_ptr<std::unordered_set<int16_t>>,
-            std::shared_ptr<std::unordered_set<int32_t>>,
-            std::shared_ptr<std::unordered_set<int64_t>>,
-            std::shared_ptr<std::unordered_set<float>>,
-            std::shared_ptr<std::unordered_set<double>>>;
-
     bool empty_;
     entity::TypeDescriptor base_type_;
     NumericSetType numeric_base_set_;

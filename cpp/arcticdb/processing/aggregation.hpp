@@ -8,7 +8,7 @@
 #pragma once
 
 #include <arcticdb/processing/expression_node.hpp>
-#include <arcticdb/processing/processing_segment.hpp>
+#include <arcticdb/processing/processing_unit.hpp>
 #include <arcticdb/processing/bucketizer.hpp>
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/entity/type_utils.hpp>
@@ -44,8 +44,13 @@ struct OutputType<DataTypeTag<DataType::BOOL8>, void> {
 };
 
 template<>
-struct OutputType<DataTypeTag<DataType::MICROS_UTC64>, void> {
-    using type = ScalarTagType<DataTypeTag<DataType::MICROS_UTC64>>;
+struct OutputType<DataTypeTag<DataType::NANOSECONDS_UTC64>, void> {
+    using type = ScalarTagType<DataTypeTag<DataType::NANOSECONDS_UTC64>>;
+};
+
+template<>
+struct OutputType<DataTypeTag<DataType::EMPTYVAL>, void> {
+    using type = ScalarTagType<DataTypeTag<DataType::EMPTYVAL>>;
 };
 
 void add_data_type_impl(DataType data_type, std::optional<DataType>& current_data_type);
@@ -154,7 +159,7 @@ struct MaxOrMinAggregatorData {
         add_data_type_impl(data_type, data_type_);
     }
     void aggregate(const std::optional<ColumnWithStrings>& input_column, const std::vector<size_t>& groups, size_t unique_values) {
-        if(data_type_.has_value() && input_column.has_value()) {
+        if(data_type_.has_value() && *data_type_ != DataType::EMPTYVAL && input_column.has_value()) {
             entity::details::visit_type(*data_type_, [&input_column, unique_values, &groups, that=this] (auto global_type_desc_tag) {
                 using GlobalInputType = decltype(global_type_desc_tag);
                 if constexpr(!is_sequence_type(GlobalInputType::DataTypeTag::data_type)) {

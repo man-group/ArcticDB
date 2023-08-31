@@ -72,3 +72,12 @@ def test_column_names_by_timestamp(lmdb_version_store, one_col_df, two_col_df):
 
     # Assert query with the timestamp after the two col write returns two columns
     assert lmdb_version_store.column_names(symbol, as_of=after_two_col_write) == ["x", "y"]
+
+
+def test_get_num_rows(lmdb_version_store, two_col_df):
+    symbol = "test_get_num_rows"
+    df = two_col_df()
+    lmdb_version_store.write(symbol, df)
+    rows = lmdb_version_store.get_num_rows(symbol)
+
+    assert rows == df.shape[0]

@@ -10,6 +10,7 @@ import numpy as np
 
 from arcticdb.version_store._common import TimeFrame
 from arcticdb.util.test import assert_frame_equal, assert_series_equal
+from arcticdb.util._versions import IS_PANDAS_TWO
 
 
 def test_write_no_rows(lmdb_version_store, sym):
@@ -134,12 +135,10 @@ def test_empty_series(lmdb_version_store_dynamic_schema, sym):
     ser = pd.Series([])
     lmdb_version_store_dynamic_schema.write(sym, ser)
     assert not lmdb_version_store_dynamic_schema.is_symbol_pickled(sym)
+    if IS_PANDAS_TWO:
+        # In Pandas 2.0, RangeIndex is used by default when an empty dataframe or series is created.
+        # The index is converted to a DatetimeIndex for preserving the behavior of ArcticDB with
+        # Pandas 1.0.
+        ser.index = ser.index.astype("datetime64[ns]")
+
     assert_series_equal(lmdb_version_store_dynamic_schema.read(sym).data, ser)
-
-
-def test_fallback_to_pickle(lmdb_version_store, sym):
-    column_names = ["a", "b", "c"]
-    df = pd.DataFrame(columns=column_names)
-    lmdb_version_store.write(sym, df)
-    assert lmdb_version_store.is_symbol_pickled(sym)
-    assert_frame_equal(df, lmdb_version_store.read(sym).data)

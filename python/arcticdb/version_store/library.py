@@ -7,11 +7,14 @@ As of the Change Date specified in that file, in accordance with the Business So
 """
 
 import datetime
+import pytz
 from enum import Enum, auto
 from typing import Optional, Any, Tuple, Dict, AnyStr, Union, List, Iterable, NamedTuple
 from numpy import datetime64
 
+from arcticdb.options import LibraryOptions
 from arcticdb.supported_types import Timestamp
+from arcticdb.util._versions import IS_PANDAS_TWO
 
 from arcticdb.version_store.processing import QueryBuilder
 from arcticdb.version_store._store import NativeVersionStore, VersionedItem, VersionQueryInput
@@ -304,6 +307,16 @@ class Library:
     def __contains__(self, symbol: str):
         return self.has_symbol(symbol)
 
+    def options(self) -> LibraryOptions:
+        write_options = self._nvs.lib_cfg().lib_desc.version.write_options
+        return LibraryOptions(
+            dynamic_schema=write_options.dynamic_schema,
+            dedup=write_options.de_duplication,
+            rows_per_segment=write_options.segment_row_size,
+            columns_per_segment=write_options.column_group_size,
+            encoding_version=self._nvs.lib_cfg().lib_desc.version.encoding_version,
+        )
+
     def write(
         self,
         symbol: str,
@@ -489,7 +502,7 @@ class Library:
         raise ArcticUnsupportedDataTypeException(error_message)
 
     def write_batch(
-        self, payloads: List[WritePayload], prune_previous_versions: bool = False, staged=False, validate_index=True
+        self, payloads: List[WritePayload], prune_previous_versions: bool = False, validate_index=True
     ) -> List[VersionedItem]:
         """
         Write a batch of multiple symbols.
@@ -499,8 +512,6 @@ class Library:
         payloads : `List[WritePayload]`
             Symbols and their corresponding data. There must not be any duplicate symbols in `payload`.
         prune_previous_versions: `bool`, default=False
-            See `write`.
-        staged: `bool`, default=False
             See `write`.
         validate_index: bool, default=False
             If set to True, it will verify for each entry in the batch whether the index of the data supports date range searches and update operations.
@@ -558,7 +569,6 @@ class Library:
             [p.metadata for p in payloads],
             prune_previous_version=prune_previous_versions,
             pickle_on_failure=False,
-            parallel=staged,
             validate_index=validate_index,
         )
 
@@ -813,6 +823,22 @@ class Library:
             prune_previous_version=prune_previous_versions,
         )
 
+    def delete_staged_data(self, symbol: str):
+        """
+        Removes staged data.
+
+        Parameters
+        ----------
+        symbol : `str`
+            Symbol to remove staged data for.
+
+        See Also
+        --------
+        write
+            Documentation on the ``staged`` parameter explains the concept of staged data in more detail.
+        """
+        self._nvs.remove_incomplete(symbol)
+
     def finalize_staged_data(
         self,
         symbol: str,
@@ -884,7 +910,7 @@ class Library:
         write
             Documentation on the ``staged`` parameter explains the concept of staged data in more detail.
         """
-        return self._nvs.version_store.get_incomplete_symbols()
+        return self._nvs.list_symbols_with_incomplete_data()
 
     def read(
         self,
@@ -1048,9 +1074,9 @@ class Library:
                     f"Unsupported item in the symbols argument s=[{s}] type(s)=[{type(s)}]. Only [str] and"
                     " [ReadRequest] are supported."
                 )
-        throw_on_missing_version = False
+        throw_on_error = False
         return self._nvs._batch_read_to_versioned_items(
-            symbol_strings, as_ofs, date_ranges, columns, query_builder or query_builders, throw_on_missing_version
+            symbol_strings, as_ofs, date_ranges, columns, query_builder or query_builders, throw_on_error
         )
 
     def read_metadata(self, symbol: str, as_of: Optional[AsOf] = None) -> VersionedItem:
@@ -1186,10 +1212,12 @@ class Library:
         """
 
         self._raise_if_duplicate_symbols_in_batch(write_metadata_payloads)
+        throw_on_error = False
         return self._nvs._batch_write_metadata_to_versioned_items(
             [p.symbol for p in write_metadata_payloads],
             [p.metadata for p in write_metadata_payloads],
             prune_previous_version=prune_previous_versions,
+            throw_on_error=throw_on_error,
         )
 
     def snapshot(
@@ -1503,6 +1531,11 @@ class Library:
         """
         info = self._nvs.get_info(symbol, as_of)
         last_update_time = pd.to_datetime(info["last_update"], utc=True)
+        if IS_PANDAS_TWO:
+            # Pandas 2.0.0 now uses `datetime.timezone.utc` instead of `pytz.UTC`.
+            # See: https://github.com/pandas-dev/pandas/issues/34916
+            # We enforce the use of `pytz.UTC` for consistency.
+            last_update_time = last_update_time.replace(tzinfo=pytz.UTC)
         columns = tuple(NameWithDType(n, t) for n, t in zip(info["col_names"]["columns"], info["dtype"]))
         index = NameWithDType(info["col_names"]["index"], info["col_names"]["index_dtype"])
         date_range = tuple(

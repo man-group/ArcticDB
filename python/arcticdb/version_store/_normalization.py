@@ -25,6 +25,7 @@ from mmap import mmap
 from collections import Counter
 from arcticdb.exceptions import ArcticNativeException, ArcticNativeNotYetImplemented
 from arcticdb.supported_types import DateRangeInput, time_types as supported_time_types
+from arcticdb.util._versions import IS_PANDAS_TWO
 from arcticdb.version_store.read_result import ReadResult
 from arcticdb_ext.version_store import SortedValue as _SortedValue
 from pandas.core.internals import make_block
@@ -97,6 +98,13 @@ class FrameData(
             return FrameData(fd.value.data, fd.names, fd.index_columns)
 
 
+# NOTE: When using Pandas < 2.0, `datetime64` _always_ uses nanosecond resolution,
+# i.e. Pandas < 2.0 _always_ provides `datetime64[ns]` and ignores any other resolution.
+# Yet, this has changed in Pandas 2.0 and other resolution can be used,
+# i.e. Pandas >= 2.0 will also provides `datetime64[us]`, `datetime64[ms]` and `datetime64[s]`.
+# See: https://pandas.pydata.org/docs/dev/whatsnew/v2.0.0.html#construction-with-datetime64-or-timedelta64-dtype-with-unsupported-resolution  # noqa: E501
+# TODO: for the support of Pandas>=2.0, convert any `datetime` to `datetime64[ns]` before-hand and do not
+# rely uniquely on the resolution-less 'M' specifier if it this doable.
 DTN64_DTYPE = "datetime64[ns]"
 NP_OBJECT_DTYPE = np.dtype("O")
 
@@ -172,6 +180,14 @@ def _to_primitive(arr, arr_name, dynamic_strings, string_max_len=None, coerce_co
         return arr.codes
 
     obj_tokens = (object, "object", "O")
+    if np.issubdtype(arr.dtype, np.datetime64):
+        # ArcticDB only operates at nanosecond resolution (i.e. `datetime64[ns]`) type because so did Pandas < 2.
+        # In Pandas >= 2.0, other resolution are supported (namely `ms`, `s`, and `us`).
+        # See: https://pandas.pydata.org/docs/dev/whatsnew/v2.0.0.html#construction-with-datetime64-or-timedelta64-dtype-with-unsupported-resolution  # noqa: E501
+        # We want to maintain consistent behaviour, so we convert any other resolution
+        # to `datetime64[ns]`.
+        arr = arr.astype(DTN64_DTYPE, copy=False)
+
     if arr.dtype.hasobject is False and not (
         dynamic_strings and arr.dtype == "float" and coerce_column_type in obj_tokens
     ):
@@ -181,12 +197,19 @@ def _to_primitive(arr, arr_name, dynamic_strings, string_max_len=None, coerce_co
 
     if len(arr) == 0:
         if coerce_column_type is None:
-            raise ArcticNativeNotYetImplemented(
-                "coercing column type is required when empty column of object type, Column type={} for column={}"
-                .format(arr.dtype, arr_name)
-            )
-        else:
-            return arr.astype(coerce_column_type)
+            if IS_PANDAS_TWO:
+                # Before Pandas 2.0, empty series' dtype was float, but as of Pandas 2.0. empty series' dtype became object.
+                # See: https://github.com/pandas-dev/pandas/issues/17261
+                # We want to maintain consistent behaviour, so we treat empty series as containing floats.
+                # val_type = ValueType::FLOAT;
+                coerce_column_type = float
+                return arr.astype(coerce_column_type)
+            else:
+                raise ArcticNativeNotYetImplemented(
+                    "coercing column type is required when empty column of object type, Column type={} for column={}"
+                    .format(arr.dtype, arr_name)
+                )
+        return arr.astype(coerce_column_type)
 
     # Coerce column allows us to force a column to the given type, which means we can skip expensive iterations in
     # Python with the caveat that if the user gave an invalid type it's going to blow up in the core.
@@ -270,6 +293,7 @@ _range_index_props_are_public = hasattr(RangeIndex, "start")
 def _normalize_single_index(index, index_names, index_norm, dynamic_strings=None, string_max_len=None):
     # index: pd.Index or np.ndarray -> np.ndarray
     index_tz = None
+
     if isinstance(index, RangeIndex):
         # skip index since we can reconstruct it, so no need to actually store it
         if index.name:
@@ -500,6 +524,20 @@ class _PandasNormalizer(Normalizer):
             df.reset_index(fields, inplace=True)
             index = df.index
         else:
+            n_rows = len(index)
+            n_categorical_columns = len(df.select_dtypes(include="category").columns)
+            if IS_PANDAS_TWO and isinstance(index, RangeIndex) and n_rows == 0 and n_categorical_columns == 0:
+                # In Pandas 1.0, an Index is used by default for any empty dataframe or series, except if
+                # there are categorical columns in which case a RangeIndex is used.
+                #
+                # In Pandas 2.0, RangeIndex is used by default for _any_ empty dataframe or series.
+                # See: https://github.com/pandas-dev/pandas/issues/49572
+                # Yet internally, ArcticDB uses a DatetimeIndex for empty dataframes and series without categorical
+                # columns.
+                #
+                # The index is converted to a DatetimeIndex for preserving the behavior of ArcticDB with Pandas 1.0.
+                index = DatetimeIndex([])
+
             index_norm = pd_norm.index
             index_norm.is_not_range_index = not isinstance(index, RangeIndex)
 
@@ -555,6 +593,13 @@ class SeriesNormalizer(_PandasNormalizer):
             s.name = norm_meta.common.name
         else:
             s.name = None
+
+        if s.empty and IS_PANDAS_TWO:
+            # Before Pandas 2.0, empty series' dtype was float, but as of Pandas 2.0. empty series' dtype became object.
+            # See: https://github.com/pandas-dev/pandas/issues/17261
+            # We want to maintain consistent behaviour, so we return empty series as containing objects
+            # when the Pandas version is >= 2.0
+            s = s.astype("object")
 
         return s
 
@@ -663,7 +708,23 @@ class DataFrameNormalizer(_PandasNormalizer):
         columns, denormed_columns, data = _denormalize_columns(item, norm_meta, idx_type, n_indexes)
 
         if not self._skip_df_consolidation:
+            columns_dtype = {} if data is None else {name: np_array.dtype for name, np_array in data.items()}
             df = DataFrame(data, index=index, columns=columns)
+
+            # Setting the columns' dtype manually, since pandas might just convert the dtype of some
+            # (empty) columns to another one and since the `dtype` keyword for `pd.DataFrame` constructor
+            # does not accept a mapping such as `columns_dtype`.
+            # For instance the following code has been tried but returns a pandas.DataFrame full of NaNs:
+            #
+            #       columns_mapping = {} if data is None else {
+            #           name: pd.Series(np_array, index=index, dtype=np_array.dtype)
+            #           for name, np_array in data.items()
+            #       }
+            #       df = DataFrame(index=index, columns=columns_mapping, copy=False)
+            #
+            for column_name, dtype in columns_dtype.items():
+                df[column_name] = df[column_name].astype(dtype, copy=False)
+
         else:
             if index is not None:
                 df = self.df_without_consolidation(columns, index, item, n_indexes, data)

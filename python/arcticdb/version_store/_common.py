@@ -26,6 +26,13 @@ else:
         return str(v)
 
 
+# NOTE: When using Pandas < 2.0, `datetime64` _always_ has the nanosecond resolution,
+# i.e. Pandas < 2.0 _always_ provides `datetime64[ns]` and ignores any other resolution.
+# Yet, this has changed in Pandas 2.0 and other resolution can be used,
+# i.e. Pandas 2.0 will also provides `datetime64[us]`, `datetime64[ms]` and `datetime64[s]`.
+# See: https://pandas.pydata.org/docs/dev/whatsnew/v2.0.0.html#construction-with-datetime64-or-timedelta64-dtype-with-unsupported-resolution  # noqa: E501
+# TODO: for the support of Pandas>=2.0, convert any `datetime` to `datetime64[ns]` before-hand and do not
+# rely uniquely on the resolution-less 'M' specifier if it this doable.
 _NS_DTYPE = np.dtype("datetime64[ns]")
 
 

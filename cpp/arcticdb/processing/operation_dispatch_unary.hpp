@@ -59,6 +59,9 @@ VariantData unary_operator(const Value& val, Func&& func) {
 
 template <typename Func>
 VariantData unary_operator(const Column& col, Func&& func) {
+    schema::check<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>(
+            !is_empty_type(col.type().data_type()),
+            "Empty column provided to unary operator");
     std::unique_ptr<Column> output;
 
     details::visit_type(col.type().data_type(), [&](auto col_desc_tag) {

@@ -5,7 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
-from arcticdb.options import LibraryOptions
+from arcticdb.options import DEFAULT_ENCODING_VERSION, LibraryOptions
 from arcticc.pb2.storage_pb2 import LibraryConfig
 from arcticdb_ext.storage import Library, StorageOverride
 from arcticdb.encoding_version import EncodingVersion
@@ -32,7 +32,9 @@ def set_library_options(lib_desc: "LibraryConfig", options: LibraryOptions):
     write_options.segment_row_size = options.rows_per_segment
     write_options.column_group_size = options.columns_per_segment
 
-    lib_desc.version.encoding_version = options.encoding_version
+    lib_desc.version.encoding_version = (
+        options.encoding_version if options.encoding_version is not None else DEFAULT_ENCODING_VERSION
+    )
 
 
 class ArcticLibraryAdapter(ABC):
@@ -64,4 +66,8 @@ class ArcticLibraryAdapter(ABC):
         pass
 
     def get_storage_override(self) -> StorageOverride:
+        return StorageOverride()
+
+    def get_masking_override(self) -> StorageOverride:
+        """Override that clears any storage config that should not be persisted."""
         return StorageOverride()

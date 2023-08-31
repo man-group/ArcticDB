@@ -90,4 +90,4 @@ inline void fix_descriptor_mismatch_or_throw(
             operation);
     }
 }
-} // namespace arcticc
+} // namespace arcticdb

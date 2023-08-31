@@ -18,10 +18,10 @@ import attr
 from six import PY3
 from copy import deepcopy
 from functools import wraps
-from packaging import version
 
 from arcticdb.config import Defaults
 from arcticdb.log import configure, logger_by_name
+from arcticdb.util._versions import PANDAS_VERSION, CHECK_FREQ_VERSION
 from arcticdb.version_store import NativeVersionStore
 from arcticdb.version_store._custom_normalizers import CustomNormalizer
 from arcticc.pb2.descriptors_pb2 import NormalizationMetadata
@@ -30,11 +30,6 @@ from arcticc.pb2.storage_pb2 import LibraryDescriptor, VersionStoreConfig
 from arcticdb.version_store.helper import ArcticFileConfig
 from arcticdb.config import _DEFAULT_ENVS_PATH
 from arcticdb_ext import set_config_int, get_config_int, unset_config_int
-
-
-PANDAS_VERSION = version.parse(pd.__version__)
-CHECK_FREQ_VERSION = version.Version("1.1")
-IS_PANDAS_ZERO = PANDAS_VERSION < version.Version("1.0")
 
 
 def maybe_not_check_freq(f):

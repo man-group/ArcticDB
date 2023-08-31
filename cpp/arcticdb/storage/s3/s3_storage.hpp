@@ -27,11 +27,9 @@
 
 namespace arcticdb::storage::s3 {
 
-class S3Storage final : public Storage<S3Storage> {
+const std::string USE_AWS_CRED_PROVIDERS_TOKEN = "_RBAC_";
 
-    using Parent = Storage<S3Storage>;
-    friend Parent;
-
+class S3Storage final : public Storage {
   public:
     friend class S3TestClientAccessor<S3Storage>;
     using Config = arcticdb::proto::s3_storage::Config;
@@ -43,30 +41,29 @@ class S3Storage final : public Storage<S3Storage> {
      */
     std::string get_key_path(const VariantKey& key) const;
 
-  protected:
-    void do_write(Composite<KeySegmentPair>&& kvs);
+  private:
+    void do_write(Composite<KeySegmentPair>&& kvs) final;
 
-    void do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts opts);
+    void do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts opts) final;
 
-    template<class Visitor>
-    void do_read(Composite<VariantKey>&& ks, Visitor &&visitor, ReadKeyOpts opts);
+    void do_read(Composite<VariantKey>&& ks, const ReadVisitor& visitor, ReadKeyOpts opts) final;
 
-    void do_remove(Composite<VariantKey>&& ks, RemoveOpts opts);
+    void do_remove(Composite<VariantKey>&& ks, RemoveOpts opts) final;
 
-    template<class Visitor>
-    void do_iterate_type(KeyType key_type, Visitor &&visitor, const std::string &prefix);
+    void do_iterate_type(KeyType key_type, const IterateTypeVisitor& visitor, const std::string &prefix) final;
 
-    bool do_key_exists(const VariantKey& key);
+    bool do_key_exists(const VariantKey& key) final;
 
-    bool do_supports_prefix_matching() {
+    bool do_supports_prefix_matching() const final {
         return true;
     }
 
-    bool do_fast_delete() {
+    bool do_fast_delete() final {
         return false;
     }
 
-  private:
+    std::string do_key_path(const VariantKey& key) const final { return get_key_path(key); };
+
     auto& client() { return s3_client_; }
     const std::string& bucket_name() const { return bucket_name_; }
     const std::string& root_folder() const { return root_folder_; }
@@ -218,13 +215,14 @@ auto get_s3_config(const ConfigType& conf) {
     Aws::Client::ClientConfiguration client_configuration = get_proxy_config(endpoint_scheme);
     client_configuration.scheme = endpoint_scheme;
 
-    if (!conf.region().empty())
+    if (!conf.region().empty()) {
         client_configuration.region = conf.region();
+    }
 
+    if (!conf.endpoint().empty()) {
+        client_configuration.endpointOverride = conf.endpoint();
+    }
 
-    auto endpoint = conf.endpoint();
-    util::check_arg(!endpoint.empty(), "S3 Endpoint must be specified");
-    client_configuration.endpointOverride = endpoint;
     const bool verify_ssl = ConfigsMap::instance()->get_int("S3Storage.VerifySSL", conf.ssl());
     ARCTICDB_RUNTIME_DEBUG(log::storage(), "Verify ssl: {}", verify_ssl);
     client_configuration.verifySSL = verify_ssl;
@@ -241,7 +239,4 @@ Aws::Auth::AWSCredentials get_aws_credentials(const ConfigType& conf) {
     return Aws::Auth::AWSCredentials(conf.credential_name().c_str(), conf.credential_key().c_str());
 }
 
-} //namespace arcticdb::s3
-
-#define ARCTICDB_S3_STORAGE_H_
-#include <arcticdb/storage/s3/s3_storage-inl.hpp>
+} //namespace arcticdb::storage::s3

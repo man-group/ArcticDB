@@ -15,11 +15,10 @@ from arcticdb.version_store.helper import add_azure_library_to_env
 from arcticdb.config import _DEFAULT_ENV
 from arcticdb.version_store._store import NativeVersionStore
 from arcticdb.adapters.arctic_library_adapter import ArcticLibraryAdapter, set_library_options
-from arcticdb_ext.storage import Library
+from arcticdb_ext.storage import StorageOverride, AzureOverride
 from arcticdb.encoding_version import EncodingVersion
 from collections import namedtuple
 from dataclasses import dataclass, fields
-from distutils.util import strtobool
 
 PARSED_QUERY = namedtuple("PARSED_QUERY", ["region"])
 
@@ -27,7 +26,7 @@ PARSED_QUERY = namedtuple("PARSED_QUERY", ["region"])
 @dataclass
 class ParsedQuery:
     Path_prefix: Optional[str] = None
-    CA_cert_path: Optional[str] = None
+    CA_cert_path: str = ""
     Container: Optional[str] = None
 
 
@@ -38,7 +37,7 @@ class AzureLibraryAdapter(ArcticLibraryAdapter):
     def supports_uri(uri: str) -> bool:
         return uri.startswith("azure://")
 
-    def __init__(self, uri: str, *args, **kwargs):
+    def __init__(self, uri: str, encoding_version: EncodingVersion, *args, **kwargs):
         self._uri = uri
         match = re.match(self.REGEX, uri)
 
@@ -56,8 +55,9 @@ class AzureLibraryAdapter(ArcticLibraryAdapter):
         )
         self._container = self._query_params.Container
         self._ca_cert_path = self._query_params.CA_cert_path
+        self._encoding_version = encoding_version
 
-        super().__init__(uri, EncodingVersion.V1)
+        super().__init__(uri, self._encoding_version)
 
     def __repr__(self):
         return "azure(endpoint=%s, container=%s)" % (self._endpoint, self._container)
@@ -79,7 +79,9 @@ class AzureLibraryAdapter(ArcticLibraryAdapter):
             ca_cert_path=self._ca_cert_path,
         )
 
-        lib = NativeVersionStore.create_store_from_config(env_cfg, _DEFAULT_ENV, self.CONFIG_LIBRARY_NAME)
+        lib = NativeVersionStore.create_store_from_config(
+            env_cfg, _DEFAULT_ENV, self.CONFIG_LIBRARY_NAME, encoding_version=self._encoding_version
+        )
 
         return lib._library
 
@@ -100,6 +102,26 @@ class AzureLibraryAdapter(ArcticLibraryAdapter):
         _kwargs = {k: v for k, v in parsed_query.items() if k in field_dict.keys()}
         return _kwargs
 
+    def get_storage_override(self) -> AzureOverride:
+        azure_override = AzureOverride()
+        if self._container:
+            azure_override.container_name = self._container
+        if self._endpoint:
+            azure_override.endpoint = self._endpoint
+        if self._ca_cert_path:
+            azure_override.ca_cert_path = self._ca_cert_path
+
+        storage_override = StorageOverride()
+        storage_override.set_azure_override(azure_override)
+
+        return storage_override
+
+    def get_masking_override(self) -> StorageOverride:
+        storage_override = StorageOverride()
+        azure_override = AzureOverride()
+        storage_override.set_azure_override(azure_override)
+        return storage_override
+
     def create_library(self, name, library_options: LibraryOptions):
         env_cfg = EnvironmentConfigsMap()
 
@@ -119,9 +141,14 @@ class AzureLibraryAdapter(ArcticLibraryAdapter):
             ca_cert_path=self._ca_cert_path,
         )
 
+        library_options.encoding_version = (
+            library_options.encoding_version if library_options.encoding_version is not None else self._encoding_version
+        )
         set_library_options(env_cfg.env_by_id[_DEFAULT_ENV].lib_by_path[name], library_options)
 
-        lib = NativeVersionStore.create_store_from_config(env_cfg, _DEFAULT_ENV, name)
+        lib = NativeVersionStore.create_store_from_config(
+            env_cfg, _DEFAULT_ENV, name, encoding_version=library_options.encoding_version
+        )
 
         return lib
 

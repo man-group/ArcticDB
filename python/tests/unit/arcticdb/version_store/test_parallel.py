@@ -9,7 +9,6 @@ import numpy as np
 import pandas as pd
 import random
 import datetime
-import pytest
 
 from arcticdb.util.test import (
     assert_frame_equal,
@@ -18,11 +17,48 @@ from arcticdb.util.test import (
     random_floats,
     random_dates,
 )
+from arcticdb.util._versions import IS_PANDAS_TWO
+from arcticdb_ext.storage import KeyType
+
+
+def test_remove_incomplete(lmdb_version_store):
+    lib = lmdb_version_store
+    lib_tool = lib.library_tool()
+    assert lib_tool.find_keys(KeyType.APPEND_DATA) == []
+    assert lib.list_symbols_with_incomplete_data() == []
+
+    sym1 = "test_remove_incomplete_1"
+    sym2 = "test_remove_incomplete_2"
+    num_chunks = 10
+    df1 = pd.DataFrame({"col": np.arange(10)}, index=pd.date_range("2000-01-01", periods=num_chunks))
+    df2 = pd.DataFrame({"col": np.arange(100, 110)}, index=pd.date_range("2001-01-01", periods=num_chunks))
+    for idx in range(num_chunks):
+        lib.write(sym1, df1.iloc[idx : idx + 1, :], parallel=True)
+        lib.write(sym2, df2.iloc[idx : idx + 1, :], parallel=True)
+
+    assert len(lib_tool.find_keys_for_symbol(KeyType.APPEND_DATA, sym1)) == num_chunks
+    assert len(lib_tool.find_keys_for_symbol(KeyType.APPEND_DATA, sym2)) == num_chunks
+    assert sorted(lib.list_symbols_with_incomplete_data()) == [sym1, sym2]
+
+    lib.remove_incomplete(sym1)
+    assert lib_tool.find_keys_for_symbol(KeyType.APPEND_DATA, sym1) == []
+    assert len(lib_tool.find_keys_for_symbol(KeyType.APPEND_DATA, sym2)) == num_chunks
+    assert lib.list_symbols_with_incomplete_data() == [sym2]
+
+    lib.remove_incomplete(sym2)
+    assert lib_tool.find_keys(KeyType.APPEND_DATA) == []
+    assert lib.list_symbols_with_incomplete_data() == []
+
+    # Removing incompletes from a symbol that doesn't exist, or a symbol with no incompletes, is a no-op
+    lib.remove_incomplete("non-existent-symbol")
+    sym3 = "test_remove_incomplete_3"
+    lib.write(sym3, df1)
+    lib.remove_incomplete(sym3)
 
 
 def test_parallel_write(lmdb_version_store):
     sym = "parallel"
-    lmdb_version_store.version_store.remove_incomplete(sym)
+    lmdb_version_store.remove_incomplete(sym)
 
     num_rows = 1111
     dtidx = pd.date_range("1970-01-01", periods=num_rows)
@@ -182,7 +218,6 @@ def test_datetimes_to_nats(lmdb_version_store):
         index = pd.Index([dt + datetime.timedelta(seconds=s) for s in range(num_rows_per_day)])
         vals = {c: random_dates(num_rows_per_day) for c in cols}
         new_df = pd.DataFrame(data=vals, index=index)
-
         dataframes.append(new_df)
         df = pd.concat((df, new_df))
         dt = dt + datetime.timedelta(days=1)
@@ -196,4 +231,12 @@ def test_datetimes_to_nats(lmdb_version_store):
     df.sort_index(axis=1, inplace=True)
     result = vit.data
     result.sort_index(axis=1, inplace=True)
-    assert_frame_equal(vit.data, df)
+
+    if IS_PANDAS_TWO:
+        # In Pandas < 2.0, `datetime64[ns]` was _always_ used. `datetime64[ns]` is also used by ArcticDB.
+        # In Pandas >= 2.0, the `datetime64` can be used with other resolutions (namely 's', 'ms', and 'us').
+        # See: https://pandas.pydata.org/docs/dev/whatsnew/v2.0.0.html#construction-with-datetime64-or-timedelta64-dtype-with-unsupported-resolution  # noqa
+        # Hence, we convert to the largest resolution (which is guaranteed to be the ones of the original `df`).
+        result = result.astype(df.dtypes)
+
+    assert_frame_equal(result, df)

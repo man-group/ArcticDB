@@ -5,15 +5,14 @@
  * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
  */
 
-#include <arcticdb/storage/s3/s3_storage.hpp>
+#define ARCTICDB_S3_STORAGE_H_
+#include <arcticdb/storage/s3/s3_storage-inl.hpp>
 #include <aws/core/auth/AWSCredentialsProvider.h>
 #include <arcticdb/storage/s3/s3_api.hpp>
 #include <arcticdb/log/log.hpp>
 #include <locale>
 
 namespace arcticdb::storage::s3 {
-
-const std::string USE_AWS_CRED_PROVIDERS_TOKEN = "_RBAC_";
 
 namespace detail {
 std::streamsize S3StreamBuffer::xsputn(const char_type* s, std::streamsize n) {
@@ -33,7 +32,7 @@ std::streamsize S3StreamBuffer::xsputn(const char_type* s, std::streamsize n) {
 }
 
 S3Storage::S3Storage(const LibraryPath &library_path, OpenMode mode, const Config &conf) :
-    Parent(library_path, mode),
+    Storage(library_path, mode),
     s3_api_(S3ApiInstance::instance()),
     root_folder_(object_store_utils::get_root_folder(library_path)),
     bucket_name_(conf.bucket_name()) {
