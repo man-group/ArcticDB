@@ -291,6 +291,10 @@ jobs:
 
   can_merge:
     needs: [leader-cpp-test-linux, leader-cpp-test-windows, follower-linux, follower-windows, persistent_storage_verify_linux, persistent_storage_verify_windows]
+    if: |
+      always() &&
+      !failure() &&
+      !cancelled()
     runs-on: ubuntu-latest
     steps:
       - run: echo Dummy job to simplify PR merge checks configuration
