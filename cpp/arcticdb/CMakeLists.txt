@@ -245,6 +245,8 @@ set(arcticdb_srcs
         storage/library.hpp
         storage/library_index.hpp
         storage/library_manager.hpp
+        storage/azure/azure_storage.hpp
+        storage/azure/azure_storage-inl.hpp
         storage/lmdb/lmdb_storage.hpp
         storage/lmdb/lmdb_storage-inl.hpp
         storage/memory/memory_storage.hpp
@@ -393,8 +395,7 @@ set(arcticdb_srcs
         python/python_to_tensor_frame.cpp
         storage/config_resolvers.cpp
         storage/failure_simulation.cpp
-        storage/azure/azure_storage-inl.hpp
-        storage/azure/azure_storage.hpp
+        storage/library_manager.cpp
         storage/azure/azure_storage.cpp
         storage/lmdb/lmdb_storage.cpp
         storage/mongo/mongo_client.cpp
