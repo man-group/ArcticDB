@@ -117,6 +117,7 @@ jobs:
           python -m coverage run -m pytest tests
         env:
           TEST_OUTPUT_DIR: ${{runner.temp}}
+          ARCTICDB_CODE_COVERAGE_BUILD: 1
           # Use the Mongo created in the service container above to test against
           CI_MONGO_HOST: mongodb
 
