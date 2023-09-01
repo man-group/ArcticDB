@@ -150,8 +150,19 @@ def moto_s3_uri_incl_bucket(moto_s3_endpoint_and_credentials):
 
 
 @pytest.fixture(scope="function")
-def real_s3_uri():
-    yield get_real_s3_uri()
+def shared_real_s3_uri():
+    """
+    Path to persistent s3 that is shared between the tests in whole workflow run
+    """
+    yield get_real_s3_uri(shared_path=True)
+
+
+@pytest.fixture(scope="function")
+def unique_real_s3_uri():
+    """
+    Path to persistent s3 that is unique for the current test type (e.g. windows_cp37_integration)
+    """
+    yield get_real_s3_uri(shared_path=False)
 
 
 @pytest.fixture(
@@ -169,13 +180,13 @@ def real_s3_uri():
         ),
     ],
 )
-def arctic_client(request, moto_s3_uri_incl_bucket, tmpdir, encoding_version):
+def arctic_client(request, moto_s3_uri_incl_bucket, tmpdir, unique_real_s3_uri, encoding_version):
     if request.param == "S3":
         ac = Arctic(moto_s3_uri_incl_bucket, encoding_version)
     elif request.param == "Azure":
         ac = Arctic(request.getfixturevalue("azurite_azure_uri_incl_bucket"), encoding_version)
     elif request.param == "REAL_S3":
-        ac = Arctic(get_real_s3_uri(shared_path=False))
+        ac = Arctic(unique_real_s3_uri)
     elif request.param == "LMDB":
         ac = Arctic(f"lmdb://{tmpdir}", encoding_version)
     else:
@@ -992,7 +1003,7 @@ def spawn_azurite(azurite_port):
                 marks=pytest.mark.skipif(not AZURE_SUPPORT, reason="Pending Azure Storge Conda support"),
             ),
             pytest.param(
-                "real_s3_uri",
+                "unique_real_s3_uri",
                 marks=pytest.mark.skipif(
                     not PERSISTENT_STORAGE_TESTS_ENABLED, reason="Can be used only when persistent storage is enabled"
                 ),
