@@ -119,6 +119,26 @@ For example:
 
 For more information, [see the Arctic class reference](https://docs.arcticdb.io/api/arcticdb#arcticdb.Arctic.__init__).
 
+#### LMDB Configuration
+
+LMDB supports configuring its map size. See its [documentation](http://www.lmdb.tech/doc/group__mdb.html#gaa2506ec8dab3d969b0e609cd82e619e5).
+
+You may need to tweak it on Windows, whereas on Linux the default is much larger and should suffice. This is because Windows allocates physical
+space for the map file eagerly, whereas on Linux the map size is an upper bound to the physical space that will be used.
+
+You can set a map size in the connection string:
+
+```python
+>>> from arcticdb import Arctic
+>>> ac = Arctic('lmdb://path/to/desired/database?map_size=2GB')
+```
+
+The default on Windows is only 128MB. Errors with `lmdb errror code -30792` indicate that the map is getting full and that you should
+increase its size. This will happen if you are doing large writes. You should ensure that you only have one Arctic instance open over
+a given LMDB database.
+
+For more information, [see the Arctic class reference](https://docs.arcticdb.io/api/arcticdb#arcticdb.Arctic.__init__).
+
 #### Library Setup
 
 ArcticDB is geared towards storing many (potentially millions) of tables. Individual tables are called _symbols_ and 
