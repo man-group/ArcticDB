@@ -297,7 +297,11 @@ jobs:
 
   publish:
     needs: [common_config, can_merge]
-    if: needs.common_config.outputs.pypi_publish && needs.common_config.outputs.publish_env
+    if: |
+      always() &&
+      !failure() &&
+      !cancelled() &&
+      (needs.common_config.outputs.pypi_publish && needs.common_config.outputs.publish_env)
     uses: ./.github/workflows/publish.yml
     secrets: inherit
     permissions: {contents: write}
