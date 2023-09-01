@@ -156,7 +156,7 @@ ArcticDB exceptions are exposed in `arcticdb.exceptions` and sit in a hierarchy:
 ```
 RuntimeError
 └-- ArcticException
-    |-- ArcticNativeNotYetImplemented
+    |-- ArcticDbNotYetImplemented
     |-- DuplicateKeyException
     |-- MissingDataException
     |-- NoDataFoundException
