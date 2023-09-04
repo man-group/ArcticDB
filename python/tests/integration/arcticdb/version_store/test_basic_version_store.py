@@ -1347,11 +1347,10 @@ def test_batch_write_then_list_symbol_without_cache(basic_store_factory):
         assert set(lib.list_symbols()) == set(symbols)
 
 
-# TODO: GPETROV Check this with the basic_store_factory
-def test_batch_write_missing_keys_dedup(version_store_factory):
+def test_batch_write_missing_keys_dedup(basic_store_factory):
     """When there is duplicate data to reuse for the current write, we need to access the index key of the previous
     versions in order to refer to the corresponding keys for the deduplicated data."""
-    lib = version_store_factory(de_duplication=True)
+    lib = basic_store_factory(de_duplication=True)
     assert lib.lib_cfg().lib_desc.version.write_options.de_duplication
 
     df1 = pd.DataFrame({"a": [3, 5, 7]})
@@ -1367,8 +1366,8 @@ def test_batch_write_missing_keys_dedup(version_store_factory):
         lib.batch_write(["s1", "s2"], [df1, df2])
 
 
-def test_batch_write_metadata_missing_keys(lmdb_version_store):
-    lib = lmdb_version_store
+def test_batch_write_metadata_missing_keys(basic_store):
+    lib = basic_store
 
     df1 = pd.DataFrame({"a": [3, 5, 7]})
     df2 = pd.DataFrame({"a": [4, 6, 8]})
@@ -1384,8 +1383,8 @@ def test_batch_write_metadata_missing_keys(lmdb_version_store):
         _ = lib.batch_write_metadata(["s1", "s2"], [{"s1_meta": 1}, {"s2_meta": 1}])
 
 
-def test_batch_read_metadata_missing_keys(lmdb_version_store):
-    lib = lmdb_version_store
+def test_batch_read_metadata_missing_keys(basic_store):
+    lib = basic_store
 
     df1 = pd.DataFrame({"a": [3, 5, 7]})
     df2 = pd.DataFrame({"a": [4, 6, 8]})
@@ -1408,8 +1407,8 @@ def test_batch_read_metadata_missing_keys(lmdb_version_store):
         _ = lib.batch_read_metadata(["s2"], [0])
 
 
-def test_batch_read_metadata_multi_missing_keys(lmdb_version_store):
-    lib = lmdb_version_store
+def test_batch_read_metadata_multi_missing_keys(basic_store):
+    lib = basic_store
     lib_tool = lib.library_tool()
 
     lib.write("s1", 0, metadata={"s1": "metadata"})
@@ -1420,8 +1419,8 @@ def test_batch_read_metadata_multi_missing_keys(lmdb_version_store):
         _ = lib.batch_read_metadata_multi(["s1"], [None])
 
 
-def test_batch_read_missing_keys(lmdb_version_store):
-    lib = lmdb_version_store
+def test_batch_read_missing_keys(basic_store):
+    lib = basic_store
 
     df1 = pd.DataFrame({"a": [3, 5, 7]})
     df2 = pd.DataFrame({"a": [4, 6, 8]})
@@ -1448,8 +1447,8 @@ def test_batch_read_missing_keys(lmdb_version_store):
         _ = lib.batch_read(["s1", "s2", "s3"], [None, None, 0])
 
 
-def test_batch_get_info_missing_keys(lmdb_version_store):
-    lib = lmdb_version_store
+def test_batch_get_info_missing_keys(basic_store):
+    lib = basic_store
 
     df1 = pd.DataFrame({"a": [3, 5, 7]})
     df2 = pd.DataFrame({"a": [5, 7, 9]})
