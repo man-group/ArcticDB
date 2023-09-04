@@ -47,7 +47,6 @@ from arcticdb.util.test import (
     distinct_timestamps,
     RUN_MONGO_TEST,
 )
-from arcticdb_ext.tools import AZURE_SUPPORT
 from tests.util.date import DateRange
 
 
