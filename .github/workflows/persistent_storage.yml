@@ -58,7 +58,7 @@ jobs:
       - name: Get oldest release for the current major release cycle
         run: |
           pip install requests
-          python build_tooling\get_newest_latest_version.py > $GITHUB_ENV
+          python build_tooling/get_newest_latest_version.py > $GITHUB_ENV
       
       - name: Install oldest supported release
         run: |
