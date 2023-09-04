@@ -48,7 +48,7 @@ from arcticdb_ext.version_store import ColumnStats as _ColumnStats
 from arcticdb_ext.version_store import StreamDescriptorMismatch
 from arcticdb_ext.version_store import DataError
 from arcticdb.authorization.permissions import OpenMode
-from arcticdb.exceptions import ArcticNativeNotYetImplemented, ArcticNativeException
+from arcticdb.exceptions import ArcticDbNotYetImplemented, ArcticNativeException
 from arcticdb.flattener import Flattener
 from arcticdb.log import version as log
 from arcticdb.version_store._custom_normalizers import get_custom_normalizer, CompositeCustomNormalizer
@@ -150,7 +150,7 @@ def _handle_categorical_columns(symbol, data, throw=True):
                 " columns: {}".format(symbol, categorical_columns)
             )
             if throw:
-                raise ArcticNativeNotYetImplemented(message)
+                raise ArcticDbNotYetImplemented(message)
             else:
                 log.warn(message)
 
@@ -233,7 +233,7 @@ class NativeVersionStore:
                 MsgPackNormalizer(nfh), use_norm_failure_handler_known_types=use_norm_failure_handler_known_types
             )
         else:
-            raise ArcticNativeNotYetImplemented("No other normalization failure handler")
+            raise ArcticDbNotYetImplemented("No other normalization failure handler")
 
     def _initialize(self, library, env, lib_cfg, custom_normalizer, open_mode):
         self._library = library
@@ -336,7 +336,7 @@ class NativeVersionStore:
                     dynamic_schema=dynamic_schema,
                     **kwargs,
                 )
-        except ArcticNativeNotYetImplemented as ex:
+        except ArcticDbNotYetImplemented as ex:
             log.error("Not supported: normalizing symbol={}, data={}, metadata={}, {}", symbol, dataframe, metadata, ex)
             raise
         except Exception as ex:
@@ -351,12 +351,12 @@ class NativeVersionStore:
     @staticmethod
     def check_symbol_validity(symbol):
         if not len(symbol) < MAX_SYMBOL_SIZE:
-            raise ArcticNativeNotYetImplemented(
+            raise ArcticDbNotYetImplemented(
                 f"Symbol length {len(symbol)} chars exceeds the max supported length of {MAX_SYMBOL_SIZE} chars."
             )
 
         if len(set(symbol).intersection(UNSUPPORTED_S3_CHARS)):
-            raise ArcticNativeNotYetImplemented(
+            raise ArcticDbNotYetImplemented(
                 f"The symbol '{symbol}' has one or more unsupported characters({','.join(UNSUPPORTED_S3_CHARS)})."
             )
 
@@ -1013,34 +1013,39 @@ class NativeVersionStore:
             Dictionary of symbol mapping with the versioned items. The data attribute will be None.
         """
         _check_batch_kwargs(NativeVersionStore.batch_read_metadata, NativeVersionStore.read_metadata, kwargs)
-        meta_items = self._batch_read_meta_to_versioned_items(symbols, as_ofs, kwargs)
-        return {v.symbol: v for v in meta_items if v is not None}
+        include_errors_and_none_meta = False
+        meta_items = self._batch_read_metadata_to_versioned_items(
+            symbols, as_ofs, include_errors_and_none_meta, **kwargs
+        )
+        return {v.symbol: v for v in meta_items}
 
-    def _batch_read_meta_to_versioned_items(self, symbols, as_ofs, kwargs=None):
-        if kwargs is None:
-            kwargs = dict()
-        meta_data_list = []
+    def _batch_read_metadata_to_versioned_items(self, symbols, as_ofs, include_errors_and_none_meta, **kwargs):
         version_queries = self._get_version_queries(len(symbols), as_ofs, **kwargs)
         read_options = self._get_read_options(**kwargs)
-        result = self.version_store.batch_read_metadata(symbols, version_queries, read_options)
-        result_list = list(zip(symbols, result))
-        for original_symbol, result in result_list:
-            vitem, udm = result
-            if original_symbol != vitem.symbol:
-                meta_data_list.append(None)
-            else:
-                meta = denormalize_user_metadata(udm, self._normalizer) if udm else None
-                meta_data_list.append(
-                    VersionedItem(
-                        symbol=vitem.symbol,
-                        library=self._library.library_path,
-                        data=None,
-                        version=vitem.version,
-                        metadata=meta,
-                        host=self.env,
+        # For historical reasons, NativeVersionStore.batch_read_metadata returns None if the requested version does not
+        # exist, but should throw an exception for other errors. Library.read_metadata_batch should get DataError
+        # objects if exceptions are thrown.
+        read_options.set_batch_throw_on_error(not include_errors_and_none_meta)
+        metadatas_or_errors = self.version_store.batch_read_metadata(symbols, version_queries, read_options)
+        meta_items = []
+        for metadata in metadatas_or_errors:
+            if isinstance(metadata, DataError) and include_errors_and_none_meta:
+                meta_items.append(metadata)
+            if not isinstance(metadata, DataError):
+                vitem, udm = metadata
+                if udm is not None or include_errors_and_none_meta:
+                    meta = denormalize_user_metadata(udm, self._normalizer) if udm is not None else None
+                    meta_items.append(
+                        VersionedItem(
+                            symbol=vitem.symbol,
+                            library=self._library.library_path,
+                            data=None,
+                            version=vitem.version,
+                            metadata=meta,
+                            host=self.env,
+                        )
                     )
-                )
-        return meta_data_list
+        return meta_items
 
     def batch_read_metadata_multi(
         self, symbols: List[str], as_ofs: Optional[List[VersionQueryInput]] = None, **kwargs
@@ -1079,6 +1084,7 @@ class NativeVersionStore:
         results_dict = {}
         version_queries = self._get_version_queries(len(symbols), as_ofs, **kwargs)
         read_options = self._get_read_options(**kwargs)
+        read_options.set_batch_throw_on_error(True)
         for result in self.version_store.batch_read_metadata(symbols, version_queries, read_options):
             vitem, udm = result
             meta = denormalize_user_metadata(udm, self._normalizer) if udm else None
@@ -1165,7 +1171,29 @@ class NativeVersionStore:
             If data is unsorted, when validate_index is set to True.
         """
         _check_batch_kwargs(NativeVersionStore.batch_write, NativeVersionStore.write, kwargs)
+        throw_on_error = True
+        return self._batch_write_internal(
+            symbols,
+            data_vector,
+            metadata_vector,
+            prune_previous_version,
+            pickle_on_failure,
+            validate_index,
+            throw_on_error,
+            **kwargs,
+        )
 
+    def _batch_write_internal(
+        self,
+        symbols: List[str],
+        data_vector: List[Any],
+        metadata_vector: Optional[List[Any]] = None,
+        prune_previous_version=None,
+        pickle_on_failure=None,
+        validate_index: bool = False,
+        throw_on_error: bool = True,
+        **kwargs,
+    ) -> List[VersionedItem]:
         for symbol in symbols:
             self.check_symbol_validity(symbol)
 
@@ -1201,9 +1229,15 @@ class NativeVersionStore:
         items = [info[1] for info in normalized_infos]
         norm_metas = [info[2] for info in normalized_infos]
         cxx_versioned_items = self.version_store.batch_write(
-            symbols, items, norm_metas, udms, prune_previous_version, validate_index
+            symbols, items, norm_metas, udms, prune_previous_version, validate_index, throw_on_error
         )
-        return [self._convert_thin_cxx_item_to_python(v) for v in cxx_versioned_items]
+        write_results = []
+        for result in cxx_versioned_items:
+            if isinstance(result, DataError):
+                write_results.append(result)
+            else:
+                write_results.append(self._convert_thin_cxx_item_to_python(result))
+        return write_results
 
     def _batch_write_metadata_to_versioned_items(
         self, symbols: List[str], metadata_vector: List[Any], prune_previous_version, throw_on_error
@@ -1306,7 +1340,7 @@ class NativeVersionStore:
         UnsortedDataException
             If data is unsorted, when validate_index is set to True.
         """
-        throw_on_missing_version = True
+        throw_on_error = True
         _check_batch_kwargs(NativeVersionStore.batch_append, NativeVersionStore.append, kwargs)
         return self._batch_append_to_versioned_items(
             symbols,
@@ -1314,7 +1348,7 @@ class NativeVersionStore:
             metadata_vector,
             prune_previous_version,
             validate_index,
-            throw_on_missing_version,
+            throw_on_error,
             **kwargs,
         )
 
@@ -1325,7 +1359,7 @@ class NativeVersionStore:
         metadata_vector,
         prune_previous_version,
         validate_index,
-        throw_on_missing_version,
+        throw_on_error,
         **kwargs,
     ):
         for symbol in symbols:
@@ -1370,7 +1404,7 @@ class NativeVersionStore:
             prune_previous_version,
             validate_index,
             write_if_missing,
-            throw_on_missing_version,
+            throw_on_error,
         )
         append_results = []
         for result in cxx_versioned_items:
@@ -2542,6 +2576,10 @@ class NativeVersionStore:
             - type, `str`
             - date_range, `tuple`
         """
+        throw_on_error = True
+        return self._batch_read_descriptor(symbols, as_ofs, throw_on_error)
+
+    def _batch_read_descriptor(self, symbols, as_ofs, throw_on_error):
         as_ofs_lists = []
         if as_ofs == None:
             as_ofs_lists = [None] * len(symbols)
@@ -2553,12 +2591,16 @@ class NativeVersionStore:
             version_queries.append(self._get_version_query(as_of))
 
         read_options = _PythonVersionStoreReadOptions()
-        list_descriptors = self.version_store.batch_read_descriptor(symbols, version_queries, read_options)
-        args_list = list(zip(list_descriptors, symbols, version_queries, as_ofs_lists))
-        list_infos = []
+        read_options.set_batch_throw_on_error(throw_on_error)
+        descriptions_or_errors = self.version_store.batch_read_descriptor(symbols, version_queries, read_options)
+        args_list = list(zip(descriptions_or_errors, symbols, version_queries, as_ofs_lists))
+        description_results = []
         for dit, symbol, version_query, as_of in args_list:
-            list_infos.append(self._process_info(symbol, dit, as_of))
-        return list_infos
+            if isinstance(dit, DataError):
+                description_results.append(dit)
+            else:
+                description_results.append(self._process_info(symbol, dit, as_of))
+        return description_results
 
     def write_metadata(
         self, symbol: str, metadata: Any, prune_previous_version: Optional[bool] = None
@@ -2691,9 +2733,7 @@ class NativeVersionStore:
         """
 
         if self._lib_cfg.lib_desc.version.write_options.bucketize_dynamic:
-            raise ArcticNativeNotYetImplemented(
-                f"Support for library with 'bucketize_dynamic' ON is not implemented yet"
-            )
+            raise ArcticDbNotYetImplemented(f"Support for library with 'bucketize_dynamic' ON is not implemented yet")
 
         result = self.version_store.defragment_symbol_data(symbol, segment_size)
         return VersionedItem(

@@ -104,11 +104,6 @@ jobs:
         uses: SimenB/github-actions-cpu-cores@v1
         id: cpu-cores
 
-      - name: Append to environment_unix.yml
-        shell: bash -l {0}
-        run: |
-            echo "  - cxx-compiler" >> environment_unix.yml
-
       - name: Install Conda environment from environment_unix.yml
         uses: mamba-org/setup-micromamba@v1
         with:
@@ -136,7 +131,7 @@ jobs:
           cd cpp/out/darwin-conda-release-build/
           make -j ${{ steps.cpu-cores.outputs.count }} arcticdb_rapidcheck_tests
           make -j ${{ steps.cpu-cores.outputs.count }} test_unit_arcticdb
-  
+
       - name: Run C++ Tests
         shell: bash -l {0}
         run: |

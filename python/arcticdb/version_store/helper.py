@@ -190,7 +190,7 @@ def add_memory_library_to_env(cfg, lib_name, env_name, description=None):
     _add_lib_desc_to_env(env, lib_name, sid, description)
 
 
-def add_mongo_library_to_env(cfg, lib_name, env_name, uri=None, description=None):
+def get_mongo_proto(cfg, lib_name, env_name, uri):
     env = cfg.env_by_id[env_name]
     mongo = MongoConfig()
     if uri is not None:
@@ -198,6 +198,18 @@ def add_mongo_library_to_env(cfg, lib_name, env_name, uri=None, description=None
 
     sid, storage = get_storage_for_lib_name(lib_name, env)
     storage.config.Pack(mongo, type_url_prefix="cxx.arctic.org")
+    return sid, storage
+
+
+def add_mongo_library_to_env(cfg, lib_name, env_name, uri=None, description=None):
+    env = cfg.env_by_id[env_name]
+    sid, storage = get_mongo_proto(
+        cfg=cfg,
+        lib_name=lib_name,
+        env_name=env_name,
+        uri=uri,
+    )
+
     _add_lib_desc_to_env(env, lib_name, sid, description)
 
 

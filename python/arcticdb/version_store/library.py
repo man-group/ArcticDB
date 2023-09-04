@@ -18,6 +18,7 @@ from arcticdb.util._versions import IS_PANDAS_TWO
 
 from arcticdb.version_store.processing import QueryBuilder
 from arcticdb.version_store._store import NativeVersionStore, VersionedItem, VersionQueryInput
+from arcticdb.version_store._normalization import denormalize_user_metadata
 from arcticdb_ext.exceptions import ArcticException
 from arcticdb_ext.version_store import DataError
 import pandas as pd
@@ -503,7 +504,7 @@ class Library:
 
     def write_batch(
         self, payloads: List[WritePayload], prune_previous_versions: bool = False, validate_index=True
-    ) -> List[VersionedItem]:
+    ) -> List[Union[VersionedItem, DataError]]:
         """
         Write a batch of multiple symbols.
 
@@ -520,9 +521,13 @@ class Library:
 
         Returns
         -------
-        List[VersionedItem]
-            Structure containing metadata and version number of the written symbols in the store, in the
+        List[Union[VersionedItem, DataError]]
+            List of versioned items. The data attribute will be None for each versioned item.
+            i-th entry corresponds to i-th element of `payloads`. Each result correspond to
+            a structure containing metadata and version number of the written symbols in the store, in the
             same order as `payload`.
+            If a key error or any other internal exception is raised, a DataError object is returned, with symbol,
+            error_code, error_category, and exception_string properties.
 
         Raises
         ------
@@ -530,8 +535,6 @@ class Library:
             When duplicate symbols appear in payload.
         ArcticUnsupportedDataTypeException
             If data that is not of NormalizableType appears in any of the payloads.
-        UnsortedDataException
-            If data is unsorted, when validate_index is set to True.
 
         See Also
         --------
@@ -563,13 +566,15 @@ class Library:
         self._raise_if_duplicate_symbols_in_batch(payloads)
         self._raise_if_unsupported_type_in_write_batch(payloads)
 
-        return self._nvs.batch_write(
+        throw_on_error = False
+        return self._nvs._batch_write_internal(
             [p.symbol for p in payloads],
             [p.data for p in payloads],
             [p.metadata for p in payloads],
             prune_previous_version=prune_previous_versions,
             pickle_on_failure=False,
             validate_index=validate_index,
+            throw_on_error=throw_on_error,
         )
 
     def write_pickle_batch(
@@ -723,7 +728,7 @@ class Library:
         List[Union[VersionedItem, DataError]]
             List of versioned items. i-th entry corresponds to i-th element of `append_payloads`.
             Each result correspond to a structure containing metadata and version number of the affected
-            symbol in the store. If any internal exception is raised, a DataError object is returned, with symbol,
+            symbol in the store. If a key error or any other internal exception is raised, a DataError object is returned, with symbol,
             error_code, error_category, and exception_string properties.
 
         Raises
@@ -736,7 +741,7 @@ class Library:
 
         self._raise_if_duplicate_symbols_in_batch(append_payloads)
         self._raise_if_unsupported_type_in_write_batch(append_payloads)
-        throw_on_missing_version = False
+        throw_on_error = False
 
         return self._nvs._batch_append_to_versioned_items(
             [p.symbol for p in append_payloads],
@@ -744,7 +749,7 @@ class Library:
             [p.metadata for p in append_payloads],
             prune_previous_version=prune_previous_versions,
             validate_index=validate_index,
-            throw_on_missing_version=throw_on_missing_version,
+            throw_on_error=throw_on_error,
         )
 
     def update(
@@ -1001,7 +1006,8 @@ class Library:
         List[Union[VersionedItem, DataError]]
             A list of the read results, whose i-th element corresponds to the i-th element of the ``symbols`` parameter.
             If the specified version does not exist, a DataError object is returned, with symbol, version_request_type,
-            version_request_data properties, error_code, error_category, and exception_string properties.
+            version_request_data properties, error_code, error_category, and exception_string properties. If a key error or
+            any other internal exception occurs, the same DataError object is also returned.
 
         Raises
         ------
@@ -1100,22 +1106,24 @@ class Library:
         """
         return self._nvs.read_metadata(symbol, as_of)
 
-    def read_metadata_batch(self, symbols: List[Union[str, ReadInfoRequest]]) -> List[VersionedItem]:
+    def read_metadata_batch(self, symbols: List[Union[str, ReadInfoRequest]]) -> List[Union[VersionedItem, DataError]]:
         """
         Reads the metadata of multiple symbols.
 
         Parameters
         ----------
         symbols : List[Union[str, ReadInfoRequest]]
-            List of symbols to read.
+            List of symbols to read metadata.
 
         Returns
         -------
-        List[VersionedItem]
-            A list of the read results, whose i-th element corresponds to the i-th element of the ``symbols`` parameter.
+        List[Union[VersionedItem, DataError]]
+            A list of the read metadata results, whose i-th element corresponds to the i-th element of the ``symbols`` parameter.
             A VersionedItem object with the metadata field set as None will be returned if the requested version of the
-                symbol exists but there is no metadata
-            A None object will be returned if the requested version of the symbol does not exist
+            symbol exists but there is no metadata
+            If the specified version does not exist, a DataError object is returned, with symbol, version_request_type,
+            version_request_data properties, error_code, error_category, and exception_string properties. If a key error or
+            any other internal exception occurs, the same DataError object is also returned.
 
         See Also
         --------
@@ -1141,7 +1149,9 @@ class Library:
                 raise ArcticInvalidApiUsageException(
                     f"Invalid symbol type s=[{s}] type(s)=[{type(s)}]. Only [str] and [ReadInfoRequest] are supported."
                 )
-        return self._nvs._batch_read_meta_to_versioned_items(symbol_strings, as_ofs)
+
+        include_errors_and_none_meta = True
+        return self._nvs._batch_read_metadata_to_versioned_items(symbol_strings, as_ofs, include_errors_and_none_meta)
 
     def write_metadata(self, symbol: str, metadata: Any) -> VersionedItem:
         """
@@ -1553,7 +1563,9 @@ class Library:
             date_range=date_range,
         )
 
-    def get_description_batch(self, symbols: List[Union[str, ReadInfoRequest]]) -> List[SymbolDescription]:
+    def get_description_batch(
+        self, symbols: List[Union[str, ReadInfoRequest]]
+    ) -> List[Union[SymbolDescription, DataError]]:
         """
         Returns descriptive data for a list of ``symbols``.
 
@@ -1561,12 +1573,14 @@ class Library:
         ----------
         symbols : List[Union[str, ReadInfoRequest]]
             List of symbols to read.
-            Params columns, date_range and query_builder from ReadInfoRequest are not used
 
         Returns
         -------
-        List[SymbolDescription]
+        List[Union[SymbolDescription, DataError]]
             A list of the descriptive data, whose i-th element corresponds to the i-th element of the ``symbols`` parameter.
+            If the specified version does not exist, a DataError object is returned, with symbol, version_request_type,
+            version_request_data properties, error_code, error_category, and exception_string properties. If a key error or
+            any other internal exception occurs, the same DataError object is also returned.
 
         See Also
         --------
@@ -1595,29 +1609,36 @@ class Library:
                     " [ReadInfoRequest] are supported."
                 )
 
-        infos = self._nvs.batch_get_info(symbol_strings, as_ofs)
-        list_descriptions = []
-        for info in infos:
-            last_update_time = pd.to_datetime(info["last_update"], utc=True)
-            columns = tuple(NameWithDType(n, t) for n, t in zip(info["col_names"]["columns"], info["dtype"]))
-            index = NameWithDType(info["col_names"]["index"], info["col_names"]["index_dtype"])
-            date_range = tuple(
-                map(
-                    lambda x: x.replace(tzinfo=datetime.timezone.utc) if not np.isnat(np.datetime64(x)) else x,
-                    info["date_range"],
+        throw_on_error = False
+        descriptions = self._nvs._batch_read_descriptor(symbol_strings, as_ofs, throw_on_error)
+
+        description_results = []
+        for description in descriptions:
+            if isinstance(description, DataError):
+                description_results.append(description)
+            else:
+                last_update_time = pd.to_datetime(description["last_update"], utc=True)
+                columns = tuple(
+                    NameWithDType(n, t) for n, t in zip(description["col_names"]["columns"], description["dtype"])
                 )
-            )
-            list_descriptions.append(
-                SymbolDescription(
-                    columns=columns,
-                    index=index,
-                    row_count=info["rows"],
-                    last_update_time=last_update_time,
-                    index_type=info["index_type"],
-                    date_range=date_range,
+                index = NameWithDType(description["col_names"]["index"], description["col_names"]["index_dtype"])
+                date_range = tuple(
+                    map(
+                        lambda x: x.replace(tzinfo=datetime.timezone.utc) if not np.isnat(np.datetime64(x)) else x,
+                        description["date_range"],
+                    )
                 )
-            )
-        return list_descriptions
+                description_results.append(
+                    SymbolDescription(
+                        columns=columns,
+                        index=index,
+                        row_count=description["rows"],
+                        last_update_time=last_update_time,
+                        index_type=description["index_type"],
+                        date_range=date_range,
+                    )
+                )
+        return description_results
 
     def reload_symbol_list(self):
         """
