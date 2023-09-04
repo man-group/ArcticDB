@@ -150,6 +150,22 @@ def moto_s3_uri_incl_bucket(moto_s3_endpoint_and_credentials):
     ] + ":" + bucket + "?access=" + aws_access_key + "&secret=" + aws_secret_key + "&port=" + port
 
 
+@pytest.fixture(scope="function")
+def shared_real_s3_uri():
+    """
+    Path to persistent s3 that is shared between the tests in whole workflow run
+    """
+    yield get_real_s3_uri(shared_path=True)
+
+
+@pytest.fixture(scope="function")
+def unique_real_s3_uri():
+    """
+    Path to persistent s3 that is unique for the current test type (e.g. windows_cp37_integration)
+    """
+    yield get_real_s3_uri(shared_path=False)
+
+
 @pytest.fixture(
     scope="function",
     params=[

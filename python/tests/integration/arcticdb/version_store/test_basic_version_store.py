@@ -1329,8 +1329,114 @@ def test_batch_write_missing_keys_dedup(basic_store_factory):
         lib.batch_write(["s1", "s2"], [df1, df2])
 
 
-def test_batch_roundtrip_metadata(lmdb_version_store_tombstone_and_sync_passive):
-    lmdb_version_store = lmdb_version_store_tombstone_and_sync_passive
+def test_batch_write_metadata_missing_keys(basic_store):
+    lib = basic_store
+
+    df1 = pd.DataFrame({"a": [3, 5, 7]})
+    df2 = pd.DataFrame({"a": [4, 6, 8]})
+    lib.write("s1", df1)
+    lib.write("s2", df2)
+
+    lib_tool = lib.library_tool()
+    s1_index_key = lib_tool.find_keys_for_id(KeyType.TABLE_INDEX, "s1")[0]
+    s2_index_key = lib_tool.find_keys_for_id(KeyType.TABLE_INDEX, "s2")[0]
+    lib_tool.remove(s1_index_key)
+    lib_tool.remove(s2_index_key)
+    with pytest.raises(StorageException):
+        _ = lib.batch_write_metadata(["s1", "s2"], [{"s1_meta": 1}, {"s2_meta": 1}])
+
+
+def test_batch_read_metadata_missing_keys(basic_store):
+    lib = basic_store
+
+    df1 = pd.DataFrame({"a": [3, 5, 7]})
+    df2 = pd.DataFrame({"a": [4, 6, 8]})
+    lib.write("s1", df1, metadata={"s1": "metadata"})
+    # Need two versions for this symbol as we're going to delete a version key, and the optimisation of storing the
+    # latest index key in the version ref key means it will still work if we just write one version key and then delete
+    # it
+    lib.write("s2", df2, metadata={"s2": "metadata"})
+    lib.write("s2", df2, metadata={"s2": "more_metadata"})
+    lib_tool = lib.library_tool()
+    s1_index_key = lib_tool.find_keys_for_id(KeyType.TABLE_INDEX, "s1")[0]
+    s2_version_keys = lib_tool.find_keys_for_id(KeyType.VERSION, "s2")
+    s2_key_to_delete = [key for key in s2_version_keys if key.version_id == 0][0]
+    lib_tool.remove(s1_index_key)
+    lib_tool.remove(s2_key_to_delete)
+
+    with pytest.raises(StorageException):
+        _ = lib.batch_read_metadata(["s1"], [None])
+    with pytest.raises(StorageException):
+        _ = lib.batch_read_metadata(["s2"], [0])
+
+
+def test_batch_read_metadata_multi_missing_keys(basic_store):
+    lib = basic_store
+    lib_tool = lib.library_tool()
+
+    lib.write("s1", 0, metadata={"s1": "metadata"})
+    key_to_delete = lib_tool.find_keys_for_id(KeyType.TABLE_INDEX, "s1")[0]
+    lib_tool.remove(key_to_delete)
+
+    with pytest.raises(StorageException):
+        _ = lib.batch_read_metadata_multi(["s1"], [None])
+
+
+def test_batch_read_missing_keys(basic_store):
+    lib = basic_store
+
+    df1 = pd.DataFrame({"a": [3, 5, 7]})
+    df2 = pd.DataFrame({"a": [4, 6, 8]})
+    df3 = pd.DataFrame({"a": [5, 7, 9]})
+    lib.write("s1", df1)
+    lib.write("s2", df2)
+    # Need two versions for this symbol as we're going to delete a version key, and the optimisation of storing the
+    # latest index key in the version ref key means it will still work if we just write one version key and then delete
+    # it
+    lib.write("s3", df3)
+    lib.write("s3", df3)
+    lib_tool = lib.library_tool()
+    s1_index_key = lib_tool.find_keys_for_id(KeyType.TABLE_INDEX, "s1")[0]
+    s2_data_key = lib_tool.find_keys_for_id(KeyType.TABLE_DATA, "s2")[0]
+    s3_version_keys = lib_tool.find_keys_for_id(KeyType.VERSION, "s3")
+    s3_key_to_delete = [key for key in s3_version_keys if key.version_id == 0][0]
+    lib_tool.remove(s1_index_key)
+    lib_tool.remove(s2_data_key)
+    lib_tool.remove(s3_key_to_delete)
+
+    # The exception thrown is different for missing version keys to everything else, and so depends on which symbol is
+    # processed first
+    with pytest.raises((NoDataFoundException, StorageException)):
+        _ = lib.batch_read(["s1", "s2", "s3"], [None, None, 0])
+
+
+def test_batch_get_info_missing_keys(basic_store):
+    lib = basic_store
+
+    df1 = pd.DataFrame({"a": [3, 5, 7]})
+    df2 = pd.DataFrame({"a": [5, 7, 9]})
+    lib.write("s1", df1)
+    # Need two versions for this symbol as we're going to delete a version key, and the optimisation of storing the
+    # latest index key in the version ref key means it will still work if we just write one version key and then delete
+    # it
+    lib.write("s2", df2)
+    lib.write("s2", df2)
+    lib_tool = lib.library_tool()
+    s1_index_key = lib_tool.find_keys_for_id(KeyType.TABLE_INDEX, "s1")[0]
+    s2_version_keys = lib_tool.find_keys_for_id(KeyType.VERSION, "s2")
+    s2_key_to_delete = [key for key in s2_version_keys if key.version_id == 0][0]
+    lib_tool.remove(s1_index_key)
+    lib_tool.remove(s2_key_to_delete)
+
+    with pytest.raises(StorageException):
+        _ = lib.batch_get_info(["s1"], [None])
+    with pytest.raises(StorageException):
+        _ = lib.batch_get_info(["s2"], [0])
+
+
+def test_batch_roundtrip_metadata(basic_store_tombstone_and_sync_passive):
+    lib = basic_store_tombstone_and_sync_passive
+
     metadatas = {}
     for x in range(10):
         symbol = "Sym_{}".format(x)
@@ -1351,23 +1457,6 @@ def test_batch_roundtrip_metadata(lmdb_version_store_tombstone_and_sync_passive)
 
     for sym, returned in vits.items():
         assert returned.metadata == metadatas[sym]
-
-
-def test_batch_write_metadata_missing_keys(basic_store):
-    lib = basic_store
-
-    df1 = pd.DataFrame({"a": [3, 5, 7]})
-    df2 = pd.DataFrame({"a": [4, 6, 8]})
-    lib.write("s1", df1)
-    lib.write("s2", df2)
-
-    lib_tool = lib.library_tool()
-    s1_index_key = lib_tool.find_keys_for_id(KeyType.TABLE_INDEX, "s1")[0]
-    s2_index_key = lib_tool.find_keys_for_id(KeyType.TABLE_INDEX, "s2")[0]
-    lib_tool.remove(s1_index_key)
-    lib_tool.remove(s2_index_key)
-    with pytest.raises(StorageException):
-        _ = lib.batch_write_metadata(["s1", "s2"], [{"s1_meta": 1}, {"s2_meta": 1}])
 
 
 def test_write_composite_data_with_user_meta(basic_store):
