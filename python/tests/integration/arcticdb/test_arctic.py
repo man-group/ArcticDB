@@ -206,17 +206,19 @@ def test_separation_between_libraries_with_prefixes(object_storage_uri_incl_buck
 
     option = get_path_prefix_option(object_storage_uri_incl_bucket)
     if option not in object_storage_uri_incl_bucket:
-        mercury_uri = f"{object_storage_uri_incl_bucket}{option}=/planet/mercury"
+        mercury_uri = f"{object_storage_uri_incl_bucket}{option}=/planet_mercury"
     else:
         # if we have a path_prefix, we assume that it is at the end and we simply append to it
-        mercury_uri = f"{object_storage_uri_incl_bucket}/planet/mercury"
+        mercury_uri = f"{object_storage_uri_incl_bucket}/planet_mercury"
+
     ac_mercury = Arctic(mercury_uri)
 
     if option not in object_storage_uri_incl_bucket:
-        mars_uri = f"{object_storage_uri_incl_bucket}{option}=/planet/mars"
+        mars_uri = f"{object_storage_uri_incl_bucket}{option}=/planet_mars"
     else:
         # if we have a path_prefix, we assume that it is at the end and we simply append to it
-        mars_uri = f"{object_storage_uri_incl_bucket}/planet/mars"
+        mars_uri = f"{object_storage_uri_incl_bucket}/planet_mars"
+
     ac_mars = Arctic(mars_uri)
 
     assert ac_mars.list_libraries() == []
