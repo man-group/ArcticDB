@@ -14,8 +14,6 @@
 
 namespace arcticdb::storage::s3 {
 
-const std::string USE_AWS_CRED_PROVIDERS_TOKEN = "_RBAC_";
-
 namespace detail {
 std::streamsize S3StreamBuffer::xsputn(const char_type* s, std::streamsize n) {
     ARCTICDB_DEBUG(log::version(), "xsputn {} pos at {}, {} bytes", uintptr_t(buffer_.get()), pos_, n);

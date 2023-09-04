@@ -100,16 +100,17 @@ std::vector<VersionedItem> PythonVersionStore::batch_write_index_keys_to_version
     return output;
 }
 
-std::vector<VersionedItem> PythonVersionStore::batch_write(
+std::vector<std::variant<VersionedItem, DataError>> PythonVersionStore::batch_write(
     const std::vector<StreamId>& stream_ids,
     const std::vector<py::tuple> &items,
     const std::vector<py::object> &norms,
     const std::vector<py::object> &user_metas,
     bool prune_previous_versions,
-    bool validate_index) {
+    bool validate_index,
+    bool throw_on_error) {
 
     auto frames = create_input_tensor_frames(stream_ids, items, norms, user_metas);
-    return batch_write_versioned_dataframe_internal(stream_ids, std::move(frames), prune_previous_versions, validate_index);
+    return batch_write_versioned_dataframe_internal(stream_ids, std::move(frames), prune_previous_versions, validate_index, throw_on_error);
 }
 
 std::vector<std::variant<VersionedItem, DataError>> PythonVersionStore::batch_append(
@@ -120,9 +121,9 @@ std::vector<std::variant<VersionedItem, DataError>> PythonVersionStore::batch_ap
     bool prune_previous_versions,
     bool validate_index,
     bool upsert,
-    bool throw_on_missing_version) {
+    bool throw_on_error) {
     auto frames = create_input_tensor_frames(stream_ids, items, norms, user_metas);
-    return batch_append_internal(stream_ids, std::move(frames), prune_previous_versions, validate_index, upsert, throw_on_missing_version);
+    return batch_append_internal(stream_ids, std::move(frames), prune_previous_versions, validate_index, upsert, throw_on_error);
 }
 
 void PythonVersionStore::_clear_symbol_list_keys() {
@@ -996,7 +997,8 @@ std::pair<VersionedItem, py::object> PythonVersionStore::read_metadata(
 std::vector<std::variant<VersionedItem, DataError>> PythonVersionStore::batch_write_metadata(
     const std::vector<StreamId>& stream_ids,
     const std::vector<py::object>& user_meta,
-    bool prune_previous_versions) {
+    bool prune_previous_versions,
+    bool throw_on_error) {
     std::vector<arcticdb::proto::descriptors::UserDefinedMetadata> user_meta_protos;
     user_meta_protos.reserve(user_meta.size());
     for(const auto& user_meta_item : user_meta) {
@@ -1004,7 +1006,7 @@ std::vector<std::variant<VersionedItem, DataError>> PythonVersionStore::batch_wr
         python_util::pb_from_python(user_meta_item, user_meta_proto);
         user_meta_protos.emplace_back(std::move(user_meta_proto));
     }
-    return batch_write_versioned_metadata_internal(stream_ids, prune_previous_versions, std::move(user_meta_protos));
+    return batch_write_versioned_metadata_internal(stream_ids, prune_previous_versions, throw_on_error, std::move(user_meta_protos));
 }
 
 std::vector<std::pair<VersionedItem, TimeseriesDescriptor>> PythonVersionStore::batch_restore_version(
@@ -1013,23 +1015,28 @@ std::vector<std::pair<VersionedItem, TimeseriesDescriptor>> PythonVersionStore::
     return batch_restore_version_internal(stream_ids, version_queries);
 }
 
-std::vector<std::pair<VersionedItem, py::object>> PythonVersionStore::batch_read_metadata(
+std::vector<std::variant<std::pair<VersionedItem, py::object>, DataError>> PythonVersionStore::batch_read_metadata(
     const std::vector<StreamId>& stream_ids,
     const std::vector<VersionQuery>& version_queries,
     const ReadOptions& read_options) {
     ARCTICDB_SAMPLE(BatchReadMetadata, 0)
-    auto metadata = batch_read_metadata_internal(stream_ids, version_queries, read_options);
+    auto metadatas_or_errors = batch_read_metadata_internal(stream_ids, version_queries, read_options);
 
-    std::vector<std::pair<VersionedItem, py::object>> results;
-    for (auto [key, meta_proto]: metadata) {
+    std::vector<std::variant<std::pair<VersionedItem, py::object>, DataError>> results;
+    for (auto&& metadata_or_error: metadatas_or_errors) {
+        if (std::holds_alternative<std::pair<VariantKey, std::optional<google::protobuf::Any>>>(metadata_or_error)) {
+            auto&& [key, meta_proto] = std::get<std::pair<VariantKey, std::optional<google::protobuf::Any>>>(metadata_or_error);
+            VersionedItem version{std::move(to_atom(key))};
             if(meta_proto.has_value()) {
-                VersionedItem version{std::move(to_atom(*key))};
-                auto res = std::make_pair(version, metadata_protobuf_to_pyobject(meta_proto));
-                results.push_back(res);
+                auto res = std::make_pair(std::move(version), metadata_protobuf_to_pyobject(std::move(meta_proto)));
+                results.push_back(std::move(res));
             }else{
-                auto res = std::make_pair(VersionedItem(), py::none());
-                results.push_back(res);   
+                auto res = std::make_pair(std::move(version), py::none());
+                results.push_back(std::move(res));   
             }
+        } else {
+            results.push_back(std::get<DataError>(std::move(metadata_or_error)));   
+        }
     }
     return results;
 }
@@ -1042,7 +1049,7 @@ DescriptorItem PythonVersionStore::read_descriptor(
     return read_descriptor_internal(stream_id, version_query, read_options);
 }
 
-std::vector<DescriptorItem> PythonVersionStore::batch_read_descriptor(
+std::vector<std::variant<DescriptorItem, DataError>> PythonVersionStore::batch_read_descriptor(
         const std::vector<StreamId>& stream_ids,
         const std::vector<VersionQuery>& version_queries,
         const ReadOptions& read_options){

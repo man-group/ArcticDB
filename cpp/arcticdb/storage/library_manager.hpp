@@ -18,6 +18,7 @@
 #include <arcticdb/storage/storages.hpp>
 #include <arcticdb/storage/library.hpp>
 #include <arcticdb/storage/storage_override.hpp>
+#include <arcticdb/storage/s3/s3_storage.hpp>
 #include <arcticdb/async/async_store.hpp>
 #include <arcticdb/codec/default_codecs.hpp>
 #include <arcticdb/codec/codec.hpp>
@@ -31,23 +32,56 @@
 #include <filesystem>
 
 namespace arcticdb::storage {
+
+namespace {
+    const std::string BAD_CONFIG_IN_STORAGE_ERROR = "Current library config is unsupported in this version of ArcticDB. "
+                                                    "Please ask an administrator for your storage to follow the instructions in "
+                                                    "https://github.com/man-group/ArcticDB/blob/master/docs/mkdocs/docs/technical/upgrade_storage.md";
+
+    const std::string BAD_CONFIG_IN_ATTEMPTED_WRITE = "Attempting to write forbidden storage config. This indicates a "
+                                                      "bug in ArcticDB.";
+
+    template<typename T>
+    struct StorageVisitor {
+        arcticdb::proto::storage::LibraryConfig& lib_cfg_proto;
+
+        void operator()(const T& storage_override) {
+            for(auto& storage: *lib_cfg_proto.mutable_storage_by_id()){
+                storage_override.modify_storage_config(storage.second);
+            }
+        }
+    };
+}
+
     class LibraryManager {
     public:
         explicit LibraryManager(const std::shared_ptr<storage::Library>& library) :
-            store_(std::make_shared<async::AsyncStore<util::SysClock>>(library, codec::default_lz4_codec(), encoding_version(library->config()))){
+            store_(std::make_shared<async::AsyncStore<util::SysClock>>(library, codec::default_lz4_codec(),
+                    encoding_version(library->config()))){
         }
 
-        void write_library_config(const py::object& lib_cfg, const LibraryPath& path) const {
+        void write_library_config(const py::object& lib_cfg, const LibraryPath& path, const StorageOverride& storage_override,
+                                  const bool validate) const {
             SegmentInMemory segment;
 
             arcticdb::proto::storage::LibraryConfig lib_cfg_proto;
             google::protobuf::Any output = {};
             python_util::pb_from_python(lib_cfg, lib_cfg_proto);
+
+            apply_storage_override(storage_override, lib_cfg_proto);
+
             output.PackFrom(lib_cfg_proto);
+
+            if (validate) {
+                for (const auto &storage: lib_cfg_proto.storage_by_id()) {
+                    is_storage_config_ok(storage.second, BAD_CONFIG_IN_ATTEMPTED_WRITE, true);
+                }
+            }
+
             segment.set_metadata(std::move(output));
 
             store_->write_sync(
-                    entity::KeyType::                       LIBRARY_CONFIG,
+                    entity::KeyType::LIBRARY_CONFIG,
                     StreamId(path.to_delim_path()),
                     std::move(segment)
             );
@@ -57,6 +91,13 @@ namespace arcticdb::storage {
             arcticdb::proto::storage::LibraryConfig config = get_config_internal(path, storage_override);
 
             return arcticdb::python_util::pb_to_python(config);
+        }
+
+        [[nodiscard]] bool is_library_config_ok(const LibraryPath& path, bool throw_on_failure) const {
+            arcticdb::proto::storage::LibraryConfig config = get_config_internal(path, StorageOverride{});
+            return std::all_of(config.storage_by_id().begin(), config.storage_by_id().end(), [&throw_on_failure](const auto& storage) {
+               return is_storage_config_ok(storage.second, BAD_CONFIG_IN_STORAGE_ERROR, throw_on_failure);
+            });
         }
 
         void remove_library_config(const LibraryPath& path) const {
@@ -92,17 +133,40 @@ namespace arcticdb::storage {
         }
 
     private:
-        static void apply_storage_override(const StorageOverride& storage_override, arcticdb::proto::storage::LibraryConfig& lib_cfg_proto) {
+        static void apply_storage_override(const StorageOverride& storage_override,
+                                           arcticdb::proto::storage::LibraryConfig& lib_cfg_proto) {
             util::variant_match(
                 storage_override.variant(),
-                [&lib_cfg_proto] (const S3CredentialsOverride& credentials_override) {
-                    for(auto& storage: *lib_cfg_proto.mutable_storage_by_id()){
-                        credentials_override.modify_storage_credentials(storage.second);
-                    }
-                },
-                [] (const auto&) {
-                    //std::monostate
-                });
+                StorageVisitor<S3Override>{lib_cfg_proto},
+                StorageVisitor<AzureOverride>{lib_cfg_proto},
+                StorageVisitor<LmdbOverride>{lib_cfg_proto},
+                [] (const std::monostate&) {});
+        }
+
+        static bool is_storage_config_ok(const arcticdb::proto::storage::VariantStorage& storage, const std::string& error_message, bool throw_on_failure) {
+            bool is_ok{true};
+            if(storage.config().Is<arcticdb::proto::s3_storage::Config>()) {
+                arcticdb::proto::s3_storage::Config s3_storage;
+                storage.config().UnpackTo(&s3_storage);
+                is_ok = is_s3_credential_ok(s3_storage.credential_key()) && is_s3_credential_ok(s3_storage.credential_name());
+            }
+            if(storage.config().Is<arcticdb::proto::azure_storage::Config>()) {
+                arcticdb::proto::azure_storage::Config azure_storage;
+                storage.config().UnpackTo(&azure_storage);
+                is_ok = azure_storage.endpoint().empty();
+            }
+
+            if (is_ok) {
+                return true;
+            } else if (throw_on_failure) {
+                internal::raise<ErrorCode::E_STORED_CONFIG_ERROR>(error_message);
+            } else {
+                return false;
+            }
+        }
+
+        static bool is_s3_credential_ok(std::string_view cred) {
+            return cred.empty() || cred == s3::USE_AWS_CRED_PROVIDERS_TOKEN;
         }
 
         [[nodiscard]] arcticdb::proto::storage::LibraryConfig get_config_internal(const LibraryPath& path, const StorageOverride& storage_override) const {

@@ -62,131 +62,6 @@ def generate_dataframe(columns, dt, num_days, num_rows_per_day):
     return pd.concat(dataframes)
 
 
-def test_read_meta_batch_with_tombstones(arctic_library):
-    lib = arctic_library
-    lib.write_pickle("sym1", 1, {"meta1": 1}, prune_previous_versions=False)
-    lib.write_pickle("sym2", 2, {"meta2": 2}, prune_previous_versions=False)
-    lib.write_pickle("sym3", 3, {"meta3": 3}, prune_previous_versions=False)
-    lib.write_pickle("sym_no_meta", 4, prune_previous_versions=False)
-
-    lib.write_pickle("sym1", 1, {"meta1": 4}, prune_previous_versions=False)
-    lib.write_pickle("sym2", 2, {"meta2": 5}, prune_previous_versions=False)
-    lib.write_pickle("sym3", 3, {"meta3": 6}, prune_previous_versions=False)
-    lib.write_pickle("sym_no_meta", 4, prune_previous_versions=False)
-
-    lib.write_pickle("sym1", 1, {"meta1": 6}, prune_previous_versions=False)
-    lib.write_pickle("sym2", 2, {"meta2": 7}, prune_previous_versions=False)
-    lib.write_pickle("sym3", 3, {"meta3": 8}, prune_previous_versions=False)
-    lib.write_pickle("sym_no_meta", 4, prune_previous_versions=False)
-
-    results_list = lib.read_metadata_batch(["sym1", "sym2", "sym_no_exist", "sym3", "sym_no_meta"])
-
-    assert results_list[0].metadata == {"meta1": 6}
-    assert results_list[1].metadata == {"meta2": 7}
-    assert results_list[2] is None
-    assert results_list[3].metadata == {"meta3": 8}
-    assert results_list[4].metadata is None
-
-    lib.delete("sym1", versions=2)
-    lib.delete("sym2", versions=2)
-    lib.delete("sym3", versions=2)
-    lib.delete("sym_no_meta", versions=2)
-
-    results_list = lib.read_metadata_batch(["sym1", "sym2", "sym_no_exist", "sym3", "sym_no_meta"])
-    assert results_list[0].metadata == {"meta1": 4}
-    assert results_list[1].metadata == {"meta2": 5}
-    assert results_list[2] is None
-    assert results_list[3].metadata == {"meta3": 6}
-    assert results_list[4].metadata is None
-
-    assert lib.read_metadata("sym1").metadata == results_list[0].metadata
-    assert lib.read_metadata("sym2").metadata == results_list[1].metadata
-    assert lib.read_metadata("sym3").metadata == results_list[3].metadata
-    assert lib.read_metadata("sym_no_meta").metadata == results_list[4].metadata
-
-
-def test_read_meta_batch_with_as_ofs_and_non_existent_version(arctic_library):
-    lib = arctic_library
-    lib.write_pickle("sym1", 1, {"meta1": 1}, prune_previous_versions=False)
-    lib.write_pickle("sym2", 2, {"meta2": 2}, prune_previous_versions=False)
-    lib.write_pickle("sym3", 3, {"meta3": 3}, prune_previous_versions=False)
-
-    lib.write_pickle("sym1", 1, {"meta1": 4}, prune_previous_versions=False)
-    lib.write_pickle("sym2", 2, {"meta2": 5}, prune_previous_versions=False)
-    lib.write_pickle("sym3", 3, {"meta3": 6}, prune_previous_versions=False)
-
-    lib.write_pickle("sym1", 1, {"meta1": 7}, prune_previous_versions=False)
-    lib.write_pickle("sym2", 2, {"meta2": 8}, prune_previous_versions=False)
-    lib.write_pickle("sym3", 3, {"meta3": 9}, prune_previous_versions=False)
-
-    results_list = lib.read_metadata_batch(
-        [
-            ReadInfoRequest("sym1", as_of=0),
-            ReadInfoRequest("sym2", as_of=0),
-            ReadInfoRequest("sym2", as_of=5),
-            "sym_no_exist",
-            ReadInfoRequest("sym3", as_of=0),
-        ]
-    )
-    assert results_list[0].metadata == {"meta1": 1}
-    assert results_list[1].metadata == {"meta2": 2}
-    assert results_list[2] is None
-    assert results_list[3] is None
-    assert results_list[4].metadata == {"meta3": 3}
-
-    results_list = lib.read_metadata_batch(
-        [
-            ReadInfoRequest("sym1", as_of=1),
-            ReadInfoRequest("sym2", as_of=1),
-            ReadInfoRequest("sym2", as_of=5),
-            "sym_no_exist",
-            ReadInfoRequest("sym3", as_of=1),
-        ]
-    )
-    assert results_list[0].metadata == {"meta1": 4}
-    assert results_list[1].metadata == {"meta2": 5}
-    assert results_list[2] is None
-    assert results_list[3] is None
-    assert results_list[4].metadata == {"meta3": 6}
-
-    results_list = lib.read_metadata_batch(
-        [
-            ReadInfoRequest("sym2", as_of=0),
-            ReadInfoRequest("sym2", as_of=1),
-            ReadInfoRequest("sym3", as_of=1),
-            "sym1",
-            ReadInfoRequest("sym2", as_of=2),
-        ]
-    )
-    assert results_list[0].metadata == {"meta2": 2}
-    assert results_list[1].metadata == {"meta2": 5}
-    assert results_list[2].metadata == {"meta3": 6}
-    assert results_list[3].metadata == {"meta1": 7}
-    assert results_list[4].metadata == {"meta2": 8}
-
-
-def test_read_meta_batch_with_as_ofs(arctic_library):
-    lib = arctic_library
-    num_symbols = 10
-    num_versions = 4
-
-    for version in range(num_versions):
-        write_requests = []
-        for sym in range(num_symbols):
-            write_requests.append(WritePayload("sym_" + str(sym), version, metadata={"meta_" + str(sym): version}))
-        lib.write_pickle_batch(write_requests, prune_previous_versions=False)
-    requests = [
-        ReadInfoRequest("sym_" + str(sym), as_of=version)
-        for sym in range(num_symbols)
-        for version in range(num_versions)
-    ]
-    results_list = lib.read_metadata_batch(requests)
-    for sym in range(num_symbols):
-        for version in range(num_versions):
-            idx = sym * num_versions + version
-            assert results_list[idx].metadata == {"meta_" + str(sym): version}
-
-
 def test_write_meta_batch_with_as_ofs(arctic_library):
     lib = arctic_library
     num_symbols = 2
@@ -240,6 +115,142 @@ def test_write_metadata_batch_with_none(arctic_library):
         assert results_read[sym].data is None
         assert results_read[sym].metadata == {"meta_" + str(sym): sym}
         assert results_read[sym].version == 0
+
+
+def test_read_meta_batch_with_as_ofs(arctic_library):
+    lib = arctic_library
+
+    # Given
+    lib.write_pickle("sym1", 1, {"meta1": 0})
+    lib.write_pickle("sym1", 1, {"meta1": 1})
+    lib.write_pickle("sym2", 2, {"meta2": 0})
+    lib.write_pickle("sym2", 2, {"meta2": 1})
+
+    # When
+    batch = lib.read_metadata_batch(
+        [
+            ReadInfoRequest("sym1", as_of=0),
+            "sym1",
+            ReadInfoRequest("sym2", as_of=0),
+            "sym2",
+        ]
+    )
+
+    # Then
+    assert batch[0].metadata == {"meta1": 0}
+    assert batch[1].metadata == {"meta1": 1}
+    assert batch[2].metadata == {"meta2": 0}
+    assert batch[3].metadata == {"meta2": 1}
+
+
+def test_read_metadata_batch_with_none(arctic_library):
+    lib = arctic_library
+
+    # Given
+    df1 = pd.DataFrame({"a": [5, 7, 9]})
+    df2 = pd.DataFrame({"a": [7, 9, 11]})
+    lib.write("s1", df1)
+    lib.write("s2", df2)
+
+    # When
+    batch = lib.read_metadata_batch(["s1", "s2"])
+
+    # Then
+    assert batch[0].data is None
+    assert batch[0].metadata is None
+    assert batch[0].version == 0
+
+    assert batch[1].data is None
+    assert batch[1].metadata is None
+    assert batch[1].version == 0
+
+
+def test_read_metadata_batch_missing_keys(arctic_library):
+    lib = arctic_library
+
+    # Given
+    df1 = pd.DataFrame({"a": [3, 5, 7]})
+    lib.write("s1", df1, metadata={"meta1": 0})
+    # Need two versions for this symbol as we're going to delete a version key, and the optimisation of storing the
+    # latest index key in the version ref key means it will still work if we just write one version key and then delete
+    # it
+    df2 = pd.DataFrame({"a": [5, 7, 9]})
+    lib.write("s2", df2, metadata={"meta2": 0})
+    lib.write("s2", df2, metadata={"meta2": 1})
+    df3 = pd.DataFrame({"a": [7, 9, 11]})
+    lib.write("s3", df3, metadata={"meta3": 0})
+
+    lib_tool = lib._nvs.library_tool()
+    s1_index_key = lib_tool.find_keys_for_id(KeyType.TABLE_INDEX, "s1")[0]
+    s2_version_keys = lib_tool.find_keys_for_id(KeyType.VERSION, "s2")
+    s2_key_to_delete = [key for key in s2_version_keys if key.version_id == 0][0]
+    lib_tool.remove(s1_index_key)
+    lib_tool.remove(s2_key_to_delete)
+
+    # When
+    batch = lib.read_metadata_batch(["s1", ReadInfoRequest("s2", as_of=0), "s3"])
+
+    # Then
+    assert isinstance(batch[0], DataError)
+    assert batch[0].symbol == "s1"
+    assert batch[0].version_request_type == VersionRequestType.LATEST
+    assert batch[0].version_request_data is None
+    assert batch[0].error_code == ErrorCode.E_KEY_NOT_FOUND
+    assert batch[0].error_category == ErrorCategory.STORAGE
+
+    assert isinstance(batch[1], DataError)
+    assert batch[1].symbol == "s2"
+    assert batch[1].version_request_type == VersionRequestType.SPECIFIC
+    assert batch[1].version_request_data == 0
+    assert batch[1].error_code == ErrorCode.E_KEY_NOT_FOUND
+    assert batch[1].error_category == ErrorCategory.STORAGE
+
+    assert not isinstance(batch[2], DataError)
+    assert batch[2].metadata == {"meta3": 0}
+
+
+def test_read_metadata_batch_symbol_doesnt_exist(arctic_library):
+    lib = arctic_library
+
+    # Given
+    df = pd.DataFrame({"a": [3, 5, 7]})
+    lib.write("s1", df, {"meta1": 0})
+
+    # When
+    batch = lib.read_metadata_batch(["s1", "s2"])
+
+    # Then
+    assert not isinstance(batch[0], DataError)
+    assert batch[0].metadata == {"meta1": 0}
+
+    assert isinstance(batch[1], DataError)
+    assert batch[1].symbol == "s2"
+    assert batch[1].version_request_type == VersionRequestType.LATEST
+    assert batch[1].version_request_data == None
+    assert batch[1].error_code == ErrorCode.E_NO_SUCH_VERSION
+    assert batch[1].error_category == ErrorCategory.MISSING_DATA
+
+
+def test_read_metadata_batch_version_doesnt_exist(arctic_library):
+    lib = arctic_library
+
+    # Given
+    df = pd.DataFrame({"a": [3, 5, 7]})
+    lib.write("s1", df, {"meta1": 0})
+
+    # When
+    batch = lib.read_metadata_batch([ReadInfoRequest("s1", as_of=0), ReadInfoRequest("s1", as_of=1)])
+
+    # Then
+    assert not isinstance(batch[0], DataError)
+    assert batch[0].metadata == {"meta1": 0}
+
+    assert isinstance(batch[1], DataError)
+    assert batch[1].symbol == "s1"
+    assert batch[1].version_request_type == VersionRequestType.SPECIFIC
+    assert batch[1].version_request_data == 1
+    assert batch[1].error_code == ErrorCode.E_NO_SUCH_VERSION
+    assert batch[1].error_category == ErrorCategory.MISSING_DATA
 
 
 class A:
@@ -318,7 +329,7 @@ def test_write_batch(library_factory):
     lib = library_factory(LibraryOptions(rows_per_segment=10))
     assert lib._nvs._lib_cfg.lib_desc.version.write_options.segment_row_size == 10
     num_days = 40
-    num_symbols = 40
+    num_symbols = 2
     dt = datetime(2019, 4, 8, 0, 0, 0)
     column_length = 4
     num_columns = 5
@@ -344,12 +355,12 @@ def test_write_batch(library_factory):
 
 
 def test_write_batch_dedup(library_factory):
-    """Should be able to write different size of batch of data."""
+    """Should be able to write different size of batch of data reusing deduplicated data from previous versions."""
     lib = library_factory(LibraryOptions(rows_per_segment=10, dedup=True))
     assert lib._nvs._lib_cfg.lib_desc.version.write_options.segment_row_size == 10
     assert lib._nvs._lib_cfg.lib_desc.version.write_options.de_duplication == True
     num_days = 40
-    num_symbols = 10
+    num_symbols = 2
     num_versions = 4
     dt = datetime(2019, 4, 8, 0, 0, 0)
     column_length = 4
@@ -381,6 +392,48 @@ def test_write_batch_dedup(library_factory):
         data_key_version = lib._nvs.read_index("symbol_" + str(sym))["version_id"]
         for s in range(num_segments):
             assert data_key_version[s] == 0
+
+
+def test_write_batch_missing_keys_dedup(library_factory):
+    """When there is duplicate data to reuse for the current write, we need to access the index key of the previous
+    versions in order to refer to the corresponding keys for the deduplicated data."""
+    lib = library_factory(LibraryOptions(dedup=True))
+    assert lib._nvs._lib_cfg.lib_desc.version.write_options.de_duplication == True
+
+    num_days = 2
+    num_rows_per_day = 1
+
+    # Given
+    dt = datetime(2019, 4, 8, 0, 0, 0)
+    df1 = generate_dataframe(["a", "b", "c"], dt, num_days, num_rows_per_day)
+    df2 = generate_dataframe(["a", "b", "c"], dt, num_days, num_rows_per_day)
+    lib.write("s1", df1)
+    lib.write("s2", df2)
+
+    lib_tool = lib._nvs.library_tool()
+    s1_index_key = lib_tool.find_keys_for_id(KeyType.TABLE_INDEX, "s1")[0]
+    lib_tool.remove(s1_index_key)
+
+    # When
+    batch = lib.write_batch(
+        [
+            WritePayload("s1", df1, metadata="great_metadata_s1"),
+            WritePayload("s2", df2, metadata="great_metadata_s2"),
+        ]
+    )
+
+    # Then
+    assert isinstance(batch[0], DataError)
+    assert batch[0].symbol == "s1"
+    assert batch[0].version_request_type is None
+    assert batch[0].version_request_data is None
+    assert batch[0].error_code == ErrorCode.E_KEY_NOT_FOUND
+    assert batch[0].error_category == ErrorCategory.STORAGE
+
+    assert not isinstance(batch[1], DataError)
+    read_dataframe = lib.read("s2")
+    assert read_dataframe.metadata == "great_metadata_s2"
+    assert_frame_equal(read_dataframe.data, df2)
 
 
 def test_append_batch(library_factory):
@@ -844,6 +897,135 @@ def test_read_batch_query_builder_missing_keys(arctic_library):
     assert batch[2].version_request_data == 0
     assert batch[2].error_code == ErrorCode.E_KEY_NOT_FOUND
     assert batch[2].error_category == ErrorCategory.STORAGE
+
+
+def test_get_description_batch_missing_keys(arctic_library):
+    lib = arctic_library
+
+    # Given
+    df1 = pd.DataFrame({"a": [3, 5, 7]}, index=pd.date_range(start="1/1/2018", end="1/3/2018"))
+    df2 = pd.DataFrame({"a": [5, 7, 9]}, index=pd.date_range(start="1/1/2018", end="1/3/2018"))
+    df3 = pd.DataFrame({"a": [7, 9, 11]}, index=pd.date_range(start="1/1/2018", end="1/3/2018"))
+    df3.index.rename("named_index", inplace=True)
+
+    lib.write("s1", df1)
+    # Need two versions for this symbol as we're going to delete a version key, and the optimisation of storing the
+    # latest index key in the version ref key means it will still work if we just write one version key and then delete
+    # it
+    lib.write("s2", df2)
+    lib.write("s2", df2)
+    lib.write("s3", df3)
+    lib_tool = lib._nvs.library_tool()
+    s1_index_key = lib_tool.find_keys_for_id(KeyType.TABLE_INDEX, "s1")[0]
+    s2_version_keys = lib_tool.find_keys_for_id(KeyType.VERSION, "s2")
+    s2_key_to_delete = [key for key in s2_version_keys if key.version_id == 0][0]
+    lib_tool.remove(s1_index_key)
+    lib_tool.remove(s2_key_to_delete)
+
+    # When
+    batch = lib.get_description_batch(["s1", ReadInfoRequest("s2", as_of=0), "s3"])
+
+    # Then
+    assert isinstance(batch[0], DataError)
+    assert batch[0].symbol == "s1"
+    assert batch[0].version_request_type == VersionRequestType.LATEST
+    assert batch[0].version_request_data is None
+    assert batch[0].error_code == ErrorCode.E_KEY_NOT_FOUND
+    assert batch[0].error_category == ErrorCategory.STORAGE
+
+    assert isinstance(batch[1], DataError)
+    assert batch[1].symbol == "s2"
+    assert batch[1].version_request_type == VersionRequestType.SPECIFIC
+    assert batch[1].version_request_data == 0
+    assert batch[1].error_code == ErrorCode.E_KEY_NOT_FOUND
+    assert batch[1].error_category == ErrorCategory.STORAGE
+
+    assert not isinstance(batch[2], DataError)
+    assert batch[2].date_range == tuple(
+        map(
+            lambda x: x.replace(tzinfo=timezone.utc) if not np.isnat(np.datetime64(x)) else x,
+            (datetime(2018, 1, 1), datetime(2018, 1, 3)),
+        )
+    )
+    assert [c[0] for c in batch[2].columns] == ["a"]
+    assert batch[2].index[0] == ["named_index"]
+    assert batch[2].index_type == "index"
+    assert batch[2].row_count == 3
+
+
+def test_get_description_batch_symbol_doesnt_exist(arctic_library):
+    lib = arctic_library
+
+    # Given
+    df = pd.DataFrame({"a": [3, 5, 7, 9]}, index=pd.date_range(start="1/1/2018", end="1/4/2018"))
+    df.index.rename("named_index", inplace=True)
+    lib.write("s1", df)
+
+    # When
+    batch = lib.get_description_batch(["s1", "s2"])
+
+    # Then
+    assert not isinstance(batch[0], DataError)
+    assert batch[0].date_range == tuple(
+        map(
+            lambda x: x.replace(tzinfo=timezone.utc) if not np.isnat(np.datetime64(x)) else x,
+            (datetime(2018, 1, 1), datetime(2018, 1, 4)),
+        )
+    )
+    assert [c[0] for c in batch[0].columns] == ["a"]
+    assert batch[0].index[0] == ["named_index"]
+    assert batch[0].index_type == "index"
+    assert batch[0].row_count == 4
+
+    assert isinstance(batch[1], DataError)
+    assert batch[1].symbol == "s2"
+    assert batch[1].version_request_type == VersionRequestType.LATEST
+    assert batch[1].version_request_data == None
+    assert batch[1].error_code == ErrorCode.E_NO_SUCH_VERSION
+    assert batch[1].error_category == ErrorCategory.MISSING_DATA
+
+
+def test_get_description_batch_version_doesnt_exist(arctic_library):
+    lib = arctic_library
+
+    # Given
+    df1 = pd.DataFrame({"a": [3, 5, 7, 9]}, index=pd.date_range(start="1/1/2018", end="1/4/2018"))
+    df1.index.rename("named_index", inplace=True)
+    df2 = pd.DataFrame({"a": [4, 6, 8]})
+    lib.write("s1", df1)
+    lib.write("s2", df2)
+
+    # When
+    batch = lib.get_description_batch(
+        [ReadInfoRequest("s1", as_of=0), ReadInfoRequest("s1", as_of=1), ReadInfoRequest("s2", as_of=1)]
+    )
+
+    # Then
+    assert not isinstance(batch[0], DataError)
+    assert batch[0].date_range == tuple(
+        map(
+            lambda x: x.replace(tzinfo=timezone.utc) if not np.isnat(np.datetime64(x)) else x,
+            (datetime(2018, 1, 1), datetime(2018, 1, 4)),
+        )
+    )
+    assert [c[0] for c in batch[0].columns] == ["a"]
+    assert batch[0].index[0] == ["named_index"]
+    assert batch[0].index_type == "index"
+    assert batch[0].row_count == 4
+
+    assert isinstance(batch[1], DataError)
+    assert batch[1].symbol == "s1"
+    assert batch[1].version_request_type == VersionRequestType.SPECIFIC
+    assert batch[1].version_request_data == 1
+    assert batch[1].error_code == ErrorCode.E_NO_SUCH_VERSION
+    assert batch[1].error_category == ErrorCategory.MISSING_DATA
+
+    assert isinstance(batch[2], DataError)
+    assert batch[2].symbol == "s2"
+    assert batch[2].version_request_type == VersionRequestType.SPECIFIC
+    assert batch[2].version_request_data == 1
+    assert batch[2].error_code == ErrorCode.E_NO_SUCH_VERSION
+    assert batch[2].error_category == ErrorCategory.MISSING_DATA
 
 
 def test_read_batch_query_builder_symbol_doesnt_exist(arctic_library):

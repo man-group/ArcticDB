@@ -7,6 +7,8 @@ As of the Change Date specified in that file, in accordance with the Business So
 """
 import random
 import time
+import os
+import pytest
 
 from multiprocessing import Process, Value
 
@@ -56,6 +58,13 @@ def read_data(lib, sym, done, error):
             assert vs[idx]["version"] == vs[idx + 1]["version"] + 1
 
 
+@pytest.mark.skipif(
+    os.environ.get("ARCTICDB_CODE_COVERAGE_BUILD", "0") == "1",
+    reason=(
+        "When we build for code coverage, we make a DEBUG binary, which is much slower and causes this test to take"
+        " around ~4 hours which is breaking the build"
+    ),
+)
 def test_stress_version_map_compact(object_version_store, sym, capsys):
     done = Value("b", 0)
     error = Value("b", 0)

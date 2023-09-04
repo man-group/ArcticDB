@@ -188,7 +188,7 @@ class PythonVersionStore : public LocalVersionedEngine {
         const ReadOptions& read_options
     );
 
-    std::vector<DescriptorItem> batch_read_descriptor(
+    std::vector<std::variant<DescriptorItem, DataError>> batch_read_descriptor(
         const std::vector<StreamId>& stream_ids,
         const std::vector<VersionQuery>& version_queries,
         const ReadOptions& read_options);
@@ -263,18 +263,20 @@ class PythonVersionStore : public LocalVersionedEngine {
         const std::optional<bool>& skip_snapshots);
 
     // Batch methods
-    std::vector<VersionedItem> batch_write(
+    std::vector<std::variant<VersionedItem, DataError>> batch_write(
         const std::vector<StreamId> &stream_ids,
         const std::vector<py::tuple> &items,
         const std::vector<py::object> &norms,
         const std::vector<py::object> &user_metas,
         bool prune_previous_versions,
-        bool validate_index);
+        bool validate_index,
+        bool throw_on_error);
 
     std::vector<std::variant<VersionedItem, DataError>> batch_write_metadata(
         const std::vector<StreamId>& stream_ids,
         const std::vector<py::object>& user_meta,
-        bool prune_previous_versions);
+        bool prune_previous_versions,
+        bool throw_on_error);
 
     std::vector<std::variant<VersionedItem, DataError>> batch_append(
         const std::vector<StreamId> &stream_ids,
@@ -284,7 +286,7 @@ class PythonVersionStore : public LocalVersionedEngine {
         bool prune_previous_versions,
         bool validate_index,
         bool upsert,
-        bool throw_on_missing_version);
+        bool throw_on_error);
 
     std::vector<std::pair<VersionedItem, TimeseriesDescriptor>> batch_restore_version(
         const std::vector<StreamId>& id,
@@ -296,7 +298,7 @@ class PythonVersionStore : public LocalVersionedEngine {
         std::vector<ReadQuery>& read_queries,
         const ReadOptions& read_options);
 
-    std::vector<std::pair<VersionedItem, py::object>> batch_read_metadata(
+    std::vector<std::variant<std::pair<VersionedItem, py::object>, DataError>> batch_read_metadata(
         const std::vector<StreamId>& stream_ids,
         const std::vector<VersionQuery>& version_queries,
         const ReadOptions& read_options);

@@ -19,6 +19,7 @@ For legacy reasons, the terms `symbol`, `stream`, and `stream ID` are used inter
 | 1001       | Invalid Argument                            | An invalid argument has been passed in. This error is an internal error and not expected to be exposed to the user - please create an issue on the GitHub repository. |
 | 1002       | An internal ArcticDB assertion has failed.  | This error is an internal error and not expected to be exposed to the user - please create an issue on the GitHub repository.                                         |
 | 1003       | ArcticDB has encountered an internal error. | This error is an internal error and not expected to be exposed to the user - please create an issue on the GitHub repository.                                         |
+| 1004       | Unsupported config found in storage         | Follow the instructions in the error message to repair configuration within your Arctic instance.                                                                     |
 
 
 ### Normalization Errors
@@ -155,7 +156,7 @@ ArcticDB exceptions are exposed in `arcticdb.exceptions` and sit in a hierarchy:
 ```
 RuntimeError
 └-- ArcticException
-    |-- ArcticNativeNotYetImplemented
+    |-- ArcticDbNotYetImplemented
     |-- DuplicateKeyException
     |-- MissingDataException
     |-- NoDataFoundException

@@ -164,8 +164,14 @@ class MongoClientImpl {
         uint64_t min_pool_size,
         uint64_t max_pool_size,
         uint64_t selection_timeout_ms) {
-        return fmt::format("{}&minPoolSize={}&maxPoolSize={}&serverSelectionTimeoutMS={}",
-            uri, min_pool_size, max_pool_size, selection_timeout_ms);
+        const auto uri_options = mongocxx::uri(uri).options();
+        if (uri_options.find("minPoolSize") == uri_options.end())
+            uri += fmt::format("&minPoolSize={}", min_pool_size);
+        if (uri_options.find("maxPoolSize") == uri_options.end())
+            uri += fmt::format("&maxPoolSize={}", max_pool_size);
+        if (uri_options.find("serverSelectionTimeoutMS") == uri_options.end())
+            uri += fmt::format("&serverSelectionTimeoutMS={}", selection_timeout_ms);
+        return uri;
     }
 
   public:

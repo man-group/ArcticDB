@@ -97,6 +97,10 @@ schedule table [in the readme](https://github.com/man-group/ArcticDB/blob/master
 
 The conversion date will be two years from when the release is [published on GitHub](https://github.com/man-group/ArcticDB/releases/). This is not required if you are releasing a patch release.
 
+## 6. Docs
+The release worflow will also trigger the workflow releasing the documentation to the ArcticDB site. The documentation which will be uploaded is based of the branch from which the release will happen.
+In case a release candidate is promoted to a release the workflow will upload outdated docs to the site. In this case the documentation must be deployed again by running the [docs workflow](https://github.com/man-group/ArcticDB/tree/master/.github/workflows#docsyml).
+
 # Removing a release
 
 **Note** - instructions in this section are only to be followed if a broken build has been released that needs to be removed. 

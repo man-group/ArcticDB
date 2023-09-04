@@ -10,7 +10,7 @@ from pandas import DataFrame, Timestamp
 import pytest
 
 from arcticdb.version_store import NativeVersionStore, VersionedItem
-from arcticdb.exceptions import ArcticNativeNotYetImplemented
+from arcticdb.exceptions import ArcticDbNotYetImplemented
 from arcticdb_ext.storage import NoDataFoundException
 from arcticdb.util.test import assert_frame_equal, distinct_timestamps
 
@@ -32,7 +32,7 @@ def test_rt_df_with_small_meta(object_and_lmdb_version_store):
 
 
 def test_rt_df_with_humonguous_meta(object_and_lmdb_version_store):
-    with pytest.raises(ArcticNativeNotYetImplemented):
+    with pytest.raises(ArcticDbNotYetImplemented):
         from arcticdb.version_store._normalization import _MAX_USER_DEFINED_META as MAX
 
         df = DataFrame(data=["A", "B", "C"])

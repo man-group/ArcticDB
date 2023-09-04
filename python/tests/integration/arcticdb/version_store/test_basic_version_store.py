@@ -23,10 +23,9 @@ from numpy.testing import assert_array_equal
 from pytz import timezone
 
 from arcticdb.exceptions import (
+    ArcticDbNotYetImplemented,
     ArcticNativeNotYetImplemented,
     InternalException,
-    NoSuchVersionException,
-    StreamDescriptorMismatch,
     UserInputException,
 )
 from arcticdb import QueryBuilder
@@ -34,7 +33,7 @@ from arcticdb.flattener import Flattener
 from arcticdb.version_store import NativeVersionStore
 from arcticdb.version_store._custom_normalizers import CustomNormalizer, register_normalizer
 from arcticdb.version_store._store import UNSUPPORTED_S3_CHARS, MAX_SYMBOL_SIZE, VersionedItem
-from arcticdb_ext.exceptions import _ArcticLegacyCompatibilityException
+from arcticdb_ext.exceptions import _ArcticLegacyCompatibilityException, StorageException
 from arcticdb_ext.storage import KeyType, NoDataFoundException
 from arcticdb_ext.version_store import NoSuchVersionException, StreamDescriptorMismatch, ManualClockVersionStore
 from arcticc.pb2.descriptors_pb2 import NormalizationMetadata  # Importing from arcticdb dynamically loads arcticc.pb2
@@ -46,9 +45,33 @@ from arcticdb.util.test import (
     assert_series_equal,
     config_context,
     distinct_timestamps,
+    RUN_MONGO_TEST,
 )
 from arcticdb_ext.tools import AZURE_SUPPORT
 from tests.util.date import DateRange
+
+
+# if RUN_MONGO_TEST:
+#     SMOKE_TEST_VERSION_STORES = [
+#         "lmdb_version_store_v1",
+#         "lmdb_version_store_v2",
+#         "s3_version_store_v1",
+#         "s3_version_store_v2",
+#         "mongo_version_store",
+#     ]
+# else:
+#     SMOKE_TEST_VERSION_STORES = [
+#         "lmdb_version_store_v1",
+#         "lmdb_version_store_v2",
+#         "s3_version_store_v1",
+#         "s3_version_store_v2",
+#     ]  # SKIP_WIN and SKIP_MAC
+
+# if AZURE_SUPPORT:
+#     SMOKE_TEST_VERSION_STORES.append("azure_version_store")
+
+# if os.getenv("ARCTICDB_REAL_STORAGE_TESTS") == "1":
+#     SMOKE_TEST_VERSION_STORES.append("real_s3_version_store")
 
 
 @pytest.fixture()
@@ -93,9 +116,23 @@ def test_s3_breaking_chars(object_version_store, breaking_char):
     """
     sym = f"prefix{breaking_char}postfix"
     df = sample_dataframe()
+
     with pytest.raises(ArcticNativeNotYetImplemented):
         object_version_store.write(sym, df)
 
+    assert sym not in object_version_store.list_symbols()
+
+
+def test_s3_breaking_chars_exception_compat(object_version_store):
+    """Test that chars that are not supported are raising the appropriate exception and that we fail on write without corrupting the db
+    """
+    sym = "prefix*postfix"
+    df = sample_dataframe()
+    # Check that ArcticNativeNotYetImplemented is aliased correctly as ArcticDbNotYetImplemented for backwards compat
+    with pytest.raises(ArcticNativeNotYetImplemented) as e_info:
+        object_version_store.write(sym, df)
+
+    assert isinstance(e_info.value, ArcticNativeNotYetImplemented)
     assert sym not in object_version_store.list_symbols()
 
 
@@ -1309,9 +1346,135 @@ def test_batch_write_then_list_symbol_without_cache(basic_store_factory):
         lib.batch_write(symbols=symbols, data_vector=[df, df, df])
         assert set(lib.list_symbols()) == set(symbols)
 
+ 
+# TODO: GPETROV Check this with the basic_store_factory 
+def test_batch_write_missing_keys_dedup(version_store_factory):
+    """When there is duplicate data to reuse for the current write, we need to access the index key of the previous
+    versions in order to refer to the corresponding keys for the deduplicated data."""
+    lib = version_store_factory(de_duplication=True)
+    assert lib.lib_cfg().lib_desc.version.write_options.de_duplication
 
+    df1 = pd.DataFrame({"a": [3, 5, 7]})
+    df2 = pd.DataFrame({"a": [4, 6, 8]})
+    lib.write("s1", df1)
+    lib.write("s2", df2)
+
+    lib_tool = lib.library_tool()
+    s1_index_key = lib_tool.find_keys_for_id(KeyType.TABLE_INDEX, "s1")[0]
+    lib_tool.remove(s1_index_key)
+
+    with pytest.raises(StorageException):
+        lib.batch_write(["s1", "s2"], [df1, df2])
+
+        
+def test_batch_write_metadata_missing_keys(lmdb_version_store):
+    lib = lmdb_version_store
+
+    df1 = pd.DataFrame({"a": [3, 5, 7]})
+    df2 = pd.DataFrame({"a": [4, 6, 8]})
+    lib.write("s1", df1)
+    lib.write("s2", df2)
+
+    lib_tool = lib.library_tool()
+    s1_index_key = lib_tool.find_keys_for_id(KeyType.TABLE_INDEX, "s1")[0]
+    s2_index_key = lib_tool.find_keys_for_id(KeyType.TABLE_INDEX, "s2")[0]
+    lib_tool.remove(s1_index_key)
+    lib_tool.remove(s2_index_key)
+    with pytest.raises(StorageException):
+        _ = lib.batch_write_metadata(["s1", "s2"], [{"s1_meta": 1}, {"s2_meta": 1}])
+
+        
+ def test_batch_read_metadata_missing_keys(lmdb_version_store):
+    lib = lmdb_version_store
+
+    df1 = pd.DataFrame({"a": [3, 5, 7]})
+    df2 = pd.DataFrame({"a": [4, 6, 8]})
+    lib.write("s1", df1, metadata={"s1": "metadata"})
+    # Need two versions for this symbol as we're going to delete a version key, and the optimisation of storing the
+    # latest index key in the version ref key means it will still work if we just write one version key and then delete
+    # it
+    lib.write("s2", df2, metadata={"s2": "metadata"})
+    lib.write("s2", df2, metadata={"s2": "more_metadata"})
+    lib_tool = lib.library_tool()
+    s1_index_key = lib_tool.find_keys_for_id(KeyType.TABLE_INDEX, "s1")[0]
+    s2_version_keys = lib_tool.find_keys_for_id(KeyType.VERSION, "s2")
+    s2_key_to_delete = [key for key in s2_version_keys if key.version_id == 0][0]
+    lib_tool.remove(s1_index_key)
+    lib_tool.remove(s2_key_to_delete)
+
+    with pytest.raises(StorageException):
+        _ = lib.batch_read_metadata(["s1"], [None])
+    with pytest.raises(StorageException):
+        _ = lib.batch_read_metadata(["s2"], [0])
+
+
+def test_batch_read_metadata_multi_missing_keys(lmdb_version_store):
+    lib = lmdb_version_store
+    lib_tool = lib.library_tool()
+
+    lib.write("s1", 0, metadata={"s1": "metadata"})
+    key_to_delete = lib_tool.find_keys_for_id(KeyType.TABLE_INDEX, "s1")[0]
+    lib_tool.remove(key_to_delete)
+
+    with pytest.raises(StorageException):
+        _ = lib.batch_read_metadata_multi(["s1"], [None])
+        
+        
+def test_batch_read_missing_keys(lmdb_version_store):
+    lib = lmdb_version_store
+
+    df1 = pd.DataFrame({"a": [3, 5, 7]})
+    df2 = pd.DataFrame({"a": [4, 6, 8]})
+    df3 = pd.DataFrame({"a": [5, 7, 9]})
+    lib.write("s1", df1)
+    lib.write("s2", df2)
+    # Need two versions for this symbol as we're going to delete a version key, and the optimisation of storing the
+    # latest index key in the version ref key means it will still work if we just write one version key and then delete
+    # it
+    lib.write("s3", df3)
+    lib.write("s3", df3)
+    lib_tool = lib.library_tool()
+    s1_index_key = lib_tool.find_keys_for_id(KeyType.TABLE_INDEX, "s1")[0]
+    s2_data_key = lib_tool.find_keys_for_id(KeyType.TABLE_DATA, "s2")[0]
+    s3_version_keys = lib_tool.find_keys_for_id(KeyType.VERSION, "s3")
+    s3_key_to_delete = [key for key in s3_version_keys if key.version_id == 0][0]
+    lib_tool.remove(s1_index_key)
+    lib_tool.remove(s2_data_key)
+    lib_tool.remove(s3_key_to_delete)
+
+    # The exception thrown is different for missing version keys to everything else, and so depends on which symbol is
+    # processed first
+    with pytest.raises((NoDataFoundException, StorageException)):
+        _ = lib.batch_read(["s1", "s2", "s3"], [None, None, 0])
+
+
+def test_batch_get_info_missing_keys(lmdb_version_store):
+    lib = lmdb_version_store
+
+    df1 = pd.DataFrame({"a": [3, 5, 7]})
+    df2 = pd.DataFrame({"a": [5, 7, 9]})
+    lib.write("s1", df1)
+    # Need two versions for this symbol as we're going to delete a version key, and the optimisation of storing the
+    # latest index key in the version ref key means it will still work if we just write one version key and then delete
+    # it
+    lib.write("s2", df2)
+    lib.write("s2", df2)
+    lib_tool = lib.library_tool()
+    s1_index_key = lib_tool.find_keys_for_id(KeyType.TABLE_INDEX, "s1")[0]
+    s2_version_keys = lib_tool.find_keys_for_id(KeyType.VERSION, "s2")
+    s2_key_to_delete = [key for key in s2_version_keys if key.version_id == 0][0]
+    lib_tool.remove(s1_index_key)
+    lib_tool.remove(s2_key_to_delete)
+
+    with pytest.raises(StorageException):
+        _ = lib.batch_get_info(["s1"], [None])
+    with pytest.raises(StorageException):
+        _ = lib.batch_get_info(["s2"], [0])
+        
+  
 def test_batch_roundtrip_metadata(basic_store_tombstone_and_sync_passive):
     lmdb_version_store = basic_store_tombstone_and_sync_passive
+
     metadatas = {}
     for x in range(10):
         symbol = "Sym_{}".format(x)
@@ -1388,7 +1551,7 @@ def test_coercion_to_float(basic_store):
     assert df["col"].dtype == np.object_
 
     if sys.platform != "win32":  # SKIP_WIN Windows always uses dynamic strings
-        with pytest.raises(ArcticNativeNotYetImplemented):
+        with pytest.raises(ArcticDbNotYetImplemented):
             # Needs pickling due to the obj column
             lib.write("test", df)
 
@@ -1405,7 +1568,7 @@ def test_coercion_to_str_with_dynamic_strings(basic_store):
     assert df["col"].dtype == np.object_
 
     if sys.platform != "win32":  # SKIP_WIN Windows always uses dynamic strings
-        with pytest.raises(ArcticNativeNotYetImplemented):
+        with pytest.raises(ArcticDbNotYetImplemented):
             lib.write("sym", df)
 
     with mock.patch(
@@ -1513,7 +1676,7 @@ def test_batch_read_meta(basic_store_tombstone_and_sync_passive):
     assert results_dict["sym2"].data is None
 
 
-def test_batch_read_meta_with_missing(basic_store_tombstone_and_sync_passive):
+def test_batch_read_metadata_symbol_doesnt_exist(basic_store_tombstone_and_sync_passive):
     lmdb_version_store = basic_store_tombstone_and_sync_passive
     lib = lmdb_version_store
     for idx in range(10):
@@ -1527,6 +1690,7 @@ def test_batch_read_meta_with_missing(basic_store_tombstone_and_sync_passive):
 
 def test_list_versions_with_deleted_symbols(basic_store_tombstone_and_pruning):
     lib = basic_store_tombstone_and_pruning
+
     lib.write("a", 1)
     lib.snapshot("snap")
     lib.write("a", 2)

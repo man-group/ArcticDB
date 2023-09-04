@@ -15,7 +15,7 @@ from arcticdb.version_store.helper import add_s3_library_to_env
 from arcticdb.config import _DEFAULT_ENV
 from arcticdb.version_store._store import NativeVersionStore
 from arcticdb.adapters.arctic_library_adapter import ArcticLibraryAdapter, set_library_options
-from arcticdb_ext.storage import Library, StorageOverride, S3CredentialsOverride
+from arcticdb_ext.storage import Library, StorageOverride, S3Override
 from arcticdb.encoding_version import EncodingVersion
 from collections import namedtuple
 from dataclasses import dataclass, fields
@@ -37,8 +37,6 @@ class ParsedQuery:
     aws_auth: Optional[bool] = False
 
     path_prefix: Optional[str] = None
-
-    force_uri_lib_config: Optional[bool] = False
 
 
 class S3LibraryAdapter(ArcticLibraryAdapter):
@@ -109,8 +107,8 @@ class S3LibraryAdapter(ArcticLibraryAdapter):
         parsed_query = re.split("[;&]", query)
         parsed_query = {t.split("=", 1)[0]: t.split("=", 1)[1] for t in parsed_query}
 
+        field_dict = {field.name: field for field in fields(ParsedQuery)}
         for key in parsed_query.keys():
-            field_dict = {field.name: field for field in fields(ParsedQuery)}
             if key not in field_dict.keys():
                 raise ValueError(
                     "Invalid S3 URI. "
@@ -132,22 +130,29 @@ class S3LibraryAdapter(ArcticLibraryAdapter):
         return ParsedQuery(**_kwargs)
 
     def get_storage_override(self) -> StorageOverride:
-        storage_override = StorageOverride()
-        if self._query_params.force_uri_lib_config:
-            s3_override = S3CredentialsOverride()
-            if self._query_params.access:
-                s3_override.credential_name = self._query_params.access
-            if self._query_params.secret:
-                s3_override.credential_key = self._query_params.secret
-            if self._query_params.region:
-                s3_override.region = self._query_params.region
-            if self._endpoint:
-                s3_override.endpoint = self._endpoint
-            if self._bucket:
-                s3_override.bucket_name = self._bucket
-            storage_override = StorageOverride()
-            storage_override.set_override(s3_override)
+        s3_override = S3Override()
+        if self._query_params.access:
+            s3_override.credential_name = self._query_params.access
+        if self._query_params.secret:
+            s3_override.credential_key = self._query_params.secret
+        if self._query_params.region:
+            s3_override.region = self._query_params.region
+        if self._endpoint:
+            s3_override.endpoint = self._endpoint
+        if self._bucket:
+            s3_override.bucket_name = self._bucket
 
+        s3_override.use_virtual_addressing = self._query_params.use_virtual_addressing
+
+        storage_override = StorageOverride()
+        storage_override.set_s3_override(s3_override)
+
+        return storage_override
+
+    def get_masking_override(self) -> StorageOverride:
+        storage_override = StorageOverride()
+        s3_override = S3Override()
+        storage_override.set_s3_override(s3_override)
         return storage_override
 
     def create_library(self, name, library_options: LibraryOptions):

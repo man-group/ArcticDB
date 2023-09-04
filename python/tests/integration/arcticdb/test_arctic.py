@@ -6,26 +6,17 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 import sys
-import os
 
 import pytz
-from arcticdb_ext.exceptions import InternalException, ErrorCode, ErrorCategory
-from arcticdb.exceptions import ArcticNativeNotYetImplemented, LibraryNotFound
-from pandas import Timestamp
+from arcticdb_ext.exceptions import InternalException
+from arcticdb.exceptions import ArcticDbNotYetImplemented, LibraryNotFound
 
-try:
-    from arcticdb.version_store import VersionedItem as PythonVersionedItem
-except ImportError:
-    # arcticdb squashes the packages
-    from arcticdb._store import VersionedItem as PythonVersionedItem
-from arcticdb_ext.storage import NoDataFoundException, KeyType
-from arcticdb_ext.version_store import VersionRequestType
+from arcticdb_ext.storage import NoDataFoundException
 
 from arcticdb.arctic import Arctic
 from arcticdb.exceptions import MismatchingLibraryOptions
-from arcticdb.adapters.s3_library_adapter import S3LibraryAdapter
-from arcticdb.options import DEFAULT_ENCODING_VERSION, LibraryOptions
 from arcticdb.encoding_version import EncodingVersion
+from arcticdb.options import LibraryOptions
 from arcticdb import QueryBuilder, DataError
 from arcticc.pb2.s3_storage_pb2 import Config as S3Config
 
@@ -33,12 +24,10 @@ import math
 import re
 import pytest
 import pandas as pd
-from datetime import datetime, date, timezone, timedelta
+from datetime import datetime, timezone
 import numpy as np
 from arcticdb_ext.tools import AZURE_SUPPORT
-from numpy import datetime64
-from arcticdb.util.test import assert_frame_equal, random_strings_of_length, random_floats
-import random
+from arcticdb.util.test import assert_frame_equal, RUN_MONGO_TEST
 
 if AZURE_SUPPORT:
     from azure.storage.blob import BlobServiceClient
@@ -46,25 +35,13 @@ from botocore.client import BaseClient as BotoClient
 import time
 
 
-try:
-    from arcticdb.version_store.library import (
-        WritePayload,
-        ArcticUnsupportedDataTypeException,
-        ReadRequest,
-        ReadInfoRequest,
-        ArcticInvalidApiUsageException,
-        StagedDataFinalizeMethod,
-    )
-except ImportError:
-    # arcticdb squashes the packages
-    from arcticdb.library import (
-        WritePayload,
-        ArcticUnsupportedDataTypeException,
-        ReadRequest,
-        ReadInfoRequest,
-        ArcticInvalidApiUsageException,
-        StagedDataFinalizeMethod,
-    )
+from arcticdb.version_store.library import (
+    WritePayload,
+    ArcticUnsupportedDataTypeException,
+    ReadRequest,
+    StagedDataFinalizeMethod,
+    ArcticInvalidApiUsageException,
+)
 
 
 def test_library_creation_deletion(arctic_client):
@@ -117,50 +94,52 @@ def test_get_library(arctic_client):
         _ = ac.get_library("pytest_test_lib", create_if_missing=False, library_options=library_options)
 
 
-def test_uri_override(moto_s3_uri_incl_bucket):
-    def _get_s3_storage_config(lib):
-        primary_storage_name = lib._nvs.lib_cfg().lib_desc.storage_ids[0]
-        primary_any = lib._nvs.lib_cfg().storage_by_id[primary_storage_name]
+def test_do_not_persist_s3_details(moto_s3_endpoint_and_credentials):
+    """We apply an in-memory overlay for these instead. In particular we should absolutely not persist credentials
+    in the storage."""
+
+    def _get_s3_storage_config(cfg):
+        primary_storage_name = cfg.lib_desc.storage_ids[0]
+        primary_any = cfg.storage_by_id[primary_storage_name]
         s3_config = S3Config()
         primary_any.config.Unpack(s3_config)
         return s3_config
 
-    wrong_uri = "s3://otherhost:test_bucket_0?access=dog&secret=cat&port=17988&region=blah"
-    altered_ac = Arctic(moto_s3_uri_incl_bucket)
-    altered_ac._library_adapter = S3LibraryAdapter(wrong_uri, EncodingVersion.V2)
-    # At this point the library_manager is still correct, so we can write
-    # and retrieve libraries, but the library_adapter has fake credentials
-    altered_ac.create_library("override_endpoint", LibraryOptions())
-    altered_lib = altered_ac["override_endpoint"]
-    s3_storage = _get_s3_storage_config(altered_lib)
-    assert s3_storage.endpoint == "otherhost:17988"
-    assert s3_storage.credential_name == "dog"
-    assert s3_storage.credential_key == "cat"
-    assert s3_storage.bucket_name == "test_bucket_0"
-    assert s3_storage.region == "blah"
+    endpoint, port, bucket, aws_access_key, aws_secret_key = moto_s3_endpoint_and_credentials
+    uri = (
+        endpoint.replace("http://", "s3://").rsplit(":", 1)[0]
+        + ":"
+        + bucket
+        + "?access="
+        + aws_access_key
+        + "&secret="
+        + aws_secret_key
+        + "&port="
+        + port
+    )
 
-    # Enable `force_uri_lib_config` and instantiate Arctic using the genuine moto details.
-    # These differ from the fake details that the library was created with.
-    override_uri = "{}&region=reg&force_uri_lib_config=True".format(moto_s3_uri_incl_bucket)
-    override_ac = Arctic(override_uri)
-    override_lib = override_ac["override_endpoint"]
-    s3_storage = _get_s3_storage_config(override_lib)
-    assert s3_storage.endpoint == override_ac._library_adapter._endpoint
-    assert s3_storage.credential_name == override_ac._library_adapter._query_params.access
-    assert s3_storage.credential_key == override_ac._library_adapter._query_params.secret
-    assert s3_storage.bucket_name == override_ac._library_adapter._bucket
-    assert s3_storage.region == override_ac._library_adapter._query_params.region
+    ac = Arctic(uri)
+    ac.create_library("test")
 
-    # Same as above, but with `force_uri_lib_config` off.
-    # This should return the fake details the library was created with.
-    ac = Arctic(moto_s3_uri_incl_bucket)
-    lib = ac["override_endpoint"]
-    s3_storage = _get_s3_storage_config(lib)
-    assert s3_storage.endpoint == "otherhost:17988"
-    assert s3_storage.credential_name == "dog"
-    assert s3_storage.credential_key == "cat"
-    assert s3_storage.bucket_name == "test_bucket_0"
-    assert s3_storage.region == "blah"
+    lib = ac["test"]
+    lib.write("sym", pd.DataFrame())
+
+    config = ac._library_manager.get_library_config("test")
+    s3_storage = _get_s3_storage_config(config)
+    assert s3_storage.bucket_name == ""
+    assert s3_storage.credential_name == ""
+    assert s3_storage.credential_key == ""
+    assert s3_storage.endpoint == ""
+    assert s3_storage.max_connections == 0
+    assert s3_storage.connect_timeout == 0
+    assert s3_storage.request_timeout == 0
+    assert not s3_storage.ssl
+    assert s3_storage.prefix.startswith("test")
+    assert not s3_storage.https
+    assert s3_storage.region == ""
+    assert not s3_storage.use_virtual_addressing
+
+    assert "sym" in ac["test"].list_symbols()
 
 
 def test_library_options(arctic_client):
@@ -222,13 +201,13 @@ def test_separation_between_libraries_with_prefixes(object_storage_uri_incl_buck
     with the same name in the same bucket without over-writing each other's work. This can be useful when
     creating a new bucket is time-consuming, for example due to organizational issues.
     """
-
     option = get_path_prefix_option(object_storage_uri_incl_bucket)
     if option not in object_storage_uri_incl_bucket:
         mercury_uri = f"{object_storage_uri_incl_bucket}{option}=/planet/mercury"
     else:
         # if we have a path_prefix, we assume that it is at the end and we simply append to it
         mercury_uri = f"{object_storage_uri_incl_bucket}/planet/mercury"
+
     ac_mercury = Arctic(mercury_uri)
 
     if option not in object_storage_uri_incl_bucket:
@@ -236,6 +215,7 @@ def test_separation_between_libraries_with_prefixes(object_storage_uri_incl_buck
     else:
         # if we have a path_prefix, we assume that it is at the end and we simply append to it
         mars_uri = f"{object_storage_uri_incl_bucket}/planet/mars"
+
     ac_mars = Arctic(mars_uri)
 
     assert ac_mars.list_libraries() == []
@@ -548,6 +528,16 @@ def test_delete_date_range(arctic_library):
         lib["symbol"].data, pd.DataFrame({"column": [7, 8]}, index=pd.date_range(start="1/3/2018", end="1/4/2018"))
     )
     assert lib["symbol"].version == 1
+
+
+@pytest.mark.skipif(not RUN_MONGO_TEST, reason="Mongo test on windows is fiddly")
+def test_mongo_repr(mongo_test_uri):
+    max_pool_size = 10
+    min_pool_size = 100
+    selection_timeout_ms = 1000
+    uri = f"{mongo_test_uri}/?maxPoolSize={max_pool_size}&minPoolSize={min_pool_size}&serverSelectionTimeoutMS={selection_timeout_ms}"
+    ac = Arctic(uri)
+    assert repr(ac) == f"Arctic(config=mongodb(endpoint={mongo_test_uri[len('mongodb://'):]}))"
 
 
 def test_s3_repr(moto_s3_uri_incl_bucket):
@@ -912,7 +902,7 @@ def test_numpy_string(arctic_library):
 
 @pytest.mark.skipif(sys.platform != "win32", reason="SKIP_WIN Numpy strings not supported yet")
 def test_numpy_string_fails_on_windows(arctic_library):
-    with pytest.raises(ArcticNativeNotYetImplemented):
+    with pytest.raises(ArcticDbNotYetImplemented):
         arctic_library.write("symbol", np.array(["ab", "cd", "efg"]))
 
 
@@ -1065,18 +1055,9 @@ def test_get_uri(object_storage_uri_incl_bucket):
     assert ac.get_uri() == object_storage_uri_incl_bucket
 
 
-def test_lmdb(tmpdir):
-    # Github Issue #520 - this used to segfault
-    d = {
-        "test1": pd.Timestamp("1979-01-18 00:00:00"),
-        "test2": pd.Timestamp("1979-01-19 00:00:00"),
-    }
-
-    arc = Arctic(f"lmdb://{tmpdir}")
-    arc.create_library("model")
-    lib = arc.get_library("model")
-
-    for i in range(50):
-        lib.write_pickle("test", d)
-        lib = arc.get_library("model")
-        lib.read("test").data
+@pytest.mark.skipif(not AZURE_SUPPORT, reason="Pending Azure Storge Conda support")
+def test_azure_no_ca_path(azurite_azure_test_connection_setting):
+    (endpoint, container, credential_name, credential_key, ca_cert_path) = azurite_azure_test_connection_setting
+    ac = Arctic(
+        f"azure://DefaultEndpointsProtocol=http;AccountName={credential_name};AccountKey={credential_key};BlobEndpoint={endpoint}/{credential_name};Container={container}"
+    )
