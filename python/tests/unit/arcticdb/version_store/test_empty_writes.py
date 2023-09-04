@@ -5,6 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+import pytest
 import pandas as pd
 import numpy as np
 
@@ -142,3 +143,21 @@ def test_empty_series(lmdb_version_store_dynamic_schema, sym):
         ser.index = ser.index.astype("datetime64[ns]")
 
     assert_series_equal(lmdb_version_store_dynamic_schema.read(sym).data, ser)
+
+
+@pytest.mark.parametrize("dtype", ["int64", "float64"])
+def test_append_empty_series(lmdb_version_store_dynamic_schema, sym, dtype):
+    ser = pd.Series([])
+    lmdb_version_store_dynamic_schema.write(sym, ser)
+    assert not lmdb_version_store_dynamic_schema.is_symbol_pickled(sym)
+    if IS_PANDAS_TWO:
+        # In Pandas 2.0, RangeIndex is used by default when an empty dataframe or series is created.
+        # The index is converted to a DatetimeIndex for preserving the behavior of ArcticDB with
+        # Pandas 1.0.
+        ser.index = ser.index.astype("datetime64[ns]")
+
+    assert_series_equal(lmdb_version_store_dynamic_schema.read(sym).data, ser)
+
+    new_ser = pd.Series([1, 2, 3], dtype=dtype)
+    lmdb_version_store_dynamic_schema.append(sym, new_ser)
+    assert_series_equal(lmdb_version_store_dynamic_schema.read(sym).data, new_ser)
