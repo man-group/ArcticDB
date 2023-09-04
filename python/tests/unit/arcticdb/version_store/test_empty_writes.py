@@ -136,13 +136,8 @@ def test_empty_series(lmdb_version_store_dynamic_schema, sym):
     ser = pd.Series([])
     lmdb_version_store_dynamic_schema.write(sym, ser)
     assert not lmdb_version_store_dynamic_schema.is_symbol_pickled(sym)
-    if IS_PANDAS_TWO:
-        # In Pandas 2.0, RangeIndex is used by default when an empty dataframe or series is created.
-        # The index is converted to a DatetimeIndex for preserving the behavior of ArcticDB with
-        # Pandas 1.0.
-        ser.index = ser.index.astype("datetime64[ns]")
 
-    assert_series_equal(lmdb_version_store_dynamic_schema.read(sym).data, ser)
+    assert_series_equal(lmdb_version_store_dynamic_schema.read(sym).data, ser, check_index_type=False)
 
 
 @pytest.mark.parametrize("dtype", ["int64", "float64"])
@@ -150,13 +145,8 @@ def test_append_empty_series(lmdb_version_store_dynamic_schema, sym, dtype):
     ser = pd.Series([])
     lmdb_version_store_dynamic_schema.write(sym, ser)
     assert not lmdb_version_store_dynamic_schema.is_symbol_pickled(sym)
-    if IS_PANDAS_TWO:
-        # In Pandas 2.0, RangeIndex is used by default when an empty dataframe or series is created.
-        # The index is converted to a DatetimeIndex for preserving the behavior of ArcticDB with
-        # Pandas 1.0.
-        ser.index = ser.index.astype("datetime64[ns]")
 
-    assert_series_equal(lmdb_version_store_dynamic_schema.read(sym).data, ser)
+    assert_series_equal(lmdb_version_store_dynamic_schema.read(sym).data, ser, check_index_type=False)
 
     new_ser = pd.Series([1, 2, 3], dtype=dtype)
     lmdb_version_store_dynamic_schema.append(sym, new_ser)

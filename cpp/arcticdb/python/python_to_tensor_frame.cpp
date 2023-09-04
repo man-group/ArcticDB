@@ -52,9 +52,9 @@ NativeTensor obj_to_tensor(PyObject *ptr) {
     auto arr = pybind11::detail::array_proxy(ptr);
     auto descr = pybind11::detail::array_descriptor_proxy(arr->descr);
     auto ndim = arr->nd;
-    auto val_type = get_value_type(descr->kind);
-    auto val_bytes = static_cast<uint8_t>(descr->elsize);
     ssize_t size = ndim == 1 ? arr->dimensions[0] : arr->dimensions[0] * arr->dimensions[1];
+    auto val_type = size > 0 ? get_value_type(descr->kind) : ValueType::EMPTY;
+    auto val_bytes = static_cast<uint8_t>(descr->elsize);
     auto c_style = arr->strides[0] == val_bytes;
 
     if (is_sequence_type(val_type)) {

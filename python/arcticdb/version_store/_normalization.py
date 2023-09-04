@@ -196,9 +196,7 @@ def _to_primitive(arr, arr_name, dynamic_strings, string_max_len=None, coerce_co
         return arr
 
     if len(arr) == 0:
-        if coerce_column_type is None:
-            return None
-        return arr.astype(coerce_column_type)
+        return arr
 
     # Coerce column allows us to force a column to the given type, which means we can skip expensive iterations in
     # Python with the caveat that if the user gave an invalid type it's going to blow up in the core.
@@ -583,12 +581,12 @@ class SeriesNormalizer(_PandasNormalizer):
         else:
             s.name = None
 
-        if s.empty and IS_PANDAS_TWO:
+        if s.empty:
             # Before Pandas 2.0, empty series' dtype was float, but as of Pandas 2.0. empty series' dtype became object.
             # See: https://github.com/pandas-dev/pandas/issues/17261
             # We want to maintain consistent behaviour, so we return empty series as containing objects
             # when the Pandas version is >= 2.0
-            s = s.astype("object")
+            s = s.astype("object") if IS_PANDAS_TWO else s.astype("float")
 
         return s
 
