@@ -192,6 +192,8 @@ def test_separation_between_libraries(object_storage_uri_incl_bucket):
 def get_path_prefix_option(uri):
     if "azure" in uri:  # azure connection string has a different format
         return ";Path_prefix"
+    elif "mongo" in uri:
+        return "?path_prefix"
     else:
         return "&path_prefix"
 

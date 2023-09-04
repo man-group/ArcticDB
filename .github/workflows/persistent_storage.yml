@@ -54,16 +54,15 @@ jobs:
         if: inputs.arcticdb_version == 'latest'
         run: |
           pip install arcticdb
-
-      - name: Install oldest(1.0.0) release for Linux
-        if: inputs.arcticdb_version == 'oldest' && matrix.os == 'linux'
+      
+      - name: Get oldest release for the current major release cycle
         run: |
-          pip install arcticdb==1.0.0
-
-      - name: Install oldest(1.1.0) release for Windows
-        if: inputs.arcticdb_version == 'oldest' && matrix.os == 'windows'
+          pip install requests
+          python build_tooling\get_newest_latest_version.py > $GITHUB_ENV
+      
+      - name: Install oldest supported release
         run: |
-          pip install arcticdb==1.1.0
+          pip install arcticdb==${{ env.ARCTICDB_LATEST_OLDEST_RELEASE }}
 
       - name: Set persistent storage variables
         uses: ./.github/actions/set_persistent_storage_env_vars
