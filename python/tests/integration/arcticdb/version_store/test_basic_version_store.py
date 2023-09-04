@@ -1346,8 +1346,8 @@ def test_batch_write_then_list_symbol_without_cache(basic_store_factory):
         lib.batch_write(symbols=symbols, data_vector=[df, df, df])
         assert set(lib.list_symbols()) == set(symbols)
 
- 
-# TODO: GPETROV Check this with the basic_store_factory 
+
+# TODO: GPETROV Check this with the basic_store_factory
 def test_batch_write_missing_keys_dedup(version_store_factory):
     """When there is duplicate data to reuse for the current write, we need to access the index key of the previous
     versions in order to refer to the corresponding keys for the deduplicated data."""
@@ -1366,7 +1366,7 @@ def test_batch_write_missing_keys_dedup(version_store_factory):
     with pytest.raises(StorageException):
         lib.batch_write(["s1", "s2"], [df1, df2])
 
-        
+
 def test_batch_write_metadata_missing_keys(lmdb_version_store):
     lib = lmdb_version_store
 
@@ -1383,8 +1383,8 @@ def test_batch_write_metadata_missing_keys(lmdb_version_store):
     with pytest.raises(StorageException):
         _ = lib.batch_write_metadata(["s1", "s2"], [{"s1_meta": 1}, {"s2_meta": 1}])
 
-        
- def test_batch_read_metadata_missing_keys(lmdb_version_store):
+
+def test_batch_read_metadata_missing_keys(lmdb_version_store):
     lib = lmdb_version_store
 
     df1 = pd.DataFrame({"a": [3, 5, 7]})
@@ -1418,8 +1418,8 @@ def test_batch_read_metadata_multi_missing_keys(lmdb_version_store):
 
     with pytest.raises(StorageException):
         _ = lib.batch_read_metadata_multi(["s1"], [None])
-        
-        
+
+
 def test_batch_read_missing_keys(lmdb_version_store):
     lib = lmdb_version_store
 
@@ -1470,8 +1470,8 @@ def test_batch_get_info_missing_keys(lmdb_version_store):
         _ = lib.batch_get_info(["s1"], [None])
     with pytest.raises(StorageException):
         _ = lib.batch_get_info(["s2"], [0])
-        
-  
+
+
 def test_batch_roundtrip_metadata(basic_store_tombstone_and_sync_passive):
     lmdb_version_store = basic_store_tombstone_and_sync_passive
 

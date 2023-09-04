@@ -166,7 +166,7 @@ def unique_real_s3_uri():
     """
     yield get_real_s3_uri(shared_path=False)
 
-    
+
 @pytest.fixture(
     scope="function",
     params=[
@@ -1036,6 +1036,7 @@ def spawn_azurite(azurite_port):
                 "unique_real_s3_uri",
                 marks=pytest.mark.skipif(
                     not PERSISTENT_STORAGE_TESTS_ENABLED, reason="Can be used only when persistent storage is enabled"
+                ),
             ),
             pytest.param(
                 "mongo_test_uri",
