@@ -1054,3 +1054,12 @@ def test_azure_no_ca_path(azurite_azure_test_connection_setting):
     ac = Arctic(
         f"azure://DefaultEndpointsProtocol=http;AccountName={credential_name};AccountKey={credential_key};BlobEndpoint={endpoint}/{credential_name};Container={container}"
     )
+
+
+def test_s3_force_uri_lib_config_handling(moto_s3_uri_incl_bucket):
+    # force_uri_lib_config is a obsolete configuration. However, user still include this option in their setup. For backward compatitbility, we need to make sure such setup will still work
+    # Why it becomes obsolete: https://github.com/man-group/ArcticDB/pull/803
+    Arctic(f"{moto_s3_uri_incl_bucket}&force_uri_lib_config=true)")
+
+    with pytest.raises(ValueError):
+        Arctic(f"{moto_s3_uri_incl_bucket}&force_uri_lib_config=false)")
