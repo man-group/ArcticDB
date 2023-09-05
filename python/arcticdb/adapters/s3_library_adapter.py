@@ -38,6 +38,9 @@ class ParsedQuery:
 
     path_prefix: Optional[str] = None
 
+    # DEPRECATED - see https://github.com/man-group/ArcticDB/pull/833
+    force_uri_lib_config: Optional[bool] = True
+
 
 class S3LibraryAdapter(ArcticLibraryAdapter):
     REGEX = r"s3(s)?://(?P<endpoint>.*):(?P<bucket>[-_a-zA-Z0-9.]+)(?P<query>\?.*)?"
@@ -54,6 +57,12 @@ class S3LibraryAdapter(ArcticLibraryAdapter):
         self._bucket = match_groups["bucket"]
 
         self._query_params: ParsedQuery = self._parse_query(match["query"])
+
+        if self._query_params.force_uri_lib_config is False:
+            raise ValueError(
+                "The support of 'force_uri_lib_config=false' has been dropped due to security concerns. Please refer to"
+                " https://github.com/man-group/ArcticDB/pull/803 for more information."
+            )
 
         if self._query_params.port:
             self._endpoint += f":{self._query_params.port}"
