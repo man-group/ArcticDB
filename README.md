@@ -14,7 +14,10 @@
 <br /><br />
 <a href="https://github.com/man-group/ArcticDB/actions"><img src="https://github.com/man-group/ArcticDB/actions/workflows/build.yml/badge.svg"/></a>
 </p>
+---
+## Star History
 
+[![Star History Chart](https://api.star-history.com/svg?repos=man-group/ArcticDB&type=Date)](https://star-history.com/#man-group/ArcticDB&Date)
 ---
 
 **ArcticDB** is a high performance, serverless **DataFrame database** built for the Python Data Science ecosystem.
