@@ -338,6 +338,7 @@ constexpr char get_dtype_specifier(ValueType vt){
         case ValueType::UTF8_FIXED: return 'U';
         case ValueType::ASCII_FIXED: return 'S';
         case ValueType::BYTES: return 'O';
+        case ValueType::EMPTY: return 'O';
         default:
             return 'x';
     }

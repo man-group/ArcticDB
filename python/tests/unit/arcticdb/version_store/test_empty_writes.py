@@ -11,7 +11,6 @@ import numpy as np
 
 from arcticdb.version_store._common import TimeFrame
 from arcticdb.util.test import assert_frame_equal, assert_series_equal
-from arcticdb.util._versions import IS_PANDAS_TWO
 
 
 def test_write_no_rows(lmdb_version_store, sym):
