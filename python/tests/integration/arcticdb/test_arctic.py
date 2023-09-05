@@ -192,8 +192,6 @@ def test_separation_between_libraries(object_storage_uri_incl_bucket):
 def get_path_prefix_option(uri):
     if "azure" in uri:  # azure connection string has a different format
         return ";Path_prefix"
-    elif "mongo" in uri:
-        return ""
     else:
         return "&path_prefix"
 
@@ -203,6 +201,8 @@ def test_separation_between_libraries_with_prefixes(object_storage_uri_incl_buck
     with the same name in the same bucket without over-writing each other's work. This can be useful when
     creating a new bucket is time-consuming, for example due to organizational issues.
     """
+    if "mongo" in object_storage_uri_incl_bucket:
+        pytest.skip("Mongo doesn't support path_prefix")
 
     option = get_path_prefix_option(object_storage_uri_incl_bucket)
     if option not in object_storage_uri_incl_bucket:
