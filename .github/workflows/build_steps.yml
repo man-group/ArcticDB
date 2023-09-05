@@ -278,13 +278,14 @@ jobs:
           echo "ARCTICDB_REAL_S3_CLEAR=${{ inputs.clear }}" >> $GITHUB_ENV
           echo "ARCTICDB_REAL_S3_ACCESS_KEY=${{ secrets.AWS_S3_ACCESS_KEY }}" >> $GITHUB_ENV
           echo "ARCTICDB_REAL_S3_SECRET_KEY=${{ secrets.AWS_S3_SECRET_KEY }}" >> $GITHUB_ENV
-          
+  
       - name: Run test
         run: build_tooling/parallel_test.sh tests/${{matrix.type}}
         env:
           TEST_OUTPUT_DIR: ${{runner.temp}}
           # Use the Mongo created in the service container above to test against
           CI_MONGO_HOST: mongodb
+          CI_MONGO_HOST_2: mongodb_2
           ARCTICDB_PERSISTENT_STORAGE_LIB_NAME: 'test_${{ github.ref_name }}_${{matrix.os}}_${{env.python_impl_name}}${{matrix.python_deps_id}}'
   
 

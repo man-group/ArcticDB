@@ -107,8 +107,8 @@ class S3LibraryAdapter(ArcticLibraryAdapter):
         parsed_query = re.split("[;&]", query)
         parsed_query = {t.split("=", 1)[0]: t.split("=", 1)[1] for t in parsed_query}
 
+        field_dict = {field.name: field for field in fields(ParsedQuery)}
         for key in parsed_query.keys():
-            field_dict = {field.name: field for field in fields(ParsedQuery)}
             if key not in field_dict.keys():
                 raise ValueError(
                     "Invalid S3 URI. "

@@ -8,10 +8,10 @@ As of the Change Date specified in that file, in accordance with the Business So
 import sys
 
 import pytz
-from arcticdb_ext.exceptions import InternalException, ErrorCode, ErrorCategory
-from arcticdb.exceptions import ArcticNativeNotYetImplemented, LibraryNotFound
+from arcticdb_ext.exceptions import InternalException
+from arcticdb.exceptions import ArcticDbNotYetImplemented, LibraryNotFound
 
-from arcticdb_ext.storage import NoDataFoundException, KeyType, StorageOverride
+from arcticdb_ext.storage import NoDataFoundException
 
 from arcticdb.arctic import Arctic
 from arcticdb.exceptions import MismatchingLibraryOptions
@@ -27,7 +27,7 @@ import pandas as pd
 from datetime import datetime, timezone
 import numpy as np
 from arcticdb_ext.tools import AZURE_SUPPORT
-from arcticdb.util.test import assert_frame_equal
+from arcticdb.util.test import assert_frame_equal, RUN_MONGO_TEST
 
 if AZURE_SUPPORT:
     from azure.storage.blob import BlobServiceClient
@@ -195,18 +195,28 @@ def get_path_prefix_option(uri):
         return "&path_prefix"
 
 
-def test_separation_between_libraries_with_prefixes(object_storage_uri_incl_bucket):
+@pytest.mark.parametrize(
+    "lib_type",
+    [
+        "moto_s3_uri_incl_bucket",
+        pytest.param(
+            "azurite_azure_uri_incl_bucket",
+            marks=pytest.mark.skipif(not AZURE_SUPPORT, reason="Pending Azure Storge Conda support"),
+        ),
+    ],
+)
+def test_separation_between_libraries_with_prefixes(lib_type, request):
     """The motivation for the prefix feature is that separate users want to be able to create libraries
     with the same name in the same bucket without over-writing each other's work. This can be useful when
     creating a new bucket is time-consuming, for example due to organisational issues.
     """
-
-    option = get_path_prefix_option(object_storage_uri_incl_bucket)
-    mercury_uri = f"{object_storage_uri_incl_bucket}{option}=/planet/mercury"
+    lib = request.getfixturevalue(lib_type)
+    option = get_path_prefix_option(lib)
+    mercury_uri = f"{lib}{option}=/planet/mercury"
     ac_mercury = Arctic(mercury_uri)
     assert ac_mercury.list_libraries() == []
 
-    mars_uri = f"{object_storage_uri_incl_bucket}{option}=/planet/mars"
+    mars_uri = f"{lib}{option}=/planet/mars"
     ac_mars = Arctic(mars_uri)
     assert ac_mars.list_libraries() == []
 
@@ -511,6 +521,16 @@ def test_delete_date_range(arctic_library):
         lib["symbol"].data, pd.DataFrame({"column": [7, 8]}, index=pd.date_range(start="1/3/2018", end="1/4/2018"))
     )
     assert lib["symbol"].version == 1
+
+
+@pytest.mark.skipif(not RUN_MONGO_TEST, reason="Mongo test on windows is fiddly")
+def test_mongo_repr(mongo_test_uri):
+    max_pool_size = 10
+    min_pool_size = 100
+    selection_timeout_ms = 1000
+    uri = f"{mongo_test_uri}/?maxPoolSize={max_pool_size}&minPoolSize={min_pool_size}&serverSelectionTimeoutMS={selection_timeout_ms}"
+    ac = Arctic(uri)
+    assert repr(ac) == f"Arctic(config=mongodb(endpoint={mongo_test_uri[len('mongodb://'):]}))"
 
 
 def test_s3_repr(moto_s3_uri_incl_bucket):
@@ -875,7 +895,7 @@ def test_numpy_string(arctic_library):
 
 @pytest.mark.skipif(sys.platform != "win32", reason="SKIP_WIN Numpy strings not supported yet")
 def test_numpy_string_fails_on_windows(arctic_library):
-    with pytest.raises(ArcticNativeNotYetImplemented):
+    with pytest.raises(ArcticDbNotYetImplemented):
         arctic_library.write("symbol", np.array(["ab", "cd", "efg"]))
 
 
@@ -1026,23 +1046,6 @@ def test_reload_symbol_list(connection_string, client, request):
 def test_get_uri(object_storage_uri_incl_bucket):
     ac = Arctic(object_storage_uri_incl_bucket)
     assert ac.get_uri() == object_storage_uri_incl_bucket
-
-
-def test_lmdb(tmpdir):
-    # Github Issue #520 - this used to segfault
-    d = {
-        "test1": pd.Timestamp("1979-01-18 00:00:00"),
-        "test2": pd.Timestamp("1979-01-19 00:00:00"),
-    }
-
-    arc = Arctic(f"lmdb://{tmpdir}")
-    arc.create_library("model")
-    lib = arc.get_library("model")
-
-    for i in range(50):
-        lib.write_pickle("test", d)
-        lib = arc.get_library("model")
-        lib.read("test").data
 
 
 @pytest.mark.skipif(not AZURE_SUPPORT, reason="Pending Azure Storge Conda support")

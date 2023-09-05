@@ -14,8 +14,9 @@ from arcticdb.version_store.library import ArcticInvalidApiUsageException, Libra
 from arcticdb.version_store._store import NativeVersionStore
 from arcticdb.adapters.s3_library_adapter import S3LibraryAdapter
 from arcticdb.adapters.lmdb_library_adapter import LMDBLibraryAdapter
-from arcticdb.encoding_version import EncodingVersion
 from arcticdb.adapters.azure_library_adapter import AzureLibraryAdapter
+from arcticdb.adapters.mongo_library_adapter import MongoLibraryAdapter
+from arcticdb.encoding_version import EncodingVersion
 
 
 class Arctic:
@@ -24,7 +25,7 @@ class Arctic:
     creation, deletion and retrieval of Arctic libraries.
     """
 
-    _LIBRARY_ADAPTERS = [S3LibraryAdapter, LMDBLibraryAdapter, AzureLibraryAdapter]
+    _LIBRARY_ADAPTERS = [S3LibraryAdapter, LMDBLibraryAdapter, AzureLibraryAdapter, MongoLibraryAdapter]
 
     def __init__(self, uri: str, encoding_version: EncodingVersion = DEFAULT_ENCODING_VERSION):
         """
@@ -118,8 +119,26 @@ class Arctic:
             LMDB
             ----
 
-                The LMDB URI connection scheme has the form ``lmdb:///<path to store LMDB files>``. There are no options
-                available for the LMDB URI connection scheme.
+                The LMDB connection scheme has the form ``lmdb:///<path to store LMDB files>[?options]``.
+
+                Options is a query string that specifies connection specific options as ``<name>=<value>`` pairs joined with
+                ``&``.
+
+                +---------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------+
+                | Option                    | Description                                                                                                                                                   |
+                +===========================+===============================================================================================================================================================+
+                | map_size                  | LMDB map size (see http://www.lmdb.tech/doc/group__mdb.html#gaa2506ec8dab3d969b0e609cd82e619e5). String. Supported formats are:                               |                                                                                                              |
+                |                           |                                                                                                                                                               |
+                |                           | "150MB" / "20GB" / "3TB"                                                                                                                                      |
+                |                           |                                                                                                                                                               |
+                |                           | The only supported units are MB / GB / TB.                                                                                                                    |
+                |                           |                                                                                                                                                               |
+                |                           | On Windows and MacOS, LMDB will materialize a file of this size, so you need to set it to a reasonable value that your system has                             |
+                |                           | room for, and it has a small default (order of 100MB). On Linux, this is an upper bound on the space used by LMDB and the default is large                    |
+                |                           | (order of 100GB).                                                                                                                                             |
+                +---------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------+
+
+                Example connection strings are `lmdb:///home/user/my_lmdb` or `lmdb:///home/user/my_lmdb?map_size=2GB`.
 
         encoding_version: EncodingVersion, default DEFAULT_ENCODING_VERSION
             When creating new libraries with this Arctic instance, the defaul encoding version to use.

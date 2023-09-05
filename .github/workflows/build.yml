@@ -45,7 +45,10 @@ jobs:
                 symbols: "*.gz" # Please update publish.yml when changing this!!
                 do_not_archive: ["*.so", "*.[ao]", "vcpkg_installed"]
                 test_services:
-                  mongodb: { image: "mongo:4.4" }
+                  mongodb:
+                    image: "mongo:4.4"
+                  mongodb_2:
+                    image: "mongo:4.4"
             windows_matrix:
               - os: windows
                 distro: windows-latest
@@ -283,6 +286,10 @@ jobs:
 
   can_merge:
     needs: [leader-cpp-test-linux, leader-cpp-test-windows, follower-linux, follower-windows, persistent_storage_verify_linux, persistent_storage_verify_windows]
+    if: |
+      always() &&
+      !failure() &&
+      !cancelled()
     runs-on: ubuntu-latest
     steps:
       - run: echo Dummy job to simplify PR merge checks configuration
@@ -290,7 +297,11 @@ jobs:
 
   publish:
     needs: [common_config, can_merge]
-    if: needs.common_config.outputs.pypi_publish && needs.common_config.outputs.publish_env
+    if: |
+      always() &&
+      !failure() &&
+      !cancelled() &&
+      (needs.common_config.outputs.pypi_publish && needs.common_config.outputs.publish_env)
     uses: ./.github/workflows/publish.yml
     secrets: inherit
     permissions: {contents: write}

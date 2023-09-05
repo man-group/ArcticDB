@@ -195,8 +195,10 @@ public:
     folly::Future<std::pair<std::optional<VariantKey>, std::optional<google::protobuf::Any>>> get_metadata(
         std::optional<AtomKey>&& key);
 
-    folly::Future<std::pair<std::optional<VariantKey>, std::optional<google::protobuf::Any>>> get_metadata_async(
-        folly::Future<std::optional<AtomKey>>&& version_fut);
+    folly::Future<std::pair<VariantKey, std::optional<google::protobuf::Any>>> get_metadata_async(
+        folly::Future<std::optional<AtomKey>>&& version_fut,
+        const StreamId& stream_id,
+        const VersionQuery& version_query);
 
     folly::Future<DescriptorItem> get_descriptor(
         AtomKey&& key);
@@ -283,7 +285,7 @@ public:
         bool prune_previous_versions,
         bool validate_index,
         bool upsert,
-        bool throw_on_missing_version);
+        bool throw_on_error);
 
     std::vector<ReadVersionOutput> batch_read_keys(
         const std::vector<AtomKey> &keys,
@@ -302,7 +304,7 @@ public:
         std::vector<ReadQuery>& read_queries,
         const ReadOptions& read_options);
 
-    std::vector<DescriptorItem> batch_read_descriptor_internal(
+    std::vector<std::variant<DescriptorItem, DataError>> batch_read_descriptor_internal(
             const std::vector<StreamId>& stream_ids,
             const std::vector<VersionQuery>& version_queries,
             const ReadOptions& read_options);
@@ -317,7 +319,7 @@ public:
             const std::vector<StreamId>& stream_ids,
             const std::vector<VersionQuery>& version_queries);
 
-    std::vector<std::pair<std::optional<VariantKey>, std::optional<google::protobuf::Any>>> batch_read_metadata_internal(
+    std::vector<std::variant<std::pair<VariantKey, std::optional<google::protobuf::Any>>, DataError>> batch_read_metadata_internal(
         const std::vector<StreamId>& stream_ids,
         const std::vector<VersionQuery>& version_queries,
         const ReadOptions& read_options);
@@ -376,11 +378,12 @@ public:
         const std::vector<UpdateInfo>& stream_update_info_vector,
         bool prune_previous_versions);
 
-    std::vector<VersionedItem> batch_write_versioned_dataframe_internal(
+    std::vector<std::variant<VersionedItem, DataError>> batch_write_versioned_dataframe_internal(
         const std::vector<StreamId>& stream_ids,
         std::vector<InputTensorFrame>&& frames,
         bool prune_previous_versions,
-        bool validate_index
+        bool validate_index,
+        bool throw_on_error
     );
 
     VersionIdAndDedupMapInfo create_version_id_and_dedup_map(
