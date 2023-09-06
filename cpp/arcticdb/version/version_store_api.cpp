@@ -212,14 +212,16 @@ VersionResultVector get_latest_versions_for_symbols(
     VersionResultVector res;
     std::unordered_set<std::pair<StreamId, VersionId>> unpruned_versions;
     for (auto &s_id: stream_ids) {
-            auto version_key = get_latest_undeleted_version(store, version_map, s_id, version_query, ReadOptions{}).value();
-            res.emplace_back(
-                s_id,
-                version_key.version_id(),
-                version_key.creation_ts(),
-                snapshots_for_symbol[{s_id, version_key.version_id()}],
-                false);
-
+            auto opt_version_key = get_latest_undeleted_version(store, version_map, s_id, version_query, ReadOptions{});
+            if (opt_version_key) {
+                auto version_key = opt_version_key.value();
+                res.emplace_back(
+                    s_id,
+                    version_key.version_id(),
+                    version_key.creation_ts(),
+                    snapshots_for_symbol[{s_id, version_key.version_id()}],
+                    false);
+            }
     }
     std::sort(res.begin(), res.end(), VersionComp());
     return res;
