@@ -141,7 +141,7 @@ class Arctic:
                 Example connection strings are `lmdb:///home/user/my_lmdb` or `lmdb:///home/user/my_lmdb?map_size=2GB`.
 
         encoding_version: EncodingVersion, default DEFAULT_ENCODING_VERSION
-            When creating new libraries with this Arctic instance, the defaul encoding version to use.
+            When creating new libraries with this Arctic instance, the default encoding version to use.
             Can be overridden by specifying the encoding version in the LibraryOptions argument to create_library.
 
         Examples

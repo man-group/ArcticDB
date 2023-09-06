@@ -191,6 +191,8 @@ Write the DataFrame:
 VersionedItem(symbol=test_frame,library=data,data=n/a,version=0,metadata=None,host=<host>)
 ```
 
+The `'test_frame'` DataFrame will be used for the remainder of this guide.
+
 !!! info "ArcticDB index"
 
     When writing Pandas DataFrames, ArcticDB supports the following index types:
@@ -221,8 +223,8 @@ ArcticDB enables you to slice by _row_ and by _column_.
 !!! info "ArcticDB indexing"
 
     ArcticDB will construct a full index for _ordered numerical and timeseries (e.g. DatetimeIndex) Pandas indexes_. This will enable
-    optimised slicing across index entries. If the index is unsorted or not numeric, then whilst your data can be stored,
-    row-slicing will be slower.
+    optimised slicing across index entries. If the index is unsorted or not numeric your data can still be stored but row-slicing will
+    be slower.
 
 ###### Row-slicing
 
@@ -278,7 +280,7 @@ ArcticDB fully supports modifying stored data via two primitives: _update_ and _
 ##### Update
 
 The update primitive enables you to overwrite a contiguous chunk of data. In the below example, we use `update` to modify _2000-01-01 05:00:00_, 
-remove _2000-01-01 06:00:00_ and insert a duplicate entry for _2000-01-01 07:00:00_.
+remove _2000-01-01 06:00:00_ and modify _2000-01-01 07:00:00_.
 
 ```Python
 # Recreate the DataFrame with new (and different!) random data, and filter to only the first and third row
@@ -321,7 +323,7 @@ Let's append data to the end of the timeseries:
 2000-01-02 09:00:00      2      1     20     47     47     16     14     48  ...
 ```
 
-** Note the starting date of this DataFrame is after the final row written previously! **
+** Note the starting date of this DataFrame is the same as the final row written previously! **
 
 Let's now _append_ that DataFrame to what was written previously, and then pull back the final 7 rows from storage:
 
@@ -339,7 +341,7 @@ VersionedItem(symbol=test_frame,library=data,data=n/a,version=2,metadata=None,ho
 2000-01-02 09:00:00      2      1     20     47     47     16     14     48  ...
 ```
 
-The final 7 rows included the 5 rows we have just appended and the last two rows that were written previously. 
+The final 7 rows consist of the last two rows written previously followed by the 5 rows that we have just appended.
 
 ##### Versioning
 
