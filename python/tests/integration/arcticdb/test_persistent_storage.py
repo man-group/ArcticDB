@@ -2,7 +2,14 @@ import pytest
 import os
 import pandas as pd
 from arcticdb.arctic import Arctic
-from arcticdb.util.storage_test import get_seed_libraries, get_real_s3_uri
+from arcticdb.util.storage_test import (
+    get_seed_libraries,
+    get_real_s3_uri,
+    generate_pseudo_random_dataframe,
+    generate_ascending_dataframe,
+    verify_ascending_dataframe,
+    verify_pseudo_random_dataframe
+)
 from tests.conftest import PERSISTENT_STORAGE_TESTS_ENABLED
 
 if PERSISTENT_STORAGE_TESTS_ENABLED:
@@ -58,3 +65,39 @@ def test_real_s3_storage_write(three_col_df):
     lib.append("three", three_df)
     val = lib.read("three")
     # TODO: assert three_df.equals(val.data)
+
+
+@pytest.mark.parametrize("num_rows", [
+    1_000_000,
+    # 10_000_000
+])
+@pytest.mark.skipif(
+    not PERSISTENT_STORAGE_TESTS_ENABLED, reason="This test should run only if the persistent storage tests are enabled"
+)
+# We are testing with arctic_client so we can test the performance of the various client options over big data
+def test_persistent_storage_read_write_large_data_ascending(arctic_client, num_rows):
+    arctic_client.create_library("test_persistent_storage_read_write_large_data_ascending")
+    lib = arctic_client["test_persistent_storage_read_write_large_data_ascending"]
+
+    sym = str(num_rows)
+    lib.write(sym, generate_ascending_dataframe(num_rows))
+    result_df = lib.read(sym).data
+    verify_ascending_dataframe(result_df, num_rows)
+
+@pytest.mark.parametrize("num_rows", [
+    1_000_000,
+    # 10_000_000,
+    # 100_000_000
+])
+@pytest.mark.skipif(
+    not PERSISTENT_STORAGE_TESTS_ENABLED, reason="This test should run only if the persistent storage tests are enabled"
+)
+# We are testing with arctic_client so we can test the performance of the various client options over big data
+def test_persistent_storage_read_write_large_data_random(arctic_client, num_rows):
+    arctic_client.create_library("test_persistent_storage_read_write_large_data_ascending")
+    lib = arctic_client["test_persistent_storage_read_write_large_data_ascending"]
+
+    sym = str(num_rows)
+    lib.write(sym, generate_pseudo_random_dataframe(num_rows))
+    result_df = lib.read(sym).data
+    verify_pseudo_random_dataframe(result_df, num_rows)
