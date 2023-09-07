@@ -292,6 +292,28 @@ struct DecodeSegmentTask : BaseTask {
     }
 };
 
+struct DecodeSliceTask : BaseTask {
+    ARCTICDB_MOVE_ONLY_DEFAULT(DecodeSliceTask)
+
+    pipelines::RangesAndKey ranges_and_key_;
+    std::shared_ptr<std::unordered_set<std::string>> columns_to_decode_;
+
+    explicit DecodeSliceTask(
+            pipelines::RangesAndKey&& ranges_and_key,
+            std::shared_ptr<std::unordered_set<std::string>> columns_to_decode):
+            ranges_and_key_(std::move(ranges_and_key)),
+            columns_to_decode_(columns_to_decode) {
+    }
+
+    pipelines::SegmentAndSlice operator()(storage::KeySegmentPair&& key_segment_pair) {
+        ARCTICDB_SAMPLE(DecodeSliceTask, 0)
+        return decode_into_slice(std::move(key_segment_pair));
+    }
+
+private:
+    pipelines::SegmentAndSlice decode_into_slice(storage::KeySegmentPair&& key_segment_pair);
+};
+
 struct DecodeSlicesTask : BaseTask {
     ARCTICDB_MOVE_ONLY_DEFAULT(DecodeSlicesTask)
 
@@ -303,7 +325,7 @@ struct DecodeSlicesTask : BaseTask {
             }
 
     Composite<pipelines::SliceAndKey> operator()(Composite<std::pair<Segment, pipelines::SliceAndKey>> && skp) const {
-        ARCTICDB_SAMPLE(DecodeAtomTask, 0)
+        ARCTICDB_SAMPLE(DecodeSlicesTask, 0)
         auto sk_pairs = std::move(skp);
         return sk_pairs.transform([that=this] (auto&& ssp){
             auto seg_slice_pair = std::forward<decltype(ssp)>(ssp);
@@ -333,47 +355,26 @@ struct SegmentFunctionTask : BaseTask {
 };
 
 struct MemSegmentProcessingTask : BaseTask {
-    std::shared_ptr<Store> store_;
     std::vector<std::shared_ptr<Clause>> clauses_;
-    std::optional<Composite<ProcessingUnit>> procs_;
+    Composite<EntityIds> entity_ids_;
 
     explicit MemSegmentProcessingTask(
-           const std::shared_ptr<Store>& store,
            std::vector<std::shared_ptr<Clause>> clauses,
-           std::optional<Composite<ProcessingUnit>>&& procs = std::nullopt) :
-        store_(store),
+           Composite<EntityIds>&& entity_ids) :
         clauses_(std::move(clauses)),
-        procs_(std::move(procs)) {
-    }
-
-   static ProcessingUnit slice_to_segment(Composite<pipelines::SliceAndKey>&& is) {
-        auto inputs = std::move(is);
-        return ProcessingUnit(inputs.as_range());
-    }
-
-    [[nodiscard]]
-    Composite<ProcessingUnit> process(Composite<ProcessingUnit>&& proc){
-        auto procs = std::move(proc);
-        for(const auto& clause : clauses_) {
-            procs = clause->process(store_, std::move(procs));
-
-            if(clause->clause_info().requires_repartition_)
-                break;
-        }
-        return procs;
+        entity_ids_(std::move(entity_ids)) {
     }
 
     ARCTICDB_MOVE_ONLY_DEFAULT(MemSegmentProcessingTask)
 
-    Composite<ProcessingUnit> operator()(Composite<pipelines::SliceAndKey>&& sk) {
-        return process(Composite<ProcessingUnit>(slice_to_segment(std::move(sk))));
-    }
+    Composite<EntityIds> operator()() {
+        for(const auto& clause : clauses_) {
+            entity_ids_ = clause->process(std::move(entity_ids_));
 
-    Composite<ProcessingUnit> operator()() {
-        internal::check<ErrorCode::E_ASSERTION_FAILURE>(
-                procs_.has_value(),
-                "MemSegmentProcessingTask () operator expects processing units to be provided in ctor");
-        return process(std::move(*procs_));
+            if(clause->clause_info().requires_repartition_)
+                break;
+        }
+        return std::move(entity_ids_);
     }
 
 };
