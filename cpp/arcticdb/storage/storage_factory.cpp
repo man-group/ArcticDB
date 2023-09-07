@@ -9,11 +9,9 @@
 #include <arcticdb/storage/lmdb/lmdb_storage.hpp>
 #include <arcticdb/storage/memory/memory_storage.hpp>
 #include <arcticdb/storage/mongo/mongo_storage.hpp>
+#include <arcticdb/storage/azure/azure_storage.hpp>
 #include <arcticdb/storage/s3/s3_storage.hpp>
 #include <arcticdb/storage/s3/nfs_backed_storage.hpp>
-#ifndef ARCTICDB_USING_CONDA //Awaiting Azure sdk support in conda https://github.com/man-group/ArcticDB/issues/519
-#include <arcticdb/storage/azure/azure_storage.hpp>
-#endif
 #include <arcticdb/util/pb_util.hpp>
 
 namespace arcticdb::storage {
@@ -56,14 +54,12 @@ std::unique_ptr<Storage> create_storage(
         storage = std::make_unique<nfs_backed::NfsBackedStorage>(
                 nfs_backed::NfsBackedStorage(library_path, mode, nfs_backed_config)
         );
-#ifndef ARCTICDB_USING_CONDA //Awaiting Azure sdk support in conda https://github.com/man-group/ArcticDB/issues/519
-        } else if (type_name == azure::AzureStorage::Config::descriptor()->full_name()) {
+    } else if (type_name == azure::AzureStorage::Config::descriptor()->full_name()) {
         azure::AzureStorage::Config azure_config;
         storage_descriptor.config().UnpackTo(&azure_config);
         storage = std::make_unique<azure::AzureStorage  >(
             azure::AzureStorage(library_path, mode, azure_config)
         );
-#endif
     } else
         throw std::runtime_error(fmt::format("Unknown config type {}", type_name));
 
