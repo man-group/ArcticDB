@@ -70,11 +70,9 @@ struct StreamSource {
 
     using DecodeContinuation = folly::Function<folly::Unit(SegmentInMemory &&)>;
 
-    virtual std::vector<Composite<ProcessingUnit>> batch_read_uncompressed(
-        std::vector<Composite<pipelines::SliceAndKey>> &&keys,
-        const std::vector<std::shared_ptr<Clause>>& clauses,
-        const std::shared_ptr<std::unordered_set<std::string>>& filter_columns,
-        const BatchReadArgs &args) = 0;
+    virtual std::vector<folly::Future<pipelines::SegmentAndSlice>> batch_read_uncompressed(
+        std::vector<pipelines::RangesAndKey>&& ranges_and_keys,
+        std::shared_ptr<std::unordered_set<std::string>> columns_to_decode) = 0;
 
     virtual folly::Future<std::pair<std::optional<VariantKey>, std::optional<google::protobuf::Any>>> read_metadata(
         const entity::VariantKey &key,

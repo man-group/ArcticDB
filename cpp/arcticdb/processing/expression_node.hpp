@@ -110,7 +110,7 @@ struct ExpressionNode {
 
     ExpressionNode(VariantNode left, OperationType op);
 
-    VariantData compute(ProcessingUnit& seg, const std::shared_ptr<Store>& store) const;
+    VariantData compute(ProcessingUnit& seg) const;
 };
 
 } //namespace arcticdb

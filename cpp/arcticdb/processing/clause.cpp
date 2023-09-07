@@ -20,53 +20,163 @@
 
 namespace arcticdb {
 
-std::vector<Composite<SliceAndKey>> structure_by_row_slice(std::vector<SliceAndKey>& slice_and_keys, size_t start_from) {
-    std::sort(std::begin(slice_and_keys), std::end(slice_and_keys), [] (const SliceAndKey& left, const SliceAndKey& right) {
-        return std::tie(left.slice().row_range.first, left.slice().col_range.first) < std::tie(right.slice().row_range.first, right.slice().col_range.first);
+using namespace pipelines;
+
+std::vector<std::vector<size_t>> structure_by_row_slice(std::vector<RangesAndKey>& ranges_and_keys,
+                                                           size_t start_from) {
+    std::sort(std::begin(ranges_and_keys), std::end(ranges_and_keys), [] (const RangesAndKey& left, const RangesAndKey& right) {
+        return std::tie(left.row_range_.first, left.col_range_.first) < std::tie(right.row_range_.first, right.col_range_.first);
     });
-
-    std::vector<Composite<SliceAndKey>> rows;
-    auto sk_it = std::begin(slice_and_keys);
-    std::advance(sk_it, start_from);
-    while(sk_it != std::end(slice_and_keys)) {
-        pipelines::RowRange row_range{sk_it->slice().row_range};
-        auto sk = Composite{std::move(*sk_it)};
-        // Iterate through all SliceAndKeys that contain data for the same RowRange - i.e., iterate along column segments
-        // for same row group
-        while(++sk_it != std::end(slice_and_keys) && sk_it->slice().row_range == row_range) {
-            sk.push_back(std::move(*sk_it));
+    ranges_and_keys.erase(ranges_and_keys.begin(), ranges_and_keys.begin() + start_from);
+    std::vector<std::vector<size_t>> res;
+    RowRange previous_row_range;
+    for (const auto& [idx, ranges_and_key]: folly::enumerate(ranges_and_keys)) {
+        RowRange current_row_range{ranges_and_key.row_range_};
+        if (current_row_range != previous_row_range) {
+            res.emplace_back();
         }
-
-        util::check(!sk.empty(), "Should not push empty slice/key pairs to the pipeline");
-        rows.emplace_back(std::move(sk));
+        res.back().emplace_back(idx);
+        previous_row_range = current_row_range;
     }
-    return rows;
+    return res;
 }
 
-std::vector<Composite<SliceAndKey>> structure_by_column_slice(std::vector<SliceAndKey>& slice_and_keys) {
-    std::sort(std::begin(slice_and_keys), std::end(slice_and_keys), [] (const SliceAndKey& left, const SliceAndKey& right) {
-        return std::tie(left.slice().col_range.first, left.slice().row_range.first) < std::tie(right.slice().col_range.first, right.slice().row_range.first);
+std::vector<std::vector<size_t>> structure_by_column_slice(std::vector<RangesAndKey>& ranges_and_keys) {
+    std::sort(std::begin(ranges_and_keys), std::end(ranges_and_keys), [] (const RangesAndKey& left, const RangesAndKey& right) {
+        return std::tie(left.col_range_.first, left.row_range_.first) < std::tie(right.col_range_.first, right.row_range_.first);
     });
-
-    std::vector<Composite<SliceAndKey>> cols;
-    auto sk_it = std::begin(slice_and_keys);
-    while(sk_it != std::end(slice_and_keys)) {
-        pipelines::ColRange col_range{sk_it->slice().col_range};
-        auto sk = Composite{std::move(*sk_it)};
-        // Iterate through all SliceAndKeys that contain data for the same ColRange - i.e., iterate along row segments
-        // for same column group
-        while(++sk_it != std::end(slice_and_keys) && sk_it->slice().col_range == col_range) {
-            sk.push_back(std::move(*sk_it));
+    std::vector<std::vector<size_t>> res;
+    ColRange previous_col_range;
+    for (const auto& [idx, ranges_and_key]: folly::enumerate(ranges_and_keys)) {
+        ColRange current_col_range{ranges_and_key.col_range_};
+        if (current_col_range != previous_col_range) {
+            res.emplace_back();
         }
-
-        util::check(!sk.empty(), "Should not push empty slice/key pairs to the pipeline");
-        cols.emplace_back(std::move(sk));
+        res.back().emplace_back(idx);
+        previous_col_range = current_col_range;
     }
-    return cols;
+    return res;
 }
 
-std::vector<Composite<ProcessingUnit>> single_partition(std::vector<Composite<ProcessingUnit>> &&comps) {
-    std::vector<Composite<ProcessingUnit>> v;
+/*
+ * On entry to a clause, construct ProcessingUnits from the input entity IDs. These will either be provided by the
+ * structure_for_processing method for the first clause in the pipeline, or by the previous clause for all subsequent
+ * clauses.
+ * At time of writing, all clauses require segments, row ranges, and column ranges. Some also require atom keys and
+ * partitioning buckets, so these can optionally be populated in the output processing units as well.
+ */
+Composite<ProcessingUnit> gather_entities(std::shared_ptr<ComponentManager> component_manager,
+                                          Composite<EntityIds>&& entity_ids,
+                                          bool include_atom_keys,
+                                          bool include_bucket) {
+    return entity_ids.transform([&component_manager, include_atom_keys, include_bucket]
+    (const EntityIds& entity_ids) -> ProcessingUnit {
+        ProcessingUnit res;
+        std::vector<folly::Future<std::shared_ptr<SegmentInMemory>>> segment_futs;
+        std::vector<folly::Future<std::shared_ptr<RowRange>>> row_range_futs;
+        std::vector<folly::Future<std::shared_ptr<ColRange>>> col_range_futs;
+        segment_futs.reserve(entity_ids.size());
+        row_range_futs.reserve(entity_ids.size());
+        col_range_futs.reserve(entity_ids.size());
+        for (auto entity_id: entity_ids) {
+            segment_futs.emplace_back(component_manager->get<std::shared_ptr<SegmentInMemory>>(entity_id));
+            row_range_futs.emplace_back(component_manager->get<std::shared_ptr<RowRange>>(entity_id));
+            col_range_futs.emplace_back(component_manager->get<std::shared_ptr<ColRange>>(entity_id));
+        }
+        res.set_segments(folly::collect(segment_futs).get());
+        res.set_row_ranges(folly::collect(row_range_futs).get());
+        res.set_col_ranges(folly::collect(col_range_futs).get());
+
+        if (include_atom_keys) {
+            std::vector<folly::Future<std::shared_ptr<AtomKey>>> futs;
+            futs.reserve(entity_ids.size());
+            for (auto entity_id: entity_ids) {
+                futs.emplace_back(component_manager->get<std::shared_ptr<AtomKey>>(entity_id));
+            }
+            res.set_atom_keys(folly::collect(futs).get());
+        }
+        if (include_bucket) {
+            std::vector<folly::Future<size_t>> futs;
+            futs.reserve(entity_ids.size());
+            for (auto entity_id: entity_ids) {
+                futs.emplace_back(component_manager->get<size_t>(entity_id));
+            }
+            // Each entity_id has a bucket, but they must all be the same within one processing unit
+            auto buckets = folly::collect(futs).get();
+            if (buckets.size() > 0) {
+                internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+                        std::adjacent_find(buckets.begin(), buckets.end(), std::not_equal_to<>() ) == buckets.end(),
+                        "Partitioning error: segments to be processed together must be in the same bucket"
+                        );
+                res.set_bucket(buckets.at(0));
+            }
+        }
+        return res;
+    });
+}
+
+/*
+ * On exit from a clause, we need to push the elements of the newly created processing unit's into the component
+ * manager. These will either be used by the next clause in the pipeline, or to present the output dataframe back to
+ * the user if this is the final clause in the pipeline.
+ * Elements that share an index in the optional vectors of a ProcessingUnit correspond to the same entity, and so are
+ * pushed into the component manager with the same ID.
+ */
+EntityIds push_entities(std::shared_ptr<ComponentManager> component_manager, ProcessingUnit&& proc) {
+    std::optional<EntityIds> res;
+    if (proc.segments_.has_value()) {
+        res = std::make_optional<EntityIds>();
+        for (const auto& segment: *proc.segments_) {
+            res->emplace_back(component_manager->add(segment, std::nullopt, 1));
+        }
+    }
+    if (proc.row_ranges_.has_value()) {
+        if (res.has_value()) {
+            for (const auto& [idx, row_range]: folly::enumerate(*proc.row_ranges_)) {
+                component_manager->add(row_range, res->at(idx));
+            }
+        } else {
+            res = std::make_optional<EntityIds>();
+            for (const auto& row_range: *proc.row_ranges_) {
+                res->emplace_back(component_manager->add(row_range));
+            }
+        }
+    }
+    if (proc.col_ranges_.has_value()) {
+        if (res.has_value()) {
+            for (const auto& [idx, col_range]: folly::enumerate(*proc.col_ranges_)) {
+                component_manager->add(col_range, res->at(idx));
+            }
+        } else {
+            res = std::make_optional<EntityIds>();
+            for (const auto& col_range: *proc.col_ranges_) {
+                res->emplace_back(component_manager->add(col_range));
+            }
+        }
+    }
+    if (proc.atom_keys_.has_value()) {
+        if (res.has_value()) {
+            for (const auto& [idx, atom_key]: folly::enumerate(*proc.atom_keys_)) {
+                component_manager->add(atom_key, res->at(idx));
+            }
+        } else {
+            res = std::make_optional<EntityIds>();
+            for (const auto& atom_key: *proc.atom_keys_) {
+                res->emplace_back(component_manager->add(atom_key));
+            }
+        }
+    }
+    internal::check<ErrorCode::E_ASSERTION_FAILURE>(res.has_value(), "Unexpected empty result in push_entities");
+    if (proc.bucket_.has_value()) {
+        for (auto entity_id: *res) {
+            component_manager->add(*proc.bucket_, entity_id);
+        }
+    }
+    return *res;
+}
+
+std::vector<Composite<EntityIds>> single_partition(std::vector<Composite<EntityIds>> &&comps) {
+    std::vector<Composite<EntityIds>> v;
     v.push_back(merge_composites_shallow(std::move(comps)));
     return v;
 }
@@ -116,21 +226,19 @@ public:
     }
 };
 
-struct SliceAndKeyWrapper {
-    pipelines::SliceAndKey seg_;
-    std::shared_ptr<Store> store_;
+struct SegmentWrapper {
+    SegmentInMemory seg_;
     SegmentInMemory::iterator it_;
     const StreamId id_;
 
-    explicit SliceAndKeyWrapper(pipelines::SliceAndKey &&seg, std::shared_ptr<Store> store) :
+    explicit SegmentWrapper(SegmentInMemory&& seg) :
             seg_(std::move(seg)),
-            store_(std::move(store)),
-            it_(seg_.segment(store_).begin()),
-            id_(seg_.segment(store_).descriptor().id()) {
+            it_(seg_.begin()),
+            id_(seg_.descriptor().id()) {
     }
 
     bool advance() {
-        return ++it_ != seg_.segment(store_).end();
+        return ++it_ != seg_.end();
     }
 
     SegmentInMemory::Row &row() {
@@ -142,31 +250,33 @@ struct SliceAndKeyWrapper {
     }
 };
 
-Composite<ProcessingUnit> PassthroughClause::process(ARCTICDB_UNUSED const std::shared_ptr<Store> &store,
-                                                     Composite<ProcessingUnit> &&p) const {
+Composite<EntityIds> PassthroughClause::process(Composite<EntityIds> &&p) const {
     auto procs = std::move(p);
     return procs;
 }
 
-Composite<ProcessingUnit> FilterClause::process(
-        std::shared_ptr<Store> store,
-        Composite<ProcessingUnit> &&p
+Composite<EntityIds> FilterClause::process(
+        Composite<EntityIds>&& entity_ids
         ) const {
-    auto procs = std::move(p);
-    Composite<ProcessingUnit> output;
-    procs.broadcast([&optimisation=optimisation_, &store, &expression_context = expression_context_, &output](auto &proc) {
-        proc.set_expression_context(expression_context);
-        auto variant_data = proc.get(expression_context->root_node_name_, store);
+    auto procs = gather_entities(component_manager_, std::move(entity_ids));
+    Composite<EntityIds> output;
+    procs.broadcast([&output, this](auto&& proc) {
+        proc.set_expression_context(expression_context_);
+        auto variant_data = proc.get(expression_context_->root_node_name_);
         util::variant_match(variant_data,
-                            [&optimisation, &proc, &output, &store](const std::shared_ptr<util::BitSet> &bitset) {
-                                proc.apply_filter(*bitset, store, optimisation);
-                                output.push_back(std::move(proc));
+                            [&proc, &output, this](const std::shared_ptr<util::BitSet> &bitset) {
+                                if (bitset->count() > 0) {
+                                    proc.apply_filter(*bitset, optimisation_);
+                                    output.push_back(push_entities(component_manager_, std::move(proc)));
+                                } else {
+                                    log::version().debug("Filter returned empty result");
+                                }
                             },
                             [](EmptyResult) {
                                log::version().debug("Filter returned empty result");
                             },
-                            [&output, &proc](FullResult) {
-                                output.push_back(std::move(proc));
+                            [&output, &proc, this](FullResult) {
+                                output.push_back(push_entities(component_manager_, std::move(proc)));
                             },
                             [](const auto &) {
                                 util::raise_rte("Expected bitset from filter clause");
@@ -179,28 +289,25 @@ std::string FilterClause::to_string() const {
     return expression_context_ ? fmt::format("WHERE {}", expression_context_->root_node_name_.value) : "";
 }
 
-Composite<ProcessingUnit> ProjectClause::process(std::shared_ptr<Store> store,
-                                                 Composite<ProcessingUnit> &&p) const {
-    auto procs = std::move(p);
-    Composite<ProcessingUnit> output;
-    procs.broadcast([&store, &expression_context = expression_context_, &output, that = this](auto &proc) {
-        proc.set_expression_context(expression_context);
-        auto variant_data = proc.get(expression_context->root_node_name_, store);
+Composite<EntityIds> ProjectClause::process(Composite<EntityIds>&& entity_ids) const {
+    auto procs = gather_entities(component_manager_, std::move(entity_ids));
+    Composite<EntityIds> output;
+    procs.broadcast([&output, this](auto&& proc) {
+        proc.set_expression_context(expression_context_);
+        auto variant_data = proc.get(expression_context_->root_node_name_);
         util::variant_match(variant_data,
-                            [&proc, &output, &store, &that](ColumnWithStrings &col) {
+                            [&proc, &output, this](ColumnWithStrings &col) {
 
                                 const auto data_type = col.column_->type().data_type();
-                                const std::string_view name = that->output_column_;
+                                const std::string_view name = output_column_;
 
-                                auto &slice_and_keys = proc.data();
-                                auto &last = *slice_and_keys.rbegin();
-                                last.segment(store).add_column(scalar_field(data_type, name), col.column_);
-                                ++last.slice().col_range.second;
-                                output.push_back(std::move(proc));
+                                proc.segments_->back()->add_column(scalar_field(data_type, name), col.column_);
+                                ++proc.col_ranges_->back()->second;
+                                output.push_back(push_entities(component_manager_, std::move(proc)));
                             },
-                            [&proc, &output, &expression_context](const EmptyResult&) {
-                                if(expression_context->dynamic_schema_)
-                                    output.push_back(std::move(proc));
+                            [&proc, &output, this](const EmptyResult&) {
+                                if(expression_context_->dynamic_schema_)
+                                    output.push_back(push_entities(component_manager_, std::move(proc)));
                                 else
                                     util::raise_rte("Cannot project from empty column with static schema");
                             },
@@ -246,9 +353,8 @@ AggregationClause::AggregationClause(const std::string& grouping_column,
     }
 }
 
-Composite<ProcessingUnit> AggregationClause::process(std::shared_ptr<Store> store,
-                                                     Composite<ProcessingUnit> &&p) const {
-    auto procs = std::move(p);
+Composite<EntityIds> AggregationClause::process(Composite<EntityIds>&& entity_ids) const {
+    auto procs = gather_entities(component_manager_, std::move(entity_ids));
     std::vector<GroupingAggregatorData> aggregators_data;
     internal::check<ErrorCode::E_INVALID_ARGUMENT>(
             !aggregators_.empty(),
@@ -258,10 +364,10 @@ Composite<ProcessingUnit> AggregationClause::process(std::shared_ptr<Store> stor
     }
 
     // Work out the common type between the processing units for the columns being aggregated
-    procs.broadcast([&store, &aggregators_data, &aggregators=aggregators_](auto& proc) {
+    procs.broadcast([&aggregators_data, &aggregators=aggregators_](auto& proc) {
         for (auto agg_data: folly::enumerate(aggregators_data)) {
             auto input_column_name = aggregators.at(agg_data.index).get_input_column_name();
-            auto input_column = proc.get(input_column_name, store);
+            auto input_column = proc.get(input_column_name);
             if (std::holds_alternative<ColumnWithStrings>(input_column)) {
                 agg_data->add_data_type(std::get<ColumnWithStrings>(input_column).column_->type().data_type());
             }
@@ -274,15 +380,13 @@ Composite<ProcessingUnit> AggregationClause::process(std::shared_ptr<Store> stor
     DataType grouping_data_type;
     GroupingMap grouping_map;
     procs.broadcast(
-        [&store, &num_unique,
-        &grouping_data_type, &grouping_map, &next_group_id, &aggregators_data, &string_pool, that=this](
-            auto &proc) {
-            auto partitioning_column = proc.get(ColumnName(that->grouping_column_), store);
+        [&num_unique, &grouping_data_type, &grouping_map, &next_group_id, &aggregators_data, &string_pool, this](auto &proc) {
+            auto partitioning_column = proc.get(ColumnName(grouping_column_));
             if (std::holds_alternative<ColumnWithStrings>(partitioning_column)) {
                 ColumnWithStrings col = std::get<ColumnWithStrings>(partitioning_column);
                 entity::details::visit_type(col.column_->type().data_type(),
                                             [&proc_=proc, &grouping_map, &next_group_id, &aggregators_data, &string_pool, &col,
-                                             &num_unique, &store, &grouping_data_type, that](auto data_type_tag) {
+                                             &num_unique, &grouping_data_type, this](auto data_type_tag) {
                                                 using DataTypeTagType = decltype(data_type_tag);
                                                 using RawType = typename DataTypeTagType::raw_type;
                                                 constexpr auto data_type = DataTypeTagType::data_type;
@@ -337,8 +441,8 @@ Composite<ProcessingUnit> AggregationClause::process(std::shared_ptr<Store> stor
                                                 num_unique = next_group_id;
                                                 util::check(num_unique != 0, "Got zero unique values");
                                                 for (auto agg_data: folly::enumerate(aggregators_data)) {
-                                                    auto input_column_name = that->aggregators_.at(agg_data.index).get_input_column_name();
-                                                    auto input_column = proc_.get(input_column_name, store);
+                                                    auto input_column_name = aggregators_.at(agg_data.index).get_input_column_name();
+                                                    auto input_column = proc_.get(input_column_name);
                                                     std::optional<ColumnWithStrings> opt_input_column;
                                                     if (std::holds_alternative<ColumnWithStrings>(input_column)) {
                                                         auto column_with_strings = std::get<ColumnWithStrings>(input_column);
@@ -386,64 +490,57 @@ Composite<ProcessingUnit> AggregationClause::process(std::shared_ptr<Store> stor
 
     seg.set_string_pool(string_pool);
     seg.set_row_id(num_unique - 1);
-    return Composite{ProcessingUnit{std::move(seg)}};
+    return Composite<EntityIds>(push_entities(component_manager_, ProcessingUnit(std::move(seg))));
 }
 
 [[nodiscard]] std::string AggregationClause::to_string() const {
     return fmt::format("AGGREGATE {}", aggregation_map_);
 }
 
-[[nodiscard]] Composite<ProcessingUnit> RemoveColumnPartitioningClause::process(std::shared_ptr<Store> store,
-                                                                                Composite<ProcessingUnit> &&p) const {
-    using namespace arcticdb::pipelines;
-    auto procs = std::move(p);
-    Composite<ProcessingUnit> output;
-    procs.broadcast([&store, &output](ProcessingUnit &proc) {
+[[nodiscard]] Composite<EntityIds> RemoveColumnPartitioningClause::process(Composite<EntityIds>&& entity_ids) const {
+    auto procs = gather_entities(component_manager_, std::move(entity_ids));
+    Composite<EntityIds> output;
+    procs.broadcast([&output, this](ProcessingUnit &proc) {
         size_t min_start_row = std::numeric_limits<size_t>::max();
         size_t max_end_row = 0;
         size_t min_start_col = std::numeric_limits<size_t>::max();
         size_t max_end_col = 0;
         std::optional<SegmentInMemory> output_seg;
-        for (auto& slice_and_key: proc.data()) {
-            min_start_row = std::min(min_start_row, slice_and_key.slice().row_range.start());
-            max_end_row = std::max(max_end_row, slice_and_key.slice().row_range.end());
-            min_start_col = std::min(min_start_col, slice_and_key.slice().col_range.start());
-            max_end_col = std::max(max_end_col, slice_and_key.slice().col_range.end());
-            auto segment = std::move(slice_and_key.segment(store));
+        for (auto&& [idx, segment]: folly::enumerate(proc.segments_.value())) {
+            min_start_row = std::min(min_start_row, proc.row_ranges_->at(idx)->start());
+            max_end_row = std::max(max_end_row, proc.row_ranges_->at(idx)->end());
+            min_start_col = std::min(min_start_col, proc.col_ranges_->at(idx)->start());
+            max_end_col = std::max(max_end_col, proc.col_ranges_->at(idx)->end());
             if (output_seg.has_value()) {
-                stream::merge_string_columns(segment, output_seg->string_pool_ptr(), false);
-                output_seg->concatenate(std::move(segment), true);
+                stream::merge_string_columns(*segment, output_seg->string_pool_ptr(), false);
+                output_seg->concatenate(std::move(*segment), true);
             } else {
-                output_seg = std::make_optional<SegmentInMemory>(std::move(segment));
+                output_seg = std::make_optional<SegmentInMemory>(std::move(*segment));
             }
         }
         if (output_seg.has_value()) {
-            const RowRange row_range{min_start_row, max_end_row};
-            const ColRange col_range{min_start_col, max_end_col};
-            output.push_back(ProcessingUnit{std::move(*output_seg), FrameSlice{col_range, row_range}});
+            output.push_back(push_entities(component_manager_, ProcessingUnit(std::move(*output_seg),
+                                                                RowRange{min_start_row, max_end_row},
+                                                                ColRange{min_start_col, max_end_col})));
         }
     });
     return output;
 }
 
-Composite<ProcessingUnit> SplitClause::process(std::shared_ptr<Store> store,
-                                               Composite<ProcessingUnit> &&procs) const {
-    using namespace arcticdb::pipelines;
-
-    auto proc_composite = std::move(procs);
-    Composite<ProcessingUnit> ret;
-    proc_composite.broadcast([&store, rows = rows_, &ret](auto &&p) {
+Composite<EntityIds> SplitClause::process(Composite<EntityIds>&& entity_ids) const {
+    auto procs = gather_entities(component_manager_, std::move(entity_ids));
+    Composite<EntityIds> ret;
+    procs.broadcast([this, &ret](auto &&p) {
         auto proc = std::forward<decltype(p)>(p);
-        auto slice_and_keys = proc.data();
-        for (auto &slice_and_key: slice_and_keys) {
-            auto split_segs = slice_and_key.segment(store).split(rows);
-            const ColRange col_range{slice_and_key.slice().col_range};
-            size_t start_row = slice_and_key.slice().row_range.start();
+        for (auto&& [idx, seg]: folly::enumerate(proc.segments_.value())) {
+            auto split_segs = seg->split(rows_);
+            size_t start_row = proc.row_ranges_->at(idx)->start();
             size_t end_row = 0;
-            for (auto &item : split_segs) {
-                end_row = start_row + item.row_count();
-                const RowRange row_range{start_row, end_row};
-                ret.push_back(ProcessingUnit{std::move(item), FrameSlice{col_range, row_range}});
+            for (auto&& split_seg : split_segs) {
+                end_row = start_row + split_seg.row_count();
+                ret.push_back(push_entities(component_manager_, ProcessingUnit(std::move(split_seg),
+                                                                 RowRange(start_row, end_row),
+                                                                 std::move(*proc.col_ranges_->at(idx)))));
                 start_row = end_row;
             }
         }
@@ -451,42 +548,44 @@ Composite<ProcessingUnit> SplitClause::process(std::shared_ptr<Store> store,
     return ret;
 }
 
-Composite<ProcessingUnit> SortClause::process(std::shared_ptr<Store> store,
-                                              Composite<ProcessingUnit> &&p) const {
-    auto procs = std::move(p);
-    procs.broadcast([&store, &column = column_](auto &proc) {
-        auto slice_and_keys = proc.data();
-        for (auto &slice_and_key: slice_and_keys) {
-            slice_and_key.segment(store).sort(column);
+Composite<EntityIds> SortClause::process(Composite<EntityIds>&& entity_ids) const {
+    auto procs = gather_entities(component_manager_, std::move(entity_ids));
+    Composite<EntityIds> output;
+    procs.broadcast([&output, this](auto&& proc) {
+        for (auto& seg: proc.segments_.value()) {
+            // This modifies the segment in place, which goes against the ECS principle of all entities being immutable
+            // Only used by SortMerge right now and so this is fine, although it would not generalise well
+            seg->sort(column_);
         }
+        output.push_back(push_entities(component_manager_, std::move(proc)));
     });
-    return procs;
+    return output;
 }
 
 template<typename IndexType, typename DensityPolicy, typename QueueType, typename Comparator, typename StreamId>
 void merge_impl(
-        Composite<ProcessingUnit> &ret,
+        std::shared_ptr<ComponentManager> component_manager,
+        Composite<EntityIds> &ret,
         QueueType &input_streams,
         bool add_symbol_column,
         StreamId stream_id,
-        const arcticdb::pipelines::RowRange row_range,
-        const arcticdb::pipelines::ColRange col_range,
+        const RowRange row_range,
+        const ColRange col_range,
         IndexType index,
         const StreamDescriptor& stream_descriptor) {
-    using namespace arcticdb::pipelines;
     auto num_segment_rows = ConfigsMap::instance()->get_int("Merge.SegmentSize", 100000);
     using SegmentationPolicy = stream::RowCountSegmentPolicy;
     SegmentationPolicy segmentation_policy{static_cast<size_t>(num_segment_rows)};
 
-    auto func = [&ret, &row_range, &col_range](auto &&segment) {
-        ret.push_back(ProcessingUnit{std::forward<SegmentInMemory>(segment), FrameSlice{col_range, row_range}});
+    auto func = [&component_manager, &ret, &row_range, &col_range](auto &&segment) {
+        ret.push_back(push_entities(component_manager, ProcessingUnit{std::forward<SegmentInMemory>(segment), row_range, col_range}));
     };
-    
+
     using AggregatorType = stream::Aggregator<IndexType, stream::DynamicSchema, SegmentationPolicy, DensityPolicy>;
     const auto& fields = stream_descriptor.fields();
     FieldCollection new_fields{};
     (void)new_fields.add(fields[0].ref());
-    
+
     auto index_desc = index_descriptor(stream_id, index, new_fields);
     auto desc = StreamDescriptor{index_desc};
 
@@ -495,79 +594,73 @@ void merge_impl(
             std::move(func), std::move(segmentation_policy), desc, std::nullopt
     };
 
-    stream::do_merge<IndexType, SliceAndKeyWrapper, AggregatorType, decltype(input_streams)>(
+    stream::do_merge<IndexType, SegmentWrapper, AggregatorType, decltype(input_streams)>(
         input_streams, agg, add_symbol_column);
 }
 
 // MergeClause receives a list of DataFrames as input and merge them into a single one where all 
 // the rows are sorted by time stamp
-Composite<ProcessingUnit> MergeClause::process(std::shared_ptr<Store> store,
-                                               Composite<ProcessingUnit> &&p) const {
-    using namespace arcticdb::pipelines;
-    auto procs = std::move(p);
+Composite<EntityIds> MergeClause::process(Composite<EntityIds>&& entity_ids) const {
+    auto procs = gather_entities(component_manager_, std::move(entity_ids));
 
     auto compare =
-            [](const std::unique_ptr<SliceAndKeyWrapper> &left,
-               const std::unique_ptr<SliceAndKeyWrapper> &right) {
-                const auto left_index = pipelines::index::index_value_from_row(left->row(),
+            [](const std::unique_ptr<SegmentWrapper> &left,
+               const std::unique_ptr<SegmentWrapper> &right) {
+                const auto left_index = index::index_value_from_row(left->row(),
                                                                                IndexDescriptor::TIMESTAMP, 0);
-                const auto right_index = pipelines::index::index_value_from_row(right->row(),
+                const auto right_index = index::index_value_from_row(right->row(),
                                                                                 IndexDescriptor::TIMESTAMP, 0);
                 return left_index > right_index;
             };
 
-    movable_priority_queue<std::unique_ptr<SliceAndKeyWrapper>, std::vector<std::unique_ptr<SliceAndKeyWrapper>>, decltype(compare)> input_streams{
+    movable_priority_queue<std::unique_ptr<SegmentWrapper>, std::vector<std::unique_ptr<SegmentWrapper>>, decltype(compare)> input_streams{
             compare};
 
     size_t min_start_row = std::numeric_limits<size_t>::max();
     size_t max_end_row = 0;
     size_t min_start_col = std::numeric_limits<size_t>::max();
     size_t max_end_col = 0;
-    procs.broadcast([&input_streams, &store, &min_start_row, &max_end_row, &min_start_col, &max_end_col](auto &&proc) {
-        auto slice_and_keys = proc.release_data();
-        for (auto &&slice_and_key: slice_and_keys) {
-            size_t start_row = slice_and_key.slice().row_range.start();
+    procs.broadcast([&input_streams, &min_start_row, &max_end_row, &min_start_col, &max_end_col](auto&& proc) {
+        for (auto&& [idx, segment]: folly::enumerate(proc.segments_.value())) {
+            size_t start_row = proc.row_ranges_->at(idx)->start();
             min_start_row = start_row < min_start_row ? start_row : min_start_row;
-            size_t end_row = slice_and_key.slice().row_range.end();
+            size_t end_row = proc.row_ranges_->at(idx)->end();
             max_end_row = end_row > max_end_row ? end_row : max_end_row;
-            size_t start_col = slice_and_key.slice().col_range.start();
+            size_t start_col = proc.col_ranges_->at(idx)->start();
             min_start_col = start_col < min_start_col ? start_col : min_start_col;
-            size_t end_col = slice_and_key.slice().col_range.end();
+            size_t end_col = proc.col_ranges_->at(idx)->end();
             max_end_col = end_col > max_end_col ? end_col : max_end_col;
-            input_streams.push(
-                    std::make_unique<SliceAndKeyWrapper>(std::forward<pipelines::SliceAndKey>(slice_and_key),
-                                                         store));
+            input_streams.push(std::make_unique<SegmentWrapper>(std::move(*segment)));
         }
     });
     const RowRange row_range{min_start_row, max_end_row};
     const ColRange col_range{min_start_col, max_end_col};
-    Composite<ProcessingUnit> ret;
+    Composite<EntityIds> ret;
     std::visit(
-            [&ret, &input_streams, add_symbol_column = add_symbol_column_, &comp = compare, stream_id = stream_id_, &row_range, &col_range, &stream_descriptor = stream_descriptor_](auto idx,
-                                                                                            auto density) {
-                merge_impl<decltype(idx), decltype(density), decltype(input_streams), decltype(comp), decltype(stream_id)>(ret,
+            [this, &ret, &input_streams, &comp=compare, stream_id=stream_id_, &row_range, &col_range](auto idx, auto density) {
+                merge_impl<decltype(idx), decltype(density), decltype(input_streams), decltype(comp), decltype(stream_id)>(component_manager_,
+                                                                                                      ret,
                                                                                                       input_streams,
-                                                                                                      add_symbol_column,
+                                                                                                      add_symbol_column_,
                                                                                                       stream_id,
                                                                                                       row_range,
                                                                                                       col_range,
                                                                                                       idx,
-                                                                                                      stream_descriptor);
+                                                                                                      stream_descriptor_);
             }, index_, density_policy_);
 
     return ret;
 }
 
-std::optional<std::vector<Composite<ProcessingUnit>>> MergeClause::repartition(
-        std::vector<Composite<ProcessingUnit>> &&comps) const {
-    std::vector<Composite<ProcessingUnit>> v;
+std::optional<std::vector<Composite<EntityIds>>> MergeClause::repartition(
+        std::vector<Composite<EntityIds>> &&comps) const {
+    std::vector<Composite<EntityIds>> v;
     v.push_back(merge_composites_shallow(std::move(comps)));
     return v;
 }
 
-Composite<ProcessingUnit> ColumnStatsGenerationClause::process(std::shared_ptr<Store> store,
-                                                               Composite<ProcessingUnit> &&p) const {
-    auto procs = std::move(p);
+Composite<EntityIds> ColumnStatsGenerationClause::process(Composite<EntityIds>&& entity_ids) const {
+    auto procs = gather_entities(component_manager_, std::move(entity_ids), true, false);
     std::vector<ColumnStatsAggregatorData> aggregators_data;
     internal::check<ErrorCode::E_INVALID_ARGUMENT>(
             static_cast<bool>(column_stats_aggregators_),
@@ -583,21 +676,19 @@ Composite<ProcessingUnit> ColumnStatsGenerationClause::process(std::shared_ptr<S
             !procs.empty(),
             "ColumnStatsGenerationClause::process does not make sense with no processing units");
     procs.broadcast(
-            [&store, &start_indexes, &end_indexes, &aggregators_data, that=this](
-                    auto &proc) {
-                for (const auto& slice_and_key: proc.data_) {
-                    start_indexes.insert(slice_and_key.key_->start_index());
-                    end_indexes.insert(slice_and_key.key_->end_index());
+            [&start_indexes, &end_indexes, &aggregators_data, this](auto &proc) {
+                for (const auto& key: proc.atom_keys_.value()) {
+                    start_indexes.insert(key->start_index());
+                    end_indexes.insert(key->end_index());
                 }
                 for (auto agg_data : folly::enumerate(aggregators_data)) {
-                    auto
-                        input_column_name = that->column_stats_aggregators_->at(agg_data.index).get_input_column_name();
-                    auto input_column = proc.get(input_column_name, store);
+                    auto input_column_name = column_stats_aggregators_->at(agg_data.index).get_input_column_name();
+                    auto input_column = proc.get(input_column_name);
                     if (std::holds_alternative<ColumnWithStrings>(input_column)) {
                         auto input_column_with_strings = std::get<ColumnWithStrings>(input_column);
                         agg_data->aggregate(input_column_with_strings);
                     } else {
-                        if (!that->processing_config_.dynamic_schema_)
+                        if (!processing_config_.dynamic_schema_)
                             internal::raise<ErrorCode::E_ASSERTION_FAILURE>(
                                 "Unable to resolve column denoted by aggregation operator: '{}'",
                                 input_column_name);
@@ -629,42 +720,45 @@ Composite<ProcessingUnit> ColumnStatsGenerationClause::process(std::shared_ptr<S
         seg.concatenate(agg_data->finalize(column_stats_aggregators_->at(agg_data.index).get_output_column_names()));
     }
     seg.set_row_id(0);
-    return Composite{ProcessingUnit{std::move(seg)}};
+    return Composite<EntityIds>(push_entities(component_manager_, ProcessingUnit(std::move(seg))));
 }
 
-std::vector<Composite<SliceAndKey>> RowRangeClause::structure_for_processing(
-        std::vector<SliceAndKey>& slice_and_keys, ARCTICDB_UNUSED size_t start_from) const {
-    slice_and_keys.erase(std::remove_if(slice_and_keys.begin(), slice_and_keys.end(), [this](const SliceAndKey& slice_and_key) {
-        return slice_and_key.slice_.row_range.start() >= end_ || slice_and_key.slice_.row_range.end() <= start_;
-    }), slice_and_keys.end());
-    return structure_by_column_slice(slice_and_keys);
+std::vector<std::vector<size_t>> RowRangeClause::structure_for_processing(
+        std::vector<RangesAndKey>& ranges_and_keys,
+        ARCTICDB_UNUSED size_t start_from) const {
+    ranges_and_keys.erase(std::remove_if(ranges_and_keys.begin(), ranges_and_keys.end(), [this](const RangesAndKey& ranges_and_key) {
+        return ranges_and_key.row_range_.start() >= end_ || ranges_and_key.row_range_.end() <= start_;
+    }), ranges_and_keys.end());
+    return structure_by_column_slice(ranges_and_keys);
 }
 
-Composite<ProcessingUnit> RowRangeClause::process(std::shared_ptr<Store> store,
-                                                  Composite<ProcessingUnit> &&p) const {
-    auto procs = std::move(p);
-    procs.broadcast([&store, this](ProcessingUnit &proc) {
-        for (auto& slice_and_key: proc.data()) {
-            auto row_range = slice_and_key.slice_.row_range;
-            if ((start_ > row_range.start() && start_ < row_range.end()) ||
-                (end_ > row_range.start() && end_ < row_range.end())) {
+Composite<EntityIds> RowRangeClause::process(Composite<EntityIds> &&entity_ids) const {
+    auto procs = gather_entities(component_manager_, std::move(entity_ids));
+    Composite<EntityIds> output;
+    procs.broadcast([&output, this](ProcessingUnit &proc) {
+        for (auto&& [idx, row_range]: folly::enumerate(proc.row_ranges_.value())) {
+            if ((start_ > row_range->start() && start_ < row_range->end()) ||
+                (end_ > row_range->start() && end_ < row_range->end())) {
                 // Zero-indexed within this slice
                 size_t start_row{0};
-                size_t end_row{row_range.diff()};
-                if (start_ > row_range.start() && start_ < row_range.end()) {
-                    start_row = start_ - row_range.start();
+                size_t end_row{row_range->diff()};
+                if (start_ > row_range->start() && start_ < row_range->end()) {
+                    start_row = start_ - row_range->start();
                 }
-                if (end_ > row_range.start() && end_ < row_range.end()) {
-                    end_row = end_ - (row_range.start());
+                if (end_ > row_range->start() && end_ < row_range->end()) {
+                    end_row = end_ - (row_range->start());
                 }
-                auto seg = truncate_segment(slice_and_key.segment(store), start_row, end_row);
-                slice_and_key.slice_.adjust_rows(seg.row_count());
-                slice_and_key.slice_.adjust_columns(seg.descriptor().field_count() - seg.descriptor().index().field_count());
-                slice_and_key.segment_ = std::move(seg);
-            } // else all rows in the slice and key are required, do nothing
+                auto seg = truncate_segment(*proc.segments_->at(idx), start_row, end_row);
+                auto num_rows = seg.is_null() ? 0 : seg.row_count();
+                proc.row_ranges_->at(idx) = std::make_shared<pipelines::RowRange>(proc.row_ranges_->at(idx)->first, proc.row_ranges_->at(idx)->first + num_rows);
+                auto num_cols = seg.is_null() ? 0 : seg.descriptor().field_count() - seg.descriptor().index().field_count();
+                proc.col_ranges_->at(idx) = std::make_shared<pipelines::ColRange>(proc.col_ranges_->at(idx)->first, proc.col_ranges_->at(idx)->first + num_cols);
+                proc.segments_->at(idx) = std::make_shared<SegmentInMemory>(std::move(seg));
+            } // else all rows in this segment are required, do nothing
         }
+        output.push_back(push_entities(component_manager_, std::move(proc)));
     });
-    return procs;
+    return output;
 }
 
 void RowRangeClause::set_processing_config(const ProcessingConfig& processing_config) {
@@ -695,36 +789,37 @@ std::string RowRangeClause::to_string() const {
     return fmt::format("{} {}", row_range_type_ == RowRangeType::HEAD ? "HEAD" : "TAIL", n_);
 }
 
-std::vector<Composite<SliceAndKey>> DateRangeClause::structure_for_processing(
-        std::vector<SliceAndKey>& slice_and_keys, size_t start_from) const {
-    slice_and_keys.erase(std::remove_if(slice_and_keys.begin(), slice_and_keys.end(), [this](const SliceAndKey& slice_and_key) {
-        auto [start_index, end_index] = slice_and_key.key().time_range();
+std::vector<std::vector<size_t>> DateRangeClause::structure_for_processing(
+        std::vector<RangesAndKey>& ranges_and_keys,
+        size_t start_from) const {
+    ranges_and_keys.erase(std::remove_if(ranges_and_keys.begin(), ranges_and_keys.end(), [this](const RangesAndKey& ranges_and_key) {
+        auto [start_index, end_index] = ranges_and_key.key_.time_range();
         return start_index > end_ || end_index <= start_;
-    }), slice_and_keys.end());
-    return structure_by_row_slice(slice_and_keys, start_from);
+    }), ranges_and_keys.end());
+    return structure_by_row_slice(ranges_and_keys, start_from);
 }
 
-Composite<ProcessingUnit> DateRangeClause::process(ARCTICDB_UNUSED std::shared_ptr<Store> store,
-                                                   Composite<ProcessingUnit> &&p) const {
-    auto procs = std::move(p);
-    procs.broadcast([&store, this](ProcessingUnit &proc) {
-        // We are only interested in the index, which is in every SegmentInMemory in proc.data(), so just use the first
-        auto slice_and_key = proc.data()[0];
-        auto row_range = slice_and_key.slice_.row_range;
-        auto [start_index, end_index] = slice_and_key.key().time_range();
+Composite<EntityIds> DateRangeClause::process(Composite<EntityIds> &&entity_ids) const {
+    auto procs = gather_entities(component_manager_, std::move(entity_ids), true, false);
+    Composite<EntityIds> output;
+    procs.broadcast([&output, this](ProcessingUnit &proc) {
+        // We are only interested in the index, which is in every SegmentInMemory in proc.segments_, so just use the first
+        auto row_range = proc.row_ranges_->at(0);
+        auto [start_index, end_index] = proc.atom_keys_->at(0)->time_range();
         if ((start_ > start_index && start_ < end_index) || (end_ >= start_index && end_ < end_index)) {
             size_t start_row{0};
-            size_t end_row{row_range.diff()};
+            size_t end_row{row_range->diff()};
             if (start_ > start_index && start_ < end_index) {
-                start_row = slice_and_key.segment(store).column_ptr(0)->search_sorted<timestamp>(start_);
+                start_row = proc.segments_->at(0)->column_ptr(0)->search_sorted<timestamp>(start_);
             }
             if (end_ >= start_index && end_ < end_index) {
-                end_row = slice_and_key.segment(store).column_ptr(0)->search_sorted<timestamp>(end_, true);
+                end_row = proc.segments_->at(0)->column_ptr(0)->search_sorted<timestamp>(end_, true);
             }
-            proc.truncate(start_row, end_row, store);
+            proc.truncate(start_row, end_row);
         } // else all rows in the processing unit are required, do nothing
+        output.push_back(push_entities(component_manager_, std::move(proc)));
     });
-    return procs;
+    return output;
 }
 
 std::string DateRangeClause::to_string() const {

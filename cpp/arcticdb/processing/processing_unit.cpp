@@ -8,72 +8,72 @@
 #include <arcticdb/processing/processing_unit.hpp>
 
 namespace arcticdb {
+
 void ProcessingUnit::apply_filter(
     const util::BitSet& bitset,
-    const std::shared_ptr<Store>& store,
     PipelineOptimisation optimisation) {
+    internal::check<ErrorCode::E_ASSERTION_FAILURE>(segments_.has_value() && row_ranges_.has_value() && col_ranges_.has_value(),
+                                                    "ProcessingUnit::apply_filter requires all of segments, row_ranges, and col_ranges to be present");
     auto filter_down_stringpool = optimisation == PipelineOptimisation::MEMORY;
 
-    for (auto& slice_and_key: data_) {
-        auto seg = filter_segment(slice_and_key.segment(store),
+    for (auto&& [idx, segment]: folly::enumerate(*segments_)) {
+        auto seg = filter_segment(*segment,
                                   bitset,
                                   filter_down_stringpool);
-        if(!seg.is_null()) {
-            slice_and_key.slice_.adjust_rows(seg.row_count());
-            slice_and_key.slice_.adjust_columns(seg.descriptor().field_count() - seg.descriptor().index().field_count());
-        } else {
-            slice_and_key.slice_.adjust_rows(0u);
-            slice_and_key.slice_.adjust_columns(0u);
-        }
-        slice_and_key.segment_ = std::move(seg);
+        auto num_rows = seg.is_null() ? 0 : seg.row_count();
+        row_ranges_->at(idx) = std::make_shared<pipelines::RowRange>(row_ranges_->at(idx)->first, row_ranges_->at(idx)->first + num_rows);
+        auto num_cols = seg.is_null() ? 0 : seg.descriptor().field_count() - seg.descriptor().index().field_count();
+        col_ranges_->at(idx) = std::make_shared<pipelines::ColRange>(col_ranges_->at(idx)->first, col_ranges_->at(idx)->first + num_cols);
+        segments_->at(idx) = std::make_shared<SegmentInMemory>(std::move(seg));
     }
 }
 
 // Inclusive of start_row, exclusive of end_row
-void ProcessingUnit::truncate(size_t start_row, size_t end_row, const std::shared_ptr<Store>& store) {
-    for (auto& slice_and_key: data_) {
-        auto seg = truncate_segment(slice_and_key.segment(store), start_row, end_row);
-        if(!seg.is_null()) {
-            slice_and_key.slice_.adjust_rows(seg.row_count());
-            slice_and_key.slice_.adjust_columns(seg.descriptor().field_count() - seg.descriptor().index().field_count());
-        } else {
-            slice_and_key.slice_.adjust_rows(0u);
-            slice_and_key.slice_.adjust_columns(0u);
-        }
-        slice_and_key.segment_ = std::move(seg);
+void ProcessingUnit::truncate(size_t start_row, size_t end_row) {
+    internal::check<ErrorCode::E_ASSERTION_FAILURE>(segments_.has_value() && row_ranges_.has_value() && col_ranges_.has_value(),
+                                                    "ProcessingUnit::truncate requires all of segments, row_ranges, and col_ranges to be present");
+
+    for (auto&& [idx, segment]: folly::enumerate(*segments_)) {
+        auto seg = truncate_segment(*segment, start_row, end_row);
+        auto num_rows = seg.is_null() ? 0 : seg.row_count();
+        row_ranges_->at(idx) = std::make_shared<pipelines::RowRange>(row_ranges_->at(idx)->first, row_ranges_->at(idx)->first + num_rows);
+        auto num_cols = seg.is_null() ? 0 : seg.descriptor().field_count() - seg.descriptor().index().field_count();
+        col_ranges_->at(idx) = std::make_shared<pipelines::ColRange>(col_ranges_->at(idx)->first, col_ranges_->at(idx)->first + num_cols);
+        segments_->at(idx) = std::make_shared<SegmentInMemory>(std::move(seg));
     }
 }
 
-VariantData ProcessingUnit::get(const VariantNode &name, const std::shared_ptr<Store> &store) {
+VariantData ProcessingUnit::get(const VariantNode &name) {
+    internal::check<ErrorCode::E_ASSERTION_FAILURE>(segments_.has_value(), "ProcessingUnit::get requires segments to be present");
     return util::variant_match(name,
         [&](const ColumnName &column_name) {
-        for (auto &slice_and_key: data_) {
-            slice_and_key.segment(store).init_column_map();
-            if (auto opt_idx = slice_and_key.segment(store).column_index(column_name.value)) {
+        for (const auto& segment: *segments_) {
+            segment->init_column_map();
+            if (auto opt_idx = segment->column_index(column_name.value)) {
                 return VariantData(ColumnWithStrings(
-                        slice_and_key.segment(store).column_ptr(
+                        segment->column_ptr(
                         position_t(position_t(opt_idx.value()))),
-                        slice_and_key.segment(store).string_pool_ptr()));
+                        segment->string_pool_ptr()));
             }
         }
         // Try multi-index column names
         std::string multi_index_column_name = fmt::format("__idx__{}",
                                                           column_name.value);
-        for (auto &slice_and_key: data_) {
-            if (auto opt_idx = slice_and_key.segment(store).column_index(multi_index_column_name)) {
+        for (const auto& segment: *segments_) {
+            if (auto opt_idx = segment->column_index(multi_index_column_name)) {
                 return VariantData(ColumnWithStrings(
-                        slice_and_key.segment(store).column_ptr(
+                        segment->column_ptr(
                         position_t(opt_idx.value())),
-                        slice_and_key.segment(store).string_pool_ptr()));
+                        segment->string_pool_ptr()));
             }
         }
 
         if (expression_context_ && !expression_context_->dynamic_schema_) {
             internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Column {} not found in {}",
                                                             column_name,
-                                                            data_[0].segment(store).descriptor());
+                                                            segments_->at(0)->descriptor());
         } else {
-            log::version().debug("Column {} not found in {}", column_name, data_[0].segment(store).descriptor());
+            log::version().debug("Column {} not found in {}", column_name, segments_->at(0)->descriptor());
             return VariantData{EmptyResult{}};
         }
         },
@@ -89,7 +89,7 @@ VariantData ProcessingUnit::get(const VariantNode &name, const std::shared_ptr<S
             return computed->second;
         } else {
             auto expr = expression_context_->expression_nodes_.get_value(expression_name.value);
-            auto data = expr->compute(self(), store);
+            auto data = expr->compute(self());
             computed_data_.try_emplace(expression_name.value, data);
             return data;
         }
@@ -98,7 +98,6 @@ VariantData ProcessingUnit::get(const VariantNode &name, const std::shared_ptr<S
         util::raise_rte("ProcessingUnit::get called with monostate VariantNode");
     }
     );
-    util::raise_rte("Unexpected value, or expression");
 }
 
 } //namespace arcticdb
