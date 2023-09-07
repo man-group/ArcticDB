@@ -32,7 +32,9 @@ def real_s3_credentials(shared_path: bool = True):
 
 def get_real_s3_uri(shared_path: bool = True):
     endpoint, bucket, region, access_key, secret_key, path_prefix, _ = real_s3_credentials(shared_path)
-    aws_uri = f"s3s://{endpoint}:{bucket}?access={access_key}&secret={secret_key}&region={region}&path_prefix={path_prefix}"
+    aws_uri = (
+        f"s3s://{endpoint}:{bucket}?access={access_key}&secret={secret_key}&region={region}&path_prefix={path_prefix}"
+    )
     return aws_uri
 
 
