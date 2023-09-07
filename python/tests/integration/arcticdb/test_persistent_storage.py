@@ -64,7 +64,6 @@ def test_real_s3_storage_write(three_col_df):
     three_df = three_col_df(3)
     lib.append("three", three_df)
     val = lib.read("three")
-    # TODO: assert three_df.equals(val.data)
 
 
 @pytest.mark.parametrize(
