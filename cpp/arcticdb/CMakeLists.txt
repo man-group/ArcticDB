@@ -238,6 +238,7 @@ set(arcticdb_srcs
         pipeline/write_frame.hpp
         pipeline/write_options.hpp
         processing/aggregation.hpp
+        processing/component_manager.hpp
         processing/operation_dispatch.hpp
         processing/operation_dispatch_binary.hpp
         processing/operation_dispatch_unary.hpp
@@ -388,6 +389,7 @@ set(arcticdb_srcs
         processing/processing_unit.cpp
         processing/aggregation.cpp
         processing/clause.cpp
+        processing/component_manager.cpp
         processing/expression_node.cpp
         processing/operation_dispatch.cpp
         processing/operation_dispatch_unary.cpp
@@ -720,9 +722,11 @@ if(${TEST})
             log/test/test_log.cpp
             pipeline/test/test_container.hpp
             pipeline/test/test_pipeline.cpp
-            pipeline/test/test_query.cpp util/test/test_regex.cpp
+            pipeline/test/test_query.cpp
+            util/test/test_regex.cpp
             processing/test/test_arithmetic_type_promotion.cpp
             processing/test/test_clause.cpp
+            processing/test/test_component_manager.cpp
             processing/test/test_expression.cpp
             processing/test/test_has_valid_type_promotion.cpp
             processing/test/test_operation_dispatch.cpp
@@ -734,7 +738,6 @@ if(${TEST})
             storage/test/test_mongo_storage.cpp
             storage/test/test_s3_storage.cpp
             storage/test/test_storage_factory.cpp
-            stream/test/stream_test_common.cpp
             stream/test/stream_test_common.cpp
             stream/test/test_aggregator.cpp
             stream/test/test_append_map.cpp

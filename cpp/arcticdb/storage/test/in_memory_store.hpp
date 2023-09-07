@@ -47,11 +47,9 @@ namespace arcticdb {
             return false;
         }
 
-        std::vector<Composite<ProcessingUnit>> batch_read_uncompressed(
-                std::vector<Composite<pipelines::SliceAndKey>> &&,
-                const std::vector<std::shared_ptr<Clause>>&,
-                const std::shared_ptr<std::unordered_set<std::string>>&,
-                const BatchReadArgs &) override {
+        std::vector<folly::Future<pipelines::SegmentAndSlice>> batch_read_uncompressed(
+                std::vector<pipelines::RangesAndKey>&&,
+                std::shared_ptr<std::unordered_set<std::string>>) override {
             throw std::runtime_error("Not implemented for tests");
         }
 

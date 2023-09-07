@@ -225,12 +225,6 @@ public:
         [[nodiscard]] size_t row_pos() const { return row_id_; }
 
         template<class IndexType>
-            auto index() {
-            using RawType =  typename IndexType::TypeDescTag::DataTypeTag::raw_type;
-            return parent_->scalar_at<RawType>(row_id_, 0).value();
-        }
-
-        template<class IndexType>
         [[nodiscard]] auto index() const {
             using RawType =  typename IndexType::TypeDescTag::DataTypeTag::raw_type;
             return parent_->scalar_at<RawType>(row_id_, 0).value();

@@ -120,6 +120,10 @@ struct Composite {
 
         ARCTICDB_MOVE_ONLY_DEFAULT(Composite)
 
+        [[nodiscard]] bool is_single() const {
+            return values_.size() == 1 && std::holds_alternative<T>(values_[0]);
+        }
+
         [[nodiscard]] size_t size() const {
             return std::accumulate(std::begin(values_), std::end(values_), 0, [](size_t n, const ValueType &v) {
                 return util::variant_match(v,
