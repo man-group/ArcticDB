@@ -140,10 +140,16 @@ class S3LibraryAdapter(ArcticLibraryAdapter):
 
     def get_storage_override(self) -> StorageOverride:
         s3_override = S3Override()
-        if self._query_params.access:
-            s3_override.credential_name = self._query_params.access
-        if self._query_params.secret:
-            s3_override.credential_key = self._query_params.secret
+        # storage_override will overwrite access and key while reading config from storage
+        # access and secret whether equals to _RBAC_ are used for determining aws_auth is true on C++ layer
+        if self._query_params.aws_auth:
+            s3_override.credential_name = USE_AWS_CRED_PROVIDERS_TOKEN
+            s3_override.credential_key = USE_AWS_CRED_PROVIDERS_TOKEN
+        else:
+            if self._query_params.access:
+                s3_override.credential_name = self._query_params.access
+            if self._query_params.secret:
+                s3_override.credential_key = self._query_params.secret
         if self._query_params.region:
             s3_override.region = self._query_params.region
         if self._endpoint:
