@@ -454,7 +454,7 @@ def test_delete_version(arctic_library):
 def test_non_existent_list_versions_latest_only(arctic_library):
     lib = arctic_library
     df = pd.DataFrame({"col1": [1, 2, 3], "col2": [4, 5, 6]})
-    assert len(lib.list_versions('symbol', latest_only=True)) == 0
+    assert len(lib.list_versions("symbol", latest_only=True)) == 0
 
 def test_delete_version_with_snapshot(arctic_library):
     lib = arctic_library
