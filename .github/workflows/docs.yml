@@ -56,7 +56,7 @@ jobs:
       - name: MkDocs
         run: |
           echo "::group::Pip"
-          pip3 install mkdocs-material
+          pip3 install mkdocs-jupyter
           echo "::endgroup::"
 
           cd docs/mkdocs
