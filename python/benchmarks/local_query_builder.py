@@ -15,7 +15,7 @@ class LocalQueryBuilderFunctions:
     number = 5
     timeout = 6000
 
-    params = [10_000, 100_000]
+    params = [1_000_000, 10_000_000]
     param_names = ["num_rows"]
 
     def setup_cache(self):
@@ -36,7 +36,54 @@ class LocalQueryBuilderFunctions:
         self.ac = Arctic("lmdb://query_builder?map_size=5GB")
         self.lib_name = "query_builder"
 
+    # Omit string columns in filtering/projection benchmarks to avoid time/memory being dominated by Python string
+    # allocation
+    def time_filtering_numeric(self, num_rows):
+        lib = self.ac[self.lib_name]
+        q = QueryBuilder()
+        # v3 is random floats between 0 and 100
+        q = q[q["v3"] < 1.0]
+        lib.read(f"{num_rows}_rows", columns=["v3"], query_builder=q)
+
+    def peakmem_filtering_numeric(self, num_rows):
+        lib = self.ac[self.lib_name]
+        q = QueryBuilder()
+        # v3 is random floats between 0 and 100
+        q = q[q["v3"] < 10.0]
+        lib.read(f"{num_rows}_rows", columns=["v3"], query_builder=q)
+
+    def time_filtering_string_isin(self, num_rows):
+        lib = self.ac[self.lib_name]
+        # Selects about 1% of the rows
+        k = num_rows // 1000
+        string_set = [f"id{str(i).zfill(3)}" for i in range(1, k + 1)]
+        q = QueryBuilder()
+        q = q[q["id1"].isin(string_set)]
+        lib.read(f"{num_rows}_rows", columns=["v3"], query_builder=q)
+
+    def peakmem_filtering_string_isin(self, num_rows):
+        lib = self.ac[self.lib_name]
+        # Selects about 1% of the rows
+        k = num_rows // 1000
+        string_set = [f"id{str(i).zfill(3)}" for i in range(1, k + 1)]
+        q = QueryBuilder()
+        q = q[q["id1"].isin(string_set)]
+        lib.read(f"{num_rows}_rows", columns=["v3"], query_builder=q)
+
+    def time_projection(self, num_rows):
+        lib = self.ac[self.lib_name]
+        q = QueryBuilder()
+        q = q.apply("new_col", q["v2"] * q["v3"])
+        lib.read(f"{num_rows}_rows", columns=["new_col"], query_builder=q)
+
+    def peakmem_projection(self, num_rows):
+        lib = self.ac[self.lib_name]
+        q = QueryBuilder()
+        q = q.apply("new_col", q["v2"] * q["v3"])
+        lib.read(f"{num_rows}_rows", columns=["new_col"], query_builder=q)
+
     # The names are based on the queries used here: https://duckdblabs.github.io/db-benchmark/
+    # Don't rename to distinguish from other query tests as renaming makes it a new benchmark, losing historic results
     def time_query_1(self, num_rows):
         lib = self.ac[self.lib_name]
         q = QueryBuilder()

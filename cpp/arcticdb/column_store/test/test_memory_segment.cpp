@@ -203,7 +203,7 @@ TEST(MemSegment, StdFindIf) {
     auto num_rows = 100u;
     auto frame_wrapper = get_test_timeseries_frame("modify", num_rows, 0);
     auto &segment = frame_wrapper.segment_;
-    auto it = std::find_if(std::begin(segment), std::end(segment), [] (auto& row) { return row.template index<TimeseriesIndex>() == 50; });
+    auto it = std::find_if(std::begin(segment), std::end(segment), [] (SegmentInMemory::Row& row) { return row.template index<TimeseriesIndex>() == 50; });
     auto val_it = it->begin();
     ASSERT_EQ(it->index<TimeseriesIndex>(), 50);
     std::advance(val_it, 1);
@@ -215,10 +215,10 @@ TEST(MemSegment, LowerBound) {
     auto frame_wrapper = get_test_timeseries_frame("modify", num_rows, 0);
     auto &segment = frame_wrapper.segment_;
     auto odds_segment = SegmentInMemory{segment.descriptor(), num_rows / 2};
-    std::copy_if(std::begin(segment), std::end(segment), std::back_inserter(odds_segment), [](auto& row) {
+    std::copy_if(std::begin(segment), std::end(segment), std::back_inserter(odds_segment), [](SegmentInMemory::Row& row) {
         return row.template index<TimeseriesIndex>() & 1;
     });
-    auto lb = std::lower_bound(std::begin(odds_segment), std::end(odds_segment), timestamp(50), [] (auto& row, timestamp t) {return row.template index<TimeseriesIndex>() < t; });
+    auto lb = std::lower_bound(std::begin(odds_segment), std::end(odds_segment), timestamp(50), [] (SegmentInMemory::Row& row, timestamp t) {return row.template index<TimeseriesIndex>() < t; });
     ASSERT_EQ(lb->index<TimeseriesIndex>(), 51);
 }
 

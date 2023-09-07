@@ -14,6 +14,7 @@
 
 #include <arcticdb/async/task_scheduler.hpp>
 #include <arcticdb/column_store/memory_segment.hpp>
+#include <arcticdb/processing/component_manager.hpp>
 #include <arcticdb/processing/expression_context.hpp>
 #include <arcticdb/processing/expression_node.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>
@@ -30,92 +31,71 @@ namespace arcticdb {
 
     /*
      * A processing unit is designed to be used in conjunction with the clause processing framework.
-     * Each clause will execute in turn and will be passed the same mutable ProcessingUnit which it will have free
-     * rein to modify prior to passing off to the next clause. In contract, clauses and the expression trees contained
-     * within are immutable as they represent predefined behaviour.
+     * At the start of each clause's process method ProcessingUnits are constructed from the provided entity IDs.
+     * All clauses at time of writing need segments, row ranges, and column ranges. Some also require atom keys and
+     * the partitioning bucket. In this case the previous clause must have populated these fields in the component
+     * manager for the specified entity IDs, otherwise an assertion will fail.
+     * At the end of the clause process method, any of these optional fields that are present will be pushed to the
+     * component manager.
+     * For the components stored in vectors, the vectors must be the same length, and the segment, row range, column
+     * range, and atom key that share an index in their respective vectors are associated.
      *
-     * ProcessingUnit contains two main member attributes:
-     *
-     * ExpressionContext: This contains the expression tree for the currently running clause - each clause contains an
-     * expression tree containing nodes that map to columns, constant values or other nodes in the tree. This allows
-     * for the processing of expressions such as `(df['a'] + 4) < df['b']`. One instance of an expression context can be
-     * shared across many ProcessingUnit's. See ExpressionContext class for more documentation.
-     *
-     * computed_data_: This contains a map from node name to previously computed result. Should an expression such as
-     * df['col1'] + 1 appear multiple times in the tree this allows us to only perform the computation once and spill
-     * the result to disk.
+     * In addition, the expression context is a constant, representing the AST for computing expressions in filter and
+     * projection clauses.
+     * computed_data_ holds a map from a string representation of a [sub-]expression of the AST to a computed value
+     * of this expression. This way, if an expression appears twice in the AST, we will only compute it once.
      */
     struct ProcessingUnit {
-        // We want a collection of SliceAndKeys here so that we have all of the columns for a given row present in a single
-        // ProcessingUnit, for 2 reasons:
-        // 1: For binary operations in ExpressionNode involving 2 columns, we need both available in a single processing
-        //    segment in order for "get" calls to make sense
-        // 2: As "get" uses cached results where possible, it is not obvious which processing unit should hold the
-        //    cached result for operations involving 2 columns (probably both). By moving these cached results up a level
-        //    to contain all the information for a given row, this becomes unambiguous.
-        std::vector<pipelines::SliceAndKey> data_;
+        std::optional<std::vector<std::shared_ptr<SegmentInMemory>>> segments_;
+        std::optional<std::vector<std::shared_ptr<pipelines::RowRange>>> row_ranges_;
+        std::optional<std::vector<std::shared_ptr<pipelines::ColRange>>> col_ranges_;
+        std::optional<std::vector<std::shared_ptr<AtomKey>>> atom_keys_;
+        std::optional<bucket_id> bucket_;
+
         std::shared_ptr<ExpressionContext> expression_context_;
         std::unordered_map<std::string, VariantData> computed_data_;
 
-        // Set by PartitioningClause
-        std::optional<size_t> bucket_;
-
         ProcessingUnit() = default;
 
-        ProcessingUnit(SegmentInMemory &&seg,
-                       pipelines::FrameSlice&& slice,
-                       std::optional<size_t> bucket = std::nullopt) :
-                bucket_(bucket) {
-            data_.emplace_back(pipelines::SliceAndKey{std::move(seg), std::move(slice)});
+        ProcessingUnit(SegmentInMemory&& seg,
+                       std::optional<pipelines::RowRange>&& row_range=std::nullopt,
+                       std::optional<pipelines::ColRange>&& col_range=std::nullopt) {
+            auto segment_in_memory = std::move(seg);
+            auto rows = row_range.value_or(RowRange(0, segment_in_memory.row_count()));
+            auto cols = col_range.value_or(ColRange(0, segment_in_memory.is_null() ? 0 : segment_in_memory.descriptor().field_count() - segment_in_memory.descriptor().index().field_count()));
+            segments_.emplace({std::make_shared<SegmentInMemory>(std::move(segment_in_memory))});
+            row_ranges_.emplace({std::make_shared<pipelines::RowRange>(std::move(rows))});
+            col_ranges_.emplace({std::make_shared<pipelines::ColRange>(std::move(cols))});
+
         }
 
-        explicit ProcessingUnit(pipelines::SliceAndKey &&sk,
-                                std::optional<size_t> bucket = std::nullopt) :
-                bucket_(bucket) {
-            data_.emplace_back(pipelines::SliceAndKey{std::move(sk)});
+        void set_segments(std::vector<std::shared_ptr<SegmentInMemory>>&& segments) {
+            segments_.emplace(std::move(segments));
         }
 
-        explicit ProcessingUnit(std::vector<pipelines::SliceAndKey> &&sk,
-                                std::optional<size_t> bucket = std::nullopt) :
-                bucket_(bucket) {
-            data_ = std::move(sk);
+        void set_row_ranges(std::vector<std::shared_ptr<pipelines::RowRange>>&& row_ranges) {
+            row_ranges_.emplace(std::move(row_ranges));
         }
 
-        explicit ProcessingUnit(SegmentInMemory &&seg,
-                                std::optional<size_t> bucket = std::nullopt) :
-                bucket_(bucket) {
-            data_.emplace_back(pipelines::SliceAndKey{std::move(seg)});
+        void set_col_ranges(std::vector<std::shared_ptr<pipelines::ColRange>>&& col_ranges) {
+            col_ranges_.emplace(std::move(col_ranges));
         }
 
-        std::vector<pipelines::SliceAndKey>&& release_data() {
-            return std::move(data_);
+        void set_atom_keys(std::vector<std::shared_ptr<AtomKey>>&& atom_keys) {
+            atom_keys_.emplace(std::move(atom_keys));
         }
 
-        std::vector<pipelines::SliceAndKey>& data() {
-            return data_;
-        }
-
-        const std::vector<pipelines::SliceAndKey>& data() const {
-            return data_;
+        void set_bucket(bucket_id bucket) {
+            bucket_.emplace(bucket);
         }
 
         ProcessingUnit &self() {
             return *this;
         }
 
-        size_t get_bucket(){
-            internal::check<ErrorCode::E_ASSERTION_FAILURE>(bucket_.has_value(),
-                                                            "ProcessingUnit::get_bucket called, but bucket_ has no value");
-            return *bucket_;
-        }
+        void apply_filter(const util::BitSet& bitset, PipelineOptimisation optimisation);
 
-        void set_bucket(size_t bucket) {
-            bucket_ = bucket;
-        }
-
-        void apply_filter(const util::BitSet& bitset, const std::shared_ptr<Store>& store, PipelineOptimisation optimisation);
-
-        void truncate(size_t start_row, size_t end_row, const std::shared_ptr<Store>& store);
+        void truncate(size_t start_row, size_t end_row);
 
         void set_expression_context(const std::shared_ptr<ExpressionContext>& expression_context) {
             expression_context_ = expression_context;
@@ -124,7 +104,7 @@ namespace arcticdb {
         // The name argument to this function is either a column/value name, or uniquely identifies an ExpressionNode object.
         // If this function has been called before with the same ExpressionNode name, then we cache the result in the
         // computed_data_ map to avoid duplicating work.
-        VariantData get(const VariantNode &name, const std::shared_ptr<Store> &store);
+        VariantData get(const VariantNode &name);
     };
 
     inline std::vector<pipelines::SliceAndKey> collect_segments(Composite<ProcessingUnit>&& p) {
@@ -133,12 +113,17 @@ namespace arcticdb {
 
         procs.broadcast([&output] (auto&& p) {
             auto proc = std::forward<ProcessingUnit>(p);
-            auto slice_and_keys = proc.release_data();
-            std::move(std::begin(slice_and_keys), std::end(slice_and_keys), std::back_inserter(output));
+            internal::check<ErrorCode::E_ASSERTION_FAILURE>(proc.segments_.has_value() && proc.row_ranges_.has_value() && proc.col_ranges_.has_value(),
+                                                            "collect_segments requires all of segments, row_ranges, and col_ranges to be present");
+            for (auto&& [idx, segment]: folly::enumerate(*proc.segments_)) {
+                pipelines::FrameSlice frame_slice(*proc.col_ranges_->at(idx), *proc.row_ranges_->at(idx));
+                output.emplace_back(std::move(*segment), std::move(frame_slice));
+            }
         });
 
         return output;
     }
+
 
     template<typename Grouper, typename Bucketizer>
     std::pair<std::vector<std::optional<uint8_t>>, std::vector<uint64_t>> get_buckets(
@@ -180,16 +165,15 @@ namespace arcticdb {
 
     template<typename GrouperType, typename BucketizerType>
     Composite<ProcessingUnit> partition_processing_segment(
-            const std::shared_ptr<Store>& store,
             ProcessingUnit& input,
             const ColumnName& grouping_column_name,
             bool dynamic_schema) {
 
         Composite<ProcessingUnit> output;
-        auto get_result = input.get(ColumnName(grouping_column_name), store);
+        auto get_result = input.get(ColumnName(grouping_column_name));
         if (std::holds_alternative<ColumnWithStrings>(get_result)) {
             auto partitioning_column = std::get<ColumnWithStrings>(get_result);
-            partitioning_column.column_->type().visit_tag([&output, &input, &partitioning_column, &store](auto type_desc_tag) {
+            partitioning_column.column_->type().visit_tag([&output, &input, &partitioning_column](auto type_desc_tag) {
                 using TypeDescriptorTag = decltype(type_desc_tag);
                 using DescriptorType = std::decay_t<TypeDescriptorTag>;
                 using TagType =  typename DescriptorType::DataTypeTag;
@@ -206,25 +190,28 @@ namespace arcticdb {
                                             num_buckets);
                         num_buckets = std::numeric_limits<uint8_t>::max();
                     }
-                    std::vector<ProcessingUnit> procs{static_cast<size_t>(num_buckets)};
+                    std::vector<ProcessingUnit> procs{static_cast<bucket_id>(num_buckets)};
                     BucketizerType bucketizer(num_buckets);
                     auto [row_to_bucket, bucket_counts] = get_buckets(partitioning_column, grouper, bucketizer);
-                    for (auto &seg_slice_and_key: input.data()) {
-                        const SegmentInMemory &seg = seg_slice_and_key.segment(store);
-                        auto new_segs = partition_segment(seg, row_to_bucket, bucket_counts);
-                        for (auto &&new_seg: folly::enumerate(new_segs)) {
-                            if (bucket_counts.at(new_seg.index) > 0) {
-                                pipelines::FrameSlice new_slice{seg_slice_and_key.slice()};
-                                new_slice.adjust_rows(new_seg->row_count());
-                                procs.at(new_seg.index).data().emplace_back(
-                                        pipelines::SliceAndKey{std::move(*new_seg), std::move(new_slice)});
+                    for (auto&& [input_idx, seg]: folly::enumerate(input.segments_.value())) {
+                        auto new_segs = partition_segment(*seg, row_to_bucket, bucket_counts);
+                        for (auto && [output_idx, new_seg]: folly::enumerate(new_segs)) {
+                            if (bucket_counts.at(output_idx) > 0) {
+                                if (!procs.at(output_idx).segments_.has_value()) {
+                                    procs.at(output_idx).segments_ = std::make_optional<std::vector<std::shared_ptr<SegmentInMemory>>>();
+                                    procs.at(output_idx).row_ranges_ = std::make_optional<std::vector<std::shared_ptr<pipelines::RowRange>>>();
+                                    procs.at(output_idx).col_ranges_ = std::make_optional<std::vector<std::shared_ptr<pipelines::ColRange>>>();
+                                }
+                                procs.at(output_idx).segments_->emplace_back(std::make_shared<SegmentInMemory>(std::move(new_seg)));
+                                procs.at(output_idx).row_ranges_->emplace_back(input.row_ranges_->at(input_idx));
+                                procs.at(output_idx).col_ranges_->emplace_back(input.col_ranges_->at(input_idx));
                             }
                         }
                     }
-                    for (auto &&proc: folly::enumerate(procs)) {
-                        if (bucket_counts.at(proc.index) > 0) {
-                            proc->set_bucket(proc.index);
-                            output.push_back(std::move(*proc));
+                    for (auto&& [idx, proc]: folly::enumerate(procs)) {
+                        if (bucket_counts.at(idx) > 0) {
+                            proc.bucket_ = idx;
+                            output.push_back(std::move(proc));
                         }
                     }
                 }
