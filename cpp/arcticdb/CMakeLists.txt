@@ -44,6 +44,9 @@ find_package(mongocxx REQUIRED)
 find_package(bsoncxx REQUIRED)
 find_package(zstd CONFIG REQUIRED)  # "CONFIG" bypasses our cpp/CMake/FindZstd.cmake module
 
+find_package(azure-identity-cpp CONFIG REQUIRED)
+find_package(azure-storage-blobs-cpp CONFIG REQUIRED)
+
 if(${BUILD_WITH_REMOTERY})
     add_compile_definitions(USE_REMOTERY)
 endif()
@@ -390,6 +393,9 @@ set(arcticdb_srcs
         python/python_to_tensor_frame.cpp
         storage/config_resolvers.cpp
         storage/failure_simulation.cpp
+        storage/azure/azure_storage-inl.hpp
+        storage/azure/azure_storage.hpp
+        storage/azure/azure_storage.cpp
         storage/lmdb/lmdb_storage.cpp
         storage/mongo/mongo_client.cpp
         storage/mongo/mongo_instance.cpp
@@ -421,15 +427,12 @@ set(arcticdb_srcs
         version/version_core.cpp
         version/version_store_api.cpp
         version/version_utils.cpp
-        version/symbol_list.cpp )
+        version/symbol_list.cpp)
 
 # Exclude vendored sources when using conda.
-if(NOT ${ARCTICDB_USING_CONDA}) #Awaiting Azure sdk support in conda https://github.com/man-group/ArcticDB/issues/519
+if(NOT ${ARCTICDB_USING_CONDA})
     list (APPEND arcticdb_srcs
         util/third_party/robin_hood.hpp
-        storage/azure/azure_storage-inl.hpp
-        storage/azure/azure_storage.hpp
-        storage/azure/azure_storage.cpp
     )
 endif()
 
@@ -487,16 +490,9 @@ set (arcticdb_core_libraries
         ${ARCTICDB_MONGO_LIBS}
         spdlog::spdlog
         Folly::folly # Transitively includes: double-conversion, gflags, glog, libevent, libssl, libcrypto, libiberty, libsodium
-        )
-
-if(NOT ${ARCTICDB_USING_CONDA})  #Awaiting Azure sdk support in conda https://github.com/man-group/ArcticDB/issues/519
-    find_package(azure-identity-cpp CONFIG REQUIRED)
-    find_package(azure-storage-blobs-cpp CONFIG REQUIRED)
-    list (APPEND arcticdb_core_libraries
         Azure::azure-identity
         Azure::azure-storage-blobs
-    )
-endif()
+)
 
 # Dependencies expose different names of their libraries depending
 # on their origin (i.e. vendored source or packages on conda-forge).
