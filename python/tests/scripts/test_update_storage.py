@@ -1,6 +1,8 @@
 import sys
 
 import pytest
+import pandas as pd
+from pandas.util.testing import assert_frame_equal
 
 from arcticdb import Arctic
 from arcticdb.scripts.update_storage import run
@@ -109,6 +111,14 @@ def test_upgrade_script_s3_rbac_ok(moto_s3_endpoint_and_credentials, monkeypatch
     assert s3_storage.bucket_name == bucket
     assert s3_storage.credential_name == USE_AWS_CRED_PROVIDERS_TOKEN
     assert s3_storage.credential_key == USE_AWS_CRED_PROVIDERS_TOKEN
+
+    expected = pd.DataFrame({"col1": [1, 2, 3], "col2": [4, 5, 6]})
+    sym = "test"
+    ac = Arctic(uri)
+    ac[LIB_NAME].write(sym, expected)
+
+    ac = Arctic(uri)  # Force load lib config from storage, to check "storage-overridened" config
+    assert_frame_equal(expected, ac[LIB_NAME].read(sym).data)
 
 
 # Side effect needed from "_create_container" fixture
