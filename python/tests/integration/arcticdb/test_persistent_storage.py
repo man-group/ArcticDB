@@ -8,7 +8,7 @@ from arcticdb.util.storage_test import (
     generate_pseudo_random_dataframe,
     generate_ascending_dataframe,
     verify_ascending_dataframe,
-    verify_pseudo_random_dataframe
+    verify_pseudo_random_dataframe,
 )
 from tests.conftest import PERSISTENT_STORAGE_TESTS_ENABLED
 
@@ -67,10 +67,13 @@ def test_real_s3_storage_write(three_col_df):
     # TODO: assert three_df.equals(val.data)
 
 
-@pytest.mark.parametrize("num_rows", [
-    1_000_000,
-    # 10_000_000
-])
+@pytest.mark.parametrize(
+    "num_rows",
+    [
+        1_000_000,
+        # 10_000_000
+    ],
+)
 @pytest.mark.skipif(
     not PERSISTENT_STORAGE_TESTS_ENABLED, reason="This test should run only if the persistent storage tests are enabled"
 )
@@ -84,11 +87,15 @@ def test_persistent_storage_read_write_large_data_ascending(arctic_client, num_r
     result_df = lib.read(sym).data
     verify_ascending_dataframe(result_df, num_rows)
 
-@pytest.mark.parametrize("num_rows", [
-    1_000_000,
-    # 10_000_000,
-    # 100_000_000
-])
+
+@pytest.mark.parametrize(
+    "num_rows",
+    [
+        1_000_000,
+        # 10_000_000,
+        # 100_000_000
+    ],
+)
 @pytest.mark.skipif(
     not PERSISTENT_STORAGE_TESTS_ENABLED, reason="This test should run only if the persistent storage tests are enabled"
 )
