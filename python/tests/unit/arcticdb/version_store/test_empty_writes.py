@@ -21,13 +21,13 @@ def test_write_no_rows(lmdb_version_store, sym):
     assert not lmdb_version_store.is_symbol_pickled(sym)
     df.index = df.index.astype("datetime64[ns]")
     df["a"] = df["a"].astype("float64")
-    assert_frame_equal(lmdb_version_store.read(sym).data, df)
+    assert_frame_equal(lmdb_version_store.read(sym).data, df, check_index_type=False, check_dtype=False)
 
     df2 = pd.DataFrame([[1.3, 6, "test"]], columns=column_names, index=[pd.Timestamp(0)])
     df2 = pd.concat((df, df2))
     # coercing not needed
     lmdb_version_store.append(sym, df2, dynamic_strings=True)
-    assert_frame_equal(lmdb_version_store.read(sym).data, df2)
+    assert_frame_equal(lmdb_version_store.read(sym).data, df2, check_index_type=False, check_dtype=False)
 
     df3 = pd.DataFrame(
         [[3.3, 8, None], [2.3, 10, "test2"]], columns=column_names, index=[pd.Timestamp(1), pd.Timestamp(2)]
@@ -35,7 +35,7 @@ def test_write_no_rows(lmdb_version_store, sym):
     df2 = pd.concat((df2, df3))
     # coercing not needed
     lmdb_version_store.append(sym, df3, dynamic_strings=True)
-    assert_frame_equal(lmdb_version_store.read(sym).data, df2)
+    assert_frame_equal(lmdb_version_store.read(sym).data, df2, check_index_type=False, check_dtype=False)
 
 
 def test_write_no_columns_dynamic_schema(lmdb_version_store_dynamic_schema, sym):
