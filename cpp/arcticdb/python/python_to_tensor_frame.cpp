@@ -108,7 +108,10 @@ NativeTensor obj_to_tensor(PyObject *ptr) {
         }
     }
 
-    auto dt = combine_data_type(val_type, get_size_bits(val_bytes));
+    // When processing empty collections, the size bits have to be `SizeBits::S64`,
+    // and we can't use `val_bytes` to get this information since some dtype have another `elsize` than 8.
+    SizeBits size_bits = val_type == ValueType::EMPTY ? SizeBits::S64 : get_size_bits(val_bytes);
+    auto dt = combine_data_type(val_type, size_bits);
     ssize_t nbytes = size * descr->elsize;
     return {nbytes, ndim, arr->strides, arr->dimensions, dt, descr->elsize, arr->data};
 }
