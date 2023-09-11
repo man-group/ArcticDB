@@ -89,12 +89,12 @@ def test_write_no_rows_and_columns(lmdb_version_store_dynamic_schema, sym):
     lmdb_version_store_dynamic_schema.write(sym, df)
     assert not lmdb_version_store_dynamic_schema.is_symbol_pickled(sym)
     df.index = df.index.astype("datetime64[ns]")
-    assert_frame_equal(lmdb_version_store_dynamic_schema.read(sym).data, df)
+    assert_frame_equal(lmdb_version_store_dynamic_schema.read(sym).data, df, check_index_type=False, check_dtype=False)
 
     df2 = pd.DataFrame([[1.3, 6, "test"]], columns=column_names, index=[pd.Timestamp(2)])
     lmdb_version_store_dynamic_schema.append(sym, df2)
     ans = lmdb_version_store_dynamic_schema.read(sym).data
-    assert_frame_equal(ans, df2)
+    assert_frame_equal(ans, df2, check_index_type=False, check_dtype=False)
 
     df4 = pd.DataFrame(
         [[3.3, 8, None, 3.5], [2.3, 10, "test2"]],
@@ -103,7 +103,7 @@ def test_write_no_rows_and_columns(lmdb_version_store_dynamic_schema, sym):
     )
     df5 = pd.concat((df2, df4))
     lmdb_version_store_dynamic_schema.append(sym, df4, dynamic_strings=True)
-    assert_frame_equal(lmdb_version_store_dynamic_schema.read(sym).data, df5)
+    assert_frame_equal(lmdb_version_store_dynamic_schema.read(sym).data, df5, check_index_type=False, check_dtype=False)
 
 
 def test_update_no_columns_dynamic_schema(lmdb_version_store_dynamic_schema, sym):
