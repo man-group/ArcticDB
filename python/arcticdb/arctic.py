@@ -103,6 +103,8 @@ class Arctic:
                 |                           | "/etc/pki/tls/cacert.pem"                             OpenELEC                                                                                                |
                 |                           | "/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem"   CentOS/RHEL 7                                                                                           |
                 |                           | "/etc/ssl/cert.pem"                                   Alpine Linux                                                                                            |
+                |                           | WARNING for WINDOWS USER: Not leaving this empty will switch the backend support of Azure SDK from winhttp to libcurl. If ca cert path is needed to be        |
+                |                           | specified, set it in Windows setting so winhttp will be used still                                                                                            |
                 +---------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------+
 
                 Exception: Azure exceptions message always ends with `{AZURE_SDK_HTTP_STATUS_CODE}:{AZURE_SDK_REASON_PHRASE}`.
