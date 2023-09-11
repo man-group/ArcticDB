@@ -729,7 +729,7 @@ class DataFrameNormalizer(_PandasNormalizer):
                 # `pd.Categorical.from_codes` from `pandas~=0.25.x` (pandas' supported version for python 3.6)
                 # does not support `codes` of `dtype=object`: it has to have an integral dtype.
                 # See: https://github.com/pandas-dev/pandas/blob/0.25.x/pandas/core/arrays/categorical.py#L688-L704
-                if IS_PANDAS_ZERO and codes.dtype is object:
+                if IS_PANDAS_ZERO:
                     codes = np.asarray(codes, dtype=int)
                 df[key] = pd.Categorical.from_codes(codes=codes, categories=category_info)
         for key in norm_meta.common.int_categories:
