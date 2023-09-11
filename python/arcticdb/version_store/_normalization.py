@@ -25,7 +25,7 @@ from mmap import mmap
 from collections import Counter
 from arcticdb.exceptions import ArcticNativeException, ArcticDbNotYetImplemented
 from arcticdb.supported_types import DateRangeInput, time_types as supported_time_types
-from arcticdb.util._versions import IS_PANDAS_TWO
+from arcticdb.util._versions import IS_PANDAS_TWO, IS_PANDAS_ZERO
 from arcticdb.version_store.read_result import ReadResult
 from arcticdb_ext.version_store import SortedValue as _SortedValue
 from pandas.core.internals import make_block
@@ -725,8 +725,13 @@ class DataFrameNormalizer(_PandasNormalizer):
         for key in norm_meta.common.categories:
             if key in data:
                 category_info = list(norm_meta.common.categories[key].category)
-                res = pd.Categorical.from_codes(codes=data[key], categories=category_info)
-                df[key] = res
+                codes = data[key]
+                # `pd.Categorical.from_codes` from `pandas~=0.25.x` (pandas' supported version for python 3.6)
+                # does not support `codes` of `dtype=object`: it has to have an integral dtype.
+                # See: https://github.com/pandas-dev/pandas/blob/0.25.x/pandas/core/arrays/categorical.py#L688-L704
+                if IS_PANDAS_ZERO and codes.dtype is object:
+                    codes = np.asarray(codes, dtype=int)
+                df[key] = pd.Categorical.from_codes(codes=codes, categories=category_info)
         for key in norm_meta.common.int_categories:
             if key in data:
                 category_info = list(norm_meta.common.int_categories[key].category)
