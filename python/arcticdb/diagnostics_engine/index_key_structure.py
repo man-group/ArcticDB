@@ -1,6 +1,7 @@
 from IPython.display import display, Markdown
-from .library_utils import check_and_adapt_library, check_symbol_exists
+from .library_utils import check_and_adapt_library, check_symbol_exists, get_string_version
 from datetime import datetime
+import pandas as pd
 
 
 def display_segments(df):
@@ -78,13 +79,9 @@ def display_index_key_structure(lib, symbol, as_of=None):
     if not check_symbol_exists(lib, symbol, as_of):
         return
 
-    if as_of == None:
-        string_version = "the latest version"
-    else:
-        string_version = "the version number " + str(as_of)
-
+    string_version = get_string_version(as_of)
     description = f"""
-    \n Data segment information for ***{string_version}*** from symbol ***{symbol}***:
+    \n Data segment information for {string_version} from symbol ***{symbol}***:
     """
     display(Markdown(description))
     df = lib.read_index(symbol, as_of=as_of)

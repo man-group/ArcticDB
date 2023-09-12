@@ -2,6 +2,7 @@ import networkx as nx
 import matplotlib.pyplot as plt
 from arcticdb.toolbox.library_tool import LibraryTool, KeyType
 import numpy as np
+import pandas as pd
 from IPython.display import display, Markdown
 from .library_utils import check_and_adapt_library, check_symbol_exists
 
@@ -15,6 +16,7 @@ def get_diagnosis_description(
     steps,
     snapshots_count,
     snapshots_list,
+    snapshots_direct_search,
 ):
     """
     Generate a detailed report string based on the existence of a version in various locations.
@@ -24,7 +26,20 @@ def get_diagnosis_description(
     else:
         end_of_chain_description = "reaching the end. "
 
-    if exists_in_version_list:
+    if snapshots_direct_search:
+        if exists_in_snasphots:
+            description = (
+                f"***Snapshot {target} exists***."
+                f"\n- You will need to traverse each of the {snapshots_count} snapshots to find "
+                "the one you are looking for. "
+            )
+        else:
+            description = (
+                f"***Snapshot {target} does not exists***."
+                f"\n- You will need to traverse all of the {snapshots_count} snapshots to verify "
+                "that the one you are looking for does not exist. "
+            )
+    elif exists_in_version_list:
         description = (
             f"***Version {target} exists***. \n- We need a total of {steps} steps in order to traverse the version list"
             f" until reaching version {target}. \n- Each step in the chain requires one I/O operation, so a large"
@@ -51,9 +66,10 @@ def get_diagnosis_description(
         snapshots_list_str = ", ".join(f"**{name}**" for name in snapshots_list)
         description += f"\n- The list of snapshots contain the version is as follows: {snapshots_list_str}."
     else:
+        version = "The specified as_of" if target is None else f"Version number {target}"
         description = (
-            f"***Version {target} has been deleted for that symbol***. \n- It takes {steps} extra I/O operations to"
-            " traverse the version chain until "
+            f"***{version} has been deleted or never existed for that symbol***. \n- It takes {steps} extra I/O"
+            " operations to traverse the version chain until "
             + end_of_chain_description
         )
         description += (
@@ -204,12 +220,28 @@ def parse_keys(keys):
     return parsed_keys
 
 
+def get_target_version_from_timestamp(parsed_versions, timestamp):
+    target_version = None
+    latest_timestamp = None
+    for version in parsed_versions.values():
+        if version["date"] < timestamp and not version["deleted"]:
+            if latest_timestamp is None or version["date"] > latest_timestamp:
+                latest_timestamp = version["date"]
+                target_version = version["version"]
+    return target_version
+
+
 def get_target_version(parsed_versions, parsed_keys, as_of):
     """
     Get the target version based on the 'as_of', or the latest version if 'as_of' is None.
     """
     if as_of is not None:
-        return as_of
+        if isinstance(as_of, pd.Timestamp):
+            return get_target_version_from_timestamp(parsed_versions, as_of), False
+        elif isinstance(as_of, str):
+            return as_of, True
+        else:
+            return as_of, False
 
     # When the target version is None, we need to return the most recent 'alive' version, which is the
     # first non-tombstone one. The 'alive_versions' contains all the integers from the version list,
@@ -220,7 +252,9 @@ def get_target_version(parsed_versions, parsed_keys, as_of):
     alive_versions = [key for key in parsed_versions.keys() if parsed_versions[key]["deleted"] == False]
     for key in parsed_keys:
         if key.version_id in alive_versions:
-            return key.version_id
+            return key.version_id, False
+
+    return None, False
 
 
 def traverse_version_list(parsed_keys, target):
@@ -249,7 +283,9 @@ def get_compacted_versions(parsed_versions, last_version_in_list):
     return compacted_versions
 
 
-def determine_where_version_exists(present_in_version_list, parsed_versions, target):
+def determine_where_version_exists(
+    present_in_version_list, parsed_versions, target, snapshots_direct_search, all_snapshots_lists
+):
     """
     Determine the existence of the target version in various locations: version list, compacted versions, snapshots.
     """
@@ -258,7 +294,10 @@ def determine_where_version_exists(present_in_version_list, parsed_versions, tar
     exists_in_snapshots = False
     is_tombstoned = False
 
-    if target in parsed_versions.keys():
+    if snapshots_direct_search:
+        if target in all_snapshots_lists:
+            exists_in_snapshots = True
+    elif target in parsed_versions.keys():
         if parsed_versions[target]["deleted"] == False:
             if present_in_version_list:
                 exist_in_version_list = True
@@ -316,25 +355,36 @@ def version_list_diagnosis(lib, symbol, as_of=None):
     parsed_keys = parse_keys(keys)
 
     # get specific version we are looking for
-    target = get_target_version(parsed_versions, parsed_keys, as_of)
+    target, snapshots_direct_search = get_target_version(parsed_versions, parsed_keys, as_of)
 
     # Even if the target we find it is a tombstone, we would stop here
     # we are just interested in the number of steps at this point
-    steps, present_in_version_list = traverse_version_list(parsed_keys, target)
+    steps, present_in_version_list = (
+        traverse_version_list(parsed_keys, target) if not snapshots_direct_search else 0,
+        False,
+    )
+
+    all_snapshots_lists = lib.list_snapshots()
+
+    # Determine if the version exists in the version list, in the snapshots, or in a compacted version.
     (
         exists_in_version_list,
         exists_as_compacted_version,
         exists_in_snasphots,
         is_tombstoned,
-    ) = determine_where_version_exists(present_in_version_list, parsed_versions, target)
+    ) = determine_where_version_exists(
+        present_in_version_list, parsed_versions, target, snapshots_direct_search, all_snapshots_lists
+    )
 
     # get all the compacted versions after the last node from the version list
-    compacted_versions = get_compacted_versions(parsed_versions, parsed_keys[-1].version_id)
+    compacted_versions = (
+        get_compacted_versions(parsed_versions, parsed_keys[-1].version_id) if not snapshots_direct_search else []
+    )
 
-    # get the total number of snapshots
-    snapshots_count = len(lib.list_snapshots())
     # get the snapshots for the target version
-    snapshots_list = parsed_versions[target]["snapshots"] if exists_in_snasphots else None
+    specific_version_snapshots_list = (
+        parsed_versions[target]["snapshots"] if exists_in_snasphots and not snapshots_direct_search else None
+    )
 
     # based on all the previous information, give a meaningful message to the user
     description = get_diagnosis_description(
@@ -344,18 +394,20 @@ def version_list_diagnosis(lib, symbol, as_of=None):
         is_tombstoned,
         target,
         steps,
-        snapshots_count,
-        snapshots_list,
+        len(all_snapshots_lists),
+        specific_version_snapshots_list,
+        snapshots_direct_search,
     )
+    display(Markdown(description))
 
     # Create and display graph for version list chain
-    display(Markdown(description))
-    visualize_versions(
-        parsed_versions,
-        parsed_keys,
-        exists_in_version_list,
-        exists_as_compacted_version,
-        target,
-        steps,
-        compacted_versions,
-    )
+    if not snapshots_direct_search:
+        visualize_versions(
+            parsed_versions,
+            parsed_keys,
+            exists_in_version_list,
+            exists_as_compacted_version,
+            target,
+            steps,
+            compacted_versions,
+        )

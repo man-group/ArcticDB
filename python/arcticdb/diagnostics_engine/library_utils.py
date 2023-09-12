@@ -1,5 +1,6 @@
 from arcticdb.version_store import NativeVersionStore
 from IPython.display import display, Markdown
+import pandas as pd
 
 
 def check_and_adapt_library(lib):
@@ -14,15 +15,24 @@ def check_and_adapt_library(lib):
         return None
 
 
+def get_string_version(as_of):
+    if as_of is not None:
+        if isinstance(as_of, pd.Timestamp):
+            string_version = "the as_of date ***" + as_of.strftime("%Y-%m-%d %H:%M:%S %Z") + "***"
+        elif isinstance(as_of, str):
+            string_version = f"the snapshot name ***{as_of}***"
+        else:
+            string_version = f"the version number ***{as_of}***"
+    else:
+        string_version = "***the latest version***"
+    return string_version
+
+
 def check_symbol_exists(lib, symbol, as_of=None):
     """
     Verifies that the symbol and version (in case it is specified) exist
     """
-    if as_of == None:
-        string_version = "the latest version"
-    else:
-        string_version = "the version number " + str(as_of)
-
+    string_version = get_string_version(as_of)
     if not lib.has_symbol(symbol, as_of=as_of):
         display(Markdown(f"Symbol does not exists for {string_version} from symbol {symbol}"))
         return False
