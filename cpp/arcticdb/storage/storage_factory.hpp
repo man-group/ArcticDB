@@ -14,11 +14,6 @@
 
 
 namespace arcticdb {
-#ifdef ARCTICDB_USING_CONDA
-    static const bool AZURE_SUPPORT = false;
-#else
-    static const bool AZURE_SUPPORT = true;
-#endif
     namespace storage {
 
         std::unique_ptr<Storage> create_storage(
