@@ -68,5 +68,7 @@ dependencies:
   # See: https://github.com/man-group/ArcticDB/pull/291
   - hypothesis < 6.73
   - pytest-sugar
-  - pymongo
+  - pymongo # for testing only
+  - azure-storage-blob # for testing only
+  - azure-identity # for testing only
 

@@ -8,7 +8,6 @@ from pandas.testing import assert_frame_equal
 
 from arcticdb.util.test import sample_dataframe
 from arcticdb_ext.storage import KeyType
-from arcticdb_ext.tools import AZURE_SUPPORT
 
 import pytest
 
@@ -27,13 +26,7 @@ def check_no_keys(library):
 
 @pytest.mark.parametrize(
     "store_factory",
-    [
-        "s3_store_factory",
-        pytest.param(
-            "azure_store_factory",
-            marks=pytest.mark.skipif(not AZURE_SUPPORT, reason="Pending Azure Storge Conda support"),
-        ),
-    ],
+    ["s3_store_factory", "azure_store_factory"],
 )
 def test_stress_delete(store_factory, request):
     store_factory = request.getfixturevalue(store_factory)
