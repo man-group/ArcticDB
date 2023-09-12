@@ -9,50 +9,58 @@ from .library_utils import check_and_adapt_library, check_symbol_exists
 def get_diagnosis_description(
     exists_in_version_list,
     exists_as_compacted_version,
-    exists_in_snaphots,
+    exists_in_snasphots,
     is_tombstoned,
     target,
     steps,
     snapshots_count,
+    snapshots_list,
 ):
     """
     Generate a detailed report string based on the existence of a version in various locations.
     """
+    if is_tombstoned:
+        end_of_chain_description = "finding the deletion marker (tombstone). "
+    else:
+        end_of_chain_description = "reaching the end. "
+
     if exists_in_version_list:
         description = (
-            f"***Version {target} exists***. We need a total of {steps} extra I/O operations in"
-            " order to traverse the version list until reaching version {target}. Each step in the chain requires one"
-            " I/O operation, so a large number of steps could lead to significant I/O and consequently affect"
-            " performance. If the number of steps is large, it is recommended to perform compaction to reduce the"
-            " number of I/O operations required."
+            f"***Version {target} exists***. \n- We need a total of {steps} steps in order to traverse the version list"
+            f" until reaching version {target}. \n- Each step in the chain requires one I/O operation, so a large"
+            " number of steps could lead to significant I/O and consequently affect performance. \n- If the number of"
+            " steps is large, it is recommended to perform compaction to reduce the number of I/O operations required."
         )
     elif exists_as_compacted_version:
         description = (
-            f"***Version {target} exists but has been compacted***. You will traverse the version chain until you find"
-            f" the node that represent the compacted versions. It will require a total of {steps} extra I/O operations."
-            " Then, you'll need to find the index keys for that version."
+            f"***Version {target} exists but has been compacted***. \n- You will traverse the version chain until you"
+            f" find the node that represent the compacted versions. \n- It will require a total of {steps} extra I/O"
+            " operations. \n- Then, you'll need to find the index keys for that version."
         )
-    elif exists_in_snaphots:
+    elif exists_in_snasphots:
         description = (
-            f"***Version {target} has been deleted but is present in the snapshots***. To find it, you will first"
-            f" traverse the version chain, which requires a total of {steps} extra I/O operations, until finding the"
-            f" deletion marker (tombstone) or reaching the end. Then you will check all the {snapshots_count}"
-            " snapshots, which can be a costly operation."
+            f"***Version {target} has been deleted but is present in any of the snapshots***. \n- To find it, you will"
+            f" first traverse the version chain, which requires a total of {steps} extra I/O operations to traverse the"
+            " version chain until "
+            + end_of_chain_description
         )
+        description += (
+            f"\n- Next, you will need to verify each of the {snapshots_count} snapshots to find "
+            "which one(s) contain the version you are looking for. "
+        )
+        snapshots_list_str = ", ".join(f"**{name}**" for name in snapshots_list)
+        description += f"\n- The list of snapshots contain the version is as follows: {snapshots_list_str}."
     else:
         description = (
-            f"***Version {target} has been deleted for that symbol***. It takes {steps} extra I/O operations to"
+            f"***Version {target} has been deleted for that symbol***. \n- It takes {steps} extra I/O operations to"
             " traverse the version chain until "
+            + end_of_chain_description
         )
-        if is_tombstoned:
-            description += "finding the deletion marker (tombstone)"
-        else:
-            description += "reaching the end. "
         description += (
-            f"There are {snapshots_count} snapshots present, so you would still need to check them for the version,"
+            f"\n- There are {snapshots_count} snapshots present, so you would still need to check them for the version,"
             " which can be a costly operation."
             if snapshots_count > 0
-            else "There are no snapshots present, so no further checks are needed."
+            else "\n- There are no snapshots present, so no further checks are needed."
         )
 
     return description
@@ -203,9 +211,15 @@ def get_target_version(parsed_versions, parsed_keys, as_of):
     if as_of is not None:
         return as_of
 
-    alive_versions = parsed_versions.keys()
+    # When the target version is None, we need to return the most recent 'alive' version, which is the
+    # first non-tombstone one. The 'alive_versions' contains all the integers from the version list,
+    # but we must always respect the order established by 'parsed_keys' (i.e., the actual physical version chain).
+    # This is why we iterate across this strict order. Finally, we need to check the 'deleted' flag from
+    # the version list, as we still need to exclude the versions that are present in the version list
+    # solely because they are included in any snapshot.
+    alive_versions = [key for key in parsed_versions.keys() if parsed_versions[key]["deleted"] == False]
     for key in parsed_keys:
-        if key in alive_versions and parsed_versions[key.version_id]["deleted"] == False:
+        if key.version_id in alive_versions:
             return key.version_id
 
 
@@ -241,22 +255,24 @@ def determine_where_version_exists(present_in_version_list, parsed_versions, tar
     """
     exist_in_version_list = False
     exists_as_compacted_version = False
-    exists_in_snaphots = False
+    exists_in_snapshots = False
     is_tombstoned = False
 
     if target in parsed_versions.keys():
-        # if it exists either in the version list or compacted, we don't about about if also exists in snapshots
         if parsed_versions[target]["deleted"] == False:
             if present_in_version_list:
                 exist_in_version_list = True
             else:
                 exists_as_compacted_version = True
         else:
-            if parsed_versions[target]["snapshots"]:
-                exists_in_snaphots = True
-    elif present_in_version_list:
+            # if it exists in the version list and it has been deleted
+            # it must contain any snapshot in the 'snapshots' list
+            assert parsed_versions[target]["snapshots"]
+            exists_in_snapshots = True
+
+    if present_in_version_list and (exists_in_snapshots or not (exist_in_version_list or exists_as_compacted_version)):
         is_tombstoned = True
-    return exist_in_version_list, exists_as_compacted_version, exists_in_snaphots, is_tombstoned
+    return exist_in_version_list, exists_as_compacted_version, exists_in_snapshots, is_tombstoned
 
 
 def version_list_diagnosis(lib, symbol, as_of=None):
@@ -308,7 +324,7 @@ def version_list_diagnosis(lib, symbol, as_of=None):
     (
         exists_in_version_list,
         exists_as_compacted_version,
-        exists_in_snaphots,
+        exists_in_snasphots,
         is_tombstoned,
     ) = determine_where_version_exists(present_in_version_list, parsed_versions, target)
 
@@ -317,16 +333,19 @@ def version_list_diagnosis(lib, symbol, as_of=None):
 
     # get the total number of snapshots
     snapshots_count = len(lib.list_snapshots())
+    # get the snapshots for the target version
+    snapshots_list = parsed_versions[target]["snapshots"] if exists_in_snasphots else None
 
     # based on all the previous information, give a meaningful message to the user
     description = get_diagnosis_description(
         exists_in_version_list,
         exists_as_compacted_version,
-        exists_in_snaphots,
+        exists_in_snasphots,
         is_tombstoned,
         target,
         steps,
         snapshots_count,
+        snapshots_list,
     )
 
     # Create and display graph for version list chain

@@ -1,5 +1,6 @@
 from IPython.display import display, Markdown
 from .library_utils import check_and_adapt_library, check_symbol_exists
+from datetime import datetime
 
 
 def display_segments(df):
@@ -13,8 +14,22 @@ def display_segments(df):
     # Reset index to convert 'start_index' to a regular column
     df_reset = df.reset_index()
 
+    # Convert 'creation_ts' from epoch timestamp to human-readable UTC time
+    df_reset["creation UTC time"] = df_reset["creation_ts"].apply(
+        lambda x: datetime.utcfromtimestamp(x / 1e9).strftime("%Y-%m-%d %H:%M:%S")
+    )
+
     # Select the columns to be displayed
-    columns = ["version_id", "start_index", "end_index", "creation_ts", "start_row", "end_row", "start_col", "end_col"]
+    columns = [
+        "version_id",
+        "start_index",
+        "end_index",
+        "creation UTC time",
+        "start_row",
+        "end_row",
+        "start_col",
+        "end_col",
+    ]
     df_display = df_reset[columns]
 
     # Display the DataFrame in a table format

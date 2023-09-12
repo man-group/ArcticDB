@@ -113,7 +113,7 @@ def get_read_description(sorted_state):
     """
     Provides a description for the read method based on the current sorted state.
     """
-    if sorted_state != "ASCENDING" and sorted_state != "UNKNOWN":
+    if sorted_state not in ["ASCENDING", "UNKNOWN"]:
         return (
             "\n- **Read method with date range filter**: A sorting exception (E_UNSORTED_DATA) will be raised because"
             " your data is explicitly UNSORTED or DESCENDING. This method does not have a user-settable validate_index"

@@ -8,9 +8,9 @@ def calculate_and_add_segment_occupancy_info(df):
     """
     Calculates the number of data points, rows, and columns for each segment in the DataFrame.
     """
-    df["data_points"] = (df["end_row"] - df["start_row"] + 1) * (df["end_col"] - df["start_col"] + 1)
-    df["rows"] = df["end_row"] - df["start_row"] + 1
-    df["columns"] = df["end_col"] - df["start_col"] + 1
+    df["data_points"] = (df["end_row"] - df["start_row"]) * (df["end_col"] - df["start_col"])
+    df["rows"] = df["end_row"] - df["start_row"]
+    df["columns"] = df["end_col"] - df["start_col"]
     return df
 
 
@@ -34,13 +34,15 @@ def calculate_segments_occupancy_maximums(df, total_segment_size, segment_row_si
     return max_data_points, max_rows, max_columns
 
 
-def calculate_fragmentation(total_data_points, total_rows, total_columns, max_data_points, max_rows, max_columns):
+def calculate_fragmentation(
+    total_data_points, total_rows, total_columns, max_data_points, max_rows, max_columns, dynamic_schema
+):
     """
     Calculates the overall fragmentation level as well as row-wise and column-wise fragmentation for the data.
     """
     fragmentation = float(total_data_points) / max_data_points
     per_row_fragmentation = float(total_rows) / max_rows
-    per_column_fragmentation = float(total_columns) / max_columns
+    per_column_fragmentation = None if dynamic_schema else float(total_columns) / max_columns
     return fragmentation, per_row_fragmentation, per_column_fragmentation
 
 
@@ -76,7 +78,7 @@ def display_message(fragmentation, per_row_fragmentation, per_column_fragmentati
             "However, be careful with the latter option as it can have other implications."
         )
 
-    if per_column_fragmentation < 0.5:
+    if per_column_fragmentation is not None and per_column_fragmentation < 0.5:
         message += (
             f"\n- Your column utilization is only about {per_column_fragmentation * 100:.1f}%. This could occur when"
             " the number of columns in your data exceeds the column group size. For example, if your column group size"
@@ -97,7 +99,8 @@ def plot_data_points(df, total_segment_size):
     description = (
         "\nThe plot below represents the distribution of the number of data points per data segment. Understanding this"
         " distribution can help optimize data storage and retrieval operations. The dotted red line represents the"
-        " maximum number of data points per segment."
+        " maximum number of data points per segment. Thus, the further we are from the dotted line, the more fragmented"
+        " the data is."
     )
     display(Markdown(description))
 
@@ -107,6 +110,27 @@ def plot_data_points(df, total_segment_size):
     plt.xlabel("Number of Data Points per Segment")
     plt.ylabel("Frequency")
     plt.title("Histogram of Number of Data Points per Data Segment")
+    plt.show()
+
+
+def plot_per_row_fragmentation(df, segment_row_size):
+    """
+    Plots a histogram of the number rows per segment.
+    """
+    description = (
+        "\nThe plot below represents the distribution of the number of rows per data segment. Understanding this"
+        " distribution can help optimize data storage and retrieval operations. The dotted red line represents the"
+        " maximum number of rows per segment. Thus, the further we are from the dotted line, the more fragmented the"
+        " data is."
+    )
+    display(Markdown(description))
+
+    plt.figure(figsize=(16, 9))
+    plt.hist(df["rows"], bins=100, rwidth=10)
+    plt.axvline(segment_row_size, color="r", linestyle="--")
+    plt.xlabel("Number of rows per Segment")
+    plt.ylabel("Frequency")
+    plt.title("Histogram of Number of rows per Data Segment")
     plt.show()
 
 
@@ -148,6 +172,7 @@ def fragmentation_diagnosis(lib, symbol, as_of=None):
 
     segment_row_size = lib._lib_cfg.lib_desc.version.write_options.segment_row_size
     column_group_size = lib._lib_cfg.lib_desc.version.write_options.column_group_size
+    dynamic_schema = lib._lib_cfg.lib_desc.version.write_options.dynamic_schema
 
     # Calculate the actual amount of data stored across all the segments
     df = lib.read_index(symbol, as_of=as_of)
@@ -162,9 +187,11 @@ def fragmentation_diagnosis(lib, symbol, as_of=None):
 
     # Infer fragmentation
     fragmentation, per_row_fragmentation, per_column_fragmentation = calculate_fragmentation(
-        sum_data_points, sum_rows, sum_columns, max_data_points, max_rows, max_columns
+        sum_data_points, sum_rows, sum_columns, max_data_points, max_rows, max_columns, dynamic_schema
     )
 
     # Display Results
     display_message(fragmentation, per_row_fragmentation, per_column_fragmentation)
     plot_data_points(df, total_segment_size)
+    if not dynamic_schema:
+        plot_per_row_fragmentation(df, segment_row_size)
