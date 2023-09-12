@@ -203,7 +203,6 @@ enum class DataType : uint8_t {
     ASCII_DYNAMIC64 = detail::combine_val_bits(ValueType::ASCII_DYNAMIC, SizeBits::S64),
     UTF_FIXED64 = detail::combine_val_bits(ValueType::UTF8_FIXED, SizeBits::S64),
     UTF_DYNAMIC64 = detail::combine_val_bits(ValueType::UTF_DYNAMIC, SizeBits::S64),
-    BYTES_DYNAMIC64 = detail::combine_val_bits(ValueType::BYTES, SizeBits::S64),
     EMPTYVAL = detail::combine_val_bits(ValueType::EMPTY, SizeBits::S64),
 #undef DT_COMBINE
     UNKNOWN = 0,
@@ -338,6 +337,7 @@ constexpr char get_dtype_specifier(ValueType vt){
         case ValueType::UTF8_FIXED: return 'U';
         case ValueType::ASCII_FIXED: return 'S';
         case ValueType::BYTES: return 'O';
+        case ValueType::EMPTY: return 'O';
         default:
             return 'x';
     }
