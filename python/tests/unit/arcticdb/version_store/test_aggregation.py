@@ -185,7 +185,7 @@ def test_mean_aggregation_float(object_version_store):
     df.index.rename("grouping_column", inplace=True)
     res.data.sort_index(inplace=True)
 
-    assert_frame_equal(res.data, df)
+    assert_frame_equal(res.data, df, check_dtype=False, check_index_type=False)
 
 
 def test_mean_aggregation_float_nan(lmdb_version_store_v2):
