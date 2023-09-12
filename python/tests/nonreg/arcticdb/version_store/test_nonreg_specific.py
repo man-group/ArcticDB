@@ -241,3 +241,31 @@ def test_update_fixed_width_to_dynamic_strings(lib_type, request):
     expected_df = dynamic_strings_data
     read_df = lib.read(symbol).data
     assert_frame_equal(expected_df, read_df)
+
+
+# https://github.com/man-group/ArcticDB/issues/767
+# Batch write and append call aggregator_set_data from threads running in the CPU threadpool (i.e. not the main thread)
+# With unicode strings, a PyObject allocation is needed, and therefore the thread must be holding the GIL
+# This test ensures that the correct thread is holding the GIL when performing these allocations, and that there is no
+# deadlock.
+# This is not an issue with non-batch methods as aggregator_set_data is called from the main thread, which pybind11
+# ensures is holding the GIL on entry to the C++ layer.
+def test_batch_write_unicode_strings(lmdb_version_store):
+    lib = lmdb_version_store
+    syms = ["sym1", "sym2"]
+    # 10 was too small to trigger problem
+    num_rows = 100
+
+    index = np.arange(num_rows)
+    u_umlaut = b"\xc3\x9c".decode("utf-8")
+    unicode_vals = [u_umlaut] * num_rows
+
+    data = [
+        pd.Series(data=unicode_vals, index=index),
+        pd.Series(data=unicode_vals, index=index),
+    ]
+
+    # The problem was not always triggered on the first call
+    for _ in range(5):
+        lib.batch_write(syms, data)
+        lib.batch_append(syms, data)

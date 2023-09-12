@@ -38,6 +38,9 @@ class ParsedQuery:
 
     path_prefix: Optional[str] = None
 
+    # DEPRECATED - see https://github.com/man-group/ArcticDB/pull/833
+    force_uri_lib_config: Optional[bool] = True
+
 
 class S3LibraryAdapter(ArcticLibraryAdapter):
     REGEX = r"s3(s)?://(?P<endpoint>.*):(?P<bucket>[-_a-zA-Z0-9.]+)(?P<query>\?.*)?"
@@ -54,6 +57,12 @@ class S3LibraryAdapter(ArcticLibraryAdapter):
         self._bucket = match_groups["bucket"]
 
         self._query_params: ParsedQuery = self._parse_query(match["query"])
+
+        if self._query_params.force_uri_lib_config is False:
+            raise ValueError(
+                "The support of 'force_uri_lib_config=false' has been dropped due to security concerns. Please refer to"
+                " https://github.com/man-group/ArcticDB/pull/803 for more information."
+            )
 
         if self._query_params.port:
             self._endpoint += f":{self._query_params.port}"
@@ -131,10 +140,16 @@ class S3LibraryAdapter(ArcticLibraryAdapter):
 
     def get_storage_override(self) -> StorageOverride:
         s3_override = S3Override()
-        if self._query_params.access:
-            s3_override.credential_name = self._query_params.access
-        if self._query_params.secret:
-            s3_override.credential_key = self._query_params.secret
+        # storage_override will overwrite access and key while reading config from storage
+        # access and secret whether equals to _RBAC_ are used for determining aws_auth is true on C++ layer
+        if self._query_params.aws_auth:
+            s3_override.credential_name = USE_AWS_CRED_PROVIDERS_TOKEN
+            s3_override.credential_key = USE_AWS_CRED_PROVIDERS_TOKEN
+        else:
+            if self._query_params.access:
+                s3_override.credential_name = self._query_params.access
+            if self._query_params.secret:
+                s3_override.credential_key = self._query_params.secret
         if self._query_params.region:
             s3_override.region = self._query_params.region
         if self._endpoint:
