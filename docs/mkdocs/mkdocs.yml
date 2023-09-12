@@ -1,4 +1,6 @@
 site_name: ArcticDB
+repo_url: https://github.com/man-group/ArcticDB
+repo_name: man-group/ArcticDB
 
 markdown_extensions:
   - admonition
@@ -9,17 +11,24 @@ markdown_extensions:
   - attr_list
   - md_in_html
 
+plugins:
+  - search
+  - mkdocs-jupyter:
+      ignore_h1_titles: True
+      include_source: True
+
 theme:
   name: material
+  custom_dir: overrides
   logo: images/FullWithBorder.png
   favicon: images/FullWithBorder.png
   palette:
     scheme: arcticdb
   features:
     - navigation.expand
+
 extra_css:
   - stylesheets/extra.css
-
 
 nav:
 - Introduction: 'index.md'
@@ -35,6 +44,8 @@ nav:
     - Parallel Writes: 'tutorials/parallel_writes.md'
     - Snapshots: 'tutorials/snapshots.md'
     - Metadata: 'tutorials/metadata.md'
+- Notebooks:
+    - Intro Notebook: 'notebooks/ArcticDB_demo_lmdb.ipynb'
 - Library Configuration: 'lib_config.md'
 - Runtime Configuration: 'runtime_config.md'
 - Error Messages: 'error_messages.md'
