@@ -23,7 +23,6 @@ import pytest
 import pandas as pd
 from datetime import datetime, date, timezone, timedelta
 import numpy as np
-from arcticdb_ext.tools import AZURE_SUPPORT
 from numpy import datetime64
 from arcticdb.util.test import (
     assert_frame_equal,
@@ -34,8 +33,7 @@ from arcticdb.util._versions import IS_PANDAS_TWO
 
 import random
 
-if AZURE_SUPPORT:
-    from azure.storage.blob import BlobServiceClient
+from azure.storage.blob import BlobServiceClient
 from botocore.client import BaseClient as BotoClient
 import time
 

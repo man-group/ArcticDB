@@ -26,11 +26,9 @@ import pytest
 import pandas as pd
 from datetime import datetime, timezone
 import numpy as np
-from arcticdb_ext.tools import AZURE_SUPPORT
 from arcticdb.util.test import assert_frame_equal, RUN_MONGO_TEST
 
-if AZURE_SUPPORT:
-    from azure.storage.blob import BlobServiceClient
+from azure.storage.blob import BlobServiceClient
 from botocore.client import BaseClient as BotoClient
 import time
 
@@ -199,10 +197,7 @@ def get_path_prefix_option(uri):
     "lib_type",
     [
         "moto_s3_uri_incl_bucket",
-        pytest.param(
-            "azurite_azure_uri_incl_bucket",
-            marks=pytest.mark.skipif(not AZURE_SUPPORT, reason="Pending Azure Storge Conda support"),
-        ),
+        "azurite_azure_uri_incl_bucket",
     ],
 )
 def test_separation_between_libraries_with_prefixes(lib_type, request):
@@ -235,11 +230,7 @@ def test_separation_between_libraries_with_prefixes(lib_type, request):
 def object_storage_uri_and_client():
     return [
         ("moto_s3_uri_incl_bucket", "boto_client"),
-        pytest.param(
-            "azurite_azure_uri_incl_bucket",
-            "azure_client_and_create_container",
-            marks=pytest.mark.skipif(not AZURE_SUPPORT, reason="Pending Azure Storge Conda support"),
-        ),
+        ("azurite_azure_uri_incl_bucket", "azure_client_and_create_container"),
     ]
 
 
@@ -1048,7 +1039,6 @@ def test_get_uri(object_storage_uri_incl_bucket):
     assert ac.get_uri() == object_storage_uri_incl_bucket
 
 
-@pytest.mark.skipif(not AZURE_SUPPORT, reason="Pending Azure Storge Conda support")
 def test_azure_no_ca_path(azurite_azure_test_connection_setting):
     (endpoint, container, credential_name, credential_key, ca_cert_path) = azurite_azure_test_connection_setting
     ac = Arctic(
@@ -1057,7 +1047,7 @@ def test_azure_no_ca_path(azurite_azure_test_connection_setting):
 
 
 def test_s3_force_uri_lib_config_handling(moto_s3_uri_incl_bucket):
-    # force_uri_lib_config is a obsolete configuration. However, user still include this option in their setup. For backward compatitbility, we need to make sure such setup will still work
+    # force_uri_lib_config is a obsolete configuration. However, user still includes this option in their setup. For backward compatitbility, we need to make sure such setup will still work
     # Why it becomes obsolete: https://github.com/man-group/ArcticDB/pull/803
     Arctic(f"{moto_s3_uri_incl_bucket}&force_uri_lib_config=true)")
 
