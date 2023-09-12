@@ -80,4 +80,7 @@ def test_stress_multicolumn(lib_type, request):
         output_df = lib.read(name).data
         print("reading from arctic native: {}".format(pd.Timestamp("now") - now))
 
-        assert_frame_equal(test_data, output_df, check_dtype=False, check_index_type=False)
+        # ArcticDB stores empty columns under a dedicated `EMPTYVAL` type, so the types are not going
+        # to match with pandas until the first append.
+        is_not_empty = not test_data.empty
+        assert_frame_equal(test_data, output_df, check_dtype=is_not_empty, check_index_type=is_not_empty)
