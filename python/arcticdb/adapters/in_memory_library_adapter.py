@@ -16,16 +16,17 @@ from arcticdb.config import _DEFAULT_ENV
 from arcticdb.version_store._store import NativeVersionStore
 from arcticdb.adapters.arctic_library_adapter import ArcticLibraryAdapter, set_library_options
 from arcticdb.encoding_version import EncodingVersion
-from arcticdb.exceptions import ArcticDbNotYetImplemented, LmdbOptionsError
+from arcticdb.exceptions import ArcticDbNotYetImplemented
 
 
 @dataclass
 class ParsedQuery:
     pass
 
+
 def parse_query(query: str) -> ParsedQuery:
     if query:
-        raise ArcticDbNotYetImplemented('In-memory URIs do not support any query parameters yet')
+        raise ArcticDbNotYetImplemented("In-memory URIs do not support any query parameters yet")
     return ParsedQuery()
 
 
@@ -53,7 +54,7 @@ class InMemoryLibraryAdapter(ArcticLibraryAdapter):
 
         self._query_params: ParsedQuery = parse_query(match["query"])
 
-        super().__init__(uri, self._encoding_version) # no point in doing this?? I guess good practise... ?
+        super().__init__(uri, self._encoding_version)  # no point in doing this?? I guess good practise... ?
 
     def __repr__(self):
         return "MEM(name=%s)" % self._name
@@ -73,9 +74,7 @@ class InMemoryLibraryAdapter(ArcticLibraryAdapter):
     def create_library(self, name, library_options: LibraryOptions):
         env_cfg = EnvironmentConfigsMap()
 
-        add_memory_library_to_env(
-            env_cfg, lib_name=name, env_name=_DEFAULT_ENV, db_name=self._name
-        )
+        add_memory_library_to_env(env_cfg, lib_name=name, env_name=_DEFAULT_ENV, db_name=self._name)
 
         library_options.encoding_version = (
             library_options.encoding_version if library_options.encoding_version is not None else self._encoding_version
@@ -91,4 +90,3 @@ class InMemoryLibraryAdapter(ArcticLibraryAdapter):
     def cleanup_library(self, library_name: str, library_config: LibraryConfig):
         # The in-memory Storage held by the LibraryManager and the Arctic instance will both be deleted for us.
         pass
-

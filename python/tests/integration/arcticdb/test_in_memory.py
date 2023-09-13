@@ -4,6 +4,7 @@ import pandas as pd
 
 from arcticdb.util.test import assert_frame_equal
 
+
 def test_in_memory():
     ac = Arctic("mem://memory_db")
     ac.create_library("test_lib")
@@ -12,8 +13,9 @@ def test_in_memory():
     lib.write("symbol", df)
     assert_frame_equal(lib.read("symbol").data, df)
 
-## TODO: Some sort of cache size test
-#def test_in_memory_cache_size():
+
+# TODO: Some sort of cache size test
+# def test_in_memory_cache_size():
 #    # Given - tiny map size
 #    ac = Arctic(f"lmdb://{tmpdir}?map_size=1KB")
 #

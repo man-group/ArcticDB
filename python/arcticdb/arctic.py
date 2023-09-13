@@ -27,7 +27,11 @@ class Arctic:
     """
 
     _LIBRARY_ADAPTERS = [
-        S3LibraryAdapter, LMDBLibraryAdapter, AzureLibraryAdapter, MongoLibraryAdapter, InMemoryLibraryAdapter
+        S3LibraryAdapter,
+        LMDBLibraryAdapter,
+        AzureLibraryAdapter,
+        MongoLibraryAdapter,
+        InMemoryLibraryAdapter,
     ]
 
     def __init__(self, uri: str, encoding_version: EncodingVersion = DEFAULT_ENCODING_VERSION):
