@@ -11,6 +11,7 @@ package arcticc.pb2.in_memory_storage_pb2;
 
 message Config {
     uint64 cache_size = 1; // if 0 => 10GB
+    string name = 2; // A name for the mem
 }
 
 
