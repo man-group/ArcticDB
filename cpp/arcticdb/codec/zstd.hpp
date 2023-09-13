@@ -68,7 +68,7 @@ struct ZstdDecoder {
         T *t_out,
         std::size_t out_bytes) {
 
-        const std::size_t decomp_size = ZSTD_getDecompressedSize(in, in_bytes);
+        const std::size_t decomp_size = ZSTD_getFrameContentSize(in, in_bytes);
         util::check_arg(decomp_size == out_bytes, "expected out_bytes == zstd deduced bytes, actual {} != {}",
                         out_bytes, decomp_size);
         std::size_t real_decomp = ZSTD_decompress(t_out, out_bytes, in, in_bytes);
