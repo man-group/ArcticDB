@@ -32,6 +32,7 @@ dependencies:
   - libprotobuf < 4
   - bitmagic
   - spdlog
+  - azure-core-cpp
   - azure-identity-cpp
   - azure-storage-blobs-cpp
   # Incompatibility with fmt last version
