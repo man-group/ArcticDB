@@ -726,10 +726,10 @@ class DataFrameNormalizer(_PandasNormalizer):
             if key in data:
                 category_info = list(norm_meta.common.categories[key].category)
                 codes = data[key]
-                # `pd.Categorical.from_codes` from `pandas~=0.25.x` (pandas' supported version for python 3.6)
-                # does not support `codes` of `dtype=object`: it has to have an integral dtype.
-                # See: https://github.com/pandas-dev/pandas/blob/0.25.x/pandas/core/arrays/categorical.py#L688-L704
                 if IS_PANDAS_ZERO:
+                    # `pd.Categorical.from_codes` from `pandas~=0.25.x` (pandas' supported version for python 3.6)
+                    # does not support `codes` of `dtype=object`: it has to have an integral dtype.
+                    # See: https://github.com/pandas-dev/pandas/blob/0.25.x/pandas/core/arrays/categorical.py#L688-L704
                     codes = np.asarray(codes, dtype=int)
                 df[key] = pd.Categorical.from_codes(codes=codes, categories=category_info)
         for key in norm_meta.common.int_categories:

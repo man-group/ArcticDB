@@ -2,13 +2,13 @@ import sys
 
 import pytest
 import pandas as pd
-from pandas.util.testing import assert_frame_equal
 
 from arcticdb import Arctic
 from arcticdb.scripts.update_storage import run
 from arcticdb.options import LibraryOptions
 from arcticc.pb2.s3_storage_pb2 import Config as S3Config
 from arcticc.pb2.azure_storage_pb2 import Config as AzureConfig
+from arcticdb.util.test import assert_frame_equal
 
 from arcticdb.adapters.s3_library_adapter import USE_AWS_CRED_PROVIDERS_TOKEN
 from arcticdb_ext.tools import AZURE_SUPPORT
