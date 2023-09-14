@@ -147,6 +147,39 @@ class PythonVersionStore : public LocalVersionedEngine {
         ColumnStats& column_stats,
         const VersionQuery& version_query);
 
+    // todo: remove dimensions from these calls. Very inelegant.
+    // todo: move this out of PythonVersionStore?
+
+    void train_vector_namespace_bucketiser(
+            const std::string vector_namespace,
+            const std::string metric,
+            const uint64_t centroids,
+            const std::optional<std::vector<float>> training_vectors,
+            const uint64_t dimensions
+    );
+
+    void bucketise_vector_namespace(
+            const std::string vector_namespace,
+            const uint64_t dimensions
+            );
+
+    void index_segment_vectors(
+            const std::string vector_namespace,
+            const std::string vector_index,
+            const std::string metric,
+            const uint64_t dimensions
+    );
+
+    std::vector<std::string> search_vectors_with_bucketiser_and_index(
+            const std::string vector_namespace,
+            const std::vector<float> query_vector,
+            const uint16_t k,
+            const uint64_t nprobes,
+            const uint64_t dimensions
+    );
+
+
+
     void drop_column_stats_version(
         const StreamId& stream_id,
         const std::optional<ColumnStats>& column_stats_to_drop,

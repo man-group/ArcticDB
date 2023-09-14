@@ -697,6 +697,42 @@ VersionedItem PythonVersionStore::sort_merge(
     return sort_merge_internal(stream_id, meta, append, convert_int_to_float, via_iteration, sparsify);
 }
 
+void PythonVersionStore::train_vector_namespace_bucketiser(
+        const std::string vector_namespace,
+        const std::string metric,
+        const uint64_t centroids,
+        const std::optional<std::vector<float>> training_vectors,
+        const uint64_t dimensions
+) {
+    train_vector_namespace_bucketiser_internal(vector_namespace, metric, centroids, training_vectors, dimensions);
+}
+
+void PythonVersionStore::bucketise_vector_namespace(
+        const std::string vector_namespace,
+        const uint64_t dimensions
+) {
+    bucketise_vector_namespace_internal(vector_namespace, dimensions);
+}
+
+void PythonVersionStore::index_segment_vectors(
+        const std::string vector_namespace,
+        const std::string vector_index,
+        const std::string metric,
+        const uint64_t dimensions
+) {
+    index_segment_vectors_internal(vector_namespace, vector_index, metric, dimensions);
+}
+
+std::vector<std::string> PythonVersionStore::search_vectors_with_bucketiser_and_index(
+        const std::string vector_namespace,
+        const std::vector<float> query_vector,
+        const uint16_t k,
+        const uint64_t nprobes,
+        const uint64_t dimensions
+        ) {
+    return search_vectors_with_bucketiser_and_index_internal(vector_namespace, query_vector, k, nprobes, dimensions);
+}
+
 void PythonVersionStore::write_parallel(
     const StreamId& stream_id,
     const py::tuple &item,

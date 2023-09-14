@@ -72,6 +72,10 @@ const KeyData& get_key_data(KeyType key_type) {
     STRING_KEY(KeyType::TOMBSTONE_ALL, tall, 'q')
     STRING_REF(KeyType::LIBRARY_CONFIG, cref, 'C')
     STRING_KEY(KeyType::COLUMN_STATS, cstats, 'S')
+    STRING_KEY(KeyType::SEGMENT_VECTOR_INDEX, vdxs, 'I')
+    STRING_KEY(KeyType::NAMESPACE_INSERTION_BUCKETISER, vdxib, 'N')
+    STRING_KEY(KeyType::NAMESPACE_QUERY_BUCKETISER, vdxqb, 'Q')
+    STRING_KEY(KeyType::QUERY_BUCKET_TO_INSERTION_BUCKET, qib, 'T')
 
 
     const auto& data =  KeyMap::get(int(key_type));

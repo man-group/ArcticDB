@@ -21,6 +21,7 @@
 #include <arcticdb/version/version_map_batch_methods.hpp>
 #include <arcticdb/util/container_filter_wrapper.hpp>
 #include <arcticdb/python/gil_lock.hpp>
+#include <arcticdb/vector_db/vector_db.hpp>
 
 namespace arcticdb::version_store {
 template<class ClockType>
@@ -1711,6 +1712,52 @@ VersionedItem LocalVersionedEngine::sort_merge_internal(
     auto versioned_item = sort_merge_impl(store_, stream_id, user_meta, update_info, append, convert_int_to_float, via_iteration, sparsify);
     version_map()->write_version(store(), versioned_item.key_);
     return versioned_item;
+}
+
+void LocalVersionedEngine::train_vector_namespace_bucketiser_internal(
+        const std::string vector_namespace,
+        const std::string metric,
+        const uint64_t centroids,
+        const std::optional<std::vector<float>> training_vectors,
+        const uint64_t dimensions
+) {
+    auto stream_id = vector_namespace + "_vector_db";
+    auto update_info = get_latest_undeleted_version_and_next_version_id(store(), version_map(), stream_id, VersionQuery{}, ReadOptions{});
+    train_vector_namespace_bucketiser_impl(store_, update_info, stream_id, metric, centroids, training_vectors, dimensions);
+}
+
+void LocalVersionedEngine::bucketise_vector_namespace_internal(
+        const std::string vector_namespace,
+        ARCTICDB_UNUSED const uint64_t dimensions) {
+    auto stream_id = vector_namespace + "_vector_db";
+    auto update_info = get_latest_undeleted_version_and_next_version_id(store(), version_map(), stream_id, VersionQuery{}, ReadOptions{});
+    auto versioned_item = bucketise_vector_namespace_impl(store_, stream_id, update_info, dimensions);
+    version_map()->write_version(store(), versioned_item.key_);
+}
+
+void LocalVersionedEngine::index_segment_vectors_internal(
+        const std::string vector_namespace,
+        const std::string vector_index,
+        const std::string metric,
+        const uint64_t dimensions
+        ) {
+    auto stream_id = vector_namespace + "_vector_db";
+    auto update_info = get_latest_undeleted_version_and_next_version_id(store(), version_map(), stream_id, VersionQuery{}, ReadOptions{});
+    index_segment_vectors_impl(store_, update_info, stream_id, vector_index, metric, dimensions);
+}
+
+std::vector<std::string> LocalVersionedEngine::search_vectors_with_bucketiser_and_index_internal(
+        const std::string vector_namespace,
+        const std::vector<float> query_vector,
+        const uint16_t k,
+        const uint64_t nprobes,
+        const uint64_t dimensions
+        ) {
+    auto stream_id = vector_namespace + "_vector_db";
+    auto update_info = get_latest_undeleted_version_and_next_version_id(
+            store(), version_map(), stream_id, VersionQuery{}, ReadOptions{});
+    return search_vectors_with_bucketiser_and_index_impl(
+            store_, update_info, stream_id, query_vector, k, nprobes, dimensions);
 }
 
 bool LocalVersionedEngine::has_stream(const StreamId & stream_id){

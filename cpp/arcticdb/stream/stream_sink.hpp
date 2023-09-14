@@ -53,6 +53,8 @@ struct StreamSink {
         const StreamId &stream_id,
         SegmentInMemory &&segment) = 0;
 
+    virtual entity::VariantKey write_sync(AtomKey atom_key, SegmentInMemory &&segment) = 0;
+
     virtual entity::VariantKey write_sync(
         stream::KeyType key_type,
         VersionId version_id,

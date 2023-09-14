@@ -1,8 +1,10 @@
 import string
+import time
 
 from hypothesis import HealthCheck, settings, given, strategies as st, reproduce_failure
 from hypothesis.extra.pandas import column, data_frames, range_indexes
 from hypothesis.extra.numpy import arrays
+from arcticdb import Arctic
 from arcticdb.options import LibraryOptions
 from arcticdb_ext.version_store import NoSuchVersionException
 from arcticdb.util.hypothesis import (
@@ -10,6 +12,7 @@ from arcticdb.util.hypothesis import (
     string_strategy,
     use_of_function_scoped_fixtures_in_hypothesis_checked,
 )
+from arcticdb.encoding_version import EncodingVersion
 
 try:
     from arcticdb.version_store import VersionedItem as PythonVersionedItem
@@ -48,6 +51,55 @@ except ImportError:
         StagedDataFinalizeMethod,
     )
 
+
+def test_with_indexing():
+    np.random.seed(0)
+    random.seed(0)
+    ac = Arctic("lmdb://test_with_indexing")
+
+    dimensions, number_of_vectors, k = 1500, 20000, 5
+    string_column_names = list(range(number_of_vectors)) # [
+    #     "".join(random.choices(string.ascii_uppercase + string.digits, k=10)) for _ in range(number_of_vectors)
+    # ]
+
+    tempus = time.time()
+    lib_name = f"pytest_test_top_k_simple_{tempus}_dimensions_{dimensions}_vectors_{number_of_vectors}"
+
+    ac.create_library(lib_name,
+                      LibraryOptions(
+                          encoding_version = EncodingVersion.V2,
+                          rows_per_segment = dimensions,
+                          columns_per_segment = int(100000000/dimensions)
+                      ))
+    vector_db = VectorDB(ac[lib_name])
+
+    df = pd.DataFrame(np.random.rand(dimensions, number_of_vectors), columns=string_column_names)
+
+    start = time.time()
+    vector_db._upsert_for_testing(f"df{dimensions}", df)
+    finished_upsert = time.time()
+    time_upsert = finished_upsert - start
+    print(f"Wrote {df.size/time_upsert} floats per second.")
+
+    vector_db._bucketise_namespace(f"df{dimensions}", "IP", 100, dimensions, df)
+    finished_bucketise = time.time()
+    time_bucketise = finished_bucketise - finished_upsert
+    print(f"Bucketised {df.size/time_bucketise} floats per second.")
+
+    vector_db._index_segments(f"df{dimensions}", "test", "IP", dimensions)
+    finished_index_segments = time.time()
+    time_index_segments = finished_index_segments - finished_bucketise
+    print(f"Indexed [within segments] {df.size/time_index_segments} floats per second.")
+
+    result = vector_db.search_vectors_with_bucketiser_and_index(f"df{dimensions}", np.zeros(dimensions), 5, 10, dimensions)
+    finished_search = time.time()
+    time_search = finished_search - finished_index_segments
+    print(f"Searched {df.size/time_search} floats per second.")
+    print(result)
+
+    pass
+
+# Nearly everything below is for exact top-k.
 
 def test_top_k_simple(arctic_client):
     np.random.seed(0)

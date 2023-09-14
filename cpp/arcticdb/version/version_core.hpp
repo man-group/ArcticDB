@@ -21,6 +21,7 @@
 #include <arcticdb/stream/aggregator.hpp>
 #include <arcticdb/entity/frame_and_descriptor.hpp>
 #include <arcticdb/version/version_store_objects.hpp>
+#include <arcticdb/version/version_map.hpp>
 
 #include <string>
 
@@ -70,6 +71,14 @@ VersionedItem update_impl(
     InputTensorFrame&& frame,
     const WriteOptions&& options,
     bool dynamic_schema);
+
+std::vector<SliceAndKey> read_and_process(
+        const std::shared_ptr<Store>& store,
+        const std::shared_ptr<PipelineContext>& pipeline_context,
+        const ReadQuery& read_query,
+        const ReadOptions& read_options,
+        size_t start_from
+);
 
 VersionedItem delete_range_impl(
     const std::shared_ptr<Store>& store,
@@ -159,6 +168,17 @@ VersionedItem sort_merge_impl(
     bool sparsify
     );
 
+
+
+VersionedItem collate_and_write(
+        const std::shared_ptr<Store>& store,
+        const std::shared_ptr<PipelineContext>& pipeline_context,
+        const std::vector<FrameSlice>& slices,
+        std::vector<VariantKey> keys,
+        size_t append_after,
+        const std::optional<arcticdb::proto::descriptors::UserDefinedMetadata>& user_meta
+);
+
 void modify_descriptor(
     const std::shared_ptr<pipelines::PipelineContext>& pipeline_context,
     const ReadOptions& read_options);
@@ -169,6 +189,15 @@ void read_indexed_keys_to_pipeline(
     const VersionedItem& version_info,
     ReadQuery& read_query,
     const ReadOptions& read_options);
+
+void read_incompletes_to_pipeline(
+        const std::shared_ptr<Store>& store,
+        std::shared_ptr<PipelineContext>& pipeline_context,
+        const ReadQuery& read_query,
+        const ReadOptions& read_options,
+        bool convert_int_to_float,
+        bool via_iteration,
+        bool sparsify);
 
 void add_index_columns_to_query(
     const ReadQuery& read_query, 

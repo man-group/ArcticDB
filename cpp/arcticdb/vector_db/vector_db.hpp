@@ -8,20 +8,23 @@
 #pragma once
 
 #include <arcticdb/processing/clause.hpp>
+#include <arcticdb/version/version_map.hpp>
+#include <arcticdb/storage/store.hpp>
+#include <storage/library.hpp>
+#include <version/version_store_objects.hpp>
+#include <faiss/IndexIVFFlat.h>
+#include <faiss/IndexFlat.h>
 
 namespace arcticdb {
+    using namespace arcticdb::version_store; // we need to refer to UpdateInfo
 
     struct NamedColumnSortedByDistance {
         double distance_;
         std::shared_ptr<Column> column_;
         std::string_view name_;
 
-        explicit NamedColumnSortedByDistance(double distance,
-                                             std::shared_ptr<Column> column,
-                                             std::string_view name) :
-                distance_(distance),
-                column_(column),
-                name_(name) {}
+        explicit NamedColumnSortedByDistance(double distance, std::shared_ptr<Column> column, std::string_view name)
+                : distance_(distance), column_(column), name_(name) {}
 
         NamedColumnSortedByDistance() = delete;
 
@@ -38,60 +41,6 @@ namespace arcticdb {
 
     };
 
-    struct TopK {
-        uint64_t k_;
-        std::set<NamedColumnSortedByDistance> top_k_;
-        double furthest_distance_{std::numeric_limits<double>::infinity()};
-
-        explicit TopK(int k) : k_(k) {}
-
-        TopK() = delete;
-
-        ARCTICDB_MOVE_COPY_DEFAULT(TopK);
-
-        bool try_insert(
-                double distance,
-                std::shared_ptr<Column> column,
-                std::string_view name
-        ) {
-            return try_insert(NamedColumnSortedByDistance(
-                    distance,
-                    column,
-                    name));
-        }
-
-        bool try_insert(const NamedColumnSortedByDistance &col) {
-            // NB We require <= so that the vector name acts as the tiebreaker when the distance is the same.
-            // This is not guaranteed to the user but is useful for testing.
-            bool inserted = false;
-            if (col.distance_ < furthest_distance_ || (col.distance_ == furthest_distance_ && col < *top_k_.rbegin())) {
-                top_k_.insert(col);
-                inserted = true;
-            }
-            // Obviously if col.distance_ < furthest_distance_ then we've got a closer vector so we insert it.
-            // Where col.distance_ == furthest_distance_, the latter cannot be infinity, since in Python we require that
-            // all vectors should be within the n-cube centred about the origin whose long diagonal has length
-            // std::numeric_limits<double>::max(). Therefore, furthest_distance_ is finite. Therefore, it's been
-            // altered, and so we have at least member of top_k_. So top_k_ is nonempty and we can compare
-            // col < *top_k_.rbegin().
-            if (top_k_.size() > k_) {
-                top_k_.erase(*top_k_.rbegin());
-                furthest_distance_ = top_k_.rbegin()->distance_;
-            } else if (inserted && top_k_.size() == k_) {
-                furthest_distance_ = top_k_.rbegin()->distance_;
-            }
-            // There are three cases here.
-            // - top_k.size() < k. Then we don't need to erase anything or refresh the furthest distance. When there are
-            //   fewer than k elements in top_k_, we want to add any new vector we see; we may remove it later of course.
-            // - top_k_.size() is exactly k. Then we don't need to erase anything. But we might have just inserted
-            //   something so we need to reload the furthest_distance_ if we inserted something.
-            // - top_k.size() = k+1. Then we do need to erase the furthest element. We also need to refresh the largest
-            //   element.
-            return inserted;
-        }
-    };
-
-
     struct TopKClause {
         ClauseInfo clause_info_;
         std::vector<double> query_vector_;
@@ -103,19 +52,16 @@ namespace arcticdb {
 
         TopKClause(std::vector<double> query_vector, uint8_t k);
 
-        [[nodiscard]] Composite<ProcessingUnit> process(
-                std::shared_ptr<Store> store,
-                Composite<ProcessingUnit> &&p
-        ) const;
+        [[nodiscard]] Composite<ProcessingUnit>
+        process(std::shared_ptr<Store> store, Composite<ProcessingUnit> &&p) const;
 
-        [[nodiscard]] std::vector<Composite<SliceAndKey>> structure_for_processing(
-                std::vector<SliceAndKey>& slice_and_keys, ARCTICDB_UNUSED size_t) const {
+        [[nodiscard]] std::vector<Composite<SliceAndKey>>
+        structure_for_processing(std::vector<SliceAndKey> &slice_and_keys, ARCTICDB_UNUSED size_t) const {
             return structure_by_column_slice(slice_and_keys);
         }
 
-        std::optional<std::vector<Composite<ProcessingUnit>>> repartition(
-                const std::shared_ptr<Store>& store,
-                std::vector<Composite<ProcessingUnit>> &&c) const;
+        std::optional<std::vector<Composite<ProcessingUnit>>>
+        repartition(const std::shared_ptr<Store> &store, std::vector<Composite<ProcessingUnit>> &&c) const;
 
         [[nodiscard]] const ClauseInfo &clause_info() const {
             return clause_info_;
@@ -127,4 +73,154 @@ namespace arcticdb {
         [[nodiscard]] std::string to_string() const;
     };
 
-}
+
+    struct BucketiseVectorsClause {
+        ClauseInfo clause_info_;
+        uint64_t dimensions_;
+        faiss::Index *bucketiser_;
+
+        BucketiseVectorsClause() = delete;
+
+        ARCTICDB_MOVE_COPY_DEFAULT(BucketiseVectorsClause);
+
+        BucketiseVectorsClause(uint64_t dimensions, faiss::Index *bucketiser);
+
+        [[nodiscard]] Composite<ProcessingUnit>
+        process(std::shared_ptr<Store> store, Composite<ProcessingUnit> &&p) const;
+
+        [[nodiscard]] std::vector<Composite<SliceAndKey>>
+        structure_for_processing(std::vector<SliceAndKey> &slice_and_keys, ARCTICDB_UNUSED size_t) const {
+            return structure_by_column_slice(slice_and_keys);
+        }
+
+        [[nodiscard]] std::optional<std::vector<Composite<ProcessingUnit>>>
+        repartition(const std::shared_ptr<Store> &store, std::vector<Composite<ProcessingUnit>> &&c) const;
+
+        [[nodiscard]] const ClauseInfo &clause_info() const {
+            return clause_info_;
+        }
+
+        void set_processing_config(ARCTICDB_UNUSED const ProcessingConfig &processing_config) {}
+
+        [[nodiscard]] std::string to_string() const;
+    };
+
+    struct IndexSegmentClause {
+        ClauseInfo clause_info_;
+        StreamId stream_id_;
+        std::string index_;
+        std::string metric_;
+        uint64_t dimensions_;
+        VersionId version_id_;
+        UpdateInfo update_info_;
+
+        IndexSegmentClause() = delete;
+
+        ARCTICDB_MOVE_COPY_DEFAULT(IndexSegmentClause);
+
+        IndexSegmentClause(
+                StreamId stream_id,
+                std::string index,
+                std::string metric,
+                uint64_t dimensions,
+                VersionId version_id,
+                UpdateInfo update_info);
+
+        [[nodiscard]] Composite<ProcessingUnit>
+        process(std::shared_ptr<Store> store, Composite<ProcessingUnit> &&p) const;
+
+        [[nodiscard]] std::vector<Composite<SliceAndKey>>
+        structure_for_processing(std::vector<SliceAndKey> &slice_and_keys, ARCTICDB_UNUSED size_t) const {
+            return structure_by_column_slice(slice_and_keys);
+        }
+
+        [[nodiscard]] std::optional<std::vector<Composite<ProcessingUnit>>>
+        repartition(ARCTICDB_UNUSED const std::shared_ptr<Store> &,
+                    ARCTICDB_UNUSED std::vector<Composite<ProcessingUnit>> &&) const {
+            return std::nullopt;
+        }
+
+        [[nodiscard]] const ClauseInfo &clause_info() const {
+            return clause_info_;
+        }
+
+        void set_processing_config(ARCTICDB_UNUSED const ProcessingConfig &processing_config) {}
+
+        [[nodiscard]] std::string to_string() const;
+    };
+
+    struct SearchSegmentWithIndexClause {
+        ClauseInfo clause_info_;
+        std::vector<float> query_vectors_;
+        uint16_t k_;
+        std::string vector_index_;
+        uint64_t dimensions_;
+        StreamId stream_id_;
+        VersionId version_id_;
+        UpdateInfo update_info_;
+        std::shared_ptr<VersionMap> version_map_;
+
+        SearchSegmentWithIndexClause() = delete;
+
+        ARCTICDB_MOVE_COPY_DEFAULT(SearchSegmentWithIndexClause);
+
+        SearchSegmentWithIndexClause(std::vector<float> query_vectors, uint16_t k, std::string vector_index,
+                                     uint64_t dimensions, StreamId stream_id, VersionId version_id,
+                                     UpdateInfo update_info, std::shared_ptr<VersionMap> version_map);
+
+        [[nodiscard]] Composite<ProcessingUnit>
+        process(std::shared_ptr<Store> store, Composite<ProcessingUnit> &&p) const;
+
+        [[nodiscard]] std::vector<Composite<SliceAndKey>>
+        structure_for_processing(std::vector<SliceAndKey> &slice_and_keys, ARCTICDB_UNUSED size_t) const {
+            return structure_by_column_slice(slice_and_keys);
+        }
+
+        [[nodiscard]] std::optional<std::vector<Composite<ProcessingUnit>>>
+        repartition(ARCTICDB_UNUSED const std::shared_ptr<Store> &,
+                    ARCTICDB_UNUSED std::vector<Composite<ProcessingUnit>> &&) const {
+            return std::nullopt;
+        }
+
+        [[nodiscard]] const ClauseInfo &clause_info() const {
+            return clause_info_;
+        }
+
+        void set_processing_config(ARCTICDB_UNUSED const ProcessingConfig &processing_config) {}
+
+        [[nodiscard]] std::string to_string() const;
+    };
+} // namespace arcticdb
+
+namespace arcticdb::version_store {
+    void index_segment_vectors_impl(const std::shared_ptr<Store> &store,
+                              const UpdateInfo update_info,
+                              const StreamId &stream_id,
+                              const std::string vector_index,
+                              const std::string metric,
+                              const uint64_t dimensions);
+
+    std::vector<std::string>
+    search_vectors_with_bucketiser_and_index_impl(
+            const std::shared_ptr<Store> &store,
+            const UpdateInfo update_info,
+            const StreamId &stream_id,
+            const std::vector<float> query_vectors,
+            const uint16_t k,
+            const uint64_t nprobes,
+            const uint64_t dimensions);
+
+    void train_vector_namespace_bucketiser_impl(
+            const std::shared_ptr<Store> &store,
+            const UpdateInfo &update_info,
+            const StreamId &stream_id,
+            const std::string metric,
+            const uint64_t centroids,
+            const std::optional<std::vector<float>> &training_vectors,
+            const uint64_t dimensions
+    );
+
+    VersionedItem bucketise_vector_namespace_impl(const std::shared_ptr<Store> &store, const StreamId &stream_id,
+                                             const UpdateInfo &update_info, ARCTICDB_UNUSED const uint64_t dimensions);
+
+} // namespace arcticdb::version_store
