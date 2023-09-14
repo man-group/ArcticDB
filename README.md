@@ -53,9 +53,7 @@ ArcticDB is designed from the outset to be resilient; there is no single point o
 | --------------------- | - | - |
 | S3                 | ✔️ | ✔️ |
 | LMDB               | ✔️ | ✔️ |
-| Azure Blob Storage | ✔️ | ➖|
-
-Azure Blob Storage will be available on conda-forge as of 3.0.0.
+| Azure Blob Storage | ✔️ | ✔️ |
 
 ### Installation
 
