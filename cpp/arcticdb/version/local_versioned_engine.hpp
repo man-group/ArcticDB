@@ -265,6 +265,34 @@ public:
         bool sparsify
         );
 
+    void train_vector_namespace_bucketiser_internal(
+            const std::string vector_namespace,
+            const std::string metric,
+            const uint64_t centroids,
+            const std::optional<std::vector<float>> training_vectors,
+            const uint64_t dimensions
+    );
+
+    void bucketise_vector_namespace_internal(
+            const std::string vector_namespace,
+            const uint64_t dimensions
+    );
+
+    void index_segment_vectors_internal(
+            const std::string vector_namespace,
+            const std::string vector_index,
+            const std::string metric,
+            const uint64_t dimensions
+    );
+
+    std::vector<std::string> search_vectors_with_bucketiser_and_index_internal(
+            const std::string vector_namespace,
+            const std::vector<float> query_vector,
+            const uint16_t k,
+            const uint64_t nprobes,
+            const uint64_t dimensions
+    );
+
     std::vector<folly::Future<AtomKey>> batch_write_internal(
         std::vector<VersionId> version_ids,
         const std::vector<StreamId>& stream_ids,

@@ -442,6 +442,18 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
          .def("write_metadata",
              &PythonVersionStore::write_metadata,
              "Create a new version with new metadata and data from the last version")
+         .def("index_segment_vectors",
+              &PythonVersionStore::index_segment_vectors,
+              "Index vectors by segment in VectorDB.")
+        .def("search_vectors_with_bucketiser_and_index",
+             &PythonVersionStore::search_vectors_with_bucketiser_and_index,
+             "Search vectors with index in VectorDB.")
+        .def("train_vector_namespace_bucketiser",
+             &PythonVersionStore::train_vector_namespace_bucketiser,
+             "Train bucketiser on vectors in VectorDB.")
+        .def("bucketise_vector_namespace",
+             &PythonVersionStore::bucketise_vector_namespace,
+             "Index vectors in VectorDB.")
         .def("create_column_stats_version",
              &PythonVersionStore::create_column_stats_version,
              "Create column stats")

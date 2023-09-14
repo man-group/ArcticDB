@@ -95,6 +95,19 @@ public:
             .thenValue(WriteSegmentTask{library_});
     }
 
+    entity::VariantKey write_sync(AtomKey atom_key, SegmentInMemory &&segment) override {
+        util::check(segment.descriptor().id() == atom_key.id(),
+                    "Descriptor id mismatch in atom key {} != {}",
+                    atom_key.id(),
+                    segment.descriptor().id());
+
+        auto encoded = EncodeAtomTask{
+            atom_key.type(), atom_key.version_id(), atom_key.id(), atom_key.start_index(), atom_key.end_index(),
+            atom_key.creation_ts(), std::move(segment), codec_, encoding_version_
+        }();
+        return WriteSegmentTask{library_}(std::move(encoded));
+    }
+
     entity::VariantKey write_sync(
         stream::KeyType key_type,
         VersionId version_id,

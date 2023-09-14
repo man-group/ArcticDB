@@ -59,6 +59,7 @@ void register_bindings(py::module& storage, py::exception<arcticdb::ArcticExcept
         .value("SNAPSHOT_TOMBSTONE", KeyType::SNAPSHOT_TOMBSTONE)
         .value("LOG_COMPACTED", KeyType::LOG_COMPACTED)
         .value("COLUMN_STATS", KeyType::COLUMN_STATS)
+        .value("VECTOR_INDEX", KeyType::SEGMENT_VECTOR_INDEX)
         ;
 
     py::enum_<OpenMode>(storage, "OpenMode")

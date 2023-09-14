@@ -287,6 +287,18 @@ class VectorDB:
     def __getitem__(self, item: str):
         return _VectorSymbol(item, self)
 
+    def _upsert_for_testing(
+        self,
+        namespace: str,
+        vectors: pd.DataFrame
+    ) -> None:
+        """
+        Utility method for testing that ignores all checks.
+        """
+        symbol_name = f"{namespace}{VECTOR_DB_DISTINGUISHED_SUFFIX}"
+        self._lib.write(symbol_name, vectors, metadata={"dimensions": vectors.shape[0]})
+
+
     def upsert(
         self,
         namespace: str,
@@ -447,6 +459,50 @@ class VectorDB:
         """
         return self._lib.read(f"{namespace}{VECTOR_DB_DISTINGUISHED_SUFFIX}", identifiers).data
 
+    def index(
+        self,
+        namespace: str,
+        index: str, # presently ignored but can contain faiss 'index factory' string
+        metric: str,
+        centroids: int,
+        training_set: pd.DataFrame,
+        dimensions: int
+    ) -> None:
+        self._bucketise_namespace(namespace, metric, centroids, dimensions, training_set)
+        if metric not in ["IP", "L2"]:
+            raise ValueError("Only inner product ('IP') and L2 ('L2') supported metrics.")
+        self._index_segments(namespace, index, metric, dimensions)
+
+    def _bucketise_namespace(
+            self,
+            namespace: str,
+            metric: str,
+            centroids: int,
+            dimensions: int,
+            training_set: pd.DataFrame,
+    ) -> pd.DataFrame:
+        self._lib._nvs.version_store.train_vector_namespace_bucketiser(namespace, metric, centroids, list(training_set.to_numpy().flatten()), dimensions)
+        self._lib._nvs.version_store.bucketise_vector_namespace(namespace, dimensions)
+
+    def _index_segments(
+            self,
+            namespace: str,
+            index: str,
+            metric: str,
+            dimensions: int
+    ) -> pd.DataFrame:
+        self._lib._nvs.version_store.index_segment_vectors(namespace, index, metric, dimensions)
+
+    def search_vectors_with_bucketiser_and_index(
+            self,
+            namespace: str,
+            query_vector: List[float],
+            k: int,
+            nprobes: int,
+            dimensions: int
+    ) -> None:
+        return self._lib._nvs.version_store.search_vectors_with_bucketiser_and_index(namespace, query_vector, k, nprobes, dimensions)
+
 
 class _VectorSymbol:
     def __init__(self, namespace: str, vector_db: VectorDB):
@@ -478,7 +534,6 @@ class _VectorSymbol:
 
     def read(self, identifiers: Optional[List[str]] = None) -> pd.DataFrame:
         return self.vector_db.read(self.namespace, identifiers)
-
 
 def new_vector_db(ac: Arctic, name: str, max_vector_size: int, segment_width: Optional[int] = None) -> VectorDB:
     """

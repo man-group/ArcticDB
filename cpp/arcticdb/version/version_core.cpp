@@ -30,6 +30,7 @@
 #include <arcticdb/version/schema_checks.hpp>
 #include <arcticdb/version/version_utils.hpp>
 #include <arcticdb/entity/merge_descriptors.hpp>
+#include "vector_db/vector_db.hpp"
 
 namespace arcticdb::version_store {
 
@@ -988,7 +989,8 @@ FrameAndDescriptor read_dataframe_impl(
     ARCTICDB_DEBUG(log::version(), "Fetching data to frame");
     SegmentInMemory frame;
     auto buffers = std::make_shared<BufferHolder>();
-    if(!read_query.clauses_.empty()) {
+    auto test = store->read_sync(pipeline_context->slice_and_keys_[0].key());
+    if (!read_query.clauses_.empty()) {
         ARCTICDB_SAMPLE(RunPipelineAndOutput, 0)
         util::check_rte(!pipeline_context->is_pickled(),"Cannot filter pickled data");
         auto segs = read_and_process(store, pipeline_context, read_query, read_options, 0u);

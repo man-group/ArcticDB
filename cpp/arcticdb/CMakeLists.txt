@@ -22,6 +22,8 @@ cmake_policy(PUSH)
     find_package(AWSSDK REQUIRED COMPONENTS s3)
 cmake_policy(POP)
 
+find_package(faiss REQUIRED)
+find_package(folly REQUIRED)
 find_package(Boost REQUIRED)
 find_package(fmt REQUIRED)
 find_package(spdlog REQUIRED)
@@ -163,6 +165,7 @@ endif ()
 ## Core library without python bindings ##
 set(arcticdb_srcs
         # header files
+        vector_db/vector_db.hpp
         async/async_store.hpp
         async/batch_read_args.hpp
         async/task_scheduler.hpp
@@ -346,6 +349,7 @@ set(arcticdb_srcs
         version/version_store_objects.hpp
         version/version_utils.hpp
         # CPP files
+        vector_db/vector_db.cpp
         async/async_store.cpp
         async/task_scheduler.cpp
         async/tasks.cpp
@@ -492,6 +496,8 @@ set (arcticdb_core_libraries
         Folly::folly # Transitively includes: double-conversion, gflags, glog, libevent, libssl, libcrypto, libiberty, libsodium
         Azure::azure-identity
         Azure::azure-storage-blobs
+        openblas
+        faiss
 )
 
 # Dependencies expose different names of their libraries depending

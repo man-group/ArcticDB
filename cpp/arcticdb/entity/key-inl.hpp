@@ -180,6 +180,22 @@ enum class KeyType : int {
      * Contains column stats about the index key with the same stream ID and version number
      */
     COLUMN_STATS = 25,
+    /*
+     * Contains vector indices.
+     */
+    SEGMENT_VECTOR_INDEX = 26,
+    /*
+     * Contains bucketiser for insertion.
+     */
+    NAMESPACE_INSERTION_BUCKETISER = 27,
+    /*
+     * Contains bucketiser for search.
+     */
+    NAMESPACE_QUERY_BUCKETISER = 28,
+    /*
+     * Contains query bucket to insertion bucket key vector.
+     */
+    QUERY_BUCKET_TO_INSERTION_BUCKET = 29,
     UNDEFINED
 };
 
