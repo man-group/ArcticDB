@@ -8,6 +8,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 import re
 import time
 from typing import Optional
+import ssl
 import platform
 
 from arcticc.pb2.storage_pb2 import EnvironmentConfigsMap, LibraryConfig
@@ -26,7 +27,10 @@ PARSED_QUERY = namedtuple("PARSED_QUERY", ["region"])
 @dataclass
 class ParsedQuery:
     Path_prefix: Optional[str] = None
-    CA_cert_path: str = ""
+    # winhttp is used as Azure backend support on Windows by default; winhttp itself maintains ca cert.
+    # The options should be left empty else libcurl will be used on Windows
+    CA_cert_path: Optional[str] = "" # CURLOPT_CAINFO in curl
+    CA_cert_dir: Optional[str] = "" # CURLOPT_CAPATH in curl
     Container: Optional[str] = None
 
 
@@ -54,9 +58,16 @@ class AzureLibraryAdapter(ArcticLibraryAdapter):
             ]
         )
         self._container = self._query_params.Container
-        if platform.system() == "Windows" and self._query_params.CA_cert_path:
-            raise ValueError(f"CA_cert_path cannot be set on Windows platform")
+        if platform.system() != "Linux" and (self._query_params.CA_cert_path or self._query_params.CA_cert_dir):
+            raise ValueError("You have provided `ca_cert_path` or `ca_cert_dir` in the URI which is only supported on Linux. " \
+                             "Remove the setting in the connection URI and use your operating system defaults.")
         self._ca_cert_path = self._query_params.CA_cert_path
+        self._ca_cert_dir = self._query_params.CA_cert_dir
+        if not self._ca_cert_path and not self._ca_cert_dir and platform.system() == "Linux":
+            if ssl.get_default_verify_paths().cafile is not None:
+                self._ca_cert_path = ssl.get_default_verify_paths().cafile
+            if ssl.get_default_verify_paths().capath is not None:
+                self._ca_cert_dir = ssl.get_default_verify_paths().capath
         self._encoding_version = encoding_version
 
         super().__init__(uri, self._encoding_version)
@@ -80,6 +91,7 @@ class AzureLibraryAdapter(ArcticLibraryAdapter):
             endpoint=self._endpoint,
             with_prefix=with_prefix,
             ca_cert_path=self._ca_cert_path,
+            ca_cert_dir=self._ca_cert_dir,
         )
 
         lib = NativeVersionStore.create_store_from_config(
@@ -111,6 +123,8 @@ class AzureLibraryAdapter(ArcticLibraryAdapter):
             azure_override.endpoint = self._endpoint
         if self._ca_cert_path:
             azure_override.ca_cert_path = self._ca_cert_path
+        if self._ca_cert_dir:
+            azure_override.ca_cert_dir = self._ca_cert_dir
 
         storage_override = StorageOverride()
         storage_override.set_azure_override(azure_override)
@@ -138,6 +152,7 @@ class AzureLibraryAdapter(ArcticLibraryAdapter):
             endpoint=self._endpoint,
             with_prefix=with_prefix,
             ca_cert_path=self._ca_cert_path,
+            ca_cert_dir=self._ca_cert_dir,
         )
 
     @property

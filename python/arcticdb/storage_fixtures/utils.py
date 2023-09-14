@@ -136,3 +136,21 @@ def safer_rmtree(fixture, path):
         time.sleep(1)
         with handler:  # Even with ignore_errors=True, rmtree might still throw on Windows....
             shutil.rmtree(path, ignore_errors=True)
+
+
+def get_ca_cert_for_testing(working_dir):
+    key_file = os.path.join(working_dir, "key.pem")
+    cert_file = os.path.join(working_dir, "cert.pem")
+    client_cert_file = os.path.join(working_dir, "client.pem")
+    ca = trustme.CA()
+    server_cert = ca.issue_cert("localhost")
+    server_cert.private_key_pem.write_to_path(key_file)
+    server_cert.cert_chain_pems[0].write_to_path(cert_file)
+    ca.cert_pem.write_to_path(client_cert_file)
+    # Create the sym link for curl CURLOPT_CAPATH option; rehash only available on openssl >=1.1.1
+    subprocess.run(
+        f'ln -s "{client_cert_file}" "$(openssl x509 -hash -noout -in "{client_cert_file}")".0',
+        cwd=working_dir,
+        shell=True,
+    )
+    return ca, key_file, cert_file, client_cert_file # Need to keep ca alive to authenticate the cert
