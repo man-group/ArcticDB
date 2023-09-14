@@ -40,7 +40,7 @@ def calculate_fragmentation(
     """
     Calculates the overall fragmentation level as well as row-wise and column-wise fragmentation for the data.
     """
-    fragmentation = float(total_data_points) / max_data_points
+    fragmentation = None if dynamic_schema else float(total_data_points) / max_data_points
     per_row_fragmentation = float(total_rows) / max_rows
     per_column_fragmentation = None if dynamic_schema else float(total_columns) / max_columns
     return fragmentation, per_row_fragmentation, per_column_fragmentation
@@ -51,23 +51,23 @@ def display_message(fragmentation, per_row_fragmentation, per_column_fragmentati
     Displays a markdown message based on the calculated fragmentation levels.
     """
     message = ""
-    if fragmentation < 0.5:
-        message += (
-            f"\n**Warning!** Your overall fragmentation is about {fragmentation * 100:.1f}%. The data appears quite"
-            " fragmented. "
-        )
-    elif fragmentation < 0.75:
-        message += (
-            f"\n**Attention:** Your overall fragmentation is about {fragmentation * 100:.1f}%. The data appears to be"
-            " somewhat fragmented. "
-        )
-    else:
-        message += (
-            f"\n**Good news:** Your overall fragmentation is about {fragmentation * 100:.1f}%. No major fragmentation"
-            " issues detected. "
-        )
-        display(Markdown(message))
-        return
+    if fragmentation is not None:
+        if fragmentation < 0.5:
+            message += (
+                f"\n**Warning!** Your overall fragmentation is about {fragmentation * 100:.1f}%. The data appears quite"
+                " fragmented. "
+            )
+        elif fragmentation < 0.75:
+            message += (
+                f"\n**Attention:** Your overall fragmentation is about {fragmentation * 100:.1f}%. The data appears to"
+                " be somewhat fragmented. "
+            )
+        else:
+            message += (
+                f"\n**Good news:** Your overall fragmentation is about {fragmentation * 100:.1f}%. No major"
+                " fragmentation issues detected. "
+            )
+            display(Markdown(message))
 
     if per_row_fragmentation < 0.5:
         message += (
@@ -163,15 +163,15 @@ def fragmentation_diagnosis(lib, symbol, as_of=None):
     fragmentation_diagnosis(lib, 'my_symbol', 3)
     """
 
-    lib = check_and_adapt_library(lib)
+    lib, _ = check_and_adapt_library(lib)
     if lib is None:
         return
 
     if not check_symbol_exists(lib, symbol, as_of):
         return
 
-    segment_row_size = lib._lib_cfg.lib_desc.version.write_options.segment_row_size
-    column_group_size = lib._lib_cfg.lib_desc.version.write_options.column_group_size
+    segment_row_size = (lambda x: x if x > 0 else 100000)(lib._lib_cfg.lib_desc.version.write_options.segment_row_size)
+    column_group_size = (lambda x: x if x > 0 else 127)(lib._lib_cfg.lib_desc.version.write_options.column_group_size)
     dynamic_schema = lib._lib_cfg.lib_desc.version.write_options.dynamic_schema
 
     # Calculate the actual amount of data stored across all the segments
@@ -192,6 +192,6 @@ def fragmentation_diagnosis(lib, symbol, as_of=None):
 
     # Display Results
     display_message(fragmentation, per_row_fragmentation, per_column_fragmentation)
-    plot_data_points(df, total_segment_size)
     if not dynamic_schema:
-        plot_per_row_fragmentation(df, segment_row_size)
+        plot_data_points(df, total_segment_size)
+    plot_per_row_fragmentation(df, segment_row_size)

@@ -18,7 +18,7 @@ def pickling_diagnosis(lib, frame):
     -------
     None
     """
-    lib = check_and_adapt_library(lib)
+    lib, _ = check_and_adapt_library(lib)
     if lib is None:
         return
 

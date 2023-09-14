@@ -183,6 +183,8 @@ EXPLANATIONS = {
     performance of list_symbols operations. For a more detailed understanding of this feature, including how it
     works and its various use cases and limitations, please refer to the specific 'Symbol list consistency
     diagnosis' section in this notebook.""",
+    "strict_mode": """
+    \n If normalisation is running in strict mode, writing pickled data is disabled""",
 }
 
 
@@ -205,10 +207,10 @@ class LibraryInfoGetter:
     info_getter.display_library_options()
     """
 
-    def __init__(self, lib, explanations):
+    def __init__(self, lib, is_internal_api, explanations):
         self.response_obj = lib._lib_cfg.lib_desc.version
+        self.is_internal_api = is_internal_api
         self.explanations = explanations
-
         self.response_non_default_str = (
             "## Next, see the list of your library options that has been modified with respect to the default"
             " values:\n\n"
@@ -218,13 +220,44 @@ class LibraryInfoGetter:
         )
 
         # Default values defined internally
-        self.internal_default_values = {
+        self.c_plus_plus_overwritten_when_zero = {
             "column_group_size": 127,
             "segment_row_size": 100000,
             "max_num_buckets": 150,
+            "max_blob_size": 16777216,
         }
 
-    def traverse_descriptor(self, obj):
+        self.internal_default_values = {
+            "prune_previous_version": True,
+            "dynamic_strings": True,
+            "use_tombstones": True,
+            "fast_tombstone_all": True,
+            "symbol_list": True,
+        }
+
+        # values that are not a library option, starting from lib._lib_cfg.lib_desc.version
+        self.exclusion_set = {
+            "write_options.sync_disabled.enabled",
+            "write_options.sync_passive.enabled",
+            "write_options.sync_active.enabled",
+            "failure_sim.write_failure_prob",
+            "failure_sim.read_failure_prob",
+            "deleted",
+            "prometheus_config.instance",
+            "prometheus_config.host",
+            "prometheus_config.port",
+            "prometheus_config.job_name",
+            "prometheus_config.prometheus_env",
+            "prometheus_config.prometheus_model",
+            "event_logger_config.logstash_config.event_type",
+            "event_logger_config.logstash_config.host",
+            "event_logger_config.logstash_config.port",
+            "event_logger_config.logstash_config.allow_name_lookup",
+            "event_logger_config.file_logger.file_path",
+            "storage_fallthrough",
+        }
+
+    def traverse_descriptor(self, obj, path=""):
         """
         Traverses the fields of the provided protobuf object, compares their values with default ones,
         and updates response strings accordingly. The function is recursive for nested protobuf message types.
@@ -232,20 +265,25 @@ class LibraryInfoGetter:
         default_response_obj = type(obj)()
         for field in obj.DESCRIPTOR.fields:
             value = getattr(obj, field.name)
+            full_name = path + "." + field.name if path else field.name
             if field.message_type:
-                self.traverse_descriptor(value)
-            elif field.name in self.explanations:
-                default_value = getattr(default_response_obj, field.name)
-                explanation = self.explanations.get(field.name, "No explanation required.")
+                self.traverse_descriptor(value, full_name)
+            elif full_name not in self.exclusion_set:
+                default_value = (
+                    getattr(default_response_obj, field.name)
+                    if (not self.is_internal_api or field.name not in self.internal_default_values)
+                    else self.internal_default_values[field.name]
+                )
+                explanation = self.explanations.get(field.name, "No explanation provided.")
                 if value != default_value:
-                    if field.name in self.internal_default_values:
-                        default_value = self.internal_default_values[field.name]
+                    if default_value == 0 and field.name in self.c_plus_plus_overwritten_when_zero:
+                        default_value = self.c_plus_plus_overwritten_when_zero[field.name]
                     self.response_non_default_str += (
                         f"\n### **{field.name}**: {value} (Default: {default_value})\n\n{explanation}\n\n"
                     )
                 else:
-                    if field.name in self.internal_default_values:
-                        value = self.internal_default_values[field.name]
+                    if value == 0 and field.name in self.c_plus_plus_overwritten_when_zero:
+                        value = self.c_plus_plus_overwritten_when_zero[field.name]
                     self.response_default_str += f"\n### **{field.name}**: {value}\n\n{explanation}\n\n"
 
     def display_library_options(self):
@@ -279,8 +317,8 @@ def display_library_options(lib):
     refer to options that have been altered from their defaults. For each setting, an explanation is provided
     to clarify its role and impact.
     """
-    lib = check_and_adapt_library(lib)
+    lib, is_internal_api = check_and_adapt_library(lib)
     if lib is None:
         return
-    info_getter = LibraryInfoGetter(lib, EXPLANATIONS)
+    info_getter = LibraryInfoGetter(lib, is_internal_api, EXPLANATIONS)
     info_getter.display_library_options()

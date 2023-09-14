@@ -72,7 +72,7 @@ def display_index_key_structure(lib, symbol, as_of=None):
     display_index_key_structure(lib, 'my_symbol', 3)
     """
 
-    lib = check_and_adapt_library(lib)
+    lib, _ = check_and_adapt_library(lib)
     if lib is None:
         return
 

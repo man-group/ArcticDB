@@ -144,7 +144,7 @@ def sortedness_diagnosis(lib, symbol, as_of=None):
     -------
     None
     """
-    lib = check_and_adapt_library(lib)
+    lib, _ = check_and_adapt_library(lib)
     if lib is None:
         return
 

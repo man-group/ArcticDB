@@ -1,23 +1,28 @@
 from arcticdb.version_store import NativeVersionStore
 from IPython.display import display, Markdown
 import pandas as pd
+from arcticdb.supported_types import time_types as supported_time_types
+from arcticdb.version_store.library import Library
 
 
 def check_and_adapt_library(lib):
     """
     Verifies that the type of the library is compatible with the diagnostics engine, and if necessary,
-    adapts the library to the type used internally by the engine
+    adapts the library to the type used internally by the engine. It also returns if the original library
+    type belongs to the internal API.
     """
     if isinstance(lib, NativeVersionStore):
-        return lib
+        return lib, True
+    elif isinstance(lib, Library):
+        lib._nvs, False
     else:
         display(Markdown(f"the provided library is not supported"))
-        return None
+        return None, False
 
 
 def get_string_version(as_of):
     if as_of is not None:
-        if isinstance(as_of, pd.Timestamp):
+        if isinstance(as_of, supported_time_types):
             string_version = "the as_of date ***" + as_of.strftime("%Y-%m-%d %H:%M:%S %Z") + "***"
         elif isinstance(as_of, str):
             string_version = f"the snapshot name ***{as_of}***"

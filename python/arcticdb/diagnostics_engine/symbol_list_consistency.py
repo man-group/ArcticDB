@@ -2,17 +2,6 @@ from IPython.display import display, Markdown
 from .library_utils import check_and_adapt_library
 
 
-def get_non_existent_symbols(lib, sym_list):
-    """
-    Checks which of the symbols from the provided list are no longer present in the library.
-    """
-    not_in_lib = []
-    for sym in sym_list:
-        if not lib.has_symbol(sym):
-            not_in_lib.append(sym)
-    return not_in_lib
-
-
 def get_symbols_list_from_cache(lib):
     """
     Retrieves and returns a list of symbols from the cached structure of the provided library.
@@ -56,7 +45,7 @@ def symbol_list_consistency(lib):
     --------
     symbol_list_consistency(my_library)
     """
-    lib = check_and_adapt_library(lib)
+    lib, _ = check_and_adapt_library(lib)
     if lib is None:
         return
 
@@ -78,12 +67,13 @@ def symbol_list_consistency(lib):
             f" are:\n\n```\n{cached_symbols}\n```."
         )
 
-    deleted_symbols_list = list(set(get_all_symbols_from_library(lib)) - non_cached_symbol_list_set)
+    deleted_symbols_set = set(get_all_symbols_from_library(lib)) - non_cached_symbol_list_set
+    deleted_symbols_list = list(deleted_symbols_set)
     if deleted_symbols_list:
         deleted_symbols = ", ".join(deleted_symbols_list)
         response += f"\n\n- The set of deleted symbols in your library are: ```\n{deleted_symbols}\n```."
 
-    deleted_symbols_present_in_cache_list = get_non_existent_symbols(lib, cached_symbol_list)
+    deleted_symbols_present_in_cache_list = list(deleted_symbols_set & cached_symbol_list_set)
     if deleted_symbols_present_in_cache_list:
         deleted_symbols_present_in_cache = ", ".join(deleted_symbols_present_in_cache_list)
         response += (
