@@ -15,7 +15,6 @@ import numpy as np
 from datetime import datetime, timezone
 from typing import List
 from enum import Enum
-import platform
 
 from arcticdb_ext.exceptions import InternalException, UserInputException
 from arcticdb_ext.storage import NoDataFoundException
@@ -36,7 +35,7 @@ from arcticdb.version_store.library import (
     ArcticInvalidApiUsageException,
 )
 
-from tests.util.mark import AZURE_TESTS_MARK, MONGO_TESTS_MARK, REAL_S3_TESTS_MARK, S3_SSL_TESTS_MARK
+from tests.util.mark import AZURE_TESTS_MARK, MONGO_TESTS_MARK, REAL_S3_TESTS_MARK, SSL_TESTS_MARK, SSL_TEST_ENABLED
 
 class ParameterDisplayStatus(Enum):
     NOT_SHOW = 1
@@ -44,41 +43,94 @@ class ParameterDisplayStatus(Enum):
     ENABLE = 3
 
 parameter_display_status = [ParameterDisplayStatus.NOT_SHOW, ParameterDisplayStatus.DISABLE, ParameterDisplayStatus.ENABLE]
+no_ssl_parameter_display_status = [ParameterDisplayStatus.NOT_SHOW, ParameterDisplayStatus.DISABLE]
 
-@S3_SSL_TESTS_MARK
-@pytest.mark.parametrize('client_cert_file', parameter_display_status)
-@pytest.mark.parametrize('ssl', parameter_display_status)
-def test_s3_no_ssl_verification(s3_no_ssl_storage, client_cert_file, ssl):
-    uri = s3_no_ssl_storage.arctic_uri
-    if ssl == ParameterDisplayStatus.DISABLE:
-        uri += "&ssl=False"
-    elif ssl == ParameterDisplayStatus.ENABLE:
-        uri += "&ssl=True"
+class DefaultSetting:
+    def __init__(self, factory):
+        self.cafile = factory.client_cert_file
+        self.capath = factory.client_cert_dir
+
+def edit_connection_string(uri, delimiter, storage, ssl_setting, client_cert_file, client_cert_dir):
+    # Clear default setting in the uri
+    if SSL_TEST_ENABLED:
+        uri = storage.replace_uri_field(uri, ArcticUriFields.CA_PATH, "", start=1, end=3).rstrip(delimiter)
+        if isinstance(storage, S3Bucket) and "&ssl=" in uri:
+            uri = storage.replace_uri_field(uri, ArcticUriFields.SSL, "", start=1, end=3).rstrip(delimiter)
+    # http server with ssl verification doesn't make sense but it is permitted due to historical reason
+    if ssl_setting == ParameterDisplayStatus.DISABLE:
+        uri += f"{delimiter}ssl=False"
+    elif ssl_setting == ParameterDisplayStatus.ENABLE:
+        uri += f"{delimiter}ssl=True"
     if client_cert_file == ParameterDisplayStatus.DISABLE:
-        uri += "&CA_cert_path="
+        uri += f"{delimiter}CA_cert_path="
     elif client_cert_file == ParameterDisplayStatus.ENABLE:
-        uri += f"&CA_cert_path={s3_no_ssl_storage.factory.client_cert_file}"
+        assert storage.factory.client_cert_file
+        uri += f"{delimiter}CA_cert_path={storage.factory.client_cert_file}"
+    if client_cert_dir == ParameterDisplayStatus.DISABLE:
+        uri += f"{delimiter}CA_cert_dir="
+    elif client_cert_dir == ParameterDisplayStatus.ENABLE:
+        assert storage.factory.client_cert_dir
+        uri += f"{delimiter}CA_cert_dir={storage.factory.client_cert_dir}"
+    return uri
+
+# s3_storage will become non-ssl if SSL_TEST_ENABLED is False
+@pytest.mark.parametrize('client_cert_file', parameter_display_status if SSL_TEST_ENABLED else no_ssl_parameter_display_status)
+@pytest.mark.parametrize('client_cert_dir', parameter_display_status if SSL_TEST_ENABLED else no_ssl_parameter_display_status)
+@pytest.mark.parametrize('ssl_setting', parameter_display_status if SSL_TEST_ENABLED else no_ssl_parameter_display_status)
+def test_s3_verification(monkeypatch, s3_storage, client_cert_file, client_cert_dir, ssl_setting):
+    storage = s3_storage
+    # Leaving ca file and ca dir unset will fallback to using os default setting,
+    # which is different from the test environment
+    default_setting = DefaultSetting(storage.factory)
+    monkeypatch.setattr("ssl.get_default_verify_paths", lambda: default_setting)
+    uri = edit_connection_string(storage.arctic_uri, "&", storage, ssl_setting, client_cert_file, client_cert_dir)
     ac = Arctic(uri)
     lib = ac.create_library("test")
     lib.write("sym", pd.DataFrame())
 
 
-@S3_SSL_TESTS_MARK
-def test_s3_ca_directory_ssl_verification(s3_storage):
-    uri = f"s3s://{s3_storage.factory.host}:{s3_storage.bucket}?access={s3_storage.key.id}" \
-          f"&secret={s3_storage.key.secret}&CA_cert_path=&CA_cert_dir={s3_storage.factory.client_cert_dir}&ssl=True"
-    if s3_storage.factory.port:
-        uri += f"&port={s3_storage.factory.port}"
+@SSL_TESTS_MARK
+@pytest.mark.parametrize('client_cert_file', no_ssl_parameter_display_status)
+@pytest.mark.parametrize('client_cert_dir', no_ssl_parameter_display_status)
+@pytest.mark.parametrize('ssl_setting', no_ssl_parameter_display_status)
+def test_s3_no_ssl_verification(monkeypatch, s3_no_ssl_storage, client_cert_file, client_cert_dir, ssl_setting):        
+    storage = s3_no_ssl_storage
+    # Leaving ca file and ca dir unset will fallback to using os default setting,
+    # which is different from the test environment
+    default_setting = DefaultSetting(storage.factory)
+    monkeypatch.setattr("ssl.get_default_verify_paths", lambda: default_setting)
+    uri = edit_connection_string(storage.arctic_uri, "&", storage, ssl_setting, client_cert_file, client_cert_dir)
     ac = Arctic(uri)
     lib = ac.create_library("test")
     lib.write("sym", pd.DataFrame())
 
 
-@S3_SSL_TESTS_MARK
-def test_s3_https_backend_without_ssl_verification(s3_storage):
-    uri = f"s3s://{s3_storage.factory.host}:{s3_storage.bucket}?access={s3_storage.key.id}&secret={s3_storage.key.secret}&ssl=False"
-    if s3_storage.factory.port:
-        uri += f"&port={s3_storage.factory.port}"
+@AZURE_TESTS_MARK
+@pytest.mark.parametrize('client_cert_file', no_ssl_parameter_display_status)
+@pytest.mark.parametrize('client_cert_dir', no_ssl_parameter_display_status)
+def test_azurite_no_ssl_verification(monkeypatch, azurite_storage, client_cert_file, client_cert_dir):
+    storage = azurite_storage
+    # Leaving ca file and ca dir unset will fallback to using os default setting,
+    # which is different from the test environment
+    default_setting = DefaultSetting(storage.factory)
+    monkeypatch.setattr("ssl.get_default_verify_paths", lambda: default_setting)
+    uri = edit_connection_string(storage.arctic_uri, ";", storage, None, client_cert_file, client_cert_dir)
+    ac = Arctic(uri)
+    lib = ac.create_library("test")
+    lib.write("sym", pd.DataFrame())
+
+
+@AZURE_TESTS_MARK
+@SSL_TESTS_MARK
+@pytest.mark.parametrize('client_cert_file', parameter_display_status)
+@pytest.mark.parametrize('client_cert_dir', parameter_display_status)
+def test_azurite_ssl_verification(azurite_ssl_storage, monkeypatch, client_cert_file, client_cert_dir):
+    storage = azurite_ssl_storage
+    # Leaving ca file and ca dir unset will fallback to using os default setting,
+    # which is different from the test environment
+    default_setting = DefaultSetting(storage.factory)
+    monkeypatch.setattr("ssl.get_default_verify_paths", lambda: default_setting)
+    uri = edit_connection_string(storage.arctic_uri, ";", storage, None, client_cert_file, client_cert_dir)
     ac = Arctic(uri)
     lib = ac.create_library("test")
     lib.write("sym", pd.DataFrame())
@@ -907,14 +959,6 @@ def test_get_uri(fixture, request):
     storage_fixture: StorageFixture = request.getfixturevalue(fixture)
     ac = storage_fixture.create_arctic()
     assert ac.get_uri() == storage_fixture.arctic_uri
-
-
-@AZURE_TESTS_MARK  # GH issue #1060
-def test_azure_no_ca_path(azurite_storage: StorageFixture):
-    uri = azurite_storage.replace_uri_field(azurite_storage.arctic_uri, ArcticUriFields.CA_PATH, "", start=1, end=3)
-    assert "CA_cert_path" not in uri
-    ac = Arctic(uri.rstrip(";"))
-    ac.create_library("x")
 
 
 @AZURE_TESTS_MARK

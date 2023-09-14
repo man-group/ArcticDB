@@ -18,4 +18,5 @@ message Config {
     string prefix = 5;
     string ca_cert_path = 6;
     bool use_mock_storage_for_testing = 7;
+    string ca_cert_dir = 8;
 }

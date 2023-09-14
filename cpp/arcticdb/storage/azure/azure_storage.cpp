@@ -351,10 +351,16 @@ AzureStorage::AzureStorage(const LibraryPath &library_path, OpenMode mode, const
             ARCTICDB_RUNTIME_DEBUG(log::storage(), "Using Real Azure storage");
             azure_client_ = std::make_unique<RealAzureClient>(conf);
         }
-        if (conf.ca_cert_path().empty())
+        if (conf.ca_cert_path().empty()) {
             ARCTICDB_RUNTIME_DEBUG(log::storage(), "Using default CA cert path");
-        else
+        } else {
             ARCTICDB_RUNTIME_DEBUG(log::storage(), "CA cert path: {}", conf.ca_cert_path());
+        }
+        if (conf.ca_cert_dir().empty()) {
+            ARCTICDB_RUNTIME_DEBUG(log::storage(), "Using default CA cert directory");
+        } else {
+            ARCTICDB_RUNTIME_DEBUG(log::storage(), "CA cert directory: {}", conf.ca_cert_dir());
+        }
         ARCTICDB_RUNTIME_DEBUG(log::storage(), "Connecting to Azure Blob Storage: {} Container: {}", conf.endpoint(), conf.container_name());
 
         if (!conf.prefix().empty()) {

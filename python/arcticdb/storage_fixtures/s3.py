@@ -22,9 +22,10 @@ import requests
 from typing import NamedTuple, Optional, Any, Type
 
 from .api import *
-from .utils import get_ephemeral_port, GracefulProcessUtils, wait_for_server_to_come_up, safer_rmtree
+from .utils import get_ephemeral_port, GracefulProcessUtils, wait_for_server_to_come_up, safer_rmtree, get_ca_cert_for_testing
 from arcticc.pb2.storage_pb2 import EnvironmentConfigsMap
 from arcticdb.version_store.helper import add_s3_library_to_env
+from tests.util.mark import SSL_TEST_ENABLED
 
 # All storage client libraries to be imported on-demand to speed up start-up of ad-hoc test runs
 
@@ -41,6 +42,8 @@ class S3Bucket(StorageFixture):
         ArcticUriFields.USER: re.compile("[?&](access=)([^&]+)(&?)"),
         ArcticUriFields.PASSWORD: re.compile("[?&](secret=)([^&]+)(&?)"),
         ArcticUriFields.PATH_PREFIX: re.compile("[?&](path_prefix=)([^&]+)(&?)"),
+        ArcticUriFields.CA_PATH: re.compile("[?&](CA_cert_path=)([^&]*)(&?)"),
+        ArcticUriFields.SSL: re.compile("[?&](ssl=)([^&]+)(&?)"),
     }
 
     key: Key
@@ -67,7 +70,7 @@ class S3Bucket(StorageFixture):
         if platform.system() == "Linux":
             if factory.client_cert_file:
                 self.arctic_uri += f"&CA_cert_path={self.factory.client_cert_file}"
-            # client_cert_dir is skipped on purpose; It will be test manually in other tests
+            # client_cert_dir is skipped on purpose; It will be tested manually in other tests
 
     def __exit__(self, exc_type, exc_value, traceback):
         if self.factory.clean_bucket_on_fixture_exit:
@@ -94,7 +97,7 @@ class S3Bucket(StorageFixture):
             use_mock_storage_for_testing=self.factory.use_mock_storage_for_testing,
             ssl=self.factory.ssl,
             ca_cert_path=self.factory.client_cert_file,
-        )  # client_cert_dir is skipped on purpose; It will be test manually in other tests
+        )# client_cert_dir is skipped on purpose; It will be tested manually in other tests
         return cfg
 
     def set_permission(self, *, read: bool, write: bool):
@@ -286,31 +289,16 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
         self.working_dir = mkdtemp(suffix="MotoS3StorageFixtureFactory")
         self._iam_endpoint = f"{self.http_protocol}://localhost:{port}"
 
-        self.ssl = (
-            self.http_protocol == "https"
-        )  # In real world, using https protocol doesn't necessarily mean ssl will be verified
-        if self.http_protocol == "https":
-            self.key_file = os.path.join(self.working_dir, "key.pem")
-            self.cert_file = os.path.join(self.working_dir, "cert.pem")
-            self.client_cert_file = os.path.join(self.working_dir, "client.pem")
-            ca = trustme.CA()
-            server_cert = ca.issue_cert("localhost")
-            server_cert.private_key_pem.write_to_path(self.key_file)
-            server_cert.cert_chain_pems[0].write_to_path(self.cert_file)
-            ca.cert_pem.write_to_path(self.client_cert_file)
-            self.client_cert_dir = self.working_dir
-            # Create the sym link for curl CURLOPT_CAPATH option; rehash only available on openssl >=1.1.1
-            subprocess.run(
-                f'ln -s "{self.client_cert_file}" "$(openssl x509 -hash -noout -in "{self.client_cert_file}")".0',
-                cwd=self.working_dir,
-                shell=True,
-            )
+        self.ssl = self.http_protocol == "https" # In real world, using https protocol doesn't necessarily mean ssl will be verified
+        if SSL_TEST_ENABLED:
+            self.ca, self.key_file, self.cert_file, self.client_cert_file = get_ca_cert_for_testing(self.working_dir)
         else:
-            self.key_file = None
-            self.cert_file = None
-            self.client_cert_file = None
-            self.client_cert_dir = None
-
+            self.ca = ""
+            self.key_file = ""
+            self.cert_file = ""
+            self.client_cert_file = ""
+        self.client_cert_dir = self.working_dir
+        
         self._p = multiprocessing.Process(
             target=self.run_server,
             args=(

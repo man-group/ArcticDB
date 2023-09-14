@@ -51,12 +51,12 @@ Currently controlled by the ARCTICDB_PERSISTENT_STORAGE_TESTS and ARCTICDB_FAST_
 
 """Windows and MacOS have different handling of self-signed CA cert for test. 
 TODO: https://github.com/man-group/ArcticDB/issues/1394"""
-S3_SSL_TEST_ENABLED = sys.platform == "linux"
+SSL_TEST_ENABLED = sys.platform == "linux"
 
 
-S3_SSL_TESTS_MARK = pytest.mark.skipif(
-    not S3_SSL_TEST_ENABLED,
-    reason="Additional S3 test only when SSL is ON",
+SSL_TESTS_MARK = pytest.mark.skipif(
+    not SSL_TEST_ENABLED,
+    reason="When SSL tests are enabled",
 )
 
 

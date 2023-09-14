@@ -64,8 +64,6 @@ class AzureStorage final : public Storage {
     unsigned int request_timeout_;
     Azure::Storage::Blobs::UploadBlockBlobFromOptions upload_option_;
     Azure::Storage::Blobs::DownloadBlobToOptions download_option_;
-
-    Azure::Storage::Blobs::BlobClientOptions get_client_options(const Config &conf);
 };
 
 inline arcticdb::proto::storage::VariantStorage pack_config(const std::string &container_name) {
