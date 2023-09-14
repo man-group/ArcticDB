@@ -266,7 +266,9 @@ PythonFilterClause = namedtuple("PythonFilterClause", ["expr"])
 PythonProjectionClause = namedtuple("PythonProjectionClause", ["name", "expr"])
 PythonGroupByClause = namedtuple("PythonGroupByClause", ["name"])
 PythonAggregationClause = namedtuple("PythonAggregationClause", ["aggregations"])
-PythonRowRangeClause = namedtuple("PythonRowRangeClause", ["row_range_type", "n"])
+PythonRowRangeClause = namedtuple(
+    "PythonRowRangeClause", ["row_range_type", "n", "start", "end"], defaults=(None, None, None, None)
+)
 PythonDateRangeClause = namedtuple("PythonDateRangeClause", ["start", "end"])
 
 
@@ -513,14 +515,22 @@ class QueryBuilder:
     def _head(self, n: int):
         check(not len(self.clauses), "Head only supported as first clause in the pipeline")
         self.clauses.append(_RowRangeClause(_RowRangeType.HEAD, n))
-        self._python_clauses.append(PythonRowRangeClause(_RowRangeType.HEAD, n))
+        self._python_clauses.append(PythonRowRangeClause(row_range_type=_RowRangeType.HEAD, n=n))
         return self
 
     def _tail(self, n: int):
         check(not len(self.clauses), "Tail only supported as first clause in the pipeline")
         self.clauses.append(_RowRangeClause(_RowRangeType.TAIL, n))
-        self._python_clauses.append(PythonRowRangeClause(_RowRangeType.TAIL, n))
+        self._python_clauses.append(PythonRowRangeClause(row_range_type=_RowRangeType.TAIL, n=n))
         return self
+
+    def _row_range(self, signed_row_range):
+        check(not len(self.clauses), "Row range only supported as first clause in the pipeline")
+        start = signed_row_range.start_
+        end = signed_row_range.end_
+
+        self.clauses.append(_RowRangeClause(_RowRangeType.RANGE, start, end))
+        self._python_clauses.append(PythonRowRangeClause(start=start, end=end))
 
     def date_range(self, date_range: DateRangeInput):
         """

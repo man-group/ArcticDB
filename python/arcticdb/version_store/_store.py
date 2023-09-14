@@ -1592,10 +1592,12 @@ class NativeVersionStore:
             of the data that falls within the given range. The same effect can be achieved by using the date_range
             clause of the QueryBuilder class, which will be slower, but return data with a smaller memory footprint.
             See the QueryBuilder.date_range docstring for more details.
+            Only one of date_range or row_range can be provided.
         row_range: `Optional[Tuple[int, int]]`, default=None
             Row range to read data for. Inclusive of the lower bound, exclusive of the upper bound
             lib.read(symbol, row_range=(start, end)).data should behave the same as df.iloc[start:end], including in
-            the handling of negative start/end values. Only one of date_range or row_range can be provided.
+            the handling of negative start/end values.
+            Only one of date_range or row_range can be provided.
         columns: `Optional[List[str]]`, default=None
             Applicable only for Pandas data. Determines which columns to return data for.
         query_builder: 'Optional[QueryBuilder]', default=None
@@ -1610,9 +1612,15 @@ class NativeVersionStore:
 
         if row_range is not None:
             row_range = _SignedRowRange(row_range[0], row_range[1])
+
         if date_range is not None and query_builder is not None:
             q = QueryBuilder()
             query_builder = q.date_range(date_range).then(query_builder)
+
+        if row_range is not None and query_builder is not None:
+            q = QueryBuilder()
+            query_builder = q._row_range(row_range).then(query_builder)
+
         version_query, read_options, read_query = self._get_queries(
             as_of, date_range, row_range, columns, query_builder, **kwargs
         )

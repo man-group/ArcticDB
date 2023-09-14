@@ -922,6 +922,7 @@ class Library:
         symbol: str,
         as_of: Optional[AsOf] = None,
         date_range: Optional[Tuple[Optional[Timestamp], Optional[Timestamp]]] = None,
+        row_range: Optional[Tuple[int, int]] = None,
         columns: Optional[List[str]] = None,
         query_builder: Optional[QueryBuilder] = None,
     ) -> VersionedItem:
@@ -951,6 +952,15 @@ class Library:
             The same effect can be achieved by using the date_range clause of the QueryBuilder class, which will be
             slower, but return data with a smaller memory footprint. See the QueryBuilder.date_range docstring for more
             details.
+
+            Only one of date_range or row_range can be provided.
+
+        row_range: `Optional[Tuple[int, int]]`, default=None
+            Row range to read data for. Inclusive of the lower bound, exclusive of the upper bound
+            lib.read(symbol, row_range=(start, end)).data should behave the same as df.iloc[start:end], including in
+            the handling of negative start/end values.
+
+            Only one of date_range or row_range can be provided.
 
         columns: List[str], default=None
             Applicable only for Pandas data. Determines which columns to return data for.
@@ -983,7 +993,12 @@ class Library:
         2       7
         """
         return self._nvs.read(
-            symbol=symbol, as_of=as_of, date_range=date_range, columns=columns, query_builder=query_builder
+            symbol=symbol,
+            as_of=as_of,
+            date_range=date_range,
+            row_range=row_range,
+            columns=columns,
+            query_builder=query_builder,
         )
 
     def read_batch(

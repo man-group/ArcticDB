@@ -670,8 +670,10 @@ void RowRangeClause::set_processing_config(const ProcessingConfig& processing_co
     switch(row_range_type_) {
         case RowRangeType::HEAD:
             if (n_ >= 0) {
+                start_ = 0;
                 end_ = std::min(n_, total_rows);
             } else {
+                start_ = 0;
                 end_ = std::max(static_cast<int64_t>(0), total_rows + n_);
             }
             break;
@@ -684,6 +686,13 @@ void RowRangeClause::set_processing_config(const ProcessingConfig& processing_co
                 end_ = total_rows;
             }
             break;
+        case RowRangeType::RANGE:
+            if (start_ > end_) {
+                internal::raise<ErrorCode::E_ASSERTION_FAILURE>("RowRangeClause start index {} is greater than end index {}", start_, end_);
+            }
+            n_ = end_ - start_;
+            break;
+
         default:
             internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Unrecognised RowRangeType {}", static_cast<uint8_t>(row_range_type_));
     }

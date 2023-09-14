@@ -511,13 +511,14 @@ struct ColumnStatsGenerationClause {
 struct RowRangeClause {
     enum class RowRangeType: uint8_t {
         HEAD,
-        TAIL
+        TAIL,
+        RANGE
     };
 
     ClauseInfo clause_info_;
     RowRangeType row_range_type_;
     // As passed into head or tail
-    int64_t n_;
+    int64_t n_{0};
 
     // Row range to keep. Zero-indexed, inclusive of start, exclusive of end
     // Calculated from n, whether the RowRangeType is head or tail, and the total rows as passed in by set_processing_config
@@ -527,6 +528,12 @@ struct RowRangeClause {
     explicit RowRangeClause(RowRangeType row_range_type, int64_t n):
             row_range_type_(row_range_type),
             n_(n) {
+    }
+
+    explicit RowRangeClause(int64_t start, int64_t end):
+            row_range_type_(RowRangeType::RANGE),
+            start_(start),
+            end_(end) {
     }
 
     RowRangeClause() = delete;

@@ -218,9 +218,11 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
         .def_property_readonly("diff", &pipelines::RowRange::diff);
 
     py::class_<pipelines::SignedRowRange, std::shared_ptr<pipelines::SignedRowRange>>(version, "SignedRowRange")
-    .def(py::init([](int64_t start, int64_t end){
-        return SignedRowRange{start, end};
-    }));
+        .def(py::init([](int64_t start, int64_t end){
+            return SignedRowRange{start, end};
+        }))
+        .def_readwrite("start_", &pipelines::SignedRowRange::start_)
+        .def_readwrite("end_", &pipelines::SignedRowRange::end_);
 
     py::class_<pipelines::ColRange, std::shared_ptr<pipelines::ColRange>>(version, "ColRange")
         .def_property_readonly("start", &pipelines::ColRange::start)
@@ -288,10 +290,12 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
 
     py::enum_<RowRangeClause::RowRangeType>(version, "RowRangeType")
             .value("HEAD", RowRangeClause::RowRangeType::HEAD)
-            .value("TAIL", RowRangeClause::RowRangeType::TAIL);
+            .value("TAIL", RowRangeClause::RowRangeType::TAIL)
+            .value("RANGE", RowRangeClause::RowRangeType::TAIL);
 
     py::class_<RowRangeClause, std::shared_ptr<RowRangeClause>>(version, "RowRangeClause")
             .def(py::init<RowRangeClause::RowRangeType, int64_t>())
+            .def(py::init<int64_t, int64_t>())
             .def("__str__", &RowRangeClause::to_string);
 
     py::class_<DateRangeClause, std::shared_ptr<DateRangeClause>>(version, "DateRangeClause")
