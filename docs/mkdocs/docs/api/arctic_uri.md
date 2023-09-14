@@ -31,7 +31,7 @@ specifies the region and `region` is not set.
 
 The Azure URI connection scheme has the form `azure://[options]`.
 It is based on the Azure Connection String, with additional options for configuring ArcticDB.
-Please refer to https://learn.microsoft.com/en-us/azure/storage/common/storage-configure-connection-string for more details.
+Please refer to [Azure](https://learn.microsoft.com/en-us/azure/storage/common/storage-configure-connection-string) for more details.
 
 `options` is a string that specifies connection specific options as `<name>=<value>` pairs joined with `;` (the final key value pair should not include a trailing `;`).
 
@@ -41,17 +41,18 @@ Additional options specific for ArcticDB:
 |---------------|---------------|
 | Container     | Azure container for blobs |
 | Path_prefix   | Path within Azure container to use for data storage |
-| CA_cert_path  | (Non-Windows platform only) Azure CA certificate path. If not set, default path will be used. Note: For Linux distribution, default path is set to `/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem`. If the certificate cannot be found in the provided path, an Azure exception with no meaningful error code will be thrown. For more details, please see [here](https://github.com/Azure/azure-sdk-for-cpp/issues/4738). For example, `Failed to iterate azure blobs 'C' 0:`.<br><br>Default certificate path in various Linux distributions:<br>`/etc/ssl/certs/ca-certificates.crt` for Debian/Ubuntu/Gentoo etc.<br>`/etc/pki/tls/certs/ca-bundle.crt` for Fedora/RHEL 6<br>`/etc/ssl/ca-bundle.pem` for OpenSUSE<br>`/etc/pki/tls/cacert.pem` for OpenELEC<br>`/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem` for CentOS/RHEL 7<br>`/etc/ssl/cert.pem` for Alpine Linux |
+| CA_cert_path  | (Linux platform only) Azure CA certificate path. If not set, python ``ssl.get_default_verify_paths().cafile`` will be used. If the certificate cannot be found in the provided path, an Azure exception with no meaningful error code will be thrown. For more details, please see [here](https://github.com/Azure/azure-sdk-for-cpp/issues/4738). For example, `Failed to iterate azure blobs 'C' 0:`.|
+| CA_cert_dir   | (Linux platform only) Azure CA certificate directory. If not set, python ``ssl.get_default_verify_paths().capath`` will be used. Certificates can only be used if corresponding hash files [exist](https://www.openssl.org/docs/man1.0.2/man3/SSL_CTX_load_verify_locations.html). If the certificate cannot be found in the provided path, an Azure exception with no meaningful error code will be thrown. For more details, please see [here](https://github.com/Azure/azure-sdk-for-cpp/issues/4738). For example, `Failed to iterate azure blobs 'C' 0:`.|
 
-For Windows user, `CA_cert_path` cannot be set. Please set CA certificate related option on Windows setting.
-For details, you may refer to https://learn.microsoft.com/en-us/skype-sdk/sdn/articles/installing-the-trusted-root-certificate
+For non-Linux platforms, neither `CA_cert_path` nor `CA_cert_dir` may be set. Please set CA certificate related options using operating system settings.
+For Windows, please see [here](https://learn.microsoft.com/en-us/skype-sdk/sdn/articles/installing-the-trusted-root-certificate)
 
 Exception: Azure exceptions message always ends with `{AZURE_SDK_HTTP_STATUS_CODE}:{AZURE_SDK_REASON_PHRASE}`.
 
-Please refer to https://github.com/Azure/azure-sdk-for-cpp/blob/24ed290815d8f9dbcd758a60fdc5b6b9205f74e0/sdk/core/azure-core/inc/azure/core/http/http_status_code.hpp for
+Please refer to [azure-sdk-for-cpp](https://github.com/Azure/azure-sdk-for-cpp/blob/24ed290815d8f9dbcd758a60fdc5b6b9205f74e0/sdk/core/azure-core/inc/azure/core/http/http_status_code.hpp) for
 more details of provided status codes.
 
-Note that due to a bug in Azure C++ SDK (https://github.com/Azure/azure-sdk-for-cpp/issues/4738), Azure may not give meaningful status codes and
+Note that due to a [bug](https://github.com/Azure/azure-sdk-for-cpp/issues/4738) in Azure C++ SDK, Azure may not give meaningful status codes and
 reason phrases in the exception. To debug these instances, please set the environment variable `export AZURE_LOG_LEVEL` to `1` to turn on the SDK debug logging.
 
 
