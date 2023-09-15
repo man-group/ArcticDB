@@ -1067,6 +1067,7 @@ class Library:
         symbol_strings = []
         as_ofs = []
         date_ranges = []
+        row_ranges = []
         columns = []
         query_builders = []
 
@@ -1074,6 +1075,8 @@ class Library:
             symbol_strings.append(s_.symbol)
             as_ofs.append(s_.as_of)
             date_ranges.append(s_.date_range)
+            row_ranges.append(s_.row_range)
+
             columns.append(s_.columns)
             if s_.query_builder is not None and query_builder is not None:
                 raise ArcticInvalidApiUsageException(
@@ -1085,7 +1088,7 @@ class Library:
 
         def handle_symbol(s_):
             symbol_strings.append(s_)
-            for l_ in (as_ofs, date_ranges, columns, query_builders):
+            for l_ in (as_ofs, date_ranges, row_ranges, columns, query_builders):
                 l_.append(None)
 
         for s in symbols:
@@ -1100,7 +1103,7 @@ class Library:
                 )
         throw_on_error = False
         return self._nvs._batch_read_to_versioned_items(
-            symbol_strings, as_ofs, date_ranges, columns, query_builder or query_builders, throw_on_error
+            symbol_strings, as_ofs, date_ranges, row_ranges, columns, query_builder or query_builders, throw_on_error
         )
 
     def read_metadata(self, symbol: str, as_of: Optional[AsOf] = None) -> VersionedItem:
