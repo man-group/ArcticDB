@@ -284,7 +284,7 @@ def test_querybuilder_pickling():
 
     # TODO: Also check that `PythonRowRangeClause` is pickleable once `QueryBuilder.row_range` is implemented.
     q = QueryBuilder()
-    # PythonAggregationClause
+    # PythonDateRangeClause
     q = q.date_range((pd.Timestamp("2000-01-04"), pd.Timestamp("2000-01-07")))
 
     # PythonProjectionClause
@@ -296,7 +296,7 @@ def test_querybuilder_pickling():
     # PythonGroupByClause
     q = q.groupby("col1")
 
-    # PythonDateRangeClause
+    # PythonAggregationClause
     q = q.agg({"col2": "sum"})
 
     import pickle
