@@ -221,6 +221,8 @@ class ReadRequest(NamedTuple):
         See `read` method.
     date_range: Optional[Tuple[Optional[Timestamp], Optional[Timestamp]]], default=none
         See `read`method.
+    row_range: Optional[Tuple[int, int]], default=none
+        See `read` method.
     columns: Optional[List[str]], default=none
         See `read` method.
     query_builder: Optional[Querybuilder], default=none
@@ -234,6 +236,7 @@ class ReadRequest(NamedTuple):
     symbol: str
     as_of: Optional[AsOf] = None
     date_range: Optional[Tuple[Optional[Timestamp], Optional[Timestamp]]] = None
+    row_range: Optional[Tuple[int, int]] = None
     columns: Optional[List[str]] = None
     query_builder: Optional[QueryBuilder] = None
 
