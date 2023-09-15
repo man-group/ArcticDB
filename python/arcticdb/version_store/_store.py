@@ -1484,8 +1484,8 @@ class NativeVersionStore:
         else:
             return [self._get_version_query(None, **kwargs) for _ in range(num_symbols)]
 
-    def _get_read_query(self, date_range: Optional[DateRangeInput], signed_row_range, columns, query_builder):
-        check(date_range is None or signed_row_range is None, "Date range and row range both specified")
+    def _get_read_query(self, date_range: Optional[DateRangeInput], row_range, columns, query_builder):
+        check(date_range is None or row_range is None, "Date range and row range both specified")
         read_query = _PythonVersionStoreReadQuery()
 
         if query_builder:
@@ -1494,8 +1494,8 @@ class NativeVersionStore:
         if date_range is not None:
             read_query.row_filter = _normalize_dt_range(date_range)
 
-        if signed_row_range is not None:
-            read_query.signed_row_range = signed_row_range
+        if row_range is not None:
+            read_query.signed_row_range = _SignedRowRange(row_range[0], row_range[1])
 
         if columns is not None:
             read_query.columns = list(columns)
@@ -1543,20 +1543,18 @@ class NativeVersionStore:
 
         for idx in range(num_symbols):
             date_range = None
-            signed_row_range = None
+            row_range = None
             these_columns = None
             query = None
             if date_ranges is not None:
                 date_range = date_ranges[idx]
             if row_ranges is not None:
-                # Conversion to SignedRowRange
                 row_range = row_ranges[idx]
-                signed_row_range = _SignedRowRange(row_range[0], row_range[1])
             if columns is not None:
                 these_columns = columns[idx]
             if query_builder is not None:
                 query = query_builder if isinstance(query_builder, QueryBuilder) else query_builder[idx]
-            read_queries.append(self._get_read_query(date_range, signed_row_range, these_columns, query))
+            read_queries.append(self._get_read_query(date_range, row_range, these_columns, query))
 
         return read_queries
 
@@ -1626,10 +1624,6 @@ class NativeVersionStore:
         -------
         VersionedItem
         """
-
-        if row_range is not None:
-            row_range = _SignedRowRange(row_range[0], row_range[1])
-
         if date_range is not None and query_builder is not None:
             q = QueryBuilder()
             query_builder = q.date_range(date_range).then(query_builder)

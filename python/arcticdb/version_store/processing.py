@@ -528,10 +528,10 @@ class QueryBuilder:
         self._python_clauses.append(PythonRowRangeClause(row_range_type=_RowRangeType.TAIL, n=n))
         return self
 
-    def _row_range(self, signed_row_range):
+    def _row_range(self, row_range):
         check(not len(self.clauses), "Row range only supported as first clause in the pipeline")
-        start = signed_row_range.start_
-        end = signed_row_range.end_
+        start = row_range[0]
+        end = row_range[1]
 
         self.clauses.append(_RowRangeClause(_RowRangeType.RANGE, start, end))
         self._python_clauses.append(PythonRowRangeClause(start=start, end=end))
