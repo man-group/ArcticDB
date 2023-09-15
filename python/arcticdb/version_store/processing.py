@@ -533,7 +533,7 @@ class QueryBuilder:
         start = row_range[0]
         end = row_range[1]
 
-        self.clauses.append(_RowRangeClause(_RowRangeType.RANGE, start, end))
+        self.clauses.append(_RowRangeClause(start, end))
         self._python_clauses.append(PythonRowRangeClause(start=start, end=end))
         return self
 
