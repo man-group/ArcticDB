@@ -277,3 +277,28 @@ def test_querybuilder_groupby_then_groupby(lmdb_version_store_tiny_segment):
     received.sort_index(inplace=True)
     expected = df.groupby("col1").agg({"col2": "sum", "col3": "mean"}).groupby("col2").agg({"col3": "mean"})
     assert_frame_equal(expected, received)
+
+
+def test_querybuilder_pickling():
+    """QueryBuilder must be pickleable with all possible clauses."""
+
+    # TODO: Also check that `PythonRowRangeClause` is pickleable once `QueryBuilder.row_range` is implemented.
+    q = QueryBuilder()
+    # PythonDateRangeClause
+    q = q.date_range((pd.Timestamp("2000-01-04"), pd.Timestamp("2000-01-07")))
+
+    # PythonProjectionClause
+    q = q[q["col1"].isin(2, 3, 7)]
+
+    # PythonFilterClause
+    q = q.apply("new_col", (q["col1"] * q["col2"]) + 13)
+
+    # PythonGroupByClause
+    q = q.groupby("col1")
+
+    # PythonAggregationClause
+    q = q.agg({"col2": "sum"})
+
+    import pickle
+
+    assert pickle.loads(pickle.dumps(q)) == q
