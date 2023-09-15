@@ -13,14 +13,3 @@ def test_in_memory():
     lib.write("symbol", df)
     assert_frame_equal(lib.read("symbol").data, df)
 
-
-# TODO: Some sort of cache size test
-# def test_in_memory_cache_size():
-#    # Given - tiny map size
-#    ac = Arctic(f"lmdb://{tmpdir}?map_size=1KB")
-#
-#    # When
-#    with pytest.raises(InternalException) as e:
-#        ac.create_library("test")
-#    # Then - even library creation fails so map size having an effect
-#    assert "MDB_MAP_FULL" in str(e.value)

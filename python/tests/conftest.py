@@ -44,6 +44,7 @@ from arcticdb.version_store.helper import (
     create_test_s3_cfg,
     create_test_mongo_cfg,
     create_test_azure_cfg,
+    create_test_memory_cfg,
 )
 from arcticdb.config import Defaults
 from arcticdb.util.test import configure_test_logger, apply_lib_cfg, RUN_MONGO_TEST
@@ -152,6 +153,7 @@ def moto_s3_uri_incl_bucket(moto_s3_endpoint_and_credentials):
     params=[
         "S3",
         "LMDB",
+        "MEM",
         pytest.param(
             "Azure",
             marks=pytest.mark.skipif(not AZURE_SUPPORT, reason="Pending Azure Storge Conda support"),
@@ -171,6 +173,8 @@ def arctic_client(request, moto_s3_uri_incl_bucket, tmpdir, encoding_version, li
         ac = Arctic(f"lmdb://{tmpdir}", encoding_version)
     elif request.param == "Mongo":
         ac = Arctic(request.getfixturevalue("mongo_test_uri"), encoding_version)
+    elif request.param == "MEM":
+        ac = Arctic("mem://")
     else:
         raise NotImplementedError()
 
@@ -797,3 +801,40 @@ def object_version_store(object_store_factory):
 )
 def object_and_lmdb_version_store(request):
     yield request.getfixturevalue(request.param)
+
+
+@pytest.fixture
+def in_memory_store_factory(lib_name):
+    cfg_maker = functools.partial(create_test_memory_cfg)
+    used = {}
+    try:
+        yield functools.partial(_version_store_factory_impl, used, cfg_maker, lib_name)
+    finally:
+        for lib in used.values():
+            lib.version_store.clear()
+
+
+@pytest.fixture
+def in_memory_version_store(in_memory_store_factory):
+    return in_memory_store_factory()
+
+
+@pytest.fixture
+def in_memory_version_store_tiny_segment(in_memory_store_factory):
+    return in_memory_store_factory(column_group_size=2, segment_row_size=2)
+
+
+@pytest.fixture(params=["lmdb_version_store", "in_memory_version_store"])
+def lmdb_or_in_memory_version_store(request, encoding_version):
+    # Note the encoding_version parameter is needed here to create a fixture for lmdb_version_store.
+    # This is done in the pytest_generate_tests(metafunc) pre-processing.
+    return request.getfixturevalue(request.param)
+
+
+@pytest.fixture(params=[
+    "lmdb_version_store_tiny_segment",
+    "in_memory_version_store_tiny_segment"])
+def lmdb_or_in_memory_version_store_tiny_segment(request):
+    # We do not need the encoding_version parameter here for some reason, despite needing it before.
+    return request.getfixturevalue(request.param)
+

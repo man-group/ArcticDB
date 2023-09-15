@@ -1096,6 +1096,7 @@ void PythonVersionStore::clear() {
         return;
     }
 
+    // Note that delete_all() on a MemoryStorage will cause a deadlock. Its fast_delete() method works fine.
     delete_all(store(), true);
 }
 

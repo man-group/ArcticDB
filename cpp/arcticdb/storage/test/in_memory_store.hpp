@@ -208,7 +208,7 @@ namespace arcticdb {
             size_t removed = util::variant_match(key,
                 [&](const AtomKey &ak) { return seg_by_atom_key_.erase(ak); },
                 [&](const RefKey &rk) { return seg_by_ref_key_.erase(rk); });
-            ARCTICDB_DEBUG(log::storage(), "Mock store removed {} {}", removed, key);
+            ARCTICDB_DEBUG(log::storage(), "Mock store removed {} {}", removed, key);     // Why have we got "MOCK" here ???  Think it is now time to go to debugger...
             if (removed == 0 && !opts.ignores_missing_key_) {
                 throw storage::KeyNotFoundException(Composite(VariantKey(key)));
             }

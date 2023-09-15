@@ -87,7 +87,7 @@ namespace arcticdb::storage::memory {
         });
     }
 
-inline bool MemoryStorage::do_key_exists(const VariantKey& key) {
+    inline bool MemoryStorage::do_key_exists(const VariantKey& key) {
         ARCTICDB_SAMPLE(MemoryStorageKeyExists, 0)
         std::lock_guard lock{*mutex_};
         auto& key_vec = data_[variant_key_type(key)];
@@ -118,7 +118,9 @@ inline bool MemoryStorage::do_key_exists(const VariantKey& key) {
     }
 
     bool MemoryStorage::do_fast_delete() {
-        return false;
+        std::lock_guard lock{*mutex_};
+        data_.clear();
+        return true;
     }
 
     inline void MemoryStorage::do_iterate_type(KeyType key_type, const IterateTypeVisitor& visitor, const std::string &/*prefix*/) {
