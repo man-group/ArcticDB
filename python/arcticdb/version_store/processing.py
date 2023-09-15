@@ -535,6 +535,7 @@ class QueryBuilder:
 
         self.clauses.append(_RowRangeClause(_RowRangeType.RANGE, start, end))
         self._python_clauses.append(PythonRowRangeClause(start=start, end=end))
+        return self
 
     def date_range(self, date_range: DateRangeInput):
         """
