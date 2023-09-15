@@ -147,11 +147,16 @@ class Arctic:
 
                 Example connection strings are `lmdb:///home/user/my_lmdb` or `lmdb:///home/user/my_lmdb?map_size=2GB`.
 
+
             In-Memory
             ----
-                The in-memory connection scheme has the form ``mem://``.
+                The in-memory connection scheme has the form ``mem://<name>`, e.g. `mem://memory_db`.
 
-                Options? cache_size?
+                Currently the `<name>` argument is ignored, so ``mem://`` is allowed. This may be changed in future.
+
+                The storage is local to the returned `Arctic` instance. Instantiating another, even with the same
+                name, deals with an independent set of libraries.
+
 
         encoding_version: EncodingVersion, default DEFAULT_ENCODING_VERSION
             When creating new libraries with this Arctic instance, the defaul encoding version to use.

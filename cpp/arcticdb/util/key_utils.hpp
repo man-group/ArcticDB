@@ -46,7 +46,7 @@ inline void delete_keys_of_type_if_sync(const std::shared_ptr<Store>& store, Pre
     try {
         store->iterate_type(key_type, [predicate=std::forward<Predicate>(predicate), store=store](VariantKey &&key) {
             if(predicate(key))
-                store->remove_key_sync(key); // Hanging here on Thread 1
+                store->remove_key_sync(key);
         }, prefix);
     }
     catch(const std::exception& ex) {

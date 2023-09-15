@@ -831,10 +831,7 @@ def lmdb_or_in_memory_version_store(request, encoding_version):
     return request.getfixturevalue(request.param)
 
 
-@pytest.fixture(params=[
-    "lmdb_version_store_tiny_segment",
-    "in_memory_version_store_tiny_segment"])
+@pytest.fixture(params=["lmdb_version_store_tiny_segment", "in_memory_version_store_tiny_segment"])
 def lmdb_or_in_memory_version_store_tiny_segment(request):
     # We do not need the encoding_version parameter here for some reason, despite needing it before.
     return request.getfixturevalue(request.param)
-

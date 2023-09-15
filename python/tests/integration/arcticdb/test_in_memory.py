@@ -12,4 +12,3 @@ def test_in_memory():
     df = pd.DataFrame({"a": [1, 2, 3], "b": [4, 5, 6]})
     lib.write("symbol", df)
     assert_frame_equal(lib.read("symbol").data, df)
-
