@@ -18,7 +18,7 @@ inline ssize_t calc_elements(const shape_t* shape, ssize_t ndim) {
 }
 
 /*
- * A wrapper around a 2D tensor that provides a more convenient interface for accessing the data
+ * A wrapper around a 1D or 2D tensor that provides a more convenient interface for accessing the data
  * in the tensor. This is used to pass data between the Python and C++ layers.
  *
  * This typically stores the data of the numpy array backing a column of a pandas DataFrame.
