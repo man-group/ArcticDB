@@ -307,7 +307,7 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
     py::class_<ReadQuery>(version, "PythonVersionStoreReadQuery")
             .def(py::init())
             .def_readwrite("columns",&ReadQuery::columns)
-            .def_readwrite("row_range",&ReadQuery::row_range)
+            .def_readwrite("signed_row_range",&ReadQuery::signed_row_range)
             .def_readwrite("row_filter",&ReadQuery::row_filter)
             // Unsurprisingly, pybind11 doesn't understand folly::poly, so use vector of variants here
             .def("add_clauses",
