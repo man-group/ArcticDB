@@ -12,7 +12,7 @@ from math import inf
 import numpy as np
 import pandas as pd
 
-from typing import Dict
+from typing import Dict, NamedTuple
 
 from arcticdb.exceptions import ArcticNativeException, UserInputException
 from arcticdb.version_store._normalization import normalize_dt_range_to_ts
@@ -266,10 +266,14 @@ PythonFilterClause = namedtuple("PythonFilterClause", ["expr"])
 PythonProjectionClause = namedtuple("PythonProjectionClause", ["name", "expr"])
 PythonGroupByClause = namedtuple("PythonGroupByClause", ["name"])
 PythonAggregationClause = namedtuple("PythonAggregationClause", ["aggregations"])
-PythonRowRangeClause = namedtuple(
-    "PythonRowRangeClause", ["row_range_type", "n", "start", "end"], defaults=(None, None, None, None)
-)
 PythonDateRangeClause = namedtuple("PythonDateRangeClause", ["start", "end"])
+
+
+class PythonRowRangeClause(NamedTuple):
+    row_range_type: _RowRangeType = None
+    n: int = None
+    start: int = None
+    end: int = None
 
 
 class QueryBuilder:
