@@ -74,3 +74,5 @@ dependencies:
   - azure-identity
   - pyarrow
   - asv
+  - trustme
+

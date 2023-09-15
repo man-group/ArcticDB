@@ -34,6 +34,7 @@ from typing import Optional, Any, Dict
 import subprocess
 import tempfile
 import pymongo
+import trustme
 
 import requests
 
@@ -120,9 +121,10 @@ def _moto_s3_uri():
 
 
 @pytest.fixture(scope="function")
-def azure_client_and_create_container(azurite_container, azurite_azure_uri):
+def azure_client_and_create_container(azurite_container, azurite_azure_uri, temp_cert):
+    _, _, ca_cert_path = temp_cert
     client = BlobServiceClient.from_connection_string(
-        conn_str=azurite_azure_uri, container_name=azurite_container
+        conn_str=azurite_azure_uri, container_name=azurite_container, connection_verify=ca_cert_path
     )  # add connection_verify=False to bypass ssl checking
 
     container_client = client.get_container_client(container=azurite_container)
@@ -273,12 +275,13 @@ def persistent_arctic_client(request, encoding_version):
 
 
 @pytest.fixture
-def azurite_azure_test_connection_setting(azurite_port, azurite_container, spawn_azurite):
+def azurite_azure_test_connection_setting(azurite_port, azurite_container, spawn_azurite, temp_cert):
     credential_name = "devstoreaccount1"
     credential_key = "Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw=="
-    endpoint = f"http://127.0.0.1:{azurite_port}"
+    endpoint = f"https://127.0.0.1:{azurite_port}"
     # Default cert path is used; May run into problem on Linux's non RHEL distribution; See more on https://github.com/man-group/ArcticDB/issues/514
-    ca_cert_path = ""
+    _, _, ca_cert_path = temp_cert
+    ca_cert_dir = os.path.dirname(ca_cert_path)
 
     return endpoint, azurite_container, credential_name, credential_key, ca_cert_path
 
@@ -1057,12 +1060,30 @@ def azurite_container():
     return container
 
 
-@pytest.fixture(scope="session")
-def spawn_azurite(azurite_port):
+def temp_folder():
+    return tempfile.TemporaryDirectory()
+
+
+@pytest.fixture(scope="module")
+def temp_cert(temp_folder):
+    key_file = f"{temp_folder.name}/key.pem"
+    cert_file = f"{temp_folder.name}/cert.pem"
+    client_cert_file = f"{temp_folder.name}/client.pem"
+    ca = trustme.CA()
+    server_cert = ca.issue_cert("127.0.0.1")
+    server_cert.private_key_pem.write_to_path(key_file)
+    server_cert.cert_chain_pems[0].write_to_path(cert_file)
+    ca.cert_pem.write_to_path(client_cert_file)
+    return key_file, cert_file, client_cert_file
+
+
+@pytest.fixture(scope="module")
+def spawn_azurite(azurite_port, temp_cert):
     temp_folder = tempfile.TemporaryDirectory()
+    key_file, cert_file, _ = temp_cert
     try:  # Awaiting fix for cleanup in windows file-in-use problem
         p = subprocess.Popen(
-            f"azurite --silent --blobPort {azurite_port} --blobHost 127.0.0.1 --queuePort 0 --tablePort 0",
+            f"azurite --silent --blobPort {azurite_port} --blobHost 127.0.0.1 --queuePort 0 --tablePort 0 --key {key_file} --cert {cert_file}",
             cwd=temp_folder.name,
             shell=True,
         )
