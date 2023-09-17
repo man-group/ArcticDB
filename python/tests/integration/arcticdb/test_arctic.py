@@ -173,7 +173,7 @@ def test_library_options(arctic_client):
     assert lib._nvs._lib_cfg.lib_desc.version.encoding_version == EncodingVersion.V2
 
 
-def test_separation_between_libraries(object_storage_uri_incl_bucket):
+def test_separation_between_libraries(arctic_client):
     """Validate that symbols in one library are not exposed in another."""
     ac = arctic_client
     assert ac.list_libraries() == []
