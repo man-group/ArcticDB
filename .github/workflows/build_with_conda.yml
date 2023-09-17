@@ -89,6 +89,7 @@ jobs:
       - name: Benchmark with asv
         shell: bash -l {0}
         run:
+          python -m asv machine --yes
           python -m asv run master..add_asv_benchmarks
 
   macos:
@@ -146,4 +147,5 @@ jobs:
       - name: Benchmark with asv
         shell: bash -l {0}
         run:
+          python -m asv machine --yes
           python -m asv run master..add_asv_benchmarks
