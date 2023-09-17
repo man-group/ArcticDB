@@ -50,7 +50,7 @@ PythonOutputFrame::~PythonOutputFrame() {
             });
         }
     }
-    Allocator::instance()->trim();
+    // Allocator::instance()->trim();
 }
 
 std::shared_ptr<FrameDataWrapper> PythonOutputFrame::arrays(py::object &ref) {
