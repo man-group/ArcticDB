@@ -86,6 +86,11 @@ jobs:
         env:
           ARCTICDB_USING_CONDA: 1
 
+      - name: Benchmark with asv
+        shell: bash -l {0}
+        run:
+          python -m asv run master..add_asv_benchmarks
+
   macos:
     strategy:
       matrix:
@@ -138,3 +143,7 @@ jobs:
           cd cpp/out/darwin-conda-release-build/
           make test
 
+      - name: Benchmark with asv
+        shell: bash -l {0}
+        run:
+          python -m asv run master..add_asv_benchmarks

@@ -35,13 +35,13 @@
     // Customizable commands for installing and uninstalling the project.
     // See asv.conf.json documentation.
     "install_command": [
-        "python setup.py develop"
+        "ARCTICDB_USING_CONDA=1 python setup.py develop"
     ],
     // "uninstall_command": ["return-code=any python -mpip uninstall -y {project}"],
 
     // List of branches to benchmark. If not provided, defaults to "master"
     // (for git) or "default" (for mercurial).
-    "branches": ["master"], // for git
+    "branches": ["add_asv_benchmarks"], // for git
     // "branches": ["default"],    // for mercurial
 
     // The DVCS being used.  If not set, it will be automatically
@@ -56,7 +56,7 @@
     // If missing or the empty string, the tool will be automatically
     // determined by looking for tools on the PATH environment
     // variable.
-    "environment_type": "virtualenv",
+    "environment_type": "conda",
 
     // timeout in seconds for installing any dependencies in environment
     // defaults to 10 min
@@ -67,14 +67,14 @@
 
     // The Pythons you'd like to test against.  If not provided, defaults
     // to the current version of Python used to run `asv`.
-    // "pythons": ["2.7", "3.8"],
+    "pythons": ["3.6", "3.11"],
 
     // The list of conda channel names to be searched for benchmark
     // dependency packages in the specified order
     // "conda_channels": ["conda-forge", "defaults"],
 
     // A conda environment file that is used for environment creation.
-    // "conda_environment_file": "environment.yml",
+    "conda_environment_file": "environment_unix.yml",
 
     // The matrix of dependencies to test.  Each key of the "req"
     // requirements dictionary is the name of a package (in PyPI) and
