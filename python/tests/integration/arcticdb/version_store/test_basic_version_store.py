@@ -92,12 +92,7 @@ def test_s3_breaking_chars(object_version_store, breaking_char):
     """
     sym = f"prefix{breaking_char}postfix"
     df = sample_dataframe()
-<<<<<<< HEAD
     with pytest.raises(ArcticDbNotYetImplemented):
-=======
-
-    with pytest.raises(ArcticNativeNotYetImplemented):
->>>>>>> b94ee92453a68eaf418ce5a2d6fb4233286c5936
         object_version_store.write(sym, df)
 
     assert sym not in object_version_store.list_symbols()
@@ -109,7 +104,7 @@ def test_s3_breaking_chars_exception_compat(object_version_store):
     sym = "prefix*postfix"
     df = sample_dataframe()
     # Check that ArcticNativeNotYetImplemented is aliased correctly as ArcticDbNotYetImplemented for backwards compat
-    with pytest.raises(ArcticNativeNotYetImplemented) as e_info:
+    with pytest.raises(ArcticDbNotYetImplemented) as e_info:
         object_version_store.write(sym, df)
 
     assert isinstance(e_info.value, ArcticNativeNotYetImplemented)
