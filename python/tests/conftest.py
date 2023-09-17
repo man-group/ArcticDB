@@ -48,6 +48,7 @@ from arcticdb.version_store.helper import (
 from arcticdb.config import Defaults
 from arcticdb.util.test import configure_test_logger, apply_lib_cfg, RUN_MONGO_TEST
 from arcticdb.util.storage_test import get_real_s3_uri, real_s3_credentials
+
 from arcticdb.version_store.helper import ArcticMemoryConfig
 from arcticdb.version_store import NativeVersionStore
 from arcticdb.version_store._normalization import MsgPackNormalizer
@@ -176,15 +177,15 @@ def unique_real_s3_uri():
             marks=pytest.mark.skipif(not AZURE_SUPPORT, reason="Pending Azure Storage Conda support"),
         ),
         pytest.param(
+            "Mongo",
+            marks=pytest.mark.skipif(not RUN_MONGO_TEST, reason="Mongo test on windows is fiddly"),
+        ),
+        pytest.param(
             "REAL_S3",
             marks=pytest.mark.skipif(
                 not PERSISTENT_STORAGE_TESTS_ENABLED,
                 reason="This store can be used only if the persistent storage tests are enabled",
             ),
-        ),
-        pytest.param(
-            "Mongo",
-            marks=pytest.mark.skipif(not RUN_MONGO_TEST, reason="Mongo test on windows is fiddly"),
         ),
     ],
 )
@@ -1027,8 +1028,8 @@ def spawn_azurite(azurite_port):
         [
             "moto_s3_uri_incl_bucket",
             pytest.param(
-                "mongo_test_uri",
-                marks=pytest.mark.skipif(not RUN_MONGO_TEST, reason="Mongo test on windows is fiddly"),
+                "azurite_azure_uri_incl_bucket",
+                marks=pytest.mark.skipif(not AZURE_SUPPORT, reason="Pending Azure Storage Conda support"),
             ),
             pytest.param(
                 "unique_real_s3_uri",
@@ -1037,8 +1038,8 @@ def spawn_azurite(azurite_port):
                 ),
             ),
             pytest.param(
-                "azurite_azure_uri_incl_bucket",
-                marks=pytest.mark.skipif(not AZURE_SUPPORT, reason="Pending Azure Storge Conda support"),
+                "mongo_test_uri",
+                marks=pytest.mark.skipif(not RUN_MONGO_TEST, reason="Mongo test on windows is fiddly"),
             ),
         ]
     ),

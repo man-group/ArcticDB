@@ -92,9 +92,27 @@ def test_s3_breaking_chars(object_version_store, breaking_char):
     """
     sym = f"prefix{breaking_char}postfix"
     df = sample_dataframe()
+<<<<<<< HEAD
     with pytest.raises(ArcticDbNotYetImplemented):
+=======
+
+    with pytest.raises(ArcticNativeNotYetImplemented):
+>>>>>>> b94ee92453a68eaf418ce5a2d6fb4233286c5936
         object_version_store.write(sym, df)
 
+    assert sym not in object_version_store.list_symbols()
+
+
+def test_s3_breaking_chars_exception_compat(object_version_store):
+    """Test that chars that are not supported are raising the appropriate exception and that we fail on write without corrupting the db
+    """
+    sym = "prefix*postfix"
+    df = sample_dataframe()
+    # Check that ArcticNativeNotYetImplemented is aliased correctly as ArcticDbNotYetImplemented for backwards compat
+    with pytest.raises(ArcticNativeNotYetImplemented) as e_info:
+        object_version_store.write(sym, df)
+
+    assert isinstance(e_info.value, ArcticNativeNotYetImplemented)
     assert sym not in object_version_store.list_symbols()
 
 
@@ -1637,9 +1655,8 @@ def test_batch_read_meta(basic_store_tombstone_and_sync_passive):
     assert results_dict["sym2"].data is None
 
 
-def test_batch_read_metadata_symbol_doesnt_exist(lmdb_version_store_tombstone_and_sync_passive):
-    lmdb_version_store = lmdb_version_store_tombstone_and_sync_passive
-    lib = lmdb_version_store
+def test_batch_read_metadata_symbol_doesnt_exist(basic_store_tombstone_and_sync_passive):
+    lib = basic_store_tombstone_and_sync_passive
     for idx in range(10):
         lib.write("sym" + str(idx), idx, metadata={"meta": idx})
 
@@ -1684,6 +1701,7 @@ def test_batch_read_metadata_multi_missing_keys(basic_store):
 
 def test_list_versions_with_deleted_symbols(basic_store_tombstone_and_pruning):
     lib = basic_store_tombstone_and_pruning
+
     lib.write("a", 1)
     lib.snapshot("snap")
     lib.write("a", 2)
