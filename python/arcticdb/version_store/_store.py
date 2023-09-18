@@ -956,6 +956,7 @@ class NativeVersionStore:
             all(v is not None for v in versioned_items),
             "Null value from _batch_read_to_versioned_items. NoDataFoundException should have been thrown instead.",
         )
+        self.version_store.trim()
         return {v.symbol: v for v in versioned_items}
 
     def _batch_read_to_versioned_items(
