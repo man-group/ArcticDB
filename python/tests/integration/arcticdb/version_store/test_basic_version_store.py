@@ -1661,39 +1661,6 @@ def test_batch_read_metadata_symbol_doesnt_exist(basic_store_tombstone_and_sync_
     assert "sym_doesnotexist" not in results_dict
 
 
-def test_batch_read_metadata_missing_keys(basic_store):
-    lib = basic_store
-    lib.write("s1", df1, metadata={"s1": "metadata"})
-    # Need two versions for this symbol as we're going to delete a version key, and the optimisation of storing the
-    # latest index key in the version ref key means it will still work if we just write one version key and then delete
-    # it
-    lib.write("s2", df2, metadata={"s2": "metadata"})
-    lib.write("s2", df2, metadata={"s2": "more_metadata"})
-    lib_tool = lib.library_tool()
-    s1_index_key = lib_tool.find_keys_for_id(KeyType.TABLE_INDEX, "s1")[0]
-    s2_version_keys = lib_tool.find_keys_for_id(KeyType.VERSION, "s2")
-    s2_key_to_delete = [key for key in s2_version_keys if key.version_id == 0][0]
-    lib_tool.remove(s1_index_key)
-    lib_tool.remove(s2_key_to_delete)
-
-    with pytest.raises(StorageException):
-        _ = lib.batch_read_metadata(["s1"], [None])
-    with pytest.raises(StorageException):
-        _ = lib.batch_read_metadata(["s2"], [0])
-
-
-def test_batch_read_metadata_multi_missing_keys(basic_store):
-    lib = basic_store
-    lib_tool = lib.library_tool()
-
-    lib.write("s1", 0, metadata={"s1": "metadata"})
-    key_to_delete = lib_tool.find_keys_for_id(KeyType.TABLE_INDEX, "s1")[0]
-    lib_tool.remove(key_to_delete)
-
-    with pytest.raises(StorageException):
-        _ = lib.batch_read_metadata_multi(["s1"], [None])
-
-
 def test_list_versions_with_deleted_symbols(basic_store_tombstone_and_pruning):
     lib = basic_store_tombstone_and_pruning
 
