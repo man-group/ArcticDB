@@ -280,6 +280,7 @@ jobs:
           TEST_OUTPUT_DIR: ${{runner.temp}}
           # Use the Mongo created in the service container above to test against
           CI_MONGO_HOST: mongodb
+          CI_MONGO_HOST_2: mongodb_2
 
       - name: Collect crash dumps (Windows)
         if: matrix.os == 'windows' && failure()
