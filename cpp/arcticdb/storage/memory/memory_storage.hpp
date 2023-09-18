@@ -12,6 +12,7 @@
 #include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/util/composite.hpp>
 #include <folly/Range.h>
+#include <folly/concurrency/ConcurrentHashMap.h>
 #include <arcticdb/storage/key_segment_pair.hpp>
 
 namespace arcticdb::storage::memory {
@@ -43,12 +44,12 @@ namespace arcticdb::storage::memory {
 
         std::string do_key_path(const VariantKey&) const final { return {}; };
 
-        using KeyMap = std::unordered_map<VariantKey, Segment>;
+        using KeyMap = folly::ConcurrentHashMap<VariantKey, Segment>;
+        // This is pre-populated so that concurrent access is fine.
+        // An outer folly::ConcurrentHashMap would only return const inner hash maps which is no good.
         using TypeMap = std::unordered_map<KeyType, KeyMap>;
-        using MutexType = std::recursive_mutex;
 
         TypeMap data_;
-        std::unique_ptr<MutexType> mutex_;  // Methods taking functions pointers may call back into the storage
     };
 
     inline arcticdb::proto::storage::VariantStorage pack_config(uint64_t cache_size) {
