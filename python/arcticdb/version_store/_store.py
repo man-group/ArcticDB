@@ -132,6 +132,20 @@ def _normalize_dt_range(dtr: DateRangeInput) -> _IndexRange:
     return _IndexRange(start.value, end.value)
 
 
+def _normalize_row_range(row_range: Tuple[int, int]) -> _RowRange:
+    start, end = row_range
+    if start < 0:
+        raise ArcticNativeException(f"Start row index must be >= 0 ; currently: start={start}")
+
+    if end < 0:
+        raise ArcticNativeException(f"End row index must be >= 0 ; currently: end={end}")
+
+    if end < start:
+        raise ArcticNativeException(f"End row index must be >= start row index ; currently: end={end} < start={start}")
+
+    return _RowRange(start, end)
+
+
 def _handle_categorical_columns(symbol, data, throw=True):
     if isinstance(data, (pd.DataFrame, pd.Series)):
         categorical_columns = []
@@ -1483,7 +1497,13 @@ class NativeVersionStore:
         else:
             return [self._get_version_query(None, **kwargs) for _ in range(num_symbols)]
 
-    def _get_read_query(self, date_range: Optional[DateRangeInput], row_range, columns, query_builder):
+    def _get_read_query(
+        self,
+        date_range: Optional[DateRangeInput],
+        row_range: Tuple[int, int],
+        columns: Optional[List[str]],
+        query_builder: QueryBuilder,
+    ):
         check(date_range is None or row_range is None, "Date range and row range both specified")
         read_query = _PythonVersionStoreReadQuery()
 
@@ -1492,6 +1512,9 @@ class NativeVersionStore:
 
         if date_range is not None:
             read_query.row_filter = _normalize_dt_range(date_range)
+
+        if row_range is not None:
+            read_query.row_filter = _normalize_row_range(row_range)
 
         if columns is not None:
             read_query.columns = list(columns)
