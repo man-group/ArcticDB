@@ -965,8 +965,8 @@ def test_tail(arctic_library):
 
 
 @pytest.mark.parametrize("dedup", [True, False])
-def test_dedup(object_storage_uri_incl_bucket, dedup):
-    ac = Arctic(object_storage_uri_incl_bucket)
+def test_dedup(arctic_client, dedup):
+    ac = arctic_client
     assert ac.list_libraries() == []
     ac.create_library("pytest_test_library", LibraryOptions(dedup=dedup))
     lib = ac["pytest_test_library"]
@@ -977,8 +977,8 @@ def test_dedup(object_storage_uri_incl_bucket, dedup):
     assert data_key_version == 0 if dedup else 1
 
 
-def test_segment_slicing(object_storage_uri_incl_bucket):
-    ac = Arctic(object_storage_uri_incl_bucket)
+def test_segment_slicing(arctic_client):
+    ac = arctic_client
     assert ac.list_libraries() == []
     rows_per_segment = 5
     columns_per_segment = 2

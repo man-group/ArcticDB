@@ -195,7 +195,7 @@ def arctic_client(request, moto_s3_uri_incl_bucket, tmpdir, encoding_version, li
     elif request.param == "Azure":
         ac = Arctic(request.getfixturevalue("azurite_azure_uri_incl_bucket"), encoding_version)
     elif request.param == "REAL_S3":
-        ac = Arctic(unique_real_s3_uri)
+        ac = Arctic(request.getfixturevalue("unique_real_s3_uri"), encoding_version)
     elif request.param == "LMDB":
         ac = Arctic(f"lmdb://{tmpdir}", encoding_version)
     elif request.param == "Mongo":
