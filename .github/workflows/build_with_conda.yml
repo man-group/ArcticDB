@@ -88,9 +88,9 @@ jobs:
 
       - name: Benchmark with asv
         shell: bash -l {0}
-        run:
+        run: |
           python -m asv machine --yes
-          python -m asv run -v
+          python -m asv run HASHFILE:hashes_to_benchmark.txt
 
   macos:
     strategy:
@@ -146,6 +146,6 @@ jobs:
 
       - name: Benchmark with asv
         shell: bash -l {0}
-        run:
+        run: |
           python -m asv machine --yes
-          python -m asv run -v
+          python -m asv run HASHFILE:hashes_to_benchmark.txt
