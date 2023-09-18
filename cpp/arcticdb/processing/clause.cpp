@@ -635,7 +635,7 @@ std::vector<Composite<SliceAndKey>> RowRangeClause::structure_for_processing(
     slice_and_keys.erase(std::remove_if(slice_and_keys.begin(), slice_and_keys.end(), [this](const SliceAndKey& slice_and_key) {
         return slice_and_key.slice_.row_range.start() >= end_ || slice_and_key.slice_.row_range.end() <= start_;
     }), slice_and_keys.end());
-    return structure_by_column_slice(slice_and_keys);
+    return structure_by_row_slice(slice_and_keys, start_from);
 }
 
 Composite<ProcessingUnit> RowRangeClause::process(std::shared_ptr<Store> store,
