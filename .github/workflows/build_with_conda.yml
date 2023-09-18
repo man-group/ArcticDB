@@ -90,7 +90,7 @@ jobs:
         shell: bash -l {0}
         run: |
           python -m asv machine --yes
-          python -m asv run
+          python -m asv run master..add_asv_benchmarks
 
   macos:
     strategy:
@@ -148,4 +148,4 @@ jobs:
         shell: bash -l {0}
         run: |
           python -m asv machine --yes
-          python -m asv run
+          python -m asv run master..add_asv_benchmarks
