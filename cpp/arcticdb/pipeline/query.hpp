@@ -33,14 +33,9 @@ namespace arcticdb::pipelines {
 
 using FilterRange = std::variant<std::monostate, IndexRange, RowRange>;
 
-struct SignedRowRange {
-    int64_t start_;
-    int64_t end_;
-};
 
 struct ReadQuery {
     mutable std::vector<std::string> columns; // empty <=> all columns
-    std::optional<SignedRowRange> signed_row_range;
     FilterRange row_filter; // no filter by default
     std::vector<std::shared_ptr<Clause>> clauses_;
 
@@ -54,18 +49,7 @@ struct ReadQuery {
         clauses_ = clauses;
     }
 
-    void calculate_row_filter(int64_t total_rows) {
-        if (signed_row_range.has_value()) {
-            size_t start = signed_row_range->start_ >= 0 ?
-                           std::min(signed_row_range->start_, total_rows) :
-                           std::max(total_rows + signed_row_range->start_,
-                                    static_cast<int64_t>(0));
-            size_t end = signed_row_range->end_ >= 0 ?
-                         std::min(signed_row_range->end_, total_rows) :
-                         std::max(total_rows + signed_row_range->end_, static_cast<int64_t>(0));
-            row_filter = RowRange(start, end);
-        }
-    }
+
 };
 
 struct SnapshotVersionQuery {

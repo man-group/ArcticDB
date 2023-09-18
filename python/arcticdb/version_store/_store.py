@@ -38,7 +38,6 @@ from arcticdb_ext.storage import (
 from arcticdb.version_store.read_result import ReadResult
 from arcticdb_ext.version_store import IndexRange as _IndexRange
 from arcticdb_ext.version_store import RowRange as _RowRange
-from arcticdb_ext.version_store import SignedRowRange as _SignedRowRange
 from arcticdb_ext.version_store import PythonVersionStore as _PythonVersionStore
 from arcticdb_ext.version_store import PythonVersionStoreReadQuery as _PythonVersionStoreReadQuery
 from arcticdb_ext.version_store import PythonVersionStoreUpdateQuery as _PythonVersionStoreUpdateQuery
@@ -1493,9 +1492,6 @@ class NativeVersionStore:
 
         if date_range is not None:
             read_query.row_filter = _normalize_dt_range(date_range)
-
-        if row_range is not None:
-            read_query.signed_row_range = _SignedRowRange(row_range[0], row_range[1])
 
         if columns is not None:
             read_query.columns = list(columns)

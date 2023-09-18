@@ -642,7 +642,6 @@ void read_indexed_keys_to_pipeline(
 
     add_index_columns_to_query(read_query, index_segment_reader.tsd());
 
-    read_query.calculate_row_filter(static_cast<int64_t>(index_segment_reader.tsd().proto().total_rows()));
     bool bucketize_dynamic = index_segment_reader.bucketize_dynamic();
     pipeline_context->desc_ = index_segment_reader.tsd().as_stream_descriptor();
 

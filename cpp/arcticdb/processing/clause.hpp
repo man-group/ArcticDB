@@ -520,8 +520,15 @@ struct RowRangeClause {
     // As passed into head or tail
     int64_t n_{0};
 
-    // Row range to keep. Zero-indexed, inclusive of start, exclusive of end
-    // Calculated from n, whether the RowRangeType is head or tail, and the total rows as passed in by set_processing_config
+    // User provided values, which are used to calculate start and end.
+    // Both can be provided with negative values to wrap indices.
+    int64_t user_provided_start_;
+    int64_t user_provided_end_;
+
+    // Row range to keep. Zero-indexed, inclusive of start, exclusive of end.
+    // If the RowRangeType is `HEAD` or `TAIL`, this is calculated from `n` and
+    // the total rows as passed in by `set_processing_config`.
+    // If the RowRangeType is `RANGE`, then start and end are set to the user-provided values.
     uint64_t start_{0};
     uint64_t end_{0};
 
@@ -532,8 +539,8 @@ struct RowRangeClause {
 
     explicit RowRangeClause(int64_t start, int64_t end):
             row_range_type_(RowRangeType::RANGE),
-            start_(start),
-            end_(end) {
+            user_provided_start_(start),
+            user_provided_end_(end) {
     }
 
     RowRangeClause() = delete;
