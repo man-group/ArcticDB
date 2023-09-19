@@ -1074,10 +1074,25 @@ def test_get_uri(object_storage_uri_incl_bucket):
 
 
 def test_azure_no_ca_path(azurite_azure_test_connection_setting):
-    (endpoint, container, credential_name, credential_key, ca_cert_path) = azurite_azure_test_connection_setting
-    ac = Arctic(
+    endpoint, container, credential_name, credential_key, _ = azurite_azure_test_connection_setting
+    Arctic(
         f"azure://DefaultEndpointsProtocol=http;AccountName={credential_name};AccountKey={credential_key};BlobEndpoint={endpoint}/{credential_name};Container={container}"
     )
+
+
+def test_azure_sas_token(azure_account_sas_token, azurite_azure_test_connection_setting):
+    endpoint, container, credential_name, _, _ = azurite_azure_test_connection_setting
+    ac = Arctic(
+        f"azure://DefaultEndpointsProtocol=http;SharedAccessSignature={azure_account_sas_token};BlobEndpoint={endpoint}/{credential_name};Container={container}"
+    )
+    expected = pd.DataFrame({"col1": [1, 2, 3], "col2": [4, 5, 6]})
+    sym = "test"
+    lib = "lib"
+    ac.create_library(lib)
+    ac[lib].write(sym, expected)
+    assert_frame_equal(expected, ac[lib].read(sym).data)
+
+    assert ac.list_libraries() == [lib]
 
 
 def test_s3_force_uri_lib_config_handling(moto_s3_uri_incl_bucket):
