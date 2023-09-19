@@ -90,7 +90,7 @@ class Arctic:
                 +---------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------+
                 | Path_prefix               | Path within Azure container to use for data storage                                                                                                           |
                 +---------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------+
-                | CA_cert_path              | Azure CA certificate path. If not set, default path will be used.                                                                                             |
+                | CA_cert_path              | (Non-Windows platform only) Azure CA certificate path. If not set, default path will be used.                                                                 |
                 |                           | Note: For Linux distribution, default path is set to `/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem`.                                                     |
                 |                           | If the certificate cannot be found in the provided path, an Azure exception with no meaningful error code will be thrown.                                     |
                 |                           | For more details, please see https://github.com/Azure/azure-sdk-for-cpp/issues/4738.                                                                          |
@@ -103,9 +103,10 @@ class Arctic:
                 |                           | "/etc/pki/tls/cacert.pem"                             OpenELEC                                                                                                |
                 |                           | "/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem"   CentOS/RHEL 7                                                                                           |
                 |                           | "/etc/ssl/cert.pem"                                   Alpine Linux                                                                                            |
-                |                           | WARNING for WINDOWS USER: Not leaving this empty will switch the backend support of Azure SDK from winhttp to libcurl. If ca cert path is needed to be        |
-                |                           | specified, set it in Windows setting so winhttp will be used still                                                                                            |
                 +---------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------+
+
+                For Windows user, `CA_cert_path` cannot be set. Please set CA certificate related option on Windows setting.
+                For details, you may refer to https://learn.microsoft.com/en-us/skype-sdk/sdn/articles/installing-the-trusted-root-certificate
 
                 Exception: Azure exceptions message always ends with `{AZURE_SDK_HTTP_STATUS_CODE}:{AZURE_SDK_REASON_PHRASE}`.
 
@@ -127,7 +128,7 @@ class Arctic:
                 +---------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------+
                 | Option                    | Description                                                                                                                                                   |
                 +===========================+===============================================================================================================================================================+
-                | map_size                  | LMDB map size (see http://www.lmdb.tech/doc/group__mdb.html#gaa2506ec8dab3d969b0e609cd82e619e5). String. Supported formats are:                               |                                                                                                              |
+                | map_size                  | LMDB map size (see http://www.lmdb.tech/doc/group__mdb.html#gaa2506ec8dab3d969b0e609cd82e619e5). String. Supported formats are:                               |
                 |                           |                                                                                                                                                               |
                 |                           | "150MB" / "20GB" / "3TB"                                                                                                                                      |
                 |                           |                                                                                                                                                               |

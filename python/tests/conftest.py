@@ -100,7 +100,7 @@ def azure_client_and_create_container(azurite_container, azurite_azure_uri):
     return client
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture
 def azure_account_sas_token(azure_client_and_create_container, azurite_azure_test_connection_setting):
     start_time = datetime.now(timezone.utc)
     expiry_time = start_time + timedelta(days=1)
@@ -109,8 +109,12 @@ def azure_account_sas_token(azure_client_and_create_container, azurite_azure_tes
     sas_token = generate_account_sas(
         account_key=credential_key,
         account_name=credential_name,
-        resource_types=ResourceTypes.from_string("sco"),
-        permission=AccountSasPermissions.from_string("rwdlacup"),
+        resource_types=ResourceTypes.from_string(
+            "sco"
+        ),  # Each letter stands for one kind of resources; https://github.com/Azure/azure-sdk-for-python/blob/70ace4351ff78c3fe5a6f579132fc30d305fd3c9/sdk/tables/azure-data-tables/azure/data/tables/_models.py#L585
+        permission=AccountSasPermissions.from_string(
+            "rwdlacup"
+        ),  # Each letter stands for one kind of permission; https://github.com/Azure/azure-sdk-for-python/blob/70ace4351ff78c3fe5a6f579132fc30d305fd3c9/sdk/tables/azure-data-tables/azure/data/tables/_models.py#L656
         expiry=expiry_time,
         start=start_time,
     )
