@@ -98,6 +98,8 @@ jobs:
       matrix:
         include:
           - os: macos-latest
+            cpp_tests: "1"
+            python_tests: "1"
 
       fail-fast: false
     runs-on: ${{ matrix.os }}
