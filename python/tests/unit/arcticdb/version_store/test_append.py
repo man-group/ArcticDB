@@ -669,7 +669,7 @@ def test_append_with_cont_mem_problem(sym, lmdb_version_store_tiny_segment_dynam
 
 def test_append_docs_example(lmdb_version_store):
     # This test is really just the append example from the docs.
-    # Other examples are included so that outputs can be easily re-generated.j
+    # Other examples are included so that outputs can be easily re-generated.
     lib = lmdb_version_store
 
     # Write example
