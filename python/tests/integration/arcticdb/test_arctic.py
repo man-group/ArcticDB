@@ -474,7 +474,7 @@ def test_list_versions_latest_only(arctic_library):
     lib.write("symbol", df)
     lib.write("symbol", df)
     lib.write("symbol", df)
-    assert len(lib.list_versions("symbol", latest_only=True)) == 3
+    assert len(lib.list_versions("symbol", latest_only=True)) == 1
 
 
 def test_non_existent_list_versions_latest_only(arctic_library):
