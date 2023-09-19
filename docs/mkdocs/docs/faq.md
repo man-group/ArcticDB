@@ -155,3 +155,11 @@ The handling of `NaN` in ArcticDB depends on the type of the column under consid
 * For string columns, `NaN`, as well as Python `None`, are fully supported.
 * For floating-point numeric columns, `NaN` is also fully supported.
 * For integer numeric columns `NaN` is not supported. A column that otherwise contains only integers will be treated as a floating point column if a `NaN` is encountered by ArcticDB, at which point [the usual rules](/api/arcticdb/arcticdb.LibraryOptions) around type promotion for libraries configured with or without dynamic schema all apply as usual.
+
+### ArcticDB seems to be consuming a lot of memory/RAM, can I do something about it?
+
+As there are some objects that have to be shared between the C++ module and the Python level API, they need to be cleaned by the Python Garbage Collector ([GC](https://docs.python.org/3/library/gc.html)).
+Sometime this cleanup can be delayed which can result in the memory hogging.
+If you suspect that this is happening during your use, you can try to manually cleanup the memory by:
+- calling [gc.collect()](https://docs.python.org/3/library/gc.html#gc.collect)
+- calling the trim method on the ArcticDB library that you are using (e.g. lib.trim())

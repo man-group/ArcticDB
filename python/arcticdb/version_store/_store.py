@@ -900,6 +900,13 @@ class NativeVersionStore:
             vitem = self._adapt_read_res(read_result)
             yield vitem
 
+    def trim(self) -> None:
+        """
+        Calls trim on the allocator of the underlying version_store
+        Should be called after gc.collect() to remove any reference cycles
+        """
+        self.version_store.trim()
+
     def batch_read(
         self,
         symbols: List[str],
@@ -956,7 +963,6 @@ class NativeVersionStore:
             all(v is not None for v in versioned_items),
             "Null value from _batch_read_to_versioned_items. NoDataFoundException should have been thrown instead.",
         )
-        self.version_store.trim()
         return {v.symbol: v for v in versioned_items}
 
     def _batch_read_to_versioned_items(
