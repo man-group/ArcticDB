@@ -90,6 +90,8 @@ jobs:
         shell: bash -l {0}
         run: |
           python -m asv machine --yes
+          git status
+          git branch
           python -m asv run
 
   macos:
@@ -148,4 +150,6 @@ jobs:
         shell: bash -l {0}
         run: |
           python -m asv machine --yes
+          git status
+          git branch
           python -m asv run
