@@ -47,7 +47,7 @@ from arcticdb.version_store.helper import (
 )
 from arcticdb.config import Defaults
 from arcticdb.util.test import configure_test_logger, apply_lib_cfg, RUN_MONGO_TEST
-from arcticdb.util.storage_test import get_real_s3_uri, real_s3_credentials
+from tests.util.storage_test import get_real_s3_uri, real_s3_credentials
 
 from arcticdb.version_store.helper import ArcticMemoryConfig
 from arcticdb.version_store import NativeVersionStore

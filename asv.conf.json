@@ -96,15 +96,15 @@
     // new environments.  A value of ``null`` means that the variable
     // will not be set for the current combination.
     //
-    // "matrix": {
-    //     "req": {
-    //         "numpy": ["1.6", "1.7"],
-    //         "six": ["", null],  // test with and without six installed
-    //         "pip+emcee": [""]   // emcee is only available for install with pip.
-    //     },
-    //     "env": {"ENV_VAR_1": ["val1", "val2"]},
-    //     "env_nobuild": {"ENV_VAR_2": ["val3", null]},
-    // },
+    "matrix": {
+        "req": {
+            "pymongo": [""],
+            // "six": ["", null],  // test with and without six installed
+            // "pip+emcee": [""]   // emcee is only available for install with pip.
+        },
+        // "env": {"ENV_VAR_1": ["val1", "val2"]},
+        // "env_nobuild": {"ENV_VAR_2": ["val3", null]},
+    },
 
     // Combinations of libraries/python versions can be excluded/included
     // from the set to test. Each entry is a dictionary containing additional
