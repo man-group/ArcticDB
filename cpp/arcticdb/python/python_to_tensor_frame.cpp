@@ -24,14 +24,14 @@ bool is_unicode(PyObject *obj) {
     return PyUnicode_Check(obj);
 }
 
-PyStringWrapper pystring_to_buffer(PyObject *obj) {
+PyStringWrapper pystring_to_buffer(PyObject *obj, bool is_owned) {
     char *buffer;
     ssize_t length;
     util::check(!is_unicode(obj), "Unexpected unicode object");
     if (PYBIND11_BYTES_AS_STRING_AND_SIZE(obj, &buffer, &length))
         util::raise_rte("Unable to extract string contents! (invalid type)");
 
-    return {buffer, length, obj};
+    return {buffer, length, is_owned ? obj : nullptr};
 }
 
 PyStringWrapper py_unicode_to_buffer(PyObject *obj, std::optional<ScopedGILLock>& scoped_gil_lock) {
@@ -50,7 +50,7 @@ PyStringWrapper py_unicode_to_buffer(PyObject *obj, std::optional<ScopedGILLock>
             PyObject* utf8_obj = PyUnicode_AsUTF8String(obj);
             if (!utf8_obj)
                 util::raise_rte("Unable to extract string contents! (encoding issue)");
-            return pystring_to_buffer(utf8_obj);
+            return pystring_to_buffer(utf8_obj, true);
         }
     } else {
         util::raise_rte("Expected unicode");
