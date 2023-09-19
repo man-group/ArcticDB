@@ -689,6 +689,7 @@ def test_append_docs_example(lmdb_version_store):
     _cols = ["COL_30", "COL_31"]
     print(lib.read("test_frame", date_range=_range, columns=_cols).data)
     from arcticdb import QueryBuilder
+
     q = QueryBuilder()
     q = q[(q["COL_30"] > 30) & (q["COL_31"] < 50)]
     print(lib.read("test_frame", date_range=_range, colymns=_cols, query_builder=q).data)
@@ -697,7 +698,7 @@ def test_append_docs_example(lmdb_version_store):
     random_data = np.random.randint(0, 50, size=(25, 50))
     df2 = pd.DataFrame(random_data, columns=["COL_%d" % i for i in range(50)])
     df2.index = pd.date_range(datetime(2000, 1, 1, 5), periods=25, freq="H")
-    df2 = df2.iloc[[0,2]]
+    df2 = df2.iloc[[0, 2]]
     print(df2)
     lib.update("test_frame", df2)
     print(lib.head("test_frame", 2))
@@ -709,8 +710,8 @@ def test_append_docs_example(lmdb_version_store):
     df_append.index = pd.date_range(datetime(2000, 1, 2, 7), periods=5, freq="H")
 
     lib.append("test_frame", df_append)
-    print(lib.tail('test_frame', 7).data)
+    print(lib.tail("test_frame", 7).data)
     expected = pd.concat([df2, df.drop(df.index[:3]), df_append])
     assert_frame_equal(lib.read("test_frame").data, expected)
 
-    print(lib.tail('test_frame', 7, as_of=0).data)
+    print(lib.tail("test_frame", 7, as_of=0).data)
