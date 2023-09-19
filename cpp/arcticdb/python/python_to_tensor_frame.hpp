@@ -38,7 +38,7 @@ struct ARCTICDB_VISIBILITY_HIDDEN PyStringWrapper {
 };
 
 PyStringWrapper pystring_to_buffer(
-    PyObject *obj);
+    PyObject *obj, bool is_owned);
 
 PyStringWrapper py_unicode_to_buffer(
     PyObject *obj,
