@@ -58,7 +58,7 @@ jobs:
       - name: Get oldest release for the current major release cycle
         run: |
           pip install requests
-          python build_tooling/get_newest_latest_version.py > $GITHUB_ENV
+          python build_tooling/get_newest_latest_version.py >> $GITHUB_ENV
       
       - name: Install oldest supported release
         run: |
@@ -75,13 +75,13 @@ jobs:
         if: inputs.job_type == 'seed'
         run: |
           echo "Running seed for ${{ env.ARCTICDB_PERSISTENT_STORAGE_UNIQUE_ID }} on ${{matrix.os}}_${{env.python_impl_name}}"
-          python python/arcticdb/util/storage_test.py --type seed --version ${{inputs.arcticdb_version}}
+          python python/tests/util/storage_test.py --type seed --version ${{inputs.arcticdb_version}}
 
       - name: Verify the storage
         if: inputs.job_type == 'verify'
         run: |
           echo "Running verify for ${{ github.ref_name }} on ${{matrix.os}}_${{env.python_impl_name}}"
-          python python/arcticdb/util/storage_test.py --type verify
+          python python/tests/util/storage_test.py --type verify
         
   cleanup:
     if: inputs.job_type == 'cleanup'
@@ -108,4 +108,4 @@ jobs:
       - name: Clean the storage
         run: |
           echo "Running cleanup for ${{ github.ref_name }}"
-          python python/arcticdb/util/storage_test.py --type cleanup
+          python python/tests/util/storage_test.py --type cleanup

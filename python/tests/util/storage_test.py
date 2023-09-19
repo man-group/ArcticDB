@@ -25,7 +25,7 @@ def real_s3_credentials(shared_path: bool = True):
     else:
         path_prefix = os.getenv("ARCTICDB_PERSISTENT_STORAGE_UNIQUE_PATH_PREFIX")
 
-    clear = True if str(os.getenv("ARCTICDB_REAL_S3_CLEAR")).lower() in ["true", "1"] else False
+    clear = str(os.getenv("ARCTICDB_REAL_S3_CLEAR")).lower() in ("true", "1")
 
     return endpoint, bucket, region, access_key, secret_key, path_prefix, clear
 
@@ -133,7 +133,7 @@ def generate_pseudo_random_dataframe(n, freq="S", end_timestamp="1/1/2023"):
     # Generate random values such that their sum is equal to N
     values = np.random.dirichlet(np.ones(n), size=1) * n
     # Generate timestamps
-    timestamps = pd.date_range(end=end_timestamp, periods=n, freq="S")
+    timestamps = pd.date_range(end=end_timestamp, periods=n, freq=freq)
     # Create dataframe
     df = pd.DataFrame({"timestamp": timestamps, "value": values[0]})
     return df
@@ -141,7 +141,7 @@ def generate_pseudo_random_dataframe(n, freq="S", end_timestamp="1/1/2023"):
 
 def gen_fake_ticker(val):
     # We are adding + 1 to skip the 0(empty) char
-    return f"AST_{chr((val % 255) + 1)}"
+    return f"TK_{chr((val % 255) + 1)}"
 
 
 def generate_ascending_dataframe(n, freq="S", end_timestamp="1/1/2023"):
@@ -151,7 +151,7 @@ def generate_ascending_dataframe(n, freq="S", end_timestamp="1/1/2023"):
     - value contains integers in ascending order
     - fake_ticker contains strings that are generated based on the corresponding value with the gen_fake_ticker function
     """
-    # Generate random values such that their sum is equal to n
+    # Generate random values such that their sum is equal to n(n+1)/2
     values = range(1, n + 1)
     # Generate timestamps
     timestamps = pd.date_range(end=end_timestamp, periods=n, freq=freq)

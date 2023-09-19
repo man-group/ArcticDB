@@ -5,6 +5,9 @@ on:
       run:
         type: boolean
 
+  push:
+    branches: ["add_asv_benchmarks"]
+
   schedule: # Schdeule the job to run at 12 a.m. daily
     - cron: '0 0 * * *'
 jobs:
@@ -200,3 +203,11 @@ jobs:
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.ARCTICDB_DEV_WEBHOOK_URL }}
           SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
+
+      - name: Benchmark with asv
+        shell: bash -l {0}
+        run: |
+          python -m asv machine --yes
+          git status
+          git branch
+          python -m asv run
