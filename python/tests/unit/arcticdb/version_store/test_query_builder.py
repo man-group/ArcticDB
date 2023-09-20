@@ -174,7 +174,7 @@ def test_querybuilder_row_range_then_project(lmdb_version_store_tiny_segment, us
 
     q = QueryBuilder()
     if use_row_range_clause:
-        q = q.row_range(row_range)
+        q = q._row_range(row_range)
     q = q.apply("new_col", (q["col1"] * q["col2"]) + 13)
 
     if use_row_range_clause:
