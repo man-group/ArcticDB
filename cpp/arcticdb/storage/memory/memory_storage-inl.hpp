@@ -30,21 +30,17 @@ namespace arcticdb::storage::memory {
             for (auto &kv : group.values()) {
                 util::variant_match(kv.variant_key(),
                                     [&](const RefKey &key) {
-                                        auto it = key_vec.find(key);
-
-                                        if (it != key_vec.end()) {
+                                        if (auto it = key_vec.find(key); it != key_vec.end()) {
                                             key_vec.erase(it);
                                         }
 
-                                        const auto& res = key_vec.try_emplace(key, kv.segment());
-                                        util::check(res.second, "Unable to assign ref key");
+                                        key_vec.try_emplace(key, kv.segment());
                                     },
                                     [&](const AtomKey &key) {
                                         util::check(key_vec.find(key) == key_vec.end(),
                                                     "Cannot replace atom key in in-memory storage");
 
-                                        const auto& res = key_vec.try_emplace(key, kv.segment());
-                                        util::check(res.second, "Unable to assign atom key");
+                                        key_vec.try_emplace(key, kv.segment());
                                     }
                 );
             }

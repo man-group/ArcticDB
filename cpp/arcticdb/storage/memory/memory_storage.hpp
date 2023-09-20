@@ -52,10 +52,9 @@ namespace arcticdb::storage::memory {
         TypeMap data_;
     };
 
-    inline arcticdb::proto::storage::VariantStorage pack_config(uint64_t cache_size) {
+    inline arcticdb::proto::storage::VariantStorage pack_config() {
         arcticdb::proto::storage::VariantStorage output;
         arcticdb::proto::memory_storage::Config cfg;
-        cfg.set_cache_size(cache_size);
         util::pack_to_any(cfg, *output.mutable_config());
         return output;
     }

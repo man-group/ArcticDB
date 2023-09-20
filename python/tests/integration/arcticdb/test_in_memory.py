@@ -6,7 +6,7 @@ from arcticdb.util.test import assert_frame_equal
 
 
 def test_in_memory():
-    ac = Arctic("mem://memory_db")
+    ac = Arctic("mem://")
     ac.create_library("test_lib")
     lib = ac["test_lib"]
     df = pd.DataFrame({"a": [1, 2, 3], "b": [4, 5, 6]})

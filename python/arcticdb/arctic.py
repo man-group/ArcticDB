@@ -150,12 +150,9 @@ class Arctic:
 
             In-Memory
             ----
-                The in-memory connection scheme has the form ``mem://<name>`, e.g. `mem://memory_db`.
+                The in-memory connection scheme has the form ``"mem://"`.
 
-                Currently the `<name>` argument is ignored, so ``mem://`` is allowed. This may be changed in the future.
-
-                The storage is local to the returned `Arctic` instance. Instantiating another, even with the same
-                name, deals with an independent set of libraries.
+                The storage is local to the returned `Arctic` instance.
 
 
         encoding_version: EncodingVersion, default DEFAULT_ENCODING_VERSION

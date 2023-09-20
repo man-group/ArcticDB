@@ -825,7 +825,7 @@ def in_memory_version_store_tiny_segment(in_memory_store_factory):
 
 
 @pytest.fixture(params=["lmdb_version_store", "in_memory_version_store"])
-def lmdb_or_in_memory_version_store(request, encoding_version):
+def basic_store(request, encoding_version):
     # Note the encoding_version parameter is needed here to create a fixture for lmdb_version_store.
     # This is done in the pytest_generate_tests(metafunc) pre-processing.
     return request.getfixturevalue(request.param)

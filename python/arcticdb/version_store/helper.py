@@ -181,11 +181,9 @@ def add_lmdb_library_to_env(cfg, lib_name, env_name, db_dir=Defaults.DATA_DIR, d
     _add_lib_desc_to_env(env, lib_name, sid, description)
 
 
-def add_memory_library_to_env(cfg, lib_name, env_name, db_name=None, description=None):
+def add_memory_library_to_env(cfg, lib_name, env_name, description=None):
     env = cfg.env_by_id[env_name]
     in_mem = MemoryConfig()
-    if db_name:
-        in_mem.name = db_name  # Currently unused in the C++ code
 
     sid, storage = get_storage_for_lib_name(lib_name, env)
     storage.config.Pack(in_mem, type_url_prefix="cxx.arctic.org")
