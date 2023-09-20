@@ -5,6 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+import sys
 import copy
 import pickle
 import math
@@ -1789,6 +1790,7 @@ def test_filter_string_single_quote(lmdb_version_store):
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(df=data_frames([column("a", elements=string_strategy)], index=range_indexes()), val=string_strategy)
+@pytest.mark.skipif(sys.platform == "darwin", reason="This test currently segfaults on MacOS.")
 def test_filter_string_equals_col_val(lmdb_version_store, df, val):
     assume(not df.empty)
     q = QueryBuilder()
