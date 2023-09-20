@@ -46,6 +46,7 @@ nav:
     - Metadata: 'tutorials/metadata.md'
 - Notebooks:
     - Intro Notebook: 'notebooks/ArcticDB_demo_lmdb.ipynb'
+    - Querybuilder Notebook: 'notebooks/ArcticDB_demo_querybuilder.ipynb'
 - Library Configuration: 'lib_config.md'
 - Runtime Configuration: 'runtime_config.md'
 - Error Messages: 'error_messages.md'
