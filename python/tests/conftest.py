@@ -71,8 +71,8 @@ def run_server(port):
     )
 
 
-@pytest.fixture(scope="module")
-def _moto_s3_uri_module():
+@pytest.fixture(scope="session")
+def _moto_s3_uri():
     port = get_ephemeral_port()
     p = multiprocessing.Process(target=run_server, args=(port,))
     p.start()
@@ -126,37 +126,36 @@ def azure_account_sas_token(azure_client_and_create_container, azurite_azure_tes
 
 
 @pytest.fixture(scope="function")
-def boto_client(_moto_s3_uri_module):
-    endpoint = _moto_s3_uri_module
+def boto_client(_moto_s3_uri):
+    endpoint = _moto_s3_uri
     client = boto3.client(
         service_name="s3", endpoint_url=endpoint, aws_access_key_id="awd", aws_secret_access_key="awd"
     )
 
     yield client
 
+    requests.post(f"{endpoint}/moto-api/reset")
 
-@pytest.fixture
+
+@pytest.fixture(scope="session")
 def aws_access_key():
     return "awd"
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def aws_secret_key():
     return "awd"
 
 
 @pytest.fixture(scope="function")
-def moto_s3_endpoint_and_credentials(_moto_s3_uri_module, aws_access_key, aws_secret_key):
+def moto_s3_endpoint_and_credentials(_moto_s3_uri, aws_access_key, aws_secret_key, boto_client):
     global bucket_id
 
-    endpoint = _moto_s3_uri_module
+    endpoint = _moto_s3_uri
     port = endpoint.rsplit(":", 1)[1]
-    client = boto3.client(
-        service_name="s3", endpoint_url=endpoint, aws_access_key_id=aws_access_key, aws_secret_access_key=aws_secret_key
-    )
 
     bucket = f"test_bucket_{bucket_id}"
-    client.create_bucket(Bucket=bucket)
+    boto_client.create_bucket(Bucket=bucket)
     bucket_id = bucket_id + 1
     yield endpoint, port, bucket, aws_access_key, aws_secret_key
 
@@ -1038,7 +1037,7 @@ def get_wide_df():
     return get_df
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="session")
 def azurite_port():
     return get_ephemeral_port()
 
@@ -1051,7 +1050,7 @@ def azurite_container():
     return container
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="session")
 def spawn_azurite(azurite_port):
     temp_folder = tempfile.TemporaryDirectory()
     try:  # Awaiting fix for cleanup in windows file-in-use problem

@@ -127,11 +127,21 @@ public:
 };
 
 class LmdbOverride {
+    std::string path_;
     uint64_t map_size_;
 
 public:
+
+    [[nodiscard]] std::string path() const {
+        return path_;
+    }
+
     [[nodiscard]] uint64_t map_size() const {
         return map_size_;
+    }
+
+    void set_path(std::string path) {
+        path_ = path;
     }
 
     void set_map_size(uint64_t map_size) {
@@ -143,6 +153,7 @@ public:
             arcticdb::proto::lmdb_storage::Config lmdb_storage;
             storage.config().UnpackTo(&lmdb_storage);
 
+            lmdb_storage.set_path(path_);
             lmdb_storage.set_map_size(map_size_);
 
             util::pack_to_any(lmdb_storage, *storage.mutable_config());
