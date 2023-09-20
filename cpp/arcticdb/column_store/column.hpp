@@ -734,6 +734,10 @@ public:
         return const_cast<T*>(const_cast<const Column*>(this)->ptr_cast<T>(idx, required_bytes));
     }
 
+    auto& buffer() {
+        return data_.buffer();
+    }
+
     void change_type(DataType target_type) {
         util::check(shapes_.empty(), "Can't change type on multi-dimensional column with type {}", type_);
         if(type_.data_type() == target_type)
