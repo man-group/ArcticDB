@@ -712,6 +712,7 @@ class Library:
         `append_payloads`.
         Note that this isn't an atomic operation - it's possible for one symbol to be fully written and readable before
         another symbol.
+
         Parameters
         ----------
         append_payloads : `List[WritePayload]`
@@ -1186,6 +1187,7 @@ class Library:
         `write_metadata_payloads`.
         Note that this isn't an atomic operation - it's possible for the metadata for one symbol to be fully written and
         readable before another symbol.
+
         Parameters
         ----------
         write_metadata_payloads : `List[WriteMetadataPayload]`

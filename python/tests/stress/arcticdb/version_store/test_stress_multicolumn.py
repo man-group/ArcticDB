@@ -10,11 +10,8 @@ import string
 import pandas as pd
 from pandas.tseries.offsets import MonthBegin
 import pytest
-import sys
 
 from arcticdb.util.test import assert_frame_equal
-from arcticdb.util._versions import IS_PANDAS_TWO
-from arcticdb_ext.tools import AZURE_SUPPORT
 
 
 def id_generator(size=75, chars=string.ascii_uppercase + string.digits):
@@ -47,10 +44,7 @@ def make_periods(start_date, end_date, freq, range_type="b"):
         "lmdb_version_store_big_map",
         "s3_version_store_v1",
         "s3_version_store_v2",
-        pytest.param(
-            "azure_version_store",
-            marks=pytest.mark.skipif(not AZURE_SUPPORT, reason="Pending Azure Storge Conda support"),
-        ),
+        "azure_version_store",
     ],
 )
 def test_stress_multicolumn(lib_type, request):
@@ -82,9 +76,7 @@ def test_stress_multicolumn(lib_type, request):
         output_df = lib.read(name).data
         print("reading from arctic native: {}".format(pd.Timestamp("now") - now))
 
-        if IS_PANDAS_TWO and test_data.empty:
-            # In Pandas 2.0, RangeIndex is used by default when an empty dataframe or series is created.
-            # The index has to be converted to a DatetimeIndex by ArcticDB to perform updates.
-            test_data.index = test_data.index.astype("datetime64[ns]")
-
-        assert_frame_equal(test_data, output_df)
+        # ArcticDB stores empty columns under a dedicated `EMPTYVAL` type, so the types are not going
+        # to match with pandas until the first append.
+        is_not_empty = not test_data.empty
+        assert_frame_equal(test_data, output_df, check_dtype=is_not_empty, check_index_type=is_not_empty)

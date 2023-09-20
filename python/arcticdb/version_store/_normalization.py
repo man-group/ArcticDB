@@ -25,7 +25,7 @@ from mmap import mmap
 from collections import Counter
 from arcticdb.exceptions import ArcticNativeException, ArcticDbNotYetImplemented
 from arcticdb.supported_types import DateRangeInput, time_types as supported_time_types
-from arcticdb.util._versions import IS_PANDAS_TWO
+from arcticdb.util._versions import IS_PANDAS_TWO, IS_PANDAS_ZERO
 from arcticdb.version_store.read_result import ReadResult
 from arcticdb_ext.version_store import SortedValue as _SortedValue
 from pandas.core.internals import make_block
@@ -196,19 +196,6 @@ def _to_primitive(arr, arr_name, dynamic_strings, string_max_len=None, coerce_co
         return arr
 
     if len(arr) == 0:
-        if coerce_column_type is None:
-            if IS_PANDAS_TWO:
-                # Before Pandas 2.0, empty series' dtype was float, but as of Pandas 2.0. empty series' dtype became object.
-                # See: https://github.com/pandas-dev/pandas/issues/17261
-                # We want to maintain consistent behaviour, so we treat empty series as containing floats.
-                # val_type = ValueType::FLOAT;
-                coerce_column_type = float
-                return arr.astype(coerce_column_type)
-            else:
-                raise ArcticDbNotYetImplemented(
-                    "coercing column type is required when empty column of object type, Column type={} for column={}"
-                    .format(arr.dtype, arr_name)
-                )
         return arr.astype(coerce_column_type)
 
     # Coerce column allows us to force a column to the given type, which means we can skip expensive iterations in
@@ -594,12 +581,12 @@ class SeriesNormalizer(_PandasNormalizer):
         else:
             s.name = None
 
-        if s.empty and IS_PANDAS_TWO:
+        if s.empty:
             # Before Pandas 2.0, empty series' dtype was float, but as of Pandas 2.0. empty series' dtype became object.
             # See: https://github.com/pandas-dev/pandas/issues/17261
             # We want to maintain consistent behaviour, so we return empty series as containing objects
             # when the Pandas version is >= 2.0
-            s = s.astype("object")
+            s = s.astype("object") if IS_PANDAS_TWO else s.astype("float")
 
         return s
 
@@ -738,8 +725,13 @@ class DataFrameNormalizer(_PandasNormalizer):
         for key in norm_meta.common.categories:
             if key in data:
                 category_info = list(norm_meta.common.categories[key].category)
-                res = pd.Categorical.from_codes(codes=data[key], categories=category_info)
-                df[key] = res
+                codes = data[key]
+                if IS_PANDAS_ZERO:
+                    # `pd.Categorical.from_codes` from `pandas~=0.25.x` (pandas' supported version for python 3.6)
+                    # does not support `codes` of `dtype=object`: it has to have an integral dtype.
+                    # See: https://github.com/pandas-dev/pandas/blob/0.25.x/pandas/core/arrays/categorical.py#L688-L704
+                    codes = np.asarray(codes, dtype=int)
+                df[key] = pd.Categorical.from_codes(codes=codes, categories=category_info)
         for key in norm_meta.common.int_categories:
             if key in data:
                 category_info = list(norm_meta.common.int_categories[key].category)

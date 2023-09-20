@@ -5,12 +5,12 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+import pytest
 import pandas as pd
 import numpy as np
 
 from arcticdb.version_store._common import TimeFrame
 from arcticdb.util.test import assert_frame_equal, assert_series_equal
-from arcticdb.util._versions import IS_PANDAS_TWO
 
 
 def test_write_no_rows(lmdb_version_store, sym):
@@ -21,7 +21,10 @@ def test_write_no_rows(lmdb_version_store, sym):
     assert not lmdb_version_store.is_symbol_pickled(sym)
     df.index = df.index.astype("datetime64[ns]")
     df["a"] = df["a"].astype("float64")
-    assert_frame_equal(lmdb_version_store.read(sym).data, df)
+
+    # ArcticDB stores empty columns under a dedicated `EMPTYVAL` type, so the types are not going to match with pandas
+    # until the first append.
+    assert_frame_equal(lmdb_version_store.read(sym).data, df, check_index_type=False, check_dtype=False)
 
     df2 = pd.DataFrame([[1.3, 6, "test"]], columns=column_names, index=[pd.Timestamp(0)])
     df2 = pd.concat((df, df2))
@@ -89,7 +92,9 @@ def test_write_no_rows_and_columns(lmdb_version_store_dynamic_schema, sym):
     lmdb_version_store_dynamic_schema.write(sym, df)
     assert not lmdb_version_store_dynamic_schema.is_symbol_pickled(sym)
     df.index = df.index.astype("datetime64[ns]")
-    assert_frame_equal(lmdb_version_store_dynamic_schema.read(sym).data, df)
+    # ArcticDB stores empty columns under a dedicated `EMPTYVAL` type, so the types are not going to match with pandas
+    # until the first append.
+    assert_frame_equal(lmdb_version_store_dynamic_schema.read(sym).data, df, check_index_type=False, check_dtype=False)
 
     df2 = pd.DataFrame([[1.3, 6, "test"]], columns=column_names, index=[pd.Timestamp(2)])
     lmdb_version_store_dynamic_schema.append(sym, df2)
@@ -135,10 +140,22 @@ def test_empty_series(lmdb_version_store_dynamic_schema, sym):
     ser = pd.Series([])
     lmdb_version_store_dynamic_schema.write(sym, ser)
     assert not lmdb_version_store_dynamic_schema.is_symbol_pickled(sym)
-    if IS_PANDAS_TWO:
-        # In Pandas 2.0, RangeIndex is used by default when an empty dataframe or series is created.
-        # The index is converted to a DatetimeIndex for preserving the behavior of ArcticDB with
-        # Pandas 1.0.
-        ser.index = ser.index.astype("datetime64[ns]")
 
-    assert_series_equal(lmdb_version_store_dynamic_schema.read(sym).data, ser)
+    # ArcticDB stores empty columns under a dedicated `EMPTYVAL` type, so the types are not going to match with pandas
+    # until the first append.
+    assert_series_equal(lmdb_version_store_dynamic_schema.read(sym).data, ser, check_index_type=False)
+
+
+@pytest.mark.parametrize("dtype", ["int64", "float64"])
+def test_append_empty_series(lmdb_version_store_dynamic_schema, sym, dtype):
+    ser = pd.Series([])
+    lmdb_version_store_dynamic_schema.write(sym, ser)
+    assert not lmdb_version_store_dynamic_schema.is_symbol_pickled(sym)
+
+    # ArcticDB stores empty columns under a dedicated `EMPTYVAL` type, so the types are not going to match with pandas
+    # until the first append.
+    assert_series_equal(lmdb_version_store_dynamic_schema.read(sym).data, ser, check_index_type=False)
+
+    new_ser = pd.Series([1, 2, 3], dtype=dtype)
+    lmdb_version_store_dynamic_schema.append(sym, new_ser)
+    assert_series_equal(lmdb_version_store_dynamic_schema.read(sym).data, new_ser)

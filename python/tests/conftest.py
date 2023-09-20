@@ -53,10 +53,7 @@ from arcticdb.version_store import NativeVersionStore
 from arcticdb.version_store._normalization import MsgPackNormalizer
 from arcticdb.options import LibraryOptions
 from arcticdb_ext.storage import Library
-from arcticdb_ext.tools import AZURE_SUPPORT
-
-if AZURE_SUPPORT:
-    from azure.storage.blob import BlobServiceClient
+from azure.storage.blob import BlobServiceClient
 
 configure_test_logger()
 
@@ -154,10 +151,7 @@ def moto_s3_uri_incl_bucket(moto_s3_endpoint_and_credentials):
         "S3",
         "LMDB",
         "MEM",
-        pytest.param(
-            "Azure",
-            marks=pytest.mark.skipif(not AZURE_SUPPORT, reason="Pending Azure Storge Conda support"),
-        ),
+        "Azure",
         pytest.param(
             "Mongo",
             marks=pytest.mark.skipif(not RUN_MONGO_TEST, reason="Mongo test on windows is fiddly"),
@@ -205,10 +199,7 @@ def azurite_azure_uri_incl_bucket(azurite_azure_uri, azure_client_and_create_con
 
 
 @pytest.fixture(scope="function")
-def arctic_library(request, arctic_client):
-    if AZURE_SUPPORT:
-        request.getfixturevalue("azure_client_and_create_container")
-
+def arctic_library(request, arctic_client, azure_client_and_create_container):
     arctic_client.create_library("pytest_test_lib")
     return arctic_client["pytest_test_lib"]
 
@@ -522,9 +513,7 @@ def mongo_version_store(mongo_store_factory):
     return mongo_store_factory()
 
 
-@pytest.fixture(
-    scope="function", params=["s3_store_factory", "azure_store_factory"] if AZURE_SUPPORT else ["s3_store_factory"]
-)
+@pytest.fixture(scope="function", params=["s3_store_factory", "azure_store_factory"])
 def object_store_factory(request):
     store_factory = request.getfixturevalue(request.param)
     return store_factory
@@ -738,26 +727,22 @@ def azurite_container():
 
 @pytest.fixture(scope="module")
 def spawn_azurite(azurite_port):
-    if AZURE_SUPPORT:
-        temp_folder = tempfile.TemporaryDirectory()
-        try:  # Awaiting fix for cleanup in windows file-in-use problem
-            p = subprocess.Popen(
-                f"azurite --silent --blobPort {azurite_port} --blobHost 127.0.0.1 --queuePort 0 --tablePort 0",
-                cwd=temp_folder.name,
-                shell=True,
-            )
-            time.sleep(2)  # Wait for Azurite to start up
-            yield
-        finally:
-            print("Killing Azurite")
-            if sys.platform == "win32":  # different way of killing process on Windows
-                os.system(f"taskkill /F /PID {p.pid}")
-            else:
-                p.kill()
-            temp_folder = None  # For cleanup; For an unknown reason somehow using with syntax causes error
-
-    else:
+    temp_folder = tempfile.TemporaryDirectory()
+    try:  # Awaiting fix for cleanup in windows file-in-use problem
+        p = subprocess.Popen(
+            f"azurite --silent --blobPort {azurite_port} --blobHost 127.0.0.1 --queuePort 0 --tablePort 0",
+            cwd=temp_folder.name,
+            shell=True,
+        )
+        time.sleep(2)  # Wait for Azurite to start up
         yield
+    finally:
+        print("Killing Azurite")
+        if sys.platform == "win32":  # different way of killing process on Windows
+            os.system(f"taskkill /F /PID {p.pid}")
+        else:
+            p.kill()
+        temp_folder = None  # For cleanup; For an unknown reason somehow using with syntax causes error
 
 
 @pytest.fixture(
@@ -765,13 +750,10 @@ def spawn_azurite(azurite_port):
     params=(
         [
             "moto_s3_uri_incl_bucket",
+            "azurite_azure_uri_incl_bucket",
             pytest.param(
                 "mongo_test_uri",
                 marks=pytest.mark.skipif(not RUN_MONGO_TEST, reason="Mongo test on windows is fiddly"),
-            ),
-            pytest.param(
-                "azurite_azure_uri_incl_bucket",
-                marks=pytest.mark.skipif(not AZURE_SUPPORT, reason="Pending Azure Storge Conda support"),
             ),
         ]
     ),
@@ -795,8 +777,6 @@ def object_version_store(object_store_factory):
             "s3_version_store_v2",
             "azure_version_store",
         ]
-        if AZURE_SUPPORT
-        else ["lmdb_version_store_v1", "lmdb_version_store_v2", "s3_version_store_v1", "s3_version_store_v2"]
     ),
 )
 def object_and_lmdb_version_store(request):

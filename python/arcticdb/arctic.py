@@ -112,8 +112,6 @@ class Arctic:
                 |                           | "/etc/ssl/cert.pem"                                   Alpine Linux                                                                                            |
                 +---------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------+
 
-                Note: Support for Azure Blob Storage is currently only available in *non-Conda* binaries distribution.
-
                 Exception: Azure exceptions message always ends with `{AZURE_SDK_HTTP_STATUS_CODE}:{AZURE_SDK_REASON_PHRASE}`.
 
                 Please refer to https://github.com/Azure/azure-sdk-for-cpp/blob/24ed290815d8f9dbcd758a60fdc5b6b9205f74e0/sdk/core/azure-core/inc/azure/core/http/http_status_code.hpp for
@@ -156,7 +154,7 @@ class Arctic:
 
 
         encoding_version: EncodingVersion, default DEFAULT_ENCODING_VERSION
-            When creating new libraries with this Arctic instance, the defaul encoding version to use.
+            When creating new libraries with this Arctic instance, the default encoding version to use.
             Can be overridden by specifying the encoding version in the LibraryOptions argument to create_library.
 
         Examples

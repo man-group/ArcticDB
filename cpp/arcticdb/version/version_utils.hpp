@@ -327,7 +327,7 @@ inline bool load_latest_ongoing(const LoadParameter &load_params, const std::sha
 }
 
 inline bool looking_for_undeleted(const LoadParameter& load_params, const std::shared_ptr<VersionMapEntry>& entry, const LoadProgress& load_progress) {
-    if(load_params.load_type_ != LoadType::LOAD_UNDELETED) {
+    if(!(load_params.load_type_ == LoadType::LOAD_UNDELETED || load_params.load_type_ == LoadType::LOAD_LATEST_UNDELETED)) {
         return true;
     }
 

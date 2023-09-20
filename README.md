@@ -53,9 +53,7 @@ ArcticDB is designed from the outset to be resilient; there is no single point o
 | --------------------- | - | - |
 | S3                 | ✔️ | ✔️ |
 | LMDB               | ✔️ | ✔️ |
-| Azure Blob Storage | ✔️ | ➖ |
-
-Support for Azure Blob Storage in conda-forge is tracked in [#519](https://github.com/man-group/ArcticDB/issues/519).
+| Azure Blob Storage | ✔️ | ✔️ |
 
 ### Installation
 
@@ -145,7 +143,7 @@ Please see version conversion dates in the below table:
 | 1.5 | Business Source License 1.1 | Jul  11, 2025 |
 | 1.6 | Business Source License 1.1 | Jul  25, 2025 |
 | 2.0 | Business Source License 1.1 | Aug  29, 2025 |
-| 3.0 | Business Source License 1.1 | Aug  31, 2025 |
+| 3.0 | Business Source License 1.1 | Sep  13, 2025 |
 
 ## Code of Conduct
 
