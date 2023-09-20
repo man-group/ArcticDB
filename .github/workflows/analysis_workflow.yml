@@ -208,6 +208,7 @@ jobs:
         shell: bash -l {0}
         run: |
           python -m asv machine --yes
+          git config --global --add safe.directory /__w/ArcticDB/ArcticDB
           git status
           git branch
           python -m asv run
