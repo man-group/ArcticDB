@@ -13,7 +13,6 @@
 
 #include <memory>
 
-
 #define ARCTICDB_RUNTIME_SAMPLE(name, flags) \
 static bool _scoped_timer_active_ = ConfigsMap::instance()->get_int("Logging.timings", 0) == 1 || ConfigsMap::instance()->get_int("Logging.ALL", 0) == 1; \
 arcticdb::ScopedTimer runtime_timer = !_scoped_timer_active_ ? arcticdb::ScopedTimer() : arcticdb::ScopedTimer(#name, [](auto msg) { \
