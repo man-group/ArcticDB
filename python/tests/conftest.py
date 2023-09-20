@@ -45,7 +45,7 @@ from arcticdb.version_store.helper import (
     create_test_mongo_cfg,
     create_test_azure_cfg,
 )
-from arcticdb.config import Defaults
+from arcticdb.config import Defaults, MACOS_CONDA_BUILD, MACOS_CONDA_BUILD_SKIP_REASON
 from arcticdb.util.test import configure_test_logger, apply_lib_cfg, RUN_MONGO_TEST
 from arcticdb.version_store.helper import ArcticMemoryConfig
 from arcticdb.version_store import NativeVersionStore
@@ -149,7 +149,10 @@ def moto_s3_uri_incl_bucket(moto_s3_endpoint_and_credentials):
     params=[
         "S3",
         "LMDB",
-        "Azure",
+        pytest.param(
+            "Azure",
+            marks=pytest.mark.skipif(MACOS_CONDA_BUILD, reason=MACOS_CONDA_BUILD_SKIP_REASON),
+        ),
         pytest.param(
             "Mongo",
             marks=pytest.mark.skipif(not RUN_MONGO_TEST, reason="Mongo test on windows is fiddly"),
@@ -195,7 +198,10 @@ def azurite_azure_uri_incl_bucket(azurite_azure_uri, azure_client_and_create_con
 
 
 @pytest.fixture(scope="function")
-def arctic_library(request, arctic_client, azure_client_and_create_container):
+def arctic_library(request, arctic_client):
+    if not MACOS_CONDA_BUILD:
+        request.getfixturevalue("azure_client_and_create_container")
+
     arctic_client.create_library("pytest_test_lib")
     return arctic_client["pytest_test_lib"]
 
@@ -509,7 +515,10 @@ def mongo_version_store(mongo_store_factory):
     return mongo_store_factory()
 
 
-@pytest.fixture(scope="function", params=["s3_store_factory", "azure_store_factory"])
+@pytest.fixture(
+    scope="function",
+    params=["s3_store_factory", "azure_store_factory"] if not MACOS_CONDA_BUILD else ["s3_store_factory"],
+)
 def object_store_factory(request):
     store_factory = request.getfixturevalue(request.param)
     return store_factory
@@ -746,7 +755,10 @@ def spawn_azurite(azurite_port):
     params=(
         [
             "moto_s3_uri_incl_bucket",
-            "azurite_azure_uri_incl_bucket",
+            pytest.param(
+                "azurite_azure_uri_incl_bucket",
+                marks=pytest.mark.skipif(MACOS_CONDA_BUILD, reason=MACOS_CONDA_BUILD_SKIP_REASON),
+            ),
             pytest.param(
                 "mongo_test_uri",
                 marks=pytest.mark.skipif(not RUN_MONGO_TEST, reason="Mongo test on windows is fiddly"),
@@ -773,6 +785,8 @@ def object_version_store(object_store_factory):
             "s3_version_store_v2",
             "azure_version_store",
         ]
+        if not MACOS_CONDA_BUILD
+        else ["lmdb_version_store_v1", "lmdb_version_store_v2", "s3_version_store_v1", "s3_version_store_v2"]
     ),
 )
 def object_and_lmdb_version_store(request):

@@ -13,6 +13,7 @@ import random
 from itertools import chain, product
 from datetime import datetime
 
+from arcticdb.config import MACOS_CONDA_BUILD
 from arcticdb_ext.storage import KeyType, NoDataFoundException
 from arcticdb.util.test import config_context, random_string, assert_frame_equal, distinct_timestamps
 
@@ -48,6 +49,8 @@ def gen_params_store_and_timeout():
         ],
         get_map_timeouts(),
     ]
+    if not MACOS_CONDA_BUILD:
+        p[0].append("azure_version_store")
     return list(product(*p))
 
 

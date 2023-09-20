@@ -29,6 +29,7 @@ from arcticdb.exceptions import (
     UserInputException,
 )
 from arcticdb import QueryBuilder
+from arcticdb.config import MACOS_CONDA_BUILD
 from arcticdb.flattener import Flattener
 from arcticdb.version_store import NativeVersionStore
 from arcticdb.version_store._custom_normalizers import CustomNormalizer, register_normalizer
@@ -57,6 +58,9 @@ SMOKE_TEST_VERSION_STORES = [
     "s3_version_store_v2",
     "azure_version_store",
 ]
+
+if not MACOS_CONDA_BUILD:
+    SMOKE_TEST_VERSION_STORES.append("azure_version_store")
 
 if RUN_MONGO_TEST:
     SMOKE_TEST_VERSION_STORES.append("mongo_version_store")

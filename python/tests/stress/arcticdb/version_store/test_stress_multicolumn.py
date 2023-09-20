@@ -13,6 +13,8 @@ import pytest
 
 from arcticdb.util.test import assert_frame_equal
 
+from arcticdb.config import MACOS_CONDA_BUILD, MACOS_CONDA_BUILD_SKIP_REASON
+
 
 def id_generator(size=75, chars=string.ascii_uppercase + string.digits):
     return "".join(random.choice(chars) for _ in range(size))
@@ -44,7 +46,10 @@ def make_periods(start_date, end_date, freq, range_type="b"):
         "lmdb_version_store_big_map",
         "s3_version_store_v1",
         "s3_version_store_v2",
-        "azure_version_store",
+        pytest.param(
+            "azure_version_store",
+            marks=pytest.mark.skipif(MACOS_CONDA_BUILD, reason=MACOS_CONDA_BUILD_SKIP_REASON),
+        ),
     ],
 )
 def test_stress_multicolumn(lib_type, request):
