@@ -499,4 +499,4 @@ def test_pyarrow_error(lmdb_version_store):
     assert mixed_df["pyarrow"].dtype == "float64[pyarrow]"
 
     with pytest.raises(ArcticDbNotYetImplemented, match=error_msg_intro):
-        lmdb_version_store.write("test_pyarrow_error_mixed_df", series)
+        lmdb_version_store.write("test_pyarrow_error_mixed_df", mixed_df)
