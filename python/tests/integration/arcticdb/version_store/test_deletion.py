@@ -408,6 +408,14 @@ def test_delete_mixed(object_version_store, sym):
     assert object_version_store.has_symbol(symbol) is False
 
 
+def test_batch_delete(object_store_factory, sym):
+    lib = object_store_factory(column_group_size=2, segment_row_size=2)
+    NUM_ROWS = 10
+    NUM_COLUMNS = 500
+    lib.write(sym, pd.DataFrame(np.random.randint(0,100,size=(NUM_ROWS, NUM_COLUMNS)), columns=[f"COL_{i}" for i in range(NUM_COLUMNS)], index=pd.date_range("2000", periods=NUM_ROWS, freq="h")))
+    lib.delete(sym)
+
+
 def tests_with_pruning_and_tombstones(lmdb_version_store_tombstone_and_pruning, sym):
     symbol = sym
     lib = lmdb_version_store_tombstone_and_pruning
