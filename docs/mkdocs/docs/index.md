@@ -29,7 +29,7 @@ ArcticDB supports Python 3.6 - 3.11. To install, simply run:
 pip install arcticdb
 ```
 
-### Usage
+### Setup
 
 ArcticDB is a storage engine designed for object storage, but also supports local-disk storage using LMDB.
 
@@ -48,7 +48,7 @@ To get started, we can import ArcticDB and instantiate it:
 
 For more information on the format of _<URI\>_, please view the docstring ([`>>> help(Arctic)`](https://docs.arcticdb.io/api/arcticdb#arcticdb.Arctic)). Below we'll run through some setup examples.
 
-#### S3 Configuration Examples
+#### S3 configuration
 
 There are two methods to configure S3 access. If you happen to know the access and secret key, simply connect as follows:
 
@@ -89,7 +89,7 @@ Connecting to AWS with a pre-defined region:
 >>> ac = Arctic('s3s://s3.eu-west-2.amazonaws.com:arcticdb-test-bucket?aws_auth=true')
 ```
 
-Note that no explicit credential parameters are given. When `aws_auth` is passed, authentication is delegated to the AWS SDK which is responsible for locating the appropriate credentials in the `.config` file or 
+Note that no explicit credential parameters are given. When `aws_auth` is passed, authentication is delegated to the AWS SDK which is responsible for locating the appropriate credentials in the `.config` file or
 in environment variables. You can manually configure which profile is being used by setting the `AWS_PROFILE` environment variable as described in the
 [AWS Documentation](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-files.html).
 
@@ -119,7 +119,7 @@ For example:
 
 For more information, [see the Arctic class reference](https://docs.arcticdb.io/api/arcticdb#arcticdb.Arctic.__init__).
 
-#### LMDB Configuration
+#### LMDB configuration
 
 LMDB supports configuring its map size. See its [documentation](http://www.lmdb.tech/doc/group__mdb.html#gaa2506ec8dab3d969b0e609cd82e619e5).
 
@@ -137,7 +137,24 @@ The default on Windows is only 128MB. Errors with `lmdb errror code -30792` indi
 increase its size. This will happen if you are doing large writes. You should ensure that you only have one Arctic instance open over
 a given LMDB database.
 
-For more information, [see the Arctic class reference](https://docs.arcticdb.io/api/arcticdb#arcticdb.Arctic.__init__).
+For more information on the different endpoints, [see the Arctic class reference](https://docs.arcticdb.io/api/arcticdb#arcticdb.Arctic.__init__).
+
+#### In-memory configuration
+
+An in-memory backend is provided mainly for testing and experimentation. It could be useful when creating files with LMDB is not desired.
+
+There are no configuration parameters, and the memory is owned solely be the Arctic instance.
+
+For example:
+
+```python
+>>> from arcticdb import Arctic
+>>> ac = Arctic('mem://')
+```
+
+TODO: For concurrent access to a local backend, LMDB connected to tmpfs is recommended.
+
+### Usage
 
 #### Library Setup
 
