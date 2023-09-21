@@ -239,7 +239,7 @@ jobs:
           git config --global --add safe.directory /__w/ArcticDB/ArcticDB
           git status
           git branch
-          python -m asv run HASHFILE:hashes_to_benchmark.txt -v -q --show-stderr
+          python -m asv run -v -q --show-stderr
           zip -r asv_output.zip .asv/
 
       - name: Upload Benchmarking output
@@ -283,7 +283,7 @@ jobs:
           git config --global --add safe.directory /__w/ArcticDB/ArcticDB
           git status
           git branch
-          python -m asv run HASHFILE:hashes_to_benchmark.txt -v -q --show-stderr
+          python -m asv run -v -q --show-stderr
           zip -r asv_output.zip .asv/
 
       - name: Upload Benchmarking output
