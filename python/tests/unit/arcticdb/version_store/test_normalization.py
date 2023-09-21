@@ -477,3 +477,16 @@ def test_no_inplace_index_array_modification(lmdb_version_store, sym, datetime64
     lmdb_version_store.write(sym, pandas_container)
     assert pandas_container.index is original_index_array
     assert pandas_container.index.dtype == datetime64_dtype
+
+
+def test_pyarrow_error(lmdb_version_store):
+    _ = pytest.importorskip("pyarrow")
+
+    error_msg_intro = "PyArrow-backed pandas DataFrame and Series are not currently supported by ArcticDB."
+    df = pd.DataFrame(data=[[1.0, 0.2], [0.2, 0.5]], dtype="float32[pyarrow]")
+    with pytest.raises(ArcticNativeException, match=error_msg_intro):
+        lmdb_version_store.write("test_pyarrow_error_df", df)
+
+    series = pd.Series(data=[1.0, 0.2], dtype="float32[pyarrow]")
+    with pytest.raises(ArcticNativeException, match=error_msg_intro):
+        lmdb_version_store.write("test_pyarrow_error_series", series)
