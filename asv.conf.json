@@ -35,7 +35,7 @@
     // Customizable commands for installing and uninstalling the project.
     // See asv.conf.json documentation.
     "install_command": [
-        "pip install -ve ."
+        "ARCTICDB_USING_CONDA=1 python -m pip install --no-build-isolation --no-deps -v -e ."
     ],
     // "uninstall_command": ["return-code=any python -mpip uninstall -y {project}"],
 
@@ -56,7 +56,7 @@
     // If missing or the empty string, the tool will be automatically
     // determined by looking for tools on the PATH environment
     // variable.
-    "environment_type": "virtualenv",
+    "environment_type": "conda",
 
     // timeout in seconds for installing any dependencies in environment
     // defaults to 10 min
@@ -74,7 +74,7 @@
     // "conda_channels": ["conda-forge", "defaults"],
 
     // A conda environment file that is used for environment creation.
-    // "conda_environment_file": "environment_unix.yml",
+    "conda_environment_file": "environment_unix.yml",
 
     // The matrix of dependencies to test.  Each key of the "req"
     // requirements dictionary is the name of a package (in PyPI) and

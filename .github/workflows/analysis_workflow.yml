@@ -204,6 +204,34 @@ jobs:
           SLACK_WEBHOOK_URL: ${{ secrets.ARCTICDB_DEV_WEBHOOK_URL }}
           SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
 
+  benchmark_macos:
+    strategy:
+      matrix:
+        include:
+          - os: macos-latest
+
+      fail-fast: false
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: recursive
+
+      - name: Get number of CPU cores
+        uses: SimenB/github-actions-cpu-cores@v1
+        id: cpu-cores
+
+      - name: Install Conda environment from environment_unix.yml
+        uses: mamba-org/setup-micromamba@v1
+        with:
+          environment-file: environment_unix.yml
+          environment-name: arcticdb
+          init-shell: >-
+            bash
+          cache-environment: true
+          post-cleanup: 'all'
+
       - name: Benchmark with asv
         shell: bash -l {0}
         run: |
