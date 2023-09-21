@@ -32,7 +32,9 @@ class TimeSuite:
     of iterating over dictionaries in Python.
     """
     number = 5
-    params = ([1_000, 100_000], [500, 1000])
+    timeout = 6000
+
+    params = ([100, 500, 1000, 2000], [500, 1000])
     param_names = ['rows', 'num_symbols']
 
     def __init__(self):

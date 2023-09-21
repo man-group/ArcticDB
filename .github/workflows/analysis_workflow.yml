@@ -204,6 +204,50 @@ jobs:
           SLACK_WEBHOOK_URL: ${{ secrets.ARCTICDB_DEV_WEBHOOK_URL }}
           SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
 
+  benchmark_linux:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+
+      fail-fast: false
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: recursive
+
+      - name: Get number of CPU cores
+        uses: SimenB/github-actions-cpu-cores@v1
+        id: cpu-cores
+
+      - name: Install Conda environment from environment_unix.yml
+        uses: mamba-org/setup-micromamba@v1
+        with:
+          environment-file: environment_unix.yml
+          environment-name: arcticdb
+          init-shell: >-
+            bash
+          cache-environment: true
+          post-cleanup: 'all'
+
+      - name: Benchmark with asv
+        shell: bash -l {0}
+        run: |
+          python -m asv machine --yes
+          git config --global --add safe.directory /__w/ArcticDB/ArcticDB
+          git status
+          git branch
+          python -m asv run HASHFILE:hashes_to_benchmark.txt -v -q --show-stderr
+          zip -r asv_output.zip .asv/
+
+      - name: Upload Benchmarking output
+        uses: actions/upload-artifact@v3
+        with:
+          name: asv-benchmarking-artifact-linux
+          path: asv_output.zip
+
   benchmark_macos:
     strategy:
       matrix:
@@ -239,4 +283,11 @@ jobs:
           git config --global --add safe.directory /__w/ArcticDB/ArcticDB
           git status
           git branch
-          python -m asv run
+          python -m asv run HASHFILE:hashes_to_benchmark.txt -v -q --show-stderr
+          zip -r asv_output.zip .asv/
+
+      - name: Upload Benchmarking output
+        uses: actions/upload-artifact@v3
+        with:
+          name: asv-benchmarking-artifact-macos
+          path: asv_output.zip
