@@ -240,7 +240,8 @@ jobs:
           git status
           git branch
           python -m asv run -v -q --show-stderr
-          zip -r asv_output.zip .asv/
+          python -m asv publish
+          zip -r asv_output.zip .asv/html/
 
       - name: Upload Benchmarking output
         uses: actions/upload-artifact@v3
@@ -284,7 +285,8 @@ jobs:
           git status
           git branch
           python -m asv run -v -q --show-stderr
-          zip -r asv_output.zip .asv/
+          python -m asv publish
+          zip -r asv_output.zip .asv/html/
 
       - name: Upload Benchmarking output
         uses: actions/upload-artifact@v3
