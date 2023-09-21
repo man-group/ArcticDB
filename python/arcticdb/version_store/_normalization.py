@@ -174,7 +174,7 @@ def get_timezone_from_metadata(norm_meta):
 def _to_primitive(arr, arr_name, dynamic_strings, string_max_len=None, coerce_column_type=None, norm_meta=None):
     arr_dtype_as_str = str(arr.dtype)
     if "pyarrow" in arr_dtype_as_str:
-        raise ArcticNativeException(
+        raise ArcticDbNotYetImplemented(
             "PyArrow-backed pandas DataFrame and Series are not currently supported by ArcticDB. \n"
             "Please convert your pandas DataFrame and Series to use NumPy array before using them with ArcticDB. \n"
             "If you are interested in the support of PyArrow-backed pandas DataFrame and Series, please upvote this \n"

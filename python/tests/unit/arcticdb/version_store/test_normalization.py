@@ -484,9 +484,9 @@ def test_pyarrow_error(lmdb_version_store):
 
     error_msg_intro = "PyArrow-backed pandas DataFrame and Series are not currently supported by ArcticDB."
     df = pd.DataFrame(data=[[1.0, 0.2], [0.2, 0.5]], dtype="float32[pyarrow]")
-    with pytest.raises(ArcticNativeException, match=error_msg_intro):
+    with pytest.raises(ArcticDbNotYetImplemented, match=error_msg_intro):
         lmdb_version_store.write("test_pyarrow_error_df", df)
 
     series = pd.Series(data=[1.0, 0.2], dtype="float32[pyarrow]")
-    with pytest.raises(ArcticNativeException, match=error_msg_intro):
+    with pytest.raises(ArcticDbNotYetImplemented, match=error_msg_intro):
         lmdb_version_store.write("test_pyarrow_error_series", series)
