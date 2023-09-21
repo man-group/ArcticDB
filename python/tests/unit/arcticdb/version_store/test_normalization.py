@@ -488,3 +488,15 @@ def test_pyarrow_error(lmdb_version_store):
     series = pd.Series(data=[1.0, 0.2], dtype="float32[pyarrow]")
     with pytest.raises(ArcticDbNotYetImplemented, match=error_msg_intro):
         lmdb_version_store.write("test_pyarrow_error_series", series)
+
+    # Mixed NumPy- and PyArrow-backed DataFrame.
+    np_ser = pd.Series([0.1], dtype="float64")
+    pa_ser = pd.Series([0.1], dtype="float64[pyarrow]")
+
+    mixed_df = pd.DataFrame({"numpy": np_ser, "pyarrow": pa_ser})
+
+    assert mixed_df["numpy"].dtype == "float64"
+    assert mixed_df["pyarrow"].dtype == "float64[pyarrow]"
+
+    with pytest.raises(ArcticDbNotYetImplemented, match=error_msg_intro):
+        lmdb_version_store.write("test_pyarrow_error_mixed_df", series)
