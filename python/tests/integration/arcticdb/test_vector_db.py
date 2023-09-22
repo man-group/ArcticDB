@@ -51,13 +51,85 @@ except ImportError:
         StagedDataFinalizeMethod,
     )
 
+def test_search():
+    ac = Arctic("lmdb:///var/jpl")
+    vector_db = VectorDB(ac["reference_library_1695381000.4680254"])
+    num_vectors = 100000
+    dimensions = 2000
+    namespace = f"{num_vectors}-vectors-{dimensions}-d"
+    centroids = 500
+    training_points = centroids * 10
+    begin = time.time()
+    vector_db._bucketise_namespace(namespace, "L2", centroids, dimensions, pd.DataFrame(np.random.rand(dimensions, training_points)))
+    bucketise = time.time()
+    print(f"Bucketised {dimensions*num_vectors} floats in {bucketise - begin} seconds i.e. {dimensions*num_vectors/(bucketise - begin)} floats per second.")
+
+    vector_db._index_segments(namespace, "test", "L2", dimensions)
+    segment = time.time()
+    print(f"Indexed in {segment - bucketise} seconds i.e. {dimensions*num_vectors/(bucketise-begin)}")
+
+    result = vector_db.search_vectors_with_bucketiser_and_index(namespace, np.zeros(dimensions), 5, 1, dimensions)
+    search = time.time()
+    print(f"Searched in {search - segment} seconds i.e. {dimensions*num_vectors/(search - segment)}")
+    pass
+
+def test_test():
+    ac = Arctic("lmdb:///scratch/data/jpl/vectors")
+    vector_db = VectorDB(ac["reference_library"])
+    namespace = "100000-vectors-5000-d"
+    # these go from 100k to 10m vectors and 100D to 5000D (possibly more, can't remember)
+    # above a million this breaks in a variety of exotic ways.
+    dimensions = 100
+    centroids = 250
+    training_points = centroids * 50
+    begin = time.time()
+    vector_db._bucketise_namespace(namespace, "IP", centroids, dimensions, pd.DataFrame(np.random.rand(dimensions, training_points)))
+    # bucketising alone isn't enough for indexing; we also need to call _index_segments
+    # the index param is ignored but the metric isn't
+    # VectorDB.index is what's exposed
+    elapsed = time.time() - begin
+    pass
+
+def test_upsert():
+    np.random.seed(0)
+    ac = Arctic("lmdb:///var/jpl/")
+    tempus = time.time()
+    lib_name = f"reference_library_{tempus}"
+    #
+    max_dimensions = 2000
+
+    ac.create_library(lib_name,
+                      LibraryOptions(
+                          encoding_version = EncodingVersion.V2,
+                          rows_per_segment = max_dimensions,
+                          columns_per_segment = 10
+                      ))
+    vector_db = VectorDB(ac[lib_name])
+
+    for number_of_vectors in [1000]:
+        for dimensions in [2000]:
+            print(f"{number_of_vectors} vectors, {dimensions} dimensions.")
+            string_column_names = list(range(number_of_vectors))
+            df = pd.DataFrame(np.random.rand(dimensions, number_of_vectors), columns=string_column_names)
+            last = time.time()
+            vector_db._upsert_for_testing(f"{number_of_vectors}-vectors-{dimensions}-d", df)
+            vector_db._bucketise_namespace(f"{number_of_vectors}-vectors-{dimensions}-d", "IP", 100, dimensions, pd.DataFrame(np.random.rand(dimensions, 10)))
+            print(f"Upserted {dimensions*number_of_vectors} floats in {time.time() - last} seconds i.e. {dimensions*number_of_vectors/(time.time() - last)} fps.")
+
+    print("Done")
+def bucketise():
+    lib_name = "reference_library"
+    ac = Arctic("lmdb://test_with_indexing")
+    vector_db = VectorDB(ac[lib_name])
+
+    vector_db._bucketise_namespace()
 
 def test_with_indexing():
     np.random.seed(0)
     random.seed(0)
     ac = Arctic("lmdb://test_with_indexing")
 
-    dimensions, number_of_vectors, k = 1500, 20000, 5
+    dimensions, number_of_vectors, k = 1500, 2000, 5
     string_column_names = list(range(number_of_vectors)) # [
     #     "".join(random.choices(string.ascii_uppercase + string.digits, k=10)) for _ in range(number_of_vectors)
     # ]
@@ -73,7 +145,7 @@ def test_with_indexing():
                       ))
     vector_db = VectorDB(ac[lib_name])
 
-    df = pd.DataFrame(np.random.rand(dimensions, number_of_vectors), columns=string_column_names)
+    df = pd.DataFrame(np.random.rand(dimensions, number_of_vectors))
 
     start = time.time()
     vector_db._upsert_for_testing(f"df{dimensions}", df)
