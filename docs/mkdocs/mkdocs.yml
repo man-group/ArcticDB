@@ -35,6 +35,7 @@ nav:
     - Parallel Writes: 'tutorials/parallel_writes.md'
     - Snapshots: 'tutorials/snapshots.md'
     - Metadata: 'tutorials/metadata.md'
+    - LMDB and in-memory storage: 'tutorials/lmdb_and_in_memory.md'
 - Library Configuration: 'lib_config.md'
 - Runtime Configuration: 'runtime_config.md'
 - Error Messages: 'error_messages.md'

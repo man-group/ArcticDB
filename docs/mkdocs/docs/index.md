@@ -31,7 +31,7 @@ pip install arcticdb
 
 ### Setup
 
-ArcticDB is a storage engine designed for object storage, but also supports local-disk storage using LMDB.
+ArcticDB is a storage engine designed for object storage, but also supports local RAM storage and local-disk storage using LMDB.
 
 !!! Storage Compatibility
 
