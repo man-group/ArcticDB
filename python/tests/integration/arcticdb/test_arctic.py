@@ -443,6 +443,40 @@ def test_delete_version(arctic_library):
     assert lib["symbol"].metadata == {"very": "interesting"}
 
 
+def test_list_versions_write_append_update(arctic_library):
+    lib = arctic_library
+    # Note: can only update timeseries dataframes
+    index = pd.date_range(start="2000-01-01", freq="D", periods=3)
+    df = pd.DataFrame({"col1": [1, 2, 3], "col2": [4, 5, 6]}, index=index)
+    lib.write("symbol", df)
+    index_append = pd.date_range(start="2000-01-04", freq="D", periods=3)
+    df_append = pd.DataFrame({"col1": [7, 8, 9], "col2": [10, 11, 12]}, index=index_append)
+    lib.append("symbol", df_append)
+    index_update = pd.DatetimeIndex(["2000-01-03", "2000-01-05"])
+    df_update = pd.DataFrame({"col1": [13, 14], "col2": [15, 16]}, index=index_update)
+    lib.update("symbol", df_update)
+    assert_frame_equal(lib.read("symbol").data, pd.concat([df.iloc[:-1], df_update, df_append.iloc[[2]]]))
+    assert len(lib.list_versions("symbol")) == 3
+
+
+def test_list_versions_latest_only(arctic_library):
+    lib = arctic_library
+    df = pd.DataFrame({"col1": [1, 2, 3], "col2": [4, 5, 6]})
+    lib.write("symbol", df)
+    lib.write("symbol", df)
+    lib.write("symbol", df)
+    assert len(lib.list_versions("symbol", latest_only=True)) == 1
+
+
+def test_non_existent_list_versions_latest_only(arctic_library):
+    lib = arctic_library
+    assert len(lib.list_versions("symbol", latest_only=True)) == 0
+    df = pd.DataFrame({"col1": [1, 2, 3], "col2": [4, 5, 6]})
+    lib.write("symbol2", df)
+    lib.delete("symbol2")
+    assert len(lib.list_versions("symbol2", latest_only=True)) == 0
+
+
 def test_delete_version_with_snapshot(arctic_library):
     lib = arctic_library
     df = pd.DataFrame({"col1": [1, 2, 3], "col2": [4, 5, 6]})
@@ -1040,10 +1074,25 @@ def test_get_uri(object_storage_uri_incl_bucket):
 
 
 def test_azure_no_ca_path(azurite_azure_test_connection_setting):
-    (endpoint, container, credential_name, credential_key, ca_cert_path) = azurite_azure_test_connection_setting
-    ac = Arctic(
+    endpoint, container, credential_name, credential_key, _ = azurite_azure_test_connection_setting
+    Arctic(
         f"azure://DefaultEndpointsProtocol=http;AccountName={credential_name};AccountKey={credential_key};BlobEndpoint={endpoint}/{credential_name};Container={container}"
     )
+
+
+def test_azure_sas_token(azure_account_sas_token, azurite_azure_test_connection_setting):
+    endpoint, container, credential_name, _, _ = azurite_azure_test_connection_setting
+    ac = Arctic(
+        f"azure://DefaultEndpointsProtocol=http;SharedAccessSignature={azure_account_sas_token};BlobEndpoint={endpoint}/{credential_name};Container={container}"
+    )
+    expected = pd.DataFrame({"col1": [1, 2, 3], "col2": [4, 5, 6]})
+    sym = "test"
+    lib = "lib"
+    ac.create_library(lib)
+    ac[lib].write(sym, expected)
+    assert_frame_equal(expected, ac[lib].read(sym).data)
+
+    assert ac.list_libraries() == [lib]
 
 
 def test_s3_force_uri_lib_config_handling(moto_s3_uri_incl_bucket):

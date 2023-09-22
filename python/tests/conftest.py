@@ -27,7 +27,7 @@ import pytest
 import numpy as np
 import pandas as pd
 import random
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from typing import Optional, Any, Dict
 import subprocess
 from pathlib import Path
@@ -52,7 +52,7 @@ from arcticdb.version_store import NativeVersionStore
 from arcticdb.version_store._normalization import MsgPackNormalizer
 from arcticdb.options import LibraryOptions
 from arcticdb_ext.storage import Library
-from azure.storage.blob import BlobServiceClient
+from azure.storage.blob import BlobServiceClient, generate_account_sas, ResourceTypes, AccountSasPermissions
 
 configure_test_logger()
 
@@ -98,6 +98,27 @@ def azure_client_and_create_container(azurite_container, azurite_azure_uri):
         client.create_container(name=azurite_container)
 
     return client
+
+
+@pytest.fixture
+def azure_account_sas_token(azure_client_and_create_container, azurite_azure_test_connection_setting):
+    start_time = datetime.now(timezone.utc)
+    expiry_time = start_time + timedelta(days=1)
+    _, _, credential_name, credential_key, _ = azurite_azure_test_connection_setting
+
+    sas_token = generate_account_sas(
+        account_key=credential_key,
+        account_name=credential_name,
+        resource_types=ResourceTypes.from_string(
+            "sco"
+        ),  # Each letter stands for one kind of resources; https://github.com/Azure/azure-sdk-for-python/blob/70ace4351ff78c3fe5a6f579132fc30d305fd3c9/sdk/tables/azure-data-tables/azure/data/tables/_models.py#L585
+        permission=AccountSasPermissions.from_string(
+            "rwdlacup"
+        ),  # Each letter stands for one kind of permission; https://github.com/Azure/azure-sdk-for-python/blob/70ace4351ff78c3fe5a6f579132fc30d305fd3c9/sdk/tables/azure-data-tables/azure/data/tables/_models.py#L656
+        expiry=expiry_time,
+        start=start_time,
+    )
+    return sas_token
 
 
 @pytest.fixture(scope="function")

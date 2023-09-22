@@ -70,3 +70,4 @@ dependencies:
   # Python dependencies (for tests only)
   - azure-storage-blob
   - azure-identity
+  - pyarrow

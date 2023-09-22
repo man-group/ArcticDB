@@ -146,7 +146,7 @@ void aggregator_set_data(
                             auto wrapper= convert::py_unicode_to_buffer(*ptr_data, scoped_gil_lock);
                             agg.set_string_at(col, s, wrapper.buffer_, wrapper.length_);
                         } else {
-                            auto wrapper = convert::pystring_to_buffer(*ptr_data);
+                            auto wrapper = convert::pystring_to_buffer(*ptr_data, false);
                             agg.set_string_at(col, s, wrapper.buffer_, wrapper.length_);
                         }
                     }
