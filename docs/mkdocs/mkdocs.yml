@@ -30,6 +30,10 @@ theme:
 extra_css:
   - stylesheets/extra.css
 
+plugins:
+  - search
+  - mkdocstrings
+
 nav:
 - Introduction: 'index.md'
 - Storage Guides:
