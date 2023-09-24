@@ -19,8 +19,12 @@ and diagrams are generated, even undocumented classes / functions. This gives ab
 
 Install
 ```
-pip install mkdocs-material mkdocs-jupyter
+pip install mkdocs-material mkdocs-jupyter mkdocstrings[python] black
 ```
+- mkdocs-material: theme
+- mkdocs-jupyter: jupyter notebook support
+- mkdocstrings[python]: python docstring support, like sphinx docs
+- black: for signature formatting
 
 To build mkdocs (to `/tmp/docs_build/` as an example):
 ```
@@ -30,8 +34,21 @@ mkdocs build -d /tmp/docs_build
 
 Development server 
 ```
-mkdocs serve -a 0.0.0.0:8000
+mkdocs serve -s -v -a 0.0.0.0:8000
 ```
+
+The python docstring parser, griffe, will struggle with some built-in (C++) modules
+You'll see 'alias' errors as this:
+```
+ERROR   -  mkdocstrings: Template 'alias.html' not found for 'python' handler and theme 'material'.
+ERROR   -  Error reading page 'api/library.md': alias.html
+```
+which is why we set this in mkdocs.yml
+```
+preload_modules:
+    - arcticdb_ext
+```
+
 
 ### Sphinx
 

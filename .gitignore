@@ -39,4 +39,5 @@ CMakeUserPresets.json
 
 .DS_Store
 
+docs/mkdocs/site/
 docs/mkdocs/docs/notebooks/.ipynb_checkpoints/

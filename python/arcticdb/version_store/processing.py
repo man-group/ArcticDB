@@ -299,45 +299,45 @@ class QueryBuilder:
 
     isin/isnotin accept lists, sets, frozensets, 1D ndarrays, or *args unpacking. For example:
 
-    >>> l = [1, 2, 3]
-    >>> q.isin(l)
+        >>> l = [1, 2, 3]
+        >>> q.isin(l)
 
     is equivalent to...
 
-    >>> q.isin(1, 2, 3)
+        >>> q.isin(1, 2, 3)
 
     Boolean columns can be filtered on directly:
 
-    >>> q = QueryBuilder()
-    >>> q = q[q["boolean_column"]]
+        >>> q = QueryBuilder()
+        >>> q = q[q["boolean_column"]]
 
     and combined with other operations intuitively:
 
-    >>> q = QueryBuilder()
-    >>> q = q[(q["boolean_column_1"] & ~q["boolean_column_2"]) & (q["numeric_column"] > 0)]
+        >>> q = QueryBuilder()
+        >>> q = q[(q["boolean_column_1"] & ~q["boolean_column_2"]) & (q["numeric_column"] > 0)]
 
     Arbitrary combinations of these expressions is possible, for example:
 
-    >>> q = q[(((q["a"] * q["b"]) / 5) < (0.7 * q["c"])) & (q["b"] != 12)]
+        >>> q = q[(((q["a"] * q["b"]) / 5) < (0.7 * q["c"])) & (q["b"] != 12)]
 
     See tests/unit/arcticdb/version_store/test_filtering.py for more example uses.
 
-    Timestamp filtering:
-        pandas.Timestamp, datetime.datetime, pandas.Timedelta, and datetime.timedelta objects are supported.
-        Note that internally all of these types are converted to nanoseconds (since epoch in the Timestamp/datetime
-        cases). This means that nonsensical operations such as multiplying two times together are permitted (but not
-        encouraged).
-    Restrictions:
-        String equality/inequality (and isin/isnotin) is supported for printable ASCII characters only.
-        Although not prohibited, it is not recommended to use ==, !=, isin, or isnotin with floating point values.
-    Exceptions:
-        inf or -inf values are provided for comparison
-        Column involved in query is a Categorical
-        Symbol is pickled
-        Column involved in query is not present in symbol
-        Query involves comparing strings using <, <=, >, or >= operators
-        Query involves comparing a string to one or more numeric values, or vice versa
-        Query involves arithmetic with a column containing strings
+    #Timestamp filtering
+    pandas.Timestamp, datetime.datetime, pandas.Timedelta, and datetime.timedelta objects are supported.
+    Note that internally all of these types are converted to nanoseconds (since epoch in the Timestamp/datetime
+    cases). This means that nonsensical operations such as multiplying two times together are permitted (but not
+    encouraged).
+    #Restrictions
+    String equality/inequality (and isin/isnotin) is supported for printable ASCII characters only.
+    Although not prohibited, it is not recommended to use ==, !=, isin, or isnotin with floating point values.
+    #Exceptions
+    inf or -inf values are provided for comparison
+    Column involved in query is a Categorical
+    Symbol is pickled
+    Column involved in query is not present in symbol
+    Query involves comparing strings using <, <=, >, or >= operators
+    Query involves comparing a string to one or more numeric values, or vice versa
+    Query involves arithmetic with a column containing strings
     """
 
     def __init__(self):
