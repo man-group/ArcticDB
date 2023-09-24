@@ -22,6 +22,7 @@ cmake_policy(PUSH)
     find_package(AWSSDK REQUIRED COMPONENTS s3)
 cmake_policy(POP)
 
+find_package(faiss REQUIRED)
 find_package(Boost REQUIRED)
 find_package(fmt REQUIRED)
 find_package(spdlog REQUIRED)
@@ -493,6 +494,8 @@ set (arcticdb_core_libraries
         Folly::folly # Transitively includes: double-conversion, gflags, glog, libevent, libssl, libcrypto, libiberty, libsodium
         Azure::azure-identity
         Azure::azure-storage-blobs
+        openblas
+        faiss
 )
 
 # Dependencies expose different names of their libraries depending
