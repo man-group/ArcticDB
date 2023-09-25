@@ -244,6 +244,9 @@ jobs:
           python -m asv run -v --show-stderr HASHFILE:hashes_to_benchmark.txt
           python -m asv publish
           zip -r asv_output.zip .asv/html/
+        env:
+          # There are problem with the linux build when building in paralel
+          CMAKE_BUILD_PARALLEL_LEVEL: 1
 
       - name: Upload Benchmarking output
         uses: actions/upload-artifact@v3
