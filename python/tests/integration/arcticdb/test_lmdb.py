@@ -66,11 +66,11 @@ def test_lmdb(tmpdir):
 
 
 def test_lmdb_malloc_trim(tmpdir):
-    # Make sure that bindings for calling malloc_trim as setup correctly
+    # Make sure that the bindings for calling malloc_trim have been setup correctly
     ac = Arctic(f"lmdb://{tmpdir}")
     ac.create_library("test_lmdb_malloc_trim")
     lib = ac["test_lmdb_malloc_trim"]
-    lib.trim()
+    lib._nvs.trim()
 
 
 def test_lmdb_mapsize(tmpdir):

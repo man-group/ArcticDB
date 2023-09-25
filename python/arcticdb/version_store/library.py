@@ -986,13 +986,6 @@ class Library:
             symbol=symbol, as_of=as_of, date_range=date_range, columns=columns, query_builder=query_builder
         )
 
-    def trim(self) -> None:
-        """
-        Calls trim on the allocator of the underlying version_store
-        Should be called after gc.collect() to remove any reference cycles
-        """
-        self._nvs.trim()
-
     def read_batch(
         self, symbols: List[Union[str, ReadRequest]], query_builder: Optional[QueryBuilder] = None
     ) -> List[Union[VersionedItem, DataError]]:
