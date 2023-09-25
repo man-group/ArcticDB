@@ -78,6 +78,16 @@ class VectorLibrary(object):
     def __get__item(self, symbol: str) -> None:
         raise ArcticDbNotYetImplemented
 
+    def _write_metadata(self, namespace: str, metadata: Dict[str, Any]):
+        self._metadata[namespace] = metadata
+        self._lib.write_pickle(namespace_metadata_symbol(namespace), pd.DataFrame({k: [v] for k,v in metadata.items()}))
+        # Rather annoyingly the constructor for pd.DataFrame expects dictionaries like {"dimension": [30]}, not
+        # {"dimension": 30}.
+
+    def _write_query_bucketiser(self, namespace: str, query_bucketiser: faiss.Index):
+        self._query_bucketisers[namespace] = query_bucketiser
+        self._lib.write(namespace_query_bucketiser_symbol(namespace), faiss.serialize_index(query_bucketiser))
+
     def _get_metadata(self, namespace: str) -> Dict[str, Any]:
         if namespace in self._metadata:
             return self._metadata[namespace]
@@ -88,12 +98,6 @@ class VectorLibrary(object):
             # singleton list.
         else:
             raise Exception(f"PyVectorDB: metadata not found for {namespace}.")
-
-    def _write_metadata(self, namespace: str, metadata: Dict[str, Any]):
-        self._metadata[namespace] = metadata
-        self._lib.write_pickle(namespace_metadata_symbol(namespace), pd.DataFrame({k: [v] for k,v in metadata.items()}))
-        # Rather annoyingly the constructor for pd.DataFrame expects dictionaries like {"dimension": [30]}, not
-        # {"dimension": 30}.
 
     def _get_insertion_bucketiser(self, namespace: str) -> faiss.Index:
         if namespace in self._insertion_bucketisers:
@@ -274,6 +278,7 @@ class VectorLibrary(object):
                 # self._update_bucket_index(namespace, bucket)
             # todo: add to the index in cpp
         self._lib.write_batch(write_payloads)
+        self._write_query_bucketiser(namespace, query_bucketiser)
 
         vectors_to_buckets = vectors["bucket"].reset_index()
         vectors_to_buckets.rename(columns={"index": "label"}, inplace=True)
@@ -301,7 +306,7 @@ class VectorLibrary(object):
             raise Exception(f"PyVectorDB: query vectors to namespace {namespace} must have length {dimension}")
 
         query_bucketiser = self._get_query_bucketiser(namespace)
-        distances, buckets = query_bucketiser.index.search(query_vectors, nprobes)
+        distances, buckets = query_bucketiser.search(query_vectors, nprobes)
         buckets_to_vectors = {bucket: [] for bucket in set(buckets.flatten())} # vectors to search in each bucket
         for i in range(query_vectors.shape[0]):
             for bucket in buckets[i]:
