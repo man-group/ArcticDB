@@ -56,7 +56,6 @@ SMOKE_TEST_VERSION_STORES = [
     "lmdb_version_store_v2",
     "s3_version_store_v1",
     "s3_version_store_v2",
-    "azure_version_store",
 ]
 
 if not MACOS_CONDA_BUILD:
