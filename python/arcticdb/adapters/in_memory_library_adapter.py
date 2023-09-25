@@ -22,7 +22,7 @@ class InMemoryLibraryAdapter(ArcticLibraryAdapter):
     """
     Use in-memory storage.
 
-    Supports only the URI `"mem://"`.
+    Only supports the URI ``"mem://"``.
     """
 
     REGEX = r"mem://"
