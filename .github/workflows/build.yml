@@ -93,16 +93,18 @@ jobs:
       fail-fast: false
       matrix:
         python3: ${{fromJson(vars.LINUX_PYTHON_VERSIONS || '[6, 7, 8, 9, 10, 11]')}}
+        arcticdb_version: ["oldest", "latest"]
         include:
           - python_deps_ids: [""]
             matrix_override: ${{fromJson(needs.common_config.outputs.linux_matrix)}}
-    name: Seed Persistent Storage for 3.${{matrix.python3}} Linux
+    name: Seed Persistent Storage for 3.${{matrix.python3}} Linux with ${{ matrix.arcticdb_version }} ArcticDB package version
     uses: ./.github/workflows/persistent_storage.yml
     secrets: inherit
     permissions: {packages: write}
     with:
       job_type: seed
       python3: ${{matrix.python3}}
+      arcticdb_version: ${{matrix.arcticdb_version}}
       matrix: ${{toJson(matrix.matrix_override)}}
       python_deps_ids: ${{toJson(matrix.python_deps_ids)}}
 
@@ -113,16 +115,18 @@ jobs:
       fail-fast: false
       matrix:
         python3: ${{fromJson(vars.WINDOWS_PYTHON_VERSIONS || '[7, 8, 9, 10, 11]')}}
+        arcticdb_version: ["oldest", "latest"]
         include:
           - python_deps_ids: [""]
             matrix_override: ${{fromJson(needs.common_config.outputs.windows_matrix)}}
-    name: Seed Persistent Storage for 3.${{matrix.python3}} Windows
+    name: Seed Persistent Storage for 3.${{matrix.python3}} Windows with ${{ matrix.arcticdb_version }} ArcticDB package version 
     uses: ./.github/workflows/persistent_storage.yml
     secrets: inherit
     permissions: {packages: write}
     with:
       job_type: seed
       python3: ${{matrix.python3}}
+      arcticdb_version: ${{matrix.arcticdb_version}}
       matrix: ${{toJson(matrix.matrix_override)}}
       python_deps_ids: ${{toJson(matrix.python_deps_ids)}}
 
@@ -242,16 +246,18 @@ jobs:
       fail-fast: false
       matrix:
         python3: ${{fromJson(vars.LINUX_PYTHON_VERSIONS || '[6, 7, 8, 9, 10, 11]')}}
+        arcticdb_version: ["oldest", "latest"]
         include:
           - python_deps_ids: [""]
             matrix_override: ${{fromJson(needs.common_config.outputs.linux_matrix)}}
-    name: Verify Persistent Storage for 3.${{matrix.python3}} Linux
+    name: Verify Persistent Storage for 3.${{matrix.python3}} Linux with ${{ matrix.arcticdb_version }} ArcticDB package version 
     uses: ./.github/workflows/persistent_storage.yml
     secrets: inherit
     permissions: {packages: write}
     with:
       job_type: verify
       python3: ${{matrix.python3}}
+      arcticdb_version: ${{matrix.arcticdb_version}}
       matrix: ${{toJson(matrix.matrix_override)}}
       python_deps_ids: ${{toJson(matrix.python_deps_ids)}}
 
@@ -262,16 +268,18 @@ jobs:
       fail-fast: false
       matrix:
         python3: ${{fromJson(vars.WINDOWS_PYTHON_VERSIONS || '[7, 8, 9, 10, 11]')}}
+        arcticdb_version: ["oldest", "latest"]
         include:
           - python_deps_ids: [""]
             matrix_override: ${{fromJson(needs.common_config.outputs.windows_matrix)}}
-    name: Verify Persistent Storage for 3.${{matrix.python3}} Windows
+    name: Verify Persistent Storage for 3.${{matrix.python3}} Windows with ${{ matrix.arcticdb_version }} ArcticDB package version 
     uses: ./.github/workflows/persistent_storage.yml
     secrets: inherit
     permissions: {packages: write}
     with:
       job_type: verify
       python3: ${{matrix.python3}}
+      arcticdb_version: ${{matrix.arcticdb_version}}
       matrix: ${{toJson(matrix.matrix_override)}}
       python_deps_ids: ${{toJson(matrix.python_deps_ids)}}
     

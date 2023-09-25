@@ -17,10 +17,10 @@ from arcticdb.util._versions import IS_PANDAS_TWO
 from arcticdb.util.test import assert_frame_equal
 
 
-def test_categorical(lmdb_version_store, sym):
+def test_categorical(basic_store, sym):
     c = pd.Categorical(["a", "b", "c", "a", "b", "c"])
     df = pd.DataFrame({"int": np.arange(6), "cat": c})
-    lib = lmdb_version_store
+    lib = basic_store
     lib.write(sym, df)
     read_df = lib.read(sym).data
     # Not pickled
@@ -29,11 +29,11 @@ def test_categorical(lmdb_version_store, sym):
     assert read_df.cat.dtype == "category"
 
 
-def test_categorical_multiple_col(lmdb_version_store, sym):
+def test_categorical_multiple_col(basic_store, sym):
     c = pd.Categorical(["a", "b", "c", "a", "b", "c"])
     c1 = pd.Categorical(["a", "b", "b", "a", "b", "c"])
     df = pd.DataFrame({"int": np.arange(6), "cat1": c, "cat2": c1})
-    lib = lmdb_version_store
+    lib = basic_store
     lib.write(sym, df)
     read_df = lib.read(sym).data
     # Not pickled
@@ -48,11 +48,11 @@ def test_categorical_multiple_col(lmdb_version_store, sym):
     assert_frame_equal(df, read_df)
 
 
-def test_categorical_multiple_col_read_subset(lmdb_version_store, sym):
+def test_categorical_multiple_col_read_subset(basic_store, sym):
     c = pd.Categorical(["a", "b", "c", "a", "b", "c"])
     c1 = pd.Categorical(["a", "b", "b", "a", "b", "c"])
     df = pd.DataFrame({"int": np.arange(6), "cat1": c, "cat2": c1})
-    lib = lmdb_version_store
+    lib = basic_store
     lib.write(sym, df)
     read_df = lib.read(sym, columns=["cat1"]).data
     # Not pickled
@@ -65,10 +65,10 @@ def test_categorical_multiple_col_read_subset(lmdb_version_store, sym):
     assert_frame_equal(df[["cat1"]], read_df)
 
 
-def test_categorical_with_None(lmdb_version_store, sym):
+def test_categorical_with_None(basic_store, sym):
     c = pd.Categorical(["a", "b", "c", "a", "b", "c", None])
     df = pd.DataFrame({"int": np.arange(7), "cat": c})
-    lib = lmdb_version_store
+    lib = basic_store
     lib.write(sym, df)
     read_df = lib.read(sym).data
     # Not pickled
@@ -78,10 +78,10 @@ def test_categorical_with_None(lmdb_version_store, sym):
     assert_frame_equal(df, read_df)
 
 
-def test_categorical_empty(lmdb_version_store, sym):
+def test_categorical_empty(basic_store, sym):
     c = pd.Categorical([])
     df = pd.DataFrame({"cat": c})
-    lib = lmdb_version_store
+    lib = basic_store
     lib.write(sym, df)
     read_df = lib.read(sym).data
     # In Pandas 1.0, an Index is used by default for any an empty dataframe or series is created,
@@ -94,10 +94,10 @@ def test_categorical_empty(lmdb_version_store, sym):
     assert_frame_equal(df, read_df)
 
 
-def test_categorical_with_integers(lmdb_version_store, sym):
+def test_categorical_with_integers(basic_store, sym):
     c = pd.Categorical(np.arange(6))
     df = pd.DataFrame({"int": np.arange(6), "cat_int": c})
-    lib = lmdb_version_store
+    lib = basic_store
     lib.write(sym, df)
     read_df = lib.read(sym).data
     # Not pickled
@@ -121,11 +121,11 @@ def test_categorical_with_integers(lmdb_version_store, sym):
     assert_frame_equal(df, read_df)
 
 
-def test_categorical_with_integers_and_strings(lmdb_version_store, sym):
+def test_categorical_with_integers_and_strings(basic_store, sym):
     c = pd.Categorical(np.arange(6))
     c1 = pd.Categorical(["a", "b", "b", "a", "b", "c"])
     df = pd.DataFrame({"int": np.arange(6), "cat_int": c, "cat_str": c1})
-    lib = lmdb_version_store
+    lib = basic_store
     lib.write(sym, df)
     read_df = lib.read(sym).data
     # Not pickled
@@ -150,8 +150,8 @@ def test_categorical_with_integers_and_strings(lmdb_version_store, sym):
     assert_frame_equal(df, read_df)
 
 
-def test_categorical_batch_write(lmdb_version_store):
-    lib = lmdb_version_store
+def test_categorical_batch_write(basic_store):
+    lib = basic_store
     symbols = ["test_categorical_batch_write_1", "test_categorical_batch_write_2"]
     dfs = [
         pd.DataFrame({"a": ["hello", "hi", "hello"]}, dtype="category"),
@@ -162,8 +162,8 @@ def test_categorical_batch_write(lmdb_version_store):
         assert_frame_equal(lib.read(symbol).data, dfs[idx])
 
 
-def test_categorical_append(lmdb_version_store):
-    lib = lmdb_version_store
+def test_categorical_append(basic_store):
+    lib = basic_store
     symbol = "test_categorical_append"
     original_df = pd.DataFrame({"a": ["hello", "hi", "hello"]}, dtype="category")
     lib.write(symbol, original_df)
@@ -172,8 +172,8 @@ def test_categorical_append(lmdb_version_store):
         lib.append(symbol, append_df)
 
 
-def test_categorical_update(lmdb_version_store):
-    lib = lmdb_version_store
+def test_categorical_update(basic_store):
+    lib = basic_store
     symbol = "test_categorical_update"
     original_df = pd.DataFrame({"a": ["hello", "hi", "hello"]}, dtype="category")
     lib.write(symbol, original_df)
@@ -182,8 +182,8 @@ def test_categorical_update(lmdb_version_store):
         lib.update(symbol, append_df)
 
 
-def test_categorical_series(lmdb_version_store):
-    lib = lmdb_version_store
+def test_categorical_series(basic_store):
+    lib = basic_store
     symbol = "test_categorical_series"
     original_series = pd.Series(["hello", "hi", "hello"], dtype="category")
     lib.write(symbol, original_series)
@@ -192,8 +192,8 @@ def test_categorical_series(lmdb_version_store):
         lib.append(symbol, append_series)
 
 
-def test_categorical_multi_index(lmdb_version_store):
-    lib = lmdb_version_store
+def test_categorical_multi_index(basic_store):
+    lib = basic_store
     symbol = "test_categorical_multi_index"
     dt1 = datetime.datetime(2019, 4, 8, 10, 5, 2, 1)
     dt2 = datetime.datetime(2019, 4, 9, 10, 5, 2, 1)

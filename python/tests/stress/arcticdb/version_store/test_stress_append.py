@@ -18,7 +18,7 @@ from arcticdb.util.test import (
 )
 
 
-def test_append_stress(lmdb_version_store):
+def test_append_stress(object_version_store):
     num_rows_per_day = 1000
     num_days = 10
     identifier_length = 8
@@ -27,18 +27,18 @@ def test_append_stress(lmdb_version_store):
 
     symbol = "test_append_stress"
     df = dataframe_for_date(dt, identifiers)
-    lmdb_version_store.write(symbol, df)
+    object_version_store.write(symbol, df)
 
     for i in range(num_days):
         dt = dt + datetime.timedelta(days=1)
         new_df = dataframe_for_date(dt, identifiers)
-        lmdb_version_store.append(symbol, new_df)
+        object_version_store.append(symbol, new_df)
         df = pd.concat((df, new_df))
-        vit = lmdb_version_store.read(symbol)
+        vit = object_version_store.read(symbol)
         assert_frame_equal(vit.data, df)
 
 
-def test_write_parallel_stress(lmdb_version_store):
+def test_write_parallel_stress(object_version_store):
     num_rows_per_day = 1000
     num_days = 100
     identifier_length = 8
@@ -57,14 +57,14 @@ def test_write_parallel_stress(lmdb_version_store):
 
     random.shuffle(dataframes)
     for d in dataframes:
-        lmdb_version_store.write(symbol, d, parallel=True)
+        object_version_store.write(symbol, d, parallel=True)
 
-    lmdb_version_store.version_store.compact_incomplete(symbol, False, False)
-    vit = lmdb_version_store.read(symbol)
+    object_version_store.version_store.compact_incomplete(symbol, False, False)
+    vit = object_version_store.read(symbol)
     assert_frame_equal(vit.data, df)
 
 
-def test_write_parallel_stress_schema_change(lmdb_version_store):
+def test_write_parallel_stress_schema_change(object_version_store):
     num_rows_per_day = 1000
     num_days = 100
     num_columns = 8
@@ -87,17 +87,17 @@ def test_write_parallel_stress_schema_change(lmdb_version_store):
 
     random.shuffle(dataframes)
     for d in dataframes:
-        lmdb_version_store.write(symbol, d, parallel=True)
+        object_version_store.write(symbol, d, parallel=True)
 
-    lmdb_version_store.version_store.compact_incomplete(symbol, False, False)
-    vit = lmdb_version_store.read(symbol)
+    object_version_store.version_store.compact_incomplete(symbol, False, False)
+    vit = object_version_store.read(symbol)
     df.sort_index(axis=1, inplace=True)
     result = vit.data
     result.sort_index(axis=1, inplace=True)
     assert_frame_equal(vit.data, df)
 
 
-def test_write_parallel_stress_schema_change_strings(lmdb_version_store_big_map):
+def test_write_parallel_stress_schema_change_strings(basic_store_large_data):
     num_rows_per_day = 1000
     num_days = 100
     num_columns = 8
@@ -121,17 +121,17 @@ def test_write_parallel_stress_schema_change_strings(lmdb_version_store_big_map)
 
     random.shuffle(dataframes)
     for d in dataframes:
-        lmdb_version_store_big_map.write(symbol, d, parallel=True)
+        basic_store_large_data.write(symbol, d, parallel=True)
 
-    lmdb_version_store_big_map.version_store.compact_incomplete(symbol, False, False)
-    vit = lmdb_version_store_big_map.read(symbol)
+    basic_store_large_data.version_store.compact_incomplete(symbol, False, False)
+    vit = basic_store_large_data.read(symbol)
     df.sort_index(axis=1, inplace=True)
     result = vit.data
     result.sort_index(axis=1, inplace=True)
     assert_frame_equal(vit.data, df)
 
 
-def test_write_parallel_stress_schema_change_strings_with_nan(lmdb_version_store_big_map):
+def test_write_parallel_stress_schema_change_strings_with_nan(basic_store_large_data):
     num_rows_per_day = 1000
     num_days = 100
     num_columns = 8
@@ -155,17 +155,17 @@ def test_write_parallel_stress_schema_change_strings_with_nan(lmdb_version_store
 
     random.shuffle(dataframes)
     for d in dataframes:
-        lmdb_version_store_big_map.write(symbol, d, parallel=True)
+        basic_store_large_data.write(symbol, d, parallel=True)
 
-    lmdb_version_store_big_map.version_store.compact_incomplete(symbol, False, False)
-    vit = lmdb_version_store_big_map.read(symbol)
+    basic_store_large_data.version_store.compact_incomplete(symbol, False, False)
+    vit = basic_store_large_data.read(symbol)
     df.sort_index(axis=1, inplace=True)
     result = vit.data
     result.sort_index(axis=1, inplace=True)
     assert_frame_equal(vit.data, df)
 
 
-def test_change_to_dynamic_strings(lmdb_version_store):
+def test_change_to_dynamic_strings(object_version_store):
     num_rows_per_day = 1000
     num_days = 100
     num_columns = 5
@@ -181,17 +181,17 @@ def test_change_to_dynamic_strings(lmdb_version_store):
         vals = {c: random_strings_of_length(num_rows_per_day, string_length, False) for c in columns}
         new_df = pd.DataFrame(data=vals, index=index)
         if i < num_days / 2:
-            lmdb_version_store.append(symbol, new_df, dynamic_strings=False, write_if_missing=True)
+            object_version_store.append(symbol, new_df, dynamic_strings=False, write_if_missing=True)
         else:
-            lmdb_version_store.append(symbol, new_df, dynamic_strings=True)
+            object_version_store.append(symbol, new_df, dynamic_strings=True)
         df = pd.concat((df, new_df))
         dt = dt + datetime.timedelta(days=1)
 
-    vit = lmdb_version_store.read(symbol)
+    vit = object_version_store.read(symbol)
     assert_frame_equal(vit.data, df)
 
 
-def test_write_parallel_stress_many_chunks(lmdb_version_store):
+def test_write_parallel_stress_many_chunks(object_version_store):
     num_rows_per_day = 10
     num_days = 10
     num_columns = 8
@@ -214,10 +214,10 @@ def test_write_parallel_stress_many_chunks(lmdb_version_store):
 
     random.shuffle(dataframes)
     for d in dataframes:
-        lmdb_version_store.write(symbol, d, parallel=True)
+        object_version_store.write(symbol, d, parallel=True)
 
-    lmdb_version_store.version_store.compact_incomplete(symbol, False, False)
-    vit = lmdb_version_store.read(symbol)
+    object_version_store.version_store.compact_incomplete(symbol, False, False)
+    vit = object_version_store.read(symbol)
     df.sort_index(axis=1, inplace=True)
     result = vit.data
     result.sort_index(axis=1, inplace=True)

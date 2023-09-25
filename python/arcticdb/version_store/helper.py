@@ -272,6 +272,12 @@ def add_s3_library_to_env(
     use_virtual_addressing=False,
 ):
     env = cfg.env_by_id[env_name]
+    if with_prefix and isinstance(with_prefix, str) and (with_prefix.endswith("/") or "//" in with_prefix):
+        raise UserInputException(
+            "path_prefix cannot contain // or end with a / because this breaks some S3 API calls, path_prefix was"
+            f" [{with_prefix}]"
+        )
+
     sid, storage = get_s3_proto(
         cfg=cfg,
         lib_name=lib_name,
@@ -307,6 +313,9 @@ def create_test_s3_cfg(
     region: str = None,
 ) -> EnvironmentConfigsMap:
     cfg = EnvironmentConfigsMap()
+    if with_prefix and isinstance(with_prefix, str):
+        with_prefix = f"{with_prefix}/{lib_name}"
+
     add_s3_library_to_env(
         cfg,
         lib_name=lib_name,

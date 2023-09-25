@@ -80,6 +80,7 @@ def test_stress(pct_null, repeats, symbol, object_version_store):
     assert_frame_equal(test_df, df)
 
 
+# This test is running only against LMDB because it is **very** slow, if ran against a persistent storage
 @param_dict("pct_null", "repeats", "symbol", high_entropy=(0.0, 1), low_entropy=(0.0, 1000))
 def test_stress_small_row(pct_null, repeats, symbol, lmdb_version_store_tiny_segment):
     print("Testing symbol " + symbol)

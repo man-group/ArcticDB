@@ -8,15 +8,13 @@ This page looks into how they are used and how to run them locally, when needed 
 
 ## Python scripts related to Persistent Storage testing
 
-The Python scripts related to the persistent_storage are:
-- storage_common.py
-- seed_storage.py
-- verify_storage.py
-- cleanup_storage.py
+There are some Python utility functions to the persistent storages.
+They can be found in python\arcticdb\util\storage_test.py
+This is also a callable script, that can be used to perform the operations described below.
 
-They implement the following steps:
+The file contains implementations for the following steps:
 1. Seed - seeding some libraries in the real storages
-    - in order to access this, you need to set the **ARCTICDB_PERSISTENT_STORAGE_LIB_NAME** environment variable 
+    - in order to access this, you need to set the **ARCTICDB_PERSISTENT_STORAGE_SHARED_PATH_PREFIX** environment variable 
     - these libraries are used to test that the versions that we are building can read data from previous versions
     - the libraries are used in the following test python\tests\integration\arcticdb\test_persistent_storage.py::test_real_s3_storage_read
     - the libraries' names are predetermined from this pattern:
