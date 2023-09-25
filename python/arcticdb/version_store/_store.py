@@ -69,7 +69,7 @@ from arcticdb.version_store._normalization import (
 from arcticdb.util.memory import format_bytes
 
 # These chars are encoded by S3 and on doing a list_symbols they will show up as the encoded form eg. &amp
-UNSUPPORTED_S3_CHARS = {"\0", "*", "&", "<", ">"}
+UNSUPPORTED_S3_CHARS = {"\0", "*", "<", ">"}
 MAX_SYMBOL_SIZE = (2**8) - 1
 
 
