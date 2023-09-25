@@ -48,7 +48,7 @@ extensions = [
 
 autodoc_default_flags = ["members"]
 autodoc_member_order = "bysource"
-autosummary_generate = False
+autosummary_generate = True
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ["_templates"]
