@@ -73,4 +73,5 @@ dependencies:
   - azure-storage-blob
   - azure-identity
   - pyarrow
+  - trustme
 

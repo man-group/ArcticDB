@@ -1073,11 +1073,18 @@ def test_get_uri(object_storage_uri_incl_bucket):
     assert ac.get_uri() == object_storage_uri_incl_bucket
 
 
-def test_azure_no_ca_path(azurite_azure_test_connection_setting):
-    endpoint, container, credential_name, credential_key, _ = azurite_azure_test_connection_setting
-    Arctic(
-        f"azure://DefaultEndpointsProtocol=http;AccountName={credential_name};AccountKey={credential_key};BlobEndpoint={endpoint}/{credential_name};Container={container}"
+def test_azure_ca_dir_only(azurite_azure_test_connection_setting, azure_client_and_create_container):
+    (endpoint, container, credential_name, credential_key, _, ca_cert_dir) = azurite_azure_test_connection_setting
+    ac = Arctic(
+        f"azure://DefaultEndpointsProtocol=https;AccountName={credential_name};AccountKey={credential_key};BlobEndpoint={endpoint}/{credential_name};Container={container};CA_cert_dir={ca_cert_dir}"
     )
+    LIB_NAME = "abc"
+    expected = pd.DataFrame({"col1": [1, 2, 3], "col2": [4, 5, 6]})
+    sym = "test"
+    ac.create_library(LIB_NAME)
+    ac[LIB_NAME].write(sym, expected)
+
+    assert_frame_equal(expected, ac[LIB_NAME].read(sym).data)
 
 
 def test_azure_sas_token(azure_account_sas_token, azurite_azure_test_connection_setting):

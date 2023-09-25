@@ -116,7 +116,8 @@ void register_bindings(py::module& storage, py::exception<arcticdb::ArcticExcept
         .def(py::init<>())
         .def_property("container_name", &AzureOverride::container_name, &AzureOverride::set_container_name)
         .def_property("endpoint", &AzureOverride::endpoint, &AzureOverride::set_endpoint)
-        .def_property("ca_cert_path", &AzureOverride::ca_cert_path, &AzureOverride::set_ca_cert_path);
+        .def_property("ca_cert_path", &AzureOverride::ca_cert_path, &AzureOverride::set_ca_cert_path)
+        .def_property("ca_cert_dir", &AzureOverride::ca_cert_dir, &AzureOverride::set_ca_cert_dir);
 
     py::class_<LmdbOverride>(storage, "LmdbOverride")
             .def(py::init<>())

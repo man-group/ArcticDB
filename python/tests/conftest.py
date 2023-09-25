@@ -34,6 +34,7 @@ from pathlib import Path
 import socket
 import tempfile
 import pymongo
+import trustme
 
 import requests
 from pytest_server_fixtures.base import get_ephemeral_port
@@ -90,8 +91,8 @@ def _moto_s3_uri_module():
 @pytest.fixture(scope="function")
 def azure_client_and_create_container(azurite_container, azurite_azure_uri):
     client = BlobServiceClient.from_connection_string(
-        conn_str=azurite_azure_uri, container_name=azurite_container
-    )  # add connection_verify=False to bypass ssl checking
+        conn_str=azurite_azure_uri, container_name=azurite_container, connection_verify=False
+    )  # ssl cert verification is off as it is for testing only and function requires CA bundle
 
     container_client = client.get_container_client(container=azurite_container)
     if not container_client.exists():
@@ -194,20 +195,21 @@ def arctic_client(request, moto_s3_uri_incl_bucket, tmpdir, encoding_version, li
 
 
 @pytest.fixture
-def azurite_azure_test_connection_setting(azurite_port, azurite_container, spawn_azurite):
+def azurite_azure_test_connection_setting(azurite_port, azurite_container, spawn_azurite, temp_cert):
     credential_name = "devstoreaccount1"
     credential_key = "Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw=="
-    endpoint = f"http://127.0.0.1:{azurite_port}"
+    endpoint = f"https://127.0.0.1:{azurite_port}"
     # Default cert path is used; May run into problem on Linux's non RHEL distribution; See more on https://github.com/man-group/ArcticDB/issues/514
-    ca_cert_path = ""
+    (_, _, ca_cert_path) = temp_cert
+    ca_cert_dir = os.path.dirname(ca_cert_path)
 
-    return endpoint, azurite_container, credential_name, credential_key, ca_cert_path
+    return endpoint, azurite_container, credential_name, credential_key, ca_cert_path, ca_cert_dir
 
 
 @pytest.fixture
 def azurite_azure_uri(azurite_azure_test_connection_setting):
-    (endpoint, container, credential_name, credential_key, ca_cert_path) = azurite_azure_test_connection_setting
-    return f"azure://DefaultEndpointsProtocol=http;AccountName={credential_name};AccountKey={credential_key};BlobEndpoint={endpoint}/{credential_name};Container={container};CA_cert_path={ca_cert_path}"  # semi-colon at the end is not accepted by the sdk
+    (endpoint, container, credential_name, credential_key, ca_cert_path, _) = azurite_azure_test_connection_setting
+    return f"azure://DefaultEndpointsProtocol=https;AccountName={credential_name};AccountKey={credential_key};BlobEndpoint={endpoint}/{credential_name};Container={container};CA_cert_path={ca_cert_path}"  # semi-colon at the end is not accepted by the sdk
 
 
 @pytest.fixture
@@ -244,7 +246,14 @@ def arcticdb_test_s3_config(moto_s3_endpoint_and_credentials):
 @pytest.fixture
 def arcticdb_test_azure_config(azurite_azure_test_connection_setting, azurite_azure_uri):
     def create(lib_name):
-        (endpoint, container, credential_name, credential_key, ca_cert_path) = azurite_azure_test_connection_setting
+        (
+            _,
+            container,
+            credential_name,
+            credential_key,
+            ca_cert_path,
+            ca_cert_dir,
+        ) = azurite_azure_test_connection_setting
         return create_test_azure_cfg(
             lib_name=lib_name,
             credential_name=credential_name,
@@ -252,6 +261,7 @@ def arcticdb_test_azure_config(azurite_azure_test_connection_setting, azurite_az
             container_name=container,
             endpoint=azurite_azure_uri,
             ca_cert_path=ca_cert_path,
+            ca_cert_dir=ca_cert_dir,
         )
 
     return create
@@ -743,11 +753,35 @@ def azurite_container():
 
 
 @pytest.fixture(scope="module")
-def spawn_azurite(azurite_port):
+def temp_cert():
     temp_folder = tempfile.TemporaryDirectory()
+    key_file = f"{temp_folder.name}/key.pem"
+    cert_file = f"{temp_folder.name}/cert.pem"
+    client_cert_file = f"{temp_folder.name}/client.pem"
+    ca = trustme.CA()
+    server_cert = ca.issue_cert("127.0.0.1")
+    server_cert.private_key_pem.write_to_path(key_file)
+    server_cert.cert_chain_pems[0].write_to_path(cert_file)
+    ca.cert_pem.write_to_path(client_cert_file)
+    # Create the sym link for curl CURLOPT_CAPATH option; rehash only available on openssl >=1.1.1
+    subprocess.run(
+        f'ln -s "{client_cert_file}" "$(openssl x509 -hash -noout -in "{client_cert_file}")".0',
+        cwd=temp_folder.name,
+        shell=True,
+    )
+    return key_file, cert_file, client_cert_file
+
+
+@pytest.fixture(scope="module")
+def spawn_azurite(azurite_port, temp_cert):
+    temp_folder = tempfile.TemporaryDirectory()
+    key_file, cert_file, _ = temp_cert
     try:  # Awaiting fix for cleanup in windows file-in-use problem
         p = subprocess.Popen(
-            f"azurite --silent --blobPort {azurite_port} --blobHost 127.0.0.1 --queuePort 0 --tablePort 0",
+            {
+                f"azurite --silent --blobPort {azurite_port} --blobHost 127.0.0.1 --queuePort 0 --tablePort 0 --key"
+                f" {key_file} --cert {cert_file}"
+            },
             cwd=temp_folder.name,
             shell=True,
         )

@@ -92,11 +92,12 @@ void do_write_impl(
                         blob_client.UploadFrom(dst, write_size, upload_option, get_context(request_timeout));
                     }
                     catch (const Azure::Core::RequestFailedException& e){
-                        util::raise_rte("Failed to write azure with key '{}' {} {}: {}",
+                        util::raise_rte("Failed to write azure with key '{}' {} {}: {} :{}",
                                             k,
                                             blob_name,
                                             static_cast<int>(e.StatusCode),
-                                            e.ReasonPhrase);
+                                            e.ReasonPhrase,
+                                            e.what());
                     }
 
                     ARCTICDB_RUNTIME_DEBUG(log::storage(), "Wrote key {}: {}, with {} bytes of data",
@@ -155,11 +156,12 @@ void do_read_impl(Composite<VariantKey> && ks,
                 }
                 catch (const Azure::Core::RequestFailedException& e){
                     if (!opts.dont_warn_about_missing_key) {
-                        log::storage().warn("Failed to read azure segment with key '{}' {} {}: {}",
+                        log::storage().warn("Failed to read azure segment with key '{}' {} {}: {}: {}",
                                                 k,
                                                 blob_name,
                                                 static_cast<int>(e.StatusCode),
-                                                e.ReasonPhrase);
+                                                e.ReasonPhrase,
+                                                e.what());
                     }
                     failed_reads.push_back(k);
                 }
@@ -188,9 +190,10 @@ void do_remove_impl(Composite<VariantKey>&& ks,
                 container_client.SubmitBatch(batch, Azure::Storage::Blobs::SubmitBlobBatchOptions(), get_context(request_timeout));//To align with s3 behaviour, deleting non-exist objects is not an error, so not handling response
             }
             catch (const Azure::Core::RequestFailedException& e){
-                util::raise_rte("Failed to create azure segment batch remove request {}: {}",
+                util::raise_rte("Failed to create azure segment batch remove request {}: {} :{}",
                                     static_cast<int>(e.StatusCode),
-                                    e.ReasonPhrase);
+                                    e.ReasonPhrase,
+                                    e.what());
             }
             batch = container_client.CreateBatch();
             batch_counter = 0u;
@@ -260,10 +263,11 @@ void do_iterate_type_impl(KeyType key_type,
             }
         }
         catch (const Azure::Core::RequestFailedException& e){
-            log::storage().warn("Failed to iterate azure blobs '{}' {}: {}",
+            log::storage().warn("Failed to iterate azure blobs '{}' {}: {}: {}",
                                 key_type,
                                 static_cast<int>(e.StatusCode),
-                                e.ReasonPhrase);
+                                e.ReasonPhrase,
+                                e.what());
         }
 }
 
@@ -283,11 +287,12 @@ bool do_key_exists_impl(
                 return true;
         }
         catch (const Azure::Core::RequestFailedException& e){
-            log::storage().debug("Failed to check azure key '{}' {} {}: {}",
+            log::storage().debug("Failed to check azure key '{}' {} {}: {} :{}",
                                 key,
                                 blob_name,
                                 static_cast<int>(e.StatusCode),
-                                e.ReasonPhrase);
+                                e.ReasonPhrase,
+                                e.what());
         }
         return false;
 }

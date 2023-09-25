@@ -90,28 +90,21 @@ class Arctic:
                 +---------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------+
                 | Path_prefix               | Path within Azure container to use for data storage                                                                                                           |
                 +---------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------+
-                | CA_cert_path              | (Non-Windows platform only) Azure CA certificate path. If not set, default path will be used.                                                                 |
-                |                           | Note: For Linux distribution, default path is set to `/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem`.                                                     |
-                |                           | If the certificate cannot be found in the provided path, an Azure exception with no meaningful error code will be thrown.                                     |
-                |                           | For more details, please see https://github.com/Azure/azure-sdk-for-cpp/issues/4738.                                                                          |
-                |                           | For example, ``Failed to iterate azure blobs 'C' 0:``.                                                                                                        |
-                |                           |                                                                                                                                                               |
-                |                           | Default certificate path in various Linux distributions:                                                                                                      |
-                |                           | "/etc/ssl/certs/ca-certificates.crt"                  Debian/Ubuntu/Gentoo etc.                                                                               |
-                |                           | "/etc/pki/tls/certs/ca-bundle.crt"                    Fedora/RHEL 6                                                                                           |
-                |                           | "/etc/ssl/ca-bundle.pem"                              OpenSUSE                                                                                                |
-                |                           | "/etc/pki/tls/cacert.pem"                             OpenELEC                                                                                                |
-                |                           | "/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem"   CentOS/RHEL 7                                                                                           |
-                |                           | "/etc/ssl/cert.pem"                                   Alpine Linux                                                                                            |
+                | CA_cert_path              | (Non-Windows platform only) Azure CA certificate path.                                                                                                        |
+                |                           | It sets option ``CURLOPT_CAINFO`` in Azure SDK's libcurl backend. If not set, python ``ssl.get_default_verify_paths().cafile`` will be used                   |
+                +---------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------+
+                | CA_cert_dir               | (Non-Windows platform only) Azure CA certificate directory.                                                                                                   |
+                |                           | It sets option ``CURLOPT_CAPATH`` in Azure SDK's libcurl backend. If not set, python ``ssl.get_default_verify_paths().capath`` will be used                   |
+                |                           | Certificates can only be used if corresponding hash files exist (https://www.openssl.org/docs/man1.0.2/man3/SSL_CTX_load_verify_locations.html)               |
                 +---------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------+
 
                 For Windows user, `CA_cert_path` cannot be set. Please set CA certificate related option on Windows setting.
                 For details, you may refer to https://learn.microsoft.com/en-us/skype-sdk/sdn/articles/installing-the-trusted-root-certificate
 
-                Exception: Azure exceptions message always ends with `{AZURE_SDK_HTTP_STATUS_CODE}:{AZURE_SDK_REASON_PHRASE}`.
+                Azure exception messages always end with `{AZURE_SDK_HTTP_STATUS_CODE}: {AZURE_SDK_REASON_PHRASE}: {AZURE_SDK_EXCEPTION_STRING}`.
 
                 Please refer to https://github.com/Azure/azure-sdk-for-cpp/blob/24ed290815d8f9dbcd758a60fdc5b6b9205f74e0/sdk/core/azure-core/inc/azure/core/http/http_status_code.hpp for
-                more details of provided status codes.
+                more details of provided status codes and reason phrases.
 
                 Note that due to a bug in Azure C++ SDK (https://github.com/Azure/azure-sdk-for-cpp/issues/4738), Azure may not give meaningful status codes and
                 reason phrases in the exception. To debug these instances, please set the environment variable ``export AZURE_LOG_LEVEL`` to ``1`` to turn on the SDK debug logging.

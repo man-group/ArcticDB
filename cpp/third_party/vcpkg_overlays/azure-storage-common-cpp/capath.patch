@@ -1,0 +1,54 @@
+diff --git a/sdk/core/azure-core/inc/azure/core/http/curl_transport.hpp b/sdk/core/azure-core/inc/azure/core/http/curl_transport.hpp
+index a8e28364..4beebde6 100644
+--- a/sdk/core/azure-core/inc/azure/core/http/curl_transport.hpp
++++ b/sdk/core/azure-core/inc/azure/core/http/curl_transport.hpp
+@@ -120,6 +120,18 @@ namespace Azure { namespace Core { namespace Http {
+      */
+     std::string CAInfo;
+ 
++    /**
++     * @brief Path to a directory which holds PEM encoded file, containing the certificate authorities
++     * sent to libcurl handle directly.
++     *
++     * @remark The Azure SDK will not check if the path is valid or not.
++     *
++     * @remark The default is the built-in system specific path. More about this option:
++     * https://curl.se/libcurl/c/CURLOPT_CAPATH.html
++     *
++     */
++    std::string CAPath;
++
+     /**
+      * @brief All HTTP requests will keep the connection channel open to the service.
+      *
+diff --git a/sdk/core/azure-core/src/http/curl/curl.cpp b/sdk/core/azure-core/src/http/curl/curl.cpp
+index 80309f89..c1236456 100644
+--- a/sdk/core/azure-core/src/http/curl/curl.cpp
++++ b/sdk/core/azure-core/src/http/curl/curl.cpp
+@@ -1280,6 +1280,8 @@ inline std::string GetConnectionKey(std::string const& host, CurlTransportOption
+   key.append(",");
+   key.append(!options.CAInfo.empty() ? options.CAInfo : "0");
+   key.append(",");
++  key.append(!options.CAPath.empty() ? options.CAPath : "0");
++  key.append(",");
+   key.append(
+       options.Proxy.HasValue() ? (options.Proxy.Value().empty() ? "NoProxy" : options.Proxy.Value())
+                                : "0");
+@@ -2307,6 +2309,17 @@ CurlConnection::CurlConnection(
+     }
+   }
+ 
++  if (!options.CAPath.empty())
++  {
++    if (!SetLibcurlOption(m_handle, CURLOPT_CAPATH, options.CAPath.c_str(), &result))
++    {
++      throw Azure::Core::Http::TransportException(
++          _detail::DefaultFailedToGetNewConnectionTemplate + hostDisplayName
++          + ". Failed to set CA path to:" + options.CAPath + ". "
++          + std::string(curl_easy_strerror(result)));
++    }
++  }
++
+   if (!options.SslOptions.PemEncodedExpectedRootCertificates.empty())
+   {
+     curl_blob rootCertBlob

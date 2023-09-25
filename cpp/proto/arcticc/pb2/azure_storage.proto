@@ -17,4 +17,5 @@ message Config {
     uint32 request_timeout = 4;
     string prefix = 5;
     string ca_cert_path = 6;
+    string ca_cert_dir = 7;
 }

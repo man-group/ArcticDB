@@ -61,9 +61,7 @@ include(PythonUtils) # Must be called before Pybind (third_party) to override it
 
 add_subdirectory(third_party)
 add_subdirectory(proto)
-if(NOT ${ARCTICDB_USING_CONDA})
-    include(AzureVcpkg) #AzureVcpkg.cmake is from https://github.com/Azure/azure-sdk-for-cpp/blob/main/cmake-modules/AzureVcpkg.cmake, commit ada77b3
-endif()
+
 
 python_utils_dump_vars_if_enabled("After Pybind")
 python_utils_check_include_dirs("accepted by pybind")

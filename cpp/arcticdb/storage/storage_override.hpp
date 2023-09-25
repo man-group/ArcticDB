@@ -86,6 +86,7 @@ class AzureOverride {
     std::string container_name_;
     std::string endpoint_;
     std::string ca_cert_path_;
+    std::string ca_cert_dir_;
 
 public:
     std::string container_name() const {
@@ -112,6 +113,14 @@ public:
         ca_cert_path_ = ca_cert_path;
     }
 
+    std::string ca_cert_dir() const {
+        return ca_cert_dir_;
+    }
+
+    void set_ca_cert_dir(std::string_view ca_cert_dir){
+        ca_cert_dir_ = ca_cert_dir;
+    }
+
     void modify_storage_config(arcticdb::proto::storage::VariantStorage& storage) const {
         if(storage.config().Is<arcticdb::proto::azure_storage::Config>()) {
             arcticdb::proto::azure_storage::Config azure_storage;
@@ -120,6 +129,7 @@ public:
             azure_storage.set_container_name(container_name_);
             azure_storage.set_endpoint(endpoint_);
             azure_storage.set_ca_cert_path(ca_cert_path_);
+            azure_storage.set_ca_cert_dir(ca_cert_dir_);
 
             util::pack_to_any(azure_storage, *storage.mutable_config());
         }

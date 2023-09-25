@@ -27,6 +27,10 @@ AzureStorage::AzureStorage(const LibraryPath &library_path, OpenMode mode, const
             ARCTICDB_RUNTIME_DEBUG(log::storage(), "Using default CA cert path");
         else
             ARCTICDB_RUNTIME_DEBUG(log::storage(), "CA cert path: {}", conf.ca_cert_path());
+        if (conf.ca_cert_dir().empty())
+            ARCTICDB_RUNTIME_DEBUG(log::storage(), "Using default CA cert directory");
+        else
+            ARCTICDB_RUNTIME_DEBUG(log::storage(), "CA cert directory: {}", conf.ca_cert_dir());
         ARCTICDB_RUNTIME_DEBUG(log::storage(), "Connecting to Azure Blob Storage: {} Container: {}", conf.endpoint(), conf.container_name());
 
         if (!conf.prefix().empty()) {
@@ -42,9 +46,10 @@ AzureStorage::AzureStorage(const LibraryPath &library_path, OpenMode mode, const
 
 Azure::Storage::Blobs::BlobClientOptions AzureStorage::get_client_options(const Config &conf) {
     BlobClientOptions client_options;
-    if (!conf.ca_cert_path().empty()) {//WARNING: Setting ca_cert_path will force Azure sdk uses libcurl as backend support, instead of winhttp
+    if (!conf.ca_cert_path().empty() || !conf.ca_cert_dir().empty()) {//WARNING: Setting ca_cert_path will force Azure sdk uses libcurl as backend support, instead of winhttp
         Azure::Core::Http::CurlTransportOptions curl_transport_options;
         curl_transport_options.CAInfo = conf.ca_cert_path();
+        curl_transport_options.CAPath = conf.ca_cert_dir();
         client_options.Transport.Transport = std::make_shared<Azure::Core::Http::CurlTransport>(curl_transport_options);
     }
     return client_options;
