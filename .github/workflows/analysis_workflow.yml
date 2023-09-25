@@ -241,7 +241,7 @@ jobs:
           git status
           git branch
           git log --oneline -n 100
-          python -m asv run HASHFILE:hashes_to_benchmark.txt
+          python -m asv run -v -q --show-stderr HASHFILE:hashes_to_benchmark.txt
           python -m asv publish
           zip -r asv_output.zip .asv/html/
 
@@ -288,7 +288,7 @@ jobs:
           git status
           git branch
           git log --oneline -n 100
-          python -m asv run HASHFILE:hashes_to_benchmark.txt
+          python -m asv run -v -q --show-stderr HASHFILE:hashes_to_benchmark.txt
           python -m asv publish
           zip -r asv_output.zip .asv/html/
 
