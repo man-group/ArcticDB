@@ -59,6 +59,11 @@ for each new release of ArcticDB upstream.
 You can update such a PR or create a new one to release a version, updating the
 conda recipe. [Here's an example.](https://github.com/conda-forge/arcticdb-feedstock/pull/10)
 
+> [!IMPORTANT]  
+> If publishing a release-candidate (AKA pre-release version), you **must** branch from `rc` and merge the created PR into the `rc` branch. 
+> This will require modifying the base branch of the created PR.
+> If publishing a normal release, you **must** branch of `main` and merge the created PR into the `main` branch. 
+
 You will need to update:
 
 1. `version`, pointing to the tag created in step 1
@@ -69,10 +74,6 @@ You will need to update:
 
 A PR is generally open with a todo-list summarizing all the required steps to perform,
 before an update to the feedstock.
-
-> [!IMPORTANT]  
-> If releasing a pre-release version, you **must** merge the created PR into the `pr` branch and not the `main` branch. 
-> This will require modifying the base branch of the created PR.
 
 ## 3. Release to PyPi
 
