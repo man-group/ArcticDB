@@ -693,6 +693,11 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
         .def("get_store_current_timestamp_for_tests",
              &PythonVersionStore::get_store_current_timestamp_for_tests,
              "For testing purposes only")
+        .def("trim",
+             [](ARCTICDB_UNUSED PythonVersionStore& v) {
+               Allocator::instance()->trim();
+              },
+             "Call trim on the native store's underlining memory allocator")
         ;
 
     py::class_<ManualClockVersionStore, PythonVersionStore>(version, "ManualClockVersionStore")
