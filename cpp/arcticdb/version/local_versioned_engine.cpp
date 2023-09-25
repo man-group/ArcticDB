@@ -21,6 +21,7 @@
 #include <arcticdb/version/version_map_batch_methods.hpp>
 #include <arcticdb/util/container_filter_wrapper.hpp>
 #include <arcticdb/python/gil_lock.hpp>
+#include <arcticdb/vector_db/vector_db.hpp>
 
 namespace arcticdb::version_store {
 template<class ClockType>
@@ -1749,6 +1750,41 @@ void LocalVersionedEngine::configure(const storage::LibraryDescriptor::VariantSt
     }
     );
 }
+
+void LocalVersionedEngine::initialise_bucket_index_internal(
+        const std::string& stream_id,
+        const std::string& index,
+        const std::string& metric,
+        const uint64_t& dimension,
+        const std::optional<std::vector<float>>& vectors,
+        const std::optional<std::vector<faiss::Index::idx_t>>& labels
+        ) {
+    auto vit = vector_db::initialise_bucket_index_impl(store_, stream_id, index, metric, dimension, vectors, labels);
+    version_map()->write_version(store(), vit.key_);
+}
+
+void LocalVersionedEngine::update_bucket_index_internal(
+        const std::string& stream_id,
+        const std::vector<float>& vectors,
+        const std::vector<faiss::Index::idx_t>& labels
+        ) {
+    auto update_info = get_latest_undeleted_version_and_next_version_id(
+            store(), version_map(), stream_id, VersionQuery{}, ReadOptions{}
+            );
+    auto vit = vector_db::update_bucket_index_impl(store_, stream_id, update_info, vectors, labels);
+    version_map()->write_version(store(), vit.key_);
+}
+
+std::pair<std::vector<faiss::Index::idx_t>, std::vector<float>> LocalVersionedEngine::search_bucket_with_index_internal(
+        const StreamId& stream_id,
+        const VersionQuery& version_query,
+        const std::vector<float>& vectors,
+        const uint64_t& k
+        ) {
+    auto version_info = get_version_to_read(stream_id, version_query, ReadOptions{});
+    return vector_db::search_bucket_with_index_impl(store(), version_info.value(), vectors, k);
+}
+
 
 timestamp LocalVersionedEngine::latest_timestamp(const std::string& symbol) {
     if(auto latest_incomplete = latest_incomplete_timestamp(store(), symbol); latest_incomplete)

@@ -21,6 +21,7 @@
 #include <arcticdb/version/versioned_engine.hpp>
 #include <arcticdb/entity/descriptor_item.hpp>
 #include <arcticdb/entity/data_error.hpp>
+#include <faiss/Index.h>
 
 #include <sstream>
 namespace arcticdb::version_store {
@@ -404,6 +405,28 @@ public:
     entity::timestamp get_store_current_timestamp_for_tests() {
         return store()->current_timestamp();
     }
+
+    void initialise_bucket_index_internal(
+            const std::string& stream_id,
+            const std::string& index,
+            const std::string& metric,
+            const uint64_t& dimension,
+            const std::optional<std::vector<float>>& vectors = std::nullopt,
+            const std::optional<std::vector<faiss::Index::idx_t>>& labels = std::nullopt
+    );
+
+    void update_bucket_index_internal(
+            const std::string& stream_id,
+            const std::vector<float>& vectors,
+            const std::vector<faiss::Index::idx_t>& labels
+    );
+
+    std::pair<std::vector<faiss::Index::idx_t>, std::vector<float>> search_bucket_with_index_internal(
+            const StreamId& stream_id,
+            const VersionQuery& version_query,
+            const std::vector<float>& vectors,
+            const uint64_t& k
+    );
 
 protected:
     VersionedItem compact_incomplete_dynamic(

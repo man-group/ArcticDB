@@ -693,6 +693,15 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
         .def("get_store_current_timestamp_for_tests",
              &PythonVersionStore::get_store_current_timestamp_for_tests,
              "For testing purposes only")
+        .def("initialise_bucket_index",
+             &PythonVersionStore::initialise_bucket_index,
+             "Initialise an index on a bucket in a PyVectorDB.")
+        .def("update_bucket_index",
+             &PythonVersionStore::update_bucket_index,
+             "Update an index on a bucket in a PyVectorDB.")
+        .def("search_bucket_with_index",
+             &PythonVersionStore::search_bucket_with_index,
+             "Search a bucket with an index in a PyVectorDB.")
         ;
 
     py::class_<ManualClockVersionStore, PythonVersionStore>(version, "ManualClockVersionStore")

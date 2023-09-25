@@ -310,6 +310,28 @@ class PythonVersionStore : public LocalVersionedEngine {
         const std::optional<bool>& use_symbol_list = std::nullopt,
         const std::optional<bool>& all_symbols = std::nullopt);
 
+    void initialise_bucket_index(
+            const std::string& stream_id,
+            const std::string& index,
+            const std::string& metric,
+            const uint64_t& dimension,
+            const std::optional<std::vector<float>>& vectors = std::nullopt,
+            const std::optional<std::vector<faiss::Index::idx_t>>& labels = std::nullopt
+    );
+
+    void update_bucket_index(
+            const std::string& stream_id,
+            const std::vector<float>& vectors,
+            const std::vector<faiss::Index::idx_t>& labels
+    );
+
+    std::pair<std::vector<faiss::Index::idx_t>, std::vector<float>> search_bucket_with_index(
+            const StreamId& stream_id,
+            const VersionQuery& version_query,
+            const py::array_t<float>& vectors,
+            const uint64_t& k
+    );
+
     void clear();
     bool empty();
     void force_delete_symbol(const StreamId& stream_id);

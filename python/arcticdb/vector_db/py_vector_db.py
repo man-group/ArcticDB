@@ -2,9 +2,11 @@ from typing import Optional, Union, Dict, Any
 
 from arcticdb import Arctic
 from arcticdb.encoding_version import EncodingVersion
-from arcticdb.version_store.library import Library
+from arcticdb.version_store.library import Library, WritePayload
 from arcticdb.options import DEFAULT_ENCODING_VERSION, LibraryOptions
 from arcticdb.exceptions import ArcticDbNotYetImplemented
+
+from arcticdb_ext.version_store import PythonVersionStoreVersionQuery as _PythonVersionStoreVersionQuery
 
 import numpy as np
 import pandas as pd
@@ -23,7 +25,7 @@ def namespace_bucket_vectors_symbol(namespace: str, segment: int) -> str:
     return f"{namespace}_segment_{segment}_vectors"
 
 
-def namespace_segment_index_symbol(namespace: str, segment: int) -> str:
+def namespace_bucket_index_symbol(namespace: str, segment: int) -> str:
     return f"{namespace}_segment_{segment}_index"
 
 
@@ -31,8 +33,16 @@ def namespace_vectors_to_bucket_symbol(namespace: str) -> str:
     return f"{namespace}_vectors_to_segments"
 
 
-def namespace_bucketiser_symbol(namespace: str) -> str:
-    return f"{namespace}_bucketiser"
+def namespace_insertion_bucketiser_symbol(namespace: str) -> str:
+    return f"{namespace}_insertion_bucketiser"
+
+
+def namespace_query_bucketiser_symbol(namespace: str) -> str:
+    return f"{namespace}_query_bucketiser"
+
+
+def namespace_centroids_symbol(namespace: str) -> str:
+    return f"{namespace}_centroids"
 
 
 class VectorLibrary(object):
@@ -58,7 +68,9 @@ class VectorLibrary(object):
         self._lib = library
         self._metadata = {}
         # possibly inefficient for large numbers of namespaces.
-        self._bucketisers = {}
+        self._insertion_bucketisers = {}
+        self._query_bucketisers = {}
+        self._centroids = {}
 
     def __repr__(self):
         return f"VectorLibrary({str(self._lib)})"
@@ -71,19 +83,41 @@ class VectorLibrary(object):
             return self._metadata[namespace]
         elif namespace_metadata_symbol(namespace) in self._lib.list_symbols():
             return {k: v[0] for k,v in
-                    self._lib.read(namespace_metadata_symbol(namespace)).data.to_dict()}
+                    self._lib.read_pickle(namespace_metadata_symbol(namespace)).data.to_dict()}
             # See comment in create_namespace: to create a pandas frame to upsert we had to put the values in a
             # singleton list.
         else:
-            raise Exception("Metadata not found.")
+            raise Exception(f"PyVectorDB: metadata not found for {namespace}.")
 
-    def _get_bucketiser(self, namespace: str) -> faiss.Index:
-        if namespace in self._bucketisers:
-            return self._bucketisers[namespace]
-        elif namespace_bucketiser_symbol(namespace) in self._bucketisers:
-            return faiss.deserialize_index(self._lib.read(namespace_bucketiser_symbol(namespace)).data)
+    def _write_metadata(self, namespace: str, metadata: Dict[str, Any]):
+        self._metadata[namespace] = metadata
+        self._lib.write_pickle(namespace_metadata_symbol(namespace), pd.DataFrame({k: [v] for k,v in metadata.items()}))
+        # Rather annoyingly the constructor for pd.DataFrame expects dictionaries like {"dimension": [30]}, not
+        # {"dimension": 30}.
+
+    def _get_insertion_bucketiser(self, namespace: str) -> faiss.Index:
+        if namespace in self._insertion_bucketisers:
+            return self._insertion_bucketisers[namespace]
+        elif namespace_insertion_bucketiser_symbol(namespace) in self._insertion_bucketisers:
+            return faiss.deserialize_index(self._lib.read(namespace_insertion_bucketiser_symbol(namespace)).data)
         else:
-            raise Exception("Bucketiser not found.")
+            raise Exception(f"PyVectorDB: insertion bucketiser not found for {namespace}.")
+
+    def _get_query_bucketiser(self, namespace: str) -> faiss.Index:
+        if namespace in self._query_bucketisers:
+            return self._query_bucketisers[namespace]
+        elif namespace_query_bucketiser_symbol(namespace) in self._query_bucketisers:
+            return faiss.deserialize_index(self._lib.read(namespace_query_bucketiser_symbol(namespace)).data)
+        else:
+            raise Exception(f"PyVectorDB: query bucketiser not found for {namespace}.")
+
+    def _get_centroids(self, namespace: str) -> np.ndarray:
+        if namespace in self._centroids:
+            return self._centroids[namespace]
+        elif namespace_centroids_symbol(namespace) in self._query_bucketisers:
+            return self._lib.read(namespace_centroids_symbol(namespace)).data
+        else:
+            raise Exception(f"PyVectorDB: centroids not found for {namespace}.")
 
 
     def create_namespace(
@@ -91,7 +125,7 @@ class VectorLibrary(object):
             name: str,
             dimension: int,
             metric: str,
-            bucketiser: Optional[str] = None,
+            insertion_bucketiser: Optional[str] = None,
             buckets: Optional[int] = None,
             index: Optional[str] = None,
             training_vectors: Optional[NormalisableVectors] = None
@@ -119,11 +153,11 @@ class VectorLibrary(object):
         """
         if metric not in ["L2", "IP"]:
             raise ArcticDbNotYetImplemented("Metrics other than L2 and IP are not presently supported.")
-        if bucketiser:
-            if bucketiser not in ["exact"]:
+        if insertion_bucketiser:
+            if insertion_bucketiser not in ["exact"]:
                 raise ArcticDbNotYetImplemented("Non-exact bucketisation is not presently supported.")
             if (buckets is None) or (training_vectors is None):
-                raise Exception("If a bucketiser is specified, a number of buckets and some training vectors must "
+                raise Exception("If a insertion_bucketiser is specified, a number of buckets and some training vectors must "
                                 "be specified too.")
 
         if (training_vectors is not None):
@@ -139,42 +173,56 @@ class VectorLibrary(object):
         metadata = {
             "dimension": dimension,
             "metric": metric,
-            "bucketiser": bucketiser,
+            "insertion_bucketiser": insertion_bucketiser,
             "buckets": buckets,
+            "live_buckets": [],
             "index": index
         }
-        self._metadata[name] = metadata
-        self._lib.write(namespace_metadata_symbol(name), pd.DataFrame({k: [v] for k,v in metadata.items()}))
-        # Rather annoyingly the constructor for pd.DataFrame expects dictionaries like {"dimension": [30]}, not
-        # {"dimension": 30}.
+        self._write_metadata(name, metadata)
+
 
         # We work out the centroids and buckets.
         kmeans = faiss.Kmeans(dimension, buckets, niter=50, verbose=True)
         kmeans.train(training_vectors)
-        # Now we initialise the bucketiser.
+        # Now we initialise the insertion_bucketiser.
         if metric == "L2":
-            bucketiser = faiss.IndexFlatL2(dimension)
+            insertion_bucketiser = faiss.IndexFlatL2(dimension)
+            query_bucketiser = faiss.index_factory(dimension, "IDMap, Flat", faiss.METRIC_L2)
         elif metric == "IP":
-            bucketiser = faiss.IndexFlatIP(dimension)
+            insertion_bucketiser = faiss.IndexFlatIP(dimension)
+            query_bucketiser = faiss.index_factory(dimension, "IDMap,Flat", faiss.METRIC_INNER_PRODUCT)
         else:
             raise Exception("Metrics other than L2 and IP are not presently supported. This should've been caught.")
-        bucketiser.add(kmeans.centroids)
-        # It's more efficient not to re-read the bucketiser each time, and it should be fairly small.
-        self._bucketisers[name] = bucketiser
+        insertion_bucketiser.add(kmeans.centroids)
+        # It's more efficient not to re-read the insertion_bucketiser each time, and it should be fairly small.
+        self._insertion_bucketisers[name] = insertion_bucketiser
         # But we still want to be able to read and write it.
         self._lib.write(
-            namespace_bucketiser_symbol(name),
-            faiss.serialize_index(bucketiser)
+            namespace_insertion_bucketiser_symbol(name),
+            faiss.serialize_index(insertion_bucketiser)
+        )
+        # Not all bucketisers will be available at any given time.
+        self._query_bucketisers[name] = query_bucketiser
+        self._lib.write(
+            namespace_query_bucketiser_symbol(name),
+            faiss.serialize_index(query_bucketiser)
+        )
+        # We also store the centroids.
+        self._centroids[name] = kmeans.centroids
+        self._lib.write(
+            namespace_centroids_symbol(name),
+            kmeans.centroids
         )
 
         pass
+    
 
     def upsert(
             self,
             namespace: str,
             vectors: pd.DataFrame
     ) -> None:
-        # Some initial checks; we also get some metadata and the bucketiser.
+        # Some initial checks; we also get some metadata and the insertion_bucketiser.
         if len(vectors.shape) != 2:
             raise Exception("Vectors must be presented in a two-dimensional np.ndarray.")
 
@@ -185,25 +233,47 @@ class VectorLibrary(object):
         if vectors.shape[1] != dimension:
             raise Exception("Vectors of wrong dimensionality.")
 
-        bucketiser = self._get_bucketiser(namespace)
+        insertion_bucketiser = self._get_insertion_bucketiser(namespace)
+        query_bucketiser = self._get_query_bucketiser(namespace)
+        centroids = self._get_centroids(namespace)
 
         # We add a column in vectors corresponding to the bucket in which each vector should be placed.
-        vectors["bucket"] = bucketiser.search(vectors.to_numpy(), 1)[1]
+        vectors["bucket"] = insertion_bucketiser.search(vectors.to_numpy(), 1)[1]
+        write_payloads = []
 
         for bucket, vectors_to_upsert in vectors.groupby("bucket"):
+            query_bucketiser.remove_ids(np.array([bucket]))
+            query_bucketiser.add_with_ids(np.array([centroids[bucket]]), np.array([bucket]))
+            flattened = vectors_to_upsert.drop("bucket", axis=1).to_numpy().flatten()
+            labels = vectors_to_upsert.index.to_numpy()
             if not self._lib.has_symbol(namespace_bucket_vectors_symbol(namespace, bucket)):
-                self._initialise_bucket_index(namespace, bucket, index)
-                self._lib.write(
+                write_payloads.append(WritePayload(
                     namespace_bucket_vectors_symbol(namespace, bucket),
-                    vectors_to_upsert.drop("bucket", axis=1).to_numpy().flatten()
+                    flattened
+                ))
+                self._lib._nvs.version_store.initialise_bucket_index(
+                    namespace_bucket_index_symbol(namespace, bucket),
+                    index,
+                    "L2",
+                    dimension,
+                    flattened,
+                    labels
                 )
+                # todo: work out whatever cursed check is stopping us from reading the symbol since something is probably
+                # wrong but I can't work out what.
             else:
-                self._lib.append(
+                write_payloads.append(WritePayload(
                     namespace_bucket_vectors_symbol(namespace, bucket),
-                    vectors_to_upsert.drop("bucket", axis=1).to_numpy().flatten()
+                    flattened
+                ))
+                self._lib._nvs.version_store.update_bucket_index(
+                    namespace_bucket_index_symbol(namespace, bucket),
+                    flattened,
+                    labels
                 )
-                self._update_bucket_index(namespace, bucket)
+                # self._update_bucket_index(namespace, bucket)
             # todo: add to the index in cpp
+        self._lib.write_batch(write_payloads)
 
         vectors_to_buckets = vectors["bucket"].reset_index()
         vectors_to_buckets.rename(columns={"index": "label"}, inplace=True)
@@ -216,20 +286,47 @@ class VectorLibrary(object):
 
         pass
 
-    def _initialise_bucket_index(
+    def query(
             self,
             namespace: str,
-            bucket: int,
-            index: str
-    ):
-        pass
+            query_vectors: np.ndarray,
+            k: int,
+            nprobes: int
+    ) -> Any:
+        if len(query_vectors.shape) != 2:
+            raise Exception("PyVectorDB: Vectors must be presented in a two-dimensional np.ndarray.")
+        metadata = self._get_metadata(namespace)
+        dimension = metadata["dimension"]
+        if query_vectors.shape[1] != dimension:
+            raise Exception(f"PyVectorDB: query vectors to namespace {namespace} must have length {dimension}")
 
-    def _update_bucket_index(
-            self,
-            namespace: str,
-            bucket: str
-    ):
-        pass
+        query_bucketiser = self._get_query_bucketiser(namespace)
+        distances, buckets = query_bucketiser.index.search(query_vectors, nprobes)
+        buckets_to_vectors = {bucket: [] for bucket in set(buckets.flatten())} # vectors to search in each bucket
+        for i in range(query_vectors.shape[0]):
+            for bucket in buckets[i]:
+                buckets_to_vectors[bucket].append(i)
+
+        results_by_bucket = {bucket: self._lib._nvs.version_store.search_bucket_with_index(
+                namespace_bucket_index_symbol(namespace, bucket),
+                _PythonVersionStoreVersionQuery(),
+                np.concatenate([query_vectors[i] for i in vectors]),
+                k
+            ) for bucket, vectors in buckets_to_vectors.items()}
+
+        results_by_vector = {i: {"labels": [], "distances": []} for i in range(len(query_vectors))}
+        for bucket, (d, l) in results_by_bucket.items():
+            vectors = buckets_to_vectors[bucket]
+            for i in range(len(d) // k): # iterate over the number of vectors queried from each bucket.
+                results_by_vector[vectors[i]]["labels"].append(d[i*k:i*k+(k-1)])
+                results_by_vector[vectors[i]]["distances"].append(l[i*k:i*k+(k-1)])
+        top_k_by_vector = {i: [(label, distance) for distance, label in sorted(zip(res["distances"], res["labels"]))] for res in results_by_vector.values()}
+        return top_k_by_vector
+
+
+        print(0)
+
+
 
 
 class PyVectorDB(object):

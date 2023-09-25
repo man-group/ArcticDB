@@ -164,6 +164,7 @@ endif ()
 ## Core library without python bindings ##
 set(arcticdb_srcs
         # header files
+        vector_db/vector_db.hpp
         async/async_store.hpp
         async/batch_read_args.hpp
         async/task_scheduler.hpp
@@ -349,6 +350,7 @@ set(arcticdb_srcs
         version/version_store_objects.hpp
         version/version_utils.hpp
         # CPP files
+        vector_db/vector_db.cpp
         async/async_store.cpp
         async/task_scheduler.cpp
         async/tasks.cpp

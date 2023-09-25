@@ -1122,4 +1122,33 @@ void PythonVersionStore::force_delete_symbol(const StreamId& stream_id) {
     delete_all_for_stream(store(), stream_id, true);
 }
 
+void PythonVersionStore::initialise_bucket_index(
+        const std::string& stream_id,
+        const std::string& index,
+        const std::string& metric,
+        const uint64_t& dimension,
+        const std::optional<std::vector<float>>& vectors,
+        const std::optional<std::vector<faiss::Index::idx_t>>& labels
+) {
+    initialise_bucket_index_internal(stream_id, index, metric, dimension, vectors, labels);
+}
+
+void PythonVersionStore::update_bucket_index(
+        const std::string& stream_id,
+        const std::vector<float>& vectors,
+        const std::vector<faiss::Index::idx_t>& labels
+) {
+    update_bucket_index_internal(stream_id, vectors, labels);
+};
+
+std::pair<std::vector<faiss::Index::idx_t>, std::vector<float>> PythonVersionStore::search_bucket_with_index(
+        const StreamId& stream_id,
+        const VersionQuery& version_query,
+        const py::array_t<float>& vectors,
+        const uint64_t& k
+) {
+    return search_bucket_with_index_internal(stream_id, version_query, std::vector<float>(vectors.data(), vectors.data() + vectors.size()), k);
+};
+
+
 } //namespace arcticdb::version_store

@@ -71,6 +71,14 @@ VersionedItem update_impl(
     const WriteOptions&& options,
     bool dynamic_schema);
 
+std::vector<SliceAndKey> read_and_process(
+        const std::shared_ptr<Store>& store,
+        const std::shared_ptr<PipelineContext>& pipeline_context,
+        const ReadQuery& read_query,
+        const ReadOptions& read_options,
+        size_t start_from
+);
+
 VersionedItem delete_range_impl(
     const std::shared_ptr<Store>& store,
     const AtomKey& prev,
@@ -147,7 +155,16 @@ VersionedItem defragment_symbol_data_impl(
         const UpdateInfo& update_info,
         const WriteOptions& options,
         size_t segment_size);
-        
+
+VersionedItem collate_and_write(
+        const std::shared_ptr<Store>& store,
+        const std::shared_ptr<PipelineContext>& pipeline_context,
+        const std::vector<FrameSlice>& slices,
+        std::vector<VariantKey> keys,
+        size_t append_after,
+        const std::optional<arcticdb::proto::descriptors::UserDefinedMetadata>& user_meta
+);
+
 VersionedItem sort_merge_impl(
     const std::shared_ptr<Store>& store,
     const StreamId& stream_id,
