@@ -1,7 +1,6 @@
 # LMDB and In-Memory storage backends
 
-As alternatives to object storage such as S3 and Azure, ArcticDB can use a file-based LMDB
-backend, or a RAM-based in-memory storage.
+ArcticDB can use a file-based LMDB backend, or a RAM-based in-memory storage, as alternatives to object storage such as S3 and Azure.
 
 Two simple examples are shown below.
 
@@ -134,13 +133,141 @@ Filesystem               Size  Used Avail Use% Mounted on
 tmpfs                    1.0G     0  1.0G   0% /somedir/tmpfs_mount_point
 ```
 
-From Python you can connect to this filesystem with LMDB as you would usually.
+From ArcticDB you can connect to this filesystem with LMDB as you would usually.
 
 ### Is it any faster?
 
-See the timing results below. The differences are not massive, but clearly `tmpfs` is a good ephemeral LMDB store
-solution.
+See the timing results below and the Appendix for the code to generate this data. The differences are not huge with
+tmpfs out-performing disk only for symbol writing operations. Nevertheless, tmpfs is clearly a better option for an
+ephemeral LMDB backend. We can also see that the in-memory store is significantly faster across the board as would
+be expected.
 
 ![](/images/LMDBtmpfsDiskMemSpeeds.png)
 
-Note: the ranges are roughly confidence intervals. Five repeats were made for each data size.
+Note: the ranges are 95% confidence intervals based on five repeats for each data size. The hardware limits are for
+writing to disk (not tmpfs) using the `np.save` and `np.load` functions. No data was sought for the RAM's hardware
+limit.
+
+### Attempts to measure hardware limits using `fio`
+
+Profiling hardware limits using `fio` rather than `numpy` is also possible, but varies wildly with the parameters used,
+in particular the number of jobs (processes) to use. With the commands below, the results were too unreliable to
+be of any use. The read and write numbers were both around 500 MB/s, but in increasing the `--numjobs` option,
+these numbers could be inflated drastically to upwards of 10 GB/s.
+
+Read test command:
+
+```bash
+fio --filename=./test.dat --size=2G --rw=read --bs=500M --ioengine=libaio --numjobs=1 --iodepth=1000 --name=sequential_reads --direct=0 --group_reporting
+```
+
+and for writing:
+
+```bash
+fio --filename=./test.dat --size=2G --rw=write --bs=4k --ioengine=libaio --numjobs=1 --iodepth=1000 --name=sequential_writes --direct=0 --group_reporting
+```
+
+For an explanation of the parameters see [the `fio` docs](https://fio.readthedocs.io/en/latest/fio_doc.html#threads-processes-and-job-synchronization).
+
+Thoughts on using `fio` more effectively: the block size `--bs` parameter should match ArcticDB's segment size. E.g.
+for 100,000 rows by 10 columns (as is the case here), then `--bs=8MB` is appropriate. For the `--size`, this should
+match the total size of the data being written/read to/from the symbol. The `--numjobs` should probably be one, since
+this clones separate processes which write to their own files and aggregates the total write speed and ArcticDB is limited
+to one storage backend. For `--iodepth`, this should match the number of I/O threads that ArcticDB is configured
+with:
+
+```python
+from arcticdb_ext import set_config_int
+set_config_int("VersionStore.NumIOThreads", <number_threads>)
+```
+
+However, even with these options, the read speed is still reported by `fio` as around 500 MB/s which ArcticSB seems to
+out-perform! More work needs to be done here in determining an appropriate hardware limit.
+
+### Appendix: Profiling script
+
+```python linenums="1"
+# Scipt to profile LMDB on disk vs tmpfs, and compare
+# also with the in-memory ArcticDB backend
+from arcticdb import Arctic
+import pandas as pd
+import time
+import numpy as np
+import shutil, os
+
+num_processes = 50
+ncols = 10
+nrepeats_per_data_point = 5
+
+# Note that these are not deleted when the script finishes
+disk_dir = 'disk.lmdb'
+# Need to manually mount ./k as a tmpfs file system
+tmpfs_dir = 'k/tmpfs.lmdb'
+# Temporary file to gauge hardware speed limits
+temp_numpy_file = 'temp.npy'
+csv_out_file = 'tmpfs_vs_disk_timings.csv'
+
+timings = {
+    'Storage': [],
+    'Load (bytes)': [],
+    'Speed (megabytes/s)': []
+}
+
+for data_B in np.linspace(start=200e6, stop=1000e6, num=9, dtype=int):
+    nrows = int(data_B / ncols / np.dtype(float).itemsize)
+    array = np.random.randn(nrows, ncols)
+    data = pd.DataFrame(array, columns=[f'c{i}' for i in range(ncols)])
+    assert data.values.nbytes == data_B
+
+    start = time.time()
+    np.save(temp_numpy_file, array)
+    elapsed = time.time() - start
+    write_speed_MB_s = data_B / 1e6 / elapsed
+
+    start = time.time()
+    np.load(temp_numpy_file)
+    elapsed = time.time() - start
+    read_speed_MB_s = data_B / 1e6 / elapsed
+    print(f'For {data_B}, Numpy Read speed {read_speed_MB_s} MB/s, write {write_speed_MB_s} MB/s')
+
+    for _ in range(nrepeats_per_data_point):
+        for test_dir in (disk_dir, tmpfs_dir, 'mem'):
+            print(f'Timing {test_dir} with load {data_B} B')
+
+            if test_dir == 'mem':
+                ac = Arctic(f'mem://')
+            else:
+                if os.path.exists(test_dir):
+                    # Free up space from last test
+                    shutil.rmtree(test_dir)
+
+                ac = Arctic(f'lmdb://{test_dir}')
+
+            if 'lib' not in ac.list_libraries():
+                ac.create_library('lib')
+
+            lib = ac['lib']
+            start = time.time()
+            lib.write('symbol', data)
+            elapsed = time.time() - start
+            write_speed_MB_s = data_B / 1e6 / elapsed
+            print('Time to write', elapsed, 's')
+
+            start = time.time()
+            lib.read('symbol')
+            elapsed = time.time() - start
+            read_speed_MB_s = data_B / 1e6 / elapsed
+            print('Time to read', elapsed, 's')
+
+            storage_name = {disk_dir: 'disk', tmpfs_dir: 'tmpfs', 'mem': 'mem'}[test_dir]
+            # Record the writing speed
+            timings['Load (bytes)'].append(data_B)
+            timings['Storage'].append(storage_name + ' (write)')
+            timings['Speed (megabytes/s)'].append(write_speed_MB_s)
+            # Record the reading speed
+            timings['Load (bytes)'].append(data_B)
+            timings['Storage'].append(storage_name + ' (read)')
+            timings['Speed (megabytes/s)'].append(read_speed_MB_s)
+
+pd.DataFrame(timings).to_csv(csv_out_file)
+```
