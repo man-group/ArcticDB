@@ -24,22 +24,34 @@ bool is_unicode(PyObject *obj) {
     return PyUnicode_Check(obj);
 }
 
-PyStringWrapper pystring_to_buffer(PyObject *obj, py::handle handle) {
+PyStringWrapper pystring_to_buffer(PyObject *obj, bool is_owned) {
     char *buffer;
     ssize_t length;
     util::check(!is_unicode(obj), "Unexpected unicode object");
     if (PYBIND11_BYTES_AS_STRING_AND_SIZE(obj, &buffer, &length))
         util::raise_rte("Unable to extract string contents! (invalid type)");
 
-    return {buffer, length, handle};
+    return {buffer, length, is_owned ? obj : nullptr};
 }
 
-PyStringWrapper py_unicode_to_buffer(PyObject *obj) {
+PyStringWrapper py_unicode_to_buffer(PyObject *obj, std::optional<ScopedGILLock>& scoped_gil_lock) {
     if (is_unicode(obj)) {
-        py::handle handle{PyUnicode_AsUTF8String(obj)};
-        if (!handle)
-            util::raise_rte("Unable to extract string contents! (encoding issue)");
-        return pystring_to_buffer(handle.ptr(), handle);
+        if (PyUnicode_IS_COMPACT_ASCII(obj)) {
+            return {reinterpret_cast<char *>(PyUnicode_DATA(obj)), PyUnicode_GET_LENGTH(obj)};
+        // Later versions of cpython expose macros in unicodeobject.h to perform this check, and to get the utf8_length,
+        // but for 3.6 we have to hand-roll it
+        } else if (reinterpret_cast<PyCompactUnicodeObject*>(obj)->utf8) {
+            return {reinterpret_cast<PyCompactUnicodeObject*>(obj)->utf8, reinterpret_cast<PyCompactUnicodeObject*>(obj)->utf8_length};
+        } else {
+            internal::check<ErrorCode::E_ASSERTION_FAILURE>(PyUnicode_READY(obj) == 0, "PyUnicode_READY failed");
+            if (!scoped_gil_lock.has_value()) {
+                scoped_gil_lock.emplace();
+            }
+            PyObject* utf8_obj = PyUnicode_AsUTF8String(obj);
+            if (!utf8_obj)
+                util::raise_rte("Unable to extract string contents! (encoding issue)");
+            return pystring_to_buffer(utf8_obj, true);
+        }
     } else {
         util::raise_rte("Expected unicode");
     }
@@ -52,9 +64,9 @@ NativeTensor obj_to_tensor(PyObject *ptr) {
     auto arr = pybind11::detail::array_proxy(ptr);
     auto descr = pybind11::detail::array_descriptor_proxy(arr->descr);
     auto ndim = arr->nd;
-    auto val_type = get_value_type(descr->kind);
-    auto val_bytes = static_cast<uint8_t>(descr->elsize);
     ssize_t size = ndim == 1 ? arr->dimensions[0] : arr->dimensions[0] * arr->dimensions[1];
+    auto val_type = size > 0 ? get_value_type(descr->kind) : ValueType::EMPTY;
+    auto val_bytes = static_cast<uint8_t>(descr->elsize);
     auto c_style = arr->strides[0] == val_bytes;
 
     if (is_sequence_type(val_type)) {
@@ -108,7 +120,10 @@ NativeTensor obj_to_tensor(PyObject *ptr) {
         }
     }
 
-    auto dt = combine_data_type(val_type, get_size_bits(val_bytes));
+    // When processing empty collections, the size bits have to be `SizeBits::S64`,
+    // and we can't use `val_bytes` to get this information since some dtype have another `elsize` than 8.
+    SizeBits size_bits = val_type == ValueType::EMPTY ? SizeBits::S64 : get_size_bits(val_bytes);
+    auto dt = combine_data_type(val_type, size_bits);
     ssize_t nbytes = size * descr->elsize;
     return {nbytes, ndim, arr->strides, arr->dimensions, dt, descr->elsize, arr->data};
 }

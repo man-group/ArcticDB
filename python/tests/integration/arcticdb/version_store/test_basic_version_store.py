@@ -47,28 +47,19 @@ from arcticdb.util.test import (
     distinct_timestamps,
     RUN_MONGO_TEST,
 )
-from arcticdb_ext.tools import AZURE_SUPPORT
 from tests.util.date import DateRange
 
 
-if RUN_MONGO_TEST:
-    SMOKE_TEST_VERSION_STORES = [
-        "lmdb_version_store_v1",
-        "lmdb_version_store_v2",
-        "s3_version_store_v1",
-        "s3_version_store_v2",
-        "mongo_version_store",
-    ]
-else:
-    SMOKE_TEST_VERSION_STORES = [
-        "lmdb_version_store_v1",
-        "lmdb_version_store_v2",
-        "s3_version_store_v1",
-        "s3_version_store_v2",
-    ]  # SKIP_WIN and SKIP_MAC
+SMOKE_TEST_VERSION_STORES = [
+    "lmdb_version_store_v1",
+    "lmdb_version_store_v2",
+    "s3_version_store_v1",
+    "s3_version_store_v2",
+    "azure_version_store",
+]
 
-if AZURE_SUPPORT:
-    SMOKE_TEST_VERSION_STORES.append("azure_version_store")
+if RUN_MONGO_TEST:
+    SMOKE_TEST_VERSION_STORES.append("mongo_version_store")
 
 if os.getenv("ARCTICDB_REAL_STORAGE_TESTS") == "1":
     SMOKE_TEST_VERSION_STORES.append("real_s3_version_store")

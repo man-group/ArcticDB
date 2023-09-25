@@ -15,7 +15,6 @@ from datetime import datetime
 
 from arcticdb_ext.storage import KeyType, NoDataFoundException
 from arcticdb.util.test import config_context, random_string, assert_frame_equal, distinct_timestamps
-from arcticdb_ext.tools import AZURE_SUPPORT
 
 
 def eprint(*args, **kwargs):
@@ -40,11 +39,15 @@ def get_map_timeouts():
 
 def gen_params_store_and_timeout():
     p = [
-        ["s3_version_store_v1", "s3_version_store_v2", "s3_version_store_v1", "s3_version_store_v2"],
+        [
+            "s3_version_store_v1",
+            "s3_version_store_v2",
+            "s3_version_store_v1",
+            "s3_version_store_v2",
+            "azure_version_store",
+        ],
         get_map_timeouts(),
     ]
-    if AZURE_SUPPORT:
-        p[0].append("azure_version_store")
     return list(product(*p))
 
 

@@ -26,11 +26,9 @@ import pytest
 import pandas as pd
 from datetime import datetime, timezone
 import numpy as np
-from arcticdb_ext.tools import AZURE_SUPPORT
 from arcticdb.util.test import assert_frame_equal, RUN_MONGO_TEST
 
-if AZURE_SUPPORT:
-    from azure.storage.blob import BlobServiceClient
+from azure.storage.blob import BlobServiceClient
 from botocore.client import BaseClient as BotoClient
 import time
 
@@ -199,10 +197,7 @@ def get_path_prefix_option(uri):
     "lib_type",
     [
         "moto_s3_uri_incl_bucket",
-        pytest.param(
-            "azurite_azure_uri_incl_bucket",
-            marks=pytest.mark.skipif(not AZURE_SUPPORT, reason="Pending Azure Storge Conda support"),
-        ),
+        "azurite_azure_uri_incl_bucket",
     ],
 )
 def test_separation_between_libraries_with_prefixes(lib_type, request):
@@ -235,11 +230,7 @@ def test_separation_between_libraries_with_prefixes(lib_type, request):
 def object_storage_uri_and_client():
     return [
         ("moto_s3_uri_incl_bucket", "boto_client"),
-        pytest.param(
-            "azurite_azure_uri_incl_bucket",
-            "azure_client_and_create_container",
-            marks=pytest.mark.skipif(not AZURE_SUPPORT, reason="Pending Azure Storge Conda support"),
-        ),
+        ("azurite_azure_uri_incl_bucket", "azure_client_and_create_container"),
     ]
 
 
@@ -450,6 +441,40 @@ def test_delete_version(arctic_library):
     lib.delete("symbol", versions=(1, 2))
     assert lib["symbol"].version == 0
     assert lib["symbol"].metadata == {"very": "interesting"}
+
+
+def test_list_versions_write_append_update(arctic_library):
+    lib = arctic_library
+    # Note: can only update timeseries dataframes
+    index = pd.date_range(start="2000-01-01", freq="D", periods=3)
+    df = pd.DataFrame({"col1": [1, 2, 3], "col2": [4, 5, 6]}, index=index)
+    lib.write("symbol", df)
+    index_append = pd.date_range(start="2000-01-04", freq="D", periods=3)
+    df_append = pd.DataFrame({"col1": [7, 8, 9], "col2": [10, 11, 12]}, index=index_append)
+    lib.append("symbol", df_append)
+    index_update = pd.DatetimeIndex(["2000-01-03", "2000-01-05"])
+    df_update = pd.DataFrame({"col1": [13, 14], "col2": [15, 16]}, index=index_update)
+    lib.update("symbol", df_update)
+    assert_frame_equal(lib.read("symbol").data, pd.concat([df.iloc[:-1], df_update, df_append.iloc[[2]]]))
+    assert len(lib.list_versions("symbol")) == 3
+
+
+def test_list_versions_latest_only(arctic_library):
+    lib = arctic_library
+    df = pd.DataFrame({"col1": [1, 2, 3], "col2": [4, 5, 6]})
+    lib.write("symbol", df)
+    lib.write("symbol", df)
+    lib.write("symbol", df)
+    assert len(lib.list_versions("symbol", latest_only=True)) == 1
+
+
+def test_non_existent_list_versions_latest_only(arctic_library):
+    lib = arctic_library
+    assert len(lib.list_versions("symbol", latest_only=True)) == 0
+    df = pd.DataFrame({"col1": [1, 2, 3], "col2": [4, 5, 6]})
+    lib.write("symbol2", df)
+    lib.delete("symbol2")
+    assert len(lib.list_versions("symbol2", latest_only=True)) == 0
 
 
 def test_delete_version_with_snapshot(arctic_library):
@@ -1048,9 +1073,17 @@ def test_get_uri(object_storage_uri_incl_bucket):
     assert ac.get_uri() == object_storage_uri_incl_bucket
 
 
-@pytest.mark.skipif(not AZURE_SUPPORT, reason="Pending Azure Storge Conda support")
 def test_azure_no_ca_path(azurite_azure_test_connection_setting):
     (endpoint, container, credential_name, credential_key, ca_cert_path) = azurite_azure_test_connection_setting
     ac = Arctic(
         f"azure://DefaultEndpointsProtocol=http;AccountName={credential_name};AccountKey={credential_key};BlobEndpoint={endpoint}/{credential_name};Container={container}"
     )
+
+
+def test_s3_force_uri_lib_config_handling(moto_s3_uri_incl_bucket):
+    # force_uri_lib_config is a obsolete configuration. However, user still includes this option in their setup. For backward compatitbility, we need to make sure such setup will still work
+    # Why it becomes obsolete: https://github.com/man-group/ArcticDB/pull/803
+    Arctic(f"{moto_s3_uri_incl_bucket}&force_uri_lib_config=true)")
+
+    with pytest.raises(ValueError):
+        Arctic(f"{moto_s3_uri_incl_bucket}&force_uri_lib_config=false)")

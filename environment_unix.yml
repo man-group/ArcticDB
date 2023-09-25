@@ -32,6 +32,9 @@ dependencies:
   - libprotobuf < 4
   - bitmagic
   - spdlog
+  - azure-core-cpp
+  - azure-identity-cpp
+  - azure-storage-blobs-cpp
   # Incompatibility with fmt last version
   - fmt < 10
   - folly >2022.10.31 # latest version published on vcpkg
@@ -54,7 +57,7 @@ dependencies:
   - python =3.10 # Python 3.11 requires protobuf>=4
   - packaging
   - numpy
-  - pandas < 2
+  - pandas
   - pytest
   - boto3
   - werkzeug
@@ -65,5 +68,7 @@ dependencies:
   # See: https://github.com/man-group/ArcticDB/pull/291
   - hypothesis < 6.73
   - pytest-sugar
-  - pymongo
+  - pymongo # for testing only
+  - azure-storage-blob # for testing only
+  - azure-identity # for testing only
 

@@ -1,15 +1,16 @@
 import sys
 
 import pytest
+import pandas as pd
 
 from arcticdb import Arctic
 from arcticdb.scripts.update_storage import run
 from arcticdb.options import LibraryOptions
 from arcticc.pb2.s3_storage_pb2 import Config as S3Config
 from arcticc.pb2.azure_storage_pb2 import Config as AzureConfig
+from arcticdb.util.test import assert_frame_equal
 
 from arcticdb.adapters.s3_library_adapter import USE_AWS_CRED_PROVIDERS_TOKEN
-from arcticdb_ext.tools import AZURE_SUPPORT
 
 LIB_NAME = "test_lib"
 
@@ -91,13 +92,20 @@ def test_upgrade_script_s3(moto_s3_endpoint_and_credentials):
     assert s3_storage.credential_key == ""
 
 
+def get_s3_aws_auth_uri_bucket_and_setup_server(moto_s3_endpoint_and_credentials, monkeypatch):
+    endpoint, port, bucket, aws_access_key, aws_secret_key = moto_s3_endpoint_and_credentials
+    monkeypatch.setenv("AWS_ACCESS_KEY_ID", aws_access_key)
+    monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", aws_secret_key)
+    return (
+        endpoint.replace("http://", "s3://").rsplit(":", 1)[0] + ":" + bucket + "?aws_auth=true" + "&port=" + port,
+        bucket,
+    )
+
+
 @pytest.mark.skipif(sys.platform == "win32", reason="Test fixture issue with creds")
 def test_upgrade_script_s3_rbac_ok(moto_s3_endpoint_and_credentials, monkeypatch):
     """Just _RBAC_ as creds is a placeholder. Leave config with that alone."""
-    endpoint, port, bucket, aws_access_key, aws_secret_key = moto_s3_endpoint_and_credentials
-    uri = endpoint.replace("http://", "s3://").rsplit(":", 1)[0] + ":" + bucket + "?aws_auth=true" + "&port=" + port
-    monkeypatch.setenv("AWS_ACCESS_KEY_ID", aws_access_key)
-    monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", aws_secret_key)
+    uri, bucket = get_s3_aws_auth_uri_bucket_and_setup_server(moto_s3_endpoint_and_credentials, monkeypatch)
 
     ac = Arctic(uri)
     create_library_config(ac, LIB_NAME)
@@ -111,8 +119,20 @@ def test_upgrade_script_s3_rbac_ok(moto_s3_endpoint_and_credentials, monkeypatch
     assert s3_storage.credential_key == USE_AWS_CRED_PROVIDERS_TOKEN
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="Test fixture issue with creds")
+def test_aws_auth_with_storage_overrider(moto_s3_endpoint_and_credentials, monkeypatch):
+    uri, _ = get_s3_aws_auth_uri_bucket_and_setup_server(moto_s3_endpoint_and_credentials, monkeypatch)
+    expected = pd.DataFrame({"col1": [1, 2, 3], "col2": [4, 5, 6]})
+    sym = "test"
+    ac = Arctic(uri)
+    ac.create_library(LIB_NAME)
+    ac[LIB_NAME].write(sym, expected)
+
+    ac = Arctic(uri)  # Force load lib config from storage, to check "storage-overridened" config
+    assert_frame_equal(expected, ac[LIB_NAME].read(sym).data)
+
+
 # Side effect needed from "_create_container" fixture
-@pytest.mark.skipif(not AZURE_SUPPORT, reason="Pending Azure Storge Conda support")
 def test_upgrade_script_dryrun_azure(
     azurite_azure_test_connection_setting, azurite_azure_uri, azure_client_and_create_container
 ):
@@ -137,7 +157,6 @@ def test_upgrade_script_dryrun_azure(
 
 
 # Side effect needed from "_create_container" fixture
-@pytest.mark.skipif(not AZURE_SUPPORT, reason="Pending Azure Storge Conda support")
 def test_upgrade_script_azure(
     azurite_azure_test_connection_setting, azurite_azure_uri, azure_client_and_create_container
 ):
