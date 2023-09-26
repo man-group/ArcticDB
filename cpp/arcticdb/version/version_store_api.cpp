@@ -1150,5 +1150,34 @@ std::pair<std::vector<faiss::Index::idx_t>, std::vector<float>> PythonVersionSto
     return search_bucket_with_index_internal(stream_id, version_query, std::vector<float>(vectors.data(), vectors.data() + vectors.size()), k);
 };
 
+std::pair<std::vector<faiss::Index::idx_t>, std::vector<float>> PythonVersionStore::search_bucket_without_index(
+        const StreamId& bucket_vectors,
+        const StreamId& bucket_label_map,
+        const VersionQuery& vectors_version_query,
+        const VersionQuery& label_map_version_query,
+        const py::array_t<float>& vectors,
+        const uint64_t& k,
+        const uint64_t& dimensions
+) {
+    return search_bucket_without_index_internal(bucket_vectors, bucket_label_map, vectors_version_query, label_map_version_query, std::vector<float>(vectors.data(), vectors.data() + vectors.size()), k, dimensions);
+}
+
+std::vector<std::pair<std::vector<faiss::Index::idx_t>, std::vector<float>>> PythonVersionStore::batch_search_bucket_without_index(
+        const std::vector<StreamId>& vector_buckets,
+        const std::vector<StreamId>& bucket_label_maps,
+        const std::vector<VersionQuery>& vectors_version_queries,
+        const std::vector<VersionQuery>& label_map_version_queries,
+        const std::vector<py::array_t<float>>& query_vectors,
+        const uint64_t& k,
+        const uint64_t& dimensions
+) {
+    std::vector<std::vector<float>> query_vectors_processed; // We want to put py_arrays in a vector.
+    for (auto& vectors: query_vectors) {
+        query_vectors_processed.emplace_back(std::vector<float>(vectors.data(), vectors.data() + vectors.size()));
+    }
+    return batch_search_bucket_without_index_internal(vector_buckets, bucket_label_maps, vectors_version_queries, label_map_version_queries, query_vectors_processed, k, dimensions);
+}
+
+
 
 } //namespace arcticdb::version_store

@@ -34,6 +34,15 @@ namespace arcticdb::vector_db {
             const uint64_t k
     );
 
+    std::pair<std::vector<faiss::Index::idx_t>, std::vector<float>> search_bucket_without_index_impl(
+            const std::shared_ptr<Store> store,
+            const VersionedItem& version_info_bucket_vectors,
+            const VersionedItem& version_info_bucket_label_map,
+            const std::vector<float> query_vectors,
+            const uint64_t k,
+            const uint64_t dimensions
+    );
+
     struct UpdateBucketIndexClause {
         ClauseInfo clause_info_;
         std::vector<float> vectors_;
@@ -68,4 +77,12 @@ namespace arcticdb::vector_db {
         void set_processing_config(ARCTICDB_UNUSED const ProcessingConfig&) {};
     };
 
+    folly::Future<std::pair<std::vector<faiss::Index::idx_t>, std::vector<float>>> async_search_bucket_without_index_impl(
+            const std::shared_ptr<Store> store,
+            const VersionedItem& version_info_bucket_vectors,
+            const VersionedItem& version_info_bucket_label_map,
+            const std::vector<float> query_vectors,
+            const uint64_t k,
+            const uint64_t dimensions
+    );
 }

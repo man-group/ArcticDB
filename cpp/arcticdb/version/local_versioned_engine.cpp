@@ -1785,8 +1785,64 @@ std::pair<std::vector<faiss::Index::idx_t>, std::vector<float>> LocalVersionedEn
     return vector_db::search_bucket_with_index_impl(store(), version_info.value(), vectors, k);
 }
 
+std::pair<std::vector<faiss::Index::idx_t>, std::vector<float>> LocalVersionedEngine::search_bucket_without_index_internal(
+        const StreamId& bucket_vectors,
+        const StreamId& bucket_label_map,
+        const VersionQuery& vectors_version_query,
+        const VersionQuery& label_map_version_query,
+        const std::vector<float>& vectors,
+        const uint64_t& k,
+        const uint64_t& dimensions
+) {
+    auto vectors_version_info = get_version_to_read(bucket_vectors, vectors_version_query, ReadOptions{});
+    auto label_map_version_info = get_version_to_read(bucket_label_map, label_map_version_query, ReadOptions{});
+    return vector_db::search_bucket_without_index_impl(
+            store(),
+            vectors_version_info.value(),
+            label_map_version_info.value(),
+            vectors,
+            k,
+            dimensions);
+}
 
-timestamp LocalVersionedEngine::latest_timestamp(const std::string& symbol) {
+std::vector<std::pair<std::vector<faiss::Index::idx_t>, std::vector<float>>> LocalVersionedEngine::batch_search_bucket_without_index_internal(
+        const std::vector<StreamId>& bucket_vectors,
+        const std::vector<StreamId>& bucket_label_maps,
+        const std::vector<VersionQuery>& vectors_version_queries,
+        const std::vector<VersionQuery>& label_map_version_queries,
+        const std::vector<std::vector<float>>& vectors,
+        const uint64_t k,
+        const uint64_t& dimensions
+        ) {
+    py::gil_scoped_release release_gil;
+
+    std::vector<folly::Future<std::pair<std::vector<faiss::Index::idx_t>, std::vector<float>>>> result_futures;
+    for (auto&& [idx, bucket_vector]: folly::enumerate(bucket_vectors)) {
+        auto vectors_version_info = get_version_to_read(
+                bucket_vector,
+                vectors_version_queries[idx],
+                ReadOptions{}
+        );
+        auto label_map_version_info = get_version_to_read(
+                bucket_label_maps[idx],
+                label_map_version_queries[idx],
+                ReadOptions{}
+        );
+        result_futures.push_back(vector_db::async_search_bucket_without_index_impl(
+                store(),
+                vectors_version_info.value(),
+                label_map_version_info.value(),
+                vectors[idx],
+                k,
+                dimensions
+        ));
+    };
+    return folly::collect(result_futures).get();
+}
+
+
+
+        timestamp LocalVersionedEngine::latest_timestamp(const std::string& symbol) {
     if(auto latest_incomplete = latest_incomplete_timestamp(store(), symbol); latest_incomplete)
         return latest_incomplete.value();
 

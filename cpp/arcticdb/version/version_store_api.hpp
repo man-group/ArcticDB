@@ -332,6 +332,26 @@ class PythonVersionStore : public LocalVersionedEngine {
             const uint64_t& k
     );
 
+    std::pair<std::vector<faiss::Index::idx_t>, std::vector<float>> search_bucket_without_index(
+            const StreamId& bucket_vectors,
+            const StreamId& bucket_label_map,
+            const VersionQuery& vectors_version_query,
+            const VersionQuery& label_map_version_query,
+            const py::array_t<float>& vectors,
+            const uint64_t& k,
+            const uint64_t& dimensions
+    );
+
+    std::vector<std::pair<std::vector<faiss::Index::idx_t>, std::vector<float>>> batch_search_bucket_without_index(
+            const std::vector<StreamId>& vector_buckets,
+            const std::vector<StreamId>& bucket_label_maps,
+            const std::vector<VersionQuery>& vectors_version_queries,
+            const std::vector<VersionQuery>& label_map_version_queries,
+            const std::vector<py::array_t<float>>& query_vectors,
+            const uint64_t& k,
+            const uint64_t& dimensions
+    );
+
     void clear();
     bool empty();
     void force_delete_symbol(const StreamId& stream_id);

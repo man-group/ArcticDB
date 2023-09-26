@@ -14,7 +14,10 @@
 #include <faiss/impl/io.h>
 #include <faiss/index_io.h>
 #include <faiss/index_factory.h>
+#include <faiss/utils/distances.h>
+#include <folly/futures/Future.h>
 #include <arcticdb/pipeline/frame_slice.hpp>
+#include <arcticdb/async/base_task.hpp>
 
 /**
  * @namespace arcticdb::vector_db
@@ -201,6 +204,82 @@ namespace arcticdb::vector_db {
                 );
     }
 
+    std::pair<std::vector<faiss::Index::idx_t>, std::vector<float>> search_bucket_without_index_impl(
+            const std::shared_ptr<Store> store,
+            const VersionedItem& version_info_bucket_vectors,
+            const VersionedItem& version_info_bucket_label_map,
+            const std::vector<float> query_vectors,
+            const uint64_t k,
+            const uint64_t dimensions
+            ) {
+        using namespace arcticdb::pipelines;
+        using namespace arcticdb::version_store;
+        // Put all the vectors in one big std::vector<float> for faiss to query.
+        auto bucket_vectors_pipeline_context = std::make_shared<PipelineContext>();
+        bucket_vectors_pipeline_context->stream_id_ = version_info_bucket_vectors.key_.id();
+        ReadQuery read_query;
+        ReadOptions read_options;
+        read_indexed_keys_to_pipeline(store, bucket_vectors_pipeline_context, version_info_bucket_vectors, read_query, read_options);
+        auto key = bucket_vectors_pipeline_context->slice_and_keys_[0].key();
+        std::vector<float> bucket_vectors;
+
+        for (auto& sk: bucket_vectors_pipeline_context->slice_and_keys_) {
+            auto seg = sk.segment(store);
+            util::check(seg.columns().size() == 1, "PyVectorDB: Expected bucket index in one column.");
+            auto data = seg.column(0).data();
+            while (auto block = data.next<TypeDescriptorTag<DataTypeTag<DataType::FLOAT32>, DimensionTag<Dimension::Dim0>>>()) {
+                auto start = reinterpret_cast<const float *>(block.value().data());
+                auto end = start + block.value().row_count();
+                bucket_vectors.insert(bucket_vectors.end(), start, end);
+            }
+        }
+
+        util::check(bucket_vectors.size() % dimensions == 0, "PyVectorDB: dimensionality off in bucket vectors in searching bucket sans index.");
+        util::check(query_vectors.size() % dimensions == 0, "PyVectorDB: dimensionality off in searching bucket sans index in query vector.");
+        auto num_queried = bucket_vectors.size() / dimensions;
+        auto num_queries = query_vectors.size() / dimensions;
+        auto *distances = new float[k*num_queries];
+        auto *labels = new faiss::Index::idx_t[k*num_queries];
+        faiss::knn_L2sqr(
+                query_vectors.data(),
+                bucket_vectors.data(),
+                dimensions,
+                num_queries,
+                num_queried,
+                k,
+                distances,
+                labels
+                );
+        // Now we have the distances and labels. But we need to get the label map.
+        auto label_map_pipeline_context = std::make_shared<PipelineContext>();
+        label_map_pipeline_context->stream_id_ = version_info_bucket_label_map.key_.id();
+        read_indexed_keys_to_pipeline(store, label_map_pipeline_context, version_info_bucket_label_map, read_query, read_options);
+
+        std::vector<float> label_map;
+
+        for (auto& sk: label_map_pipeline_context->slice_and_keys_) {
+            auto seg = sk.segment(store);
+            util::check(seg.columns().size() == 1, "PyVectorDB: Expected bucket index in one column.");
+            auto data = seg.column(0).data();
+            while (auto block = data.next<TypeDescriptorTag<DataTypeTag<DataType::UINT64>, DimensionTag<Dimension::Dim0>>>()) {
+                auto start = reinterpret_cast<const uint64_t *>(block.value().data());
+                auto end = start + block.value().row_count();
+                label_map.insert(label_map.end(), start, end);
+            }
+        }
+
+        auto labels_vector = std::vector<faiss::Index::idx_t>(labels, labels+(num_queries*k));
+        std::vector<faiss::Index::idx_t> mapped_labels;
+        for (auto unmapped_label: labels_vector) {
+            mapped_labels.push_back(label_map[unmapped_label]);
+        }
+
+        return std::pair<std::vector<faiss::Index::idx_t>, std::vector<float>>(
+                mapped_labels,
+                std::vector<float>(distances, distances+(num_queries*k))
+                );
+    }
+
     std::pair<std::vector<faiss::Index::idx_t>, std::vector<float>> search_bucket_with_index_impl(
             const std::shared_ptr<Store> store,
             const VersionedItem& version_info,
@@ -298,4 +377,60 @@ namespace arcticdb::vector_db {
 
         return Composite{ProcessingUnit{std::move(seg)}};
     }
+
+    struct SearchBucketWithoutIndexTask : async::BaseTask {
+        std::shared_ptr<Store> store_;
+        VersionedItem vectors_version_info_;
+        VersionedItem label_map_version_info_;
+        std::vector<float> vectors_;
+        uint64_t k_;
+        uint64_t dimensions_;
+
+        SearchBucketWithoutIndexTask(
+                std::shared_ptr<Store> store,
+                VersionedItem vectors_version_info,
+                VersionedItem label_map_version_info,
+                std::vector<float> vectors,
+                uint64_t k,
+                uint64_t dimensions
+        ) :
+                store_(store),
+                vectors_version_info_(std::move(vectors_version_info)),
+                label_map_version_info_(std::move(label_map_version_info)),
+                vectors_(std::move(vectors)),
+                k_(k),
+                dimensions_(dimensions) {
+            ARCTICDB_DEBUG(log::schedule(), "Creating task to search bucket without vectors.");
+        }
+
+        std::pair<std::vector<faiss::Index::idx_t>, std::vector<float>> operator()() {
+            return vector_db::search_bucket_without_index_impl(
+                    store_,
+                    vectors_version_info_,
+                    label_map_version_info_,
+                    vectors_,
+                    k_,
+                    dimensions_
+            );
+        }
+    };
+
+    folly::Future<std::pair<std::vector<faiss::Index::idx_t>, std::vector<float>>> async_search_bucket_without_index_impl(
+            const std::shared_ptr<Store> store,
+            const VersionedItem& version_info_bucket_vectors,
+            const VersionedItem& version_info_bucket_label_map,
+            const std::vector<float> query_vectors,
+            const uint64_t k,
+            const uint64_t dimensions
+    ) {
+        return async::submit_cpu_task(SearchBucketWithoutIndexTask{
+                store,
+                version_info_bucket_vectors,
+                version_info_bucket_label_map,
+                query_vectors,
+                k,
+                dimensions
+        });
+    }
+
 } // namespace arcticdb

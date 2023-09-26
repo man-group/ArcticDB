@@ -428,6 +428,26 @@ public:
             const uint64_t& k
     );
 
+    std::pair<std::vector<faiss::Index::idx_t>, std::vector<float>> search_bucket_without_index_internal(
+            const StreamId& bucket_vectors,
+            const StreamId& bucket_label_map,
+            const VersionQuery& vectors_version_query,
+            const VersionQuery& label_map_version_query,
+            const std::vector<float>& vectors,
+            const uint64_t& k,
+            const uint64_t& dimensions
+    );
+
+    std::vector<std::pair<std::vector<faiss::Index::idx_t>, std::vector<float>>> batch_search_bucket_without_index_internal(
+            const std::vector<StreamId>& bucket_vectors,
+            const std::vector<StreamId>& bucket_label_maps,
+            const std::vector<VersionQuery>& vectors_version_queries,
+            const std::vector<VersionQuery>& label_map_version_queries,
+            const std::vector<std::vector<float>>& vectors,
+            const uint64_t k,
+            const uint64_t& dimensions
+    );
+
 protected:
     VersionedItem compact_incomplete_dynamic(
             const StreamId& stream_id,

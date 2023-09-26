@@ -702,6 +702,12 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
         .def("search_bucket_with_index",
              &PythonVersionStore::search_bucket_with_index,
              "Search a bucket with an index in a PyVectorDB.")
+        .def("search_bucket_without_index",
+            &PythonVersionStore::search_bucket_without_index,
+            "Search a bucket without an index in a PyVectorDB.")
+        .def("batch_search_bucket_without_index",
+            &PythonVersionStore::batch_search_bucket_without_index,
+            "Search buckets without an index in a PyVectorDB.")
         ;
 
     py::class_<ManualClockVersionStore, PythonVersionStore>(version, "ManualClockVersionStore")

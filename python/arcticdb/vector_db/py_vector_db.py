@@ -21,16 +21,24 @@ def namespace_metadata_symbol(namespace: str) -> str:
     return f"{namespace}_metadata"
 
 
-def namespace_bucket_vectors_symbol(namespace: str, segment: int) -> str:
-    return f"{namespace}_segment_{segment}_vectors"
+def namespace_bucket_vectors_symbol(namespace: str, bucket: int) -> str:
+    return f"{namespace}_bucket_{bucket}_vectors"
 
 
-def namespace_bucket_index_symbol(namespace: str, segment: int) -> str:
-    return f"{namespace}_segment_{segment}_index"
+def namespace_bucket_index_symbol(namespace: str, bucket: int) -> str:
+    return f"{namespace}_bucket_{bucket}_index"
+
+
+def namespace_bucket_label_map_symbol(namespace: str, bucket: int) -> str:
+    """
+    When searching without an index, we get labels relative to the ordering of the vectors in the segment. This symbol
+    maps to the original.
+    """
+    return f"{namespace}_bucket_{bucket}_label_map"
 
 
 def namespace_vectors_to_bucket_symbol(namespace: str) -> str:
-    return f"{namespace}_vectors_to_segments"
+    return f"{namespace}_vectors_to_buckets"
 
 
 def namespace_insertion_bucketiser_symbol(namespace: str) -> str:
@@ -243,41 +251,42 @@ class VectorLibrary(object):
 
         # We add a column in vectors corresponding to the bucket in which each vector should be placed.
         vectors["bucket"] = insertion_bucketiser.search(vectors.to_numpy(), 1)[1]
-        write_payloads = []
+        append_payloads = []
 
         for bucket, vectors_to_upsert in vectors.groupby("bucket"):
             query_bucketiser.remove_ids(np.array([bucket]))
             query_bucketiser.add_with_ids(np.array([centroids[bucket]]), np.array([bucket]))
+            # todo: dedup more sensibly.
             flattened = vectors_to_upsert.drop("bucket", axis=1).to_numpy().flatten()
-            labels = vectors_to_upsert.index.to_numpy()
-            if not self._lib.has_symbol(namespace_bucket_vectors_symbol(namespace, bucket)):
-                write_payloads.append(WritePayload(
-                    namespace_bucket_vectors_symbol(namespace, bucket),
-                    flattened
-                ))
-                self._lib._nvs.version_store.initialise_bucket_index(
-                    namespace_bucket_index_symbol(namespace, bucket),
-                    index,
-                    "L2",
-                    dimension,
-                    flattened,
+            labels = vectors_to_upsert.index.to_numpy().astype(np.uint64)
+            append_payloads.append(WritePayload(
+                namespace_bucket_vectors_symbol(namespace, bucket),
+                flattened
+            ))
+            if index:
+                if not self._lib.has_symbol(namespace_bucket_vectors_symbol(namespace, bucket)):
+                    self._lib._nvs.version_store.initialise_bucket_index(
+                        namespace_bucket_index_symbol(namespace, bucket),
+                        index,
+                        "L2",
+                        dimension,
+                        flattened,
+                        labels
+                    )
+                    # todo: work out whatever cursed check is stopping us from reading the symbol since something is probably
+                    # wrong but I can't work out what.
+                else:
+                    self._lib._nvs.version_store.update_bucket_index(
+                        namespace_bucket_index_symbol(namespace, bucket),
+                        flattened,
+                        labels
+                    )
+            else: # not index so need to store a label map
+                append_payloads.append(WritePayload(
+                    namespace_bucket_label_map_symbol(namespace, bucket),
                     labels
-                )
-                # todo: work out whatever cursed check is stopping us from reading the symbol since something is probably
-                # wrong but I can't work out what.
-            else:
-                write_payloads.append(WritePayload(
-                    namespace_bucket_vectors_symbol(namespace, bucket),
-                    flattened
                 ))
-                self._lib._nvs.version_store.update_bucket_index(
-                    namespace_bucket_index_symbol(namespace, bucket),
-                    flattened,
-                    labels
-                )
-                # self._update_bucket_index(namespace, bucket)
-            # todo: add to the index in cpp
-        self._lib.write_batch(write_payloads)
+        self._lib.append_batch(append_payloads)
         self._write_query_bucketiser(namespace, query_bucketiser)
 
         vectors_to_buckets = vectors["bucket"].reset_index()
@@ -302,6 +311,7 @@ class VectorLibrary(object):
             raise Exception("PyVectorDB: Vectors must be presented in a two-dimensional np.ndarray.")
         metadata = self._get_metadata(namespace)
         dimension = metadata["dimension"]
+        index = metadata["index"]
         if query_vectors.shape[1] != dimension:
             raise Exception(f"PyVectorDB: query vectors to namespace {namespace} must have length {dimension}")
 
@@ -312,19 +322,33 @@ class VectorLibrary(object):
             for bucket in buckets[i]:
                 buckets_to_vectors[bucket].append(i)
 
-        results_by_bucket = {bucket: self._lib._nvs.version_store.search_bucket_with_index(
-                namespace_bucket_index_symbol(namespace, bucket),
-                _PythonVersionStoreVersionQuery(),
-                np.concatenate([query_vectors[i] for i in vectors]),
-                k
-            ) for bucket, vectors in buckets_to_vectors.items()}
+        if index:
+            results_by_bucket = {bucket: self._lib._nvs.version_store.search_bucket_with_index(
+                    namespace_bucket_index_symbol(namespace, bucket),
+                    _PythonVersionStoreVersionQuery(),
+                    np.concatenate([query_vectors[i] for i in vectors]),
+                    k
+                ) for bucket, vectors in buckets_to_vectors.items()}
+        else:
+            vector_buckets, label_maps, vb_queries, lm_queries, query_vectors_flattened = [], [], [], [], []
+            for bucket, vectors in buckets_to_vectors.items():
+                vector_buckets.append(namespace_bucket_vectors_symbol(namespace, bucket))
+                label_maps.append(namespace_bucket_label_map_symbol(namespace, bucket))
+                vb_queries.append(_PythonVersionStoreVersionQuery())
+                lm_queries.append(_PythonVersionStoreVersionQuery())
+                query_vectors_flattened.append(np.concatenate([query_vectors[i] for i in vectors]))
+            search_result = self._lib._nvs.version_store.batch_search_bucket_without_index(
+                vector_buckets, label_maps, vb_queries, lm_queries, query_vectors_flattened,
+                k, dimension
+            )
+            results_by_bucket = {bucket[0]: search_result[i] for i, bucket in enumerate(buckets_to_vectors.items())}
 
         results_by_vector = {i: {"labels": [], "distances": []} for i in range(len(query_vectors))}
         for bucket, (d, l) in results_by_bucket.items():
             vectors = buckets_to_vectors[bucket]
             for i in range(len(d) // k): # iterate over the number of vectors queried from each bucket.
-                results_by_vector[vectors[i]]["labels"].append(d[i*k:i*k+(k-1)])
-                results_by_vector[vectors[i]]["distances"].append(l[i*k:i*k+(k-1)])
+                results_by_vector[vectors[i]]["labels"] += d[i*k:(i+1)*k]
+                results_by_vector[vectors[i]]["distances"] += l[i*k:(i+1)*k]
         top_k_by_vector = {i: [(label, distance) for distance, label in sorted(zip(res["distances"], res["labels"]))] for res in results_by_vector.values()}
         return top_k_by_vector
 
