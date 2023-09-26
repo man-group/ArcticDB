@@ -34,7 +34,7 @@ class TimeSuite:
     number = 5
     timeout = 6000
 
-    params = ([100, 500, 1000, 2000], [500, 1000])
+    params = ([1000, 2000], [500, 1000])
     param_names = ['rows', 'num_symbols']
 
     def __init__(self):
