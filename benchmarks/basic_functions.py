@@ -1,32 +1,12 @@
-# Write the benchmarking functions here.
-# See "Writing benchmarks" in the asv docs for more information.
 from arcticdb import Arctic
 from arcticdb.version_store.library import (
     WritePayload,
     ReadRequest
 )
 
-import pandas as pd
-import numpy as np
+from common import *
 
-def generate_pseudo_random_dataframe(n, freq="S", end_timestamp="1/1/2023"):
-    """
-    Generates a Data Frame with 2 columns (timestamp and value) and N rows
-    - timestamp contains timestamps with a given frequency that end at end_timestamp
-    - value contains random floats that sum up to approximately N, for easier testing/verifying
-    """
-    # Generate random values such that their sum is equal to N
-    values = np.random.dirichlet(np.ones(n), size=1) * n
-    # Generate timestamps
-    timestamps = pd.date_range(end=end_timestamp, periods=n, freq="S")
-    # Create dataframe
-    df = pd.DataFrame({"timestamp": timestamps, "value": values[0]})
-    return df
-
-def get_prewritten_lib_name(rows):
-    return f"prewritten_{rows}"
-
-class TimeSuite:
+class BasicFunctions:
     """
     An example benchmark that times the performance of various kinds
     of iterating over dictionaries in Python.
@@ -38,9 +18,9 @@ class TimeSuite:
     param_names = ['rows', 'num_symbols']
 
     def __init__(self):
-        self.ac = Arctic("lmdb://test")
+        self.ac = Arctic("lmdb://basic_functions")
 
-        rows, num_symbols = TimeSuite.params
+        rows, num_symbols = BasicFunctions.params
         for num_row in rows:
             lib = get_prewritten_lib_name(num_row)
             self.ac.delete_library(lib)
@@ -66,6 +46,14 @@ class TimeSuite:
         lib = self.get_fresh_lib()
         for sym in range(num_symbols):
             lib.write(f"{sym}_sym", generate_pseudo_random_dataframe(rows))
+
+    def time_write_staged(self, rows, _):
+        lib = self.get_fresh_lib()
+        lib.write("staged_sym", generate_pseudo_random_dataframe(rows))
+
+    def peakmem_write_staged(self, rows, _):
+        lib = self.get_fresh_lib()
+        lib.write("staged_sym", generate_pseudo_random_dataframe(rows))
 
     def time_write_batch(self, rows, num_symbols):
         lib = self.get_fresh_lib()
