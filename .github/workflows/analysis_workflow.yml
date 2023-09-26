@@ -237,7 +237,7 @@ jobs:
           git log --oneline -n 100
           python -m asv run -v --show-stderr HASHFILE:hashes_to_benchmark.txt
           python -m asv publish
-          python -m asv gh-pages --rewrite
+          # python -m asv gh-pages --rewrite
         # env:
         #   # There are problem with the linux build when building in paralel
         #   CMAKE_BUILD_PARALLEL_LEVEL: 1
@@ -278,7 +278,7 @@ jobs:
           git config --global --add safe.directory /__w/ArcticDB/ArcticDB
           python -m asv run -v --show-stderr HASHFILE:hashes_to_benchmark.txt
           python -m asv publish
-          python -m asv gh-pages --rewrite
+          # python -m asv gh-pages --rewrite
 
       - name: Upload Benchmarking output
         uses: actions/upload-artifact@v3
