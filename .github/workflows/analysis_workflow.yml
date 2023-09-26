@@ -206,6 +206,8 @@ jobs:
 
   benchmark_linux:
     runs-on: ArcticDB
+    permissions:
+      contents: write
 
     steps:
       - uses: actions/checkout@v3
@@ -250,6 +252,8 @@ jobs:
 
   benchmark_macos:
     runs-on: macos-latest
+    permissions:
+      contents: write
 
     steps:
       - uses: actions/checkout@v3
