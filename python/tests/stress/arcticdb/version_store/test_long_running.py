@@ -42,11 +42,11 @@ SCENARIOS = [
 ]
 
 
-def test_random_scenario(lmdb_version_store_small_segment):
-    lmdb_version_store_small_segment.version_store._set_validate_version_map()
+def test_random_scenario(basic_store_small_segment):
+    basic_store_small_segment.version_store._set_validate_version_map()
     for iteration in range(ITERATIONS):
         print("Iteration {}/{}".format(iteration, ITERATIONS))
-        run_scenario(random.choice(SCENARIOS), lmdb_version_store_small_segment, True, True)
+        run_scenario(random.choice(SCENARIOS), basic_store_small_segment, True, True)
         # assert current_mem() < MAX_MEM_USAGE
         gc.collect()
         print(format_bytes(current_mem()))

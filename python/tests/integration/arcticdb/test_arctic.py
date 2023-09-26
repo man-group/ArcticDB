@@ -71,6 +71,7 @@ def test_get_library(arctic_client):
         _ = ac.get_library("pytest_test_lib")
     # Creates library with default options if just create_if_missing set to True
     lib = ac.get_library("pytest_test_lib_default_options", create_if_missing=True)
+
     assert lib.options() == LibraryOptions(encoding_version=ac._encoding_version)
     # Creates library with the specified options if create_if_missing set to True and options provided
     library_options = LibraryOptions(
@@ -170,9 +171,9 @@ def test_library_options(arctic_client):
     assert lib._nvs._lib_cfg.lib_desc.version.encoding_version == EncodingVersion.V2
 
 
-def test_separation_between_libraries(object_storage_uri_incl_bucket):
+def test_separation_between_libraries(arctic_client):
     """Validate that symbols in one library are not exposed in another."""
-    ac = Arctic(object_storage_uri_incl_bucket)
+    ac = arctic_client
     assert ac.list_libraries() == []
 
     ac.create_library("pytest_test_lib")
@@ -193,38 +194,50 @@ def get_path_prefix_option(uri):
         return "&path_prefix"
 
 
-@pytest.mark.parametrize(
-    "lib_type",
-    [
-        "moto_s3_uri_incl_bucket",
-        "azurite_azure_uri_incl_bucket",
-    ],
-)
-def test_separation_between_libraries_with_prefixes(lib_type, request):
+def test_separation_between_libraries_with_prefixes(object_storage_uri_incl_bucket):
     """The motivation for the prefix feature is that separate users want to be able to create libraries
     with the same name in the same bucket without over-writing each other's work. This can be useful when
-    creating a new bucket is time-consuming, for example due to organisational issues.
+    creating a new bucket is time-consuming, for example due to organizational issues.
     """
-    lib = request.getfixturevalue(lib_type)
-    option = get_path_prefix_option(lib)
-    mercury_uri = f"{lib}{option}=/planet/mercury"
+    if "mongo" in object_storage_uri_incl_bucket:
+        pytest.skip("Mongo doesn't support path_prefix")
+
+    option = get_path_prefix_option(object_storage_uri_incl_bucket)
+    if option not in object_storage_uri_incl_bucket:
+        mercury_uri = f"{object_storage_uri_incl_bucket}{option}=/planet_mercury"
+    else:
+        # if we have a path_prefix, we assume that it is at the end and we simply append to it
+        mercury_uri = f"{object_storage_uri_incl_bucket}/planet_mercury"
+
     ac_mercury = Arctic(mercury_uri)
-    assert ac_mercury.list_libraries() == []
 
-    mars_uri = f"{lib}{option}=/planet/mars"
+    if option not in object_storage_uri_incl_bucket:
+        mars_uri = f"{object_storage_uri_incl_bucket}{option}=/planet_mars"
+    else:
+        # if we have a path_prefix, we assume that it is at the end and we simply append to it
+        mars_uri = f"{object_storage_uri_incl_bucket}/planet_mars"
+
     ac_mars = Arctic(mars_uri)
-    assert ac_mars.list_libraries() == []
 
+    assert ac_mars.list_libraries() == []
     ac_mercury.create_library("pytest_test_lib")
+    ac_mercury.create_library("pytest_test_lib_2")
     ac_mars.create_library("pytest_test_lib")
-    assert ac_mercury.list_libraries() == ["pytest_test_lib"]
-    assert ac_mars.list_libraries() == ["pytest_test_lib"]
+    ac_mars.create_library("pytest_test_lib_2")
+    assert ac_mercury.list_libraries() == ["pytest_test_lib", "pytest_test_lib_2"]
+    assert ac_mars.list_libraries() == ["pytest_test_lib", "pytest_test_lib_2"]
 
     ac_mercury["pytest_test_lib"].write("test_1", pd.DataFrame())
     ac_mars["pytest_test_lib"].write("test_2", pd.DataFrame())
 
     assert ac_mercury["pytest_test_lib"].list_symbols() == ["test_1"]
     assert ac_mars["pytest_test_lib"].list_symbols() == ["test_2"]
+
+    ac_mercury.delete_library("pytest_test_lib")
+    ac_mercury.delete_library("pytest_test_lib_2")
+
+    ac_mars.delete_library("pytest_test_lib")
+    ac_mars.delete_library("pytest_test_lib_2")
 
 
 def object_storage_uri_and_client():
@@ -441,6 +454,40 @@ def test_delete_version(arctic_library):
     lib.delete("symbol", versions=(1, 2))
     assert lib["symbol"].version == 0
     assert lib["symbol"].metadata == {"very": "interesting"}
+
+
+def test_list_versions_write_append_update(arctic_library):
+    lib = arctic_library
+    # Note: can only update timeseries dataframes
+    index = pd.date_range(start="2000-01-01", freq="D", periods=3)
+    df = pd.DataFrame({"col1": [1, 2, 3], "col2": [4, 5, 6]}, index=index)
+    lib.write("symbol", df)
+    index_append = pd.date_range(start="2000-01-04", freq="D", periods=3)
+    df_append = pd.DataFrame({"col1": [7, 8, 9], "col2": [10, 11, 12]}, index=index_append)
+    lib.append("symbol", df_append)
+    index_update = pd.DatetimeIndex(["2000-01-03", "2000-01-05"])
+    df_update = pd.DataFrame({"col1": [13, 14], "col2": [15, 16]}, index=index_update)
+    lib.update("symbol", df_update)
+    assert_frame_equal(lib.read("symbol").data, pd.concat([df.iloc[:-1], df_update, df_append.iloc[[2]]]))
+    assert len(lib.list_versions("symbol")) == 3
+
+
+def test_list_versions_latest_only(arctic_library):
+    lib = arctic_library
+    df = pd.DataFrame({"col1": [1, 2, 3], "col2": [4, 5, 6]})
+    lib.write("symbol", df)
+    lib.write("symbol", df)
+    lib.write("symbol", df)
+    assert len(lib.list_versions("symbol", latest_only=True)) == 1
+
+
+def test_non_existent_list_versions_latest_only(arctic_library):
+    lib = arctic_library
+    assert len(lib.list_versions("symbol", latest_only=True)) == 0
+    df = pd.DataFrame({"col1": [1, 2, 3], "col2": [4, 5, 6]})
+    lib.write("symbol2", df)
+    lib.delete("symbol2")
+    assert len(lib.list_versions("symbol2", latest_only=True)) == 0
 
 
 def test_delete_version_with_snapshot(arctic_library):
@@ -946,8 +993,8 @@ def test_tail(arctic_library):
 
 
 @pytest.mark.parametrize("dedup", [True, False])
-def test_dedup(object_storage_uri_incl_bucket, dedup):
-    ac = Arctic(object_storage_uri_incl_bucket)
+def test_dedup(arctic_client, dedup):
+    ac = arctic_client
     assert ac.list_libraries() == []
     ac.create_library("pytest_test_library", LibraryOptions(dedup=dedup))
     lib = ac["pytest_test_library"]
@@ -958,8 +1005,8 @@ def test_dedup(object_storage_uri_incl_bucket, dedup):
     assert data_key_version == 0 if dedup else 1
 
 
-def test_segment_slicing(object_storage_uri_incl_bucket):
-    ac = Arctic(object_storage_uri_incl_bucket)
+def test_segment_slicing(arctic_client):
+    ac = arctic_client
     assert ac.list_libraries() == []
     rows_per_segment = 5
     columns_per_segment = 2
@@ -1040,10 +1087,25 @@ def test_get_uri(object_storage_uri_incl_bucket):
 
 
 def test_azure_no_ca_path(azurite_azure_test_connection_setting):
-    (endpoint, container, credential_name, credential_key, ca_cert_path) = azurite_azure_test_connection_setting
-    ac = Arctic(
+    endpoint, container, credential_name, credential_key, _ = azurite_azure_test_connection_setting
+    Arctic(
         f"azure://DefaultEndpointsProtocol=http;AccountName={credential_name};AccountKey={credential_key};BlobEndpoint={endpoint}/{credential_name};Container={container}"
     )
+
+
+def test_azure_sas_token(azure_account_sas_token, azurite_azure_test_connection_setting):
+    endpoint, container, credential_name, _, _ = azurite_azure_test_connection_setting
+    ac = Arctic(
+        f"azure://DefaultEndpointsProtocol=http;SharedAccessSignature={azure_account_sas_token};BlobEndpoint={endpoint}/{credential_name};Container={container}"
+    )
+    expected = pd.DataFrame({"col1": [1, 2, 3], "col2": [4, 5, 6]})
+    sym = "test"
+    lib = "lib"
+    ac.create_library(lib)
+    ac[lib].write(sym, expected)
+    assert_frame_equal(expected, ac[lib].read(sym).data)
+
+    assert ac.list_libraries() == [lib]
 
 
 def test_s3_force_uri_lib_config_handling(moto_s3_uri_incl_bucket):

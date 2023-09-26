@@ -900,6 +900,13 @@ class NativeVersionStore:
             vitem = self._adapt_read_res(read_result)
             yield vitem
 
+    def trim(self) -> None:
+        """
+        Calls trim on the allocator of the underlying version_store
+        Should be called after gc.collect() to remove any reference cycles
+        """
+        self.version_store.trim()
+
     def batch_read(
         self,
         symbols: List[str],

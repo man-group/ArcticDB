@@ -8,6 +8,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 import re
 import time
 from typing import Optional
+import platform
 
 from arcticdb.options import LibraryOptions
 from arcticc.pb2.storage_pb2 import EnvironmentConfigsMap, LibraryConfig
@@ -54,6 +55,8 @@ class AzureLibraryAdapter(ArcticLibraryAdapter):
             ]
         )
         self._container = self._query_params.Container
+        if platform.system() == "Windows" and self._query_params.CA_cert_path:
+            raise ValueError(f"CA_cert_path cannot be set on Windows platform")
         self._ca_cert_path = self._query_params.CA_cert_path
         self._encoding_version = encoding_version
 

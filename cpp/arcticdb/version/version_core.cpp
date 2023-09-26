@@ -330,6 +330,9 @@ VersionedItem update_impl(
                         std::end(affected_keys),
                         std::back_inserter(unaffected_keys));
 
+    util::check(affected_keys.size() + unaffected_keys.size() == index_segment_reader.size(), "Unaffected vs affected keys split was inconsistent {} + {} != {}",
+                affected_keys.size(), unaffected_keys.size(), index_segment_reader.size());
+
     frame.set_bucketize_dynamic(bucketize_dynamic);
     auto slicing_arg = get_slicing_policy(options, frame);
 
@@ -350,13 +353,13 @@ VersionedItem update_impl(
                             orig_filter_range = idx_range;
                             return intersecting_segments(affected_keys, idx_range, idx_range, update_info.next_version_id_, store);
                         },
-                        [](const RowRange&) {
+                        [](const RowRange&)-> std::pair<std::vector<SliceAndKey>, std::vector<SliceAndKey>> {
                             util::raise_rte("Unexpected row_range in update query");
-                            return std::pair(std::vector<SliceAndKey>{}, std::vector<SliceAndKey>{});  // unreachable
                         }
     );
 
     size_t row_count = 0;
+    const size_t new_keys_size = new_slice_and_keys.size();
     auto flattened_slice_and_keys = flatten_and_fix_rows(std::vector<std::vector<SliceAndKey>>{
         strictly_before(orig_filter_range, unaffected_keys),
         std::move(intersect_before),
@@ -365,6 +368,10 @@ VersionedItem update_impl(
         strictly_after(orig_filter_range, unaffected_keys)},
                                                          row_count
                                                          );
+
+    util::check(unaffected_keys.size() + new_keys_size + (affected_keys.size() * 2) >= flattened_slice_and_keys.size(),
+                "Output size mismatch: {} + {} + (2 * {}) < {}",
+                unaffected_keys.size(), new_keys_size, affected_keys.size(), flattened_slice_and_keys.size());
 
     std::sort(std::begin(flattened_slice_and_keys), std::end(flattened_slice_and_keys));
     auto existing_desc = index_segment_reader.tsd().as_stream_descriptor();

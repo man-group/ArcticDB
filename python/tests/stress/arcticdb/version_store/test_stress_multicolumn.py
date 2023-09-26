@@ -9,11 +9,8 @@ import random
 import string
 import pandas as pd
 from pandas.tseries.offsets import MonthBegin
-import pytest
 
 from arcticdb.util.test import assert_frame_equal
-
-from arcticdb.config import MACOS_CONDA_BUILD, MACOS_CONDA_BUILD_SKIP_REASON
 
 
 def id_generator(size=75, chars=string.ascii_uppercase + string.digits):
@@ -40,20 +37,8 @@ def make_periods(start_date, end_date, freq, range_type="b"):
     return [r for r in ranges if len(r) > 0]
 
 
-@pytest.mark.parametrize(
-    "lib_type",
-    [
-        "lmdb_version_store_big_map",
-        "s3_version_store_v1",
-        "s3_version_store_v2",
-        pytest.param(
-            "azure_version_store",
-            marks=pytest.mark.skipif(MACOS_CONDA_BUILD, reason=MACOS_CONDA_BUILD_SKIP_REASON),
-        ),
-    ],
-)
-def test_stress_multicolumn(lib_type, request):
-    lib = request.getfixturevalue(lib_type)
+def test_stress_multicolumn(object_version_store):
+    lib = object_version_store
     start = (pd.Timestamp("now") - MonthBegin(10)).strftime("%Y%m%d")
     end = pd.Timestamp("now").strftime("%Y%m%d")
     # total securities - too big for build pipeline

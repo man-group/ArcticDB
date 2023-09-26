@@ -6,7 +6,14 @@ echo Saving results to ${TEST_OUTPUT_DIR:="$(realpath "$tooling_dir/../cpp/out")
 [[ -d "$TEST_OUTPUT_DIR" ]] || mkdir -p "$TEST_OUTPUT_DIR"
 
 [[ -e ${PARALLEL_TEST_ROOT:=/tmp/parallel_test} ]] && rm -rf $PARALLEL_TEST_ROOT
-splits=${TEST_PARALLELISM:-${CMAKE_BUILD_PARALLEL_LEVEL:-`nproc || echo 2`}}
+
+# If the persistent storage tests are not enabled, we want to parallelise the pytests
+if [[ -z "${ARCTICDB_PERSISTENT_STORAGE_TESTS}" ]]; then
+  splits=${TEST_PARALLELISM:-${CMAKE_BUILD_PARALLEL_LEVEL:-`nproc || echo 2`}}
+else
+# If they are enabled, we want to run the pytests sequentially to avoid races
+  splits=1
+fi
 
 catch=`{ which catchsegv 2>/dev/null || echo ; } | tail -n 1`
 

@@ -19,8 +19,8 @@ from arcticdb.util.hypothesis import (
 )
 
 
-def test_project(object_version_store):
-    lib = object_version_store
+def test_project(local_object_version_store):
+    lib = local_object_version_store
     df = pd.DataFrame(
         {
             "VWAP": np.arange(0, 10, dtype=np.float64),

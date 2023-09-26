@@ -477,3 +477,29 @@ def test_no_inplace_index_array_modification(lmdb_version_store, sym, datetime64
     lmdb_version_store.write(sym, pandas_container)
     assert pandas_container.index is original_index_array
     assert pandas_container.index.dtype == datetime64_dtype
+
+
+@pytest.mark.skipif(
+    not IS_PANDAS_TWO, reason="The full-support of pyarrow-backed pandas objects is pandas 2.0-specific."
+)
+def test_pyarrow_error(lmdb_version_store):
+    error_msg_intro = "PyArrow-backed pandas DataFrame and Series are not currently supported by ArcticDB."
+    df = pd.DataFrame(data=[[1.0, 0.2], [0.2, 0.5]], dtype="float32[pyarrow]")
+    with pytest.raises(ArcticDbNotYetImplemented, match=error_msg_intro):
+        lmdb_version_store.write("test_pyarrow_error_df", df)
+
+    series = pd.Series(data=[1.0, 0.2], dtype="float32[pyarrow]")
+    with pytest.raises(ArcticDbNotYetImplemented, match=error_msg_intro):
+        lmdb_version_store.write("test_pyarrow_error_series", series)
+
+    # Mixed NumPy- and PyArrow-backed DataFrame.
+    np_ser = pd.Series([0.1], dtype="float64")
+    pa_ser = pd.Series([0.1], dtype="float64[pyarrow]")
+
+    mixed_df = pd.DataFrame({"numpy": np_ser, "pyarrow": pa_ser})
+
+    assert mixed_df["numpy"].dtype == "float64"
+    assert mixed_df["pyarrow"].dtype == "float64[pyarrow]"
+
+    with pytest.raises(ArcticDbNotYetImplemented, match=error_msg_intro):
+        lmdb_version_store.write("test_pyarrow_error_mixed_df", mixed_df)
