@@ -205,13 +205,7 @@ jobs:
   #         SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
 
   benchmark_linux:
-    strategy:
-      matrix:
-        include:
-          - os: ubuntu-20.04
-
-      fail-fast: false
-    runs-on: ${{ matrix.os }}
+    runs-on: ArcticDB
 
     steps:
       - uses: actions/checkout@v3
@@ -243,25 +237,18 @@ jobs:
           git log --oneline -n 100
           python -m asv run -v --show-stderr HASHFILE:hashes_to_benchmark.txt
           python -m asv publish
-          zip -r asv_output.zip .asv/html/
-        env:
-          # There are problem with the linux build when building in paralel
-          CMAKE_BUILD_PARALLEL_LEVEL: 1
+        # env:
+        #   # There are problem with the linux build when building in paralel
+        #   CMAKE_BUILD_PARALLEL_LEVEL: 1
 
       - name: Upload Benchmarking output
         uses: actions/upload-artifact@v3
         with:
           name: asv-benchmarking-artifact-linux
-          path: asv_output.zip
+          path: .asv/html/
 
   benchmark_macos:
-    strategy:
-      matrix:
-        include:
-          - os: macos-latest
-
-      fail-fast: false
-    runs-on: ${{ matrix.os }}
+    runs-on: macos-latest
 
     steps:
       - uses: actions/checkout@v3
@@ -288,15 +275,11 @@ jobs:
         run: |
           python -m asv machine --yes
           git config --global --add safe.directory /__w/ArcticDB/ArcticDB
-          git status
-          git branch
-          git log --oneline -n 100
           python -m asv run -v --show-stderr HASHFILE:hashes_to_benchmark.txt
           python -m asv publish
-          zip -r asv_output.zip .asv/html/
 
       - name: Upload Benchmarking output
         uses: actions/upload-artifact@v3
         with:
           name: asv-benchmarking-artifact-macos
-          path: asv_output.zip
+          path: .asv/html/
