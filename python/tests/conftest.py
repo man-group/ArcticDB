@@ -674,7 +674,16 @@ def object_version_store_prune_previous(object_store_factory):
 
 @pytest.fixture(
     scope="function",
-    params=["s3_store_factory", "azure_store_factory"],
+    params=[
+        "s3_store_factory",
+        pytest.param(
+            "azure_store_factory",
+            marks=pytest.mark.skipif(
+                MACOS_CONDA_BUILD,
+                reason=MACOS_CONDA_BUILD_SKIP_REASON,
+            ),
+        ),
+    ],
 )
 def local_object_store_factory(request):
     """
@@ -1096,7 +1105,10 @@ def object_storage_uri_incl_bucket(request):
             "lmdb_version_store_v2",
             "s3_version_store_v1",
             "s3_version_store_v2",
-            "azure_version_store",
+            pytest.param(
+                "azure_version_store",
+                marks=pytest.mark.skipif(MACOS_CONDA_BUILD, reason=MACOS_CONDA_BUILD_SKIP_REASON),
+            ),
             pytest.param(
                 "mongo_version_store",
                 marks=pytest.mark.skipif(sys.platform != "linux", reason="The mongo store is only supported on Linux"),
@@ -1127,7 +1139,10 @@ def object_and_lmdb_version_store(request):
             "lmdb_version_store_dynamic_schema_v2",
             "s3_version_store_dynamic_schema_v1",
             "s3_version_store_dynamic_schema_v2",
-            "azure_version_store_dynamic_schema",
+            pytest.param(
+                "azure_version_store_dynamic_schema",
+                marks=pytest.mark.skipif(MACOS_CONDA_BUILD, reason=MACOS_CONDA_BUILD_SKIP_REASON),
+            ),
             pytest.param(
                 "real_s3_version_store_dynamic_schema",
                 marks=pytest.mark.skipif(

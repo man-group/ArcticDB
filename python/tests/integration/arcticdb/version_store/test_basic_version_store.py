@@ -29,7 +29,6 @@ from arcticdb.exceptions import (
     UserInputException,
 )
 from arcticdb import QueryBuilder
-from arcticdb.config import MACOS_CONDA_BUILD
 from arcticdb.flattener import Flattener
 from arcticdb.version_store import NativeVersionStore
 from arcticdb.version_store._custom_normalizers import CustomNormalizer, register_normalizer

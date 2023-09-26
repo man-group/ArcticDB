@@ -48,7 +48,6 @@ def gen_params_store_and_timeout():
             "s3_version_store_v2",
             "s3_version_store_v1",
             "s3_version_store_v2",
-            "azure_version_store",
         ],
         get_map_timeouts(),
     ]

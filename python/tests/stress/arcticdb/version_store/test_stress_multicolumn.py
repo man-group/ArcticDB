@@ -9,8 +9,11 @@ import random
 import string
 import pandas as pd
 from pandas.tseries.offsets import MonthBegin
+import pytest
 
 from arcticdb.util.test import assert_frame_equal
+
+from tests.conftest import PERSISTENT_STORAGE_TESTS_ENABLED
 
 
 def id_generator(size=75, chars=string.ascii_uppercase + string.digits):
