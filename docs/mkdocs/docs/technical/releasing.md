@@ -41,23 +41,27 @@ If hotfixing an existing release (or pre-release) then branch off the previously
 2. Select the workflow off the source tag (e.g. `1.6.0` or `1.6.0rc1`)
 2. Click `Run workflow`.
 
-This will create a branch off of `master`, incrementing the version specified in code. 
+This will create a branch off of `master`, incrementing the version specified in code.
 
 The [build will now be running for the tag.](https://github.com/man-group/ArcticDB/actions/workflows/build.yml)
 
 ## 2. Update conda-forge recipe
 
-[`regro-cf-autotick-bot`](https://github.com/regro-cf-autotick-bot) generally opens a PR
-on [ArcticDB's feedstock](https://github.com/conda-forge/arcticdb-feedstock)
-for each new release of ArcticDB upstream.
+A new release on conda-forge is made by creating a Pull Request on the feedstock of ArcticDB: [`conda-forge/arcticdb-feedstock`](https://github.com/conda-forge/arcticdb-feedstock).
 
-> [!IMPORTANT]  
+If you have created a tag on ArcticDB's repository, [`regro-cf-autotick-bot`](https://github.com/regro-cf-autotick-bot)
+might already have opened a Pull Request to create a new release.
+You can update such a PR or create a new one to release a version, updating the conda recipe.
+
+> [!IMPORTANT]
 > **Do not commit directly to the feedstock repository.**
-> Commits to the repository release new versions to conda-forge. Instead, changes must be made via personal forks or via the PR
-> created by the [`regro-cf-autotick-bot`](https://github.com/regro-cf-autotick-bot) as described above.
+> Commits to the repository release new versions to conda-forge. Instead, changes must be made
+via personal forks or via the PR created by the [`regro-cf-autotick-bot`](https://github.com/regro-cf-autotick-bot) as mentioned above.
 
-You can update such a PR or create a new one to release a version, updating the
-conda recipe. [Here's an example.](https://github.com/conda-forge/arcticdb-feedstock/pull/10)
+> [!IMPORTANT]
+> If publishing a release-candidate (AKA pre-release version), you **must** branch from `rc` and merge the created PR into the `rc` branch.
+> This will require modifying the base branch of the created PR.
+> If publishing a normal release, you **must** branch of `main` and merge the created PR into the `main` branch.
 
 You will need to update:
 
@@ -70,9 +74,9 @@ You will need to update:
 A PR is generally open with a todo-list summarizing all the required steps to perform,
 before an update to the feedstock.
 
-> [!IMPORTANT]  
-> If releasing a pre-release version, you **must** merge the created PR into the `pr` branch and not the `main` branch. 
-> This will require modifying the base branch of the created PR.
+Here are for example:
+ - [the PR used to publish `1.3.0`](https://github.com/conda-forge/arcticdb-feedstock/pull/10), a normal release
+ - [the PR used to publish `3.0.0rc1`](https://github.com/conda-forge/arcticdb-feedstock/pull/55), a release candidate
 
 ## 3. Release to PyPi
 
