@@ -37,8 +37,9 @@ namespace arcticdb::storage::memory {
                                         key_vec.try_emplace(key, kv.segment());
                                     },
                                     [&](const AtomKey &key) {
-                                        util::check(key_vec.find(key) == key_vec.end(),
-                                                    "Cannot replace atom key in in-memory storage");
+                                        if (key_vec.find(key) != key_vec.end()) {
+                                            throw DuplicateKeyException(key);
+                                        }
 
                                         key_vec.try_emplace(key, kv.segment());
                                     }

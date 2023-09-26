@@ -98,7 +98,7 @@ in environment variables. You can manually configure which profile is being used
 You may want to restrict access for the ArcticDB library to a specific path within the bucket. To do this, you can use the `path_prefix` parameter:
 
 ```python
->>> ac = Arctic('s3s://s3.eu-west-2.amazonaws.com:arcticdb-test-bucket?path_prefix=test/&aws_auth=true')
+>>> ac = Arctic('s3s://s3.eu-west-2.amazonaws.com:arcticdb-test-bucket?path_prefix=test&aws_auth=true')
 ```
 
 #### Azure configuration

@@ -41,10 +41,12 @@ AzureStorage::AzureStorage(const LibraryPath &library_path, OpenMode mode, const
 }
 
 Azure::Storage::Blobs::BlobClientOptions AzureStorage::get_client_options(const Config &conf) {
-    Azure::Core::Http::CurlTransportOptions curl_transport_options;
-    curl_transport_options.CAInfo = conf.ca_cert_path();
     BlobClientOptions client_options;
-    client_options.Transport.Transport = std::make_shared<Azure::Core::Http::CurlTransport>(curl_transport_options);
+    if (!conf.ca_cert_path().empty()) {//WARNING: Setting ca_cert_path will force Azure sdk uses libcurl as backend support, instead of winhttp
+        Azure::Core::Http::CurlTransportOptions curl_transport_options;
+        curl_transport_options.CAInfo = conf.ca_cert_path();
+        client_options.Transport.Transport = std::make_shared<Azure::Core::Http::CurlTransport>(curl_transport_options);
+    }
     return client_options;
 }
 
