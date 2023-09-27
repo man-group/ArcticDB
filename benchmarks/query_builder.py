@@ -6,20 +6,21 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 from arcticdb import Arctic
+from arcticdb.version_store.processing import QueryBuilder
 
 from .common import *
 
-class QueryBuilder:
+class QueryBuilderFunctions:
     number = 5
     timeout = 6000
 
-    params = ([10_000_000, 100_000_000])
+    params = ([10_000, 100_000])
     param_names = ['num_rows']
 
     def __init__(self):
-        self.ac = Arctic("lmdb://query_builder?map_size=10GB")
+        self.ac = Arctic("lmdb://query_builder")
 
-        num_rows = QueryBuilder.params
+        num_rows = QueryBuilderFunctions.params
         lib = "query_builder"
         self.ac.delete_library(lib)
         self.ac.create_library(lib)
