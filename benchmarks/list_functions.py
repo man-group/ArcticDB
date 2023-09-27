@@ -1,6 +1,6 @@
 from arcticdb import Arctic
 
-from common import *
+from .common import *
 
 class BasicFunctions:
     """

@@ -4,7 +4,7 @@ from arcticdb.version_store.library import (
     ReadRequest
 )
 
-from common import *
+from .common import *
 
 class BasicFunctions:
     """
