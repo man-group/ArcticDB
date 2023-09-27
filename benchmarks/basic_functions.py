@@ -22,15 +22,16 @@ class BasicFunctions:
 
     def __init__(self):
         self.ac = Arctic("lmdb://basic_functions")
+        num_rows, num_symbols = BasicFunctions.params
 
-        rows, num_symbols = BasicFunctions.params
-        for num_row in rows:
-            lib = get_prewritten_lib_name(num_row)
+        self.dfs = {rows: generate_pseudo_random_dataframe(rows) for rows in num_rows}
+        for rows in num_rows:
+            lib = get_prewritten_lib_name(rows)
             self.ac.delete_library(lib)
             self.ac.create_library(lib)
             lib = self.ac[lib]
             for sym in range(num_symbols[-1]):
-                lib.write(f"{sym}_sym", generate_pseudo_random_dataframe(num_row))
+                lib.write(f"{sym}_sym", self.dfs[rows])
 
     def setup(self, rows, num_symbols):
         pass
@@ -43,31 +44,31 @@ class BasicFunctions:
     def time_write(self, rows, num_symbols):
         lib = self.get_fresh_lib()
         for sym in range(num_symbols):
-            lib.write(f"{sym}_sym", generate_pseudo_random_dataframe(rows))
+            lib.write(f"{sym}_sym", self.dfs[rows])
 
     def peakmem_write(self, rows, num_symbols):
         lib = self.get_fresh_lib()
         for sym in range(num_symbols):
-            lib.write(f"{sym}_sym", generate_pseudo_random_dataframe(rows))
+            lib.write(f"{sym}_sym", self.dfs[rows])
 
     def time_write_staged(self, rows, num_symbols):
         lib = self.get_fresh_lib()
         for sym in range(num_symbols):
-            lib.write(f"{sym}_sym", generate_pseudo_random_dataframe(rows), staged=True)
+            lib.write(f"{sym}_sym", self.dfs[rows], staged=True)
 
     def peakmem_write_staged(self, rows, _):
         lib = self.get_fresh_lib()
-        lib.write("staged_sym", generate_pseudo_random_dataframe(rows))
+        lib.write("staged_sym", self.dfs[rows])
 
     def time_write_batch(self, rows, num_symbols):
         lib = self.get_fresh_lib()
-        df = generate_pseudo_random_dataframe(rows)
+        df = self.dfs[rows]
         payloads = [WritePayload(f"{sym}_sym", df) for sym in range(num_symbols)]
         lib.write_batch(payloads)
 
     def peakmem_write_batch(self, rows, num_symbols):
         lib = self.get_fresh_lib()
-        df = generate_pseudo_random_dataframe(rows)
+        df = self.dfs[rows]
         payloads = [WritePayload(f"{sym}_sym", df) for sym in range(num_symbols)]
         lib.write_batch(payloads)
 

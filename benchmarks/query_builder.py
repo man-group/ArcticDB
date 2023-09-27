@@ -30,15 +30,52 @@ class QueryBuilder:
     def setup(self, num_rows):
         pass
 
-    def time_groupby_agg(self, num_rows):
+    # The names are based on the queries used here: https://duckdblabs.github.io/db-benchmark/
+    def time_query_1(self, num_rows):
         lib = self.ac["query_builder"]
         q = QueryBuilder()
         q = q.groupby("id1").agg({"v1": "sum"})
         _ = lib.read(f"{num_rows}_rows", query_builder=q)
 
-    def peakmem_groupby_agg(self, num_rows):
+    def peakmem_query_1(self, num_rows):
         lib = self.ac["query_builder"]
         q = QueryBuilder()
         q = q.groupby("id1").agg({"v1": "sum"})
+        _ = lib.read(f"{num_rows}_rows", query_builder=q)
+
+    def time_query_3(self, num_rows):
+        lib = self.ac["query_builder"]
+        q = QueryBuilder()
+        q = q.groupby("id3").agg({"v1": "sum", "v3": "sum"})
+        _ = lib.read(f"{num_rows}_rows", query_builder=q)
+
+    def peakmem_query_3(self, num_rows):
+        lib = self.ac["query_builder"]
+        q = QueryBuilder()
+        q = q.groupby("id3").agg({"v1": "sum", "v3": "sum"})
+        _ = lib.read(f"{num_rows}_rows", query_builder=q)
+
+    def time_query_4(self, num_rows):
+        lib = self.ac["query_builder"]
+        q = QueryBuilder()
+        q = q.groupby("id6").agg({"v1": "sum", "v2": "sum"})
+        _ = lib.read(f"{num_rows}_rows", query_builder=q)
+
+    def peakmem_query_4(self, num_rows):
+        lib = self.ac["query_builder"]
+        q = QueryBuilder()
+        q = q.groupby("id6").agg({"v1": "sum", "v2": "sum"})
+        _ = lib.read(f"{num_rows}_rows", query_builder=q)
+
+    def time_query_adv_query_2(self, num_rows):
+        lib = self.ac["query_builder"]
+        q = QueryBuilder()
+        q = q.groupby("id3").agg({"v1": "max", "v2": "min"})
+        _ = lib.read(f"{num_rows}_rows", query_builder=q)
+
+    def peakmem_query_adv_query_2(self, num_rows):
+        lib = self.ac["query_builder"]
+        q = QueryBuilder()
+        q = q.groupby("id3").agg({"v1": "max", "v2": "min"})
         _ = lib.read(f"{num_rows}_rows", query_builder=q)
 

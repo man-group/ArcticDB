@@ -234,6 +234,7 @@ jobs:
         run: |
           python -m asv machine --yes
           git config --global --add safe.directory /__w/ArcticDB/ArcticDB
+          python -m asv run --bench just-discover
           python -m asv run -v --show-stderr HASHFILE:hashes_to_benchmark.txt
           python -m asv publish
           git add .asv/results/*
@@ -281,6 +282,7 @@ jobs:
         run: |
           python -m asv machine --yes
           git config --global --add safe.directory /__w/ArcticDB/ArcticDB
+          python -m asv run --bench just-discover
           python -m asv run -v --show-stderr HASHFILE:hashes_to_benchmark.txt
           python -m asv publish
           git add .asv/results/*
