@@ -24,7 +24,7 @@ class QueryBuilder:
         self.ac.delete_library(lib)
         self.ac.create_library(lib)
         lib = self.ac[lib]
-        for rows in range(num_rows):
+        for rows in num_rows:
             lib.write(f"{rows}_rows", generate_benchmark_df(rows))
 
     def setup(self, num_rows):
