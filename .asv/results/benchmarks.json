@@ -1,0 +1,516 @@
+{
+    "basic_functions.BasicFunctions.peakmem_read": {
+        "code": "class BasicFunctions:\n    def peakmem_read(self, rows, num_symbols):\n        lib = self.ac[get_prewritten_lib_name(rows)]\n        COLS = ['value']\n        _ = [lib.read(f\"{sym}_sym\", columns=COLS).data for sym in range(num_symbols)]\n\n    def setup(self, rows, num_symbols):\n        pass",
+        "name": "basic_functions.BasicFunctions.peakmem_read",
+        "param_names": [
+            "rows",
+            "num_symbols"
+        ],
+        "params": [
+            [
+                "5000",
+                "10000"
+            ],
+            [
+                "500",
+                "1000"
+            ]
+        ],
+        "timeout": 6000,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "5e6c3213053ee73a7af286ea4bb673fbe2416789ef287f0d959e71b679bbb154"
+    },
+    "basic_functions.BasicFunctions.peakmem_read_batch": {
+        "code": "class BasicFunctions:\n    def peakmem_read_batch(self, rows, num_symbols):\n        lib = self.ac[get_prewritten_lib_name(rows)]\n        COLS = ['value']\n        read_reqs = [ReadRequest(f\"{sym}_sym\", columns=COLS) for sym in range(num_symbols)]\n        _ = lib .read_batch(read_reqs)\n\n    def setup(self, rows, num_symbols):\n        pass",
+        "name": "basic_functions.BasicFunctions.peakmem_read_batch",
+        "param_names": [
+            "rows",
+            "num_symbols"
+        ],
+        "params": [
+            [
+                "5000",
+                "10000"
+            ],
+            [
+                "500",
+                "1000"
+            ]
+        ],
+        "timeout": 6000,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "74e82a4d1f48848510a2b9555cd7f1aa820ba65319fc6e5d6fbabe4a1e6c6c4e"
+    },
+    "basic_functions.BasicFunctions.peakmem_write": {
+        "code": "class BasicFunctions:\n    def peakmem_write(self, rows, num_symbols):\n        lib = self.get_fresh_lib()\n        for sym in range(num_symbols):\n            lib.write(f\"{sym}_sym\", self.dfs[rows])\n\n    def setup(self, rows, num_symbols):\n        pass",
+        "name": "basic_functions.BasicFunctions.peakmem_write",
+        "param_names": [
+            "rows",
+            "num_symbols"
+        ],
+        "params": [
+            [
+                "5000",
+                "10000"
+            ],
+            [
+                "500",
+                "1000"
+            ]
+        ],
+        "timeout": 6000,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "bcbb9d5409a47df917538fae3fd06bca264b23cee44edd84fc90312957f41aa0"
+    },
+    "basic_functions.BasicFunctions.peakmem_write_batch": {
+        "code": "class BasicFunctions:\n    def peakmem_write_batch(self, rows, num_symbols):\n        lib = self.get_fresh_lib()\n        df = self.dfs[rows]\n        payloads = [WritePayload(f\"{sym}_sym\", df) for sym in range(num_symbols)]\n        lib.write_batch(payloads)\n\n    def setup(self, rows, num_symbols):\n        pass",
+        "name": "basic_functions.BasicFunctions.peakmem_write_batch",
+        "param_names": [
+            "rows",
+            "num_symbols"
+        ],
+        "params": [
+            [
+                "5000",
+                "10000"
+            ],
+            [
+                "500",
+                "1000"
+            ]
+        ],
+        "timeout": 6000,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "cd3215685dfb7a217ba11036de31102c6bf0d6a6b3bca2f1256e177bf36ed414"
+    },
+    "basic_functions.BasicFunctions.peakmem_write_staged": {
+        "code": "class BasicFunctions:\n    def peakmem_write_staged(self, rows, _):\n        lib = self.get_fresh_lib()\n        lib.write(\"staged_sym\", self.dfs[rows])\n\n    def setup(self, rows, num_symbols):\n        pass",
+        "name": "basic_functions.BasicFunctions.peakmem_write_staged",
+        "param_names": [
+            "rows",
+            "num_symbols"
+        ],
+        "params": [
+            [
+                "5000",
+                "10000"
+            ],
+            [
+                "500",
+                "1000"
+            ]
+        ],
+        "timeout": 6000,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "b06519b6e7e44836b9099e90c7de7c666b3374290f43dd4f689e9183433d797f"
+    },
+    "basic_functions.BasicFunctions.time_read": {
+        "code": "class BasicFunctions:\n    def time_read(self, rows, num_symbols):\n        lib = self.ac[get_prewritten_lib_name(rows)]\n        COLS = ['value']\n        _ = [lib.read(f\"{sym}_sym\", columns=COLS).data for sym in range(num_symbols)]\n\n    def setup(self, rows, num_symbols):\n        pass",
+        "min_run_count": 2,
+        "name": "basic_functions.BasicFunctions.time_read",
+        "number": 5,
+        "param_names": [
+            "rows",
+            "num_symbols"
+        ],
+        "params": [
+            [
+                "5000",
+                "10000"
+            ],
+            [
+                "500",
+                "1000"
+            ]
+        ],
+        "repeat": 0,
+        "rounds": 2,
+        "sample_time": 0.01,
+        "timeout": 6000,
+        "type": "time",
+        "unit": "seconds",
+        "version": "d5826130b32802cc47be4cfc06a65b183f9478c98f7474c6f4f7969c8d31b4de",
+        "warmup_time": -1
+    },
+    "basic_functions.BasicFunctions.time_read_batch": {
+        "code": "class BasicFunctions:\n    def time_read_batch(self, rows, num_symbols):\n        lib = self.ac[get_prewritten_lib_name(rows)]\n        COLS = ['value']\n        read_reqs = [ReadRequest(f\"{sym}_sym\", columns=COLS) for sym in range(num_symbols)]\n        _ = lib .read_batch(read_reqs)\n\n    def setup(self, rows, num_symbols):\n        pass",
+        "min_run_count": 2,
+        "name": "basic_functions.BasicFunctions.time_read_batch",
+        "number": 5,
+        "param_names": [
+            "rows",
+            "num_symbols"
+        ],
+        "params": [
+            [
+                "5000",
+                "10000"
+            ],
+            [
+                "500",
+                "1000"
+            ]
+        ],
+        "repeat": 0,
+        "rounds": 2,
+        "sample_time": 0.01,
+        "timeout": 6000,
+        "type": "time",
+        "unit": "seconds",
+        "version": "221f1ab3d7dead883f4f87a851e8714f0af2b3a8e588827bbd35e678d1d12f44",
+        "warmup_time": -1
+    },
+    "basic_functions.BasicFunctions.time_write": {
+        "code": "class BasicFunctions:\n    def time_write(self, rows, num_symbols):\n        lib = self.get_fresh_lib()\n        for sym in range(num_symbols):\n            lib.write(f\"{sym}_sym\", self.dfs[rows])\n\n    def setup(self, rows, num_symbols):\n        pass",
+        "min_run_count": 2,
+        "name": "basic_functions.BasicFunctions.time_write",
+        "number": 5,
+        "param_names": [
+            "rows",
+            "num_symbols"
+        ],
+        "params": [
+            [
+                "5000",
+                "10000"
+            ],
+            [
+                "500",
+                "1000"
+            ]
+        ],
+        "repeat": 0,
+        "rounds": 2,
+        "sample_time": 0.01,
+        "timeout": 6000,
+        "type": "time",
+        "unit": "seconds",
+        "version": "ac7e2a74b14107ff8a24a9b2ea95e1ec254c260e3954c5275ab5c1f58786abc1",
+        "warmup_time": -1
+    },
+    "basic_functions.BasicFunctions.time_write_batch": {
+        "code": "class BasicFunctions:\n    def time_write_batch(self, rows, num_symbols):\n        lib = self.get_fresh_lib()\n        df = self.dfs[rows]\n        payloads = [WritePayload(f\"{sym}_sym\", df) for sym in range(num_symbols)]\n        lib.write_batch(payloads)\n\n    def setup(self, rows, num_symbols):\n        pass",
+        "min_run_count": 2,
+        "name": "basic_functions.BasicFunctions.time_write_batch",
+        "number": 5,
+        "param_names": [
+            "rows",
+            "num_symbols"
+        ],
+        "params": [
+            [
+                "5000",
+                "10000"
+            ],
+            [
+                "500",
+                "1000"
+            ]
+        ],
+        "repeat": 0,
+        "rounds": 2,
+        "sample_time": 0.01,
+        "timeout": 6000,
+        "type": "time",
+        "unit": "seconds",
+        "version": "7ca283ff42996ba04846802a3767db8a012a5fe50c1b3d37c70bd5022846809d",
+        "warmup_time": -1
+    },
+    "basic_functions.BasicFunctions.time_write_staged": {
+        "code": "class BasicFunctions:\n    def time_write_staged(self, rows, num_symbols):\n        lib = self.get_fresh_lib()\n        for sym in range(num_symbols):\n            lib.write(f\"{sym}_sym\", self.dfs[rows], staged=True)\n\n    def setup(self, rows, num_symbols):\n        pass",
+        "min_run_count": 2,
+        "name": "basic_functions.BasicFunctions.time_write_staged",
+        "number": 5,
+        "param_names": [
+            "rows",
+            "num_symbols"
+        ],
+        "params": [
+            [
+                "5000",
+                "10000"
+            ],
+            [
+                "500",
+                "1000"
+            ]
+        ],
+        "repeat": 0,
+        "rounds": 2,
+        "sample_time": 0.01,
+        "timeout": 6000,
+        "type": "time",
+        "unit": "seconds",
+        "version": "358ef00d82fc4536b72371d19f5e5bba6fd5de24b7ae4da8ef0ecf3cd1dd002d",
+        "warmup_time": -1
+    },
+    "list_functions.ListFunctions.peakmem_list_symbols": {
+        "code": "class ListFunctions:\n    def peakmem_list_symbols(self, num_symbols):\n        lib = self.ac[f\"{num_symbols}_num_symbols\"]\n        _ = lib.list_symbols()\n\n    def setup(self, num_symbols):\n        pass",
+        "name": "list_functions.ListFunctions.peakmem_list_symbols",
+        "param_names": [
+            "num_symbols"
+        ],
+        "params": [
+            [
+                "500",
+                "1000"
+            ]
+        ],
+        "timeout": 6000,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "1b384df5edea31dcb41363008c553adee100e2e01271beaa333ccc0e58ea6259"
+    },
+    "list_functions.ListFunctions.peakmem_list_versions": {
+        "code": "class ListFunctions:\n    def peakmem_list_versions(self, num_symbols):\n        lib = self.ac[f\"{num_symbols}_num_symbols\"]\n        _ = lib.list_versions()\n\n    def setup(self, num_symbols):\n        pass",
+        "name": "list_functions.ListFunctions.peakmem_list_versions",
+        "param_names": [
+            "num_symbols"
+        ],
+        "params": [
+            [
+                "500",
+                "1000"
+            ]
+        ],
+        "timeout": 6000,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "b391f2d4b0210dd7656015ecc28ee85a002ab81b3919b86964bfd70fb254ff56"
+    },
+    "list_functions.ListFunctions.time_has_symbol": {
+        "code": "class ListFunctions:\n    def time_has_symbol(self, num_symbols):\n        lib = self.ac[f\"{num_symbols}_num_symbols\"]\n        _ = lib.has_symbol(\"500_sym\")\n\n    def setup(self, num_symbols):\n        pass",
+        "min_run_count": 2,
+        "name": "list_functions.ListFunctions.time_has_symbol",
+        "number": 5,
+        "param_names": [
+            "num_symbols"
+        ],
+        "params": [
+            [
+                "500",
+                "1000"
+            ]
+        ],
+        "repeat": 0,
+        "rounds": 2,
+        "sample_time": 0.01,
+        "timeout": 6000,
+        "type": "time",
+        "unit": "seconds",
+        "version": "83e945600be63943662ae6c05b5375361895ed25adc319ad6a5d2c60cac89dd6",
+        "warmup_time": -1
+    },
+    "list_functions.ListFunctions.time_list_symbols": {
+        "code": "class ListFunctions:\n    def time_list_symbols(self, num_symbols):\n        lib = self.ac[f\"{num_symbols}_num_symbols\"]\n        _ = lib.list_symbols()\n\n    def setup(self, num_symbols):\n        pass",
+        "min_run_count": 2,
+        "name": "list_functions.ListFunctions.time_list_symbols",
+        "number": 5,
+        "param_names": [
+            "num_symbols"
+        ],
+        "params": [
+            [
+                "500",
+                "1000"
+            ]
+        ],
+        "repeat": 0,
+        "rounds": 2,
+        "sample_time": 0.01,
+        "timeout": 6000,
+        "type": "time",
+        "unit": "seconds",
+        "version": "4c6ee882dfe48da6060cafe26ab08aeac65f6a6db4e1da92395c8d5a8001af1b",
+        "warmup_time": -1
+    },
+    "list_functions.ListFunctions.time_list_versions": {
+        "code": "class ListFunctions:\n    def time_list_versions(self, num_symbols):\n        lib = self.ac[f\"{num_symbols}_num_symbols\"]\n        _ = lib.list_versions()\n\n    def setup(self, num_symbols):\n        pass",
+        "min_run_count": 2,
+        "name": "list_functions.ListFunctions.time_list_versions",
+        "number": 5,
+        "param_names": [
+            "num_symbols"
+        ],
+        "params": [
+            [
+                "500",
+                "1000"
+            ]
+        ],
+        "repeat": 0,
+        "rounds": 2,
+        "sample_time": 0.01,
+        "timeout": 6000,
+        "type": "time",
+        "unit": "seconds",
+        "version": "48bcd62fefa425b4f29c1bd9dd9a9d09a062f56b42046cdf6cc819090f576925",
+        "warmup_time": -1
+    },
+    "query_builder.QueryBuilderFunctions.peakmem_query_1": {
+        "code": "class QueryBuilderFunctions:\n    def peakmem_query_1(self, num_rows):\n        lib = self.ac[\"query_builder\"]\n        q = QueryBuilder()\n        q = q.groupby(\"id1\").agg({\"v1\": \"sum\"})\n        _ = lib.read(f\"{num_rows}_rows\", query_builder=q)\n\n    def setup(self, num_rows):\n        pass",
+        "name": "query_builder.QueryBuilderFunctions.peakmem_query_1",
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "10000",
+                "100000"
+            ]
+        ],
+        "timeout": 6000,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "17c8bbb44ac44dc4900f3431f5f7116d7f56d131752f4006993ed26923fb9459"
+    },
+    "query_builder.QueryBuilderFunctions.peakmem_query_3": {
+        "code": "class QueryBuilderFunctions:\n    def peakmem_query_3(self, num_rows):\n        lib = self.ac[\"query_builder\"]\n        q = QueryBuilder()\n        q = q.groupby(\"id3\").agg({\"v1\": \"sum\", \"v3\": \"sum\"})\n        _ = lib.read(f\"{num_rows}_rows\", query_builder=q)\n\n    def setup(self, num_rows):\n        pass",
+        "name": "query_builder.QueryBuilderFunctions.peakmem_query_3",
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "10000",
+                "100000"
+            ]
+        ],
+        "timeout": 6000,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "dfb68ad3cd81e36dbd9bc3abdd5e94c05ec61c267731d31f2540b3d70dae42d9"
+    },
+    "query_builder.QueryBuilderFunctions.peakmem_query_4": {
+        "code": "class QueryBuilderFunctions:\n    def peakmem_query_4(self, num_rows):\n        lib = self.ac[\"query_builder\"]\n        q = QueryBuilder()\n        q = q.groupby(\"id6\").agg({\"v1\": \"sum\", \"v2\": \"sum\"})\n        _ = lib.read(f\"{num_rows}_rows\", query_builder=q)\n\n    def setup(self, num_rows):\n        pass",
+        "name": "query_builder.QueryBuilderFunctions.peakmem_query_4",
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "10000",
+                "100000"
+            ]
+        ],
+        "timeout": 6000,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "be0295a62e69d3e5295ef211711ff37d65ee0d793248d350dd3a80c18552b89e"
+    },
+    "query_builder.QueryBuilderFunctions.peakmem_query_adv_query_2": {
+        "code": "class QueryBuilderFunctions:\n    def peakmem_query_adv_query_2(self, num_rows):\n        lib = self.ac[\"query_builder\"]\n        q = QueryBuilder()\n        q = q.groupby(\"id3\").agg({\"v1\": \"max\", \"v2\": \"min\"})\n        _ = lib.read(f\"{num_rows}_rows\", query_builder=q)\n\n    def setup(self, num_rows):\n        pass",
+        "name": "query_builder.QueryBuilderFunctions.peakmem_query_adv_query_2",
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "10000",
+                "100000"
+            ]
+        ],
+        "timeout": 6000,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "80557e63644ce64b63d0413f09e4f20d71ad206e01ce9b901b27516d69e8b6e5"
+    },
+    "query_builder.QueryBuilderFunctions.time_query_1": {
+        "code": "class QueryBuilderFunctions:\n    def time_query_1(self, num_rows):\n        lib = self.ac[\"query_builder\"]\n        q = QueryBuilder()\n        q = q.groupby(\"id1\").agg({\"v1\": \"sum\"})\n        _ = lib.read(f\"{num_rows}_rows\", query_builder=q)\n\n    def setup(self, num_rows):\n        pass",
+        "min_run_count": 2,
+        "name": "query_builder.QueryBuilderFunctions.time_query_1",
+        "number": 5,
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "10000",
+                "100000"
+            ]
+        ],
+        "repeat": 0,
+        "rounds": 2,
+        "sample_time": 0.01,
+        "timeout": 6000,
+        "type": "time",
+        "unit": "seconds",
+        "version": "87596d0aa00bde1ee180eb2371b2885694a6c1d026e473408b4615e3479a0a1e",
+        "warmup_time": -1
+    },
+    "query_builder.QueryBuilderFunctions.time_query_3": {
+        "code": "class QueryBuilderFunctions:\n    def time_query_3(self, num_rows):\n        lib = self.ac[\"query_builder\"]\n        q = QueryBuilder()\n        q = q.groupby(\"id3\").agg({\"v1\": \"sum\", \"v3\": \"sum\"})\n        _ = lib.read(f\"{num_rows}_rows\", query_builder=q)\n\n    def setup(self, num_rows):\n        pass",
+        "min_run_count": 2,
+        "name": "query_builder.QueryBuilderFunctions.time_query_3",
+        "number": 5,
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "10000",
+                "100000"
+            ]
+        ],
+        "repeat": 0,
+        "rounds": 2,
+        "sample_time": 0.01,
+        "timeout": 6000,
+        "type": "time",
+        "unit": "seconds",
+        "version": "e79aa028e38a2fce53b0fdd47b954b940b8b084844eef41e348e354e7628e747",
+        "warmup_time": -1
+    },
+    "query_builder.QueryBuilderFunctions.time_query_4": {
+        "code": "class QueryBuilderFunctions:\n    def time_query_4(self, num_rows):\n        lib = self.ac[\"query_builder\"]\n        q = QueryBuilder()\n        q = q.groupby(\"id6\").agg({\"v1\": \"sum\", \"v2\": \"sum\"})\n        _ = lib.read(f\"{num_rows}_rows\", query_builder=q)\n\n    def setup(self, num_rows):\n        pass",
+        "min_run_count": 2,
+        "name": "query_builder.QueryBuilderFunctions.time_query_4",
+        "number": 5,
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "10000",
+                "100000"
+            ]
+        ],
+        "repeat": 0,
+        "rounds": 2,
+        "sample_time": 0.01,
+        "timeout": 6000,
+        "type": "time",
+        "unit": "seconds",
+        "version": "76a1b1e4bacb52fcdad2e62539545df75e83130ca1d62236b64bb7e39372278c",
+        "warmup_time": -1
+    },
+    "query_builder.QueryBuilderFunctions.time_query_adv_query_2": {
+        "code": "class QueryBuilderFunctions:\n    def time_query_adv_query_2(self, num_rows):\n        lib = self.ac[\"query_builder\"]\n        q = QueryBuilder()\n        q = q.groupby(\"id3\").agg({\"v1\": \"max\", \"v2\": \"min\"})\n        _ = lib.read(f\"{num_rows}_rows\", query_builder=q)\n\n    def setup(self, num_rows):\n        pass",
+        "min_run_count": 2,
+        "name": "query_builder.QueryBuilderFunctions.time_query_adv_query_2",
+        "number": 5,
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "10000",
+                "100000"
+            ]
+        ],
+        "repeat": 0,
+        "rounds": 2,
+        "sample_time": 0.01,
+        "timeout": 6000,
+        "type": "time",
+        "unit": "seconds",
+        "version": "64d6db363d0bba782c4d734d03e082ab4b8fd0f1b93d2b21ea09ed42717248e4",
+        "warmup_time": -1
+    },
+    "version": 2
+}
