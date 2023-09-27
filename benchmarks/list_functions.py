@@ -27,7 +27,7 @@ class ListFunctions:
             for sym in range(syms):
                 lib.write(f"{sym}_sym", generate_pseudo_random_dataframe(ListFunctions.rows))
 
-    def setup(self, _):
+    def setup(self, num_symbols):
         pass
 
     def time_list_symbols(self, num_symbols):

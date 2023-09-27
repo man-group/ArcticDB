@@ -29,7 +29,7 @@ class BasicFunctions:
             for sym in range(num_symbols[-1]):
                 lib.write(f"{sym}_sym", generate_pseudo_random_dataframe(num_row))
 
-    def setup(self, _, _):
+    def setup(self, rows, num_symbols):
         pass
 
     def get_fresh_lib(self):
@@ -82,11 +82,11 @@ class BasicFunctions:
         lib = self.ac[get_prewritten_lib_name(rows)]
         COLS = ['value']
         read_reqs = [ReadRequest(f"{sym}_sym", columns=COLS) for sym in range(num_symbols)]
-        _ =lib .read_batch(read_reqs)
+        _ = lib .read_batch(read_reqs)
 
     def peakmem_read_batch(self, rows, num_symbols):
         lib = self.ac[get_prewritten_lib_name(rows)]
         COLS = ['value']
         read_reqs = [ReadRequest(f"{sym}_sym", columns=COLS) for sym in range(num_symbols)]
-        _ =lib .read_batch(read_reqs)
+        _ = lib .read_batch(read_reqs)
     
