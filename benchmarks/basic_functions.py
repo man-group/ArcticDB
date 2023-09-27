@@ -29,7 +29,7 @@ class BasicFunctions:
             for sym in range(num_symbols[-1]):
                 lib.write(f"{sym}_sym", generate_pseudo_random_dataframe(num_row))
 
-    def setup(self, rows, num_symbols):
+    def setup(self, _, _):
         pass
 
     def get_fresh_lib(self):
@@ -47,9 +47,10 @@ class BasicFunctions:
         for sym in range(num_symbols):
             lib.write(f"{sym}_sym", generate_pseudo_random_dataframe(rows))
 
-    def time_write_staged(self, rows, _):
+    def time_write_staged(self, rows, num_symbols):
         lib = self.get_fresh_lib()
-        lib.write("staged_sym", generate_pseudo_random_dataframe(rows))
+        for sym in range(num_symbols):
+            lib.write(f"{sym}_sym", generate_pseudo_random_dataframe(rows), staged=True)
 
     def peakmem_write_staged(self, rows, _):
         lib = self.get_fresh_lib()
