@@ -27,7 +27,7 @@ import pandas as pd
 from datetime import datetime, timezone
 import numpy as np
 
-from arcticdb.config import MACOS_CONDA_BUILD
+from arcticdb.config import MACOS_CONDA_BUILD, MACOS_CONDA_BUILD_SKIP_REASON
 from arcticdb.util.test import assert_frame_equal, RUN_MONGO_TEST
 
 from azure.storage.blob import BlobServiceClient
@@ -1098,6 +1098,7 @@ def test_azure_no_ca_path(azurite_azure_test_connection_setting):
     )
 
 
+@pytest.mark.skipif(MACOS_CONDA_BUILD, reason=MACOS_CONDA_BUILD_SKIP_REASON)
 def test_azure_sas_token(azure_account_sas_token, azurite_azure_test_connection_setting):
     endpoint, container, credential_name, _, _ = azurite_azure_test_connection_setting
     ac = Arctic(
