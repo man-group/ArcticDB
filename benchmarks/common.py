@@ -17,10 +17,31 @@ def generate_pseudo_random_dataframe(n, freq="S", end_timestamp="1/1/2023"):
     # Generate random values such that their sum is equal to N
     values = np.random.uniform(0, 2, size=n)
     # Generate timestamps
-    timestamps = pd.date_range(end=end_timestamp, periods=n, freq="S")
+    timestamps = pd.date_range(end=end_timestamp, periods=n, freq=freq)
     # Create dataframe
-    df = pd.DataFrame({"timestamp": timestamps, "value": values[0]})
+    df = pd.DataFrame({"timestamp": timestamps, "value": values})
     return df
+
+def generate_benchmark_df(N, K=100, freq="S", end_timestamp="1/1/2023"):
+    timestamps = pd.date_range(end=end_timestamp, periods=N, freq=freq)
+    
+    # Based on https://github.com/duckdblabs/db-benchmark/blob/master/_data/groupby-datagen.R#L19
+    DT = pd.DataFrame()
+    DT["id1"] = np.random.choice([f'id{str(i).zfill(3)}' for i in range(1, K+1)], N)
+    DT["id2"] = np.random.choice([f'id{str(i).zfill(3)}' for i in range(1, K+1)], N)
+    DT["id3"] = np.random.choice([f'id{str(i).zfill(10)}' for i in range(1, N//K + 1)], N)
+    DT["id4"] = np.random.choice(range(1, K+1), N)
+    DT["id5"] = np.random.choice(range(1, K+1), N)
+    DT["id6"] = np.random.choice(range(1, N//K + 1), N)
+    DT["v1"] = np.random.choice(range(1, 6), N)
+    DT["v2"] = np.random.choice(range(1, 16), N)
+    DT["v3"] = np.round(np.random.uniform(0, 100, N), 6)
+
+    assert len(timestamps) == len(DT)
+
+    DT.index = timestamps
+
+    return DT
 
 def get_prewritten_lib_name(rows):
     return f"prewritten_{rows}"
