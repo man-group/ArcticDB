@@ -93,7 +93,7 @@ def test_empty_df(basic_store):
     assert df2.empty
 
 
-def test_df_datetime_multi_index_with_timezones(object_and_lmdb_version_store):
+def test_df_datetime_multi_index_with_timezones(object_and_mem_and_lmdb_version_store):
     zone = "America/Chicago"
     df = DataFrame(
         data=["A", "BC", "DEF"],
@@ -104,7 +104,7 @@ def test_df_datetime_multi_index_with_timezones(object_and_lmdb_version_store):
     )
     first_index, second_index = df.index.levels
     assert first_index.tzinfo.zone == second_index.tzinfo.zone == zone
-    object_and_lmdb_version_store.write("pandastz", df)
-    saved_df = object_and_lmdb_version_store.read("pandastz").data
+    object_and_mem_and_lmdb_version_store.write("pandastz", df)
+    saved_df = object_and_mem_and_lmdb_version_store.read("pandastz").data
     first_index_s, second_index_s = saved_df.index.levels
     assert first_index_s.tzinfo.zone == second_index_s.tzinfo.zone == zone

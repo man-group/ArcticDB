@@ -699,6 +699,26 @@ def local_object_version_store_prune_previous(local_object_store_factory):
 @pytest.fixture(
     params=[
         "version_store_factory",
+        pytest.param(
+            "real_s3_store_factory",
+            marks=pytest.mark.skipif(
+                not PERSISTENT_STORAGE_TESTS_ENABLED,
+                reason="This store can be used only if the persistent storage tests are enabled",
+            ),
+        ),
+    ],
+)
+def version_store_and_real_s3_basic_store_factory(request):
+    """
+    Just the version_store and real_s3 specifically for the test test_interleaved_store_read
+    where the in_memory_store_factory is not designed to have this functionality.
+    """
+    return request.getfixturevalue(request.param)
+
+
+@pytest.fixture(
+    params=[
+        "version_store_factory",
         "in_memory_store_factory",
         pytest.param(
             "real_s3_store_factory",
@@ -710,12 +730,6 @@ def local_object_version_store_prune_previous(local_object_store_factory):
     ],
 )
 def basic_store_factory(request):
-    """
-    Designed to test the bare minimum of stores in integration/stress tests
-     - LMDB for local storage
-     - mem for in-memory storage
-     - AWS S3 for persistent storage, if enabled
-    """
     store_factory = request.getfixturevalue(request.param)
     return store_factory
 
@@ -725,6 +739,7 @@ def basic_store(basic_store_factory):
     """
     Designed to test the bare minimum of stores
      - LMDB for local storage
+     - mem for in-memory storage
      - AWS S3 for persistent storage, if enabled
     """
     return basic_store_factory()
@@ -1119,7 +1134,7 @@ def object_and_mem_and_lmdb_version_store(request):
             "s3_version_store_dynamic_schema_v1",
             "s3_version_store_dynamic_schema_v2",
             "azure_version_store_dynamic_schema",
-            "memory_version_store_dynamic_schema",
+            "in_memory_version_store_dynamic_schema",
             pytest.param(
                 "real_s3_version_store_dynamic_schema",
                 marks=pytest.mark.skipif(
@@ -1186,5 +1201,4 @@ def in_memory_version_store_tiny_segment(in_memory_store_factory):
 
 @pytest.fixture(params=["lmdb_version_store_tiny_segment", "in_memory_version_store_tiny_segment"])
 def lmdb_or_in_memory_version_store_tiny_segment(request):
-    # We do not need the encoding_version parameter here for some reason, despite needing it before.
     return request.getfixturevalue(request.param)
