@@ -235,10 +235,10 @@ jobs:
           python -m asv machine --yes
           git config --global --add safe.directory /__w/ArcticDB/ArcticDB
           python -m asv run -v --show-stderr HASHFILE:hashes_to_benchmark.txt
+          git pull
           python -m asv publish
           git add .asv/results/*
           git commit -m "Update ASV Results"
-          git pull
           git push --force origin HEAD
           python -m asv gh-pages --rewrite
         # env:
@@ -251,46 +251,46 @@ jobs:
           name: asv-benchmarking-artifact-linux
           path: .asv/html/
 
-  benchmark_macos:
-    runs-on: macos-latest
-    permissions:
-      contents: write
+  # benchmark_macos:
+  #   runs-on: macos-latest
+  #   permissions:
+  #     contents: write
 
-    steps:
-      - uses: actions/checkout@v3
-        with:
-          submodules: recursive
-          fetch-depth: 0
+  #   steps:
+  #     - uses: actions/checkout@v3
+  #       with:
+  #         submodules: recursive
+  #         fetch-depth: 0
 
-      - name: Get number of CPU cores
-        uses: SimenB/github-actions-cpu-cores@v1
-        id: cpu-cores
+  #     - name: Get number of CPU cores
+  #       uses: SimenB/github-actions-cpu-cores@v1
+  #       id: cpu-cores
 
-      - name: Install Conda environment from environment_unix.yml
-        uses: mamba-org/setup-micromamba@v1
-        with:
-          environment-file: environment_unix.yml
-          environment-name: arcticdb
-          init-shell: >-
-            bash
-          cache-environment: true
-          post-cleanup: 'all'
+  #     - name: Install Conda environment from environment_unix.yml
+  #       uses: mamba-org/setup-micromamba@v1
+  #       with:
+  #         environment-file: environment_unix.yml
+  #         environment-name: arcticdb
+  #         init-shell: >-
+  #           bash
+  #         cache-environment: true
+  #         post-cleanup: 'all'
 
-      - name: Benchmark with asv
-        shell: bash -l {0}
-        run: |
-          python -m asv machine --yes
-          git config --global --add safe.directory /__w/ArcticDB/ArcticDB
-          python -m asv run -v --show-stderr HASHFILE:hashes_to_benchmark.txt
-          python -m asv publish
-          git add .asv/results/*
-          git commit -m "Update ASV Results"
-          git pull
-          git push --force origin HEAD
-          python -m asv gh-pages --rewrite
+  #     - name: Benchmark with asv
+  #       shell: bash -l {0}
+  #       run: |
+  #         python -m asv machine --yes
+  #         git config --global --add safe.directory /__w/ArcticDB/ArcticDB
+  #         python -m asv run -v --show-stderr HASHFILE:hashes_to_benchmark.txt
+  #         git pull
+  #         python -m asv publish
+  #         git add .asv/results/*
+  #         git commit -m "Update ASV Results"
+  #         git push --force origin HEAD
+  #         python -m asv gh-pages --rewrite
 
-      - name: Upload Benchmarking output
-        uses: actions/upload-artifact@v3
-        with:
-          name: asv-benchmarking-artifact-macos
-          path: .asv/html/
+  #     - name: Upload Benchmarking output
+  #       uses: actions/upload-artifact@v3
+  #       with:
+  #         name: asv-benchmarking-artifact-macos
+  #         path: .asv/html/
