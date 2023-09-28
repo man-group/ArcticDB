@@ -229,6 +229,12 @@ jobs:
           cache-environment: true
           post-cleanup: 'all'
 
+      - name: Set persistent storage variables
+        uses: ./.github/actions/set_persistent_storage_env_vars
+        with:
+          aws_access_key: "${{ secrets.AWS_S3_ACCESS_KEY }}"
+          aws_secret_key: "${{ secrets.AWS_S3_SECRET_KEY }}"
+
       - name: Benchmark with asv
         shell: bash -l {0}
         run: |
@@ -275,6 +281,12 @@ jobs:
             bash
           cache-environment: true
           post-cleanup: 'all'
+
+      - name: Set persistent storage variables
+        uses: ./.github/actions/set_persistent_storage_env_vars
+        with:
+          aws_access_key: "${{ secrets.AWS_S3_ACCESS_KEY }}"
+          aws_secret_key: "${{ secrets.AWS_S3_SECRET_KEY }}"
 
       - name: Benchmark with asv
         shell: bash -l {0}
