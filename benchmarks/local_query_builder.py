@@ -10,7 +10,7 @@ from arcticdb.version_store.processing import QueryBuilder
 
 from .common import *
 
-class QueryBuilderFunctions:
+class LocalQueryBuilderFunctions:
     number = 5
     timeout = 6000
 
@@ -20,62 +20,66 @@ class QueryBuilderFunctions:
     def __init__(self):
         self.ac = Arctic("lmdb://query_builder")
 
-        num_rows = QueryBuilderFunctions.params
-        lib = "query_builder"
-        self.ac.delete_library(lib)
-        self.ac.create_library(lib)
-        lib = self.ac[lib]
+        num_rows = LocalQueryBuilderFunctions.params
+        self.lib_name = "query_builder"
+        self.ac.delete_library(self.lib_name)
+        self.ac.create_library(self.lib_name)
+        lib = self.ac[self.lib_name]
         for rows in num_rows:
             lib.write(f"{rows}_rows", generate_benchmark_df(rows))
+
+    def __del__(self):
+        for lib in self.ac.list_libraries():
+            self.ac.delete_library(lib)
 
     def setup(self, num_rows):
         pass
 
     # The names are based on the queries used here: https://duckdblabs.github.io/db-benchmark/
     def time_query_1(self, num_rows):
-        lib = self.ac["query_builder"]
+        lib = self.ac[self.lib_name]
         q = QueryBuilder()
         q = q.groupby("id1").agg({"v1": "sum"})
         _ = lib.read(f"{num_rows}_rows", query_builder=q)
 
     def peakmem_query_1(self, num_rows):
-        lib = self.ac["query_builder"]
+        lib = self.ac[self.lib_name]
         q = QueryBuilder()
         q = q.groupby("id1").agg({"v1": "sum"})
         _ = lib.read(f"{num_rows}_rows", query_builder=q)
 
     def time_query_3(self, num_rows):
-        lib = self.ac["query_builder"]
+        lib = self.ac[self.lib_name]
         q = QueryBuilder()
         q = q.groupby("id3").agg({"v1": "sum", "v3": "sum"})
         _ = lib.read(f"{num_rows}_rows", query_builder=q)
 
     def peakmem_query_3(self, num_rows):
-        lib = self.ac["query_builder"]
+        lib = self.ac[self.lib_name]
         q = QueryBuilder()
         q = q.groupby("id3").agg({"v1": "sum", "v3": "sum"})
         _ = lib.read(f"{num_rows}_rows", query_builder=q)
 
     def time_query_4(self, num_rows):
-        lib = self.ac["query_builder"]
+        lib = self.ac[self.lib_name]
         q = QueryBuilder()
         q = q.groupby("id6").agg({"v1": "sum", "v2": "sum"})
         _ = lib.read(f"{num_rows}_rows", query_builder=q)
 
     def peakmem_query_4(self, num_rows):
-        lib = self.ac["query_builder"]
+        lib = self.ac[self.lib_name]
         q = QueryBuilder()
         q = q.groupby("id6").agg({"v1": "sum", "v2": "sum"})
         _ = lib.read(f"{num_rows}_rows", query_builder=q)
 
     def time_query_adv_query_2(self, num_rows):
-        lib = self.ac["query_builder"]
+        lib = self.ac[self.lib_name]
         q = QueryBuilder()
         q = q.groupby("id3").agg({"v1": "max", "v2": "min"})
         _ = lib.read(f"{num_rows}_rows", query_builder=q)
 
     def peakmem_query_adv_query_2(self, num_rows):
-        lib = self.ac["query_builder"]
+        lib = self.ac[self.lib_name]
         q = QueryBuilder()
         q = q.groupby("id3").agg({"v1": "max", "v2": "min"})
         _ = lib.read(f"{num_rows}_rows", query_builder=q)

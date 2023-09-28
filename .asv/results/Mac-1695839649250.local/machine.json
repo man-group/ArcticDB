@@ -1,9 +1,0 @@
-{
-    "arch": "x86_64",
-    "cpu": "Intel(R) Xeon(R) CPU E5-1650 v2 @ 3.50GHz",
-    "machine": "Mac-1695839649250.local",
-    "num_cpu": "3",
-    "os": "Darwin 21.6.0",
-    "ram": "15032385536",
-    "version": 1
-}

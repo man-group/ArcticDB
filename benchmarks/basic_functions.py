@@ -33,6 +33,10 @@ class BasicFunctions:
             for sym in range(num_symbols[-1]):
                 lib.write(f"{sym}_sym", self.dfs[rows])
 
+    def __del__(self):
+        for lib in self.ac.list_libraries():
+            self.ac.delete_library(lib)
+
     def setup(self, rows, num_symbols):
         pass
 
@@ -74,23 +78,62 @@ class BasicFunctions:
 
     def time_read(self, rows, num_symbols):
         lib = self.ac[get_prewritten_lib_name(rows)]
-        COLS = ['value']
-        _ = [lib.read(f"{sym}_sym", columns=COLS).data for sym in range(num_symbols)]
+        _ = [lib.read(f"{sym}_sym").data for sym in range(num_symbols)]
 
     def peakmem_read(self, rows, num_symbols):
+        lib = self.ac[get_prewritten_lib_name(rows)]
+        _ = [lib.read(f"{sym}_sym").data for sym in range(num_symbols)]
+
+    def time_read_batch(self, rows, num_symbols):
+        lib = self.ac[get_prewritten_lib_name(rows)]
+        read_reqs = [ReadRequest(f"{sym}_sym") for sym in range(num_symbols)]
+        _ = lib.read_batch(read_reqs)
+
+    def peakmem_read_batch(self, rows, num_symbols):
+        lib = self.ac[get_prewritten_lib_name(rows)]
+        read_reqs = [ReadRequest(f"{sym}_sym") for sym in range(num_symbols)]
+        _ = lib.read_batch(read_reqs)
+
+    def time_read_with_columns(self, rows, num_symbols):
         lib = self.ac[get_prewritten_lib_name(rows)]
         COLS = ['value']
         _ = [lib.read(f"{sym}_sym", columns=COLS).data for sym in range(num_symbols)]
 
-    def time_read_batch(self, rows, num_symbols):
+    def peakmem_read_with_columns(self, rows, num_symbols):
+        lib = self.ac[get_prewritten_lib_name(rows)]
+        COLS = ['value']
+        _ = [lib.read(f"{sym}_sym", columns=COLS).data for sym in range(num_symbols)]
+
+    def time_read_batch_with_columns(self, rows, num_symbols):
         lib = self.ac[get_prewritten_lib_name(rows)]
         COLS = ['value']
         read_reqs = [ReadRequest(f"{sym}_sym", columns=COLS) for sym in range(num_symbols)]
         _ = lib .read_batch(read_reqs)
 
-    def peakmem_read_batch(self, rows, num_symbols):
+    def peakmem_read_batch_with_columns(self, rows, num_symbols):
         lib = self.ac[get_prewritten_lib_name(rows)]
         COLS = ['value']
         read_reqs = [ReadRequest(f"{sym}_sym", columns=COLS) for sym in range(num_symbols)]
         _ = lib .read_batch(read_reqs)
     
+    def time_read_with_date_ranges(self, rows, num_symbols):
+        lib = self.ac[get_prewritten_lib_name(rows)]
+        dr = pd.date_range("2023-01-01", "2023-01-01")
+        _ = [lib.read(f"{sym}_sym", date_range=dr).data for sym in range(num_symbols)]
+
+    def peakmem_read_with_date_ranges(self, rows, num_symbols):
+        lib = self.ac[get_prewritten_lib_name(rows)]
+        dr = pd.date_range("2023-01-01", "2023-01-01")
+        _ = [lib.read(f"{sym}_sym", date_range=dr).data for sym in range(num_symbols)]
+
+    def time_read_batch_with_date_ranges(self, rows, num_symbols):
+        lib = self.ac[get_prewritten_lib_name(rows)]
+        dr = pd.date_range("2023-01-01", "2023-01-01")
+        read_reqs = [ReadRequest(f"{sym}_sym", date_range=dr) for sym in range(num_symbols)]
+        _ = lib .read_batch(read_reqs)
+
+    def peakmem_read_batch_with_date_ranges(self, rows, num_symbols):
+        lib = self.ac[get_prewritten_lib_name(rows)]
+        dr = pd.date_range("2023-01-01", "2023-01-01")
+        read_reqs = [ReadRequest(f"{sym}_sym", date_range=dr) for sym in range(num_symbols)]
+        _ = lib .read_batch(read_reqs)

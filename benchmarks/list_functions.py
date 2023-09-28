@@ -23,12 +23,16 @@ class ListFunctions:
 
         num_symbols = ListFunctions.params
         for syms in num_symbols:
-            lib = f"{syms}_num_symbols"
-            self.ac.delete_library(lib)
-            self.ac.create_library(lib)
-            lib = self.ac[lib]
+            lib_name = f"{syms}_num_symbols"
+            self.ac.delete_library(lib_name)
+            self.ac.create_library(lib_name)
+            lib = self.ac[lib_name]
             for sym in range(syms):
                 lib.write(f"{sym}_sym", generate_pseudo_random_dataframe(ListFunctions.rows))
+
+    def __del__(self):
+        for lib in self.ac.list_libraries():
+            self.ac.delete_library(lib)
 
     def setup(self, num_symbols):
         pass
