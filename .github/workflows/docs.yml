@@ -53,28 +53,19 @@ jobs:
                 }
             }
 
-      - name: MkDocs
+      - name: Install documenation dependencies
         run: |
-          echo "::group::Pip"
-          pip3 install mkdocs-jupyter
-          echo "::endgroup::"
+          pip3 install mkdocs-material mkdocs-jupyter mkdocstrings[python] black pybind11-stubgen
 
+      - name: Stubfile generation
+        run: |
+          cd python
+          pybind11-stubgen arcticdb_ext.version_store --ignore-all-errors -o .
+
+      - name: MkDocs build
+        run: |
           cd docs/mkdocs
-          mkdocs build -d /tmp/docs_build
-
-      - name: Sphinx
-        run: |
-          set -x -o pipefail
-          echo "::group::Pip"
-          ls
-          pip3 install sphinx sphinx_rtd_theme ${{inputs.api_wheel || '*.whl'}}
-          echo "::endgroup::"
-
-          cd docs/sphinxdocs
-          make html 2>&1 \
-          | sed -r 's#^(([^:]*/site-packages/)?([^:]+.py):([^:]*):([1-9]+): )?WARNING: .*#::warning file=\3,line=\5::&#'
-          mkdir /tmp/docs_build/api/
-          mv build/html/* /tmp/docs_build/api/
+          mkdocs build -s -d /tmp/docs_build
 
       - name: Publish to Cloudflare Pages
         if: inputs.environment && vars.CLOUDFLARE_PAGE_BRANCH
