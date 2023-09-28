@@ -47,6 +47,8 @@ find_package(zstd CONFIG REQUIRED)  # "CONFIG" bypasses our cpp/CMake/FindZstd.c
 find_package(azure-identity-cpp CONFIG REQUIRED)
 find_package(azure-storage-blobs-cpp CONFIG REQUIRED)
 
+find_package(RocksDB CONFIG REQUIRED)
+
 if(${BUILD_WITH_REMOTERY})
     add_compile_definitions(USE_REMOTERY)
 endif()
@@ -493,6 +495,7 @@ set (arcticdb_core_libraries
         Folly::folly # Transitively includes: double-conversion, gflags, glog, libevent, libssl, libcrypto, libiberty, libsodium
         Azure::azure-identity
         Azure::azure-storage-blobs
+        RocksDB::rocksdb
 )
 
 # Dependencies expose different names of their libraries depending
