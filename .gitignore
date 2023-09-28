@@ -41,3 +41,6 @@ CMakeUserPresets.json
 
 docs/mkdocs/site/
 docs/mkdocs/docs/notebooks/.ipynb_checkpoints/
+
+# Ignore automatically generated stub files (*.pyi)
+pyton/**/*.pyi
