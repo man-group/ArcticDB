@@ -7,6 +7,30 @@ As of the Change Date specified in that file, in accordance with the Business So
 """
 import pandas as pd
 import numpy as np
+import os
+
+def real_s3_credentials(shared_path: bool = True):
+    endpoint = os.getenv("ARCTICDB_REAL_S3_ENDPOINT")
+    bucket = os.getenv("ARCTICDB_REAL_S3_BUCKET")
+    region = os.getenv("ARCTICDB_REAL_S3_REGION")
+    access_key = os.getenv("ARCTICDB_REAL_S3_ACCESS_KEY")
+    secret_key = os.getenv("ARCTICDB_REAL_S3_SECRET_KEY")
+    if shared_path:
+        path_prefix = os.getenv("ARCTICDB_PERSISTENT_STORAGE_SHARED_PATH_PREFIX")
+    else:
+        path_prefix = os.getenv("ARCTICDB_PERSISTENT_STORAGE_UNIQUE_PATH_PREFIX")
+
+    clear = str(os.getenv("ARCTICDB_REAL_S3_CLEAR")).lower() in ("true", "1")
+
+    return endpoint, bucket, region, access_key, secret_key, path_prefix, clear
+
+
+def get_real_s3_uri(shared_path: bool = True):
+    endpoint, bucket, region, access_key, secret_key, path_prefix, _ = real_s3_credentials(shared_path)
+    aws_uri = (
+        f"s3s://{endpoint}:{bucket}?access={access_key}&secret={secret_key}&region={region}&path_prefix={path_prefix}"
+    )
+    return aws_uri
 
 def generate_pseudo_random_dataframe(n, freq="S", end_timestamp="1/1/2023"):
     """
