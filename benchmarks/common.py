@@ -43,7 +43,8 @@ def generate_pseudo_random_dataframe(n, freq="S", end_timestamp="1/1/2023"):
     # Generate timestamps
     timestamps = pd.date_range(end=end_timestamp, periods=n, freq=freq)
     # Create dataframe
-    df = pd.DataFrame({"timestamp": timestamps, "value": values})
+    df = pd.DataFrame({"value": values})
+    df.index = timestamps
     return df
 
 def generate_benchmark_df(N, K=100, freq="S", end_timestamp="1/1/2023"):
