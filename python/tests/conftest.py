@@ -46,7 +46,7 @@ from arcticdb.version_store.helper import (
     create_test_azure_cfg,
     create_test_memory_cfg,
 )
-from arcticdb.config import Defaults
+from arcticdb.config import Defaults, MACOS_CONDA_BUILD, MACOS_CONDA_BUILD_SKIP_REASON
 from arcticdb.util.test import configure_test_logger, apply_lib_cfg, RUN_MONGO_TEST
 from tests.util.storage_test import get_real_s3_uri, real_s3_credentials
 
@@ -192,7 +192,10 @@ def unique_real_s3_uri():
         "S3",
         "LMDB",
         "MEM",
-        "Azure",
+        pytest.param(
+            "Azure",
+            marks=pytest.mark.skipif(MACOS_CONDA_BUILD, reason=MACOS_CONDA_BUILD_SKIP_REASON),
+        ),
         pytest.param(
             "Mongo",
             marks=pytest.mark.skipif(not RUN_MONGO_TEST, reason="Mongo test on windows is fiddly"),
@@ -281,8 +284,10 @@ def azurite_azure_uri_incl_bucket(azurite_azure_uri, azure_client_and_create_con
 
 
 @pytest.fixture(scope="function")
-def arctic_library(arctic_client):
-    arctic_client.delete_library("pytest_test_lib")
+def arctic_library(request, arctic_client):
+    if not MACOS_CONDA_BUILD:
+        request.getfixturevalue("azure_client_and_create_container")
+
     arctic_client.create_library("pytest_test_lib")
 
     yield arctic_client["pytest_test_lib"]
@@ -628,7 +633,13 @@ def mongo_version_store(mongo_store_factory):
     scope="function",
     params=[
         "s3_store_factory",
-        "azure_store_factory",
+        pytest.param(
+            "azure_store_factory",
+            marks=pytest.mark.skipif(
+                MACOS_CONDA_BUILD,
+                reason=MACOS_CONDA_BUILD_SKIP_REASON,
+            ),
+        ),
         pytest.param(
             "real_s3_store_factory",
             marks=pytest.mark.skipif(
@@ -667,7 +678,16 @@ def object_version_store_prune_previous(object_store_factory):
 
 @pytest.fixture(
     scope="function",
-    params=["s3_store_factory", "azure_store_factory"],
+    params=[
+        "s3_store_factory",
+        pytest.param(
+            "azure_store_factory",
+            marks=pytest.mark.skipif(
+                MACOS_CONDA_BUILD,
+                reason=MACOS_CONDA_BUILD_SKIP_REASON,
+            ),
+        ),
+    ],
 )
 def local_object_store_factory(request):
     """
@@ -1077,7 +1097,10 @@ def spawn_azurite(azurite_port):
     params=(
         [
             "moto_s3_uri_incl_bucket",
-            "azurite_azure_uri_incl_bucket",
+            pytest.param(
+                "azurite_azure_uri_incl_bucket",
+                marks=pytest.mark.skipif(MACOS_CONDA_BUILD, reason=MACOS_CONDA_BUILD_SKIP_REASON),
+            ),
             pytest.param(
                 "mongo_test_uri",
                 marks=pytest.mark.skipif(not RUN_MONGO_TEST, reason="Mongo test on windows is fiddly"),
@@ -1103,8 +1126,11 @@ def object_storage_uri_incl_bucket(request):
             "lmdb_version_store_v2",
             "s3_version_store_v1",
             "s3_version_store_v2",
-            "azure_version_store",
             "in_memory_version_store",
+            pytest.param(
+                "azure_version_store",
+                marks=pytest.mark.skipif(MACOS_CONDA_BUILD, reason=MACOS_CONDA_BUILD_SKIP_REASON),
+            ),
             pytest.param(
                 "mongo_version_store",
                 marks=pytest.mark.skipif(sys.platform != "linux", reason="The mongo store is only supported on Linux"),
@@ -1116,6 +1142,8 @@ def object_storage_uri_incl_bucket(request):
                 ),
             ),
         ]
+        if not MACOS_CONDA_BUILD
+        else ["lmdb_version_store_v1", "lmdb_version_store_v2", "s3_version_store_v1", "s3_version_store_v2"]
     ),
 )
 def object_and_mem_and_lmdb_version_store(request):
@@ -1133,8 +1161,11 @@ def object_and_mem_and_lmdb_version_store(request):
             "lmdb_version_store_dynamic_schema_v2",
             "s3_version_store_dynamic_schema_v1",
             "s3_version_store_dynamic_schema_v2",
-            "azure_version_store_dynamic_schema",
             "in_memory_version_store_dynamic_schema",
+            pytest.param(
+                "azure_version_store_dynamic_schema",
+                marks=pytest.mark.skipif(MACOS_CONDA_BUILD, reason=MACOS_CONDA_BUILD_SKIP_REASON),
+            ),
             pytest.param(
                 "real_s3_version_store_dynamic_schema",
                 marks=pytest.mark.skipif(

@@ -26,6 +26,8 @@ import pytest
 import pandas as pd
 from datetime import datetime, timezone
 import numpy as np
+
+from arcticdb.config import MACOS_CONDA_BUILD, MACOS_CONDA_BUILD_SKIP_REASON
 from arcticdb.util.test import assert_frame_equal, RUN_MONGO_TEST
 
 from azure.storage.blob import BlobServiceClient
@@ -241,6 +243,9 @@ def test_separation_between_libraries_with_prefixes(object_storage_uri_incl_buck
 
 
 def object_storage_uri_and_client():
+    if MACOS_CONDA_BUILD:
+        return [("moto_s3_uri_incl_bucket", "boto_client")]
+
     return [
         ("moto_s3_uri_incl_bucket", "boto_client"),
         ("azurite_azure_uri_incl_bucket", "azure_client_and_create_container"),
@@ -1093,6 +1098,7 @@ def test_azure_no_ca_path(azurite_azure_test_connection_setting):
     )
 
 
+@pytest.mark.skipif(MACOS_CONDA_BUILD, reason=MACOS_CONDA_BUILD_SKIP_REASON)
 def test_azure_sas_token(azure_account_sas_token, azurite_azure_test_connection_setting):
     endpoint, container, credential_name, _, _ = azurite_azure_test_connection_setting
     ac = Arctic(

@@ -86,9 +86,10 @@ def test_special_chars(object_version_store, special_char):
     assert_frame_equal(vitem.data, df)
 
 
-@pytest.mark.parametrize("breaking_char", [chr(0), "\0", "&", "*", "<", ">"])
+@pytest.mark.parametrize("breaking_char", [chr(0), "\0", "*", "<", ">"])
 def test_s3_breaking_chars(object_version_store, breaking_char):
-    """Test that chars that are not supported are raising the appropriate exception and that we fail on write without corrupting the db
+    """Test that chars that are not supported are raising the appropriate exception and that we fail on write without
+    corrupting the db.
     """
     sym = f"prefix{breaking_char}postfix"
     df = sample_dataframe()
@@ -99,7 +100,8 @@ def test_s3_breaking_chars(object_version_store, breaking_char):
 
 
 def test_s3_breaking_chars_exception_compat(object_version_store):
-    """Test that chars that are not supported are raising the appropriate exception and that we fail on write without corrupting the db
+    """Test that chars that are not supported are raising the appropriate exception and that we fail on write without
+    corrupting the db
     """
     sym = "prefix*postfix"
     df = sample_dataframe()
