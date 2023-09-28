@@ -232,7 +232,7 @@ jobs:
       - name: Benchmark with asv
         shell: bash -l {0}
         run: |
-          python -m asv machine --yes
+          python -m asv machine --machine ArcticDB-linux --yes
           git config --global --add safe.directory /__w/ArcticDB/ArcticDB
           python -m asv run -v --show-stderr HASHFILE:hashes_to_benchmark.txt
           git pull
