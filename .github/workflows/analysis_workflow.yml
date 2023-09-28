@@ -2,9 +2,11 @@ name: Build with analysis tools
 on:
   workflow_dispatch:
     inputs:
-      run:
+      run_all_benchmarks:
         type: boolean
 
+  push:
+    branches: ["add_asv_benchmarks_new"]
   schedule: # Schdeule the job to run at 12 a.m. daily
     - cron: '0 0 * * *'
 jobs:
@@ -15,78 +17,244 @@ jobs:
         cibuildwheel_ver: "2.12.1"
         force_update: false
 
-  code_coverage:
-    needs: [cibw_docker_image]  
-    runs-on: "ubuntu-latest"
+  # code_coverage:
+  #   needs: [cibw_docker_image]  
+  #   runs-on: "ubuntu-latest"
+  #   container:
+  #       image: ${{needs.cibw_docker_image.outputs.tag}}
+  #   services:
+  #     mongodb:
+  #       image: mongo:4.4
+  #       ports:
+  #         - 27017:27017
+  #   env:
+  #     SCCACHE_GHA_VERSION: ${{vars.SCCACHE_GHA_VERSION || 1}} # Setting this env var enables the caching
+  #     VCPKG_NUGET_USER: ${{secrets.VCPKG_NUGET_USER || github.repository_owner}}
+  #     VCPKG_NUGET_TOKEN: ${{secrets.VCPKG_NUGET_TOKEN || secrets.GITHUB_TOKEN}}
+  #     VCPKG_MAN_NUGET_USER: ${{secrets.VCPKG_MAN_NUGET_USER}} # For forks to download pre-compiled dependencies from the Man repo
+  #     VCPKG_MAN_NUGET_TOKEN: ${{secrets.VCPKG_MAN_NUGET_TOKEN}}
+  #     CMAKE_C_COMPILER_LAUNCHER: sccache
+  #     CMAKE_CXX_COMPILER_LAUNCHER: sccache
+  #     ARCTIC_CMAKE_PRESET: linux-debug
+  #   steps:
+  #     - uses: actions/checkout@v3
+  #       with:
+  #         submodules: recursive
+
+  #     - name: Get number of CPU cores
+  #       uses: SimenB/github-actions-cpu-cores@v1
+  #       id: cpu-cores
+
+  #     - name: Extra envs
+  #       run: |
+  #         . build_tooling/vcpkg_caching.sh # Linux follower needs another call in CIBW
+  #         echo -e "VCPKG_BINARY_SOURCES=$VCPKG_BINARY_SOURCES
+  #         VCPKG_ROOT=$PLATFORM_VCPKG_ROOT" | tee -a $GITHUB_ENV
+  #         cmake -P cpp/CMake/CpuCount.cmake | sed 's/^-- //' | tee -a $GITHUB_ENV
+  #       env:
+  #         CMAKE_BUILD_PARALLEL_LEVEL: ${{vars.CMAKE_BUILD_PARALLEL_LEVEL}}
+
+  #     - name: Prepare C++ compilation env
+  #       run: . build_tooling/prep_cpp_build.sh 
+      
+  #     - name: CMake compile
+  #       uses: lukka/run-cmake@v10
+  #       with:
+  #         cmakeListsTxtPath: ${{github.workspace}}/cpp/CMakeLists.txt
+  #         configurePreset: ${{env.ARCTIC_CMAKE_PRESET}}
+  #         buildPreset: ${{env.ARCTIC_CMAKE_PRESET}}
+  #       env:
+  #         ARCTICDB_CODE_COVERAGE_BUILD: 1
+  #         ARCTICDB_DEBUG_FIND_PYTHON: ${{vars.ARCTICDB_DEBUG_FIND_PYTHON}}
+  #         python_impl_name: 'cp311'
+        
+  #     - name: Run C++ Tests
+  #       shell: bash -l {0}
+  #       run: |
+  #         cd cpp/out/linux-debug-build/
+  #         ls arcticdb
+  #         make -j ${{ steps.cpu-cores.outputs.count }} arcticdb_rapidcheck_tests
+  #         make -j ${{ steps.cpu-cores.outputs.count }} test_unit_arcticdb
+  #         ctest
+
+  #     # We are chainging the python here because we want to use the default python to build (it is devel version)
+  #     # and this python for the rest of the testing
+  #     - name: Select Python (Linux)
+  #       run: echo /opt/python/cp36-cp36m/bin >> $GITHUB_PATH
+      
+  #     - name: Test with pytest
+  #       shell: bash -l {0}
+  #       run: |
+  #         yum install nodejs npm -y
+  #         npm config set strict-ssl false
+  #         npm install -g azurite
+  #         python -m pip install --upgrade pip
+
+  #         python >build_tooling/requirements-analysis-workflow.txt <<END
+  #         from configparser import ConfigParser
+  #         cf = ConfigParser()
+  #         cf.read("setup.cfg");
+
+  #         # setup_requires is not needed
+  #         print(cf['options']['setup_requires'])
+  #         print(cf['options']['install_requires'])
+  #         print(cf['options.extras_require']['Testing'])
+  #         END
+
+  #         python -m pip install -r build_tooling/requirements-analysis-workflow.txt
+  #         python -m grpc_tools.protoc -Icpp/proto --python_out=./python cpp/proto/arcticc/pb2/*.proto
+  #         cd python
+  #         ln -s ../cpp/out/linux-debug-build/arcticdb/arcticdb_ext.cpython-36m-x86_64-linux-gnu.so
+  #         python -m coverage run -m pytest tests
+  #       env:
+  #         TEST_OUTPUT_DIR: ${{runner.temp}}
+  #         ARCTICDB_CODE_COVERAGE_BUILD: 1
+  #         # Use the Mongo created in the service container above to test against
+  #         CI_MONGO_HOST: mongodb
+
+  #     - name: Get python Coverage report
+  #       shell: bash -l {0}
+  #       run: |
+  #         cd python
+  #         python -m coverage report -m | tee output.txt
+  #         python -m coverage html
+  #         zip -r python_cov.zip htmlcov/
+
+  #         echo "PYTHON_COV_PERCENT=$(cat output.txt | grep 'TOTAL' | awk '{print $NF}' | tr -d '%')" >> $GITHUB_ENV
+
+  #     - name: Run Gcovr manually post-pytest
+  #       shell: bash -l {0}
+  #       run: |
+  #         cd cpp/out/linux-debug-build/
+  #         python -m pip install gcovr
+  #         mkdir coverage
+  #         python -m gcovr --txt --html-details coverage/index.html -e vcpkg_installed/ -e proto/ -e ../../third_party -e ../../arcticdb/util/test/ -r ../.. --exclude-throw-branches --exclude-unreachable-branches -u --exclude-function-lines | tee output.txt
+  #         zip -r coverage.zip coverage/
+
+  #         echo "CPP_COV_PERCENT=$(cat output.txt | grep 'TOTAL' | awk '{print $NF}' | tr -d '%')" >> $GITHUB_ENV
+
+  #     - name: Upload Coverage
+  #       uses: actions/upload-artifact@v3
+  #       with:
+  #         name: cpp-coverage-artifact
+  #         path: cpp/out/linux-debug-build/coverage.zip
+
+  #     - name: Upload Python Coverage
+  #       uses: actions/upload-artifact@v3
+  #       with:
+  #         name: python-coverage-artifact
+  #         path: python/python_cov.zip
+
+  #     - name: Restore cached CPP Coverage Percentage from the previous run
+  #       id: cache-cov-restore
+  #       uses: actions/cache/restore@v3
+  #       with:
+  #         path: prev_coverage.txt
+  #         key: coverage
+      
+  #     - name: Get and compare coverage if cache was restored
+  #       run: |
+  #         # if cache was restored, compare coverage
+  #         if [ -f coverage.txt ]; then
+  #           PREV_COVERAGE=$(cat prev_coverage.txt | cut -d' ' -f2)
+  #           echo "Previous coverage: $PREV_COVERAGE"
+  #           CURR_COVERAGE=${{env.CPP_COV_PERCENT}}
+  #           echo "CPP_COV_PREV_PERCENT=$PREV_COVERAGE" >> $GITHUB_ENV
+  #           echo "Current coverage: $CURR_COVERAGE"
+  #           if [ $CURR_COVERAGE -gt $PREV_COVERAGE ]; then
+  #             echo "Coverage increased"
+  #           elif [ $CURR_COVERAGE -lt $PREV_COVERAGE ]; then
+  #             echo "Coverage decreased"
+  #           else
+  #             echo "Coverage unchanged"
+  #           fi
+  #         fi
+
+  #     - name: Save CPP Coverage Percentage to file
+  #       run: |
+  #         echo "Coverage: ${{ env.CPP_COV_PERCENT }}" > current_coverage.txt
+
+  #     - name: Save the current CPP Coverage Percentage to the cache
+  #       id: cache-cov-save
+  #       uses: actions/cache/save@v3
+  #       with:
+  #         path: current_coverage.txt
+  #         key: coverage
+
+  #     - name: Check percentage and send Slack notification
+  #       if: ${{ env.CPP_COV_PREV_PERCENT && env.CPP_COV_PERCENT && env.CPP_COV_PERCENT < env.CPP_COV_PREV_PERCENT }}
+  #       uses: slackapi/slack-github-action@v1.24.0
+  #       with:
+  #         # For posting a rich message using Block Kit
+  #         payload: |
+  #           {
+  #             "text": "The CPP Code Coverage has been reduced",
+  #             "blocks": [
+  #               {
+  #                 "type": "section",
+  #                 "text": {
+  #                   "type": "mrkdwn",
+  #                   "text": "The CPP Code Coverage from the current run(${{ env.CPP_COV_PERCENT }}%) is lower the previous one(${{ env.CPP_COV_PREV_PERCENT }}%)."
+  #                 }
+  #               }
+  #             ]
+  #           }
+  #       env:
+  #         SLACK_WEBHOOK_URL: ${{ secrets.ARCTICDB_DEV_WEBHOOK_URL }}
+  #         SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
+  start_ec2_runner:
+    uses: ./.github/workflows/ec2_runner_jobs.yml
+    secrets: inherit
+    permissions: write-all
+    with:
+      job_type: start
+
+  benchmark_linux_small:
+    # timeout-minutes: 600
+    needs: [start_ec2_runner, cibw_docker_image]
+    runs-on: ${{ needs.start_ec2_runner.outputs.label }}
     container:
-        image: ${{needs.cibw_docker_image.outputs.tag}}
-    services:
-      mongodb:
-        image: mongo:4.4
-        ports:
-          - 27017:27017
-    env:
-      SCCACHE_GHA_VERSION: ${{vars.SCCACHE_GHA_VERSION || 1}} # Setting this env var enables the caching
-      VCPKG_NUGET_USER: ${{secrets.VCPKG_NUGET_USER || github.repository_owner}}
-      VCPKG_NUGET_TOKEN: ${{secrets.VCPKG_NUGET_TOKEN || secrets.GITHUB_TOKEN}}
-      VCPKG_MAN_NUGET_USER: ${{secrets.VCPKG_MAN_NUGET_USER}} # For forks to download pre-compiled dependencies from the Man repo
-      VCPKG_MAN_NUGET_TOKEN: ${{secrets.VCPKG_MAN_NUGET_TOKEN}}
-      CMAKE_C_COMPILER_LAUNCHER: sccache
-      CMAKE_CXX_COMPILER_LAUNCHER: sccache
-      ARCTIC_CMAKE_PRESET: linux-debug
+      image: ${{needs.cibw_docker_image.outputs.tag}}
+    permissions:
+      contents: write
+
     steps:
       - uses: actions/checkout@v3
         with:
           submodules: recursive
+          fetch-depth: 0
 
-      - name: Get number of CPU cores
-        uses: SimenB/github-actions-cpu-cores@v1
-        id: cpu-cores
-
-      - name: Extra envs
-        run: |
-          . build_tooling/vcpkg_caching.sh # Linux follower needs another call in CIBW
-          echo -e "VCPKG_BINARY_SOURCES=$VCPKG_BINARY_SOURCES
-          VCPKG_ROOT=$PLATFORM_VCPKG_ROOT" | tee -a $GITHUB_ENV
-          cmake -P cpp/CMake/CpuCount.cmake | sed 's/^-- //' | tee -a $GITHUB_ENV
-        env:
-          CMAKE_BUILD_PARALLEL_LEVEL: ${{vars.CMAKE_BUILD_PARALLEL_LEVEL}}
-
-      - name: Prepare C++ compilation env
-        run: . build_tooling/prep_cpp_build.sh 
-      
-      - name: CMake compile
-        uses: lukka/run-cmake@v10
+      - name: Install Conda environment from environment_unix.yml
+        uses: mamba-org/setup-micromamba@v1
         with:
-          cmakeListsTxtPath: ${{github.workspace}}/cpp/CMakeLists.txt
-          configurePreset: ${{env.ARCTIC_CMAKE_PRESET}}
-          buildPreset: ${{env.ARCTIC_CMAKE_PRESET}}
-        env:
-          ARCTICDB_CODE_COVERAGE_BUILD: 1
-          ARCTICDB_DEBUG_FIND_PYTHON: ${{vars.ARCTICDB_DEBUG_FIND_PYTHON}}
-          python_impl_name: 'cp311'
-        
-      - name: Run C++ Tests
-        shell: bash -l {0}
-        run: |
-          cd cpp/out/linux-debug-build/
-          ls arcticdb
-          make -j ${{ steps.cpu-cores.outputs.count }} arcticdb_rapidcheck_tests
-          make -j ${{ steps.cpu-cores.outputs.count }} test_unit_arcticdb
-          ctest
+          environment-file: environment_unix.yml
+          environment-name: arcticdb
+          # generate-run-shell: true
+          init-shell: bash
+          cache-environment: true
+          post-cleanup: 'all'
 
+      # - name: Set persistent storage variables
+      #   uses: ./.github/actions/set_persistent_storage_env_vars
+      #   with:
+      #     aws_access_key: "${{ secrets.AWS_S3_ACCESS_KEY }}"
+      #     aws_secret_key: "${{ secrets.AWS_S3_SECRET_KEY }}"
+
+      # - name: Configure sccache
+      #   uses: mozilla-actions/sccache-action@v0.0.3
+      #   with:
+      #     version: "v0.4.0"
+        
       # We are chainging the python here because we want to use the default python to build (it is devel version)
       # and this python for the rest of the testing
       - name: Select Python (Linux)
         run: echo /opt/python/cp36-cp36m/bin >> $GITHUB_PATH
-      
-      - name: Test with pytest
-        shell: bash -l {0}
+
+      - name: Run all version benchmarks
+        # if: inputs.run_all_benchmarks
+        shell: bash -el {0}
         run: |
-          yum install nodejs npm -y
-          npm config set strict-ssl false
-          npm install -g azurite
-          python -m pip install --upgrade pip
+          # python -m pip install --upgrade pip
 
           python >build_tooling/requirements-analysis-workflow.txt <<END
           from configparser import ConfigParser
@@ -99,104 +267,60 @@ jobs:
           print(cf['options.extras_require']['Testing'])
           END
 
-          python -m pip install -r build_tooling/requirements-analysis-workflow.txt
-          python -m grpc_tools.protoc -Icpp/proto --python_out=./python cpp/proto/arcticc/pb2/*.proto
-          cd python
-          ln -s ../cpp/out/linux-debug-build/arcticdb/arcticdb_ext.cpython-36m-x86_64-linux-gnu.so
-          python -m coverage run -m pytest tests
-        env:
-          TEST_OUTPUT_DIR: ${{runner.temp}}
-          ARCTICDB_CODE_COVERAGE_BUILD: 1
-          # Use the Mongo created in the service container above to test against
-          CI_MONGO_HOST: mongodb
+          # python -m pip install -r build_tooling/requirements-analysis-workflow.txt
+          # python -m grpc_tools.protoc -Icpp/proto --python_out=./python cpp/proto/arcticc/pb2/*.proto
 
-      - name: Get python Coverage report
-        shell: bash -l {0}
-        run: |
-          cd python
-          python -m coverage report -m | tee output.txt
-          python -m coverage html
-          zip -r python_cov.zip htmlcov/
+          python -m asv machine -v --yes --machine ArcticDB-Runner-Medium
+          git config --global --add safe.directory .
+          python -m asv run -v --show-stderr HASHFILE:hashes_to_benchmark.txt
+          # if ["${{inputs.run_all_benchmarks}}"]; then
+          #   python -m asv run -v --show-stderr HASHFILE:hashes_to_benchmark.txt
+          # else
+          #   python -m asv run -v --show-stderr HEAD^!
+          # fi
+          git pull
 
-          echo "PYTHON_COV_PERCENT=$(cat output.txt | grep 'TOTAL' | awk '{print $NF}' | tr -d '%')" >> $GITHUB_ENV
-
-      - name: Run Gcovr manually post-pytest
-        shell: bash -l {0}
-        run: |
-          cd cpp/out/linux-debug-build/
-          python -m pip install gcovr
-          mkdir coverage
-          python -m gcovr --txt --html-details coverage/index.html -e vcpkg_installed/ -e proto/ -e ../../third_party -e ../../arcticdb/util/test/ -r ../.. --exclude-throw-branches --exclude-unreachable-branches -u --exclude-function-lines | tee output.txt
-          zip -r coverage.zip coverage/
-
-          echo "CPP_COV_PERCENT=$(cat output.txt | grep 'TOTAL' | awk '{print $NF}' | tr -d '%')" >> $GITHUB_ENV
-
-      - name: Upload Coverage
-        uses: actions/upload-artifact@v3
-        with:
-          name: cpp-coverage-artifact
-          path: cpp/out/linux-debug-build/coverage.zip
-
-      - name: Upload Python Coverage
-        uses: actions/upload-artifact@v3
-        with:
-          name: python-coverage-artifact
-          path: python/python_cov.zip
-
-      - name: Restore cached CPP Coverage Percentage from the previous run
-        id: cache-cov-restore
-        uses: actions/cache/restore@v3
-        with:
-          path: prev_coverage.txt
-          key: coverage
-      
-      - name: Get and compare coverage if cache was restored
-        run: |
-          # if cache was restored, compare coverage
-          if [ -f coverage.txt ]; then
-            PREV_COVERAGE=$(cat prev_coverage.txt | cut -d' ' -f2)
-            echo "Previous coverage: $PREV_COVERAGE"
-            CURR_COVERAGE=${{env.CPP_COV_PERCENT}}
-            echo "CPP_COV_PREV_PERCENT=$PREV_COVERAGE" >> $GITHUB_ENV
-            echo "Current coverage: $CURR_COVERAGE"
-            if [ $CURR_COVERAGE -gt $PREV_COVERAGE ]; then
-              echo "Coverage increased"
-            elif [ $CURR_COVERAGE -lt $PREV_COVERAGE ]; then
-              echo "Coverage decreased"
-            else
-              echo "Coverage unchanged"
-            fi
+          git symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/master
+          python -m asv publish
+          
+          # Add the latest commit to the hashes_to_benchmark.txt
+          if [!"${{inputs.run_all_benchmarks}}"]; then
+            git log --name-status HEAD^..HEAD --oneline  -n1 --decorate=no | awk '{print $1;}' >> hashes_to_benchmark.txt
           fi
+          
+          git config --global user.email "georgi.petrov@man.com"
+          git config --global user.name "Georgi Petrov"
 
-      - name: Save CPP Coverage Percentage to file
-        run: |
-          echo "Coverage: ${{ env.CPP_COV_PERCENT }}" > current_coverage.txt
-
-      - name: Save the current CPP Coverage Percentage to the cache
-        id: cache-cov-save
-        uses: actions/cache/save@v3
-        with:
-          path: current_coverage.txt
-          key: coverage
-
-      - name: Check percentage and send Slack notification
-        if: ${{ env.CPP_COV_PREV_PERCENT && env.CPP_COV_PERCENT && env.CPP_COV_PERCENT < env.CPP_COV_PREV_PERCENT }}
-        uses: slackapi/slack-github-action@v1.24.0
-        with:
-          # For posting a rich message using Block Kit
-          payload: |
-            {
-              "text": "The CPP Code Coverage has been reduced",
-              "blocks": [
-                {
-                  "type": "section",
-                  "text": {
-                    "type": "mrkdwn",
-                    "text": "The CPP Code Coverage from the current run(${{ env.CPP_COV_PERCENT }}%) is lower the previous one(${{ env.CPP_COV_PREV_PERCENT }}%)."
-                  }
-                }
-              ]
-            }
+          git add .asv/results/*
+          git add hashes_to_benchmark.txt
+          git commit -m "Update ASV Results and hashes to test"
+          git push --force origin HEAD
+          python -m asv gh-pages --rewrite
+          # if [[!"${{github.ref}}" -eq 'refs/heads/master']]; then
+          #   python -m asv gh-pages --rewrite
+          # fi
         env:
-          SLACK_WEBHOOK_URL: ${{ secrets.ARCTICDB_DEV_WEBHOOK_URL }}
-          SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
+          CMAKE_BUILD_PARALLEL_LEVEL: 8
+          SCCACHE_GHA_VERSION: ${{vars.SCCACHE_GHA_VERSION || 1}} # Setting this env var enables the caching
+          VCPKG_NUGET_USER: ${{secrets.VCPKG_NUGET_USER || github.repository_owner}}
+          VCPKG_NUGET_TOKEN: ${{secrets.VCPKG_NUGET_TOKEN || secrets.GITHUB_TOKEN}}
+          VCPKG_MAN_NUGET_USER: ${{secrets.VCPKG_MAN_NUGET_USER}} # For forks to download pre-compiled dependencies from the Man repo
+          VCPKG_MAN_NUGET_TOKEN: ${{secrets.VCPKG_MAN_NUGET_TOKEN}}
+          CMAKE_C_COMPILER_LAUNCHER: sccache
+          CMAKE_CXX_COMPILER_LAUNCHER: sccache
+
+      # - name: Run benchmarks for latest head
+      #   shell: bash -el {0}
+      #   run: |
+      #     python -m asv run -v --show-stderr HEAD^!
+
+  stop-ec2-runner:
+    needs: [start_ec2_runner, benchmark_linux_small]
+    if: ${{ always() }}
+    uses: ./.github/workflows/ec2_runner_jobs.yml
+    secrets: inherit
+    permissions: write-all
+    with:
+      job_type: stop
+      label: ${{ needs.start_ec2_runner.outputs.label }}
+      ec2-instance-id: ${{ needs.start_ec2_runner.outputs.ec2-instance-id }}
