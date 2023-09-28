@@ -55,7 +55,7 @@ jobs:
 
       - name: Install documenation dependencies (including ArcticDB)
         run: |
-          pip3 install mkdocs-material mkdocs-jupyter mkdocstrings[python] black pybind11-stubgen {{inputs.api_wheel || '*.whl'}}
+          pip3 install mkdocs-material mkdocs-jupyter mkdocstrings[python] black pybind11-stubgen ${{inputs.api_wheel || '*.whl'}}
 
       - name: Stubfile generation
         # stubfiles will be in docs/mkdocs/arcticdb_ext and so scanned as arcticdb_ext by mkdocs
