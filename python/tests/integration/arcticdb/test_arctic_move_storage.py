@@ -84,6 +84,9 @@ def test_move_lmdb_library_map_size_reduction(tmpdir_factory):
 
     assert "lmdb error code -30792" in str(exc_info.value)
 
+    # stuff should still be readable despite the error
+    assert_frame_equal(df, lib.read("sym").data)
+
 
 def test_move_lmdb_library_map_size_increase(tmpdir_factory):
     # Given - any LMDB library

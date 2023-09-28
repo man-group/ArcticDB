@@ -8,6 +8,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 import functools
 import multiprocessing
 import shutil
+import socket
 
 import boto3
 import werkzeug
@@ -30,13 +31,10 @@ import random
 from datetime import datetime, timezone, timedelta
 from typing import Optional, Any, Dict
 import subprocess
-from pathlib import Path
-import socket
 import tempfile
 import pymongo
 
 import requests
-from pytest_server_fixtures.base import get_ephemeral_port
 
 from arcticdb.arctic import Arctic
 from arcticdb.version_store.helper import (
@@ -71,13 +69,35 @@ def run_server(port):
     )
 
 
+def _get_ephemeral_port() -> int:
+    # Get a free port from the OS
+    sock = socket.socket()
+    sock.bind(("", 0))
+    port = sock.getsockname()[1]
+    sock.close()  # possible race to bind to port now
+    return port
+
+
 @pytest.fixture(scope="session")
 def _moto_s3_uri():
-    port = get_ephemeral_port()
+    port = _get_ephemeral_port()
     p = multiprocessing.Process(target=run_server, args=(port,))
     p.start()
 
-    time.sleep(0.5)
+    attempts = 0
+    while True:
+        time.sleep(0.2)
+        try:
+            response = requests.get(f"http://localhost:{port}")
+            code = response.status_code
+            if code == 200:
+                break
+        except requests.exceptions.ConnectionError:
+            pass
+
+        attempts += 1
+        if attempts == 20:
+            pytest.fail(f"moto3 server on http://localhost:{port} failed to start up")
 
     yield f"http://localhost:{port}"
 
@@ -1039,7 +1059,7 @@ def get_wide_df():
 
 @pytest.fixture(scope="session")
 def azurite_port():
-    return get_ephemeral_port()
+    return _get_ephemeral_port()
 
 
 @pytest.fixture
