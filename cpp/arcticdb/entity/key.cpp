@@ -4,11 +4,6 @@
  *
  * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
  */
-#ifdef ARCTICDB_USE_CONDA
-    #include <semimap/semimap.h>
-#else
-    #include <third_party/semimap/semimap.h>
-#endif
 #include <arcticdb/entity/key.hpp>
 
 namespace arcticdb::entity {
@@ -37,46 +32,43 @@ struct KeyData {
     const char* description_;
 };
 
-const KeyData& get_key_data(KeyType key_type) {
-    struct KeyMapTag{};
-    using KeyMap = semi::static_map<int, KeyData, KeyMapTag>;
+KeyData get_key_data(KeyType key_type) {
+#define NUMERIC_KEY(kt, name, c) case kt: return KeyData{ #name, c, VariantType::NUMERIC_TYPE, KeyClass::ATOM_KEY, #kt };
+#define STRING_KEY(kt, name, c)  case kt: return KeyData{ #name, c, VariantType::STRING_TYPE, KeyClass::ATOM_KEY, #kt};
+#define STRING_REF(kt, name, c)  case kt: return KeyData{ #name, c, VariantType::STRING_TYPE, KeyClass::REF_KEY,  #kt };
 
-#define KEY_ID(x) []() constexpr { return static_cast<int>(x); }
-#define NUMERIC_KEY(kt, name, c) KeyMap::get(KEY_ID(kt)) = { #name, c, VariantType::NUMERIC_TYPE, KeyClass::ATOM_KEY, #kt };
-#define STRING_KEY(kt, name, c) KeyMap::get(KEY_ID(kt)) = { #name, c, VariantType::STRING_TYPE, KeyClass::ATOM_KEY, #kt};
-#define STRING_REF(kt, name, c) KeyMap::get(KEY_ID(kt)) = { #name, c, VariantType::STRING_TYPE, KeyClass::REF_KEY,  #kt };
-
-    NUMERIC_KEY(KeyType::STREAM_GROUP, sg, 'g')
-    NUMERIC_KEY(KeyType::GENERATION, gen, 'G')
+    switch (key_type) {
+    // Important ones
+    STRING_REF(KeyType::VERSION_REF, vref, 'r')
     STRING_KEY(KeyType::TABLE_DATA, tdata, 'd')
     STRING_KEY(KeyType::TABLE_INDEX, tindex, 'i')
     STRING_KEY(KeyType::VERSION, ver, 'V')
     STRING_KEY(KeyType::VERSION_JOURNAL, vj, 'v')
-    STRING_KEY(KeyType::METRICS, met, 'M')
     STRING_KEY(KeyType::SNAPSHOT, snap, 's')
     STRING_KEY(KeyType::SYMBOL_LIST, sl, 'l')
-    STRING_REF(KeyType::VERSION_REF, vref, 'r')
-    STRING_REF(KeyType::STORAGE_INFO, sref, 'h')
-    STRING_REF(KeyType::APPEND_REF, aref, 'a')
-    STRING_KEY(KeyType::MULTI_KEY, mref, 'm')
-    STRING_REF(KeyType::LOCK, lref, 'x')
-    STRING_REF(KeyType::SNAPSHOT_REF, tref, 't')
-    STRING_REF(KeyType::SNAPSHOT_TOMBSTONE, ttomb, 'X')
-    STRING_KEY(KeyType::PARTITION, pref, 'p')
+    STRING_KEY(KeyType::TOMBSTONE_ALL, tall, 'q')
     STRING_KEY(KeyType::TOMBSTONE, tomb, 'x')
-    STRING_KEY(KeyType::APPEND_DATA, app, 'b')
+    STRING_REF(KeyType::LIBRARY_CONFIG, cref, 'C')
+    STRING_KEY(KeyType::COLUMN_STATS, cstats, 'S')
+    STRING_REF(KeyType::SNAPSHOT_REF, tref, 't')
+    // Less important
     STRING_KEY(KeyType::LOG, log, 'o')
     STRING_KEY(KeyType::LOG_COMPACTED, logc, 'O')
     STRING_REF(KeyType::OFFSET, off, 'f')
     STRING_REF(KeyType::BACKUP_SNAPSHOT_REF, bref, 'B')
-    STRING_KEY(KeyType::TOMBSTONE_ALL, tall, 'q')
-    STRING_REF(KeyType::LIBRARY_CONFIG, cref, 'C')
-    STRING_KEY(KeyType::COLUMN_STATS, cstats, 'S')
-
-
-    const auto& data =  KeyMap::get(int(key_type));
-    util::check(data.short_name_ != 'u', "Could not get data for key_type {}", static_cast<int>(key_type));
-    return data;
+    STRING_KEY(KeyType::METRICS, met, 'M')
+    STRING_REF(KeyType::APPEND_REF, aref, 'a')
+    STRING_KEY(KeyType::MULTI_KEY, mref, 'm')
+    STRING_REF(KeyType::LOCK, lref, 'x')
+    STRING_REF(KeyType::SNAPSHOT_TOMBSTONE, ttomb, 'X')
+    STRING_KEY(KeyType::APPEND_DATA, app, 'b')
+    // Unused
+    STRING_KEY(KeyType::PARTITION, pref, 'p')
+    STRING_REF(KeyType::STORAGE_INFO, sref, 'h')
+    NUMERIC_KEY(KeyType::STREAM_GROUP, sg, 'g')
+    NUMERIC_KEY(KeyType::GENERATION, gen, 'G')
+    default:util::raise_rte("Could not get data for key_type {}", static_cast<int>(key_type));
+    };
 }
 
 const char* key_type_long_name(KeyType key_type) {
