@@ -897,6 +897,171 @@ def test_update_with_upsert(arctic_library):
     assert "symbol" in lib.list_symbols()
 
 
+def test_update_partial_segment(library_factory):
+    """The update_df overlaps the central part of the existing segment. As a result, two extra intersecting segments
+    are created for each non-overlapping side of the segment. in this test, there is a column containing strings and
+    another column containing numbers."""
+
+    lib = library_factory(LibraryOptions(rows_per_segment=10))
+    assert lib._nvs._lib_cfg.lib_desc.version.write_options.segment_row_size == 10
+    sym = "my_symbol"
+    # given
+    df = pd.DataFrame(
+        {"a": ["hello", "bonjour", "buenos dias", "gutentag"], "b": [1, 2, 3, 4]},
+        index=pd.date_range(start="1/1/2018", end="1/4/2018", freq="1D"),
+    )
+    lib.write(sym, df)
+    # when
+    df_update = pd.DataFrame(
+        {"a": ["Buongiorno", "bon dia"], "b": [5, 6]}, index=pd.date_range(start="1/2/2018", end="1/3/2018", freq="1D")
+    )
+    lib.update(sym, df_update)
+    # then
+    read_df = lib.read(sym).data
+    expected = pd.DataFrame(
+        {"a": ["hello", "Buongiorno", "bon dia", "gutentag"], "b": [1, 5, 6, 4]},
+        index=pd.date_range(start="1/1/2018", end="1/4/2018", freq="1D"),
+    )
+    assert_frame_equal(expected, read_df)
+
+
+def test_update_partial_segment_low_end(library_factory):
+    """The update_df overlaps the low end part of the existing segment. As a result, one
+    extra intersecting segment is created for the high end side of the segment. in this test,
+    there is a column containing strings and another column containing numbers."""
+
+    lib = library_factory(LibraryOptions(rows_per_segment=10))
+    assert lib._nvs._lib_cfg.lib_desc.version.write_options.segment_row_size == 10
+    sym = "my_symbol"
+    # given
+    df = pd.DataFrame(
+        {"a": ["hello", "bonjour", "buenos dias", "gutentag"], "b": [1, 2, 3, 4]},
+        index=pd.date_range(start="1/1/2018", end="1/4/2018", freq="1D"),
+    )
+    lib.write(sym, df)
+    # when
+    df_update = pd.DataFrame(
+        {"a": ["Buongiorno", "bon dia"], "b": [5, 6]}, index=pd.date_range(start="1/1/2018", end="1/2/2018", freq="1D")
+    )
+    lib.update(sym, df_update)
+    # then
+    read_df = lib.read(sym).data
+    expected = pd.DataFrame(
+        {"a": ["Buongiorno", "bon dia", "buenos dias", "gutentag"], "b": [5, 6, 3, 4]},
+        index=pd.date_range(start="1/1/2018", end="1/4/2018", freq="1D"),
+    )
+    assert_frame_equal(expected, read_df)
+
+
+def test_update_partial_segment_high_end(library_factory):
+    """The update_df overlaps the high end part of the existing segment. As a result, one
+    extra intersecting segment is created for the low end side of the segment. in this test,
+    there is a column containing strings and another column containing numbers."""
+
+    lib = library_factory(LibraryOptions(rows_per_segment=10))
+    assert lib._nvs._lib_cfg.lib_desc.version.write_options.segment_row_size == 10
+    sym = "my_symbol"
+    # given
+    df = pd.DataFrame(
+        {"a": ["hello", "bonjour", "buenos dias", "gutentag"], "b": [1, 2, 3, 4]},
+        index=pd.date_range(start="1/1/2018", end="1/4/2018", freq="1D"),
+    )
+    lib.write(sym, df)
+    # when
+    df_update = pd.DataFrame(
+        {"a": ["Buongiorno", "bon dia"], "b": [5, 6]}, index=pd.date_range(start="1/3/2018", end="1/4/2018", freq="1D")
+    )
+    lib.update(sym, df_update)
+    # then
+    read_df = lib.read(sym).data
+    expected = pd.DataFrame(
+        {"a": ["hello", "bonjour", "Buongiorno", "bon dia"], "b": [1, 2, 5, 6]},
+        index=pd.date_range(start="1/1/2018", end="1/4/2018", freq="1D"),
+    )
+    assert_frame_equal(expected, read_df)
+
+
+def test_update_partial_segment_dynamic_schema(library_factory):
+    """The update_df overlaps the central part of the existing segment. Consequently, two extra intersecting
+    segments are created for each non-overlapping side of the segment. Initially, this test includes a column
+    containing strings and another column containing numbers. Then, update_df introduces a third column of floats,
+    as we are testing dynamic schema."""
+
+    lib = library_factory(LibraryOptions(rows_per_segment=10, dynamic_schema=True))
+    assert lib._nvs._lib_cfg.lib_desc.version.write_options.segment_row_size == 10
+    sym = "my_symbol"
+    # given
+    df = pd.DataFrame(
+        {"a": ["hello", "bonjour", "buenos dias", "gutentag"], "b": [1, 2, 3, 4]},
+        index=pd.date_range(start="1/1/2018", end="1/4/2018", freq="1D"),
+    )
+    lib.write(sym, df)
+    # when
+    df_update = pd.DataFrame({"c": [5.8, 6.1]}, index=pd.date_range(start="1/2/2018", end="1/3/2018", freq="1D"))
+    lib.update(sym, df_update)
+    # then
+    read_df = lib.read(sym).data
+    expected = pd.DataFrame(
+        {"a": ["hello", None, None, "gutentag"], "b": [1, 0, 0, 4], "c": [np.NaN, 5.8, 6.1, np.NaN]},
+        index=pd.date_range(start="1/1/2018", end="1/4/2018", freq="1D"),
+    )
+    assert_frame_equal(expected, read_df)
+
+
+def test_update_partial_segment_low_end_dynamic_schema(library_factory):
+    """The update_df overlaps the low end part of the existing segment. As a result, one extra
+    intersecting segment is created for the high end side of the segment. Initially, this test
+    includes a column containing strings and another column containing numbers. Then, update_df
+    introduces a third column of floats, as we are testing dynamic schema."""
+
+    lib = library_factory(LibraryOptions(rows_per_segment=10, dynamic_schema=True))
+    assert lib._nvs._lib_cfg.lib_desc.version.write_options.segment_row_size == 10
+    sym = "my_symbol"
+    # given
+    df = pd.DataFrame(
+        {"a": ["hello", "bonjour", "buenos dias", "gutentag"], "b": [1, 2, 3, 4]},
+        index=pd.date_range(start="1/1/2018", end="1/4/2018", freq="1D"),
+    )
+    lib.write(sym, df)
+    # when
+    df_update = pd.DataFrame({"c": [5.8, 6.1]}, index=pd.date_range(start="1/1/2018", end="1/2/2018", freq="1D"))
+    lib.update(sym, df_update)
+    # then
+    read_df = lib.read(sym).data
+    expected = pd.DataFrame(
+        {"a": [None, None, "buenos dias", "gutentag"], "b": [0, 0, 3, 4], "c": [5.8, 6.1, np.NaN, np.NaN]},
+        index=pd.date_range(start="1/1/2018", end="1/4/2018", freq="1D"),
+    )
+    assert_frame_equal(expected, read_df)
+
+
+def test_update_partial_segment_high_end_dynamic_schema(library_factory):
+    """The update_df overlaps the high end part of the existing segment. As a result, one extra
+    intersecting segment is created for the low end side of the segment. Initially, this test
+    includes a column containing strings and another column containing numbers. Then, update_df
+    introduces a third column of floats, as we are testing dynamic schema."""
+
+    lib = library_factory(LibraryOptions(rows_per_segment=10, dynamic_schema=True))
+    assert lib._nvs._lib_cfg.lib_desc.version.write_options.segment_row_size == 10
+    sym = "my_symbol"
+    # given
+    df = pd.DataFrame(
+        {"a": ["hello", "bonjour", "buenos dias", "gutentag"], "b": [1, 2, 3, 4]},
+        index=pd.date_range(start="1/1/2018", end="1/4/2018", freq="1D"),
+    )
+    lib.write(sym, df)
+    # when
+    df_update = pd.DataFrame({"c": [5.8, 6.1]}, index=pd.date_range(start="1/3/2018", end="1/4/2018", freq="1D"))
+    lib.update(sym, df_update)
+    # then
+    read_df = lib.read(sym).data
+    expected = pd.DataFrame(
+        {"a": ["hello", "bonjour", None, None], "b": [1, 2, 0, 0], "c": [np.NaN, np.NaN, 5.8, 6.1]},
+        index=pd.date_range(start="1/1/2018", end="1/4/2018", freq="1D"),
+    )
+    assert_frame_equal(expected, read_df)
+
+
 def test_read_with_read_request_form(arctic_library):
     lib = arctic_library
 

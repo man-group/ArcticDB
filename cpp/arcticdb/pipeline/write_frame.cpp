@@ -213,31 +213,6 @@ folly::Future<entity::AtomKey> append_frame(
     });
 }
 
-void update_string_columns(const SegmentInMemory& original, SegmentInMemory output) {
-    util::check(original.descriptor() == output.descriptor(), "Update string column handling expects identical descriptors");
-    for (size_t column = 0; column < static_cast<size_t>(original.descriptor().fields().size()); ++column) {
-        auto &frame_field = original.field(column);
-        auto field_type = frame_field.type().data_type();
-
-        if (is_sequence_type(field_type)) {
-            auto &target = output.column(static_cast<position_t>(column)).data().buffer();
-            size_t end = output.row_count();
-            for(auto row = 0u; row < end; ++row) {
-                auto val = get_string_from_buffer(row, target, original.const_string_pool());
-                util::variant_match(val,
-                                    [&] (std::string_view sv) {
-                                        auto off_str = output.string_pool().get(sv);
-                                        set_offset_string_at(row, target, off_str.offset());
-                                    },
-                                    [&] (StringPool::offset_t offset) {
-                                        set_offset_string_at(row, target, offset);
-                                    });
-
-            }
-        }
-    }
-}
-
 std::optional<SliceAndKey> rewrite_partial_segment(
         const SliceAndKey& existing,
         IndexRange index_range,
@@ -254,14 +229,13 @@ std::optional<SliceAndKey> rewrite_partial_segment(
 
     if(!before) {
         util::check(existing_range.start_ < index_range.start_, "Unexpected index range in after: {} !< {}", existing_range.start_, index_range.start_);
-        auto bound = std::lower_bound(std::begin(segment), std::end(segment), start, [] ( auto& row, timestamp t) {return row.template index<TimeseriesIndex>() < t; });
+        auto bound = std::lower_bound(std::begin(segment), std::end(segment), start, [] ( auto& row, timestamp t) {
+            return row.template index<TimeseriesIndex>() < t; 
+        });
         size_t num_rows = std::distance(std::begin(segment), bound);
         if(num_rows == 0)
             return std::nullopt;
-
-        auto output = SegmentInMemory{segment.descriptor(), num_rows};
-        std::copy(std::begin(segment), bound, std::back_inserter(output));
-        update_string_columns(segment, output);
+        auto output = segment.truncate(0, num_rows, true);
         FrameSlice new_slice{
             std::make_shared<StreamDescriptor>(output.descriptor()),
             existing.slice_.col_range,
@@ -273,17 +247,15 @@ std::optional<SliceAndKey> rewrite_partial_segment(
     }
     else {
         util::check(existing_range.end_ > index_range.end_, "Unexpected non-intersection of update indices: {} !> {}", existing_range.end_ , index_range.end_);
-
         auto bound = std::upper_bound(std::begin(segment), std::end(segment), end, [] ( timestamp t, auto& row) {
             return t < row.template index<TimeseriesIndex>();
         });
-        size_t num_rows = std::distance(bound, std::end(segment));
+        size_t start_row = std::distance(std::begin(segment), bound);
+        size_t end_row =  std::distance(std::begin(segment), std::end(segment));
+        size_t num_rows = end_row - start_row;
         if(num_rows == 0)
             return std::nullopt;
-
-        auto output = SegmentInMemory{segment.descriptor(), num_rows};
-        std::copy(bound, std::end(segment), std::back_inserter(output));
-        update_string_columns(segment, output);
+        auto output = segment.truncate(start_row, end_row, true);
         FrameSlice new_slice{
             std::make_shared<StreamDescriptor>(output.descriptor()),
                     existing.slice_.col_range,

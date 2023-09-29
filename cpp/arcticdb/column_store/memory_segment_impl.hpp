@@ -1138,7 +1138,8 @@ public:
     // Inclusive of start_row, exclusive of end_row
     inline std::shared_ptr<SegmentInMemoryImpl> truncate(
             size_t start_row,
-            size_t end_row) const {
+            size_t end_row,
+            bool reconstruct_string_pool = false) const {
         auto num_values = end_row - start_row;
         internal::check<ErrorCode::E_ASSERTION_FAILURE>(
                 is_sparse() || (start_row < row_count() && end_row <= row_count() && num_values > 0),
@@ -1147,7 +1148,8 @@ public:
         auto output = std::make_shared<SegmentInMemoryImpl>();
 
         output->set_row_data(num_values - 1);
-        output->set_string_pool(string_pool_);
+        if (!reconstruct_string_pool) 
+            output->set_string_pool(string_pool_);
         output->set_compacted(compacted_);
         if (metadata_) {
             google::protobuf::Any metadata;
@@ -1156,12 +1158,32 @@ public:
         }
 
         for(const auto&& [idx, column] : folly::enumerate(columns_)) {
-            auto truncated_column = Column::truncate(column, start_row, end_row);
-            output->add_column(descriptor_->field(idx), truncated_column);
+            auto &frame_field = descriptor_->field(idx);
+            auto field_type = frame_field.type().data_type();
+            if (reconstruct_string_pool && is_sequence_type(field_type)) {
+                output->add_column(frame_field, num_values, true);
+                auto &source = column->data().buffer();
+                auto &target = output->column(static_cast<position_t>(idx)).data().buffer();
+                for(auto row = 0u; row < num_values; ++row) {
+                    auto val = get_string_from_buffer(start_row + row, source, *string_pool_);
+                    util::variant_match(val,
+                                        [&] (std::string_view sv) {
+                                            auto off_str = output->string_pool().get(sv);
+                                            set_offset_string_at(row, target, off_str.offset());
+                                        },
+                                        [&] (StringPool::offset_t offset) {
+                                            set_offset_string_at(row, target, offset);
+                                        });
+                }
+            }else{
+                auto truncated_column = Column::truncate(column, start_row, end_row);
+                output->add_column(frame_field, truncated_column);
+            }
         }
         output->attach_descriptor(descriptor_);
         return output;
     }
+
 
     // Partitions the segment into n new segments. Each row in the starting segment is mapped to one of the output segments
     // by the row_to_segment vector (std::nullopt means the row is not included in any output segment).
