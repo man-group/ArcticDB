@@ -49,11 +49,11 @@ ArcticDB is designed from the outset to be resilient; there is no single point o
 ### Storage compatibility
 
 
-|                       | PyPI | conda-forge |
-| --------------------- | - | - |
-| S3                 | ✔️ | ✔️ |
-| LMDB               | ✔️ | ✔️ |
-| Azure Blob Storage | ✔️ | ✔️ |
+|                       | Linux | Windows | Mac (conda-forge only) |
+| --------------------- | - | - | - |
+| S3                 | ✔️ | ✔️ | ✔️ |
+| LMDB               | ✔️ | ➖ | ✔️ |
+| Azure Blob Storage | ✔️ | ✔️ | ➖ |
 
 ### Installation
 
