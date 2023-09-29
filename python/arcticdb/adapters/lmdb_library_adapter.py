@@ -24,8 +24,8 @@ from arcticdb.encoding_version import EncodingVersion
 from arcticdb.exceptions import ArcticDbNotYetImplemented, LmdbOptionsError
 
 
-def _rmtree_errorhandler(func, path, exc_info):
-    log.warn("Error removing LMDB tree at path=[{}] error=[{}]", path, exc_info)
+def _rm_errorhandler(func, path, exc_info):
+    log.warn("Error removing LMDB file at path=[{}] error=[{}]", path, exc_info)
 
 
 @dataclass
@@ -162,7 +162,24 @@ class LMDBLibraryAdapter(ArcticLibraryAdapter):
         return lib
 
     def cleanup_library(self, library_name: str):
-        shutil.rmtree(os.path.join(self._path, library_name), onerror=_rmtree_errorhandler)
+        lmdb_files_removed = True
+        for file in ("lock.mdb", "data.mdb"):
+            path = os.path.join(self._path, library_name, file)
+            try:
+                os.remove(path)
+            except Exception as e:
+                lmdb_files_removed = False
+                _rm_errorhandler(None, path, e)
+        dir_path = os.path.join(self._path, library_name)
+        if os.path.exists(dir_path):
+            if os.listdir(dir_path):
+                log.warn(
+                    "Skipping deletion of directory holding LMDB library during library deletion as it contains "
+                    f"files unrelated to LMDB. LMDB files {'have' if lmdb_files_removed else 'have not'} been "
+                    f"removed. directory=[{dir_path}]"
+                )
+            else:
+                shutil.rmtree(os.path.join(self._path, library_name), onerror=_rm_errorhandler)
 
     def get_storage_override(self) -> StorageOverride:
         lmdb_override = LmdbOverride()
