@@ -150,7 +150,7 @@ class VectorLibrary(object):
             buckets: Optional[int] = None,
             index: Optional[str] = None,
             training_vectors: Optional[NormalisableVectors] = None,
-            dynamic_rebucketise = False
+            dynamic_rebucketise = True
     ) -> None:
         """
         Creates a vector namespace.
