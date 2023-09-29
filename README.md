@@ -49,10 +49,10 @@ ArcticDB is designed from the outset to be resilient; there is no single point o
 ### Storage compatibility
 
 
-|                       | Linux | Windows | Mac (conda-forge only) |
+|                       | Linux | Windows | Mac |
 | --------------------- | - | - | - |
 | S3                 | ✔️ | ✔️ | ✔️ |
-| LMDB               | ✔️ | ➖ | ✔️ |
+| LMDB               | ✔️ | Beta | ✔️ |
 | Azure Blob Storage | ✔️ | ✔️ | ➖ |
 
 ### Installation
