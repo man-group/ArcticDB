@@ -295,9 +295,10 @@ LmdbStorage::LmdbStorage(const LibraryPath &library_path, OpenMode mode, const C
     // Windows needs a sensible size as it allocates disk for the whole file even before any writes. Linux just gets an arbitrarily large size
     // that it probably won't ever reach.
 #ifdef _WIN32
-    constexpr uint64_t default_map_size = 1ULL << 27; /* 128 MiB */
+    // At least enough for 300 cols and 1M rows
+    constexpr uint64_t default_map_size = 2ULL * (1ULL << 30); /* 2 GiB */
 #else
-    constexpr uint64_t default_map_size = 100ULL * (4ULL << 30); /* 400 GiB */
+    constexpr uint64_t default_map_size = 400ULL * (1ULL << 30); /* 400 GiB */
 #endif
     auto mapsize = or_else(static_cast<uint64_t>(conf.map_size()), default_map_size);
     env().set_mapsize(mapsize);

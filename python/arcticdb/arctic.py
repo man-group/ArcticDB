@@ -138,7 +138,7 @@ class Arctic:
                 |                           | The only supported units are MB / GB / TB.                                                                                                                    |
                 |                           |                                                                                                                                                               |
                 |                           | On Windows and MacOS, LMDB will materialize a file of this size, so you need to set it to a reasonable value that your system has                             |
-                |                           | room for, and it has a small default (order of 100MB). On Linux, this is an upper bound on the space used by LMDB and the default is large                    |
+                |                           | room for, and it has a small default (order of 1GB). On Linux, this is an upper bound on the space used by LMDB and the default is large                      |
                 |                           | (order of 100GB).                                                                                                                                             |
                 +---------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------+
 
