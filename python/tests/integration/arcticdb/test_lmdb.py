@@ -48,6 +48,29 @@ def test_library_deletion(tmpdir):
     assert ac.list_libraries() == ["test_lib2"]
 
 
+def test_library_deletion_leave_non_lmdb_files_alone(tmpdir):
+    # See Github issue #517
+    # Given
+    ac = Arctic(f"lmdb://{tmpdir}/lmdb_instance")
+    path = os.path.join(tmpdir, "lmdb_instance", "test_lib")
+    ac.create_library("test_lib")
+    assert os.path.exists(path)
+    with open(os.path.join(path, "another"), "w") as f:
+        f.write("blah")
+    os.makedirs(os.path.join(path, "dir"))
+
+    ac.create_library("test_lib2")
+
+    # When
+    ac.delete_library("test_lib")
+
+    # Then
+    assert os.path.exists(path)
+    files = set(os.listdir(path))
+    assert files == {"dir", "another"}
+    assert ac.list_libraries() == ["test_lib2"]
+
+
 def test_lmdb(tmpdir):
     # Github Issue #520 - this used to segfault
     d = {
