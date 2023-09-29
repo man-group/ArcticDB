@@ -126,7 +126,7 @@ For instance:
 
  - for release build on MacOS with mamba and conda-forge, use:
 
-```
+  ```bash
   export ARCTICDB_USING_CONDA=1
   cmake -DTEST=off --preset darwin-conda-release cpp
   cd cpp
