@@ -30,7 +30,6 @@ import numpy as np
 from arcticdb.config import MACOS_CONDA_BUILD, MACOS_CONDA_BUILD_SKIP_REASON
 from arcticdb.util.test import assert_frame_equal, RUN_MONGO_TEST
 
-from azure.storage.blob import BlobServiceClient
 from botocore.client import BaseClient as BotoClient
 import time
 

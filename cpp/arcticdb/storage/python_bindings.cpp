@@ -120,6 +120,7 @@ void register_bindings(py::module& storage, py::exception<arcticdb::ArcticExcept
 
     py::class_<LmdbOverride>(storage, "LmdbOverride")
             .def(py::init<>())
+            .def_property("path", &LmdbOverride::path, &LmdbOverride::set_path)
             .def_property("map_size", &LmdbOverride::map_size, &LmdbOverride::set_map_size);
 
     py::class_<StorageOverride>(storage, "StorageOverride")

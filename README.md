@@ -43,8 +43,8 @@ ArcticDB is designed from the outset to be resilient; there is no single point o
 |                       | PyPI (Python 3.6 - 3.11) | conda-forge (Python 3.8 - 3.11) |
 | --------------------- | - | - |
 | Linux                 | ✔️ | ✔️ |
-| Windows               | Beta | ➖ |
-| MacOS (Apple Silicon) | ➖ | ✔️ |
+| Windows               | ✔️ | ➖ |
+| MacOS (Apple Silicon) | ➖ | Beta️ |
 
 ### Storage compatibility
 

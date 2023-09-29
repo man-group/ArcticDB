@@ -15,7 +15,6 @@ from arcticdb.log import storage as log
 
 from arcticdb.options import LibraryOptions
 from arcticc.pb2.storage_pb2 import EnvironmentConfigsMap, LibraryConfig
-from arcticc.pb2.lmdb_storage_pb2 import Config as LmdbConfig
 from arcticdb.version_store.helper import add_lmdb_library_to_env
 from arcticdb.config import _DEFAULT_ENV
 from arcticdb.version_store._store import NativeVersionStore
@@ -26,7 +25,7 @@ from arcticdb.exceptions import ArcticDbNotYetImplemented, LmdbOptionsError
 
 
 def _rmtree_errorhandler(func, path, exc_info):
-    log.warn("Error removing LMDB tree at path=[{}]", path, exc_info=exc_info)
+    log.warn("Error removing LMDB tree at path=[{}] error=[{}]", path, exc_info)
 
 
 @dataclass
@@ -162,14 +161,12 @@ class LMDBLibraryAdapter(ArcticLibraryAdapter):
 
         return lib
 
-    def cleanup_library(self, library_name: str, library_config: LibraryConfig):
-        for k, v in library_config.storage_by_id.items():
-            lmdb_config = LmdbConfig()
-            v.config.Unpack(lmdb_config)
-            shutil.rmtree(os.path.join(lmdb_config.path, library_name), onerror=_rmtree_errorhandler)
+    def cleanup_library(self, library_name: str):
+        shutil.rmtree(os.path.join(self._path, library_name), onerror=_rmtree_errorhandler)
 
     def get_storage_override(self) -> StorageOverride:
         lmdb_override = LmdbOverride()
+        lmdb_override.path = self._path
         if self._query_params.map_size:
             lmdb_override.map_size = self._query_params.map_size
 
