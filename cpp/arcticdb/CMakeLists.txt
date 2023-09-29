@@ -253,6 +253,8 @@ set(arcticdb_srcs
         storage/lmdb/lmdb_storage-inl.hpp
         storage/memory/memory_storage.hpp
         storage/memory/memory_storage.cpp
+        storage/rocksdb/rocksdb_storage.hpp
+        storage/rocksdb/rocksdb_storage.cpp
         storage/mongo/mongo_client.hpp
         storage/mongo/mongo_instance.hpp
         storage/mongo/mongo_storage.hpp
