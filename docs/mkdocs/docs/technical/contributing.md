@@ -142,7 +142,9 @@ For instance:
    We recommend using the [`editable` installation](https://setuptools.pypa.io/en/latest/userguide/development_mode.html) for development:
 
   ```bash
-  export ARCTICDB_USING_CONDA=1 
+  export ARCTICDB_USING_CONDA=1
+  # Adapt the CMake preset to your setup.
+  export ARCTIC_CMAKE_PRESET=linux-conda-debug
   python -m pip install --no-build-isolation --no-deps --verbose --editable .
   ```
 
