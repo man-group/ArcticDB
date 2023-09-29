@@ -31,7 +31,7 @@ pip install arcticdb
 
 ### Setup
 
-ArcticDB is a storage engine designed for object storage, but also supports local RAM storage and local-disk storage using LMDB.
+ArcticDB is a storage engine designed for object storage, but also supports local-disk storage using LMDB.
 
 !!! Storage Compatibility
 
@@ -101,7 +101,7 @@ You may want to restrict access for the ArcticDB library to a specific path with
 >>> ac = Arctic('s3s://s3.eu-west-2.amazonaws.com:arcticdb-test-bucket?path_prefix=test&aws_auth=true')
 ```
 
-#### Azure configuration
+#### Azure
 
 ArcticDB uses the [Azure connection string](https://learn.microsoft.com/en-us/azure/storage/common/storage-configure-connection-string) to define the connection: 
 
@@ -119,7 +119,7 @@ For example:
 
 For more information, [see the Arctic class reference](https://docs.arcticdb.io/api/arcticdb#arcticdb.Arctic.__init__).
 
-#### LMDB configuration
+#### LMDB
 
 LMDB supports configuring its map size. See its [documentation](http://www.lmdb.tech/doc/group__mdb.html#gaa2506ec8dab3d969b0e609cd82e619e5).
 
@@ -133,11 +133,12 @@ You can set a map size in the connection string:
 >>> ac = Arctic('lmdb://path/to/desired/database?map_size=2GB')
 ```
 
-The default on Windows is only 128MB. Errors with `lmdb errror code -30792` indicate that the map is getting full and that you should
-increase its size. This will happen if you are doing large writes. You should ensure that you only have one Arctic instance open over
-a given LMDB database.
+The default on Windows is 2GiB. Errors with `lmdb errror code -30792` indicate that the map is getting full and that you should
+increase its size. This will happen if you are doing large writes.
 
-For more information on the different endpoints, [see the Arctic class reference](https://docs.arcticdb.io/api/arcticdb#arcticdb.Arctic.__init__).
+In each Python process, you should ensure that you only have one Arctic instance open over a given LMDB database.
+
+LMDB does not work with remote filesystems.
 
 #### In-memory configuration
 
@@ -152,9 +153,7 @@ For example:
 >>> ac = Arctic('mem://')
 ```
 
-TODO: For concurrent access to a local backend, LMDB connected to tmpfs is recommended.
-
-### Usage
+For concurrent access to a local backend, we recommend LMDB connected to tmpfs.
 
 #### Library Setup
 
