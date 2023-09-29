@@ -373,7 +373,7 @@ class VectorLibrary(object):
         buckets = len([size for size in bucket_sizes.values() if size != 0])
         total_vectors = sum(bucket_sizes.values())
         mean = total_vectors / buckets
-        buckets_to_deduplicate = [i for i, size in enumerate(bucket_sizes.values()) if size > 2*mean]
+        buckets_to_deduplicate = [key for key, size in bucket_sizes.items() if size > 2*mean]
         next_bucket = len(self._centroids[namespace])
         # We try to remove up to buckets_added empty buckets at the end.
         buckets_added = 0
