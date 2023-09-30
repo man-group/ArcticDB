@@ -703,8 +703,8 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
     py::class_<ManualClockVersionStore, PythonVersionStore>(version, "ManualClockVersionStore")
         .def(py::init<const std::shared_ptr<storage::Library>&>())
         .def_property_static("time",
-            []() { return util::ManualClock::time_.load(); },
-            [](const py::class_<ManualClockVersionStore>&, entity::timestamp ts) { util::ManualClock::time_ = ts; })
+            [](const py::class_<ManualClockVersionStore>& /*self*/) { return util::ManualClock::time_.load(); },
+            [](const py::class_<ManualClockVersionStore>& /*self*/, entity::timestamp ts) { util::ManualClock::time_ = ts; })
          ;
 
     py::class_<LocalVersionedEngine>(version, "VersionedEngine")
