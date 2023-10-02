@@ -14,6 +14,7 @@
 #include <arcticdb/entity/performance_tracing.hpp>
 #include <arcticdb/storage/memory/memory_storage.hpp>
 #include <arcticdb/storage/storage_options.hpp>
+#include <arcticdb/storage/storage_utils.hpp>
 
 namespace arcticdb::storage::memory {
 
@@ -21,7 +22,6 @@ namespace arcticdb::storage::memory {
 
     inline void MemoryStorage::do_write(Composite<KeySegmentPair>&& kvs) {
         ARCTICDB_SAMPLE(MemoryStorageWrite, 0)
-        std::lock_guard lock{*mutex_};
 
         auto fmt_db = [](auto &&k) { return variant_key_type(k.variant_key()); };
 
@@ -31,13 +31,18 @@ namespace arcticdb::storage::memory {
             for (auto &kv : group.values()) {
                 util::variant_match(kv.variant_key(),
                                     [&](const RefKey &key) {
-                                        key_vec[key] = kv.segment();
+                                        if (auto it = key_vec.find(key); it != key_vec.end()) {
+                                            key_vec.erase(it);
+                                        }
+
+                                        key_vec.try_emplace(key, kv.segment());
                                     },
                                     [&](const AtomKey &key) {
-                                        util::check(key_vec.find(key) == key_vec.end(),
-                                                    "Cannot replace atom key in in-memory storage");
+                                        if (key_vec.find(key) != key_vec.end()) {
+                                            throw DuplicateKeyException(key);
+                                        }
 
-                                        key_vec[key] = kv.segment();
+                                        key_vec.try_emplace(key, kv.segment());
                                     }
                 );
             }
@@ -46,7 +51,6 @@ namespace arcticdb::storage::memory {
 
     inline void MemoryStorage::do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts opts) {
         ARCTICDB_SAMPLE(MemoryStorageUpdate, 0)
-        std::lock_guard lock{*mutex_};
 
         auto fmt_db = [](auto &&k) { return variant_key_type(k.variant_key()); };
 
@@ -68,7 +72,6 @@ namespace arcticdb::storage::memory {
 
     inline void MemoryStorage::do_read(Composite<VariantKey>&& ks, const ReadVisitor& visitor, ReadKeyOpts) {
         ARCTICDB_SAMPLE(MemoryStorageRead, 0)
-        std::lock_guard lock{*mutex_};
         auto fmt_db = [](auto &&k) { return variant_key_type(k); };
 
         (fg::from(ks.as_range()) | fg::move | fg::groupBy(fmt_db)).foreach([&](auto &&group) {
@@ -87,10 +90,9 @@ namespace arcticdb::storage::memory {
         });
     }
 
-inline bool MemoryStorage::do_key_exists(const VariantKey& key) {
+    inline bool MemoryStorage::do_key_exists(const VariantKey& key) {
         ARCTICDB_SAMPLE(MemoryStorageKeyExists, 0)
-        std::lock_guard lock{*mutex_};
-        auto& key_vec = data_[variant_key_type(key)];
+        const auto& key_vec = data_[variant_key_type(key)];
         auto it = key_vec.find(key);
         return it != key_vec.end();
     }
@@ -98,7 +100,6 @@ inline bool MemoryStorage::do_key_exists(const VariantKey& key) {
     inline void MemoryStorage::do_remove(Composite<VariantKey>&& ks, RemoveOpts opts)
     {
         ARCTICDB_SAMPLE(MemoryStorageRemove, 0)
-        std::lock_guard lock{*mutex_};
         auto fmt_db = [](auto &&k) { return variant_key_type(k); };
 
         (fg::from(ks.as_range()) | fg::move | fg::groupBy(fmt_db)).foreach([&](auto &&group) {
@@ -118,16 +119,23 @@ inline bool MemoryStorage::do_key_exists(const VariantKey& key) {
     }
 
     bool MemoryStorage::do_fast_delete() {
-        return false;
+        foreach_key_type([&] (KeyType key_type) {
+            data_[key_type].clear();
+        });
+        return true;
     }
 
-    inline void MemoryStorage::do_iterate_type(KeyType key_type, const IterateTypeVisitor& visitor, const std::string &/*prefix*/) {
+    inline void MemoryStorage::do_iterate_type(KeyType key_type, const IterateTypeVisitor& visitor, const std::string& prefix) {
         ARCTICDB_SAMPLE(MemoryStorageItType, 0)
-        std::lock_guard lock{*mutex_};
         auto& key_vec = data_[key_type];
+        auto prefix_matcher = stream_id_prefix_matcher(prefix);
+
         for(auto& key_value : key_vec) {
             auto key = key_value.first;
-            visitor(std::move(key));
+
+            if (prefix_matcher(variant_key_id(key))) {
+                visitor(std::move(key));
+            }
         }
     }
 }

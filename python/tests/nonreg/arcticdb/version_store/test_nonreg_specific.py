@@ -15,8 +15,8 @@ from arcticdb.util.test import assert_frame_equal
 from arcticc.pb2.descriptors_pb2 import TypeDescriptor
 
 
-def test_read_keys(object_and_lmdb_version_store_dynamic_schema):
-    lib = object_and_lmdb_version_store_dynamic_schema
+def test_read_keys(object_and_mem_and_lmdb_version_store_dynamic_schema):
+    lib = object_and_mem_and_lmdb_version_store_dynamic_schema
     symbol = "test_update_float_int"
     data1 = pd.DataFrame({"a": [np.float64(1.0)]}, index=[datetime.datetime(2019, 4, 9, 10, 5, 2, 1)])
     data2 = pd.DataFrame({"a": [np.int64(2)]}, index=[datetime.datetime(2019, 4, 8, 10, 5, 2, 1)])
@@ -31,8 +31,8 @@ def test_read_keys(object_and_lmdb_version_store_dynamic_schema):
     assert_frame_equal(expected, result)
 
 
-def test_update_int_float(object_and_lmdb_version_store_dynamic_schema):
-    lib = object_and_lmdb_version_store_dynamic_schema
+def test_update_int_float(object_and_mem_and_lmdb_version_store_dynamic_schema):
+    lib = object_and_mem_and_lmdb_version_store_dynamic_schema
     symbol = "test_update_int_float"
     data1 = pd.DataFrame({"a": [np.int64(2)]}, index=[datetime.datetime(2019, 4, 9, 10, 5, 2, 1)])
     data2 = pd.DataFrame({"a": [np.float64(1.0)]}, index=[datetime.datetime(2019, 4, 8, 10, 5, 2, 1)])
@@ -47,8 +47,8 @@ def test_update_int_float(object_and_lmdb_version_store_dynamic_schema):
     assert_frame_equal(expected, result)
 
 
-def test_update_nan_int(object_and_lmdb_version_store_dynamic_schema):
-    lib = object_and_lmdb_version_store_dynamic_schema
+def test_update_nan_int(object_and_mem_and_lmdb_version_store_dynamic_schema):
+    lib = object_and_mem_and_lmdb_version_store_dynamic_schema
     symbol = "test_update_nan_int"
     data1 = pd.DataFrame({"a": [np.nan]}, index=[datetime.datetime(2019, 4, 9, 10, 5, 2, 1)])
     data2 = pd.DataFrame({"a": [np.int64(2)]}, index=[datetime.datetime(2019, 4, 8, 10, 5, 2, 1)])
@@ -63,8 +63,8 @@ def test_update_nan_int(object_and_lmdb_version_store_dynamic_schema):
     assert_frame_equal(expected, result)
 
 
-def test_update_int_nan(object_and_lmdb_version_store_dynamic_schema):
-    lib = object_and_lmdb_version_store_dynamic_schema
+def test_update_int_nan(object_and_mem_and_lmdb_version_store_dynamic_schema):
+    lib = object_and_mem_and_lmdb_version_store_dynamic_schema
     symbol = "test_update_int_nan"
     data1 = pd.DataFrame({"a": [np.int64(2)]}, index=[datetime.datetime(2019, 4, 9, 10, 5, 2, 1)])
     data2 = pd.DataFrame({"a": [np.nan]}, index=[datetime.datetime(2019, 4, 8, 10, 5, 2, 1)])
@@ -80,8 +80,8 @@ def test_update_int_nan(object_and_lmdb_version_store_dynamic_schema):
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="SKIP_WIN Only dynamic strings are supported on Windows")
-def test_append_dynamic_to_fixed_width_strings(object_and_lmdb_version_store_dynamic_schema):
-    lib = object_and_lmdb_version_store_dynamic_schema
+def test_append_dynamic_to_fixed_width_strings(object_and_mem_and_lmdb_version_store_dynamic_schema):
+    lib = object_and_mem_and_lmdb_version_store_dynamic_schema
     symbol = "test_append_dynamic_to_fixed_width_strings"
 
     fixed_width_strings_index = pd.date_range("2000-1-1", periods=3)
@@ -103,8 +103,8 @@ def test_append_dynamic_to_fixed_width_strings(object_and_lmdb_version_store_dyn
     assert_frame_equal(expected_df, read_df)
 
 
-def test_append_fixed_width_to_dynamic_strings(object_and_lmdb_version_store_dynamic_schema):
-    lib = object_and_lmdb_version_store_dynamic_schema
+def test_append_fixed_width_to_dynamic_strings(object_and_mem_and_lmdb_version_store_dynamic_schema):
+    lib = object_and_mem_and_lmdb_version_store_dynamic_schema
     symbol = "test_append_fixed_width_to_dynamic_strings"
 
     dynamic_strings_index = pd.date_range("2000-1-1", periods=3)
@@ -129,8 +129,8 @@ def test_append_fixed_width_to_dynamic_strings(object_and_lmdb_version_store_dyn
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="SKIP_WIN Only dynamic strings are supported on Windows")
-def test_update_dynamic_to_fixed_width_strings(object_and_lmdb_version_store_dynamic_schema):
-    lib = object_and_lmdb_version_store_dynamic_schema
+def test_update_dynamic_to_fixed_width_strings(object_and_mem_and_lmdb_version_store_dynamic_schema):
+    lib = object_and_mem_and_lmdb_version_store_dynamic_schema
     symbol = "test_update_dynamic_to_fixed_width_strings"
 
     fixed_width_strings_index = pd.date_range("2000-1-1", periods=3)
@@ -153,8 +153,8 @@ def test_update_dynamic_to_fixed_width_strings(object_and_lmdb_version_store_dyn
     assert_frame_equal(expected_df, read_df)
 
 
-def test_update_fixed_width_to_dynamic_strings(object_and_lmdb_version_store_dynamic_schema):
-    lib = object_and_lmdb_version_store_dynamic_schema
+def test_update_fixed_width_to_dynamic_strings(object_and_mem_and_lmdb_version_store_dynamic_schema):
+    lib = object_and_mem_and_lmdb_version_store_dynamic_schema
     symbol = "test_update_fixed_width_to_dynamic_strings"
 
     dynamic_strings_index = pd.date_range("2000-1-1", periods=3)

@@ -180,7 +180,7 @@ def test_separation_between_libraries(arctic_client):
     ac.create_library("pytest_test_lib")
     ac.create_library("pytest_test_lib_2")
 
-    assert ac.list_libraries() == ["pytest_test_lib", "pytest_test_lib_2"]
+    assert set(ac.list_libraries()) == {"pytest_test_lib", "pytest_test_lib_2"}
 
     ac["pytest_test_lib"].write("test_1", pd.DataFrame())
     ac["pytest_test_lib_2"].write("test_2", pd.DataFrame())
