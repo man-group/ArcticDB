@@ -16,6 +16,7 @@ from arcticdb.adapters.s3_library_adapter import S3LibraryAdapter
 from arcticdb.adapters.lmdb_library_adapter import LMDBLibraryAdapter
 from arcticdb.adapters.azure_library_adapter import AzureLibraryAdapter
 from arcticdb.adapters.mongo_library_adapter import MongoLibraryAdapter
+from arcticdb.adapters.in_memory_library_adapter import InMemoryLibraryAdapter
 from arcticdb.encoding_version import EncodingVersion
 
 
@@ -25,7 +26,13 @@ class Arctic:
     creation, deletion and retrieval of Arctic libraries.
     """
 
-    _LIBRARY_ADAPTERS = [S3LibraryAdapter, LMDBLibraryAdapter, AzureLibraryAdapter, MongoLibraryAdapter]
+    _LIBRARY_ADAPTERS = [
+        S3LibraryAdapter,
+        LMDBLibraryAdapter,
+        AzureLibraryAdapter,
+        MongoLibraryAdapter,
+        InMemoryLibraryAdapter,
+    ]
 
     def __init__(self, uri: str, encoding_version: EncodingVersion = DEFAULT_ENCODING_VERSION):
         """
@@ -39,8 +46,7 @@ class Arctic:
         uri: str
             URI specifying the backing store used to access, configure, and create Arctic libraries.
 
-            S3
-            --
+            **S3**
 
                 The S3 URI connection scheme has the form ``s3(s)://<s3 end point>:<s3 bucket>[?options]``.
 
@@ -51,29 +57,28 @@ class Arctic:
 
                 Available options for S3:
 
-                +---------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------+
-                | Option                    | Description                                                                                                                                                   |
-                +===========================+===============================================================================================================================================================+
-                | port                      | port to use for S3 connection                                                                                                                                 |
-                +---------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------+
-                | region                    | S3 region                                                                                                                                                     |
-                +---------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------+
-                | use_virtual_addressing    | Whether to use virtual addressing to access the S3 bucket                                                                                                     |
-                +---------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------+
-                | access                    | S3 access key                                                                                                                                                 |
-                +---------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------+
-                | secret                    | S3 secret access key                                                                                                                                          |
-                +---------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------+
-                | path_prefix               | Path within S3 bucket to use for data storage                                                                                                                 |
-                +---------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------+
-                | aws_auth                  | If true, authentication to endpoint will be computed via AWS environment vars/config files. If no options are provided `aws_auth` will be assumed to be true. |
-                +---------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------+
+                +---------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------+
+                | Option                    | Description                                                                                                                                                     |
+                +===========================+=================================================================================================================================================================+
+                | port                      | port to use for S3 connection                                                                                                                                   |
+                +---------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------+
+                | region                    | S3 region                                                                                                                                                       |
+                +---------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------+
+                | use_virtual_addressing    | Whether to use virtual addressing to access the S3 bucket                                                                                                       |
+                +---------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------+
+                | access                    | S3 access key                                                                                                                                                   |
+                +---------------------------+--------------------------------------------------------------------------------------------------------------------------------------------- -------------------+
+                | secret                    | S3 secret access key                                                                                                                                            |
+                +---------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------+
+                | path_prefix               | Path within S3 bucket to use for data storage                                                                                                                   |
+                +---------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------+
+                | aws_auth                  | If true, authentication to endpoint will be computed via AWS environment vars/config files. If no options are provided ``aws_auth`` will be assumed to be true. |
+                +---------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------+
 
-                Note: When connecting to AWS, `region` can be automatically deduced from the endpoint if the given endpoint
-                specifies the region and `region` is not set.
+                Note: When connecting to AWS, ``region`` can be automatically deduced from the endpoint if the given endpoint
+                specifies the region and ``region`` is not set.
 
-            Azure
-            -----
+            **Azure**
 
                 The Azure URI connection scheme has the form ``azure://[options]``.
                 It is based on the Azure Connection String, with additional options for configuring ArcticDB.
@@ -91,7 +96,7 @@ class Arctic:
                 | Path_prefix               | Path within Azure container to use for data storage                                                                                                           |
                 +---------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------+
                 | CA_cert_path              | (Non-Windows platform only) Azure CA certificate path. If not set, default path will be used.                                                                 |
-                |                           | Note: For Linux distribution, default path is set to `/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem`.                                                     |
+                |                           | Note: For Linux distribution, default path is set to ``/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem``.                                                   |
                 |                           | If the certificate cannot be found in the provided path, an Azure exception with no meaningful error code will be thrown.                                     |
                 |                           | For more details, please see https://github.com/Azure/azure-sdk-for-cpp/issues/4738.                                                                          |
                 |                           | For example, ``Failed to iterate azure blobs 'C' 0:``.                                                                                                        |
@@ -108,7 +113,7 @@ class Arctic:
                 For Windows user, `CA_cert_path` cannot be set. Please set CA certificate related option on Windows setting.
                 For details, you may refer to https://learn.microsoft.com/en-us/skype-sdk/sdn/articles/installing-the-trusted-root-certificate
 
-                Exception: Azure exceptions message always ends with `{AZURE_SDK_HTTP_STATUS_CODE}:{AZURE_SDK_REASON_PHRASE}`.
+                Exception: Azure exceptions message always ends with ``{AZURE_SDK_HTTP_STATUS_CODE}:{AZURE_SDK_REASON_PHRASE}``.
 
                 Please refer to https://github.com/Azure/azure-sdk-for-cpp/blob/24ed290815d8f9dbcd758a60fdc5b6b9205f74e0/sdk/core/azure-core/inc/azure/core/http/http_status_code.hpp for
                 more details of provided status codes.
@@ -116,9 +121,7 @@ class Arctic:
                 Note that due to a bug in Azure C++ SDK (https://github.com/Azure/azure-sdk-for-cpp/issues/4738), Azure may not give meaningful status codes and
                 reason phrases in the exception. To debug these instances, please set the environment variable ``export AZURE_LOG_LEVEL`` to ``1`` to turn on the SDK debug logging.
 
-
-            LMDB
-            ----
+            **LMDB**
 
                 The LMDB connection scheme has the form ``lmdb:///<path to store LMDB files>[?options]``.
 
@@ -139,7 +142,13 @@ class Arctic:
                 |                           | (order of 100GB).                                                                                                                                             |
                 +---------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------+
 
-                Example connection strings are `lmdb:///home/user/my_lmdb` or `lmdb:///home/user/my_lmdb?map_size=2GB`.
+                Example connection strings are ``lmdb:///home/user/my_lmdb`` or ``lmdb:///home/user/my_lmdb?map_size=2GB``.
+
+            **In-Memory**
+
+                The in-memory connection scheme has the form ``mem://``.
+
+                The storage is local to the ``Arctic`` instance.
 
         encoding_version: EncodingVersion, default DEFAULT_ENCODING_VERSION
             When creating new libraries with this Arctic instance, the default encoding version to use.
@@ -196,7 +205,7 @@ class Arctic:
         self, name: str, create_if_missing: Optional[bool] = False, library_options: Optional[LibraryOptions] = None
     ) -> Library:
         """
-        Returns the library named `name`.
+        Returns the library named ``name``.
 
         This method can also be invoked through subscripting. ``Arctic('bucket').get_library("test")`` is equivalent to
         ``Arctic('bucket')["test"]``.
@@ -297,7 +306,7 @@ class Arctic:
 
         Parameters
         ----------
-        name: `str`
+        name: str
             Name of the library to delete.
         """
         already_open = self._open_libraries.pop(name, None)
@@ -316,7 +325,7 @@ class Arctic:
 
         Parameters
         ----------
-        name: `str`
+        name: str
             Name of the library to check the existence of.
 
         Returns

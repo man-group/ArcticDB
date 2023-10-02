@@ -81,7 +81,8 @@ def test_symbol_list_with_rec_norm(basic_store):
     assert basic_store.list_symbols() == ["rec_norm"]
 
 
-def test_interleaved_store_read(basic_store_factory):
+def test_interleaved_store_read(version_store_and_real_s3_basic_store_factory):
+    basic_store_factory = version_store_and_real_s3_basic_store_factory
     vs1 = basic_store_factory()
     vs2 = basic_store_factory(reuse_name=True)
 

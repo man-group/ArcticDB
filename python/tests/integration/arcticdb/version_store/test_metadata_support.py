@@ -19,8 +19,8 @@ from arcticdb.util.test import assert_frame_equal, distinct_timestamps
 # test_rt_df stands for roundtrip dataframe (implicitly pandas given file name)
 
 
-def test_rt_df_with_small_meta(object_and_lmdb_version_store):
-    lib = object_and_lmdb_version_store
+def test_rt_df_with_small_meta(object_and_mem_and_lmdb_version_store):
+    lib = object_and_mem_and_lmdb_version_store
     #  type: (NativeVersionStore)->None
 
     df = DataFrame(data=["A", "B", "C"])
@@ -31,21 +31,21 @@ def test_rt_df_with_small_meta(object_and_lmdb_version_store):
     assert meta == vit.metadata
 
 
-def test_rt_df_with_humonguous_meta(object_and_lmdb_version_store):
+def test_rt_df_with_humonguous_meta(object_and_mem_and_lmdb_version_store):
     with pytest.raises(ArcticDbNotYetImplemented):
         from arcticdb.version_store._normalization import _MAX_USER_DEFINED_META as MAX
 
         df = DataFrame(data=["A", "B", "C"])
         meta = {"a": "x" * (MAX)}
-        object_and_lmdb_version_store.write("pandas", df, metadata=meta)
+        object_and_mem_and_lmdb_version_store.write("pandas", df, metadata=meta)
 
-        vit = object_and_lmdb_version_store.read("pandas")
+        vit = object_and_mem_and_lmdb_version_store.read("pandas")
         assert_frame_equal(df, vit)
         assert meta == vit.metadata
 
 
-def test_read_metadata(object_and_lmdb_version_store):
-    lib = object_and_lmdb_version_store
+def test_read_metadata(object_and_mem_and_lmdb_version_store):
+    lib = object_and_mem_and_lmdb_version_store
     original_data = [1, 2, 3]
     snap_name = "metadata_snap_1"
     symbol = "test_symbol"
@@ -55,8 +55,8 @@ def test_read_metadata(object_and_lmdb_version_store):
     assert lib.read_metadata("test_symbol").metadata == metadata
 
 
-def test_read_metadata_by_version(object_and_lmdb_version_store):
-    lib = object_and_lmdb_version_store
+def test_read_metadata_by_version(object_and_mem_and_lmdb_version_store):
+    lib = object_and_mem_and_lmdb_version_store
     data_v1 = [1, 2, 3]
     data_v2 = [10, 20, 30]
     symbol = "test_symbol"

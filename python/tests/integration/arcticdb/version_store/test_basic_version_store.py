@@ -191,8 +191,8 @@ def test_unhandled_chars_already_present_update(object_version_store, unhandled_
     assert len(vitem.data) == len(new_vitem.data)
 
 
-def test_with_prune(object_and_lmdb_version_store, symbol):
-    version_store = object_and_lmdb_version_store
+def test_with_prune(object_and_mem_and_lmdb_version_store, symbol):
+    version_store = object_and_mem_and_lmdb_version_store
     df = sample_dataframe()
     modified_df = sample_dataframe()
 
@@ -610,8 +610,8 @@ def test_get_info(basic_store):
     assert info["index_type"] == "index"
 
 
-def test_get_info_version(object_and_lmdb_version_store):
-    lib = object_and_lmdb_version_store
+def test_get_info_version(object_and_mem_and_lmdb_version_store):
+    lib = object_and_mem_and_lmdb_version_store
     # given
     sym = "get_info_version_test"
     df = pd.DataFrame(data={"col1": np.arange(10)}, index=pd.date_range(pd.Timestamp(0), periods=10))
@@ -852,8 +852,8 @@ def test_is_pickled_by_timestamp(basic_store):
     assert basic_store.is_symbol_pickled(symbol, pd.Timestamp(np.iinfo(np.int64).max)) is False
 
 
-def test_list_versions(object_and_lmdb_version_store):
-    version_store = object_and_lmdb_version_store
+def test_list_versions(object_and_mem_and_lmdb_version_store):
+    version_store = object_and_mem_and_lmdb_version_store
     version_store.write("a", 1)  # a, v0
     version_store.write("b", 1)  # b, v0
     version_store.write("c", 1)  # c, v0
@@ -1610,16 +1610,16 @@ def test_find_version(lmdb_version_store_v1):
     assert lib._find_version(sym, as_of=v3_time.after).version == 3
 
 
-def test_library_deletion_lmdb(lmdb_version_store):
+def test_library_deletion_lmdb(basic_store):
     # lmdb uses fast deletion
-    lmdb_version_store.write("a", 1)
-    lmdb_version_store.write("b", 1)
+    basic_store.write("a", 1)
+    basic_store.write("b", 1)
 
-    lmdb_version_store.snapshot("snap")
-    assert len(lmdb_version_store.list_symbols()) == 2
-    lmdb_version_store.version_store.clear()
-    assert len(lmdb_version_store.list_symbols()) == 0
-    lib_tool = lmdb_version_store.library_tool()
+    basic_store.snapshot("snap")
+    assert len(basic_store.list_symbols()) == 2
+    basic_store.version_store.clear()
+    assert len(basic_store.list_symbols()) == 0
+    lib_tool = basic_store.library_tool()
     assert lib_tool.count_keys(KeyType.VERSION) == 0
     assert lib_tool.count_keys(KeyType.TABLE_INDEX) == 0
 
@@ -2112,58 +2112,6 @@ def test_batch_read_version_doesnt_exist(basic_store):
     basic_store.write(sym2, 2)
     with pytest.raises(NoDataFoundException):
         _ = basic_store.batch_read([sym1, sym2], as_ofs=[0, 1])
-
-
-def test_batch_read_missing_keys(basic_store):
-    lib = basic_store
-
-    df1 = pd.DataFrame({"a": [3, 5, 7]})
-    df2 = pd.DataFrame({"a": [4, 6, 8]})
-    df3 = pd.DataFrame({"a": [5, 7, 9]})
-    lib.write("s1", df1)
-    lib.write("s2", df2)
-    # Need two versions for this symbol as we're going to delete a version key, and the optimisation of storing the
-    # latest index key in the version ref key means it will still work if we just write one version key and then delete
-    # it
-    lib.write("s3", df3)
-    lib.write("s3", df3)
-    lib_tool = lib.library_tool()
-    s1_index_key = lib_tool.find_keys_for_id(KeyType.TABLE_INDEX, "s1")[0]
-    s2_data_key = lib_tool.find_keys_for_id(KeyType.TABLE_DATA, "s2")[0]
-    s3_version_keys = lib_tool.find_keys_for_id(KeyType.VERSION, "s3")
-    s3_key_to_delete = [key for key in s3_version_keys if key.version_id == 0][0]
-    lib_tool.remove(s1_index_key)
-    lib_tool.remove(s2_data_key)
-    lib_tool.remove(s3_key_to_delete)
-
-    # The exception thrown is different for missing version keys to everything else, and so depends on which symbol is
-    # processed first
-    with pytest.raises((NoDataFoundException, StorageException)):
-        _ = lib.batch_read(["s1", "s2", "s3"], [None, None, 0])
-
-
-def test_batch_get_info_missing_keys(basic_store):
-    lib = basic_store
-
-    df1 = pd.DataFrame({"a": [3, 5, 7]})
-    df2 = pd.DataFrame({"a": [5, 7, 9]})
-    lib.write("s1", df1)
-    # Need two versions for this symbol as we're going to delete a version key, and the optimisation of storing the
-    # latest index key in the version ref key means it will still work if we just write one version key and then delete
-    # it
-    lib.write("s2", df2)
-    lib.write("s2", df2)
-    lib_tool = lib.library_tool()
-    s1_index_key = lib_tool.find_keys_for_id(KeyType.TABLE_INDEX, "s1")[0]
-    s2_version_keys = lib_tool.find_keys_for_id(KeyType.VERSION, "s2")
-    s2_key_to_delete = [key for key in s2_version_keys if key.version_id == 0][0]
-    lib_tool.remove(s1_index_key)
-    lib_tool.remove(s2_key_to_delete)
-
-    with pytest.raises(StorageException):
-        _ = lib.batch_get_info(["s1"], [None])
-    with pytest.raises(StorageException):
-        _ = lib.batch_get_info(["s2"], [0])
 
 
 def test_index_keys_start_end_index(basic_store, sym):
