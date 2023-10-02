@@ -1,5 +1,6 @@
 from IPython.display import display, Markdown
 from .library_utils import check_and_adapt_library
+from arcticdb.options import LibraryOptions
 
 EXPLANATIONS = {
     "segment_row_size": """
@@ -257,6 +258,12 @@ class LibraryInfoGetter:
             "storage_fallthrough",
         }
 
+        self.external_library_to_proto_names = {
+            "dedup": "de_duplication",
+            "rows_per_segment": "segment_row_size",
+            "columns_per_segment": "column_group_size",
+        }
+
     def traverse_descriptor(self, obj, path=""):
         """
         Traverses the fields of the provided protobuf object, compares their values with default ones,
@@ -271,7 +278,7 @@ class LibraryInfoGetter:
             elif full_name not in self.exclusion_set:
                 default_value = (
                     getattr(default_response_obj, field.name)
-                    if (not self.is_internal_api or field.name not in self.internal_default_values)
+                    if (field.name not in self.internal_default_values)
                     else self.internal_default_values[field.name]
                 )
                 explanation = self.explanations.get(field.name, "No explanation provided.")
@@ -286,8 +293,43 @@ class LibraryInfoGetter:
                         value = self.c_plus_plus_overwritten_when_zero[field.name]
                     self.response_default_str += f"\n### **{field.name}**: {value}\n\n{explanation}\n\n"
 
+    def traverse_library_options(self, obj):
+        """
+        Traverses the fields of library_options, compares their values with default ones,
+        and updates response strings accordingly
+        """
+        default_library_options = LibraryOptions()
+        attributes = vars(default_library_options)
+        for attribute, default_value in attributes.items():
+            field_proto_name = (
+                attribute
+                if attribute not in self.external_library_to_proto_names
+                else self.external_library_to_proto_names[attribute]
+            )
+            value = self.find_library_value_from_proto_obj(obj, field_proto_name)
+            if value is not None:
+                explanation = self.explanations.get(field_proto_name, "No explanation provided.")
+                if value != default_value:
+                    self.response_non_default_str += (
+                        f"\n### **{attribute}**: {value} (Default: {default_value})\n\n{explanation}\n\n"
+                    )
+                else:
+                    self.response_default_str += f"\n### **{attribute}**: {value}\n\n{explanation}\n\n"
+
+    def find_library_value_from_proto_obj(self, obj, field_name):
+        for proto_field in obj.DESCRIPTOR.fields:
+            if proto_field.message_type:
+                value = self.find_library_value_from_proto_obj(getattr(obj, proto_field.name), field_name)
+                if value is not None:
+                    return value
+            elif field_name == proto_field.name:
+                return getattr(obj, field_name)
+        return None
+
     def display_library_options(self):
-        self.traverse_descriptor(self.response_obj)
+        self.traverse_descriptor(self.response_obj) if self.is_internal_api else self.traverse_library_options(
+            self.response_obj
+        )
         display(Markdown(self.response_non_default_str))
         display(Markdown(self.response_default_str))
 

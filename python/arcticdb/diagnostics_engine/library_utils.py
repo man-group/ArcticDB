@@ -14,7 +14,7 @@ def check_and_adapt_library(lib):
     if isinstance(lib, NativeVersionStore):
         return lib, True
     elif isinstance(lib, Library):
-        lib._nvs, False
+        return lib._nvs, False
     else:
         display(Markdown(f"the provided library is not supported"))
         return None, False
