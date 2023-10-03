@@ -10,7 +10,7 @@ syntax = "proto3";
 package arcticc.pb2.rocksdb_storage_pb2;
 
 message Config {
-    uint64 cache_size = 1; // if 0 => 10GB
+    string path = 1; // The directory of the rocksdb store.
 }
 
 

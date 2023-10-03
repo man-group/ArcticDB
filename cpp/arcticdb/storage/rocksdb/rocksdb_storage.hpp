@@ -14,6 +14,8 @@
 #include <folly/Range.h>
 #include <arcticdb/storage/key_segment_pair.hpp>
 
+#include <rocksdb/db.h>
+
 namespace arcticdb::storage::rocksdb {
 
     class RocksDBStorage final : public Storage {
@@ -21,6 +23,7 @@ namespace arcticdb::storage::rocksdb {
         using Config = arcticdb::proto::rocksdb_storage::Config;
 
         RocksDBStorage(const LibraryPath &lib, OpenMode mode, const Config &conf);
+        ~RocksDBStorage();
 
     private:
         void do_write(Composite<KeySegmentPair>&& kvs) final;
@@ -33,6 +36,8 @@ namespace arcticdb::storage::rocksdb {
 
         bool do_key_exists(const VariantKey& key) final;
 
+        std::string do_key_path(const VariantKey&) const final { return {}; };
+
         bool do_supports_prefix_matching() const final {
             return false;
         }
@@ -41,8 +46,26 @@ namespace arcticdb::storage::rocksdb {
 
         void do_iterate_type(KeyType key_type, const IterateTypeVisitor& visitor, const std::string & prefix) final;
 
-        std::string do_key_path(const VariantKey&) const final { return {}; };
+        // The _internal methods remove code duplication across update, write, and read methods.
+        void do_write_internal(Composite<KeySegmentPair>&& kvs);
+        std::vector<VariantKey> do_remove_internal(Composite<VariantKey>&& ks, RemoveOpts opts);
 
+        // Could use unique ptr to avoid needing a destructor for this class, but we are told
+        // in the Column-Families wiki page to delete the column families before the db, so can't
+        // leave it up to the std::unique_ptr random order (could delete db before the handles vector).
+        // Note that DestroyColumnFamilyHandle just checks it is not the default handle, and then
+        // just calls delete on the raw ptr.
+
+        //std::unique_ptr<::rocksdb::DB> db_;
+        //db_ = std::unique_ptr<::rocksdb::DB>(db_raw_ptr);
+
+        ::rocksdb::DB* db_;
+
+        using MapKeyType = std::string;
+        using HandleType = ::rocksdb::ColumnFamilyHandle*;
+        std::unordered_map<MapKeyType, HandleType> handles_by_key_type_;
+
+        const std::string DEFAULT_ROCKSDB_NOT_OK_ERROR = "RocksDB status returned not OK.";
     };
 
     inline arcticdb::proto::storage::VariantStorage pack_config() {
@@ -52,4 +75,4 @@ namespace arcticdb::storage::rocksdb {
         return output;
     }
 
-}//namespace arcticdbx::storage
+} //namespace arcticdb::storage::rocksdb
