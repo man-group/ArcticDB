@@ -8,6 +8,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 import functools
 import multiprocessing
 import shutil
+import socket
 
 import boto3
 import werkzeug
@@ -30,13 +31,10 @@ import random
 from datetime import datetime, timezone, timedelta
 from typing import Optional, Any, Dict
 import subprocess
-from pathlib import Path
-import socket
 import tempfile
 import pymongo
 
 import requests
-from pytest_server_fixtures.base import get_ephemeral_port
 
 from arcticdb.arctic import Arctic
 from arcticdb.version_store.helper import (
@@ -44,8 +42,9 @@ from arcticdb.version_store.helper import (
     create_test_s3_cfg,
     create_test_mongo_cfg,
     create_test_azure_cfg,
+    create_test_memory_cfg,
 )
-from arcticdb.config import Defaults
+from arcticdb.config import Defaults, MACOS_CONDA_BUILD, MACOS_CONDA_BUILD_SKIP_REASON
 from arcticdb.util.test import configure_test_logger, apply_lib_cfg, RUN_MONGO_TEST
 from tests.util.storage_test import get_real_s3_uri, real_s3_credentials
 
@@ -71,13 +70,35 @@ def run_server(port):
     )
 
 
-@pytest.fixture(scope="module")
-def _moto_s3_uri_module():
-    port = get_ephemeral_port()
+def _get_ephemeral_port() -> int:
+    # Get a free port from the OS
+    sock = socket.socket()
+    sock.bind(("", 0))
+    port = sock.getsockname()[1]
+    sock.close()  # possible race to bind to port now
+    return port
+
+
+@pytest.fixture(scope="session")
+def _moto_s3_uri():
+    port = _get_ephemeral_port()
     p = multiprocessing.Process(target=run_server, args=(port,))
     p.start()
 
-    time.sleep(0.5)
+    attempts = 0
+    while True:
+        time.sleep(0.2)
+        try:
+            response = requests.get(f"http://localhost:{port}")
+            code = response.status_code
+            if code == 200:
+                break
+        except requests.exceptions.ConnectionError:
+            pass
+
+        attempts += 1
+        if attempts == 20:
+            pytest.fail(f"moto3 server on http://localhost:{port} failed to start up")
 
     yield f"http://localhost:{port}"
 
@@ -126,37 +147,36 @@ def azure_account_sas_token(azure_client_and_create_container, azurite_azure_tes
 
 
 @pytest.fixture(scope="function")
-def boto_client(_moto_s3_uri_module):
-    endpoint = _moto_s3_uri_module
+def boto_client(_moto_s3_uri):
+    endpoint = _moto_s3_uri
     client = boto3.client(
         service_name="s3", endpoint_url=endpoint, aws_access_key_id="awd", aws_secret_access_key="awd"
     )
 
     yield client
 
+    requests.post(f"{endpoint}/moto-api/reset")
 
-@pytest.fixture
+
+@pytest.fixture(scope="session")
 def aws_access_key():
     return "awd"
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def aws_secret_key():
     return "awd"
 
 
 @pytest.fixture(scope="function")
-def moto_s3_endpoint_and_credentials(_moto_s3_uri_module, aws_access_key, aws_secret_key):
+def moto_s3_endpoint_and_credentials(_moto_s3_uri, aws_access_key, aws_secret_key, boto_client):
     global bucket_id
 
-    endpoint = _moto_s3_uri_module
+    endpoint = _moto_s3_uri
     port = endpoint.rsplit(":", 1)[1]
-    client = boto3.client(
-        service_name="s3", endpoint_url=endpoint, aws_access_key_id=aws_access_key, aws_secret_access_key=aws_secret_key
-    )
 
     bucket = f"test_bucket_{bucket_id}"
-    client.create_bucket(Bucket=bucket)
+    boto_client.create_bucket(Bucket=bucket)
     bucket_id = bucket_id + 1
     yield endpoint, port, bucket, aws_access_key, aws_secret_key
 
@@ -190,7 +210,11 @@ def unique_real_s3_uri():
     params=[
         "S3",
         "LMDB",
-        "Azure",
+        "MEM",
+        pytest.param(
+            "Azure",
+            marks=pytest.mark.skipif(MACOS_CONDA_BUILD, reason=MACOS_CONDA_BUILD_SKIP_REASON),
+        ),
         pytest.param(
             "Mongo",
             marks=pytest.mark.skipif(not RUN_MONGO_TEST, reason="Mongo test on windows is fiddly"),
@@ -214,6 +238,8 @@ def arctic_client(request, moto_s3_uri_incl_bucket, tmpdir, encoding_version):
         ac = Arctic(f"lmdb://{tmpdir}", encoding_version)
     elif request.param == "Mongo":
         ac = Arctic(request.getfixturevalue("mongo_test_uri"), encoding_version)
+    elif request.param == "MEM":
+        ac = Arctic("mem://")
     else:
         raise NotImplementedError()
 
@@ -277,8 +303,10 @@ def azurite_azure_uri_incl_bucket(azurite_azure_uri, azure_client_and_create_con
 
 
 @pytest.fixture(scope="function")
-def arctic_library(arctic_client):
-    arctic_client.delete_library("pytest_test_lib")
+def arctic_library(request, arctic_client):
+    if not MACOS_CONDA_BUILD:
+        request.getfixturevalue("azure_client_and_create_container")
+
     arctic_client.create_library("pytest_test_lib")
 
     yield arctic_client["pytest_test_lib"]
@@ -624,7 +652,13 @@ def mongo_version_store(mongo_store_factory):
     scope="function",
     params=[
         "s3_store_factory",
-        "azure_store_factory",
+        pytest.param(
+            "azure_store_factory",
+            marks=pytest.mark.skipif(
+                MACOS_CONDA_BUILD,
+                reason=MACOS_CONDA_BUILD_SKIP_REASON,
+            ),
+        ),
         pytest.param(
             "real_s3_store_factory",
             marks=pytest.mark.skipif(
@@ -663,7 +697,16 @@ def object_version_store_prune_previous(object_store_factory):
 
 @pytest.fixture(
     scope="function",
-    params=["s3_store_factory", "azure_store_factory"],
+    params=[
+        "s3_store_factory",
+        pytest.param(
+            "azure_store_factory",
+            marks=pytest.mark.skipif(
+                MACOS_CONDA_BUILD,
+                reason=MACOS_CONDA_BUILD_SKIP_REASON,
+            ),
+        ),
+    ],
 )
 def local_object_store_factory(request):
     """
@@ -704,12 +747,28 @@ def local_object_version_store_prune_previous(local_object_store_factory):
         ),
     ],
 )
+def version_store_and_real_s3_basic_store_factory(request):
+    """
+    Just the version_store and real_s3 specifically for the test test_interleaved_store_read
+    where the in_memory_store_factory is not designed to have this functionality.
+    """
+    return request.getfixturevalue(request.param)
+
+
+@pytest.fixture(
+    params=[
+        "version_store_factory",
+        "in_memory_store_factory",
+        pytest.param(
+            "real_s3_store_factory",
+            marks=pytest.mark.skipif(
+                not PERSISTENT_STORAGE_TESTS_ENABLED,
+                reason="This store can be used only if the persistent storage tests are enabled",
+            ),
+        ),
+    ],
+)
 def basic_store_factory(request):
-    """
-    Designed to test the bare minimum of stores in integration/stress tests
-     - LMDB for local storage
-     - AWS S3 for persistent storage, if enabled
-    """
     store_factory = request.getfixturevalue(request.param)
     return store_factory
 
@@ -719,6 +778,7 @@ def basic_store(basic_store_factory):
     """
     Designed to test the bare minimum of stores
      - LMDB for local storage
+     - mem for in-memory storage
      - AWS S3 for persistent storage, if enabled
     """
     return basic_store_factory()
@@ -1018,9 +1078,9 @@ def get_wide_df():
     return get_df
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="session")
 def azurite_port():
-    return get_ephemeral_port()
+    return _get_ephemeral_port()
 
 
 @pytest.fixture
@@ -1031,7 +1091,7 @@ def azurite_container():
     return container
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="session")
 def spawn_azurite(azurite_port):
     temp_folder = tempfile.TemporaryDirectory()
     try:  # Awaiting fix for cleanup in windows file-in-use problem
@@ -1056,7 +1116,10 @@ def spawn_azurite(azurite_port):
     params=(
         [
             "moto_s3_uri_incl_bucket",
-            "azurite_azure_uri_incl_bucket",
+            pytest.param(
+                "azurite_azure_uri_incl_bucket",
+                marks=pytest.mark.skipif(MACOS_CONDA_BUILD, reason=MACOS_CONDA_BUILD_SKIP_REASON),
+            ),
             pytest.param(
                 "mongo_test_uri",
                 marks=pytest.mark.skipif(not RUN_MONGO_TEST, reason="Mongo test on windows is fiddly"),
@@ -1082,7 +1145,11 @@ def object_storage_uri_incl_bucket(request):
             "lmdb_version_store_v2",
             "s3_version_store_v1",
             "s3_version_store_v2",
-            "azure_version_store",
+            "in_memory_version_store",
+            pytest.param(
+                "azure_version_store",
+                marks=pytest.mark.skipif(MACOS_CONDA_BUILD, reason=MACOS_CONDA_BUILD_SKIP_REASON),
+            ),
             pytest.param(
                 "mongo_version_store",
                 marks=pytest.mark.skipif(sys.platform != "linux", reason="The mongo store is only supported on Linux"),
@@ -1094,9 +1161,11 @@ def object_storage_uri_incl_bucket(request):
                 ),
             ),
         ]
+        if not MACOS_CONDA_BUILD
+        else ["lmdb_version_store_v1", "lmdb_version_store_v2", "s3_version_store_v1", "s3_version_store_v2"]
     ),
 )
-def object_and_lmdb_version_store(request):
+def object_and_mem_and_lmdb_version_store(request):
     """
     Designed to test all supported stores
     """
@@ -1111,7 +1180,11 @@ def object_and_lmdb_version_store(request):
             "lmdb_version_store_dynamic_schema_v2",
             "s3_version_store_dynamic_schema_v1",
             "s3_version_store_dynamic_schema_v2",
-            "azure_version_store_dynamic_schema",
+            "in_memory_version_store_dynamic_schema",
+            pytest.param(
+                "azure_version_store_dynamic_schema",
+                marks=pytest.mark.skipif(MACOS_CONDA_BUILD, reason=MACOS_CONDA_BUILD_SKIP_REASON),
+            ),
             pytest.param(
                 "real_s3_version_store_dynamic_schema",
                 marks=pytest.mark.skipif(
@@ -1121,8 +1194,61 @@ def object_and_lmdb_version_store(request):
         ]
     ),
 )
-def object_and_lmdb_version_store_dynamic_schema(request):
+def object_and_mem_and_lmdb_version_store_dynamic_schema(request):
     """
     Designed to test all supported stores
     """
     yield request.getfixturevalue(request.param)
+
+
+@pytest.fixture
+def in_memory_store_factory(lib_name):
+    cfg_maker = functools.partial(create_test_memory_cfg)
+    used = {}
+
+    def create_version_store(
+        col_per_group: Optional[int] = None,
+        row_per_segment: Optional[int] = None,
+        override_name: str = None,
+        **kwargs,
+    ) -> NativeVersionStore:
+        if col_per_group is not None and "column_group_size" not in kwargs:
+            kwargs["column_group_size"] = col_per_group
+        if row_per_segment is not None and "segment_row_size" not in kwargs:
+            kwargs["segment_row_size"] = row_per_segment
+
+        if "lmdb_config" in kwargs:
+            del kwargs["lmdb_config"]
+
+        if override_name is not None:
+            library_name = override_name
+        else:
+            library_name = lib_name
+
+        return _version_store_factory_impl(used, cfg_maker, library_name, **kwargs)
+
+    try:
+        yield create_version_store
+    finally:
+        for lib in used.values():
+            lib.version_store.clear()
+
+
+@pytest.fixture
+def in_memory_version_store(in_memory_store_factory):
+    return in_memory_store_factory()
+
+
+@pytest.fixture
+def in_memory_version_store_dynamic_schema(in_memory_store_factory):
+    return in_memory_store_factory(dynamic_schema=True)
+
+
+@pytest.fixture
+def in_memory_version_store_tiny_segment(in_memory_store_factory):
+    return in_memory_store_factory(column_group_size=2, segment_row_size=2)
+
+
+@pytest.fixture(params=["lmdb_version_store_tiny_segment", "in_memory_version_store_tiny_segment"])
+def lmdb_or_in_memory_version_store_tiny_segment(request):
+    return request.getfixturevalue(request.param)

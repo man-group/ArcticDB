@@ -83,15 +83,15 @@ $MY_PYTHON -m pip install -ve .
 
 Note that as this will copy the binary to your Python installation this will have to be run after each and every change of a C++ file.
 
-mamba and conda-forge Quickstart
-================================
+Building using mamba and conda-forge
+====================================
 
-This quickstart uses build dependencies from [conda-forge](https://conda-forge.org/).
+This section uses build dependencies from [conda-forge](https://conda-forge.org/).
 It is a pre-requisite for releasing ArcticDB on conda-forge.
 
 **⚠️ At the time of writing, installing ArcticDB with this setup under Windows is not possible
-since [no distribution of folly for Windows is not available on conda-forge](https://anaconda.org/conda-forge/folly).
-For tracking progress on packaging folly for Windows on conda-forge, see: [`conda-forge/folly-feedstock#98`](https://github.com/conda-forge/folly-feedstock/pull/98)**
+due to a linkage problems with libprotobuf.
+See: https://github.com/man-group/ArcticDB/pull/449**
 
  - [Install `mamba`](https://mamba.readthedocs.io/en/latest/installation.html)
  - Create the `arcticdb` environment from its specification (`environment_unix.yml`):
@@ -106,11 +106,46 @@ For tracking progress on packaging folly for Windows on conda-forge, see: [`cond
   mamba activate arcticdb
   ```
 
- - Build and install ArcticDB in the `arcticdb` environment using dependencies installed in this environement:
+#### Building CMake targets
+
+[Several CMake presets](https://github.com/man-group/ArcticDB/blob/master/cpp/CMakePresets.json) are defined for build types, OS's, and build system.
+
+For instance:
+
+ - for debug build on Linux with mamba and conda-forge, use:
+ 
+  ```bash
+  export ARCTICDB_USING_CONDA=1
+  cmake -DTEST=off --preset linux-conda-debug cpp
+  cd cpp
+
+  # You might need to use fewer threads than what's possible your machine
+  # not to have it swap and freeze (e.g. we use 4 of them here).
+  cmake --build --preset linux-conda-debug -j 4
+  ```
+
+ - for release build on MacOS with mamba and conda-forge, use:
+
+  ```bash
+  export ARCTICDB_USING_CONDA=1
+  cmake -DTEST=off --preset darwin-conda-release cpp
+  cd cpp
+
+  # You might need to use fewer threads than what's possible your machine
+  # not to have it swap and freeze (e.g. we use 4 of them here).
+  cmake --build --preset linux-conda-debug -j 4
+  ```
+
+#### Building and installing the Python Package
+
+ - Build and install ArcticDB in the `arcticdb` environment using dependencies installed in this environment.
    We recommend using the [`editable` installation](https://setuptools.pypa.io/en/latest/userguide/development_mode.html) for development:
 
   ```bash
-  ARCTICDB_USING_CONDA=1 python -m pip install --verbose --editable .
+  export ARCTICDB_USING_CONDA=1
+  # Adapt the CMake preset to your setup.
+  export ARCTIC_CMAKE_PRESET=linux-conda-debug
+  python -m pip install --no-build-isolation --no-deps --verbose --editable .
   ```
 
  - Use ArcticDB from Python:

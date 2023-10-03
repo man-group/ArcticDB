@@ -62,7 +62,7 @@ class ArcticLibraryAdapter(ABC):
     def create_library(self, name: str, library_options: LibraryOptions) -> NativeVersionStore:
         raise NotImplementedError
 
-    def cleanup_library(self, library_name: str, library_config: LibraryConfig):
+    def cleanup_library(self, library_name: str):
         pass
 
     def get_storage_override(self) -> StorageOverride:
