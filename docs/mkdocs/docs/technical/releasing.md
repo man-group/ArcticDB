@@ -41,38 +41,61 @@ If hotfixing an existing release (or pre-release) then branch off the previously
 2. Select the workflow off the source tag (e.g. `1.6.0` or `1.6.0rc1`)
 2. Click `Run workflow`.
 
-This will create a branch off of `master`, incrementing the version specified in code. 
+This will create a branch off of `master`, incrementing the version specified in code.
 
 The [build will now be running for the tag.](https://github.com/man-group/ArcticDB/actions/workflows/build.yml)
 
 ## 2. Update conda-forge recipe
 
-[`regro-cf-autotick-bot`](https://github.com/regro-cf-autotick-bot) generally opens a PR
-on [ArcticDB's feedstock](https://github.com/conda-forge/arcticdb-feedstock)
-for each new release of ArcticDB upstream.
+A new release on conda-forge is made by creating a Pull Request on the feedstock of ArcticDB: [`conda-forge/arcticdb-feedstock`](https://github.com/conda-forge/arcticdb-feedstock).
 
-> [!IMPORTANT]  
+For more information about conda-forge release process and feedstocks' maintenance,
+see [this section of the documentation of conda-forge](https://conda-forge.org/docs/maintainer/updating_pkgs.html).
+
+If you have created a tag for a release on ArcticDB's repository, [`regro-cf-autotick-bot`](https://github.com/regro-cf-autotick-bot)
+might already have opened a Pull Request to create a new release.
+You can push commit to this PR or alternatively create a new PR to release a version.
+
+> [!IMPORTANT]
 > **Do not commit directly to the feedstock repository.**
-> Commits to the repository release new versions to conda-forge. Instead, changes must be made via personal forks or via the PR
-> created by the [`regro-cf-autotick-bot`](https://github.com/regro-cf-autotick-bot) as described above.
+> Commits to the repository release new versions to conda-forge. Instead, changes **must** be made
+via personal forks or via the PR created by the [`regro-cf-autotick-bot`](https://github.com/regro-cf-autotick-bot) as mentioned above.
 
-You can update such a PR or create a new one to release a version, updating the
-conda recipe. [Here's an example.](https://github.com/conda-forge/arcticdb-feedstock/pull/10)
+> [!IMPORTANT]
+> If publishing a normal release, you **must** create two pull-requests due to some users' constraints
+> (see the description of the introduction of the `libevent-2.1.10` branch in
+> [this PR](https://github.com/conda-forge/arcticdb-feedstock/pull/64) for more context):
+>  - one pull request which branch from `main` and merge the created PR into the `main` branch.
+>  - one pull request which branch from `libevent-2.1.10` and merge the created PR into the `libevent-2.1.10` branch.
+> This will require modifying the base branch of the created PR from `main` to `libevent-2.1.10`.
 
-You will need to update:
+> [!IMPORTANT]
+> If publishing a release-candidate (AKA pre-release), you **must** branch from `rc` and merge the created PR into the `rc` branch.
+> This will require modifying the base branch of the created PR from `main` to `rc`.
 
-1. `version`, pointing to the tag created in step 1
-2. The `sha256sum` of the source tarball
-3. The build number (i.e. `number` under the `build` section) to `0`
-4. Dependencies (if they have changed since the last version, see `setup.cfg`)
-5. Rerender the feedstock's recipe to create Azure CI jobs' specification for all variants of the package
+For each PR, the following steps are required:
+1. [Fork `regro-cf-autotick-bot`](https://github.com/conda-forge/arcticdb-feedstock/fork)
+2. Create a branch of the base branch for your case (see above)
+3. Change [`recipe/meta.yaml`](https://github.com/conda-forge/arcticdb-feedstock/blob/main/recipe/meta.yaml)
+to update the following pieces of information:
+    - `version`, pointing to the tag created in step 1
+    - `sha256sum` of the source tarball 
+    - the build number (i.e. `number` under the `build` section) to `0`
+    - the dependencies if they have changed since the last version in:
+      - [`setup.cfg`](https://github.com/man-group/ArcticDB/blob/master/setup.cfg)
+      - [`environment_unix.yml`](https://github.com/man-group/ArcticDB/blob/master/environment_unix.yml)
+4. Push on your fork and create a PR to the feedstock targeting the base branch on `conda-forge/arcticdb`
+5. Rerender the feedstock's recipe to create Azure CI jobs' specification for all variants of the package 
+   This can be done by posting a comment on the PR with the following content `@conda-forge-admin, please rerender`
 
-A PR is generally open with a todo-list summarizing all the required steps to perform,
+A PR is generally open with a TODO-list summarizing all the required steps to perform,
 before an update to the feedstock.
 
-> [!IMPORTANT]  
-> If releasing a pre-release version, you **must** merge the created PR into the `pr` branch and not the `main` branch. 
-> This will require modifying the base branch of the created PR.
+Example of pull-requests:
+ - for normal release:
+     - [the PR used to publish `4.0.0` which targets `main`](https://github.com/conda-forge/arcticdb-feedstock/pull/67)
+     - [the PR used to publish `4.0.0` which targets `libevent-2.1.10`](https://github.com/conda-forge/arcticdb-feedstock/pull/68)
+ - for a release candidate: [the PR used to publish `3.0.0rc1` with targets `rc`](https://github.com/conda-forge/arcticdb-feedstock/pull/55)
 
 ## 3. Release to PyPi
 

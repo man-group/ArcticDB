@@ -715,6 +715,7 @@ class Library:
         `append_payloads`.
         Note that this isn't an atomic operation - it's possible for one symbol to be fully written and readable before
         another symbol.
+
         Parameters
         ----------
         append_payloads : `List[WritePayload]`
@@ -1207,6 +1208,7 @@ class Library:
         `write_metadata_payloads`.
         Note that this isn't an atomic operation - it's possible for the metadata for one symbol to be fully written and
         readable before another symbol.
+
         Parameters
         ----------
         write_metadata_payloads : `List[WriteMetadataPayload]`
@@ -1716,7 +1718,7 @@ class Library:
             Target for maximum no. of rows per segment, after compaction.
             If parameter is not provided, library option - "segment_row_size" will be used
             Note that no. of rows per segment, after compaction, may exceed the target.
-            It is for achieving smallest no. of segment after compaction. Please refer to below example for further explantion.
+            It is for achieving smallest no. of segment after compaction. Please refer to below example for further explanation.
 
         Returns
         -------

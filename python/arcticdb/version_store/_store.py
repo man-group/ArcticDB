@@ -68,7 +68,7 @@ from arcticdb.version_store._normalization import (
 from arcticdb.util.memory import format_bytes
 
 # These chars are encoded by S3 and on doing a list_symbols they will show up as the encoded form eg. &amp
-UNSUPPORTED_S3_CHARS = {"\0", "*", "&", "<", ">"}
+UNSUPPORTED_S3_CHARS = {"\0", "*", "<", ">"}
 MAX_SYMBOL_SIZE = (2**8) - 1
 
 
@@ -912,6 +912,13 @@ class NativeVersionStore:
             read_result = ReadResult(*result)
             vitem = self._adapt_read_res(read_result)
             yield vitem
+
+    def trim(self) -> None:
+        """
+        Calls trim on the allocator of the underlying version_store
+        Should be called after gc.collect() to remove any reference cycles
+        """
+        self.version_store.trim()
 
     def batch_read(
         self,

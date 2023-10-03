@@ -28,7 +28,9 @@ class MongoLibraryAdapter(ArcticLibraryAdapter):
 
     def __init__(self, uri: str, encoding_version: EncodingVersion, *args, **kwargs):
         try:
-            parameters = pymongo.uri_parser.parse_uri(uri)
+            parameters = pymongo.uri_parser.parse_uri(
+                uri
+            )  # also checks pymongo uri syntax, throw exception as early as possible if syntax is incorrect
             self._endpoint = f"{parameters['nodelist'][0][0]}:{parameters['nodelist'][0][1]}"
         except Exception as e:
             raise UserInputException(

@@ -6,6 +6,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 import json
+import sys
 import os
 import os.path as osp
 from abc import abstractmethod, ABCMeta
@@ -28,6 +29,14 @@ from arcticdb.exceptions import ArcticNativeException
 from arcticdb.log import logger_by_name, configure
 
 _HOME = osp.expanduser("~/.arctic/native")
+
+# TODO: Some tests are either segfaulting or failing on MacOS with conda builds.
+# This is meant to be used as a temporary flag to skip/xfail those tests.
+MACOS_CONDA_BUILD = sys.platform == "darwin" and os.getenv("ARCTICDB_USING_CONDA", "0") == "1"
+MACOS_CONDA_BUILD_SKIP_REASON = (
+    "Tests fail for macOS conda builds, either because Azurite is improperly configured"
+    "on the CI or because there's problem with Azure SDK for C++ in this configuration."
+)
 
 EnvName = AnyStr
 LibName = AnyStr

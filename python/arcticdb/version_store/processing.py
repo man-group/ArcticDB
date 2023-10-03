@@ -607,6 +607,10 @@ class QueryBuilder:
                 self.clauses.append(_GroupByClause(python_clause.name))
             elif isinstance(python_clause, PythonAggregationClause):
                 self.clauses.append(_AggregationClause(self.clauses[-1].grouping_column, python_clause.aggregations))
+            elif isinstance(python_clause, PythonRowRangeClause):
+                self.clauses.append(_RowRangeClause(python_clause.row_range_type, python_clause.n))
+            elif isinstance(python_clause, PythonDateRangeClause):
+                self.clauses.append(_DateRangeClause(python_clause.start, python_clause.end))
             else:
                 raise ArcticNativeException(
                     f"Unrecognised clause type {type(python_clause)} when unpickling QueryBuilder"

@@ -19,7 +19,7 @@ from arcticdb.util.test import assert_frame_equal
 # test_rt_df stands for roundtrip dataframe (implicitly pandas given file name)
 
 
-def test_rt_df_with_datetimeindex_with_timezone(lmdb_version_store):
+def test_rt_df_with_datetimeindex_with_timezone(basic_store):
     df = DataFrame(
         data=["A", "BC", "DEF"],
         index=DatetimeIndex(
@@ -27,18 +27,18 @@ def test_rt_df_with_datetimeindex_with_timezone(lmdb_version_store):
         ),
     )
 
-    lmdb_version_store.write("pandas", df)
-    saved_df = lmdb_version_store.read("pandas").data
+    basic_store.write("pandas", df)
+    saved_df = basic_store.read("pandas").data
     assert df.index.tz == saved_df.index.tz
     assert all(df.index == saved_df.index)
     assert_frame_equal(df, saved_df, check_names=False)
 
 
-def test_rt_df_range_index_with_name(lmdb_version_store):
+def test_rt_df_range_index_with_name(basic_store):
     df = DataFrame(data=["A", "B", "D"])
     df.index.name = "xxx"
-    lmdb_version_store.write("pandas", df)
-    saved_df = lmdb_version_store.read("pandas").data
+    basic_store.write("pandas", df)
+    saved_df = basic_store.read("pandas").data
     assert df.index.name == saved_df.index.name
     assert all(df.index == saved_df.index)
     assert_frame_equal(df, saved_df)
@@ -46,7 +46,7 @@ def test_rt_df_range_index_with_name(lmdb_version_store):
 
 @pytest.mark.parametrize("has_index", [True, False])
 @pytest.mark.parametrize("N", [1, 5, 10])
-def test_rt_df_small_col_dtidx(lmdb_version_store, N, has_index):
+def test_rt_df_small_col_dtidx(basic_store, N, has_index):
     rnd = RandomState(0x42)
 
     if has_index:
@@ -58,8 +58,8 @@ def test_rt_df_small_col_dtidx(lmdb_version_store, N, has_index):
 
     symbol = "df_{}".format(N)
     df = DataFrame(data={"A": rnd.rand(N), "B": np.repeat(np.nan, N), "C": rnd.rand(N)}, index=idx)
-    lmdb_version_store.write(symbol, df)
-    saved_df = lmdb_version_store.read(symbol).data
+    basic_store.write(symbol, df)
+    saved_df = basic_store.read(symbol).data
     assert df.index.name == saved_df.index.name
     assert all(df.index == saved_df.index)
     assert_frame_equal(df, saved_df)
@@ -80,20 +80,20 @@ def create_params():
 
 
 @pytest.mark.parametrize("symbol, item", create_params())
-def test_rt_df(lmdb_version_store, symbol, item):
-    lmdb_version_store.write("xxx", item.copy())
-    df2 = lmdb_version_store.read("xxx").data
+def test_rt_df(basic_store, symbol, item):
+    basic_store.write("xxx", item.copy())
+    df2 = basic_store.read("xxx").data
     assert_frame_equal(item, df2)
 
 
-def test_empty_df(lmdb_version_store):
+def test_empty_df(basic_store):
     item = pd.DataFrame()
-    lmdb_version_store.write("xxx", item)
-    df2 = lmdb_version_store.read("xxx").data
+    basic_store.write("xxx", item)
+    df2 = basic_store.read("xxx").data
     assert df2.empty
 
 
-def test_df_datetime_multi_index_with_timezones(object_and_lmdb_version_store):
+def test_df_datetime_multi_index_with_timezones(object_and_mem_and_lmdb_version_store):
     zone = "America/Chicago"
     df = DataFrame(
         data=["A", "BC", "DEF"],
@@ -104,7 +104,7 @@ def test_df_datetime_multi_index_with_timezones(object_and_lmdb_version_store):
     )
     first_index, second_index = df.index.levels
     assert first_index.tzinfo.zone == second_index.tzinfo.zone == zone
-    object_and_lmdb_version_store.write("pandastz", df)
-    saved_df = object_and_lmdb_version_store.read("pandastz").data
+    object_and_mem_and_lmdb_version_store.write("pandastz", df)
+    saved_df = object_and_mem_and_lmdb_version_store.read("pandastz").data
     first_index_s, second_index_s = saved_df.index.levels
     assert first_index_s.tzinfo.zone == second_index_s.tzinfo.zone == zone

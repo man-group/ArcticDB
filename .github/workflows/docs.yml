@@ -64,7 +64,7 @@ jobs:
 
       - name: Sphinx
         run: |
-          set -x
+          set -x -o pipefail
           echo "::group::Pip"
           ls
           pip3 install sphinx sphinx_rtd_theme ${{inputs.api_wheel || '*.whl'}}

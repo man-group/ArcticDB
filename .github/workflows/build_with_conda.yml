@@ -77,10 +77,17 @@ jobs:
           cd cpp/out/linux-conda-release-build/
           make test
 
+      - name: Install npm # Linux github runner image does not come with npm
+        if: matrix.os == 'linux'
+        uses: actions/setup-node@v3.3.0
+        with:
+          node-version: '16'
+
       - name: Test with pytest
         shell: bash -l {0}
         if: matrix.python_tests == '1'
         run: |
+          npm install -g azurite
           cd python
           python -m pytest tests
         env:
@@ -137,4 +144,18 @@ jobs:
         run: |
           cd cpp/out/darwin-conda-release-build/
           make test
+
+      - name: Install npm
+        uses: actions/setup-node@v3.3.0
+        with:
+          node-version: '16'
+
+      - name: Test with pytest
+        shell: bash -l {0}
+        run: |
+          npm install -g azurite
+          cd python
+          python -m pytest tests
+        env:
+          ARCTICDB_USING_CONDA: 1
 

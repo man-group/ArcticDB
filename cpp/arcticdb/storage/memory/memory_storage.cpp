@@ -10,7 +10,9 @@
 
 namespace arcticdb::storage::memory {
     MemoryStorage::MemoryStorage(const LibraryPath &library_path, OpenMode mode, const Config&) :
-        Storage(library_path, mode),
-        mutex_(std::make_unique<MutexType>()) {
+        Storage(library_path, mode) {
+        arcticdb::entity::foreach_key_type([this](KeyType&& key_type) {
+            data_[key_type];
+        });
     }
 } // arcticdb::storage::memory

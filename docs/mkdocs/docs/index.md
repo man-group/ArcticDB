@@ -29,9 +29,9 @@ ArcticDB supports Python 3.6 - 3.11. To install, simply run:
 pip install arcticdb
 ```
 
-### Usage
+### Setup
 
-ArcticDB is a storage engine designed for object storage, but also supports local-disk storage using LMDB.
+ArcticDB is a storage engine designed for object storage, but also supports local RAM storage and local-disk storage using LMDB.
 
 !!! Storage Compatibility
 
@@ -48,7 +48,7 @@ To get started, we can import ArcticDB and instantiate it:
 
 For more information on the format of _<URI\>_, please view the docstring ([`>>> help(Arctic)`](https://docs.arcticdb.io/api/arcticdb#arcticdb.Arctic)). Below we'll run through some setup examples.
 
-#### S3 Configuration Examples
+#### S3 configuration
 
 There are two methods to configure S3 access. If you happen to know the access and secret key, simply connect as follows:
 
@@ -89,7 +89,7 @@ Connecting to AWS with a pre-defined region:
 >>> ac = Arctic('s3s://s3.eu-west-2.amazonaws.com:arcticdb-test-bucket?aws_auth=true')
 ```
 
-Note that no explicit credential parameters are given. When `aws_auth` is passed, authentication is delegated to the AWS SDK which is responsible for locating the appropriate credentials in the `.config` file or 
+Note that no explicit credential parameters are given. When `aws_auth` is passed, authentication is delegated to the AWS SDK which is responsible for locating the appropriate credentials in the `.config` file or
 in environment variables. You can manually configure which profile is being used by setting the `AWS_PROFILE` environment variable as described in the
 [AWS Documentation](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-files.html).
 
@@ -98,7 +98,7 @@ in environment variables. You can manually configure which profile is being used
 You may want to restrict access for the ArcticDB library to a specific path within the bucket. To do this, you can use the `path_prefix` parameter:
 
 ```python
->>> ac = Arctic('s3s://s3.eu-west-2.amazonaws.com:arcticdb-test-bucket?path_prefix=test/&aws_auth=true')
+>>> ac = Arctic('s3s://s3.eu-west-2.amazonaws.com:arcticdb-test-bucket?path_prefix=test&aws_auth=true')
 ```
 
 #### Azure configuration
@@ -119,7 +119,7 @@ For example:
 
 For more information, [see the Arctic class reference](https://docs.arcticdb.io/api/arcticdb#arcticdb.Arctic.__init__).
 
-#### LMDB Configuration
+#### LMDB configuration
 
 LMDB supports configuring its map size. See its [documentation](http://www.lmdb.tech/doc/group__mdb.html#gaa2506ec8dab3d969b0e609cd82e619e5).
 
@@ -137,7 +137,24 @@ The default on Windows is only 128MB. Errors with `lmdb errror code -30792` indi
 increase its size. This will happen if you are doing large writes. You should ensure that you only have one Arctic instance open over
 a given LMDB database.
 
-For more information, [see the Arctic class reference](https://docs.arcticdb.io/api/arcticdb#arcticdb.Arctic.__init__).
+For more information on the different endpoints, [see the Arctic class reference](https://docs.arcticdb.io/api/arcticdb#arcticdb.Arctic.__init__).
+
+#### In-memory configuration
+
+An in-memory backend is provided mainly for testing and experimentation. It could be useful when creating files with LMDB is not desired.
+
+There are no configuration parameters, and the memory is owned solely be the Arctic instance.
+
+For example:
+
+```python
+>>> from arcticdb import Arctic
+>>> ac = Arctic('mem://')
+```
+
+TODO: For concurrent access to a local backend, LMDB connected to tmpfs is recommended.
+
+### Usage
 
 #### Library Setup
 
@@ -191,6 +208,8 @@ Write the DataFrame:
 VersionedItem(symbol=test_frame,library=data,data=n/a,version=0,metadata=None,host=<host>)
 ```
 
+The `'test_frame'` DataFrame will be used for the remainder of this guide.
+
 !!! info "ArcticDB index"
 
     When writing Pandas DataFrames, ArcticDB supports the following index types:
@@ -221,8 +240,8 @@ ArcticDB enables you to slice by _row_ and by _column_.
 !!! info "ArcticDB indexing"
 
     ArcticDB will construct a full index for _ordered numerical and timeseries (e.g. DatetimeIndex) Pandas indexes_. This will enable
-    optimised slicing across index entries. If the index is unsorted or not numeric, then whilst your data can be stored,
-    row-slicing will be slower.
+    optimised slicing across index entries. If the index is unsorted or not numeric your data can still be stored but row-slicing will
+    be slower.
 
 ###### Row-slicing
 
@@ -278,7 +297,7 @@ ArcticDB fully supports modifying stored data via two primitives: _update_ and _
 ##### Update
 
 The update primitive enables you to overwrite a contiguous chunk of data. In the below example, we use `update` to modify _2000-01-01 05:00:00_, 
-remove _2000-01-01 06:00:00_ and insert a duplicate entry for _2000-01-01 07:00:00_.
+remove _2000-01-01 06:00:00_ and modify _2000-01-01 07:00:00_.
 
 ```Python
 # Recreate the DataFrame with new (and different!) random data, and filter to only the first and third row
@@ -286,8 +305,8 @@ remove _2000-01-01 06:00:00_ and insert a duplicate entry for _2000-01-01 07:00:
 >>> df = pd.DataFrame(random_data, columns=['COL_%d' % i for i in range(50)])
 >>> df.index = pd.date_range(datetime(2000, 1, 1, 5), periods=25, freq="H")
 # Filter!
->>> df = df.iloc[[0,2]] 
->>> df 
+>>> df = df.iloc[[0,2]]
+>>> df
                      COL_0  COL_1  COL_2  COL_3  COL_4  COL_5  COL_6  COL_7  ...
 2000-01-01 05:00:00     46     24      4     20      7     32      1     18  ...
 2000-01-01 07:00:00     44     37     16     27     30      1     35     25  ...
@@ -311,14 +330,14 @@ Let's append data to the end of the timeseries:
 ```Python
 >>> random_data = np.random.randint(0, 50, size=(5, 50))
 >>> df_append = pd.DataFrame(random_data, columns=['COL_%d' % i for i in range(50)])
->>> df_append.index = pd.date_range(datetime(2000, 1, 2, 5), periods=5, freq="H")
+>>> df_append.index = pd.date_range(datetime(2000, 1, 2, 7), periods=5, freq="H")
 >>> df_append
                      COL_0  COL_1  COL_2  COL_3  COL_4  COL_5  COL_6  COL_7  ...
-2000-01-02 05:00:00     34     33      5     44     15     25      1     25  ...
-2000-01-02 06:00:00      9     39     15     18     49     47      7     45  ...
-2000-01-02 07:00:00     12     40      9     27     49     31     45      0  ...
-2000-01-02 08:00:00     43     25     39     26     13      7     20     40  ...
-2000-01-02 09:00:00      2      1     20     47     47     16     14     48  ...
+2000-01-02 07:00:00     38     44      4     37      3     26     12     10  ...
+2000-01-02 08:00:00     44     32      4     12     15     13     17     16  ...
+2000-01-02 09:00:00     44     43     28     38     20     34     46     37  ...
+2000-01-02 10:00:00     46     22     34     33     18     35      5      3  ...
+2000-01-02 11:00:00     30     47     14     41     43     40     22     45  ...
 ```
 
 ** Note the starting date of this DataFrame is after the final row written previously! **
@@ -332,14 +351,14 @@ VersionedItem(symbol=test_frame,library=data,data=n/a,version=2,metadata=None,ho
                      COL_0  COL_1  COL_2  COL_3  COL_4  COL_5  COL_6  COL_7  ...
 2000-01-02 04:00:00      4     13      8     14     25     11     11     11  ...
 2000-01-02 05:00:00     14     41     24      7     16     10     15     36  ...
-2000-01-02 05:00:00     34     33      5     44     15     25      1     25  ...
-2000-01-02 06:00:00      9     39     15     18     49     47      7     45  ...
-2000-01-02 07:00:00     12     40      9     27     49     31     45      0  ...
-2000-01-02 08:00:00     43     25     39     26     13      7     20     40  ...
-2000-01-02 09:00:00      2      1     20     47     47     16     14     48  ...
+2000-01-02 07:00:00     38     44      4     37      3     26     12     10  ...
+2000-01-02 08:00:00     44     32      4     12     15     13     17     16  ...
+2000-01-02 09:00:00     44     43     28     38     20     34     46     37  ...
+2000-01-02 10:00:00     46     22     34     33     18     35      5      3  ...
+2000-01-02 11:00:00     30     47     14     41     43     40     22     45  ...
 ```
 
-The final 7 rows included the 5 rows we have just appended and the last two rows that were written previously. 
+The final 7 rows consist of the last two rows written previously followed by the 5 rows that we have just appended.
 
 ##### Versioning
 

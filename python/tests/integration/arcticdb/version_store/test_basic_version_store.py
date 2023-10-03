@@ -47,31 +47,7 @@ from arcticdb.util.test import (
     distinct_timestamps,
     RUN_MONGO_TEST,
 )
-from arcticdb_ext.tools import AZURE_SUPPORT
 from tests.util.date import DateRange
-
-
-if RUN_MONGO_TEST:
-    SMOKE_TEST_VERSION_STORES = [
-        "lmdb_version_store_v1",
-        "lmdb_version_store_v2",
-        "s3_version_store_v1",
-        "s3_version_store_v2",
-        "mongo_version_store",
-    ]
-else:
-    SMOKE_TEST_VERSION_STORES = [
-        "lmdb_version_store_v1",
-        "lmdb_version_store_v2",
-        "s3_version_store_v1",
-        "s3_version_store_v2",
-    ]  # SKIP_WIN and SKIP_MAC
-
-if AZURE_SUPPORT:
-    SMOKE_TEST_VERSION_STORES.append("azure_version_store")
-
-if os.getenv("ARCTICDB_REAL_STORAGE_TESTS") == "1":
-    SMOKE_TEST_VERSION_STORES.append("real_s3_version_store")
 
 
 @pytest.fixture()
@@ -85,117 +61,119 @@ def assert_equal_value(data, expected):
     assert_frame_equal(received, expected)
 
 
-def test_simple_flow(lmdb_version_store_no_symbol_list, symbol):
+def test_simple_flow(basic_store_no_symbol_list, symbol):
     df = sample_dataframe()
     modified_df = pd.DataFrame({"col": [1, 2, 3, 4]})
-    lmdb_version_store_no_symbol_list.write(symbol, df, metadata={"blah": 1})
-    assert lmdb_version_store_no_symbol_list.read(symbol).metadata == {"blah": 1}
+    basic_store_no_symbol_list.write(symbol, df, metadata={"blah": 1})
+    assert basic_store_no_symbol_list.read(symbol).metadata == {"blah": 1}
 
-    lmdb_version_store_no_symbol_list.write(symbol, modified_df)
-    vitem = lmdb_version_store_no_symbol_list.read(symbol)
+    basic_store_no_symbol_list.write(symbol, modified_df)
+    vitem = basic_store_no_symbol_list.read(symbol)
     assert_frame_equal(vitem.data, modified_df)
-    assert lmdb_version_store_no_symbol_list.list_symbols() == [symbol]
+    assert basic_store_no_symbol_list.list_symbols() == [symbol]
 
-    lmdb_version_store_no_symbol_list.delete(symbol)
-    assert lmdb_version_store_no_symbol_list.list_symbols() == lmdb_version_store_no_symbol_list.list_versions() == []
+    basic_store_no_symbol_list.delete(symbol)
+    assert basic_store_no_symbol_list.list_symbols() == basic_store_no_symbol_list.list_versions() == []
 
 
 @pytest.mark.parametrize("special_char", list("$@=;/:+ ,?\\{^}%`[]\"'~#|!-_.()"))
-def test_special_chars(s3_version_store, special_char):
+def test_special_chars(object_version_store, special_char):
     """Test chars with special URI encoding under RFC 3986"""
     sym = f"prefix{special_char}postfix"
     df = sample_dataframe()
-    s3_version_store.write(sym, df)
-    vitem = s3_version_store.read(sym)
+    object_version_store.write(sym, df)
+    vitem = object_version_store.read(sym)
     assert_frame_equal(vitem.data, df)
 
 
-@pytest.mark.parametrize("breaking_char", [chr(0), "\0", "&", "*", "<", ">"])
-def test_s3_breaking_chars(s3_version_store_v2, breaking_char):
-    """Test that chars that are not supported are raising the appropriate exception and that we fail on write without corrupting the db
+@pytest.mark.parametrize("breaking_char", [chr(0), "\0", "*", "<", ">"])
+def test_s3_breaking_chars(object_version_store, breaking_char):
+    """Test that chars that are not supported are raising the appropriate exception and that we fail on write without
+    corrupting the db.
     """
     sym = f"prefix{breaking_char}postfix"
     df = sample_dataframe()
     with pytest.raises(ArcticDbNotYetImplemented):
-        s3_version_store_v2.write(sym, df)
+        object_version_store.write(sym, df)
 
-    assert sym not in s3_version_store_v2.list_symbols()
+    assert sym not in object_version_store.list_symbols()
 
 
-def test_s3_breaking_chars_exception_compat(s3_version_store_v2):
-    """Test that chars that are not supported are raising the appropriate exception and that we fail on write without corrupting the db
+def test_s3_breaking_chars_exception_compat(object_version_store):
+    """Test that chars that are not supported are raising the appropriate exception and that we fail on write without
+    corrupting the db
     """
     sym = "prefix*postfix"
     df = sample_dataframe()
     # Check that ArcticNativeNotYetImplemented is aliased correctly as ArcticDbNotYetImplemented for backwards compat
-    with pytest.raises(ArcticNativeNotYetImplemented) as e_info:
-        s3_version_store_v2.write(sym, df)
+    with pytest.raises(ArcticDbNotYetImplemented) as e_info:
+        object_version_store.write(sym, df)
 
     assert isinstance(e_info.value, ArcticNativeNotYetImplemented)
-    assert sym not in s3_version_store_v2.list_symbols()
+    assert sym not in object_version_store.list_symbols()
 
 
 @pytest.mark.parametrize("unhandled_char", [chr(30), chr(127), chr(128)])
-def test_unhandled_chars_default(s3_version_store, unhandled_char):
+def test_unhandled_chars_default(object_version_store, unhandled_char):
     """Test that by default, the problematic chars are raising an exception"""
     sym = f"prefix{unhandled_char}postfix"
     df = sample_dataframe()
     with pytest.raises(UserInputException):
-        s3_version_store.write(sym, df)
-    syms = s3_version_store.list_symbols()
+        object_version_store.write(sym, df)
+    syms = object_version_store.list_symbols()
     assert sym not in syms
 
 
 @pytest.mark.parametrize("unhandled_char", [chr(30), chr(127), chr(128)])
-def test_unhandled_chars_update_upsert(s3_version_store, unhandled_char):
+def test_unhandled_chars_update_upsert(object_version_store, unhandled_char):
     df = pd.DataFrame(
         {"col_1": ["a", "b"], "col_2": [0.1, 0.2]}, index=[pd.Timestamp("2022-01-01"), pd.Timestamp("2022-01-02")]
     )
     sym = f"prefix{unhandled_char}postfix"
     with pytest.raises(UserInputException):
-        s3_version_store.update(sym, df, upsert=True)
-    syms = s3_version_store.list_symbols()
+        object_version_store.update(sym, df, upsert=True)
+    syms = object_version_store.list_symbols()
     assert sym not in syms
 
 
 @pytest.mark.parametrize("unhandled_char", [chr(30), chr(127), chr(128)])
-def test_unhandled_chars_append(s3_version_store, unhandled_char):
+def test_unhandled_chars_append(object_version_store, unhandled_char):
     df = pd.DataFrame(
         {"col_1": ["a", "b"], "col_2": [0.1, 0.2]}, index=[pd.Timestamp("2022-01-01"), pd.Timestamp("2022-01-02")]
     )
     sym = f"prefix{unhandled_char}postfix"
     with pytest.raises(UserInputException):
-        s3_version_store.append(sym, df)
-    syms = s3_version_store.list_symbols()
+        object_version_store.append(sym, df)
+    syms = object_version_store.list_symbols()
     assert sym not in syms
 
 
 @pytest.mark.parametrize("unhandled_char", [chr(127), chr(128)])
-def test_unhandled_chars_already_present_write(s3_version_store, three_col_df, unhandled_char):
+def test_unhandled_chars_already_present_write(object_version_store, three_col_df, unhandled_char):
     sym = f"prefix{unhandled_char}postfix"
     with config_context("VersionStore.NoStrictSymbolCheck", 1):
-        s3_version_store.write(sym, three_col_df())
-    vitem = s3_version_store.read(sym)
-    s3_version_store.write(sym, three_col_df(1))
-    new_vitem = s3_version_store.read(sym)
+        object_version_store.write(sym, three_col_df())
+    vitem = object_version_store.read(sym)
+    object_version_store.write(sym, three_col_df(1))
+    new_vitem = object_version_store.read(sym)
     assert not vitem.data.equals(new_vitem.data)
 
 
 @pytest.mark.parametrize("unhandled_char", [chr(127), chr(128)])
-def test_unhandled_chars_already_present_append(s3_version_store, three_col_df, unhandled_char):
+def test_unhandled_chars_already_present_append(object_version_store, three_col_df, unhandled_char):
     sym = f"prefix{unhandled_char}postfix"
     with config_context("VersionStore.NoStrictSymbolCheck", 1):
-        s3_version_store.write(sym, three_col_df(1))
+        object_version_store.write(sym, three_col_df(1))
 
-    vitem = s3_version_store.read(sym)
-    s3_version_store.append(sym, three_col_df(10))
-    new_vitem = s3_version_store.read(sym)
+    vitem = object_version_store.read(sym)
+    object_version_store.append(sym, three_col_df(10))
+    new_vitem = object_version_store.read(sym)
     assert not vitem.data.equals(new_vitem.data)
     assert len(vitem.data) != len(new_vitem.data)
 
 
 @pytest.mark.parametrize("unhandled_char", [chr(127), chr(128)])
-def test_unhandled_chars_already_present_update(s3_version_store, unhandled_char):
+def test_unhandled_chars_already_present_update(object_version_store, unhandled_char):
     df = pd.DataFrame(
         {"col_1": ["a", "b"], "col_2": [0.1, 0.2]}, index=[pd.Timestamp("2022-01-01"), pd.Timestamp("2022-01-02")]
     )
@@ -204,18 +182,17 @@ def test_unhandled_chars_already_present_update(s3_version_store, unhandled_char
     )
     sym = f"prefix{unhandled_char}postfix"
     with config_context("VersionStore.NoStrictSymbolCheck", 1):
-        s3_version_store.write(sym, df)
+        object_version_store.write(sym, df)
 
-    vitem = s3_version_store.read(sym)
-    s3_version_store.update(sym, update_df)
-    new_vitem = s3_version_store.read(sym)
+    vitem = object_version_store.read(sym)
+    object_version_store.update(sym, update_df)
+    new_vitem = object_version_store.read(sym)
     assert not vitem.data.equals(new_vitem.data)
     assert len(vitem.data) == len(new_vitem.data)
 
 
-@pytest.mark.parametrize("version_store", SMOKE_TEST_VERSION_STORES)
-def test_with_prune(request, version_store, symbol):
-    version_store = request.getfixturevalue(version_store)
+def test_with_prune(object_and_mem_and_lmdb_version_store, symbol):
+    version_store = object_and_mem_and_lmdb_version_store
     df = sample_dataframe()
     modified_df = sample_dataframe()
 
@@ -237,90 +214,90 @@ def test_with_prune(request, version_store, symbol):
     assert_frame_equal(version_store.read(symbol, as_of="my_snap2").data, final_df)
 
 
-def test_prune_previous_versions_explicit_method(lmdb_version_store, symbol):
+def test_prune_previous_versions_explicit_method(basic_store, symbol):
     # Given
     df = sample_dataframe()
     modified_df = sample_dataframe(1)
 
-    lmdb_version_store.write(symbol, df, metadata={"something": "something"}, prune_previous_version=True)
-    lmdb_version_store.write(symbol, modified_df, prune_previous_version=False)
+    basic_store.write(symbol, df, metadata={"something": "something"}, prune_previous_version=True)
+    basic_store.write(symbol, modified_df, prune_previous_version=False)
 
-    lmdb_version_store.snapshot("my_snap")
+    basic_store.snapshot("my_snap")
 
     final_df = sample_dataframe(2)
-    lmdb_version_store.write(symbol, final_df, prune_previous_version=False)
+    basic_store.write(symbol, final_df, prune_previous_version=False)
 
     # When
-    lmdb_version_store.prune_previous_versions(symbol)
+    basic_store.prune_previous_versions(symbol)
 
     # Then - only latest version and snapshots should survive
-    assert_frame_equal(lmdb_version_store.read(symbol).data, final_df)
-    assert len([ver for ver in lmdb_version_store.list_versions() if not ver["deleted"]]) == 1
-    assert_frame_equal(lmdb_version_store.read(symbol, as_of="my_snap").data, modified_df)
+    assert_frame_equal(basic_store.read(symbol).data, final_df)
+    assert len([ver for ver in basic_store.list_versions() if not ver["deleted"]]) == 1
+    assert_frame_equal(basic_store.read(symbol, as_of="my_snap").data, modified_df)
 
 
-def test_prune_previous_versions_nothing_to_do(lmdb_version_store, symbol):
+def test_prune_previous_versions_nothing_to_do(basic_store, symbol):
     df = sample_dataframe()
-    lmdb_version_store.write(symbol, df)
+    basic_store.write(symbol, df)
 
     # When
-    lmdb_version_store.prune_previous_versions(symbol)
+    basic_store.prune_previous_versions(symbol)
 
     # Then
-    result = lmdb_version_store.read(symbol).data
+    result = basic_store.read(symbol).data
     assert_frame_equal(result, df)
-    assert len(lmdb_version_store.list_versions(symbol)) == 1
-    assert len([ver for ver in lmdb_version_store.list_versions(symbol) if not ver["deleted"]]) == 1
+    assert len(basic_store.list_versions(symbol)) == 1
+    assert len([ver for ver in basic_store.list_versions(symbol) if not ver["deleted"]]) == 1
 
 
-def test_prune_previous_versions_no_snapshot(lmdb_version_store, symbol):
+def test_prune_previous_versions_no_snapshot(basic_store, symbol):
     # Given
     df = sample_dataframe()
     modified_df = sample_dataframe(1)
 
-    lmdb_version_store.write(symbol, df, metadata={"something": "something"}, prune_previous_version=True)
-    lmdb_version_store.write(symbol, modified_df, prune_previous_version=False)
+    basic_store.write(symbol, df, metadata={"something": "something"}, prune_previous_version=True)
+    basic_store.write(symbol, modified_df, prune_previous_version=False)
 
     final_df = sample_dataframe(2)
-    lmdb_version_store.write(symbol, final_df, prune_previous_version=False)
+    basic_store.write(symbol, final_df, prune_previous_version=False)
 
     # When
-    lmdb_version_store.prune_previous_versions(symbol)
+    basic_store.prune_previous_versions(symbol)
 
     # Then - only latest version should survive
-    assert_frame_equal(lmdb_version_store.read(symbol).data, final_df)
-    assert len([ver for ver in lmdb_version_store.list_versions() if not ver["deleted"]]) == 1
+    assert_frame_equal(basic_store.read(symbol).data, final_df)
+    assert len([ver for ver in basic_store.list_versions() if not ver["deleted"]]) == 1
 
 
-def test_prune_previous_versions_multiple_times(lmdb_version_store, symbol):
+def test_prune_previous_versions_multiple_times(basic_store, symbol):
     # Given
     df = sample_dataframe()
     modified_df = sample_dataframe(1)
 
-    lmdb_version_store.write(symbol, df, metadata={"something": "something"}, prune_previous_version=True)
-    lmdb_version_store.write(symbol, modified_df, prune_previous_version=False)
+    basic_store.write(symbol, df, metadata={"something": "something"}, prune_previous_version=True)
+    basic_store.write(symbol, modified_df, prune_previous_version=False)
 
     # When
-    lmdb_version_store.prune_previous_versions(symbol)
-    lmdb_version_store.prune_previous_versions(symbol)
+    basic_store.prune_previous_versions(symbol)
+    basic_store.prune_previous_versions(symbol)
 
     # Then - only latest version should survive
-    assert_frame_equal(lmdb_version_store.read(symbol).data, modified_df)
-    assert len([ver for ver in lmdb_version_store.list_versions() if not ver["deleted"]]) == 1
+    assert_frame_equal(basic_store.read(symbol).data, modified_df)
+    assert len([ver for ver in basic_store.list_versions() if not ver["deleted"]]) == 1
 
     # Let's write and prune again
     final_df = sample_dataframe(2)
-    lmdb_version_store.write(symbol, final_df, prune_previous_version=False)
-    lmdb_version_store.prune_previous_versions(symbol)
-    assert_frame_equal(lmdb_version_store.read(symbol).data, final_df)
-    assert len([ver for ver in lmdb_version_store.list_versions() if not ver["deleted"]]) == 1
+    basic_store.write(symbol, final_df, prune_previous_version=False)
+    basic_store.prune_previous_versions(symbol)
+    assert_frame_equal(basic_store.read(symbol).data, final_df)
+    assert len([ver for ver in basic_store.list_versions() if not ver["deleted"]]) == 1
 
 
-def test_prune_previous_versions_write_batch(lmdb_version_store):
+def test_prune_previous_versions_write_batch(basic_store):
     """Verify that the batch write method correctly prunes previous versions when the corresponding option is specified.
     """
     # Given
-    lib = lmdb_version_store
+    lib = basic_store
     lib_tool = lib.library_tool()
     sym1 = "test_symbol1"
     sym2 = "test_symbol2"
@@ -347,11 +324,11 @@ def test_prune_previous_versions_write_batch(lmdb_version_store):
     assert len(lib_tool.find_keys(KeyType.SYMBOL_LIST)) == 4
 
 
-def test_prune_previous_versions_batch_write_metadata(lmdb_version_store):
+def test_prune_previous_versions_batch_write_metadata(basic_store):
     """Verify that the batch write metadata method correctly prunes previous versions when the corresponding option is specified.
     """
     # Given
-    lib = lmdb_version_store
+    lib = basic_store
     lib_tool = lib.library_tool()
     sym1 = "test_symbol1"
     sym2 = "test_symbol2"
@@ -378,11 +355,11 @@ def test_prune_previous_versions_batch_write_metadata(lmdb_version_store):
     assert len(lib_tool.find_keys(KeyType.SYMBOL_LIST)) == 2
 
 
-def test_prune_previous_versions_append_batch(lmdb_version_store):
+def test_prune_previous_versions_append_batch(basic_store):
     """Verify that the batch append method correctly prunes previous versions when the corresponding option is specified.
     """
     # Given
-    lib = lmdb_version_store
+    lib = basic_store
     lib_tool = lib.library_tool()
     sym1 = "test_symbol1"
     sym2 = "test_symbol2"
@@ -409,36 +386,36 @@ def test_prune_previous_versions_append_batch(lmdb_version_store):
     assert len(lib_tool.find_keys(KeyType.SYMBOL_LIST)) == 4
 
 
-def test_deleting_unknown_symbol(lmdb_version_store, symbol):
+def test_deleting_unknown_symbol(basic_store, symbol):
     df = sample_dataframe()
 
-    lmdb_version_store.write(symbol, df, metadata={"something": "something"})
+    basic_store.write(symbol, df, metadata={"something": "something"})
 
-    assert_frame_equal(lmdb_version_store.read(symbol).data, df)
+    assert_frame_equal(basic_store.read(symbol).data, df)
 
     # Should not raise.
-    lmdb_version_store.delete("does_not_exist")
+    basic_store.delete("does_not_exist")
 
 
-def test_negative_cases(lmdb_version_store, symbol):
+def test_negative_cases(basic_store, symbol):
     df = sample_dataframe()
     # To stay consistent with arctic this doesn't throw.
-    lmdb_version_store.delete("does_not_exist")
+    basic_store.delete("does_not_exist")
 
     # Creating a snapshot in an empty library should not create it.
-    lmdb_version_store.snapshot("empty_snapshot")
+    basic_store.snapshot("empty_snapshot")
     with pytest.raises(NoDataFoundException):
-        lmdb_version_store.delete_snapshot("empty_snapshot")
+        basic_store.delete_snapshot("empty_snapshot")
 
     with pytest.raises(NoDataFoundException):
-        lmdb_version_store.read("does_not_exist")
+        basic_store.read("does_not_exist")
     with pytest.raises(NoDataFoundException):
-        lmdb_version_store.read("does_not_exist", "empty_snapshots")
+        basic_store.read("does_not_exist", "empty_snapshots")
 
     with pytest.raises(NoDataFoundException):
-        lmdb_version_store.delete_snapshot("does_not_exist")
-    lmdb_version_store.write(symbol, df)
-    lmdb_version_store.delete(symbol)
+        basic_store.delete_snapshot("does_not_exist")
+    basic_store.write(symbol, df)
+    basic_store.delete(symbol)
 
 
 @pytest.mark.parametrize(
@@ -456,6 +433,7 @@ def test_list_symbols_regex(request, lib_type):
     lib.write("asdf", {"foo": "bar"}, metadata={"a": 1, "b": 10})
     lib.write("furble", {"foo": "bar"}, metadata={"a": 1, "b": 10})
     lib.snapshot("snap2")
+
     assert "asdf" in lib.list_symbols(regex="asd")
     assert "furble" not in lib.list_symbols(regex="asd")
     assert "asdf" in lib.list_symbols(snapshot="snap2", regex="asd")
@@ -470,22 +448,23 @@ def test_list_symbols_prefix(object_version_store):
 
     for sym in itertools.chain(blahs, nahs):
         object_version_store.write(sym, sample_dataframe(10))
+
     assert set(object_version_store.list_symbols(prefix="blah_")) == set(blahs)
     assert set(object_version_store.list_symbols(prefix="nah_")) == set(nahs)
 
 
-def test_mixed_df_without_pickling_enabled(lmdb_version_store):
+def test_mixed_df_without_pickling_enabled(basic_store):
     mixed_type_df = pd.DataFrame({"a": [1, 2, "a"]})
     with pytest.raises(Exception):
-        lmdb_version_store.write("sym", mixed_type_df)
+        basic_store.write("sym", mixed_type_df)
 
 
-def test_dataframe_fallback_with_pickling_enabled(lmdb_version_store_allows_pickling):
+def test_dataframe_fallback_with_pickling_enabled(basic_store_allows_pickling):
     mixed_type_df = pd.DataFrame({"a": [1, 2, "a", None]})
-    lmdb_version_store_allows_pickling.write("sym", mixed_type_df)
+    basic_store_allows_pickling.write("sym", mixed_type_df)
 
 
-def test_range_index(lmdb_version_store, sym):
+def test_range_index(basic_store, sym):
     d1 = {
         "x": np.arange(10, 20, dtype=np.int64),
         "y": np.arange(20, 30, dtype=np.int64),
@@ -493,22 +472,22 @@ def test_range_index(lmdb_version_store, sym):
     }
     idx = pd.RangeIndex(-1, -11, -1)
     df = pd.DataFrame(d1, index=idx)
-    lmdb_version_store.write(sym, df)
+    basic_store.write(sym, df)
 
-    vit = lmdb_version_store.read(sym)
+    vit = basic_store.read(sym)
     assert_frame_equal(df, vit.data)
 
-    vit = lmdb_version_store.read(sym, columns=["y"])
+    vit = basic_store.read(sym, columns=["y"])
     expected = pd.DataFrame({"y": d1["y"]}, index=idx)
     assert_frame_equal(expected, vit.data)
 
 
 @pytest.mark.parametrize("use_date_range_clause", [True, False])
-def test_date_range(lmdb_version_store, use_date_range_clause):
+def test_date_range(basic_store, use_date_range_clause):
     initial_timestamp = pd.Timestamp("2019-01-01")
     df = pd.DataFrame(data=np.arange(100), index=pd.date_range(initial_timestamp, periods=100))
     sym = "date_test"
-    lmdb_version_store.write(sym, df)
+    basic_store.write(sym, df)
     start_offset = 2
     end_offset = 5
 
@@ -520,9 +499,9 @@ def test_date_range(lmdb_version_store, use_date_range_clause):
     if use_date_range_clause:
         q = QueryBuilder()
         q = q.date_range(date_range)
-        data_start = lmdb_version_store.read(sym, query_builder=q).data
+        data_start = basic_store.read(sym, query_builder=q).data
     else:
-        data_start = lmdb_version_store.read(sym, date_range=date_range).data
+        data_start = basic_store.read(sym, date_range=date_range).data
     assert query_start_ts == data_start.index[0]
     assert data_start[data_start.columns[0]][0] == start_offset
 
@@ -531,9 +510,9 @@ def test_date_range(lmdb_version_store, use_date_range_clause):
     if use_date_range_clause:
         q = QueryBuilder()
         q = q.date_range(date_range)
-        data_end = lmdb_version_store.read(sym, query_builder=q).data
+        data_end = basic_store.read(sym, query_builder=q).data
     else:
-        data_end = lmdb_version_store.read(sym, date_range=date_range).data
+        data_end = basic_store.read(sym, date_range=date_range).data
     assert query_end_ts == data_end.index[-1]
     assert data_end[data_end.columns[0]][-1] == end_offset
 
@@ -541,9 +520,9 @@ def test_date_range(lmdb_version_store, use_date_range_clause):
     if use_date_range_clause:
         q = QueryBuilder()
         q = q.date_range(date_range)
-        data_closed = lmdb_version_store.read(sym, query_builder=q).data
+        data_closed = basic_store.read(sym, query_builder=q).data
     else:
-        data_closed = lmdb_version_store.read(sym, date_range=date_range).data
+        data_closed = basic_store.read(sym, date_range=date_range).data
     assert query_start_ts == data_closed.index[0]
     assert query_end_ts == data_closed.index[-1]
     assert data_closed[data_closed.columns[0]][0] == start_offset
@@ -551,30 +530,30 @@ def test_date_range(lmdb_version_store, use_date_range_clause):
 
 
 @pytest.mark.parametrize("use_date_range_clause", [True, False])
-def test_date_range_none(lmdb_version_store, use_date_range_clause):
+def test_date_range_none(basic_store, use_date_range_clause):
     sym = "date_test2"
     rows = 100
     initial_timestamp = pd.Timestamp("2019-01-01")
     df = pd.DataFrame(data=np.arange(rows), index=pd.date_range(initial_timestamp, periods=100))
-    lmdb_version_store.write(sym, df)
+    basic_store.write(sym, df)
     date_range = (None, None)
     # Should just return everything
     if use_date_range_clause:
         q = QueryBuilder()
         q = q.date_range(date_range)
-        data = lmdb_version_store.read(sym, query_builder=q).data
+        data = basic_store.read(sym, query_builder=q).data
     else:
-        data = lmdb_version_store.read(sym, date_range=(None, None)).data
+        data = basic_store.read(sym, date_range=(None, None)).data
     assert len(data) == rows
 
 
 @pytest.mark.parametrize("use_date_range_clause", [True, False])
-def test_date_range_start_equals_end(lmdb_version_store, use_date_range_clause):
+def test_date_range_start_equals_end(basic_store, use_date_range_clause):
     sym = "date_test2"
     rows = 100
     initial_timestamp = pd.Timestamp("2019-01-01")
     df = pd.DataFrame(data=np.arange(rows), index=pd.date_range(initial_timestamp, periods=100))
-    lmdb_version_store.write(sym, df)
+    basic_store.write(sym, df)
     start_offset = 2
     query_start_ts = initial_timestamp + pd.DateOffset(start_offset)
     date_range = (query_start_ts, query_start_ts)
@@ -582,18 +561,18 @@ def test_date_range_start_equals_end(lmdb_version_store, use_date_range_clause):
     if use_date_range_clause:
         q = QueryBuilder()
         q = q.date_range(date_range)
-        data = lmdb_version_store.read(sym, query_builder=q).data
+        data = basic_store.read(sym, query_builder=q).data
     else:
-        data = lmdb_version_store.read(sym, date_range=date_range).data
+        data = basic_store.read(sym, date_range=date_range).data
     assert len(data) == 1
     assert data[data.columns[0]][0] == start_offset
 
 
 @pytest.mark.parametrize("use_date_range_clause", [True, False])
-def test_date_range_row_sliced(lmdb_version_store_tiny_segment, use_date_range_clause):
-    lib = lmdb_version_store_tiny_segment
+def test_date_range_row_sliced(basic_store_tiny_segment, use_date_range_clause):
+    lib = basic_store_tiny_segment
     sym = "test_date_range_row_sliced"
-    # lmdb_version_store_tiny_segment produces 2x2 segments
+    # basic_store_tiny_segment produces 2x2 segments
     num_rows = 6
     index = pd.date_range("2000-01-01", periods=num_rows, freq="D")
     df = pd.DataFrame({"col": np.arange(num_rows)}, index=index)
@@ -618,12 +597,12 @@ def test_date_range_row_sliced(lmdb_version_store_tiny_segment, use_date_range_c
     assert_frame_equal(expected, received)
 
 
-def test_get_info(lmdb_version_store):
+def test_get_info(basic_store):
     sym = "get_info_test"
     df = pd.DataFrame(data={"col1": np.arange(10)}, index=pd.date_range(pd.Timestamp(0), periods=10))
     df.index.name = "dt_index"
-    lmdb_version_store.write(sym, df)
-    info = lmdb_version_store.get_info(sym)
+    basic_store.write(sym, df)
+    info = basic_store.get_info(sym)
     assert int(info["rows"]) == 10
     assert info["type"] == "pandasdf"
     assert info["col_names"]["columns"] == ["col1"]
@@ -631,11 +610,8 @@ def test_get_info(lmdb_version_store):
     assert info["index_type"] == "index"
 
 
-@pytest.mark.parametrize(
-    "lib_type", ["lmdb_version_store_v1", "lmdb_version_store_v2", "s3_version_store_v1", "s3_version_store_v2"]
-)
-def test_get_info_version(request, lib_type):
-    lib = request.getfixturevalue(lib_type)
+def test_get_info_version(object_and_mem_and_lmdb_version_store):
+    lib = object_and_mem_and_lmdb_version_store
     # given
     sym = "get_info_version_test"
     df = pd.DataFrame(data={"col1": np.arange(10)}, index=pd.date_range(pd.Timestamp(0), periods=10))
@@ -655,56 +631,56 @@ def test_get_info_version(request, lib_type):
     assert info_1["last_update"] > info_0["last_update"]
 
 
-def test_get_info_date_range(lmdb_version_store):
+def test_get_info_date_range(basic_store):
     # given
     sym = "test_get_info_date_range"
     df = pd.DataFrame(data={"col1": np.arange(10)}, index=pd.date_range(pd.Timestamp(0), periods=10))
-    lmdb_version_store.write(sym, df)
+    basic_store.write(sym, df)
     df = pd.DataFrame(data={"col1": np.arange(20)}, index=pd.date_range(pd.Timestamp(0), periods=20))
-    lmdb_version_store.write(sym, df, prune_previous_version=False)
+    basic_store.write(sym, df, prune_previous_version=False)
 
     # when
-    info_0 = lmdb_version_store.get_info(sym, version=0)
-    info_1 = lmdb_version_store.get_info(sym, version=1)
-    latest_version = lmdb_version_store.get_info(sym)
+    info_0 = basic_store.get_info(sym, version=0)
+    info_1 = basic_store.get_info(sym, version=1)
+    latest_version = basic_store.get_info(sym)
 
     # then
     assert latest_version == info_1
-    assert info_1["date_range"] == lmdb_version_store.get_timerange_for_symbol(sym, version=1)
-    assert info_0["date_range"] == lmdb_version_store.get_timerange_for_symbol(sym, version=0)
+    assert info_1["date_range"] == basic_store.get_timerange_for_symbol(sym, version=1)
+    assert info_0["date_range"] == basic_store.get_timerange_for_symbol(sym, version=0)
 
 
-def test_get_info_version_no_columns_nat(lmdb_version_store):
+def test_get_info_version_no_columns_nat(basic_store):
     sym = "test_get_info_version_no_columns_nat"
     column_names = ["a", "b", "c"]
     df = pd.DataFrame(columns=column_names)
     df["b"] = df["b"].astype("int64")
-    lmdb_version_store.write(sym, df, dynamic_strings=True, coerce_columns={"a": float, "b": int, "c": str})
-    info = lmdb_version_store.get_info(sym)
+    basic_store.write(sym, df, dynamic_strings=True, coerce_columns={"a": float, "b": int, "c": str})
+    info = basic_store.get_info(sym)
     assert np.isnat(info["date_range"][0]) == True
     assert np.isnat(info["date_range"][1]) == True
 
 
-def test_get_info_version_empty_nat(lmdb_version_store):
+def test_get_info_version_empty_nat(basic_store):
     sym = "test_get_info_version_empty_nat"
-    lmdb_version_store.write(sym, pd.DataFrame())
-    info = lmdb_version_store.get_info(sym)
+    basic_store.write(sym, pd.DataFrame())
+    info = basic_store.get_info(sym)
     assert np.isnat(info["date_range"][0]) == True
     assert np.isnat(info["date_range"][1]) == True
 
 
-def test_update_times(lmdb_version_store):
+def test_update_times(basic_store):
     # given
     df = pd.DataFrame(data={"col1": np.arange(10)}, index=pd.date_range(pd.Timestamp(0), periods=10))
-    lmdb_version_store.write("sym_1", df)
+    basic_store.write("sym_1", df)
     df = pd.DataFrame(data={"col1": np.arange(20)}, index=pd.date_range(pd.Timestamp(0), periods=20))
-    lmdb_version_store.write("sym_1", df, prune_previous_version=False)
+    basic_store.write("sym_1", df, prune_previous_version=False)
     df = pd.DataFrame(data={"col1": np.arange(15)}, index=pd.date_range(pd.Timestamp(0), periods=15))
-    lmdb_version_store.write("sym_2", df)
+    basic_store.write("sym_2", df)
 
     # when
-    update_times_default = lmdb_version_store.update_times(["sym_1", "sym_2"])
-    update_times_versioned = lmdb_version_store.update_times(["sym_1", "sym_1", "sym_2"], as_ofs=[0, 1, None])
+    update_times_default = basic_store.update_times(["sym_1", "sym_2"])
+    update_times_versioned = basic_store.update_times(["sym_1", "sym_1", "sym_2"], as_ofs=[0, 1, None])
 
     # then
     assert len(update_times_default) == 2
@@ -713,13 +689,13 @@ def test_update_times(lmdb_version_store):
     assert update_times_versioned[0] < update_times_versioned[1] < update_times_versioned[2]
 
 
-def test_get_info_multi_index(lmdb_version_store):
+def test_get_info_multi_index(basic_store):
     dtidx = pd.date_range(pd.Timestamp("2016-01-01"), periods=3)
     vals = np.arange(3, dtype=np.uint32)
     multi_df = pd.DataFrame({"col1": [1, 4, 9]}, index=pd.MultiIndex.from_arrays([dtidx, vals]))
     sym = "multi_info_test"
-    lmdb_version_store.write(sym, multi_df)
-    info = lmdb_version_store.get_info(sym)
+    basic_store.write(sym, multi_df)
+    info = basic_store.get_info(sym)
     assert int(info["rows"]) == 3
     assert info["type"] == "pandasdf"
     assert info["col_names"]["columns"] == ["col1"]
@@ -727,75 +703,75 @@ def test_get_info_multi_index(lmdb_version_store):
     assert info["index_type"] == "multi_index"
 
 
-def test_get_info_index_column(lmdb_version_store, sym):
+def test_get_info_index_column(basic_store, sym):
     df = pd.DataFrame([[1, 2, 3, 4, 5, 6]], columns=["A", "B", "C", "D", "E", "F"])
 
-    lmdb_version_store.write(sym, df)
-    info = lmdb_version_store.get_info(sym)
+    basic_store.write(sym, df)
+    info = basic_store.get_info(sym)
     assert info["col_names"]["index"] == [None]
     assert info["col_names"]["columns"] == ["A", "B", "C", "D", "E", "F"]
 
-    lmdb_version_store.write(sym, df.set_index("B"))
-    info = lmdb_version_store.get_info(sym)
+    basic_store.write(sym, df.set_index("B"))
+    info = basic_store.get_info(sym)
     assert info["col_names"]["index"] == ["B"]
     assert info["col_names"]["columns"] == ["A", "C", "D", "E", "F"]
 
-    lmdb_version_store.write(sym, df.set_index(["A", "B"]))
-    info = lmdb_version_store.get_info(sym)
+    basic_store.write(sym, df.set_index(["A", "B"]))
+    info = basic_store.get_info(sym)
     assert info["col_names"]["index"] == ["A", "B"]
     assert info["col_names"]["columns"] == ["C", "D", "E", "F"]
 
-    lmdb_version_store.write(sym, df.set_index(["A", "B"], append=True))
-    info = lmdb_version_store.get_info(sym)
+    basic_store.write(sym, df.set_index(["A", "B"], append=True))
+    info = basic_store.get_info(sym)
     assert info["col_names"]["index"] == [None, "A", "B"]
     assert info["col_names"]["columns"] == ["C", "D", "E", "F"]
 
 
-def test_empty_pd_series(lmdb_version_store):
+def test_empty_pd_series(basic_store):
     sym = "empty_s"
     series = pd.Series()
-    lmdb_version_store.write(sym, series)
-    assert lmdb_version_store.read(sym).data.empty
+    basic_store.write(sym, series)
+    assert basic_store.read(sym).data.empty
 
 
-def test_empty_df(lmdb_version_store):
+def test_empty_df(basic_store):
     sym = "empty_s"
     df = pd.DataFrame()
-    lmdb_version_store.write(sym, df)
+    basic_store.write(sym, df)
     # if no index information is provided, we assume a datetimeindex
-    assert lmdb_version_store.read(sym).data.empty
+    assert basic_store.read(sym).data.empty
 
 
-def test_empty_ndarr(lmdb_version_store):
+def test_empty_ndarr(basic_store):
     sym = "empty_s"
     ndarr = np.array([])
-    lmdb_version_store.write(sym, ndarr)
-    assert_array_equal(lmdb_version_store.read(sym).data, ndarr)
+    basic_store.write(sym, ndarr)
+    assert_array_equal(basic_store.read(sym).data, ndarr)
 
 
 # See AN-765 for why we need no_symbol_list fixture
-def test_large_symbols(lmdb_version_store_no_symbol_list):
+def test_large_symbols(basic_store_no_symbol_list):
     with pytest.raises(ArcticDbNotYetImplemented):
-        lmdb_version_store_no_symbol_list.write("a" * (MAX_SYMBOL_SIZE + 1), 1)
+        basic_store_no_symbol_list.write("a" * (MAX_SYMBOL_SIZE + 1), 1)
 
     for _ in range(5):
         valid_sized_sym = "a" * random.randint(1, MAX_SYMBOL_SIZE - 1)
-        lmdb_version_store_no_symbol_list.write(valid_sized_sym, 1)
-        assert lmdb_version_store_no_symbol_list.read(valid_sized_sym).data == 1
+        basic_store_no_symbol_list.write(valid_sized_sym, 1)
+        assert basic_store_no_symbol_list.read(valid_sized_sym).data == 1
 
         valid_punctuations = "".join(list(set(string.punctuation) - set(UNSUPPORTED_S3_CHARS)))
         valid_char_sym = "".join(
             [random.choice(string.ascii_letters + string.digits + valid_punctuations) for _ in range(12)]
         )
 
-        lmdb_version_store_no_symbol_list.write(valid_char_sym, 1)
-        assert lmdb_version_store_no_symbol_list.read(valid_char_sym).data == 1
+        basic_store_no_symbol_list.write(valid_char_sym, 1)
+        assert basic_store_no_symbol_list.read(valid_char_sym).data == 1
 
 
-def test_unsupported_chars_in_symbols(lmdb_version_store):
+def test_unsupported_chars_in_symbols(basic_store):
     for ch in UNSUPPORTED_S3_CHARS:
         with pytest.raises(ArcticDbNotYetImplemented):
-            lmdb_version_store.write(ch, 1)
+            basic_store.write(ch, 1)
 
     for _ in range(5):
         valid_punctuations = "".join(list(set(string.punctuation) - set(UNSUPPORTED_S3_CHARS)))
@@ -803,82 +779,81 @@ def test_unsupported_chars_in_symbols(lmdb_version_store):
             [random.choice(string.ascii_letters + string.digits + valid_punctuations) for _ in range(12)]
         )
 
-        lmdb_version_store.write(valid_char_sym, 1)
-        assert lmdb_version_store.read(valid_char_sym).data == 1
+        basic_store.write(valid_char_sym, 1)
+        assert basic_store.read(valid_char_sym).data == 1
 
 
-def test_partial_read_pickled_df(lmdb_version_store):
+def test_partial_read_pickled_df(basic_store):
     will_be_pickled = [1, 2, 3]
-    lmdb_version_store.write("blah", will_be_pickled)
-    assert lmdb_version_store.read("blah").data == will_be_pickled
+    basic_store.write("blah", will_be_pickled)
+    assert basic_store.read("blah").data == will_be_pickled
 
     with pytest.raises(InternalException):
-        lmdb_version_store.read("blah", columns=["does_not_matter"])
+        basic_store.read("blah", columns=["does_not_matter"])
 
     with pytest.raises(InternalException):
-        lmdb_version_store.read("blah", date_range=(DateRange(pd.Timestamp("1970-01-01"), pd.Timestamp("2027-12-31"))))
+        basic_store.read("blah", date_range=(DateRange(pd.Timestamp("1970-01-01"), pd.Timestamp("2027-12-31"))))
 
 
-def test_is_pickled(lmdb_version_store):
+def test_is_pickled(basic_store):
     will_be_pickled = [1, 2, 3]
-    lmdb_version_store.write("blah", will_be_pickled)
-    assert lmdb_version_store.is_symbol_pickled("blah") is True
+    basic_store.write("blah", will_be_pickled)
+    assert basic_store.is_symbol_pickled("blah") is True
 
     df = pd.DataFrame({"a": np.arange(3)})
-    lmdb_version_store.write("normal", df)
-    assert lmdb_version_store.is_symbol_pickled("normal") is False
+    basic_store.write("normal", df)
+    assert basic_store.is_symbol_pickled("normal") is False
 
 
-def test_is_pickled_by_version(lmdb_version_store):
+def test_is_pickled_by_version(basic_store):
     symbol = "test"
     will_be_pickled = [1, 2, 3]
-    lmdb_version_store.write(symbol, will_be_pickled)
+    basic_store.write(symbol, will_be_pickled)
 
     not_pickled = pd.DataFrame({"a": np.arange(3)})
-    lmdb_version_store.write(symbol, not_pickled)
+    basic_store.write(symbol, not_pickled)
 
-    assert lmdb_version_store.is_symbol_pickled(symbol) is False
-    assert lmdb_version_store.is_symbol_pickled(symbol, 0) is True
-    assert lmdb_version_store.is_symbol_pickled(symbol, 1) is False
+    assert basic_store.is_symbol_pickled(symbol) is False
+    assert basic_store.is_symbol_pickled(symbol, 0) is True
+    assert basic_store.is_symbol_pickled(symbol, 1) is False
 
 
-def test_is_pickled_by_snapshot(lmdb_version_store):
+def test_is_pickled_by_snapshot(basic_store):
     symbol = "test"
     will_be_pickled = [1, 2, 3]
     snap1 = "snap1"
-    lmdb_version_store.write(symbol, will_be_pickled)
-    lmdb_version_store.snapshot(snap1)
+    basic_store.write(symbol, will_be_pickled)
+    basic_store.snapshot(snap1)
 
     snap2 = "snap2"
     not_pickled = pd.DataFrame({"a": np.arange(3)})
-    lmdb_version_store.write(symbol, not_pickled)
-    lmdb_version_store.snapshot(snap2)
+    basic_store.write(symbol, not_pickled)
+    basic_store.snapshot(snap2)
 
-    assert lmdb_version_store.is_symbol_pickled(symbol) is False
-    assert lmdb_version_store.is_symbol_pickled(symbol, snap1) is True
-    assert lmdb_version_store.is_symbol_pickled(symbol, snap2) is False
+    assert basic_store.is_symbol_pickled(symbol) is False
+    assert basic_store.is_symbol_pickled(symbol, snap1) is True
+    assert basic_store.is_symbol_pickled(symbol, snap2) is False
 
 
-def test_is_pickled_by_timestamp(lmdb_version_store):
+def test_is_pickled_by_timestamp(basic_store):
     symbol = "test"
     will_be_pickled = [1, 2, 3]
-    with distinct_timestamps(lmdb_version_store) as first_write_timestamps:
-        lmdb_version_store.write(symbol, will_be_pickled)
+    with distinct_timestamps(basic_store) as first_write_timestamps:
+        basic_store.write(symbol, will_be_pickled)
 
     not_pickled = pd.DataFrame({"a": np.arange(3)})
-    with distinct_timestamps(lmdb_version_store):
-        lmdb_version_store.write(symbol, not_pickled)
+    with distinct_timestamps(basic_store):
+        basic_store.write(symbol, not_pickled)
 
     with pytest.raises(NoDataFoundException):
-        lmdb_version_store.read(symbol, pd.Timestamp(0))
-    assert lmdb_version_store.is_symbol_pickled(symbol) is False
-    assert lmdb_version_store.is_symbol_pickled(symbol, first_write_timestamps.after) is True
-    assert lmdb_version_store.is_symbol_pickled(symbol, pd.Timestamp(np.iinfo(np.int64).max)) is False
+        basic_store.read(symbol, pd.Timestamp(0))
+    assert basic_store.is_symbol_pickled(symbol) is False
+    assert basic_store.is_symbol_pickled(symbol, first_write_timestamps.after) is True
+    assert basic_store.is_symbol_pickled(symbol, pd.Timestamp(np.iinfo(np.int64).max)) is False
 
 
-@pytest.mark.parametrize("version_store", SMOKE_TEST_VERSION_STORES)
-def test_list_versions(request, version_store):
-    version_store = request.getfixturevalue(version_store)
+def test_list_versions(object_and_mem_and_lmdb_version_store):
+    version_store = object_and_mem_and_lmdb_version_store
     version_store.write("a", 1)  # a, v0
     version_store.write("b", 1)  # b, v0
     version_store.write("c", 1)  # c, v0
@@ -889,8 +864,8 @@ def test_list_versions(request, version_store):
     version_store.snapshot("snap2")
     version_store.write("c", 3)  # c, v1
     version_store.snapshot("snap3")
-    versions = version_store.list_versions()
 
+    versions = version_store.list_versions()
     assert len(versions) == 3 + 2 + 2  # a-3, b-2, c-2
     sorted_versions_for_a = sorted([v for v in versions if v["symbol"] == "a"], key=lambda x: x["version"])
     assert len(sorted_versions_for_a) == 3
@@ -908,20 +883,20 @@ def test_list_versions(request, version_store):
     assert get_tuples_from_version_info(version_store.list_versions(snapshot="snap3")) == {("a", 2), ("b", 1), ("c", 1)}
 
 
-def test_list_versions_deleted_flag(lmdb_version_store):
-    lmdb_version_store.write("symbol", pd.DataFrame(), metadata=1)
-    lmdb_version_store.write("symbol", pd.DataFrame(), metadata=2, prune_previous_version=False)
-    lmdb_version_store.write("symbol", pd.DataFrame(), metadata=3, prune_previous_version=False)
-    lmdb_version_store.snapshot("snapshot")
+def test_list_versions_deleted_flag(basic_store):
+    basic_store.write("symbol", pd.DataFrame(), metadata=1)
+    basic_store.write("symbol", pd.DataFrame(), metadata=2, prune_previous_version=False)
+    basic_store.write("symbol", pd.DataFrame(), metadata=3, prune_previous_version=False)
+    basic_store.snapshot("snapshot")
 
-    versions = lmdb_version_store.list_versions("symbol")
+    versions = basic_store.list_versions("symbol")
     assert len(versions) == 3
     versions = sorted(versions, key=lambda v: v["version"])
     assert not versions[2]["deleted"]
     assert versions[2]["snapshots"] == ["snapshot"]
 
-    lmdb_version_store.delete_version("symbol", 2)
-    versions = lmdb_version_store.list_versions("symbol")
+    basic_store.delete_version("symbol", 2)
+    versions = basic_store.list_versions("symbol")
     assert len(versions) == 3
     versions = sorted(versions, key=lambda v: v["version"])
 
@@ -933,8 +908,8 @@ def test_list_versions_deleted_flag(lmdb_version_store):
     assert versions[2]["snapshots"] == ["snapshot"]
 
 
-def test_list_versions_with_snapshots(lmdb_version_store):
-    lib = lmdb_version_store
+def test_list_versions_with_snapshots(basic_store):
+    lib = basic_store
     lib.write("a", 0)  # v0
     lib.write("b", 0)  # v0
     lib.snapshot("snap1")  # a_v0, b_v0
@@ -954,44 +929,45 @@ def test_list_versions_with_snapshots(lmdb_version_store):
     assert set([v["snapshots"] for v in items_for_a if v["version"] == 1][0]) == {"snap2", "snap3"}
 
 
-def test_read_ts(lmdb_version_store):
-    with distinct_timestamps(lmdb_version_store) as first_write_timestamps:
-        lmdb_version_store.write("a", 1)  # v0
-    assert lmdb_version_store.read("a", as_of=first_write_timestamps.after).version == 0
-    with distinct_timestamps(lmdb_version_store):
-        lmdb_version_store.write("a", 2)  # v1
-    with distinct_timestamps(lmdb_version_store):
-        lmdb_version_store.write("a", 3)  # v2
-    lmdb_version_store.write("a", 4)  # v3
-    lmdb_version_store.snapshot("snap3")
-    versions = lmdb_version_store.list_versions()
+def test_read_ts(basic_store):
+    with distinct_timestamps(basic_store) as first_write_timestamps:
+        basic_store.write("a", 1)  # v0
+    assert basic_store.read("a", as_of=first_write_timestamps.after).version == 0
+    with distinct_timestamps(basic_store):
+        basic_store.write("a", 2)  # v1
+    with distinct_timestamps(basic_store):
+        basic_store.write("a", 3)  # v2
+    basic_store.write("a", 4)  # v3
+    basic_store.snapshot("snap3")
+
+    versions = basic_store.list_versions()
     assert len(versions) == 4
     sorted_versions_for_a = sorted([v for v in versions if v["symbol"] == "a"], key=lambda x: x["version"])
     ts_for_v1 = sorted_versions_for_a[1]["date"]
-    vitem = lmdb_version_store.read("a", as_of=ts_for_v1)
+    vitem = basic_store.read("a", as_of=ts_for_v1)
     assert vitem.version == 1
     assert vitem.data == 2
 
     ts_for_v2 = sorted_versions_for_a[0]["date"]
-    vitem = lmdb_version_store.read("a", as_of=ts_for_v2)
+    vitem = basic_store.read("a", as_of=ts_for_v2)
     assert vitem.version == 0
     assert vitem.data == 1
 
     with pytest.raises(NoDataFoundException):
-        lmdb_version_store.read("a", as_of=pd.Timestamp(0))
+        basic_store.read("a", as_of=pd.Timestamp(0))
 
     brexit_almost_over = pd.Timestamp(np.iinfo(np.int64).max)  # Timestamp("2262-04-11 23:47:16.854775807")
-    vitem = lmdb_version_store.read("a", as_of=brexit_almost_over)
+    vitem = basic_store.read("a", as_of=brexit_almost_over)
     assert vitem.version == 3
     assert vitem.data == 4
 
-    vitem = lmdb_version_store.read("a", as_of=first_write_timestamps.after)
+    vitem = basic_store.read("a", as_of=first_write_timestamps.after)
     assert vitem.version == 0
     assert vitem.data == 1
 
 
-def test_negative_strides(version_store_factory):
-    lmdb_version_store = version_store_factory(col_per_group=2, row_per_segment=2)
+def test_negative_strides(basic_store_tiny_segment):
+    lmdb_version_store = basic_store_tiny_segment
     negative_stride_np = np.array([[1, 2, 3, 4, 5, 6], [7, 8, 9, 10, 11, 12]], np.int32)[::-1]
     lmdb_version_store.write("negative_strides", negative_stride_np)
     vit = lmdb_version_store.read("negative_strides")
@@ -1002,24 +978,24 @@ def test_negative_strides(version_store_factory):
     assert_frame_equal(negative_stride_df, vit2.data)
 
 
-def test_dynamic_strings(lmdb_version_store):
+def test_dynamic_strings(basic_store):
     row = pd.Series(["A", "B", "C", "Aaba", "Baca", "CABA", "dog", "cat"])
     df = pd.DataFrame({"x": row})
-    lmdb_version_store.write("strings", df, dynamic_strings=True)
-    vit = lmdb_version_store.read("strings")
+    basic_store.write("strings", df, dynamic_strings=True)
+    vit = basic_store.read("strings")
     assert_frame_equal(vit.data, df)
 
 
-def test_dynamic_strings_non_contigous(lmdb_version_store):
+def test_dynamic_strings_non_contiguous(basic_store):
     df = sample_dataframe_only_strings(100, 0, 100)
     series = df.iloc[-1]
     series.name = None
-    lmdb_version_store.write("strings", series, dynamic_strings=True)
-    vit = lmdb_version_store.read("strings")
+    basic_store.write("strings", series, dynamic_strings=True)
+    vit = basic_store.read("strings")
     assert_series_equal(vit.data, series)
 
 
-def test_dynamic_strings_with_none(lmdb_version_store):
+def test_dynamic_strings_with_none(basic_store):
     row = pd.Series(
         [
             "A",
@@ -1037,12 +1013,12 @@ def test_dynamic_strings_with_none(lmdb_version_store):
         ]
     )
     df = pd.DataFrame({"x": row})
-    lmdb_version_store.write("strings", df, dynamic_strings=True)
-    vit = lmdb_version_store.read("strings")
+    basic_store.write("strings", df, dynamic_strings=True)
+    vit = basic_store.read("strings")
     assert_frame_equal(vit.data, df)
 
 
-def test_dynamic_strings_with_none_first_element(lmdb_version_store):
+def test_dynamic_strings_with_none_first_element(basic_store):
     row = pd.Series(
         [
             None,
@@ -1061,47 +1037,45 @@ def test_dynamic_strings_with_none_first_element(lmdb_version_store):
         ]
     )
     df = pd.DataFrame({"x": row})
-    lmdb_version_store.write("strings", df, dynamic_strings=True)
-    vit = lmdb_version_store.read("strings")
+    basic_store.write("strings", df, dynamic_strings=True)
+    vit = basic_store.read("strings")
     assert_frame_equal(vit.data, df)
 
 
-def test_dynamic_strings_with_all_nones(lmdb_version_store):
+def test_dynamic_strings_with_all_nones(basic_store):
     df = pd.DataFrame({"x": [None, None]})
-    lmdb_version_store.write("strings", df, dynamic_strings=True)
-    data = lmdb_version_store.read("strings")
+    basic_store.write("strings", df, dynamic_strings=True)
+    data = basic_store.read("strings")
     assert data.data["x"][0] is None
     assert data.data["x"][1] is None
 
 
-def test_dynamic_strings_with_all_nones_update(lmdb_version_store):
+def test_dynamic_strings_with_all_nones_update(basic_store):
     df = pd.DataFrame(
         {"col_1": ["a", "b"], "col_2": [0.1, 0.2]}, index=[pd.Timestamp("2022-01-01"), pd.Timestamp("2022-01-02")]
     )
     update_df = pd.DataFrame({"col_1": [np.nan], "col_2": [0.1]}, index=[pd.Timestamp("2022-01-01")])
-    lmdb_version_store.write("strings", df, dynamic_strings=True)
+    basic_store.write("strings", df, dynamic_strings=True)
     with pytest.raises(StreamDescriptorMismatch):
         # nan causes col_1 is considered to be a float column
         # Won't accept that as a string column even with DS enabled
-        lmdb_version_store.update("strings", update_df, dynamic_strings=True)
+        basic_store.update("strings", update_df, dynamic_strings=True)
 
-    lmdb_version_store.update("strings", update_df.astype({"col_1": "object"}), dynamic_strings=True)
+    basic_store.update("strings", update_df.astype({"col_1": "object"}), dynamic_strings=True)
 
-    data = lmdb_version_store.read("strings")
+    data = basic_store.read("strings")
     assert math.isnan(data.data["col_1"][pd.Timestamp("2022-01-01")])
     assert data.data["col_1"][pd.Timestamp("2022-01-02")] == "b"
 
-    lmdb_version_store.write("strings", df, dynamic_strings=True)
-    lmdb_version_store.update(
-        "strings", update_df, dynamic_strings=True, coerce_columns={"col_1": object, "col_2": "float"}
-    )
+    basic_store.write("strings", df, dynamic_strings=True)
+    basic_store.update("strings", update_df, dynamic_strings=True, coerce_columns={"col_1": object, "col_2": "float"})
 
-    data = lmdb_version_store.read("strings")
+    data = basic_store.read("strings")
     assert math.isnan(data.data["col_1"][pd.Timestamp("2022-01-01")])
     assert data.data["col_1"][pd.Timestamp("2022-01-02")] == "b"
 
 
-def test_dynamic_strings_with_nan(lmdb_version_store):
+def test_dynamic_strings_with_nan(basic_store):
     row = pd.Series(
         [
             np.nan,
@@ -1121,22 +1095,22 @@ def test_dynamic_strings_with_nan(lmdb_version_store):
     )
 
     df = pd.DataFrame({"x": row})
-    lmdb_version_store.write("strings", df, dynamic_strings=True)
-    vit = lmdb_version_store.read("strings")
+    basic_store.write("strings", df, dynamic_strings=True)
+    vit = basic_store.read("strings")
     assert_frame_equal(vit.data, df)
 
 
-def test_metadata_with_snapshots(lmdb_version_store):
+def test_metadata_with_snapshots(basic_store):
     symbol_metadata1 = {"test": "data_meta"}
     symbol_metadata2 = {"test": "should_not_be_returned"}
     snap_metadata = {"test": "snap_meta"}
-    lmdb_version_store.write("symbol", 1, metadata=symbol_metadata1)
-    lmdb_version_store.snapshot("snap1", metadata=snap_metadata)
-    lmdb_version_store.write("symbol", 2, metadata=symbol_metadata2)
+    basic_store.write("symbol", 1, metadata=symbol_metadata1)
+    basic_store.snapshot("snap1", metadata=snap_metadata)
+    basic_store.write("symbol", 2, metadata=symbol_metadata2)
 
-    meta = lmdb_version_store.read_metadata("symbol", as_of="snap1").metadata
+    meta = basic_store.read_metadata("symbol", as_of="snap1").metadata
     assert meta == symbol_metadata1
-    snapshot = lmdb_version_store.list_snapshots()
+    snapshot = basic_store.list_snapshots()
     assert snapshot["snap1"] == snap_metadata
 
 
@@ -1157,7 +1131,7 @@ def equals(x, y):
         assert x == y
 
 
-def test_recursively_written_data(lmdb_version_store):
+def test_recursively_written_data(basic_store):
     samples = [
         {"a": np.arange(5), "b": np.arange(8)},  # dict of np arrays
         (np.arange(5), np.arange(6)),  # tuple of np arrays
@@ -1166,41 +1140,41 @@ def test_recursively_written_data(lmdb_version_store):
     ]
 
     for idx, sample in enumerate(samples):
-        lmdb_version_store.write("sym_recursive" + str(idx), sample, recursive_normalizers=True)
-        lmdb_version_store.write("sym_pickle" + str(idx), sample)  # pickled writes
-        recursive_data = lmdb_version_store.read("sym_recursive" + str(idx)).data
-        pickled_data = lmdb_version_store.read("sym_pickle" + str(idx)).data
+        basic_store.write("sym_recursive" + str(idx), sample, recursive_normalizers=True)
+        basic_store.write("sym_pickle" + str(idx), sample)  # pickled writes
+        recursive_data = basic_store.read("sym_recursive" + str(idx)).data
+        pickled_data = basic_store.read("sym_pickle" + str(idx)).data
         equals(sample, recursive_data)
         equals(pickled_data, recursive_data)
 
 
-def test_recursively_written_data_with_metadata(lmdb_version_store):
+def test_recursively_written_data_with_metadata(basic_store):
     samples = [
         {"a": np.arange(5), "b": np.arange(8)},  # dict of np arrays
         (np.arange(5), np.arange(6)),  # tuple of np arrays
     ]
 
     for idx, sample in enumerate(samples):
-        vit = lmdb_version_store.write(
+        vit = basic_store.write(
             "sym_recursive" + str(idx), sample, metadata={"something": 1}, recursive_normalizers=True
         )
-        recursive_data = lmdb_version_store.read("sym_recursive" + str(idx)).data
+        recursive_data = basic_store.read("sym_recursive" + str(idx)).data
         equals(sample, recursive_data)
         assert vit.metadata == {"something": 1}
 
 
-def test_recursively_written_data_with_nones(lmdb_version_store):
+def test_recursively_written_data_with_nones(basic_store):
     sample = {"a": np.arange(5), "b": np.arange(8), "c": None}
 
-    lmdb_version_store.write("sym_recursive", sample, recursive_normalizers=True)
-    lmdb_version_store.write("sym_pickle", sample)  # pickled writes
-    recursive_data = lmdb_version_store.read("sym_recursive").data
-    pickled_data = lmdb_version_store.read("sym_recursive").data
+    basic_store.write("sym_recursive", sample, recursive_normalizers=True)
+    basic_store.write("sym_pickle", sample)  # pickled writes
+    recursive_data = basic_store.read("sym_recursive").data
+    pickled_data = basic_store.read("sym_recursive").data
     equals(sample, recursive_data)
     equals(pickled_data, recursive_data)
 
 
-def test_recursive_nested_data(lmdb_version_store):
+def test_recursive_nested_data(basic_store):
     sample_data = {"a": {"b": {"c": {"d": np.arange(24)}}}}
     fl = Flattener()
     assert fl.can_flatten(sample_data)
@@ -1209,8 +1183,8 @@ def test_recursive_nested_data(lmdb_version_store):
     assert len(to_write) == 1
     equals(list(to_write.values())[0], np.arange(24))
 
-    lmdb_version_store.write("s", sample_data, recursive_normalizers=True)
-    equals(lmdb_version_store.read("s").data, sample_data)
+    basic_store.write("s", sample_data, recursive_normalizers=True)
+    equals(basic_store.read("s").data, sample_data)
 
 
 def test_named_tuple_flattening_rejected():
@@ -1220,14 +1194,14 @@ def test_named_tuple_flattening_rejected():
     assert fl.can_flatten(nt) is False
 
 
-def test_data_directly_msgpackable(lmdb_version_store):
+def test_data_directly_msgpackable(basic_store):
     data = {"a": [1, 2, 3], "b": {"c": 5}}
     fl = Flattener()
     meta, to_write = fl.create_meta_structure(data, "sym")
     assert len(to_write) == 0
     assert meta["leaf"] is True
-    lmdb_version_store.write("s", data, recursive_normalizers=True)
-    equals(lmdb_version_store.read("s").data, data)
+    basic_store.write("s", data, recursive_normalizers=True)
+    equals(basic_store.read("s").data, data)
 
 
 class AlmostAList(list):
@@ -1257,22 +1231,22 @@ def test_recursive_normalizer_with_custom_class():
     assert fl.is_normalizable_to_nested_structure(list_like_obj)
 
 
-def test_really_large_symbol_for_recursive_data(lmdb_version_store):
+def test_really_large_symbol_for_recursive_data(basic_store):
     data = {"a" * 100: {"b" * 100: {"c" * 1000: {"d": np.arange(5)}}}}
-    lmdb_version_store.write("s" * 100, data, recursive_normalizers=True)
+    basic_store.write("s" * 100, data, recursive_normalizers=True)
     fl = Flattener()
     metastruct, to_write = fl.create_meta_structure(data, "s" * 100)
     assert len(list(to_write.keys())[0]) < fl.MAX_KEY_LENGTH
-    equals(lmdb_version_store.read("s" * 100).data, data)
+    equals(basic_store.read("s" * 100).data, data)
 
 
-def test_nested_custom_types(lmdb_version_store):
+def test_nested_custom_types(basic_store):
     data = AlmostAList([1, 2, 3, AlmostAList([5, np.arange(6)])])
     fl = Flattener()
     meta, to_write = fl.create_meta_structure(data, "sym")
     equals(list(to_write.values())[0], np.arange(6))
-    lmdb_version_store.write("sym", data, recursive_normalizers=True)
-    got_back = lmdb_version_store.read("sym").data
+    basic_store.write("sym", data, recursive_normalizers=True)
+    got_back = basic_store.read("sym").data
     assert isinstance(got_back, AlmostAList)
     assert isinstance(got_back[3], AlmostAList)
     assert got_back[0] == 1
@@ -1290,8 +1264,8 @@ def test_batch_operations(object_version_store_prune_previous):
         equals(result["sym3"].data, np.arange(10))
 
 
-def test_batch_read_tombstoned_version_via_snapshot(lmdb_version_store):  # AN-285
-    lib = lmdb_version_store
+def test_batch_read_tombstoned_version_via_snapshot(basic_store):  # AN-285
+    lib = basic_store
     lib.write("a", 0)
     lib.snapshot("s")
     lib.write("a", 1, prune_previous_version=True)
@@ -1302,8 +1276,8 @@ def test_batch_read_tombstoned_version_via_snapshot(lmdb_version_store):  # AN-2
     assert meta["a"].version == 0
 
 
-def test_batch_write(lmdb_version_store_tombstone_and_sync_passive):
-    lmdb_version_store = lmdb_version_store_tombstone_and_sync_passive
+def test_batch_write(basic_store_tombstone_and_sync_passive):
+    lmdb_version_store = basic_store_tombstone_and_sync_passive
     multi_data = {"sym1": np.arange(8), "sym2": np.arange(9), "sym3": np.arange(10)}
     metadata = {"sym1": {"key1": "val1"}, "sym2": None, "sym3": None}
 
@@ -1326,22 +1300,21 @@ def test_batch_write(lmdb_version_store_tombstone_and_sync_passive):
     assert len(lmdb_version_store.list_versions()) == 6
 
 
-def test_batch_write_then_read(lmdb_version_store):
+def test_batch_write_then_read(basic_store):
     symbol = "sym_d_1"
     data = pd.Series(index=[0], data=[1])
 
     # Write, then delete a symbol
-    lmdb_version_store.write(symbol=symbol, data=data)
-    lmdb_version_store.delete(symbol)
+    basic_store.write(symbol=symbol, data=data)
+    basic_store.delete(symbol)
 
     # Batch write the same data to the same symbol
-    lmdb_version_store.batch_write(symbols=[symbol], data_vector=[data])
-    lmdb_version_store.read(symbol)
+    basic_store.batch_write(symbols=[symbol], data_vector=[data])
+    basic_store.read(symbol)
 
 
-@pytest.mark.parametrize("factory_name", ["version_store_factory", "s3_store_factory"])
-def test_batch_write_then_list_symbol_without_cache(request, factory_name):
-    factory = request.getfixturevalue(factory_name)
+def test_batch_write_then_list_symbol_without_cache(basic_store_factory):
+    factory = basic_store_factory
     lib = factory(symbol_list=False, segment_row_size=10)
     df = pd.DataFrame([1, 2, 3])
     for idx in range(10):
@@ -1351,10 +1324,10 @@ def test_batch_write_then_list_symbol_without_cache(request, factory_name):
         assert set(lib.list_symbols()) == set(symbols)
 
 
-def test_batch_write_missing_keys_dedup(version_store_factory):
+def test_batch_write_missing_keys_dedup(basic_store_factory):
     """When there is duplicate data to reuse for the current write, we need to access the index key of the previous
     versions in order to refer to the corresponding keys for the deduplicated data."""
-    lib = version_store_factory(de_duplication=True)
+    lib = basic_store_factory(de_duplication=True)
     assert lib.lib_cfg().lib_desc.version.write_options.de_duplication
 
     df1 = pd.DataFrame({"a": [3, 5, 7]})
@@ -1370,32 +1343,8 @@ def test_batch_write_missing_keys_dedup(version_store_factory):
         lib.batch_write(["s1", "s2"], [df1, df2])
 
 
-def test_batch_roundtrip_metadata(lmdb_version_store_tombstone_and_sync_passive):
-    lmdb_version_store = lmdb_version_store_tombstone_and_sync_passive
-    metadatas = {}
-    for x in range(10):
-        symbol = "Sym_{}".format(x)
-        metadatas[symbol] = {"a": x}
-
-    for symbol in metadatas:
-        lmdb_version_store.write(symbol, 12)
-
-    symbols = []
-    metas = []
-    for sym, meta in metadatas.items():
-        symbols.append(sym)
-        metas.append(meta)
-
-    write_result = lmdb_version_store.batch_write_metadata(symbols, metas)
-    assert all(type(w) == VersionedItem for w in write_result)
-    vits = lmdb_version_store.batch_read_metadata(symbols)
-
-    for sym, returned in vits.items():
-        assert returned.metadata == metadatas[sym]
-
-
-def test_batch_write_metadata_missing_keys(lmdb_version_store):
-    lib = lmdb_version_store
+def test_batch_write_metadata_missing_keys(basic_store):
+    lib = basic_store
 
     df1 = pd.DataFrame({"a": [3, 5, 7]})
     df2 = pd.DataFrame({"a": [4, 6, 8]})
@@ -1411,53 +1360,166 @@ def test_batch_write_metadata_missing_keys(lmdb_version_store):
         _ = lib.batch_write_metadata(["s1", "s2"], [{"s1_meta": 1}, {"s2_meta": 1}])
 
 
-def test_write_composite_data_with_user_meta(lmdb_version_store):
+def test_batch_read_metadata_missing_keys(basic_store):
+    lib = basic_store
+
+    df1 = pd.DataFrame({"a": [3, 5, 7]})
+    df2 = pd.DataFrame({"a": [4, 6, 8]})
+    lib.write("s1", df1, metadata={"s1": "metadata"})
+    # Need two versions for this symbol as we're going to delete a version key, and the optimisation of storing the
+    # latest index key in the version ref key means it will still work if we just write one version key and then delete
+    # it
+    lib.write("s2", df2, metadata={"s2": "metadata"})
+    lib.write("s2", df2, metadata={"s2": "more_metadata"})
+    lib_tool = lib.library_tool()
+    s1_index_key = lib_tool.find_keys_for_id(KeyType.TABLE_INDEX, "s1")[0]
+    s2_version_keys = lib_tool.find_keys_for_id(KeyType.VERSION, "s2")
+    s2_key_to_delete = [key for key in s2_version_keys if key.version_id == 0][0]
+    lib_tool.remove(s1_index_key)
+    lib_tool.remove(s2_key_to_delete)
+
+    with pytest.raises(StorageException):
+        _ = lib.batch_read_metadata(["s1"], [None])
+    with pytest.raises(StorageException):
+        _ = lib.batch_read_metadata(["s2"], [0])
+
+
+def test_batch_read_metadata_multi_missing_keys(basic_store):
+    lib = basic_store
+    lib_tool = lib.library_tool()
+
+    lib.write("s1", 0, metadata={"s1": "metadata"})
+    key_to_delete = lib_tool.find_keys_for_id(KeyType.TABLE_INDEX, "s1")[0]
+    lib_tool.remove(key_to_delete)
+
+    with pytest.raises(StorageException):
+        _ = lib.batch_read_metadata_multi(["s1"], [None])
+
+
+def test_batch_read_missing_keys(basic_store):
+    lib = basic_store
+
+    df1 = pd.DataFrame({"a": [3, 5, 7]})
+    df2 = pd.DataFrame({"a": [4, 6, 8]})
+    df3 = pd.DataFrame({"a": [5, 7, 9]})
+    lib.write("s1", df1)
+    lib.write("s2", df2)
+    # Need two versions for this symbol as we're going to delete a version key, and the optimisation of storing the
+    # latest index key in the version ref key means it will still work if we just write one version key and then delete
+    # it
+    lib.write("s3", df3)
+    lib.write("s3", df3)
+    lib_tool = lib.library_tool()
+    s1_index_key = lib_tool.find_keys_for_id(KeyType.TABLE_INDEX, "s1")[0]
+    s2_data_key = lib_tool.find_keys_for_id(KeyType.TABLE_DATA, "s2")[0]
+    s3_version_keys = lib_tool.find_keys_for_id(KeyType.VERSION, "s3")
+    s3_key_to_delete = [key for key in s3_version_keys if key.version_id == 0][0]
+    lib_tool.remove(s1_index_key)
+    lib_tool.remove(s2_data_key)
+    lib_tool.remove(s3_key_to_delete)
+
+    # The exception thrown is different for missing version keys to everything else, and so depends on which symbol is
+    # processed first
+    with pytest.raises((NoDataFoundException, StorageException)):
+        _ = lib.batch_read(["s1", "s2", "s3"], [None, None, 0])
+
+
+def test_batch_get_info_missing_keys(basic_store):
+    lib = basic_store
+
+    df1 = pd.DataFrame({"a": [3, 5, 7]})
+    df2 = pd.DataFrame({"a": [5, 7, 9]})
+    lib.write("s1", df1)
+    # Need two versions for this symbol as we're going to delete a version key, and the optimisation of storing the
+    # latest index key in the version ref key means it will still work if we just write one version key and then delete
+    # it
+    lib.write("s2", df2)
+    lib.write("s2", df2)
+    lib_tool = lib.library_tool()
+    s1_index_key = lib_tool.find_keys_for_id(KeyType.TABLE_INDEX, "s1")[0]
+    s2_version_keys = lib_tool.find_keys_for_id(KeyType.VERSION, "s2")
+    s2_key_to_delete = [key for key in s2_version_keys if key.version_id == 0][0]
+    lib_tool.remove(s1_index_key)
+    lib_tool.remove(s2_key_to_delete)
+
+    with pytest.raises(StorageException):
+        _ = lib.batch_get_info(["s1"], [None])
+    with pytest.raises(StorageException):
+        _ = lib.batch_get_info(["s2"], [0])
+
+
+def test_batch_roundtrip_metadata(basic_store_tombstone_and_sync_passive):
+    lib = basic_store_tombstone_and_sync_passive
+
+    metadatas = {}
+    for x in range(10):
+        symbol = "Sym_{}".format(x)
+        metadatas[symbol] = {"a": x}
+
+    for symbol in metadatas:
+        lib.write(symbol, 12)
+
+    symbols = []
+    metas = []
+    for sym, meta in metadatas.items():
+        symbols.append(sym)
+        metas.append(meta)
+
+    write_result = lib.batch_write_metadata(symbols, metas)
+    assert all(type(w) == VersionedItem for w in write_result)
+    vits = lib.batch_read_metadata(symbols)
+
+    for sym, returned in vits.items():
+        assert returned.metadata == metadatas[sym]
+
+
+def test_write_composite_data_with_user_meta(basic_store):
     multi_data = {"sym1": np.arange(8), "sym2": np.arange(9), "sym3": np.arange(10)}
-    lmdb_version_store.write("sym", multi_data, metadata={"a": 1})
-    vitem = lmdb_version_store.read("sym")
+    basic_store.write("sym", multi_data, metadata={"a": 1})
+    vitem = basic_store.read("sym")
     assert vitem.metadata == {"a": 1}
     equals(vitem.data["sym1"], np.arange(8))
 
 
-def test_force_delete(lmdb_version_store):
+def test_force_delete(basic_store):
     df1 = sample_dataframe()
-    lmdb_version_store.write("sym1", df1)
+    basic_store.write("sym1", df1)
     df2 = sample_dataframe(seed=1)
-    lmdb_version_store.write("sym1", df2)
+    basic_store.write("sym1", df2)
     df3 = sample_dataframe(seed=2)
-    lmdb_version_store.write("sym2", df3)
+    basic_store.write("sym2", df3)
     df4 = sample_dataframe(seed=3)
-    lmdb_version_store.write("sym2", df4)
-    lmdb_version_store.version_store.force_delete_symbol("sym2")
+    basic_store.write("sym2", df4)
+    basic_store.version_store.force_delete_symbol("sym2")
     with pytest.raises(NoDataFoundException):
-        lmdb_version_store.read("sym2")
+        basic_store.read("sym2")
 
-    assert_frame_equal(lmdb_version_store.read("sym1").data, df2)
-    assert_frame_equal(lmdb_version_store.read("sym1", as_of=0).data, df1)
+    assert_frame_equal(basic_store.read("sym1").data, df2)
+    assert_frame_equal(basic_store.read("sym1", as_of=0).data, df1)
 
 
-def test_dataframe_with_NaN_in_timestamp_column(lmdb_version_store):
+def test_dataframe_with_NaN_in_timestamp_column(basic_store):
     normal_df = pd.DataFrame({"col": [pd.Timestamp("now"), pd.NaT]})
-    lmdb_version_store.write("normal", normal_df)
-    assert_frame_equal(normal_df, lmdb_version_store.read("normal").data)
+    basic_store.write("normal", normal_df)
+    assert_frame_equal(normal_df, basic_store.read("normal").data)
 
 
-def test_dataframe_with_nan_and_nat_in_timestamp_column(lmdb_version_store):
+def test_dataframe_with_nan_and_nat_in_timestamp_column(basic_store):
     df_with_NaN_mixed_in_ts = pd.DataFrame({"col": [pd.Timestamp("now"), pd.NaT, np.NaN]})
-    lmdb_version_store.write("mixed_nan", df_with_NaN_mixed_in_ts)
-    returned_df = lmdb_version_store.read("mixed_nan").data
+    basic_store.write("mixed_nan", df_with_NaN_mixed_in_ts)
+    returned_df = basic_store.read("mixed_nan").data
     # NaN will now be converted to NaT
     isinstance(returned_df["col"][2], type(pd.NaT))
 
 
-def test_dataframe_with_nan_and_nat_only(lmdb_version_store):
+def test_dataframe_with_nan_and_nat_only(basic_store):
     df_with_nan_and_nat_only = pd.DataFrame({"col": [pd.NaT, pd.NaT, np.NaN]})  # Sample will be pd.NaT
-    lmdb_version_store.write("nan_nat", df_with_nan_and_nat_only)
-    assert_frame_equal(lmdb_version_store.read("nan_nat").data, pd.DataFrame({"col": [pd.NaT, pd.NaT, pd.NaT]}))
+    basic_store.write("nan_nat", df_with_nan_and_nat_only)
+    assert_frame_equal(basic_store.read("nan_nat").data, pd.DataFrame({"col": [pd.NaT, pd.NaT, pd.NaT]}))
 
 
-def test_coercion_to_float(lmdb_version_store_string_coercion):
-    lib = lmdb_version_store_string_coercion
+def test_coercion_to_float(basic_store):
+    lib = basic_store
     df = pd.DataFrame({"col": [np.NaN, "1", np.NaN]})
     # col is now an Object column with all NaNs
     df["col"][1] = np.NaN
@@ -1475,9 +1537,9 @@ def test_coercion_to_float(lmdb_version_store_string_coercion):
     assert returned["col"].dtype != np.object_
 
 
-def test_coercion_to_str_with_dynamic_strings(lmdb_version_store_string_coercion):
+def test_coercion_to_str_with_dynamic_strings(basic_store):
     # assert that the getting sample function is not called
-    lib = lmdb_version_store_string_coercion
+    lib = basic_store
     df = pd.DataFrame({"col": [None, None, "hello", "world"]})
     assert df["col"].dtype == np.object_
 
@@ -1548,36 +1610,35 @@ def test_find_version(lmdb_version_store_v1):
     assert lib._find_version(sym, as_of=v3_time.after).version == 3
 
 
-def test_library_deletion_lmdb(lmdb_version_store):
+def test_library_deletion_lmdb(basic_store):
     # lmdb uses fast deletion
-    lmdb_version_store.write("a", 1)
-    lmdb_version_store.write("b", 1)
+    basic_store.write("a", 1)
+    basic_store.write("b", 1)
 
-    lmdb_version_store.snapshot("snap")
-    assert len(lmdb_version_store.list_symbols()) == 2
-    lmdb_version_store.version_store.clear()
-    assert len(lmdb_version_store.list_symbols()) == 0
-    lib_tool = lmdb_version_store.library_tool()
+    basic_store.snapshot("snap")
+    assert len(basic_store.list_symbols()) == 2
+    basic_store.version_store.clear()
+    assert len(basic_store.list_symbols()) == 0
+    lib_tool = basic_store.library_tool()
     assert lib_tool.count_keys(KeyType.VERSION) == 0
     assert lib_tool.count_keys(KeyType.TABLE_INDEX) == 0
 
 
-def test_resolve_defaults(version_store_factory):
-    lib = version_store_factory()
+def test_resolve_defaults(basic_store_factory):
+    lib = basic_store_factory()
     proto_cfg = lib._lib_cfg.lib_desc.version.write_options
     assert lib.resolve_defaults("recursive_normalizers", proto_cfg, False) is False
     os.environ["recursive_normalizers"] = "True"
     assert lib.resolve_defaults("recursive_normalizers", proto_cfg, False, uppercase=False) is True
 
-    lib2 = version_store_factory(dynamic_strings=True, reuse_name=True)
+    lib2 = basic_store_factory(dynamic_strings=True, reuse_name=True)
     proto_cfg = lib2._lib_cfg.lib_desc.version.write_options
     assert lib2.resolve_defaults("dynamic_strings", proto_cfg, False) is True
     del os.environ["recursive_normalizers"]
 
 
-def test_batch_read_meta(lmdb_version_store_tombstone_and_sync_passive):
-    lmdb_version_store = lmdb_version_store_tombstone_and_sync_passive
-    lib = lmdb_version_store
+def test_batch_read_meta(basic_store_tombstone_and_sync_passive):
+    lib = basic_store_tombstone_and_sync_passive
     for idx in range(10):
         lib.write("sym" + str(idx), idx, metadata={"meta": idx})
 
@@ -1590,9 +1651,8 @@ def test_batch_read_meta(lmdb_version_store_tombstone_and_sync_passive):
     assert results_dict["sym2"].data is None
 
 
-def test_batch_read_metadata_symbol_doesnt_exist(lmdb_version_store_tombstone_and_sync_passive):
-    lmdb_version_store = lmdb_version_store_tombstone_and_sync_passive
-    lib = lmdb_version_store
+def test_batch_read_metadata_symbol_doesnt_exist(basic_store_tombstone_and_sync_passive):
+    lib = basic_store_tombstone_and_sync_passive
     for idx in range(10):
         lib.write("sym" + str(idx), idx, metadata={"meta": idx})
 
@@ -1602,49 +1662,13 @@ def test_batch_read_metadata_symbol_doesnt_exist(lmdb_version_store_tombstone_an
     assert "sym_doesnotexist" not in results_dict
 
 
-def test_batch_read_metadata_missing_keys(lmdb_version_store):
-    lib = lmdb_version_store
-
-    df1 = pd.DataFrame({"a": [3, 5, 7]})
-    df2 = pd.DataFrame({"a": [4, 6, 8]})
-    lib.write("s1", df1, metadata={"s1": "metadata"})
-    # Need two versions for this symbol as we're going to delete a version key, and the optimisation of storing the
-    # latest index key in the version ref key means it will still work if we just write one version key and then delete
-    # it
-    lib.write("s2", df2, metadata={"s2": "metadata"})
-    lib.write("s2", df2, metadata={"s2": "more_metadata"})
-    lib_tool = lib.library_tool()
-    s1_index_key = lib_tool.find_keys_for_id(KeyType.TABLE_INDEX, "s1")[0]
-    s2_version_keys = lib_tool.find_keys_for_id(KeyType.VERSION, "s2")
-    s2_key_to_delete = [key for key in s2_version_keys if key.version_id == 0][0]
-    lib_tool.remove(s1_index_key)
-    lib_tool.remove(s2_key_to_delete)
-
-    with pytest.raises(StorageException):
-        _ = lib.batch_read_metadata(["s1"], [None])
-    with pytest.raises(StorageException):
-        _ = lib.batch_read_metadata(["s2"], [0])
-
-
-def test_batch_read_metadata_multi_missing_keys(lmdb_version_store):
-    lib = lmdb_version_store
-    lib_tool = lib.library_tool()
-
-    lib.write("s1", 0, metadata={"s1": "metadata"})
-    key_to_delete = lib_tool.find_keys_for_id(KeyType.TABLE_INDEX, "s1")[0]
-    lib_tool.remove(key_to_delete)
-
-    with pytest.raises(StorageException):
-        _ = lib.batch_read_metadata_multi(["s1"], [None])
-
-
-def test_list_versions_with_deleted_symbols(lmdb_version_store_tombstone_and_pruning):
-    lib = lmdb_version_store_tombstone_and_pruning
+def test_list_versions_with_deleted_symbols(basic_store_tombstone_and_pruning):
+    lib = basic_store_tombstone_and_pruning
     lib.write("a", 1)
     lib.snapshot("snap")
     lib.write("a", 2)
-    # At this point version 0 of 'a' is pruned but is still in the snapshot.
     versions = lib.list_versions()
+    # At this point version 0 of 'a' is pruned but is still in the snapshot.
     assert len(versions) == 2
     deleted = [v for v in versions if v["deleted"]]
     not_deleted = [v for v in versions if not v["deleted"]]
@@ -1657,8 +1681,8 @@ def test_list_versions_with_deleted_symbols(lmdb_version_store_tombstone_and_pru
     assert lib.read("a").data == 2
 
 
-def test_read_with_asof_version_for_snapshotted_version(lmdb_version_store_tombstone_and_pruning):
-    lib = lmdb_version_store_tombstone_and_pruning
+def test_read_with_asof_version_for_snapshotted_version(basic_store_tombstone_and_pruning):
+    lib = basic_store_tombstone_and_pruning
     lib.write("a", 1)
     lib.snapshot("snap")
     lib.write("a", 2)
@@ -1673,8 +1697,8 @@ def test_read_with_asof_version_for_snapshotted_version(lmdb_version_store_tombs
     assert lib.read("a", as_of=0).data == 1
 
 
-def test_get_tombstone_deletion_state_without_delayed_del(version_store_factory, sym):
-    lib = version_store_factory(use_tombstones=True, delayed_deletes=False)
+def test_get_tombstone_deletion_state_without_delayed_del(basic_store_factory, sym):
+    lib = basic_store_factory(use_tombstones=True, delayed_deletes=False)
     lib.write(sym, 1)
 
     lib.write(sym, 2)
@@ -1694,8 +1718,8 @@ def test_get_tombstone_deletion_state_without_delayed_del(version_store_factory,
     assert tombstoned_version_map[2] is False
 
 
-def test_get_timerange_for_symbol(lmdb_version_store, sym):
-    lib = lmdb_version_store
+def test_get_timerange_for_symbol(basic_store, sym):
+    lib = basic_store
     initial_timestamp = pd.Timestamp("2019-01-01")
     df = pd.DataFrame(data=np.arange(100), index=pd.date_range(initial_timestamp, periods=100))
     lib.write(sym, df)
@@ -1703,8 +1727,8 @@ def test_get_timerange_for_symbol(lmdb_version_store, sym):
     assert mints == datetime(2019, 1, 1)
 
 
-def test_get_timerange_for_symbol_tz(lmdb_version_store, sym):
-    lib = lmdb_version_store
+def test_get_timerange_for_symbol_tz(basic_store, sym):
+    lib = basic_store
     dt1 = timezone("US/Eastern").localize(datetime(2021, 4, 1))
     dt2 = timezone("US/Eastern").localize(datetime(2021, 4, 1, 3))
     dst = pd.DataFrame({"a": [0, 1]}, index=[dt1, dt2])
@@ -1714,8 +1738,8 @@ def test_get_timerange_for_symbol_tz(lmdb_version_store, sym):
     assert maxts == dt2
 
 
-def test_get_timerange_for_symbol_dst(lmdb_version_store, sym):
-    lib = lmdb_version_store
+def test_get_timerange_for_symbol_dst(basic_store, sym):
+    lib = basic_store
     dst = pd.DataFrame({"a": [0, 1]}, index=[datetime(2021, 4, 1), datetime(2021, 4, 1, 3)])
     lib.write(sym, dst)
     mints, maxts = lib.get_timerange_for_symbol(sym)
@@ -1723,8 +1747,8 @@ def test_get_timerange_for_symbol_dst(lmdb_version_store, sym):
     assert maxts == datetime(2021, 4, 1, 3)
 
 
-def test_batch_read_meta_with_tombstones(lmdb_version_store_tombstone_and_sync_passive):
-    lib = lmdb_version_store_tombstone_and_sync_passive
+def test_batch_read_meta_with_tombstones(basic_store_tombstone_and_sync_passive):
+    lib = basic_store_tombstone_and_sync_passive
     lib.write("sym1", 1, {"meta1": 1})
     lib.write("sym1", 1, {"meta1": 2})
     lib.write("sym2", 1, {"meta2": 1})
@@ -1738,8 +1762,8 @@ def test_batch_read_meta_with_tombstones(lmdb_version_store_tombstone_and_sync_p
     assert lib.read_metadata("sym1").metadata == results_dict["sym1"].metadata
 
 
-def test_batch_read_meta_with_pruning(version_store_factory):
-    lib = version_store_factory(use_tombstones=True, prune_previous_version=True, sync_passive=True)
+def test_batch_read_meta_with_pruning(basic_store_factory):
+    lib = basic_store_factory(use_tombstones=True, prune_previous_version=True, sync_passive=True)
     lib.write("sym1", 1, {"meta1": 1})
     lib.write("sym1", 1, {"meta1": 2})
     lib.write("sym1", 3, {"meta1": 3})
@@ -1775,8 +1799,8 @@ def test_batch_read_meta_multiple_versions(object_version_store):
     assert results_dict["sym2"][3].metadata == {"meta2": 4}
 
 
-def test_list_symbols(lmdb_version_store):
-    lib = lmdb_version_store
+def test_list_symbols(basic_store):
+    lib = basic_store
 
     lib.write("a", 1)
     lib.write("b", 1)
@@ -1812,8 +1836,8 @@ def test_get_index(object_version_store):
     assert idx.iloc[0]["version_id"] == 0
 
 
-def test_snapshot_empty_segment(lmdb_version_store):
-    lib = lmdb_version_store
+def test_snapshot_empty_segment(basic_store):
+    lib = basic_store
 
     lib.write("a", 1)
     lib.write("b", 1)
@@ -1827,8 +1851,8 @@ def test_snapshot_empty_segment(lmdb_version_store):
     assert lib.has_symbol("c") is False
 
 
-def test_columns_as_nparrary(lmdb_version_store, sym):
-    lib = lmdb_version_store
+def test_columns_as_nparrary(basic_store, sym):
+    lib = basic_store
     d = {"col1": [1, 2], "col2": [3, 4]}
     lib.write(sym, pd.DataFrame(data=d))
 
@@ -1852,8 +1876,8 @@ def test_simple_recursive_normalizer(object_version_store):
     )
 
 
-def test_dynamic_schema_similar_index_column(lmdb_version_store_dynamic_schema):
-    lib = lmdb_version_store_dynamic_schema
+def test_dynamic_schema_similar_index_column(basic_store_dynamic_schema):
+    lib = basic_store_dynamic_schema
     dr = pd.date_range("2020-01-01", "2020-01-31", name="date")
     date_series = pd.Series(dr, index=dr)
     lib.write("date_series", date_series)
@@ -1861,8 +1885,8 @@ def test_dynamic_schema_similar_index_column(lmdb_version_store_dynamic_schema):
     assert_series_equal(returned, date_series)
 
 
-def test_dynamic_schema_similar_index_column_dataframe(lmdb_version_store_dynamic_schema):
-    lib = lmdb_version_store_dynamic_schema
+def test_dynamic_schema_similar_index_column_dataframe(basic_store_dynamic_schema):
+    lib = basic_store_dynamic_schema
     dr = pd.date_range("2020-01-01", "2020-01-31", name="date")
     date_series = pd.DataFrame({"date": np.arange(len(dr))}, index=dr)
     lib.write("date_series", date_series)
@@ -1870,8 +1894,8 @@ def test_dynamic_schema_similar_index_column_dataframe(lmdb_version_store_dynami
     assert_frame_equal(returned, date_series)
 
 
-def test_dynamic_schema_similar_index_column_dataframe_multiple_col(lmdb_version_store_dynamic_schema):
-    lib = lmdb_version_store_dynamic_schema
+def test_dynamic_schema_similar_index_column_dataframe_multiple_col(basic_store_dynamic_schema):
+    lib = basic_store_dynamic_schema
     dr = pd.date_range("2020-01-01", "2020-01-31", name="date")
     date_series = pd.DataFrame({"col": np.arange(len(dr)), "date": np.arange(len(dr))}, index=dr)
     lib.write("date_series", date_series)
@@ -1879,30 +1903,30 @@ def test_dynamic_schema_similar_index_column_dataframe_multiple_col(lmdb_version
     assert_frame_equal(returned, date_series)
 
 
-def test_restore_version(version_store_factory):
-    lmdb_version_store = version_store_factory(col_per_group=2, row_per_segment=2)
+def test_restore_version(basic_store_tiny_segment):
+    lib = basic_store_tiny_segment
     # Triggers bug https://github.com/man-group/ArcticDB/issues/469 by freezing time
-    lmdb_version_store.version_store = ManualClockVersionStore(lmdb_version_store._library)
+    lib.version_store = ManualClockVersionStore(lib._library)
     symbol = "test_restore_version"
     df1 = get_sample_dataframe(20, 4)
     df1.index = pd.DatetimeIndex([pd.Timestamp.now()] * len(df1))
     metadata = {"a": 43}
-    lmdb_version_store.write(symbol, df1, metadata=metadata)
+    lib.write(symbol, df1, metadata=metadata)
     df2 = get_sample_dataframe(20, 6)
     df2.index = df1.index + pd.Timedelta(hours=1)
-    second_write_item = lmdb_version_store.write(symbol, df2, prune_previous_version=False)
+    second_write_item = lib.write(symbol, df2, prune_previous_version=False)
     assert second_write_item.version == 1
-    restore_item = lmdb_version_store.restore_version(symbol, as_of=0)
+    restore_item = lib.restore_version(symbol, as_of=0)
     assert restore_item.version == 2
     assert restore_item.metadata == metadata
-    latest = lmdb_version_store.read(symbol)
+    latest = lib.read(symbol)
     assert_frame_equal(latest.data, df1)
     assert latest.metadata == metadata
 
 
 @pytest.mark.parametrize("ver", (3, "snap"))
-def test_restore_version_not_found(lmdb_version_store, ver):
-    lib: NativeVersionStore = lmdb_version_store
+def test_restore_version_not_found(basic_store, ver):
+    lib: NativeVersionStore = basic_store
     lib.write("abc", 1)
     lib.write("abc", 2)
     lib.write("bcd", 9)
@@ -1911,43 +1935,43 @@ def test_restore_version_not_found(lmdb_version_store, ver):
         lib.restore_version("abc", ver)
 
 
-def test_restore_version_latest_is_noop(lmdb_version_store):
+def test_restore_version_latest_is_noop(basic_store):
     symbol = "test_restore_version"
     df1 = get_sample_dataframe(2, 4)
     df1.index = pd.DatetimeIndex([pd.Timestamp.now()] * len(df1))
     metadata = {"a": 43}
-    lmdb_version_store.write(symbol, df1)
+    basic_store.write(symbol, df1)
     df2 = get_sample_dataframe(2, 6)
     df2.index = df1.index + pd.Timedelta(hours=1)
-    second_write_item = lmdb_version_store.write(symbol, df2, prune_previous_version=False, metadata=metadata)
+    second_write_item = basic_store.write(symbol, df2, prune_previous_version=False, metadata=metadata)
     assert second_write_item.version == 1
-    restore_item = lmdb_version_store.restore_version(symbol, as_of=1)
+    restore_item = basic_store.restore_version(symbol, as_of=1)
     assert restore_item.version == 1
     assert restore_item.metadata == metadata
-    latest = lmdb_version_store.read(symbol)
+    latest = basic_store.read(symbol)
     assert_frame_equal(latest.data, df2)
     assert latest.metadata == metadata
     assert latest.version == 1
 
 
-def test_restore_version_ndarray(lmdb_version_store):
+def test_restore_version_ndarray(basic_store):
     symbol = "test_restore_version_ndarray"
     arr1 = np.array([0, 2, 4])
     metadata = {"b": 42}
-    lmdb_version_store.write(symbol, arr1, metadata=metadata)
+    basic_store.write(symbol, arr1, metadata=metadata)
     arr2 = np.array([0, 4, 8])
-    second_write_item = lmdb_version_store.write(symbol, arr2, prune_previous_version=False)
+    second_write_item = basic_store.write(symbol, arr2, prune_previous_version=False)
     assert second_write_item.version == 1
-    restore_item = lmdb_version_store.restore_version(symbol, as_of=0)
+    restore_item = basic_store.restore_version(symbol, as_of=0)
     assert restore_item.version == 2
     assert restore_item.metadata == metadata
-    latest = lmdb_version_store.read(symbol)
+    latest = basic_store.read(symbol)
     assert_array_equal(latest.data, arr1)
     assert latest.metadata == metadata
 
 
-def test_batch_restore_version(lmdb_version_store_tombstone):
-    lmdb_version_store = lmdb_version_store_tombstone
+def test_batch_restore_version(basic_store_tombstone):
+    lmdb_version_store = basic_store_tombstone
     symbols = []
     for i in range(5):
         symbols.append("sym_{}".format(i))
@@ -1974,8 +1998,8 @@ def test_batch_restore_version(lmdb_version_store_tombstone):
         assert_frame_equal(read_df, dfs[d])
 
 
-def test_batch_append(lmdb_version_store_tombstone, three_col_df):
-    lmdb_version_store = lmdb_version_store_tombstone
+def test_batch_append(basic_store_tombstone, three_col_df):
+    lmdb_version_store = basic_store_tombstone
     multi_data = {"sym1": three_col_df(), "sym2": three_col_df(1), "sym3": three_col_df(2)}
     metadata = {"sym1": {"key1": "val1"}, "sym2": None, "sym3": None}
 
@@ -1999,10 +2023,10 @@ def test_batch_append(lmdb_version_store_tombstone, three_col_df):
         assert vit.metadata == append_metadata[sym]
 
 
-def test_batch_append_with_throw_exception(lmdb_version_store, three_col_df):
+def test_batch_append_with_throw_exception(basic_store, three_col_df):
     multi_data = {"sym1": three_col_df(), "sym2": three_col_df(1)}
     with pytest.raises(NoSuchVersionException):
-        lmdb_version_store.batch_append(
+        basic_store.batch_append(
             list(multi_data.keys()),
             list(multi_data.values()),
             write_if_missing=False,
@@ -2010,8 +2034,8 @@ def test_batch_append_with_throw_exception(lmdb_version_store, three_col_df):
 
 
 @pytest.mark.parametrize("use_date_range_clause", [True, False])
-def test_batch_read_date_range(lmdb_version_store_tombstone_and_sync_passive, use_date_range_clause):
-    lmdb_version_store = lmdb_version_store_tombstone_and_sync_passive
+def test_batch_read_date_range(basic_store_tombstone_and_sync_passive, use_date_range_clause):
+    lmdb_version_store = basic_store_tombstone_and_sync_passive
     symbols = []
     for i in range(5):
         symbols.append("sym_{}".format(i))
@@ -2049,8 +2073,8 @@ def test_batch_read_date_range(lmdb_version_store_tombstone_and_sync_passive, us
         assert_frame_equal(vit.data, dfs[x].loc[start:end])
 
 
-def test_batch_read_columns(lmdb_version_store_tombstone_and_sync_passive):
-    lmdb_version_store = lmdb_version_store_tombstone_and_sync_passive
+def test_batch_read_columns(basic_store_tombstone_and_sync_passive):
+    lmdb_version_store = basic_store_tombstone_and_sync_passive
     columns_of_interest = ["strings", "uint8"]
     number_of_requests = 5
     symbols = []
@@ -2073,88 +2097,36 @@ def test_batch_read_columns(lmdb_version_store_tombstone_and_sync_passive):
         assert_equal_value(vit.data, dfs[x][columns_of_interest])
 
 
-def test_batch_read_symbol_doesnt_exist(lmdb_version_store):
+def test_batch_read_symbol_doesnt_exist(basic_store):
     sym1 = "sym1"
     sym2 = "sym2"
-    lmdb_version_store.write(sym1, 1)
+    basic_store.write(sym1, 1)
     with pytest.raises(NoDataFoundException):
-        _ = lmdb_version_store.batch_read([sym1, sym2])
+        _ = basic_store.batch_read([sym1, sym2])
 
 
-def test_batch_read_version_doesnt_exist(lmdb_version_store):
+def test_batch_read_version_doesnt_exist(basic_store):
     sym1 = "sym1"
     sym2 = "sym2"
-    lmdb_version_store.write(sym1, 1)
-    lmdb_version_store.write(sym2, 2)
+    basic_store.write(sym1, 1)
+    basic_store.write(sym2, 2)
     with pytest.raises(NoDataFoundException):
-        _ = lmdb_version_store.batch_read([sym1, sym2], as_ofs=[0, 1])
+        _ = basic_store.batch_read([sym1, sym2], as_ofs=[0, 1])
 
 
-def test_batch_read_missing_keys(lmdb_version_store):
-    lib = lmdb_version_store
-
-    df1 = pd.DataFrame({"a": [3, 5, 7]})
-    df2 = pd.DataFrame({"a": [4, 6, 8]})
-    df3 = pd.DataFrame({"a": [5, 7, 9]})
-    lib.write("s1", df1)
-    lib.write("s2", df2)
-    # Need two versions for this symbol as we're going to delete a version key, and the optimisation of storing the
-    # latest index key in the version ref key means it will still work if we just write one version key and then delete
-    # it
-    lib.write("s3", df3)
-    lib.write("s3", df3)
-    lib_tool = lib.library_tool()
-    s1_index_key = lib_tool.find_keys_for_id(KeyType.TABLE_INDEX, "s1")[0]
-    s2_data_key = lib_tool.find_keys_for_id(KeyType.TABLE_DATA, "s2")[0]
-    s3_version_keys = lib_tool.find_keys_for_id(KeyType.VERSION, "s3")
-    s3_key_to_delete = [key for key in s3_version_keys if key.version_id == 0][0]
-    lib_tool.remove(s1_index_key)
-    lib_tool.remove(s2_data_key)
-    lib_tool.remove(s3_key_to_delete)
-
-    # The exception thrown is different for missing version keys to everything else, and so depends on which symbol is
-    # processed first
-    with pytest.raises((NoDataFoundException, StorageException)):
-        _ = lib.batch_read(["s1", "s2", "s3"], [None, None, 0])
-
-
-def test_batch_get_info_missing_keys(lmdb_version_store):
-    lib = lmdb_version_store
-
-    df1 = pd.DataFrame({"a": [3, 5, 7]})
-    df2 = pd.DataFrame({"a": [5, 7, 9]})
-    lib.write("s1", df1)
-    # Need two versions for this symbol as we're going to delete a version key, and the optimisation of storing the
-    # latest index key in the version ref key means it will still work if we just write one version key and then delete
-    # it
-    lib.write("s2", df2)
-    lib.write("s2", df2)
-    lib_tool = lib.library_tool()
-    s1_index_key = lib_tool.find_keys_for_id(KeyType.TABLE_INDEX, "s1")[0]
-    s2_version_keys = lib_tool.find_keys_for_id(KeyType.VERSION, "s2")
-    s2_key_to_delete = [key for key in s2_version_keys if key.version_id == 0][0]
-    lib_tool.remove(s1_index_key)
-    lib_tool.remove(s2_key_to_delete)
-
-    with pytest.raises(StorageException):
-        _ = lib.batch_get_info(["s1"], [None])
-    with pytest.raises(StorageException):
-        _ = lib.batch_get_info(["s2"], [0])
-
-
-def test_index_keys_start_end_index(lmdb_version_store, sym):
+def test_index_keys_start_end_index(basic_store, sym):
     idx = pd.date_range("2022-01-01", periods=100, freq="D")
     df = pd.DataFrame({"a": range(len(idx))}, index=idx)
-    lmdb_version_store.write(sym, df)
+    basic_store.write(sym, df)
 
-    lt = lmdb_version_store.library_tool()
+    lt = basic_store.library_tool()
     key = lt.find_keys_for_id(KeyType.TABLE_INDEX, sym)[0]
     assert key.start_index == 1640995200000000000
     assert key.end_index == 1649548800000000001
 
 
-def test_dynamic_schema_column_hash_update(lmdb_version_store_column_buckets):
-    lib = lmdb_version_store_column_buckets
+def test_dynamic_schema_column_hash_update(basic_store_column_buckets):
+    lib = basic_store_column_buckets
     idx = pd.date_range("2022-01-01", periods=10, freq="D")
     l = len(idx)
     df = pd.DataFrame(
@@ -2188,8 +2160,8 @@ def test_dynamic_schema_column_hash_update(lmdb_version_store_column_buckets):
     assert_frame_equal(vit.data, df)
 
 
-def test_dynamic_schema_column_hash_append(lmdb_version_store_column_buckets):
-    lib = lmdb_version_store_column_buckets
+def test_dynamic_schema_column_hash_append(basic_store_column_buckets):
+    lib = basic_store_column_buckets
     idx = pd.date_range("2022-01-01", periods=10, freq="D")
     l = len(idx)
     df = pd.DataFrame(
@@ -2219,8 +2191,8 @@ def test_dynamic_schema_column_hash_append(lmdb_version_store_column_buckets):
     assert_frame_equal(vit.data, new_df)
 
 
-def test_dynamic_schema_column_hash(lmdb_version_store_column_buckets):
-    lib = lmdb_version_store_column_buckets
+def test_dynamic_schema_column_hash(basic_store_column_buckets):
+    lib = basic_store_column_buckets
     idx = pd.date_range("2022-01-01", periods=10, freq="D")
     l = len(idx)
     df = pd.DataFrame(
@@ -2243,8 +2215,8 @@ def test_dynamic_schema_column_hash(lmdb_version_store_column_buckets):
     assert_frame_equal(df[["a", "c"]], read_df)
 
 
-def test_list_versions_without_snapshots(lmdb_version_store):
-    lib = lmdb_version_store
+def test_list_versions_without_snapshots(basic_store):
+    lib = basic_store
     lib.write("symbol_1", 0)
     lib.write("symbol_1", 1)
     lib.snapshot("snap_1")
@@ -2263,8 +2235,8 @@ def test_list_versions_without_snapshots(lmdb_version_store):
 
 @pytest.mark.parametrize("batch", (True, False))
 @pytest.mark.parametrize("method", ("append", "update"))  # "write" is implied
-def test_modification_methods_dont_return_input_data(lmdb_version_store, batch, method):  # AN-650
-    lib: NativeVersionStore = lmdb_version_store
+def test_modification_methods_dont_return_input_data(basic_store, batch, method):  # AN-650
+    lib: NativeVersionStore = basic_store
 
     def do(op, start, n):
         date_range = pd.date_range(start, periods=n)
@@ -2290,8 +2262,8 @@ def test_modification_methods_dont_return_input_data(lmdb_version_store, batch, 
 @pytest.mark.skipif(sys.platform == "darwin", reason="Test broken on MacOS (issue #692)")
 @pytest.mark.parametrize("method", ("append", "update"))
 @pytest.mark.parametrize("num", (5, 50, 1001))
-def test_diff_long_stream_descriptor_mismatch(lmdb_version_store, method, num):
-    lib: NativeVersionStore = lmdb_version_store
+def test_diff_long_stream_descriptor_mismatch(basic_store, method, num):
+    lib: NativeVersionStore = basic_store
     lib.write("x", pd.DataFrame({f"col{i}": [i, i + 1, i + 2] for i in range(num)}, index=pd.date_range(0, periods=3)))
     bad_row = {f"col{i}": ["a"] if i % 20 == 4 else [i] for i in (0, *range(3, num + 1))}
     try:
@@ -2310,25 +2282,25 @@ def test_diff_long_stream_descriptor_mismatch(lmdb_version_store, method, num):
                 assert f"FD<name=col{i}, type=TD<type=UTF" in msg
 
 
-def test_get_non_existing_columns_in_series(lmdb_version_store, sym):
-    lib = lmdb_version_store
+def test_get_non_existing_columns_in_series(basic_store, sym):
+    lib = basic_store
     dst = pd.Series(index=pd.date_range(pd.Timestamp("2022-01-01"), pd.Timestamp("2022-02-01")), data=0.0)
     lib.write(sym, dst)
-    assert lmdb_version_store.read(sym, columns=["col1"]).data.empty
+    assert basic_store.read(sym, columns=["col1"]).data.empty
 
 
-def test_get_existing_columns_in_series(lmdb_version_store, sym):
-    lib = lmdb_version_store
+def test_get_existing_columns_in_series(basic_store, sym):
+    lib = basic_store
     dst = pd.Series(index=pd.date_range(pd.Timestamp("2022-01-01"), pd.Timestamp("2022-02-01")), data=0.0, name="col1")
     lib.write(sym, dst)
-    assert not lmdb_version_store.read(sym, columns=["col1", "col2"]).data.empty
+    assert not basic_store.read(sym, columns=["col1", "col2"]).data.empty
     if __name__ == "__main__":
         pytest.main()
 
 
 @pytest.mark.skip
-def test_use_previous_on_failure_single(lmdb_version_store):
-    lib = lmdb_version_store
+def test_use_previous_on_failure_single(basic_store):
+    lib = basic_store
     idx = pd.date_range("2022-01-01", periods=10, freq="D")
     l = len(idx)
     df1 = pd.DataFrame({"a": range(l), "b": range(1, l + 1), "c": range(2, l + 2)}, index=idx)
@@ -2340,7 +2312,7 @@ def test_use_previous_on_failure_single(lmdb_version_store):
     df2 = pd.DataFrame({"d": range(1, l + 1), "e": range(2, l + 2), "f": range(3, l + 3)}, index=idx)
     lib.write("symbol", df2)
 
-    lib_tool = lmdb_version_store.library_tool()
+    lib_tool = basic_store.library_tool()
     version_keys = lib_tool.find_keys_for_id(KeyType.VERSION, "symbol")
     assert len(version_keys) == 2
     version_keys.sort(key=lambda k: k.creation_ts)
@@ -2355,13 +2327,13 @@ def test_use_previous_on_failure_single(lmdb_version_store):
 
 
 @pytest.mark.skip
-def test_use_previous_on_failure_batch(lmdb_version_store):
-    lib = lmdb_version_store
+def test_use_previous_on_failure_batch(basic_store):
+    lib = basic_store
 
     expected = []
     write_times = []
     symbols = []
-    lib_tool = lmdb_version_store.library_tool()
+    lib_tool = basic_store.library_tool()
     num_items = 10
 
     for x in range(num_items):

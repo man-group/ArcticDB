@@ -5,6 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+import sys
 import copy
 import pickle
 import math
@@ -23,6 +24,7 @@ from packaging.version import Version
 import random
 import string
 
+from arcticdb.config import MACOS_CONDA_BUILD
 from arcticdb.exceptions import ArcticNativeException
 from arcticdb_ext.storage import KeyType, NoDataFoundException
 from arcticdb.version_store.processing import QueryBuilder
@@ -1789,6 +1791,7 @@ def test_filter_string_single_quote(lmdb_version_store):
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(df=data_frames([column("a", elements=string_strategy)], index=range_indexes()), val=string_strategy)
+@pytest.mark.skipif(MACOS_CONDA_BUILD, reason="This test might segfault on MacOS conda-forge builds.")
 def test_filter_string_equals_col_val(lmdb_version_store, df, val):
     assume(not df.empty)
     q = QueryBuilder()
@@ -1800,6 +1803,7 @@ def test_filter_string_equals_col_val(lmdb_version_store, df, val):
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(df=data_frames([column("a", elements=string_strategy)], index=range_indexes()), val=string_strategy)
+@pytest.mark.skipif(MACOS_CONDA_BUILD, reason="This test might segfault on MacOS conda-forge builds.")
 def test_filter_string_equals_val_col(lmdb_version_store, df, val):
     assume(not df.empty)
     q = QueryBuilder()
@@ -1815,6 +1819,7 @@ def test_filter_string_equals_val_col(lmdb_version_store, df, val):
         [column("a", elements=string_strategy), column("b", elements=string_strategy)], index=range_indexes()
     )
 )
+@pytest.mark.skipif(MACOS_CONDA_BUILD, reason="This test might segfault on MacOS conda-forge builds.")
 def test_filter_string_equals_col_col(lmdb_version_store, df):
     assume(not df.empty)
     q = QueryBuilder()
@@ -1826,6 +1831,7 @@ def test_filter_string_equals_col_col(lmdb_version_store, df):
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(df=data_frames([column("a", elements=string_strategy)], index=range_indexes()), val=string_strategy)
+@pytest.mark.skipif(MACOS_CONDA_BUILD, reason="This test might segfault on MacOS conda-forge builds.")
 def test_filter_string_not_equals_col_val(lmdb_version_store, df, val):
     assume(not df.empty)
     q = QueryBuilder()
@@ -1837,6 +1843,7 @@ def test_filter_string_not_equals_col_val(lmdb_version_store, df, val):
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(df=data_frames([column("a", elements=string_strategy)], index=range_indexes()), val=string_strategy)
+@pytest.mark.skipif(MACOS_CONDA_BUILD, reason="This test might segfault on MacOS conda-forge builds.")
 def test_filter_string_not_equals_val_col(lmdb_version_store, df, val):
     assume(not df.empty)
     q = QueryBuilder()
@@ -1852,6 +1859,7 @@ def test_filter_string_not_equals_val_col(lmdb_version_store, df, val):
         [column("a", elements=string_strategy), column("b", elements=string_strategy)], index=range_indexes()
     )
 )
+@pytest.mark.skipif(MACOS_CONDA_BUILD, reason="This test might segfault on MacOS conda-forge builds.")
 def test_filter_string_not_equals_col_col(lmdb_version_store, df):
     assume(not df.empty)
     q = QueryBuilder()
