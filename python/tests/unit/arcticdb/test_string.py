@@ -9,7 +9,9 @@ import numpy as np
 from numpy.testing import assert_equal
 import platform
 import pandas as pd
+import pytest
 
+from arcticdb_ext.exceptions import UserInputException
 from arcticdb_ext.types import (
     TypeDescriptor,
     StreamDescriptor,
@@ -161,3 +163,42 @@ def test_write_fixed_coerce_dynamic(lmdb_version_store):
     lmdb_version_store.write("strings", df, dynamic_strings=False)
     vit = lmdb_version_store.read("strings", force_string_to_object=True)
     assert_frame_equal(df, vit.data)
+
+
+def test_string_encoding_error_message(lmdb_version_store_tiny_segment):
+    lib = lmdb_version_store_tiny_segment
+
+    # Broken index
+    df = pd.DataFrame({"working_column": ["hello", "bonjour", "nihao"]}, index=["hello", "bonjour", 5])
+    with pytest.raises(UserInputException) as e:
+        lib.write("sym_broken_index", df, dynamic_strings=True)
+    exception_message = str(e.value)
+    assert all(string in exception_message for string in ["index", "row 2", "int"])
+
+    # Broken non-index column
+    df = pd.DataFrame({"broken_column": ["hello", "bonjour", np.arange(5)]}, index=np.arange(3))
+    with pytest.raises(UserInputException) as e:
+        lib.write("sym_broken_non_index_column", df, dynamic_strings=True)
+    exception_message = str(e.value)
+    assert all(string in exception_message for string in ["broken_column", "row 2", "ndarray"])
+
+    # Append
+    df = pd.DataFrame({"broken_column": ["hello", "bonjour", "nihao"]}, index=np.arange(3))
+    lib.write("sym_append", df, dynamic_strings=True)
+    df = pd.DataFrame({"broken_column": ["hello", "bonjour", 5.5]}, index=np.arange(3))
+    with pytest.raises(UserInputException) as e:
+        lib.append("sym_append", df, dynamic_strings=True)
+    exception_message = str(e.value)
+    assert all(string in exception_message for string in ["broken_column", "row 2", "float"])
+
+    # Update
+    df = pd.DataFrame(
+        {"broken_column": ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"]},
+        index=pd.date_range("2000-01-01", periods=10),
+    )
+    lib.write("sym_update", df, dynamic_strings=True)
+    df = pd.DataFrame({"broken_column": ["hello", "bonjour", 5.5]}, index=pd.date_range("2000-01-03", periods=3))
+    with pytest.raises(UserInputException) as e:
+        lib.update("sym_update", df, dynamic_strings=True)
+    exception_message = str(e.value)
+    assert all(string in exception_message for string in ["broken_column", "row 2", "float"])
