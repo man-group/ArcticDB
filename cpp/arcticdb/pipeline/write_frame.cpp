@@ -83,20 +83,26 @@ folly::Future<std::vector<SliceAndKey>> write_slices(
             auto rows_to_write = slice.row_range.second - slice.row_range.first;
             if (frame.desc.index().field_count() > 0) {
                 util::check(static_cast<bool>(frame.index_tensor), "Got null index tensor in write_slices");
-                aggregator_set_data(
+                auto opt_error = aggregator_set_data(
                     frame.desc.fields(0).type(),
                     frame.index_tensor.value(),
                     agg, 0, rows_to_write, offset_in_frame, slice_num_for_column, regular_slice_size, false);
+                if (opt_error.has_value()) {
+                    opt_error->raise(frame.desc.fields(0).name(), offset_in_frame);
+                }
             }
 
             for (size_t col = 0, end = slice.col_range.diff(); col < end; ++col) {
                 auto abs_col = col + frame.desc.index().field_count();
                 auto &fd = slice.non_index_field(col);
                 auto &tensor = frame.field_tensors[slice.absolute_field_col(col)];
-                aggregator_set_data(
+                auto opt_error = aggregator_set_data(
                     fd.type(),
                     tensor, agg, abs_col, rows_to_write, offset_in_frame, slice_num_for_column,
                     regular_slice_size, sparsify_floats);
+                if (opt_error.has_value()) {
+                    opt_error->raise(fd.name(), offset_in_frame);
+                }
             }
 
             ++slice_num_for_column;
