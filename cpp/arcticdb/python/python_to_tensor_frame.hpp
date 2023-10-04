@@ -29,7 +29,25 @@ struct ARCTICDB_VISIBILITY_HIDDEN PyStringWrapper {
     PyStringWrapper(char *buf, ssize_t len, PyObject* obj=nullptr) :
         buffer_(buf),
         length_(size_t(len)),
-        obj_(obj) {}
+        obj_(obj) {
+    }
+
+    ARCTICDB_NO_COPY(PyStringWrapper)
+
+    PyStringWrapper(PyStringWrapper&& other):
+            buffer_(other.buffer_),
+            length_(other.length_),
+            obj_(other.obj_) {
+        other.obj_ = nullptr;
+    }
+
+    PyStringWrapper& operator=(PyStringWrapper&& other) {
+        buffer_ = other.buffer_;
+        length_ = other.length_;
+        obj_ = other.obj_;
+        other.obj_ = nullptr;
+        return *this;
+    }
 
     ~PyStringWrapper() {
         if (obj_)
@@ -37,10 +55,28 @@ struct ARCTICDB_VISIBILITY_HIDDEN PyStringWrapper {
     }
 };
 
-PyStringWrapper pystring_to_buffer(
+struct ARCTICDB_VISIBILITY_HIDDEN StringEncodingError {
+    StringEncodingError() = default;
+    explicit StringEncodingError(std::string_view error_message):
+            error_message_(error_message) {
+    }
+
+    void raise(std::string_view column_name, size_t offset_in_frame = 0) {
+        user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                "String encoding failed in column '{}', row {}, error '{}'",
+                column_name,
+                row_index_in_slice_ + offset_in_frame,
+                error_message_);
+    }
+
+    size_t row_index_in_slice_;
+    std::string error_message_;
+};
+
+std::variant<StringEncodingError, PyStringWrapper> pystring_to_buffer(
     PyObject *obj, bool is_owned);
 
-PyStringWrapper py_unicode_to_buffer(
+std::variant<StringEncodingError, PyStringWrapper> py_unicode_to_buffer(
     PyObject *obj,
     std::optional<ScopedGILLock>& scoped_gil_lock);
 

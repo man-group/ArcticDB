@@ -24,36 +24,44 @@ bool is_unicode(PyObject *obj) {
     return PyUnicode_Check(obj);
 }
 
-PyStringWrapper pystring_to_buffer(PyObject *obj, bool is_owned) {
+std::variant<StringEncodingError, PyStringWrapper> pystring_to_buffer(PyObject *obj, bool is_owned) {
+    if(is_unicode(obj)) {
+        return StringEncodingError(
+                fmt::format("Unexpected unicode in Python object with type {}", obj->ob_type->tp_name));
+    }
     char *buffer;
     ssize_t length;
-    util::check(!is_unicode(obj), "Unexpected unicode object");
-    if (PYBIND11_BYTES_AS_STRING_AND_SIZE(obj, &buffer, &length))
-        util::raise_rte("Unable to extract string contents! (invalid type)");
-
-    return {buffer, length, is_owned ? obj : nullptr};
+    if (PYBIND11_BYTES_AS_STRING_AND_SIZE(obj, &buffer, &length)) {
+        return StringEncodingError(fmt::format("Unable to extract string contents from Python object with type {}",
+                                               obj->ob_type->tp_name));
+    }
+    return PyStringWrapper(buffer, length, is_owned ? obj : nullptr);
 }
 
-PyStringWrapper py_unicode_to_buffer(PyObject *obj, std::optional<ScopedGILLock>& scoped_gil_lock) {
-    if (is_unicode(obj)) {
-        if (PyUnicode_IS_COMPACT_ASCII(obj)) {
-            return {reinterpret_cast<char *>(PyUnicode_DATA(obj)), PyUnicode_GET_LENGTH(obj)};
-        // Later versions of cpython expose macros in unicodeobject.h to perform this check, and to get the utf8_length,
-        // but for 3.6 we have to hand-roll it
-        } else if (reinterpret_cast<PyCompactUnicodeObject*>(obj)->utf8) {
-            return {reinterpret_cast<PyCompactUnicodeObject*>(obj)->utf8, reinterpret_cast<PyCompactUnicodeObject*>(obj)->utf8_length};
-        } else {
-            internal::check<ErrorCode::E_ASSERTION_FAILURE>(PyUnicode_READY(obj) == 0, "PyUnicode_READY failed");
-            if (!scoped_gil_lock.has_value()) {
-                scoped_gil_lock.emplace();
-            }
-            PyObject* utf8_obj = PyUnicode_AsUTF8String(obj);
-            if (!utf8_obj)
-                util::raise_rte("Unable to extract string contents! (encoding issue)");
-            return pystring_to_buffer(utf8_obj, true);
-        }
+std::variant<StringEncodingError, PyStringWrapper> py_unicode_to_buffer(PyObject *obj, std::optional<ScopedGILLock>& scoped_gil_lock) {
+    if(!is_unicode(obj)) {
+        return StringEncodingError(
+                fmt::format("Unexpected non-unicode in Python object with type {}", obj->ob_type->tp_name));
+    }
+    if (PyUnicode_IS_COMPACT_ASCII(obj)) {
+        return PyStringWrapper(reinterpret_cast<char *>(PyUnicode_DATA(obj)), PyUnicode_GET_LENGTH(obj));
+    // Later versions of cpython expose macros in unicodeobject.h to perform this check, and to get the utf8_length,
+    // but for 3.6 we have to hand-roll it
+    } else if (reinterpret_cast<PyCompactUnicodeObject*>(obj)->utf8) {
+        return PyStringWrapper(reinterpret_cast<PyCompactUnicodeObject*>(obj)->utf8, reinterpret_cast<PyCompactUnicodeObject*>(obj)->utf8_length);
     } else {
-        util::raise_rte("Expected unicode");
+        if (PyUnicode_READY(obj) != 0) {
+            return StringEncodingError(fmt::format("PyUnicode_READY failed on Python object with type", obj->ob_type->tp_name));
+        }
+
+        if (!scoped_gil_lock.has_value()) {
+            scoped_gil_lock.emplace();
+        }
+        PyObject* utf8_obj = PyUnicode_AsUTF8String(obj);
+        if (!utf8_obj) {
+            return StringEncodingError(fmt::format("Unable to extract string contents from Python object with type {}", obj->ob_type->tp_name));
+        }
+        return pystring_to_buffer(utf8_obj, true);
     }
 }
 
