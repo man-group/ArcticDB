@@ -49,7 +49,6 @@ struct ReadQuery {
         clauses_ = clauses;
     }
 
-
 };
 
 struct SnapshotVersionQuery {

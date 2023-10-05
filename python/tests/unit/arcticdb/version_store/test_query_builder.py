@@ -123,7 +123,7 @@ def test_querybuilder_row_range(lmdb_version_store_tiny_segment, use_row_range_c
     df = pd.DataFrame({"col1": np.arange(10), "col2": np.arange(100, 110)}, index=np.arange(10))
     lib.write(symbol, df)
 
-    row_range = (3, 6)
+    row_range = (3, 7)
 
     q = QueryBuilder()
     if use_row_range_clause:
@@ -134,7 +134,7 @@ def test_querybuilder_row_range(lmdb_version_store_tiny_segment, use_row_range_c
     else:
         received = lib.read(symbol, row_range=row_range, query_builder=q).data
 
-    expected = df.iloc[3:6]
+    expected = df.iloc[3:7]
     assert_frame_equal(expected, received)
 
 
@@ -145,7 +145,7 @@ def test_querybuilder_row_range_then_filter(lmdb_version_store_tiny_segment, use
     df = pd.DataFrame({"col1": np.arange(10), "col2": np.arange(100, 110)}, index=np.arange(10))
     lib.write(symbol, df)
 
-    row_range = (3, 6)
+    row_range = (3, 7)
 
     q = QueryBuilder()
     if use_row_range_clause:
@@ -170,7 +170,7 @@ def test_querybuilder_row_range_then_project(lmdb_version_store_tiny_segment, us
     )
     lib.write(symbol, df)
 
-    row_range = (3, 6)
+    row_range = (3, 7)
 
     q = QueryBuilder()
     if use_row_range_clause:
@@ -199,7 +199,7 @@ def test_querybuilder_row_range_then_groupby(lmdb_version_store_tiny_segment, us
     )
     lib.write(symbol, df)
 
-    row_range = (3, 6)
+    row_range = (3, 7)
 
     q = QueryBuilder()
     if use_row_range_clause:
