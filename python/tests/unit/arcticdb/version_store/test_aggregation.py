@@ -63,7 +63,7 @@ def test_hypothesis_mean_agg(lmdb_version_store, df):
     # Older versions of Pandas treat values which exceeds limits as `np.inf` or `-np.inf`.
     # ArcticDB adopted this behaviour.
     #
-    # Yet, wew version of Pandas treats values which exceeds limits as `np.nan` instead.
+    # Yet, new version of Pandas treats values which exceeds limits as `np.nan` instead.
     # To be able to compare the results, we need to replace `np.inf` and `-np.inf` with `np.nan`.
     received_df.replace(-np.inf, np.nan, inplace=True)
     received_df.replace(np.inf, np.nan, inplace=True)
