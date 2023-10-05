@@ -53,16 +53,22 @@ def test_hypothesis_mean_agg(lmdb_version_store, df):
 
     q = QueryBuilder()
     q = q.groupby("grouping_column").agg({"a": "mean"})
-    expected = df.groupby("grouping_column").agg({"a": "mean"})
-    expected.replace(
-        np.nan, np.inf, inplace=True
-    )  # New version of pandas treats values which exceeds limits as np.nan rather than np.inf, as in old version and arcticdb
+    expected_df = df.groupby("grouping_column").agg({"a": "mean"})
 
     symbol = "mean_agg"
     lib.write(symbol, df)
-    vit = lib.read(symbol, query_builder=q)
-    vit.data.sort_index(inplace=True)
-    assert_frame_equal(expected, vit.data)
+    received_df = lib.read(symbol, query_builder=q).data
+    received_df.sort_index(inplace=True)
+
+    # Older versions of Pandas treat values which exceeds limits as `np.inf` or `-np.inf`.
+    # ArcticDB adopted this behaviour.
+    #
+    # Yet, new version of Pandas treats values which exceeds limits as `np.nan` instead.
+    # To be able to compare the results, we need to replace `np.inf` and `-np.inf` with `np.nan`.
+    received_df.replace(-np.inf, np.nan, inplace=True)
+    received_df.replace(np.inf, np.nan, inplace=True)
+
+    assert_frame_equal(expected_df, received_df)
 
 
 @use_of_function_scoped_fixtures_in_hypothesis_checked
@@ -82,16 +88,22 @@ def test_hypothesis_sum_agg(lmdb_version_store, df):
 
     q = QueryBuilder()
     q = q.groupby("grouping_column").agg({"a": "sum"})
-    expected = df.groupby("grouping_column").agg({"a": "sum"})
-    expected.replace(
-        np.nan, np.inf, inplace=True
-    )  # New version of pandas treats values which exceeds limits as np.nan rather than np.inf, as in old version and arcticdb
+    expected_df = df.groupby("grouping_column").agg({"a": "sum"})
 
     symbol = "sum_agg"
     lib.write(symbol, df)
-    vit = lib.read(symbol, query_builder=q)
-    vit.data.sort_index(inplace=True)
-    assert_frame_equal(expected, vit.data)
+    received_df = lib.read(symbol, query_builder=q).data
+    received_df.sort_index(inplace=True)
+
+    # Older versions of Pandas treat values which exceeds limits as `np.inf` or `-np.inf`.
+    # ArcticDB adopted this behaviour.
+    #
+    # Yet, new version of Pandas treats values which exceeds limits as `np.nan` instead.
+    # To be able to compare the results, we need to replace `np.inf` and `-np.inf` with `np.nan`.
+    received_df.replace(-np.inf, np.nan, inplace=True)
+    received_df.replace(np.inf, np.nan, inplace=True)
+
+    assert_frame_equal(expected_df, received_df)
 
 
 @use_of_function_scoped_fixtures_in_hypothesis_checked
