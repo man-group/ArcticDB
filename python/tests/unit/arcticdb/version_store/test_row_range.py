@@ -9,6 +9,30 @@ import numpy as np
 import pytest
 
 from arcticdb_ext.exceptions import InternalException
+from arcticdb.version_store import _store as store
+
+
+@pytest.mark.parametrize(
+    "row_range, total_n_rows, expected_row_range",
+    [
+        ((0, 10), 10, (0, 10)),
+        ((0, 10), 20, (0, 10)),
+        ((0, 10), 5, (0, 5)),
+        ((0, 10), 0, (0, 0)),
+        ((-4, -2), 10, (6, 8)),
+        ((-4, -2), 20, (16, 18)),
+        ((-4, -2), 5, (1, 3)),
+        ((-4, -2), 0, (0, 0)),
+        ((5, -2), 10, (5, 8)),
+        ((5, -2), 20, (5, 18)),
+        ((-2, 10), 10, (8, 10)),
+    ],
+)
+def test_normalize_row_range(row_range, total_n_rows, expected_row_range):
+    output_row_range = store._normalize_row_range(row_range, total_n_rows)
+
+    assert output_row_range.start == expected_row_range[0]
+    assert output_row_range.end == expected_row_range[1]
 
 
 def generic_row_range_test(version_store, symbol, df, start_row, end_row):
