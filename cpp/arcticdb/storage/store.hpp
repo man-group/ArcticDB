@@ -15,8 +15,15 @@
 
 namespace arcticdb {
 /*
- * Interface for a read/write compatible storage backend. At the time of writing, the main implementers are AsyncStore
- * and InMemoryStore.
+ * The Store class aims, as much as possible, to be a fundamental, non-leaky abstraction.
+ *
+ * It takes SegmentInMemory and writes them to a persistent storage, returning a key.
+ * It also takes keys and returns several SegmentInMemory.
+ *
+ * Higher level operations can read from or write to a Store without any consideration of what sort of storage
+ * is being written to, what compression (if any) is being applied, the encoding to be used, etc.
+ *
+ * At the time of writing, the main implementation is AsyncStore.
  */
 class Store : public stream::StreamSink, public stream::StreamSource, public std::enable_shared_from_this<Store> {
 public:
