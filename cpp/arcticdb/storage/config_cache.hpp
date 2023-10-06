@@ -41,11 +41,6 @@ class ConfigCache {
         return descriptor_map_.find(path) != descriptor_map_.end();
     }
 
-    void add_library_config(const LibraryPath &path, const arcticdb::proto::storage::LibraryConfig lib_cfg) {
-        add_library(path, decode_library_descriptor(lib_cfg.lib_desc()));
-        for(const auto& storage: lib_cfg.storage_by_id())
-            add_storage(StorageName{storage.first}, storage.second);
-    }
 
     void add_library(const LibraryPath &path, const LibraryDescriptor &desc) {
         config_resolver_->add_library(environment_name_, encode_library_descriptor(desc));
@@ -53,7 +48,7 @@ class ConfigCache {
         descriptor_map_.emplace(path, desc);
     }
 
-    void add_storage(const StorageName& storage_name, const arcticdb::proto::storage::VariantStorage storage) {
+    void add_storage(const StorageName& storage_name, const StorageConfig& storage) {
         config_resolver_->add_storage(environment_name_, storage_name, storage);
     }
 
@@ -82,15 +77,19 @@ class ConfigCache {
         for (const auto& storage_name : descriptor.storage_ids_) {
             // Otherwise see if we have the storage config.
             arcticdb::proto::storage::VariantStorage storage_conf;
-            auto storage_conf_pos = storage_configs_.find(storage_name);
-            if(storage_conf_pos != storage_configs_.end())
-                storage_conf = storage_conf_pos->second;
-
+            VariantStorageCredential storage_credential;
+            
+            auto update_config = [&storage_configs_ = std::as_const(storage_configs_), &storage_name = std::as_const(storage_name)](auto &storage_conf, auto &storage_credential){
+                auto storage_conf_pos = storage_configs_.find(storage_name);
+                if(storage_conf_pos != storage_configs_.end()){
+                    storage_conf = storage_conf_pos->second.pb_config;
+                    storage_credential = storage_conf_pos->second.credential;
+                }
+            };
+            update_config(storage_conf, storage_credential);
             // As a last resort, get the whole environment config from the resolver.
             refresh_config();
-            storage_conf_pos = storage_configs_.find(storage_name);
-            if(storage_conf_pos != storage_configs_.end())
-                storage_conf = storage_conf_pos->second;
+            update_config(storage_conf, storage_credential);
 
             storages.emplace_back(create_storage(path, mode, storage_conf));
         }
@@ -122,7 +121,7 @@ class ConfigCache {
 
     EnvironmentName environment_name_;
     std::unordered_map<LibraryPath, LibraryDescriptor> descriptor_map_;
-    std::unordered_map<StorageName, arcticdb::proto::storage::VariantStorage> storage_configs_;
+    std::unordered_map<StorageName, StorageConfig> storage_configs_;
     std::shared_ptr<ConfigResolver> config_resolver_;
     mutable std::mutex mutex_;
 };

@@ -34,7 +34,7 @@ class Arctic:
         InMemoryLibraryAdapter,
     ]
 
-    def __init__(self, uri: str, encoding_version: EncodingVersion = DEFAULT_ENCODING_VERSION):
+    def __init__(self, uri: str, encoding_version: EncodingVersion = DEFAULT_ENCODING_VERSION, credential = None):
         """
         Initializes a top-level Arctic library management instance.
 
@@ -177,7 +177,7 @@ class Arctic:
             )
 
         self._encoding_version = encoding_version
-        self._library_adapter = _cls(uri, self._encoding_version)
+        self._library_adapter = _cls(uri, self._encoding_version, credential)
         self._library_manager = LibraryManager(self._library_adapter.config_library)
         self._uri = uri
 

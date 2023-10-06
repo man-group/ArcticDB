@@ -16,7 +16,7 @@ from arcticdb.version_store.helper import add_azure_library_to_env
 from arcticdb.config import _DEFAULT_ENV
 from arcticdb.version_store._store import NativeVersionStore
 from arcticdb.adapters.arctic_library_adapter import ArcticLibraryAdapter, set_library_options
-from arcticdb_ext.storage import StorageOverride, AzureOverride, CONFIG_LIBRARY_NAME
+from arcticdb_ext.storage import StorageOverride, AzureOverride, CONFIG_LIBRARY_NAME, TokenCredential
 from arcticdb.encoding_version import EncodingVersion
 from collections import namedtuple
 from dataclasses import dataclass, fields
@@ -38,7 +38,7 @@ class AzureLibraryAdapter(ArcticLibraryAdapter):
     def supports_uri(uri: str) -> bool:
         return uri.startswith("azure://")
 
-    def __init__(self, uri: str, encoding_version: EncodingVersion, *args, **kwargs):
+    def __init__(self, uri: str, encoding_version: EncodingVersion, token_credential: TokenCredential, *args, **kwargs):
         self._uri = uri
         match = re.match(self.REGEX, uri)
 

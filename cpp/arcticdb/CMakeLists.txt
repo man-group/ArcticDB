@@ -270,6 +270,7 @@ set(arcticdb_srcs
         storage/storage_options.hpp
         storage/storage.hpp
         storage/storage_override.hpp
+        storage/storage_credential.hpp
         storage/store.hpp
         stream/aggregator.hpp
         stream/aggregator-inl.hpp

@@ -26,10 +26,10 @@ namespace arcticdb::storage::apy {
 
 using namespace python_util;
 
-std::shared_ptr<LibraryIndex> create_library_index(const std::string &environment_name, const py::object &py_envs) {
+std::shared_ptr<LibraryIndex> create_library_index(const std::string &environment_name, const py::object &py_envs, StorageCredential &storage_credential) {
     arcticdb::proto::storage::EnvironmentConfigsMap envs;
     pb_from_python(py_envs, envs);
-    auto env_by_id = convert_environment_config(envs);
+    auto env_by_id = convert_environment_config(envs, storage_credential);
     auto mem_resolver = create_in_memory_resolver(env_by_id);
     return std::make_shared<LibraryIndex>(EnvironmentName{environment_name}, mem_resolver);
 }
@@ -70,16 +70,20 @@ void register_bindings(py::module& storage, py::exception<arcticdb::ArcticExcept
         .value("WRITE", OpenMode::WRITE)
         .value("DELETE", OpenMode::DELETE);
 
-    storage.def("create_library_index", &create_library_index);
+    py::class_<Azure::Core::Credentials::TokenCredential, std::shared_ptr<Azure::Core::Credentials::TokenCredential>>(storage, "TokenCredential");
+    py::class_<Azure::Identity::DefaultAzureCredential, std::shared_ptr<Azure::Identity::DefaultAzureCredential>, Azure::Core::Credentials::TokenCredential>(storage, "DefaultAzureCredential")
+        .def(py::init<>());
 
-    storage.def("create_mem_config_resolver", [](const py::object & env_config_map_py) -> std::shared_ptr<ConfigResolver> {
+    storage.def("create_library_index", &create_library_index, py::arg("environment_name"), py::arg("py_envs"), py::arg("storage_credential") = StorageCredential());
+
+    storage.def("create_mem_config_resolver", [](const py::object & env_config_map_py, StorageCredential &storage_credential) -> std::shared_ptr<ConfigResolver> {
         arcticdb::proto::storage::EnvironmentConfigsMap ecm;
         pb_from_python(env_config_map_py, ecm);
         auto resolver = std::make_shared<storage::details::InMemoryConfigResolver>();
         for(auto &[env, cfg] :ecm.env_by_id()){
             EnvironmentName env_name{env};
             for(auto &[id, variant_storage]: cfg.storage_by_id()){
-                resolver->add_storage(env_name, StorageName{id}, variant_storage);
+                resolver->add_storage(env_name, StorageName{id}, {variant_storage, storage_credential.variant()});
             }
             for(auto &[id, lib_desc]: cfg.lib_by_path()){
                 resolver->add_library(env_name, lib_desc);

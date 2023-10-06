@@ -71,12 +71,12 @@ inline storage::LibraryDescriptor decode_library_descriptor(const arcticdb::prot
 
 using MemConfig  = storage::details::InMemoryConfigResolver::MemoryConfig;
 
-inline std::vector<std::pair<std::string, MemConfig>> convert_environment_config(arcticdb::proto::storage::EnvironmentConfigsMap envs) {
+inline std::vector<std::pair<std::string, MemConfig>> convert_environment_config(arcticdb::proto::storage::EnvironmentConfigsMap envs, StorageCredential &storage_credential) {
     std::vector<std::pair<std::string, MemConfig>> env_by_id;
     for (auto&[env_key, env_config] : envs.env_by_id()) {
         MemConfig current;
         for (auto &[storage_key, storage_value] : env_config.storage_by_id())
-            current.storages_.insert(std::make_pair(storage::StorageName(storage_key), storage_value));
+            current.storages_.insert(std::make_pair(storage::StorageName(storage_key), StorageConfig{storage_value, storage_credential.variant()}));
 
         for (auto &[library_key, library_value] : env_config.lib_by_path())
             current.libraries_.insert(std::make_pair(LibraryPath::from_delim_path(library_key), library_value));
