@@ -52,10 +52,10 @@ namespace arcticdb::storage::rocksdb {
             auto key_type_name = fmt::format("{}", group.key());
             auto handle = handles_by_key_type_.at(key_type_name);
             for (const auto &k : group.values()) {
-                auto key_slice = ::rocksdb::Slice(to_serialized_key(k));
+                std::string k_str = to_serialized_key(k);
                 std::string value;
-                auto s = db_->Get(::rocksdb::ReadOptions(), handle, key_slice, &value);
-                util::check(s.ok(), DEFAULT_ROCKSDB_NOT_OK_ERROR);
+                auto s = db_->Get(::rocksdb::ReadOptions(), handle, ::rocksdb::Slice(k_str), &value);
+                util::check(s.ok(), DEFAULT_ROCKSDB_NOT_OK_ERROR + s.ToString());
                 visitor(k, Segment::from_bytes(reinterpret_cast<uint8_t*>(value.data()), value.size()));
             }
         });
@@ -65,8 +65,9 @@ namespace arcticdb::storage::rocksdb {
         ARCTICDB_SAMPLE(RocksDBStorageKeyExists, 0)
         std::string value; // unused
         auto key_type_name = fmt::format("{}", variant_key_type(key));
-        auto key_slice = ::rocksdb::Slice(to_serialized_key(key));
-        return !db_->Get(::rocksdb::ReadOptions(), handles_by_key_type_.at(key_type_name),key_slice, &value).IsNotFound();
+        auto k_str = to_serialized_key(key);
+        auto s = db_->Get(::rocksdb::ReadOptions(), handles_by_key_type_.at(key_type_name), ::rocksdb::Slice(k_str), &value);
+        return !s.IsNotFound();
     }
 
     inline void RocksDBStorage::do_remove(Composite<VariantKey>&& ks, RemoveOpts opts)
@@ -109,6 +110,9 @@ namespace arcticdb::storage::rocksdb {
                 visitor(std::move(k));
             }
         }
+        auto s = it->status();
+        util::check(s.ok(), DEFAULT_ROCKSDB_NOT_OK_ERROR + s.ToString());
+        delete it;
     }
 
     inline std::vector<VariantKey> RocksDBStorage::do_remove_internal(Composite<VariantKey>&& ks, RemoveOpts opts)
@@ -123,12 +127,12 @@ namespace arcticdb::storage::rocksdb {
             auto options = ::rocksdb::WriteOptions(); // Should this be const class attr? Used in write_internal too.
             options.sync = true;
             for (const auto &k : group.values()) {
-                auto key_slice = ::rocksdb::Slice(to_serialized_key(k));
-                // Note will be ok even if key does not exist
-                auto s = db_->Delete(options, handle, key_slice);
-                util::check(s.ok(), DEFAULT_ROCKSDB_NOT_OK_ERROR);
-                ARCTICDB_DEBUG(log::storage(), "Deleted segment for key {}", variant_key_view(k));
-                if (!do_key_exists(k) && !opts.ignores_missing_key_) {
+                if (do_key_exists(k)) {
+                    auto k_str = to_serialized_key(k);
+                    auto s = db_->Delete(options, handle, ::rocksdb::Slice(k_str));
+                    util::check(s.ok(), DEFAULT_ROCKSDB_NOT_OK_ERROR + s.ToString());
+                    ARCTICDB_DEBUG(log::storage(), "Deleted segment for key {}", variant_key_view(k));
+                } else if (!opts.ignores_missing_key_) {
                     log::storage().warn("Failed to delete segment for key {}", variant_key_view(k));
                     failed_deletes.push_back(k);
                 }
@@ -146,7 +150,7 @@ namespace arcticdb::storage::rocksdb {
             for (auto &kv : group.values()) {
                 auto options = ::rocksdb::WriteOptions();
                 options.sync = true;
-                auto key_slice = ::rocksdb::Slice(to_serialized_key(kv.variant_key()));
+                auto k_str = to_serialized_key(kv.variant_key());
 
                 auto& seg = kv.segment();
                 auto hdr_sz = seg.segment_header_bytes_size();
@@ -158,8 +162,8 @@ namespace arcticdb::storage::rocksdb {
                 if (!override && do_key_exists(kv.variant_key())) {
                     throw DuplicateKeyException(kv.variant_key());
                 }
-                auto s = db_->Put(options, handle, key_slice, ::rocksdb::Slice(seg_data));
-                util::check(s.ok(), DEFAULT_ROCKSDB_NOT_OK_ERROR);
+                auto s = db_->Put(options, handle, ::rocksdb::Slice(k_str), ::rocksdb::Slice(seg_data));
+                util::check(s.ok(), DEFAULT_ROCKSDB_NOT_OK_ERROR + s.ToString());
             }
         });
     }
