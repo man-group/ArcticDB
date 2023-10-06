@@ -11,6 +11,7 @@
 #include <arcticdb/storage/library.hpp>
 #include <arcticdb/storage/library_path.hpp>
 #include <arcticdb/storage/storage_override.hpp>
+#include <arcticdb/storage/storage_credential.hpp>
 #include <arcticdb/pipeline/index_segment_reader.hpp>
 
 
@@ -30,7 +31,7 @@ namespace arcticdb::storage {
 
         void remove_library_config(const LibraryPath& path) const;
 
-        [[nodiscard]] std::shared_ptr<Library> get_library(const LibraryPath& path, const StorageOverride& storage_override = StorageOverride{});
+        [[nodiscard]] std::shared_ptr<Library> get_library(const LibraryPath& path, const StorageOverride& storage_override = StorageOverride{}, const StorageCredential& storage_credential = StorageCredential{});
 
         void close_library_if_open(const LibraryPath& path);
 

@@ -77,3 +77,5 @@ dependencies:
   - pyarrow
   - asv
   - pymongo
+  - trustme
+

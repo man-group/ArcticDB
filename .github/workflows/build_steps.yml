@@ -273,13 +273,13 @@ jobs:
 
       - name: Install npm # Linux github runner image does not come with npm
         if: matrix.os == 'linux'
-        uses: actions/setup-node@v3.3.0
+        uses: actions/setup-node@v3.3.0 # >=v4.0 will bump node to v20, which requires glibc >= v2.28; The manylinux image for testing only has glibc==2.17 atm https://github.com/actions/runner/issues/2906
         with:
-          node-version: '16'
+          node-version: '16' # setup-node@v3 has node v16; Azurite only test against node v14, 16 and 18 in its pipeline atm
 
       - name: Install the wheel and dependencies
         run: |
-          npm install -g azurite
+          npm install -g azurite@3.27.0
           cmake -P cpp/CMake/CpuCount.cmake | sed 's/^-- //' | tee -a $GITHUB_ENV
           python -V
           cd "$RUNNER_TEMP" # Works for Windows-style paths as well
@@ -307,6 +307,14 @@ jobs:
           aws_secret_key: "${{ secrets.AWS_S3_SECRET_KEY }}"
           strategy_branch: "${{ env.distinguishing_name }}"
 
+      - name: Set mandatory persistent storage variables
+        uses: ./.github/actions/set_mandatory_persistent_storage_env_vars
+        with:
+          azure_client_id: "${{ secrets.AZURE_CLIENT_ID }}"
+          azure_client_secret: "${{ secrets.AZURE_CLIENT_SECRET }}"
+          azure_tenant_id: "${{ secrets.AZURE_TENANT_ID }}"
+          azure_storage_account: "${{ secrets.AZURE_STORAGE_ACCOUNT }}"
+    
       - name: Run test
         run: |
           build_tooling/parallel_test.sh tests/${{matrix.type}}

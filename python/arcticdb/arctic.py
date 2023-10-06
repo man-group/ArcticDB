@@ -9,7 +9,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 from typing import List, Optional
 
 from arcticdb.options import DEFAULT_ENCODING_VERSION, LibraryOptions
-from arcticdb_ext.storage import LibraryManager
+from arcticdb_ext.storage import LibraryManager, AzureDefaultCredential
 from arcticdb.exceptions import LibraryNotFound, MismatchingLibraryOptions
 from arcticdb.version_store.library import ArcticInvalidApiUsageException, Library
 from arcticdb.version_store._store import NativeVersionStore
@@ -40,7 +40,7 @@ class Arctic:
     _created_lib_names: Optional[List[str]] = None
     _accessed_libs: Optional[List[NativeVersionStore]] = None
 
-    def __init__(self, uri: str, encoding_version: EncodingVersion = DEFAULT_ENCODING_VERSION):
+    def __init__(self, uri: str, encoding_version: EncodingVersion = DEFAULT_ENCODING_VERSION, credential: AzureDefaultCredential = None):
         """
         Initializes a top-level Arctic library management instance.
 
@@ -160,12 +160,25 @@ class Arctic:
             When creating new libraries with this Arctic instance, the default encoding version to use.
             Can be overridden by specifying the encoding version in the LibraryOptions argument to create_library.
 
+            
+        credential: AzureDefaultCredential, default None
+            For using default token credential `DefaultAzureCredential` (https://github.com/Azure/azure-sdk-for-cpp/blob/main/sdk/identity/azure-identity/README.md#authenticate-azure-hosted-applications) to
+            authenticate Azure storage only.
+            Otherwise, simply leave it unassigned
+            
+            Mutually exclusive to other Azure authentication method, e.g. SAS token, account key.
+            This authentication methos has utmost priority over other methods.
+
         Examples
         --------
 
         >>> ac = Arctic('s3://MY_ENDPOINT:MY_BUCKET')  # Leave AWS to derive credential information
         >>> ac = Arctic('s3://MY_ENDPOINT:MY_BUCKET?region=YOUR_REGION&access=ABCD&secret=DCBA') # Manually specify creds
         >>> ac = Arctic('azure://CA_cert_path=/etc/ssl/certs/ca-certificates.crt;BlobEndpoint=https://arctic.blob.core.windows.net;Container=acblob;SharedAccessSignature=sp=sig')
+
+        >>> from arcticdb_ext.storage import AzureDefaultCredential
+        >>> ac = Arctic('azure://CA_cert_path=/etc/ssl/certs/ca-certificates.crt;BlobEndpoint=https://arctic.blob.core.windows.net;Container=acblob', credential=AzureDefaultCredential())
+        
         >>> ac.create_library('travel_data')
         >>> ac.list_libraries()
         ['travel_data']
@@ -183,7 +196,7 @@ class Arctic:
             )
 
         self._encoding_version = encoding_version
-        self._library_adapter: ArcticLibraryAdapter = _cls(uri, self._encoding_version)
+        self._library_adapter: ArcticLibraryAdapter = _cls(uri, self._encoding_version, credential)
         self._library_manager = LibraryManager(self._library_adapter.config_library)
         self._uri = uri
 
@@ -194,9 +207,10 @@ class Arctic:
 
         storage_override = self._library_adapter.get_storage_override()
         lib = NativeVersionStore(
-            self._library_manager.get_library(lib_mgr_name, storage_override),
+            self._library_manager.get_library(lib_mgr_name, storage_override, self._library_adapter.get_credential()),
             repr(self._library_adapter),
             lib_cfg=self._library_manager.get_library_config(lib_mgr_name, storage_override),
+            credential=self._library_adapter.get_credential(),
         )
         if self._accessed_libs is not None:
             self._accessed_libs.append(lib)

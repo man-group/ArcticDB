@@ -16,7 +16,7 @@ import numpy as np
 from datetime import datetime, timezone
 
 from arcticdb_ext.exceptions import InternalException, UserInputException
-from arcticdb_ext.storage import NoDataFoundException
+from arcticdb_ext.storage import NoDataFoundException, AzureDefaultCredential
 from arcticdb.exceptions import ArcticDbNotYetImplemented, LibraryNotFound, MismatchingLibraryOptions
 from arcticdb.arctic import Arctic
 from arcticdb.options import LibraryOptions
@@ -35,7 +35,7 @@ from arcticdb.version_store.library import (
     ArcticInvalidApiUsageException,
 )
 
-from tests.util.mark import AZURE_TESTS_MARK, MONGO_TESTS_MARK, REAL_S3_TESTS_MARK
+from tests.util.mark import AZURE_TESTS_MARK, MONGO_TESTS_MARK, REAL_S3_TESTS_MARK, MANDATORY_REAL_AZURE_TESTS_MARK
 
 
 def test_library_creation_deletion(arctic_client):
@@ -1052,7 +1052,6 @@ def test_azure_no_ca_path(azurite_storage: StorageFixture):
     uri = azurite_storage.replace_uri_field(azurite_storage.arctic_uri, ArcticUriFields.CA_PATH, "", start=1, end=3)
     assert "CA_cert_path" not in uri
     ac = Arctic(uri.rstrip(";"))
-    ac.create_library("x")
 
 
 @AZURE_TESTS_MARK
@@ -1074,3 +1073,15 @@ def test_s3_force_uri_lib_config_handling(s3_storage):
 
     with pytest.raises(ValueError):
         Arctic(s3_storage.arctic_uri + "&force_uri_lib_config=false")
+
+
+@MANDATORY_REAL_AZURE_TESTS_MARK
+def test_azure_credential_auth(real_azure_storage):
+    ac = Arctic(real_azure_storage.arctic_uri, credential=real_azure_storage.factory.internal_credential)
+    expected = pd.DataFrame({"col1": [1, 2, 3], "col2": [4, 5, 6]})
+    sym = "test"
+    lib = "lib"
+    if not ac.has_library(lib):
+        ac.create_library(lib)
+    ac[lib].write(sym, expected)
+    assert_frame_equal(ac[lib].read(sym).data, expected)

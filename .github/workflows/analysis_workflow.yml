@@ -94,6 +94,11 @@ jobs:
           threads: 1
           fast_tests_only: 0
           other_params: '-m coverage run '
+        env:
+          TEST_IN_ANALYSIS_WORKFLOW: 1
+          # Enable https on azurite needs to set ca cert; CA_cert_path cannot be set on Windows platform
+          # Azurite is flaky on conda and analysis pipeline
+          # To improve: https://github.com/man-group/ArcticDB/issues/1210
 
       - name: Get python Coverage report
         shell: bash -l {0}
@@ -219,6 +224,14 @@ jobs:
         with:
           aws_access_key: "${{ secrets.AWS_S3_ACCESS_KEY }}"
           aws_secret_key: "${{ secrets.AWS_S3_SECRET_KEY }}"
+
+      - name: Set mandatory persistent storage variables
+        uses: ./.github/actions/set_mandatory_persistent_storage_env_vars
+        with:
+          azure_client_id: "${{ secrets.AZURE_CLIENT_ID }}"
+          azure_client_secret: "${{ secrets.AZURE_CLIENT_SECRET }}"
+          azure_tenant_id: "${{ secrets.AZURE_TENANT_ID }}"
+          azure_storage_account: "${{ secrets.AZURE_STORAGE_ACCOUNT }}"
 
       - name: Configure sccache
         uses: mozilla-actions/sccache-action@v0.0.3

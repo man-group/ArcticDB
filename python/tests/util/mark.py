@@ -46,6 +46,13 @@ REAL_S3_TESTS_MARK = pytest.mark.skipif(
 """Mark on tests using the real (i.e. hosted by AWS as opposed to moto) S3.
 Currently controlled by the ARCTICDB_PERSISTENT_STORAGE_TESTS and ARCTICDB_FAST_TESTS_ONLY env vars."""
 
+MANDATORY_PERSISTENT_STORAGE_TESTS_ENABLED = os.getenv("ARCTICDB_MANDATORY_PERSISTENT_STORAGE_TESTS") == "1"
+MANDATORY_REAL_AZURE_TESTS_MARK = pytest.mark.skipif(
+    not MANDATORY_PERSISTENT_STORAGE_TESTS_ENABLED,
+    reason="Can be used only when persistent storage's credential is set",
+)
+"""Mark on mandatory tests using the real storage.
+Currently controlled by the ARCTICDB_MANDATORY_PERSISTENT_STORAGE_TESTS. Usually it only will be set in github pipeline"""
 
 def xfail_on_linux_conda(reason=""):
     def decorator(func):

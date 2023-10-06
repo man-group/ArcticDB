@@ -13,7 +13,7 @@ runs:
       run: |
         yum install nodejs npm -y
         npm config set strict-ssl false
-        npm install -g azurite
+        npm install -g azurite@3.27.0
         
         cd python
         ln -s ../cpp/out/linux-${{ inputs.build_type }}-build/arcticdb/arcticdb_ext.cpython-36m-x86_64-linux-gnu.so

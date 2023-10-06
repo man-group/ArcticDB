@@ -69,14 +69,14 @@ jobs:
           CTEST_OUTPUT_ON_FAILURE=1 make test
 
       - name: Install npm # Linux github runner image does not come with npm
-        uses: actions/setup-node@v3.3.0
+        uses: actions/setup-node@v3.3.0 # >=v4.0 will bump node to v20, which requires glibc >= v2.28; The manylinux image for testing only has glibc==2.17 atm https://github.com/actions/runner/issues/2906
         with:
-          node-version: '16'
+          node-version: '16' # setup-node@v3 has node v16; Azurite only test against node v14, 16 and 18 in its pipeline atm
 
       - name: Test with pytest
         shell: bash -l {0}
         run: |
-          npm install -g azurite
+          npm install -g azurite@3.27.0
           cd python
           export ARCTICDB_RAND_SEED=$RANDOM
           python -m pytest -n ${{ steps.cpu-cores.outputs.count }} tests
@@ -146,14 +146,14 @@ jobs:
           CTEST_OUTPUT_ON_FAILURE=1 make test
 
       - name: Install npm
-        uses: actions/setup-node@v3.3.0
+        uses: actions/setup-node@v3.3.0 # >=v4.0 will bump node to v20, which requires glibc >= v2.28; The manylinux image for testing only has glibc==2.17 atm https://github.com/actions/runner/issues/2906
         with:
-          node-version: '16'
+          node-version: '16' # setup-node@v3 has node v16; Azurite only test against node v14, 16 and 18 in its pipeline atm
 
       - name: Test with pytest
         shell: bash -l {0}
         run: |
-          npm install -g azurite
+          npm install -g azurite@3.27.0
           cd python
           export ARCTICDB_RAND_SEED=$RANDOM
           python -m pytest -n ${{ steps.cpu-cores.outputs.count }} tests

@@ -117,7 +117,15 @@ For example:
 >>> ac = Arctic("azure://CA_cert_path=/etc/ssl/certs/ca-certificates.crt;BlobEndpoint=https://arctic.blob.core.windows.net;Container=acblob;SharedAccessSignature=sp=awd&st=2001-01-01T00:00:00Z&se=2002-01-01T00:00:00Z&spr=https&rf=g&sig=awd%3D")
 ```
 
-For more information, [see the Arctic class reference](https://docs.arcticdb.io/api/arcticdb#arcticdb.Arctic.__init__).
+Or, to use [default token credential(DefaultAzureCredential)](https://github.com/Azure/azure-sdk-for-cpp/blob/main/sdk/identity/azure-identity/README.md#authenticate-azure-hosted-applications) for authentication:
+
+```python
+>>> from arcticdb import Arctic
+>>> from arcticdb_ext.storage import AzureDefaultCredential
+>>> ac = Arctic('azure://CA_cert_path=/etc/ssl/certs/ca-certificates.crt;BlobEndpoint=https://arctic.blob.core.windows.net;Container=acblob', credential=AzureDefaultCredential())
+```
+
+For more information, [see the Arctic class reference](https://docs.arcticdb.io/latest/api/arctic/#arcticdb.Arctic.__init__).
 
 #### LMDB
 

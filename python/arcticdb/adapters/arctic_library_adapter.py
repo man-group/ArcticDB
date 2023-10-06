@@ -11,7 +11,7 @@ from typing import Iterable, List
 
 from arcticdb.options import DEFAULT_ENCODING_VERSION, LibraryOptions
 from arcticc.pb2.storage_pb2 import LibraryConfig
-from arcticdb_ext.storage import Library, StorageOverride, CONFIG_LIBRARY_NAME
+from arcticdb_ext.storage import Library, StorageOverride, CONFIG_LIBRARY_NAME, StorageCredential
 from arcticdb.encoding_version import EncodingVersion
 
 
@@ -79,3 +79,5 @@ class ArcticLibraryAdapter(ABC):
     def library_manager_names_to_user_facing(self, names: Iterable[str]) -> List[str]:
         """The inverse of `get_name_for_library_manager`."""
         return names
+    def get_credential(self) -> StorageCredential:
+        return StorageCredential()
