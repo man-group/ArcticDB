@@ -26,7 +26,7 @@ See: https://docs.github.com/en/issues/tracking-your-work-with-issues/linking-a-
    Checklist for code changes...
   </summary>
  
- - [ ] Have you updated the relevant docstrings and documentation?
+ - [ ] Have you updated the relevant docstrings, documentation and copyright notice?
  - [ ] Is this contribution tested against [all ArcticDB's features](../docs/mkdocs/docs/technical/contributing.md)?
  - [ ] Do all exceptions introduced raise appropriate [error messages](https://docs.arcticdb.io/error_messages/)?
  - [ ] Are API changes highlighted in the PR description?
