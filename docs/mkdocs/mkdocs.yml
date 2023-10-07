@@ -14,12 +14,6 @@ markdown_extensions:
       permalink: True
       toc_depth: '1-3'
 
-plugins:
-  - search
-  - mkdocs-jupyter:
-      ignore_h1_titles: True
-      include_source: True
-
 theme:
   name: material
   custom_dir: overrides
@@ -38,6 +32,9 @@ extra_css:
 
 plugins:
   - search
+  - mkdocs-jupyter:
+    ignore_h1_titles: True
+    include_source: True
   - mkdocstrings:
       handlers:
         python:
@@ -75,29 +72,29 @@ nav:
   - Licensing FAQs: 'licensing.md'
 - Guides:
   - Tutorials:
-      - Fundamentals: 'tutorials/fundamentals.md'
-      - Parallel Writes: 'tutorials/parallel_writes.md'
-      - Snapshots: 'tutorials/snapshots.md'
-      - Metadata: 'tutorials/metadata.md'
-      - In-memory backends: 'tutorials/lmdb_and_in_memory.md'
+    - Fundamentals: 'tutorials/fundamentals.md'
+    - Parallel Writes: 'tutorials/parallel_writes.md'
+    - Snapshots: 'tutorials/snapshots.md'
+    - Metadata: 'tutorials/metadata.md'
+    - In-memory backends: 'tutorials/lmdb_and_in_memory.md'
   - Storage Guides:
-      - Getting started with AWS S3: 'aws.md'
-      - Getting started with Azure Blob Storage: 'azure.md'
-  - Notebooks:
-      - Intro Notebook: 'notebooks/ArcticDB_demo_lmdb.ipynb'
+    - Getting started with AWS S3: 'aws.md'
+    - Getting started with Azure Blob Storage: 'azure.md'
   - Technical Information:
-      - Architecture: 'technical/architecture.md'
-      - On-Disk Storage: 'technical/on_disk_storage.md'
-      - Arctic Migration: 'technical/migration.md'
-      - Contributing: 'technical/contributing.md'
+    - Architecture: 'technical/architecture.md'
+    - On-Disk Storage: 'technical/on_disk_storage.md'
+    - Arctic Migration: 'technical/migration.md'
+    - Contributing: 'technical/contributing.md'
   - Configuration:
-      - Library Configuration: 'lib_config.md'
-      - Runtime Configuration: 'runtime_config.md'
-      - Error Messages: 'error_messages.md'
+    - Library Configuration: 'lib_config.md'
+    - Runtime Configuration: 'runtime_config.md'
+    - Error Messages: 'error_messages.md'
+- Notebooks:
+  - Intro Notebook: 'notebooks/ArcticDB_demo_lmdb.ipynb'
 - Python API Reference: 
-    - Introduction: 'api/index.md'
-    - Arctic: 'api/arctic.md'
-    - Library: 'api/library.md'
-    - Library Types: 'api/library_types.md'
-    - Query Builder: 'api/query_builder.md'
-    - Exceptions: 'api/exceptions.md'
+  - Introduction: 'api/index.md'
+  - Arctic: 'api/arctic.md'
+  - Library: 'api/library.md'
+  - Library Types: 'api/library_types.md'
+  - Query Builder: 'api/query_builder.md'
+  - Exceptions: 'api/exceptions.md'
