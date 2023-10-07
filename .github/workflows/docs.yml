@@ -22,36 +22,16 @@ jobs:
           prefix = {"CPython": "cp", "PyPy": "pp"}[platform.python_implementation()]
           v = platform.python_version_tuple()
           print(f"PY_IMPL={prefix}{v[0]}{v[1]}")' | tee -a $GITHUB_ENV
-
-      # Copy and pasted from publsh.yml, until GitHub adds selective artifact download
-      - uses: actions/setup-node@v3
+  
+      - id: download-wheel-artifact
+        name: Download wheel artifact
         if: ${{!inputs.api_wheel}}
+        uses: dawidd6/action-download-artifact@v2
         with:
-          node-version: 16
-      - run: npm install @actions/artifact
-        if: ${{!inputs.api_wheel}}
-      - id: download
-        name: Fetch wheel artifacts
-        if: ${{!inputs.api_wheel}}
-        uses: actions/github-script@v6
-        with:
-          script: |
-            const dhc = require("./node_modules/@actions/artifact/lib/internal/download-http-client.js");
-            const ds = require("./node_modules/@actions/artifact/lib/internal/download-specification.js");
-
-            const cwd = process.cwd();
-            const client = new dhc.DownloadHttpClient();
-            const artifactsResponse = await client.listArtifacts();
-            for (const artifact of artifactsResponse.value) {
-                if (artifact.name.startsWith("wheel-${{env.PY_IMPL}}-manylinux")) {
-                  console.log(`Downloading ${artifact.name} to ${cwd}`);
-                  const itemsResponse = await client.getContainerItems(artifact.name, artifact.fileContainerResourceUrl);
-                  const downloadSpecs = ds.getDownloadSpecification(artifact.name, itemsResponse.value, cwd, false);
-                  await client.downloadSingleArtifact(downloadSpecs.filesToDownload);
-                } else {
-                  console.log(`Ignoring ${artifact.name}`);
-                }
-            }
+          name: wheel-${{env.PY_IMPL}}-manylinux_x86_64
+          workflow: build.yml
+          workflow_conclusion: success
+          branch: master
 
       - name: Install documenation dependencies (including ArcticDB)
         run: |
