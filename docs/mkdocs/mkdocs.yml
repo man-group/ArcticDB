@@ -95,6 +95,6 @@ nav:
   - Introduction: 'api/index.md'
   - Arctic: 'api/arctic.md'
   - Library: 'api/library.md'
-  - Library Types: 'api/library_types.md'
+  - Library related objects: 'api/library_types.md'
   - Query Builder: 'api/query_builder.md'
   - Exceptions: 'api/exceptions.md'
