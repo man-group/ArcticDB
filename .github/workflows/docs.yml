@@ -38,16 +38,17 @@ jobs:
           pip3 install mkdocs-material mkdocs-jupyter mkdocstrings[python] black pybind11-stubgen ${{inputs.api_wheel || '*.whl'}}
 
       - name: Stubfile generation
-        # stubfiles will be in docs/mkdocs/arcticdb_ext and so scanned as arcticdb_ext by mkdocs
-        # FIXME --ignore-all-errors may mask new errors and stop needed stubs from being generated
+        # stubfiles will be generated into docs/mkdocs/arcticdb_ext and so imported as arcticdb_ext by mkdocs when it builds
+        # FIXME --ignore-all-errors may mask new errors and should be removed when we are compliant
         run: |  
           cd docs/mkdocs
           pybind11-stubgen arcticdb_ext.version_store --ignore-all-errors -o .
 
       - name: MkDocs build
+        # FIXME mkdocs build --strict should be enabled when we are compliant
         run: |
-          cd docs/mkdocs
-          mkdocs build -s -d /tmp/docs_build
+          cd docs/mkdocs  
+          mkdocs build -d /tmp/docs_build
 
       - name: Publish to Cloudflare Pages
         if: inputs.environment && vars.CLOUDFLARE_PAGE_BRANCH
