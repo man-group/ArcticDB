@@ -15,7 +15,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v3
 
-      - name: Detect system Python implementation
+      - name: Detect runner Python implementation
         if: ${{!inputs.api_wheel}}
         run: |
           python3 -c 'import platform
@@ -24,7 +24,7 @@ jobs:
           print(f"PY_IMPL={prefix}{v[0]}{v[1]}")' | tee -a $GITHUB_ENV
   
       - id: download-wheel-artifact
-        name: Download wheel artifact
+        name: Download wheel artifact from last successful build
         if: ${{!inputs.api_wheel}}
         uses: dawidd6/action-download-artifact@v2
         with:
@@ -37,7 +37,7 @@ jobs:
         run: |
           pip3 install mkdocs-material mkdocs-jupyter mkdocstrings[python] black pybind11-stubgen ${{inputs.api_wheel || '*.whl'}}
 
-      - name: Stubfile generation
+      - name: Stubfile generation for arcticdb_ext
         # stubfiles will be generated into docs/mkdocs/arcticdb_ext and so imported as arcticdb_ext by mkdocs when it builds
         # FIXME --ignore-all-errors may mask new errors and should be removed when we are compliant
         run: |  
