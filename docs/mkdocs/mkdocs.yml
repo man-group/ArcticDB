@@ -10,6 +10,7 @@ markdown_extensions:
       alternate_style: true
   - attr_list
   - md_in_html
+  - def_list
   - toc:
       permalink: True
       toc_depth: '1-3'
