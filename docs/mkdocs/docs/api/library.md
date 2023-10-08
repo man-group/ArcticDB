@@ -12,4 +12,5 @@ methods.
 
 ::: arcticdb.version_store.library.Library
     options:
+      # init is not intended to be used directly
       filters: ["!^__init__$"]
