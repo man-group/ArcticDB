@@ -20,6 +20,12 @@
 #include <vector>
 
 namespace arcticdb {
+    /*
+     * In-memory implementation of Store for testing purposes.
+     *
+     * InMemoryStore only implements a fraction of all the methods from Store.
+     *
+     */
     class InMemoryStore : public Store {
 
     public:
