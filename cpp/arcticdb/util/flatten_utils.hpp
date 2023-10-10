@@ -34,6 +34,7 @@ inline bool has_funky_strides(py::array_t<T>& a) {
 
 template <typename RawType, typename TensorType>
 inline bool is_cstyle_array(const TensorType& tensor){
+    //log::version().info("ndim: {}\tstrides: {}  {}\tsize: {}", tensor.ndim(), tensor.strides(0), tensor.strides(1), sizeof(RawType));
     return tensor.size() == 0 || tensor.strides(tensor.ndim() - 1) == sizeof(RawType);
 }
 

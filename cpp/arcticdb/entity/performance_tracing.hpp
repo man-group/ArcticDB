@@ -25,7 +25,7 @@ static bool _scoped_subtimer_##name_active_ = ConfigsMap::instance()->get_int("L
 arcticdb::ScopedTimer runtime_sub_timer_##name = !_scoped_subtimer_##name_active_ ? arcticdb::ScopedTimer() : arcticdb::ScopedTimer(#name, [](auto msg) { \
     log::timings().debug(msg); \
 });
-
+#define ARCTICDB_LOG_PERFORMANCE
 
 #ifdef USE_REMOTERY
 

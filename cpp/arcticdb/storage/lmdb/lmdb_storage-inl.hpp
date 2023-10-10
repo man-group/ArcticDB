@@ -63,10 +63,15 @@ inline void LmdbStorage::do_write_internal(Composite<KeySegmentPair>&& kvs, ::lm
     });
 }
 
+inline auto wait_for_transaction(::lmdb::env& env) {
+    ARCTICDB_SAMPLE(LmdbStorageWaitForTransaction, 0)
+    return ::lmdb::txn::begin(env);
+}
+
 inline void LmdbStorage::do_write(Composite<KeySegmentPair>&& kvs) {
     ARCTICDB_SAMPLE(LmdbStorageWrite, 0)
-    std::lock_guard<std::mutex> lock{*write_mutex_};
-    auto txn = ::lmdb::txn::begin(env()); // scoped abort on exception, so no partial writes
+ //   std::lock_guard<std::mutex> lock{*write_mutex_};
+    auto txn = wait_for_transaction(env()); // scoped abort on exception, so no partial writes
     ARCTICDB_SUBSAMPLE(LmdbStorageInTransaction, 0)
     do_write_internal(std::move(kvs), txn);
     ARCTICDB_SUBSAMPLE(LmdbStorageCommit, 0)
@@ -75,7 +80,7 @@ inline void LmdbStorage::do_write(Composite<KeySegmentPair>&& kvs) {
 
 inline void LmdbStorage::do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts opts) {
     ARCTICDB_SAMPLE(LmdbStorageUpdate, 0)
-    std::lock_guard<std::mutex> lock{*write_mutex_};
+    //std::lock_guard<std::mutex> lock{*write_mutex_};
     auto txn = ::lmdb::txn::begin(env());
     ARCTICDB_SUBSAMPLE(LmdbStorageInTransaction, 0)
     auto keys = kvs.transform([](const auto& kv){return kv.variant_key();});

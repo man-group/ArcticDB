@@ -436,6 +436,8 @@ public:
                                encoding_version_));
         }, write_count);
 
+        auto key_segs = std::make_shared<Composite<storage::KeySegmentPair>>();
+        auto write_mutex = std::make_shared<std::mutex>();
         for (folly::Future<storage::KeySegmentPair>& encode_fut : encode_futs) {
             futs.emplace_back(
                 std::move(encode_fut).thenValue([de_dup_map](auto &&ks) -> std::pair<VariantKey,
@@ -443,17 +445,20 @@ public:
                         auto key_seg = std::forward<decltype(ks)>(ks);
                         return lookup_match_in_dedup_map(de_dup_map, std::move(key_seg));
                     })
-                    .via(&async::io_executor()).thenValue([lib = library_](auto &&item) {
+                    .via(&async::cpu_executor()).thenValue([lib = library_, key_segs, write_mutex](auto &&item) {
                         auto key_opt_segment = std::forward<decltype(item)>(item);
-                        if (key_opt_segment.second)
-                            lib->write(Composite<storage::KeySegmentPair>({VariantKey{key_opt_segment.first},
-                                                                           std::move(*key_opt_segment.second)}));
-
+                        if (key_opt_segment.second) {
+                            std::lock_guard guard{*write_mutex};
+                            key_segs->push_back({VariantKey{key_opt_segment.first},
+                                                std::move(*key_opt_segment.second)});
+                        }
                         return key_opt_segment.first;
                     }));
         }
-
-        return folly::collect(futs).via(&async::io_executor());
+        util::check(key_segs->size() == key_seg_pairs.size(), "Not all segmnets written {} != {}", key_segs->size(), key_seg_pairs.size());
+        auto ret = folly::collect(futs).via(&async::io_executor()).get();
+        library_->write(std::move(*key_segs));
+        return folly::makeFuture(ret);
     }
 
     void set_failure_sim(const arcticdb::proto::storage::VersionStoreConfig::StorageFailureSimulator &cfg)

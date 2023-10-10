@@ -155,9 +155,11 @@ if (NOT WIN32)
         # For now, we do not want to treat warnings as errors for those builds.
         add_compile_options("-Werror")
     endif()
-    add_compile_options("-ggdb")
+    add_compile_options("-g")
     add_compile_options("-fvisibility=hidden")
     add_compile_options("-fno-omit-frame-pointer")
+    add_compile_options(-O0)
+    add_compile_options(-fno-inline)
 endif ()
 
 ## Core library without python bindings ##

@@ -37,7 +37,7 @@ struct Lz4BlockEncoder {
             const Opts &opts,
             const T *in,
             BlockProtobufHelper &block_utils,
-            HashAccum &hasher,
+            HashAccum &hasher ARCTICDB_UNUSED,
             T *out,
             std::size_t out_capacity,
             std::ptrdiff_t &pos,
@@ -49,7 +49,7 @@ struct Lz4BlockEncoder {
 
         util::check_arg(compressed_bytes >= 0, "expected compressed bytes >= 0, actual {}", compressed_bytes);
         ARCTICDB_TRACE(log::storage(), "Block of size {} compressed to {} bytes", block_utils.bytes_, compressed_bytes);
-        hasher(in, block_utils.count_);
+        //hasher(in, block_utils.count_);
         pos += ssize_t(compressed_bytes);
         out_codec.mutable_lz4()->MergeFrom(opts);
         return std::size_t(compressed_bytes);
