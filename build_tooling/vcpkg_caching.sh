@@ -9,7 +9,7 @@ PLATFORM_VCPKG_ROOT=`cygpath -wa . 2>/dev/null || pwd`
 nuget="`which mono 2>/dev/null` `./vcpkg fetch nuget | tail -n 1`"  # which mono will return empty on windows
 echo "Using nuget=$nuget"
 
-VCPKG_BINARY_SOURCES="clear;nuget,github,readwrite"
+VCPKG_BINARY_SOURCES="clear;nuget,github,readwrite;nugettimeout,1200"
 url="https://nuget.pkg.github.com/$VCPKG_NUGET_USER/index.json"
 $nuget sources add -source $url -storepasswordincleartext -name github \
     -username "${VCPKG_NUGET_USER:?environment variable is not set}" \
