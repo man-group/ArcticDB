@@ -131,6 +131,68 @@ def test_hypothesis_max_agg_dynamic(lmdb_version_store_dynamic_schema_v1, df):
         pass
 
 
+@use_of_function_scoped_fixtures_in_hypothesis_checked
+@settings(deadline=None)
+@given(
+    df=data_frames(
+        [
+            column("grouping_column", elements=string_strategy, fill=string_strategy),
+            column("a", elements=non_zero_numeric_type_strategies()),
+        ],
+        index=range_indexes(),
+    )
+)
+def test_hypothesis_count_agg_dynamic(lmdb_version_store_dynamic_schema_v1, df):
+    lib = lmdb_version_store_dynamic_schema_v1
+    assume(not df.empty)
+
+    symbol = f"count_agg-{uuid.uuid4().hex}"
+    expected, slices = make_dynamic(df)
+    for df_slice in slices:
+        lib.append(symbol, df_slice, write_if_missing=True)
+
+    try:
+        q = QueryBuilder()
+        q = q.groupby("grouping_column").agg({"a": "count"})
+
+        vit = lib.read(symbol, query_builder=q)
+        vit.data.sort_index(inplace=True)
+
+        expected = expected.groupby("grouping_column").agg({"a": "count"})
+        expected = expected.astype(np.uint64)
+
+        assert_frame_equal(vit.data, expected)
+    # pandas 1.0 raises SpecificationError rather than KeyError if the column in "agg" doesn't exist
+    except (KeyError, SpecificationError):
+        pass
+
+
+def test_count_aggregation_dynamic(s3_version_store_dynamic_schema_v2):
+    lib = s3_version_store_dynamic_schema_v2
+    df = DataFrame(
+        {
+            "grouping_column": ["group_1", "group_1", "group_1", "group_2", "group_2", "group_3"],
+            "to_count": [100, 1, 3, 2, 2, np.nan],
+        },
+        index=np.arange(6),
+    )
+    symbol = "test_count_aggregation_dynamic"
+    expected, slices = make_dynamic(df)
+    for df_slice in slices:
+        lib.append(symbol, df_slice, write_if_missing=True)
+
+    q = QueryBuilder()
+    q = q.groupby("grouping_column").agg({"to_count": "count"})
+
+    received = lib.read(symbol, query_builder=q).data
+    received.sort_index(inplace=True)
+
+    expected = expected.groupby("grouping_column").agg({"to_count": "count"})
+    expected = expected.astype(np.uint64)
+
+    assert_frame_equal(received, expected)
+
+
 def test_sum_aggregation_dynamic(s3_version_store_dynamic_schema_v2):
     lib = s3_version_store_dynamic_schema_v2
     df = DataFrame(
