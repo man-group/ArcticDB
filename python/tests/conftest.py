@@ -42,6 +42,7 @@ from arcticdb.version_store.helper import (
     create_test_s3_cfg,
     create_test_mongo_cfg,
     create_test_azure_cfg,
+    create_test_memory_cfg,
 )
 from arcticdb.config import Defaults, MACOS_CONDA_BUILD, MACOS_CONDA_BUILD_SKIP_REASON
 from arcticdb.util.test import configure_test_logger, apply_lib_cfg, RUN_MONGO_TEST
@@ -209,6 +210,7 @@ def unique_real_s3_uri():
     params=[
         "S3",
         "LMDB",
+        "MEM",
         pytest.param(
             "Azure",
             marks=pytest.mark.skipif(MACOS_CONDA_BUILD, reason=MACOS_CONDA_BUILD_SKIP_REASON),
@@ -236,6 +238,8 @@ def arctic_client(request, moto_s3_uri_incl_bucket, tmpdir, encoding_version):
         ac = Arctic(f"lmdb://{tmpdir}", encoding_version)
     elif request.param == "Mongo":
         ac = Arctic(request.getfixturevalue("mongo_test_uri"), encoding_version)
+    elif request.param == "MEM":
+        ac = Arctic("mem://")
     else:
         raise NotImplementedError()
 
@@ -743,12 +747,28 @@ def local_object_version_store_prune_previous(local_object_store_factory):
         ),
     ],
 )
+def version_store_and_real_s3_basic_store_factory(request):
+    """
+    Just the version_store and real_s3 specifically for the test test_interleaved_store_read
+    where the in_memory_store_factory is not designed to have this functionality.
+    """
+    return request.getfixturevalue(request.param)
+
+
+@pytest.fixture(
+    params=[
+        "version_store_factory",
+        "in_memory_store_factory",
+        pytest.param(
+            "real_s3_store_factory",
+            marks=pytest.mark.skipif(
+                not PERSISTENT_STORAGE_TESTS_ENABLED,
+                reason="This store can be used only if the persistent storage tests are enabled",
+            ),
+        ),
+    ],
+)
 def basic_store_factory(request):
-    """
-    Designed to test the bare minimum of stores in integration/stress tests
-     - LMDB for local storage
-     - AWS S3 for persistent storage, if enabled
-    """
     store_factory = request.getfixturevalue(request.param)
     return store_factory
 
@@ -758,6 +778,7 @@ def basic_store(basic_store_factory):
     """
     Designed to test the bare minimum of stores
      - LMDB for local storage
+     - mem for in-memory storage
      - AWS S3 for persistent storage, if enabled
     """
     return basic_store_factory()
@@ -1124,6 +1145,7 @@ def object_storage_uri_incl_bucket(request):
             "lmdb_version_store_v2",
             "s3_version_store_v1",
             "s3_version_store_v2",
+            "in_memory_version_store",
             pytest.param(
                 "azure_version_store",
                 marks=pytest.mark.skipif(MACOS_CONDA_BUILD, reason=MACOS_CONDA_BUILD_SKIP_REASON),
@@ -1143,7 +1165,7 @@ def object_storage_uri_incl_bucket(request):
         else ["lmdb_version_store_v1", "lmdb_version_store_v2", "s3_version_store_v1", "s3_version_store_v2"]
     ),
 )
-def object_and_lmdb_version_store(request):
+def object_and_mem_and_lmdb_version_store(request):
     """
     Designed to test all supported stores
     """
@@ -1158,6 +1180,7 @@ def object_and_lmdb_version_store(request):
             "lmdb_version_store_dynamic_schema_v2",
             "s3_version_store_dynamic_schema_v1",
             "s3_version_store_dynamic_schema_v2",
+            "in_memory_version_store_dynamic_schema",
             pytest.param(
                 "azure_version_store_dynamic_schema",
                 marks=pytest.mark.skipif(MACOS_CONDA_BUILD, reason=MACOS_CONDA_BUILD_SKIP_REASON),
@@ -1171,8 +1194,61 @@ def object_and_lmdb_version_store(request):
         ]
     ),
 )
-def object_and_lmdb_version_store_dynamic_schema(request):
+def object_and_mem_and_lmdb_version_store_dynamic_schema(request):
     """
     Designed to test all supported stores
     """
     yield request.getfixturevalue(request.param)
+
+
+@pytest.fixture
+def in_memory_store_factory(lib_name):
+    cfg_maker = functools.partial(create_test_memory_cfg)
+    used = {}
+
+    def create_version_store(
+        col_per_group: Optional[int] = None,
+        row_per_segment: Optional[int] = None,
+        override_name: str = None,
+        **kwargs,
+    ) -> NativeVersionStore:
+        if col_per_group is not None and "column_group_size" not in kwargs:
+            kwargs["column_group_size"] = col_per_group
+        if row_per_segment is not None and "segment_row_size" not in kwargs:
+            kwargs["segment_row_size"] = row_per_segment
+
+        if "lmdb_config" in kwargs:
+            del kwargs["lmdb_config"]
+
+        if override_name is not None:
+            library_name = override_name
+        else:
+            library_name = lib_name
+
+        return _version_store_factory_impl(used, cfg_maker, library_name, **kwargs)
+
+    try:
+        yield create_version_store
+    finally:
+        for lib in used.values():
+            lib.version_store.clear()
+
+
+@pytest.fixture
+def in_memory_version_store(in_memory_store_factory):
+    return in_memory_store_factory()
+
+
+@pytest.fixture
+def in_memory_version_store_dynamic_schema(in_memory_store_factory):
+    return in_memory_store_factory(dynamic_schema=True)
+
+
+@pytest.fixture
+def in_memory_version_store_tiny_segment(in_memory_store_factory):
+    return in_memory_store_factory(column_group_size=2, segment_row_size=2)
+
+
+@pytest.fixture(params=["lmdb_version_store_tiny_segment", "in_memory_version_store_tiny_segment"])
+def lmdb_or_in_memory_version_store_tiny_segment(request):
+    return request.getfixturevalue(request.param)

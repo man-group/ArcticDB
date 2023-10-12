@@ -44,6 +44,7 @@ nav:
     - Parallel Writes: 'tutorials/parallel_writes.md'
     - Snapshots: 'tutorials/snapshots.md'
     - Metadata: 'tutorials/metadata.md'
+    - In-memory backends: 'tutorials/lmdb_and_in_memory.md'
 - Notebooks:
     - Intro Notebook: 'notebooks/ArcticDB_demo_lmdb.ipynb'
     - Querybuilder Notebook: 'notebooks/ArcticDB_demo_querybuilder.ipynb'
