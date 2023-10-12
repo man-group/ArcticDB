@@ -90,4 +90,11 @@ inline arcticdb::proto::storage::VariantStorage pack_config(
     return output;
 }
 
+
+struct NfsBucketizer {
+    static std::string bucketize(const std::string& root_folder, const VariantKey& vk);
+    static size_t bucketize_length(KeyType key_type);
+};
+
+
 } //namespace arcticdb::nfs_backed

@@ -5,12 +5,94 @@
  * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
  */
 
-#define ARCTICDB_S3_STORAGE_H_
-#include <arcticdb/storage/s3/s3_storage-inl.hpp>
-#include <aws/core/auth/AWSCredentialsProvider.h>
-#include <arcticdb/storage/s3/s3_api.hpp>
-#include <arcticdb/log/log.hpp>
+#include <arcticdb/storage/s3/s3_storage.hpp>
+
 #include <locale>
+
+#include <google/protobuf/io/zero_copy_stream_impl_lite.h>
+#include <folly/gen/Base.h>
+#include <aws/core/auth/AWSCredentialsProvider.h>
+
+#include <arcticdb/log/log.hpp>
+#include <arcticdb/storage/s3/s3_api.hpp>
+#include <arcticdb/util/preconditions.hpp>
+#include <arcticdb/util/pb_util.hpp>
+#include <arcticdb/log/log.hpp>
+#include <arcticdb/util/buffer_pool.hpp>
+#include <arcticdb/storage/object_store_utils.hpp>
+#include <arcticdb/storage/storage_options.hpp>
+#include <arcticdb/storage/storage_utils.hpp>
+#include <arcticdb/entity/serialized_key.hpp>
+#include <arcticdb/util/exponential_backoff.hpp>
+#include <arcticdb/util/configs_map.hpp>
+#include <arcticdb/util/composite.hpp>
+
+#include <aws/s3/model/GetObjectRequest.h>
+#include <aws/s3/model/PutObjectRequest.h>
+#include <aws/s3/model/DeleteObjectRequest.h>
+#include <aws/s3/model/DeleteObjectsRequest.h>
+#include <aws/s3/model/ListObjectsV2Request.h>
+#include <aws/s3/model/HeadObjectRequest.h>
+#include <aws/s3/model/Object.h>
+#include <aws/s3/model/Delete.h>
+#include <aws/s3/model/ObjectIdentifier.h>
+
+#include <boost/interprocess/streams/bufferstream.hpp>
+#include <folly/ThreadLocal.h>
+
+#include <arcticdb/storage/s3/detail-inl.hpp>
+
+#undef GetMessage
+
+namespace arcticdb::storage {
+
+using namespace object_store_utils;
+
+namespace s3 {
+
+namespace fg = folly::gen;
+
+
+std::string S3Storage::get_key_path(const VariantKey& key) const {
+    auto b = FlatBucketizer{};
+    auto key_type_dir = key_type_folder(root_folder_, variant_key_type(key));
+    return object_path(b.bucketize(key_type_dir, key), key);
+    // FUTURE: if we can reuse `detail::do_*` below doing polymorphism instead of templating, then this method is useful
+    // to most of them
+}
+
+void S3Storage::do_write(Composite<KeySegmentPair>&& kvs) {
+    detail::do_write_impl(std::move(kvs), root_folder_, bucket_name_, s3_client_, FlatBucketizer{});
+}
+
+void S3Storage::do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts) {
+    detail::do_update_impl(std::move(kvs), root_folder_, bucket_name_, s3_client_, FlatBucketizer{});
+}
+
+void S3Storage::do_read(Composite<VariantKey>&& ks, const ReadVisitor& visitor, ReadKeyOpts opts) {
+    detail::do_read_impl(std::move(ks), visitor, root_folder_, bucket_name_, s3_client_, FlatBucketizer{}, opts);
+}
+
+void S3Storage::do_remove(Composite<VariantKey>&& ks, RemoveOpts) {
+    detail::do_remove_impl(std::move(ks), root_folder_, bucket_name_, s3_client_, FlatBucketizer{});
+}
+
+void S3Storage::do_iterate_type(KeyType key_type, const IterateTypeVisitor& visitor, const std::string& prefix) {
+    auto prefix_handler = [] (const std::string& prefix, const std::string& key_type_dir, const KeyDescriptor key_descriptor, KeyType) {
+        return !prefix.empty() ? fmt::format("{}/{}*{}", key_type_dir, key_descriptor, prefix) : key_type_dir;
+    };
+
+    detail::do_iterate_type_impl(key_type, std::move(visitor), root_folder_, bucket_name_, s3_client_, FlatBucketizer{}, std::move(prefix_handler), prefix);
+}
+
+bool S3Storage::do_key_exists(const VariantKey& key) {
+    return detail::do_key_exists_impl(key, root_folder_, bucket_name_, s3_client_, FlatBucketizer{});
+}
+
+
+} // namespace s3
+} // namespace arcticdb::storage
+
 
 namespace arcticdb::storage::s3 {
 
