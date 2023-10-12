@@ -15,6 +15,7 @@
 #include <arcticdb/pipeline/input_tensor_frame.hpp>
 #include <arcticdb/stream/protobuf_mappings.hpp>
 #include <arcticdb/entity/protobuf_mappings.hpp>
+#include <arcticdb/python/gil_lock.hpp>
 #include <arcticdb/python/python_types.hpp>
 #include <arcticdb/python/python_to_tensor_frame.hpp>
 #include <arcticdb/pipeline/string_pool_utils.hpp>
@@ -90,7 +91,7 @@ RawType* flatten_tensor(
 }
 
 template<typename Tensor, typename Aggregator>
-void aggregator_set_data(
+std::optional<convert::StringEncodingError> aggregator_set_data(
     const TypeDescriptor &type_desc,
     Tensor &tensor,
     Aggregator &agg,
@@ -101,7 +102,7 @@ void aggregator_set_data(
     size_t regular_slice_size,
     bool sparsify_floats
 ) {
-    type_desc.visit_tag([&](auto &&tag) {
+    return type_desc.visit_tag([&](auto &&tag) {
         using RawType = typename std::decay_t<decltype(tag)>::DataTypeTag::raw_type;
         constexpr auto dt = std::decay_t<decltype(tag)>::DataTypeTag::data_type;
 
@@ -130,26 +131,38 @@ void aggregator_set_data(
                     ptr_data = flatten_tensor<PyObject*>(flattened_buffer, rows_to_write, tensor, slice_num, regular_slice_size);
 
                 auto none = py::none{};
+                std::variant<convert::StringEncodingError, convert::PyStringWrapper> wrapper_or_error;
+                // GIL will be acquired if there is a string that is not pure ASCII/UTF-8
+                // In this case a PyObject will be allocated by convert::py_unicode_to_buffer
+                // If such a string is encountered in a column, then the GIL will be held until that whole column has
+                // been processed, on the assumption that if a column has one such string it will probably have many.
+                std::optional<ScopedGILLock> scoped_gil_lock;
                 for (size_t s = 0; s < rows_to_write; ++s, ++ptr_data) {
                     if (*ptr_data == none.ptr()) {
                         agg.set_no_string_at(col, s, not_a_string());
-                    }
-                    else if(is_py_nan(*ptr_data)){
+                    } else if(is_py_nan(*ptr_data)){
                         agg.set_no_string_at(col, s, nan_placeholder());
-                    }
-                    else {
+                    } else {
                         if constexpr (is_utf_type(slice_value_type(dt))) {
-                            auto wrapper= convert::py_unicode_to_buffer(*ptr_data);
-                            agg.set_string_at(col, s, wrapper.buffer_, wrapper.length_);
+                            wrapper_or_error = convert::py_unicode_to_buffer(*ptr_data, scoped_gil_lock);
+                        } else {
+                            wrapper_or_error = convert::pystring_to_buffer(*ptr_data, false);
                         }
-                        else {
-                            auto wrapper = convert::pystring_to_buffer(*ptr_data);
+                        // Cannot use util::variant_match as only one of the branches would have a return type
+                        if (std::holds_alternative<convert::PyStringWrapper>(wrapper_or_error)) {
+                            convert::PyStringWrapper wrapper(std::move(std::get<convert::PyStringWrapper>(wrapper_or_error)));
                             agg.set_string_at(col, s, wrapper.buffer_, wrapper.length_);
+                        } else if (std::holds_alternative<convert::StringEncodingError>(wrapper_or_error)) {
+                            auto error = std::get<convert::StringEncodingError>(wrapper_or_error);
+                            error.row_index_in_slice_ = s;
+                            return std::optional<convert::StringEncodingError>(error);
+                        } else {
+                            internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Unexpected variant alternative");
                         }
                     }
                 }
             }
-        } else {
+        } else if constexpr (is_numeric_type(dt) || is_bool_type(dt)) {
             auto ptr = tensor.template ptr_cast<RawType>(row);
             if (sparsify_floats) {
                 if constexpr (is_floating_point_type(dt)) {
@@ -172,7 +185,10 @@ void aggregator_set_data(
                     agg.set_array(col, t);
                 }
             }
+        }  else if constexpr (!is_empty_type(dt)) {
+            static_assert(!sizeof(dt), "Unknown data type");
         }
+        return std::optional<convert::StringEncodingError>();
     });
 }
 

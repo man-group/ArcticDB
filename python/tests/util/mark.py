@@ -13,7 +13,7 @@ from datetime import date
 from numpy import datetime64
 from packaging import version
 
-from arcticdb.util.test import PANDAS_VERSION
+from arcticdb.util._versions import PANDAS_VERSION
 
 
 def _no_op_decorator(fun):

@@ -13,7 +13,7 @@
 #include <arcticdb/stream/aggregator.hpp>
 #include <arcticdb/version/version_store_api.hpp>
 #include <arcticdb/storage/storages.hpp>
-#include <arcticdb/storage/variant_storage.hpp>
+#include <arcticdb/storage/memory/memory_storage.hpp>
 #include <arcticdb/storage/test/in_memory_store.hpp>
 #include <arcticdb/stream/segment_aggregator.hpp>
 #include <arcticdb/python/python_to_tensor_frame.hpp>
@@ -78,6 +78,48 @@ using TestAggregator =  Aggregator<TimeseriesIndex, FixedSchema, stream::NeverSe
 using SinkWrapper = SinkWrapperImpl<TestAggregator>;
 using TestSparseAggregator = Aggregator<TimeseriesIndex, FixedSchema, stream::NeverSegmentPolicy, SparseColumnPolicy>;
 using SparseSinkWrapper = SinkWrapperImpl<TestSparseAggregator>;
+
+// Generates an int64_t Column where the value in each row is equal to the row index
+inline Column generate_int_column(size_t num_rows) {
+    using TDT = TypeDescriptorTag<DataTypeTag<DataType::INT64>, DimensionTag<Dimension ::Dim0>>;
+    Column column(static_cast<TypeDescriptor>(TDT{}), 0, false, false);
+    for(size_t idx = 0; idx < num_rows; ++idx) {
+        column.set_scalar<int64_t>(static_cast<ssize_t>(idx), static_cast<int64_t>(idx));
+    }
+    return column;
+}
+
+// Generates an int64_t Column where the value in each row is equal to the row index modulo the number of unique values
+inline Column generate_int_column_repeated_values(size_t num_rows, size_t unique_values) {
+    using TDT = TypeDescriptorTag<DataTypeTag<DataType::INT64>, DimensionTag<Dimension ::Dim0>>;
+    Column column(static_cast<TypeDescriptor>(TDT{}), 0, false, false);
+    for(size_t idx = 0; idx < num_rows; ++idx) {
+        column.set_scalar<int64_t>(static_cast<ssize_t>(idx), static_cast<int64_t>(idx % unique_values));
+    }
+    return column;
+}
+
+// Generates a Column of empty type
+inline Column generate_empty_column() {
+    using TDT = TypeDescriptorTag<DataTypeTag<DataType::EMPTYVAL>, DimensionTag<Dimension ::Dim0>>;
+    Column column(static_cast<TypeDescriptor>(TDT{}), 0, false, false);
+    return column;
+}
+
+// Generate a segment in memory suitable for testing groupby's empty type column behaviour with 5 columns:
+// * int_repeating_values - an int64_t column with unique_values repeating values
+// * empty_<agg> - an empty column for each supported aggregation
+inline SegmentInMemory generate_groupby_testing_segment(size_t num_rows, size_t unique_values) {
+    SegmentInMemory seg;
+    auto int_repeated_values_col = std::make_shared<Column>(generate_int_column_repeated_values(num_rows, unique_values));
+    seg.add_column(scalar_field(int_repeated_values_col->type().data_type(), "int_repeated_values"), int_repeated_values_col);
+    seg.add_column(scalar_field(DataType::EMPTYVAL, "empty_sum"), std::make_shared<Column>(generate_empty_column()));
+    seg.add_column(scalar_field(DataType::EMPTYVAL, "empty_min"), std::make_shared<Column>(generate_empty_column()));
+    seg.add_column(scalar_field(DataType::EMPTYVAL, "empty_max"), std::make_shared<Column>(generate_empty_column()));
+    seg.add_column(scalar_field(DataType::EMPTYVAL, "empty_mean"), std::make_shared<Column>(generate_empty_column()));
+    seg.set_row_id(num_rows - 1);
+    return seg;
+}
 
 inline SegmentInMemory get_standard_timeseries_segment(const std::string& name, size_t num_rows = 10) {
     auto wrapper = SinkWrapper(name, {
@@ -167,7 +209,7 @@ inline SegmentInMemory get_sparse_timeseries_segment_floats(const std::string& n
 inline auto get_test_config_data() {
     using namespace arcticdb::storage;
     LibraryPath path{"test", "store"};
-    auto storages = create_storages(path, OpenMode::DELETE, memory::pack_config(1000));
+    auto storages = create_storages(path, OpenMode::DELETE, memory::pack_config());
     return std::make_tuple(path, std::move(storages));
 }
 
@@ -177,7 +219,7 @@ inline auto get_test_config_data() {
  * See also python_version_store_in_memory() and stream_test_common.hpp for alternatives using LMDB.
  */
 template<typename VerStoreType = version_store::LocalVersionedEngine>
-inline VerStoreType get_test_engine(LibraryDescriptor::VariantStoreConfig cfg = {}) {
+inline VerStoreType get_test_engine(storage::LibraryDescriptor::VariantStoreConfig cfg = {}) {
     auto [path, storages] = get_test_config_data();
     auto library = std::make_shared<arcticdb::storage::Library>(path, std::move(storages), std::move(cfg));
     return VerStoreType(library);

@@ -77,7 +77,9 @@ SegmentInMemory MinMaxAggregatorData::finalize(const std::vector<ColumnName>& ou
 void SumAggregatorData::aggregate(const std::optional<ColumnWithStrings>& input_column, const std::vector<size_t>& groups, size_t unique_values) {
     // If data_type_ has no value, it means there is no data for this aggregation
     // For sums, we want this to display as zero rather than NaN
-    data_type_ = data_type_.value_or(DataType::FLOAT64);
+    if (!data_type_.has_value() || *data_type_ == DataType::EMPTYVAL) {
+        data_type_ = DataType::FLOAT64;
+    }
     entity::details::visit_type(*data_type_, [&input_column, unique_values, &groups, that=this] (auto global_type_desc_tag) {
         using GlobalInputType = decltype(global_type_desc_tag);
         if constexpr(!is_sequence_type(GlobalInputType::DataTypeTag::data_type)) {

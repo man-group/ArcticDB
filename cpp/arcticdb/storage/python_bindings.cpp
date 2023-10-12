@@ -102,35 +102,56 @@ void register_bindings(py::module& storage, py::exception<arcticdb::ArcticExcept
         })
         ;
 
-    py::class_<S3CredentialsOverride>(storage, "S3CredentialsOverride")
+    py::class_<S3Override>(storage, "S3Override")
         .def(py::init<>())
-        .def_property("credential_name", &S3CredentialsOverride::credential_name,  &S3CredentialsOverride::set_credential_name)
-        .def_property("credential_key", &S3CredentialsOverride::credential_key, &S3CredentialsOverride::set_credential_key)
-        .def_property("endpoint", &S3CredentialsOverride::endpoint, &S3CredentialsOverride::set_endpoint)
-        .def_property("bucket_name", &S3CredentialsOverride::bucket_name, &S3CredentialsOverride::set_bucket_name)
-        .def_property("region", &S3CredentialsOverride::region, &S3CredentialsOverride::set_region);
+        .def_property("credential_name", &S3Override::credential_name, &S3Override::set_credential_name)
+        .def_property("credential_key", &S3Override::credential_key, &S3Override::set_credential_key)
+        .def_property("endpoint", &S3Override::endpoint, &S3Override::set_endpoint)
+        .def_property("bucket_name", &S3Override::bucket_name, &S3Override::set_bucket_name)
+        .def_property("region", &S3Override::region, &S3Override::set_region)
+        .def_property(
+                "use_virtual_addressing", &S3Override::use_virtual_addressing, &S3Override::set_use_virtual_addressing);
 
+    py::class_<AzureOverride>(storage, "AzureOverride")
+        .def(py::init<>())
+        .def_property("container_name", &AzureOverride::container_name, &AzureOverride::set_container_name)
+        .def_property("endpoint", &AzureOverride::endpoint, &AzureOverride::set_endpoint)
+        .def_property("ca_cert_path", &AzureOverride::ca_cert_path, &AzureOverride::set_ca_cert_path);
+
+    py::class_<LmdbOverride>(storage, "LmdbOverride")
+            .def(py::init<>())
+            .def_property("path", &LmdbOverride::path, &LmdbOverride::set_path)
+            .def_property("map_size", &LmdbOverride::map_size, &LmdbOverride::set_map_size);
 
     py::class_<StorageOverride>(storage, "StorageOverride")
         .def(py::init<>())
-        .def("set_override", &StorageOverride::set_override);
+        .def("set_s3_override", &StorageOverride::set_s3_override)
+        .def("set_azure_override", &StorageOverride::set_azure_override)
+        .def("set_lmdb_override", &StorageOverride::set_lmdb_override);
 
     py::class_<LibraryManager, std::shared_ptr<LibraryManager>>(storage, "LibraryManager")
         .def(py::init<std::shared_ptr<storage::Library>>())
-        .def("write_library_config", [](const LibraryManager& library_manager, py::object& lib_cfg, std::string_view library_path) {
+        .def("write_library_config", [](const LibraryManager& library_manager, py::object& lib_cfg,
+                                        std::string_view library_path, const StorageOverride& storage_override, const bool validate) {
             LibraryPath lib_path{library_path, '.'};
-
-            return library_manager.write_library_config(lib_cfg, lib_path);
-        })
+            return library_manager.write_library_config(lib_cfg, lib_path, storage_override, validate);
+        },
+             py::arg("lib_cfg"),
+             py::arg("library_path"),
+             py::arg("override") = StorageOverride{},
+             py::arg("test_only_validation_toggle") = false)
         .def("get_library_config", [](const LibraryManager& library_manager, std::string_view library_path, const StorageOverride& storage_override){
             return library_manager.get_library_config(LibraryPath{library_path, '.'}, storage_override);
-        })
+        }, py::arg("library_path"), py::arg("override") = StorageOverride{})
+        .def("is_library_config_ok", [](const LibraryManager& library_manager, std::string_view library_path, bool throw_on_failure) {
+            return library_manager.is_library_config_ok(LibraryPath{library_path, '.'}, throw_on_failure);
+        }, py::arg("library_path"), py::arg("throw_on_failure") = true)
         .def("remove_library_config", [](const LibraryManager& library_manager, std::string_view library_path){
             return library_manager.remove_library_config(LibraryPath{library_path, '.'});
         })
         .def("get_library", [](const LibraryManager& library_manager, std::string_view library_path, const StorageOverride& storage_override){
             return library_manager.get_library(LibraryPath{library_path, '.'}, storage_override);
-        })
+        }, py::arg("library_path"), py::arg("storage_override") = StorageOverride{})
         .def("has_library", [](const LibraryManager& library_manager, std::string_view library_path){
             return library_manager.has_library(LibraryPath{library_path, '.'});
         })
@@ -169,4 +190,3 @@ void register_bindings(py::module& storage, py::exception<arcticdb::ArcticExcept
 }
 
 } // namespace arcticdb::storage::apy
-

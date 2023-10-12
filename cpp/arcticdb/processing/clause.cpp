@@ -7,7 +7,7 @@
 
 #include <vector>
 #include <variant>
-#include <arcticdb/processing/processing_segment.hpp>
+#include <arcticdb/processing/processing_unit.hpp>
 #include <folly/Poly.h>
 #include <arcticdb/util/composite.hpp>
 #include <arcticdb/processing/clause.hpp>
@@ -20,8 +20,53 @@
 
 namespace arcticdb {
 
-std::vector<Composite<ProcessingSegment>> single_partition(std::vector<Composite<ProcessingSegment>> &&comps) {
-    std::vector<Composite<ProcessingSegment>> v;
+std::vector<Composite<SliceAndKey>> structure_by_row_slice(std::vector<SliceAndKey>& slice_and_keys, size_t start_from) {
+    std::sort(std::begin(slice_and_keys), std::end(slice_and_keys), [] (const SliceAndKey& left, const SliceAndKey& right) {
+        return std::tie(left.slice().row_range.first, left.slice().col_range.first) < std::tie(right.slice().row_range.first, right.slice().col_range.first);
+    });
+
+    std::vector<Composite<SliceAndKey>> rows;
+    auto sk_it = std::begin(slice_and_keys);
+    std::advance(sk_it, start_from);
+    while(sk_it != std::end(slice_and_keys)) {
+        pipelines::RowRange row_range{sk_it->slice().row_range};
+        auto sk = Composite{std::move(*sk_it)};
+        // Iterate through all SliceAndKeys that contain data for the same RowRange - i.e., iterate along column segments
+        // for same row group
+        while(++sk_it != std::end(slice_and_keys) && sk_it->slice().row_range == row_range) {
+            sk.push_back(std::move(*sk_it));
+        }
+
+        util::check(!sk.empty(), "Should not push empty slice/key pairs to the pipeline");
+        rows.emplace_back(std::move(sk));
+    }
+    return rows;
+}
+
+std::vector<Composite<SliceAndKey>> structure_by_column_slice(std::vector<SliceAndKey>& slice_and_keys) {
+    std::sort(std::begin(slice_and_keys), std::end(slice_and_keys), [] (const SliceAndKey& left, const SliceAndKey& right) {
+        return std::tie(left.slice().col_range.first, left.slice().row_range.first) < std::tie(right.slice().col_range.first, right.slice().row_range.first);
+    });
+
+    std::vector<Composite<SliceAndKey>> cols;
+    auto sk_it = std::begin(slice_and_keys);
+    while(sk_it != std::end(slice_and_keys)) {
+        pipelines::ColRange col_range{sk_it->slice().col_range};
+        auto sk = Composite{std::move(*sk_it)};
+        // Iterate through all SliceAndKeys that contain data for the same ColRange - i.e., iterate along row segments
+        // for same column group
+        while(++sk_it != std::end(slice_and_keys) && sk_it->slice().col_range == col_range) {
+            sk.push_back(std::move(*sk_it));
+        }
+
+        util::check(!sk.empty(), "Should not push empty slice/key pairs to the pipeline");
+        cols.emplace_back(std::move(sk));
+    }
+    return cols;
+}
+
+std::vector<Composite<ProcessingUnit>> single_partition(std::vector<Composite<ProcessingUnit>> &&comps) {
+    std::vector<Composite<ProcessingUnit>> v;
     v.push_back(merge_composites_shallow(std::move(comps)));
     return v;
 }
@@ -29,17 +74,17 @@ std::vector<Composite<ProcessingSegment>> single_partition(std::vector<Composite
 class GroupingMap {
     using NumericMapType = std::variant<
             std::monostate,
-            std::shared_ptr<std::unordered_map<bool, size_t>>,
-            std::shared_ptr<std::unordered_map<uint8_t, size_t>>,
-            std::shared_ptr<std::unordered_map<uint16_t, size_t>>,
-            std::shared_ptr<std::unordered_map<uint32_t, size_t>>,
-            std::shared_ptr<std::unordered_map<uint64_t, size_t>>,
-            std::shared_ptr<std::unordered_map<int8_t, size_t>>,
-            std::shared_ptr<std::unordered_map<int16_t, size_t>>,
-            std::shared_ptr<std::unordered_map<int32_t, size_t>>,
-            std::shared_ptr<std::unordered_map<int64_t, size_t>>,
-            std::shared_ptr<std::unordered_map<float, size_t>>,
-            std::shared_ptr<std::unordered_map<double, size_t>>>;
+            std::shared_ptr<emilib::HashMap<bool, size_t>>,
+            std::shared_ptr<emilib::HashMap<uint8_t, size_t>>,
+            std::shared_ptr<emilib::HashMap<uint16_t, size_t>>,
+            std::shared_ptr<emilib::HashMap<uint32_t, size_t>>,
+            std::shared_ptr<emilib::HashMap<uint64_t, size_t>>,
+            std::shared_ptr<emilib::HashMap<int8_t, size_t>>,
+            std::shared_ptr<emilib::HashMap<int16_t, size_t>>,
+            std::shared_ptr<emilib::HashMap<int32_t, size_t>>,
+            std::shared_ptr<emilib::HashMap<int64_t, size_t>>,
+            std::shared_ptr<emilib::HashMap<float, size_t>>,
+            std::shared_ptr<emilib::HashMap<double, size_t>>>;
 
     NumericMapType map_;
 
@@ -55,16 +100,16 @@ public:
     }
 
     template<typename T>
-    std::shared_ptr<std::unordered_map<T, size_t>> get() {
+    std::shared_ptr<emilib::HashMap<T, size_t>> get() {
         return util::variant_match(map_,
                                    [that = this](const std::monostate &) {
-                                       that->map_ = std::make_shared<std::unordered_map<T, size_t>>();
-                                       return std::get<std::shared_ptr<std::unordered_map<T, size_t>>>(that->map_);
+                                       that->map_ = std::make_shared<emilib::HashMap<T, size_t>>();
+                                       return std::get<std::shared_ptr<emilib::HashMap<T, size_t>>>(that->map_);
                                    },
-                                   [](const std::shared_ptr<std::unordered_map<T, size_t>> &ptr) {
+                                   [](const std::shared_ptr<emilib::HashMap<T, size_t>> &ptr) {
                                        return ptr;
                                    },
-                                   [](const auto &) -> std::shared_ptr<std::unordered_map<T, size_t>> {
+                                   [](const auto &) -> std::shared_ptr<emilib::HashMap<T, size_t>> {
                                        schema::raise<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>(
                                                "GroupBy does not support the grouping column type changing with dynamic schema");
                                    });
@@ -97,18 +142,18 @@ struct SliceAndKeyWrapper {
     }
 };
 
-Composite<ProcessingSegment> PassthroughClause::process(ARCTICDB_UNUSED const std::shared_ptr<Store> &store,
-                                                        Composite<ProcessingSegment> &&p) const {
+Composite<ProcessingUnit> PassthroughClause::process(ARCTICDB_UNUSED const std::shared_ptr<Store> &store,
+                                                     Composite<ProcessingUnit> &&p) const {
     auto procs = std::move(p);
     return procs;
 }
 
-Composite<ProcessingSegment> FilterClause::process(
+Composite<ProcessingUnit> FilterClause::process(
         std::shared_ptr<Store> store,
-        Composite<ProcessingSegment> &&p
+        Composite<ProcessingUnit> &&p
         ) const {
     auto procs = std::move(p);
-    Composite<ProcessingSegment> output;
+    Composite<ProcessingUnit> output;
     procs.broadcast([&optimisation=optimisation_, &store, &expression_context = expression_context_, &output](auto &proc) {
         proc.set_expression_context(expression_context);
         auto variant_data = proc.get(expression_context->root_node_name_, store);
@@ -134,10 +179,10 @@ std::string FilterClause::to_string() const {
     return expression_context_ ? fmt::format("WHERE {}", expression_context_->root_node_name_.value) : "";
 }
 
-Composite<ProcessingSegment> ProjectClause::process(std::shared_ptr<Store> store,
-                                                                  Composite<ProcessingSegment> &&p) const {
+Composite<ProcessingUnit> ProjectClause::process(std::shared_ptr<Store> store,
+                                                 Composite<ProcessingUnit> &&p) const {
     auto procs = std::move(p);
-    Composite<ProcessingSegment> output;
+    Composite<ProcessingUnit> output;
     procs.broadcast([&store, &expression_context = expression_context_, &output, that = this](auto &proc) {
         proc.set_expression_context(expression_context);
         auto variant_data = proc.get(expression_context->root_node_name_, store);
@@ -199,8 +244,8 @@ AggregationClause::AggregationClause(const std::string& grouping_column,
     }
 }
 
-Composite<ProcessingSegment> AggregationClause::process(std::shared_ptr<Store> store,
-                                                        Composite<ProcessingSegment> &&p) const {
+Composite<ProcessingUnit> AggregationClause::process(std::shared_ptr<Store> store,
+                                                     Composite<ProcessingUnit> &&p) const {
     auto procs = std::move(p);
     std::vector<GroupingAggregatorData> aggregators_data;
     internal::check<ErrorCode::E_INVALID_ARGUMENT>(
@@ -210,12 +255,11 @@ Composite<ProcessingSegment> AggregationClause::process(std::shared_ptr<Store> s
         aggregators_data.emplace_back(agg.get_aggregator_data());
     }
 
-    // Work out the common type between the processing segments for the columns being aggregated
+    // Work out the common type between the processing units for the columns being aggregated
     procs.broadcast([&store, &aggregators_data, &aggregators=aggregators_](auto& proc) {
         for (auto agg_data: folly::enumerate(aggregators_data)) {
             auto input_column_name = aggregators.at(agg_data.index).get_input_column_name();
             auto input_column = proc.get(input_column_name, store);
-            std::optional<ColumnWithStrings> opt_input_column;
             if (std::holds_alternative<ColumnWithStrings>(input_column)) {
                 agg_data->add_data_type(std::get<ColumnWithStrings>(input_column).column_->type().data_type());
             }
@@ -245,26 +289,45 @@ Composite<ProcessingSegment> AggregationClause::process(std::shared_ptr<Store> s
                                                 row_to_group.reserve(col.column_->row_count());
                                                 auto input_data = col.column_->data();
                                                 auto hash_to_group = grouping_map.get<RawType>();
+                                                // For string grouping columns, keep a local map within this ProcessingUnit
+                                                // from offsets to groups, to avoid needless calls to col.string_at_offset and
+                                                // string_pool->get
+                                                // This could be slower in cases where there aren't many repeats in string
+                                                // grouping columns. Maybe track hit ratio of finds and stop using it if it is
+                                                // too low?
+                                                // Tested with 100,000,000 row dataframe with 100,000 unique values in the grouping column. Timings:
+                                                // 11.14 seconds without caching
+                                                // 11.01 seconds with caching
+                                                // Not worth worrying about right now
+                                                emilib::HashMap<RawType, size_t> offset_to_group;
                                                 while (auto block = input_data.next<ScalarTagType<DataTypeTagType>>()) {
                                                     const auto row_count = block->row_count();
                                                     auto ptr = block->data();
                                                     for (size_t i = 0; i < row_count; ++i, ++ptr) {
                                                         RawType val;
                                                         if constexpr(is_sequence_type(data_type)) {
-                                                            std::optional<std::string_view> str = col.string_at_offset(*ptr);
-                                                            if (str.has_value()) {
-                                                                val = string_pool->get(*str, true).offset();
+                                                            auto offset = *ptr;
+                                                            if (auto it = offset_to_group.find(offset); it != offset_to_group.end()) {
+                                                                val = it->second;
                                                             } else {
-                                                                val = *ptr;
+                                                                std::optional<std::string_view> str = col.string_at_offset(offset);
+                                                                if (str.has_value()) {
+                                                                    val = string_pool->get(*str, true).offset();
+                                                                } else {
+                                                                    val = offset;
+                                                                }
+                                                                RawType val_copy(val);
+                                                                offset_to_group.insert_unique(std::move(offset), std::move(val_copy));
                                                             }
                                                         } else {
                                                             val = *ptr;
                                                         }
                                                         if (auto it = hash_to_group->find(val); it == hash_to_group->end()) {
-                                                            row_to_group.push_back(next_group_id);
-                                                            hash_to_group->try_emplace(val, next_group_id++);
+                                                            row_to_group.emplace_back(next_group_id);
+                                                            auto group_id = next_group_id++;
+                                                            hash_to_group->insert_unique(std::move(val), std::move(group_id));
                                                         } else {
-                                                            row_to_group.push_back(it->second);
+                                                            row_to_group.emplace_back(it->second);
                                                         }
                                                     }
                                                 }
@@ -276,7 +339,11 @@ Composite<ProcessingSegment> AggregationClause::process(std::shared_ptr<Store> s
                                                     auto input_column = proc_.get(input_column_name, store);
                                                     std::optional<ColumnWithStrings> opt_input_column;
                                                     if (std::holds_alternative<ColumnWithStrings>(input_column)) {
-                                                        opt_input_column.emplace(std::get<ColumnWithStrings>(input_column));
+                                                        auto column_with_strings = std::get<ColumnWithStrings>(input_column);
+                                                        // Empty columns don't contribute to aggregations
+                                                        if (!is_empty_type(column_with_strings.column_->type().data_type())) {
+                                                            opt_input_column.emplace(std::move(column_with_strings));
+                                                        }
                                                     }
                                                     agg_data->aggregate(opt_input_column, row_to_group, num_unique);
                                                 }
@@ -317,19 +384,19 @@ Composite<ProcessingSegment> AggregationClause::process(std::shared_ptr<Store> s
 
     seg.set_string_pool(string_pool);
     seg.set_row_id(num_unique - 1);
-    return Composite{ProcessingSegment{std::move(seg)}};
+    return Composite{ProcessingUnit{std::move(seg)}};
 }
 
 [[nodiscard]] std::string AggregationClause::to_string() const {
     return fmt::format("AGGREGATE {}", aggregation_map_);
 }
 
-[[nodiscard]] Composite<ProcessingSegment> RemoveColumnPartitioningClause::process(std::shared_ptr<Store> store,
-                                                                                   Composite<ProcessingSegment> &&p) const {
+[[nodiscard]] Composite<ProcessingUnit> RemoveColumnPartitioningClause::process(std::shared_ptr<Store> store,
+                                                                                Composite<ProcessingUnit> &&p) const {
     using namespace arcticdb::pipelines;
     auto procs = std::move(p);
-    Composite<ProcessingSegment> output;
-    procs.broadcast([&store, &output](ProcessingSegment &proc) {
+    Composite<ProcessingUnit> output;
+    procs.broadcast([&store, &output](ProcessingUnit &proc) {
         size_t min_start_row = std::numeric_limits<size_t>::max();
         size_t max_end_row = 0;
         size_t min_start_col = std::numeric_limits<size_t>::max();
@@ -351,18 +418,18 @@ Composite<ProcessingSegment> AggregationClause::process(std::shared_ptr<Store> s
         if (output_seg.has_value()) {
             const RowRange row_range{min_start_row, max_end_row};
             const ColRange col_range{min_start_col, max_end_col};
-            output.push_back(ProcessingSegment{std::move(*output_seg), FrameSlice{col_range, row_range}});
+            output.push_back(ProcessingUnit{std::move(*output_seg), FrameSlice{col_range, row_range}});
         }
     });
     return output;
 }
 
-Composite<ProcessingSegment> SplitClause::process(std::shared_ptr<Store> store,
-                                                  Composite<ProcessingSegment> &&procs) const {
+Composite<ProcessingUnit> SplitClause::process(std::shared_ptr<Store> store,
+                                               Composite<ProcessingUnit> &&procs) const {
     using namespace arcticdb::pipelines;
 
     auto proc_composite = std::move(procs);
-    Composite<ProcessingSegment> ret;
+    Composite<ProcessingUnit> ret;
     proc_composite.broadcast([&store, rows = rows_, &ret](auto &&p) {
         auto proc = std::forward<decltype(p)>(p);
         auto slice_and_keys = proc.data();
@@ -374,7 +441,7 @@ Composite<ProcessingSegment> SplitClause::process(std::shared_ptr<Store> store,
             for (auto &item : split_segs) {
                 end_row = start_row + item.row_count();
                 const RowRange row_range{start_row, end_row};
-                ret.push_back(ProcessingSegment{std::move(item), FrameSlice{col_range, row_range}});
+                ret.push_back(ProcessingUnit{std::move(item), FrameSlice{col_range, row_range}});
                 start_row = end_row;
             }
         }
@@ -382,8 +449,8 @@ Composite<ProcessingSegment> SplitClause::process(std::shared_ptr<Store> store,
     return ret;
 }
 
-Composite<ProcessingSegment> SortClause::process(std::shared_ptr<Store> store,
-                                                 Composite<ProcessingSegment> &&p) const {
+Composite<ProcessingUnit> SortClause::process(std::shared_ptr<Store> store,
+                                              Composite<ProcessingUnit> &&p) const {
     auto procs = std::move(p);
     procs.broadcast([&store, &column = column_](auto &proc) {
         auto slice_and_keys = proc.data();
@@ -396,7 +463,7 @@ Composite<ProcessingSegment> SortClause::process(std::shared_ptr<Store> store,
 
 template<typename IndexType, typename DensityPolicy, typename QueueType, typename Comparator, typename StreamId>
 void merge_impl(
-        Composite<ProcessingSegment> &ret,
+        Composite<ProcessingUnit> &ret,
         QueueType &input_streams,
         bool add_symbol_column,
         StreamId stream_id,
@@ -410,7 +477,7 @@ void merge_impl(
     SegmentationPolicy segmentation_policy{static_cast<size_t>(num_segment_rows)};
 
     auto func = [&ret, &row_range, &col_range](auto &&segment) {
-        ret.push_back(ProcessingSegment{std::forward<SegmentInMemory>(segment), FrameSlice{col_range, row_range}});
+        ret.push_back(ProcessingUnit{std::forward<SegmentInMemory>(segment), FrameSlice{col_range, row_range}});
     };
     
     using AggregatorType = stream::Aggregator<IndexType, stream::DynamicSchema, SegmentationPolicy, DensityPolicy>;
@@ -432,8 +499,8 @@ void merge_impl(
 
 // MergeClause receives a list of DataFrames as input and merge them into a single one where all 
 // the rows are sorted by time stamp
-Composite<ProcessingSegment> MergeClause::process(std::shared_ptr<Store> store,
-                                                  Composite<ProcessingSegment> &&p) const {
+Composite<ProcessingUnit> MergeClause::process(std::shared_ptr<Store> store,
+                                               Composite<ProcessingUnit> &&p) const {
     using namespace arcticdb::pipelines;
     auto procs = std::move(p);
 
@@ -472,7 +539,7 @@ Composite<ProcessingSegment> MergeClause::process(std::shared_ptr<Store> store,
     });
     const RowRange row_range{min_start_row, max_end_row};
     const ColRange col_range{min_start_col, max_end_col};
-    Composite<ProcessingSegment> ret;
+    Composite<ProcessingUnit> ret;
     std::visit(
             [&ret, &input_streams, add_symbol_column = add_symbol_column_, &comp = compare, stream_id = stream_id_, &row_range, &col_range, &stream_descriptor = stream_descriptor_](auto idx,
                                                                                             auto density) {
@@ -489,15 +556,15 @@ Composite<ProcessingSegment> MergeClause::process(std::shared_ptr<Store> store,
     return ret;
 }
 
-std::optional<std::vector<Composite<ProcessingSegment>>> MergeClause::repartition(
-        std::vector<Composite<ProcessingSegment>> &&comps) const {
-    std::vector<Composite<ProcessingSegment>> v;
+std::optional<std::vector<Composite<ProcessingUnit>>> MergeClause::repartition(
+        std::vector<Composite<ProcessingUnit>> &&comps) const {
+    std::vector<Composite<ProcessingUnit>> v;
     v.push_back(merge_composites_shallow(std::move(comps)));
     return v;
 }
 
-Composite<ProcessingSegment> ColumnStatsGenerationClause::process(std::shared_ptr<Store> store,
-                                                                  Composite<ProcessingSegment> &&p) const {
+Composite<ProcessingUnit> ColumnStatsGenerationClause::process(std::shared_ptr<Store> store,
+                                                               Composite<ProcessingUnit> &&p) const {
     auto procs = std::move(p);
     std::vector<ColumnStatsAggregatorData> aggregators_data;
     internal::check<ErrorCode::E_INVALID_ARGUMENT>(
@@ -512,7 +579,7 @@ Composite<ProcessingSegment> ColumnStatsGenerationClause::process(std::shared_pt
 
     internal::check<ErrorCode::E_INVALID_ARGUMENT>(
             !procs.empty(),
-            "ColumnStatsGenerationClause::process does not make sense with no processing segments");
+            "ColumnStatsGenerationClause::process does not make sense with no processing units");
     procs.broadcast(
             [&store, &start_indexes, &end_indexes, &aggregators_data, that=this](
                     auto &proc) {
@@ -538,15 +605,15 @@ Composite<ProcessingSegment> ColumnStatsGenerationClause::process(std::shared_pt
 
     internal::check<ErrorCode::E_ASSERTION_FAILURE>(
             start_indexes.size() == 1 && end_indexes.size() == 1,
-            "Expected all data segments in one processing segment to have same start and end indexes");
+            "Expected all data segments in one processing unit to have same start and end indexes");
     auto start_index = *start_indexes.begin();
     auto end_index = *end_indexes.begin();
     schema::check<ErrorCode::E_UNSUPPORTED_INDEX_TYPE>(
             std::holds_alternative<NumericIndex>(start_index) && std::holds_alternative<NumericIndex>(end_index),
             "Cannot build column stats over string-indexed symbol"
     );
-    auto start_index_col = std::make_shared<Column>(make_scalar_type(DataType::MICROS_UTC64), true);
-    auto end_index_col = std::make_shared<Column>(make_scalar_type(DataType::MICROS_UTC64), true);
+    auto start_index_col = std::make_shared<Column>(make_scalar_type(DataType::NANOSECONDS_UTC64), true);
+    auto end_index_col = std::make_shared<Column>(make_scalar_type(DataType::NANOSECONDS_UTC64), true);
     start_index_col->template push_back<NumericIndex>(std::get<NumericIndex>(start_index));
     end_index_col->template push_back<NumericIndex>(std::get<NumericIndex>(end_index));
     start_index_col->set_row_data(0);
@@ -554,30 +621,112 @@ Composite<ProcessingSegment> ColumnStatsGenerationClause::process(std::shared_pt
 
     SegmentInMemory seg;
     seg.descriptor().set_index(IndexDescriptor(0, IndexDescriptor::ROWCOUNT));
-    seg.add_column(scalar_field(DataType::MICROS_UTC64, start_index_column_name), start_index_col);
-    seg.add_column(scalar_field(DataType::MICROS_UTC64, end_index_column_name), end_index_col);
+    seg.add_column(scalar_field(DataType::NANOSECONDS_UTC64, start_index_column_name), start_index_col);
+    seg.add_column(scalar_field(DataType::NANOSECONDS_UTC64, end_index_column_name), end_index_col);
     for (const auto& agg_data: folly::enumerate(aggregators_data)) {
         seg.concatenate(agg_data->finalize(column_stats_aggregators_->at(agg_data.index).get_output_column_names()));
     }
     seg.set_row_id(0);
-    return Composite{ProcessingSegment{std::move(seg)}};
+    return Composite{ProcessingUnit{std::move(seg)}};
 }
 
-Composite<ProcessingSegment> RowNumberLimitClause::process(std::shared_ptr<Store> store,
-                                                           Composite<ProcessingSegment> &&p) const {
+std::vector<Composite<SliceAndKey>> RowRangeClause::structure_for_processing(
+        std::vector<SliceAndKey>& slice_and_keys, ARCTICDB_UNUSED size_t start_from) const {
+    slice_and_keys.erase(std::remove_if(slice_and_keys.begin(), slice_and_keys.end(), [this](const SliceAndKey& slice_and_key) {
+        return slice_and_key.slice_.row_range.start() >= end_ || slice_and_key.slice_.row_range.end() <= start_;
+    }), slice_and_keys.end());
+    return structure_by_column_slice(slice_and_keys);
+}
+
+Composite<ProcessingUnit> RowRangeClause::process(std::shared_ptr<Store> store,
+                                                  Composite<ProcessingUnit> &&p) const {
     auto procs = std::move(p);
-    procs.broadcast([&store, this](ProcessingSegment &proc) {
-        auto row_range = proc.data()[0].slice_.row_range;
-        if (row_range.start() == 0ULL && row_range.end() > n) {
-            util::BitSet bv(static_cast<util::BitSet::size_type>(row_range.diff()));
-            bv.set_range(0, bv_size(n));
-            proc.apply_filter(bv, store, PipelineOptimisation::MEMORY);
-        } else if (!warning_shown) {
-            warning_shown = true;
-            log::version().info("RowNumberLimitFilter bypassed because rows.start() == {}", row_range.start());
+    procs.broadcast([&store, this](ProcessingUnit &proc) {
+        for (auto& slice_and_key: proc.data()) {
+            auto row_range = slice_and_key.slice_.row_range;
+            if ((start_ > row_range.start() && start_ < row_range.end()) ||
+                (end_ > row_range.start() && end_ < row_range.end())) {
+                // Zero-indexed within this slice
+                size_t start_row{0};
+                size_t end_row{row_range.diff()};
+                if (start_ > row_range.start() && start_ < row_range.end()) {
+                    start_row = start_ - row_range.start();
+                }
+                if (end_ > row_range.start() && end_ < row_range.end()) {
+                    end_row = end_ - (row_range.start());
+                }
+                auto seg = truncate_segment(slice_and_key.segment(store), start_row, end_row);
+                slice_and_key.slice_.adjust_rows(seg.row_count());
+                slice_and_key.slice_.adjust_columns(seg.descriptor().field_count() - seg.descriptor().index().field_count());
+                slice_and_key.segment_ = std::move(seg);
+            } // else all rows in the slice and key are required, do nothing
         }
     });
     return procs;
+}
+
+void RowRangeClause::set_processing_config(const ProcessingConfig& processing_config) {
+    auto total_rows = static_cast<int64_t>(processing_config.total_rows_);
+    switch(row_range_type_) {
+        case RowRangeType::HEAD:
+            if (n_ >= 0) {
+                end_ = std::min(n_, total_rows);
+            } else {
+                end_ = std::max(static_cast<int64_t>(0), total_rows + n_);
+            }
+            break;
+        case RowRangeType::TAIL:
+            if (n_ >= 0) {
+                start_ = std::max(static_cast<int64_t>(0), total_rows - n_);
+                end_ = total_rows;
+            } else {
+                start_ = std::min(-n_, total_rows);
+                end_ = total_rows;
+            }
+            break;
+        default:
+            internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Unrecognised RowRangeType {}", static_cast<uint8_t>(row_range_type_));
+    }
+}
+
+std::string RowRangeClause::to_string() const {
+    return fmt::format("{} {}", row_range_type_ == RowRangeType::HEAD ? "HEAD" : "TAIL", n_);
+}
+
+std::vector<Composite<SliceAndKey>> DateRangeClause::structure_for_processing(
+        std::vector<SliceAndKey>& slice_and_keys, size_t start_from) const {
+    slice_and_keys.erase(std::remove_if(slice_and_keys.begin(), slice_and_keys.end(), [this](const SliceAndKey& slice_and_key) {
+        auto [start_index, end_index] = slice_and_key.key().time_range();
+        return start_index > end_ || end_index <= start_;
+    }), slice_and_keys.end());
+    return structure_by_row_slice(slice_and_keys, start_from);
+}
+
+Composite<ProcessingUnit> DateRangeClause::process(ARCTICDB_UNUSED std::shared_ptr<Store> store,
+                                                   Composite<ProcessingUnit> &&p) const {
+    auto procs = std::move(p);
+    procs.broadcast([&store, this](ProcessingUnit &proc) {
+        // We are only interested in the index, which is in every SegmentInMemory in proc.data(), so just use the first
+        auto slice_and_key = proc.data()[0];
+        auto row_range = slice_and_key.slice_.row_range;
+        auto [start_index, end_index] = slice_and_key.key().time_range();
+        if ((start_ > start_index && start_ < end_index) || (end_ >= start_index && end_ < end_index)) {
+            size_t start_row{0};
+            size_t end_row{row_range.diff()};
+            if (start_ > start_index && start_ < end_index) {
+                start_row = slice_and_key.segment(store).column_ptr(0)->search_sorted<timestamp>(start_);
+            }
+            if (end_ >= start_index && end_ < end_index) {
+                end_row = slice_and_key.segment(store).column_ptr(0)->search_sorted<timestamp>(end_, true);
+            }
+            proc.truncate(start_row, end_row, store);
+        } // else all rows in the processing unit are required, do nothing
+    });
+    return procs;
+}
+
+std::string DateRangeClause::to_string() const {
+    return fmt::format("DATE RANGE {} - {}", start_, end_);
 }
 
 }

@@ -12,6 +12,9 @@ on:
       - pyproject.toml
   workflow_dispatch:
     inputs:
+      persistent_storage:
+        description: Run the persistent storage tests
+        type: boolean
       pypi_publish:
         type: boolean
       publish_env:
@@ -42,7 +45,10 @@ jobs:
                 symbols: "*.gz" # Please update publish.yml when changing this!!
                 do_not_archive: ["*.so", "*.[ao]", "vcpkg_installed"]
                 test_services:
-                  mongodb: { image: "mongo:4.4" }
+                  mongodb:
+                    image: "mongo:4.4"
+                  mongodb_2:
+                    image: "mongo:4.4"
             windows_matrix:
               - os: windows
                 distro: windows-latest
@@ -71,6 +77,59 @@ jobs:
       cmake_preset_type_resolved: ${{inputs.cmake_preset_type != '-' && inputs.cmake_preset_type || env.CMAKE_PRESET_TYPE}}
       linux_matrix: ${{toJson(matrix.linux_matrix)}}
       windows_matrix: ${{toJson(matrix.windows_matrix)}}
+
+  pre_seed_cleanup:
+    if: inputs.persistent_storage == true
+    name: Cleanup persistent storages
+    uses: ./.github/workflows/persistent_storage.yml
+    secrets: inherit
+    with:
+      job_type: cleanup
+
+  persistent_storage_seed_linux:
+    needs: [common_config, pre_seed_cleanup]
+    if: inputs.persistent_storage == true
+    strategy:
+      fail-fast: false
+      matrix:
+        python3: ${{fromJson(vars.LINUX_PYTHON_VERSIONS || '[6, 7, 8, 9, 10, 11]')}}
+        arcticdb_version: ["oldest", "latest"]
+        include:
+          - python_deps_ids: [""]
+            matrix_override: ${{fromJson(needs.common_config.outputs.linux_matrix)}}
+    name: Seed Persistent Storage for 3.${{matrix.python3}} Linux with ${{ matrix.arcticdb_version }} ArcticDB package version
+    uses: ./.github/workflows/persistent_storage.yml
+    secrets: inherit
+    permissions: {packages: write}
+    with:
+      job_type: seed
+      python3: ${{matrix.python3}}
+      arcticdb_version: ${{matrix.arcticdb_version}}
+      matrix: ${{toJson(matrix.matrix_override)}}
+      python_deps_ids: ${{toJson(matrix.python_deps_ids)}}
+
+  persistent_storage_seed_windows:
+    needs: [common_config, pre_seed_cleanup]
+    if: inputs.persistent_storage == true
+    strategy:
+      fail-fast: false
+      matrix:
+        python3: ${{fromJson(vars.WINDOWS_PYTHON_VERSIONS || '[7, 8, 9, 10, 11]')}}
+        arcticdb_version: ["oldest", "latest"]
+        include:
+          - python_deps_ids: [""]
+            matrix_override: ${{fromJson(needs.common_config.outputs.windows_matrix)}}
+    name: Seed Persistent Storage for 3.${{matrix.python3}} Windows with ${{ matrix.arcticdb_version }} ArcticDB package version 
+    uses: ./.github/workflows/persistent_storage.yml
+    secrets: inherit
+    permissions: {packages: write}
+    with:
+      job_type: seed
+      python3: ${{matrix.python3}}
+      arcticdb_version: ${{matrix.arcticdb_version}}
+      matrix: ${{toJson(matrix.matrix_override)}}
+      python_deps_ids: ${{toJson(matrix.python_deps_ids)}}
+
 
   cibw_docker_image:
     needs: [common_config]
@@ -139,7 +198,8 @@ jobs:
       cmake_preset_type: ${{needs.common_config.outputs.cmake_preset_type_resolved}}
       matrix: ${{toJson(matrix.matrix_override)}}
       python_deps_ids: ${{toJson(matrix.python_deps_ids)}}
-
+      persistent_storage: ${{inputs.persistent_storage}}
+  
   leader-compile-windows:
     needs: [common_config]
     name: Windows Compile
@@ -177,9 +237,67 @@ jobs:
       cibw_version: ${{needs.common_config.outputs.cibuildwheel_ver}}
       cmake_preset_type: ${{needs.common_config.outputs.cmake_preset_type_resolved}}
       matrix: ${{needs.common_config.outputs.windows_matrix}}
+      persistent_storage: ${{ inputs.persistent_storage }}
+
+  persistent_storage_verify_linux:
+    needs: [common_config, follower-linux, follower-windows]
+    if: inputs.persistent_storage == true
+    strategy:
+      fail-fast: false
+      matrix:
+        python3: ${{fromJson(vars.LINUX_PYTHON_VERSIONS || '[6, 7, 8, 9, 10, 11]')}}
+        arcticdb_version: ["oldest", "latest"]
+        include:
+          - python_deps_ids: [""]
+            matrix_override: ${{fromJson(needs.common_config.outputs.linux_matrix)}}
+    name: Verify Persistent Storage for 3.${{matrix.python3}} Linux with ${{ matrix.arcticdb_version }} ArcticDB package version 
+    uses: ./.github/workflows/persistent_storage.yml
+    secrets: inherit
+    permissions: {packages: write}
+    with:
+      job_type: verify
+      python3: ${{matrix.python3}}
+      arcticdb_version: ${{matrix.arcticdb_version}}
+      matrix: ${{toJson(matrix.matrix_override)}}
+      python_deps_ids: ${{toJson(matrix.python_deps_ids)}}
+
+  persistent_storage_verify_windows:
+    needs: [common_config, follower-windows, follower-linux]
+    if: inputs.persistent_storage == true
+    strategy:
+      fail-fast: false
+      matrix:
+        python3: ${{fromJson(vars.WINDOWS_PYTHON_VERSIONS || '[7, 8, 9, 10, 11]')}}
+        arcticdb_version: ["oldest", "latest"]
+        include:
+          - python_deps_ids: [""]
+            matrix_override: ${{fromJson(needs.common_config.outputs.windows_matrix)}}
+    name: Verify Persistent Storage for 3.${{matrix.python3}} Windows with ${{ matrix.arcticdb_version }} ArcticDB package version 
+    uses: ./.github/workflows/persistent_storage.yml
+    secrets: inherit
+    permissions: {packages: write}
+    with:
+      job_type: verify
+      python3: ${{matrix.python3}}
+      arcticdb_version: ${{matrix.arcticdb_version}}
+      matrix: ${{toJson(matrix.matrix_override)}}
+      python_deps_ids: ${{toJson(matrix.python_deps_ids)}}
+    
+  post_verify_cleanup:
+    needs: [persistent_storage_verify_windows, persistent_storage_verify_linux]
+    if: inputs.persistent_storage == true
+    name: Cleanup persistent storages
+    uses: ./.github/workflows/persistent_storage.yml
+    secrets: inherit
+    with:
+      job_type: cleanup
 
   can_merge:
-    needs: [leader-cpp-test-linux, leader-cpp-test-windows, follower-linux, follower-windows]
+    needs: [leader-cpp-test-linux, leader-cpp-test-windows, follower-linux, follower-windows, persistent_storage_verify_linux, persistent_storage_verify_windows]
+    if: |
+      always() &&
+      !failure() &&
+      !cancelled()
     runs-on: ubuntu-latest
     steps:
       - run: echo Dummy job to simplify PR merge checks configuration
@@ -187,7 +305,11 @@ jobs:
 
   publish:
     needs: [common_config, can_merge]
-    if: needs.common_config.outputs.pypi_publish && needs.common_config.outputs.publish_env
+    if: |
+      always() &&
+      !failure() &&
+      !cancelled() &&
+      (needs.common_config.outputs.pypi_publish && needs.common_config.outputs.publish_env)
     uses: ./.github/workflows/publish.yml
     secrets: inherit
     permissions: {contents: write}

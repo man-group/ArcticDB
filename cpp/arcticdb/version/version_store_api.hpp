@@ -7,6 +7,7 @@
 
 #pragma once
 
+#include <arcticdb/entity/data_error.hpp>
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/stream/index.hpp>
 #include <arcticdb/util/timeouts.hpp>
@@ -50,9 +51,10 @@ namespace as = arcticdb::stream;
 class PythonVersionStore : public LocalVersionedEngine {
 
   public:
-    explicit PythonVersionStore(
-        const std::shared_ptr<storage::Library>& library,
-        const std::optional<std::string>& license_key = std::nullopt);
+    template<class ClockType = util::SysClock>
+    explicit PythonVersionStore(const std::shared_ptr<storage::Library>& library, const ClockType& ct = util::SysClock{}) :
+        LocalVersionedEngine(library, ct) {
+    }
 
     VersionedItem write_dataframe_specific_version(
         const StreamId& stream_id,
@@ -76,7 +78,8 @@ class PythonVersionStore : public LocalVersionedEngine {
         const std::vector<StreamId> &sub_keys,  // TODO: make this optional?
         const std::vector<py::tuple> &items,
         const std::vector<py::object> &norm_metas,
-        const py::object &user_meta);
+        const py::object &user_meta,
+        bool prune_previous_versions);
 
     VersionedItem write_partitioned_dataframe(
         const StreamId& stream_id,
@@ -125,7 +128,8 @@ class PythonVersionStore : public LocalVersionedEngine {
             bool convert_int_to_float,
             bool via_iteration = true,
             bool sparsify = false,
-            const std::optional<py::object>& user_meta = std::nullopt);
+            const std::optional<py::object>& user_meta = std::nullopt,
+            bool prune_previous_versions = false);
 
     void write_parallel(
         const StreamId& stream_id,
@@ -180,16 +184,19 @@ class PythonVersionStore : public LocalVersionedEngine {
 
     std::pair<VersionedItem, py::object> read_metadata(
         const StreamId& stream_id,
-        const VersionQuery& version_query
+        const VersionQuery& version_query,
+        const ReadOptions& read_options
     );
 
-    std::vector<DescriptorItem> batch_read_descriptor(
+    std::vector<std::variant<DescriptorItem, DataError>> batch_read_descriptor(
         const std::vector<StreamId>& stream_ids,
-        const std::vector<VersionQuery>& version_queries);
+        const std::vector<VersionQuery>& version_queries,
+        const ReadOptions& read_options);
 
     DescriptorItem read_descriptor(
         const StreamId& stream_id,
-        const VersionQuery& version_query);
+        const VersionQuery& version_query,
+        const ReadOptions& read_options);
 
     ReadResult read_index(
         const StreamId& stream_id,
@@ -256,40 +263,45 @@ class PythonVersionStore : public LocalVersionedEngine {
         const std::optional<bool>& skip_snapshots);
 
     // Batch methods
-    std::vector<VersionedItem> batch_write(
+    std::vector<std::variant<VersionedItem, DataError>> batch_write(
         const std::vector<StreamId> &stream_ids,
         const std::vector<py::tuple> &items,
         const std::vector<py::object> &norms,
         const std::vector<py::object> &user_metas,
         bool prune_previous_versions,
-        bool validate_index);
+        bool validate_index,
+        bool throw_on_error);
 
-    std::vector<VersionedItem> batch_write_metadata(
-        std::vector<StreamId> stream_ids,
+    std::vector<std::variant<VersionedItem, DataError>> batch_write_metadata(
+        const std::vector<StreamId>& stream_ids,
         const std::vector<py::object>& user_meta,
-        bool prune_previous_versions);
+        bool prune_previous_versions,
+        bool throw_on_error);
 
-    std::vector<VersionedItem> batch_append(
+    std::vector<std::variant<VersionedItem, DataError>> batch_append(
         const std::vector<StreamId> &stream_ids,
         const std::vector<py::tuple> &items,
         const std::vector<py::object> &norms,
         const std::vector<py::object> &user_metas,
         bool prune_previous_versions,
-        bool ensre_sorted);
+        bool validate_index,
+        bool upsert,
+        bool throw_on_error);
 
     std::vector<std::pair<VersionedItem, TimeseriesDescriptor>> batch_restore_version(
         const std::vector<StreamId>& id,
         const std::vector<VersionQuery>& version_query);
 
-    std::vector<ReadResult> batch_read(
+    std::vector<std::variant<ReadResult, DataError>> batch_read(
         const std::vector<StreamId>& stream_ids,
         const std::vector<VersionQuery>& version_queries,
         std::vector<ReadQuery>& read_queries,
         const ReadOptions& read_options);
 
-    std::vector<std::pair<VersionedItem, py::object>> batch_read_metadata(
+    std::vector<std::variant<std::pair<VersionedItem, py::object>, DataError>> batch_read_metadata(
         const std::vector<StreamId>& stream_ids,
-        const std::vector<VersionQuery>& version_queries);
+        const std::vector<VersionQuery>& version_queries,
+        const ReadOptions& read_options);
 
     std::set<StreamId> list_streams(
         const std::optional<SnapshotId>& snap_name = std::nullopt,
@@ -334,16 +346,21 @@ private:
     void delete_snapshot_sync(const SnapshotId& snap_name, const VariantKey& snap_key);
 };
 
-inline std::vector<ReadResult> frame_to_read_result(std::vector<std::pair<VersionedItem, FrameAndDescriptor>>&& keys_frame_and_descriptors) {
-    std::vector<ReadResult> read_results;
+struct ManualClockVersionStore : PythonVersionStore {
+    ManualClockVersionStore(const std::shared_ptr<storage::Library>& library) :
+            PythonVersionStore(library, util::ManualClock{}) {}
+};
+
+inline std::vector<std::variant<ReadResult, DataError>> frame_to_read_result(std::vector<ReadVersionOutput>&& keys_frame_and_descriptors) {
+    std::vector<std::variant<ReadResult, DataError>> read_results;
     read_results.reserve(keys_frame_and_descriptors.size());
-    for (auto [item, fd] : keys_frame_and_descriptors) {
+    for (auto& read_version_output : keys_frame_and_descriptors) {
         read_results.emplace_back(ReadResult(
-            item,
-            PythonOutputFrame{fd.frame_, fd.buffers_},
-            fd.desc_.proto().normalization(),
-            fd.desc_.proto().user_meta(),
-            fd.desc_.proto().multi_key_meta(),
+            read_version_output.versioned_item_,
+            PythonOutputFrame{read_version_output.frame_and_descriptor_.frame_, read_version_output.frame_and_descriptor_.buffers_},
+            read_version_output.frame_and_descriptor_.desc_.proto().normalization(),
+            read_version_output.frame_and_descriptor_.desc_.proto().user_meta(),
+            read_version_output.frame_and_descriptor_.desc_.proto().multi_key_meta(),
             std::vector<AtomKey>{}));
     }
     return read_results;

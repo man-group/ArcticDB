@@ -19,6 +19,7 @@ For legacy reasons, the terms `symbol`, `stream`, and `stream ID` are used inter
 | 1001       | Invalid Argument                            | An invalid argument has been passed in. This error is an internal error and not expected to be exposed to the user - please create an issue on the GitHub repository. |
 | 1002       | An internal ArcticDB assertion has failed.  | This error is an internal error and not expected to be exposed to the user - please create an issue on the GitHub repository.                                         |
 | 1003       | ArcticDB has encountered an internal error. | This error is an internal error and not expected to be exposed to the user - please create an issue on the GitHub repository.                                         |
+| 1004       | Unsupported config found in storage         | Follow the instructions in the error message to repair configuration within your Arctic instance.                                                                     |
 
 
 ### Normalization Errors
@@ -65,6 +66,8 @@ For legacy reasons, the terms `symbol`, `stream`, and `stream ID` are used inter
 | Error Code | Cause                                                                  | Resolution                                                                                                                                          |
 |------------|------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------|
 | 7000       | The input provided by the user is invalid in some fashion.             | The resolution will depend on the nature of the incorrect input, and should be explained in the associated error message. |
+| 7001       | The input was expected to be a valid decimal string but it is not a valid decimal string.             | Pass a valid decimal string. |
+| 7002       | An unsupported character was found in a symbol name.             | We support only the ASCII characters between 32-127 inclusive. Change your symbol name so it contains only valid characters. **If you want to bypass this check, you can define an environment variable called - ARCTICDB_VersionStore_NoStrictSymbolCheck_int=1**. |
 
 ### Compatibility Errors
 
@@ -153,7 +156,7 @@ ArcticDB exceptions are exposed in `arcticdb.exceptions` and sit in a hierarchy:
 ```
 RuntimeError
 └-- ArcticException
-    |-- ArcticNativeNotYetImplemented
+    |-- ArcticDbNotYetImplemented
     |-- DuplicateKeyException
     |-- MissingDataException
     |-- NoDataFoundException

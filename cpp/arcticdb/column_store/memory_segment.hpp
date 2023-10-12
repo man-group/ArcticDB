@@ -403,6 +403,20 @@ public:
         return SegmentInMemory(impl_->filter(filter_bitset, filter_down_stringpool, validate));
     }
 
+    SegmentInMemory truncate(size_t start_row, size_t end_row) const{
+        return SegmentInMemory(impl_->truncate(start_row, end_row));
+    }
+
+    std::vector<SegmentInMemory> partition(const std::vector<std::optional<uint8_t>>& row_to_segment,
+                           const std::vector<uint64_t>& segment_counts) const{
+        std::vector<SegmentInMemory> res;
+        auto impls = impl_->partition(row_to_segment, segment_counts);
+        for (auto&& impl: impls) {
+            res.emplace_back(SegmentInMemory(std::move(impl)));
+        }
+        return res;
+    }
+
     bool empty() const {
         return is_null() || impl_->empty();
     }

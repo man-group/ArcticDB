@@ -13,6 +13,8 @@ import pytest
 
 from arcticdb.util.test import assert_frame_equal
 
+from tests.conftest import PERSISTENT_STORAGE_TESTS_ENABLED
+
 
 def id_generator(size=75, chars=string.ascii_uppercase + string.digits):
     return "".join(random.choice(chars) for _ in range(size))
@@ -38,9 +40,8 @@ def make_periods(start_date, end_date, freq, range_type="b"):
     return [r for r in ranges if len(r) > 0]
 
 
-@pytest.mark.parametrize("lib_type", ["lmdb_version_store_big_map", "s3_version_store_v1", "s3_version_store_v2"])
-def test_stress_multicolumn(lib_type, request):
-    lib = request.getfixturevalue(lib_type)
+def test_stress_multicolumn(object_version_store):
+    lib = object_version_store
     start = (pd.Timestamp("now") - MonthBegin(10)).strftime("%Y%m%d")
     end = pd.Timestamp("now").strftime("%Y%m%d")
     # total securities - too big for build pipeline
@@ -68,4 +69,7 @@ def test_stress_multicolumn(lib_type, request):
         output_df = lib.read(name).data
         print("reading from arctic native: {}".format(pd.Timestamp("now") - now))
 
-        assert_frame_equal(test_data, output_df)
+        # ArcticDB stores empty columns under a dedicated `EMPTYVAL` type, so the types are not going
+        # to match with pandas until the first append.
+        is_not_empty = not test_data.empty
+        assert_frame_equal(test_data, output_df, check_dtype=is_not_empty, check_index_type=is_not_empty)

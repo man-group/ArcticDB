@@ -56,7 +56,7 @@ jobs:
       - name: MkDocs
         run: |
           echo "::group::Pip"
-          pip3 install mkdocs-material
+          pip3 install mkdocs-jupyter
           echo "::endgroup::"
 
           cd docs/mkdocs
@@ -64,7 +64,7 @@ jobs:
 
       - name: Sphinx
         run: |
-          set -x
+          set -x -o pipefail
           echo "::group::Pip"
           ls
           pip3 install sphinx sphinx_rtd_theme ${{inputs.api_wheel || '*.whl'}}

@@ -30,14 +30,12 @@ std::string_view datatype_to_str(const DataType dt) {
         TO_STR(FLOAT32)
         TO_STR(FLOAT64)
         TO_STR(BOOL8)
-        TO_STR(MICROS_UTC64)
+        TO_STR(NANOSECONDS_UTC64)
         TO_STR(ASCII_FIXED64)
         TO_STR(ASCII_DYNAMIC64)
         TO_STR(UTF_FIXED64)
         TO_STR(UTF_DYNAMIC64)
-        //    TO_STR(UTF8_STRING)
-//     TO_STR(BYTES)
-        //    TO_STR(PICKLE)
+        TO_STR(EMPTYVAL)
 #undef TO_STR
         default:return std::string_view("UNKNOWN");
     }

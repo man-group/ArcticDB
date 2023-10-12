@@ -15,7 +15,7 @@ from arcticdb.version_store.helper import add_s3_library_to_env
 from arcticdb.config import _DEFAULT_ENV
 from arcticdb.version_store._store import NativeVersionStore
 from arcticdb.adapters.arctic_library_adapter import ArcticLibraryAdapter, set_library_options
-from arcticdb_ext.storage import Library, StorageOverride, S3CredentialsOverride
+from arcticdb_ext.storage import Library, StorageOverride, S3Override
 from arcticdb.encoding_version import EncodingVersion
 from collections import namedtuple
 from dataclasses import dataclass, fields
@@ -38,7 +38,8 @@ class ParsedQuery:
 
     path_prefix: Optional[str] = None
 
-    force_uri_lib_config: Optional[bool] = False
+    # DEPRECATED - see https://github.com/man-group/ArcticDB/pull/833
+    force_uri_lib_config: Optional[bool] = True
 
 
 class S3LibraryAdapter(ArcticLibraryAdapter):
@@ -57,6 +58,12 @@ class S3LibraryAdapter(ArcticLibraryAdapter):
 
         self._query_params: ParsedQuery = self._parse_query(match["query"])
 
+        if self._query_params.force_uri_lib_config is False:
+            raise ValueError(
+                "The support of 'force_uri_lib_config=false' has been dropped due to security concerns. Please refer to"
+                " https://github.com/man-group/ArcticDB/pull/803 for more information."
+            )
+
         if self._query_params.port:
             self._endpoint += f":{self._query_params.port}"
 
@@ -72,7 +79,7 @@ class S3LibraryAdapter(ArcticLibraryAdapter):
         return "S3(endpoint=%s, bucket=%s)" % (self._endpoint, self._bucket)
 
     @property
-    def config_library(self) -> Library:
+    def config_library(self):
         env_cfg = EnvironmentConfigsMap()
         _name = self._query_params.access if not self._query_params.aws_auth else USE_AWS_CRED_PROVIDERS_TOKEN
         _key = self._query_params.secret if not self._query_params.aws_auth else USE_AWS_CRED_PROVIDERS_TOKEN
@@ -96,9 +103,9 @@ class S3LibraryAdapter(ArcticLibraryAdapter):
 
         lib = NativeVersionStore.create_store_from_config(
             env_cfg, _DEFAULT_ENV, self.CONFIG_LIBRARY_NAME, encoding_version=self._encoding_version
-        )._library
+        )
 
-        return lib
+        return lib._library
 
     def _parse_query(self, query: str) -> ParsedQuery:
         if query and query.startswith("?"):
@@ -109,8 +116,8 @@ class S3LibraryAdapter(ArcticLibraryAdapter):
         parsed_query = re.split("[;&]", query)
         parsed_query = {t.split("=", 1)[0]: t.split("=", 1)[1] for t in parsed_query}
 
+        field_dict = {field.name: field for field in fields(ParsedQuery)}
         for key in parsed_query.keys():
-            field_dict = {field.name: field for field in fields(ParsedQuery)}
             if key not in field_dict.keys():
                 raise ValueError(
                     "Invalid S3 URI. "
@@ -132,25 +139,38 @@ class S3LibraryAdapter(ArcticLibraryAdapter):
         return ParsedQuery(**_kwargs)
 
     def get_storage_override(self) -> StorageOverride:
-        storage_override = StorageOverride()
-        if self._query_params.force_uri_lib_config:
-            s3_override = S3CredentialsOverride()
+        s3_override = S3Override()
+        # storage_override will overwrite access and key while reading config from storage
+        # access and secret whether equals to _RBAC_ are used for determining aws_auth is true on C++ layer
+        if self._query_params.aws_auth:
+            s3_override.credential_name = USE_AWS_CRED_PROVIDERS_TOKEN
+            s3_override.credential_key = USE_AWS_CRED_PROVIDERS_TOKEN
+        else:
             if self._query_params.access:
                 s3_override.credential_name = self._query_params.access
             if self._query_params.secret:
                 s3_override.credential_key = self._query_params.secret
-            if self._query_params.region:
-                s3_override.region = self._query_params.region
-            if self._endpoint:
-                s3_override.endpoint = self._endpoint
-            if self._bucket:
-                s3_override.bucket_name = self._bucket
-            storage_override = StorageOverride()
-            storage_override.set_override(s3_override)
+        if self._query_params.region:
+            s3_override.region = self._query_params.region
+        if self._endpoint:
+            s3_override.endpoint = self._endpoint
+        if self._bucket:
+            s3_override.bucket_name = self._bucket
+
+        s3_override.use_virtual_addressing = self._query_params.use_virtual_addressing
+
+        storage_override = StorageOverride()
+        storage_override.set_s3_override(s3_override)
 
         return storage_override
 
-    def create_library_config(self, name, library_options: LibraryOptions) -> LibraryConfig:
+    def get_masking_override(self) -> StorageOverride:
+        storage_override = StorageOverride()
+        s3_override = S3Override()
+        storage_override.set_s3_override(s3_override)
+        return storage_override
+
+    def create_library(self, name, library_options: LibraryOptions):
         env_cfg = EnvironmentConfigsMap()
 
         _name = self._query_params.access if not self._query_params.aws_auth else USE_AWS_CRED_PROVIDERS_TOKEN
@@ -176,16 +196,16 @@ class S3LibraryAdapter(ArcticLibraryAdapter):
             use_virtual_addressing=self._query_params.use_virtual_addressing,
         )
 
+        library_options.encoding_version = (
+            library_options.encoding_version if library_options.encoding_version is not None else self._encoding_version
+        )
         set_library_options(env_cfg.env_by_id[_DEFAULT_ENV].lib_by_path[name], library_options)
 
         lib = NativeVersionStore.create_store_from_config(
-            env_cfg, _DEFAULT_ENV, name, encoding_version=self._encoding_version
+            env_cfg, _DEFAULT_ENV, name, encoding_version=library_options.encoding_version
         )
 
-        return lib._lib_cfg
-
-    def initialize_library(self, name: str, config: LibraryConfig):
-        pass
+        return lib
 
     def _configure_aws(self):
         if not self._query_params.region:

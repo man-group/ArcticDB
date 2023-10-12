@@ -14,8 +14,15 @@ jobs:
   linux:
     strategy:
       matrix:
+        # we use two jobs for python and cpp tests st. they can run in parallel
         include:
           - os: ubuntu-latest
+            cpp_tests: "1"
+            python_tests: "0"
+
+          - os: ubuntu-latest
+            cpp_tests: "0"
+            python_tests: "1"
 
       fail-fast: false
     runs-on: ${{ matrix.os }}
@@ -33,6 +40,10 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Get number of CPU cores
+        uses: SimenB/github-actions-cpu-cores@v1
+        id: cpu-cores
+
       - name: Install Conda environment from environment-dev.yml
         uses: mamba-org/setup-micromamba@v1
         with:
@@ -49,12 +60,40 @@ jobs:
           python -m pip install --no-build-isolation --no-deps -v -e .
         env:
           ARCTICDB_USING_CONDA: 1
+          # Using one thread to avoid swapping which might freeze CI machines.
+          CMAKE_BUILD_PARALLEL_LEVEL: 1
+          ARCTICDB_BUILD_CPP_TESTS: ${{ matrix.cpp_tests }}
+
+      - name: Build C++ Tests
+        if: matrix.cpp_tests == '1'
+        shell: bash -l {0}
+        run: |
+          cd cpp/out/linux-conda-release-build/
+          make -j ${{ steps.cpu-cores.outputs.count }} arcticdb_rapidcheck_tests
+          make -j ${{ steps.cpu-cores.outputs.count }} test_unit_arcticdb
+
+      - name: Run C++ Tests
+        if: matrix.cpp_tests == '1'
+        shell: bash -l {0}
+        run: |
+          cd cpp/out/linux-conda-release-build/
+          make test
+
+      - name: Install npm # Linux github runner image does not come with npm
+        if: matrix.os == 'linux'
+        uses: actions/setup-node@v3.3.0
+        with:
+          node-version: '16'
 
       - name: Test with pytest
         shell: bash -l {0}
+        if: matrix.python_tests == '1'
         run: |
+          npm install -g azurite
           cd python
           python -m pytest tests
+        env:
+          ARCTICDB_USING_CONDA: 1
 
   macos:
     strategy:
@@ -69,6 +108,10 @@ jobs:
       - uses: actions/checkout@v3
         with:
           submodules: recursive
+
+      - name: Get number of CPU cores
+        uses: SimenB/github-actions-cpu-cores@v1
+        id: cpu-cores
 
       - name: Install Conda environment from environment-dev.yml
         uses: mamba-org/setup-micromamba@v1
@@ -89,10 +132,32 @@ jobs:
           python -m pip install --no-build-isolation --no-deps -v -e .
         env:
           ARCTICDB_USING_CONDA: 1
+          # Using one thread to avoid swapping which might freeze the CI machine.
+          CMAKE_BUILD_PARALLEL_LEVEL: 1
+          ARCTICDB_BUILD_CPP_TESTS: 1
+
+      - name: Build C++ Tests
+        shell: bash -l {0}
+        run: |
+          cd cpp/out/darwin-conda-release-build/
+          make -j ${{ steps.cpu-cores.outputs.count }} arcticdb_rapidcheck_tests
+          make -j ${{ steps.cpu-cores.outputs.count }} test_unit_arcticdb
+
+      - name: Run C++ Tests
+        shell: bash -l {0}
+        run: |
+          cd cpp/out/darwin-conda-release-build/
+          make test
+
+      - name: Install npm
+        uses: actions/setup-node@v3.3.0
+        with:
+          node-version: '16'
 
       - name: Test with pytest
         shell: bash -l {0}
         run: |
+          npm install -g azurite
           cd python
           python -m pytest tests
 
@@ -139,3 +204,5 @@ jobs:
           call C:\Users\runneradmin\micromamba-root\condabin\micromamba.bat activate arcticdb
           cd python
           python -m pytest tests
+        env:
+          ARCTICDB_USING_CONDA: 1

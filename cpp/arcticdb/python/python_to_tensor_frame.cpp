@@ -16,6 +16,7 @@
 #include <pybind11/numpy.h>
 
 namespace arcticdb::convert {
+const char none_char[8] = {'\300', '\000', '\000', '\000', '\000', '\000', '\000', '\000'};
 
 using namespace arcticdb::pipelines;
 
@@ -23,24 +24,44 @@ bool is_unicode(PyObject *obj) {
     return PyUnicode_Check(obj);
 }
 
-PyStringWrapper pystring_to_buffer(PyObject *obj, py::handle handle) {
+std::variant<StringEncodingError, PyStringWrapper> pystring_to_buffer(PyObject *obj, bool is_owned) {
+    if(is_unicode(obj)) {
+        return StringEncodingError(
+                fmt::format("Unexpected unicode in Python object with type {}", obj->ob_type->tp_name));
+    }
     char *buffer;
     ssize_t length;
-    util::check(!is_unicode(obj), "Unexpected unicode object");
-    if (PYBIND11_BYTES_AS_STRING_AND_SIZE(obj, &buffer, &length))
-        util::raise_rte("Unable to extract string contents! (invalid type)");
-
-    return {buffer, length, handle};
+    if (PYBIND11_BYTES_AS_STRING_AND_SIZE(obj, &buffer, &length)) {
+        return StringEncodingError(fmt::format("Unable to extract string contents from Python object with type {}",
+                                               obj->ob_type->tp_name));
+    }
+    return PyStringWrapper(buffer, length, is_owned ? obj : nullptr);
 }
 
-PyStringWrapper py_unicode_to_buffer(PyObject *obj) {
-    if (is_unicode(obj)) {
-        py::handle handle{PyUnicode_AsUTF8String(obj)};
-        if (!handle)
-            util::raise_rte("Unable to extract string contents! (encoding issue)");
-        return pystring_to_buffer(handle.ptr(), handle);
+std::variant<StringEncodingError, PyStringWrapper> py_unicode_to_buffer(PyObject *obj, std::optional<ScopedGILLock>& scoped_gil_lock) {
+    if(!is_unicode(obj)) {
+        return StringEncodingError(
+                fmt::format("Unexpected non-unicode in Python object with type {}", obj->ob_type->tp_name));
+    }
+    if (PyUnicode_IS_COMPACT_ASCII(obj)) {
+        return PyStringWrapper(reinterpret_cast<char *>(PyUnicode_DATA(obj)), PyUnicode_GET_LENGTH(obj));
+    // Later versions of cpython expose macros in unicodeobject.h to perform this check, and to get the utf8_length,
+    // but for 3.6 we have to hand-roll it
+    } else if (reinterpret_cast<PyCompactUnicodeObject*>(obj)->utf8) {
+        return PyStringWrapper(reinterpret_cast<PyCompactUnicodeObject*>(obj)->utf8, reinterpret_cast<PyCompactUnicodeObject*>(obj)->utf8_length);
     } else {
-        util::raise_rte("Expected unicode");
+        if (PyUnicode_READY(obj) != 0) {
+            return StringEncodingError(fmt::format("PyUnicode_READY failed on Python object with type", obj->ob_type->tp_name));
+        }
+
+        if (!scoped_gil_lock.has_value()) {
+            scoped_gil_lock.emplace();
+        }
+        PyObject* utf8_obj = PyUnicode_AsUTF8String(obj);
+        if (!utf8_obj) {
+            return StringEncodingError(fmt::format("Unable to extract string contents from Python object with type {}", obj->ob_type->tp_name));
+        }
+        return pystring_to_buffer(utf8_obj, true);
     }
 }
 
@@ -51,9 +72,9 @@ NativeTensor obj_to_tensor(PyObject *ptr) {
     auto arr = pybind11::detail::array_proxy(ptr);
     auto descr = pybind11::detail::array_descriptor_proxy(arr->descr);
     auto ndim = arr->nd;
-    auto val_type = get_value_type(descr->kind);
-    auto val_bytes = static_cast<uint8_t>(descr->elsize);
     ssize_t size = ndim == 1 ? arr->dimensions[0] : arr->dimensions[0] * arr->dimensions[1];
+    auto val_type = size > 0 ? get_value_type(descr->kind) : ValueType::EMPTY;
+    auto val_bytes = static_cast<uint8_t>(descr->elsize);
     auto c_style = arr->strides[0] == val_bytes;
 
     if (is_sequence_type(val_type)) {
@@ -67,23 +88,50 @@ NativeTensor obj_to_tensor(PyObject *ptr) {
             auto none = py::none{};
             auto obj = reinterpret_cast<PyObject **>(arr->data);
             bool empty = false;
+            bool all_nans = false;
             PyObject *sample = *obj;
+            // Arctic allows both None and NaN to represent a string with no value. We have 3 options:
+            // * In case all values are None we can mark this column segment as EmptyType and avoid allocating storage
+            //      memory for it
+            // * In case all values are NaN we can't sample the value to check if it's UTF or ASCII (since NaN is not
+            //      UTF nor ASCII). In that case we choose to save it as UTF
+            // * In case there is at least one actual string we can sample it and decide the type of the column segment
+            //      based on it
+            // Note: ValueType::ASCII_DYNAMIC was used when Python 2 was supported. It is no longer supported, and
+            //  we're not expected to enter that branch.
             if (sample == none.ptr() || is_py_nan(sample)) {
-                // Iterate till we find the first non null element, the frontend ensures there is at least one.
+                empty = true;
+                all_nans = true;
                 util::check(c_style, "Non contiguous columns with first element as None not supported yet.");
-                auto casted_col =
-                    std::find_if(obj, obj + size, [&none](auto val) { return val != none.ptr() && !is_py_nan(val); });
-                empty = casted_col == obj + size;
-                sample = *casted_col;
+                PyObject** current_object = obj;
+                while(current_object < obj + size) {
+                    if(*current_object == none.ptr()) {
+                        all_nans = false;
+                    } else if(is_py_nan(*current_object)) {
+                        empty = false;
+                    } else {
+                        all_nans = false;
+                        empty = false;
+                        break;
+                    }
+                    ++current_object;
+                }
+                sample = *current_object;
             }
-            if (empty || is_unicode(sample)) {
+            if (empty) {
+                val_type = ValueType::EMPTY;
+            } else if(all_nans || is_unicode(sample)){
                 val_type = ValueType::UTF_DYNAMIC;
-            } else if (PYBIND11_BYTES_CHECK(sample))
+            } else if (PYBIND11_BYTES_CHECK(sample)) {
                 val_type = ValueType::ASCII_DYNAMIC;
+            }
         }
     }
 
-    auto dt = combine_data_type(val_type, get_size_bits(val_bytes));
+    // When processing empty collections, the size bits have to be `SizeBits::S64`,
+    // and we can't use `val_bytes` to get this information since some dtype have another `elsize` than 8.
+    SizeBits size_bits = val_type == ValueType::EMPTY ? SizeBits::S64 : get_size_bits(val_bytes);
+    auto dt = combine_data_type(val_type, size_bits);
     ssize_t nbytes = size * descr->elsize;
     return {nbytes, ndim, arr->strides, arr->dimensions, dt, descr->elsize, arr->data};
 }
@@ -119,7 +167,7 @@ InputTensorFrame py_ndf_to_frame(
         std::string index_column_name = !idx_names.empty() ? idx_names[0] : "index";
         res.num_rows = index_tensor.shape(0);
         //TODO handle string indexes
-        if (index_tensor.data_type() == DataType::MICROS_UTC64) {
+        if (index_tensor.data_type() == DataType::NANOSECONDS_UTC64) {
 
             res.desc.set_index_field_count(1);
             res.desc.set_index_type(IndexDescriptor::TIMESTAMP);
@@ -149,6 +197,39 @@ InputTensorFrame py_ndf_to_frame(
         res.desc.add_field(scalar_field(tensor.data_type(), col_names[i]));
         res.field_tensors.push_back(std::move(tensor));
     }
+
+    ARCTICDB_DEBUG(log::version(), "Received frame with descriptor {}", res.desc);
+    res.set_index_range();
+    return res;
+}
+
+InputTensorFrame py_none_to_frame() {
+    ARCTICDB_SUBSAMPLE_DEFAULT(NormalizeNoneFrame)
+    InputTensorFrame res;
+    res.num_rows = 0u;
+
+    arcticdb::proto::descriptors::NormalizationMetadata::MsgPackFrame msg;
+    msg.set_size_bytes(1);
+    msg.set_version(1);
+    res.norm_meta.mutable_msg_pack_frame()->CopyFrom(msg);
+
+    // Fill index
+    res.index = stream::RowCountIndex();
+    res.desc.set_index_type(IndexDescriptor::ROWCOUNT);
+
+    // Fill tensors
+    auto col_name = "bytes";
+    auto sorted = SortedValue::UNKNOWN;
+
+    res.set_sorted(sorted);
+
+    ssize_t strides = 8;
+    ssize_t shapes = 1;
+
+    auto tensor = NativeTensor{8, 1, &strides, &shapes, DataType::UINT64, 8, none_char};
+    res.num_rows = std::max(res.num_rows, tensor.shape(0));
+    res.desc.add_field(scalar_field(tensor.data_type(), col_name));
+    res.field_tensors.push_back(std::move(tensor));
 
     ARCTICDB_DEBUG(log::version(), "Received frame with descriptor {}", res.desc);
     res.set_index_range();

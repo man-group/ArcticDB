@@ -34,7 +34,7 @@ using ExpressionName = util::StringWrappingValue<ExpressionNameTag>;
 
 using VariantNode = std::variant<std::monostate, ColumnName, ValueName, ValueSetName, ExpressionName>;
 
-struct ProcessingSegment;
+struct ProcessingUnit;
 class Store;
 
 /*
@@ -110,7 +110,7 @@ struct ExpressionNode {
 
     ExpressionNode(VariantNode left, OperationType op);
 
-    VariantData compute(ProcessingSegment& seg, const std::shared_ptr<Store>& store) const;
+    VariantData compute(ProcessingUnit& seg, const std::shared_ptr<Store>& store) const;
 };
 
 } //namespace arcticdb

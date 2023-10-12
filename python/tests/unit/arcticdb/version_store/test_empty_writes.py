@@ -5,6 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+import pytest
 import pandas as pd
 import numpy as np
 
@@ -20,10 +21,13 @@ def test_write_no_rows(lmdb_version_store, sym):
     assert not lmdb_version_store.is_symbol_pickled(sym)
     df.index = df.index.astype("datetime64[ns]")
     df["a"] = df["a"].astype("float64")
-    assert_frame_equal(lmdb_version_store.read(sym).data, df)
+
+    # ArcticDB stores empty columns under a dedicated `EMPTYVAL` type, so the types are not going to match with pandas
+    # until the first append.
+    assert_frame_equal(lmdb_version_store.read(sym).data, df, check_index_type=False, check_dtype=False)
 
     df2 = pd.DataFrame([[1.3, 6, "test"]], columns=column_names, index=[pd.Timestamp(0)])
-    df2 = df.append(df2)
+    df2 = pd.concat((df, df2))
     # coercing not needed
     lmdb_version_store.append(sym, df2, dynamic_strings=True)
     assert_frame_equal(lmdb_version_store.read(sym).data, df2)
@@ -31,7 +35,7 @@ def test_write_no_rows(lmdb_version_store, sym):
     df3 = pd.DataFrame(
         [[3.3, 8, None], [2.3, 10, "test2"]], columns=column_names, index=[pd.Timestamp(1), pd.Timestamp(2)]
     )
-    df2 = df2.append(df3)
+    df2 = pd.concat((df2, df3))
     # coercing not needed
     lmdb_version_store.append(sym, df3, dynamic_strings=True)
     assert_frame_equal(lmdb_version_store.read(sym).data, df2)
@@ -88,7 +92,9 @@ def test_write_no_rows_and_columns(lmdb_version_store_dynamic_schema, sym):
     lmdb_version_store_dynamic_schema.write(sym, df)
     assert not lmdb_version_store_dynamic_schema.is_symbol_pickled(sym)
     df.index = df.index.astype("datetime64[ns]")
-    assert_frame_equal(lmdb_version_store_dynamic_schema.read(sym).data, df)
+    # ArcticDB stores empty columns under a dedicated `EMPTYVAL` type, so the types are not going to match with pandas
+    # until the first append.
+    assert_frame_equal(lmdb_version_store_dynamic_schema.read(sym).data, df, check_index_type=False, check_dtype=False)
 
     df2 = pd.DataFrame([[1.3, 6, "test"]], columns=column_names, index=[pd.Timestamp(2)])
     lmdb_version_store_dynamic_schema.append(sym, df2)
@@ -100,7 +106,7 @@ def test_write_no_rows_and_columns(lmdb_version_store_dynamic_schema, sym):
         columns=column_names + ["d"],
         index=[pd.Timestamp(3), pd.Timestamp(4)],
     )
-    df5 = df2.append(df4)
+    df5 = pd.concat((df2, df4))
     lmdb_version_store_dynamic_schema.append(sym, df4, dynamic_strings=True)
     assert_frame_equal(lmdb_version_store_dynamic_schema.read(sym).data, df5)
 
@@ -134,12 +140,22 @@ def test_empty_series(lmdb_version_store_dynamic_schema, sym):
     ser = pd.Series([])
     lmdb_version_store_dynamic_schema.write(sym, ser)
     assert not lmdb_version_store_dynamic_schema.is_symbol_pickled(sym)
-    assert_series_equal(lmdb_version_store_dynamic_schema.read(sym).data, ser)
+
+    # ArcticDB stores empty columns under a dedicated `EMPTYVAL` type, so the types are not going to match with pandas
+    # until the first append.
+    assert_series_equal(lmdb_version_store_dynamic_schema.read(sym).data, ser, check_index_type=False)
 
 
-def test_fallback_to_pickle(lmdb_version_store, sym):
-    column_names = ["a", "b", "c"]
-    df = pd.DataFrame(columns=column_names)
-    lmdb_version_store.write(sym, df)
-    assert lmdb_version_store.is_symbol_pickled(sym)
-    assert_frame_equal(df, lmdb_version_store.read(sym).data)
+@pytest.mark.parametrize("dtype", ["int64", "float64"])
+def test_append_empty_series(lmdb_version_store_dynamic_schema, sym, dtype):
+    ser = pd.Series([])
+    lmdb_version_store_dynamic_schema.write(sym, ser)
+    assert not lmdb_version_store_dynamic_schema.is_symbol_pickled(sym)
+
+    # ArcticDB stores empty columns under a dedicated `EMPTYVAL` type, so the types are not going to match with pandas
+    # until the first append.
+    assert_series_equal(lmdb_version_store_dynamic_schema.read(sym).data, ser, check_index_type=False)
+
+    new_ser = pd.Series([1, 2, 3], dtype=dtype)
+    lmdb_version_store_dynamic_schema.append(sym, new_ser)
+    assert_series_equal(lmdb_version_store_dynamic_schema.read(sym).data, new_ser)

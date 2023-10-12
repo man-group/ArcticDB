@@ -15,8 +15,9 @@ import pandas as pd
 from typing import Dict
 
 from arcticdb.exceptions import ArcticNativeException, UserInputException
+from arcticdb.version_store._normalization import normalize_dt_range_to_ts
 from arcticdb.preconditions import check
-from arcticdb.supported_types import time_types as supported_time_types
+from arcticdb.supported_types import DateRangeInput, time_types as supported_time_types
 
 from arcticdb_ext.version_store import PipelineOptimisation as _Optimisation
 from arcticdb_ext.version_store import ExpressionContext as _ExpressionContext
@@ -24,6 +25,9 @@ from arcticdb_ext.version_store import FilterClause as _FilterClause
 from arcticdb_ext.version_store import ProjectClause as _ProjectClause
 from arcticdb_ext.version_store import GroupByClause as _GroupByClause
 from arcticdb_ext.version_store import AggregationClause as _AggregationClause
+from arcticdb_ext.version_store import RowRangeClause as _RowRangeClause
+from arcticdb_ext.version_store import DateRangeClause as _DateRangeClause
+from arcticdb_ext.version_store import RowRangeType as _RowRangeType
 from arcticdb_ext.version_store import ExpressionName as _ExpressionName
 from arcticdb_ext.version_store import ColumnName as _ColumnName
 from arcticdb_ext.version_store import ValueName as _ValueName
@@ -262,6 +266,8 @@ PythonFilterClause = namedtuple("PythonFilterClause", ["expr"])
 PythonProjectionClause = namedtuple("PythonProjectionClause", ["name", "expr"])
 PythonGroupByClause = namedtuple("PythonGroupByClause", ["name"])
 PythonAggregationClause = namedtuple("PythonAggregationClause", ["aggregations"])
+PythonRowRangeClause = namedtuple("PythonRowRangeClause", ["row_range_type", "n"])
+PythonDateRangeClause = namedtuple("PythonDateRangeClause", ["start", "end"])
 
 
 class QueryBuilder:
@@ -480,6 +486,71 @@ class QueryBuilder:
         self._python_clauses.append(PythonAggregationClause(aggregations))
         return self
 
+    # TODO: specify type of other must be QueryBuilder with from __future__ import annotations once only Python 3.7+
+    # supported
+    def then(self, other):
+        """
+        Applies processing specified in other after any processing already defined for this QueryBuilder.
+
+        Parameters
+        ----------
+        other: `QueryBuilder`
+            QueryBuilder to apply after this one in the processing pipeline.
+
+        Returns
+        -------
+        QueryBuilder
+            Modified QueryBuilder object.
+        """
+        check(
+            not len(other.clauses) or not isinstance(other.clauses[0], _DateRangeClause),
+            "In QueryBuilder.then: Date range only supported as first clause in the pipeline",
+        )
+        self.clauses.extend(other.clauses)
+        self._python_clauses.extend(other._python_clauses)
+        return self
+
+    def _head(self, n: int):
+        check(not len(self.clauses), "Head only supported as first clause in the pipeline")
+        self.clauses.append(_RowRangeClause(_RowRangeType.HEAD, n))
+        self._python_clauses.append(PythonRowRangeClause(_RowRangeType.HEAD, n))
+        return self
+
+    def _tail(self, n: int):
+        check(not len(self.clauses), "Tail only supported as first clause in the pipeline")
+        self.clauses.append(_RowRangeClause(_RowRangeType.TAIL, n))
+        self._python_clauses.append(PythonRowRangeClause(_RowRangeType.TAIL, n))
+        return self
+
+    def date_range(self, date_range: DateRangeInput):
+        """
+        DateRange to read data for.  Applicable only for Pandas data with a DateTime index. Returns only the part
+        of the data that falls within the given range. The returned data object will use less memory than passing
+        date_range directly as an argument to the read method, at the cost of being slightly slower.
+        Must be the first clause in the QueryBuilder object.
+
+        Parameters
+        ----------
+        date_range: `DateRangeInput`
+            A date range in the same format as accepted by the read method.
+
+        Examples
+        --------
+
+        >>> q = QueryBuilder()
+        >>> q = q.date_range((pd.Timestamp("2000-01-01"), pd.Timestamp("2001-01-01")))
+
+        Returns
+        -------
+        QueryBuilder
+            Modified QueryBuilder object.
+        """
+        check(not len(self.clauses), "Date range only supported as first clause in the pipeline")
+        start, end = normalize_dt_range_to_ts(date_range)
+        self.clauses.append(_DateRangeClause(start.value, end.value))
+        self._python_clauses.append(PythonDateRangeClause(start.value, end.value))
+        return self
+
     def __eq__(self, right):
         return self._optimisation == right._optimisation and self._python_clauses == right._python_clauses
 
@@ -521,6 +592,10 @@ class QueryBuilder:
                 self.clauses.append(_GroupByClause(python_clause.name))
             elif isinstance(python_clause, PythonAggregationClause):
                 self.clauses.append(_AggregationClause(self.clauses[-1].grouping_column, python_clause.aggregations))
+            elif isinstance(python_clause, PythonRowRangeClause):
+                self.clauses.append(_RowRangeClause(python_clause.row_range_type, python_clause.n))
+            elif isinstance(python_clause, PythonDateRangeClause):
+                self.clauses.append(_DateRangeClause(python_clause.start, python_clause.end))
             else:
                 raise ArcticNativeException(
                     f"Unrecognised clause type {type(python_clause)} when unpickling QueryBuilder"
@@ -551,6 +626,9 @@ class QueryBuilder:
         for clause in self.clauses:
             if hasattr(clause, "set_pipeline_optimisation"):
                 clause.set_pipeline_optimisation(_Optimisation.MEMORY)
+
+    def needs_post_processing(self):
+        return not any(isinstance(clause, (_RowRangeClause, _DateRangeClause)) for clause in self.clauses)
 
 
 CONSTRUCTOR_MAP = {

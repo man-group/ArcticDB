@@ -182,8 +182,10 @@ TEST_F(SparseTestStore, SimpleRoundtripStrings) {
 
     ASSERT_EQ(frame.row_count(), 2);
     auto val1 = frame.scalar_at<PyObject*>(0, 1);
-    auto str_wrapper = convert::py_unicode_to_buffer(val1.value());
-    ASSERT_EQ(strcmp(str_wrapper.buffer_, "five"), 0);
+    std::optional<ScopedGILLock> scoped_gil_lock;
+    auto str_wrapper = convert::py_unicode_to_buffer(val1.value(), scoped_gil_lock);
+    ASSERT_TRUE(std::holds_alternative<convert::PyStringWrapper>(str_wrapper));
+    ASSERT_EQ(strcmp(std::get<convert::PyStringWrapper>(str_wrapper).buffer_, "five"), 0);
 
     auto val2 = frame.string_at(0, 2);
     ASSERT_EQ(val2.value()[0], char{0});
@@ -560,9 +562,11 @@ TEST_F(SparseTestStore, CompactWithStrings) {
 
     for(size_t i = 0; i < num_rows; i += 2) {
         auto val1 = frame.scalar_at<PyObject*>(i, 1);
-        auto str_wrapper = convert::py_unicode_to_buffer(val1.value());
+        std::optional<ScopedGILLock> scoped_gil_lock;
+        auto str_wrapper = convert::py_unicode_to_buffer(val1.value(), scoped_gil_lock);
         auto expected = fmt::format("{}", i + 1);
-        ASSERT_EQ(strcmp(str_wrapper.buffer_, expected.data()), 0);
+        ASSERT_TRUE(std::holds_alternative<convert::PyStringWrapper>(str_wrapper));
+        ASSERT_EQ(strcmp(std::get<convert::PyStringWrapper>(str_wrapper).buffer_, expected.data()), 0);
 
         auto val2 = frame.string_at(i, 2);
         ASSERT_EQ(val2.value()[0], char{0});

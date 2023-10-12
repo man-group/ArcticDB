@@ -14,6 +14,7 @@
 #include <arcticdb/entity/index_range.hpp>
 #include <arcticdb/pipeline/index_fields.hpp>
 #include <arcticdb/entity/stream_descriptor.hpp>
+#include <arcticdb/entity/type_utils.hpp>
 
 #include <folly/Range.h>
 
@@ -68,7 +69,7 @@ public:
     }
 
     using TypeDescTag = TypeDescriptorTag<
-        DataTypeTag<DataType::MICROS_UTC64>,
+        DataTypeTag<DataType::NANOSECONDS_UTC64>,
         DimensionTag<Dimension::Dim0>>;
 
     static constexpr size_t field_count() {
@@ -80,9 +81,20 @@ public:
     }
 
     void check(const FieldCollection &fields) const {
-        util::check_arg(fields.size() >= int(field_count()), "expected at least {} fields, actual {}",
-                        field_count(), fields.size());
-        util::check_arg(fields[0].type() == this->field(0).type(), "expected field[0]={}, actual {}",
+        const size_t fields_size = fields.size();
+        const int current_fields_size = int(field_count());
+
+        const TypeDescriptor &first_field_type = fields[0].type();
+        const TypeDescriptor &current_first_field_type = this->field(0).type();
+
+        const bool valid_type_promotion = has_valid_type_promotion(first_field_type, current_first_field_type).has_value();
+        const bool trivial_type_compatibility = trivially_compatible_types(first_field_type, current_first_field_type);
+
+        const bool compatible_types = valid_type_promotion || trivial_type_compatibility;
+
+        util::check_arg(fields_size >= current_fields_size, "expected at least {} fields, actual {}",
+                        current_fields_size, fields_size);
+        util::check_arg(compatible_types, "expected field[0]={}, actual {}",
                         this->field(0), fields[0]);
     }
 
@@ -235,7 +247,7 @@ private:
 class RowCountIndex : public BaseIndex<RowCountIndex> {
   public:
     using TypeDescTag = TypeDescriptorTag<
-        DataTypeTag<DataType::MICROS_UTC64>,
+        DataTypeTag<DataType::NANOSECONDS_UTC64>,
         DimensionTag<Dimension::Dim0>>;
 
     RowCountIndex() = default;

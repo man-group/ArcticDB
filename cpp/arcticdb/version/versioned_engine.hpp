@@ -23,6 +23,18 @@ namespace arcticdb::version_store {
 using namespace arcticdb::entity;
 using namespace arcticdb::pipelines;
 
+struct ReadVersionOutput {
+    ReadVersionOutput() = delete;
+    ReadVersionOutput(VersionedItem&& versioned_item, FrameAndDescriptor&& frame_and_descriptor):
+            versioned_item_(std::move(versioned_item)),
+            frame_and_descriptor_(std::move(frame_and_descriptor)) {}
+
+    ARCTICDB_MOVE_ONLY_DEFAULT(ReadVersionOutput)
+
+    VersionedItem versioned_item_;
+    FrameAndDescriptor frame_and_descriptor_;
+};
+
 /**
  * The VersionedEngine interface contains methods that are portable between languages.
  *
@@ -72,9 +84,7 @@ public:
         InputTensorFrame&& frame) const = 0;
 
     virtual bool has_stream(
-        const StreamId & stream_id,
-        const std::optional<bool>& skip_compat,
-        const std::optional<bool>& iterate_on_failure
+        const StreamId & stream_id
     ) = 0;
 
     /**
@@ -97,7 +107,7 @@ public:
         ReadQuery& read_query,
         const ReadOptions& read_options) = 0;
 
-    virtual std::pair<VersionedItem, FrameAndDescriptor> read_dataframe_version_internal(
+    virtual ReadVersionOutput read_dataframe_version_internal(
         const StreamId &stream_id,
         const VersionQuery& version_query,
         ReadQuery& read_query,
@@ -111,7 +121,8 @@ public:
         bool validate_index
     ) = 0;
 
-    virtual std::pair<VersionedItem, std::vector<AtomKey>> write_individual_segment(
+    /** Test-specific cut-down version of write_versioned_dataframe_internal */
+    virtual VersionedItem write_individual_segment(
         const StreamId& stream_id,
         SegmentInMemory&& segment,
         bool prune_previous_versions
@@ -136,14 +147,6 @@ public:
     virtual std::set<StreamId> get_active_incomplete_refs() = 0;
 
     virtual void push_incompletes_to_symbol_list(const std::set<StreamId>& incompletes) = 0;
-
-    virtual VersionedItem compact_incomplete_dynamic(
-        const StreamId& stream_id,
-        const std::optional<arcticdb::proto::descriptors::UserDefinedMetadata>& user_meta,
-        bool append,
-        bool convert_int_to_float,
-        bool via_iteration,
-        bool sparsify) = 0;
 
     virtual bool is_symbol_fragmented(const StreamId& stream_id, std::optional<size_t> segment_size) = 0;
 

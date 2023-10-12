@@ -26,12 +26,9 @@ def get_log_types():
     return [KeyType.LOG, KeyType.LOG_COMPACTED]
 
 
-@pytest.mark.parametrize(
-    "lib_type", ["lmdb_version_store_v1", "lmdb_version_store_v2", "s3_version_store_v1", "s3_version_store_v2"]
-)
-def test_get_types(lib_type, request):
+def test_get_types(object_and_mem_and_lmdb_version_store):
     df = sample_dataframe()
-    lib = request.getfixturevalue(lib_type)
+    lib = object_and_mem_and_lmdb_version_store
     lib.write("symbol1", df)
     lib_tool = lib.library_tool()
     version_keys = lib_tool.find_keys_for_id(KeyType.VERSION, "symbol1")
@@ -46,13 +43,9 @@ def test_get_types(lib_type, request):
     assert index_df.at[0, "version_id"] == 0
 
 
-@pytest.mark.parametrize(
-    "lib_type", ["lmdb_version_store_v1", "lmdb_version_store_v2", "s3_version_store_v1", "s3_version_store_v2"]
-)
-def test_read_keys(lib_type, request):
-    lib = request.getfixturevalue(lib_type)
-    populate_db(lib)
-    lib_tool = lib.library_tool()
+def test_read_keys(object_and_mem_and_lmdb_version_store):
+    populate_db(object_and_mem_and_lmdb_version_store)
+    lib_tool = object_and_mem_and_lmdb_version_store.library_tool()
     all_key_types = lib_tool.key_types()
     all_keys = []
     for key_type in all_key_types:
@@ -64,13 +57,9 @@ def test_read_keys(lib_type, request):
         assert len(lib_tool.find_keys(key_type)) == 0
 
 
-@pytest.mark.parametrize(
-    "lib_type", ["lmdb_version_store_v1", "lmdb_version_store_v2", "s3_version_store_v1", "s3_version_store_v2"]
-)
-def test_write_keys(lib_type, request):
-    lib = request.getfixturevalue(lib_type)
-    populate_db(lib)
-    lib_tool = lib.library_tool()
+def test_write_keys(object_and_mem_and_lmdb_version_store):
+    populate_db(object_and_mem_and_lmdb_version_store)
+    lib_tool = object_and_mem_and_lmdb_version_store.library_tool()
     all_key_types = lib_tool.key_types()
     all_keys = []
     for key_type in all_key_types:
@@ -88,12 +77,9 @@ def test_write_keys(lib_type, request):
     assert len(new_keys) == len(all_keys)
 
 
-@pytest.mark.parametrize(
-    "lib_type", ["lmdb_version_store_v1", "lmdb_version_store_v2", "s3_version_store_v1", "s3_version_store_v2"]
-)
-def test_count_keys(lib_type, request):
+def test_count_keys(object_and_mem_and_lmdb_version_store):
     df = sample_dataframe()
-    lib = request.getfixturevalue(lib_type)
+    lib = object_and_mem_and_lmdb_version_store
     lib.write("symbol", df)
     lib.write("pickled", data={"a": 1}, pickle_on_failure=True)
     lib.snapshot("mysnap")

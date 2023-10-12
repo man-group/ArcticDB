@@ -33,11 +33,12 @@ auto visit_dim(DataType dt, Callable &&c) {
         DT_CASE(FLOAT32)
         DT_CASE(FLOAT64)
         DT_CASE(BOOL8)
-        DT_CASE(MICROS_UTC64)
+        DT_CASE(NANOSECONDS_UTC64)
         DT_CASE(ASCII_FIXED64)
         DT_CASE(ASCII_DYNAMIC64)
         DT_CASE(UTF_FIXED64)
         DT_CASE(UTF_DYNAMIC64)
+        DT_CASE(EMPTYVAL)
 #undef DT_CASE
     default: util::raise_rte("Invalid dtype '{}' in visit dim", datatype_to_str(dt));
     }
@@ -59,11 +60,12 @@ auto visit_type(DataType dt, Callable &&c) {
         DT_CASE(FLOAT32)
         DT_CASE(FLOAT64)
         DT_CASE(BOOL8)
-        DT_CASE(MICROS_UTC64)
+        DT_CASE(NANOSECONDS_UTC64)
         DT_CASE(ASCII_FIXED64)
         DT_CASE(ASCII_DYNAMIC64)
         DT_CASE(UTF_FIXED64)
         DT_CASE(UTF_DYNAMIC64)
+        DT_CASE(EMPTYVAL)
 #undef DT_CASE
     default: util::raise_rte("Invalid dtype '{}' in visit type", datatype_to_str(dt));
     }

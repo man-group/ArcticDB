@@ -21,6 +21,7 @@
 #include <arcticdb/pipeline/slicing.hpp>
 #include <arcticdb/pipeline/input_tensor_frame.hpp>
 #include <arcticdb/storage/library.hpp>
+#include <arcticdb/storage/lmdb/lmdb_storage.hpp>
 #include <arcticdb/version/version_store_api.hpp>
 #include <arcticdb/stream/index.hpp>
 #include <filesystem>
@@ -316,7 +317,7 @@ inline std::pair<storage::LibraryPath, arcticdb::proto::storage::LibraryConfig> 
 inline std::shared_ptr<storage::Library> test_library_from_config(const storage::LibraryPath& lib_path,  const arcticdb::proto::storage::LibraryConfig& lib_cfg) {
     auto storage_cfg = lib_cfg.storage_by_id().at(lib_cfg.lib_desc().storage_ids(0));
     auto vs_cfg = lib_cfg.lib_desc().has_version()
-            ? LibraryDescriptor::VariantStoreConfig{lib_cfg.lib_desc().version()}
+            ? storage::LibraryDescriptor::VariantStoreConfig{lib_cfg.lib_desc().version()}
             : std::monostate{};
     return std::make_shared<storage::Library>(
             lib_path,

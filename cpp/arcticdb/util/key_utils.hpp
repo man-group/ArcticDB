@@ -41,10 +41,32 @@ inline void delete_keys_of_type_if(const std::shared_ptr<Store>& store, Predicat
     }
 }
 
+template<class Predicate>
+inline void delete_keys_of_type_if_sync(const std::shared_ptr<Store>& store, Predicate&& predicate, KeyType key_type, const std::string& prefix = std::string(), bool continue_on_error = false) {
+    try {
+        store->iterate_type(key_type, [predicate=std::forward<Predicate>(predicate), store=store](VariantKey &&key) {
+            if(predicate(key))
+                store->remove_key_sync(key);
+        }, prefix);
+    }
+    catch(const std::exception& ex) {
+        if(continue_on_error)
+            log::storage().warn("Caught exception {} trying to delete key, continuing", ex.what());
+        else
+            throw;
+    }
+}
+
 inline void delete_keys_of_type_for_stream(const std::shared_ptr<Store>& store, const StreamId& stream_id, KeyType key_type, bool continue_on_error = false) {
     auto prefix = std::holds_alternative<StringId>(stream_id) ? std::get<StringId>(stream_id) : std::string();
     auto match_stream_id =  [&stream_id](const VariantKey & k){ return variant_key_id(k) == stream_id; };
     delete_keys_of_type_if(store, std::move(match_stream_id), key_type, prefix, continue_on_error);
+}
+
+inline void delete_keys_of_type_for_stream_sync(const std::shared_ptr<Store>& store, const StreamId& stream_id, KeyType key_type, bool continue_on_error = false) {
+    auto prefix = std::holds_alternative<StringId>(stream_id) ? std::get<StringId>(stream_id) : std::string();
+    auto match_stream_id =  [&stream_id](const VariantKey & k){ return variant_key_id(k) == stream_id; };
+    delete_keys_of_type_if_sync(store, std::move(match_stream_id), key_type, prefix, continue_on_error);
 }
 
 inline void delete_all_keys_of_type(KeyType key_type, const std::shared_ptr<Store>& store, bool continue_on_error) {

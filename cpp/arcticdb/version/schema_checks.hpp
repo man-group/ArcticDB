@@ -63,7 +63,13 @@ inline bool columns_match(const StreamDescriptor &left, const StreamDescriptor &
         if (left.fields(i).name() != right.fields(i).name())
             return false;
 
-        if (!trivially_compatible_types(left.fields(i).type(), right.fields(i).type()))
+        const TypeDescriptor &left_type = left.fields(i).type();
+        const TypeDescriptor &right_type = right.fields(i).type();
+
+        const bool valid_type_promotion = has_valid_type_promotion(left_type, right_type).has_value();
+        const bool trivial_type_compatibility = trivially_compatible_types(left_type, right_type);
+
+        if (!trivial_type_compatibility and !valid_type_promotion)
             return false;
     }
     return true;
@@ -90,4 +96,4 @@ inline void fix_descriptor_mismatch_or_throw(
             operation);
     }
 }
-} // namespace arcticc
+} // namespace arcticdb

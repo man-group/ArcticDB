@@ -6,74 +6,41 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 import sys
-import os
 
 import pytz
 from arcticdb_ext.exceptions import InternalException
-from arcticdb.exceptions import ArcticNativeNotYetImplemented
-from pandas import Timestamp
+from arcticdb.exceptions import ArcticDbNotYetImplemented, LibraryNotFound
 
-try:
-    from arcticdb.version_store import VersionedItem as PythonVersionedItem
-except ImportError:
-    # arcticdb squashes the packages
-    from arcticdb._store import VersionedItem as PythonVersionedItem
 from arcticdb_ext.storage import NoDataFoundException
 
 from arcticdb.arctic import Arctic
-from arcticdb.adapters.s3_library_adapter import S3LibraryAdapter
-from arcticdb.options import LibraryOptions
+from arcticdb.exceptions import MismatchingLibraryOptions
 from arcticdb.encoding_version import EncodingVersion
-from arcticdb import QueryBuilder
+from arcticdb.options import LibraryOptions
+from arcticdb import QueryBuilder, DataError
 from arcticc.pb2.s3_storage_pb2 import Config as S3Config
 
 import math
 import re
 import pytest
 import pandas as pd
-from datetime import datetime, date, timezone, timedelta
+from datetime import datetime, timezone
 import numpy as np
-from numpy import datetime64
-from arcticdb.util.test import (
-    assert_frame_equal,
-    random_strings_of_length,
-    random_floats,
+
+from arcticdb.config import MACOS_CONDA_BUILD, MACOS_CONDA_BUILD_SKIP_REASON
+from arcticdb.util.test import assert_frame_equal, RUN_MONGO_TEST
+
+from botocore.client import BaseClient as BotoClient
+import time
+
+
+from arcticdb.version_store.library import (
+    WritePayload,
+    ArcticUnsupportedDataTypeException,
+    ReadRequest,
+    StagedDataFinalizeMethod,
+    ArcticInvalidApiUsageException,
 )
-import random
-
-
-try:
-    from arcticdb.version_store.library import (
-        WritePayload,
-        ArcticDuplicateSymbolsInBatchException,
-        ArcticUnsupportedDataTypeException,
-        ReadRequest,
-        ReadInfoRequest,
-        ArcticInvalidApiUsageException,
-        StagedDataFinalizeMethod,
-    )
-except ImportError:
-    # arcticdb squashes the packages
-    from arcticdb.library import (
-        WritePayload,
-        ArcticDuplicateSymbolsInBatchException,
-        ArcticUnsupportedDataTypeException,
-        ReadRequest,
-        ReadInfoRequest,
-        ArcticInvalidApiUsageException,
-        StagedDataFinalizeMethod,
-    )
-
-
-def generate_dataframe(columns, dt, num_days, num_rows_per_day):
-    dataframes = []
-    for _ in range(num_days):
-        index = pd.Index([dt + timedelta(seconds=s) for s in range(num_rows_per_day)])
-        vals = {c: random_floats(num_rows_per_day) for c in columns}
-        new_df = pd.DataFrame(data=vals, index=index)
-        dataframes.append(new_df)
-        dt = dt + timedelta(days=1)
-    return pd.concat(dataframes)
 
 
 def test_library_creation_deletion(arctic_client):
@@ -84,6 +51,7 @@ def test_library_creation_deletion(arctic_client):
         ac.create_library("pytest_test_lib")
 
     assert ac.list_libraries() == ["pytest_test_lib"]
+    assert ac.has_library("pytest_test_lib")
     assert ac["pytest_test_lib"].name == "pytest_test_lib"
 
     ac.delete_library("pytest_test_lib")
@@ -91,89 +59,128 @@ def test_library_creation_deletion(arctic_client):
     ac.delete_library("library_that_does_not_exist")
 
     assert not ac.list_libraries()
-    with pytest.raises(Exception):  # TODO: Nicely wrap?
+    with pytest.raises(LibraryNotFound):
         _lib = ac["pytest_test_lib"]
+    assert not ac.has_library("pytest_test_lib")
 
 
-def test_uri_override(moto_s3_uri_incl_bucket):
-    def _get_s3_storage_config(lib):
-        primary_storage_name = lib._nvs.lib_cfg().lib_desc.storage_ids[0]
-        primary_any = lib._nvs.lib_cfg().storage_by_id[primary_storage_name]
+def test_get_library(arctic_client):
+    ac = arctic_client
+    assert ac.list_libraries() == []
+    # Throws if library doesn't exist
+    with pytest.raises(LibraryNotFound):
+        _ = ac.get_library("pytest_test_lib")
+    # Creates library with default options if just create_if_missing set to True
+    lib = ac.get_library("pytest_test_lib_default_options", create_if_missing=True)
+
+    assert lib.options() == LibraryOptions(encoding_version=ac._encoding_version)
+    # Creates library with the specified options if create_if_missing set to True and options provided
+    library_options = LibraryOptions(
+        dynamic_schema=True,
+        dedup=True,
+        rows_per_segment=10,
+        columns_per_segment=10,
+        encoding_version=EncodingVersion.V1 if ac._encoding_version == EncodingVersion.V2 else EncodingVersion.V2,
+    )
+    lib = ac.get_library("pytest_test_lib_specified_options", create_if_missing=True, library_options=library_options)
+    assert lib.options() == library_options
+    # If the library already exists, create_if_missing is True, and options are provided, then the provided options must match the existing library
+    library_options.dynamic_schema = False
+    with pytest.raises(MismatchingLibraryOptions):
+        _ = ac.get_library("pytest_test_lib_specified_options", create_if_missing=True, library_options=library_options)
+    # Throws if library_options are provided but create_if_missing is False
+    with pytest.raises(ArcticInvalidApiUsageException):
+        _ = ac.get_library("pytest_test_lib", create_if_missing=False, library_options=library_options)
+
+
+def test_do_not_persist_s3_details(moto_s3_endpoint_and_credentials):
+    """We apply an in-memory overlay for these instead. In particular we should absolutely not persist credentials
+    in the storage."""
+
+    def _get_s3_storage_config(cfg):
+        primary_storage_name = cfg.lib_desc.storage_ids[0]
+        primary_any = cfg.storage_by_id[primary_storage_name]
         s3_config = S3Config()
         primary_any.config.Unpack(s3_config)
         return s3_config
 
-    wrong_uri = "s3://otherhost:test_bucket_0?access=dog&secret=cat&port=17988&region=blah"
-    altered_ac = Arctic(moto_s3_uri_incl_bucket)
-    altered_ac._library_adapter = S3LibraryAdapter(wrong_uri, EncodingVersion.V2)
-    # At this point the library_manager is still correct, so we can write
-    # and retrieve libraries, but the library_adapter has fake credentials
-    altered_ac.create_library("override_endpoint", LibraryOptions())
-    altered_lib = altered_ac["override_endpoint"]
-    s3_storage = _get_s3_storage_config(altered_lib)
-    assert s3_storage.endpoint == "otherhost:17988"
-    assert s3_storage.credential_name == "dog"
-    assert s3_storage.credential_key == "cat"
-    assert s3_storage.bucket_name == "test_bucket_0"
-    assert s3_storage.region == "blah"
+    endpoint, port, bucket, aws_access_key, aws_secret_key = moto_s3_endpoint_and_credentials
+    uri = (
+        endpoint.replace("http://", "s3://").rsplit(":", 1)[0]
+        + ":"
+        + bucket
+        + "?access="
+        + aws_access_key
+        + "&secret="
+        + aws_secret_key
+        + "&port="
+        + port
+    )
 
-    # Enable `force_uri_lib_config` and instantiate Arctic using the genuine moto details.
-    # These differ from the fake details that the library was created with.
-    override_uri = "{}&region=reg&force_uri_lib_config=True".format(moto_s3_uri_incl_bucket)
-    override_ac = Arctic(override_uri)
-    override_lib = override_ac["override_endpoint"]
-    s3_storage = _get_s3_storage_config(override_lib)
-    assert s3_storage.endpoint == override_ac._library_adapter._endpoint
-    assert s3_storage.credential_name == override_ac._library_adapter._query_params.access
-    assert s3_storage.credential_key == override_ac._library_adapter._query_params.secret
-    assert s3_storage.bucket_name == override_ac._library_adapter._bucket
-    assert s3_storage.region == override_ac._library_adapter._query_params.region
+    ac = Arctic(uri)
+    ac.create_library("test")
 
-    # Same as above, but with `force_uri_lib_config` off.
-    # This should return the fake details the library was created with.
-    ac = Arctic(moto_s3_uri_incl_bucket)
-    lib = ac["override_endpoint"]
-    s3_storage = _get_s3_storage_config(lib)
-    assert s3_storage.endpoint == "otherhost:17988"
-    assert s3_storage.credential_name == "dog"
-    assert s3_storage.credential_key == "cat"
-    assert s3_storage.bucket_name == "test_bucket_0"
-    assert s3_storage.region == "blah"
+    lib = ac["test"]
+    lib.write("sym", pd.DataFrame())
+
+    config = ac._library_manager.get_library_config("test")
+    s3_storage = _get_s3_storage_config(config)
+    assert s3_storage.bucket_name == ""
+    assert s3_storage.credential_name == ""
+    assert s3_storage.credential_key == ""
+    assert s3_storage.endpoint == ""
+    assert s3_storage.max_connections == 0
+    assert s3_storage.connect_timeout == 0
+    assert s3_storage.request_timeout == 0
+    assert not s3_storage.ssl
+    assert s3_storage.prefix.startswith("test")
+    assert not s3_storage.https
+    assert s3_storage.region == ""
+    assert not s3_storage.use_virtual_addressing
+
+    assert "sym" in ac["test"].list_symbols()
 
 
-def test_library_options(moto_s3_uri_incl_bucket):
-    ac = Arctic(moto_s3_uri_incl_bucket)
+def test_library_options(arctic_client):
+    ac = arctic_client
     assert ac.list_libraries() == []
     ac.create_library("pytest_default_options")
     lib = ac["pytest_default_options"]
+    assert lib.options() == LibraryOptions(encoding_version=ac._encoding_version)
     write_options = lib._nvs._lib_cfg.lib_desc.version.write_options
     assert not write_options.dynamic_schema
     assert not write_options.de_duplication
     assert write_options.segment_row_size == 100_000
     assert write_options.column_group_size == 127
+    assert lib._nvs._lib_cfg.lib_desc.version.encoding_version == ac._encoding_version
 
+    library_options = LibraryOptions(
+        dynamic_schema=True, dedup=True, rows_per_segment=20, columns_per_segment=3, encoding_version=EncodingVersion.V2
+    )
     ac.create_library(
         "pytest_explicit_options",
-        LibraryOptions(dynamic_schema=True, dedup=True, rows_per_segment=20, columns_per_segment=3),
+        library_options,
     )
     lib = ac["pytest_explicit_options"]
+    assert lib.options() == library_options
     write_options = lib._nvs._lib_cfg.lib_desc.version.write_options
     assert write_options.dynamic_schema
     assert write_options.de_duplication
     assert write_options.segment_row_size == 20
     assert write_options.column_group_size == 3
     assert write_options.dynamic_strings
+    assert lib._nvs._lib_cfg.lib_desc.version.encoding_version == EncodingVersion.V2
 
 
-def test_separation_between_libraries(moto_s3_uri_incl_bucket):
+def test_separation_between_libraries(arctic_client):
     """Validate that symbols in one library are not exposed in another."""
-    ac = Arctic(moto_s3_uri_incl_bucket)
+    ac = arctic_client
     assert ac.list_libraries() == []
 
     ac.create_library("pytest_test_lib")
     ac.create_library("pytest_test_lib_2")
 
-    assert ac.list_libraries() == ["pytest_test_lib", "pytest_test_lib_2"]
+    assert set(ac.list_libraries()) == {"pytest_test_lib", "pytest_test_lib_2"}
 
     ac["pytest_test_lib"].write("test_1", pd.DataFrame())
     ac["pytest_test_lib_2"].write("test_2", pd.DataFrame())
@@ -181,25 +188,45 @@ def test_separation_between_libraries(moto_s3_uri_incl_bucket):
     assert ac["pytest_test_lib_2"].list_symbols() == ["test_2"]
 
 
-def test_separation_between_libraries_with_prefixes(moto_s3_uri_incl_bucket):
+def get_path_prefix_option(uri):
+    if "azure" in uri:  # azure connection string has a different format
+        return ";Path_prefix"
+    else:
+        return "&path_prefix"
+
+
+def test_separation_between_libraries_with_prefixes(object_storage_uri_incl_bucket):
     """The motivation for the prefix feature is that separate users want to be able to create libraries
     with the same name in the same bucket without over-writing each other's work. This can be useful when
-    creating a new bucket is time-consuming, for example due to organisational issues.
-
-    See AN-566.
+    creating a new bucket is time-consuming, for example due to organizational issues.
     """
-    mercury_uri = moto_s3_uri_incl_bucket + "&path_prefix=/planet/mercury"
+    if "mongo" in object_storage_uri_incl_bucket:
+        pytest.skip("Mongo doesn't support path_prefix")
+
+    option = get_path_prefix_option(object_storage_uri_incl_bucket)
+    if option not in object_storage_uri_incl_bucket:
+        mercury_uri = f"{object_storage_uri_incl_bucket}{option}=/planet_mercury"
+    else:
+        # if we have a path_prefix, we assume that it is at the end and we simply append to it
+        mercury_uri = f"{object_storage_uri_incl_bucket}/planet_mercury"
+
     ac_mercury = Arctic(mercury_uri)
-    assert ac_mercury.list_libraries() == []
 
-    mars_uri = moto_s3_uri_incl_bucket + "&path_prefix=/planet/mars"
+    if option not in object_storage_uri_incl_bucket:
+        mars_uri = f"{object_storage_uri_incl_bucket}{option}=/planet_mars"
+    else:
+        # if we have a path_prefix, we assume that it is at the end and we simply append to it
+        mars_uri = f"{object_storage_uri_incl_bucket}/planet_mars"
+
     ac_mars = Arctic(mars_uri)
-    assert ac_mars.list_libraries() == []
 
+    assert ac_mars.list_libraries() == []
     ac_mercury.create_library("pytest_test_lib")
+    ac_mercury.create_library("pytest_test_lib_2")
     ac_mars.create_library("pytest_test_lib")
-    assert ac_mercury.list_libraries() == ["pytest_test_lib"]
-    assert ac_mars.list_libraries() == ["pytest_test_lib"]
+    ac_mars.create_library("pytest_test_lib_2")
+    assert ac_mercury.list_libraries() == ["pytest_test_lib", "pytest_test_lib_2"]
+    assert ac_mars.list_libraries() == ["pytest_test_lib", "pytest_test_lib_2"]
 
     ac_mercury["pytest_test_lib"].write("test_1", pd.DataFrame())
     ac_mars["pytest_test_lib"].write("test_2", pd.DataFrame())
@@ -207,13 +234,37 @@ def test_separation_between_libraries_with_prefixes(moto_s3_uri_incl_bucket):
     assert ac_mercury["pytest_test_lib"].list_symbols() == ["test_1"]
     assert ac_mars["pytest_test_lib"].list_symbols() == ["test_2"]
 
+    ac_mercury.delete_library("pytest_test_lib")
+    ac_mercury.delete_library("pytest_test_lib_2")
 
-def test_library_management_path_prefix(moto_s3_uri_incl_bucket, boto_client):
-    test_bucket = sorted(boto_client.list_buckets()["Buckets"], key=lambda bucket_meta: bucket_meta["CreationDate"])[
-        -1
-    ]["Name"]
+    ac_mars.delete_library("pytest_test_lib")
+    ac_mars.delete_library("pytest_test_lib_2")
 
-    URI = moto_s3_uri_incl_bucket + "&path_prefix=hello/world"
+
+def object_storage_uri_and_client():
+    if MACOS_CONDA_BUILD:
+        return [("moto_s3_uri_incl_bucket", "boto_client")]
+
+    return [
+        ("moto_s3_uri_incl_bucket", "boto_client"),
+        ("azurite_azure_uri_incl_bucket", "azure_client_and_create_container"),
+    ]
+
+
+@pytest.mark.parametrize("connection_string, client", object_storage_uri_and_client())
+def test_library_management_path_prefix(connection_string, client, request):
+    connection_string = request.getfixturevalue(request.getfixturevalue("connection_string"))
+    client = request.getfixturevalue(request.getfixturevalue("client"))
+
+    if isinstance(client, BotoClient):
+        test_bucket = sorted(client.list_buckets()["Buckets"], key=lambda bucket_meta: bucket_meta["CreationDate"])[-1][
+            "Name"
+        ]
+    else:
+        time.sleep(1)  # Azurite is slow....
+        test_bucket = list(client.list_containers())
+
+    URI = f"{connection_string}{get_path_prefix_option(connection_string)}=hello/world"
     ac = Arctic(URI)
     assert ac.list_libraries() == []
 
@@ -227,7 +278,13 @@ def test_library_management_path_prefix(moto_s3_uri_incl_bucket, boto_client):
     ac["pytest_test_lib"].snapshot("test_snapshot")
     assert ac["pytest_test_lib"].list_snapshots() == {"test_snapshot": None}
 
-    keys = [d["Key"] for d in boto_client.list_objects(Bucket=test_bucket)["Contents"]]
+    if isinstance(client, BotoClient):
+        keys = [d["Key"] for d in client.list_objects(Bucket=test_bucket)["Contents"]]
+    else:
+        REGEX = r".*Container=(?P<container>[^;]+).*"
+        match = re.match(REGEX, connection_string)
+        container = match.groupdict()["container"]
+        keys = [blob["name"] for blob in client.get_container_client(container).list_blobs()]
     assert all(k.startswith("hello/world") for k in keys)
     assert any(k.startswith("hello/world/_arctic_cfg") for k in keys)
     assert any(k.startswith("hello/world/pytest_test_lib") for k in keys)
@@ -235,138 +292,8 @@ def test_library_management_path_prefix(moto_s3_uri_incl_bucket, boto_client):
     ac.delete_library("pytest_test_lib")
 
     assert not ac.list_libraries()
-    with pytest.raises(Exception):  # TODO: Nicely wrap?
+    with pytest.raises(LibraryNotFound):
         _lib = ac["pytest_test_lib"]
-
-
-def test_read_meta_batch_with_tombstones(arctic_library):
-    lib = arctic_library
-    lib.write_pickle("sym1", 1, {"meta1": 1}, prune_previous_versions=False)
-    lib.write_pickle("sym2", 2, {"meta2": 2}, prune_previous_versions=False)
-    lib.write_pickle("sym3", 3, {"meta3": 3}, prune_previous_versions=False)
-    lib.write_pickle("sym_no_meta", 4, prune_previous_versions=False)
-
-    lib.write_pickle("sym1", 1, {"meta1": 4}, prune_previous_versions=False)
-    lib.write_pickle("sym2", 2, {"meta2": 5}, prune_previous_versions=False)
-    lib.write_pickle("sym3", 3, {"meta3": 6}, prune_previous_versions=False)
-    lib.write_pickle("sym_no_meta", 4, prune_previous_versions=False)
-
-    lib.write_pickle("sym1", 1, {"meta1": 6}, prune_previous_versions=False)
-    lib.write_pickle("sym2", 2, {"meta2": 7}, prune_previous_versions=False)
-    lib.write_pickle("sym3", 3, {"meta3": 8}, prune_previous_versions=False)
-    lib.write_pickle("sym_no_meta", 4, prune_previous_versions=False)
-
-    results_list = lib.read_metadata_batch(["sym1", "sym2", "sym_no_exist", "sym3", "sym_no_meta"])
-
-    assert results_list[0].metadata == {"meta1": 6}
-    assert results_list[1].metadata == {"meta2": 7}
-    assert results_list[2] is None
-    assert results_list[3].metadata == {"meta3": 8}
-    assert results_list[4].metadata is None
-
-    lib.delete("sym1", versions=2)
-    lib.delete("sym2", versions=2)
-    lib.delete("sym3", versions=2)
-    lib.delete("sym_no_meta", versions=2)
-
-    results_list = lib.read_metadata_batch(["sym1", "sym2", "sym_no_exist", "sym3", "sym_no_meta"])
-    assert results_list[0].metadata == {"meta1": 4}
-    assert results_list[1].metadata == {"meta2": 5}
-    assert results_list[2] is None
-    assert results_list[3].metadata == {"meta3": 6}
-    assert results_list[4].metadata is None
-
-    assert lib.read_metadata("sym1").metadata == results_list[0].metadata
-    assert lib.read_metadata("sym2").metadata == results_list[1].metadata
-    assert lib.read_metadata("sym3").metadata == results_list[3].metadata
-    assert lib.read_metadata("sym_no_meta").metadata == results_list[4].metadata
-
-
-def test_read_meta_batch_with_as_ofs(arctic_library):
-    lib = arctic_library
-    lib.write_pickle("sym1", 1, {"meta1": 1}, prune_previous_versions=False)
-    lib.write_pickle("sym2", 2, {"meta2": 2}, prune_previous_versions=False)
-    lib.write_pickle("sym3", 3, {"meta3": 3}, prune_previous_versions=False)
-
-    lib.write_pickle("sym1", 1, {"meta1": 4}, prune_previous_versions=False)
-    lib.write_pickle("sym2", 2, {"meta2": 5}, prune_previous_versions=False)
-    lib.write_pickle("sym3", 3, {"meta3": 6}, prune_previous_versions=False)
-
-    lib.write_pickle("sym1", 1, {"meta1": 7}, prune_previous_versions=False)
-    lib.write_pickle("sym2", 2, {"meta2": 8}, prune_previous_versions=False)
-    lib.write_pickle("sym3", 3, {"meta3": 9}, prune_previous_versions=False)
-
-    results_list = lib.read_metadata_batch(
-        [
-            ReadInfoRequest("sym1", as_of=0),
-            ReadInfoRequest("sym2", as_of=0),
-            ReadInfoRequest("sym2", as_of=5),
-            "sym_no_exist",
-            ReadInfoRequest("sym3", as_of=0),
-        ]
-    )
-    assert results_list[0].metadata == {"meta1": 1}
-    assert results_list[1].metadata == {"meta2": 2}
-    assert results_list[2] is None
-    assert results_list[3] is None
-    assert results_list[4].metadata == {"meta3": 3}
-
-    results_list = lib.read_metadata_batch(
-        [
-            ReadInfoRequest("sym1", as_of=1),
-            ReadInfoRequest("sym2", as_of=1),
-            ReadInfoRequest("sym2", as_of=5),
-            "sym_no_exist",
-            ReadInfoRequest("sym3", as_of=1),
-        ]
-    )
-    assert results_list[0].metadata == {"meta1": 4}
-    assert results_list[1].metadata == {"meta2": 5}
-    assert results_list[2] is None
-    assert results_list[3] is None
-    assert results_list[4].metadata == {"meta3": 6}
-
-    results_list = lib.read_metadata_batch(
-        [
-            ReadInfoRequest("sym2", as_of=0),
-            ReadInfoRequest("sym2", as_of=1),
-            ReadInfoRequest("sym3", as_of=1),
-            "sym1",
-            ReadInfoRequest("sym2", as_of=2),
-        ]
-    )
-    assert results_list[0].metadata == {"meta2": 2}
-    assert results_list[1].metadata == {"meta2": 5}
-    assert results_list[2].metadata == {"meta3": 6}
-    assert results_list[3].metadata == {"meta1": 7}
-    assert results_list[4].metadata == {"meta2": 8}
-
-
-def test_read_meta_batch_with_as_ofs_stress(arctic_library):
-    lib = arctic_library
-    num_symbols = 10
-    num_versions = 20
-    for sym in range(num_symbols):
-        for version in range(num_versions):
-            lib.write_pickle(
-                "sym_" + str(sym), version, metadata={"meta_" + str(sym): version}, prune_previous_versions=False
-            )
-
-    requests = [
-        ReadInfoRequest("sym_" + str(sym), as_of=version)
-        for sym in range(num_symbols)
-        for version in range(num_versions)
-    ]
-    results_list = lib.read_metadata_batch(requests)
-    for sym in range(num_symbols):
-        for version in range(num_versions):
-            idx = sym * num_versions + version
-            assert results_list[idx].metadata == {"meta_" + str(sym): version}
-
-    requests = ["sym_" + str(sym) for sym in range(num_symbols)]
-    results_list = lib.read_metadata_batch(requests)
-    for sym in range(num_symbols):
-        assert results_list[sym].metadata == {"meta_" + str(sym): num_versions - 1}
 
 
 def test_basic_write_read_update_and_append(arctic_library):
@@ -410,6 +337,25 @@ def test_basic_write_read_update_and_append(arctic_library):
     lib.write("meta", df, metadata={"goodbye": "cruel world"})
     read_metadata = lib.read_metadata("meta")
     assert read_metadata.version == 1
+
+
+def test_write_metadata_with_none(arctic_library):
+    lib = arctic_library
+    symbol = "symbol"
+    meta = {"meta_" + str(symbol): 0}
+
+    result_write = lib.write_metadata(symbol, meta)
+    assert result_write.version == 0
+
+    read_meta_symbol = lib.read_metadata(symbol)
+    assert read_meta_symbol.data is None
+    assert read_meta_symbol.metadata == meta
+    assert read_meta_symbol.version == 0
+
+    read_symbol = lib.read(symbol)
+    assert read_symbol.data is None
+    assert read_symbol.metadata == meta
+    assert read_symbol.version == 0
 
 
 def staged_write(sym, arctic_library):
@@ -514,6 +460,40 @@ def test_delete_version(arctic_library):
     assert lib["symbol"].metadata == {"very": "interesting"}
 
 
+def test_list_versions_write_append_update(arctic_library):
+    lib = arctic_library
+    # Note: can only update timeseries dataframes
+    index = pd.date_range(start="2000-01-01", freq="D", periods=3)
+    df = pd.DataFrame({"col1": [1, 2, 3], "col2": [4, 5, 6]}, index=index)
+    lib.write("symbol", df)
+    index_append = pd.date_range(start="2000-01-04", freq="D", periods=3)
+    df_append = pd.DataFrame({"col1": [7, 8, 9], "col2": [10, 11, 12]}, index=index_append)
+    lib.append("symbol", df_append)
+    index_update = pd.DatetimeIndex(["2000-01-03", "2000-01-05"])
+    df_update = pd.DataFrame({"col1": [13, 14], "col2": [15, 16]}, index=index_update)
+    lib.update("symbol", df_update)
+    assert_frame_equal(lib.read("symbol").data, pd.concat([df.iloc[:-1], df_update, df_append.iloc[[2]]]))
+    assert len(lib.list_versions("symbol")) == 3
+
+
+def test_list_versions_latest_only(arctic_library):
+    lib = arctic_library
+    df = pd.DataFrame({"col1": [1, 2, 3], "col2": [4, 5, 6]})
+    lib.write("symbol", df)
+    lib.write("symbol", df)
+    lib.write("symbol", df)
+    assert len(lib.list_versions("symbol", latest_only=True)) == 1
+
+
+def test_non_existent_list_versions_latest_only(arctic_library):
+    lib = arctic_library
+    assert len(lib.list_versions("symbol", latest_only=True)) == 0
+    df = pd.DataFrame({"col1": [1, 2, 3], "col2": [4, 5, 6]})
+    lib.write("symbol2", df)
+    lib.delete("symbol2")
+    assert len(lib.list_versions("symbol2", latest_only=True)) == 0
+
+
 def test_delete_version_with_snapshot(arctic_library):
     lib = arctic_library
     df = pd.DataFrame({"col1": [1, 2, 3], "col2": [4, 5, 6]})
@@ -585,7 +565,17 @@ def test_delete_date_range(arctic_library):
     assert lib["symbol"].version == 1
 
 
-def test_repr(moto_s3_uri_incl_bucket):
+@pytest.mark.skipif(not RUN_MONGO_TEST, reason="Mongo test on windows is fiddly")
+def test_mongo_repr(mongo_test_uri):
+    max_pool_size = 10
+    min_pool_size = 100
+    selection_timeout_ms = 1000
+    uri = f"{mongo_test_uri}/?maxPoolSize={max_pool_size}&minPoolSize={min_pool_size}&serverSelectionTimeoutMS={selection_timeout_ms}"
+    ac = Arctic(uri)
+    assert repr(ac) == f"Arctic(config=mongodb(endpoint={mongo_test_uri[len('mongodb://'):]}))"
+
+
+def test_s3_repr(moto_s3_uri_incl_bucket):
     ac = Arctic(moto_s3_uri_incl_bucket)
 
     assert ac.list_libraries() == []
@@ -626,44 +616,11 @@ def test_write_object_with_pickle_mode(arctic_library):
     assert lib["test_1"].data.id == "id_1"
 
 
-def test_write_batch_with_pickle_mode(arctic_library):
-    """Writing in pickle mode should succeed when the user uses the dedicated method."""
-    lib = arctic_library
-    lib.write_pickle_batch(
-        [WritePayload("test_1", A("id_1")), WritePayload("test_2", A("id_2"), metadata="the metadata")]
-    )
-    assert lib["test_1"].data.id == "id_1"
-    assert lib["test_1"].version == 0
-    assert lib["test_2"].data.id == "id_2"
-    assert lib["test_2"].metadata == "the metadata"
-
-
 def test_write_object_without_pickle_mode(arctic_library):
     """Writing outside of pickle mode should fail when the user does not use the dedicated method."""
     lib = arctic_library
     with pytest.raises(ArcticUnsupportedDataTypeException):
         lib.write("test_1", A("id_1"))
-
-
-def test_write_object_in_batch_without_pickle_mode(arctic_library):
-    """Writing outside of pickle mode should fail when the user does not use the dedicated method."""
-    lib = arctic_library
-    with pytest.raises(ArcticUnsupportedDataTypeException) as e:
-        lib.write_batch([WritePayload("test_1", A("id_1"))])
-    # omit the part with the full class path as that will change in arcticdb
-    assert e.value.args[0].startswith(
-        "payload contains some data of types that cannot be normalized. Consider using write_pickle_batch instead."
-        " symbols with bad datatypes"
-    )
-
-
-def test_write_object_in_batch_without_pickle_mode_many_symbols(arctic_library):
-    """Writing outside of pickle mode should fail when the user does not use the dedicated method."""
-    lib = arctic_library
-    with pytest.raises(ArcticUnsupportedDataTypeException) as e:
-        lib.write_batch([WritePayload(f"test_{i}", A(f"id_{i}")) for i in range(10)])
-    message: str = e.value.args[0]
-    assert "(and more)... 10 data in total have bad types." in message
 
 
 def test_write_list_without_pickle_mode(arctic_library):
@@ -688,62 +645,6 @@ def test_write_non_native_frame_without_pickle_mode(arctic_library):
     df = pd.DataFrame({"col1": [A("id_1")]})
     with pytest.raises(Exception):
         lib.write("test_1", df)
-
-
-def test_write_batch_duplicate_symbols(arctic_library):
-    """Should throw and not write if duplicate symbols are provided."""
-    lib = arctic_library
-    with pytest.raises(ArcticDuplicateSymbolsInBatchException):
-        lib.write_batch(
-            [
-                WritePayload("symbol_1", pd.DataFrame()),
-                WritePayload("symbol_1", pd.DataFrame(), metadata="great_metadata"),
-            ]
-        )
-
-    assert not lib.list_symbols()
-
-
-def test_write_pickle_batch_duplicate_symbols(arctic_library):
-    """Should throw and not write if duplicate symbols are provided."""
-    lib = arctic_library
-    with pytest.raises(ArcticDuplicateSymbolsInBatchException):
-        lib.write_pickle_batch(
-            [
-                WritePayload("symbol_1", pd.DataFrame()),
-                WritePayload("symbol_1", pd.DataFrame(), metadata="great_metadata"),
-            ]
-        )
-
-    assert not lib.list_symbols()
-
-
-def test_write_batch(library_factory):
-    """Should be able to write different size of batch of data."""
-    lib = library_factory(LibraryOptions(rows_per_segment=10))
-    assert lib._nvs._lib_cfg.lib_desc.version.write_options.segment_row_size == 10
-    num_columns = 16
-    num_days = 200
-    num_symbols = 200
-    dt = datetime(2019, 4, 8, 0, 0, 0)
-    column_length = 6
-    num_rows_per_day = 1
-    list_requests = []
-    list_dataframes = {}
-    for sym in range(num_symbols):
-        columns = random_strings_of_length(num_columns, column_length, True)
-        df = generate_dataframe(random.sample(columns, 6), dt, num_days, num_rows_per_day)
-        list_requests.append(WritePayload("symbol_" + str(sym), df, metadata="great_metadata" + str(sym)))
-        list_dataframes[sym] = df
-
-    batch = lib.write_batch(list_requests)
-    assert all(type(w) == PythonVersionedItem for w in batch)
-
-    for sym in range(num_symbols):
-        original_dataframe = list_dataframes[sym]
-        read_dataframe = lib.read("symbol_" + str(sym))
-        assert read_dataframe.metadata == "great_metadata" + str(sym)
-        assert_frame_equal(read_dataframe.data, original_dataframe)
 
 
 def test_write_with_unpacking(arctic_library):
@@ -1000,27 +901,6 @@ def test_update_with_upsert(arctic_library):
     assert "symbol" in lib.list_symbols()
 
 
-def test_read_batch_mixed_request_supported(arctic_library):
-    lib = arctic_library
-
-    # Given
-    lib.write("s1", pd.DataFrame())
-    s2_frame = pd.DataFrame({"col": [1, 2, 3]})
-    lib.write("s2", s2_frame)
-    s3_frame = pd.DataFrame({"col_2": [4, 5, 6]})
-    lib.write("s3", s3_frame)
-
-    # When - note the batch has a mix of symbols and read requests
-    batch = lib.read_batch(["s1", "s2", ReadRequest("s3"), "s1"])  # duplicates are fine
-
-    # Then
-    assert [vi.symbol for vi in batch] == ["s1", "s2", "s3", "s1"]
-    assert batch[0].data.empty
-    assert_frame_equal(s2_frame, batch[1].data)
-    assert_frame_equal(s3_frame, batch[2].data)
-    assert batch[3].data.empty
-
-
 def test_read_with_read_request_form(arctic_library):
     lib = arctic_library
 
@@ -1034,129 +914,6 @@ def test_read_with_read_request_form(arctic_library):
 
     # Then
     assert_frame_equal(result.data, pd.DataFrame({"A": [1, 2]}))
-
-
-def test_read_batch_with_columns(arctic_library):
-    lib = arctic_library
-
-    # Given
-    lib.write("s", pd.DataFrame({"A": [1, 2, 3], "B": [4, 5, 6], "C": [7, 8, 9]}))
-
-    # When
-    batch = lib.read_batch([ReadRequest("s", columns=["B", "C"])])
-
-    # Then
-    assert_frame_equal(pd.DataFrame({"B": [4, 5, 6], "C": [7, 8, 9]}), batch[0].data)
-
-
-def test_read_batch_overall_query_builder(arctic_library):
-    lib = arctic_library
-
-    # Given
-    q = QueryBuilder()
-    q = q[q["a"] < 5]
-    lib.write("s1", pd.DataFrame({"a": [3, 5, 7]}))
-    lib.write("s2", pd.DataFrame({"a": [4, 6, 8]}))
-    # When
-    batch = lib.read_batch(["s1", "s2"], query_builder=q)
-    # Then
-    assert_frame_equal(batch[0].data, pd.DataFrame({"a": [3]}))
-    assert_frame_equal(batch[1].data, pd.DataFrame({"a": [4]}))
-
-
-def test_read_batch_per_symbol_query_builder(arctic_library):
-    lib = arctic_library
-
-    # Given
-    q_1 = QueryBuilder()
-    q_1 = q_1[q_1["a"] < 5]
-    q_2 = QueryBuilder()
-    q_2 = q_2[q_2["a"] < 7]
-    lib.write("s1", pd.DataFrame({"a": [3, 5, 7]}))
-    lib.write("s2", pd.DataFrame({"a": [4, 6, 8]}))
-    # When
-    batch = lib.read_batch([ReadRequest("s1", query_builder=q_1), ReadRequest("s2", query_builder=q_2)])
-    # Then
-    assert_frame_equal(batch[0].data, pd.DataFrame({"a": [3]}))
-    assert_frame_equal(batch[1].data, pd.DataFrame({"a": [4, 6]}))
-
-
-def test_read_batch_as_of(arctic_library):
-    lib = arctic_library
-
-    # Given
-    lib.write("s1", pd.DataFrame({"col": [1, 2, 3]}))  # v0
-    lib.write("s1", pd.DataFrame(), prune_previous_versions=False)  # v1
-
-    # When
-    batch = lib.read_batch(["s1", ReadRequest("s1", as_of=0)])
-
-    # Then
-    assert batch[0].data.empty
-    assert not batch[1].data.empty
-    assert type(batch[1]) == PythonVersionedItem
-
-
-def test_read_batch_date_ranges(arctic_library):
-    lib = arctic_library
-    df = pd.DataFrame({"column": [1, 2, 3, 4]}, index=pd.date_range(start="1/1/2018", end="1/4/2018"))
-    lib.write("symbol", df)
-
-    batch = lib.read_batch(
-        [
-            ReadRequest("symbol", date_range=(datetime(2018, 1, 1), datetime(2018, 1, 2))),
-            ReadRequest("symbol", date_range=(datetime(2018, 1, 1), datetime(2018, 1, 3))),
-        ]
-    )
-
-    assert_frame_equal(
-        batch[0].data, pd.DataFrame({"column": [1, 2]}, index=pd.date_range(start="1/1/2018", end="1/2/2018"))
-    )
-    assert_frame_equal(
-        batch[1].data, pd.DataFrame({"column": [1, 2, 3]}, index=pd.date_range(start="1/1/2018", end="1/3/2018"))
-    )
-
-
-def test_read_batch_date_ranges_dates_not_times(arctic_library):
-    lib = arctic_library
-    df = pd.DataFrame({"column": [1, 2, 3, 4]}, index=pd.date_range(start="1/1/2018", end="1/4/2018"))
-    lib.write("symbol", df)
-
-    batch = lib.read_batch(
-        [
-            ReadRequest("symbol", date_range=(date(2018, 1, 1), date(2018, 1, 2))),
-            ReadRequest("symbol", date_range=(date(2018, 1, 1), date(2018, 1, 3))),
-        ]
-    )
-
-    assert_frame_equal(
-        batch[0].data, pd.DataFrame({"column": [1, 2]}, index=pd.date_range(start="1/1/2018", end="1/2/2018"))
-    )
-    assert_frame_equal(
-        batch[1].data, pd.DataFrame({"column": [1, 2, 3]}, index=pd.date_range(start="1/1/2018", end="1/3/2018"))
-    )
-
-
-def test_read_batch_overall_query_builder_and_per_request_query_builder_raises(arctic_library):
-    lib = arctic_library
-
-    # Given
-    q_1 = QueryBuilder()
-    q_1 = q_1[q_1["a"] < 5]
-    q_2 = QueryBuilder()
-    q_2 = q_2[q_2["a"] < 7]
-    lib.write("s", pd.DataFrame({"a": [3, 5, 7]}))
-    # When & Then
-    with pytest.raises(ArcticInvalidApiUsageException):
-        lib.read_batch([ReadRequest("s", query_builder=q_1)], query_builder=q_2)
-
-
-def test_read_batch_unhandled_type(arctic_library):
-    """Only str and ReadRequest are supported."""
-    lib = arctic_library
-    lib.write("1", pd.DataFrame())
-    with pytest.raises(ArcticInvalidApiUsageException):
-        lib.read_batch([1])
 
 
 def test_has_symbol(arctic_library):
@@ -1180,7 +937,7 @@ def test_numpy_string(arctic_library):
 
 @pytest.mark.skipif(sys.platform != "win32", reason="SKIP_WIN Numpy strings not supported yet")
 def test_numpy_string_fails_on_windows(arctic_library):
-    with pytest.raises(ArcticNativeNotYetImplemented):
+    with pytest.raises(ArcticDbNotYetImplemented):
         arctic_library.write("symbol", np.array(["ab", "cd", "efg"]))
 
 
@@ -1206,219 +963,6 @@ def test_get_description(arctic_library):
     assert original_info.row_count == 4
     assert info.last_update_time > original_info.last_update_time
     assert info.last_update_time.tz == pytz.UTC
-
-
-def test_get_description_batch(arctic_library):
-    lib = arctic_library
-
-    # given
-    df = pd.DataFrame({"column": [1, 2, 3, 4]}, index=pd.date_range(start="1/1/2018", end="1/4/2018"))
-    df.index.rename("named_index", inplace=True)
-    lib.write("symbol1", df)
-    to_append_df = pd.DataFrame({"column": [5, 6]}, index=pd.date_range(start="1/5/2018", end="1/6/2018"))
-    to_append_df.index.rename("named_index", inplace=True)
-    lib.append("symbol1", to_append_df)
-
-    df = pd.DataFrame({"column": [1, 2, 3, 4]}, index=pd.date_range(start="1/1/2019", end="1/4/2019"))
-    df.index.rename("named_index", inplace=True)
-    lib.write("symbol2", df)
-    to_append_df = pd.DataFrame({"column": [5, 6]}, index=pd.date_range(start="1/5/2019", end="1/6/2019"))
-    to_append_df.index.rename("named_index", inplace=True)
-    lib.append("symbol2", to_append_df)
-
-    df = pd.DataFrame({"column": [1, 2, 3, 4]}, index=pd.date_range(start="1/1/2020", end="1/4/2020"))
-    df.index.rename("named_index", inplace=True)
-    lib.write("symbol3", df)
-    to_append_df = pd.DataFrame({"column": [5, 6]}, index=pd.date_range(start="1/5/2020", end="1/6/2020"))
-    to_append_df.index.rename("named_index", inplace=True)
-    lib.append("symbol3", to_append_df)
-    # when
-    infos = lib.get_description_batch(["symbol1", "symbol2", "symbol3"])
-    original_infos = lib.get_description_batch(
-        [ReadInfoRequest("symbol1", as_of=0), ReadInfoRequest("symbol2", as_of=0), ReadInfoRequest("symbol3", as_of=0)]
-    )
-
-    assert infos[0].date_range == tuple(
-        map(
-            lambda x: x.replace(tzinfo=timezone.utc) if not np.isnat(np.datetime64(x)) else x,
-            (datetime(2018, 1, 1), datetime(2018, 1, 6)),
-        )
-    )
-    assert infos[1].date_range == tuple(
-        map(
-            lambda x: x.replace(tzinfo=timezone.utc) if not np.isnat(np.datetime64(x)) else x,
-            (datetime(2019, 1, 1), datetime(2019, 1, 6)),
-        )
-    )
-    assert infos[2].date_range == tuple(
-        map(
-            lambda x: x.replace(tzinfo=timezone.utc) if not np.isnat(np.datetime64(x)) else x,
-            (datetime(2020, 1, 1), datetime(2020, 1, 6)),
-        )
-    )
-
-    assert original_infos[0].date_range == tuple(
-        map(
-            lambda x: x.replace(tzinfo=timezone.utc) if not np.isnat(np.datetime64(x)) else x,
-            (datetime(2018, 1, 1), datetime(2018, 1, 4)),
-        )
-    )
-    assert original_infos[1].date_range == tuple(
-        map(
-            lambda x: x.replace(tzinfo=timezone.utc) if not np.isnat(np.datetime64(x)) else x,
-            (datetime(2019, 1, 1), datetime(2019, 1, 4)),
-        )
-    )
-    assert original_infos[2].date_range == tuple(
-        map(
-            lambda x: x.replace(tzinfo=timezone.utc) if not np.isnat(np.datetime64(x)) else x,
-            (datetime(2020, 1, 1), datetime(2020, 1, 4)),
-        )
-    )
-
-    list_infos = list(zip(infos, original_infos))
-    # then
-    for info, original_info in list_infos:
-        assert [c[0] for c in info.columns] == ["column"]
-        assert info.index[0] == ["named_index"]
-        assert info.index_type == "index"
-        assert info.row_count == 6
-        assert original_info.row_count == 4
-        assert info.last_update_time > original_info.last_update_time
-
-
-def test_get_description_batch_multiple_versions(arctic_library):
-    lib = arctic_library
-
-    # given
-    df = pd.DataFrame({"column": [1, 2, 3, 4]}, index=pd.date_range(start="1/1/2018", end="1/4/2018"))
-    df.index.rename("named_index", inplace=True)
-    lib.write("symbol1", df)
-    to_append_df = pd.DataFrame({"column": [5, 6]}, index=pd.date_range(start="1/5/2018", end="1/6/2018"))
-    to_append_df.index.rename("named_index", inplace=True)
-    lib.append("symbol1", to_append_df)
-
-    df = pd.DataFrame({"column": [1, 2, 3, 4]}, index=pd.date_range(start="1/1/2019", end="1/4/2019"))
-    df.index.rename("named_index", inplace=True)
-    lib.write("symbol2", df)
-    to_append_df = pd.DataFrame({"column": [5, 6]}, index=pd.date_range(start="1/5/2019", end="1/6/2019"))
-    to_append_df.index.rename("named_index", inplace=True)
-    lib.append("symbol2", to_append_df)
-
-    df = pd.DataFrame({"column": [1, 2, 3, 4]}, index=pd.date_range(start="1/1/2020", end="1/4/2020"))
-    df.index.rename("named_index", inplace=True)
-    lib.write("symbol3", df)
-    to_append_df = pd.DataFrame({"column": [5, 6]}, index=pd.date_range(start="1/5/2020", end="1/6/2020"))
-    to_append_df.index.rename("named_index", inplace=True)
-    lib.append("symbol3", to_append_df)
-
-    infos_multiple_version = lib.get_description_batch(
-        [
-            ReadInfoRequest("symbol1", as_of=0),
-            ReadInfoRequest("symbol2", as_of=0),
-            ReadInfoRequest("symbol3", as_of=0),
-            ReadInfoRequest("symbol1", as_of=1),
-            ReadInfoRequest("symbol2", as_of=1),
-            ReadInfoRequest("symbol3", as_of=1),
-        ]
-    )
-
-    infos = infos_multiple_version[3:6]
-    original_infos = infos_multiple_version[0:3]
-
-    assert infos[0].date_range == tuple(
-        map(
-            lambda x: x.replace(tzinfo=timezone.utc) if not np.isnat(np.datetime64(x)) else x,
-            (datetime(2018, 1, 1), datetime(2018, 1, 6)),
-        )
-    )
-    assert infos[1].date_range == tuple(
-        map(
-            lambda x: x.replace(tzinfo=timezone.utc) if not np.isnat(np.datetime64(x)) else x,
-            (datetime(2019, 1, 1), datetime(2019, 1, 6)),
-        )
-    )
-    assert infos[2].date_range == tuple(
-        map(
-            lambda x: x.replace(tzinfo=timezone.utc) if not np.isnat(np.datetime64(x)) else x,
-            (datetime(2020, 1, 1), datetime(2020, 1, 6)),
-        )
-    )
-
-    assert original_infos[0].date_range == tuple(
-        map(
-            lambda x: x.replace(tzinfo=timezone.utc) if not np.isnat(np.datetime64(x)) else x,
-            (datetime(2018, 1, 1), datetime(2018, 1, 4)),
-        )
-    )
-    assert original_infos[1].date_range == tuple(
-        map(
-            lambda x: x.replace(tzinfo=timezone.utc) if not np.isnat(np.datetime64(x)) else x,
-            (datetime(2019, 1, 1), datetime(2019, 1, 4)),
-        )
-    )
-    assert original_infos[2].date_range == tuple(
-        map(
-            lambda x: x.replace(tzinfo=timezone.utc) if not np.isnat(np.datetime64(x)) else x,
-            (datetime(2020, 1, 1), datetime(2020, 1, 4)),
-        )
-    )
-
-    list_infos = list(zip(infos, original_infos))
-    # then
-    for info, original_info in list_infos:
-        assert [c[0] for c in info.columns] == ["column"]
-        assert info.index[0] == ["named_index"]
-        assert info.index_type == "index"
-        assert info.row_count == 6
-        assert original_info.row_count == 4
-        assert info.last_update_time > original_info.last_update_time
-
-
-def test_read_description_batch_high_amount(arctic_library):
-    lib = arctic_library
-    num_symbols = 10
-    num_versions = 10
-    start_year = 2000
-    start_day = 1
-    for sym in range(num_symbols):
-        for version in range(num_versions):
-            start_date = pd.Timestamp(str("{}/1/{}".format(start_year + sym, start_day + version)))
-            end_date = pd.Timestamp(str("{}/1/{}".format(start_year + sym, start_day + version + 3)))
-            df = pd.DataFrame({"column": [1, 2, 3, 4]}, index=pd.date_range(start=start_date, end=end_date))
-            lib.write("sym_" + str(sym), df, prune_previous_versions=False)
-    requests = [
-        ReadInfoRequest("sym_" + str(sym), as_of=version)
-        for sym in range(num_symbols)
-        for version in range(num_versions)
-    ]
-    results_list = lib.get_description_batch(requests)
-    for sym in range(num_symbols):
-        for version in range(num_versions):
-            idx = sym * num_versions + version
-            date_ramge_comp = (
-                datetime(start_year + sym, 1, start_day + version),
-                datetime(start_year + sym, 1, start_day + version + 3),
-            )
-            date_range_comp_with_utc = tuple(
-                map(lambda x: x.replace(tzinfo=timezone.utc) if not np.isnat(np.datetime64(x)) else x, date_ramge_comp)
-            )
-            assert results_list[idx].date_range == date_range_comp_with_utc
-            if version > 0:
-                assert results_list[idx].last_update_time > results_list[idx - 1].last_update_time
-                assert results_list[idx].last_update_time.tz == pytz.UTC
-
-
-def test_read_description_batch_empty_nat(arctic_library):
-    lib = arctic_library
-    num_symbols = 10
-    for sym in range(num_symbols):
-        lib.write("sym_" + str(sym), pd.DataFrame())
-    requests = [ReadInfoRequest("sym_" + str(sym)) for sym in range(num_symbols)]
-    results_list = lib.get_description_batch(requests)
-    for sym in range(num_symbols):
-        assert np.isnat(results_list[sym].date_range[0]) == True
-        assert np.isnat(results_list[sym].date_range[1]) == True
 
 
 def test_tail(arctic_library):
@@ -1453,8 +997,8 @@ def test_tail(arctic_library):
 
 
 @pytest.mark.parametrize("dedup", [True, False])
-def test_dedup(moto_s3_uri_incl_bucket, dedup):
-    ac = Arctic(moto_s3_uri_incl_bucket)
+def test_dedup(arctic_client, dedup):
+    ac = arctic_client
     assert ac.list_libraries() == []
     ac.create_library("pytest_test_library", LibraryOptions(dedup=dedup))
     lib = ac["pytest_test_library"]
@@ -1465,8 +1009,8 @@ def test_dedup(moto_s3_uri_incl_bucket, dedup):
     assert data_key_version == 0 if dedup else 1
 
 
-def test_segment_slicing(moto_s3_uri_incl_bucket):
-    ac = Arctic(moto_s3_uri_incl_bucket)
+def test_segment_slicing(arctic_client):
+    ac = arctic_client
     assert ac.list_libraries() == []
     rows_per_segment = 5
     columns_per_segment = 2
@@ -1486,11 +1030,26 @@ def test_segment_slicing(moto_s3_uri_incl_bucket):
     assert num_data_segments == math.ceil(rows / rows_per_segment) * math.ceil(columns / columns_per_segment)
 
 
-def test_reload_symbol_list(moto_s3_uri_incl_bucket, boto_client):
+@pytest.mark.parametrize("connection_string, client", object_storage_uri_and_client())
+def test_reload_symbol_list(connection_string, client, request):
+    connection_string = request.getfixturevalue(request.getfixturevalue("connection_string"))
+    client = request.getfixturevalue(request.getfixturevalue("client"))
+
     def get_symbol_list_keys():
-        keys = [
-            d["Key"] for d in boto_client.list_objects(Bucket=test_bucket)["Contents"] if d["Key"].startswith(lib_name)
-        ]
+        if isinstance(client, BotoClient):
+            keys = [
+                d["Key"] for d in client.list_objects(Bucket=test_bucket)["Contents"] if d["Key"].startswith(lib_name)
+            ]
+        else:
+            time.sleep(1)  # Azurite is slow....
+            REGEX = r".*Container=(?P<container>[^;]+).*"
+            match = re.match(REGEX, connection_string)
+            container = match.groupdict()["container"]
+            keys = [
+                blob["name"]
+                for blob in client.get_container_client(container).list_blobs()
+                if blob["name"].startswith(lib_name)
+            ]
         symbol_list_keys = []
         for key in keys:
             path_components = key.split("/")
@@ -1498,10 +1057,14 @@ def test_reload_symbol_list(moto_s3_uri_incl_bucket, boto_client):
                 symbol_list_keys.append(path_components[2])
         return symbol_list_keys
 
-    test_bucket = sorted(boto_client.list_buckets()["Buckets"], key=lambda bucket_meta: bucket_meta["CreationDate"])[
-        -1
-    ]["Name"]
-    ac = Arctic(moto_s3_uri_incl_bucket)
+    if isinstance(client, BotoClient):
+        test_bucket = sorted(client.list_buckets()["Buckets"], key=lambda bucket_meta: bucket_meta["CreationDate"])[-1][
+            "Name"
+        ]
+    else:
+        test_bucket = list(client.list_containers())
+
+    ac = Arctic(connection_string)
     assert ac.list_libraries() == []
 
     lib_name = "pytest_test_lib"
@@ -1522,6 +1085,38 @@ def test_reload_symbol_list(moto_s3_uri_incl_bucket, boto_client):
     assert len(get_symbol_list_keys()) == 1
 
 
-def test_get_uri(moto_s3_uri_incl_bucket):
-    ac = Arctic(moto_s3_uri_incl_bucket)
-    assert ac.get_uri() == moto_s3_uri_incl_bucket
+def test_get_uri(object_storage_uri_incl_bucket):
+    ac = Arctic(object_storage_uri_incl_bucket)
+    assert ac.get_uri() == object_storage_uri_incl_bucket
+
+
+def test_azure_no_ca_path(azurite_azure_test_connection_setting):
+    endpoint, container, credential_name, credential_key, _ = azurite_azure_test_connection_setting
+    Arctic(
+        f"azure://DefaultEndpointsProtocol=http;AccountName={credential_name};AccountKey={credential_key};BlobEndpoint={endpoint}/{credential_name};Container={container}"
+    )
+
+
+@pytest.mark.skipif(MACOS_CONDA_BUILD, reason=MACOS_CONDA_BUILD_SKIP_REASON)
+def test_azure_sas_token(azure_account_sas_token, azurite_azure_test_connection_setting):
+    endpoint, container, credential_name, _, _ = azurite_azure_test_connection_setting
+    ac = Arctic(
+        f"azure://DefaultEndpointsProtocol=http;SharedAccessSignature={azure_account_sas_token};BlobEndpoint={endpoint}/{credential_name};Container={container}"
+    )
+    expected = pd.DataFrame({"col1": [1, 2, 3], "col2": [4, 5, 6]})
+    sym = "test"
+    lib = "lib"
+    ac.create_library(lib)
+    ac[lib].write(sym, expected)
+    assert_frame_equal(expected, ac[lib].read(sym).data)
+
+    assert ac.list_libraries() == [lib]
+
+
+def test_s3_force_uri_lib_config_handling(moto_s3_uri_incl_bucket):
+    # force_uri_lib_config is a obsolete configuration. However, user still includes this option in their setup. For backward compatitbility, we need to make sure such setup will still work
+    # Why it becomes obsolete: https://github.com/man-group/ArcticDB/pull/803
+    Arctic(f"{moto_s3_uri_incl_bucket}&force_uri_lib_config=true)")
+
+    with pytest.raises(ValueError):
+        Arctic(f"{moto_s3_uri_incl_bucket}&force_uri_lib_config=false)")
