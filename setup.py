@@ -26,6 +26,7 @@ ARCTICDB_BUILD_CPP_TESTS = os.environ.get("ARCTICDB_BUILD_CPP_TESTS", "0")
 ARCTICDB_BUILD_CPP_TESTS = ARCTICDB_BUILD_CPP_TESTS != "0"
 print(f"ARCTICDB_BUILD_CPP_TESTS={ARCTICDB_BUILD_CPP_TESTS}")
 
+
 def _log_and_run(*cmd, **kwargs):
     print("Running " + " ".join(cmd))
     subprocess.check_call(cmd, **kwargs)
@@ -142,16 +143,21 @@ class CMakeBuild(build_ext):
             suffix = "-debug" if self.debug else "-release"
             suffix = conda_suffix + suffix
             preset = ("windows-cl" if platform.system() == "Windows" else platform.system().lower()) + suffix
-        _log_and_run(
+
+        env_var_vcpkg = "ARCTICDB_VCPKG_INSTALL_DIR"
+        vcpkg_installed_dir = os.getenv(env_var_vcpkg)
+        args = [
             cmake,
             f"-DTEST={ARCTICDB_BUILD_CPP_TESTS}",
             f"-DBUILD_PYTHON_VERSION={sys.version_info[0]}.{sys.version_info[1]}",
             f"-DCMAKE_INSTALL_PREFIX={os.path.dirname(dest)}",
             "--preset",
             preset,
-            cwd="cpp",
-        )
+        ]
+        if vcpkg_installed_dir:
+            args.append(f"-DVCPKG_INSTALLED_DIR={vcpkg_installed_dir}")
 
+        _log_and_run(*args, cwd="cpp")
         search = f"cpp/out/{preset}-build"
         candidates = glob.glob(search)
         assert len(candidates) == 1, f"Specify {env_var} or use a single build directory. {search}={candidates}"
