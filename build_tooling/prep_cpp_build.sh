@@ -22,8 +22,6 @@ case `uname -a` in
             mkdir "${ARCTICDB_BUILD_DIR:?environment variable is not set}"
             MSYS=winsymlinks:nativestrict ln -s "$ARCTICDB_BUILD_DIR" out
         fi
-        # Defined here for the leader, which calls with the . syntax, so can set env
-        ARCTICDB_VCPKG_INSTALL_DIR="C:/test_arcticdb_install_dir"  # TODO: should configure in build.yml
     fi
 
     mkdir vcpkg/buildtrees vcpkg/packages out || true
@@ -40,7 +38,5 @@ case `uname -a` in
         ln -s "$ARCTICDB_BUILD_DIR" out
     fi
 esac
-
-echo ARCTICDB_VCPKG_INSTALL_DIR=$ARCTICDB_VCPKG_INSTALL_DIR
 
 popd

@@ -47,14 +47,14 @@ jobs:
       CMAKE_CXX_COMPILER_LAUNCHER: sccache
       ARCTIC_CMAKE_PRESET: ${{matrix.cmake_preset_prefix}}-${{inputs.cmake_preset_type}}
       ARCTICDB_BUILD_DIR: ${{matrix.build_dir}}
+      ARCTICDB_VCPKG_INSTALLED_DIR: ${{matrix.vcpkg_installed_dir}}
       CIBW_ENVIRONMENT_PASS_LINUX: SCCACHE_GHA_VERSION ACTIONS_CACHE_URL ACTIONS_RUNTIME_TOKEN VCPKG_INSTALLATION_ROOT
         VCPKG_BINARY_SOURCES VCPKG_NUGET_USER VCPKG_NUGET_TOKEN VCPKG_MAN_NUGET_USER VCPKG_MAN_NUGET_TOKEN
         CMAKE_C_COMPILER_LAUNCHER CMAKE_CXX_COMPILER_LAUNCHER CMAKE_BUILD_PARALLEL_LEVEL ARCTIC_CMAKE_PRESET
-        ARCTICDB_BUILD_DIR TEST_OUTPUT_DIR
+        ARCTICDB_BUILD_DIR TEST_OUTPUT_DIR ARCTICDB_VCPKG_INSTALLED_DIR
       ARCTICDB_DEBUG_FIND_PYTHON: ${{vars.ARCTICDB_DEBUG_FIND_PYTHON}}
       python_impl_name: ${{inputs.python3 > 0 && format('cp3{0}', inputs.python3) || 'default'}}
       CIBW_BUILD: ${{format('cp3{0}-{1}', inputs.python3, matrix.cibw_build_suffix)}}
-      TEST_ENV3: testing_var3
     defaults:
       run: {shell: bash}
     steps:
@@ -96,11 +96,6 @@ jobs:
           VCPKG_ROOT=$PLATFORM_VCPKG_ROOT
           TEST_ENV=testing_var
           ${{matrix.envs || ''}}" | tee -a $GITHUB_ENV
-          if ${{matrix.os == 'windows'}}; then
-            echo "Setting windows only extra envs"
-            echo -e "ARCTICDB_VCPKG_INSTALL_DIR=C:/test_arcticdb_install_dir
-            TEST_ENV2=testing_var2" | tee -a $GITHUB_ENV
-          fi
           cmake -P cpp/CMake/CpuCount.cmake | sed 's/^-- //' | tee -a $GITHUB_ENV
         env:
           CMAKE_BUILD_PARALLEL_LEVEL: ${{vars.CMAKE_BUILD_PARALLEL_LEVEL}}
@@ -148,34 +143,29 @@ jobs:
             docker inspect --type=image "${{inputs.cibw_image_tag}}" \
               --format='manylinux_image={{index .Config.Labels "io.arcticdb.base"}}' | tee -a $GITHUB_ENV
 
-#       - name: Build wheel
-#         if: inputs.job_type == 'follower'
-#         run: pipx run cibuildwheel==${{inputs.cibw_version}}
-#         env:
-#           CIBW_MANYLINUX_X86_64_IMAGE: ${{inputs.cibw_image_tag}}
-#
-#       - name: Store wheel artifact
-#         if: inputs.job_type == 'follower'
-#         uses: actions/upload-artifact@v3
-#         with:
-#           name: wheel-${{env.CIBW_BUILD}}
-#           path: wheelhouse/*.whl
-#
-#       - name: Discover test directory names
-#         if: inputs.job_type == 'follower'
-#         # There are so few nonreg tests, run them in the hypothesis runner
-#         run: find python/tests/* -maxdepth 0 -type d ! -regex '.*\(__pycache__\|util\|nonreg\)' -printf '"%f",' |
-#               sed 's/^/test_dirs=[/ ; s/"hypothesis"/"{hypothesis,nonreg}"/ ; s/,$/]/' | tee -a $GITHUB_ENV
+      - name: Build wheel
+        if: inputs.job_type == 'follower'
+        run: pipx run cibuildwheel==${{inputs.cibw_version}}
+        env:
+          CIBW_MANYLINUX_X86_64_IMAGE: ${{inputs.cibw_image_tag}}
+
+      - name: Store wheel artifact
+        if: inputs.job_type == 'follower'
+        uses: actions/upload-artifact@v3
+        with:
+          name: wheel-${{env.CIBW_BUILD}}
+          path: wheelhouse/*.whl
+
+      - name: Discover test directory names
+        if: inputs.job_type == 'follower'
+        # There are so few nonreg tests, run them in the hypothesis runner
+        run: find python/tests/* -maxdepth 0 -type d ! -regex '.*\(__pycache__\|util\|nonreg\)' -printf '"%f",' |
+              sed 's/^/test_dirs=[/ ; s/"hypothesis"/"{hypothesis,nonreg}"/ ; s/,$/]/' | tee -a $GITHUB_ENV
 
       # ========================= Common =========================
       - name: Disk usage
         if: always()
-        run: |
-            du -m . "${{matrix.build_dir}}" | sort -n | tail -n 100
-            if ${{matrix.os == 'windows'}}; then
-              du -m C:/test_arcticdb_install_dir | sort -n | tail -n 20
-            fi
-            df -h
+        run: du -m . "${{matrix.build_dir}}" "${{matrix.vcpkg_installed_dir}}" | sort -n | tail -n 100; df -h
         continue-on-error: true
 
       - name: Make build directory readable for archiving
