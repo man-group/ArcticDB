@@ -1,0 +1,868 @@
+{
+    "basic_functions.BasicFunctions.peakmem_read": {
+        "code": "class BasicFunctions:\n    def peakmem_read(self, rows, num_symbols):\n        lib = self.ac[get_prewritten_lib_name(rows)]\n        _ = [lib.read(f\"{sym}_sym\").data for sym in range(num_symbols)]\n\n    def setup(self, rows, num_symbols):\n        self.ac = Arctic(\"lmdb://basic_functions\")\n        self.read_reqs = [ReadRequest(f\"{sym}_sym\") for sym in range(num_symbols)]\n    \n        self.df = generate_pseudo_random_dataframe(rows)\n\n    def setup_cache(self):\n        self.ac = Arctic(\"lmdb://basic_functions\")\n        num_rows, num_symbols = BasicFunctions.params\n    \n        self.dfs = {rows: generate_pseudo_random_dataframe(rows) for rows in num_rows}\n        for rows in num_rows:\n            lib = get_prewritten_lib_name(rows)\n            self.ac.delete_library(lib)\n            self.ac.create_library(lib)\n            lib = self.ac[lib]\n            for sym in range(num_symbols[-1]):\n                lib.write(f\"{sym}_sym\", self.dfs[rows])",
+        "name": "basic_functions.BasicFunctions.peakmem_read",
+        "param_names": [
+            "rows",
+            "num_symbols"
+        ],
+        "params": [
+            [
+                "50",
+                "100"
+            ],
+            [
+                "500",
+                "1000"
+            ]
+        ],
+        "setup_cache_key": "basic_functions:23",
+        "timeout": 6000,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "b59d4a8ac1360c313cfefca4fb709e1efb4027f04be13f2e1fe580a2ed1c28e5"
+    },
+    "basic_functions.BasicFunctions.peakmem_read_batch": {
+        "code": "class BasicFunctions:\n    def peakmem_read_batch(self, rows, num_symbols):\n        lib = self.ac[get_prewritten_lib_name(rows)]\n        read_reqs = [ReadRequest(f\"{sym}_sym\") for sym in range(num_symbols)]\n        _ = lib.read_batch(read_reqs)\n\n    def setup(self, rows, num_symbols):\n        self.ac = Arctic(\"lmdb://basic_functions\")\n        self.read_reqs = [ReadRequest(f\"{sym}_sym\") for sym in range(num_symbols)]\n    \n        self.df = generate_pseudo_random_dataframe(rows)\n\n    def setup_cache(self):\n        self.ac = Arctic(\"lmdb://basic_functions\")\n        num_rows, num_symbols = BasicFunctions.params\n    \n        self.dfs = {rows: generate_pseudo_random_dataframe(rows) for rows in num_rows}\n        for rows in num_rows:\n            lib = get_prewritten_lib_name(rows)\n            self.ac.delete_library(lib)\n            self.ac.create_library(lib)\n            lib = self.ac[lib]\n            for sym in range(num_symbols[-1]):\n                lib.write(f\"{sym}_sym\", self.dfs[rows])",
+        "name": "basic_functions.BasicFunctions.peakmem_read_batch",
+        "param_names": [
+            "rows",
+            "num_symbols"
+        ],
+        "params": [
+            [
+                "50",
+                "100"
+            ],
+            [
+                "500",
+                "1000"
+            ]
+        ],
+        "setup_cache_key": "basic_functions:23",
+        "timeout": 6000,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "ce1a9f4fc501f0c0a06acd767f955fbd5a0faec51be4eeea431124e8dc3f13ac"
+    },
+    "basic_functions.BasicFunctions.peakmem_read_batch_with_columns": {
+        "code": "class BasicFunctions:\n    def peakmem_read_batch_with_columns(self, rows, num_symbols):\n        lib = self.ac[get_prewritten_lib_name(rows)]\n        COLS = ['value']\n        read_reqs = [ReadRequest(f\"{sym}_sym\", columns=COLS) for sym in range(num_symbols)]\n        _ = lib .read_batch(read_reqs)\n\n    def setup(self, rows, num_symbols):\n        self.ac = Arctic(\"lmdb://basic_functions\")\n        self.read_reqs = [ReadRequest(f\"{sym}_sym\") for sym in range(num_symbols)]\n    \n        self.df = generate_pseudo_random_dataframe(rows)\n\n    def setup_cache(self):\n        self.ac = Arctic(\"lmdb://basic_functions\")\n        num_rows, num_symbols = BasicFunctions.params\n    \n        self.dfs = {rows: generate_pseudo_random_dataframe(rows) for rows in num_rows}\n        for rows in num_rows:\n            lib = get_prewritten_lib_name(rows)\n            self.ac.delete_library(lib)\n            self.ac.create_library(lib)\n            lib = self.ac[lib]\n            for sym in range(num_symbols[-1]):\n                lib.write(f\"{sym}_sym\", self.dfs[rows])",
+        "name": "basic_functions.BasicFunctions.peakmem_read_batch_with_columns",
+        "param_names": [
+            "rows",
+            "num_symbols"
+        ],
+        "params": [
+            [
+                "50",
+                "100"
+            ],
+            [
+                "500",
+                "1000"
+            ]
+        ],
+        "setup_cache_key": "basic_functions:23",
+        "timeout": 6000,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "711ba1ef00d4a7a3571f70faf19c70fc63aeda13466e4f13a13ef5160e3456cf"
+    },
+    "basic_functions.BasicFunctions.peakmem_read_batch_with_date_ranges": {
+        "code": "class BasicFunctions:\n    def peakmem_read_batch_with_date_ranges(self, rows, num_symbols):\n        lib = self.ac[get_prewritten_lib_name(rows)]\n        dr = pd.date_range(\"2023-01-01\", \"2023-01-01\")\n        read_reqs = [ReadRequest(f\"{sym}_sym\", date_range=dr) for sym in range(num_symbols)]\n        _ = lib .read_batch(read_reqs)\n\n    def setup(self, rows, num_symbols):\n        self.ac = Arctic(\"lmdb://basic_functions\")\n        self.read_reqs = [ReadRequest(f\"{sym}_sym\") for sym in range(num_symbols)]\n    \n        self.df = generate_pseudo_random_dataframe(rows)\n\n    def setup_cache(self):\n        self.ac = Arctic(\"lmdb://basic_functions\")\n        num_rows, num_symbols = BasicFunctions.params\n    \n        self.dfs = {rows: generate_pseudo_random_dataframe(rows) for rows in num_rows}\n        for rows in num_rows:\n            lib = get_prewritten_lib_name(rows)\n            self.ac.delete_library(lib)\n            self.ac.create_library(lib)\n            lib = self.ac[lib]\n            for sym in range(num_symbols[-1]):\n                lib.write(f\"{sym}_sym\", self.dfs[rows])",
+        "name": "basic_functions.BasicFunctions.peakmem_read_batch_with_date_ranges",
+        "param_names": [
+            "rows",
+            "num_symbols"
+        ],
+        "params": [
+            [
+                "50",
+                "100"
+            ],
+            [
+                "500",
+                "1000"
+            ]
+        ],
+        "setup_cache_key": "basic_functions:23",
+        "timeout": 6000,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "202f4c295f99f20d77083f3e5c96f2d5210fd50ebbd0c0057e69a35ed37ea0ee"
+    },
+    "basic_functions.BasicFunctions.peakmem_read_with_columns": {
+        "code": "class BasicFunctions:\n    def peakmem_read_with_columns(self, rows, num_symbols):\n        lib = self.ac[get_prewritten_lib_name(rows)]\n        COLS = ['value']\n        _ = [lib.read(f\"{sym}_sym\", columns=COLS).data for sym in range(num_symbols)]\n\n    def setup(self, rows, num_symbols):\n        self.ac = Arctic(\"lmdb://basic_functions\")\n        self.read_reqs = [ReadRequest(f\"{sym}_sym\") for sym in range(num_symbols)]\n    \n        self.df = generate_pseudo_random_dataframe(rows)\n\n    def setup_cache(self):\n        self.ac = Arctic(\"lmdb://basic_functions\")\n        num_rows, num_symbols = BasicFunctions.params\n    \n        self.dfs = {rows: generate_pseudo_random_dataframe(rows) for rows in num_rows}\n        for rows in num_rows:\n            lib = get_prewritten_lib_name(rows)\n            self.ac.delete_library(lib)\n            self.ac.create_library(lib)\n            lib = self.ac[lib]\n            for sym in range(num_symbols[-1]):\n                lib.write(f\"{sym}_sym\", self.dfs[rows])",
+        "name": "basic_functions.BasicFunctions.peakmem_read_with_columns",
+        "param_names": [
+            "rows",
+            "num_symbols"
+        ],
+        "params": [
+            [
+                "50",
+                "100"
+            ],
+            [
+                "500",
+                "1000"
+            ]
+        ],
+        "setup_cache_key": "basic_functions:23",
+        "timeout": 6000,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "1c0d14d580b38b11e593d209cde36fff2fefd1bf43c6adce5de34bacdbe70cff"
+    },
+    "basic_functions.BasicFunctions.peakmem_read_with_date_ranges": {
+        "code": "class BasicFunctions:\n    def peakmem_read_with_date_ranges(self, rows, num_symbols):\n        lib = self.ac[get_prewritten_lib_name(rows)]\n        dr = pd.date_range(\"2023-01-01\", \"2023-01-01\")\n        _ = [lib.read(f\"{sym}_sym\", date_range=dr).data for sym in range(num_symbols)]\n\n    def setup(self, rows, num_symbols):\n        self.ac = Arctic(\"lmdb://basic_functions\")\n        self.read_reqs = [ReadRequest(f\"{sym}_sym\") for sym in range(num_symbols)]\n    \n        self.df = generate_pseudo_random_dataframe(rows)\n\n    def setup_cache(self):\n        self.ac = Arctic(\"lmdb://basic_functions\")\n        num_rows, num_symbols = BasicFunctions.params\n    \n        self.dfs = {rows: generate_pseudo_random_dataframe(rows) for rows in num_rows}\n        for rows in num_rows:\n            lib = get_prewritten_lib_name(rows)\n            self.ac.delete_library(lib)\n            self.ac.create_library(lib)\n            lib = self.ac[lib]\n            for sym in range(num_symbols[-1]):\n                lib.write(f\"{sym}_sym\", self.dfs[rows])",
+        "name": "basic_functions.BasicFunctions.peakmem_read_with_date_ranges",
+        "param_names": [
+            "rows",
+            "num_symbols"
+        ],
+        "params": [
+            [
+                "50",
+                "100"
+            ],
+            [
+                "500",
+                "1000"
+            ]
+        ],
+        "setup_cache_key": "basic_functions:23",
+        "timeout": 6000,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "7f6fc63438d49d7881e83631044848ec246a365b7a9af7d57b1b29c8673b4445"
+    },
+    "basic_functions.BasicFunctions.peakmem_write": {
+        "code": "class BasicFunctions:\n    def peakmem_write(self, rows, num_symbols):\n        lib = self.get_fresh_lib()\n        for sym in range(num_symbols):\n            lib.write(f\"{sym}_sym\", self.df)\n\n    def setup(self, rows, num_symbols):\n        self.ac = Arctic(\"lmdb://basic_functions\")\n        self.read_reqs = [ReadRequest(f\"{sym}_sym\") for sym in range(num_symbols)]\n    \n        self.df = generate_pseudo_random_dataframe(rows)\n\n    def setup_cache(self):\n        self.ac = Arctic(\"lmdb://basic_functions\")\n        num_rows, num_symbols = BasicFunctions.params\n    \n        self.dfs = {rows: generate_pseudo_random_dataframe(rows) for rows in num_rows}\n        for rows in num_rows:\n            lib = get_prewritten_lib_name(rows)\n            self.ac.delete_library(lib)\n            self.ac.create_library(lib)\n            lib = self.ac[lib]\n            for sym in range(num_symbols[-1]):\n                lib.write(f\"{sym}_sym\", self.dfs[rows])",
+        "name": "basic_functions.BasicFunctions.peakmem_write",
+        "param_names": [
+            "rows",
+            "num_symbols"
+        ],
+        "params": [
+            [
+                "50",
+                "100"
+            ],
+            [
+                "500",
+                "1000"
+            ]
+        ],
+        "setup_cache_key": "basic_functions:23",
+        "timeout": 6000,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "09dbc7c79836db2fdc359f6edccd5a6e025f2dec3723b4adbbd296c7f3adcc28"
+    },
+    "basic_functions.BasicFunctions.peakmem_write_batch": {
+        "code": "class BasicFunctions:\n    def peakmem_write_batch(self, rows, num_symbols):\n        lib = self.get_fresh_lib()\n        df = self.df\n        payloads = [WritePayload(f\"{sym}_sym\", df) for sym in range(num_symbols)]\n        lib.write_batch(payloads)\n\n    def setup(self, rows, num_symbols):\n        self.ac = Arctic(\"lmdb://basic_functions\")\n        self.read_reqs = [ReadRequest(f\"{sym}_sym\") for sym in range(num_symbols)]\n    \n        self.df = generate_pseudo_random_dataframe(rows)\n\n    def setup_cache(self):\n        self.ac = Arctic(\"lmdb://basic_functions\")\n        num_rows, num_symbols = BasicFunctions.params\n    \n        self.dfs = {rows: generate_pseudo_random_dataframe(rows) for rows in num_rows}\n        for rows in num_rows:\n            lib = get_prewritten_lib_name(rows)\n            self.ac.delete_library(lib)\n            self.ac.create_library(lib)\n            lib = self.ac[lib]\n            for sym in range(num_symbols[-1]):\n                lib.write(f\"{sym}_sym\", self.dfs[rows])",
+        "name": "basic_functions.BasicFunctions.peakmem_write_batch",
+        "param_names": [
+            "rows",
+            "num_symbols"
+        ],
+        "params": [
+            [
+                "50",
+                "100"
+            ],
+            [
+                "500",
+                "1000"
+            ]
+        ],
+        "setup_cache_key": "basic_functions:23",
+        "timeout": 6000,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "235cd02e5aa9f96e4e30e9f0454d1ded3eecaafdfa184dd7bdd7d157746e1d44"
+    },
+    "basic_functions.BasicFunctions.peakmem_write_staged": {
+        "code": "class BasicFunctions:\n    def peakmem_write_staged(self, rows, _):\n        lib = self.get_fresh_lib()\n        lib.write(\"staged_sym\", self.df)\n\n    def setup(self, rows, num_symbols):\n        self.ac = Arctic(\"lmdb://basic_functions\")\n        self.read_reqs = [ReadRequest(f\"{sym}_sym\") for sym in range(num_symbols)]\n    \n        self.df = generate_pseudo_random_dataframe(rows)\n\n    def setup_cache(self):\n        self.ac = Arctic(\"lmdb://basic_functions\")\n        num_rows, num_symbols = BasicFunctions.params\n    \n        self.dfs = {rows: generate_pseudo_random_dataframe(rows) for rows in num_rows}\n        for rows in num_rows:\n            lib = get_prewritten_lib_name(rows)\n            self.ac.delete_library(lib)\n            self.ac.create_library(lib)\n            lib = self.ac[lib]\n            for sym in range(num_symbols[-1]):\n                lib.write(f\"{sym}_sym\", self.dfs[rows])",
+        "name": "basic_functions.BasicFunctions.peakmem_write_staged",
+        "param_names": [
+            "rows",
+            "num_symbols"
+        ],
+        "params": [
+            [
+                "50",
+                "100"
+            ],
+            [
+                "500",
+                "1000"
+            ]
+        ],
+        "setup_cache_key": "basic_functions:23",
+        "timeout": 6000,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "efc9e91a4a614380b642b0c5f370b3dcb1cad2608925f36771e5bdae04589629"
+    },
+    "basic_functions.BasicFunctions.time_read": {
+        "code": "class BasicFunctions:\n    def time_read(self, rows, num_symbols):\n        lib = self.ac[get_prewritten_lib_name(rows)]\n        _ = [lib.read(f\"{sym}_sym\").data for sym in range(num_symbols)]\n\n    def setup(self, rows, num_symbols):\n        self.ac = Arctic(\"lmdb://basic_functions\")\n        self.read_reqs = [ReadRequest(f\"{sym}_sym\") for sym in range(num_symbols)]\n    \n        self.df = generate_pseudo_random_dataframe(rows)\n\n    def setup_cache(self):\n        self.ac = Arctic(\"lmdb://basic_functions\")\n        num_rows, num_symbols = BasicFunctions.params\n    \n        self.dfs = {rows: generate_pseudo_random_dataframe(rows) for rows in num_rows}\n        for rows in num_rows:\n            lib = get_prewritten_lib_name(rows)\n            self.ac.delete_library(lib)\n            self.ac.create_library(lib)\n            lib = self.ac[lib]\n            for sym in range(num_symbols[-1]):\n                lib.write(f\"{sym}_sym\", self.dfs[rows])",
+        "min_run_count": 2,
+        "name": "basic_functions.BasicFunctions.time_read",
+        "number": 5,
+        "param_names": [
+            "rows",
+            "num_symbols"
+        ],
+        "params": [
+            [
+                "50",
+                "100"
+            ],
+            [
+                "500",
+                "1000"
+            ]
+        ],
+        "repeat": 0,
+        "rounds": 2,
+        "sample_time": 0.01,
+        "setup_cache_key": "basic_functions:23",
+        "timeout": 6000,
+        "type": "time",
+        "unit": "seconds",
+        "version": "08e1953aef3435933e031305ee83dde96d601d6bfd91a89042ed9fa7f9b2753c",
+        "warmup_time": -1
+    },
+    "basic_functions.BasicFunctions.time_read_batch": {
+        "code": "class BasicFunctions:\n    def time_read_batch(self, rows, num_symbols):\n        lib = self.ac[get_prewritten_lib_name(rows)]\n        read_reqs = [ReadRequest(f\"{sym}_sym\") for sym in range(num_symbols)]\n        _ = lib.read_batch(read_reqs)\n\n    def setup(self, rows, num_symbols):\n        self.ac = Arctic(\"lmdb://basic_functions\")\n        self.read_reqs = [ReadRequest(f\"{sym}_sym\") for sym in range(num_symbols)]\n    \n        self.df = generate_pseudo_random_dataframe(rows)\n\n    def setup_cache(self):\n        self.ac = Arctic(\"lmdb://basic_functions\")\n        num_rows, num_symbols = BasicFunctions.params\n    \n        self.dfs = {rows: generate_pseudo_random_dataframe(rows) for rows in num_rows}\n        for rows in num_rows:\n            lib = get_prewritten_lib_name(rows)\n            self.ac.delete_library(lib)\n            self.ac.create_library(lib)\n            lib = self.ac[lib]\n            for sym in range(num_symbols[-1]):\n                lib.write(f\"{sym}_sym\", self.dfs[rows])",
+        "min_run_count": 2,
+        "name": "basic_functions.BasicFunctions.time_read_batch",
+        "number": 5,
+        "param_names": [
+            "rows",
+            "num_symbols"
+        ],
+        "params": [
+            [
+                "50",
+                "100"
+            ],
+            [
+                "500",
+                "1000"
+            ]
+        ],
+        "repeat": 0,
+        "rounds": 2,
+        "sample_time": 0.01,
+        "setup_cache_key": "basic_functions:23",
+        "timeout": 6000,
+        "type": "time",
+        "unit": "seconds",
+        "version": "e429f7738f4d3caa84b7d08c7ffa245168870e780a97ef1cada5824f08e64f1d",
+        "warmup_time": -1
+    },
+    "basic_functions.BasicFunctions.time_read_batch_pure": {
+        "code": "class BasicFunctions:\n    def time_read_batch_pure(self, rows, num_symbols):\n        lib = self.ac[get_prewritten_lib_name(rows)]\n        _ = lib.read_batch(self.read_reqs)\n\n    def setup(self, rows, num_symbols):\n        self.ac = Arctic(\"lmdb://basic_functions\")\n        self.read_reqs = [ReadRequest(f\"{sym}_sym\") for sym in range(num_symbols)]\n    \n        self.df = generate_pseudo_random_dataframe(rows)\n\n    def setup_cache(self):\n        self.ac = Arctic(\"lmdb://basic_functions\")\n        num_rows, num_symbols = BasicFunctions.params\n    \n        self.dfs = {rows: generate_pseudo_random_dataframe(rows) for rows in num_rows}\n        for rows in num_rows:\n            lib = get_prewritten_lib_name(rows)\n            self.ac.delete_library(lib)\n            self.ac.create_library(lib)\n            lib = self.ac[lib]\n            for sym in range(num_symbols[-1]):\n                lib.write(f\"{sym}_sym\", self.dfs[rows])",
+        "min_run_count": 2,
+        "name": "basic_functions.BasicFunctions.time_read_batch_pure",
+        "number": 5,
+        "param_names": [
+            "rows",
+            "num_symbols"
+        ],
+        "params": [
+            [
+                "50",
+                "100"
+            ],
+            [
+                "500",
+                "1000"
+            ]
+        ],
+        "repeat": 0,
+        "rounds": 2,
+        "sample_time": 0.01,
+        "setup_cache_key": "basic_functions:23",
+        "timeout": 6000,
+        "type": "time",
+        "unit": "seconds",
+        "version": "0ed0a79d3f56357b1cc7ed127940d40b425d13cc337c8d30194457d1b0e68292",
+        "warmup_time": -1
+    },
+    "basic_functions.BasicFunctions.time_read_batch_with_columns": {
+        "code": "class BasicFunctions:\n    def time_read_batch_with_columns(self, rows, num_symbols):\n        lib = self.ac[get_prewritten_lib_name(rows)]\n        COLS = ['value']\n        read_reqs = [ReadRequest(f\"{sym}_sym\", columns=COLS) for sym in range(num_symbols)]\n        _ = lib .read_batch(read_reqs)\n\n    def setup(self, rows, num_symbols):\n        self.ac = Arctic(\"lmdb://basic_functions\")\n        self.read_reqs = [ReadRequest(f\"{sym}_sym\") for sym in range(num_symbols)]\n    \n        self.df = generate_pseudo_random_dataframe(rows)\n\n    def setup_cache(self):\n        self.ac = Arctic(\"lmdb://basic_functions\")\n        num_rows, num_symbols = BasicFunctions.params\n    \n        self.dfs = {rows: generate_pseudo_random_dataframe(rows) for rows in num_rows}\n        for rows in num_rows:\n            lib = get_prewritten_lib_name(rows)\n            self.ac.delete_library(lib)\n            self.ac.create_library(lib)\n            lib = self.ac[lib]\n            for sym in range(num_symbols[-1]):\n                lib.write(f\"{sym}_sym\", self.dfs[rows])",
+        "min_run_count": 2,
+        "name": "basic_functions.BasicFunctions.time_read_batch_with_columns",
+        "number": 5,
+        "param_names": [
+            "rows",
+            "num_symbols"
+        ],
+        "params": [
+            [
+                "50",
+                "100"
+            ],
+            [
+                "500",
+                "1000"
+            ]
+        ],
+        "repeat": 0,
+        "rounds": 2,
+        "sample_time": 0.01,
+        "setup_cache_key": "basic_functions:23",
+        "timeout": 6000,
+        "type": "time",
+        "unit": "seconds",
+        "version": "5fac0b501df935aa55bbcb9605b6671446515cb8e25ccee97f01e8e84902492c",
+        "warmup_time": -1
+    },
+    "basic_functions.BasicFunctions.time_read_batch_with_date_ranges": {
+        "code": "class BasicFunctions:\n    def time_read_batch_with_date_ranges(self, rows, num_symbols):\n        lib = self.ac[get_prewritten_lib_name(rows)]\n        dr = pd.date_range(\"2023-01-01\", \"2023-01-01\")\n        read_reqs = [ReadRequest(f\"{sym}_sym\", date_range=dr) for sym in range(num_symbols)]\n        _ = lib .read_batch(read_reqs)\n\n    def setup(self, rows, num_symbols):\n        self.ac = Arctic(\"lmdb://basic_functions\")\n        self.read_reqs = [ReadRequest(f\"{sym}_sym\") for sym in range(num_symbols)]\n    \n        self.df = generate_pseudo_random_dataframe(rows)\n\n    def setup_cache(self):\n        self.ac = Arctic(\"lmdb://basic_functions\")\n        num_rows, num_symbols = BasicFunctions.params\n    \n        self.dfs = {rows: generate_pseudo_random_dataframe(rows) for rows in num_rows}\n        for rows in num_rows:\n            lib = get_prewritten_lib_name(rows)\n            self.ac.delete_library(lib)\n            self.ac.create_library(lib)\n            lib = self.ac[lib]\n            for sym in range(num_symbols[-1]):\n                lib.write(f\"{sym}_sym\", self.dfs[rows])",
+        "min_run_count": 2,
+        "name": "basic_functions.BasicFunctions.time_read_batch_with_date_ranges",
+        "number": 5,
+        "param_names": [
+            "rows",
+            "num_symbols"
+        ],
+        "params": [
+            [
+                "50",
+                "100"
+            ],
+            [
+                "500",
+                "1000"
+            ]
+        ],
+        "repeat": 0,
+        "rounds": 2,
+        "sample_time": 0.01,
+        "setup_cache_key": "basic_functions:23",
+        "timeout": 6000,
+        "type": "time",
+        "unit": "seconds",
+        "version": "dc93a765737ce544d056794c3ffbe106651bd7deeb147aff2df97531b9684650",
+        "warmup_time": -1
+    },
+    "basic_functions.BasicFunctions.time_read_with_columns": {
+        "code": "class BasicFunctions:\n    def time_read_with_columns(self, rows, num_symbols):\n        lib = self.ac[get_prewritten_lib_name(rows)]\n        COLS = ['value']\n        _ = [lib.read(f\"{sym}_sym\", columns=COLS).data for sym in range(num_symbols)]\n\n    def setup(self, rows, num_symbols):\n        self.ac = Arctic(\"lmdb://basic_functions\")\n        self.read_reqs = [ReadRequest(f\"{sym}_sym\") for sym in range(num_symbols)]\n    \n        self.df = generate_pseudo_random_dataframe(rows)\n\n    def setup_cache(self):\n        self.ac = Arctic(\"lmdb://basic_functions\")\n        num_rows, num_symbols = BasicFunctions.params\n    \n        self.dfs = {rows: generate_pseudo_random_dataframe(rows) for rows in num_rows}\n        for rows in num_rows:\n            lib = get_prewritten_lib_name(rows)\n            self.ac.delete_library(lib)\n            self.ac.create_library(lib)\n            lib = self.ac[lib]\n            for sym in range(num_symbols[-1]):\n                lib.write(f\"{sym}_sym\", self.dfs[rows])",
+        "min_run_count": 2,
+        "name": "basic_functions.BasicFunctions.time_read_with_columns",
+        "number": 5,
+        "param_names": [
+            "rows",
+            "num_symbols"
+        ],
+        "params": [
+            [
+                "50",
+                "100"
+            ],
+            [
+                "500",
+                "1000"
+            ]
+        ],
+        "repeat": 0,
+        "rounds": 2,
+        "sample_time": 0.01,
+        "setup_cache_key": "basic_functions:23",
+        "timeout": 6000,
+        "type": "time",
+        "unit": "seconds",
+        "version": "17a2161ee598585842637c7fc3e8c1d1c04757e0c5a9b255fa4f11073da43d7c",
+        "warmup_time": -1
+    },
+    "basic_functions.BasicFunctions.time_read_with_date_ranges": {
+        "code": "class BasicFunctions:\n    def time_read_with_date_ranges(self, rows, num_symbols):\n        lib = self.ac[get_prewritten_lib_name(rows)]\n        dr = pd.date_range(\"2023-01-01\", \"2023-01-01\")\n        _ = [lib.read(f\"{sym}_sym\", date_range=dr).data for sym in range(num_symbols)]\n\n    def setup(self, rows, num_symbols):\n        self.ac = Arctic(\"lmdb://basic_functions\")\n        self.read_reqs = [ReadRequest(f\"{sym}_sym\") for sym in range(num_symbols)]\n    \n        self.df = generate_pseudo_random_dataframe(rows)\n\n    def setup_cache(self):\n        self.ac = Arctic(\"lmdb://basic_functions\")\n        num_rows, num_symbols = BasicFunctions.params\n    \n        self.dfs = {rows: generate_pseudo_random_dataframe(rows) for rows in num_rows}\n        for rows in num_rows:\n            lib = get_prewritten_lib_name(rows)\n            self.ac.delete_library(lib)\n            self.ac.create_library(lib)\n            lib = self.ac[lib]\n            for sym in range(num_symbols[-1]):\n                lib.write(f\"{sym}_sym\", self.dfs[rows])",
+        "min_run_count": 2,
+        "name": "basic_functions.BasicFunctions.time_read_with_date_ranges",
+        "number": 5,
+        "param_names": [
+            "rows",
+            "num_symbols"
+        ],
+        "params": [
+            [
+                "50",
+                "100"
+            ],
+            [
+                "500",
+                "1000"
+            ]
+        ],
+        "repeat": 0,
+        "rounds": 2,
+        "sample_time": 0.01,
+        "setup_cache_key": "basic_functions:23",
+        "timeout": 6000,
+        "type": "time",
+        "unit": "seconds",
+        "version": "ed2a9fc8eabbec8543c0f103cd06ac5434e71ddf84f6cf5b279a2a25bf3981be",
+        "warmup_time": -1
+    },
+    "basic_functions.BasicFunctions.time_write": {
+        "code": "class BasicFunctions:\n    def time_write(self, rows, num_symbols):\n        lib = self.get_fresh_lib()\n        for sym in range(num_symbols):\n            lib.write(f\"{sym}_sym\", self.df)\n\n    def setup(self, rows, num_symbols):\n        self.ac = Arctic(\"lmdb://basic_functions\")\n        self.read_reqs = [ReadRequest(f\"{sym}_sym\") for sym in range(num_symbols)]\n    \n        self.df = generate_pseudo_random_dataframe(rows)\n\n    def setup_cache(self):\n        self.ac = Arctic(\"lmdb://basic_functions\")\n        num_rows, num_symbols = BasicFunctions.params\n    \n        self.dfs = {rows: generate_pseudo_random_dataframe(rows) for rows in num_rows}\n        for rows in num_rows:\n            lib = get_prewritten_lib_name(rows)\n            self.ac.delete_library(lib)\n            self.ac.create_library(lib)\n            lib = self.ac[lib]\n            for sym in range(num_symbols[-1]):\n                lib.write(f\"{sym}_sym\", self.dfs[rows])",
+        "min_run_count": 2,
+        "name": "basic_functions.BasicFunctions.time_write",
+        "number": 5,
+        "param_names": [
+            "rows",
+            "num_symbols"
+        ],
+        "params": [
+            [
+                "50",
+                "100"
+            ],
+            [
+                "500",
+                "1000"
+            ]
+        ],
+        "repeat": 0,
+        "rounds": 2,
+        "sample_time": 0.01,
+        "setup_cache_key": "basic_functions:23",
+        "timeout": 6000,
+        "type": "time",
+        "unit": "seconds",
+        "version": "4ce449f0afb8d29da3d3817b3fe3913afcc1f834379f434f266742362c600e5d",
+        "warmup_time": -1
+    },
+    "basic_functions.BasicFunctions.time_write_batch": {
+        "code": "class BasicFunctions:\n    def time_write_batch(self, rows, num_symbols):\n        lib = self.get_fresh_lib()\n        df = self.df\n        payloads = [WritePayload(f\"{sym}_sym\", df) for sym in range(num_symbols)]\n        lib.write_batch(payloads)\n\n    def setup(self, rows, num_symbols):\n        self.ac = Arctic(\"lmdb://basic_functions\")\n        self.read_reqs = [ReadRequest(f\"{sym}_sym\") for sym in range(num_symbols)]\n    \n        self.df = generate_pseudo_random_dataframe(rows)\n\n    def setup_cache(self):\n        self.ac = Arctic(\"lmdb://basic_functions\")\n        num_rows, num_symbols = BasicFunctions.params\n    \n        self.dfs = {rows: generate_pseudo_random_dataframe(rows) for rows in num_rows}\n        for rows in num_rows:\n            lib = get_prewritten_lib_name(rows)\n            self.ac.delete_library(lib)\n            self.ac.create_library(lib)\n            lib = self.ac[lib]\n            for sym in range(num_symbols[-1]):\n                lib.write(f\"{sym}_sym\", self.dfs[rows])",
+        "min_run_count": 2,
+        "name": "basic_functions.BasicFunctions.time_write_batch",
+        "number": 5,
+        "param_names": [
+            "rows",
+            "num_symbols"
+        ],
+        "params": [
+            [
+                "50",
+                "100"
+            ],
+            [
+                "500",
+                "1000"
+            ]
+        ],
+        "repeat": 0,
+        "rounds": 2,
+        "sample_time": 0.01,
+        "setup_cache_key": "basic_functions:23",
+        "timeout": 6000,
+        "type": "time",
+        "unit": "seconds",
+        "version": "16d9e867020f3ccae56476558cd670a7b3c4edcaff8e7df0dbb661cc3e7f9b67",
+        "warmup_time": -1
+    },
+    "basic_functions.BasicFunctions.time_write_staged": {
+        "code": "class BasicFunctions:\n    def time_write_staged(self, rows, num_symbols):\n        lib = self.get_fresh_lib()\n        for sym in range(num_symbols):\n            lib.write(f\"{sym}_sym\", self.df, staged=True)\n\n    def setup(self, rows, num_symbols):\n        self.ac = Arctic(\"lmdb://basic_functions\")\n        self.read_reqs = [ReadRequest(f\"{sym}_sym\") for sym in range(num_symbols)]\n    \n        self.df = generate_pseudo_random_dataframe(rows)\n\n    def setup_cache(self):\n        self.ac = Arctic(\"lmdb://basic_functions\")\n        num_rows, num_symbols = BasicFunctions.params\n    \n        self.dfs = {rows: generate_pseudo_random_dataframe(rows) for rows in num_rows}\n        for rows in num_rows:\n            lib = get_prewritten_lib_name(rows)\n            self.ac.delete_library(lib)\n            self.ac.create_library(lib)\n            lib = self.ac[lib]\n            for sym in range(num_symbols[-1]):\n                lib.write(f\"{sym}_sym\", self.dfs[rows])",
+        "min_run_count": 2,
+        "name": "basic_functions.BasicFunctions.time_write_staged",
+        "number": 5,
+        "param_names": [
+            "rows",
+            "num_symbols"
+        ],
+        "params": [
+            [
+                "50",
+                "100"
+            ],
+            [
+                "500",
+                "1000"
+            ]
+        ],
+        "repeat": 0,
+        "rounds": 2,
+        "sample_time": 0.01,
+        "setup_cache_key": "basic_functions:23",
+        "timeout": 6000,
+        "type": "time",
+        "unit": "seconds",
+        "version": "747e3cf26b4ae02295fd4a54296f7b3eb239bcf779c18e1f96671953a6609d2c",
+        "warmup_time": -1
+    },
+    "list_functions.ListFunctions.peakmem_list_symbols": {
+        "code": "class ListFunctions:\n    def peakmem_list_symbols(self, num_symbols):\n        lib = self.ac[f\"{num_symbols}_num_symbols\"]\n        _ = lib.list_symbols()\n\n    def setup(self, num_symbols):\n        self.ac = Arctic(\"lmdb://list_functions\")\n\n    def setup_cache(self):\n        self.ac = Arctic(\"lmdb://list_functions\")\n    \n        num_symbols = ListFunctions.params\n        for syms in num_symbols:\n            lib_name = f\"{syms}_num_symbols\"\n            self.ac.delete_library(lib_name)\n            self.ac.create_library(lib_name)\n            lib = self.ac[lib_name]\n            for sym in range(syms):\n                lib.write(f\"{sym}_sym\", generate_benchmark_df(ListFunctions.rows))",
+        "name": "list_functions.ListFunctions.peakmem_list_symbols",
+        "param_names": [
+            "num_symbols"
+        ],
+        "params": [
+            [
+                "500",
+                "1000"
+            ]
+        ],
+        "setup_cache_key": "list_functions:21",
+        "timeout": 6000,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "8997b45efb3a79e2164064f16d0cd12fc08352596cd2d6619a81b77f34c84546"
+    },
+    "list_functions.ListFunctions.peakmem_list_versions": {
+        "code": "class ListFunctions:\n    def peakmem_list_versions(self, num_symbols):\n        lib = self.ac[f\"{num_symbols}_num_symbols\"]\n        _ = lib.list_versions()\n\n    def setup(self, num_symbols):\n        self.ac = Arctic(\"lmdb://list_functions\")\n\n    def setup_cache(self):\n        self.ac = Arctic(\"lmdb://list_functions\")\n    \n        num_symbols = ListFunctions.params\n        for syms in num_symbols:\n            lib_name = f\"{syms}_num_symbols\"\n            self.ac.delete_library(lib_name)\n            self.ac.create_library(lib_name)\n            lib = self.ac[lib_name]\n            for sym in range(syms):\n                lib.write(f\"{sym}_sym\", generate_benchmark_df(ListFunctions.rows))",
+        "name": "list_functions.ListFunctions.peakmem_list_versions",
+        "param_names": [
+            "num_symbols"
+        ],
+        "params": [
+            [
+                "500",
+                "1000"
+            ]
+        ],
+        "setup_cache_key": "list_functions:21",
+        "timeout": 6000,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "99838ef2310e9ea2a0c82f851329678bf8509542eca3bbe7203ff1d8951854c2"
+    },
+    "list_functions.ListFunctions.time_has_symbol": {
+        "code": "class ListFunctions:\n    def time_has_symbol(self, num_symbols):\n        lib = self.ac[f\"{num_symbols}_num_symbols\"]\n        _ = lib.has_symbol(\"250_sym\")\n\n    def setup(self, num_symbols):\n        self.ac = Arctic(\"lmdb://list_functions\")\n\n    def setup_cache(self):\n        self.ac = Arctic(\"lmdb://list_functions\")\n    \n        num_symbols = ListFunctions.params\n        for syms in num_symbols:\n            lib_name = f\"{syms}_num_symbols\"\n            self.ac.delete_library(lib_name)\n            self.ac.create_library(lib_name)\n            lib = self.ac[lib_name]\n            for sym in range(syms):\n                lib.write(f\"{sym}_sym\", generate_benchmark_df(ListFunctions.rows))",
+        "min_run_count": 2,
+        "name": "list_functions.ListFunctions.time_has_symbol",
+        "number": 5,
+        "param_names": [
+            "num_symbols"
+        ],
+        "params": [
+            [
+                "500",
+                "1000"
+            ]
+        ],
+        "repeat": 0,
+        "rounds": 2,
+        "sample_time": 0.01,
+        "setup_cache_key": "list_functions:21",
+        "timeout": 6000,
+        "type": "time",
+        "unit": "seconds",
+        "version": "47f689156e3258771e26b5d81ca1a90852a8ecbda0c7903e495578e4f32df40a",
+        "warmup_time": -1
+    },
+    "list_functions.ListFunctions.time_list_symbols": {
+        "code": "class ListFunctions:\n    def time_list_symbols(self, num_symbols):\n        lib = self.ac[f\"{num_symbols}_num_symbols\"]\n        _ = lib.list_symbols()\n\n    def setup(self, num_symbols):\n        self.ac = Arctic(\"lmdb://list_functions\")\n\n    def setup_cache(self):\n        self.ac = Arctic(\"lmdb://list_functions\")\n    \n        num_symbols = ListFunctions.params\n        for syms in num_symbols:\n            lib_name = f\"{syms}_num_symbols\"\n            self.ac.delete_library(lib_name)\n            self.ac.create_library(lib_name)\n            lib = self.ac[lib_name]\n            for sym in range(syms):\n                lib.write(f\"{sym}_sym\", generate_benchmark_df(ListFunctions.rows))",
+        "min_run_count": 2,
+        "name": "list_functions.ListFunctions.time_list_symbols",
+        "number": 5,
+        "param_names": [
+            "num_symbols"
+        ],
+        "params": [
+            [
+                "500",
+                "1000"
+            ]
+        ],
+        "repeat": 0,
+        "rounds": 2,
+        "sample_time": 0.01,
+        "setup_cache_key": "list_functions:21",
+        "timeout": 6000,
+        "type": "time",
+        "unit": "seconds",
+        "version": "2448baa52840f077efce42f47f18368913b42d2e4184f4624579d809530ecb39",
+        "warmup_time": -1
+    },
+    "list_functions.ListFunctions.time_list_versions": {
+        "code": "class ListFunctions:\n    def time_list_versions(self, num_symbols):\n        lib = self.ac[f\"{num_symbols}_num_symbols\"]\n        _ = lib.list_versions()\n\n    def setup(self, num_symbols):\n        self.ac = Arctic(\"lmdb://list_functions\")\n\n    def setup_cache(self):\n        self.ac = Arctic(\"lmdb://list_functions\")\n    \n        num_symbols = ListFunctions.params\n        for syms in num_symbols:\n            lib_name = f\"{syms}_num_symbols\"\n            self.ac.delete_library(lib_name)\n            self.ac.create_library(lib_name)\n            lib = self.ac[lib_name]\n            for sym in range(syms):\n                lib.write(f\"{sym}_sym\", generate_benchmark_df(ListFunctions.rows))",
+        "min_run_count": 2,
+        "name": "list_functions.ListFunctions.time_list_versions",
+        "number": 5,
+        "param_names": [
+            "num_symbols"
+        ],
+        "params": [
+            [
+                "500",
+                "1000"
+            ]
+        ],
+        "repeat": 0,
+        "rounds": 2,
+        "sample_time": 0.01,
+        "setup_cache_key": "list_functions:21",
+        "timeout": 6000,
+        "type": "time",
+        "unit": "seconds",
+        "version": "821444454da12d7516ba76e879884fd37cd790bc3c4072557dfdae9ac93a38dd",
+        "warmup_time": -1
+    },
+    "local_query_builder.LocalQueryBuilderFunctions.peakmem_query_1": {
+        "code": "class LocalQueryBuilderFunctions:\n    def peakmem_query_1(self, num_rows):\n        lib = self.ac[self.lib_name]\n        q = QueryBuilder()\n        q = q.groupby(\"id1\").agg({\"v1\": \"sum\"})\n        _ = lib.read(f\"{num_rows}_rows\", query_builder=q)\n\n    def setup(self, num_rows):\n        self.ac = Arctic(\"lmdb://query_builder?map_size=5GB\")\n        self.lib_name = \"query_builder\"\n\n    def setup_cache(self):\n        self.ac = Arctic(\"lmdb://query_builder?map_size=5GB\")\n    \n        num_rows = LocalQueryBuilderFunctions.params\n        self.lib_name = \"query_builder\"\n        self.ac.delete_library(self.lib_name)\n        self.ac.create_library(self.lib_name)\n        lib = self.ac[self.lib_name]\n        for rows in num_rows:\n            lib.write(f\"{rows}_rows\", generate_benchmark_df(rows))",
+        "name": "local_query_builder.LocalQueryBuilderFunctions.peakmem_query_1",
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "10000",
+                "100000"
+            ]
+        ],
+        "setup_cache_key": "local_query_builder:20",
+        "timeout": 6000,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "111efd47214e7fbef2aff7346802ba7eb5d588041f5f8f8e3f9107314f186588"
+    },
+    "local_query_builder.LocalQueryBuilderFunctions.peakmem_query_3": {
+        "code": "class LocalQueryBuilderFunctions:\n    def peakmem_query_3(self, num_rows):\n        lib = self.ac[self.lib_name]\n        q = QueryBuilder()\n        q = q.groupby(\"id3\").agg({\"v1\": \"sum\", \"v3\": \"sum\"})\n        _ = lib.read(f\"{num_rows}_rows\", query_builder=q)\n\n    def setup(self, num_rows):\n        self.ac = Arctic(\"lmdb://query_builder?map_size=5GB\")\n        self.lib_name = \"query_builder\"\n\n    def setup_cache(self):\n        self.ac = Arctic(\"lmdb://query_builder?map_size=5GB\")\n    \n        num_rows = LocalQueryBuilderFunctions.params\n        self.lib_name = \"query_builder\"\n        self.ac.delete_library(self.lib_name)\n        self.ac.create_library(self.lib_name)\n        lib = self.ac[self.lib_name]\n        for rows in num_rows:\n            lib.write(f\"{rows}_rows\", generate_benchmark_df(rows))",
+        "name": "local_query_builder.LocalQueryBuilderFunctions.peakmem_query_3",
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "10000",
+                "100000"
+            ]
+        ],
+        "setup_cache_key": "local_query_builder:20",
+        "timeout": 6000,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "256d8a8ce74a07b17d92f6d677832a700936d130503198b684b5bc1423c80aa4"
+    },
+    "local_query_builder.LocalQueryBuilderFunctions.peakmem_query_4": {
+        "code": "class LocalQueryBuilderFunctions:\n    def peakmem_query_4(self, num_rows):\n        lib = self.ac[self.lib_name]\n        q = QueryBuilder()\n        q = q.groupby(\"id6\").agg({\"v1\": \"sum\", \"v2\": \"sum\"})\n        _ = lib.read(f\"{num_rows}_rows\", query_builder=q)\n\n    def setup(self, num_rows):\n        self.ac = Arctic(\"lmdb://query_builder?map_size=5GB\")\n        self.lib_name = \"query_builder\"\n\n    def setup_cache(self):\n        self.ac = Arctic(\"lmdb://query_builder?map_size=5GB\")\n    \n        num_rows = LocalQueryBuilderFunctions.params\n        self.lib_name = \"query_builder\"\n        self.ac.delete_library(self.lib_name)\n        self.ac.create_library(self.lib_name)\n        lib = self.ac[self.lib_name]\n        for rows in num_rows:\n            lib.write(f\"{rows}_rows\", generate_benchmark_df(rows))",
+        "name": "local_query_builder.LocalQueryBuilderFunctions.peakmem_query_4",
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "10000",
+                "100000"
+            ]
+        ],
+        "setup_cache_key": "local_query_builder:20",
+        "timeout": 6000,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "eeeb23adb5b4c1a7b4ff37f00b5d568890fccfaf0b5abbb741805e54385ce23a"
+    },
+    "local_query_builder.LocalQueryBuilderFunctions.peakmem_query_adv_query_2": {
+        "code": "class LocalQueryBuilderFunctions:\n    def peakmem_query_adv_query_2(self, num_rows):\n        lib = self.ac[self.lib_name]\n        q = QueryBuilder()\n        q = q.groupby(\"id3\").agg({\"v1\": \"max\", \"v2\": \"min\"})\n        _ = lib.read(f\"{num_rows}_rows\", query_builder=q)\n\n    def setup(self, num_rows):\n        self.ac = Arctic(\"lmdb://query_builder?map_size=5GB\")\n        self.lib_name = \"query_builder\"\n\n    def setup_cache(self):\n        self.ac = Arctic(\"lmdb://query_builder?map_size=5GB\")\n    \n        num_rows = LocalQueryBuilderFunctions.params\n        self.lib_name = \"query_builder\"\n        self.ac.delete_library(self.lib_name)\n        self.ac.create_library(self.lib_name)\n        lib = self.ac[self.lib_name]\n        for rows in num_rows:\n            lib.write(f\"{rows}_rows\", generate_benchmark_df(rows))",
+        "name": "local_query_builder.LocalQueryBuilderFunctions.peakmem_query_adv_query_2",
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "10000",
+                "100000"
+            ]
+        ],
+        "setup_cache_key": "local_query_builder:20",
+        "timeout": 6000,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "5991f08dedc736962edae772889f5cc4df12bc94c2bdf0dd1e0bb9c72f61ce0d"
+    },
+    "local_query_builder.LocalQueryBuilderFunctions.time_query_1": {
+        "code": "class LocalQueryBuilderFunctions:\n    def time_query_1(self, num_rows):\n        lib = self.ac[self.lib_name]\n        q = QueryBuilder()\n        q = q.groupby(\"id1\").agg({\"v1\": \"sum\"})\n        _ = lib.read(f\"{num_rows}_rows\", query_builder=q)\n\n    def setup(self, num_rows):\n        self.ac = Arctic(\"lmdb://query_builder?map_size=5GB\")\n        self.lib_name = \"query_builder\"\n\n    def setup_cache(self):\n        self.ac = Arctic(\"lmdb://query_builder?map_size=5GB\")\n    \n        num_rows = LocalQueryBuilderFunctions.params\n        self.lib_name = \"query_builder\"\n        self.ac.delete_library(self.lib_name)\n        self.ac.create_library(self.lib_name)\n        lib = self.ac[self.lib_name]\n        for rows in num_rows:\n            lib.write(f\"{rows}_rows\", generate_benchmark_df(rows))",
+        "min_run_count": 2,
+        "name": "local_query_builder.LocalQueryBuilderFunctions.time_query_1",
+        "number": 5,
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "10000",
+                "100000"
+            ]
+        ],
+        "repeat": 0,
+        "rounds": 2,
+        "sample_time": 0.01,
+        "setup_cache_key": "local_query_builder:20",
+        "timeout": 6000,
+        "type": "time",
+        "unit": "seconds",
+        "version": "3d412aa6993de5765a9a74f70189299c2c0900e0f079af1c6f4359c052a3770e",
+        "warmup_time": -1
+    },
+    "local_query_builder.LocalQueryBuilderFunctions.time_query_3": {
+        "code": "class LocalQueryBuilderFunctions:\n    def time_query_3(self, num_rows):\n        lib = self.ac[self.lib_name]\n        q = QueryBuilder()\n        q = q.groupby(\"id3\").agg({\"v1\": \"sum\", \"v3\": \"sum\"})\n        _ = lib.read(f\"{num_rows}_rows\", query_builder=q)\n\n    def setup(self, num_rows):\n        self.ac = Arctic(\"lmdb://query_builder?map_size=5GB\")\n        self.lib_name = \"query_builder\"\n\n    def setup_cache(self):\n        self.ac = Arctic(\"lmdb://query_builder?map_size=5GB\")\n    \n        num_rows = LocalQueryBuilderFunctions.params\n        self.lib_name = \"query_builder\"\n        self.ac.delete_library(self.lib_name)\n        self.ac.create_library(self.lib_name)\n        lib = self.ac[self.lib_name]\n        for rows in num_rows:\n            lib.write(f\"{rows}_rows\", generate_benchmark_df(rows))",
+        "min_run_count": 2,
+        "name": "local_query_builder.LocalQueryBuilderFunctions.time_query_3",
+        "number": 5,
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "10000",
+                "100000"
+            ]
+        ],
+        "repeat": 0,
+        "rounds": 2,
+        "sample_time": 0.01,
+        "setup_cache_key": "local_query_builder:20",
+        "timeout": 6000,
+        "type": "time",
+        "unit": "seconds",
+        "version": "f28cfb638a02db7c0076660b2d89766d79fd4e5ad853b93f0f3b751c056cb2b9",
+        "warmup_time": -1
+    },
+    "local_query_builder.LocalQueryBuilderFunctions.time_query_4": {
+        "code": "class LocalQueryBuilderFunctions:\n    def time_query_4(self, num_rows):\n        lib = self.ac[self.lib_name]\n        q = QueryBuilder()\n        q = q.groupby(\"id6\").agg({\"v1\": \"sum\", \"v2\": \"sum\"})\n        _ = lib.read(f\"{num_rows}_rows\", query_builder=q)\n\n    def setup(self, num_rows):\n        self.ac = Arctic(\"lmdb://query_builder?map_size=5GB\")\n        self.lib_name = \"query_builder\"\n\n    def setup_cache(self):\n        self.ac = Arctic(\"lmdb://query_builder?map_size=5GB\")\n    \n        num_rows = LocalQueryBuilderFunctions.params\n        self.lib_name = \"query_builder\"\n        self.ac.delete_library(self.lib_name)\n        self.ac.create_library(self.lib_name)\n        lib = self.ac[self.lib_name]\n        for rows in num_rows:\n            lib.write(f\"{rows}_rows\", generate_benchmark_df(rows))",
+        "min_run_count": 2,
+        "name": "local_query_builder.LocalQueryBuilderFunctions.time_query_4",
+        "number": 5,
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "10000",
+                "100000"
+            ]
+        ],
+        "repeat": 0,
+        "rounds": 2,
+        "sample_time": 0.01,
+        "setup_cache_key": "local_query_builder:20",
+        "timeout": 6000,
+        "type": "time",
+        "unit": "seconds",
+        "version": "0332261bd825802bb2429f922454e44324bdf5b44442b1f0906ceb2dfffcc2db",
+        "warmup_time": -1
+    },
+    "local_query_builder.LocalQueryBuilderFunctions.time_query_adv_query_2": {
+        "code": "class LocalQueryBuilderFunctions:\n    def time_query_adv_query_2(self, num_rows):\n        lib = self.ac[self.lib_name]\n        q = QueryBuilder()\n        q = q.groupby(\"id3\").agg({\"v1\": \"max\", \"v2\": \"min\"})\n        _ = lib.read(f\"{num_rows}_rows\", query_builder=q)\n\n    def setup(self, num_rows):\n        self.ac = Arctic(\"lmdb://query_builder?map_size=5GB\")\n        self.lib_name = \"query_builder\"\n\n    def setup_cache(self):\n        self.ac = Arctic(\"lmdb://query_builder?map_size=5GB\")\n    \n        num_rows = LocalQueryBuilderFunctions.params\n        self.lib_name = \"query_builder\"\n        self.ac.delete_library(self.lib_name)\n        self.ac.create_library(self.lib_name)\n        lib = self.ac[self.lib_name]\n        for rows in num_rows:\n            lib.write(f\"{rows}_rows\", generate_benchmark_df(rows))",
+        "min_run_count": 2,
+        "name": "local_query_builder.LocalQueryBuilderFunctions.time_query_adv_query_2",
+        "number": 5,
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "10000",
+                "100000"
+            ]
+        ],
+        "repeat": 0,
+        "rounds": 2,
+        "sample_time": 0.01,
+        "setup_cache_key": "local_query_builder:20",
+        "timeout": 6000,
+        "type": "time",
+        "unit": "seconds",
+        "version": "110f435f866dd073b60942e8e2ae651110fd7847258e9120cfd5882f4ec1d232",
+        "warmup_time": -1
+    },
+    "persistent_query_builder.PersistentQueryBuilderFunctions.time_query_1": {
+        "code": "class PersistentQueryBuilderFunctions:\n    def time_query_1(self, num_rows):\n        lib = self.ac[self.lib_name]\n        q = QueryBuilder()\n        q = q.groupby(\"id1\").agg({\"v1\": \"sum\"})\n        _ = lib.read(f\"{num_rows}_rows\", query_builder=q)\n\n    def setup(self, num_rows):\n        pass",
+        "min_run_count": 2,
+        "name": "persistent_query_builder.PersistentQueryBuilderFunctions.time_query_1",
+        "number": 2,
+        "param_names": [
+            "param1"
+        ],
+        "params": [
+            [
+                "10000000",
+                "100000000"
+            ]
+        ],
+        "repeat": 0,
+        "rounds": 2,
+        "sample_time": 0.01,
+        "timeout": 6000,
+        "type": "time",
+        "unit": "seconds",
+        "version": "f646bc64f5c5a8089c7a9d2bf0d89bce9a2fd2dce2d85afb8678c27b71c16219",
+        "warmup_time": -1
+    },
+    "persistent_query_builder.PersistentQueryBuilderFunctions.time_query_3": {
+        "code": "class PersistentQueryBuilderFunctions:\n    def time_query_3(self, num_rows):\n        lib = self.ac[self.lib_name]\n        q = QueryBuilder()\n        q = q.groupby(\"id3\").agg({\"v1\": \"sum\", \"v3\": \"sum\"})\n        _ = lib.read(f\"{num_rows}_rows\", query_builder=q)\n\n    def setup(self, num_rows):\n        pass",
+        "min_run_count": 2,
+        "name": "persistent_query_builder.PersistentQueryBuilderFunctions.time_query_3",
+        "number": 2,
+        "param_names": [
+            "param1"
+        ],
+        "params": [
+            [
+                "10000000",
+                "100000000"
+            ]
+        ],
+        "repeat": 0,
+        "rounds": 2,
+        "sample_time": 0.01,
+        "timeout": 6000,
+        "type": "time",
+        "unit": "seconds",
+        "version": "89de596ea57ec5364ff97d33fe8afe555d4f6b0fe80c55c1790b29a5e18ff088",
+        "warmup_time": -1
+    },
+    "persistent_query_builder.PersistentQueryBuilderFunctions.time_query_4": {
+        "code": "class PersistentQueryBuilderFunctions:\n    def time_query_4(self, num_rows):\n        lib = self.ac[self.lib_name]\n        q = QueryBuilder()\n        q = q.groupby(\"id6\").agg({\"v1\": \"sum\", \"v2\": \"sum\"})\n        _ = lib.read(f\"{num_rows}_rows\", query_builder=q)\n\n    def setup(self, num_rows):\n        pass",
+        "min_run_count": 2,
+        "name": "persistent_query_builder.PersistentQueryBuilderFunctions.time_query_4",
+        "number": 2,
+        "param_names": [
+            "param1"
+        ],
+        "params": [
+            [
+                "10000000",
+                "100000000"
+            ]
+        ],
+        "repeat": 0,
+        "rounds": 2,
+        "sample_time": 0.01,
+        "timeout": 6000,
+        "type": "time",
+        "unit": "seconds",
+        "version": "e901886cae8012447391060275f5d37c53132eacbbd124f8bee411d66744a0b7",
+        "warmup_time": -1
+    },
+    "persistent_query_builder.PersistentQueryBuilderFunctions.time_query_adv_query_2": {
+        "code": "class PersistentQueryBuilderFunctions:\n    def time_query_adv_query_2(self, num_rows):\n        lib = self.ac[self.lib_name]\n        q = QueryBuilder()\n        q = q.groupby(\"id3\").agg({\"v1\": \"max\", \"v2\": \"min\"})\n        _ = lib.read(f\"{num_rows}_rows\", query_builder=q)\n\n    def setup(self, num_rows):\n        pass",
+        "min_run_count": 2,
+        "name": "persistent_query_builder.PersistentQueryBuilderFunctions.time_query_adv_query_2",
+        "number": 2,
+        "param_names": [
+            "param1"
+        ],
+        "params": [
+            [
+                "10000000",
+                "100000000"
+            ]
+        ],
+        "repeat": 0,
+        "rounds": 2,
+        "sample_time": 0.01,
+        "timeout": 6000,
+        "type": "time",
+        "unit": "seconds",
+        "version": "b2251023c35a9602f977f2c83b44f77b15bca81241f820b43a0fafd45360946e",
+        "warmup_time": -1
+    },
+    "version": 2
+}
