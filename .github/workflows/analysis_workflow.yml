@@ -272,12 +272,11 @@ jobs:
 
           python -m asv machine -v --yes --machine ArcticDB-Runner-Medium
           git config --global --add safe.directory .
-          python -m asv run -v --show-stderr HASHFILE:hashes_to_benchmark.txt
-          # if ["${{inputs.run_all_benchmarks}}"]; then
-          #   python -m asv run -v --show-stderr HASHFILE:hashes_to_benchmark.txt
-          # else
-          #   python -m asv run -v --show-stderr HEAD^!
-          # fi
+          if ["${{inputs.run_all_benchmarks}}"]; then
+            python -m asv run -v --show-stderr HASHFILE:hashes_to_benchmark.txt
+          else
+            python -m asv run -v --show-stderr HEAD^!
+          fi
           git pull
 
           python -m asv publish
@@ -294,6 +293,10 @@ jobs:
           git add hashes_to_benchmark.txt
           git commit -m "Update ASV Results and hashes to test"
           git push --force origin HEAD
+          
+          # Print the commit that are seen from this branch
+          for gtag in $(git tag --list --sort taggerdate | grep "^v"); do     git log $gtag --oneline -n1 --decorate=no; done
+
           python -m asv gh-pages --rewrite
           # if [[!"${{github.ref}}" -eq 'refs/heads/master']]; then
           #   python -m asv gh-pages --rewrite
