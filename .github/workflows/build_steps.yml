@@ -26,6 +26,7 @@ jobs:
         cibw_build_suffix: [0]
         envs: [0]
         build_dir: [0] # Must be an absolute path
+        vcpkg_installed_dir: [0] # Absolute path. Is currently for Windows only.
         symbols: [0] # Glob for symbol symbol files. Used for including in follower builds and exclusion on others.
         do_not_archive: [0]
         test_services: [0] # Github service containers to spin up for the pytest run
@@ -95,7 +96,7 @@ jobs:
           VCPKG_ROOT=$PLATFORM_VCPKG_ROOT
           TEST_ENV=testing_var
           ${{matrix.envs || ''}}" | tee -a $GITHUB_ENV
-          if $${matrix.os == 'windows'}}; then
+          if ${{matrix.os == 'windows'}}; then
             echo "Setting windows only extra envs"
             echo -e "ARCTICDB_VCPKG_INSTALL_DIR=C:/test_arcticdb_install_dir
             TEST_ENV2=testing_var2" | tee -a $GITHUB_ENV
@@ -147,31 +148,33 @@ jobs:
             docker inspect --type=image "${{inputs.cibw_image_tag}}" \
               --format='manylinux_image={{index .Config.Labels "io.arcticdb.base"}}' | tee -a $GITHUB_ENV
 
-      - name: Build wheel
-        if: inputs.job_type == 'follower'
-        run: pipx run cibuildwheel==${{inputs.cibw_version}}
-        env:
-          CIBW_MANYLINUX_X86_64_IMAGE: ${{inputs.cibw_image_tag}}
-
-      - name: Store wheel artifact
-        if: inputs.job_type == 'follower'
-        uses: actions/upload-artifact@v3
-        with:
-          name: wheel-${{env.CIBW_BUILD}}
-          path: wheelhouse/*.whl
-
-      - name: Discover test directory names
-        if: inputs.job_type == 'follower'
-        # There are so few nonreg tests, run them in the hypothesis runner
-        run: find python/tests/* -maxdepth 0 -type d ! -regex '.*\(__pycache__\|util\|nonreg\)' -printf '"%f",' |
-              sed 's/^/test_dirs=[/ ; s/"hypothesis"/"{hypothesis,nonreg}"/ ; s/,$/]/' | tee -a $GITHUB_ENV
+#       - name: Build wheel
+#         if: inputs.job_type == 'follower'
+#         run: pipx run cibuildwheel==${{inputs.cibw_version}}
+#         env:
+#           CIBW_MANYLINUX_X86_64_IMAGE: ${{inputs.cibw_image_tag}}
+#
+#       - name: Store wheel artifact
+#         if: inputs.job_type == 'follower'
+#         uses: actions/upload-artifact@v3
+#         with:
+#           name: wheel-${{env.CIBW_BUILD}}
+#           path: wheelhouse/*.whl
+#
+#       - name: Discover test directory names
+#         if: inputs.job_type == 'follower'
+#         # There are so few nonreg tests, run them in the hypothesis runner
+#         run: find python/tests/* -maxdepth 0 -type d ! -regex '.*\(__pycache__\|util\|nonreg\)' -printf '"%f",' |
+#               sed 's/^/test_dirs=[/ ; s/"hypothesis"/"{hypothesis,nonreg}"/ ; s/,$/]/' | tee -a $GITHUB_ENV
 
       # ========================= Common =========================
       - name: Disk usage
         if: always()
         run: |
             du -m . "${{matrix.build_dir}}" | sort -n | tail -n 100
-            du -m C:\test_arcticdb_install_dir | sort -n | tail -n 20
+            if ${{matrix.os == 'windows'}}; then
+              du -m C:/test_arcticdb_install_dir | sort -n | tail -n 20
+            fi
             df -h
         continue-on-error: true
 
