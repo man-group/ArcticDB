@@ -22,7 +22,10 @@ manylinux-x86_64-image = "ghcr.io/man-group/cibuildwheel_manylinux:latest"
 
 [tool.cibuildwheel.windows]
 build = "cp*-win_amd64"
-before-all = ". {project}/build_tooling/prep_cpp_build.sh"
+before-all = """
+bash {project}/build_tooling/prep_cpp_build.sh
+set ARCTICDB_VCPKG_INSTALL_DIR="C:/test_arcticdb_install_dir"
+"""
 before-build = "set"
 
 [tool.black]
