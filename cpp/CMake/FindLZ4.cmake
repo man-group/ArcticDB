@@ -7,6 +7,8 @@
 #  LZ4_VERSION       - LZ4 version number
 #
 
+message(STATUS "Inside FindLZ4.cmake #############")
+
 find_path(LZ4_INCLUDE_DIR
   NAMES lz4.h
   DOC "lz4 include directory")
@@ -35,6 +37,10 @@ find_package_handle_standard_args(LZ4
   VERSION_VAR LZ4_VERSION)
 
 if (LZ4_FOUND)
+  # For rocksdb conda mac, it looks for this variable only.
+  message(STATUS "Setting the lz4_FOUND variable ###########")
+  set (lz4_FOUND TRUE)
+
   set(LZ4_INCLUDE_DIRS "${LZ4_INCLUDE_DIR}")
   set(LZ4_LIBRARIES "${LZ4_LIBRARY}")
 
