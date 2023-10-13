@@ -42,7 +42,7 @@ jobs:
                 cmake_preset_prefix: linux
                 cibw_build_suffix: manylinux_x86_64
                 build_dir: /tmp/cpp_build
-                vcpkg_installed_dir: {}
+                vcpkg_installed_dir: "" # Let vcpkg use default location under cpp/out/*-build/vcpkg_installed/
                 symbols: "*.gz" # Please update publish.yml when changing this!!
                 do_not_archive: ["*.so", "*.[ao]", "vcpkg_installed"]
                 test_services:
@@ -55,8 +55,8 @@ jobs:
                 distro: windows-latest
                 cmake_preset_prefix: windows-cl
                 cibw_build_suffix: win_amd64
-                build_dir: C:\cpp_build
-                vcpkg_installed_dir: C:\vcpkg_installed_dir
+                build_dir: C:\cpp_build # Only respected by the leader in prep_cpp_build.sh
+                vcpkg_installed_dir: C:\vcpkg_installed_dir # Set explicitly for Windows to save D:\ space
                 symbols: "*.pdb" # Please update publish.yml when changing this!!
                 do_not_archive: ["*.lib", "*.ilk", "*.pyd", "*.dll", "CMakeFiles/*.dir", "vcpkg_installed"]
                 test_services: {}

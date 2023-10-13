@@ -152,8 +152,8 @@ class CMakeBuild(build_ext):
             "--preset",
             preset,
         ]
-        vcpkg_installed_dir = os.getenv("ARCTICDB_VCPKG_INSTALL_DIR")
-        print(f"ARCTICDB_VCPKG_INSTALL_DIR={vcpkg_installed_dir}")
+        vcpkg_installed_dir = os.getenv("ARCTICDB_VCPKG_INSTALLED_DIR")
+        print(f"ARCTICDB_VCPKG_INSTALLED_DIR={vcpkg_installed_dir}")
         if vcpkg_installed_dir:
             args.append(f"-DVCPKG_INSTALLED_DIR={vcpkg_installed_dir}")
 

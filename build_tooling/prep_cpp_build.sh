@@ -15,7 +15,8 @@ cd ..
 case `uname -a` in
 *Microsoft*|MINGW*)
     if [[ -n "$GITHUB_ACTION" ]] ; then
-        # Redirect the build directory to the more spacious C:
+        # Redirect the build directory to the more spacious C: for the leader only
+        # Do not redirect for the Windows followers
         if [[ "$MSYSTEM" != MINGW* ]] ; then echo "Must run $0 with git/MINGW bash" >&2
         elif [[ -e out ]] ; then echo "out directory cannot exist at this point" >&2
         else
