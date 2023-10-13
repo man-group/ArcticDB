@@ -54,4 +54,4 @@ class ListFunctions:
 
     def time_has_symbol(self, num_symbols):
         lib = self.ac[f"{num_symbols}_num_symbols"]
-        _ = lib.has_symbol("500_sym")
+        _ = lib.has_symbol("250_sym")

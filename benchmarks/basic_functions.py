@@ -105,23 +105,23 @@ class BasicFunctions:
 
     def time_read_with_columns(self, rows, num_symbols):
         lib = self.ac[get_prewritten_lib_name(rows)]
-        COLS = ['id1']
+        COLS = ['value']
         _ = [lib.read(f"{sym}_sym", columns=COLS).data for sym in range(num_symbols)]
 
     def peakmem_read_with_columns(self, rows, num_symbols):
         lib = self.ac[get_prewritten_lib_name(rows)]
-        COLS = ['id1']
+        COLS = ['value']
         _ = [lib.read(f"{sym}_sym", columns=COLS).data for sym in range(num_symbols)]
 
     def time_read_batch_with_columns(self, rows, num_symbols):
         lib = self.ac[get_prewritten_lib_name(rows)]
-        COLS = ['id1']
+        COLS = ['value']
         read_reqs = [ReadRequest(f"{sym}_sym", columns=COLS) for sym in range(num_symbols)]
         _ = lib .read_batch(read_reqs)
 
     def peakmem_read_batch_with_columns(self, rows, num_symbols):
         lib = self.ac[get_prewritten_lib_name(rows)]
-        COLS = ['id1']
+        COLS = ['value']
         read_reqs = [ReadRequest(f"{sym}_sym", columns=COLS) for sym in range(num_symbols)]
         _ = lib .read_batch(read_reqs)
     
