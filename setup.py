@@ -144,8 +144,8 @@ class CMakeBuild(build_ext):
             suffix = conda_suffix + suffix
             preset = ("windows-cl" if platform.system() == "Windows" else platform.system().lower()) + suffix
 
-        env_var_vcpkg = "ARCTICDB_VCPKG_INSTALL_DIR"
-        vcpkg_installed_dir = os.getenv(env_var_vcpkg)
+        vcpkg_installed_dir = os.getenv("ARCTICDB_VCPKG_INSTALL_DIR")
+        print(f"ARCTICDB_VCPKG_INSTALL_DIR={vcpkg_installed_dir}")
         args = [
             cmake,
             f"-DTEST={ARCTICDB_BUILD_CPP_TESTS}",

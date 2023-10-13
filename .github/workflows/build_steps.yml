@@ -102,14 +102,14 @@ jobs:
         if: inputs.job_type != 'follower'
         run: . build_tooling/prep_cpp_build.sh # Also applies to Windows
 
-      - name: CMake compile
-        if: inputs.job_type != 'follower'
-        uses: lukka/run-cmake@v10
-        with:
-          cmakeListsTxtPath: ${{github.workspace}}/cpp/CMakeLists.txt
-          configurePreset: ${{env.ARCTIC_CMAKE_PRESET}}
-          configurePresetAdditionalArgs: "['-DVCPKG_INSTALL_OPTIONS=--clean-after-build']"
-          buildPreset: ${{env.ARCTIC_CMAKE_PRESET}}
+#      - name: CMake compile
+#        if: inputs.job_type != 'follower'
+#        uses: lukka/run-cmake@v10
+#        with:
+#          cmakeListsTxtPath: ${{github.workspace}}/cpp/CMakeLists.txt
+#          configurePreset: ${{env.ARCTIC_CMAKE_PRESET}}
+#          configurePresetAdditionalArgs: "['-DVCPKG_INSTALL_OPTIONS=--clean-after-build']"
+#          buildPreset: ${{env.ARCTIC_CMAKE_PRESET}}
 
       - name: Compile C++ tests
         if: inputs.job_type == 'cpp-tests'
