@@ -166,6 +166,13 @@ class CMakeBuild(build_ext):
                 print(open(rocksdb_log).read())
             else:
                 print('### did not find rocksdb logs to print ###')
+            rocksdb_log_err = r"D:\a\ArcticDB\ArcticDB\cpp\vcpkg\buildtrees\rocksdb\install-x64-windows-static-dbg-err.log"
+            if os.path.exists(rocksdb_log_err):
+                print('### rocksdb err logs ####')
+                print(open(rocksdb_log_err).read())
+            else:
+                print('### did not find rocksdb err logs to print ###')
+            print("### finish rocksdb logs ###")
         search = f"cpp/out/{preset}-build"
         candidates = glob.glob(search)
         assert len(candidates) == 1, f"Specify {env_var} or use a single build directory. {search}={candidates}"
