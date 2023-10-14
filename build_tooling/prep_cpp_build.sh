@@ -30,8 +30,8 @@ case `uname -a` in
 
     # Try symlinking packages onto C:\ drive also
     rmdir vcpkg/packages
-    mkdir C:\vcpkg_packages
-    MSYS=winsymlinks:nativestrict ln -s C:\vcpkg_packages vcpkg/packages
+    mkdir C:\\vcpkg_packages
+    MSYS=winsymlinks:nativestrict ln -s C:\\vcpkg_packages vcpkg/packages
     ;;
 *)
     if [[ -n "$ARCTICDB_BUILD_DIR" ]] ; then
