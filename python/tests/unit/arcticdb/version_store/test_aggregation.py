@@ -138,7 +138,7 @@ def test_hypothesis_max_min_agg(lmdb_version_store, df):
     assert_frame_equal(expected, vit.data)
 
 
-def test_count_agg(lmdb_version_store, df):
+def count_aggregation(lmdb_version_store, df):
     lib = lmdb_version_store
     assume(not df.empty)
 
@@ -170,7 +170,7 @@ def test_count_agg(lmdb_version_store, df):
     )
 )
 def test_hypothesis_count_agg_non_zero_numeric(lmdb_version_store, df):
-    test_count_agg(lmdb_version_store, df)
+    count_aggregation(lmdb_version_store, df)
 
 
 @use_of_function_scoped_fixtures_in_hypothesis_checked
@@ -185,7 +185,7 @@ def test_hypothesis_count_agg_non_zero_numeric(lmdb_version_store, df):
     )
 )
 def test_hypothesis_count_agg_numeric(lmdb_version_store, df):
-    test_count_agg(lmdb_version_store, df)
+    count_aggregation(lmdb_version_store, df)
 
 
 @use_of_function_scoped_fixtures_in_hypothesis_checked
@@ -200,7 +200,7 @@ def test_hypothesis_count_agg_numeric(lmdb_version_store, df):
     )
 )
 def test_hypothesis_count_agg_strings(lmdb_version_store, df):
-    test_count_agg(lmdb_version_store, df)
+    count_aggregation(lmdb_version_store, df)
 
 
 def test_count_aggregation(local_object_version_store):

@@ -132,7 +132,7 @@ def test_hypothesis_max_agg_dynamic(lmdb_version_store_dynamic_schema_v1, df):
         pass
 
 
-def test_count_agg_dynamic(lmdb_version_store_dynamic_schema_v1, df):
+def count_agg_dynamic(lmdb_version_store_dynamic_schema_v1, df):
     lib = lmdb_version_store_dynamic_schema_v1
     assume(not df.empty)
 
@@ -169,7 +169,7 @@ def test_count_agg_dynamic(lmdb_version_store_dynamic_schema_v1, df):
     )
 )
 def test_hypothesis_count_agg_dynamic_non_zero_numeric(lmdb_version_store_dynamic_schema_v1, df):
-    test_count_agg_dynamic(lmdb_version_store_dynamic_schema_v1, df)
+    count_agg_dynamic(lmdb_version_store_dynamic_schema_v1, df)
 
 
 @use_of_function_scoped_fixtures_in_hypothesis_checked
@@ -184,7 +184,7 @@ def test_hypothesis_count_agg_dynamic_non_zero_numeric(lmdb_version_store_dynami
     )
 )
 def test_hypothesis_count_agg_dynamic_numeric(lmdb_version_store_dynamic_schema_v1, df):
-    test_count_agg_dynamic(lmdb_version_store_dynamic_schema_v1, df)
+    count_agg_dynamic(lmdb_version_store_dynamic_schema_v1, df)
 
 
 @use_of_function_scoped_fixtures_in_hypothesis_checked
@@ -199,7 +199,7 @@ def test_hypothesis_count_agg_dynamic_numeric(lmdb_version_store_dynamic_schema_
     )
 )
 def test_hypothesis_count_agg_dynamic_strings(lmdb_version_store_dynamic_schema_v1, df):
-    test_count_agg_dynamic(lmdb_version_store_dynamic_schema_v1, df)
+    count_agg_dynamic(lmdb_version_store_dynamic_schema_v1, df)
 
 
 def test_count_aggregation_dynamic(s3_version_store_dynamic_schema_v2):
