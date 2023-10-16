@@ -144,7 +144,7 @@ class CMakeBuild(build_ext):
             suffix = conda_suffix + suffix
             preset = ("windows-cl" if platform.system() == "Windows" else platform.system().lower()) + suffix
 
-        args = [
+        cmd = [
             cmake,
             f"-DTEST={ARCTICDB_BUILD_CPP_TESTS}",
             f"-DBUILD_PYTHON_VERSION={sys.version_info[0]}.{sys.version_info[1]}",
@@ -155,31 +155,10 @@ class CMakeBuild(build_ext):
         vcpkg_installed_dir = os.getenv("ARCTICDB_VCPKG_INSTALLED_DIR")
         print(f"ARCTICDB_VCPKG_INSTALLED_DIR={vcpkg_installed_dir}")
         if vcpkg_installed_dir:
-            args.append(f"-DVCPKG_INSTALLED_DIR={vcpkg_installed_dir}")
+            cmd.append(f"-DVCPKG_INSTALLED_DIR={vcpkg_installed_dir}")
 
-        try:
-            _log_and_run(*args, cwd="cpp")
-        finally:
-            rocksdb_log = r"D:\a\ArcticDB\ArcticDB\cpp\vcpkg\buildtrees\rocksdb\install-x64-windows-static-dbg-out.log"
-            if os.path.exists(rocksdb_log):
-                print('### rocksdb logs ####')
-                print(open(rocksdb_log).read())
-            else:
-                print('### did not find rocksdb logs to print ###')
-            rocksdb_log_err = r"D:\a\ArcticDB\ArcticDB\cpp\vcpkg\buildtrees\rocksdb\install-x64-windows-static-dbg-err.log"
-            if os.path.exists(rocksdb_log_err):
-                print('### rocksdb err logs ####')
-                print(open(rocksdb_log_err).read())
-            else:
-                print('### did not find rocksdb err logs to print ###')
-            print("### finish rocksdb logs ###")
-            vcpkg_manifest_log = r"D:\a\ArcticDB\ArcticDB\cpp\out\windows-cl-release-build\vcpkg-manifest-install.log"
-            if os.path.exists(vcpkg_manifest_log):
-                print('### vcpkg manifest err logs ####')
-                print(open(vcpkg_manifest_log).read())
-            else:
-                print('### did not find vcpkg manifest err logs to print ###')
-        print("### finish vcpkg manifest logs ###")
+        _log_and_run(*cmd, cwd="cpp")
+
         search = f"cpp/out/{preset}-build"
         candidates = glob.glob(search)
         assert len(candidates) == 1, f"Specify {env_var} or use a single build directory. {search}={candidates}"

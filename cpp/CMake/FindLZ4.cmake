@@ -35,6 +35,8 @@ find_package_handle_standard_args(LZ4
   VERSION_VAR LZ4_VERSION)
 
 if (LZ4_FOUND)
+  # On conda+mac rocksdb depends on lowercase lz4 so needs this and the alias below. See PR 961.
+  set(lz4_FOUND TRUE)
   set(LZ4_INCLUDE_DIRS "${LZ4_INCLUDE_DIR}")
   set(LZ4_LIBRARIES "${LZ4_LIBRARY}")
 
@@ -43,5 +45,8 @@ if (LZ4_FOUND)
     set_target_properties(LZ4::LZ4 PROPERTIES
       IMPORTED_LOCATION "${LZ4_LIBRARY}"
       INTERFACE_INCLUDE_DIRECTORIES "${LZ4_INCLUDE_DIR}")
+    if (NOT TARGET lz4::lz4 AND TARGET LZ4::LZ4)
+      add_library(lz4::lz4 ALIAS LZ4::LZ4)
+    endif ()
   endif ()
 endif ()
