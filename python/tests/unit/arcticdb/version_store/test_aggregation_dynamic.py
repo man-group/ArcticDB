@@ -24,6 +24,7 @@ from arcticdb.util.test import make_dynamic, assert_frame_equal
 from arcticdb.util.hypothesis import (
     use_of_function_scoped_fixtures_in_hypothesis_checked,
     non_zero_numeric_type_strategies,
+    numeric_type_strategies,
     string_strategy,
 )
 
@@ -131,18 +132,7 @@ def test_hypothesis_max_agg_dynamic(lmdb_version_store_dynamic_schema_v1, df):
         pass
 
 
-@use_of_function_scoped_fixtures_in_hypothesis_checked
-@settings(deadline=None)
-@given(
-    df=data_frames(
-        [
-            column("grouping_column", elements=string_strategy, fill=string_strategy),
-            column("a", elements=non_zero_numeric_type_strategies()),
-        ],
-        index=range_indexes(),
-    )
-)
-def test_hypothesis_count_agg_dynamic(lmdb_version_store_dynamic_schema_v1, df):
+def test_count_agg_dynamic(lmdb_version_store_dynamic_schema_v1, df):
     lib = lmdb_version_store_dynamic_schema_v1
     assume(not df.empty)
 
@@ -165,6 +155,51 @@ def test_hypothesis_count_agg_dynamic(lmdb_version_store_dynamic_schema_v1, df):
     # pandas 1.0 raises SpecificationError rather than KeyError if the column in "agg" doesn't exist
     except (KeyError, SpecificationError):
         pass
+
+
+@use_of_function_scoped_fixtures_in_hypothesis_checked
+@settings(deadline=None)
+@given(
+    df=data_frames(
+        [
+            column("grouping_column", elements=string_strategy, fill=string_strategy),
+            column("a", elements=non_zero_numeric_type_strategies()),
+        ],
+        index=range_indexes(),
+    )
+)
+def test_hypothesis_count_agg_dynamic_non_zero_numeric(lmdb_version_store_dynamic_schema_v1, df):
+    test_count_agg_dynamic(lmdb_version_store_dynamic_schema_v1, df)
+
+
+@use_of_function_scoped_fixtures_in_hypothesis_checked
+@settings(deadline=None)
+@given(
+    df=data_frames(
+        [
+            column("grouping_column", elements=string_strategy, fill=string_strategy),
+            column("a", elements=numeric_type_strategies()),
+        ],
+        index=range_indexes(),
+    )
+)
+def test_hypothesis_count_agg_dynamic_numeric(lmdb_version_store_dynamic_schema_v1, df):
+    test_count_agg_dynamic(lmdb_version_store_dynamic_schema_v1, df)
+
+
+@use_of_function_scoped_fixtures_in_hypothesis_checked
+@settings(deadline=None)
+@given(
+    df=data_frames(
+        [
+            column("grouping_column", elements=string_strategy, fill=string_strategy),
+            column("a", elements=string_strategy),
+        ],
+        index=range_indexes(),
+    )
+)
+def test_hypothesis_count_agg_dynamic_strings(lmdb_version_store_dynamic_schema_v1, df):
+    test_count_agg_dynamic(lmdb_version_store_dynamic_schema_v1, df)
 
 
 def test_count_aggregation_dynamic(s3_version_store_dynamic_schema_v2):
