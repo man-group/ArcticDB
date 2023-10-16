@@ -49,6 +49,8 @@ if (LZ4_FOUND)
     set_target_properties(LZ4::LZ4 PROPERTIES
       IMPORTED_LOCATION "${LZ4_LIBRARY}"
       INTERFACE_INCLUDE_DIRECTORIES "${LZ4_INCLUDE_DIR}")
-    add_library(lz4::lz4 ALIAS LZ4::LZ4)
+    if (NOT TARGET lz4::lz4 AND TARGET LZ4::LZ4)
+      add_library(lz4::lz4 ALIAS LZ4::LZ4)
+    endif ()
   endif ()
 endif ()
