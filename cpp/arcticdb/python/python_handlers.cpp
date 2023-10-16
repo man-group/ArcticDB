@@ -9,9 +9,9 @@
 
 namespace arcticdb {
     void EmptyHandler::handle_type(
-        const uint8_t*&,
+        const uint8_t*& input,
         uint8_t* dest,
-        const VariantField&,
+        const VariantField& variant_field,
         const entity::TypeDescriptor&,
         size_t dest_bytes,
         std::shared_ptr<BufferHolder>
@@ -26,5 +26,23 @@ namespace arcticdb {
             none.inc_ref();
             *ptr_dest++ = none.ptr();
         }
+
+        util::variant_match(variant_field, [&input] (const auto& field) {
+            using EncodedFieldType = std::decay_t<decltype(*field)>;
+                switch (field->encoding_case()) {
+                    case EncodedFieldType::kNdarray: {
+                        const auto& ndarray_field = field->ndarray();
+                        const auto num_blocks = ndarray_field.values_size();
+                        util::check(num_blocks <= 1, "Unexpected number of empty type blocks: {}", num_blocks);
+                        for (auto block_num = 0; block_num < num_blocks; ++block_num) {
+                            const auto &block_info = ndarray_field.values(block_num);
+                            input += block_info.out_bytes();
+                        }
+                        break;
+                    }
+                    default:
+                        util::raise_error_msg("Unsupported encoding {}", *field);
+                    }
+                });
     }
 }
