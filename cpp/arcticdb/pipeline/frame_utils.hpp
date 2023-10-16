@@ -91,7 +91,7 @@ RawType* flatten_tensor(
 }
 
 template<typename Tensor, typename Aggregator>
-void aggregator_set_data(
+std::optional<convert::StringEncodingError> aggregator_set_data(
     const TypeDescriptor &type_desc,
     Tensor &tensor,
     Aggregator &agg,
@@ -102,7 +102,7 @@ void aggregator_set_data(
     size_t regular_slice_size,
     bool sparsify_floats
 ) {
-    type_desc.visit_tag([&](auto &&tag) {
+    return type_desc.visit_tag([&](auto &&tag) {
         using RawType = typename std::decay_t<decltype(tag)>::DataTypeTag::raw_type;
         constexpr auto dt = std::decay_t<decltype(tag)>::DataTypeTag::data_type;
 
@@ -131,6 +131,7 @@ void aggregator_set_data(
                     ptr_data = flatten_tensor<PyObject*>(flattened_buffer, rows_to_write, tensor, slice_num, regular_slice_size);
 
                 auto none = py::none{};
+                std::variant<convert::StringEncodingError, convert::PyStringWrapper> wrapper_or_error;
                 // GIL will be acquired if there is a string that is not pure ASCII/UTF-8
                 // In this case a PyObject will be allocated by convert::py_unicode_to_buffer
                 // If such a string is encountered in a column, then the GIL will be held until that whole column has
@@ -143,11 +144,20 @@ void aggregator_set_data(
                         agg.set_no_string_at(col, s, nan_placeholder());
                     } else {
                         if constexpr (is_utf_type(slice_value_type(dt))) {
-                            auto wrapper= convert::py_unicode_to_buffer(*ptr_data, scoped_gil_lock);
-                            agg.set_string_at(col, s, wrapper.buffer_, wrapper.length_);
+                            wrapper_or_error = convert::py_unicode_to_buffer(*ptr_data, scoped_gil_lock);
                         } else {
-                            auto wrapper = convert::pystring_to_buffer(*ptr_data, false);
+                            wrapper_or_error = convert::pystring_to_buffer(*ptr_data, false);
+                        }
+                        // Cannot use util::variant_match as only one of the branches would have a return type
+                        if (std::holds_alternative<convert::PyStringWrapper>(wrapper_or_error)) {
+                            convert::PyStringWrapper wrapper(std::move(std::get<convert::PyStringWrapper>(wrapper_or_error)));
                             agg.set_string_at(col, s, wrapper.buffer_, wrapper.length_);
+                        } else if (std::holds_alternative<convert::StringEncodingError>(wrapper_or_error)) {
+                            auto error = std::get<convert::StringEncodingError>(wrapper_or_error);
+                            error.row_index_in_slice_ = s;
+                            return std::optional<convert::StringEncodingError>(error);
+                        } else {
+                            internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Unexpected variant alternative");
                         }
                     }
                 }
@@ -178,6 +188,7 @@ void aggregator_set_data(
         }  else if constexpr (!is_empty_type(dt)) {
             static_assert(!sizeof(dt), "Unknown data type");
         }
+        return std::optional<convert::StringEncodingError>();
     });
 }
 

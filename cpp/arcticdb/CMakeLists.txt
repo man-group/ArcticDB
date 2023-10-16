@@ -189,7 +189,6 @@ set(arcticdb_srcs
         entity/frame_and_descriptor.hpp
         entity/index_range.hpp
         entity/key.hpp
-        entity/key-inl.hpp
         entity/metrics.hpp
         entity/data_error.hpp
         entity/native_tensor.hpp
@@ -248,9 +247,7 @@ set(arcticdb_srcs
         storage/library_index.hpp
         storage/library_manager.hpp
         storage/azure/azure_storage.hpp
-        storage/azure/azure_storage-inl.hpp
         storage/lmdb/lmdb_storage.hpp
-        storage/lmdb/lmdb_storage-inl.hpp
         storage/memory/memory_storage.hpp
         storage/memory/memory_storage.cpp
         storage/rocksdb/rocksdb_storage.hpp
@@ -260,11 +257,8 @@ set(arcticdb_srcs
         storage/mongo/mongo_storage.hpp
         storage/object_store_utils.hpp
         storage/s3/nfs_backed_storage.hpp
-        storage/s3/nfs_backed_storage-inl.hpp
         storage/s3/s3_client_accessor.hpp
-        storage/s3/s3_storage-inl.hpp
         storage/s3/s3_storage_tool.hpp
-        storage/s3/s3_storage_tool-inl.hpp
         storage/storage_factory.hpp
         storage/storage_options.hpp
         storage/storage.hpp
