@@ -50,17 +50,8 @@ namespace arcticdb::storage::rocksdb {
         void do_write_internal(Composite<KeySegmentPair>&& kvs);
         std::vector<VariantKey> do_remove_internal(Composite<VariantKey>&& ks, RemoveOpts opts);
 
-        // Could use unique ptr to avoid needing a destructor for this class, but we are told
-        // in the Column-Families wiki page to delete the column families before the db, so can't
-        // leave it up to the std::unique_ptr random order (could delete db before the handles vector).
-        // Note that DestroyColumnFamilyHandle just checks it is not the default handle, and then
-        // just calls delete on the raw ptr.
-
-        //std::unique_ptr<::rocksdb::DB> db_;
-        //db_ = std::unique_ptr<::rocksdb::DB>(db_raw_ptr);
-
+        // See PR 945 for why raw pointers were used over unique ptrs here.
         ::rocksdb::DB* db_;
-
         using MapKeyType = std::string;
         using HandleType = ::rocksdb::ColumnFamilyHandle*;
         std::unordered_map<MapKeyType, HandleType> handles_by_key_type_;
