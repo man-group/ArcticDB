@@ -173,6 +173,13 @@ class CMakeBuild(build_ext):
             else:
                 print('### did not find rocksdb err logs to print ###')
             print("### finish rocksdb logs ###")
+            vcpkg_manifest_log = r"D:\a\ArcticDB\ArcticDB\cpp\out\windows-cl-release-build\vcpkg-manifest-install.log"
+            if os.path.exists(vcpkg_manifest_log):
+                print('### vcpkg manifest err logs ####')
+                print(open(vcpkg_manifest_log).read())
+            else:
+                print('### did not find vcpkg manifest err logs to print ###')
+        print("### finish vcpkg manifest logs ###")
         search = f"cpp/out/{preset}-build"
         candidates = glob.glob(search)
         assert len(candidates) == 1, f"Specify {env_var} or use a single build directory. {search}={candidates}"
