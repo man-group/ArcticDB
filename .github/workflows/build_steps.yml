@@ -119,10 +119,20 @@ jobs:
         if: inputs.job_type == 'cpp-tests' && matrix.os == 'linux'
         run: |
           # The host volume is mounted on /mnt
-          du -m /mnt/usr/local/lib/ | sort -n | tail -n 50
-          rm -rf /mnt/usr/local/lib/android # todo: add nohup and &
+          echo /
+          ls / || true
+          echo /mnt
+          ls /mnt || true
+          echo /mnt/usr
+          ls /mnt/usr || true
+          echo /mnt/usr/local
+          ls /mnt/usr/local || true
+          echo /mnt/usr/local/lib
+          ls /mnt/usr/local/lib || true
+          du -m /mnt/usr/local/lib/ | sort -n | tail -n 50 || true
+          rm -rf /mnt/usr/local/lib/android  || true         # todo: add nohup and &
           echo "done remove, new listing: "
-          du -m /mnt/usr/local/lib/ | sort -n | tail -n 50
+          du -m /mnt/usr/local/lib/ | sort -n | tail -n 50 || true
 
       - name: Compile C++ tests
         if: inputs.job_type == 'cpp-tests'
