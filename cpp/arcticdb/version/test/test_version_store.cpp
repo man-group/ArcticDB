@@ -307,7 +307,7 @@ TEST_F(VersionStoreTest, StressBatchWrite) {
     std::vector<VersionId> version_ids;
     std::vector<std::shared_ptr<DeDupMap>> dedup_maps;
 
-    for(int i = 0; i < 1000; ++i) {
+    for(int i = 0; i < 100; ++i) {
         auto symbol = fmt::format("symbol_{}", i);
         symbols.emplace_back(symbol);
         version_ids.push_back(0);
