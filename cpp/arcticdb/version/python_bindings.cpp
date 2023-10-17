@@ -217,6 +217,11 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
         .def_property_readonly("end", &pipelines::RowRange::end)
         .def_property_readonly("diff", &pipelines::RowRange::diff);
 
+    py::class_<pipelines::SignedRowRange, std::shared_ptr<pipelines::SignedRowRange>>(version, "SignedRowRange")
+        .def(py::init([](int64_t start, int64_t end){
+            return SignedRowRange{start, end};
+        }));
+
     py::class_<pipelines::ColRange, std::shared_ptr<pipelines::ColRange>>(version, "ColRange")
         .def_property_readonly("start", &pipelines::ColRange::start)
         .def_property_readonly("end", &pipelines::ColRange::end)
@@ -300,6 +305,7 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
     py::class_<ReadQuery>(version, "PythonVersionStoreReadQuery")
             .def(py::init())
             .def_readwrite("columns",&ReadQuery::columns)
+            .def_readwrite("row_range",&ReadQuery::row_range)
             .def_readwrite("row_filter",&ReadQuery::row_filter)
             // Unsurprisingly, pybind11 doesn't understand folly::poly, so use vector of variants here
             .def("add_clauses",

@@ -38,6 +38,7 @@ from arcticdb_ext.storage import (
 from arcticdb.version_store.read_result import ReadResult
 from arcticdb_ext.version_store import IndexRange as _IndexRange
 from arcticdb_ext.version_store import RowRange as _RowRange
+from arcticdb_ext.version_store import SignedRowRange as _SignedRowRange
 from arcticdb_ext.version_store import PythonVersionStore as _PythonVersionStore
 from arcticdb_ext.version_store import PythonVersionStoreReadQuery as _PythonVersionStoreReadQuery
 from arcticdb_ext.version_store import PythonVersionStoreUpdateQuery as _PythonVersionStoreUpdateQuery
@@ -130,16 +131,6 @@ VersionQueryInput = Union[int, str, ExplicitlySupportedDates, None]
 def _normalize_dt_range(dtr: DateRangeInput) -> _IndexRange:
     start, end = normalize_dt_range_to_ts(dtr)
     return _IndexRange(start.value, end.value)
-
-
-def _normalize_row_range(row_range: Tuple[int, int], total_n_rows: int) -> _RowRange:
-    start, end = row_range
-
-    # Wrap around negative indices
-    start = min(start, total_n_rows) if start >= 0 else max(total_n_rows + start, 0)
-    end = min(end, total_n_rows) if end >= 0 else max(total_n_rows + end, 0)
-
-    return _RowRange(start, end)
 
 
 def _handle_categorical_columns(symbol, data, throw=True):
@@ -1516,12 +1507,11 @@ class NativeVersionStore:
         if query_builder:
             read_query.add_clauses(query_builder.clauses)
 
+        if row_range is not None:
+            read_query.row_range = _SignedRowRange(row_range[0], row_range[1])
+
         if date_range is not None:
             read_query.row_filter = _normalize_dt_range(date_range)
-
-        if row_range is not None:
-            total_n_rows = self.get_num_rows(symbol=symbol, as_of=as_of, **kwargs)
-            read_query.row_filter = _normalize_row_range(row_range, total_n_rows)
 
         if columns is not None:
             read_query.columns = list(columns)

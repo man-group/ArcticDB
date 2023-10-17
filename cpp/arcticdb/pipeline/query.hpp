@@ -34,8 +34,17 @@ namespace arcticdb::pipelines {
 using FilterRange = std::variant<std::monostate, IndexRange, RowRange>;
 
 
+/*
+ * A structure which is used to store the potentially negative values for indices of a row range
+ */
+struct SignedRowRange {
+    int64_t start_;
+    int64_t end_;
+};
+
 struct ReadQuery {
     mutable std::vector<std::string> columns; // empty <=> all columns
+    std::optional<SignedRowRange> row_range;
     FilterRange row_filter; // no filter by default
     std::vector<std::shared_ptr<Clause>> clauses_;
 
@@ -49,6 +58,22 @@ struct ReadQuery {
         clauses_ = clauses;
     }
 
+    /*
+     * This is used to set the row filter to a row range not to perform a query of the index key
+     * to get the total number of rows in the index, preventing the cost of performing an extra request.
+     */
+     void calculate_row_filter(int64_t total_rows) {
+        if (row_range.has_value()) {
+            size_t start = row_range->start_ >= 0 ?
+                           std::min(row_range->start_, total_rows) :
+                           std::max(total_rows + row_range->start_,
+                                    static_cast<int64_t>(0));
+            size_t end = row_range->end_ >= 0 ?
+                         std::min(row_range->end_, total_rows) :
+                         std::max(total_rows + row_range->end_, static_cast<int64_t>(0));
+            row_filter = RowRange(start, end);
+        }
+    }
 };
 
 struct SnapshotVersionQuery {
