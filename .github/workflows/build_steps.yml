@@ -31,13 +31,14 @@ jobs:
         symbols: [0] # Glob for symbol symbol files. Used for including in follower builds and exclusion on others.
         do_not_archive: [0]
         test_services: [0] # Github service containers to spin up for the pytest run
+        container: [0]
         exclude:
             - os: 0
         include:
             - ${{fromJSON(inputs.matrix)[0]}} # The items after 0 are for tests only
 
     runs-on: ${{matrix.distro}}
-    container: ${{ (matrix.os == 'linux' && inputs.job_type != 'follower') && inputs.container || null}}
+    container: ${{ (matrix.os == 'linux' && inputs.job_type != 'follower') && matrix.container || null}}
     env:
       SCCACHE_GHA_VERSION: ${{vars.SCCACHE_GHA_VERSION || 1}} # Setting this env var enables the caching
       VCPKG_NUGET_USER: ${{secrets.VCPKG_NUGET_USER || github.repository_owner}}
