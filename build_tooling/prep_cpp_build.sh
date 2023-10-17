@@ -28,7 +28,6 @@ case `uname -a` in
     mkdir vcpkg/buildtrees out || true
     MSYS_NO_PATHCONV=1 compact.exe /C vcpkg\\buildtrees out
 
-    # Try symlinking packages onto C:\ drive also
     mkdir "${ARCTICDB_VCPKG_PACKAGES_DIR:?env variable ARCTICDB_VCPKG_PACKAGES_DIR is not set}"
     MSYS=winsymlinks:nativestrict ln -s "$ARCTICDB_VCPKG_PACKAGES_DIR" vcpkg/packages
     ;;
