@@ -32,6 +32,7 @@ TEST(TestLmdbStorage, Example) {
 
     arcticdb::proto::lmdb_storage::Config cfg;
     cfg.set_path("./");
+    cfg.set_map_size(128ULL * (1ULL << 20) );
     cfg.set_recreate_if_exists(true);
 
     asl::LmdbStorage storage({"A", "BB"}, as::OpenMode::WRITE, cfg);
@@ -123,6 +124,7 @@ TEST(TestLmdbStorage, Strings) {
 
     arcticdb::proto::lmdb_storage::Config cfg;
     cfg.set_path("./");
+    cfg.set_map_size(128ULL * (1ULL << 20) );
     cfg.set_recreate_if_exists(true);
 
     asl::LmdbStorage storage({"A", "BB"}, as::OpenMode::WRITE, cfg);

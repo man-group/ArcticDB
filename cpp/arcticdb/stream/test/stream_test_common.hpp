@@ -306,7 +306,13 @@ inline std::pair<storage::LibraryPath, arcticdb::proto::storage::LibraryConfig> 
     config.mutable_lib_desc()->set_name(unique_lib_name);
     auto temp_path = std::filesystem::temp_directory_path();
     // on windows, path is only implicitly converted to wstring, not string
-    auto lmdb_config =  arcticdb::storage::lmdb::pack_config(temp_path.string());
+    arcticdb::proto::storage::VariantStorage lmdb_config;
+    arcticdb::proto::lmdb_storage::Config cfg;
+    cfg.set_path(temp_path.string());
+    // 128 MiB - needs to be reasonably small else Windows build runs out of disk
+    cfg.set_map_size(128ULL * (1ULL << 20) );
+    util::pack_to_any(cfg, *lmdb_config.mutable_config());
+
     auto library_path = storage::LibraryPath::from_delim_path(unique_lib_name);
     auto storage_id = fmt::format("{}_store", unique_lib_name);
     config.mutable_lib_desc()->add_storage_ids(storage_id);

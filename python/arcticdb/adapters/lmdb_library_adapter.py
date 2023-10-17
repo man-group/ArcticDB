@@ -131,7 +131,15 @@ class LMDBLibraryAdapter(ArcticLibraryAdapter):
     def config_library(self):
         env_cfg = EnvironmentConfigsMap()
 
-        add_lmdb_library_to_env(env_cfg, lib_name=self.CONFIG_LIBRARY_NAME, env_name=_DEFAULT_ENV, db_dir=self._path)
+        # 128 MiB - needs to be reasonably small not to waste disk on Windows
+        config_library_config = {"map_size": 128 * (1 << 20)}
+        add_lmdb_library_to_env(
+            env_cfg,
+            lib_name=self.CONFIG_LIBRARY_NAME,
+            env_name=_DEFAULT_ENV,
+            db_dir=self._path,
+            lmdb_config=config_library_config,
+        )
 
         lib = NativeVersionStore.create_store_from_config(
             env_cfg, _DEFAULT_ENV, self.CONFIG_LIBRARY_NAME, encoding_version=self._encoding_version
