@@ -115,6 +115,12 @@ jobs:
           configurePresetAdditionalArgs: "['-DVCPKG_INSTALL_OPTIONS=--clean-after-build']"
           buildPreset: ${{env.ARCTIC_CMAKE_PRESET}}
 
+      - name: Save space by deleting unneeded GitHub libraries
+        if: inputs.job_type == 'cpp-tests' && matrix.os == 'linux'
+        run: |
+          du -m /usr/local/lib/ | sort -n | tail -n 50
+          nohup rm -rf /usr/local/lib/android &
+
       - name: Compile C++ tests
         if: inputs.job_type == 'cpp-tests'
         run: cd cpp; cmake --build --preset $ARCTIC_CMAKE_PRESET --target install
