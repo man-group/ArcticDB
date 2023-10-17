@@ -170,17 +170,22 @@ void CountAggregatorData::aggregate(const std::optional<ColumnWithStrings>& inpu
 
             aggregated_.resize(unique_values);
 
-            auto col_data = input_column->column_->data();
-            while (auto block = col_data.next<TypeDescriptorTag>()) {
-                auto ptr = reinterpret_cast<const RawType *>(block.value().data());
-                for (auto i = 0u; i < block.value().row_count(); ++i) {
-                    if (!is_floating_point_type(TypeDescriptorTag::DataTypeTag::data_type)
-                        || (is_floating_point_type(TypeDescriptorTag::DataTypeTag::data_type)
-                        && !std::isnan(static_cast<double>(ptr[i])))) {
-                        auto group = groups[i];
-                        auto& val = aggregated_[group];
-                        ++val;
+            if constexpr (is_floating_point_type(TypeDescriptorTag::DataTypeTag::data_type)) {
+                auto col_data = input_column->column_->data();
+                while (auto block = col_data.next<TypeDescriptorTag>()) {
+                    auto ptr = reinterpret_cast<const RawType *>(block.value().data());
+                    for (auto i = 0u; i < block.value().row_count(); ++i) {
+                        if (!std::isnan(static_cast<double>(ptr[i]))) {
+                            auto group = groups[i];
+                            auto& val = aggregated_[group];
+                            ++val;
+                        }
                     }
+                }
+            } else {
+                for (auto group: groups) {
+                    auto& val = aggregated_[group];
+                    ++val;
                 }
             }
         });

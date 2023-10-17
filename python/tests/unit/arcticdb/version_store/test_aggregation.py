@@ -164,21 +164,6 @@ def count_aggregation(lmdb_version_store, df):
     df=data_frames(
         [
             column("grouping_column", elements=string_strategy, fill=string_strategy),
-            column("a", elements=non_zero_numeric_type_strategies()),
-        ],
-        index=range_indexes(),
-    )
-)
-def test_hypothesis_count_agg_non_zero_numeric(lmdb_version_store, df):
-    count_aggregation(lmdb_version_store, df)
-
-
-@use_of_function_scoped_fixtures_in_hypothesis_checked
-@settings(deadline=None)
-@given(
-    df=data_frames(
-        [
-            column("grouping_column", elements=string_strategy, fill=string_strategy),
             column("a", elements=numeric_type_strategies()),
         ],
         index=range_indexes(),
