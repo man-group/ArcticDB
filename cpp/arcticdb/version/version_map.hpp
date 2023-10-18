@@ -815,7 +815,6 @@ public:
         auto entry = get_entry(stream_id);
         entry->clear();
         load_via_iteration(store, stream_id, entry, false);
-        fix_stream_ids_of_index_keys(store, stream_id, entry);
         remove_duplicate_index_keys(entry);
         (void)rewrite_entry(store, stream_id, entry);
     }
@@ -826,7 +825,6 @@ public:
         auto old_entry = entry;
         entry->clear();
         load_via_iteration(store, stream_id, entry, true);
-        fix_stream_ids_of_index_keys(store, stream_id, entry);
         remove_duplicate_index_keys(entry);
         (void)rewrite_entry(store, stream_id, entry);
         remove_entry_version_keys(store, old_entry, stream_id);

@@ -1777,24 +1777,20 @@ timestamp LocalVersionedEngine::latest_timestamp(const std::string& symbol) {
 std::unordered_map<KeyType, std::pair<size_t, size_t>> LocalVersionedEngine::scan_object_sizes() {
     std::unordered_map<KeyType, std::pair<size_t, size_t>> sizes;
     foreach_key_type([&store=store(), &sizes=sizes](KeyType key_type) {
-        std::vector<VariantKey> keys;
-        store->iterate_type(key_type, [&keys](const VariantKey &&k) {
-            keys.emplace_back(std::forward<const VariantKey>(k));
-        });
+        std::vector<std::pair<VariantKey, stream::StreamSource::ReadContinuation>> keys_and_continuations;
         auto& pair = sizes[key_type];
-        pair.first = keys.size();
-        std::vector<stream::StreamSource::ReadContinuation> continuations;
-        std::atomic<size_t> key_size{0};
-        for(auto&& key ARCTICDB_UNUSED : keys) {
-            continuations.emplace_back([&key_size] (auto&& ks) {
-                auto key_seg = std::move(ks);
-                key_size += key_seg.segment().total_segment_size();
-                return key_seg.variant_key();
-            });
-        }
-        store->batch_read_compressed(std::move(keys), std::move(continuations),BatchReadArgs{});
-        pair.second = key_size;
+        store->iterate_type(key_type, [&keys_and_continuations, &pair](const VariantKey &&k) {
+            keys_and_continuations.emplace_back(
+                std::forward<const VariantKey>(k),
+                [&pair](auto &&ks) {
+                    auto key_seg = std::move(ks);
+                    ++pair.first;
+                    pair.second += key_seg.segment().total_segment_size();
+                    return key_seg.variant_key();
+                });
+        });
     });
+
     return sizes;
 }
 

@@ -39,7 +39,7 @@ struct StreamSource {
 
     virtual void iterate_type(
         KeyType type,
-        entity::IterateTypeVisitor func,
+        const entity::IterateTypeVisitor& func,
         const std::string &prefix = std::string{}) = 0;
 
     [[nodiscard]] virtual folly::Future<bool> key_exists(const entity::VariantKey &key) = 0;
@@ -47,24 +47,14 @@ struct StreamSource {
     virtual bool supports_prefix_matching() const = 0;
     virtual bool fast_delete() = 0;
 
-    virtual std::vector<storage::KeySegmentPair> batch_read_compressed(
-        std::vector<entity::VariantKey> &&keys, const BatchReadArgs &args, bool may_fail) = 0;
-
     using ReadContinuation = folly::Function<entity::VariantKey(storage::KeySegmentPair &&)>;
 
-    virtual folly::Future<std::vector<entity::VariantKey>> batch_read_compressed(
-        std::vector<entity::VariantKey>&& keys,
-        std::vector<ReadContinuation>&& continuations,
+    virtual folly::Future<std::vector<VariantKey>> batch_read_compressed(
+        std::vector<std::pair<entity::VariantKey, ReadContinuation>> &&ks,
         const BatchReadArgs &args) = 0;
 
-    /**
-     * See storage_utils for the wrapper filter_keys_on_existence(vector).
-     */
     [[nodiscard]] virtual std::vector<folly::Future<bool>> batch_key_exists(
             const std::vector<entity::VariantKey> &keys) = 0;
-
-    [[nodiscard]] virtual bool batch_all_keys_exist_sync(
-            const std::unordered_set<entity::VariantKey> &keys) = 0;
 
     using DecodeContinuation = folly::Function<folly::Unit(SegmentInMemory &&)>;
 
