@@ -7,14 +7,15 @@
 
 #pragma once
 
-#include <arcticdb/entity/types.hpp>
-#include <arcticdb/util/buffer.hpp>
-
+#include <arcticdb/codec/core.hpp>
+#include <arcticdb/codec/variant_encoded_field_collection.hpp>
 #include <arcticdb/codec/segment.hpp>
-#include <arcticdb/util/pb_util.hpp>
-#include <arcticdb/util/hash.hpp>
 #include <arcticdb/column_store/column_data.hpp>
 #include <arcticdb/column_store/memory_segment.hpp>
+#include <arcticdb/entity/types.hpp>
+#include <arcticdb/util/buffer.hpp>
+#include <arcticdb/util/pb_util.hpp>
+#include <arcticdb/util/hash.hpp>
 
 #include <cstdlib>
 #include <cstdint>
@@ -48,59 +49,82 @@ void write_magic(Buffer& buffer, std::ptrdiff_t& pos) {
     pos += sizeof(MagicType);
 }
 
+/// @brief This should be the block data type descriptor when the shapes array is encoded as a block
+using ShapesBlockTDT = TypeDescriptorTag<DataTypeTag<DataType::INT64>, DimensionTag<Dimension::Dim0>>;
+/// @brief The type to be used for a block which represents shapes
+using ShapesBlock = TypedBlockData<ShapesBlockTDT>;
+
 //TODO  Provide tuning parameters to choose the encoding through encoding tags (also acting as config options)
-template<template<typename> class F, class TD>
+template<template<typename> class TypedBlock, class TD, EncodingVersion encoder_version>
 struct TypedBlockEncoderImpl;
 
-template<template<typename> class F, class TD>
-struct BlockEncoderHelper : public TypedBlockEncoderImpl<F, TD> {
-    using FieldType = F<TD>;
+template<template<typename> class F, class TD, EncodingVersion v>
+struct BlockEncoderHelper : public TypedBlockEncoderImpl<F, TD, v> {
+    using ValuesBlockType = F<TD>;
     using TypeDescriptorTag = TD;
     using DimTag = typename TD::DimensionTag;
     using DataTag = typename TD::DataTypeTag;
 };
 
-size_t encode_bitmap(
-    const util::BitMagic &sparse_map,
-    Buffer &out,
-    std::ptrdiff_t &pos);
+template<typename TD, EncodingVersion v>
+using BlockEncoder = BlockEncoderHelper<TypedBlockData, TD, v>;
 
-template<typename TD>
-using BlockEncoder = BlockEncoderHelper<TypedBlockData, TD>;
+/// @brief Options used by default to encode the shapes array of a column
+arcticdb::proto::encoding::VariantCodec shapes_encoding_opts();
 
-struct ColumnEncoder {
+/// @brief Utility class used to encode and compute the max encoding size for regular data columns for V1 encoding
+struct ColumnEncoder_v1 {
     static std::pair<size_t, size_t> max_compressed_size(
+        const arcticdb::proto::encoding::VariantCodec& codec_opts,
+        ColumnData& column_data);
+
+    static void encode(
         const arcticdb::proto::encoding::VariantCodec &codec_opts,
-        ColumnData &column_data);
-
-    template <typename EncodedFieldType>
-    void encode(
-        const arcticdb::proto::encoding::VariantCodec &codec_opts,
-        ColumnData &column_data,
-        EncodedFieldType &field,
-        Buffer &out,
-        std::ptrdiff_t &pos) {
-        column_data.type().visit_tag([&codec_opts, &column_data, &field, &out, &pos](auto type_desc_tag) {
-            using TDT = decltype(type_desc_tag);
-            using Encoder = BlockEncoder<TDT>;
-            ARCTICDB_TRACE(log::codec(), "Column data has {} blocks", column_data.num_blocks());
-
-            while (auto block = column_data.next<TDT>()) {
-                if constexpr(!is_empty_type(TDT::DataTypeTag::data_type)) {
-                    util::check(block.value().nbytes() > 0, "Zero-sized block");
-                }
-                Encoder::encode(codec_opts, block.value(), field, out, pos);
-            }
-        });
-
-        if (column_data.bit_vector() != nullptr && column_data.bit_vector()->count() > 0)   {
-            ARCTICDB_DEBUG(log::codec(), "Sparse map count = {} pos = {}", column_data.bit_vector()->count(), pos);
-            auto sparse_bm_bytes = encode_bitmap(*column_data.bit_vector(), out, pos);
-            field.mutable_ndarray()->set_sparse_map_bytes(static_cast<int>(sparse_bm_bytes));
-        }
-    }
+        ColumnData& column_data,
+        MutableVariantField variant_field,
+        Buffer& out,
+        std::ptrdiff_t& pos);
 };
 
+/// @brief Utility class used to encode and compute the max encoding size for regular data columns for V2 encoding
+/// What differs this from the already existing ColumnEncoder is that ColumnEncoder encodes the shapes of
+/// multidimensional data as part of each block. ColumnEncoder2 uses a better strategy and encodes the shapes for the
+/// whole column upfront (before all blocks).
+/// @note Although ArcticDB did not support multidimensional user data prior to creating ColumnEncoder2 some of the
+/// internal data was multidimensional and used ColumnEncoder. More specifically: string pool and metadata.
+/// @note This should be used for V2 encoding. V1 encoding can't use it as there is already data written the other
+///	way and it will be hard to distinguish both.
+struct ColumnEncoder_v2 {
+public:
+    static void encode(
+        const arcticdb::proto::encoding::VariantCodec &codec_opts,
+        ColumnData& column_data,
+        MutableVariantField variant_field,
+        Buffer& out,
+        std::ptrdiff_t& pos);
+    static std::pair<size_t, size_t> max_compressed_size(
+        const arcticdb::proto::encoding::VariantCodec& codec_opts,
+        ColumnData& column_data);
+private:
+    template<typename TypeDescriptor>
+    using Encoder = BlockEncoder<TypeDescriptor, EncodingVersion::V2>;
+	using ShapesEncoder = Encoder<ShapesBlockTDT>;
+
+	static void encode_shapes(
+        const ColumnData& column_data,
+        MutableVariantField variant_field,
+        Buffer& out,
+        std::ptrdiff_t& pos_in_buffer);
+    static void encode_blocks(
+        const arcticdb::proto::encoding::VariantCodec &codec_opts,
+        ColumnData& column_data,
+        MutableVariantField variant_field,
+        Buffer& out,
+        std::ptrdiff_t& pos);
+};
+
+template<EncodingVersion v>
+using ColumnEncoder = std::conditional_t<v == EncodingVersion::V1, ColumnEncoder_v1, ColumnEncoder_v2>;
 
 Segment encode_v2(
     SegmentInMemory&& in_mem_seg,
@@ -127,8 +151,7 @@ Buffer decode_encoded_fields(
     const uint8_t* data,
     const uint8_t* begin ARCTICDB_UNUSED);
 
-SegmentInMemory decode_segment(
-    Segment&& segment);
+SegmentInMemory decode_segment(Segment&& segment);
 
 void decode_into_memory_segment(
     const Segment& segment,
@@ -142,7 +165,8 @@ std::size_t decode_field(
     const EncodedFieldType &field,
     const uint8_t *input,
     DataSink &data_sink,
-    std::optional<util::BitMagic>& bv);
+    std::optional<util::BitMagic>& bv,
+    arcticdb::EncodingVersion encoding_version);
 
 std::optional<google::protobuf::Any> decode_metadata_from_segment(
     const Segment& segment);

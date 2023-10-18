@@ -410,7 +410,7 @@ public:
     template<class T, std::enable_if_t< std::is_integral_v<T> || std::is_floating_point_v<T>, int> = 0>
     void set_array(ssize_t row_offset, py::array_t<T>& val) {
         ARCTICDB_SAMPLE(ColumnSetArray, RMTSF_Aggregate)
-            magic_.check();
+        magic_.check();
         util::check_arg(last_logical_row_ + 1 == row_offset, "set_array expected row {}, actual {} ", last_logical_row_ + 1, row_offset);
         data_.ensure_bytes(val.nbytes());
         shapes_.ensure<shape_t>(val.ndim());
@@ -424,6 +424,8 @@ public:
         shapes_.commit();
         ++last_logical_row_;
     }
+
+    void set_empty_array(ssize_t row_offset, int dimension_count);
 
     ssize_t last_row() const {
         return last_logical_row_;

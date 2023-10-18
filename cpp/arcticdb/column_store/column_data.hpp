@@ -70,11 +70,12 @@ struct TypedBlockData {
         ValueType* ptr_;
     };
 
+    using TypeDescriptorTag = TDT;
     using raw_type = typename TDT::DataTypeTag::raw_type;
 
     ARCTICDB_MOVE_COPY_DEFAULT(TypedBlockData)
 
-    TypedBlockData(const raw_type *data, const shape_t *shapes, size_t nbytes, size_t row_count, MemBlock *block) :
+    TypedBlockData(const raw_type *data, const shape_t *shapes, size_t nbytes, size_t row_count, const MemBlock *block) :
         data_(data),
         shapes_(shapes),
         nbytes_(nbytes),
@@ -83,7 +84,7 @@ struct TypedBlockData {
         {}
 
 
-    TypedBlockData(size_t nbytes, shape_t* shapes) :
+    TypedBlockData(size_t nbytes, const shape_t* shapes) :
         data_(nullptr),
         shapes_(shapes),
         nbytes_(nbytes),
@@ -215,6 +216,9 @@ struct ColumnData {
         };
     }
 
+    /// @brief Get non-owning pointer to the shapes array for the column
+    [[nodiscard]] const Buffer* shapes() const noexcept;
+
   private:
     template<typename TDT>
     TypedBlockData<TDT> next_typed_block(MemBlock* block) {
@@ -222,23 +226,36 @@ struct ColumnData {
         const shape_t *shape_ptr = nullptr;
 
         constexpr auto dim = TDT::DimensionTag::value;
-        if constexpr (dim == Dimension::Dim0){
+        if constexpr (dim == Dimension::Dim0) {
             num_elements = block->bytes() / get_type_size(type_.data_type());
-        }  else {
+        } else {
             if (shapes_->empty()) {
                 num_elements = block->bytes() / get_type_size(type_.data_type());
             } else {
                 shape_ptr = shapes_->ptr_cast<shape_t>(shape_pos_, sizeof(shape_t));
                 size_t size = 0;
                 constexpr auto raw_type_sz = sizeof(typename TDT::DataTypeTag::raw_type);
-                while (size < block->bytes()) {
-                    if constexpr (dim == Dimension::Dim1)
+                // Blocks can contain empty tensors (empty arrays/matrices). They don't hold any data, however, they
+                // have assigned shapes. In case of an empty tensor the corresponding entries in the shapes array must
+                // be 0. The rationale is that the shapes array describes how many elements are there in a tensor. This
+                // way we can distinguish between [] (empty array) and None (no array at all). We assume that no block,
+                // besides the first, can start with empty tensors. This means that a block is exhausted when both are
+                // conditions are satisfied:
+                // i) The processed size becomes equal to the block size
+                // ii) All zero-sized shapes are parsed (i.e. the shape of the current tensor is not 0)
+                while (is_current_tensor_empty() || size < block->bytes()) {
+                    if constexpr (dim == Dimension::Dim1) {
                         size += next_shape() * raw_type_sz;
-                    else
-                        size += next_shape() * next_shape() * raw_type_sz;
+                    } else {
+                        const shape_t row_count = next_shape();
+                        const shape_t column_count = next_shape();
+                        util::check(
+                            row_count > 0 || (row_count == 0 && column_count == 0),
+                            "Tensor column count must be zero when the row count is 0");
+                        size += row_count * column_count * raw_type_sz;
+                    }
                     ++num_elements;
                 }
-
                 util::check(size == block->bytes(), "Element size vs block size overrun: {} > {}", size, block->bytes());
             }
         }
@@ -251,6 +268,10 @@ struct ColumnData {
             block
         };
     }
+
+    /// @brief Check if the current tensor is of size 0
+    /// @note The size of the current tensor is written in #shapes_ under #shapes_pos_
+    [[nodiscard]] bool is_current_tensor_empty() const;
 
     const ChunkedBuffer* data_;
     const Buffer* shapes_;

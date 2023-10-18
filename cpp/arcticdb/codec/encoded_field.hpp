@@ -199,6 +199,10 @@ struct EncodedBlock {
         hash_ = hash;
     }
 
+    [[nodiscard]] uint64_t hash() const {
+        return hash_;
+    }
+
     uint32_t out_bytes() const {
         return out_bytes_;
     }
@@ -229,8 +233,8 @@ struct EncodedField {
     uint16_t values_count_ = 0u;
     uint32_t sparse_map_bytes_ = 0u;
     uint64_t items_count_ = 0u;
-    std::array<EncodedBlock, 1> blocks_;
     TypeDescriptor arr_desc_ = {DataType::UNKNOWN, Dimension::Dim0};
+    std::array<EncodedBlock, 1> blocks_;
 
     static constexpr EncodedFieldType kNdarray = EncodedFieldType::kNdarray;
 
@@ -338,6 +342,12 @@ struct EncodedField {
             return is_shapes_ ? field_.shapes_count_ : field_.shapes_count_ + field_.values_count_;
         }
 
+        [[nodiscard]] const EncodedBlock& operator[](const size_t idx) const {
+            // Shape blocks are located before values blocks in the field. In case this is a collection of value blocks
+            // we have to skip all shape blocks. In case this is a collection of shapes we can start from 0 index.
+            const size_t shape_offset = !is_shapes_ * field_.shapes_count_;
+            return field_.blocks()[shape_offset + idx];
+        }
         const EncodedField &field_;
         bool is_shapes_;
     };
@@ -346,7 +356,7 @@ struct EncodedField {
         return type_;
     }
 
-    const EncodedBlock &shapes(size_t n) const {
+    const EncodedBlock& shapes(size_t n) const {
         util::check(n == 0, "Expected only one shape");
         util::check(shapes_count_ != 0, "No shape allocated");
         return blocks_[0];

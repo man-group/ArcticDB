@@ -20,30 +20,27 @@ namespace details {
 template<class DimType, class Callable>
 auto visit_dim(DataType dt, Callable &&c) {
     switch (dt) {
-#define DT_CASE(__T__) case DataType::__T__: \
-        return c(TypeDescriptorTag<DataTypeTag<DataType::__T__>, DimType>());
-        DT_CASE(UINT8)
-        DT_CASE(UINT16)
-        DT_CASE(UINT32)
-        DT_CASE(UINT64)
-        DT_CASE(INT8)
-        DT_CASE(INT16)
-        DT_CASE(INT32)
-        DT_CASE(INT64)
-        DT_CASE(FLOAT32)
-        DT_CASE(FLOAT64)
-        DT_CASE(BOOL8)
-        DT_CASE(NANOSECONDS_UTC64)
-        DT_CASE(ASCII_FIXED64)
-        DT_CASE(ASCII_DYNAMIC64)
-        DT_CASE(UTF_FIXED64)
-        DT_CASE(UTF_DYNAMIC64)
-        DT_CASE(EMPTYVAL)
-        DT_CASE(PYBOOL8)
-        DT_CASE(PYBOOL64)
-        DT_CASE(ARRAY64)
-#undef DT_CASE
-    default: util::raise_rte("Invalid dtype '{}' in visit dim", datatype_to_str(dt));
+        case DataType::UINT8: return c(TypeDescriptorTag<DataTypeTag<DataType::UINT8>, DimType>());
+        case DataType::UINT16: return c(TypeDescriptorTag<DataTypeTag<DataType::UINT16>, DimType>());
+        case DataType::UINT32: return c(TypeDescriptorTag<DataTypeTag<DataType::UINT32>, DimType>());
+        case DataType::UINT64: return c(TypeDescriptorTag<DataTypeTag<DataType::UINT64>, DimType>());
+        case DataType::INT8: return c(TypeDescriptorTag<DataTypeTag<DataType::INT8>, DimType>());
+        case DataType::INT16: return c(TypeDescriptorTag<DataTypeTag<DataType::INT16>, DimType>());
+        case DataType::INT32: return c(TypeDescriptorTag<DataTypeTag<DataType::INT32>, DimType>());
+        case DataType::INT64: return c(TypeDescriptorTag<DataTypeTag<DataType::INT64>, DimType>());
+        case DataType::FLOAT32: return c(TypeDescriptorTag<DataTypeTag<DataType::FLOAT32>, DimType>());
+        case DataType::FLOAT64: return c(TypeDescriptorTag<DataTypeTag<DataType::FLOAT64>, DimType>());
+        case DataType::BOOL8: return c(TypeDescriptorTag<DataTypeTag<DataType::BOOL8>, DimType>());
+        case DataType::NANOSECONDS_UTC64: return c(TypeDescriptorTag<DataTypeTag<DataType::NANOSECONDS_UTC64>, DimType>());
+        case DataType::ASCII_FIXED64: return c(TypeDescriptorTag<DataTypeTag<DataType::ASCII_FIXED64>, DimType>());
+        case DataType::ASCII_DYNAMIC64: return c(TypeDescriptorTag<DataTypeTag<DataType::ASCII_DYNAMIC64>, DimType>());
+        case DataType::UTF_FIXED64: return c(TypeDescriptorTag<DataTypeTag<DataType::UTF_FIXED64>, DimType>());
+        case DataType::UTF_DYNAMIC64: return c(TypeDescriptorTag<DataTypeTag<DataType::UTF_DYNAMIC64>, DimType>());
+        case DataType::EMPTYVAL: return c(TypeDescriptorTag<DataTypeTag<DataType::EMPTYVAL>, DimType>());
+        case DataType::PYBOOL8: return c(TypeDescriptorTag<DataTypeTag<DataType::PYBOOL8>, DimType>());
+        case DataType::PYBOOL64: return c(TypeDescriptorTag<DataTypeTag<DataType::PYBOOL64>, DimType>());
+        case DataType::ARRAY64: return c(TypeDescriptorTag<DataTypeTag<DataType::ARRAY64>, DimType>());
+        default: util::raise_rte("Invalid dtype '{}' in visit dim", datatype_to_str(dt));
     }
 }
 
@@ -81,13 +78,10 @@ auto visit_type(DataType dt, Callable &&c) {
 template<class Callable>
 auto TypeDescriptor::visit_tag(Callable &&callable) const {
     switch (dimension_) {
-#define DIM_CASE(__D__) case Dimension::__D__: \
-    return details::visit_dim<DimensionTag<Dimension::__D__>>(data_type_, callable)
-        DIM_CASE(Dim0);
-        DIM_CASE(Dim1);
-        DIM_CASE(Dim2);
-#undef DIM_CASE
-        default:throw std::invalid_argument(fmt::format("Invalid dimension %d", static_cast<uint32_t>(dimension_)));
+        case Dimension::Dim0: return details::visit_dim<DimensionTag<Dimension::Dim0>>(data_type_, callable);
+        case Dimension::Dim1: return details::visit_dim<DimensionTag<Dimension::Dim1>>(data_type_, callable);
+        case Dimension::Dim2: return details::visit_dim<DimensionTag<Dimension::Dim2>>(data_type_, callable);
+        default: throw std::invalid_argument(fmt::format("Invalid dimension %d", static_cast<uint32_t>(dimension_)));
     }
 }
 

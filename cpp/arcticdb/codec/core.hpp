@@ -7,6 +7,8 @@
 
 #pragma once
 
+
+#include <arcticdb/codec/encoded_field.hpp>
 #include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/util/buffer.hpp>
 #include <arcticdb/util/hash.hpp>
@@ -171,12 +173,14 @@ struct ShapeEncodingFromBlock {
  *  using Opts = VariantCodec::SomeCodecOptionType;
  * }
  * @tparam SE ShapeEncoding Same as VE but used for shape encoding. By default uses VE.
+ *
+ * @todo Try to replace this with arcticdb::detail::GenericBlockEncoder2
  */
-template<class BlockType, class TD, class EncoderType, class SE = ShapeEncodingFromBlock<EncoderType, EncoderType>>
+template<class BlockType, class TD, class EncoderType>
 struct GenericBlockEncoder {
     using Helper = CodecHelper<TD>;
     using T = typename Helper::T;
-    using ShapeEncoding = SE;
+    using ShapeEncoding = ShapeEncodingFromBlock<EncoderType, EncoderType>;
 
     GenericBlockEncoder() = delete;
     GenericBlockEncoder(GenericBlockEncoder &&enc) = delete;
@@ -208,14 +212,14 @@ struct GenericBlockEncoder {
     template <typename EncodedFieldType>
     static void encode(
         const typename EncoderType::Opts &opts,
-        BlockType &block,
-        EncodedFieldType &field,
-        Buffer &out,
-        std::ptrdiff_t &pos
-        ) {
+        const BlockType& block,
+        EncodedFieldType& field,
+        Buffer& out,
+        std::ptrdiff_t& pos
+    ) {
         Helper helper;
         helper.hasher_.reset(helper.seed);
-        std::size_t block_row_count = block.row_count();
+        const std::size_t block_row_count = block.row_count();
 
         if constexpr (Helper::dim == Dimension::Dim0) {
             // Only store data, no shapes since dimension is 0
@@ -233,8 +237,7 @@ struct GenericBlockEncoder {
             const auto total_items_count = field_nd_array->items_count() + block_row_count;
             field_nd_array->set_items_count(total_items_count);
             auto value_pb = field_nd_array->add_values();
-
-           const auto compressed_size = EncoderType::encode_block(opts, block.data(), helper_scalar_block, helper.hasher_, t_out,
+            const auto compressed_size = EncoderType::encode_block(opts, block.data(), helper_scalar_block, helper.hasher_, t_out,
                                                            max_compressed_size, pos, *value_pb->mutable_codec());
 
             helper_scalar_block.set_block_data(*value_pb, helper.hasher_.digest(), compressed_size);
@@ -243,21 +246,22 @@ struct GenericBlockEncoder {
             auto helper_array_block = Helper::nd_array_block(block_row_count, block.shapes());
 
             ARCTICDB_TRACE(log::codec(), "Generic block encoder writing ndarray field of {} items", helper_array_block.item_count_);
-            std::size_t comp_data = EncoderType::max_compressed_size(helper_array_block.values_.bytes_);
-            std::size_t comp_shapes = ShapeEncoding::max_compressed_size(helper_array_block.shapes_.bytes_);
+            const std::size_t max_compressed_data_size = EncoderType::max_compressed_size(helper_array_block.values_.bytes_);
+            const std::size_t max_compressed_shapes_size = ShapeEncoding::max_compressed_size(helper_array_block.shapes_.bytes_);
+            const std::size_t helper_buffer_size = max_compressed_data_size + max_compressed_shapes_size;
 
-            helper.ensure_buffer(out, pos, comp_data + comp_shapes);
+            helper.ensure_buffer(out, pos, helper_buffer_size);
             auto field_nd_array = field.mutable_ndarray();
             auto shape_pb = field_nd_array->add_shapes();
 
             // write shapes
-            auto s_out = reinterpret_cast<shape_t *>(out.data() + pos);
+            auto s_out = reinterpret_cast<shape_t*>(out.data() + pos);
             const auto shape_comp_size = ShapeEncoding::encode_block(
                 block.shapes(),
                 helper_array_block.shapes_,
                 helper.hasher_,
                 s_out,
-                comp_shapes,
+                max_compressed_shapes_size,
                 pos,
                 *shape_pb->mutable_codec());
 
@@ -266,20 +270,74 @@ struct GenericBlockEncoder {
             // write values
             auto value_pb = field_nd_array->add_values();
             auto t_out = reinterpret_cast<T *>(out.data() + pos);
-            const auto values_comp_size = EncoderType::encode_block(opts,
-                                                                        block.data(),
-                                                                        helper_array_block.values_,
-                                                                        helper.hasher_,
-                                                                        t_out,
-                                                                        comp_data,
-                                                                        pos,
-                                                                        *value_pb->mutable_codec());
+            const auto values_comp_size = EncoderType::encode_block(
+                opts,
+                block.data(),
+                helper_array_block.values_,
+                helper.hasher_,
+                t_out,
+                max_compressed_data_size,
+                pos,
+                *value_pb->mutable_codec());
 
             auto digest = helper.hasher_.digest();
             helper_array_block.update_field_size(*field_nd_array);
             helper_array_block.set_block_data(shape_pb, value_pb, shape_hash, shape_comp_size, digest, values_comp_size);
             helper_array_block.set_version(shape_pb, value_pb, EncoderType::VERSION, ShapeEncoding::VERSION);
         }
+    }
+};
+
+/// @brief Encode a block based on encoding options.
+/// Just as arcticdb::detail::struct GenericBlockEncoder this class does not care about the specific content of the
+/// block and does not take advantage of specific patterns of data. The main difference between this and
+/// arcticdb::detail::struct GenericBlockEncoder is that the latter stores the shapes data at the beginning of each
+/// block, which is suboptimal. arcticdb::detail::GenericBlockEncoder2 does not care about dimensionality and
+/// does not encode the shapes of the block. For more information see comment above arcticdb::ColumnEncoder2
+template<class BlockType, class TD, class EncoderType>
+struct GenericBlockEncoder2 {
+public:
+    using Helper = CodecHelper<TD>;
+    using T = typename Helper::T;
+
+    static size_t max_compressed_size(const BlockType &block) {
+        const auto uncompressed_size = block.nbytes();
+        const auto compressed = EncoderType::max_compressed_size(uncompressed_size);
+        ARCTICDB_TRACE(log::codec(), "Scalar block has {} bytes", compressed);
+        return compressed;
+    }
+
+    template <typename EncodedBlockType>
+    static void encode(
+        const typename EncoderType::Opts &opts,
+        const BlockType& block,
+        Buffer& out,
+        std::ptrdiff_t& pos,
+        EncodedBlockType* encoded_block
+    ) {
+        Helper helper;
+        helper.hasher_.reset(helper.seed);
+        auto helper_scalar_block = BlockProtobufHelper{block.nbytes() / sizeof(T), block.nbytes()};
+        ARCTICDB_TRACE(log::codec(), "Generic block encode writing scalar of {} elements", block.row_count());
+
+        const auto uncompressed_size = helper_scalar_block.bytes_;
+        const std::size_t max_compressed_size = EncoderType::max_compressed_size(uncompressed_size);
+        helper.ensure_buffer(out, pos, max_compressed_size);
+
+        // doing copy + hash in one pass, this might have a negative effect on perf
+        // since the hashing is path dependent. This is a toy example though so not critical
+        auto t_out = reinterpret_cast<T*>(out.data() + pos);
+        const auto compressed_size = EncoderType::encode_block(
+            opts,
+            block.data(),
+            helper_scalar_block,
+            helper.hasher_,
+            t_out,
+            max_compressed_size,
+            pos,
+            *encoded_block->mutable_codec());
+        helper_scalar_block.set_block_data(*encoded_block, helper.hasher_.digest(), compressed_size);
+        helper_scalar_block.set_version(*encoded_block, EncoderType::VERSION);
     }
 };
 

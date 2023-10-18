@@ -190,7 +190,6 @@ constexpr uint8_t combine_val_bits(ValueType v, SizeBits b = SizeBits::UNKNOWN_S
 } // namespace anonymous
 
 enum class DataType : uint8_t {
-#define DT_COMBINE(TYPE, SIZE) TYPE = combine_val_bits(ValueType::TYPE, SizeBits::SIZE)
     UINT8 = detail::combine_val_bits(ValueType::UINT, SizeBits::S8),
     UINT16 = detail::combine_val_bits(ValueType::UINT, SizeBits::S16),
     UINT32 = detail::combine_val_bits(ValueType::UINT, SizeBits::S32),
@@ -211,7 +210,6 @@ enum class DataType : uint8_t {
     PYBOOL8 = detail::combine_val_bits(ValueType::PYBOOL, SizeBits::S8),
     PYBOOL64 = detail::combine_val_bits(ValueType::PYBOOL, SizeBits::S64),
     ARRAY64 = detail::combine_val_bits(ValueType::ARRAY, SizeBits::S64),
-#undef DT_COMBINE
     UNKNOWN = 0,
 };
 
@@ -307,6 +305,14 @@ constexpr bool is_empty_type(DataType v){
 
 constexpr bool is_array_type(DataType dt) {
     return slice_value_type(dt) == ValueType::ARRAY;
+}
+
+/// @brief Check if the type must contain data
+/// Some types are allowed not to have any data, e.g. empty arrays or the empty type (which by design denotes the
+/// lack of data).
+/// @return true if the type must contain data, false it it's allowed for the type to have 0 bytes of data
+constexpr bool must_contain_data(DataType dt) {
+    return !(is_empty_type(dt) || is_array_type((dt)));
 }
 
 constexpr bool is_pyobject_type(DataType v) {

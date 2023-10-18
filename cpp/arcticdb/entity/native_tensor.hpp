@@ -52,8 +52,7 @@ struct NativeTensor {
             strides_[ndim - 1] = static_cast<ssize_t>(get_type_size(dt_));
             if(ndim == 2)
                 strides_[0] = strides_[1] * shapes_[1];
-        }
-        else {
+        } else {
             for(ssize_t i = 0; i < std::min(MaxDimensions, ndim); ++i)
                 strides_[i] = strides[i];
         }

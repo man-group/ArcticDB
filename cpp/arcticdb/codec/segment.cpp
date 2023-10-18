@@ -49,7 +49,8 @@ FieldCollection decode_fields(
                        hdr.descriptor_field(),
                        data,
                        fields,
-                       bv);
+                       bv,
+                       static_cast<arcticdb::EncodingVersion>(hdr.encoding_version()));
 
         ARCTICDB_TRACE(log::codec(), "Decoded string pool to position {}", data-begin);
     }
@@ -70,7 +71,8 @@ std::optional<FieldCollection> decode_index_fields(
                        hdr.index_descriptor_field(),
                        data,
                        fields,
-                       bv);
+                       bv,
+                       static_cast<arcticdb::EncodingVersion>(hdr.encoding_version()));
 
         ARCTICDB_TRACE(log::codec(), "Decoded string pool to position {}", data-begin);
         return std::make_optional<FieldCollection>(std::move(fields));

@@ -224,6 +224,7 @@ void register_error_code_ecosystem(py::module& m, py::exception<arcticdb::Arctic
     py::register_exception<UnsortedDataException>(m, "UnsortedDataException", sorting_exception.ptr());
     py::register_exception<UserInputException>(m, "UserInputException", compat_exception.ptr());
     py::register_exception<CompatibilityException>(m, "CompatibilityException", compat_exception.ptr());
+    py::register_exception<CodecException>(m, "CodecException", compat_exception.ptr());
 }
 
 void reinit_scheduler() {
@@ -263,12 +264,6 @@ void register_type_handlers() {
     arcticdb::TypeHandlerRegistry::instance()->register_handler(arcticdb::DataType::ARRAY64, arcticdb::ArrayHandler());
     arcticdb::TypeHandlerRegistry::instance()->register_handler(arcticdb::DataType::PYBOOL64, arcticdb::BoolHandler());
     arcticdb::TypeHandlerRegistry::instance()->register_handler(arcticdb::DataType::PYBOOL8, arcticdb::BoolHandler());
-}
-
-/// Register handling of non-trivial types. For more information @see arcticdb::TypeHandlerRegistry and
-/// @see arcticdb::ITypeHandler
-void register_type_handlers() {
-    arcticdb::TypeHandlerRegistry::instance()->register_handler(arcticdb::DataType::EMPTYVAL, arcticdb::EmptyHandler());
 }
 
 PYBIND11_MODULE(arcticdb_ext, m) {

@@ -173,9 +173,11 @@ set(arcticdb_srcs
         codec/lz4.hpp
         codec/passthrough.hpp
         codec/slice_data_sink.hpp
+        codec/typed_block_encoder_impl.hpp
         codec/zstd.hpp
         column_store/block.hpp
         column_store/chunked_buffer.hpp
+        column_store/column_data.cpp
         column_store/column_data.hpp
         column_store/column.hpp
         column_store/column_utils.hpp

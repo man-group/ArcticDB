@@ -12,6 +12,7 @@
 namespace arcticdb {
 
 using VariantField = std::variant<const EncodedField *, const arcticdb::proto::encoding::EncodedField *>;
+using MutableVariantField = std::variant<EncodedField*, arcticdb::proto::encoding::EncodedField*>;
 
 struct VariantEncodedFieldCollection {
     EncodedFieldCollection fields_;

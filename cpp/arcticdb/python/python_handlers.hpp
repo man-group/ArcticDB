@@ -12,9 +12,6 @@
 namespace arcticdb {
     namespace py = pybind11;
     struct EmptyHandler {
-
-        EmptyHandler() = default;
-
         /// @see arcticdb::ITypeHandler
         void handle_type(
             const uint8_t*& data,
@@ -22,18 +19,20 @@ namespace arcticdb {
             const VariantField& encoded_field,
             const entity::TypeDescriptor& type_descriptor,
             size_t dest_bytes,
-            std::shared_ptr<BufferHolder> buffers);
+            std::shared_ptr<BufferHolder> buffers,
+            EncodingVersion encding_version);
     };
 
     struct BoolHandler {
+        /// @see arcticdb::ITypeHandler
         void handle_type(
-                const uint8_t *&data,
-                uint8_t *dest,
-                const VariantField &encoded_field,
-                const entity::TypeDescriptor &type_descriptor,
-                size_t dest_bytes,
-                std::shared_ptr<BufferHolder> buffers
-        );
+            const uint8_t *&data,
+            uint8_t *dest,
+            const VariantField &encoded_field,
+            const entity::TypeDescriptor &type_descriptor,
+            size_t dest_bytes,
+            std::shared_ptr<BufferHolder> buffers,
+            EncodingVersion encding_version);
     };
 
     struct DecimalHandler {
@@ -51,14 +50,15 @@ namespace arcticdb {
     };
 
     struct ArrayHandler {
+        /// @see arcticdb::ITypeHandler
         void handle_type(
-                const uint8_t*& data,
-                uint8_t* dest,
-                const VariantField& encoded_field,
-                const entity::TypeDescriptor& type_descriptor,
-                size_t dest_bytes,
-                std::shared_ptr<BufferHolder> buffers
-        );
+            const uint8_t*& data,
+            uint8_t* dest,
+            const VariantField& encoded_field,
+            const entity::TypeDescriptor& type_descriptor,
+            size_t dest_bytes,
+            std::shared_ptr<BufferHolder> buffers,
+            EncodingVersion encding_version);
     };
 
     } //namespace arcticdb

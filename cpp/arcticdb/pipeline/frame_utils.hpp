@@ -21,6 +21,7 @@
 #include <arcticdb/pipeline/string_pool_utils.hpp>
 #include <util/flatten_utils.hpp>
 #include <arcticdb/entity/timeseries_descriptor.hpp>
+#include <arcticdb/entity/type_utils.hpp>
 
 namespace arcticdb {
 
@@ -90,11 +91,12 @@ RawType* flatten_tensor(
     return reinterpret_cast<RawType*>(flattened_buffer->data());
 }
 
-template<typename Tensor, typename Aggregator>
+
+template<typename Aggregator>
 std::optional<convert::StringEncodingError> aggregator_set_data(
-    const TypeDescriptor &type_desc,
-    Tensor &tensor,
-    Aggregator &agg,
+    const TypeDescriptor& type_desc,
+    const entity::NativeTensor& tensor,
+    Aggregator& agg,
     size_t col,
     size_t rows_to_write,
     size_t row,
@@ -193,8 +195,7 @@ std::optional<convert::StringEncodingError> aggregator_set_data(
             if (!c_style)
                 ptr_data = flatten_tensor<PyObject*>(flattened_buffer, rows_to_write, tensor, slice_num, regular_slice_size);
 
-            util::BitSet bitset;
-            util::scan_object_type_to_sparse(ptr_data, rows_to_write, bitset);
+            util::BitSet bitset = util::scan_object_type_to_sparse(ptr_data, rows_to_write);
 
             const auto num_values = bitset.count();
             auto bool_buffer = ChunkedBuffer::presized(num_values * sizeof(uint8_t));
@@ -211,44 +212,59 @@ std::optional<convert::StringEncodingError> aggregator_set_data(
 
         } else if constexpr(is_array_type(dt)) {
             auto data = const_cast<void*>(tensor.data());
-            auto ptr_data = reinterpret_cast<PyObject**>(data);
-            ptr_data += row;
+            const auto ptr_data = c_style ? reinterpret_cast<PyObject**>(data) + row
+                                          : flatten_tensor<PyObject*>(flattened_buffer, rows_to_write, tensor, slice_num, regular_slice_size);
 
-            if (!c_style)
-                ptr_data = flatten_tensor<PyObject*>(flattened_buffer, rows_to_write, tensor, slice_num, regular_slice_size);
+            util::BitSet values_bitset = util::scan_object_type_to_sparse(ptr_data, rows_to_write);
+            if(values_bitset.empty())
+                return std::optional<convert::StringEncodingError>();
 
-            util::BitSet bitset;
-            util::scan_object_type_to_sparse(ptr_data, rows_to_write, bitset);
-
-            const auto num_values = bitset.count();
-            if(num_values == 0)
-                return;
-
-            auto en = bitset.first();
-            auto tensor = convert::obj_to_tensor(ptr_data[*en]);
-            ssize_t row{0};
-            auto arr_td = TypeDescriptor{tensor.data_type(), Dimension{static_cast<uint8_t>(tensor.ndim())}};
-            Column arr_col{arr_td, true};
-            auto en_end = bitset.end();
-            std::optional<DataType> arr_data_type;
-            while (en < en_end) {
+            ssize_t last_logical_row{0};
+            const auto column_type_descriptor = TypeDescriptor{tensor.data_type(), Dimension::Dim2};
+            std::optional<TypeDescriptor> secondary_type;
+            Column arr_col{column_type_descriptor, true};
+            for (auto en = values_bitset.first(); en < values_bitset.end(); ++en) {
                 const auto arr_pos = *en;
-                tensor = convert::obj_to_tensor(ptr_data[arr_pos]);
-                auto current_td = TypeDescriptor{tensor.data_type(), Dimension{static_cast<uint8_t>(tensor.ndim())}};
-                util::check(current_td == arr_td, "Type descriptor mismatch in array type: {} != {}", current_td, arr_td);
-                arr_td.template visit_tag([&arr_col, &tensor, &row] (auto tdt) {
-                    using ArrayType = typename decltype(tdt)::DataTypeTag::raw_type;
-                    if constexpr(std::is_integral_v<ArrayType> || std::is_floating_point_v<ArrayType>){
-                        TypedTensor<ArrayType> typed_tensor{tensor};
-                        arr_col.set_array(row++, typed_tensor);
-                    } else
-                        util::raise_rte("Non-numeric types not supported in array values");
+                const auto row_tensor = convert::obj_to_tensor(ptr_data[arr_pos]);
+                const auto row_type_descriptor = TypeDescriptor{row_tensor.data_type(), Dimension::Dim1};
+                if(!secondary_type.has_value()) {
+                    secondary_type = row_type_descriptor;
+                } else {
+                    const std::optional<TypeDescriptor>& common_type = has_valid_common_type(row_type_descriptor, *secondary_type);
+                    normalization::check<ErrorCode::E_COLUMN_SECONDARY_TYPE_MISMATCH>(
+                        common_type.has_value(),
+                        "Numpy arrays in the same column must be of compatible types {} {}",
+                        datatype_to_str(secondary_type->data_type()),
+                        datatype_to_str(row_type_descriptor.data_type())
+                    );
+                    secondary_type = common_type;
+                }
+                // TODO: If the input array contains unexpected elements such as None, NaN, string the type
+                //  descriptor will have data_type == BYTES_DYNAMIC64. TypeDescriptor::visit_tag does not have a
+                //  case for it and it will throw exception which is not meaningful. Adding BYTES_DYNAMIC64 in
+                //  TypeDescriptor::visit_tag leads to a bunch of compilation errors spread all over the code.
+                normalization::check<ErrorCode::E_UNIMPLEMENTED_COLUMN_SECONDARY_TYPE>(
+                    is_numeric_type(row_type_descriptor.data_type()) || is_empty_type(row_type_descriptor.data_type()),
+                    "Numpy array type {} is not implemented. Only dense int and float arrays are supported.",
+                    datatype_to_str(row_type_descriptor.data_type())
+                );
+                row_type_descriptor.visit_tag([&arr_col, &row_tensor, &last_logical_row] (auto tdt) {
+                    using ArrayDataTypeTag = typename decltype(tdt)::DataTypeTag;
+                    using ArrayType = typename ArrayDataTypeTag::raw_type;
+                    if constexpr(is_empty_type(ArrayDataTypeTag::data_type)) {
+                        arr_col.set_empty_array(last_logical_row, row_tensor.ndim());
+                    } else if constexpr(is_numeric_type(ArrayDataTypeTag::data_type)) {
+                        TypedTensor<ArrayType> typed_tensor{row_tensor};
+                        arr_col.set_array(last_logical_row, typed_tensor);
+                    } else {
+                        normalization::raise<ErrorCode::E_UNIMPLEMENTED_COLUMN_SECONDARY_TYPE>(
+                            "Numpy array type is not implemented. Only dense int and float arrays are supported.");
+                    }
                 });
-
-                ++en;
+                last_logical_row++;
             }
-            agg.set_sparse_block(col, std::move(arr_col.release_buffer()), std::move(arr_col.release_shapes()), std::move(bitset));
-            agg.set_secondary_type(col, arr_td);
+            agg.set_sparse_block(col, arr_col.release_buffer(), arr_col.release_shapes(), std::move(values_bitset));
+            agg.set_secondary_type(col, *secondary_type);
         } else if constexpr (!is_empty_type(dt)) {
             static_assert(!sizeof(dt), "Unknown data type");
         }

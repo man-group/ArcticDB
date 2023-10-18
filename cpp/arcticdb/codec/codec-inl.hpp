@@ -9,13 +9,11 @@
 #error "This should only be included by codec.hpp"
 #endif
 
-#include <arcticdb/codec/core.hpp>
 #include <arcticdb/codec/encoding_sizes.hpp>
 #include <arcticdb/codec/passthrough.hpp>
 #include <arcticdb/codec/zstd.hpp>
 #include <arcticdb/codec/lz4.hpp>
 #include <arcticdb/codec/encoded_field.hpp>
-//#include <arcticdb/codec/tp4.hpp>
 #include <arcticdb/codec/slice_data_sink.hpp>
 
 #include <arcticdb/util/pb_util.hpp>
@@ -32,99 +30,6 @@
 #include <type_traits>
 
 namespace arcticdb {
-
-template<template<typename> class TypedBlock, class TD>
-struct TypedBlockEncoderImpl {
-
-    static size_t max_compressed_size(
-        const arcticdb::proto::encoding::VariantCodec &codec_opts,
-            const TypedBlock<TD> &typed_block) {
-        switch (codec_opts.codec_case()) {
-            case arcticdb::proto::encoding::VariantCodec::kZstd:
-                return get_zstd_compressed_size(typed_block);
-            case arcticdb::proto::encoding::VariantCodec::kLz4:
-                return get_lz4_compressed_size(typed_block);
-            case arcticdb::proto::encoding::VariantCodec::kPassthrough :
-                return get_passthrough_compressed_size(typed_block);
-            default:
-                return get_passthrough_compressed_size(typed_block);
-        }
-    }
-    /**
-     * Perform encoding of in memory field for storage
-     * @param f  view on the field data to encode. Can mutate underlying buffer
-     * @param field description of the encoding operation
-     * @param out output buffer to write the encoded values to. Must be resized if pos becomes > size
-     * @param pos position in bytes in the buffer where to start writing.
-     *          Modified to reflect the position after the last byte written
-     * @param opt Option used to dispatch to the appropriate encoder and configure it
-     */
-    template <typename EncodedFieldType>
-    static void encode(
-            const arcticdb::proto::encoding::VariantCodec &codec_opts,
-            TypedBlock<TD> &typed_block,
-            EncodedFieldType &field,
-            Buffer &out,
-            std::ptrdiff_t &pos) {
-        switch (codec_opts.codec_case()) {
-            case arcticdb::proto::encoding::VariantCodec::kZstd:
-                encode_zstd(codec_opts.zstd(), typed_block, field, out, pos);
-                break;
-            case arcticdb::proto::encoding::VariantCodec::kLz4:
-                encode_lz4(codec_opts.lz4(), typed_block, field, out, pos);
-                break;
-            case arcticdb::proto::encoding::VariantCodec::kPassthrough :
-                encode_passthrough(typed_block, field, out, pos);
-                break;
-//            case arcticdb::proto::encoding::VariantCodec::kTp4:
-//                encode_tp4(codec_opts.tp4(), field, field, out, pos);
-//                break;
-            default:
-                encode_passthrough(typed_block, field, out, pos);
-        }
-    }
-
-    template <typename EncodedFieldType>
-    static void encode_passthrough(
-        TypedBlock<TD> &typed_block,
-        EncodedFieldType &field,
-        Buffer &out,
-        std::ptrdiff_t &pos) {
-        arcticdb::detail::PassthroughEncoder<TypedBlock, TD>::encode(typed_block, field, out, pos);
-    }
-
-    template <typename EncodedFieldType>
-    static void encode_zstd(
-        const arcticdb::proto::encoding::VariantCodec::Zstd &opts,
-        TypedBlock<TD> &typed_block,
-        EncodedFieldType& field,
-        Buffer &out,
-        std::ptrdiff_t &pos) {
-        arcticdb::detail::ZstdEncoder<TypedBlock, TD>::encode(opts, typed_block, field, out, pos);
-    }
-
-    template <typename EncodedFieldType>
-    static void encode_lz4(
-        const arcticdb::proto::encoding::VariantCodec::Lz4 &opts,
-        TypedBlock<TD> &typed_block,
-        EncodedFieldType &field,
-        Buffer &out,
-        std::ptrdiff_t &pos) {
-        arcticdb::detail::Lz4Encoder<TypedBlock, TD>::encode(opts, typed_block, field, out, pos);
-    }
-
-    static size_t get_passthrough_compressed_size(const TypedBlock<TD> &typed_block ) {
-        return arcticdb::detail::PassthroughEncoder<TypedBlock, TD>::max_compressed_size(typed_block);
-    }
-
-    static size_t get_zstd_compressed_size(const TypedBlock<TD> &typed_block) {
-        return arcticdb::detail::ZstdEncoder<TypedBlock, TD>::max_compressed_size(typed_block);
-    }
-
-    static size_t get_lz4_compressed_size(const TypedBlock<TD> &typed_block) {
-        return arcticdb::detail::Lz4Encoder<TypedBlock, TD>::max_compressed_size(typed_block);
-    }
-};
 
 template<typename T, typename BlockType>
 void decode_block(const BlockType &block, const std::uint8_t *input, T *output) {
@@ -157,44 +62,70 @@ void decode_block(const BlockType &block, const std::uint8_t *input, T *output) 
     }
 }
 
+template<typename FieldType, class DataSink>
+inline void read_shapes(
+    FieldType& encoded_field,
+    DataSink& data_sink,
+    uint8_t const *& data_in,
+    int shapes_block,
+    shape_t*& shapes_out
+) {
+    const auto& shape = encoded_field.shapes(shapes_block);
+    decode_block<shape_t>(shape, data_in, shapes_out);
+    data_in += shape.out_bytes();
+    shapes_out += shape.in_bytes() / sizeof(shape_t);
+    data_sink.advance_shapes(shape.in_bytes());
+}
+
 template<class DataSink, typename NDArrayEncodedFieldType>
 std::size_t decode_ndarray(
-    const TypeDescriptor &td,
-    const NDArrayEncodedFieldType &field,
-    const std::uint8_t *input,
-    DataSink &data_sink,
-    std::optional<util::BitMagic>& bv) {
+    const TypeDescriptor& td,
+    const NDArrayEncodedFieldType& field,
+    const std::uint8_t* input,
+    DataSink& data_sink,
+    std::optional<util::BitMagic>& bv,
+    arcticdb::EncodingVersion encoding_version
+) {
     ARCTICDB_SUBSAMPLE_AGG(DecodeNdArray)
     std::size_t read_bytes = 0;
     td.visit_tag([&](auto type_desc_tag) {
         using TD = std::decay_t<decltype(type_desc_tag)>;
         using T = typename TD::DataTypeTag::raw_type;
 
-        auto shape_size = encoding_sizes::shape_uncompressed_size(field);
-        shape_t *shapes_out = nullptr;
-        if(shape_size > 0) {
-            shapes_out = data_sink.allocate_shapes(shape_size);
-            util::check(td.dimension() == Dimension::Dim0 || field.shapes_size() == field.values_size(),
-                        "Mismatched field and value sizes: {} != {}", field.shapes_size(), field.values_size());
+        const auto data_size = encoding_sizes::data_uncompressed_size(field);
+        const bool is_empty_array = (data_size == 0) && is_array_type(TD::DataTypeTag::data_type);
+        // Empty array will not contain actual data, however, its sparse map should be loaded
+        // so that we can distinguish None from []
+        if(data_size == 0 && !is_empty_array) {
+            return;
         }
 
-        auto data_size = encoding_sizes::data_uncompressed_size(field);
-        auto data_begin = static_cast<uint8_t *>(data_sink.allocate_data(data_size));
-        util::check(data_begin != nullptr, "Failed to allocate data of size {}", data_size);
+        // Note that when DS == StringPool (and probably other cases), this will result in a ChunkedBuffer with one massive chunk
+        auto data_begin = is_empty_array ? nullptr : static_cast<uint8_t*>(data_sink.allocate_data(data_size));
+        util::check(is_empty_array || data_begin != nullptr, "Failed to allocate data of size {}", data_size);
         auto data_out = data_begin;
         auto data_in = input;
         auto num_blocks = field.values_size();
 
         ARCTICDB_TRACE(log::codec(), "Decoding ndarray with type {}, uncompressing {} ({}) bytes in {} blocks",
             td, data_size, encoding_sizes::ndarray_field_compressed_size(field), num_blocks);
-
+        shape_t *shapes_out = nullptr;
+        if constexpr(TD::DimensionTag::value != Dimension::Dim0) {
+            const auto shape_size = encoding_sizes::shape_uncompressed_size(field);
+            if(shape_size > 0) {
+                shapes_out = data_sink.allocate_shapes(shape_size);
+            }
+            if(encoding_version == EncodingVersion::V2) {
+                read_shapes(field, data_sink, data_in, 0, shapes_out);
+            }
+        }
         for (auto block_num = 0; block_num < num_blocks; ++block_num) {
-            if (td.dimension() != Dimension::Dim0) {
-                const auto& shape = field.shapes(block_num);
-                decode_block<shape_t>(shape, data_in, shapes_out);
-                data_in += shape.out_bytes();
-                shapes_out += shape.in_bytes() / sizeof(shape_t);
-                data_sink.advance_shapes(shape.in_bytes());
+            if constexpr(TD::DimensionTag::value != Dimension::Dim0) {
+                // In V1 encoding each block of values is preceded by a block of shapes.
+                // In V2 encoding all shapes are put in a single block placed at the beginning of the block chain.
+                if(encoding_version == EncodingVersion::V1) {
+                    read_shapes(field, data_sink, data_in, block_num, shapes_out);
+                }
             }
 
             const auto& block_info = field.values(block_num);
@@ -209,7 +140,7 @@ std::size_t decode_ndarray(
 
         if(field.sparse_map_bytes()) {
             util::check_magic<util::BitMagicStart>(data_in);
-            const auto bitmap_size =   field.sparse_map_bytes() - (sizeof(util::BitMagicStart) + sizeof(util::BitMagicEnd)); //TODO functions
+            const auto bitmap_size = field.sparse_map_bytes() - util::combined_bit_magic_delimiters_size();
             bv = util::deserialize_bytes_to_bitmap(data_in, bitmap_size);
             util::check_magic<util::BitMagicEnd>(data_in);
             data_sink.set_allow_sparse(true);
@@ -217,12 +148,12 @@ std::size_t decode_ndarray(
 
         read_bytes = encoding_sizes::ndarray_field_compressed_size(field);
         util::check(data_in - input == intptr_t(read_bytes),
-                    "Decoding compressed size mismatch, expected decode size {} to equal total size {}", data_in - input ,
-                    read_bytes);
+            "Decoding compressed size mismatch, expected decode size {} to equal total size {}", data_in - input,
+             read_bytes);
 
         util::check(data_out - data_begin == intptr_t(data_size),
-                    "Decoding uncompressed size mismatch, expected position {} to be equal to data size {}",
-                    data_out - data_begin, data_size);
+            "Decoding uncompressed size mismatch, expected position {} to be equal to data size {}",
+             data_out - data_begin, data_size);
     });
     return read_bytes;
 }
@@ -233,7 +164,8 @@ std::size_t decode_field(
     const EncodedFieldType &field,
     const std::uint8_t *input,
     DataSink &data_sink,
-    std::optional<util::BitMagic>& bv) {
+    std::optional<util::BitMagic>& bv,
+    arcticdb::EncodingVersion encoding_version) {
     size_t magic_size = 0u;
     if constexpr(std::is_same_v<EncodedFieldType, arcticdb::EncodedField>) {
         magic_size += sizeof(ColumnMagic);
@@ -242,7 +174,7 @@ std::size_t decode_field(
 
     switch (field.encoding_case()) {
         case EncodedFieldType::kNdarray:
-            return decode_ndarray(td, field.ndarray(), input, data_sink, bv) + magic_size;
+            return decode_ndarray(td, field.ndarray(), input, data_sink, bv, encoding_version) + magic_size;
         default:
             util::raise_error_msg("Unsupported encoding {}", field);
     }

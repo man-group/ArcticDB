@@ -12,80 +12,77 @@
 
 namespace arcticdb {
 
-    struct DtypeCache {
-        std::unordered_map<std::pair<DataType, shape_t>, py::dtype> cache_;
+    /// @brief Generate numpy.dtype object from ArcticDB type descriptor
+    /// The dtype is used as type specifier for numpy arrays stored as column elements
+    /// @note There is special handling for ArcticDB's empty type
+    /// When numpy creates an empty array its type is float64. We want to mimic this because:
+    /// i) There is no equivalent to empty value
+    /// ii) We want input dataframes to be exact match of the output and that includes the type
+    [[nodiscard]] static inline py::dtype generate_python_dtype(const TypeDescriptor& td, shape_t type_byte_size) {
+        const char type_specifier = is_empty_type(td.data_type()) ? 'f' : get_dtype_specifier(td.data_type());
+        return py::dtype{fmt::format("{}{:d}", type_specifier, type_byte_size)};
+    }
 
-        py::dtype get_dtype(const TypeDescriptor& td, shape_t strides) {
-            ARCTICDB_SAMPLE(ArrayDtype, 0)
-
-            const auto spec = std::make_pair(td.data_type(), strides);
-            if(auto it = cache_.find(spec); it != cache_.end())
-                return it->second;
-
-            auto specifier = fmt::format("{}{:d}", get_dtype_specifier(td.data_type()), strides);
-            // TODO: scoped lock led to a deadlock in the empty handler
-            // ScopedGILLock lock;
-            py::dtype py_dtype{specifier};
-            cache_.try_emplace(spec, py_dtype);
-            return py_dtype;
-        }
-    };
-
-    PyObject* initialize_array(pybind11::dtype &dt, const shape_t* shapes, const shape_t* strides, size_t ndim, const void* ptr) {
+    [[nodiscard]] static inline PyObject* initialize_array(
+        pybind11::dtype descr,
+        const shape_t* shapes,
+        const shape_t* strides,
+        size_t ndim,
+        const void* source_ptr
+    ) {
         ARCTICDB_SAMPLE(InitializeArray, 0)
-        util::check(ptr != nullptr, "Null pointer passed in");
-
-        auto descr = dt;
-        auto flags = py::detail::npy_api::NPY_ARRAY_WRITEABLE_;
-
-        auto &api = py::detail::npy_api::get();
-
+        util::check(source_ptr != nullptr, "Null pointer passed in");
+        const auto flags = py::detail::npy_api::NPY_ARRAY_WRITEABLE_;
+        const auto &api = py::detail::npy_api::get();
         ARCTICDB_SUBSAMPLE(InitArrayCreateArray, 0)
         auto tmp = py::reinterpret_steal<py::object>(api.PyArray_NewFromDescr_(
-                api.PyArray_Type_,
-                descr.release().ptr(),
-                static_cast<int>(ndim),
-                reinterpret_cast<Py_intptr_t*>(const_cast<shape_t*>(shapes)),
-                reinterpret_cast<Py_intptr_t*>(const_cast<shape_t*>(strides)),
-                const_cast<void *>(ptr), flags, nullptr));
-
+            api.PyArray_Type_,
+            descr.release().ptr(),
+            static_cast<int>(ndim),
+            reinterpret_cast<Py_intptr_t*>(const_cast<shape_t*>(shapes)),
+            reinterpret_cast<Py_intptr_t*>(const_cast<shape_t*>(strides)),
+            const_cast<void*>(source_ptr),
+            flags,
+            nullptr));
         ARCTICDB_SUBSAMPLE(ArrayCopy, 0)
         tmp = py::reinterpret_steal<py::object>(api.PyArray_NewCopy_(tmp.ptr(), -1));
         util::check(static_cast<bool>(tmp), "Got null pointer in array allocation");
         return tmp.release().ptr();
     }
 
+    static inline const PyObject** fill_with_none(const PyObject** dest, size_t count) {
+        auto none = py::none();
+        std::generate(dest, dest + count, [&none](){ return none.inc_ref().ptr(); });
+        return dest + count;
+    }
 
     void EmptyHandler::handle_type(
-        const uint8_t *&input,
-        uint8_t *dest,
-        const VariantField &variant_field,
-        const entity::TypeDescriptor &,
+        const uint8_t*& input,
+        uint8_t* dest,
+        const VariantField& variant_field,
+        const entity::TypeDescriptor&,
         size_t dest_bytes,
-        std::shared_ptr<BufferHolder>
+        std::shared_ptr<BufferHolder>,
+        EncodingVersion
     ) {
         ARCTICDB_SAMPLE(HandleEmpty, 0)
         util::check(dest != nullptr, "Got null destination pointer");
         const size_t num_rows = dest_bytes / get_type_size(DataType::EMPTYVAL);
-        static_assert(get_type_size(DataType::EMPTYVAL) == sizeof(PyObject*));
-        auto ptr_dest = reinterpret_cast<const PyObject**>(dest);
-        py::none none = {};
-        for (auto row = 0u; row < num_rows; ++row) {
-            none.inc_ref();
-            *ptr_dest++ = none.ptr();
-        }
+        static_assert(get_type_size(DataType::EMPTYVAL) == sizeof(PyObject *));
+        auto ptr_dest = reinterpret_cast<const PyObject **>(dest);
+        fill_with_none(ptr_dest, num_rows);
 
-        util::variant_match(variant_field, [&input](const auto& field) {
+        util::variant_match(variant_field, [&input](const auto &field) {
             using EncodedFieldType = std::decay_t<decltype(*field)>;
-            if constexpr(std::is_same_v<EncodedFieldType, arcticdb::EncodedField>)
+            if constexpr (std::is_same_v<EncodedFieldType, arcticdb::EncodedField>)
                 check_magic<ColumnMagic>(input);
 
-            if(field->encoding_case() == EncodedFieldType::kNdarray) {
-                const auto& ndarray_field = field->ndarray();
+            if (field->encoding_case() == EncodedFieldType::kNdarray) {
+                const auto &ndarray_field = field->ndarray();
                 const auto num_blocks = ndarray_field.values_size();
                 util::check(num_blocks <= 1, "Unexpected number of empty type blocks: {}", num_blocks);
                 for (auto block_num = 0; block_num < num_blocks; ++block_num) {
-                    const auto& block_info = ndarray_field.values(block_num);
+                    const auto &block_info = ndarray_field.values(block_num);
                     input += block_info.out_bytes();
                 }
             } else {
@@ -100,24 +97,20 @@ namespace arcticdb {
             const VariantField& encoded_field_info,
             const entity::TypeDescriptor& type_descriptor,
             size_t dest_bytes,
-            std::shared_ptr<BufferHolder>
+            std::shared_ptr<BufferHolder>,
+            EncodingVersion encding_version
     ) {
         std::visit([&](const auto& field){
             ARCTICDB_SAMPLE(HandleBool, 0)
             util::check(dest != nullptr, "Got null destination pointer");
             util::check(field->has_ndarray(), "Bool handler expected array");
             ARCTICDB_DEBUG(log::version(), "Bool handler got encoded field: {}", field->DebugString());
-            auto none = py::none{};
-            size_t num_rows = dest_bytes / get_type_size(DataType::PYBOOL64);
-            auto ptr_dest = reinterpret_cast<PyObject**>(dest);
+            size_t row_count = dest_bytes / get_type_size(DataType::PYBOOL64);
+            auto ptr_dest = reinterpret_cast<const PyObject**>(dest);
 
             if(!field->ndarray().sparse_map_bytes()) {
-                // TODO: scoped lock led to a deadlock in the empty handler
-                // ScopedGILLock lock;
                 ARCTICDB_DEBUG(log::version(), "Bool handler has no values");
-                for(auto r = 0u; r < num_rows; ++r)
-                    *ptr_dest++ = none.inc_ref().ptr();
-
+                fill_with_none(ptr_dest, row_count);
                 return;
             }
 
@@ -126,116 +119,89 @@ namespace arcticdb {
             const auto bytes = encoding_sizes::data_uncompressed_size(ndarray);
             auto sparse = ChunkedBuffer::presized(bytes);
             SliceDataSink sparse_sink{sparse.data(), bytes};
-            data += decode_field(type_descriptor, *field, data, sparse_sink, bv);
+            data += decode_field(type_descriptor, *field, data, sparse_sink, bv, encding_version);
             const auto num_bools = bv->count();
             auto ptr_src = sparse.template ptr_cast<uint8_t>(0, num_bools * sizeof(uint8_t));
             auto last_row = 0u;
             const auto ptr_begin = ptr_dest;
 
-            auto en = bv->first();
-            const auto en_end = bv->end();
-
-            // TODO: scoped lock led to a deadlock in the empty handler
-            // ScopedGILLock lock;
-            while(en < en_end) {
+            for(auto en = bv->first(); en < bv->end(); ++en) {
                 const auto current_pos = *en;
-                for(; last_row < current_pos; ++last_row) {
-                    none.inc_ref();
-                    *ptr_dest++ = none.ptr();
-                }
-
+                ptr_dest = fill_with_none(ptr_dest, current_pos - last_row);
+                last_row = current_pos;
                 auto py_bool = py::bool_(static_cast<bool>(*ptr_src++));
                 *ptr_dest++ = py_bool.release().ptr();
                 ++last_row;
-                ++en;
                 util::check(ptr_begin + last_row == ptr_dest, "Boolean pointer out of alignment {} != {}", last_row, uintptr_t(ptr_begin + last_row));
             }
-            for(; last_row < num_rows; ++last_row) {
-                none.inc_ref();
-                *ptr_dest++ = none.ptr();
-            }
+            fill_with_none(ptr_dest, row_count - last_row);
             util::check(ptr_begin + last_row == ptr_dest, "Boolean pointer out of alignment at end: {} != {}", last_row, uintptr_t(ptr_begin + last_row));
         }, encoded_field_info);
     }
 
+    static inline TypeDescriptor get_numpy_array_type(const EncodedField* field) {
+        return field->ndarray().arr_desc();
+    }
+
+    static inline TypeDescriptor get_numpy_array_type(const arcticdb::proto::encoding::EncodedField* field) {
+        return type_desc_from_proto(field->ndarray().arr_desc());
+    }
+
     void ArrayHandler::handle_type(
-            const uint8_t*& data,
-            uint8_t* dest,
-            const VariantField& encoded_field_info,
-            const entity::TypeDescriptor& type_descriptor,
-            size_t dest_bytes,
-            std::shared_ptr<BufferHolder> buffers
-    ){
+        const uint8_t*& data,
+        uint8_t* dest,
+        const VariantField& encoded_field_info,
+        const entity::TypeDescriptor& type_descriptor,
+        size_t dest_bytes,
+        std::shared_ptr<BufferHolder> buffers,
+		EncodingVersion encoding_version
+    ) {
         util::variant_match(encoded_field_info, [&](auto field){
             ARCTICDB_SAMPLE(HandleArray, 0)
             util::check(field->has_ndarray(), "Expected ndarray in array object handler");
-            auto none = py::none();
             const auto row_count = dest_bytes / sizeof(PyObject*);
-            util::check(row_count >= field->ndarray().items_count(),
-                        "Item count mismatch: {} < {}", row_count, field->ndarray().items_count());
 
-            auto ptr_dest = reinterpret_cast<PyObject**>(dest);
+            auto ptr_dest = reinterpret_cast<const PyObject**>(dest);
             if(!field->ndarray().sparse_map_bytes()) {
                 log::version().info("Array handler has no values");
-                for(auto r = 0u; r < row_count; ++r)
-                    ptr_dest[r] = none.inc_ref().ptr();
-
+                fill_with_none(ptr_dest, row_count);
                 return;
             }
             util::check(field->ndarray().has_arr_desc(), "Array type descriptor required in array object handler");
-
-            auto bv = std::make_optional(util::BitSet{});
-            const auto td = [](auto field){
-                if constexpr(std::is_same_v<decltype(field), const EncodedField*>) {
-                    return field->ndarray().arr_desc();
-                } else if constexpr(std::is_same_v<decltype(field), const arcticdb::proto::encoding::EncodedField*>) {
-                    return type_desc_from_proto(field->ndarray().arr_desc());
-                } else {
-                    static_assert(sizeof(field) == 0, "Unexpected encoded field type");
-                }
-            }(field);
-            auto data_sink = buffers->get_buffer(td, true);
+            const TypeDescriptor array_type_descriptor = get_numpy_array_type(field);
+            auto data_sink = buffers->get_buffer(array_type_descriptor, true);
             data_sink->check_magic();
             log::version().info("Column got buffer at {}", uintptr_t(data_sink.get()));
-            data += decode_field(type_descriptor, *field, data, *data_sink, bv);
+            auto bv = std::make_optional(util::BitSet{});
+            data += decode_field(type_descriptor, *field, data, *data_sink, bv, encoding_version);
 
-            auto en = bv->first();
-            auto en_end = bv->end();
             auto last_row = 0u;
-            auto src_pos = 0u;
             ARCTICDB_SUBSAMPLE(InitArrayAcquireGIL, 0)
-            // TODO: scoped lock led to a deadlock in the empty handler
-            // ScopedGILLock lock;
-            DtypeCache dtypes;
-            shape_t strides = get_type_size(td.data_type());
-            auto py_dtype = dtypes.get_dtype(td, strides);
-            td.visit_tag([&en, &en_end, &last_row, &none, &ptr_dest, &data_sink, &src_pos, &py_dtype, &td] (auto tdt) {
+            const shape_t strides = get_type_size(array_type_descriptor.data_type());
+            const auto py_dtype = generate_python_dtype(array_type_descriptor, strides);
+            array_type_descriptor.visit_tag([&] (auto tdt) {
                 using RawType = typename decltype(tdt)::DataTypeTag::raw_type;
                 const auto& blocks = data_sink->blocks();
                 if(blocks.empty())
                     return;
 
                 auto block_it = blocks.begin();
-                auto shape = data_sink->shape_ptr();
+                const ssize_t* shape = data_sink->shape_ptr();
                 auto block_pos = 0u;
                 const auto* ptr_src = (*block_it)->data();
                 const shape_t stride = sizeof(RawType);
-                while(en < en_end) {
+                for (auto en = bv->first(); en < bv->end(); ++en) {
                     const auto offset = *en;
-                    while(last_row < offset) {
-                        none.inc_ref();
-                        *ptr_dest++ = none.ptr();
-                        ++last_row;
-                    }
+                    ptr_dest = fill_with_none(ptr_dest, offset - last_row);
+                    last_row = offset;
 
-                    auto arr_ptr = initialize_array(
-                            py_dtype,
-                            shape,
-                            &stride,
-                            static_cast<size_t>(td.dimension()),
-                            ptr_src + block_pos);
+                    *ptr_dest++ = initialize_array(
+                        py_dtype,
+                        shape,
+                        &stride,
+                        static_cast<size_t>(array_type_descriptor.dimension()),
+                        ptr_src + block_pos);
 
-                    *ptr_dest++ = arr_ptr;
                     block_pos += *shape * stride;
                     ++shape;
                     if(block_pos == (*block_it)->bytes() && ++block_it != blocks.end()) {
@@ -244,19 +210,12 @@ namespace arcticdb {
                     }
 
                     ++last_row;
-                    ++src_pos;
-                    ++en;
                 }
-
             });
+
             ARCTICDB_SUBSAMPLE(ArrayIncNones, 0)
-            for(; last_row < row_count; ++last_row) {
-                none.inc_ref();
-                *ptr_dest++ = none.ptr();
-            }
+            fill_with_none(ptr_dest, row_count - last_row);
         });
 
     }
 }
-
-} //namespace arcticdb

@@ -226,4 +226,14 @@ std::shared_ptr<Column> Column::truncate(const std::shared_ptr<Column>& column, 
     return res;
 }
 
+void Column::set_empty_array(ssize_t row_offset, int dimension_count) {
+    ARCTICDB_SAMPLE(ColumnSetArray, RMTSF_Aggregate)
+    magic_.check();
+    util::check_arg(last_logical_row_ + 1 == row_offset, "set_array expected row {}, actual {} ", last_logical_row_ + 1, row_offset);
+    shapes_.ensure<shape_t>(dimension_count);
+    memset(shapes_.ptr(), 0, dimension_count * sizeof(shape_t));
+    shapes_.commit();
+    ++last_logical_row_;
+}
+
 } //namespace arcticdb
