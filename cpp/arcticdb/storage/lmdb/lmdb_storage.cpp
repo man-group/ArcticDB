@@ -101,7 +101,7 @@ void LmdbStorage::do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts opts) {
 
 void LmdbStorage::do_read(Composite<VariantKey>&& ks, const ReadVisitor& visitor, storage::ReadKeyOpts) {
     ARCTICDB_SAMPLE(LmdbStorageRead, 0)
-    auto txn = ::lmdb::txn::begin(env(), nullptr, MDB_RDONLY);
+    auto txn = std::make_shared<::lmdb::txn>(::lmdb::txn::begin(env(), nullptr, MDB_RDONLY));
 
     auto fmt_db = [](auto &&k) { return variant_key_type(k); };
     ARCTICDB_SUBSAMPLE(LmdbStorageInTransaction, 0)
@@ -117,10 +117,13 @@ void LmdbStorage::do_read(Composite<VariantKey>&& ks, const ReadVisitor& visitor
             MDB_val mdb_val;
             ARCTICDB_SUBSAMPLE(LmdbStorageGet, 0)
 
-            if (::lmdb::dbi_get(txn, dbi.handle(), &mdb_key, &mdb_val)) {
+            if (::lmdb::dbi_get(*txn, dbi.handle(), &mdb_key, &mdb_val)) {
                 ARCTICDB_SUBSAMPLE(LmdbStorageVisitSegment, 0)
-                visitor(k, Segment::from_bytes(reinterpret_cast<std::uint8_t *>(mdb_val.mv_data),
-                                               mdb_val.mv_size));
+                auto segment = Segment::from_bytes(reinterpret_cast<std::uint8_t *>(mdb_val.mv_data),
+                                                   mdb_val.mv_size);
+                std::any keepalive;
+                segment.set_keepalive(std::any(std::move(txn)));
+                visitor(k, std::move(segment));
 
                 ARCTICDB_DEBUG(log::storage(), "Read key {}: {}, with {} bytes of data", variant_key_type(k), variant_key_view(k), mdb_val.mv_size);
             } else {

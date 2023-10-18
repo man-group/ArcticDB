@@ -124,21 +124,13 @@ class NullStore :
         throw std::runtime_error("Not implemented for tests");
     }
 
-    std::vector<folly::Future<storage::KeySegmentPair>>
-    batch_read_compressed(std::vector<entity::VariantKey> &&, const BatchReadArgs &) override {
+    std::vector<folly::Future<bool>> batch_key_exists(std::vector<entity::VariantKey> &) override {
         throw std::runtime_error("Not implemented for tests");
     }
 
-    virtual std::vector<folly::Future<bool>> batch_key_exists(std::vector<entity::VariantKey> &) {
-        throw std::runtime_error("Not implemented for tests");
-    }
-
-    folly::Future<std::vector<VariantKey>>
-    batch_read_compressed(
-        std::vector<entity::VariantKey>&&,
-        std::vector<ReadContinuation>&&,
-        const BatchReadArgs &
-    ) override {
+    folly::Future<std::vector<VariantKey>> batch_read_compressed(
+            std::vector<std::pair<entity::VariantKey, ReadContinuation>> &&ks,
+            const BatchReadArgs&) override {
         throw std::runtime_error("Not implemented for tests");
     }
 

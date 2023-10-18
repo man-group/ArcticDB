@@ -362,12 +362,6 @@ inline void set_loaded_until(const LoadProgress& load_progress, const std::share
     entry->loaded_until_ = load_progress.loaded_until_;
 }
 
-
-void fix_stream_ids_of_index_keys(
-    const std::shared_ptr<Store> &store,
-    const StreamId &stream_id,
-    const std::shared_ptr<VersionMapEntry> &entry);
-
 inline SortedValue deduce_sorted(SortedValue existing_frame, SortedValue input_frame) {
     using namespace arcticdb;
     constexpr auto UNKNOWN = SortedValue::UNKNOWN;
