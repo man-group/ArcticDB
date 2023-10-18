@@ -238,6 +238,8 @@ AggregationClause::AggregationClause(const std::string& grouping_column,
             aggregators_.emplace_back(MaxOrMinAggregator(typed_column_name, typed_column_name, Extremum::MAX));
         } else if (aggregation_operator == "min") {
             aggregators_.emplace_back(MaxOrMinAggregator(typed_column_name, typed_column_name, Extremum::MIN));
+        } else if (aggregation_operator == "count") {
+            aggregators_.emplace_back(CountAggregator(typed_column_name, typed_column_name));
         } else {
             user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>("Unknown aggregation operator provided: {}", aggregation_operator);
         }

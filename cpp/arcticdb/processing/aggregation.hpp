@@ -312,4 +312,41 @@ struct MeanAggregator {
     [[nodiscard]] GroupingAggregatorData get_aggregator_data() const { return MeanAggregatorData(); }
 };
 
+struct CountAggregatorData {
+    std::vector<uint64_t> aggregated_;
+
+    CountAggregatorData() = default;
+    // Warn on copies as aggregated_ could be a large buffer
+    CountAggregatorData(const CountAggregatorData& other):
+            aggregated_(other.aggregated_) {
+        log::version().warn("Copying potentially large buffer in CountAggregatorData");
+    }
+    CountAggregatorData& operator=(const CountAggregatorData& other) {
+        aggregated_ = other.aggregated_;
+        log::version().warn("Copying potentially large buffer in CountAggregatorData");
+        return *this;
+    }
+    ARCTICDB_MOVE(CountAggregatorData)
+
+    // Count values are always integers so this is a no-op
+    void add_data_type(ARCTICDB_UNUSED DataType data_type) {}
+    void aggregate(const std::optional<ColumnWithStrings>& input_column, const std::vector<size_t>& groups, size_t unique_values);
+    SegmentInMemory finalize(const ColumnName& output_column_name,  bool dynamic_schema, size_t unique_values);
+};
+
+struct CountAggregator {
+    ColumnName input_column_name_;
+    ColumnName output_column_name_;
+
+    explicit CountAggregator(ColumnName input_column_name, ColumnName output_column_name) :
+            input_column_name_(std::move(input_column_name)),
+            output_column_name_(std::move(output_column_name)) {
+    }
+    ARCTICDB_MOVE_COPY_DEFAULT(CountAggregator)
+
+    [[nodiscard]] ColumnName get_input_column_name() const { return input_column_name_; }
+    [[nodiscard]] ColumnName get_output_column_name() const { return output_column_name_; }
+    [[nodiscard]] GroupingAggregatorData get_aggregator_data() const { return CountAggregatorData(); }
+};
+
 } //namespace arcticdb

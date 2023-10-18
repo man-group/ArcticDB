@@ -161,4 +161,48 @@ SegmentInMemory MeanAggregatorData::finalize(const ColumnName& output_column_nam
     }
     return res;
 }
+
+void CountAggregatorData::aggregate(const std::optional<ColumnWithStrings>& input_column, const std::vector<size_t>& groups, size_t unique_values) {
+    if(input_column.has_value()) {
+        input_column->column_->type().visit_tag([&] (auto type_desc_tag) {
+            using TypeDescriptorTag =  decltype(type_desc_tag);
+            using RawType = typename TypeDescriptorTag::DataTypeTag::raw_type;
+
+            aggregated_.resize(unique_values);
+
+            if constexpr (is_floating_point_type(TypeDescriptorTag::DataTypeTag::data_type)) {
+                auto col_data = input_column->column_->data();
+                while (auto block = col_data.next<TypeDescriptorTag>()) {
+                    auto ptr = reinterpret_cast<const RawType *>(block.value().data());
+                    for (auto i = 0u; i < block.value().row_count(); ++i) {
+                        if (!std::isnan(static_cast<double>(ptr[i]))) {
+                            auto group = groups[i];
+                            auto& val = aggregated_[group];
+                            ++val;
+                        }
+                    }
+                }
+            } else {
+                for (auto group: groups) {
+                    auto& val = aggregated_[group];
+                    ++val;
+                }
+            }
+        });
+    }
+}
+
+SegmentInMemory CountAggregatorData::finalize(const ColumnName& output_column_name,  bool, size_t unique_values) {
+    SegmentInMemory res;
+    if(!aggregated_.empty()) {
+        aggregated_.resize(unique_values);
+        auto pos = res.add_column(scalar_field(DataType::UINT64, output_column_name.value), unique_values, true);
+        auto& column = res.column(pos);
+        auto ptr = reinterpret_cast<uint64_t*>(column.ptr());
+        column.set_row_data(unique_values - 1);
+        memcpy(ptr, aggregated_.data(), sizeof(uint64_t)*unique_values);
+    }
+    return res;
+}
+
 } //namespace arcticdb
