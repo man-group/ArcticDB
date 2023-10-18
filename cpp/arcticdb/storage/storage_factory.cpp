@@ -8,6 +8,7 @@
 #include <arcticdb/storage/storage_factory.hpp>
 #include <arcticdb/storage/lmdb/lmdb_storage.hpp>
 #include <arcticdb/storage/memory/memory_storage.hpp>
+#include <arcticdb/storage/rocksdb/rocksdb_storage.hpp>
 #include <arcticdb/storage/mongo/mongo_storage.hpp>
 #include <arcticdb/storage/azure/azure_storage.hpp>
 #include <arcticdb/storage/s3/s3_storage.hpp>
@@ -47,6 +48,12 @@ std::unique_ptr<Storage> create_storage(
         storage_descriptor.config().UnpackTo(&memory_config);
         storage = std::make_unique<memory::MemoryStorage>(
                 memory::MemoryStorage(library_path, mode, memory_config)
+        );
+    } else if (type_name == rocksdb::RocksDBStorage::Config::descriptor()->full_name()) {
+        rocksdb::RocksDBStorage::Config rocksdb_config;
+        storage_descriptor.config().UnpackTo(&rocksdb_config);
+        storage = std::make_unique<rocksdb::RocksDBStorage>(
+                rocksdb::RocksDBStorage(library_path, mode, rocksdb_config)
         );
     } else if (type_name == nfs_backed::NfsBackedStorage::Config::descriptor()->full_name()) {
         nfs_backed::NfsBackedStorage::Config nfs_backed_config;

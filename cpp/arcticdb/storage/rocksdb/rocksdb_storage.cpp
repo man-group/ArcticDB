@@ -85,14 +85,25 @@ RocksDBStorage::RocksDBStorage(const LibraryPath &library_path, OpenMode mode, c
 }
 
 RocksDBStorage::~RocksDBStorage() {
-    for (const auto& [key_type_name, handle]: handles_by_key_type_) {
-        auto s = db_->DestroyColumnFamilyHandle(handle);
+    if (db_ == nullptr) {
+        util::check(handles_by_key_type_.empty(), "Handles not empty but db_ is nullptr");
+    } else {
+        for (const auto &[key_type_name, handle]: handles_by_key_type_) {
+            auto s = db_->DestroyColumnFamilyHandle(handle);
+            util::check(s.ok(), DEFAULT_ROCKSDB_NOT_OK_ERROR + s.ToString());
+        }
+        handles_by_key_type_.clear();
+        auto s = db_->Close();
         util::check(s.ok(), DEFAULT_ROCKSDB_NOT_OK_ERROR + s.ToString());
+        delete db_;
     }
-    handles_by_key_type_.clear();
-    auto s = db_->Close();
-    util::check(s.ok(), DEFAULT_ROCKSDB_NOT_OK_ERROR + s.ToString());
-    delete db_;
+}
+
+RocksDBStorage::RocksDBStorage(RocksDBStorage&& from) : Storage(std::move(from)) {
+    db_ = from.db_;
+    from.db_ = nullptr;
+    // Move handles across
+    handles_by_key_type_.merge(from.handles_by_key_type_);
 }
 
 void RocksDBStorage::do_write(Composite<KeySegmentPair>&& kvs) {
@@ -118,6 +129,7 @@ void RocksDBStorage::do_read(Composite<VariantKey>&& ks, const ReadVisitor& visi
     ARCTICDB_SAMPLE(RocksDBStorageRead, 0)
     auto grouper = [](auto &&k) { return variant_key_type(k); };
 
+    std::vector<VariantKey> failed_reads;
     (fg::from(ks.as_range()) | fg::move | fg::groupBy(grouper)).foreach([&](auto &&group) {
         auto key_type_name = fmt::format("{}", group.key());
         auto handle = handles_by_key_type_.at(key_type_name);
@@ -125,10 +137,16 @@ void RocksDBStorage::do_read(Composite<VariantKey>&& ks, const ReadVisitor& visi
             std::string k_str = to_serialized_key(k);
             std::string value;
             auto s = db_->Get(::rocksdb::ReadOptions(), handle, ::rocksdb::Slice(k_str), &value);
-            util::check(s.ok(), DEFAULT_ROCKSDB_NOT_OK_ERROR + s.ToString());
-            visitor(k, Segment::from_bytes(reinterpret_cast<uint8_t*>(value.data()), value.size()));
+            if (s.IsNotFound()) {
+                failed_reads.push_back(k);
+            } else {
+                util::check(s.ok(), DEFAULT_ROCKSDB_NOT_OK_ERROR + s.ToString());
+                visitor(k, Segment::from_bytes(reinterpret_cast<uint8_t*>(value.data()), value.size(), true));
+            }
         }
     });
+    if(!failed_reads.empty())
+        throw KeyNotFoundException(Composite<VariantKey>(std::move(failed_reads)));
 }
 
 bool RocksDBStorage::do_key_exists(const VariantKey& key) {
