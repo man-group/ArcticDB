@@ -122,7 +122,7 @@ TEST(Clause, AggregationEmptyColumn) {
     ProcessingUnit processing_unit(std::move(seg), pipelines::FrameSlice{});
     Composite<ProcessingUnit> comp;
     comp.push_back(std::move(processing_unit));
-    AggregationClause aggregation("int_repeated_values", {{"empty_sum", "sum"}, {"empty_min", "min"}, {"empty_max", "max"}, {"empty_mean", "mean"}});
+    AggregationClause aggregation("int_repeated_values", {{"empty_sum", "sum"}, {"empty_min", "min"}, {"empty_max", "max"}, {"empty_mean", "mean"}, {"empty_count", "count"}});
 
     auto aggregated = aggregation.process(std::shared_ptr<Store>(), std::move(comp)).as_range();
     ASSERT_EQ(1, aggregated.size());
@@ -138,10 +138,11 @@ TEST(Clause, AggregationEmptyColumn) {
         ASSERT_EQ(double(0), sum_column.scalar_at<double>(idx));
     }
 
-    // Min, max, and mean aggregations should not be present in the output segment
+    // Min, max, mean and count aggregations should not be present in the output segment
     ASSERT_FALSE(slice_and_keys[0].segment_->column_index("empty_min").has_value());
     ASSERT_FALSE(slice_and_keys[0].segment_->column_index("empty_max").has_value());
     ASSERT_FALSE(slice_and_keys[0].segment_->column_index("empty_mean").has_value());
+    ASSERT_FALSE(slice_and_keys[0].segment_->column_index("empty_count").has_value());
 }
 
 TEST(Clause, Passthrough) {

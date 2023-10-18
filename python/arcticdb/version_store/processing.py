@@ -399,12 +399,13 @@ class QueryBuilder:
 
     def groupby(self, name: str):
         """
-        Group symbol by column name. GroupBy operations must be followed by an aggregation operator. Currently the following four aggregation
+        Group symbol by column name. GroupBy operations must be followed by an aggregation operator. Currently the following five aggregation
         operators are supported:
             * "mean" - compute the mean of the group
             * "sum" - compute the sum of the group
             * "min" - compute the min of the group
             * "max" - compute the max of the group
+            * "count" - compute the count of group
 
         For usage examples, see below.
 
