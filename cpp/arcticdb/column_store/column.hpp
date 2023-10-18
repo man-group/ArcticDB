@@ -734,7 +734,7 @@ public:
         return const_cast<T*>(const_cast<const Column*>(this)->ptr_cast<T>(idx, required_bytes));
     }
 
-    auto& buffer() {
+    [[nodiscard]] auto& buffer() {
         return data_.buffer();
     }
 
