@@ -23,28 +23,28 @@ namespace arcticdb::storage::rocksdb {
         using Config = arcticdb::proto::rocksdb_storage::Config;
 
         RocksDBStorage(const LibraryPath &lib, OpenMode mode, const Config &conf);
-        ~RocksDBStorage();
+        ~RocksDBStorage() override;
 
     private:
-        void do_write(Composite<KeySegmentPair>&& kvs) final;
+        void do_write(Composite<KeySegmentPair>&& kvs) final override;
 
-        void do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts opts) final;
+        void do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts opts) final override;
 
-        void do_read(Composite<VariantKey>&& ks, const ReadVisitor& visitor, ReadKeyOpts opts) final;
+        void do_read(Composite<VariantKey>&& ks, const ReadVisitor& visitor, ReadKeyOpts opts) final override;
 
-        void do_remove(Composite<VariantKey>&& ks, RemoveOpts opts) final;
+        void do_remove(Composite<VariantKey>&& ks, RemoveOpts opts) final override;
 
-        bool do_key_exists(const VariantKey& key) final;
+        bool do_key_exists(const VariantKey& key) final override;
 
-        std::string do_key_path(const VariantKey&) const final { return {}; };
+        std::string do_key_path(const VariantKey&) const final override { return {}; };
 
-        bool do_supports_prefix_matching() const final {
+        bool do_supports_prefix_matching() const final override {
             return false;
         }
 
-        inline bool do_fast_delete() final;
+        inline bool do_fast_delete() final override;
 
-        void do_iterate_type(KeyType key_type, const IterateTypeVisitor& visitor, const std::string & prefix) final;
+        void do_iterate_type(KeyType key_type, const IterateTypeVisitor& visitor, const std::string & prefix) final override;
 
         // The _internal methods remove code duplication across update, write, and read methods.
         void do_write_internal(Composite<KeySegmentPair>&& kvs);

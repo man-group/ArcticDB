@@ -38,6 +38,7 @@ public:
             arcticdb::proto::lmdb_storage::Config cfg;
             fs::path db_name = "test_lmdb";
             cfg.set_path((TEST_DATABASES_PATH / db_name).generic_string());
+            cfg.set_map_size(128ULL * (1ULL << 20) );
             cfg.set_recreate_if_exists(true);
 
             as::LibraryPath library_path{"a", "b"};
@@ -199,6 +200,6 @@ TEST_P(SimpleTestSuite, Strings) {
 
 using namespace std::string_literals;
 std::vector<BackendGenerator> backend_generators{"lmdb"s, "mem"s, "rocksdb"s};
-INSTANTIATE_TEST_SUITE_P(TestLmdbMemRocksDBStorages, SimpleTestSuite, testing::ValuesIn(backend_generators),
+INSTANTIATE_TEST_SUITE_P(TestEmbedded, SimpleTestSuite, testing::ValuesIn(backend_generators),
     [](const testing::TestParamInfo<SimpleTestSuite::ParamType>& info) { return info.param.get_name(); });
 

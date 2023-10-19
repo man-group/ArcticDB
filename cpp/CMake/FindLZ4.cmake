@@ -35,7 +35,14 @@ find_package_handle_standard_args(LZ4
   VERSION_VAR LZ4_VERSION)
 
 if (LZ4_FOUND)
-  # On conda+mac rocksdb depends on lowercase lz4 so needs this and the alias below. See PR 961.
+  # `lz4_FOUND` needs to be defined because:
+  #  - Other dependencies (such as RocksDB) also resolve LZ4 using `find_package(lz4 ...)`
+  #  - CMake's syntax is case-sensitive
+  #
+  # See:
+  #  - https://github.com/facebook/rocksdb/blob/0836a2b26dfbbe30c15e8cebf47771917d55e760/cmake/RocksDBConfig.cmake.in#L36
+  #  - https://github.com/facebook/rocksdb/blob/0836a2b26dfbbe30c15e8cebf47771917d55e760/cmake/modules/Findlz4.cmake#L17
+  #  - https://github.com/man-group/ArcticDB/pull/961
   set(lz4_FOUND TRUE)
   set(LZ4_INCLUDE_DIRS "${LZ4_INCLUDE_DIR}")
   set(LZ4_LIBRARIES "${LZ4_LIBRARY}")

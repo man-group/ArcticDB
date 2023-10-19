@@ -44,7 +44,7 @@ RocksDBStorage::RocksDBStorage(const LibraryPath &library_path, OpenMode mode, c
     std::vector<::rocksdb::ColumnFamilyDescriptor> column_families;
     ::rocksdb::DBOptions db_options;
 
-    ::rocksdb::ConfigOptions cfg_opts; // not used
+    ::rocksdb::ConfigOptions cfg_opts;
     auto s = ::rocksdb::LoadLatestOptions(cfg_opts, db_name, &db_options, &column_families);
     if (s.ok()) {
         std::set<std::string> existing_key_names{};
@@ -61,7 +61,8 @@ RocksDBStorage::RocksDBStorage(const LibraryPath &library_path, OpenMode mode, c
         column_families.emplace_back(::rocksdb::kDefaultColumnFamilyName, ::rocksdb::ColumnFamilyOptions());
         for (const auto& key_name: key_names) {
             util::check(key_name != ::rocksdb::kDefaultColumnFamilyName,
-                        "Key name clash with mandatory default column name");
+                "Key name clash with mandatory default column family name: \"" +
+                ::rocksdb::kDefaultColumnFamilyName + "\"");
             column_families.emplace_back(key_name, ::rocksdb::ColumnFamilyOptions());
         }
         fs::create_directories(lib_dir);
@@ -135,12 +136,16 @@ bool RocksDBStorage::do_key_exists(const VariantKey& key) {
     std::string value; // unused
     auto key_type_name = fmt::format("{}", variant_key_type(key));
     auto k_str = to_serialized_key(key);
-    auto s = db_->Get(::rocksdb::ReadOptions(), handles_by_key_type_.at(key_type_name), ::rocksdb::Slice(k_str), &value);
+    auto handle = handles_by_key_type_.at(key_type_name);
+    if (!db_->KeyMayExist(::rocksdb::ReadOptions(), handle, ::rocksdb::Slice(k_str), &value)) {
+        return false;
+    }
+    auto s = db_->Get(::rocksdb::ReadOptions(), handle, ::rocksdb::Slice(k_str), &value);
+    util::check(s.IsNotFound() || s.ok(), DEFAULT_ROCKSDB_NOT_OK_ERROR + s.ToString());
     return !s.IsNotFound();
 }
 
-void RocksDBStorage::do_remove(Composite<VariantKey>&& ks, RemoveOpts opts)
-{
+void RocksDBStorage::do_remove(Composite<VariantKey>&& ks, RemoveOpts opts) {
     ARCTICDB_SAMPLE(RocksDBStorageRemove, 0)
 
     auto failed_deletes = do_remove_internal(std::move(ks), opts);
@@ -169,7 +174,7 @@ void RocksDBStorage::do_iterate_type(KeyType key_type, const IterateTypeVisitor&
 
     auto key_type_name = fmt::format("{}", key_type);
     auto handle = handles_by_key_type_.at(key_type_name);
-    ::rocksdb::Iterator* it = db_->NewIterator(::rocksdb::ReadOptions(), handle);
+    auto it = std::unique_ptr<::rocksdb::Iterator>(db_->NewIterator(::rocksdb::ReadOptions(), handle));
     for (it->SeekToFirst(); it->Valid(); it->Next()) {
         auto key_slice = it->key();
         auto k = variant_key_from_bytes(reinterpret_cast<const uint8_t *>(key_slice.data()), key_slice.size(), key_type);
@@ -181,11 +186,9 @@ void RocksDBStorage::do_iterate_type(KeyType key_type, const IterateTypeVisitor&
     }
     auto s = it->status();
     util::check(s.ok(), DEFAULT_ROCKSDB_NOT_OK_ERROR + s.ToString());
-    delete it;
 }
 
-std::vector<VariantKey> RocksDBStorage::do_remove_internal(Composite<VariantKey>&& ks, RemoveOpts opts)
-{
+std::vector<VariantKey> RocksDBStorage::do_remove_internal(Composite<VariantKey>&& ks, RemoveOpts opts) {
     auto grouper = [](auto &&k) { return variant_key_type(k); };
     std::vector<VariantKey> failed_deletes;
 
@@ -193,12 +196,10 @@ std::vector<VariantKey> RocksDBStorage::do_remove_internal(Composite<VariantKey>
         auto key_type_name = fmt::format("{}", group.key());
         // If no key of this type has been written before, this can fail
         auto handle = handles_by_key_type_.at(key_type_name);
-        auto options = ::rocksdb::WriteOptions(); // Should this be const class attr? Used in write_internal too.
-        options.sync = true;
         for (const auto &k : group.values()) {
             if (do_key_exists(k)) {
                 auto k_str = to_serialized_key(k);
-                auto s = db_->Delete(options, handle, ::rocksdb::Slice(k_str));
+                auto s = db_->Delete(::rocksdb::WriteOptions(), handle, ::rocksdb::Slice(k_str));
                 util::check(s.ok(), DEFAULT_ROCKSDB_NOT_OK_ERROR + s.ToString());
                 ARCTICDB_DEBUG(log::storage(), "Deleted segment for key {}", variant_key_view(k));
             } else if (!opts.ignores_missing_key_) {
@@ -210,15 +211,12 @@ std::vector<VariantKey> RocksDBStorage::do_remove_internal(Composite<VariantKey>
     return failed_deletes;
 }
 
-void RocksDBStorage::do_write_internal(Composite<KeySegmentPair>&& kvs)
-{
+void RocksDBStorage::do_write_internal(Composite<KeySegmentPair>&& kvs) {
     auto grouper = [](auto &&kv) { return kv.key_type(); };
     (fg::from(kvs.as_range()) | fg::move | fg::groupBy(grouper)).foreach([&](auto &&group) {
         auto key_type_name = fmt::format("{}", group.key());
         auto handle = handles_by_key_type_.at(key_type_name);
         for (auto &kv : group.values()) {
-            auto options = ::rocksdb::WriteOptions();
-            options.sync = true;
             auto k_str = to_serialized_key(kv.variant_key());
 
             auto& seg = kv.segment();
@@ -227,11 +225,11 @@ void RocksDBStorage::do_write_internal(Composite<KeySegmentPair>&& kvs)
             std::string seg_data;
             seg_data.resize(total_sz);
             seg.write_to(reinterpret_cast<std::uint8_t *>(seg_data.data()), hdr_sz);
-            auto override = std::holds_alternative<RefKey>(kv.variant_key());
-            if (!override && do_key_exists(kv.variant_key())) {
+            auto allow_override = std::holds_alternative<RefKey>(kv.variant_key());
+            if (!allow_override && do_key_exists(kv.variant_key())) {
                 throw DuplicateKeyException(kv.variant_key());
             }
-            auto s = db_->Put(options, handle, ::rocksdb::Slice(k_str), ::rocksdb::Slice(seg_data));
+            auto s = db_->Put(::rocksdb::WriteOptions(), handle, ::rocksdb::Slice(k_str), ::rocksdb::Slice(seg_data));
             util::check(s.ok(), DEFAULT_ROCKSDB_NOT_OK_ERROR + s.ToString());
         }
     });
