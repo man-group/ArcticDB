@@ -132,7 +132,7 @@ def test_querybuilder_row_range(lmdb_version_store_tiny_segment, use_row_range_c
     if use_row_range_clause:
         received = lib.read(symbol, query_builder=q).data
     else:
-        received = lib.read(symbol, row_range=row_range, query_builder=q).data
+        received = lib.read(symbol, row_range=row_range).data
 
     expected = df.iloc[3:7]
     assert_frame_equal(expected, received)
