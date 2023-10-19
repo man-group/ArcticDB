@@ -90,13 +90,10 @@ class StorageLock {
     ARCTICDB_NO_MOVE_OR_COPY(StorageLock)
 
     void lock(const std::shared_ptr<Store>& store) {
-        mutex_.lock();
         do_lock(store);
     }
 
     void lock_timeout(const std::shared_ptr<Store>& store, size_t timeout_ms) {
-        mutex_.lock();
-        OnExit x{[that=this] () { that->mutex_.unlock(); }};
         do_lock(store, timeout_ms);
     }
 
@@ -113,11 +110,13 @@ class StorageLock {
     bool try_lock(const std::shared_ptr<Store>& store) {
        ARCTICDB_DEBUG(log::lock(), "Storage lock: try lock {}", get_thread_id());
         if(!mutex_.try_lock()) {
-           ARCTICDB_DEBUG(log::lock(), "Storage lock: failed local lock {}", get_thread_id());
+            ARCTICDB_DEBUG(log::lock(), "Storage lock: failed local lock {}", get_thread_id());
             return false;
         }
 
-        OnExit x{[that=this] () { that->mutex_.unlock(); }};
+        OnExit x{[that=this] () {
+            that->mutex_.unlock();
+        }};
         if(!ref_key_exists(store)) {
             ts_= create_ref_key(store);
             auto lock_sleep = ConfigsMap::instance()->get_int("StorageLock.WaitMs", 200);
@@ -125,7 +124,7 @@ class StorageLock {
             auto read_ts = read_timestamp(store);
             if(read_ts && read_ts.value() == ts_) {
                 x.release();
-               ARCTICDB_DEBUG(log::lock(), "Storage lock: succeeded {}", get_thread_id());
+                ARCTICDB_DEBUG(log::lock(), "Storage lock: succeeded {}", get_thread_id());
                 return true;
             } else {
                 ARCTICDB_DEBUG(log::lock(), "Storage lock: pre-empted {}", get_thread_id());
@@ -138,12 +137,9 @@ class StorageLock {
         }
     }
 
-    void _test_do_lock(const std::shared_ptr<Store>& store, std::optional<size_t> timeout_ms) {
-        do_lock(store, timeout_ms);
-    }
-
   private:
     void do_lock(const std::shared_ptr<Store>& store, std::optional<size_t> timeout_ms = std::nullopt) {
+        mutex_.lock();
         size_t wait_ms = ConfigsMap::instance()->get_int("StorageLock.InitialWaitMs", 10);
         thread_local std::uniform_int_distribution<size_t> dist;
         thread_local std::minstd_rand gen(std::random_device{}());
@@ -167,6 +163,7 @@ class StorageLock {
             if (timeout_ms && total_wait > timeout_ms.value()) {
                 ts_ = 0;
                 log::lock().info("Lock timed out, giving up after {}", wait_ms);
+                mutex_.unlock();
                 throw StorageLockTimeout{fmt::format("Storage lock {} timeout out after {} ms", name_, total_wait)};
             }
         }

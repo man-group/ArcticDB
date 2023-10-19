@@ -159,3 +159,13 @@ def test_append_empty_series(lmdb_version_store_dynamic_schema, sym, dtype):
     new_ser = pd.Series([1, 2, 3], dtype=dtype)
     lmdb_version_store_dynamic_schema.append(sym, new_ser)
     assert_series_equal(lmdb_version_store_dynamic_schema.read(sym).data, new_ser)
+
+
+def test_entirely_empty_column(lmdb_version_store):
+    data = {"Bat": ["String1"], "Cow": [None], "Pig": [1.23]}
+
+    columns = ["Bat", "Cow", "Pig"]
+    df = pd.DataFrame(data, columns=columns)
+    lib = lmdb_version_store
+    lib.write("test_entirely_empty_column", df)
+    assert_frame_equal(df, lib.read("test_entirely_empty_column").data)
