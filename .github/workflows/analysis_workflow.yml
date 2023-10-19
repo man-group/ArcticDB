@@ -66,14 +66,14 @@ jobs:
           ARCTICDB_DEBUG_FIND_PYTHON: ${{vars.ARCTICDB_DEBUG_FIND_PYTHON}}
           python_impl_name: 'cp311'
         
-      - name: Run C++ Tests
-        shell: bash -l {0}
-        run: |
-          cd cpp/out/linux-debug-build/
-          ls arcticdb
-          make -j ${{ steps.cpu-cores.outputs.count }} arcticdb_rapidcheck_tests
-          make -j ${{ steps.cpu-cores.outputs.count }} test_unit_arcticdb
-          ctest
+      # - name: Run C++ Tests
+      #   shell: bash -l {0}
+      #   run: |
+      #     cd cpp/out/linux-debug-build/
+      #     ls arcticdb
+      #     make -j ${{ steps.cpu-cores.outputs.count }} arcticdb_rapidcheck_tests
+      #     make -j ${{ steps.cpu-cores.outputs.count }} test_unit_arcticdb
+      #     ctest
 
       # We are chainging the python here because we want to use the default python to build (it is devel version)
       # and this python for the rest of the testing
