@@ -528,7 +528,8 @@ struct RowRangeClause {
     // Row range to keep. Zero-indexed, inclusive of start, exclusive of end.
     // If the RowRangeType is `HEAD` or `TAIL`, this is calculated from `n` and
     // the total rows as passed in by `set_processing_config`.
-    // If the RowRangeType is `RANGE`, then start and end are set to the user-provided values.
+    // If the RowRangeType is `RANGE`, then start and end are set using the
+    // user-provided values as passed in by `set_processing_config`.
     uint64_t start_{0};
     uint64_t end_{0};
 
