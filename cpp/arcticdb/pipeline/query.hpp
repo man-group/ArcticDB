@@ -33,7 +33,6 @@ namespace arcticdb::pipelines {
 
 using FilterRange = std::variant<std::monostate, IndexRange, RowRange>;
 
-
 /*
  * A structure which is used to store the potentially negative values for indices of a row range
  */

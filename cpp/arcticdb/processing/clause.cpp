@@ -699,7 +699,7 @@ void RowRangeClause::set_processing_config(const ProcessingConfig& processing_co
                 std::max(total_rows + user_provided_end_, static_cast<int64_t>(0))
             );
             if (start_ > end_) {
-                internal::raise<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>(
                         "RowRangeClause start index {} is greater than end index {}; originally (start, end)=({}, {}) ",
                         start_, end_, user_provided_start_, user_provided_end_);
             }
@@ -712,7 +712,11 @@ void RowRangeClause::set_processing_config(const ProcessingConfig& processing_co
 }
 
 std::string RowRangeClause::to_string() const {
-    return fmt::format("{} {}", row_range_type_ == RowRangeType::HEAD ? "HEAD" : "TAIL", n_);
+    if (row_range_type_ == RowRangeType::RANGE) {
+        return fmt::format("ROWRANGE: RANGE, start={}, end ={}", start_, end_);
+    }
+
+    return fmt::format("ROWRANGE: {}, n={}", row_range_type_ == RowRangeType::HEAD ? "HEAD" : "TAIL", n_);
 }
 
 std::vector<Composite<SliceAndKey>> DateRangeClause::structure_for_processing(
