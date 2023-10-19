@@ -1498,6 +1498,23 @@ def test_force_delete(basic_store):
     assert_frame_equal(basic_store.read("sym1", as_of=0).data, df1)
 
 
+def test_force_delete_with_delayed_deletes(basic_store_delayed_deletes):
+    df1 = sample_dataframe()
+    basic_store_delayed_deletes.write("sym1", df1)
+    df2 = sample_dataframe(seed=1)
+    basic_store_delayed_deletes.write("sym1", df2)
+    df3 = sample_dataframe(seed=2)
+    basic_store_delayed_deletes.write("sym2", df3)
+    df4 = sample_dataframe(seed=3)
+    basic_store_delayed_deletes.write("sym2", df4)
+    basic_store_delayed_deletes.version_store.force_delete_symbol("sym2")
+    with pytest.raises(NoDataFoundException):
+        basic_store_delayed_deletes.read("sym2")
+
+    assert_frame_equal(basic_store_delayed_deletes.read("sym1").data, df2)
+    assert_frame_equal(basic_store_delayed_deletes.read("sym1", as_of=0).data, df1)
+
+
 def test_dataframe_with_NaN_in_timestamp_column(basic_store):
     normal_df = pd.DataFrame({"col": [pd.Timestamp("now"), pd.NaT]})
     basic_store.write("normal", normal_df)
@@ -1716,6 +1733,37 @@ def test_get_tombstone_deletion_state_without_delayed_del(basic_store_factory, s
     tombstoned_version_map = lib.version_store._get_all_tombstoned_versions(sym)
     assert len(tombstoned_version_map) == 3
     assert tombstoned_version_map[2] is False
+
+    lib.write(f"{sym}_new", 1)
+    lib.add_to_snapshot("snap", [f"{sym}_new"])
+    tombstoned_version_map = lib.version_store._get_all_tombstoned_versions(sym)
+    assert len(tombstoned_version_map) == 3
+
+
+def test_get_tombstone_deletion_state_with_delayed_del(basic_store_factory, sym):
+    lib = basic_store_factory(use_tombstones=True, delayed_deletes=True)
+    lib.write(sym, 1)
+
+    lib.write(sym, 2)
+
+    lib.snapshot("snap")
+    lib.write(sym, 3, prune_previous_version=True)
+    tombstoned_version_map = lib.version_store._get_all_tombstoned_versions(sym)
+    # v0 and v1
+    assert len(tombstoned_version_map) == 2
+    assert tombstoned_version_map[0] is True
+    assert tombstoned_version_map[1] is True
+
+    lib.write(sym, 3)
+    lib.delete_version(sym, 2)
+    tombstoned_version_map = lib.version_store._get_all_tombstoned_versions(sym)
+    assert len(tombstoned_version_map) == 3
+    assert tombstoned_version_map[2] is True
+
+    lib.write(f"{sym}_new", 1)
+    lib.add_to_snapshot("snap", [f"{sym}_new"])
+    tombstoned_version_map = lib.version_store._get_all_tombstoned_versions(sym)
+    assert len(tombstoned_version_map) == 3
 
 
 def test_get_timerange_for_symbol(basic_store, sym):
