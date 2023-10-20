@@ -102,6 +102,18 @@ jobs:
           du -m /mnt/usr/local/lib/ | sort -n | tail -n 50
           nohup rm -rf /mnt/usr/local/lib/android &
 
+      - name: Find and remove ccache
+        if: matrix.os == 'windows'
+        run: |
+          which ccache || true
+          which ccache.exe || true
+          which cl || true
+          which cl.exe || true
+          ls "/c/Strawberry/c/bin/" || true
+          echo "try remove"
+          rm $(which ccache) || true
+          rm $(which ccache.exe) || true
+
       - name: Prepare C++ compilation env
         if: inputs.job_type != 'follower'
         run: . build_tooling/prep_cpp_build.sh # Also applies to Windows
