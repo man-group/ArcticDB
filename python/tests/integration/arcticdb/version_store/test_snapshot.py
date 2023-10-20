@@ -416,7 +416,7 @@ def test_remove_from_snapshot_missing_snap(basic_store_tombstone_and_pruning):
     lib.write("s3", 3)
 
     with pytest.raises(NoDataFoundException):
-        lib.remove_from_snapshot("snap", ["s3"])
+        lib.remove_from_snapshot("snap", ["s3"], [0])
 
 
 def test_remove_from_snapshot_multiple(basic_store_tombstone_and_pruning):

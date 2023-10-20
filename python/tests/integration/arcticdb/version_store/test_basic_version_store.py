@@ -734,6 +734,16 @@ def test_empty_pd_series(basic_store):
     assert basic_store.read(sym).data.empty
 
 
+def test_empty_pd_series_type_preservation(basic_store):
+    sym = "empty_s"
+    series = pd.Series(dtype="datetime64[ns]")
+    basic_store.write(sym, series)
+    res = basic_store.read(sym).data
+    assert res.empty
+    # TODO: Fix me when the cast bug is fixed
+    assert str(res.dtype) == "float64"
+
+
 def test_empty_df(basic_store):
     sym = "empty_s"
     df = pd.DataFrame()

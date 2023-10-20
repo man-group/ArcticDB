@@ -7,6 +7,8 @@ from tests.util.storage_test import (
     get_seed_libraries,
     generate_pseudo_random_dataframe,
     generate_ascending_dataframe,
+    test_read_persistent_library,
+    test_write_persistent_library,
 )
 from arcticdb.version_store.library import WritePayload, ReadRequest
 from tests.conftest import PERSISTENT_STORAGE_TESTS_ENABLED
@@ -25,14 +27,7 @@ else:
 def test_real_s3_storage_read(shared_real_s3_uri, library):
     ac = Arctic(shared_real_s3_uri)
     lib = ac[library]
-    symbols = lib.list_symbols()
-    assert len(symbols) == 3
-    for sym in ["one", "two", "three"]:
-        assert sym in symbols
-    for sym in symbols:
-        df = lib.read(sym).data
-        column_names = df.columns.values.tolist()
-        assert column_names == ["x", "y", "z"]
+    test_read_persistent_library(lib)
 
 
 @pytest.mark.skipif(
@@ -46,23 +41,7 @@ def test_real_s3_storage_write(shared_real_s3_uri, three_col_df):
     ac.delete_library(library_to_write_to)
     ac.create_library(library_to_write_to)
     lib = ac[library_to_write_to]
-    one_df = three_col_df()
-    lib.write("one", one_df)
-    val = lib.read("one").data
-    assert_frame_equal(val, one_df)
-
-    two_df_1 = three_col_df(1)
-    lib.write("two", two_df_1)
-    two_df_2 = three_col_df(2)
-    lib.append("two", two_df_2)
-    val = lib.read("two")
-    # TODO: Add a better check
-    assert len(val.data) == 20
-
-    three_df = three_col_df(3)
-    lib.append("three", three_df)
-    val = lib.read("three").data
-    assert_frame_equal(val, three_df)
+    test_write_persistent_library(lib)
 
 
 @pytest.mark.parametrize(
