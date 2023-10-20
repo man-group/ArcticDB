@@ -732,6 +732,10 @@ def test_empty_pd_series(basic_store):
     series = pd.Series()
     basic_store.write(sym, series)
     assert basic_store.read(sym).data.empty
+    # basic_store.update(sym, series)
+    # assert basic_store.read(sym).data.empty
+    basic_store.append(sym, series)
+    assert basic_store.read(sym).data.empty
 
 
 def test_empty_pd_series_type_preservation(basic_store):
@@ -742,6 +746,17 @@ def test_empty_pd_series_type_preservation(basic_store):
     assert res.empty
     # TODO: Fix me when the cast bug is fixed
     assert str(res.dtype) == "float64"
+    assert basic_store.read(sym).data.empty
+
+    # basic_store.update(sym, series)
+    # res = basic_store.read(sym).data
+    # assert res.empty
+    # assert str(res.dtype) == "float64"
+
+    basic_store.append(sym, series)
+    res = basic_store.read(sym).data
+    assert res.empty
+    assert str(res.dtype) == "float64"
 
 
 def test_empty_df(basic_store):
@@ -749,6 +764,10 @@ def test_empty_df(basic_store):
     df = pd.DataFrame()
     basic_store.write(sym, df)
     # if no index information is provided, we assume a datetimeindex
+    assert basic_store.read(sym).data.empty
+    # basic_store.update(sym, df)
+    # assert basic_store.read(sym).data.empty
+    basic_store.append(sym, df)
     assert basic_store.read(sym).data.empty
 
 

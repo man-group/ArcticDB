@@ -7,8 +7,8 @@ from tests.util.storage_test import (
     get_seed_libraries,
     generate_pseudo_random_dataframe,
     generate_ascending_dataframe,
-    test_read_persistent_library,
-    test_write_persistent_library,
+    read_persistent_library,
+    write_persistent_library,
 )
 from arcticdb.version_store.library import WritePayload, ReadRequest
 from tests.conftest import PERSISTENT_STORAGE_TESTS_ENABLED
@@ -27,7 +27,7 @@ else:
 def test_real_s3_storage_read(shared_real_s3_uri, library):
     ac = Arctic(shared_real_s3_uri)
     lib = ac[library]
-    test_read_persistent_library(lib)
+    read_persistent_library(lib)
 
 
 @pytest.mark.skipif(
@@ -41,7 +41,7 @@ def test_real_s3_storage_write(shared_real_s3_uri, three_col_df):
     ac.delete_library(library_to_write_to)
     ac.create_library(library_to_write_to)
     lib = ac[library_to_write_to]
-    test_write_persistent_library(lib)
+    write_persistent_library(lib)
 
 
 @pytest.mark.parametrize(

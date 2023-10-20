@@ -57,9 +57,9 @@ def test_df_3_cols(start=0):
     )
 
 
-def test_read_persistent_library(lib):
+def read_persistent_library(lib):
     symbols = lib.list_symbols()
-    assert len(symbols) == 3
+    assert len(symbols) == 4
     for sym in ["one", "two", "three", "empty_s"]:
         assert sym in symbols
     for sym in symbols[:3]:
@@ -77,7 +77,7 @@ def verify_library(ac):
     libraries = get_test_libraries(ac)
     for lib_name in libraries:
         lib = ac[lib_name]
-        test_read_library(lib)
+        read_persistent_library(lib)
 
 
 def is_strategy_branch_valid_format(input_string):
@@ -86,7 +86,7 @@ def is_strategy_branch_valid_format(input_string):
     return bool(match)
 
 
-def test_write_persistent_library(lib):
+def write_persistent_library(lib):
     one_df = test_df_3_cols()
     lib.write("one", one_df)
 
@@ -119,7 +119,7 @@ def seed_library(ac, version: str = ""):
     ac.create_library(lib_name)
 
     library = ac[lib_name]
-    test_write_persistent_library(library)
+    write_persistent_library(library)
 
 
 def cleanup_libraries(ac):
