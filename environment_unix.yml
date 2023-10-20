@@ -71,3 +71,4 @@ dependencies:
   - azure-storage-blob
   - azure-identity
   - pyarrow
+  - asv
