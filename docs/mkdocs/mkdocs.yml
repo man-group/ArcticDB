@@ -92,6 +92,7 @@ nav:
     - Error Messages: 'error_messages.md'
 - Notebooks:
   - Intro Notebook: 'notebooks/ArcticDB_demo_lmdb.ipynb'
+  - Querybuilder Notebook: 'notebooks/ArcticDB_demo_querybuilder.ipynb'
 - Python API Reference: 
   - Introduction: 'api/index.md'
   - Arctic: 'api/arctic.md'

@@ -7,8 +7,7 @@
 
 #include <gtest/gtest.h>
 
-#define ARCTICDB_NFS_BACKED_STORAGE_H_ "TODO: We should extract the stuff we want to to a separate header"
-#include <arcticdb/storage/s3/nfs_backed_storage-inl.hpp>
+#include <arcticdb/storage/s3/nfs_backed_storage.hpp>
 #include <arcticdb/entity/atom_key.hpp>
 
 TEST(KeyTransformation, Roundtrip) {

@@ -235,7 +235,7 @@ def arctic_client(request, moto_s3_uri_incl_bucket, tmpdir, encoding_version):
     elif request.param == "Real_S3":
         ac = Arctic(request.getfixturevalue("unique_real_s3_uri"), encoding_version)
     elif request.param == "LMDB":
-        ac = Arctic(f"lmdb://{tmpdir}", encoding_version)
+        ac = Arctic(f"lmdb://{tmpdir}?map_size=16MB", encoding_version)
     elif request.param == "Mongo":
         ac = Arctic(request.getfixturevalue("mongo_test_uri"), encoding_version)
     elif request.param == "MEM":
@@ -398,7 +398,7 @@ def version_store_factory(lib_name, tmpdir):
     def create_version_store(
         col_per_group: Optional[int] = None,
         row_per_segment: Optional[int] = None,
-        lmdb_config: Dict[str, Any] = {},
+        lmdb_config: Dict[str, Any] = None,
         override_name: str = None,
         **kwargs,
     ) -> NativeVersionStore:
@@ -406,6 +406,9 @@ def version_store_factory(lib_name, tmpdir):
             kwargs["column_group_size"] = col_per_group
         if row_per_segment is not None and "segment_row_size" not in kwargs:
             kwargs["segment_row_size"] = row_per_segment
+        if lmdb_config is None:
+            # 128 MiB - needs to be reasonably small else Windows build runs out of disk
+            lmdb_config = {"map_size": 128 * (1 << 20)}
 
         if override_name is not None:
             library_name = override_name

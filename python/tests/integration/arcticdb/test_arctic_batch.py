@@ -5,9 +5,6 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
-import sys
-import os
-
 import pytz
 from arcticdb_ext.exceptions import ErrorCode, ErrorCategory
 
@@ -15,7 +12,6 @@ from arcticdb.version_store import VersionedItem as PythonVersionedItem
 from arcticdb_ext.storage import KeyType
 from arcticdb_ext.version_store import VersionRequestType
 
-from arcticdb.arctic import Arctic
 from arcticdb.options import LibraryOptions
 from arcticdb import QueryBuilder, DataError
 
@@ -23,7 +19,6 @@ import pytest
 import pandas as pd
 from datetime import datetime, date, timezone, timedelta
 import numpy as np
-from numpy import datetime64
 from arcticdb.util.test import (
     assert_frame_equal,
     random_strings_of_length,
@@ -32,11 +27,6 @@ from arcticdb.util.test import (
 from arcticdb.util._versions import IS_PANDAS_TWO
 
 import random
-
-from azure.storage.blob import BlobServiceClient
-from botocore.client import BaseClient as BotoClient
-import time
-
 
 from arcticdb.version_store.library import (
     WritePayload,
