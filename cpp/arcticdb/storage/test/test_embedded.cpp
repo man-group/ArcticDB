@@ -30,7 +30,6 @@ class BackendGenerator {
 public:
     BackendGenerator(std::string backend) : backend_(std::move(backend)) {}
 
-<<<<<<< HEAD:cpp/arcticdb/storage/test/test_embedded.cpp
     std::unique_ptr<as::Storage> new_backend() const {
         if (!fs::exists(TEST_DATABASES_PATH)) {
             fs::create_directories(TEST_DATABASES_PATH);
@@ -41,12 +40,6 @@ public:
             cfg.set_path((TEST_DATABASES_PATH / db_name).generic_string());
             cfg.set_map_size(128ULL * (1ULL << 20) );
             cfg.set_recreate_if_exists(true);
-=======
-    arcticdb::proto::lmdb_storage::Config cfg;
-    cfg.set_path("./");
-    cfg.set_map_size(128ULL * (1ULL << 20) );
-    cfg.set_recreate_if_exists(true);
->>>>>>> master:cpp/arcticdb/storage/test/test_lmdb_storage.cpp
 
             as::LibraryPath library_path{"a", "b"};
             return std::make_unique<as::lmdb::LmdbStorage>(library_path, as::OpenMode::WRITE, cfg);
@@ -182,14 +175,7 @@ TEST_P(SimpleTestSuite, Strings) {
     auto environment_name = as::EnvironmentName{"res"};
     auto storage_name = as::StorageName{"lmdb_01"};
 
-<<<<<<< HEAD:cpp/arcticdb/storage/test/test_embedded.cpp
     std::unique_ptr<as::Storage> storage = GetParam().new_backend();
-=======
-    arcticdb::proto::lmdb_storage::Config cfg;
-    cfg.set_path("./");
-    cfg.set_map_size(128ULL * (1ULL << 20) );
-    cfg.set_recreate_if_exists(true);
->>>>>>> master:cpp/arcticdb/storage/test/test_lmdb_storage.cpp
 
     ac::entity::AtomKey k = ac::entity::atom_key_builder().gen_id(1).build<ac::entity::KeyType::TABLE_DATA>(999);
     auto save_k = k;
