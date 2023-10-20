@@ -44,7 +44,7 @@ ArcticDB is designed from the outset to be resilient; there is no single point o
 | --------------------- | - | - |
 | Linux                 | ✔️ | ✔️ |
 | Windows               | ✔️ | ➖ |
-| MacOS (Apple Silicon) | ➖ | Beta️ |
+| MacOS                 | ➖ | Beta️ |
 
 ### Storage compatibility
 
