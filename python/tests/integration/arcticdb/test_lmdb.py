@@ -72,7 +72,7 @@ def test_library_deletion_leave_non_lmdb_files_alone(tmpdir):
 
 
 def test_lmdb(tmpdir):
-    # Github Issue #520 - this used to segfault
+    # Github Issue #520 #889 - this used to segfault
     d = {
         "test1": pd.Timestamp("1979-01-18 00:00:00"),
         "test2": pd.Timestamp("1979-01-19 00:00:00"),

@@ -8,7 +8,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 from typing import List, Optional
 
 from arcticdb.options import DEFAULT_ENCODING_VERSION, LibraryOptions
-from arcticdb_ext.storage import LibraryManager, StorageOverride
+from arcticdb_ext.storage import LibraryManager
 from arcticdb.exceptions import LibraryNotFound, MismatchingLibraryOptions
 from arcticdb.version_store.library import ArcticInvalidApiUsageException, Library
 from arcticdb.version_store._store import NativeVersionStore
@@ -179,14 +179,27 @@ class Arctic:
         self._encoding_version = encoding_version
         self._library_adapter = _cls(uri, self._encoding_version)
         self._library_manager = LibraryManager(self._library_adapter.config_library)
+        # 1 - LibraryManager - keep global track of the non-config libraries
+
+        # On LibraryManager creation:
+        # instance state for what is open:
+        #  shared_ptr -> lib
+        # (thread-safely) static state for which are open:
+        #  {name: (weak_ptr->lib, count)}
+
+        # On access of library, check if it is still live in the static state first and give that
+        # back if it is.
+
+        # On LibraryManager destruction, thread-safely:
+        # Decrement count
+        # If it hits zero, remove the key in the static count
+        # (this avoids leaks of the keys)
+
+        # 2 - How to handle the config libraries? Same deal in the Python layer?
+
         self._uri = uri
-        self._open_libraries = dict()
 
     def __getitem__(self, name: str) -> Library:
-        already_open = self._open_libraries.get(name)
-        if already_open:
-            return already_open
-
         if not self._library_manager.has_library(name):
             raise LibraryNotFound(name)
 
@@ -292,8 +305,6 @@ class Arctic:
 
         library = self._library_adapter.create_library(name, library_options)
         library.env = repr(self._library_adapter)
-        lib = Library(repr(self), library)
-        self._open_libraries[name] = lib
         self._library_manager.write_library_config(library._lib_cfg, name, self._library_adapter.get_masking_override())
         return self.get_library(name)
 
@@ -309,11 +320,9 @@ class Arctic:
         name: str
             Name of the library to delete.
         """
-        already_open = self._open_libraries.pop(name, None)
-        if not already_open and not self._library_manager.has_library(name):
+        if not self._library_manager.has_library(name):
             return
-        (already_open or self[name])._nvs.version_store.clear()
-        del already_open  # essential to free resources held by the library
+        self[name]._nvs.version_store.clear()
         try:
             self._library_adapter.cleanup_library(name)
         finally:
@@ -332,7 +341,7 @@ class Arctic:
         -------
         True if the library exists, False otherwise.
         """
-        return name in self._open_libraries or self._library_manager.has_library(name)
+        return self._library_manager.has_library(name)
 
     def list_libraries(self) -> List[str]:
         """

@@ -24,7 +24,7 @@ const std::string BAD_CONFIG_IN_STORAGE_ERROR = "Current library config is unsup
                                                 "https://github.com/man-group/ArcticDB/blob/master/docs/mkdocs/docs/technical/upgrade_storage.md";
 
 const std::string BAD_CONFIG_IN_ATTEMPTED_WRITE = "Attempting to write forbidden storage config. This indicates a "
-                                                  "bug in ArcticDB.zz";
+                                                  "bug in ArcticDB.";
 
 template<typename T>
 struct StorageVisitor {
@@ -80,6 +80,16 @@ LibraryManager::LibraryManager(const std::shared_ptr<storage::Library>& library)
                     encoding_version(library->config()))){
 }
 
+LibraryManager::~LibraryManager() {
+    std::lock_guard<std::mutex> lock{global_open_libraries_mutex_};
+    for (const auto& library : open_libraries_) {
+        auto count = --global_open_libraries_count_.at(library->library_path());
+        if (!count) {
+            global_open_libraries_.erase(library->library_path());
+        }
+    }
+}
+
 void LibraryManager::write_library_config(const py::object& lib_cfg, const LibraryPath& path, const StorageOverride& storage_override,
                           const bool validate) const {
     SegmentInMemory segment;
@@ -124,7 +134,18 @@ void LibraryManager::remove_library_config(const LibraryPath& path) const {
     store_->remove_key(RefKey{StreamId(path.to_delim_path()), entity::KeyType::LIBRARY_CONFIG}).wait();
 }
 
-std::shared_ptr<Library> LibraryManager::get_library(const LibraryPath& path, const StorageOverride& storage_override) const {
+std::shared_ptr<Library> LibraryManager::get_library(const LibraryPath& path, const StorageOverride& storage_override) {
+    {
+        // Check global cache first, important for LMDB and RocksDB to only open once from a given process
+        std::lock_guard<std::mutex> lock{global_open_libraries_mutex_};
+        if (auto cached = global_open_libraries_.find(path); cached != global_open_libraries_.end()) {
+            auto weak_ptr = cached->second;
+            if (auto shared = weak_ptr.lock()) {
+                return shared;
+            }
+        }
+    }
+
     arcticdb::proto::storage::LibraryConfig config = get_config_internal(path, storage_override);
 
     std::vector<arcticdb::proto::storage::VariantStorage> st;
@@ -133,7 +154,15 @@ std::shared_ptr<Library> LibraryManager::get_library(const LibraryPath& path, co
     }
     auto storages = create_storages(path, OpenMode::DELETE, st);
 
-    return std::make_shared<Library>(path, std::move(storages), config.lib_desc().version());
+    auto lib = std::make_shared<Library>(path, std::move(storages), config.lib_desc().version());
+    open_libraries_.push_back(lib);
+
+    std::lock_guard<std::mutex> lock{global_open_libraries_mutex_};
+    ++global_open_libraries_count_[path];
+    global_open_libraries_.erase(path);
+    global_open_libraries_.insert({path, lib});
+
+    return lib;
 }
 
 std::vector<LibraryPath> LibraryManager::get_library_paths() const {

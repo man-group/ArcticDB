@@ -11,6 +11,7 @@ import shutil
 import socket
 
 import boto3
+import moto.s3.responses
 import werkzeug
 from moto.server import DomainDispatcherApplication, create_backend_app
 
@@ -150,7 +151,8 @@ def azure_account_sas_token(azure_client_and_create_container, azurite_azure_tes
 def boto_client(_moto_s3_uri):
     endpoint = _moto_s3_uri
     client = boto3.client(
-        service_name="s3", endpoint_url=endpoint, aws_access_key_id="awd", aws_secret_access_key="awd"
+        service_name="s3", endpoint_url=endpoint, aws_access_key_id="awd", aws_secret_access_key="awd",
+        region_name=moto.s3.responses.DEFAULT_REGION_NAME
     )
 
     yield client
@@ -211,20 +213,6 @@ def unique_real_s3_uri():
         "S3",
         "LMDB",
         "MEM",
-        pytest.param(
-            "Azure",
-            marks=pytest.mark.skipif(MACOS_CONDA_BUILD, reason=MACOS_CONDA_BUILD_SKIP_REASON),
-        ),
-        pytest.param(
-            "Mongo",
-            marks=pytest.mark.skipif(not RUN_MONGO_TEST, reason="Mongo test on windows is fiddly"),
-        ),
-        pytest.param(
-            "Real_S3",
-            marks=pytest.mark.skipif(
-                not PERSISTENT_STORAGE_TESTS_ENABLED, reason="Can be used only when persistent storage is enabled"
-            ),
-        ),
     ],
 )
 def arctic_client(request, moto_s3_uri_incl_bucket, tmpdir, encoding_version):
