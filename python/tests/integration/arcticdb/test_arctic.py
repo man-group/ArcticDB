@@ -173,6 +173,8 @@ def test_library_options(arctic_client):
 
 
 def test_separation_between_libraries(arctic_client):
+    # This fails for mem-backed without the library caching implemented in
+    # issue #520 then re-implemented in issue #889
     """Validate that symbols in one library are not exposed in another."""
     ac = arctic_client
     assert ac.list_libraries() == []
