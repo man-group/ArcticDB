@@ -77,17 +77,8 @@ bool is_storage_config_ok(const arcticdb::proto::storage::VariantStorage& storag
 
 LibraryManager::LibraryManager(const std::shared_ptr<storage::Library>& library) :
             store_(std::make_shared<async::AsyncStore<util::SysClock>>(library, codec::default_lz4_codec(),
-                    encoding_version(library->config()))){
-}
-
-LibraryManager::~LibraryManager() {
-    std::lock_guard<std::mutex> lock{global_open_libraries_mutex_};
-    for (const auto& library : open_libraries_) {
-        auto count = --global_open_libraries_count_.at(library->library_path());
-        if (!count) {
-            global_open_libraries_.erase(library->library_path());
-        }
-    }
+                    encoding_version(library->config()))),
+                    open_libraries_() {
 }
 
 void LibraryManager::write_library_config(const py::object& lib_cfg, const LibraryPath& path, const StorageOverride& storage_override,
@@ -137,12 +128,9 @@ void LibraryManager::remove_library_config(const LibraryPath& path) const {
 std::shared_ptr<Library> LibraryManager::get_library(const LibraryPath& path, const StorageOverride& storage_override) {
     {
         // Check global cache first, important for LMDB and RocksDB to only open once from a given process
-        std::lock_guard<std::mutex> lock{global_open_libraries_mutex_};
-        if (auto cached = global_open_libraries_.find(path); cached != global_open_libraries_.end()) {
-            auto weak_ptr = cached->second;
-            if (auto shared = weak_ptr.lock()) {
-                return shared;
-            }
+        std::lock_guard<std::mutex> lock{open_libraries_mutex_};
+        if (auto cached = open_libraries_.find(path); cached != open_libraries_.end()) {
+            return cached -> second;
         }
     }
 
@@ -155,12 +143,11 @@ std::shared_ptr<Library> LibraryManager::get_library(const LibraryPath& path, co
     auto storages = create_storages(path, OpenMode::DELETE, st);
 
     auto lib = std::make_shared<Library>(path, std::move(storages), config.lib_desc().version());
-    open_libraries_.push_back(lib);
 
-    std::lock_guard<std::mutex> lock{global_open_libraries_mutex_};
-    ++global_open_libraries_count_[path];
-    global_open_libraries_.erase(path);
-    global_open_libraries_.insert({path, lib});
+    {
+        std::lock_guard<std::mutex> lock{open_libraries_mutex_};
+        open_libraries_[path] = lib;
+    }
 
     return lib;
 }

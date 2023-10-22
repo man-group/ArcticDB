@@ -38,11 +38,15 @@ def get_real_s3_uri(shared_path: bool = True):
     return aws_uri
 
 
-def get_seed_libraries(ac=Arctic(get_real_s3_uri())):
+def get_seed_libraries(ac=None):
+    if ac is None:
+        ac = Arctic(get_real_s3_uri())
     return [lib for lib in ac.list_libraries() if lib.startswith("seed_")]
 
 
-def get_test_libraries(ac=Arctic(get_real_s3_uri())):
+def get_test_libraries(ac=None):
+    if ac is None:
+        ac = Arctic(get_real_s3_uri())
     return [lib for lib in ac.list_libraries() if lib.startswith("test_")]
 
 
