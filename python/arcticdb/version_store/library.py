@@ -938,9 +938,9 @@ class Library:
         as_of : AsOf, default=None
             Return the data as it was as of the point in time. ``None`` means that the latest version should be read. The
             various types of this parameter mean:
-           - ``int``: specific version number. Negative indexing is supported, with -1 representing the latest version, -2 the version before that, etc.
-           - ``str``: snapshot name which contains the version
-           - ``datetime.datetime`` : the version of the data that existed ``as_of`` the requested point in time
+            - ``int``: specific version number. Negative indexing is supported, with -1 representing the latest version, -2 the version before that, etc.
+            - ``str``: snapshot name which contains the version
+            - ``datetime.datetime`` : the version of the data that existed ``as_of`` the requested point in time
 
         date_range: Tuple[Optional[Timestamp], Optional[Timestamp]], default=None
             DateRange to restrict read data to.
@@ -1192,7 +1192,7 @@ class Library:
         ----------
         write_metadata_payloads : `List[WriteMetadataPayload]`
             Symbols and their corresponding metadata. There must not be any duplicate symbols in `payload`.
-        prune_previous_version : `Optional[bool]`, default=None
+        prune_previous_versions : `Optional[bool]`, default=None
             Remove previous versions from version list. Uses library default if left as None.
 
         Returns

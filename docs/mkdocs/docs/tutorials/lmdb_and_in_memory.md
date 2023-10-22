@@ -63,7 +63,7 @@ are not appropriate for this use case.
 
 The following Python code uses [`multiprocessing`](https://docs.python.org/3/library/multiprocessing.html)
 to spawn 50 processes that concurrently write to different symbols. (Non-staged parallel writes to the same
-symbol are [not supported](/tutorials/parallel_writes/)).
+symbol are [not supported](parallel_writes.md)).
 
 ```py
 # Code tested on Linux
@@ -121,7 +121,7 @@ pd.DataFrame(timings_list, columns=['start', 'end']).to_csv('timings.csv')
 
 Plotting the lifetimes of each process with [matplotlib](https://matplotlib.org/) we get:
 
-![](/images/LMDBConcurrency.png)
+![](../images/LMDBConcurrency.png)
 
 Explanation of graph: Each line segment represents the execution of a process writing to the shared LMDB backend.
 File locks are repeatedly obtained and released by LMDB throughout the calls to `lib.write(..)`.
@@ -138,7 +138,7 @@ tmpfs out-performing disk only for symbol writing operations. Nevertheless, tmpf
 ephemeral LMDB backend. We can also see that the in-memory store is significantly faster across the board as would
 be expected.
 
-![](/images/LMDBtmpfsDiskMemSpeeds.png)
+![](../images/LMDBtmpfsDiskMemSpeeds.png)
 
 Note: the ranges are 95% confidence intervals based on five repeats for each data size. The hardware limits are for
 writing to disk (not tmpfs) using the `np.save` and `np.load` functions. No data was sought for the RAM's hardware
