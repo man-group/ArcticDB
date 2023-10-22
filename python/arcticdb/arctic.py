@@ -179,24 +179,6 @@ class Arctic:
         self._encoding_version = encoding_version
         self._library_adapter = _cls(uri, self._encoding_version)
         self._library_manager = LibraryManager(self._library_adapter.config_library)
-        # 1 - LibraryManager - keep global track of the non-config libraries
-
-        # On LibraryManager creation:
-        # instance state for what is open:
-        #  shared_ptr -> lib
-        # (thread-safely) static state for which are open:
-        #  {name: (weak_ptr->lib, count)}
-
-        # On access of library, check if it is still live in the static state first and give that
-        # back if it is.
-
-        # On LibraryManager destruction, thread-safely:
-        # Decrement count
-        # If it hits zero, remove the key in the static count
-        # (this avoids leaks of the keys)
-
-        # 2 - How to handle the config libraries? Same deal in the Python layer?
-
         self._uri = uri
 
     def __getitem__(self, name: str) -> Library:
@@ -304,7 +286,6 @@ class Arctic:
             library_options = LibraryOptions()
 
         library = self._library_adapter.create_library(name, library_options)
-        library.env = repr(self._library_adapter)
         self._library_manager.write_library_config(library._lib_cfg, name, self._library_adapter.get_masking_override())
         return self.get_library(name)
 
