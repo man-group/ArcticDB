@@ -56,7 +56,10 @@ from arcticdb.options import LibraryOptions
 from arcticdb_ext.storage import Library
 from azure.storage.blob import BlobServiceClient, generate_account_sas, ResourceTypes, AccountSasPermissions
 
+
 PERSISTENT_STORAGE_TESTS_ENABLED = os.getenv("ARCTICDB_PERSISTENT_STORAGE_TESTS") == "1"
+FAST_TESTS_ONLY = os.getenv("ARCTICDB_FAST_TESTS_ONLY") == "1"
+
 
 configure_test_logger()
 
@@ -213,6 +216,21 @@ def unique_real_s3_uri():
         "S3",
         "LMDB",
         "MEM",
+        pytest.param(
+            "Azure",
+            marks=pytest.mark.skipif(FAST_TESTS_ONLY or MACOS_CONDA_BUILD, reason=MACOS_CONDA_BUILD_SKIP_REASON),
+        ),
+        pytest.param(
+            "Mongo",
+            marks=pytest.mark.skipif(FAST_TESTS_ONLY or not RUN_MONGO_TEST, reason="Mongo test on windows is fiddly"),
+        ),
+        pytest.param(
+            "Real_S3",
+            marks=pytest.mark.skipif(
+                FAST_TESTS_ONLY or not PERSISTENT_STORAGE_TESTS_ENABLED,
+                reason="Can be used only when persistent storage is enabled"
+            ),
+        ),
     ],
 )
 def arctic_client(request, moto_s3_uri_incl_bucket, tmpdir, encoding_version):
