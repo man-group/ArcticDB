@@ -17,25 +17,19 @@ and diagrams are generated, even undocumented classes / functions. This gives ab
 
 ### mkdocs
 
+
 Install
 ```
-pip install mkdocs-material mkdocs-jupyter
+pip install mkdocs-material mkdocs-jupyter mkdocstrings[python] black pybind11-stubgen
 ```
+- mkdocs-material: theme
+- mkdocs-jupyter: jupyter notebook support
+- mkdocstrings[python]: python docstring support, like sphinx docs
+- black: for signature formatting
+- pybind11-stubgen: for generating stubs for pybind11 extensions, so that mkdocstrings can parse them
 
-To build mkdocs (to `/tmp/docs_build/` as an example):
-```
-cd docs/mkdocs
-mkdocs build -d /tmp/docs_build
-```
 
-Development server 
-```
-mkdocs serve -a 0.0.0.0:8000
-```
-
-### Sphinx
-
-You need to have the ArcticDB wheel installed, so install it from source:
+You need to have ArcticDB installed to generate the API docs, so install it from source:
 
 ```
 cd $PROJECT_ROOT
@@ -44,38 +38,35 @@ pip install <generated wheel>
 ```
 
 or from PyPi,
-
 ```
 pip install arcticdb
 ```
 
-Install dependencies,
-
+`mkdocstrings[python]` doesn't support python extensions very well, so create interface files (pyi) for the extensions first.
 ```
-pip install sphinx sphinx_rtd_theme
-```
-
-Build,
-
-```
-cd sphinxdocs
-make html
-cd ..
+cd python
+# TODO fix these errors!
+pybind11-stubgen arcticdb_ext.version_store --ignore-all-errors -o .
 ```
 
-This writes build files to `./sphinxdocs/build/html`.
-Open `./sphinxdocs/build/html/index.html` in the browser of your choice to just view the Sphinx docs.
-
-## Uploading
-
-Add the Sphinxdocs to the build:
-
+To build mkdocs to docs/mkdocs/site:
 ```
-mkdir /tmp/docs_build/api
-cp -r ./sphinxdocs/build/html/* /tmp/mkdocs_build/api
+cd docs/mkdocs
+mkdocs build -s
 ```
 
-Then `/tmp/docs_build/` forms the docs site.
+Development server 
+```
+mkdocs serve -s -a 0.0.0.0:8000
+```
+
+The python docstring parser, griffe, will struggle with some built-in (C++) modules
+You'll see 'alias' errors as this when it can't resolve something:
+```
+ERROR   -  mkdocstrings: Template 'alias.html' not found for 'python' handler and theme 'material'.
+ERROR   -  Error reading page 'api/library.md': alias.html
+```
+
 
 ## Deploying to `docs.arcticdb.io`
 
@@ -83,6 +74,4 @@ Run the `Docs` github action.
 - Branch: Master
 - Environment: ProdPypi
 - Override: arcticdb
-
-This will generate both the mkdocs and sphinx pages.
 
