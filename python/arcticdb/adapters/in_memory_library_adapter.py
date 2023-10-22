@@ -5,10 +5,6 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
-import re
-from dataclasses import dataclass
-
-
 from arcticdb.options import LibraryOptions
 from arcticc.pb2.storage_pb2 import EnvironmentConfigsMap, LibraryConfig
 from arcticdb.version_store.helper import add_memory_library_to_env
@@ -32,11 +28,7 @@ class InMemoryLibraryAdapter(ArcticLibraryAdapter):
         return uri.startswith("mem://")
 
     def __init__(self, uri: str, encoding_version: EncodingVersion, *args, **kwargs):
-        match = re.match(self.REGEX, uri)
-        match_groups = match.groupdict()
-
         self._encoding_version = encoding_version
-
         super().__init__(uri, self._encoding_version)
 
     def __repr__(self):
