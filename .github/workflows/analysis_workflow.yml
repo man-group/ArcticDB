@@ -221,6 +221,7 @@ jobs:
         with:
           submodules: recursive
           fetch-depth: 0
+          token: ${{ secrets.ARCTICDB_TEST_PAT }}
 
       - name: Set persistent storage variables
         uses: ./.github/actions/set_persistent_storage_env_vars
@@ -297,8 +298,8 @@ jobs:
       - name: Publish results
         shell: bash -el {0}
         run: |
-          git config --global user.email "georgi.petrov@man.com"
-          git config --global user.name "Georgi Petrov"
+          git config --global user.email "arcticdb@man.com"
+          git config --global user.name "arcticdb-service-user"
 
           git pull
           git fetch --tags --all
@@ -332,6 +333,7 @@ jobs:
         with:
           submodules: recursive
           fetch-depth: 0
+          token: ${{ secrets.ARCTICDB_TEST_PAT }}
 
       - name: Install Conda environment from environment_unix.yml
         uses: mamba-org/setup-micromamba@v1
@@ -345,7 +347,7 @@ jobs:
       - name: Run all version benchmarks
         shell: bash -el {0}
         run: |
-            git config --global user.email "georgi.petrov@man.com"
-            git config --global user.name "Georgi Petrov"
+            git config --global user.email "arcticdb@man.com"
+            git config --global user.name "arcticdb-service-user"
             python -m asv publish -v
             python -m asv gh-pages -v --rewrite
