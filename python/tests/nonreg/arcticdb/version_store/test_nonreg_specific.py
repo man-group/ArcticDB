@@ -197,3 +197,34 @@ def test_batch_write_unicode_strings(lmdb_version_store):
     for _ in range(5):
         lib.batch_write(syms, data)
         lib.batch_append(syms, data)
+
+
+def test_pandas_object_dtype(lmdb_version_store):
+    lib = lmdb_version_store
+    symbol = "test_pandas_object_dtype"
+
+    # Columns of numeric (which includes datetimes) dtype != float64 with no values
+    # must always be stored with the provided dtype (never empty-type).
+    series = pd.Series([], dtype=int)
+    result = lib.read(symbol).data
+    assert series.dtype == result.dtype
+
+    if IS_PANDAS_TWO:
+        # In Pandas 2.0, columns with no values of dtype float64 must be stored with dtype float64.
+        series = pd.Series([], dtype=float)
+        result = lib.read(symbol).data
+        assert_frame_equal(series, result)
+
+        # In Pandas 2.0, columns with no values of dtype object must be stored with empty-type.
+        series = pd.Series([], dtype=object)
+        result = lib.read(symbol).data
+        assert_frame_equal(series, result)
+
+    else:
+        # Columns with no values of dtype float64 or object in Pandas 1.X should be stored with empty-type.
+        series = pd.Series([], dtype=float)
+        result = lib.read(symbol).data
+        assert result.dtype == ""
+
+        series = pd.Series([], dtype=object)
+        result = lib.read(symbol).data
