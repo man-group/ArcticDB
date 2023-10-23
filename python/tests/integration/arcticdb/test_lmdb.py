@@ -106,8 +106,6 @@ def test_lmdb_mapsize(tmpdir):
     # Then - even library creation fails so map size having an effect
     assert "MDB_MAP_FULL" in str(e.value)
 
-    del ac  # close LMDB env
-
     # Given - larger map size
     ac = Arctic(f"lmdb://{tmpdir}?map_size=1MB")
 
