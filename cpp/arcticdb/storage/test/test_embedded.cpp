@@ -11,7 +11,10 @@
 #include <arcticdb/storage/storage.hpp>
 #include <arcticdb/storage/lmdb/lmdb_storage.hpp>
 #include <arcticdb/storage/memory/memory_storage.hpp>
+
+#ifdef ARCTICDB_INCLUDE_ROCKSDB
 #include <arcticdb/storage/rocksdb/rocksdb_storage.hpp>
+#endif
 
 #include <filesystem>
 #include <stdexcept>
@@ -48,7 +51,9 @@ public:
 
             as::LibraryPath library_path{"a", "b"};
             return std::make_unique<as::memory::MemoryStorage>(library_path, as::OpenMode::WRITE, cfg);
-        } else if (backend_ == "rocksdb") {
+        }
+#ifdef ARCTICDB_INCLUDE_ROCKSDB
+        else if (backend_ == "rocksdb") {
             arcticdb::proto::rocksdb_storage::Config cfg;
             fs::path db_name = "test_rocksdb";
             cfg.set_path((TEST_DATABASES_PATH / db_name).generic_string());
@@ -56,6 +61,7 @@ public:
             as::LibraryPath library_path{"a", "b"};
             return std::make_unique<as::rocksdb::RocksDBStorage>(library_path, as::OpenMode::WRITE, cfg);
         }
+#endif
         throw std::runtime_error("Unknown backend generator type.");
     }
 
@@ -199,7 +205,16 @@ TEST_P(SimpleTestSuite, Strings) {
 }
 
 using namespace std::string_literals;
-std::vector<BackendGenerator> backend_generators{"lmdb"s, "mem"s, "rocksdb"s};
+
+std::vector<BackendGenerator> get_backend_generators() {
+    std::vector<BackendGenerator> backend_generators{"lmdb"s, "mem"s};
+#ifdef ARCTICDB_INCLUDE_ROCKSDB
+    backend_generators.emplace_back("rocksdb"s);
+#endif
+    return backend_generators;
+}
+auto backend_generators = get_backend_generators();
+
 INSTANTIATE_TEST_SUITE_P(TestEmbedded, SimpleTestSuite, testing::ValuesIn(backend_generators),
     [](const testing::TestParamInfo<SimpleTestSuite::ParamType>& info) { return info.param.get_name(); });
 
