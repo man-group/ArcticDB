@@ -20,6 +20,8 @@
 #include <rocksdb/options.h>
 #include <rocksdb/utilities/options_util.h>
 #include <rocksdb/slice.h>
+#include <rocksdb/filter_policy.h>
+#include <rocksdb/table.h>
 
 namespace arcticdb::storage::rocksdb {
 
@@ -68,6 +70,13 @@ RocksDBStorage::RocksDBStorage(const LibraryPath &library_path, OpenMode mode, c
         fs::create_directories(lib_dir);
         db_options.create_if_missing = true;
         db_options.create_missing_column_families = true;
+        db_options.IncreaseParallelism(); // TODO: add a method to task_scheduler.hpp to return the nubmer of IOThreads configured there, and use that rather than the default 16.
+        for (auto& desc: column_families) {
+            desc.options.OptimizeLevelStyleCompaction();
+            ::rocksdb::BlockBasedTableOptions table_options;
+            table_options.filter_policy.reset(::rocksdb::NewBloomFilterPolicy(10));
+            desc.options.table_factory.reset(::rocksdb::NewBlockBasedTableFactory(table_options));
+        }
     } else {
         util::raise_rte(DEFAULT_ROCKSDB_NOT_OK_ERROR + s.ToString());
     }
@@ -97,13 +106,6 @@ RocksDBStorage::~RocksDBStorage() {
         util::check(s.ok(), DEFAULT_ROCKSDB_NOT_OK_ERROR + s.ToString());
         delete db_;
     }
-}
-
-RocksDBStorage::RocksDBStorage(RocksDBStorage&& from) : Storage(std::move(from)) {
-    db_ = from.db_;
-    from.db_ = nullptr;
-    // Move handles across
-    handles_by_key_type_.merge(from.handles_by_key_type_);
 }
 
 void RocksDBStorage::do_write(Composite<KeySegmentPair>&& kvs) {

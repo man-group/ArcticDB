@@ -74,3 +74,6 @@ class RocksDBLibraryAdapter(ArcticLibraryAdapter):
         )
 
         return lib
+
+    # TODO: def cleanup_library should do something similar to LMDB
+    # See PR: 918
