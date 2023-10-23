@@ -17,7 +17,7 @@ from arcticdb.arctic import Arctic
 from arcticdb.exceptions import MismatchingLibraryOptions
 from arcticdb.encoding_version import EncodingVersion
 from arcticdb.options import LibraryOptions
-from arcticdb import QueryBuilder, DataError
+from arcticdb import QueryBuilder
 from arcticc.pb2.s3_storage_pb2 import Config as S3Config
 
 import math

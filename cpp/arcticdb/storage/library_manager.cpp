@@ -152,6 +152,11 @@ std::shared_ptr<Library> LibraryManager::get_library(const LibraryPath& path, co
     return lib;
 }
 
+void LibraryManager::close_library_if_open(const LibraryPath &path) {
+    std::lock_guard<std::mutex> lock{open_libraries_mutex_};
+    open_libraries_.erase(path);
+}
+
 std::vector<LibraryPath> LibraryManager::get_library_paths() const {
     std::vector<LibraryPath> ids;
     store_->iterate_type(entity::KeyType::LIBRARY_CONFIG, [&ids](const VariantKey &&key) {
