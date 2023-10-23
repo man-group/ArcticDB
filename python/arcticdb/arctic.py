@@ -304,6 +304,7 @@ class Arctic:
         if not self._library_manager.has_library(name):
             return
         self[name]._nvs.version_store.clear()
+        self._library_manager.close_library_if_open(name)
         try:
             self._library_adapter.cleanup_library(name)
         finally:
