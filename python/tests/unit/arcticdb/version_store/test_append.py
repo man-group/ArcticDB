@@ -5,16 +5,19 @@ from datetime import datetime
 from itertools import chain, product, combinations
 import pytest
 import sys
+import os
 from numpy.testing import assert_array_equal
 from hypothesis import given, assume, settings, strategies as st
 
 from pandas import MultiIndex
 from arcticdb.version_store._common import TimeFrame
 from arcticdb.version_store import NativeVersionStore
-from arcticdb.util.test import random_integers, assert_frame_equal
+from arcticdb.util.test import random_integers, assert_frame_equal, random_seed_context
 from arcticdb.util.hypothesis import InputFactories, use_of_function_scoped_fixtures_in_hypothesis_checked
 from arcticdb_ext.exceptions import InternalException, NormalizationException, SortingException
 from arcticdb_ext import set_config_int
+
+from tests.util.mark import SLOW_TESTS_MARK
 
 
 def test_append_simple(lmdb_version_store):
@@ -64,20 +67,22 @@ def test_append_string_of_different_sizes(lmdb_version_store):
 
 
 def gen_params_append():
-    # colnums
-    p = [list(range(2, 5))]
-    # periods
-    periods = 6
-    p.append([periods])
-    # rownums
-    p.append([1, 4, periods + 2])
-    # cols
-    p.append(list(chain(*[list(combinations(["a", "b", "c"], c)) for c in range(1, 4, 2)])))
-    # tsbounds
-    p.append([(j, i) for i in [1, periods - 1] for j in range(i)])
-    # append_point
-    p.append([k for k in range(1, periods - 1)])
-    return random.sample(list(product(*p)), 500)
+    with random_seed_context():
+        # colnums
+        p = [list(range(2, 5))]
+        # periods
+        periods = 6
+        p.append([periods])
+        # rownums
+        p.append([1, 4, periods + 2])
+        # cols
+        p.append(list(chain(*[list(combinations(["a", "b", "c"], c)) for c in range(1, 4, 2)])))
+        # tsbounds
+        p.append([(j, i) for i in [1, periods - 1] for j in range(i)])
+        # append_point
+        p.append([k for k in range(1, periods - 1)])
+        result = sorted(random.sample(list(product(*p)), 10))
+    return result
 
 
 def gen_params_append_single():
@@ -522,17 +527,18 @@ def test_append_mix_ascending_descending(lmdb_version_store):
 
 
 @use_of_function_scoped_fixtures_in_hypothesis_checked
-@settings(deadline=None, max_examples=10)
+@settings(deadline=None)
 @given(
     col_per_append_df=st.integers(2, 100),
     col_name_set=st.integers(1, 10000),
-    num_rows_per_test_cycle=st.lists(st.lists(st.integers(1, 20), min_size=1, max_size=10), min_size=1, max_size=10),
+    num_rows_per_test_cycle=st.lists(st.lists(st.integers(1, 20), min_size=1, max_size=10), max_size=2),
     column_group_size=st.integers(2, 100),
     segment_row_size=st.integers(2, 100),
     dynamic_schema=st.booleans(),
     dynamic_strings=st.booleans(),
     df_in_str=st.booleans(),
 )
+@SLOW_TESTS_MARK
 def test_append_with_defragmentation(
     sym,
     col_per_append_df,

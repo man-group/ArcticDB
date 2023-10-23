@@ -502,3 +502,14 @@ def distinct_timestamps(lib: NativeVersionStore):
         while get_ts() == right_after:
             time.sleep(0.000001)
         out.after = pd.Timestamp(get_ts(), unit="ns")
+
+
+@contextmanager
+def random_seed_context():
+    seed = os.getenv("ARCTICDB_RAND_SEED")
+    state = random.getstate()
+    random.seed(int(seed) if seed is not None else state)
+    try:
+        yield
+    finally:
+        random.setstate(state)

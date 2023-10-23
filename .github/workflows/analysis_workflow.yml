@@ -7,6 +7,9 @@ on:
 
   schedule: # Schdeule the job to run at 12 a.m. daily
     - cron: '0 0 * * *'
+
+  pull_request:
+
 jobs:
   cibw_docker_image:
     uses: ./.github/workflows/cibw_docker_image.yml
@@ -26,13 +29,10 @@ jobs:
         ports:
           - 27017:27017
     env:
-      SCCACHE_GHA_VERSION: ${{vars.SCCACHE_GHA_VERSION || 1}} # Setting this env var enables the caching
       VCPKG_NUGET_USER: ${{secrets.VCPKG_NUGET_USER || github.repository_owner}}
       VCPKG_NUGET_TOKEN: ${{secrets.VCPKG_NUGET_TOKEN || secrets.GITHUB_TOKEN}}
       VCPKG_MAN_NUGET_USER: ${{secrets.VCPKG_MAN_NUGET_USER}} # For forks to download pre-compiled dependencies from the Man repo
       VCPKG_MAN_NUGET_TOKEN: ${{secrets.VCPKG_MAN_NUGET_TOKEN}}
-      CMAKE_C_COMPILER_LAUNCHER: sccache
-      CMAKE_CXX_COMPILER_LAUNCHER: sccache
       ARCTIC_CMAKE_PRESET: linux-debug
     steps:
       - uses: actions/checkout@v3
@@ -49,6 +49,7 @@ jobs:
           echo -e "VCPKG_BINARY_SOURCES=$VCPKG_BINARY_SOURCES
           VCPKG_ROOT=$PLATFORM_VCPKG_ROOT" | tee -a $GITHUB_ENV
           cmake -P cpp/CMake/CpuCount.cmake | sed 's/^-- //' | tee -a $GITHUB_ENV
+          echo "ARCTICDB_CODE_COVERAGE_BUILD=1" | tee -a $GITHUB_ENV
         env:
           CMAKE_BUILD_PARALLEL_LEVEL: ${{vars.CMAKE_BUILD_PARALLEL_LEVEL}}
 
@@ -63,7 +64,6 @@ jobs:
           configurePreset: ${{env.ARCTIC_CMAKE_PRESET}}
           buildPreset: ${{env.ARCTIC_CMAKE_PRESET}}
         env:
-          ARCTICDB_CODE_COVERAGE_BUILD: 1
           ARCTICDB_DEBUG_FIND_PYTHON: ${{vars.ARCTICDB_DEBUG_FIND_PYTHON}}
           python_impl_name: 'cp311'
         
@@ -80,36 +80,20 @@ jobs:
       # and this python for the rest of the testing
       - name: Select Python (Linux)
         run: echo /opt/python/cp36-cp36m/bin >> $GITHUB_PATH
-      
-      - name: Test with pytest
-        shell: bash -l {0}
+
+      - name: Install local dependencies with pip
+        shell: bash
         run: |
-          yum install nodejs npm -y
-          npm config set strict-ssl false
-          npm install -g azurite
           python -m pip install --upgrade pip
+          ARCTIC_CMAKE_PRESET=skip pip install -ve .[Testing]
 
-          python >build_tooling/requirements-analysis-workflow.txt <<END
-          from configparser import ConfigParser
-          cf = ConfigParser()
-          cf.read("setup.cfg");
-
-          # setup_requires is not needed
-          print(cf['options']['setup_requires'])
-          print(cf['options']['install_requires'])
-          print(cf['options.extras_require']['Testing'])
-          END
-
-          python -m pip install -r build_tooling/requirements-analysis-workflow.txt
-          python -m grpc_tools.protoc -Icpp/proto --python_out=./python cpp/proto/arcticc/pb2/*.proto
-          cd python
-          ln -s ../cpp/out/linux-debug-build/arcticdb/arcticdb_ext.cpython-36m-x86_64-linux-gnu.so
-          python -m coverage run -m pytest tests
-        env:
-          TEST_OUTPUT_DIR: ${{runner.temp}}
-          ARCTICDB_CODE_COVERAGE_BUILD: 1
-          # Use the Mongo created in the service container above to test against
-          CI_MONGO_HOST: mongodb
+      - name: Test with pytest
+        uses: ./.github/actions/run_local_pytest
+        with:
+          build_type: debug
+          threads: 1
+          fast_tests_only: 0
+          other_params: '-m coverage run '
 
       - name: Get python Coverage report
         shell: bash -l {0}
@@ -201,6 +185,7 @@ jobs:
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.ARCTICDB_DEV_WEBHOOK_URL }}
           SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
+
   start_ec2_runner:
     uses: ./.github/workflows/ec2_runner_jobs.yml
     secrets: inherit
@@ -242,35 +227,20 @@ jobs:
           ls /opt/python  
           echo /opt/python/cp36-cp36m/bin >> $GITHUB_PATH
 
-      - name: Install dependencies
-        shell: bash -el {0}
+      - name: Install local dependencies with pip
+        shell: bash
         run: |
           python -m pip install --upgrade pip
-
-          python >build_tooling/requirements-analysis-workflow.txt <<END
-          from configparser import ConfigParser
-          cf = ConfigParser()
-          cf.read("setup.cfg");
-
-          # setup_requires is not needed
-          print(cf['options']['setup_requires'])
-          print(cf['options']['install_requires'])
-          print(cf['options.extras_require']['Testing'])
-          END
-
-          python -m pip install -r build_tooling/requirements-analysis-workflow.txt
-          python -m grpc_tools.protoc -Icpp/proto --python_out=./python cpp/proto/arcticc/pb2/*.proto
-          
-          git config --global --add safe.directory .
+          ARCTIC_CMAKE_PRESET=skip pip install -ve .[Testing]
 
       - name: Benchmark all commits
         if: inputs.run_all_benchmarks == true
         shell: bash -el {0}
         run: |
+          git config --global --add safe.directory .
           python -m asv machine -v --yes --machine ArcticDB-Runner-Medium
           python -m asv run -v --show-stderr HASHFILE:python/hashes_to_benchmark.txt
         env:
-          CMAKE_BUILD_PARALLEL_LEVEL: 8
           SCCACHE_GHA_VERSION: ${{vars.SCCACHE_GHA_VERSION || 1}} # Setting this env var enables the caching
           VCPKG_NUGET_USER: ${{secrets.VCPKG_NUGET_USER || github.repository_owner}}
           VCPKG_NUGET_TOKEN: ${{secrets.VCPKG_NUGET_TOKEN || secrets.GITHUB_TOKEN}}
@@ -280,14 +250,30 @@ jobs:
           CMAKE_CXX_COMPILER_LAUNCHER: sccache
 
       - name: Benchmark only latest commit
-        if: inputs.run_all_benchmarks == false
+        if: github.event_name != 'pull_request' && inputs.run_all_benchmarks == false
         shell: bash -el {0}
         run: |
+          git config --global --add safe.directory .  
           python -m asv machine -v --yes --machine ArcticDB-Runner-Medium
           python -m asv run -v --show-stderr HEAD^!
           git log HEAD^..HEAD --oneline -n1 --decorate=no | awk '{print $1;}' >> python/hashes_to_benchmark.txt
         env:
-          CMAKE_BUILD_PARALLEL_LEVEL: 8
+          SCCACHE_GHA_VERSION: ${{vars.SCCACHE_GHA_VERSION || 1}} # Setting this env var enables the caching
+          VCPKG_NUGET_USER: ${{secrets.VCPKG_NUGET_USER || github.repository_owner}}
+          VCPKG_NUGET_TOKEN: ${{secrets.VCPKG_NUGET_TOKEN || secrets.GITHUB_TOKEN}}
+          VCPKG_MAN_NUGET_USER: ${{secrets.VCPKG_MAN_NUGET_USER}} # For forks to download pre-compiled dependencies from the Man repo
+          VCPKG_MAN_NUGET_TOKEN: ${{secrets.VCPKG_MAN_NUGET_TOKEN}}
+          CMAKE_C_COMPILER_LAUNCHER: sccache
+          CMAKE_CXX_COMPILER_LAUNCHER: sccache
+
+      - name: Benchmark against master
+        if: github.event_name == 'pull_request' && inputs.run_all_benchmarks == false
+        shell: bash -el {0}
+        run: |
+          git config --global --add safe.directory .
+          python -m asv machine -v --yes --machine ArcticDB-Runner-Medium
+          python -m asv continuous -v --show-stderr origin/master HEAD -f 1.15
+        env:
           SCCACHE_GHA_VERSION: ${{vars.SCCACHE_GHA_VERSION || 1}} # Setting this env var enables the caching
           VCPKG_NUGET_USER: ${{secrets.VCPKG_NUGET_USER || github.repository_owner}}
           VCPKG_NUGET_TOKEN: ${{secrets.VCPKG_NUGET_TOKEN || secrets.GITHUB_TOKEN}}
@@ -297,6 +283,7 @@ jobs:
           CMAKE_CXX_COMPILER_LAUNCHER: sccache
 
       - name: Publish results
+        if: github.event_name != 'pull_request' 
         shell: bash -el {0}
         run: |
           git config --global user.email "arcticdb@man.com"

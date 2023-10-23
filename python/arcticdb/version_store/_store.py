@@ -249,10 +249,9 @@ class NativeVersionStore:
         return cls(library=lib, lib_cfg=lib_cfg, env=env, open_mode=open_mode)
 
     @staticmethod
-    def create_library_config(
-            cfg, env, lib_name, encoding_version=EncodingVersion.V1
-    ):
+    def create_library_config(cfg, env, lib_name, encoding_version=EncodingVersion.V1):
         from arcticdb.version_store.helper import extract_lib_config
+
         lib_cfg = extract_lib_config(cfg.env_by_id[env], lib_name)
         lib_cfg.lib_desc.version.encoding_version = encoding_version
         return lib_cfg
@@ -261,9 +260,7 @@ class NativeVersionStore:
     def create_store_from_config(
         cls, cfg, env, lib_name, open_mode=OpenMode.DELETE, encoding_version=EncodingVersion.V1
     ):
-        lib_cfg = NativeVersionStore.create_library_config(
-            cfg, env, lib_name, encoding_version=encoding_version
-        )
+        lib_cfg = NativeVersionStore.create_library_config(cfg, env, lib_name, encoding_version=encoding_version)
         lib = cls.create_lib_from_lib_config(lib_cfg, env, open_mode)
         return cls(library=lib, lib_cfg=lib_cfg, env=env, open_mode=open_mode)
 

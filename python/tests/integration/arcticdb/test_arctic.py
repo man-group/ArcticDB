@@ -987,17 +987,23 @@ def test_tail(arctic_library):
     )
 
 
-@pytest.mark.parametrize("dedup", [True, False])
-def test_dedup(arctic_client, dedup):
+def test_dedup(arctic_client):
     ac = arctic_client
     assert ac.list_libraries() == []
-    ac.create_library("pytest_test_library", LibraryOptions(dedup=dedup))
-    lib = ac["pytest_test_library"]
-    symbol = "test_dedup"
-    lib.write_pickle(symbol, 1)
-    lib.write_pickle(symbol, 1, prune_previous_versions=False)
-    data_key_version = lib._nvs.read_index(symbol)["version_id"][0]
-    assert data_key_version == 0 if dedup else 1
+    errors = []
+    # we are doing manual iteration due to a limitation that should be fixed by issue #1053
+    for dedup in [True, False]:
+        try:
+            ac.create_library(f"pytest_test_library_{dedup}", LibraryOptions(dedup=dedup))
+            lib = ac[f"pytest_test_library_{dedup}"]
+            symbol = "test_dedup"
+            lib.write_pickle(symbol, 1)
+            lib.write_pickle(symbol, 1, prune_previous_versions=False)
+            data_key_version = lib._nvs.read_index(symbol)["version_id"][0]
+            assert data_key_version == 0 if dedup else 1
+        except AssertionError as e:
+            errors.append(f"Failed when using dedup value {dedup}: {str(e)}")
+    assert not errors, "errors occurred:\n" + "\n".join(errors)
 
 
 def test_segment_slicing(arctic_client):
