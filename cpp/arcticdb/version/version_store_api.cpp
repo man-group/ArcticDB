@@ -768,7 +768,7 @@ std::vector<std::variant<ReadResult, DataError>> PythonVersionStore::batch_read(
     const std::vector<VersionQuery>& version_queries,
     std::vector<ReadQuery>& read_queries,
     const ReadOptions& read_options) {
-
+    
     auto read_versions_or_errors = batch_read_internal(stream_ids, version_queries, read_queries, read_options);
     std::vector<std::variant<ReadResult, DataError>> res;
     for (auto&& [idx, read_version_or_error]: folly::enumerate(read_versions_or_errors)) {
@@ -791,6 +791,7 @@ ReadResult PythonVersionStore::read_dataframe_version(
     const VersionQuery& version_query,
     ReadQuery& read_query,
     const ReadOptions& read_options) {
+
     auto opt_version_and_frame = read_dataframe_version_internal(stream_id, version_query, read_query, read_options);
     return create_python_read_result(opt_version_and_frame.versioned_item_, std::move(opt_version_and_frame.frame_and_descriptor_));
 }
@@ -1121,5 +1122,4 @@ void PythonVersionStore::force_delete_symbol(const StreamId& stream_id) {
     version_map()->delete_all_versions(store(), stream_id);
     delete_all_for_stream(store(), stream_id, true);
 }
-
 } //namespace arcticdb::version_store

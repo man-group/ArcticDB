@@ -16,6 +16,7 @@
 #include <arcticdb/util/flatten_utils.hpp>
 #include <arcticdb/util/cursored_buffer.hpp>
 #include <arcticdb/util/preconditions.hpp>
+#include <arcticdb/util/pybind_mutex.hpp>
 
 #include <fmt/format.h>
 
@@ -180,7 +181,7 @@ FieldDecodingResult py_decode_field(const TypeDescriptor &td, py::object &encode
 void register_codec(py::module &m) {
     py::class_<DynamicFieldBuffer>(m, "DynamicFieldBuffer")
         .def(py::init<TypeDescriptor, py::buffer, py::buffer>())
-        .def("as_field", &DynamicFieldBuffer::as_field);
+        .def("as_field", &DynamicFieldBuffer::as_field, py::call_guard<SingleThreadMutexHolder>());
 
     py::class_<FieldEncodingResult, std::shared_ptr<FieldEncodingResult>>(m, "FieldEncodingResult")
         .def(py::init<>())
@@ -201,7 +202,7 @@ void register_codec(py::module &m) {
         });
 
     py::class_<Buffer, std::shared_ptr<Buffer>>(m, "Buffer", py::buffer_protocol())
-        .def(py::init())
+        .def(py::init(), py::call_guard<SingleThreadMutexHolder>())
         .def("size", &Buffer::bytes)
         .def_buffer([](Buffer &buffer) {
             return py::buffer_info{
