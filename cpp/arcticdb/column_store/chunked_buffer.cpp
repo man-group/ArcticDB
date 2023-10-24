@@ -71,11 +71,8 @@ template std::vector<ChunkedBufferImpl<3968>> split(const ChunkedBufferImpl<3968
 // Inclusive of start_byte, exclusive of end_byte
 template <size_t BlockSize>
 ChunkedBufferImpl<BlockSize> truncate(const ChunkedBufferImpl<BlockSize>& input, size_t start_byte, size_t end_byte) {
-    internal::check<ErrorCode::E_ASSERTION_FAILURE>(
-            end_byte >= start_byte,
-            "ChunkedBufferImpl::truncate expects end_byte {} to be >= start_byte {}", end_byte, start_byte);
     ARCTICDB_DEBUG(log::version(), "Truncating buffer of size {} between bytes {} and {}", input.bytes(), start_byte, end_byte);
-    const auto output_size = end_byte - start_byte;
+    const auto output_size = start_byte >= end_byte ? 0 : end_byte - start_byte;
     // This is trivially extendable to use presized_in_blocks, but there is no use case for this right now, and
     // copy_frame_data_to_buffer expects a contiguous buffer
     auto output = ChunkedBufferImpl<BlockSize>::presized(output_size);

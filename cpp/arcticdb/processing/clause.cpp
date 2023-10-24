@@ -698,12 +698,6 @@ void RowRangeClause::set_processing_config(const ProcessingConfig& processing_co
                 std::min(user_provided_end_, total_rows) :
                 std::max(total_rows + user_provided_end_, static_cast<int64_t>(0))
             );
-            if (start_ > end_) {
-                user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>(
-                        "RowRangeClause start index {} is greater than end index {}; originally (start, end)=({}, {}) ",
-                        start_, end_, user_provided_start_, user_provided_end_);
-            }
-            n_ = end_ - start_;
             break;
 
         default:
