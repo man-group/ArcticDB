@@ -39,6 +39,12 @@ using SliceAndKey = pipelines::SliceAndKey;
 
 using NormMetaDescriptor = std::shared_ptr<arcticdb::proto::descriptors::NormalizationMetadata>;
 
+enum class ClauseOrder  // Specifies ordered groups in which clauses will be processed, first group, then the followings
+{
+    first,  // The clause must be processed in the first group of clauses
+    last,   // The clause must be processed in the last group of clauses
+};
+
 // Contains constant data about the clause identifiable at construction time
 struct ClauseInfo {
     // Whether processing segments need to be split into new processing segments after this clause's process method has finished
@@ -52,6 +58,9 @@ struct ClauseInfo {
     std::optional<std::string> new_index_{std::nullopt};
     // Whether this clause modifies the output descriptor
     bool modifies_output_descriptor_{false};
+
+    // Specify in which group of clauses (first, last, etc.) this clause will be processed
+    ClauseOrder processing_order_{ ClauseOrder::first };
 };
 
 // Changes how the clause behaves based on information only available after it is constructed
@@ -527,6 +536,7 @@ struct RowRangeClause {
     explicit RowRangeClause(RowRangeType row_range_type, int64_t n):
             row_range_type_(row_range_type),
             n_(n) {
+        clause_info_.processing_order_ = ClauseOrder::last; // Always process head/tail/row_range clauses last.
     }
 
     RowRangeClause() = delete;

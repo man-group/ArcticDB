@@ -6,6 +6,9 @@
  */
 
 #include <arcticdb/version/version_core.hpp>
+
+#include <algorithm>
+
 #include <arcticdb/pipeline/write_options.hpp>
 #include <arcticdb/stream/index.hpp>
 #include <arcticdb/pipeline/query.hpp>
@@ -30,6 +33,8 @@
 #include <arcticdb/version/schema_checks.hpp>
 #include <arcticdb/version/version_utils.hpp>
 #include <arcticdb/entity/merge_descriptors.hpp>
+
+
 
 namespace arcticdb::version_store {
 
@@ -535,7 +540,19 @@ std::vector<SliceAndKey> read_and_process(
         clause->set_processing_config(processing_config);
     }
 
-    std::vector<Composite<SliceAndKey>> processing_groups = read_query.clauses_[0]->structure_for_processing(
+    // We need to process the clauses in their respective order group,
+    // in particualar we need some clauses to be executed last, while keeping the
+    // original order where possible (stable).
+    const auto reordered_clauses = [&] {
+        auto reordered = read_query.clauses_;
+        std::stable_partition(reordered.begin(), reordered.end(), [](auto& clause) {
+            return clause->clause_info().processing_order_ == ClauseOrder::first;
+        });
+        return reordered;
+    }();
+
+
+    std::vector<Composite<SliceAndKey>> processing_groups = reordered_clauses[0]->structure_for_processing(
             pipeline_context->slice_and_keys_, start_from);
 
     // At this stage, each Composite contains a single ProcessingUnit, which may hold a row-slice, a column-slice, a
@@ -545,12 +562,12 @@ std::vector<SliceAndKey> read_and_process(
     // to these processing units
     std::vector<Composite<ProcessingUnit>> procs = store->batch_read_uncompressed(
             std::move(processing_groups),
-            read_query.clauses_,
+            reordered_clauses,
             filter_columns,
             BatchReadArgs{}
             );
 
-    auto merged_procs = process_remaining_clauses(store, std::move(procs), read_query.clauses_);
+    auto merged_procs = process_remaining_clauses(store, std::move(procs), reordered_clauses);
 
     if (std::any_of(read_query.clauses_.begin(), read_query.clauses_.end(), [](const std::shared_ptr<Clause>& clause) {
         return clause->clause_info().modifies_output_descriptor_;
@@ -1164,8 +1181,8 @@ VersionedItem compact_incomplete_impl(
     std::vector<FrameSlice> slices;
     bool dynamic_schema = write_options.dynamic_schema;
     auto index = index_type_from_descriptor(first_seg.descriptor());
-    auto policies = std::make_tuple(index, 
-                                    dynamic_schema ? VariantSchema{DynamicSchema::default_schema(index)} : VariantSchema{FixedSchema::default_schema(index)}, 
+    auto policies = std::make_tuple(index,
+                                    dynamic_schema ? VariantSchema{DynamicSchema::default_schema(index)} : VariantSchema{FixedSchema::default_schema(index)},
                                     sparsify ? VariantColumnPolicy{SparseColumnPolicy{}} : VariantColumnPolicy{DenseColumnPolicy{}}
                                     );
     util::variant_match(std::move(policies), [
@@ -1224,7 +1241,7 @@ PredefragmentationInfo get_pre_defragmentation_info(
 
         if (slice.row_range.diff() < segment_size && !compaction_start_info)
             compaction_start_info = {slice.row_range.start(), segment_idx};
-            
+
         if (slice.col_range.start() == pipeline_context->descriptor().index().field_count()){//where data column starts
             first_col_segment_idx.emplace_back(slice.row_range.start(), segment_idx);
             if (new_segment_row_size == 0)
@@ -1259,7 +1276,7 @@ VersionedItem defragment_symbol_data_impl(
         size_t segment_size) {
     auto pre_defragmentation_info = get_pre_defragmentation_info(store, stream_id, update_info, options, segment_size);
     util::check(is_symbol_fragmented_impl(pre_defragmentation_info.segments_need_compaction) && pre_defragmentation_info.append_after.has_value(), "Nothing to compact in defragment_symbol_data");
-    
+
     std::vector<entity::VariantKey> delete_keys;
     for(auto sk = std::next(pre_defragmentation_info.pipeline_context->begin(), pre_defragmentation_info.append_after.value()); sk != pre_defragmentation_info.pipeline_context->end(); ++sk) {
         delete_keys.emplace_back(sk->slice_and_key().key());
@@ -1297,7 +1314,7 @@ VersionedItem defragment_symbol_data_impl(
             keys,
             pre_defragmentation_info.append_after.value(),
             std::nullopt);
-    
+
     store->remove_keys(delete_keys).get();
     return vit;
 }
