@@ -11,6 +11,7 @@
 #include <pybind11/stl.h>
 
 #include <arcticdb/util/variant.hpp>
+#include <arcticdb/util/pybind_mutex.hpp>
 
 #include <arcticdb/storage/library.hpp>
 #include <arcticdb/storage/library_manager.hpp>
@@ -136,10 +137,10 @@ void register_bindings(py::module& storage, py::exception<arcticdb::ArcticExcept
             LibraryPath lib_path{library_path, '.'};
             return library_manager.write_library_config(lib_cfg, lib_path, storage_override, validate);
         },
-             py::arg("lib_cfg"),
-             py::arg("library_path"),
-             py::arg("override") = StorageOverride{},
-             py::arg("test_only_validation_toggle") = false)
+            py::arg("lib_cfg"),
+            py::arg("library_path"),
+            py::arg("override") = StorageOverride{},
+            py::arg("test_only_validation_toggle") = false)
         .def("get_library_config", [](const LibraryManager& library_manager, std::string_view library_path, const StorageOverride& storage_override){
             return library_manager.get_library_config(LibraryPath{library_path, '.'}, storage_override);
         }, py::arg("library_path"), py::arg("override") = StorageOverride{})
@@ -148,7 +149,7 @@ void register_bindings(py::module& storage, py::exception<arcticdb::ArcticExcept
         }, py::arg("library_path"), py::arg("throw_on_failure") = true)
         .def("remove_library_config", [](const LibraryManager& library_manager, std::string_view library_path){
             return library_manager.remove_library_config(LibraryPath{library_path, '.'});
-        })
+        }, py::call_guard<SingleThreadMutexHolder>())
         .def("get_library", [](LibraryManager& library_manager, std::string_view library_path, const StorageOverride& storage_override){
             return library_manager.get_library(LibraryPath{library_path, '.'}, storage_override);
         }, py::arg("library_path"), py::arg("storage_override") = StorageOverride{})
