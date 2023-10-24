@@ -60,13 +60,14 @@ def test_df_3_cols(start=0):
 def read_persistent_library(lib):
     symbols = lib.list_symbols()
     assert len(symbols) == 4
-    for sym in ["one", "two", "three", "empty_s"]:
+
+    for sym in ["one", "two", "three"]:
         assert sym in symbols
-    for sym in symbols[:3]:
         df = lib.read(sym).data
         column_names = df.columns.values.tolist()
         assert column_names == ["x", "y", "z"]
 
+    assert "empty_s" in symbols
     res = lib.read("empty_s").data
     assert res.empty
     # TODO: Fix me when the cast bug is fixed
