@@ -1269,14 +1269,8 @@ def test_read_description_batch_high_amount(arctic_library):
                 result_last_update_time = results_list[idx].last_update_time
                 tz = result_last_update_time.tz
 
-                if IS_PANDAS_TWO:
-                    # Pandas 2.0.0 now uses `datetime.timezone.utc` instead of `pytz.UTC`.
-                    # See: https://github.com/pandas-dev/pandas/issues/34916
-                    # TODO: is there a better way to handle this edge case?
-                    assert tz == timezone.utc
-                else:
-                    assert isinstance(tz, pytz.BaseTzInfo)
-                    assert tz == pytz.UTC
+                assert isinstance(tz, pytz.BaseTzInfo)
+                assert tz == pytz.UTC
 
 
 def test_read_description_batch_empty_nat(arctic_library):
