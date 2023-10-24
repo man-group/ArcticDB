@@ -26,16 +26,19 @@ jobs:
         cibw_build_suffix: [0]
         envs: [0]
         build_dir: [0] # Must be an absolute path
+        vcpkg_installed_dir: [0]
+        vcpkg_packages_dir: [0]
         symbols: [0] # Glob for symbol symbol files. Used for including in follower builds and exclusion on others.
         do_not_archive: [0]
         test_services: [0] # Github service containers to spin up for the pytest run
+        container: [0]
         exclude:
             - os: 0
         include:
             - ${{fromJSON(inputs.matrix)[0]}} # The items after 0 are for tests only
 
     runs-on: ${{matrix.distro}}
-    container: ${{ (matrix.os == 'linux' && inputs.job_type != 'follower') && inputs.cibw_image_tag || null}}
+    container: ${{ (matrix.os == 'linux' && inputs.job_type != 'follower') && matrix.container || null}}
     env:
       SCCACHE_GHA_VERSION: ${{vars.SCCACHE_GHA_VERSION || 1}} # Setting this env var enables the caching
       VCPKG_NUGET_USER: ${{secrets.VCPKG_NUGET_USER || github.repository_owner}}
@@ -46,10 +49,12 @@ jobs:
       CMAKE_CXX_COMPILER_LAUNCHER: sccache
       ARCTIC_CMAKE_PRESET: ${{matrix.cmake_preset_prefix}}-${{inputs.cmake_preset_type}}
       ARCTICDB_BUILD_DIR: ${{matrix.build_dir}}
+      ARCTICDB_VCPKG_INSTALLED_DIR: ${{matrix.vcpkg_installed_dir}}
+      ARCTICDB_VCPKG_PACKAGES_DIR: ${{matrix.vcpkg_packages_dir}}
       CIBW_ENVIRONMENT_PASS_LINUX: SCCACHE_GHA_VERSION ACTIONS_CACHE_URL ACTIONS_RUNTIME_TOKEN VCPKG_INSTALLATION_ROOT
         VCPKG_BINARY_SOURCES VCPKG_NUGET_USER VCPKG_NUGET_TOKEN VCPKG_MAN_NUGET_USER VCPKG_MAN_NUGET_TOKEN
         CMAKE_C_COMPILER_LAUNCHER CMAKE_CXX_COMPILER_LAUNCHER CMAKE_BUILD_PARALLEL_LEVEL ARCTIC_CMAKE_PRESET
-        ARCTICDB_BUILD_DIR TEST_OUTPUT_DIR
+        ARCTICDB_BUILD_DIR TEST_OUTPUT_DIR ARCTICDB_VCPKG_INSTALLED_DIR ARCTICDB_VCPKG_PACKAGES_DIR
       ARCTICDB_DEBUG_FIND_PYTHON: ${{vars.ARCTICDB_DEBUG_FIND_PYTHON}}
       python_impl_name: ${{inputs.python3 > 0 && format('cp3{0}', inputs.python3) || 'default'}}
       CIBW_BUILD: ${{format('cp3{0}-{1}', inputs.python3, matrix.cibw_build_suffix)}}
@@ -91,6 +96,16 @@ jobs:
           CMAKE_BUILD_PARALLEL_LEVEL: ${{vars.CMAKE_BUILD_PARALLEL_LEVEL}}
 
       # ========================= Leader steps =========================
+      - name: Remove GitHub default packages # To save space
+        if: inputs.job_type == 'cpp-tests' && matrix.os == 'linux'
+        run: |
+          du -m /mnt/usr/local/lib/ | sort -n | tail -n 50
+          nohup rm -rf /mnt/usr/local/lib/android &
+
+      - name: Find and remove ccache # See PR: #945
+        if: matrix.os == 'windows'
+        run: rm $(which ccache)
+
       - name: Prepare C++ compilation env
         if: inputs.job_type != 'follower'
         run: . build_tooling/prep_cpp_build.sh # Also applies to Windows
@@ -162,7 +177,7 @@ jobs:
       # ========================= Common =========================
       - name: Disk usage
         if: always()
-        run: du -m . "${{matrix.build_dir}}" | sort -n | tail -n 50 ; df -h
+        run: du -m . ${{matrix.build_dir}} ${{matrix.vcpkg_packages_dir}} | sort -n | tail -n 50; df -h
         continue-on-error: true
 
       - name: Make build directory readable for archiving

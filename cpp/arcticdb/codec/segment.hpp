@@ -100,7 +100,7 @@ class Segment {
             [&b](const std::shared_ptr<Buffer>& buf) { buf->copy_to(*b); }
             );
         buffer_ = std::move(b);
-        fields_ = std::make_shared<FieldCollection>(that.fields_->clone());
+        fields_ = that.fields_ ? std::make_shared<FieldCollection>(that.fields_->clone()) : nullptr;
     }
 
     Segment &operator=(const Segment &that) {
