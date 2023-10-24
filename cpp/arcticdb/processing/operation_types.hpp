@@ -393,10 +393,10 @@ bool operator()(int64_t t, const std::unordered_set<uint64_t>& u) const {
         return u.count(t) > 0;
 }
 // This is the version called when checking string set membership with T = uint64_t and U = int64_t
-template<typename T, typename U>
-bool operator()(T t, const robin_hood::unordered_set<U>& u) const {
+template<typename T>
+bool operator()(T t, const robin_hood::unordered_set<int64_t>& u) const {
     return u.contains(t);
-} 
+}
 };
 
 struct IsNotInOperator {
@@ -418,8 +418,8 @@ bool operator()(int64_t t, const std::unordered_set<uint64_t>& u) const {
 }
 
 // This is the version called when checking string set membership with T = uint64_t and U = int64_t
-template<typename T, typename U>
-bool operator()(T t, const robin_hood::unordered_set<U>& u) const {
+template<typename T>
+bool operator()(T t, const robin_hood::unordered_set<int64_t>& u) const {
     return !u.contains(t);
 }
 };
