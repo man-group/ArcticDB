@@ -12,6 +12,7 @@
 #include <arcticdb/toolbox/library_tool.hpp>
 #include <arcticdb/util/memory_tracing.hpp>
 #include <arcticdb/version/symbol_list.hpp>
+#include <arcticdb/util/pybind_mutex.hpp>
 
 namespace arcticdb::toolbox::apy {
 
@@ -34,7 +35,7 @@ void register_bindings(py::module &m) {
             .def("get_key_path", &LibraryTool::get_key_path)
             .def("find_keys_for_id", &LibraryTool::find_keys_for_id)
             .def("clear_ref_keys", &LibraryTool::clear_ref_keys)
-            .def("batch_key_exists", &LibraryTool::batch_key_exists);
+            .def("batch_key_exists", &LibraryTool::batch_key_exists, py::call_guard<SingleThreadMutexHolder>());
 
     // S3 Storage tool
     using namespace arcticdb::storage::s3;
