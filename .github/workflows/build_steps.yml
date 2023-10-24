@@ -104,7 +104,7 @@ jobs:
 
       - name: Find and remove ccache # See PR: #945
         if: matrix.os == 'windows'
-        run: rm $(which ccache)
+        run: rm $(which ccache) || true
 
       - name: Prepare C++ compilation env
         if: inputs.job_type != 'follower'
@@ -177,7 +177,7 @@ jobs:
       # ========================= Common =========================
       - name: Disk usage
         if: always()
-        run: du -m . ${{matrix.build_dir}} ${{matrix.vcpkg_packages_dir}} | sort -n | tail -n 50; df -h
+        run: du -m . ${{matrix.build_dir}} ${{matrix.vcpkg_packages_dir}} | sort -n | tail -n 50 || true; df -h
         continue-on-error: true
 
       - name: Make build directory readable for archiving
@@ -306,7 +306,7 @@ jobs:
 
       - name: Disk usage
         if: always()
-        run: set +e ; du -m . "${PARALLEL_TEST_ROOT:-/tmp/parallel_test}" | sort -n | tail -n 100 ; df -h
+        run: set +e ; du -m . "${PARALLEL_TEST_ROOT:-/tmp/parallel_test}" | sort -n | tail -n 100 || true; df -h
         continue-on-error: true
 
       - name: Upload the logs
