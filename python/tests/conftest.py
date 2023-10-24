@@ -54,6 +54,8 @@ from arcticdb.version_store import NativeVersionStore
 from arcticdb.version_store._normalization import MsgPackNormalizer
 from arcticdb.options import LibraryOptions
 from arcticdb_ext.storage import Library
+# TODO: When RocksDB is enabled on all platforms can remove this import
+from arcticdb_ext.storage import LibraryManager
 from azure.storage.blob import BlobServiceClient, generate_account_sas, ResourceTypes, AccountSasPermissions
 
 
@@ -231,6 +233,12 @@ def unique_real_s3_uri():
                 reason="Can be used only when persistent storage is enabled"
             ),
         ),
+        pytest.param(
+            "RocksDB",
+            marks=pytest.mark.skipif(
+                not LibraryManager.rocksdb_support, reason="RocksDB is not supported on conda builds"
+            ),
+        ),
     ],
 )
 def arctic_client(request, moto_s3_uri_incl_bucket, tmpdir, encoding_version):
@@ -245,7 +253,9 @@ def arctic_client(request, moto_s3_uri_incl_bucket, tmpdir, encoding_version):
     elif request.param == "Mongo":
         ac = Arctic(request.getfixturevalue("mongo_test_uri"), encoding_version)
     elif request.param == "MEM":
-        ac = Arctic("mem://")
+        ac = Arctic("mem://", encoding_version)
+    elif request.param == "RocksDB":
+        ac = Arctic(f"rocksdb://{tmpdir}", encoding_version)
     else:
         raise NotImplementedError()
 
