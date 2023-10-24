@@ -38,6 +38,14 @@ namespace arcticdb::storage {
 
         [[nodiscard]] bool has_library(const LibraryPath& path) const;
 
+        [[nodiscard]] static inline bool rocksdb_support() {
+#ifdef ARCTICDB_INCLUDE_ROCKSDB
+            return true;
+#else
+            return false;
+#endif
+        }
+
     private:
         [[nodiscard]] arcticdb::proto::storage::LibraryConfig get_config_internal(const LibraryPath& path, const StorageOverride& storage_override) const;
 

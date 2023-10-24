@@ -8,7 +8,9 @@
 #include <arcticdb/storage/storage_factory.hpp>
 #include <arcticdb/storage/lmdb/lmdb_storage.hpp>
 #include <arcticdb/storage/memory/memory_storage.hpp>
+#ifdef ARCTICDB_INCLUDE_ROCKSDB
 #include <arcticdb/storage/rocksdb/rocksdb_storage.hpp>
+#endif
 #include <arcticdb/storage/mongo/mongo_storage.hpp>
 #include <arcticdb/storage/azure/azure_storage.hpp>
 #include <arcticdb/storage/s3/s3_storage.hpp>
@@ -41,11 +43,15 @@ std::unique_ptr<Storage> create_storage(
         memory::MemoryStorage::Config memory_config;
         storage_descriptor.config().UnpackTo(&memory_config);
         storage = std::make_unique<memory::MemoryStorage>(library_path, mode, memory_config);
-    } else if (type_name == rocksdb::RocksDBStorage::Config::descriptor()->full_name()) {
+    }
+#ifdef ARCTICDB_INCLUDE_ROCKSDB
+    else if (type_name == rocksdb::RocksDBStorage::Config::descriptor()->full_name()) {
         rocksdb::RocksDBStorage::Config rocksdb_config;
         storage_descriptor.config().UnpackTo(&rocksdb_config);
         storage = std::make_unique<rocksdb::RocksDBStorage>(library_path, mode, rocksdb_config);
-    } else if (type_name == nfs_backed::NfsBackedStorage::Config::descriptor()->full_name()) {
+    }
+#endif
+    else if (type_name == nfs_backed::NfsBackedStorage::Config::descriptor()->full_name()) {
         nfs_backed::NfsBackedStorage::Config nfs_backed_config;
         storage_descriptor.config().UnpackTo(&nfs_backed_config);
         storage = std::make_unique<nfs_backed::NfsBackedStorage>(library_path, mode, nfs_backed_config);

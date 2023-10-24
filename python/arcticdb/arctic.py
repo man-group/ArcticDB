@@ -33,8 +33,9 @@ class Arctic:
         AzureLibraryAdapter,
         MongoLibraryAdapter,
         InMemoryLibraryAdapter,
-        RocksDBLibraryAdapter,
     ]
+    if LibraryManager.rocksdb_support:
+        _LIBRARY_ADAPTERS.append(RocksDBLibraryAdapter)
 
     def __init__(self, uri: str, encoding_version: EncodingVersion = DEFAULT_ENCODING_VERSION):
         """

@@ -138,6 +138,8 @@ void RocksDBStorage::do_read(Composite<VariantKey>&& ks, const ReadVisitor& visi
         for (const auto &k : group.values()) {
             std::string k_str = to_serialized_key(k);
             std::string value;
+            // TODO: Once PR: 975 has been merged we can use ::rocksdb::PinnableSlice to avoid the copy in
+            //       the consturction of the segment
             auto s = db_->Get(::rocksdb::ReadOptions(), handle, ::rocksdb::Slice(k_str), &value);
             if (s.IsNotFound()) {
                 failed_reads.push_back(k);

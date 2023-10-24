@@ -164,7 +164,8 @@ void register_bindings(py::module& storage, py::exception<arcticdb::ArcticExcept
                 res.push_back(lp.to_delim_path());
             }
             return res;
-        });
+        })
+        .def_property_readonly_static("rocksdb_support", [](py::object /* self */){ return LibraryManager::rocksdb_support(); });
 
     py::class_<LibraryIndex, std::shared_ptr<LibraryIndex>>(storage, "LibraryIndex")
         .def(py::init<>([](const std::string &environment_name) {
