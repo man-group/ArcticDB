@@ -64,7 +64,6 @@ class LmdbStorage final : public Storage {
 
     // _internal methods assume the write mutex is already held
     void do_write_internal(Composite<KeySegmentPair>&& kvs, ::lmdb::txn& txn);
-
     std::vector<VariantKey> do_remove_internal(Composite<VariantKey>&& ks, ::lmdb::txn& txn, RemoveOpts opts);
     std::unique_ptr<std::mutex> write_mutex_;
     std::unique_ptr<::lmdb::env> env_;

@@ -57,8 +57,6 @@ class InMemoryLibraryAdapter(ArcticLibraryAdapter):
         )
         set_library_options(env_cfg.env_by_id[_DEFAULT_ENV].lib_by_path[name], library_options)
 
-        lib = NativeVersionStore.create_store_from_config(
+        return NativeVersionStore.create_library_config(
             env_cfg, _DEFAULT_ENV, name, encoding_version=library_options.encoding_version
         )
-
-        return lib
