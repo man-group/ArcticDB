@@ -107,7 +107,6 @@
             "xxhash": [""],
             "six": [""],
             "msgpack": [""],
-            "psutil": [""],
             "pyyaml": [""],
             "decorator": [""],
             "prometheus_client": [""],

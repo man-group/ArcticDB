@@ -9,8 +9,6 @@ from __future__ import print_function
 import random
 import gc
 
-from arcticdb.util.memory import format_bytes, current_mem
-
 from arcticdb.util.tasks import (
     write_and_append_simple_df,
     write_large_mixed_df,
@@ -49,4 +47,3 @@ def test_random_scenario(basic_store_small_segment):
         run_scenario(random.choice(SCENARIOS), basic_store_small_segment, True, True)
         # assert current_mem() < MAX_MEM_USAGE
         gc.collect()
-        print(format_bytes(current_mem()))
