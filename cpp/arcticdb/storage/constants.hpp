@@ -9,5 +9,6 @@
 #include <string>
 
 namespace arcticdb::storage {
-    const std::string& CONFIG_LIBRARY_NAME = "_arctic_cfg";
+    // TODO should not be static, right?
+    static const std::string CONFIG_LIBRARY_NAME = "_arctic_cfg";
 }
