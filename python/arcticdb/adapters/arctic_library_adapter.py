@@ -7,7 +7,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 """
 from arcticdb.options import DEFAULT_ENCODING_VERSION, LibraryOptions
 from arcticc.pb2.storage_pb2 import LibraryConfig
-from arcticdb_ext.storage import Library, StorageOverride
+from arcticdb_ext.storage import Library, StorageOverride, CONFIG_LIBRARY_NAME
 from arcticdb.encoding_version import EncodingVersion
 from arcticdb.version_store._store import NativeVersionStore
 from abc import ABC, abstractmethod
@@ -38,8 +38,6 @@ def set_library_options(lib_desc: "LibraryConfig", options: LibraryOptions):
 
 
 class ArcticLibraryAdapter(ABC):
-    CONFIG_LIBRARY_NAME = "_arctic_cfg"  # TODO: Should come from native module
-
     @abstractmethod
     def __init__(self, uri: str, encoding_version: EncodingVersion):
         pass
