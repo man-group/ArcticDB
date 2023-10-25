@@ -18,7 +18,7 @@ LIB_NAME = "test_lib"
 
 def create_library_config(ac: Arctic, name: str):
     opts = LibraryOptions()
-    cfg = ac._library_adapter.create_library(name, opts)
+    cfg = ac._library_adapter.get_library_config(name, opts)
     ac._library_manager.write_library_config(cfg, name, test_only_validation_toggle=False)
 
 

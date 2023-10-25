@@ -170,7 +170,7 @@ class S3LibraryAdapter(ArcticLibraryAdapter):
         storage_override.set_s3_override(s3_override)
         return storage_override
 
-    def create_library(self, name, library_options: LibraryOptions):
+    def get_library_config(self, name, library_options: LibraryOptions):
         env_cfg = EnvironmentConfigsMap()
 
         _name = self._query_params.access if not self._query_params.aws_auth else USE_AWS_CRED_PROVIDERS_TOKEN
