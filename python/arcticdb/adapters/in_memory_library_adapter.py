@@ -47,7 +47,7 @@ class InMemoryLibraryAdapter(ArcticLibraryAdapter):
 
         return lib._library
 
-    def create_library(self, name, library_options: LibraryOptions):
+    def get_library_config(self, name, library_options: LibraryOptions):
         env_cfg = EnvironmentConfigsMap()
 
         add_memory_library_to_env(env_cfg, lib_name=name, env_name=_DEFAULT_ENV)

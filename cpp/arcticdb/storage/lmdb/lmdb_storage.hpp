@@ -74,11 +74,11 @@ class LmdbStorage final : public Storage {
 
     // For log warning only
     // Number of times an LMDB path has been opened. See also reinit_lmdb_warning.
-    // Opening an LMDB env over the same path twice in the same process is unsafe and we warn the user about it.
+    // Opening an LMDB env over the same path twice in the same process is unsafe, so we warn the user about it.
     inline static std::unordered_map<
-        std::filesystem::path,
+        std::string,
         uint64_t
-    > times_path_opened{};
+    > times_path_opened;
 };
 
 inline arcticdb::proto::storage::VariantStorage pack_config(const std::string& path) {

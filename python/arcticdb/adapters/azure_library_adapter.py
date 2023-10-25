@@ -123,7 +123,7 @@ class AzureLibraryAdapter(ArcticLibraryAdapter):
         storage_override.set_azure_override(azure_override)
         return storage_override
 
-    def create_library(self, name, library_options: LibraryOptions):
+    def get_library_config(self, name, library_options: LibraryOptions):
         env_cfg = EnvironmentConfigsMap()
 
         if self._query_params.Path_prefix:
