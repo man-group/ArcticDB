@@ -12,6 +12,7 @@ from arcticdb.config import _DEFAULT_ENV
 from arcticdb.version_store._store import NativeVersionStore
 from arcticdb.adapters.arctic_library_adapter import ArcticLibraryAdapter, set_library_options
 from arcticdb.encoding_version import EncodingVersion
+from arcticdb_ext.storage import CONFIG_LIBRARY_NAME
 
 
 class InMemoryLibraryAdapter(ArcticLibraryAdapter):
@@ -38,10 +39,10 @@ class InMemoryLibraryAdapter(ArcticLibraryAdapter):
     def config_library(self):
         env_cfg = EnvironmentConfigsMap()
 
-        add_memory_library_to_env(env_cfg, lib_name=self.CONFIG_LIBRARY_NAME, env_name=_DEFAULT_ENV)
+        add_memory_library_to_env(env_cfg, lib_name=CONFIG_LIBRARY_NAME, env_name=_DEFAULT_ENV)
 
         lib = NativeVersionStore.create_store_from_config(
-            env_cfg, _DEFAULT_ENV, self.CONFIG_LIBRARY_NAME, encoding_version=self._encoding_version
+            env_cfg, _DEFAULT_ENV, CONFIG_LIBRARY_NAME, encoding_version=self._encoding_version
         )
 
         return lib._library
