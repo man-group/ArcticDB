@@ -17,6 +17,7 @@
 #include <arcticdb/storage/protobuf_mappings.hpp>
 #include <arcticdb/storage/library_index.hpp>
 #include <arcticdb/storage/config_resolvers.hpp>
+#include <arcticdb/storage/constants.hpp>
 
 namespace py = pybind11;
 
@@ -33,6 +34,8 @@ std::shared_ptr<LibraryIndex> create_library_index(const std::string &environmen
 }
 
 void register_bindings(py::module& storage, py::exception<arcticdb::ArcticException>& base_exception) {
+    storage.attr("CONFIG_LIBRARY_NAME") = py::str(arcticdb::storage::CONFIG_LIBRARY_NAME);
+
     py::enum_<KeyType>(storage, "KeyType")
         .value("STREAM_GROUP", KeyType::STREAM_GROUP)
         .value("VERSION", KeyType::VERSION)
