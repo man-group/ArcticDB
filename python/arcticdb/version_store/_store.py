@@ -66,7 +66,6 @@ from arcticdb.version_store._normalization import (
     restrict_data_to_date_range_only,
     normalize_dt_range_to_ts,
 )
-from arcticdb.util.memory import format_bytes
 
 # These chars are encoded by S3 and on doing a list_symbols they will show up as the encoded form eg. &amp
 UNSUPPORTED_S3_CHARS = {"\0", "*", "<", ">"}
@@ -2644,18 +2643,6 @@ class NativeVersionStore:
         udm = normalize_metadata(metadata) if metadata is not None else None
         v = self.version_store.write_metadata(symbol, udm, prune_previous_version)
         return self._convert_thin_cxx_item_to_python(v)
-
-    def scan_object_sizes(self):
-        sizes = self.version_store.scan_object_sizes()
-        for key, value in sizes.items():
-            if value[0] == 0:
-                continue
-
-            print(
-                "{} \tObjects: {}\tTotal Size: {}\tAvg Size {}".format(
-                    key, value[0], format_bytes(value[1]), format_bytes(value[1] / value[0])
-                )
-            )
 
     def is_symbol_fragmented(self, symbol: str, segment_size: Optional[int] = None) -> bool:
         """
