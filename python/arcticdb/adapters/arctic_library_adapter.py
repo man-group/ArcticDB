@@ -57,7 +57,7 @@ class ArcticLibraryAdapter(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def create_library(self, name: str, library_options: LibraryOptions) -> NativeVersionStore:
+    def create_library(self, name: str, library_options: LibraryOptions):
         raise NotImplementedError
 
     def cleanup_library(self, library_name: str):
