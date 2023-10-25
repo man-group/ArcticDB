@@ -10,6 +10,7 @@
 #include <arcticdb/column_store/python_bindings.hpp>
 #include <arcticdb/storage/python_bindings.hpp>
 #include <arcticdb/storage/storage.hpp>
+#include <arcticdb/storage/lmdb/lmdb_storage.hpp>
 #include <arcticdb/stream/python_bindings.hpp>
 #include <arcticdb/toolbox/python_bindings.hpp>
 #include <arcticdb/version/python_bindings.hpp>
@@ -18,7 +19,6 @@
 #include <arcticdb/util/trace.hpp>
 #include <arcticdb/python/python_utils.hpp>
 #include <arcticdb/python/arctic_version.hpp>
-#include <arcticdb/entity/performance_tracing.hpp>
 #include <arcticdb/entity/metrics.hpp>
 #include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/async/task_scheduler.hpp>
@@ -231,6 +231,11 @@ void reinit_scheduler() {
     arcticdb::async::TaskScheduler::reattach_instance();
 }
 
+void reinit_lmdb_warning() {
+    ARCTICDB_DEBUG(arcticdb::log::version(), "Post-fork in child, resetting LMDB warning counter");
+    arcticdb::storage::lmdb::LmdbStorage::reset_warning_counter();
+}
+
 void register_instrumentation(py::module && m){
     auto remotery = m.def_submodule("remotery");
 #if defined(USE_REMOTERY)
@@ -272,6 +277,7 @@ PYBIND11_MODULE(arcticdb_ext, m) {
 #ifndef WIN32
     // No fork() in Windows, so no need to register the handler
     pthread_atfork(nullptr, nullptr, &reinit_scheduler);
+    pthread_atfork(nullptr, nullptr, &reinit_lmdb_warning);
 #endif
     // Set up the global exception handlers first, so module-specific exception handler can override it:
     auto exceptions = m.def_submodule("exceptions");

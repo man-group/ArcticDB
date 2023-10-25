@@ -31,8 +31,11 @@ namespace arcticdb::storage::lmdb {
 class LmdbStorage final : public Storage {
   public:
     using Config = arcticdb::proto::lmdb_storage::Config;
+    static void reset_warning_counter();
 
     LmdbStorage(const LibraryPath &lib, OpenMode mode, const Config &conf);
+    LmdbStorage(LmdbStorage&& other) noexcept;
+    ~LmdbStorage() override;
 
   private:
     void do_write(Composite<KeySegmentPair>&& kvs) final;
@@ -57,13 +60,26 @@ class LmdbStorage final : public Storage {
 
     std::string do_key_path(const VariantKey&) const final { return {}; };
 
+    void warn_if_lmdb_already_open(const fs::path &root_path, const std::string &lib_path_str);
+
     // _internal methods assume the write mutex is already held
     void do_write_internal(Composite<KeySegmentPair>&& kvs, ::lmdb::txn& txn);
-    std::vector<VariantKey> do_remove_internal(Composite<VariantKey>&& ks, ::lmdb::txn& txn, RemoveOpts opts);
 
+    std::vector<VariantKey> do_remove_internal(Composite<VariantKey>&& ks, ::lmdb::txn& txn, RemoveOpts opts);
     std::unique_ptr<std::mutex> write_mutex_;
     std::unique_ptr<::lmdb::env> env_;
+
     std::unordered_map<std::string, ::lmdb::dbi> dbi_by_key_type_;
+
+    std::filesystem::path lib_dir_;
+
+    // For log warning only
+    // Number of times an LMDB path has been opened. See also reinit_lmdb_warning.
+    // Opening an LMDB env over the same path twice in the same process is unsafe and we warn the user about it.
+    inline static std::unordered_map<
+        std::filesystem::path,
+        uint64_t
+    > times_path_opened{};
 };
 
 inline arcticdb::proto::storage::VariantStorage pack_config(const std::string& path) {
