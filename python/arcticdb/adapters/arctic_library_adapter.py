@@ -9,7 +9,6 @@ from arcticdb.options import DEFAULT_ENCODING_VERSION, LibraryOptions
 from arcticc.pb2.storage_pb2 import LibraryConfig
 from arcticdb_ext.storage import Library, StorageOverride, CONFIG_LIBRARY_NAME
 from arcticdb.encoding_version import EncodingVersion
-from arcticdb.version_store._store import NativeVersionStore
 from abc import ABC, abstractmethod
 
 
@@ -57,7 +56,7 @@ class ArcticLibraryAdapter(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def create_library(self, name: str, library_options: LibraryOptions):
+    def get_library_config(self, name: str, library_options: LibraryOptions):
         raise NotImplementedError
 
     def cleanup_library(self, library_name: str):

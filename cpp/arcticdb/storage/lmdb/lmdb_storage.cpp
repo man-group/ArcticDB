@@ -321,20 +321,20 @@ LmdbStorage::LmdbStorage(const LibraryPath &library_path, OpenMode mode, const C
 
     txn.commit();
 
-    ARCTICDB_DEBUG(log::storage(), "Opened lmdb storage at {} with map size {}", lib_dir_.generic_string(), format_bytes(mapsize));
+    ARCTICDB_DEBUG(log::storage(), "Opened lmdb storage at {} with map size {}", lib_dir_.string(), format_bytes(mapsize));
 }
 
 void LmdbStorage::warn_if_lmdb_already_open(const fs::path &root_path, const std::string &lib_path_str) {
-    uint64_t& count_for_pid = ++times_path_opened[root_path / lib_path_str];
+    uint64_t& count_for_pid = ++times_path_opened[(root_path / lib_path_str).string()];
     if (count_for_pid != 1) {
         // Strip magic name from warning as it will confuse users
-        if (lib_dir_.generic_string().find(CONFIG_LIBRARY_NAME) == std::string::npos) {
+        if (lib_dir_.string().find(CONFIG_LIBRARY_NAME) == std::string::npos) {
             log::storage().warn(fmt::format(
                     "LMDB path at {} has already been opened in this process which is not supported by LMDB. "
                     "To continue safely, you should delete all Library objects over the LMDB path in this "
                     "process and then try again. This indicates a bug in ArcticDB. Please report at "
                     "https://github.com/man-group/ArcticDB. Current process ID=[{}]",
-                    lib_dir_.generic_string(), getpid()));
+                    lib_dir_.string(), getpid()));
         } else {
             std::filesystem::path user_facing_path = lib_dir_;
             user_facing_path.remove_filename();
@@ -343,7 +343,7 @@ void LmdbStorage::warn_if_lmdb_already_open(const fs::path &root_path, const std
                     "You should only open a single Arctic instance over a given LMDB path. "
                     "To continue safely, you should delete this Arctic instance and any others over the LMDB path in this "
                     "process and then try again. Current process ID=[{}]",
-                    user_facing_path.generic_string(), getpid()));
+                    user_facing_path.string(), getpid()));
         }
     }
 }
@@ -359,12 +359,12 @@ LmdbStorage::LmdbStorage(LmdbStorage&& other)  noexcept
 
 LmdbStorage::~LmdbStorage() {
     if (!lib_dir_.empty()) {
-        --times_path_opened[lib_dir_];
+        --times_path_opened[lib_dir_.string()];
     }
 }
 
 void LmdbStorage::reset_warning_counter() {
-    times_path_opened = std::unordered_map<std::filesystem::path, uint64_t>{};
+    times_path_opened = std::unordered_map<std::string, uint64_t>{};
 }
 
 } // namespace arcticdb::storage::lmdb

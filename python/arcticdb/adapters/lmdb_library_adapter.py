@@ -147,7 +147,7 @@ class LMDBLibraryAdapter(ArcticLibraryAdapter):
 
         return lib._library
 
-    def create_library(self, name, library_options: LibraryOptions):
+    def get_library_config(self, name, library_options: LibraryOptions):
         env_cfg = EnvironmentConfigsMap()
 
         lmdb_config = {}

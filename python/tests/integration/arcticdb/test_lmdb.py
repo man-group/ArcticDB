@@ -1,15 +1,21 @@
+"""
+Copyright 2023 Man Group Operations Limited
+
+Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
+
+As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+"""
+import multiprocessing as mp
 import pytest
-from arcticdb import Arctic
 import pandas as pd
 import os
+import sys
 
+from arcticdb import Arctic
 from arcticdb.util.test import assert_frame_equal
 from arcticdb_ext.exceptions import InternalException
-
 from arcticdb.util.test import get_wide_dataframe
-
 import arcticdb.adapters.lmdb_library_adapter as la
-
 from arcticdb.exceptions import LmdbOptionsError
 
 
@@ -110,7 +116,6 @@ def test_lmdb_mapsize(tmpdir):
     ac = Arctic(f"lmdb://{tmpdir}?map_size=1MB")
 
     # When
-    ac.create_library("test")
     lib = ac["test"]
     df = get_wide_dataframe(size=1_000)
     lib.write("sym", df)
@@ -151,11 +156,30 @@ def test_lmdb_options_unknown_option(options):
     assert "Invalid LMDB URI" in str(e.value)
 
 
-def test_warnings(tmpdir):
+def create_arctic_instance(tmpdir):
+    ac = Arctic(f"lmdb://{tmpdir}")
+
+
+def test_warnings_arctic_instance(tmpdir):
     ac = Arctic(f"lmdb://{tmpdir}")
     # should warn
     ac = Arctic(f"lmdb://{tmpdir}")
+
     del ac
-    # should not warn TODO assert
+    # should not warn
     ac = Arctic(f"lmdb://{tmpdir}")
-    # TODO assert on warns - capture stdout?
+
+
+def test_warnings_library(tmpdir):
+    """Should not warn - library caching prevents us opening LMDB env twice."""
+    ac = Arctic(f"lmdb://{tmpdir}")
+    lib = ac.get_library("lib", create_if_missing=True)
+    lib2 = ac.get_library("lib")
+    lib3 = ac.get_library("lib")
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="Windows pessimistic file-locking")
+def test_warnings_arctic_instance_multiprocessing(tmpdir):
+    """Should not warn when across multiple processes."""
+    with mp.Pool(5) as p:
+        p.map(create_arctic_instance, [tmpdir for _ in range(20)])
