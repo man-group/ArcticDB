@@ -3,6 +3,8 @@ channels:
   - conda-forge
 dependencies:
   # Build tools
+  - cxx-compiler
+  - c-compiler
   - cmake
   - gtest
   - gflags
@@ -18,7 +20,9 @@ dependencies:
   - libevent
   - libmongocxx
   - zstd
-  - pybind11
+  # TODO: pybind 2.11.X became stricter regarding the handling of reference counts
+  # See: https://github.com/pybind/pybind11/issues/4748#issuecomment-1639445403
+  - pybind11 < 2.11
   - pcre
   - cyrus-sasl
   - aws-sdk-cpp
@@ -26,8 +30,14 @@ dependencies:
   - libprotobuf < 4
   - bitmagic
   - spdlog
-  - fmt
-  - folly >2022.10.31 # latest version published on vcpkg
+  - azure-core-cpp
+  - azure-identity-cpp
+  - azure-storage-blobs-cpp
+  # RocksDB is not supported on the conda build at the moment
+  #  - rocksdb
+  # ArcticDB is currently incompatible with fmt 10
+  - fmt < 10
+  - folly
   # Vendored build dependencies (see `cpp/thirdparty`)
   # Versions must be kept in sync
   - xxhash
@@ -36,17 +46,18 @@ dependencies:
   - rapidcheck
   - msgpack-c
   - recycle
-  # Matches the version of lmdb and lmdbxx as vendored
-  # via submodules.
+  # Matches the version of lmdb as vendored in its submodule.
   - lmdb==0.9.22
-  - lmdbxx==0.9.14
-  - libarrow
+  - lmdbxx
   - libiconv
   - aws-c-s3
+  # Build dependencies for tests
+  - libarrow
   # Python dependences
   - python =3.10 # Python 3.11 requires protobuf>=4
+  - packaging
   - numpy
-  - pandas < 2
+  - pandas
   - pytest
   - boto3
   - werkzeug
@@ -57,4 +68,9 @@ dependencies:
   # See: https://github.com/man-group/ArcticDB/pull/291
   - hypothesis < 6.73
   - pytest-sugar
-
+  - pymongo
+  # Python dependencies (for tests only)
+  - azure-storage-blob
+  - azure-identity
+  - pyarrow
+  - asv

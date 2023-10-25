@@ -23,7 +23,6 @@ using pointer_set = std::unordered_set<typename MemoryChunk::pointer>;
 
 size_t num_threads = std::thread::hardware_concurrency() - 1;
 std::size_t const num_blocks_per_thread = 10000;
-std::size_t const num_loops = 10000;
 
 template <typename MemoryChunk>
 pointer_set<MemoryChunk> call_alloc_and_dealloc(MemoryChunk& mc, std::size_t n, int64_t& execution_time_ms) {

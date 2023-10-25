@@ -19,8 +19,8 @@ from arcticdb.util.hypothesis import (
 )
 
 
-def test_project_dynamic(lmdb_version_store_dynamic_schema):
-    lib = lmdb_version_store_dynamic_schema
+def test_project_dynamic(lmdb_version_store_dynamic_schema_v1):
+    lib = lmdb_version_store_dynamic_schema_v1
     symbol = "test_project_dynamic"
 
     df = pd.DataFrame(
@@ -46,6 +46,34 @@ def test_project_dynamic(lmdb_version_store_dynamic_schema):
     assert_frame_equal(expected, received)
 
 
+def test_project_column_types_changing_and_missing(lmdb_version_store_dynamic_schema):
+    lib = lmdb_version_store_dynamic_schema
+    symbol = "test_project_column_types_changing_and_missing"
+    # Floats
+    expected = pd.DataFrame({"col_to_project": [0.5, 1.5], "data_col": [0, 1]}, index=np.arange(0, 2))
+    lib.write(symbol, expected)
+    # uint8
+    df = pd.DataFrame({"col_to_project": np.arange(2, dtype=np.uint8), "data_col": [2, 3]}, index=np.arange(2, 4))
+    lib.append(symbol, df)
+    expected = pd.concat((expected, df))
+    # Missing
+    df = pd.DataFrame({"data_col": [4, 5]}, index=np.arange(4, 6))
+    lib.append(symbol, df)
+    expected = pd.concat((expected, df))
+    # int16
+    df = pd.DataFrame(
+        {"col_to_project": np.arange(200, 202, dtype=np.int16), "data_col": [6, 7]}, index=np.arange(6, 8)
+    )
+    lib.append(symbol, df)
+
+    expected = pd.concat((expected, df))
+    expected["projected_col"] = expected["col_to_project"] * 2
+    q = QueryBuilder()
+    q = q.apply("projected_col", q["col_to_project"] * 2)
+    received = lib.read(symbol, query_builder=q).data
+    assert_frame_equal(expected, received)
+
+
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
@@ -59,8 +87,8 @@ def test_project_dynamic(lmdb_version_store_dynamic_schema):
         index=range_indexes(),
     )
 )
-def test_project_add_col_col_dynamic(lmdb_version_store_dynamic_schema, df):
-    lib = lmdb_version_store_dynamic_schema
+def test_project_add_col_col_dynamic(lmdb_version_store_dynamic_schema_v2, df):
+    lib = lmdb_version_store_dynamic_schema_v2
     assume(not df.empty)
     symbol = "test_project_add_col_col"
 
@@ -97,8 +125,8 @@ def test_project_add_col_col_dynamic(lmdb_version_store_dynamic_schema, df):
         index=range_indexes(),
     )
 )
-def test_project_multiply_col_val(lmdb_version_store_dynamic_schema, df):
-    lib = lmdb_version_store_dynamic_schema
+def test_project_multiply_col_val(lmdb_version_store_dynamic_schema_v1, df):
+    lib = lmdb_version_store_dynamic_schema_v1
     assume(not df.empty)
     symbol = "test_project_multiply_col_val"
 
@@ -134,8 +162,8 @@ def test_project_multiply_col_val(lmdb_version_store_dynamic_schema, df):
         index=range_indexes(),
     )
 )
-def test_project_divide_val_col(lmdb_version_store_dynamic_schema, df):
-    lib = lmdb_version_store_dynamic_schema
+def test_project_divide_val_col(s3_version_store_dynamic_schema_v2, df):
+    lib = s3_version_store_dynamic_schema_v2
     assume(not df.empty)
     symbol = "test_project_divide_val_col"
 

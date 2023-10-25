@@ -12,6 +12,7 @@
 #include <arcticdb/util/buffer.hpp>
 #include <arcticdb/util/cursored_buffer.hpp>
 #include <arcticdb/column_store/chunked_buffer.hpp>
+#include <arcticdb/column_store/column_data.hpp>
 
 #include <string_view>
 #include <unordered_map>
@@ -28,6 +29,13 @@
 namespace arcticdb {
 class StringPool;
 class Column;
+
+
+static FieldRef string_pool_descriptor() {
+    static TypeDescriptor type{ DataType::UINT8, Dimension::Dim1 };
+    static std::string_view name{ "__string_pool__" };
+    return FieldRef{type, name};
+}
 
 class StringBlock {
     friend class StringPool;
@@ -171,6 +179,16 @@ class StringPool {
             shapes_ = std::move(that.shapes_);
         }
         return *this;
+    }
+
+
+    ColumnData column_data() const {
+        return {
+          &block_.buffer(),
+          &shapes_.buffer(),
+          string_pool_descriptor().type(),
+          nullptr
+        };
     }
 
     OffsetString get(const char *data, size_t size, bool deduplicate = true);

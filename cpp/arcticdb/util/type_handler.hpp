@@ -10,6 +10,7 @@
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/column_store/chunked_buffer.hpp>
 #include <arcticdb/util/buffer_holder.hpp>
+#include <arcticdb/codec/variant_encoded_field_collection.hpp>
 
 #include <folly/Poly.h>
 
@@ -18,18 +19,24 @@
 
 namespace arcticdb {
 
+
 struct ITypeHandler {
     template<class Base>
     struct Interface : Base {
+
+        /// Handle decoding of a non-trivial type to Python object
+        /// @param[in] source Data to be decoded to Python objects
+        /// @param[out] dest Memory where the resulting Python objects are stored
+        /// @param[in] dest_bytes Size of dest in bytes
         void handle_type(
-            const uint8_t*& data,
+            const uint8_t*& source,
             uint8_t* dest,
-            const arcticdb::proto::encoding::EncodedField& encoded_field_info,
+            const VariantField& encoded_field_info,
             const entity::TypeDescriptor& type_descriptor,
             size_t dest_bytes,
-            std::shared_ptr<BufferHolder> buffers
-            ) { folly::poly_call<0>(*this, data, dest, encoded_field_info, type_descriptor, dest_bytes, buffers); }
-
+            std::shared_ptr<BufferHolder> buffers) {
+            folly::poly_call<0>(*this, source, dest, encoded_field_info, type_descriptor, dest_bytes, buffers);
+        }
     };
 
     template<class T>
@@ -38,6 +45,8 @@ struct ITypeHandler {
 
 using TypeHandler = folly::Poly<ITypeHandler>;
 
+/// Some types cannot be trivially converted from storage to Python types .This singleton holds a set of type erased
+/// handlers (implementing the handle_type function) which handle the parsing from storage to python.
 class TypeHandlerRegistry {
 public:
     static std::shared_ptr<TypeHandlerRegistry> instance_;

@@ -44,6 +44,9 @@ find_package(mongocxx REQUIRED)
 find_package(bsoncxx REQUIRED)
 find_package(zstd CONFIG REQUIRED)  # "CONFIG" bypasses our cpp/CMake/FindZstd.cmake module
 
+find_package(azure-identity-cpp CONFIG REQUIRED)
+find_package(azure-storage-blobs-cpp CONFIG REQUIRED)
+
 if(${BUILD_WITH_REMOTERY})
     add_compile_definitions(USE_REMOTERY)
 endif()
@@ -53,6 +56,10 @@ if(NOT ${ARCTICDB_USING_CONDA})
     find_package(Libevent CONFIG REQUIRED)
     set(ARCTICDB_MONGO_LIBS mongo::mongocxx_static mongo::bsoncxx_static)
     set(Zstd_LIBRARY $<IF:$<TARGET_EXISTS:zstd::libzstd_shared>,zstd::libzstd_shared,zstd::libzstd_static>)
+
+    if(NOT DEFINED ARCTICDB_INCLUDE_ROCKSDB)
+        set(ARCTICDB_INCLUDE_ROCKSDB 1)
+    endif()
 else()
 
     # ARCTICDB_USING_CONDA is used in header of the files including vendored
@@ -91,6 +98,12 @@ else()
     set_target_properties(Folly::folly_deps PROPERTIES INTERFACE_INCLUDE_DIRECTORIES "${NEW_FOLLY_DEPS}")
 
 endif()
+# RocksDB can be manually excluded with set(ARCTICDB_INCLUDE_ROCKSDB 0)
+# Default is to include on PyPI builds and exclude on conda builds
+if(${ARCTICDB_INCLUDE_ROCKSDB})
+    add_compile_definitions(ARCTICDB_INCLUDE_ROCKSDB)
+    find_package(RocksDB CONFIG REQUIRED)
+endif()
 
 # Libraries baked into the internal and external Linux images are found by searching various paths
 # On Windows, vcpkg will provide a "Config" which takes precedence
@@ -100,6 +113,7 @@ if (WIN32)
 else ()
     find_library(Sasl2_LIBRARY NAMES sasl2 libsasl2 PATHS /usr/local/lib/libsasl2.a REQUIRED)
 endif ()
+
 
 find_path(BITMAGIC_INCLUDE_DIRS "bitmagic/bm.h")
 
@@ -145,6 +159,17 @@ ENDIF()
 
 set(CMAKE_INSTALL_RPATH "\\$ORIGIN/lib")
 
+if (NOT WIN32)
+    if(NOT ${ARCTICDB_USING_CONDA})
+        # Compilers on conda-forge are relatively strict.
+        # For now, we do not want to treat warnings as errors for those builds.
+        add_compile_options("-Werror")
+    endif()
+    add_compile_options("-ggdb")
+    add_compile_options("-fvisibility=hidden")
+    add_compile_options("-fno-omit-frame-pointer")
+endif ()
+
 ## Core library without python bindings ##
 set(arcticdb_srcs
         # header files
@@ -172,8 +197,8 @@ set(arcticdb_srcs
         entity/frame_and_descriptor.hpp
         entity/index_range.hpp
         entity/key.hpp
-        entity/key-inl.hpp
         entity/metrics.hpp
+        entity/data_error.hpp
         entity/native_tensor.hpp
         entity/performance_tracing.hpp
         entity/protobuf_mappings.hpp
@@ -185,6 +210,7 @@ set(arcticdb_srcs
         entity/types-inl.hpp
         entity/variant_key.hpp
         entity/versioned_item.hpp
+        entity/descriptor_item.hpp
         log/log.hpp
         log/trace.hpp
         pipeline/column_mapping.hpp
@@ -217,10 +243,10 @@ set(arcticdb_srcs
         processing/operation_dispatch_unary.hpp
         processing/operation_types.hpp
         processing/signed_unsigned_comparison.hpp
-        processing/processing_segment.hpp
+        processing/processing_unit.hpp
         processing/bucketizer.hpp
         processing/clause.hpp
-        processing/execution_context.hpp
+        processing/expression_context.hpp
         processing/expression_node.hpp
         storage/common.hpp
         storage/config_resolvers.hpp
@@ -228,25 +254,22 @@ set(arcticdb_srcs
         storage/library.hpp
         storage/library_index.hpp
         storage/library_manager.hpp
+        storage/azure/azure_storage.hpp
         storage/lmdb/lmdb_storage.hpp
-        storage/lmdb/lmdb_storage-inl.hpp
         storage/memory/memory_storage.hpp
-        storage/memory/memory_storage-inl.hpp
+        storage/memory/memory_storage.cpp
         storage/mongo/mongo_client.hpp
         storage/mongo/mongo_instance.hpp
         storage/mongo/mongo_storage.hpp
+        storage/object_store_utils.hpp
         storage/s3/nfs_backed_storage.hpp
-        storage/s3/nfs_backed_storage-inl.hpp
         storage/s3/s3_client_accessor.hpp
-        storage/s3/s3_storage-inl.hpp
         storage/s3/s3_storage_tool.hpp
-        storage/s3/s3_storage_tool-inl.hpp
-        storage/s3/s3_utils.hpp
         storage/storage_factory.hpp
         storage/storage_options.hpp
         storage/storage.hpp
+        storage/storage_override.hpp
         storage/store.hpp
-        storage/variant_storage.hpp
         stream/aggregator.hpp
         stream/aggregator-inl.hpp
         stream/append_map.hpp
@@ -311,6 +334,7 @@ set(arcticdb_srcs
         util/variant.hpp
         version/de_dup_map.hpp
         version/op_log.hpp
+        version/schema_checks.hpp
         version/snapshot.hpp
         version/version_constants.hpp
         version/version_core.hpp
@@ -326,17 +350,21 @@ set(arcticdb_srcs
         version/version_store_objects.hpp
         version/version_utils.hpp
         # CPP files
+        async/async_store.cpp
         async/task_scheduler.cpp
         async/tasks.cpp
         codec/codec.cpp
         codec/encoding_sizes.cpp
         codec/segment.cpp
+        codec/variant_encoded_field_collection.cpp
         column_store/chunked_buffer.cpp
         column_store/column.cpp
         column_store/memory_segment_impl.cpp
         column_store/memory_segment_impl.cpp
         column_store/string_pool.cpp
+        entity/field_collection.cpp
         entity/key.cpp
+        entity/merge_descriptors.cpp
         entity/metrics.cpp
         entity/performance_tracing.cpp
         entity/types.cpp
@@ -355,7 +383,7 @@ set(arcticdb_srcs
         pipeline/value_set.cpp
         pipeline/write_frame.cpp
         python/normalization_checks.cpp
-        processing/processing_segment.cpp
+        processing/processing_unit.cpp
         processing/aggregation.cpp
         processing/clause.cpp
         processing/expression_node.cpp
@@ -369,8 +397,9 @@ set(arcticdb_srcs
         python/python_to_tensor_frame.cpp
         storage/config_resolvers.cpp
         storage/failure_simulation.cpp
+        storage/library_manager.cpp
+        storage/azure/azure_storage.cpp
         storage/lmdb/lmdb_storage.cpp
-        storage/memory/memory_storage.cpp
         storage/mongo/mongo_client.cpp
         storage/mongo/mongo_instance.cpp
         storage/mongo/mongo_storage.cpp
@@ -401,9 +430,14 @@ set(arcticdb_srcs
         version/version_core.cpp
         version/version_store_api.cpp
         version/version_utils.cpp
-        version/symbol_list.cpp
-        version/schema_checks.hpp
-        )
+        version/symbol_list.cpp)
+
+if(${ARCTICDB_INCLUDE_ROCKSDB})
+    list (APPEND arcticdb_srcs
+        storage/rocksdb/rocksdb_storage.hpp
+        storage/rocksdb/rocksdb_storage.cpp
+    )
+endif()
 
 # Exclude vendored sources when using conda.
 if(NOT ${ARCTICDB_USING_CONDA})
@@ -466,7 +500,9 @@ set (arcticdb_core_libraries
         ${ARCTICDB_MONGO_LIBS}
         spdlog::spdlog
         Folly::folly # Transitively includes: double-conversion, gflags, glog, libevent, libssl, libcrypto, libiberty, libsodium
-        )
+        Azure::azure-identity
+        Azure::azure-storage-blobs
+)
 
 # Dependencies expose different names of their libraries depending
 # on their origin (i.e. vendored source or packages on conda-forge).
@@ -518,6 +554,10 @@ else ()
             )
 endif ()
 
+if (${ARCTICDB_INCLUDE_ROCKSDB})
+    list (APPEND arcticdb_core_libraries RocksDB::rocksdb)
+endif()
+
 list (APPEND arcticdb_core_libraries Threads::Threads) # comes last for weakreference resolution pthread_atexit in folly
 
 set(arcticdb_core_includes
@@ -533,8 +573,8 @@ if (SSL_LINK)
         list(APPEND arcticdb_core_includes  ${KERBEROS_INCLUDE_DIR})
     endif()
 endif ()
-
 target_link_libraries(arcticdb_core_object PUBLIC ${arcticdb_core_libraries})
+
 
 target_include_directories(arcticdb_core_object
         PRIVATE
@@ -561,17 +601,6 @@ target_link_libraries(arcticdb_core PRIVATE
 
 GENERATE_EXPORT_HEADER(arcticdb_core)
 
-if (NOT WIN32)
-    if(NOT ${ARCTICDB_USING_CONDA})
-        # Compilers on conda-forge are relatively strict.
-        # For now, we do not want to treat warnings as errors for those builds.
-        add_compile_options("-Werror")
-    endif()
-    add_compile_options("-ggdb")
-    add_compile_options("-fvisibility=hidden")
-    add_compile_options("-fno-omit-frame-pointer")
-endif ()
-
 ## Core python bindings, private only ##
 set(arcticdb_python_srcs
         async/python_bindings.cpp
@@ -586,7 +615,6 @@ add_library(arcticdb_python STATIC ${arcticdb_python_srcs})
 
 target_link_libraries(arcticdb_python
         PUBLIC
-        #tsan
         arcticdb_core_static
         ${AWSSDK_LINK_LIBRARIES}
         )
@@ -615,6 +643,8 @@ pybind11_add_module(arcticdb_ext MODULE
         python/arctic_version.hpp
         python/reader.hpp
         python/adapt_read_dataframe.hpp
+        python/python_handlers.hpp
+        python/python_handlers.cpp
         )
 
 set (additional_link_flags "")
@@ -629,7 +659,6 @@ endif()
 
 target_link_libraries(arcticdb_ext
         PUBLIC
-        #tsan
         PRIVATE
         arcticdb_python
         ${additional_link_flags}
@@ -693,10 +722,11 @@ if(${TEST})
             processing/test/test_clause.cpp
             processing/test/test_expression.cpp
             processing/test/test_has_valid_type_promotion.cpp
+            processing/test/test_operation_dispatch.cpp
             processing/test/test_set_membership.cpp
             processing/test/test_signed_unsigned_comparison.cpp
             processing/test/test_type_comparison.cpp
-            storage/test/test_lmdb_storage.cpp
+            storage/test/test_embedded.cpp
             storage/test/test_memory_storage.cpp
             storage/test/test_mongo_storage.cpp
             storage/test/test_s3_storage.cpp
@@ -741,6 +771,7 @@ if(${TEST})
     set(EXECUTABLE_PERMS OWNER_WRITE OWNER_READ OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE) # 755
 
     add_executable(test_unit_arcticdb ${unit_test_srcs})
+
     install(TARGETS test_unit_arcticdb RUNTIME
                 DESTINATION .
                 PERMISSIONS ${EXECUTABLE_PERMS}
@@ -761,7 +792,6 @@ if(${TEST})
     else()
         set(COMMON_PUBLIC_TEST_LIBRARIES
                 arcticdb_core_static
-                libatomic.a  # Otherwise gtest_discover_tests cannot run the test if libatomic is not in a standard location
                 GTest::gtest
                 GTest::gmock
                 Python::Python # + pybind11::pybind11 (transitively included) = pybind11::embed, but latter is sometimes not found...
@@ -770,6 +800,11 @@ if(${TEST})
                 k5crypto
                 util # TODO: find out where we lost the transitive link to it
                 )
+        if(NOT APPLE)
+            list(APPEND COMMON_PUBLIC_TEST_LIBRARIES
+                    atomic # Otherwise gtest_discover_tests cannot run the test if libatomic is not in a standard location
+                )
+        endif()
 
         find_library(Gcov_LIBRARY gcov)
         if (NOT(${Gcov_LIBRARY} EQUAL "Gcov_LIBRARY-NOTFOUND"))
@@ -790,7 +825,7 @@ if(${TEST})
                 )
     endif()
 
-    gtest_discover_tests(test_unit_arcticdb PROPERTIES DISCOVERY_TIMEOUT 30)
+    gtest_discover_tests(test_unit_arcticdb PROPERTIES DISCOVERY_TIMEOUT 60)
 
     set(rapidcheck_srcs
             column_store/test/rapidcheck_column_store.cpp
@@ -811,7 +846,12 @@ if(${TEST})
                 PERMISSIONS ${EXECUTABLE_PERMS}
                 COMPONENT Tests)
 
-    set(RAPIDCHECK_PRIVATE_LIBRARIES ${AWSSDK_LINK_LIBRARIES} arrow_static)
+    if(ARCTICDB_USING_CONDA)
+        set(RAPIDCHECK_PRIVATE_LIBRARIES ${AWSSDK_LINK_LIBRARIES} Arrow::arrow_shared)
+    else()
+        set(RAPIDCHECK_PRIVATE_LIBRARIES ${AWSSDK_LINK_LIBRARIES} arrow_static)
+    endif()
+
     if(WIN32)
         target_link_libraries(arcticdb_rapidcheck_tests PUBLIC
                 arcticdb_core_static
@@ -835,5 +875,5 @@ if(${TEST})
             )
     endif()
 
-    gtest_discover_tests(arcticdb_rapidcheck_tests PROPERTIES DISCOVERY_TIMEOUT 30)
+    gtest_discover_tests(arcticdb_rapidcheck_tests PROPERTIES DISCOVERY_TIMEOUT 60)
 endif()

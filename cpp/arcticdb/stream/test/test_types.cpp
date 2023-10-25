@@ -7,6 +7,7 @@
 
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/stream/index.hpp>
+
 #include <gtest/gtest.h>
 
 #include <fmt/format.h>
@@ -20,11 +21,11 @@ TEST(TickStreamDesc, FromFields) {
         123,
         stream::TimeseriesIndex::default_index(),
         {
-            scalar_field_proto(DataType::UINT8, "uint8"),
-            scalar_field_proto(DataType::INT8, "int8")
+            scalar_field(DataType::UINT8, "uint8"),
+            scalar_field(DataType::INT8, "int8")
         })};
     ASSERT_EQ(fmt::format("{}", tsd),
-              "TSD<tsid=123, idx=IDX<size=1, kind=T>, fields=[time: TD<type=MICROS_UTC64, dim=0>, uint8: TD<type=UINT8, dim=0>, int8: TD<type=INT8, dim=0>]>");
+              "TSD<tsid=123, idx=IDX<size=1, kind=T>, fields=[FD<name=time, type=TD<type=NANOSECONDS_UTC64, dim=0>>, FD<name=uint8, type=TD<type=UINT8, dim=0>>, FD<name=int8, type=TD<type=INT8, dim=0>>]>");
 }
 
 TEST(DataTypeVisit, VisitTag) {

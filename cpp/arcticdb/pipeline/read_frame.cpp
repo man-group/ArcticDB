@@ -27,6 +27,8 @@
 #else
     #include <arcticdb/util/third_party/robin_hood.hpp>
 #endif
+#include <arcticdb/codec/variant_encoded_field_collection.hpp>
+
 #include <google/protobuf/util/message_differencer.h>
 #include <folly/SpinLock.h>
 #include <folly/gen/Base.h>
@@ -52,21 +54,23 @@ void mark_index_slices(
         column_groups).value();
 }
 
-StreamDescriptor get_filtered_descriptor(const StreamDescriptor& desc, const std::shared_ptr<std::vector<FieldDescriptor::Proto>>& filter_columns) {
+StreamDescriptor get_filtered_descriptor(StreamDescriptor&& descriptor, const std::shared_ptr<FieldCollection>& filter_columns) {
     // We assume here that filter_columns_ will always contain the index.
+
+    auto desc = std::move(descriptor);
     auto index = stream::index_type_from_descriptor(desc);
     return util::variant_match(index, [&desc, &filter_columns] (const auto& idx) {
         if(filter_columns) {
             return StreamDescriptor{index_descriptor(desc.id(), idx, *filter_columns)};
         }
         else {
-            return StreamDescriptor{index_descriptor(desc.id(), idx, desc.fields())};
+            return StreamDescriptor{index_descriptor(desc.id(), idx, *desc.fields_ptr())};
         }
     });
 }
 
 StreamDescriptor get_filtered_descriptor(const std::shared_ptr<PipelineContext>& context) {
-    return get_filtered_descriptor(context->descriptor(), context->filter_columns_);
+    return get_filtered_descriptor(context->descriptor().clone(), context->filter_columns_);
 }
 
 SegmentInMemory allocate_frame(const std::shared_ptr<PipelineContext>& context) {
@@ -85,8 +89,8 @@ SegmentInMemory allocate_frame(const std::shared_ptr<PipelineContext>& context) 
                 continue;
 
             auto& column = output.column(static_cast<position_t>(col_index.value()));
-            if(data_type_from_proto(field.type_desc()) != column.type().data_type())
-                column.set_orig_type(type_desc_from_proto(field.type_desc()));
+            if(field.type().data_type() != column.type().data_type())
+                column.set_orig_type(field.type());
         }
     }
 
@@ -97,12 +101,33 @@ size_t get_index_field_count(const SegmentInMemory& frame) {
     return frame.descriptor().index().field_count();
 }
 
-const uint8_t* skip_metadata_field(const arcticdb::proto::encoding::SegmentHeader & hdr, const uint8_t* data) {
+const uint8_t* skip_heading_fields(const arcticdb::proto::encoding::SegmentHeader & hdr, const uint8_t*& data) {
+    const auto has_magic_numbers = EncodingVersion(hdr.encoding_version()) == EncodingVersion::V2;
+    if(has_magic_numbers)
+        check_magic<MetadataMagic>(data);
+
     if (hdr.has_metadata_field()) {
-        // Skip it since it doesn't contain any useful info
-        auto metadata_size = encoding_size::compressed_size(hdr.metadata_field().ndarray());
+        auto metadata_size = encoding_sizes::ndarray_field_compressed_size(hdr.metadata_field().ndarray());
         ARCTICDB_DEBUG(log::version(), "Skipping {} bytes of metadata", metadata_size);
         data += metadata_size;
+    }
+
+    if(has_magic_numbers)
+        check_magic<DescriptorMagic>(data);
+
+    if(hdr.has_descriptor_field()) {
+        auto descriptor_field_size = encoding_sizes::ndarray_field_compressed_size(hdr.descriptor_field().ndarray());
+        ARCTICDB_DEBUG(log::version(), "Skipping {} bytes of descriptor", descriptor_field_size);
+        data += descriptor_field_size;
+    }
+
+    if(has_magic_numbers)
+        check_magic<IndexMagic>(data);
+
+    if(hdr.has_index_descriptor_field()) {
+        auto index_fields_size = encoding_sizes::ndarray_field_compressed_size(hdr.index_descriptor_field().ndarray());
+        ARCTICDB_DEBUG(log::version(), "Skipping {} bytes of index descriptor", index_fields_size);
+            data += index_fields_size;
     }
     return data;
 }
@@ -113,8 +138,12 @@ void decode_string_pool(const arcticdb::proto::encoding::SegmentHeader & hdr, co
         util::check(data != end, "Reached end of input block with string pool fields to decode");
         context.allocate_string_pool();
         std::optional<util::BitMagic> bv;
+
         // Note that this will decode the entire string pool into a ChunkedBuffer with exactly 1 chunk
-        data += decode(SegmentInMemory::string_pool_descriptor().type_desc(),
+        if(EncodingVersion(hdr.encoding_version()) == EncodingVersion::V2)
+            check_magic<StringPoolMagic>(data);
+
+        data += decode_field(string_pool_descriptor().type(),
                        hdr.string_pool_field(),
                        data,
                        context.string_pool(),
@@ -124,16 +153,26 @@ void decode_string_pool(const arcticdb::proto::encoding::SegmentHeader & hdr, co
     }
 }
 
-void decode_index_field(SegmentInMemory &frame, const arcticdb::proto::encoding::SegmentHeader & hdr, const uint8_t*& data, const uint8_t *begin ARCTICDB_UNUSED, const uint8_t* end ARCTICDB_UNUSED,  PipelineContextRow &context) {
+template<typename EncodedFieldType>
+void decode_index_field_impl(
+        SegmentInMemory &frame,
+        const EncodedFieldType& field,
+        const uint8_t*& data,
+        const uint8_t *begin ARCTICDB_UNUSED,
+        const uint8_t* end ARCTICDB_UNUSED,
+        PipelineContextRow &context) {
     if (get_index_field_count(frame)) {
-        auto &field = hdr.fields(0);
         if (!context.fetch_index()) {
             // not selected, skip decompression
-            data += encoding_size::compressed_size(field.ndarray());
+            auto size = encoding_sizes::ndarray_field_compressed_size(field.ndarray());
+            if constexpr(std::is_same_v<EncodedFieldType, arcticdb::EncodedField>)
+                size += sizeof(ColumnMagic);
+
+            data += size;
         } else {
             auto &buffer = frame.column(0).data().buffer(); // TODO assert size
             auto &frame_field_descriptor = frame.field(0); //TODO better method
-            auto sz = sizeof_datatype(type_desc_from_proto(frame_field_descriptor.type_desc()));
+            auto sz = sizeof_datatype(frame_field_descriptor.type());
             auto offset = sz * (context.slice_and_key().slice_.row_range.first - frame.offset());
             auto tot_size = sz * context.slice_and_key().slice_.row_range.diff();
 
@@ -141,76 +180,133 @@ void decode_index_field(SegmentInMemory &frame, const arcticdb::proto::encoding:
             ARCTICDB_DEBUG(log::storage(), "Creating index slice with total size {} ({} - {})", tot_size, sz,
                                  context.slice_and_key().slice_.row_range.diff());
 
-            google::protobuf::util::MessageDifferencer diff;
-            const auto fields_match = diff.Compare(frame_field_descriptor.type_desc(), context.descriptor().fields(0).type_desc());
+            const auto fields_match = frame_field_descriptor.type() == context.descriptor().fields(0).type();
             util::check(fields_match, "Cannot coerce index type from {} to {}",
-                        context.descriptor().fields(0).type_desc(), frame_field_descriptor.type_desc());
+                        context.descriptor().fields(0).type(), frame_field_descriptor.type());
 
             std::optional<util::BitMagic> bv;
-            data += decode(type_desc_from_proto(frame_field_descriptor.type_desc()), field, data, sink, bv);
+            data += decode_field(frame_field_descriptor.type(), field, data, sink, bv);
             util::check(!bv, "Unexpected sparse vector in index field");
             ARCTICDB_DEBUG(log::codec(), "Decoded index column {} to position {}", 0, data - begin);
         }
     }
 }
 
-void decode_or_expand(
+void decode_index_field(
+        SegmentInMemory &frame,
+        VariantField field,
+        const uint8_t*& data,
+        const uint8_t *begin ARCTICDB_UNUSED,
+        const uint8_t* end ARCTICDB_UNUSED,
+        PipelineContextRow &context) {
+    util::variant_match(field, [&] (auto field) {
+        decode_index_field_impl(frame, *field, data, begin, end, context);
+    });
+}
+
+template <typename EncodedFieldType>
+void decode_or_expand_impl(
     const uint8_t*& data,
     uint8_t* dest,
-    const arcticdb::proto::encoding::EncodedField& encoded_field_info,
+    const EncodedFieldType& encoded_field_info,
     const TypeDescriptor& type_descriptor,
     size_t dest_bytes,
     std::shared_ptr<BufferHolder> buffers) {
     if(auto handler = TypeHandlerRegistry::instance()->get_handler(type_descriptor.data_type()); handler) {
-        handler->handle_type(data, dest, encoded_field_info, type_descriptor, dest_bytes, buffers);
+        handler->handle_type(data, dest, VariantField{&encoded_field_info}, type_descriptor, dest_bytes, buffers);
     } else {
         std::optional<util::BitMagic> bv;
         if (encoded_field_info.has_ndarray() && encoded_field_info.ndarray().sparse_map_bytes() > 0) {
             const auto &ndarray = encoded_field_info.ndarray();
-            const auto bytes = encoding_size::data_uncompressed_size(ndarray);
+            const auto bytes = encoding_sizes::data_uncompressed_size(ndarray);
             ChunkedBuffer sparse{bytes};
             SliceDataSink sparse_sink{sparse.data(), bytes};
-            data += decode(type_descriptor, encoded_field_info, data, sparse_sink, bv);
+            data += decode_field(type_descriptor, encoded_field_info, data, sparse_sink, bv);
             type_descriptor.visit_tag([dest, dest_bytes, &bv, &sparse](const auto tdt) {
                 using TagType = decltype(tdt);
                 using RawType = typename TagType::DataTypeTag::raw_type;
                 util::default_initialize<TagType>(dest, dest_bytes);
                 util::expand_dense_buffer_using_bitmap<RawType>(bv.value(), sparse.data(), dest);
             });
-
         } else {
             SliceDataSink sink(dest, dest_bytes);
             const auto &ndarray = encoded_field_info.ndarray();
-            if (const auto bytes = encoding_size::data_uncompressed_size(ndarray); bytes < dest_bytes) {
+            if (const auto bytes = encoding_sizes::data_uncompressed_size(ndarray); bytes < dest_bytes) {
                 type_descriptor.visit_tag([dest, bytes, dest_bytes](const auto tdt) {
                     using TagType = decltype(tdt);
                     util::default_initialize<TagType>(dest + bytes, dest_bytes - bytes);
                 });
             }
-            data += decode(type_descriptor, encoded_field_info, data, sink, bv);
+            data += decode_field(type_descriptor, encoded_field_info, data, sink, bv);
         }
     }
 }
 
-size_t get_field_range_compressed_size(size_t start_idx, size_t num_fields, const arcticdb::proto::encoding::SegmentHeader& hdr) {
-    auto start_rg = hdr.fields().begin();
-    std::advance(start_rg, start_idx);
-    auto end_rg = start_rg;
-    std::advance(end_rg, num_fields);
-    auto total = std::accumulate(start_rg, end_rg, 0u, [] (size_t sz, const auto& fld) {
-        return sz + encoding_size::compressed_size(fld.ndarray());
-    });
+size_t get_field_range_compressed_size(size_t start_idx, size_t num_fields,
+                                       const arcticdb::proto::encoding::SegmentHeader& hdr,
+                                       const VariantEncodedFieldCollection& fields) {
+    size_t total = 0ULL;
+    const size_t magic_num_size = EncodingVersion(hdr.encoding_version()) == EncodingVersion::V2 ? sizeof(ColumnMagic) : 0u;
+    ARCTICDB_DEBUG(log::version(), "Skipping between {} and {}", start_idx, start_idx + num_fields);
+    for(auto i = start_idx; i < start_idx + num_fields; ++i) {
+        util::variant_match(fields.at(i), [&total, magic_num_size] (const auto& field) {
+            ARCTICDB_DEBUG(log::version(), "Adding {}", encoding_sizes::ndarray_field_compressed_size(field->ndarray()) + magic_num_size);
+            total += encoding_sizes::ndarray_field_compressed_size(field->ndarray()) + magic_num_size;
+        });
+    }
     ARCTICDB_DEBUG(log::version(), "Fields {} to {} contain {} bytes", start_idx, start_idx + num_fields, total);
     return total;
 }
 
-void advance_skipped_cols(const uint8_t*& data, ssize_t prev_col_offset, size_t source_col, size_t first_col_offset, size_t index_fieldcount, const arcticdb::proto::encoding::SegmentHeader& hdr) {
+void decode_or_expand(
+    const uint8_t*& data,
+    uint8_t* dest,
+    const VariantField& field,
+    const TypeDescriptor& type_descriptor,
+    size_t dest_bytes,
+    std::shared_ptr<BufferHolder> buffers) {
+    util::variant_match(field, [&] (auto field) {
+        decode_or_expand_impl(data, dest, *field, type_descriptor, dest_bytes, buffers);
+    });
+}
+
+void advance_field_size(
+    const VariantField& variant_field,
+    const uint8_t*& data,
+    bool has_magic_numbers
+    ) {
+    util::variant_match(variant_field, [&data, has_magic_numbers] (auto field) {
+    const size_t magic_num_size = has_magic_numbers ? sizeof(ColumnMagic) : 0ULL;
+    data += encoding_sizes::ndarray_field_compressed_size(field->ndarray()) + magic_num_size;
+  });
+}
+
+void advance_skipped_cols(
+        const uint8_t*& data,
+        ssize_t prev_col_offset,
+        size_t source_col,
+        size_t first_col_offset,
+        size_t index_fieldcount,
+        const VariantEncodedFieldCollection& fields,
+        const arcticdb::proto::encoding::SegmentHeader& hdr) {
     const auto next_col = prev_col_offset + 1;
     auto skipped_cols = source_col - next_col;
     if(skipped_cols) {
-        const auto bytes_to_skip = get_field_range_compressed_size((next_col - first_col_offset) + index_fieldcount, skipped_cols, hdr);
+        const auto bytes_to_skip = get_field_range_compressed_size((next_col - first_col_offset) + index_fieldcount, skipped_cols, hdr, fields);
         data += bytes_to_skip;
     }
+}
+
+template<typename IteratorType>
+bool remaining_fields_empty(IteratorType it, const PipelineContextRow& context) {
+    while(it.has_next()) {
+        const StreamDescriptor& stream_desc = context.descriptor();
+        const Field& field = stream_desc.fields(it.source_field_pos());
+        if(!is_empty_type(field.type().data_type())) {
+            return false;
+        }
+    }
+    return true;
 }
 
 void decode_into_frame_static(
@@ -225,23 +321,28 @@ void decode_into_frame_static(
     const uint8_t *end = begin + seg.buffer().bytes();
     auto &hdr = seg.header();
     auto index_fieldcount = get_index_field_count(frame);
-    data = skip_metadata_field(hdr, data);
-    context.set_descriptor(std::move(*hdr.mutable_stream_descriptor()));
+    data = skip_heading_fields(hdr, data);
+    context.set_descriptor(StreamDescriptor{ std::make_shared<StreamDescriptor::Proto>(std::move(*hdr.mutable_stream_descriptor())), seg.fields_ptr() });
     context.set_compacted(hdr.compacted());
     ARCTICDB_DEBUG(log::version(), "Num fields: {}", seg.header().fields_size());
+    const bool has_magic_nums = EncodingVersion(hdr.encoding_version()) == EncodingVersion::V2;
 
     if (data != end) {
-        decode_index_field(frame, hdr, data, begin, end, context);
+        VariantEncodedFieldCollection fields(seg);
+        auto index_field = fields.at(0u);
+        decode_index_field(frame, index_field, data, begin, end, context);
 
         StaticColumnMappingIterator it(context, index_fieldcount);
         if(it.invalid())
             return;
 
         while (it.has_next()) {
-            advance_skipped_cols(data, static_cast<ssize_t>(it.prev_col_offset()), it.source_col(), it.first_slice_col_offset(), index_fieldcount, hdr);
+            advance_skipped_cols(data, static_cast<ssize_t>(it.prev_col_offset()), it.source_col(), it.first_slice_col_offset(), index_fieldcount, fields, hdr);
+            if(has_magic_nums)
+                check_magic_in_place<ColumnMagic>(data);
 
-            util::check(it.source_field_pos() < size_t(hdr.fields_size()), "Field index out of range: {} !< {}", it.source_field_pos(), hdr.fields_size());
-            auto &encoded_field_info = hdr.fields(static_cast<int>(it.source_field_pos()));
+            auto encoded_field = fields.at(it.source_field_pos());
+            util::check(it.source_field_pos() < size_t(fields.size()), "Field index out of range: {} !< {}", it.source_field_pos(), fields.size());
             auto field_name = context.descriptor().fields(it.source_field_pos()).name();
             auto& buffer = frame.column(static_cast<ssize_t>(it.dest_col())).data().buffer();
             ColumnMapping m{frame, it.dest_col(), it.source_field_pos(), context};
@@ -253,15 +354,18 @@ void decode_into_frame_static(
                         it.dest_col(),
                         m.frame_field_descriptor_.name());
 
-            util::check(data != end, "Reached end of input block with {} fields to decode", it.remaining_fields());
-            decode_or_expand(data, buffer.data() + m.offset_bytes_, encoded_field_info, m.source_type_desc_,  m.dest_bytes_, buffers);
+            util::check(data != end || remaining_fields_empty(it, context), "Reached end of input block with {} fields to decode", it.remaining_fields());
+            decode_or_expand(data, buffer.data() + m.offset_bytes_, encoded_field, m.source_type_desc_,  m.dest_bytes_, buffers);
             ARCTICDB_TRACE(log::codec(), "Decoded column {} to position {}", field_name, data - begin);
 
             it.advance();
 
             if(it.at_end_of_selected()) {
-                advance_skipped_cols(data, static_cast<ssize_t>(it.prev_col_offset()), it.last_slice_col_offset(), it.first_slice_col_offset(), it.index_fieldcount(), hdr);
+                advance_skipped_cols(data, static_cast<ssize_t>(it.prev_col_offset()), it.last_slice_col_offset(), it.first_slice_col_offset(), it.index_fieldcount(), fields, hdr);
                 break;
+            } else {
+                if(has_magic_nums)
+                    check_magic_in_place<ColumnMagic>(data);
             }
         }
 
@@ -281,23 +385,24 @@ void decode_into_frame_dynamic(
     const uint8_t *end = begin + seg.buffer().bytes();
     auto &hdr = seg.header();
     auto index_fieldcount = get_index_field_count(frame);
-    data = skip_metadata_field(hdr, data);
-    context.set_descriptor(std::move(*hdr.mutable_stream_descriptor()));
+    data = skip_heading_fields(hdr, data);
+    context.set_descriptor(StreamDescriptor{std::make_shared<StreamDescriptor::Proto>(std::move(*hdr.mutable_stream_descriptor())), seg.fields_ptr()});
     context.set_compacted(hdr.compacted());
+    const bool has_magic_numbers = EncodingVersion(hdr.encoding_version()) == EncodingVersion::V2;
 
     if (data != end) {
-        decode_index_field(frame, hdr, data, begin, end, context);
+        VariantEncodedFieldCollection fields(seg);
+        auto index_field = fields.at(0u);
+        decode_index_field(frame, index_field, data, begin, end, context);
 
         auto field_count = context.slice_and_key().slice_.col_range.diff() + index_fieldcount;
         for (auto field_col = index_fieldcount; field_col < field_count; ++field_col) {
-            auto &encoded_field_info = hdr.fields(static_cast<int>(field_col));
             auto field_name = context.descriptor().fields(field_col).name();
-            // TODO: In case of sparse bitmap we might need to skip more bytes in segment?
-
+            auto encoded_field = fields.at(field_col);
             auto frame_loc_opt = frame.column_index(field_name);
             if (!frame_loc_opt) {
                 // Column is not selected in the output frame.
-                data += encoding_size::compressed_size(encoded_field_info.ndarray());
+                advance_field_size(encoded_field, data, has_magic_numbers);
                 continue;
             }
 
@@ -307,14 +412,14 @@ void decode_into_frame_dynamic(
                 util::check(static_cast<bool>(has_valid_type_promotion(m.source_type_desc_, m.dest_type_desc_)), "Can't promote type {} to type {} in field {}",
                             m.source_type_desc_, m.dest_type_desc_, m.frame_field_descriptor_.name());
 
-                    m.dest_type_desc_.visit_tag([&buffer, &m, &data, &encoded_field_info, &buffers] (auto dest_desc_tag) {
+                    m.dest_type_desc_.visit_tag([&buffer, &m, &data, encoded_field, buffers] (auto dest_desc_tag) {
                         using DestinationType =  typename decltype(dest_desc_tag)::DataTypeTag::raw_type;
-                        m.source_type_desc_.visit_tag([&buffer, &m, &data, &encoded_field_info, &buffers] (auto src_desc_tag ) {
+                        m.source_type_desc_.visit_tag([&buffer, &m, &data, &encoded_field, &buffers] (auto src_desc_tag ) {
                             using SourceType =  typename decltype(src_desc_tag)::DataTypeTag::raw_type;
                             if constexpr(std::is_arithmetic_v<SourceType> && std::is_arithmetic_v<DestinationType>) {
                                 const auto src_bytes = sizeof_datatype(m.source_type_desc_) * m.num_rows_;
                                 Buffer tmp_buf{src_bytes};
-                                decode_or_expand(data, tmp_buf.data(), encoded_field_info, m.source_type_desc_, src_bytes, buffers);
+                                decode_or_expand(data, tmp_buf.data(), encoded_field, m.source_type_desc_, src_bytes, buffers);
                                 auto src_ptr = reinterpret_cast<SourceType *>(tmp_buf.data());
                                 auto dest_ptr = reinterpret_cast<DestinationType *>(buffer.data() + m.offset_bytes_);
                                 for (auto i = 0u; i < m.num_rows_; ++i) {
@@ -334,7 +439,7 @@ void decode_into_frame_dynamic(
                             "Reached end of input block with {} fields to decode",
                             field_count - field_col);
 
-                decode_or_expand(data, buffer.data() + m.offset_bytes_, encoded_field_info, m.source_type_desc_, m.dest_bytes_, buffers);
+                decode_or_expand(data, buffer.data() + m.offset_bytes_, encoded_field, m.source_type_desc_, m.dest_bytes_, buffers);
             }
             ARCTICDB_TRACE(log::codec(), "Decoded column {} to position {}", frame.field(dst_col).name(), data - begin);
         }
@@ -397,7 +502,7 @@ size_t get_max_string_size_in_column(
         ChunkedBuffer &src_buffer,
         std::shared_ptr<PipelineContext> &context,
         SegmentInMemory &frame,
-        const FieldDescriptor::Proto &frame_field,
+        const Field &frame_field,
         const FrameSliceMap& slice_map,
         bool check_all) {
     const auto column_data = slice_map.columns_.find(frame_field.name());
@@ -427,7 +532,7 @@ protected:
     Column& column_;
     std::shared_ptr<PipelineContext> context_;
     SegmentInMemory frame_;
-    const FieldDescriptor::Proto frame_field_;
+    const Field& frame_field_;
     size_t row_ ;
     ChunkedBuffer& src_buffer_;
     size_t column_width_;
@@ -439,7 +544,7 @@ public:
         Column& column,
         std::shared_ptr<PipelineContext> context,
         SegmentInMemory frame,
-        const FieldDescriptor::Proto& frame_field,
+        const Field& frame_field,
         size_t alloc_width) :
         column_(column),
         context_(std::move(context)),
@@ -471,7 +576,7 @@ class EmptyDynamicStringReducer {
 protected:
     Column& column_;
     SegmentInMemory frame_;
-    const FieldDescriptor::Proto frame_field_;
+    const Field& frame_field_;
     size_t row_ ;
     ChunkedBuffer& src_buffer_;
     size_t column_width_;
@@ -485,7 +590,7 @@ public:
     EmptyDynamicStringReducer(
         Column& column,
         SegmentInMemory frame,
-        const FieldDescriptor::Proto& frame_field,
+        const Field& frame_field,
         size_t alloc_width,
         std::shared_ptr<LockType> spinlock) :
         column_(column),
@@ -541,7 +646,7 @@ public:
         Column& column,
         std::shared_ptr<PipelineContext> &context,
         SegmentInMemory frame,
-        const FieldDescriptor::Proto& frame_field,
+        const Field& frame_field,
         size_t alloc_width) :
         StringReducer(column, context, std::move(frame), frame_field, alloc_width) {
     }
@@ -572,7 +677,7 @@ public:
         Column &column,
         std::shared_ptr<PipelineContext> context,
         SegmentInMemory frame,
-        const FieldDescriptor::Proto& frame_field,
+        const Field& frame_field,
         size_t alloc_width) :
         StringReducer(column, std::move(context), std::move(frame), std::move(frame_field), alloc_width * UNICODE_WIDTH),
         conv_("UTF32", "UTF8"),
@@ -776,7 +881,7 @@ public:
         Column& column,
         std::shared_ptr<PipelineContext> &context,
         SegmentInMemory frame,
-        FieldDescriptor::Proto frame_field,
+        const Field& frame_field,
         std::shared_ptr<UniqueStringMapType> unique_string_map,
         std::shared_ptr<PyObject> py_nan,
         std::shared_ptr<LockType> lock,
@@ -816,12 +921,11 @@ public:
         const auto& segment_descriptor = context_row.descriptor();
         const auto& segment_field = segment_descriptor[column_index];
 
-        google::protobuf::util::MessageDifferencer diff;
-        auto has_type_conversion = !diff.Compare(frame_field_.type_desc(), segment_field.type_desc());
-        util::check(!has_type_conversion || trivially_compatible_types(frame_field_.type_desc(), segment_field.type_desc()),
-                    "Cannot convert from type {} to {} in frame field", frame_field_.type_desc(), segment_field.type_desc());
+        auto has_type_conversion = frame_field_.type() != segment_field.type();
+        util::check(!has_type_conversion || trivially_compatible_types(frame_field_.type(), segment_field.type()),
+                    "Cannot convert from type {} to {} in frame field", frame_field_.type(), segment_field.type());
 
-        auto is_utf = is_utf_type(slice_value_type(data_type_from_proto(frame_field_.type_desc())));
+        auto is_utf = is_utf_type(slice_value_type(frame_field_.type().data_type()));
         size_t end =  context_row.slice_and_key().slice_.row_range.second - frame_.offset();
 
         auto ptr_src = get_offset_ptr_at(row_, src_buffer_);
@@ -859,14 +963,14 @@ std::unique_ptr<StringReducer> get_string_reducer(
     Column& column,
     std::shared_ptr<PipelineContext>& context,
     SegmentInMemory frame,
-    const FieldDescriptor::Proto& frame_field,
+    const Field& frame_field,
     const FrameSliceMap& slice_map,
     std::shared_ptr<UniqueStringMapType>& unique_string_map,
     std::shared_ptr<PyObject> py_nan,
     std::shared_ptr<LockType>& spinlock,
     bool do_lock
     ) {
-    const auto& field_type = data_type_from_proto(frame_field.type_desc());
+    const auto& field_type = frame_field.type().data_type();
     std::unique_ptr<StringReducer> string_reducer;
 
     if (is_fixed_string_type(field_type)) {
@@ -917,7 +1021,7 @@ struct ReduceColumnTask : async::BaseTask {
 
     folly::Unit operator()() {
         const auto &frame_field = frame_.field(column_index_);
-        const auto field_type = data_type_from_proto(frame_field.type_desc());
+        const auto field_type = frame_field.type().data_type();
         auto &column = frame_.column(static_cast<position_t>(column_index_));
 
         const auto column_data = slice_map_->columns_.find(frame_field.name());
@@ -963,7 +1067,7 @@ void reduce_and_fix_columns(
 
     bool dynamic_schema = opt_false(read_options.dynamic_schema_);
     auto slice_map = std::make_shared<FrameSliceMap>(context, dynamic_schema);
-    auto spinlock = std::make_shared<LockType>();
+    static auto spinlock = std::make_shared<LockType>();
     std::shared_ptr<UniqueStringMapType> unique_string_map;
     std::shared_ptr<PyObject> py_nan;
 
@@ -981,7 +1085,7 @@ void reduce_and_fix_columns(
     constexpr bool parallel_strings = false;
     if(parallel_strings) {
         std::vector<folly::Future<folly::Unit>> jobs;
-        const auto batch_size = ConfigsMap::instance()->get_int("StringAllocation.BatchSize", 50);
+        static const auto batch_size = ConfigsMap::instance()->get_int("StringAllocation.BatchSize", 50);
         for (size_t c = 0; c < static_cast<size_t>(frame.descriptor().fields().size()); ++c) {
             jobs.emplace_back(async::submit_cpu_task(ReduceColumnTask(frame, c, slice_map, context, unique_string_map, py_nan, spinlock, dynamic_schema, true)));
             if(jobs.size() == static_cast<size_t>(batch_size)) {
@@ -1033,7 +1137,6 @@ folly::Future<std::vector<VariantKey>> fetch_data(
                     decode_into_frame_dynamic(frame, row, std::move(key_seg.segment()), buffers);
                 else
                     decode_into_frame_static(frame, row, std::move(key_seg.segment()), buffers);
-
                 return std::get<AtomKey>(key_seg.variant_key());
             });
         }

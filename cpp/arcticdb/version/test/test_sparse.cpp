@@ -34,11 +34,11 @@ TEST(Sparse, Simple) {
     auto& aggregator = wrapper.aggregator_;
 
     aggregator.start_row(timestamp{0})([](auto& rb) {
-        rb.set_scalar_by_name("first", uint32_t(5), make_scalar_type(DataType::UINT32));
+        rb.set_scalar_by_name("first", uint32_t(5), DataType::UINT32);
     });
 
     aggregator.start_row(timestamp{1})([](auto& rb) {
-        rb.set_scalar_by_name("second", uint64_t(6), make_scalar_type(DataType::UINT64));
+        rb.set_scalar_by_name("second", uint64_t(6), DataType::UINT64);
     });
 
     wrapper.aggregator_.commit();
@@ -67,11 +67,11 @@ TEST_F(SparseTestStore, SimpleRoundtrip) {
     auto& aggregator = wrapper.aggregator_;
 
     aggregator.start_row(timestamp{0})([](auto& rb) {
-        rb.set_scalar_by_name("first",  uint32_t(5), make_scalar_type(DataType::UINT32));
+        rb.set_scalar_by_name("first",  uint32_t(5), DataType::UINT32);
     });
 
     aggregator.start_row(timestamp{1})([](auto& rb) {
-        rb.set_scalar_by_name("second",  uint64_t(6), make_scalar_type(DataType::UINT64));
+        rb.set_scalar_by_name("second",  uint64_t(6), DataType::UINT64);
     });
 
     wrapper.aggregator_.commit();
@@ -111,16 +111,16 @@ TEST_F(SparseTestStore, DenseToSparse) {
 
     for(auto i = 0; i < 5; ++i) {
         aggregator.start_row(timestamp{i})([&](auto &rb) {
-            rb.set_scalar_by_name("first",  uint32_t(i + 1), make_scalar_type(DataType::UINT32));
+            rb.set_scalar_by_name("first",  uint32_t(i + 1), DataType::UINT32);
         });
     }
 
     aggregator.start_row(timestamp{5})([](auto& rb) {
-        rb.set_scalar_by_name("second",  uint64_t(6), make_scalar_type(DataType::UINT64));
+        rb.set_scalar_by_name("second",  uint64_t(6), DataType::UINT64);
     });
 
     aggregator.start_row(timestamp{6})([](auto& rb) {
-        rb.set_scalar_by_name("first",  uint32_t(7), make_scalar_type(DataType::UINT32));
+        rb.set_scalar_by_name("first",  uint32_t(7), DataType::UINT32);
     });
 
     wrapper.aggregator_.commit();
@@ -160,11 +160,11 @@ TEST_F(SparseTestStore, SimpleRoundtripStrings) {
     auto& aggregator = wrapper.aggregator_;
 
     aggregator.start_row(timestamp{0})([](auto& rb) {
-        rb.set_scalar_by_name(std::string_view{"first"}, std::string_view{"five"}, make_scalar_type(DataType::UTF_DYNAMIC64));
+        rb.set_scalar_by_name(std::string_view{"first"}, std::string_view{"five"}, DataType::UTF_DYNAMIC64);
     });
 
     aggregator.start_row(timestamp{1})([](auto& rb) {
-        rb.set_scalar_by_name(std::string_view{"second"}, std::string_view{"six"}, make_scalar_type(DataType::UTF_FIXED64));
+        rb.set_scalar_by_name(std::string_view{"second"}, std::string_view{"six"}, DataType::UTF_FIXED64);
     });
 
     wrapper.aggregator_.commit();
@@ -182,8 +182,10 @@ TEST_F(SparseTestStore, SimpleRoundtripStrings) {
 
     ASSERT_EQ(frame.row_count(), 2);
     auto val1 = frame.scalar_at<PyObject*>(0, 1);
-    auto str_wrapper = convert::py_unicode_to_buffer(val1.value());
-    ASSERT_EQ(strcmp(str_wrapper.buffer_, "five"), 0);
+    std::optional<ScopedGILLock> scoped_gil_lock;
+    auto str_wrapper = convert::py_unicode_to_buffer(val1.value(), scoped_gil_lock);
+    ASSERT_TRUE(std::holds_alternative<convert::PyStringWrapper>(str_wrapper));
+    ASSERT_EQ(strcmp(std::get<convert::PyStringWrapper>(str_wrapper).buffer_, "five"), 0);
 
     auto val2 = frame.string_at(0, 2);
     ASSERT_EQ(val2.value()[0], char{0});
@@ -211,11 +213,11 @@ TEST_F(SparseTestStore, Multiblock) {
 
     for(size_t i = 0; i < num_rows; i += 2) {
         aggregator.start_row(timestamp(i))([&](auto &rb) {
-            rb.set_scalar_by_name(std::string_view{"first"},  uint32_t(i + 1), make_scalar_type(DataType::UINT32));
+            rb.set_scalar_by_name(std::string_view{"first"},  uint32_t(i + 1), DataType::UINT32);
         });
 
         aggregator.start_row(timestamp(i + 1))([&](auto &rb) {
-            rb.set_scalar_by_name(std::string_view{"second"},  uint64_t(i + 2), make_scalar_type(DataType::UINT64));
+            rb.set_scalar_by_name(std::string_view{"second"},  uint64_t(i + 2), DataType::UINT64);
         });
     }
 
@@ -265,11 +267,11 @@ TEST_F(SparseTestStore, Segment) {
 
     for(size_t i = 0; i < num_rows; i += 2) {
         aggregator.start_row(timestamp(i))([&](auto &rb) {
-            rb.set_scalar_by_name(std::string_view{"first"},  uint32_t(i + 1), make_scalar_type(DataType::UINT32));
+            rb.set_scalar_by_name(std::string_view{"first"},  uint32_t(i + 1), DataType::UINT32);
         });
 
         aggregator.start_row(timestamp(i + 1))([&](auto &rb) {
-            rb.set_scalar_by_name(std::string_view{"second"},  uint64_t(i + 2), make_scalar_type(DataType::UINT64));
+            rb.set_scalar_by_name(std::string_view{"second"},  uint64_t(i + 2), DataType::UINT64);
         });
     }
 
@@ -323,11 +325,11 @@ TEST_F(SparseTestStore, SegmentWithExistingIndex) {
 
     for(size_t i = 0; i < num_rows; i += 2) {
         aggregator.start_row(timestamp(i))([&](auto &rb) {
-            rb.set_scalar_by_name(std::string_view{"first"},  uint32_t(i + 1), make_scalar_type(DataType::UINT32));
+            rb.set_scalar_by_name(std::string_view{"first"},  uint32_t(i + 1), DataType::UINT32);
         });
 
         aggregator.start_row(timestamp(i + 1))([&](auto &rb) {
-            rb.set_scalar_by_name(std::string_view{"second"},  uint64_t(i + 2), make_scalar_type(DataType::UINT64));
+            rb.set_scalar_by_name(std::string_view{"second"},  uint64_t(i + 2), DataType::UINT64);
         });
     }
 
@@ -381,11 +383,11 @@ TEST_F(SparseTestStore, SegmentAndFilterColumn) {
 
     for(size_t i = 0; i < num_rows; i += 2) {
         aggregator.start_row(timestamp(i))([&](auto &rb) {
-            rb.set_scalar_by_name(std::string_view{"first"},  uint32_t(i + 1), make_scalar_type(DataType::UINT32));
+            rb.set_scalar_by_name(std::string_view{"first"},  uint32_t(i + 1), DataType::UINT32);
         });
 
         aggregator.start_row(timestamp(i + 1))([&](auto &rb) {
-            rb.set_scalar_by_name(std::string_view{"second"},  uint64_t(i + 2), make_scalar_type(DataType::UINT64));
+            rb.set_scalar_by_name(std::string_view{"second"},  uint64_t(i + 2), DataType::UINT64);
         });
     }
 
@@ -436,11 +438,11 @@ TEST_F(SparseTestStore, SegmentWithRangeFilter) {
 
     for(size_t i = 0; i < num_rows; i += 2) {
         aggregator.start_row(timestamp(i))([&](auto &rb) {
-            rb.set_scalar_by_name(std::string_view{"first"},  uint32_t(i + 1), make_scalar_type(DataType::UINT32));
+            rb.set_scalar_by_name(std::string_view{"first"},  uint32_t(i + 1), DataType::UINT32);
         });
 
         aggregator.start_row(timestamp(i + 1))([&](auto &rb) {
-            rb.set_scalar_by_name(std::string_view{"second"},  uint64_t(i + 2), make_scalar_type(DataType::UINT64));
+            rb.set_scalar_by_name(std::string_view{"second"},  uint64_t(i + 2), DataType::UINT64);
         });
     }
 
@@ -486,11 +488,11 @@ TEST_F(SparseTestStore, Compact) {
 
     for(size_t i = 0; i < num_rows; i += 2) {
         aggregator.start_row(timestamp(i))([&](auto &rb) {
-            rb.set_scalar_by_name(std::string_view{"first"}, uint32_t(i + 1), TypeDescriptor{DataType::UINT32, Dimension::Dim0});
+            rb.set_scalar_by_name(std::string_view{"first"}, uint32_t(i + 1), DataType::UINT32);
         });
 
         aggregator.start_row(timestamp(i + 1))([&](auto &rb) {
-            rb.set_scalar_by_name(std::string_view{"second"}, uint64_t(i + 2), TypeDescriptor{DataType::UINT64, Dimension::Dim0});
+            rb.set_scalar_by_name(std::string_view{"second"}, uint64_t(i + 2), DataType::UINT64);
         });
     }
 
@@ -538,12 +540,12 @@ TEST_F(SparseTestStore, CompactWithStrings) {
     for(size_t i = 0; i < num_rows; i += 2) {
         aggregator.start_row(timestamp(i))([&](auto &rb) {
             auto val = fmt::format("{}", i + 1);
-            rb.set_scalar_by_name(std::string_view{"first"}, std::string_view{val}, make_scalar_type(DataType::UTF_DYNAMIC64));
+            rb.set_scalar_by_name(std::string_view{"first"}, std::string_view{val}, DataType::UTF_DYNAMIC64);
         });
 
         aggregator.start_row(timestamp(i + 1))([&](auto &rb) {
             auto val = fmt::format("{}", i + 2);
-            rb.set_scalar_by_name(std::string_view{"second"}, std::string_view{val}, make_scalar_type(DataType::UTF_FIXED64));
+            rb.set_scalar_by_name(std::string_view{"second"}, std::string_view{val}, DataType::UTF_FIXED64);
         });
     }
 
@@ -560,9 +562,11 @@ TEST_F(SparseTestStore, CompactWithStrings) {
 
     for(size_t i = 0; i < num_rows; i += 2) {
         auto val1 = frame.scalar_at<PyObject*>(i, 1);
-        auto str_wrapper = convert::py_unicode_to_buffer(val1.value());
+        std::optional<ScopedGILLock> scoped_gil_lock;
+        auto str_wrapper = convert::py_unicode_to_buffer(val1.value(), scoped_gil_lock);
         auto expected = fmt::format("{}", i + 1);
-        ASSERT_EQ(strcmp(str_wrapper.buffer_, expected.data()), 0);
+        ASSERT_TRUE(std::holds_alternative<convert::PyStringWrapper>(str_wrapper));
+        ASSERT_EQ(strcmp(std::get<convert::PyStringWrapper>(str_wrapper).buffer_, expected.data()), 0);
 
         auto val2 = frame.string_at(i, 2);
         ASSERT_EQ(val2.value()[0], char{0});

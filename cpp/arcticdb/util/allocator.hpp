@@ -18,6 +18,7 @@
 #include <arcticdb/util/timer.hpp>
 
 #include <boost/interprocess/managed_shared_memory.hpp>
+#include <fmt/compile.h>
 
 #include <mutex>
 #include <unordered_set>
@@ -135,14 +136,14 @@ struct TracingData {
     std::atomic<uint64_t> total_allocs_calls_;
 
     void track_alloc(AddrIdentifier addr_ts, size_t size) {
-        util::print_total_mem_usage(__FILE__, __LINE__, __FUNCTION__);
+        //util::print_total_mem_usage(__FILE__, __LINE__, __FUNCTION__);
         allocs_.insert(std::make_pair(addr_ts, size));
         total_allocs_ += size;
         total_allocs_calls_++;
         if (size != page_size) {
             total_irregular_allocs_++;
         }
-        ARCTICDB_DEBUG(log::codec(), "Allocated {} to {}:{}, total allocation size {}, total irregular allocs {}/{}",
+        ARCTICDB_TRACE(log::codec(), "Allocated {} to {}:{}, total allocation size {}, total irregular allocs {}/{}",
                             util::MemBytes{size},
                             addr_ts.first,
                             addr_ts.second,
@@ -153,7 +154,7 @@ struct TracingData {
     }
 
     void track_free(AddrIdentifier addr_ts) {
-        util::print_total_mem_usage(__FILE__, __LINE__, __FUNCTION__);
+//        util::print_total_mem_usage(__FILE__, __LINE__, __FUNCTION__);
         auto it = allocs_.find(addr_ts);
         util::check(it != allocs_.end(), "Unrecognized address in free {}:{}", addr_ts.first, addr_ts.second);
         util::check(total_allocs_ >= it->second,
@@ -163,7 +164,7 @@ struct TracingData {
                     addr_ts.second,
                     total_allocs_.load());
         total_allocs_ -= it->second;
-        ARCTICDB_DEBUG(log::codec(), "Freed {} at {}:{}, total allocation {}",
+        ARCTICDB_TRACE(log::codec(), "Freed {} at {}:{}, total allocation {}",
                             util::MemBytes{it->second},
                             addr_ts.first,
                             addr_ts.second,
@@ -273,7 +274,7 @@ private:
     inline static std::once_flag slab_init_flag_;
 
     static void init_slab() {
-        const size_t page_slab_capacity = ConfigsMap::instance()->get_int("Allocator.PageSlabCapacity", 1000 * 1000); // 4GB
+        static const size_t page_slab_capacity = ConfigsMap::instance()->get_int("Allocator.PageSlabCapacity", 1000 * 1000); // 4GB
         if (use_slab_allocator) {
             page_size_slab_allocator_ = std::make_shared<SlabAllocatorType>(page_slab_capacity);
         }
@@ -401,7 +402,6 @@ public:
 
         util::check(size != 0, "Should not allocate zero bytes");
         auto ret = internal_alloc(size);
-//        ARCTICDB_TRACE(log::codec(), "round_to_alignment got: {}, converted to: {} (alignment: {})", size, ret, alignment);
         util::check(ret != nullptr, "Failed to aligned allocate {} bytes", size);
         TracingPolicy::track_alloc(std::make_pair(uintptr_t(ret), ts), size);
         return std::make_pair(ret, ts);

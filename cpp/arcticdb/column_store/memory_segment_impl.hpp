@@ -12,6 +12,8 @@
 #include <arcticdb/column_store/column.hpp>
 #include <arcticdb/column_store/string_pool.hpp>
 #include <arcticdb/util/preconditions.hpp>
+
+#include <arcticdb/entity/timeseries_descriptor.hpp>
 #include <arcticdb/entity/performance_tracing.hpp>
 #include <arcticdb/util/magic_num.hpp>
 #include <arcticdb/util/constructors.hpp>
@@ -20,6 +22,7 @@
 #include <arcticdb/util/format_date.hpp>
 #include <arcticdb/stream/index.hpp>
 #include <arcticdb/util/hash.hpp>
+#include <arcticdb/entity/stream_descriptor.hpp>
 
 #include <google/protobuf/message.h>
 #include <google/protobuf/any.h>
@@ -40,7 +43,8 @@ inline void check_output_bitset(const arcticdb::util::BitSet& output,
                                 const arcticdb::util::BitSet& filter,
                                 const arcticdb::util::BitSet& column_bitset
                                 ){
-    // The logic here is that the filter bitset defines how the output bitset should look
+    // TODO: Do this in O(1)
+    // The logic here is that the filter bitset defines how the output bitset should look like
     // The set bits in filter decides the row ids in the output. The corresponding values in sparse_map
     // should match output bitset
     auto filter_iter = filter.first();
@@ -50,14 +54,14 @@ inline void check_output_bitset(const arcticdb::util::BitSet& output,
                                  "Mismatch in output bitset in filter_segment");
     }
 }
-} // namespace
+} // namespace anon
 
-inline bool operator==(const FieldDescriptor::Proto& left, const FieldDescriptor::Proto& right) {
+inline bool operator==(const Field::Proto& left, const Field::Proto& right) {
     google::protobuf::util::MessageDifferencer diff;
     return diff.Compare(left, right);
 }
 
-inline bool operator<(const FieldDescriptor::Proto& left, const FieldDescriptor::Proto& right) {
+inline bool operator<(const Field::Proto& left, const Field::Proto& right) {
     return left.name() < right.name();
 }
 
@@ -96,9 +100,13 @@ public:
                 using DataTypeTag = typename std::decay_t<decltype(type_desc_tag)>::DataTypeTag;
                 using RawType = typename DataTypeTag::raw_type;
                 if constexpr (is_sequence_type(DataTypeTag::data_type))
-                    return c(that->parent_->string_at(that->row_id_, position_t(that->column_id_)), std::string_view{field.name()}, type_desc_from_proto(field.type_desc()));
+                    return c(that->parent_->string_at(that->row_id_, position_t(that->column_id_)), std::string_view{field.name()}, field.type());
+                else if constexpr (is_numeric_type(DataTypeTag::data_type) || is_bool_type(DataTypeTag::data_type))
+                    return c(that->parent_->scalar_at<RawType>(that->row_id_, that->column_id_), std::string_view{field.name()}, field.type());
+                else if constexpr(is_empty_type(DataTypeTag::data_type))
+                    internal::raise<ErrorCode::E_ASSERTION_FAILURE>("visit_field does not support empty-type columns");
                 else
-                    return c(that->parent_->scalar_at<RawType>(that->row_id_, that->column_id_), std::string_view{field.name()}, type_desc_from_proto(field.type_desc()));
+                    internal::raise<ErrorCode::E_ASSERTION_FAILURE>("visit_field called with unexpected column type");
             });
         }
 
@@ -124,7 +132,7 @@ public:
             return parent_->reference_at<RawType>(row_id_, column_id_);
         }
 
-        [[nodiscard]] auto get_field() const {
+        [[nodiscard]] auto& get_field() const {
             return parent_->descriptor().field(column_id_);
         }
 
@@ -223,7 +231,7 @@ public:
         }
 
         template<class IndexType>
-            auto index() const {
+        [[nodiscard]] auto index() const {
             using RawType =  typename IndexType::TypeDescTag::DataTypeTag::raw_type;
             return parent_->scalar_at<RawType>(row_id_, 0).value();
         }
@@ -280,32 +288,37 @@ public:
         }
 
         template<class S>
-            std::optional<S> scalar_at(std::size_t col) const {
+        std::optional<S> scalar_at(std::size_t col) const {
             parent_->check_magic();
-            const auto type_desc = type_desc_from_proto(parent_->column_descriptor(col).type_desc());
+            const auto& type_desc = parent_->column_descriptor(col).type();
             std::optional<S> val;
-            type_desc.visit_tag([that=this, col, &val](auto impl) {
+            type_desc.visit_tag([this, col, &val](auto impl) {
                 using T = std::decay_t<decltype(impl)>;
                 using RawType = typename T::DataTypeTag::raw_type;
                 if constexpr (T::DimensionTag::value == Dimension::Dim0) {
                     if constexpr (is_sequence_type(T::DataTypeTag::data_type)) {
                         // test only for now
-                        throw std::runtime_error("string type not implemented");
+                        internal::raise<ErrorCode::E_ASSERTION_FAILURE>("string type not implemented");
+                    } else if constexpr(is_numeric_type(T::DataTypeTag::data_type) || is_bool_type(T::DataTypeTag::data_type)) {
+                        if constexpr(std::is_same_v<RawType, S>) {
+                            val = parent_->scalar_at<RawType>(row_id_, col);
+                        } else {
+                            internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Type mismatch in scalar access");
+                        }
+                    } else if constexpr(is_empty_type(T::DataTypeTag::data_type)) {
+                        internal::raise<ErrorCode::E_ASSERTION_FAILURE>("scalar_at not supported with empty-type columns");
                     } else {
-                        if constexpr(std::is_same_v<RawType, S>)
-                        val = that->parent_->scalar_at<RawType>(that->row_id_, col);
-                        else
-                            util::raise_rte("Type mismatch in scalar access");
+                        internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Unexpected data type in scalar access");
                     }
                 } else {
-                    throw std::runtime_error("Scalar method called on multidimensional column");
+                    internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Scalar method called on multidimensional column");
                 }
             });
             return val;
         }
 
         [[nodiscard]] std::optional<std::string_view> string_at(std::size_t col) const {
-            return parent_->string_at(row_id_, col);
+            return parent_->string_at(row_id_, position_t(col));
         }
 
         SegmentInMemoryImpl *parent_;
@@ -371,6 +384,8 @@ public:
     using iterator = SegmentIterator<Row>;
     using const_iterator = SegmentIterator<const Row>;
 
+
+
     SegmentInMemoryImpl() = default;
 
     explicit SegmentInMemoryImpl(
@@ -378,7 +393,7 @@ public:
         size_t expected_column_size,
         bool presize,
         bool allow_sparse) :
-        descriptor_(std::make_shared<StreamDescriptor>(StreamDescriptor{desc.id(), desc.index(), {}})),
+        descriptor_(std::make_shared<StreamDescriptor>(StreamDescriptor{desc.id(), desc.index()})),
         allow_sparse_(allow_sparse) {
         on_descriptor_change(desc, expected_column_size, presize, allow_sparse);
     }
@@ -415,14 +430,18 @@ public:
     void create_columns(size_t old_size, size_t expected_column_size, bool presize, bool allow_sparse) {
         columns_.reserve(descriptor_->field_count());
         for (size_t i = old_size; i < size_t(descriptor_->field_count()); ++i) {
-            auto type = type_desc_from_proto(descriptor_->fields(i).type_desc());
-            util::check(type.data_type() != DataType::UNKNOWN, "Can't create column with unknown data type");
+            auto type = descriptor_->fields(i).type();
+            util::check(type.data_type() != DataType::UNKNOWN, "Can't create column in create_columns with unknown data type");
             columns_.emplace_back(
-                std::make_shared<Column>(type_desc_from_proto(descriptor_->fields(i).type_desc()), expected_column_size, presize, allow_sparse));
+                std::make_shared<Column>(descriptor_->fields(i).type(), expected_column_size, presize, allow_sparse));
         }
         generate_column_map();
     }
 
+    /**
+     * @param descriptor
+     * @return false is descriptor change is not compatible and should trigger a segment commit
+     */
     size_t on_descriptor_change(const StreamDescriptor &descriptor, size_t expected_column_size, bool presize, bool allow_sparse) {
         ARCTICDB_TRACE(log::storage(), "Entering descriptor change: descriptor is currently {}, incoming descriptor '{}'",
                       *descriptor_, descriptor);
@@ -440,12 +459,20 @@ public:
         return column_map_->column_index(name);
     }
 
-    const FieldDescriptor::Proto& column_descriptor(size_t col) {
+    const Field& column_descriptor(size_t col) {
         return (*descriptor_)[col];
     }
 
     void end_row() {
         row_id_++;
+    }
+
+    std::shared_ptr<FieldCollection> index_fields() const {
+        return index_fields_;
+    }
+
+    void set_index_fields(std::shared_ptr<FieldCollection> index_fields) {
+        index_fields_ = std::move(index_fields);
     }
 
     void end_block_write(ssize_t size) {
@@ -553,6 +580,7 @@ public:
         column_unchecked(idx).set_string_list(row_id_ + 1, input, string_pool());
     }
 
+    //pybind11 can't resolve const and non-const version of column()
     Column &column_ref(position_t idx) {
         return column(idx);
     }
@@ -613,19 +641,21 @@ public:
 
 
 
-    position_t add_column(const FieldDescriptor::Proto &field, const std::shared_ptr<Column>& column);
+    position_t add_column(const Field &field, const std::shared_ptr<Column>& column);
 
-    position_t add_column(const FieldDescriptor::Proto &field, size_t num_rows, bool presize);
+    position_t add_column(const Field &field, size_t num_rows, bool presize);
 
-    position_t add_column(const FieldDescriptor &field, size_t num_rows, bool presize);
+    position_t add_column(FieldRef field, size_t num_rows, bool presize);
 
-    position_t add_column(const FieldDescriptor &field, const std::shared_ptr<Column>& column);
+    position_t add_column(FieldRef field_ref, const std::shared_ptr<Column>& column);
 
     void change_schema(StreamDescriptor descriptor);
 
     template<typename T>
     std::optional<T> scalar_at(position_t row, position_t col) const {
         util::check_arg(size_t(row) < row_count(), "Segment index {} out of bounds in scalar", row);
+        internal::check<ErrorCode::E_ASSERTION_FAILURE>(!is_empty_type(column(col).type().data_type()),
+                                                        "scalar_at called with empty-type column");
         return column(col).scalar_at<T>(row);
     }
 
@@ -676,10 +706,6 @@ public:
         util::check_arg(idx < position_t(columns_.size()), "Column index {} out of bounds", idx);
     }
 
-    static FieldDescriptor string_pool_descriptor() {
-        return FieldDescriptor{field_proto<Dimension::Dim1>(DataType::UINT8, std::string_view{"__string_pool__"})};
-    }
-
     void init_column_map() const {
         std::lock_guard lock{*column_map_mutex_};
         if(column_map_)
@@ -693,7 +719,7 @@ public:
         return ColumnData{
             &string_pool_->data(),
             &string_pool_->shapes(),
-            string_pool_descriptor().type_desc(),
+            string_pool_descriptor().type(),
             nullptr
         };
     }
@@ -720,7 +746,12 @@ public:
     }
 
     const std::shared_ptr<StreamDescriptor>& descriptor_ptr() const {
+        util::check(static_cast<bool>(descriptor_), "Descriptor pointer is null");
         return descriptor_;
+    }
+
+    void attach_descriptor(std::shared_ptr<StreamDescriptor> desc) {
+        descriptor_ = std::move(desc);
     }
 
     void drop_column(std::string_view name) {
@@ -735,7 +766,7 @@ public:
         column_map_->erase(name);
     }
 
-    const FieldDescriptor::Proto& field(size_t index) const {
+    const Field& field(size_t index) const {
         return descriptor()[index];
     }
 
@@ -768,6 +799,10 @@ public:
     void override_metadata(google::protobuf::Any &&meta) {
         if (meta.ByteSizeLong())
             metadata_ = std::make_unique<google::protobuf::Any>(std::move(meta));
+    }
+
+    bool has_metadata() {
+        return static_cast<bool>(metadata_);
     }
 
     const google::protobuf::Any *metadata() const {
@@ -807,7 +842,7 @@ public:
             return false;
 
         for(auto col = 0u; col < left.columns_.size(); ++col) {
-            if(is_sequence_type(left.column(col).type().data_type())) {
+            if (is_sequence_type(left.column(col).type().data_type())) {
                 const auto& left_col = left.column(col);
                 const auto& right_col = right.column(col);
                 if(left_col.type() != right_col.type())
@@ -819,10 +854,14 @@ public:
                 for(auto row = 0u; row < left_col.row_count(); ++row)
                     if(left.string_at(row, col) != right.string_at(row, col))
                         return false;
-            }
-            else {
+            } else if (is_numeric_type(left.column(col).type().data_type()) || is_bool_type(left.column(col).type().data_type())) {
                 if (left.column(col) != right.column(col))
                     return false;
+            } else if (is_empty_type(left.column(col).type().data_type())) {
+                if (!is_empty_type(right.column(col).type().data_type()))
+                    return false;
+            } else {
+                internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Unexpected data type in SegmentInMemory equality check");
             }
         }
         return true;
@@ -832,7 +871,7 @@ public:
         return allow_sparse_;
     }
 
-    // TODO: Potentially slow, fix this by storing it in protobuf
+    // TODO: Very slow, fix this by storing it in protobuf
     bool is_sparse() const {
         return std::any_of(std::begin(columns_), std::end(columns_), [] (const auto& c) {
             return c->is_sparse();
@@ -864,7 +903,6 @@ public:
         string_pool_ = string_pool;
     }
 
-    // TODO Handle sparse and reinstate
     // This implementation of split is incorrect Column::split doesn't work for sparse columns
     // Will use filter_segment for now - which should do the same amount of copying as this implementation
     std::vector<std::shared_ptr<SegmentInMemoryImpl>> old_split(size_t rows) {
@@ -926,12 +964,12 @@ public:
         std::unique_ptr<util::BitIndex> filter_idx;
         for(const auto& column : folly::enumerate(columns())) {
             (*column)->type().visit_tag([&] (auto type_desc_tag){
-                using TypeDescriptorTag = decltype(type_desc_tag);
-                using ColumnTagType = typename TypeDescriptorTag::DataTypeTag;
-                using RawType = typename ColumnTagType::raw_type;
-
+                using TypeDescriptorTag =  decltype(type_desc_tag);
+                using DataTypeTag = typename TypeDescriptorTag::DataTypeTag;
+                using RawType = typename DataTypeTag::raw_type;
                 const util::BitSet* final_bitset;
                 util::BitSet bitset_including_sparse;
+
                 auto sparse_map = (*column)->opt_sparse_map();
                 std::unique_ptr<util::BitIndex> sparse_idx;
                 auto output_col_idx = column.index;
@@ -948,7 +986,7 @@ public:
                         bitset_including_sparse.resize((*column)->row_count());
                     }
                     if (bitset_including_sparse.count() == 0) {
-                        // No values are set in the sparse column, s    kip it
+                        // No values are set in the sparse column, skip it
                         return;
                     }
                     output_col_idx = output->add_column(field(column.index), bitset_including_sparse.count(), true);
@@ -956,7 +994,7 @@ public:
                 } else {
                     final_bitset = &filter_bitset;
                 }
-                auto& output_col = output->column(output_col_idx);
+                auto& output_col = output->column(position_t(output_col_idx));
                 if (sparse_map)
                     output_col.opt_sparse_map() = std::make_optional<util::BitSet>();
                 auto output_ptr = reinterpret_cast<RawType*>(output_col.ptr());
@@ -964,7 +1002,6 @@ public:
 
                 auto bitset_iter = final_bitset->first();
                 auto row_count_so_far = 0;
-
                 // Defines the position in output sparse column where we want to write data next (only used in sparse)
                 // For dense, we just do +1
                 util::BitSetSizeType pos_output = 0;
@@ -982,7 +1019,7 @@ public:
                             }
                             auto offset = sparse_map.value().rank(*bitset_iter, *sparse_idx) - row_count_so_far - 1;
                             auto value = *(input_ptr + offset);
-                            if constexpr(is_sequence_type(ColumnTagType::data_type)) {
+                            if constexpr(is_sequence_type(DataTypeTag::data_type)) {
                                 if (filter_down_stringpool) {
                                     if (auto it = input_to_output_offsets.find(value);
                                     it != input_to_output_offsets.end()) {
@@ -996,8 +1033,12 @@ public:
                                 } else {
                                     *output_ptr = value;
                                 }
-                            } else {
+                            } else if constexpr(is_numeric_type(DataTypeTag::data_type) || is_bool_type(DataTypeTag::data_type)){
                                 *output_ptr = value;
+                            } else if constexpr(is_empty_type(DataTypeTag::data_type)) {
+                                internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Unexpected block in empty type column in SegmentInMemoryImpl::filter");
+                            } else {
+                                internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Unexpected column type in SegmentInMemoryImpl::filter");
                             }
                             output_ptr++;
                             output_col.opt_sparse_map().value()[pos_output++] = true;
@@ -1012,7 +1053,7 @@ public:
                                 break;
 
                             auto value = *(input_ptr + offset);
-                            if constexpr(is_sequence_type(ColumnTagType::data_type)) {
+                            if constexpr(is_sequence_type(DataTypeTag::data_type)) {
                                 if (filter_down_stringpool) {
                                     if (auto it = input_to_output_offsets.find(value);
                                     it != input_to_output_offsets.end()) {
@@ -1026,8 +1067,12 @@ public:
                                 } else {
                                     *output_ptr = value;
                                 }
-                            } else {
+                            } else if constexpr(is_numeric_type(DataTypeTag::data_type) || is_bool_type(DataTypeTag::data_type)){
                                 *output_ptr = value;
+                            } else if constexpr(is_empty_type(DataTypeTag::data_type)) {
+                                internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Unexpected block in empty type column in SegmentInMemoryImpl::filter");
+                            } else {
+                                internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Unexpected column type in SegmentInMemoryImpl::filter");
                             }
 
                             ++output_ptr;
@@ -1053,6 +1098,126 @@ public:
         return output;
     }
 
+    std::shared_ptr<arcticdb::proto::descriptors::TimeSeriesDescriptor> timeseries_proto() {
+        if(!tsd_) {
+            tsd_ = std::make_shared<arcticdb::proto::descriptors::TimeSeriesDescriptor>();
+            metadata_->UnpackTo(tsd_.get());
+        }
+        return tsd_;
+    }
+
+    TimeseriesDescriptor index_descriptor() {
+        return {timeseries_proto(), index_fields_};
+    }
+
+    bool has_index_fields() const {
+        return static_cast<bool>(index_fields_);
+    }
+
+    FieldCollection&& detach_index_fields() {
+        return std::move(*index_fields_);
+    }
+
+    const FieldCollection& timeseries_fields() const {
+        return *index_fields_;
+    }
+
+    void set_timeseries_descriptor(TimeseriesDescriptor&& tsd) {
+        index_fields_ = tsd.fields_ptr();
+        tsd_ = tsd.proto_ptr();
+        util::check(!tsd_->has_stream_descriptor() || tsd_->stream_descriptor().has_index(), "Stream descriptor without index in set_timeseries_descriptor");
+        google::protobuf::Any any;
+        any.PackFrom(tsd.proto());
+        set_metadata(std::move(any));
+    }
+
+    // Inclusive of start_row, exclusive of end_row
+    inline std::shared_ptr<SegmentInMemoryImpl> truncate(
+            size_t start_row,
+            size_t end_row) const {
+        auto num_values = end_row - start_row;
+        internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+                is_sparse() || (start_row < row_count() && end_row <= row_count() && num_values > 0),
+                "Truncate bounds start_row={} end_row={} outside valid range {}", start_row, end_row, row_count());
+
+        auto output = std::make_shared<SegmentInMemoryImpl>();
+
+        output->set_row_data(num_values - 1);
+        output->set_string_pool(string_pool_);
+        output->set_compacted(compacted_);
+        if (metadata_) {
+            google::protobuf::Any metadata;
+            metadata.CopyFrom(*metadata_);
+            output->set_metadata(std::move(metadata));
+        }
+
+        for(const auto&& [idx, column] : folly::enumerate(columns_)) {
+            auto truncated_column = Column::truncate(column, start_row, end_row);
+            output->add_column(descriptor_->field(idx), truncated_column);
+        }
+        output->attach_descriptor(descriptor_);
+        return output;
+    }
+
+    // Partitions the segment into n new segments. Each row in the starting segment is mapped to one of the output segments
+    // by the row_to_segment vector (std::nullopt means the row is not included in any output segment).
+    // segment_counts is the length of the number of output segments, and should be greater than or equal to the max value
+    // in row_to_segment
+    inline std::vector<std::shared_ptr<SegmentInMemoryImpl>> partition(const std::vector<std::optional<uint8_t>>& row_to_segment,
+                                                       const std::vector<uint64_t>& segment_counts) const {
+        schema::check<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>(!is_sparse(),
+                                                            "SegmentInMemory::partition not supported with sparse columns");
+        internal::check<ErrorCode::E_ASSERTION_FAILURE>(row_count() == row_to_segment.size(),
+                    "row_to_segment size does not match segment row count: {} != {}", row_to_segment.size(), row_count());
+        std::vector<std::shared_ptr<SegmentInMemoryImpl>> output(segment_counts.size());
+        if(std::all_of(segment_counts.begin(), segment_counts.end(), [](const size_t& segment_count) { return segment_count == 0; })) {
+            return output;
+        }
+
+        for (const auto& segment_count: folly::enumerate(segment_counts)) {
+            if (*segment_count > 0) {
+                auto& seg = output.at(segment_count.index);
+                seg = get_output_segment(*segment_count);
+                seg->set_row_data(*segment_count - 1);
+                seg->set_string_pool(string_pool_);
+                seg->set_compacted(compacted_);
+                if (metadata_) {
+                    google::protobuf::Any metadata;
+                    metadata.CopyFrom(*metadata_);
+                    seg->set_metadata(std::move(metadata));
+                }
+            }
+        }
+
+        for(const auto& column : folly::enumerate(columns())) {
+            (*column)->type().visit_tag([&] (auto type_desc_tag){
+                using TypeDescriptorTag = decltype(type_desc_tag);
+                using ColumnTagType = typename TypeDescriptorTag::DataTypeTag;
+                using RawType = typename ColumnTagType::raw_type;
+
+                auto output_col_idx = column.index;
+                std::vector<RawType*> output_ptrs{output.size(), nullptr};
+                for (const auto& segment: folly::enumerate(output)) {
+                    if (static_cast<bool>(*segment)) {
+                        output_ptrs.at(segment.index) = reinterpret_cast<RawType*>((*segment)->column(output_col_idx).ptr());
+                    }
+                }
+
+                auto input_data =  (*column)->data();
+                size_t overall_idx = 0;
+                while(auto block = input_data.next<TypeDescriptorTag>()) {
+                    auto input_ptr = reinterpret_cast<const RawType*>(block.value().data());
+                    for (size_t block_idx = 0; block_idx < block.value().row_count(); ++block_idx, ++input_ptr, ++overall_idx) {
+                        auto opt_output_segment_idx = row_to_segment[overall_idx];
+                        if (opt_output_segment_idx.has_value()) {
+                            *(output_ptrs[*opt_output_segment_idx]++) = *input_ptr;
+                        }
+                    }
+                }
+            });
+        }
+        return output;
+    }
 
     std::vector<std::shared_ptr<SegmentInMemoryImpl>> split(size_t rows) const{
         std::vector<std::shared_ptr<SegmentInMemoryImpl>> output;
@@ -1085,11 +1250,13 @@ private:
     bool allow_sparse_ = false;
     bool compacted_ = false;
     util::MagicNum<'M', 'S', 'e', 'g'> magic_;
+    std::shared_ptr<FieldCollection> index_fields_;
+    std::shared_ptr<arcticdb::proto::descriptors::TimeSeriesDescriptor> tsd_;
 };
 
 namespace {
 inline std::shared_ptr<SegmentInMemoryImpl> allocate_sparse_segment(const StreamId& id, const IndexDescriptor& index) {
-    return std::make_shared<SegmentInMemoryImpl>(StreamDescriptor{id, index, {}}, 0, false, true);
+    return std::make_shared<SegmentInMemoryImpl>(StreamDescriptor{id, index}, 0, false, true);
 }
 
 inline std::shared_ptr<SegmentInMemoryImpl> allocate_dense_segment(const StreamDescriptor& descriptor, size_t row_count) {

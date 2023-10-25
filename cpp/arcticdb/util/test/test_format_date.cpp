@@ -16,9 +16,9 @@ TEST(FormatDate, ZeroTs) {
 
 TEST(FormatDate, April2821) {
     using namespace arcticdb;
-#ifdef _WIN32
-    ASSERT_EQ("2021-04-28 16:11:35.0", util::format_timestamp(1619626295213000000));
-#else
+#ifdef __linux__
     ASSERT_EQ("2021-04-28 16:11:35.213", util::format_timestamp(1619626295213000000));
+#else
+    ASSERT_EQ("2021-04-28 16:11:35.0", util::format_timestamp(1619626295213000000));
 #endif
 }

@@ -24,9 +24,9 @@ std::vector<ChunkedBufferImpl<BlockSize>> split(const ChunkedBufferImpl<BlockSiz
     auto block_num ARCTICDB_UNUSED = 0u;
     for(const auto block : input.blocks()) {
         ARCTICDB_DEBUG(log::version(), "## Block {}", block_num++);
-        auto source_pos = 0u;
         util::check(block->bytes(), "Zero-sized block");
-        auto source_bytes = block->bytes() - (source_pos == 0 ? 0 : source_pos - 1);
+        auto source_pos = 0u;
+        auto source_bytes = block->bytes();
         while(source_bytes != 0) {
             if(!current_buf) {
                 remaining_current_bytes = std::min(nbytes, remaining_total_bytes);
@@ -67,5 +67,49 @@ std::vector<ChunkedBufferImpl<BlockSize>> split(const ChunkedBufferImpl<BlockSiz
 
 template std::vector<ChunkedBufferImpl<64>> split(const ChunkedBufferImpl<64>& input, size_t nbytes);
 template std::vector<ChunkedBufferImpl<3968>> split(const ChunkedBufferImpl<3968>& input, size_t nbytes);
+
+// Inclusive of start_byte, exclusive of end_byte
+template <size_t BlockSize>
+ChunkedBufferImpl<BlockSize> truncate(const ChunkedBufferImpl<BlockSize>& input, size_t start_byte, size_t end_byte) {
+    internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+            end_byte >= start_byte,
+            "ChunkedBufferImpl::truncate expects end_byte {} to be >= start_byte {}", end_byte, start_byte);
+    ARCTICDB_DEBUG(log::version(), "Truncating buffer of size {} between bytes {} and {}", input.bytes(), start_byte, end_byte);
+    const auto output_size = end_byte - start_byte;
+    // This is trivially extendable to use presized_in_blocks, but there is no use case for this right now, and
+    // copy_frame_data_to_buffer expects a contiguous buffer
+    auto output = ChunkedBufferImpl<BlockSize>::presized(output_size);
+    auto target_block = *output.blocks().begin();
+
+    const auto& input_blocks = input.blocks();
+    auto start_block_and_offset = input.block_and_offset(start_byte);
+    auto start_idx = start_block_and_offset.block_index_;
+    // end_byte is the first byte NOT to include in the output
+    auto end_idx = input.block_and_offset(end_byte - 1).block_index_ + 1;
+
+    auto target_pos = 0u;
+    auto remaining_bytes = output_size;
+    for (auto idx = start_idx; idx < end_idx; idx++) {
+        auto input_block = input_blocks.at(idx);
+        auto source_pos = idx == start_idx ? start_block_and_offset.offset_: 0u;
+        auto source_bytes = std::min(remaining_bytes, input_block->bytes() - source_pos);
+        while(source_bytes != 0) {
+            const auto this_write = std::min(remaining_bytes, source_bytes);
+            ARCTICDB_DEBUG(log::version(), "Calculated this write = {} ({}, {})", this_write, remaining_bytes,
+                           source_bytes);
+            ARCTICDB_DEBUG(log::version(), "Copying {} bytes from pos {} to pos {}", this_write, source_pos,
+                           target_pos);
+            target_block->copy_from(&(*input_block)[source_pos], this_write, target_pos);
+            source_pos += this_write;
+            source_bytes -= this_write;
+            target_pos += this_write;
+            remaining_bytes -= this_write;
+        }
+    }
+    return output;
+}
+
+template ChunkedBufferImpl<64> truncate(const ChunkedBufferImpl<64>& input, size_t start_byte, size_t end_byte);
+template ChunkedBufferImpl<3968> truncate(const ChunkedBufferImpl<3968>& input, size_t start_byte, size_t end_byte);
 
 } //namespace arcticdb

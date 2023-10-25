@@ -46,8 +46,16 @@ struct LinearClock {
     }
 };
 
+struct ManualClock {
+    inline static std::atomic<entity::timestamp> time_{0};
+
+    static entity::timestamp nanos_since_epoch() {
+        return time_.load();
+    }
+    static entity::timestamp coarse_nanos_since_epoch() {
+        return time_.load();
+    }
+};
+
 
 } // namespace arcticdb::util
-
-
-

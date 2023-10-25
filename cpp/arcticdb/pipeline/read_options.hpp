@@ -19,6 +19,8 @@ struct ReadOptions {
     std::optional<bool> allow_sparse_;
     std::optional<bool> set_tz_;
     std::optional<bool> optimise_string_memory_;
+    std::optional<bool> batch_throw_on_error_;
+    std::optional<bool> read_previous_on_failure_;
 
     void set_force_strings_to_fixed(const std::optional<bool>& force_strings_to_fixed) {
         force_strings_to_fixed_ = force_strings_to_fixed;
@@ -50,6 +52,10 @@ struct ReadOptions {
 
     void set_optimise_string_memory(const std::optional<bool>& optimise_string_memory) {
         optimise_string_memory_ = optimise_string_memory;
+    }
+
+    void set_batch_throw_on_error(bool batch_throw_on_error) {
+        batch_throw_on_error_ = batch_throw_on_error;
     }
 };
 } //namespace arcticdb

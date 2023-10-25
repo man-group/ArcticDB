@@ -15,66 +15,40 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v3
 
-      - name: Detect system Python implementation
+      - name: Detect runner Python implementation
         if: ${{!inputs.api_wheel}}
         run: |
           python3 -c 'import platform
           prefix = {"CPython": "cp", "PyPy": "pp"}[platform.python_implementation()]
           v = platform.python_version_tuple()
           print(f"PY_IMPL={prefix}{v[0]}{v[1]}")' | tee -a $GITHUB_ENV
-
-      # Copy and pasted from publsh.yml, until GitHub adds selective artifact download
-      - uses: actions/setup-node@v3
+  
+      - id: download-wheel-artifact
+        name: Download wheel artifact from last successful build
         if: ${{!inputs.api_wheel}}
+        uses: dawidd6/action-download-artifact@v2
         with:
-          node-version: 16
-      - run: npm install @actions/artifact
-        if: ${{!inputs.api_wheel}}
-      - id: download
-        name: Fetch wheel artifacts
-        if: ${{!inputs.api_wheel}}
-        uses: actions/github-script@v6
-        with:
-          script: |
-            const dhc = require("./node_modules/@actions/artifact/lib/internal/download-http-client.js");
-            const ds = require("./node_modules/@actions/artifact/lib/internal/download-specification.js");
+          name: wheel-${{env.PY_IMPL}}-manylinux_x86_64
+          workflow: build.yml
+          workflow_conclusion: success
+          branch: master
 
-            const cwd = process.cwd();
-            const client = new dhc.DownloadHttpClient();
-            const artifactsResponse = await client.listArtifacts();
-            for (const artifact of artifactsResponse.value) {
-                if (artifact.name.startsWith("wheel-${{env.PY_IMPL}}-manylinux")) {
-                  console.log(`Downloading ${artifact.name} to ${cwd}`);
-                  const itemsResponse = await client.getContainerItems(artifact.name, artifact.fileContainerResourceUrl);
-                  const downloadSpecs = ds.getDownloadSpecification(artifact.name, itemsResponse.value, cwd, false);
-                  await client.downloadSingleArtifact(downloadSpecs.filesToDownload);
-                } else {
-                  console.log(`Ignoring ${artifact.name}`);
-                }
-            }
-
-      - name: MkDocs
+      - name: Install documenation dependencies (including ArcticDB)
         run: |
-          echo "::group::Pip"
-          pip3 install mkdocs-material
-          echo "::endgroup::"
+          pip3 install mkdocs-material mkdocs-jupyter mkdocstrings[python] black pybind11-stubgen ${{inputs.api_wheel || '*.whl'}}
 
+      - name: Stubfile generation for arcticdb_ext
+        # stubfiles will be generated into docs/mkdocs/arcticdb_ext and so imported as arcticdb_ext by mkdocs when it builds
+        # FIXME --ignore-all-errors may mask new errors and should be removed when we are compliant
+        run: |  
           cd docs/mkdocs
-          mkdocs build -d /tmp/docs_build
+          pybind11-stubgen arcticdb_ext.version_store --ignore-all-errors -o .
 
-      - name: Sphinx
+      - name: MkDocs build
+        # FIXME mkdocs build --strict should be enabled when we are compliant
         run: |
-          set -x
-          echo "::group::Pip"
-          ls
-          pip3 install sphinx sphinx_rtd_theme ${{inputs.api_wheel || '*.whl'}}
-          echo "::endgroup::"
-
-          cd docs/sphinxdocs
-          make html 2>&1 \
-          | sed -r 's#^(([^:]*/site-packages/)?([^:]+.py):([^:]*):([1-9]+): )?WARNING: .*#::warning file=\3,line=\5::&#'
-          mkdir /tmp/docs_build/api/
-          mv build/html/* /tmp/docs_build/api/
+          cd docs/mkdocs  
+          mkdocs build -d /tmp/docs_build
 
       - name: Publish to Cloudflare Pages
         if: inputs.environment && vars.CLOUDFLARE_PAGE_BRANCH

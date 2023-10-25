@@ -7,8 +7,8 @@ As of the Change Date specified in that file, in accordance with the Business So
 """
 
 
-def test_many_versions(lmdb_version_store):
+def test_many_versions(object_version_store):
     for x in range(200):
-        lmdb_version_store.write("symbol_{}".format(x), "thing")
+        object_version_store.write("symbol_{}".format(x), "thing")
 
-    lmdb_version_store.snapshot("test_snap")
+    object_version_store.snapshot("test_snap")

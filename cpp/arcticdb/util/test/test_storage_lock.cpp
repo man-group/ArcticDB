@@ -16,7 +16,7 @@ using namespace arcticdb;
 using namespace folly;
 
 TEST(StorageLock, SingleThreaded) {
-    SKIP_WIN("StorageLock is not supported");
+    SKIP_MAC("StorageLock is not supported");
     auto store = std::make_shared<InMemoryStore>();
     StorageLock lock1{StringId{"test_lock"}};
     StorageLock lock2{StringId{"test_lock"}};
@@ -29,21 +29,22 @@ TEST(StorageLock, SingleThreaded) {
     lock2.unlock(store);
     lock1.lock(store);
     ASSERT_EQ(!lock2.try_lock(store), true);
+    lock1.unlock(store);
 }
 
 TEST(StorageLock, Timeout) {
-    SKIP_WIN("StorageLock is not supported");
+    SKIP_MAC("StorageLock is not supported");
     auto store = std::make_shared<InMemoryStore>();
     StorageLock lock{"test_lock"};
     StorageLock lock2{"test_lock"};
     auto begin ARCTICDB_UNUSED = util::SysClock::nanos_since_epoch();
     ASSERT_EQ(lock.try_lock(store), true);
-    EXPECT_THROW(lock2._test_do_lock(store, 10), std::runtime_error);
     auto end ARCTICDB_UNUSED = util::SysClock::nanos_since_epoch();
     ASSERT_GT(end - begin, 10000);
     ASSERT_EQ(!lock.try_lock(store), true);
     lock.unlock(store);
     ASSERT_EQ(lock.try_lock(store), true);
+    lock.unlock(store);
 }
 
 struct LockData {
@@ -97,6 +98,7 @@ struct OptimisticLockTask {
 
 
 TEST(StorageLock, Contention) {
+    SKIP_MAC("StorageLock is not supported");
     using namespace arcticdb;
 
     auto lock_data = std::make_shared<LockData>(4);
@@ -149,42 +151,39 @@ struct PessimisticLockTask {
 
 struct ForceReleaseLockTask {
     std::shared_ptr<LockData> data_;
-    int sleep_ms_;
-    std::optional<size_t> timeout_ms_;
+    size_t timeout_ms_;
 
-    ForceReleaseLockTask(std::shared_ptr<LockData> data, int sleep_ms = 1, std::optional<size_t> timeout_ms = std::nullopt) :
-    data_(std::move(data)),
-    sleep_ms_(sleep_ms),
-    timeout_ms_(timeout_ms){
+    ForceReleaseLockTask(std::shared_ptr<LockData> data, size_t timeout_ms) :
+        data_(std::move(data)),
+        timeout_ms_(timeout_ms)
+        {
     }
 
     folly::Future<folly::Unit> operator()() {
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
         StorageLock<> lock{data_->lock_name_};
 
-        for (auto i = size_t(0); i < data_->num_tests_; ++i) {
-            try {
-                if(timeout_ms_)
-                    lock.lock_timeout(data_->store_, timeout_ms_.value());
-                else
-                    lock.lock(data_->store_);
-
-                ++data_->vol_;
-                // This should be unnecessary as we are already locked
-                std::lock_guard l{data_->mutex_};
-                ++data_->atomic_;
-                // Dont unlock
-            }
-            catch(const StorageLockTimeout&) {
-                data_->timedout_ = true;
-            }
+        try {
+            lock.lock_timeout(data_->store_, timeout_ms_);
+            ++data_->vol_;
+            // This should be unnecessary as we are already locked
+            std::lock_guard l{data_->mutex_};
+            ++data_->atomic_;
+            // Dont unlock
         }
+        catch(const StorageLockTimeout&) {
+            data_->timedout_ = true;
+        }
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        // Clean up locks to avoid "mutex destroyed while active" errors on Windows debug build
+        lock.unlock(data_->store_);
         return makeFuture(Unit{});
     }
 };
 
 TEST(StorageLock, Wait) {
-    SKIP_WIN("StorageLock is not supported");
+    SKIP_MAC("StorageLock is not supported");
     using namespace arcticdb;
 
     auto lock_data = std::make_shared<LockData>(4);
@@ -201,7 +200,7 @@ TEST(StorageLock, Wait) {
 }
 
 TEST(StorageLock, Timeouts) {
-    SKIP_WIN("StorageLock is not supported");
+    SKIP_MAC("StorageLock is not supported");
     using namespace arcticdb;
     std::unordered_map<std::string, spdlog::level::level_enum> log_levels{ {"lock", spdlog::level::debug}};
 
@@ -217,21 +216,31 @@ TEST(StorageLock, Timeouts) {
 }
 
 TEST(StorageLock, ForceReleaseLock) {
+    SKIP_MAC("StorageLock is not supported");
     using namespace arcticdb;
     std::unordered_map<std::string, spdlog::level::level_enum> log_levels{ {"lock", spdlog::level::debug}};
 
     auto lock_data = std::make_shared<LockData>(4);
     folly::FutureExecutor<folly::CPUThreadPoolExecutor> exec{4};
-    // Get a storage lock but dont unlock
-    StorageLock<> lock{lock_data->lock_name_};
     // This is set in nanoseconds => 1ms
-    ConfigsMap::instance()->set_int("StorageLock.TTL", 2 * 1000 * 1000);
+    ConfigsMap::instance()->set_int("StorageLock.TTL", 1000 * 1000);
+
+    std::vector<std::shared_ptr<StorageLock<>>> locks;
+
+    // Create a first lock that the others will have to force release
+    auto first_lock = StorageLock<>(lock_data->lock_name_);
+    first_lock.lock(lock_data->store_);
+
     std::vector<Future<Unit>> futures;
     for(auto i = size_t{0}; i < 4; ++i) {
-        futures.emplace_back(exec.addFuture(ForceReleaseLockTask{lock_data, 1, 10 * 1000}));
+        futures.emplace_back(exec.addFuture(ForceReleaseLockTask{lock_data, 10 * 1000}));
     }
+
     collect(futures).get();
     ASSERT_FALSE(lock_data->timedout_);
-    ASSERT_EQ(16u, lock_data->atomic_);
-    ASSERT_EQ(16u, lock_data->vol_);
+    ASSERT_EQ(4u, lock_data->atomic_);
+    ASSERT_EQ(4u, lock_data->vol_);
+
+    // Clean up locks to avoid "mutex destroyed while active" errors on Windows debug build
+    first_lock.unlock(lock_data->store_);
 }

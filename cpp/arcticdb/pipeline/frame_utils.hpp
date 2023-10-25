@@ -11,15 +11,16 @@
 #include <arcticdb/column_store/string_pool.hpp>
 #include <arcticdb/column_store/chunked_buffer.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>
-#include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/entity/atom_key.hpp>
 #include <arcticdb/pipeline/input_tensor_frame.hpp>
 #include <arcticdb/stream/protobuf_mappings.hpp>
 #include <arcticdb/entity/protobuf_mappings.hpp>
+#include <arcticdb/python/gil_lock.hpp>
 #include <arcticdb/python/python_types.hpp>
 #include <arcticdb/python/python_to_tensor_frame.hpp>
 #include <arcticdb/pipeline/string_pool_utils.hpp>
-#include <arcticdb/util/flatten_utils.hpp>
+#include <util/flatten_utils.hpp>
+#include <arcticdb/entity/timeseries_descriptor.hpp>
 
 namespace arcticdb {
 
@@ -45,26 +46,30 @@ inline size_t get_max_string_size(const pipelines::PipelineContextRow& context_r
     return max_length;
 }
 
-arcticdb::proto::descriptors::TimeSeriesDescriptor make_descriptor(
-    size_t rows,
+TimeseriesDescriptor make_timeseries_descriptor(
+    size_t total_rows,
     StreamDescriptor&& desc,
-    arcticdb::proto::descriptors::NormalizationMetadata& norm_meta,
-    std::optional<arcticdb::proto::descriptors::UserDefinedMetadata>&& user_meta,
-    std::optional<AtomKey>&& prev_key = std::nullopt,
-    bool bucketize_dynamic=false);
+    arcticdb::proto::descriptors::NormalizationMetadata&& norm_meta,
+    std::optional<arcticdb::proto::descriptors::UserDefinedMetadata>&& um,
+    std::optional<AtomKey>&& prev_key,
+    std::optional<AtomKey>&& next_key,
+    bool bucketize_dynamic
+    );
 
-arcticdb::proto::descriptors::TimeSeriesDescriptor make_descriptor(
-    size_t rows,
+TimeseriesDescriptor timseries_descriptor_from_index_segment(
+    size_t total_rows,
     pipelines::index::IndexSegmentReader&& index_segment_reader,
-    std::optional<AtomKey>&& prev_key = std::nullopt,
-    bool bucketize_dynamic=false);
+    std::optional<AtomKey>&& prev_key,
+    bool bucketize_dynamic
+    );
 
-arcticdb::proto::descriptors::TimeSeriesDescriptor make_descriptor(
+TimeseriesDescriptor timeseries_descriptor_from_pipeline_context(
     const std::shared_ptr<pipelines::PipelineContext>& pipeline_context,
-    std::optional<AtomKey>&& prev_key = std::nullopt,
-    bool bucketize_dynamic=false);
+    std::optional<AtomKey>&& prev_key,
+    bool bucketize_dynamic);
 
-arcticdb::proto::descriptors::TimeSeriesDescriptor descriptor_from_frame(
+
+TimeseriesDescriptor index_descriptor_from_frame(
     pipelines::InputTensorFrame&& frame,
     size_t existing_rows,
     std::optional<entity::AtomKey>&& prev_key = {});
@@ -86,7 +91,7 @@ RawType* flatten_tensor(
 }
 
 template<typename Tensor, typename Aggregator>
-void aggregator_set_data(
+std::optional<convert::StringEncodingError> aggregator_set_data(
     const TypeDescriptor &type_desc,
     Tensor &tensor,
     Aggregator &agg,
@@ -97,7 +102,7 @@ void aggregator_set_data(
     size_t regular_slice_size,
     bool sparsify_floats
 ) {
-    type_desc.visit_tag([&](auto &&tag) {
+    return type_desc.visit_tag([&](auto &&tag) {
         using RawType = typename std::decay_t<decltype(tag)>::DataTypeTag::raw_type;
         constexpr auto dt = std::decay_t<decltype(tag)>::DataTypeTag::data_type;
 
@@ -126,26 +131,43 @@ void aggregator_set_data(
                     ptr_data = flatten_tensor<PyObject*>(flattened_buffer, rows_to_write, tensor, slice_num, regular_slice_size);
 
                 auto none = py::none{};
+                std::variant<convert::StringEncodingError, convert::PyStringWrapper> wrapper_or_error;
+                // GIL will be acquired if there is a string that is not pure ASCII/UTF-8
+                // In this case a PyObject will be allocated by convert::py_unicode_to_buffer
+                // If such a string is encountered in a column, then the GIL will be held until that whole column has
+                // been processed, on the assumption that if a column has one such string it will probably have many.
+                std::optional<ScopedGILLock> scoped_gil_lock;
+                auto& column = agg.segment().column(col);
+                column.allocate_data(rows_to_write * sizeof(StringPool::offset_t));
+                auto out_ptr = reinterpret_cast<StringPool::offset_t*>(column.buffer().data());
+                auto& string_pool = agg.segment().string_pool();
                 for (size_t s = 0; s < rows_to_write; ++s, ++ptr_data) {
                     if (*ptr_data == none.ptr()) {
-                        agg.set_no_string_at(col, s, not_a_string());
-                    }
-                    else if(is_py_nan(*ptr_data)){
-                        agg.set_no_string_at(col, s, nan_placeholder());
-                    }
-                    else {
+                        *out_ptr++ = not_a_string();
+                    } else if(is_py_nan(*ptr_data)){
+                        *out_ptr++ = nan_placeholder();
+                    } else {
                         if constexpr (is_utf_type(slice_value_type(dt))) {
-                            auto wrapper= convert::py_unicode_to_buffer(*ptr_data);
-                            agg.set_string_at(col, s, wrapper.buffer_, wrapper.length_);
+                            wrapper_or_error = convert::py_unicode_to_buffer(*ptr_data, scoped_gil_lock);
+                        } else {
+                            wrapper_or_error = convert::pystring_to_buffer(*ptr_data, false);
                         }
-                        else {
-                            auto wrapper = convert::pystring_to_buffer(*ptr_data);
-                            agg.set_string_at(col, s, wrapper.buffer_, wrapper.length_);
+                        // Cannot use util::variant_match as only one of the branches would have a return type
+                        if (std::holds_alternative<convert::PyStringWrapper>(wrapper_or_error)) {
+                            convert::PyStringWrapper wrapper(std::move(std::get<convert::PyStringWrapper>(wrapper_or_error)));
+                            const auto offset = string_pool.get(wrapper.buffer_, wrapper.length_);
+                            *out_ptr++ = offset.offset();
+                        } else if (std::holds_alternative<convert::StringEncodingError>(wrapper_or_error)) {
+                            auto error = std::get<convert::StringEncodingError>(wrapper_or_error);
+                            error.row_index_in_slice_ = s;
+                            return std::optional<convert::StringEncodingError>(error);
+                        } else {
+                            internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Unexpected variant alternative");
                         }
                     }
                 }
             }
-        } else {
+        } else if constexpr (is_numeric_type(dt) || is_bool_type(dt)) {
             auto ptr = tensor.template ptr_cast<RawType>(row);
             if (sparsify_floats) {
                 if constexpr (is_floating_point_type(dt)) {
@@ -168,48 +190,12 @@ void aggregator_set_data(
                     agg.set_array(col, t);
                 }
             }
+        }  else if constexpr (!is_empty_type(dt)) {
+            static_assert(!sizeof(dt), "Unknown data type");
         }
+        return std::optional<convert::StringEncodingError>();
     });
 }
-
-inline arcticdb::proto::descriptors::TimeSeriesDescriptor timeseries_descriptor_from_any(const google::protobuf::Any& any) {
-    arcticdb::proto::descriptors::TimeSeriesDescriptor tsd;
-    any.UnpackTo(&tsd);
-    return tsd;
-}
-
-inline arcticdb::proto::descriptors::TimeSeriesDescriptor timeseries_descriptor_from_segment(const SegmentInMemory& seg) {
-    util::check(seg.metadata(), "Can't get descriptor from null metadata");
-    return timeseries_descriptor_from_any(*seg.metadata());
-}
-
-inline arcticdb::proto::descriptors::TimeSeriesDescriptor default_pandas_descriptor(const SegmentInMemory& segment) {
-    arcticdb::proto::descriptors::TimeSeriesDescriptor desc;
-    desc.mutable_stream_descriptor()->CopyFrom(segment.descriptor().proto());
-    desc.set_total_rows(segment.row_count());
-    arcticdb::proto::descriptors::NormalizationMetadata_PandasDataFrame pandas;
-    desc.mutable_normalization()->mutable_df()->CopyFrom(pandas);
-    return desc;
-}
-
-arcticdb::proto::descriptors::TimeSeriesDescriptor get_timeseries_descriptor(
-    const StreamDescriptor& descriptor,
-    size_t total_rows,
-    const std::optional<AtomKey>& next_key,
-    arcticdb::proto::descriptors::NormalizationMetadata&& norm_meta);
-
-google::protobuf::Any pack_timeseries_descriptor(
-    StreamDescriptor&& descriptor,
-    size_t total_rows,
-    const std::optional<AtomKey>& next_key,
-    arcticdb::proto::descriptors::NormalizationMetadata&& norm_meta);
-
-SegmentInMemory segment_from_frame(
-    pipelines::InputTensorFrame&& frame,
-    size_t existing_rows,
-    std::optional<entity::AtomKey>&& prev_key,
-    bool allow_sparse = false
-);
 
 namespace pipelines {
 struct SliceAndKey;

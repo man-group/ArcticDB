@@ -36,3 +36,11 @@ CMakeUserPresets.json
 
 *_pb2.py
 *.mdb
+
+.DS_Store
+
+docs/mkdocs/site/
+docs/mkdocs/docs/notebooks/.ipynb_checkpoints/
+
+# Ignore automatically generated stub files (*.pyi)
+**/*.pyi

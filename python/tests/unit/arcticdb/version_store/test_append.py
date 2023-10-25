@@ -1,6 +1,7 @@
 import random
 import pandas as pd
 import numpy as np
+from datetime import datetime
 from itertools import chain, product, combinations
 import pytest
 import sys
@@ -30,20 +31,20 @@ def test_append_simple(lmdb_version_store):
     assert_frame_equal(vit.data, expected)
 
 
-def test_append_indexed(lmdb_version_store):
+def test_append_indexed(s3_version_store):
     symbol = "test_append_simple"
     idx1 = np.arange(0, 10)
     d1 = {"x": np.arange(10, 20, dtype=np.int64)}
     df1 = pd.DataFrame(data=d1, index=idx1)
-    lmdb_version_store.write(symbol, df1)
-    vit = lmdb_version_store.read(symbol)
+    s3_version_store.write(symbol, df1)
+    vit = s3_version_store.read(symbol)
     assert_frame_equal(vit.data, df1)
 
     idx2 = np.arange(10, 20)
     d2 = {"x": np.arange(20, 30, dtype=np.int64)}
     df2 = pd.DataFrame(data=d2, index=idx2)
-    lmdb_version_store.append(symbol, df2)
-    vit = lmdb_version_store.read(symbol)
+    s3_version_store.append(symbol, df2)
+    vit = s3_version_store.read(symbol)
     expected = pd.concat([df1, df2])
     assert_frame_equal(vit.data, expected)
 
@@ -664,3 +665,53 @@ def test_append_with_cont_mem_problem(sym, lmdb_version_store_tiny_segment_dynam
         lib.version_store.defragment_symbol_data(sym, None)
         res = lib.read(sym).data
         assert_frame_equal(df, res)
+
+
+def test_append_docs_example(lmdb_version_store):
+    # This test is really just the append example from the docs.
+    # Other examples are included so that outputs can be easily re-generated.
+    lib = lmdb_version_store
+
+    # Write example
+    cols = ["COL_%d" % i for i in range(50)]
+    df = pd.DataFrame(np.random.randint(0, 50, size=(25, 50)), columns=cols)
+    df.index = pd.date_range(datetime(2000, 1, 1, 5), periods=25, freq="H")
+    print(df.head(2))
+    lib.write("test_frame", df)
+
+    # Read it back
+    from_storage_df = lib.read("test_frame").data
+    print(from_storage_df.head(2))
+
+    # Slicing and filtering examples
+    print(lib.read("test_frame", date_range=(df.index[5], df.index[8])).data)
+    _range = (df.index[5], df.index[8])
+    _cols = ["COL_30", "COL_31"]
+    print(lib.read("test_frame", date_range=_range, columns=_cols).data)
+    from arcticdb import QueryBuilder
+
+    q = QueryBuilder()
+    q = q[(q["COL_30"] > 30) & (q["COL_31"] < 50)]
+    print(lib.read("test_frame", date_range=_range, colymns=_cols, query_builder=q).data)
+
+    # Update example
+    random_data = np.random.randint(0, 50, size=(25, 50))
+    df2 = pd.DataFrame(random_data, columns=["COL_%d" % i for i in range(50)])
+    df2.index = pd.date_range(datetime(2000, 1, 1, 5), periods=25, freq="H")
+    df2 = df2.iloc[[0, 2]]
+    print(df2)
+    lib.update("test_frame", df2)
+    print(lib.head("test_frame", 2))
+
+    # Append example
+    random_data = np.random.randint(0, 50, size=(5, 50))
+    df_append = pd.DataFrame(random_data, columns=["COL_%d" % i for i in range(50)])
+    print(df_append)
+    df_append.index = pd.date_range(datetime(2000, 1, 2, 7), periods=5, freq="H")
+
+    lib.append("test_frame", df_append)
+    print(lib.tail("test_frame", 7).data)
+    expected = pd.concat([df2, df.drop(df.index[:3]), df_append])
+    assert_frame_equal(lib.read("test_frame").data, expected)
+
+    print(lib.tail("test_frame", 7, as_of=0).data)

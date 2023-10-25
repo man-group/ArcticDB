@@ -96,7 +96,7 @@ As this is the first write to this symbol, the version is `0`. To retrieve the d
 
 ## Slicing and filtering
 
-See [the getting started guide for more information](../../#slicing-and-filtering).
+See [the getting started guide for more information](../index.md#slicing-and-filtering).
 
 ## Modifying data
 

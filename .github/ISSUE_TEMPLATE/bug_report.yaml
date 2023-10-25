@@ -61,7 +61,7 @@ body:
     description: |
       Run this command and paste the result bellow:
         ```bash
-        python3 -c 'import sys; print("Python:", sys.version); import platform; print("OS:", platform.platform()); import arcticdb; print("ArcticDB:", arcticdb.__version__);'
+        python3 -c "import sys; print('Python:', sys.version); import platform; print('OS:', platform.platform()); import arcticdb; print('ArcticDB:', arcticdb.__version__);"
         ```
     placeholder: >
       Python: 3.11.3 | packaged by conda-forge | (main, Apr  6 2023, 08:57:19) [GCC 11.3.0]

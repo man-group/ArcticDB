@@ -30,9 +30,9 @@ struct StreamDescriptorMismatch : ArcticSpecificException<ErrorCode::E_DESCRIPTO
 };
 
 inline void check_normalization_index_match(NormalizationOperation operation,
-                                     const StreamDescriptor::Proto &old_descriptor,
+                                     const StreamDescriptor &old_descriptor,
                                      const pipelines::InputTensorFrame &frame) {
-    auto old_idx_kind = old_descriptor.index().kind();
+    auto old_idx_kind = old_descriptor.index().type();
     bool new_is_timeseries = std::holds_alternative<TimeseriesIndex>(frame.index);
 
     if (operation == UPDATE) {
@@ -55,15 +55,21 @@ inline void check_normalization_index_match(NormalizationOperation operation,
     }
 }
 
-inline bool columns_match(const StreamDescriptor::Proto &left, const StreamDescriptor::Proto &right) {
-    if (left.fields_size() != right.fields_size())
+inline bool columns_match(const StreamDescriptor &left, const StreamDescriptor &right) {
+    if (left.fields().size() != right.fields().size())
         return false;
 
-    for (auto i = 0; i < int(left.fields_size()); ++i) {
+    for (auto i = 0; i < int(left.fields().size()); ++i) {
         if (left.fields(i).name() != right.fields(i).name())
             return false;
 
-        if (!trivially_compatible_types(left.fields(i).type_desc(), right.fields(i).type_desc()))
+        const TypeDescriptor &left_type = left.fields(i).type();
+        const TypeDescriptor &right_type = right.fields(i).type();
+
+        const bool valid_type_promotion = has_valid_type_promotion(left_type, right_type).has_value();
+        const bool trivial_type_compatibility = trivially_compatible_types(left_type, right_type);
+
+        if (!trivial_type_compatibility and !valid_type_promotion)
             return false;
     }
     return true;
@@ -74,7 +80,7 @@ inline void fix_descriptor_mismatch_or_throw(
     bool dynamic_schema,
     const pipelines::index::IndexSegmentReader &existing_isr,
     const pipelines::InputTensorFrame &new_frame) {
-    const auto &old_sd = existing_isr.tsd().stream_descriptor();
+    const auto &old_sd = existing_isr.tsd().as_stream_descriptor();
     check_normalization_index_match(operation, old_sd, new_frame);
 
     if (dynamic_schema)
@@ -82,7 +88,7 @@ inline void fix_descriptor_mismatch_or_throw(
 
     fix_normalization_or_throw(operation == APPEND, existing_isr, new_frame);
 
-    if (!columns_match(old_sd, new_frame.desc.proto())) {
+    if (!columns_match(old_sd, new_frame.desc)) {
         throw StreamDescriptorMismatch(
             "The columns (names and types) in the argument are not identical to that of the existing version",
             StreamDescriptor{old_sd},
@@ -90,4 +96,4 @@ inline void fix_descriptor_mismatch_or_throw(
             operation);
     }
 }
-} // namespace arcticc
+} // namespace arcticdb

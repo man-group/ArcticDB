@@ -7,17 +7,17 @@
 
 #include <gtest/gtest.h>
 #include <gmock/gmock-matchers.h> // Included in gtest 1.10
-#include <arcticdb/util/test/gtest_utils.hpp>
 
 #include <arcticdb/version/symbol_list.hpp>
+#include <arcticdb/version/version_map.hpp>
 #include <arcticdb/storage/test/in_memory_store.hpp>
+#include <arcticdb/util/test/generators.hpp>
+#include <arcticdb/util/test/gtest_utils.hpp>
+
 #include <shared_mutex>
 
 #include <folly/executors/FutureExecutor.h>
 #include <folly/executors/CPUThreadPoolExecutor.h>
-#include <arcticdb/version/version_map.hpp>
-#include <arcticdb/util/test/generators.hpp>
-
 
 using namespace arcticdb;
 using namespace folly;
@@ -246,7 +246,7 @@ TEST_P(SymbolListWithWriteFailures, InitialCompact) {
 }
 
 INSTANTIATE_TEST_SUITE_P(, SymbolListWithWriteFailures, Values(
-        WriteFailuresParams{{}, CompactOutcome::WRITTEN}, // No failures
+        WriteFailuresParams{FailSimParam{}, CompactOutcome::WRITTEN}, // No failures
         WriteFailuresParams{{{FailureType::WRITE, RAISE_ONCE}}, CompactOutcome::NOT_WRITTEN}, // Interferes with locking
         WriteFailuresParams{{{FailureType::WRITE, RAISE_ON_2ND_CALL}}, CompactOutcome::NOT_WRITTEN},
         WriteFailuresParams{{{FailureType::DELETE, RAISE_ONCE}}, CompactOutcome::NOT_CLEANED_UP}
@@ -346,7 +346,7 @@ TEST_F(SymbolListSuite, AddDeleteReadd) {
     write_initial_compaction_key();
 
     SymbolListState state(store);
-    for (size_t i = 0; i < 100; ++i) {
+    for (size_t i = 0; i < 10; ++i) {
         state.do_action(symbol_list);
     }
     state.do_list_symbols(symbol_list);

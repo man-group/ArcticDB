@@ -11,6 +11,8 @@
 #include <arcticdb/util/error_code.hpp>
 #include <arcticdb/util/preprocess.hpp>
 
+#include <fmt/compile.h>
+
 namespace arcticdb {
 
 namespace util::detail {
@@ -21,9 +23,19 @@ struct Raise {
 
     template<typename...Args>
     [[noreturn]] void operator()(fmt::format_string<Args...> format, Args&&...args) const {
-        std::string combo_format = fmt::format("{} {}", error_code_data<code>.name_, format);
+        std::string combo_format = fmt::format(FMT_COMPILE("{} {}"), error_code_data<code>.name_, format);
         std::string msg = fmt::format(combo_format, std::forward<Args>(args)...);
-        log::root().error(msg);
+        if constexpr(error_category == ErrorCategory::INTERNAL)
+            log::root().error(msg);
+        throw_error<code>(msg);
+    }
+
+    template<typename FormatString, typename...Args>
+    [[noreturn]] void operator()(FormatString format, Args&&...args) const {
+        std::string combo_format = fmt::format(FMT_COMPILE("{} {}"), error_code_data<code>.name_, format);
+        std::string msg = fmt::format(combo_format, std::forward<Args>(args)...);
+        if constexpr(error_category == ErrorCategory::INTERNAL)
+            log::root().error(msg);
         throw_error<code>(msg);
     }
 };
@@ -34,6 +46,13 @@ struct Check {
 
     template<typename...Args>
     void operator()(bool cond, fmt::format_string<Args...> format, Args&&...args) const {
+        if (ARCTICDB_UNLIKELY(!cond)) {
+            raise(format, std::forward<Args>(args)...);
+        }
+    }
+
+    template<typename FormatString, typename...Args>
+    void operator()(bool cond, FormatString format, Args&&...args) const {
         if (ARCTICDB_UNLIKELY(!cond)) {
             raise(format, std::forward<Args>(args)...);
         }

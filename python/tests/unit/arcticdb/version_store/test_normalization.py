@@ -16,7 +16,7 @@ import pytz
 from numpy.testing import assert_equal, assert_array_equal
 from arcticdb_ext.version_store import SortedValue as _SortedValue
 
-from arcticdb.exceptions import ArcticNativeNotYetImplemented
+from arcticdb.exceptions import ArcticDbNotYetImplemented
 from arcticdb.version_store._custom_normalizers import (
     register_normalizer,
     get_custom_normalizer,
@@ -42,10 +42,9 @@ from arcticdb.util.test import (
     TestCustomNormalizer,
     assert_frame_equal,
     assert_series_equal,
-    IS_PANDAS_ZERO,
 )
+from arcticdb.util._versions import IS_PANDAS_ZERO, IS_PANDAS_TWO
 from arcticdb.exceptions import ArcticNativeException
-
 
 params = {
     "simple_dict": {"a": "1", "b": 2, "c": 3.0, "d": True},
@@ -74,7 +73,7 @@ def test_user_meta_and_msg_pack(d):
 
 
 def test_fails_humongous_meta():
-    with pytest.raises(ArcticNativeNotYetImplemented):
+    with pytest.raises(ArcticDbNotYetImplemented):
         from arcticdb.version_store._normalization import _MAX_USER_DEFINED_META as MAX
 
         meta = {"a": "x" * (MAX)}
@@ -83,7 +82,7 @@ def test_fails_humongous_meta():
 
 def test_fails_humongous_data():
     norm = test_msgpack_normalizer
-    with pytest.raises(ArcticNativeNotYetImplemented):
+    with pytest.raises(ArcticDbNotYetImplemented):
         big = [1] * (norm.MMAP_DEFAULT_SIZE + 1)
         norm.normalize(big)
 
@@ -171,7 +170,19 @@ def test_empty_df_with_multiindex_with_tz(tz):
     assert sliced_denorm_df.index.names == orig_df.index.names
 
     for index_level_num in [0, 1]:
-        assert sliced_denorm_df.index.levels[index_level_num].tz.zone == orig_df.index.levels[index_level_num].tz.zone
+        sliced_denorm_df_index_level_num = sliced_denorm_df.index.levels[index_level_num]
+        orig_df_index_level_num = orig_df.index.levels[index_level_num]
+        if IS_PANDAS_TWO and tz is pytz.UTC:
+            # Pandas 2.0.0 now uses `datetime.timezone.utc` instead of `pytz.UTC`.
+            # See: https://github.com/pandas-dev/pandas/issues/34916
+            # TODO: is there a better way to handle this edge case?
+            assert sliced_denorm_df_index_level_num.tz == datetime.timezone.utc
+            assert isinstance(orig_df_index_level_num.tz, pytz.BaseTzInfo)
+            assert sliced_denorm_df_index_level_num.dtype == orig_df_index_level_num.dtype == "datetime64[ns, UTC]"
+        else:
+            assert isinstance(sliced_denorm_df_index_level_num.tz, pytz.BaseTzInfo)
+            assert isinstance(orig_df_index_level_num.tz, pytz.BaseTzInfo)
+            assert sliced_denorm_df_index_level_num.tz.zone == orig_df_index_level_num.tz.zone
 
 
 def test_timestamp_without_tz():
@@ -187,7 +198,7 @@ def test_timestamp_without_tz():
 
 def test_column_with_mixed_types():
     df = pd.DataFrame({"col": [1, "a"]})
-    with pytest.raises(ArcticNativeNotYetImplemented):
+    with pytest.raises(ArcticDbNotYetImplemented):
         DataFrameNormalizer().normalize(df)
 
 
@@ -294,7 +305,7 @@ def test_force_pickle_on_norm_failure():
     _d, _meta = norm.normalize(normal_df)
 
     # This should fail as the df has mixed type
-    with pytest.raises(ArcticNativeNotYetImplemented):
+    with pytest.raises(ArcticDbNotYetImplemented):
         norm.normalize(mixed_type_df)
 
     # Explicitly passing in pickle settings without global pickle flag being set should work
@@ -451,3 +462,44 @@ def test_columns_names_series_dynamic(lmdb_version_store_dynamic_schema, sym):
 
     lmdb_version_store_dynamic_schema.write(sym + "dynamic_schema", date_series)
     assert_series_equal(lmdb_version_store_dynamic_schema.read(sym + "dynamic_schema").data, date_series)
+
+
+@pytest.mark.skipif(not IS_PANDAS_TWO, reason="pandas 2.0-specific test")
+@pytest.mark.parametrize("datetime64_dtype", ["datetime64[s]", "datetime64[ms]", "datetime64[us]", "datetime64[ns]"])
+@pytest.mark.parametrize("PandasContainer", [pd.DataFrame, pd.Series])
+def test_no_inplace_index_array_modification(lmdb_version_store, sym, datetime64_dtype, PandasContainer):
+    # Normalization must not modify Series' or DataFrames' index array in-place.
+    pandas_container = PandasContainer(
+        data={"a": [1, 2, 3]},
+        index=pd.DatetimeIndex(["2020-01-01", "2020-01-02", "2020-01-03"], dtype=datetime64_dtype),
+    )
+    original_index_array = pandas_container.index
+    lmdb_version_store.write(sym, pandas_container)
+    assert pandas_container.index is original_index_array
+    assert pandas_container.index.dtype == datetime64_dtype
+
+
+@pytest.mark.skipif(
+    not IS_PANDAS_TWO, reason="The full-support of pyarrow-backed pandas objects is pandas 2.0-specific."
+)
+def test_pyarrow_error(lmdb_version_store):
+    error_msg_intro = "PyArrow-backed pandas DataFrame and Series are not currently supported by ArcticDB."
+    df = pd.DataFrame(data=[[1.0, 0.2], [0.2, 0.5]], dtype="float32[pyarrow]")
+    with pytest.raises(ArcticDbNotYetImplemented, match=error_msg_intro):
+        lmdb_version_store.write("test_pyarrow_error_df", df)
+
+    series = pd.Series(data=[1.0, 0.2], dtype="float32[pyarrow]")
+    with pytest.raises(ArcticDbNotYetImplemented, match=error_msg_intro):
+        lmdb_version_store.write("test_pyarrow_error_series", series)
+
+    # Mixed NumPy- and PyArrow-backed DataFrame.
+    np_ser = pd.Series([0.1], dtype="float64")
+    pa_ser = pd.Series([0.1], dtype="float64[pyarrow]")
+
+    mixed_df = pd.DataFrame({"numpy": np_ser, "pyarrow": pa_ser})
+
+    assert mixed_df["numpy"].dtype == "float64"
+    assert mixed_df["pyarrow"].dtype == "float64[pyarrow]"
+
+    with pytest.raises(ArcticDbNotYetImplemented, match=error_msg_intro):
+        lmdb_version_store.write("test_pyarrow_error_mixed_df", mixed_df)

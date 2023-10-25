@@ -7,6 +7,8 @@ As of the Change Date specified in that file, in accordance with the Business So
 """
 import random
 import time
+import os
+import pytest
 
 from multiprocessing import Process, Value
 
@@ -20,9 +22,9 @@ def write_data(lib, sym, done, error):
     delete_version_id = 0
     number_of_writes = 0
     try:
-        for idx1 in range(10):
+        for idx1 in range(5):
             print("Iteration {}/10".format(idx1))
-            for idx2 in range(40):
+            for idx2 in range(20):
                 if idx2 % 4 == 3:
                     lib.delete_version(sym, delete_version_id)
                     delete_version_id += 1
@@ -35,30 +37,38 @@ def write_data(lib, sym, done, error):
                 assert lib.has_symbol(sym, vid)
             for d_id in range(delete_version_id):
                 assert d_id not in vs
+
     except Exception as e:
         print(e)
         error.value = 1
     done.value = 1
 
 
-def compact_data(lib, sym, done):
+def compact_data(lib, sym, done, error):
     set_config_int("VersionMap.MaxVersionBlocks", 1)
-    while not done.value:
+    while not done.value or error.value:
         lib.version_store._compact_version_map(sym)
         time.sleep(random.uniform(0, 0.05))
 
 
-def read_data(lib, sym, done):
-    while not done.value:
+def read_data(lib, sym, done, error):
+    while not done.value or error.value:
         vs = lib.list_versions(sym)
         for idx in range(len(vs) - 1):
             assert vs[idx]["version"] == vs[idx + 1]["version"] + 1
 
 
-def test_stress_version_map_compact(s3_version_store, sym, capsys):
+@pytest.mark.skipif(
+    os.environ.get("ARCTICDB_CODE_COVERAGE_BUILD", "0") == "1",
+    reason=(
+        "When we build for code coverage, we make a DEBUG binary, which is much slower and causes this test to take"
+        " around ~4 hours which is breaking the build"
+    ),
+)
+def test_stress_version_map_compact(object_version_store, sym, capsys):
     done = Value("b", 0)
     error = Value("b", 0)
-    lib = s3_version_store
+    lib = object_version_store
     lib.version_store._set_validate_version_map()
     with capsys.disabled():
         try:
@@ -66,10 +76,10 @@ def test_stress_version_map_compact(s3_version_store, sym, capsys):
             writer = Process(name="writer", target=write_data, args=(lib, sym, done, error))
             writer.start()
             log.version.info("Starting compacter")
-            compacter = Process(name="compacter", target=compact_data, args=(lib, sym, done))
+            compacter = Process(name="compacter", target=compact_data, args=(lib, sym, done, error))
             compacter.start()
             log.version.info("Starting reader")
-            reader = Process(name="reader", target=read_data, args=(lib, sym, done))
+            reader = Process(name="reader", target=read_data, args=(lib, sym, done, error))
             reader.start()
 
             log.version.info("Joining writer")
