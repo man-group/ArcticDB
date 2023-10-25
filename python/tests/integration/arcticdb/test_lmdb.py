@@ -149,3 +149,13 @@ def test_lmdb_options_unknown_option(options):
         la.parse_query(options)
 
     assert "Invalid LMDB URI" in str(e.value)
+
+
+def test_warnings(tmpdir):
+    ac = Arctic(f"lmdb://{tmpdir}")
+    # should warn
+    ac = Arctic(f"lmdb://{tmpdir}")
+    del ac
+    # should not warn TODO assert
+    ac = Arctic(f"lmdb://{tmpdir}")
+    # TODO assert on warns - capture stdout?
