@@ -13,7 +13,7 @@ import sys
 
 from arcticdb import Arctic
 from arcticdb.util.test import assert_frame_equal
-from arcticdb_ext.exceptions import InternalException
+from arcticdb_ext.exceptions import LmdbMapFullError, StorageException
 from arcticdb.util.test import get_wide_dataframe
 import arcticdb.adapters.lmdb_library_adapter as la
 from arcticdb.exceptions import LmdbOptionsError
@@ -107,10 +107,11 @@ def test_lmdb_mapsize(tmpdir):
     ac = Arctic(f"lmdb://{tmpdir}?map_size=1KB")
 
     # When
-    with pytest.raises(InternalException) as e:
+    with pytest.raises(LmdbMapFullError) as e:
         ac.create_library("test")
     # Then - even library creation fails so map size having an effect
     assert "MDB_MAP_FULL" in str(e.value)
+    assert issubclass(e.type, StorageException)
 
     # Given - larger map size
     ac = Arctic(f"lmdb://{tmpdir}?map_size=1MB")
