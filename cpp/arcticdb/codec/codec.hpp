@@ -85,11 +85,11 @@ struct ColumnEncoder {
             using Encoder = BlockEncoder<TDT>;
             ARCTICDB_TRACE(log::codec(), "Column data has {} blocks", column_data.num_blocks());
 
-            while (auto block = column_data.next<TDT>()) {
-                if constexpr(!is_empty_type(TDT::DataTypeTag::data_type)) {
+            if constexpr(!is_empty_type(TDT::DataTypeTag::data_type)) {
+                while (auto block = column_data.next<TDT>()) {
                     util::check(block.value().nbytes() > 0, "Zero-sized block");
+                    Encoder::encode(codec_opts, block.value(), field, out, pos);
                 }
-                Encoder::encode(codec_opts, block.value(), field, out, pos);
             }
         });
 

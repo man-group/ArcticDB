@@ -29,9 +29,9 @@ std::tuple<size_t, size_t> compressed(const arcticdb::proto::encoding::SegmentHe
             metadata_size = encoding_sizes::ndarray_field_compressed_size(seg_hdr.metadata_field().ndarray());
 
         buffer_size = encoding_sizes::segment_compressed_size(seg_hdr.fields()) + metadata_size + string_pool_size;
-    }
-    else
+    } else {
         buffer_size = seg_hdr.column_fields().offset() + sizeof(EncodedMagic) + encoding_sizes::ndarray_field_compressed_size(seg_hdr.column_fields().ndarray());
+    }
 
     return {string_pool_size, buffer_size};
 }
