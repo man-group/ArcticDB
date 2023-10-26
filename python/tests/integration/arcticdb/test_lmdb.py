@@ -156,8 +156,12 @@ def test_lmdb_options_unknown_option(options):
     assert "Invalid LMDB URI" in str(e.value)
 
 
-def create_arctic_instance(tmpdir):
-    ac = Arctic(f"lmdb://{tmpdir}")
+def create_arctic_instance(td, i):
+    ac = Arctic(f"lmdb://{td}")
+    lib = ac["test"]
+    assert lib.read("a")
+    lib.write(f"{i}", pd.DataFrame())
+    assert lib.read(f"{i}")
 
 
 def test_warnings_arctic_instance(tmpdir):
@@ -179,7 +183,10 @@ def test_warnings_library(tmpdir):
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="Windows pessimistic file-locking")
-def test_warnings_arctic_instance_multiprocessing(tmpdir):
+def test_arctic_instances_across_same_lmdb_multiprocessing(tmpdir):
     """Should not warn when across multiple processes."""
+    ac = Arctic(f"lmdb://{tmpdir}")
+    ac.create_library("test")
+    ac["test"].write("a", pd.DataFrame())
     with mp.Pool(5) as p:
-        p.map(create_arctic_instance, [tmpdir for _ in range(20)])
+        p.starmap(create_arctic_instance, [(tmpdir, i) for i in range(20)])
