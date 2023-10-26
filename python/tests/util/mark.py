@@ -6,14 +6,9 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 
-import pytest
-import sys
 from typing import Union
 from datetime import date
 from numpy import datetime64
-from packaging import version
-
-from arcticdb.util._versions import PANDAS_VERSION
 
 
 def _no_op_decorator(fun):
