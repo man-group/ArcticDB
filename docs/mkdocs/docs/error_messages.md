@@ -52,8 +52,10 @@ For legacy reasons, the terms `symbol`, `stream`, and `stream ID` are used inter
 
 | Error Code | Cause                                                                  | Resolution                                                                                                                                          |
 |------------|------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------|
-| 5000       | A missing key has been requested.                                      | ArcticDB has requested a key that does not exist in storage. Please ensure that you have requested a `symbol`, `snapshot`, `version`, or column statistic that exists. |
+| 5000       | A missing key has been requested.                                      | ArcticDB has requested a key that does not exist in storage. Ensure that you have requested a `symbol`, `snapshot`, `version`, or column statistic that exists. |
 | 5001       | ArcticDB is attempting to write to an already-existing key in storage. | This error is unexpected - please ensure that no other tools are writing data the same storage location that may conflict with ArcticDB.            |
+| 5002       | The symbol being worked on does not exist.                             | ArcticDB has requested a key that does not exist in storage. Ensure that the symbol exists.                                                         |
+| 5003       | The LMDB map is full.                                                  | Close and reopen your LMDB backed Arctic instance with a larger map size. For example to open `/tmp/a/b/` with a map size of 5GB, use `Arctic("lmdb:///tmp/a/b?map_size=5GB")`. Also see the [LMDB documentation](http://www.lmdb.tech/doc/group__mdb.html#gaa2506ec8dab3d969b0e609cd82e619e5). |
 
 ### Sorting Errors
 
@@ -167,7 +169,7 @@ RuntimeError
     |-- SortingException
     |   └-- UnsortedDataException
     |-- StorageException
+    |   └-- LmdbMapFullError
     |-- StreamDescriptorMismatch
     └-- InternalException
 ```
-
