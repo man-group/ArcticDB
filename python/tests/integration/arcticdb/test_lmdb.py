@@ -14,7 +14,7 @@ import sys
 
 from arcticdb import Arctic
 from arcticdb.util.test import assert_frame_equal
-from arcticdb_ext.exceptions import LmdbMapFullError, StorageException
+from arcticdb.exceptions import LmdbMapFullError, StorageException
 from arcticdb.util.test import get_wide_dataframe
 import arcticdb.adapters.lmdb_library_adapter as la
 from arcticdb.exceptions import LmdbOptionsError
