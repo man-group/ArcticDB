@@ -118,7 +118,7 @@ void LmdbStorage::do_read(Composite<VariantKey>&& ks, const ReadVisitor& visitor
             if (::lmdb::dbi_get(txn, dbi.handle(), &mdb_key, &mdb_val)) {
                 ARCTICDB_SUBSAMPLE(LmdbStorageVisitSegment, 0)
                 visitor(k, Segment::from_bytes(reinterpret_cast<std::uint8_t *>(mdb_val.mv_data),
-                                               mdb_val.mv_size, true)); // TODO: remove this copy when finished profiling (added to make a fair test with rocksdb)
+                                               mdb_val.mv_size));
 
                 ARCTICDB_DEBUG(log::storage(), "Read key {}: {}, with {} bytes of data", variant_key_type(k), variant_key_view(k), mdb_val.mv_size);
             } else {

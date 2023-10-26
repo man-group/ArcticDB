@@ -153,8 +153,6 @@ class Arctic:
 
                 The storage is local to the ``Arctic`` instance.
 
-            TODO: Add an entry for rocksdb once chosen a URI format
-
         encoding_version: EncodingVersion, default DEFAULT_ENCODING_VERSION
             When creating new libraries with this Arctic instance, the default encoding version to use.
             Can be overridden by specifying the encoding version in the LibraryOptions argument to create_library.
