@@ -28,8 +28,6 @@ from arcticdb.version_store._custom_normalizers import CustomNormalizer
 from arcticc.pb2.descriptors_pb2 import NormalizationMetadata
 from arcticc.pb2.logger_pb2 import LoggerConfig, LoggersConfig
 from arcticc.pb2.storage_pb2 import LibraryDescriptor, VersionStoreConfig
-from arcticdb.version_store.helper import ArcticFileConfig
-from arcticdb.config import _DEFAULT_ENVS_PATH
 from arcticdb_ext import set_config_int, get_config_int, unset_config_int
 
 # leave out Mongo as spinning up a Mongo instance in Windows CI is fiddly, and Mongo support is only
@@ -141,12 +139,6 @@ def get_sample_dataframe_no_strings(size=1000, seed=0):
     return df
 
 
-def get_lib_by_name(lib_name, env, conf_path=_DEFAULT_ENVS_PATH):
-    local_conf = ArcticFileConfig(env, conf_path)
-    lib = local_conf[lib_name]
-    return lib
-
-
 @contextmanager
 def config_context(name, value):
     try:
@@ -158,12 +150,6 @@ def config_context(name, value):
             set_config_int(name, initial)
         else:
             unset_config_int(name)
-
-
-def get_artifact_path(frag, *fragments):
-    import tests
-
-    return os.path.join(tests.__path__, "artifacts", frag, *fragments)
 
 
 def param_dict(fields, cases=None, xfail=None, py2only=None, py3only=None):
