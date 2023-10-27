@@ -348,19 +348,8 @@ void LmdbStorage::warn_if_lmdb_already_open(const fs::path &root_path, const std
     }
 }
 
-LmdbStorage::LmdbStorage(LmdbStorage&& other)  noexcept
-    : Storage(std::move(static_cast<Storage&>(other))),
-    write_mutex_(std::move(other.write_mutex_)),
-    env_(std::move(other.env_)),
-    dbi_by_key_type_(std::move(other.dbi_by_key_type_)),
-    lib_dir_(std::move(other.lib_dir_)) {
-    other.lib_dir_ = "";
-}
-
 LmdbStorage::~LmdbStorage() {
-    if (!lib_dir_.empty()) {
-        --times_path_opened[lib_dir_.string()];
-    }
+    --times_path_opened[lib_dir_.string()];
 }
 
 void LmdbStorage::reset_warning_counter() {

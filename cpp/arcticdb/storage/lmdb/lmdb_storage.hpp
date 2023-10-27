@@ -34,7 +34,6 @@ class LmdbStorage final : public Storage {
     static void reset_warning_counter();
 
     LmdbStorage(const LibraryPath &lib, OpenMode mode, const Config &conf);
-    LmdbStorage(LmdbStorage&& other) noexcept;
     ~LmdbStorage() override;
 
   private:
