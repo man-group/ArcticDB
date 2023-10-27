@@ -27,6 +27,7 @@
 #include <arcticdb/util/error_code.hpp>
 #include <arcticdb/util/type_handler.hpp>
 #include <arcticdb/python/python_handlers.hpp>
+#include <arcticdb/util/pybind_mutex.hpp>
 
 #include <pybind11/pybind11.h>
 #include <folly/system/ThreadName.h>
@@ -271,6 +272,7 @@ PYBIND11_MODULE(arcticdb_ext, m) {
     initialize_folly();
 #ifndef WIN32
     // No fork() in Windows, so no need to register the handler
+    pthread_atfork(nullptr, nullptr, &SingleThreadMutexHolder::reset_mutex);
     pthread_atfork(nullptr, nullptr, &reinit_scheduler);
 #endif
     // Set up the global exception handlers first, so module-specific exception handler can override it:
