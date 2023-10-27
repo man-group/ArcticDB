@@ -792,8 +792,13 @@ ReadResult PythonVersionStore::read_dataframe_version(
     ReadQuery& read_query,
     const ReadOptions& read_options) {
 
+    static bool whatisit = false;
+    arcticdb::log::version().warn("read start {}", whatisit);
+    whatisit = true;
     auto opt_version_and_frame = read_dataframe_version_internal(stream_id, version_query, read_query, read_options);
-    return create_python_read_result(opt_version_and_frame.versioned_item_, std::move(opt_version_and_frame.frame_and_descriptor_));
+    auto result = create_python_read_result(opt_version_and_frame.versioned_item_, std::move(opt_version_and_frame.frame_and_descriptor_));
+    arcticdb::log::version().warn("read end");
+    return result;
 }
 
 void PythonVersionStore::delete_snapshot(const SnapshotId& snap_name) {

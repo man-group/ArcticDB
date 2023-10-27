@@ -1,6 +1,9 @@
 #pragma once
 
 #include <pybind11/pybind11.h>
+#include <arcticdb/log/log.hpp>
+#include <chrono>
+#include <thread>
 
 /*
 Why this mutex is necessary?
@@ -21,7 +24,21 @@ private:
 
     [[nodiscard]] static std::lock_guard<std::mutex> ensure_single_thread_cpp_pybind_entry() {
         py::gil_scoped_release release;
-        single_thread_mutex.lock(); //This is a hack for the mandatory std::adopt_lock below
+        static std::mutex single_thread_mutex;
+        static std::atomic<bool> whatisit = false;
+        static bool whatisit2 = false;
+        arcticdb::log::version().warn("phoebus mutex gil released {} {}", whatisit, whatisit2);
+        whatisit = true;
+        whatisit2 = true;
+        // single_thread_mutex.lock(); //This is a hack for the mandatory std::adopt_lock below
+        std::this_thread::sleep_for(std::chrono::milliseconds(2000));
+        arcticdb::log::version().warn("phoebus mutex try lock");
+        while (!single_thread_mutex.try_lock())
+        {
+            arcticdb::log::version().warn("phoebus mutex try lock fail");
+            std::this_thread::sleep_for(std::chrono::milliseconds(500));
+        }
+        arcticdb::log::version().warn("phoebus mutex locked");
         return {single_thread_mutex, std::adopt_lock}; //Copy list-initialization will be used if the list is incomplete. 
     };
     std::lock_guard<std::mutex> single_thread_lck = ensure_single_thread_cpp_pybind_entry();

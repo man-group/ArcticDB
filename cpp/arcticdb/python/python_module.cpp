@@ -229,6 +229,7 @@ void register_error_code_ecosystem(py::module& m, py::exception<arcticdb::Arctic
 
 void reinit_scheduler() {
     ARCTICDB_DEBUG(arcticdb::log::version(), "Post-fork, reinitializing the task scheduler");
+    arcticdb::log::version().warn("Post-fork, reinitializing the task scheduler");
     arcticdb::async::TaskScheduler::reattach_instance();
 }
 

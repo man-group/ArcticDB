@@ -10,6 +10,7 @@ from multiprocessing import Pool
 from pickle import loads, dumps
 import numpy as np
 import pandas as pd
+import os
 
 from arcticdb.util.test import assert_frame_equal
 
@@ -61,7 +62,7 @@ def _read_and_assert_symbol(args):
     for attempt in range(1, 11):
         print("start {}_{} attempt {}".format(symbol, idx, attempt))
         ss = lib.read(symbol)
-        if df("test1").equals(ss.data):
+        if df("test1").equals(ss.data) or attempt == 10:
             assert_frame_equal(ss.data, df("test1"))
             print("end {}".format(idx))
             break
@@ -71,6 +72,9 @@ def _read_and_assert_symbol(args):
 
 
 def test_parallel_reads(local_object_version_store):
+    from arcticdb.config import set_log_level
+
+    set_log_level("WARN")
     symbols = ["XXX"] * 20
     p = Pool(10)
     local_object_version_store.write(symbols[0], df("test1"))
@@ -78,3 +82,37 @@ def test_parallel_reads(local_object_version_store):
     p.map(_read_and_assert_symbol, [(local_object_version_store, s, idx) for idx, s in enumerate(symbols)])
     p.close()
     p.join()
+
+
+import threading
+from datetime import datetime
+
+dff = pd.DataFrame({"symbol": np.arange(1000000000)})
+
+
+def r_mp(args):
+    print(f"{datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]} r_mp {threading.get_native_id()}")
+    lib = args
+    assert_frame_equal(lib.read("symbol").data, dff)
+
+
+def test_mp(s3_store_factory):
+
+    lib = s3_store_factory()
+    lib.write("symbol", dff)
+
+    def r():
+        print(f"{datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]} r {threading.get_native_id()}")
+        assert_frame_equal(lib.read("symbol").data, dff)
+
+    def mp_parent():
+        print(f"{datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]} mp_parent {threading.get_native_id()}")
+        p = Pool(1)
+        time.sleep(1.5)  # give the multithread read process a head start, make sure the mutex is locked
+        p.map(r_mp, [(lib)])
+        p.close()
+        p.join()
+
+    thread_list = [threading.Thread(target=r), threading.Thread(target=mp_parent), threading.Thread(target=r)]
+    [thread.start() for thread in thread_list]
+    [thread.join() for thread in thread_list]
