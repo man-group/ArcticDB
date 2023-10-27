@@ -52,7 +52,7 @@ namespace arcticdb {
 
     static inline const PyObject** fill_with_none(const PyObject** dest, size_t count) {
         auto none = py::none();
-        std::generate(dest, dest + count, [&none](){ return none.inc_ref().ptr(); });
+        std::generate(dest, dest + count, [&none]() { return none.inc_ref().ptr(); });
         return dest + count;
     }
 
@@ -204,7 +204,7 @@ namespace arcticdb {
 
                     block_pos += *shape * stride;
                     ++shape;
-                    if(block_pos == (*block_it)->bytes() && ++block_it != blocks.end()) {
+                    if(block_it != blocks.end() && block_pos == (*block_it)->bytes() && ++block_it != blocks.end()) {
                         ptr_src = (*block_it)->data();
                         block_pos = 0;
                     }
@@ -216,6 +216,5 @@ namespace arcticdb {
             ARCTICDB_SUBSAMPLE(ArrayIncNones, 0)
             fill_with_none(ptr_dest, row_count - last_row);
         });
-
     }
 }

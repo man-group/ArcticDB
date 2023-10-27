@@ -177,7 +177,6 @@ set(arcticdb_srcs
         codec/zstd.hpp
         column_store/block.hpp
         column_store/chunked_buffer.hpp
-        column_store/column_data.cpp
         column_store/column_data.hpp
         column_store/column.hpp
         column_store/column_utils.hpp
@@ -353,6 +352,7 @@ set(arcticdb_srcs
         codec/variant_encoded_field_collection.cpp
         column_store/chunked_buffer.cpp
         column_store/column.cpp
+        column_store/column_data.cpp
         column_store/memory_segment_impl.cpp
         column_store/memory_segment_impl.cpp
         column_store/string_pool.cpp

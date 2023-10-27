@@ -650,7 +650,7 @@ std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_
     for (const auto&& [idx, stream_update_info_fut] : folly::enumerate(stream_update_info_futures)) {
         write_metadata_versions_futs.push_back(
             std::move(stream_update_info_fut)
-            .thenValue([this, prune_previous_versions, user_meta_proto = std::move(user_meta_protos[idx]), &stream_id = stream_ids[idx]](auto&& update_info) mutable -> folly::Future<IndexKeyAndUpdateInfo> {
+            .thenValue([this, user_meta_proto = std::move(user_meta_protos[idx]), &stream_id = stream_ids[idx]](auto&& update_info) mutable -> folly::Future<IndexKeyAndUpdateInfo> {
                 auto index_key_fut = folly::Future<AtomKey>::makeEmpty();
                 if (update_info.previous_index_key_.has_value()) {
                     index_key_fut = async::submit_io_task(UpdateMetadataTask{store(), update_info, std::move(user_meta_proto)});
