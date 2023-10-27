@@ -17,11 +17,27 @@ task runners can acquire the thread.
 */
 class SingleThreadMutexHolder {
 private:
+    inline static std::mutex single_thread_mutex;
+
     [[nodiscard]] static std::lock_guard<std::mutex> ensure_single_thread_cpp_pybind_entry() {
         py::gil_scoped_release release;
-        static std::mutex single_thread_mutex;
         single_thread_mutex.lock(); //This is a hack for the mandatory std::adopt_lock below
         return {single_thread_mutex, std::adopt_lock}; //Copy list-initialization will be used if the list is incomplete. 
     };
     std::lock_guard<std::mutex> single_thread_lck = ensure_single_thread_cpp_pybind_entry();
+public:
+/*
+    https://man7.org/linux/man-pages/man3/pthread_atfork.3.html
+    When fork is called in a multithreaded process, only the calling thread is duplicated in the child process. So locked mutex will stay locked in the 
+    child process. So it is required to manually unlock the mutex if it is locked (Unlocking an unlocked mutex is an UB)
+    The thread being forked must not have a running task. And the parent process may have another threads running task, locking the
+    mutex. As other threads in the parent process won't be forked, at fork, it is safe to check the status of the mutex and unlock if necessary, as the
+    child thread is the only thread can access the mutex.
+    Note: According to test, below mutex is automataically unlocked during fork. The observation deviates from the manual. So to play safe, mutex will
+    manually unlocked anyway, if it is locked.
+*/
+    static void unconditional_unlock() {
+        single_thread_mutex.try_lock();
+        single_thread_mutex.unlock();
+    }
 };
