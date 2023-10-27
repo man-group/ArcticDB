@@ -25,6 +25,16 @@ void add_data_type_impl(DataType data_type, std::optional<DataType>& current_dat
     }
 }
 
+namespace {
+    inline util::BitMagic::enumerator::value_type deref(util::BitMagic::enumerator iter) {
+        return *iter;
+    }
+
+    inline std::size_t deref(std::size_t index) {
+        return index;
+    }
+}
+
 void MinMaxAggregatorData::aggregate(const ColumnWithStrings& input_column) {
     entity::details::visit_type(input_column.column_->type().data_type(), [&input_column, that=this] (auto type_desc_tag) {
         using InputType = decltype(type_desc_tag);
@@ -93,12 +103,20 @@ void SumAggregatorData::aggregate(const std::optional<ColumnWithStrings>& input_
                     using ColumnType =  typename ColumnTagType::raw_type;
                     if constexpr(!is_sequence_type(ColumnTagType::data_type)) {
                         auto col_data = input_column->column_->data();
-                        auto groups_pos = 0;
-                        while (auto block = col_data.next<TypeDescriptorTag<ColumnTagType, DimensionTag<entity::Dimension::Dim0>>>()) {
-                            auto ptr = reinterpret_cast<const ColumnType *>(block.value().data());
-                            for (auto i = 0u; i < block.value().row_count(); ++i, ++ptr) {
-                                out_ptr[groups[groups_pos++]] += GlobalRawType(*ptr);
+                        auto lambda = [&col_data, &out_ptr, &groups](auto iter) {
+                            while (auto block = col_data.next<TypeDescriptorTag<ColumnTagType, DimensionTag<entity::Dimension::Dim0>>>()) {
+                                auto ptr = reinterpret_cast<const ColumnType *>(block.value().data());
+                                for (auto i = 0u; i < block.value().row_count(); ++i, ++ptr, ++iter) {
+                                    out_ptr[groups[deref(iter)]] += GlobalRawType(*ptr);
+                                }
                             }
+                        };
+
+                        if (input_column->column_->is_sparse()) {
+                            lambda(col_data.bit_vector()->first());
+                        }
+                        else {
+                            lambda(std::size_t(0));
                         }
                     } else {
                         util::raise_rte("String aggregations not currently supported");

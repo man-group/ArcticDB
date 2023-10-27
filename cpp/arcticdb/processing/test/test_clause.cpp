@@ -102,7 +102,7 @@ TEST(Clause, PartitionString) {
 TEST(Clause, PartitionEmptyColumn) {
     using namespace arcticdb;
 
-    auto seg = generate_groupby_testing_segment(100, 10);
+    auto seg = generate_groupby_testing_empty_segment(100, 10);
     ProcessingUnit processing_unit(std::move(seg), pipelines::FrameSlice{});
     Composite<ProcessingUnit> comp;
     comp.push_back(std::move(processing_unit));
@@ -118,7 +118,7 @@ TEST(Clause, AggregationEmptyColumn) {
     std::shared_ptr<Store> empty_store;
     size_t num_rows{100};
     size_t unique_grouping_values{10};
-    auto seg = generate_groupby_testing_segment(num_rows, unique_grouping_values);
+    auto seg = generate_groupby_testing_empty_segment(num_rows, unique_grouping_values);
     ProcessingUnit processing_unit(std::move(seg), pipelines::FrameSlice{});
     Composite<ProcessingUnit> comp;
     comp.push_back(std::move(processing_unit));
@@ -143,6 +143,77 @@ TEST(Clause, AggregationEmptyColumn) {
     ASSERT_FALSE(slice_and_keys[0].segment_->column_index("empty_max").has_value());
     ASSERT_FALSE(slice_and_keys[0].segment_->column_index("empty_mean").has_value());
     ASSERT_FALSE(slice_and_keys[0].segment_->column_index("empty_count").has_value());
+}
+
+namespace aggregation_test
+{
+    template <class T, class F>
+    void check_column(arcticdb::SliceAndKey sk, std::string_view column_name, std::size_t ugv, F&& f)
+    {
+        auto column_index = sk.segment_->column_index(column_name);
+        ASSERT_TRUE(column_index.has_value());
+        auto& column = sk.segment_->column(*column_index);
+        DataType dt = arcticdb::data_type_from_raw_type<T>();
+        ASSERT_EQ(dt, column.type().data_type());
+        for(std::size_t idx = 0u; idx < ugv; ++idx)
+        {
+            ASSERT_EQ(f(idx), column.scalar_at<T>(idx));
+        }
+    }
+}
+
+TEST(Clause, AggregationColumn)
+{
+    using namespace arcticdb;
+
+    std::shared_ptr<Store> empty_store;
+    size_t num_rows{100};
+    size_t unique_grouping_values{10};
+    auto seg = generate_groupby_testing_segment(num_rows, unique_grouping_values);
+    ProcessingUnit processing_unit(std::move(seg), pipelines::FrameSlice{});
+    Composite<ProcessingUnit> comp;
+    comp.push_back(std::move(processing_unit));
+    AggregationClause aggregation("int_repeated_values", {{"sum_int", "sum"}, {"min_int", "min"}, {"max_int", "max"}, {"mean_int", "mean"}, {"count_int", "count"}});
+
+    auto aggregated = aggregation.process(std::shared_ptr<Store>(), std::move(comp)).as_range();
+    ASSERT_EQ(1, aggregated.size());
+    auto slice_and_keys = aggregated[0].data();
+    ASSERT_EQ(1, slice_and_keys.size());
+
+    using aggregation_test::check_column;
+    check_column<int64_t>(slice_and_keys[0], "sum_int", unique_grouping_values, [](size_t idx) { return 450 + 10*idx; });
+    check_column<int64_t>(slice_and_keys[0], "min_int", unique_grouping_values, [](size_t idx) { return idx; });
+    check_column<int64_t>(slice_and_keys[0], "max_int", unique_grouping_values, [](size_t idx) { return 90+idx; });
+    check_column<double>(slice_and_keys[0], "mean_int", unique_grouping_values, [](size_t idx) { return 45+idx; });
+    check_column<uint64_t>(slice_and_keys[0], "count_int", unique_grouping_values, [](size_t idx) { return 10; });
+}
+
+TEST(Clause, AggregationSparseColumn)
+{
+    using namespace arcticdb;
+
+    std::shared_ptr<Store> empty_store;
+    size_t num_rows{100};
+    size_t unique_grouping_values{10};
+    auto seg = generate_groupby_testing_sparse_segment(num_rows, unique_grouping_values);
+    ProcessingUnit processing_unit(std::move(seg), pipelines::FrameSlice{});
+    Composite<ProcessingUnit> comp;
+    comp.push_back(std::move(processing_unit));
+    AggregationClause aggregation("int_repeated_values", {{"sum_int", "sum"}, {"min_int", "min"}, {"max_int", "max"}, {"mean_int", "mean"}, {"count_int", "count"}});
+
+    auto aggregated = aggregation.process(std::shared_ptr<Store>(), std::move(comp)).as_range();
+    ASSERT_EQ(1, aggregated.size());
+    auto slice_and_keys = aggregated[0].data();
+    ASSERT_EQ(1, slice_and_keys.size());
+
+    using aggregation_test::check_column;
+    check_column<int64_t>(slice_and_keys[0], "sum_int", unique_grouping_values, [](size_t idx) {
+        if (idx%2 == 0) {
+            return 450 + 10*idx;
+        } else {
+            return size_t(0);
+        }
+    });
 }
 
 TEST(Clause, Passthrough) {
