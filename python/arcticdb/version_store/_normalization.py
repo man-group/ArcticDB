@@ -30,7 +30,6 @@ from arcticdb_ext.version_store import SortedValue as _SortedValue
 from pandas.core.internals import make_block
 
 from pandas import DataFrame, MultiIndex, Series, DatetimeIndex, Index, RangeIndex
-from six import string_types, text_type, binary_type, PY3
 from typing import NamedTuple, List, Union, Mapping, Any, TypeVar, Tuple
 
 from arcticdb import _msgpack_compat
@@ -111,20 +110,11 @@ _SUPPORTED_TYPES = Union[DataFrame]  # , Series]
 _SUPPORTED_NATIVE_RETURN_TYPES = Union[FrameData]
 
 
-if PY3:
-
-    def _accept_array_string(v):
-        # TODO remove this once arctic keeps the string type under the hood
-        # and does not transform string into bytes
-        # string_types and binary_type can be a single type or a tuple
-        supported_string_types = string_types if isinstance(string_types, tuple) else (string_types,)
-        supported_binary_types = binary_type if isinstance(binary_type, tuple) else (binary_type,)
-        return type(v) in supported_string_types or type(v) in supported_binary_types
-
-else:
-
-    def _accept_array_string(v):
-        return isinstance(v, string_types)
+def _accept_array_string(v):
+    # TODO remove this once arctic keeps the string type under the hood
+    # and does not transform string into bytes
+    # string_types and binary_type can be a single type or a tuple
+    return type(v) in (str, bytes)
 
 
 def _is_nan(element):
@@ -147,7 +137,7 @@ def get_sample_from_non_empty_arr(arr, arr_name):
 
 def coerce_string_column_to_fixed_length_array(arr, to_type, string_max_len):
     # in python3 all text will be treated as unicode
-    if to_type == text_type:
+    if to_type == str:
         if sys.platform == "win32":
             # See https://sourceforge.net/p/numpy/mailman/numpy-discussion/thread/1139250278.7538.52.camel%40localhost.localdomain/#msg11998404
             # Different wchar size on Windows is not compatible with our current internal representation of Numpy strings
@@ -292,7 +282,7 @@ def _normalize_single_index(index, index_names, index_norm, dynamic_strings=None
     if isinstance(index, RangeIndex):
         # skip index since we can reconstruct it, so no need to actually store it
         if index.name:
-            if not isinstance(index.name, string_types):
+            if not isinstance(index.name, str):
                 raise ArcticNativeException(
                     "Cannot use non string type as index name. Actual {} with type {}".format(
                         index.name, type(index.name)
@@ -989,7 +979,7 @@ class MsgPackNormalizer(Normalizer):
             raise TypeError("Normalisation is running in strict mode, writing pickled data is disabled.")
         else:
             return ExtType(
-                MsgPackSerialization.PY_PICKLE_3 if PY3 else MsgPackSerialization.PY_PICKLE_2,
+                MsgPackSerialization.PY_PICKLE_3,
                 MsgPackNormalizer._nested_msgpack_packb(Pickler.write(obj)),
             )
 
@@ -1013,8 +1003,6 @@ class MsgPackNormalizer(Normalizer):
             return Pickler.read(data, pickled_in_python2=True)
 
         if code == MsgPackSerialization.PY_PICKLE_3:
-            if not PY3:
-                raise ArcticDbNotYetImplemented("Data has been pickled in Py3. Reading from Py2 is not supported.")
             data = MsgPackNormalizer._nested_msgpack_unpackb(data, raw=False)
             return Pickler.read(data, pickled_in_python2=False)
 
@@ -1040,13 +1028,12 @@ class MsgPackNormalizer(Normalizer):
 class Pickler(object):
     @staticmethod
     def read(data, pickled_in_python2=False):
-        if PY3:
-            if isinstance(data, string_types):
-                return pickle.loads(data.encode("ascii"), encoding="bytes")
-            elif isinstance(data, binary_type):
-                if not pickled_in_python2:
-                    # Use the default encoding for python2 pickled objects similar to what's being done for PY2.
-                    return pickle.loads(data, encoding="bytes")
+        if isinstance(data, str):
+            return pickle.loads(data.encode("ascii"), encoding="bytes")
+        elif isinstance(data, str):
+            if not pickled_in_python2:
+                # Use the default encoding for python2 pickled objects similar to what's being done for PY2.
+                return pickle.loads(data, encoding="bytes")
 
         try:
             return pickle.loads(data)
