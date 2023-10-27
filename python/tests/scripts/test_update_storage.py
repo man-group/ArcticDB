@@ -18,8 +18,8 @@ LIB_NAME = "test_lib"
 
 def create_library_config(ac: Arctic, name: str):
     opts = LibraryOptions()
-    library = ac._library_adapter.create_library(name, opts)
-    ac._library_manager.write_library_config(library._lib_cfg, name, test_only_validation_toggle=False)
+    cfg = ac._library_adapter.get_library_config(name, opts)
+    ac._library_manager.write_library_config(cfg, name, test_only_validation_toggle=False)
 
 
 def _get_s3_storage_config(cfg):

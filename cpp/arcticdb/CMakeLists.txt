@@ -248,6 +248,7 @@ set(arcticdb_srcs
         processing/clause.hpp
         processing/expression_context.hpp
         processing/expression_node.hpp
+        storage/constants.hpp
         storage/common.hpp
         storage/config_resolvers.hpp
         storage/failure_simulation.hpp
@@ -432,7 +433,8 @@ set(arcticdb_srcs
         version/version_core.cpp
         version/version_store_api.cpp
         version/version_utils.cpp
-        version/symbol_list.cpp)
+        version/symbol_list.cpp
+        )
 
 if(${ARCTICDB_INCLUDE_ROCKSDB})
     list (APPEND arcticdb_srcs
