@@ -15,7 +15,6 @@ import string
 import random
 import time
 import attr
-from six import PY3
 from copy import deepcopy
 from functools import wraps
 import sys
@@ -152,16 +151,8 @@ def config_context(name, value):
             unset_config_int(name)
 
 
-def param_dict(fields, cases=None, xfail=None, py2only=None, py3only=None):
-    # type: (List[AnyStr], Mapping[AnyStr, Any], Mapping[AnyStr, Any], Mapping[AnyStr, Any], Mapping[AnyStr, Any])->Any
+def param_dict(fields, cases=None, xfail=None):
     _cases = deepcopy(cases) if cases else dict()
-    if PY3:
-        if py3only is not None:
-            _cases.update(deepcopy(py3only))
-    else:
-        if py2only is not None:
-            _cases.update(deepcopy(py2only))
-
     if _cases:
         ids, params = zip(*list(sorted(_cases.items())))
     else:

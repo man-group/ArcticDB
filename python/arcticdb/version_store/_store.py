@@ -11,7 +11,6 @@ import sys
 import pandas as pd
 import pytz
 import re
-import six
 import itertools
 import attr
 import warnings
@@ -19,7 +18,7 @@ import difflib
 from datetime import datetime
 from numpy import datetime64
 from pandas import Timestamp, to_datetime, Timedelta
-from typing import Any, Optional, Union, List, Mapping, Iterable, Sequence, Tuple, Dict, Set, TYPE_CHECKING
+from typing import Any, Optional, Union, List, Sequence, Tuple, Dict, Set
 from contextlib import contextmanager
 
 from arcticc.pb2.descriptors_pb2 import TypeDescriptor, SortedValue
@@ -1471,7 +1470,7 @@ class NativeVersionStore:
         version_query.set_skip_compat(_assume_true("skip_compat", kwargs))
         version_query.set_iterate_on_failure(_assume_false("iterate_on_failure", kwargs))
 
-        if isinstance(as_of, six.string_types):
+        if isinstance(as_of, str):
             version_query.set_snap_name(as_of)
         elif isinstance(as_of, int):
             version_query.set_version(as_of)
