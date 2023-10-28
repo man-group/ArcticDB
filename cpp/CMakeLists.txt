@@ -14,7 +14,38 @@ option(
     "Whether ArcticDB's build system relies on conda for resolving its dependencies."
     OFF
 )
+option(ARCTICDB_USING_ADDRESS_SANITIZER "Enable address sanitizer." OFF)
+option(ARCTICDB_USING_THREAD_SANITIZER "Enable thread sanitizer." OFF)
+option(ARCTICDB_USING_MEMORY_SANITIZER "Enable memory sanitizer. Does not play well with address sanitizer." OFF)
+option(ARCTICDB_USING_UB_SANITIZER "Enable undefined behavior sanitizer." OFF)
 
+set(ARCTICDB_SANITIZER_FLAGS)
+if(${ARCTICDB_USING_ADDRESS_SANITIZER})
+    list(APPEND ARCTICDB_SANITIZER_FLAGS "-fsanitize=address;-shared-libasan")
+    link_libraries(atomic)
+    message(STATUS "Building ArcticDB with Address Sanitizer")
+endif()
+if(${ARCTICDB_USING_THREAD_SANITIZER})
+    list(APPEND ARCTICDB_SANITIZER_FLAGS "-fsanitize=thread")
+    link_libraries(atomic)
+    message(STATUS "Building ArcticDB with Thread Sanitizer")
+endif()
+if(${ARCTICDB_USING_UB_SANITIZER})
+    list(APPEND ARCTICDB_SANITIZER_FLAGS "-fsanitize=undefined")
+    message(STATUS "Building ArcticDB with UB Sanitizer")
+endif()
+
+if(ARCTICDB_SANITIZER_FLAGS)
+    list(APPEND ARCTICDB_SANITIZER_FLAGS "-g;-fno-omit-frame-pointer;-fno-optimize-sibling-calls;")
+    if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+        # ld cannot be used if sanitizers are enabled
+        # TODO: Check if mold supports sanitizers
+        add_link_options(-fuse-ld=lld)
+    endif()
+    # Note: Sanitizer flags are set globally for all targets created after
+    add_compile_options("${ARCTICDB_SANITIZER_FLAGS}")
+    add_link_options(${ARCTICDB_SANITIZER_FLAGS})
+endif()
 
 if(WIN32)
     add_compile_definitions(NOGDI)
