@@ -4,7 +4,7 @@ on:
     inputs:
       environment: { type: environment, required: false }
 jobs:
-  publish_docs:
+  docs_publish:
     runs-on: ubuntu-latest
     environment: ${{inputs.environment}}
     steps:
