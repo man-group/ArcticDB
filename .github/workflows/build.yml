@@ -321,11 +321,3 @@ jobs:
     permissions: {contents: write}
     with:
       environment: ${{needs.common_config.outputs.publish_env}}
-
-  docs:
-    if: ${{ false }}
-    needs: [common_config, follower-linux] # Needs a Linux wheel to build the API docs
-    uses: ./.github/workflows/docs.yml
-    secrets: inherit
-    with:
-      environment: ${{needs.common_config.outputs.publish_env}}
