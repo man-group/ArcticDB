@@ -1,22 +1,21 @@
-name: Docs
+name: Docs Build
 on:
-  workflow_call:
-    inputs:
-      environment: { type: string, required: false }
   workflow_dispatch:
     inputs:
-      environment: { type: environment, required: false }
-      api_wheel: { type: string, description: Override the wheel to generate API docs from }
+      version: { type: string, required: false, description: The version to build docs for, used as git tag and pypi version.  If not specified then use master and wheel from the last successful build.}
+      latest: { type: boolean, required: false, description: Alias this version as the 'latest' stable docs.}
+      deploy: { type: boolean, required: false, description: Push the built docs to the docs-pages branch on github.}
+      
 jobs:
-  can_merge:
+  build_docs:
     runs-on: ubuntu-latest
-    environment: ${{inputs.environment}}
     steps:
       - name: Checkout
         uses: actions/checkout@v3
+        ref: ${{inputs.version || 'master'}}
 
       - name: Detect runner Python implementation
-        if: ${{!inputs.api_wheel}}
+        if: ${{!inputs.version}}
         run: |
           python3 -c 'import platform
           prefix = {"CPython": "cp", "PyPy": "pp"}[platform.python_implementation()]
@@ -25,7 +24,7 @@ jobs:
   
       - id: download-wheel-artifact
         name: Download wheel artifact from last successful build
-        if: ${{!inputs.api_wheel}}
+        if: ${{!inputs.version}}
         uses: dawidd6/action-download-artifact@v2
         with:
           name: wheel-${{env.PY_IMPL}}-manylinux_x86_64
@@ -35,7 +34,7 @@ jobs:
 
       - name: Install documenation dependencies (including ArcticDB)
         run: |
-          pip3 install mkdocs-material mkdocs-jupyter mkdocstrings[python] black pybind11-stubgen ${{inputs.api_wheel || '*.whl'}}
+          pip3 install mkdocs-material mkdocs-jupyter mkdocstrings[python] black pybind11-stubgen ${{inputs.version && join('arcticdb==',inputs.version) || 'arcticdb-*.whl'}}
 
       - name: Stubfile generation for arcticdb_ext
         # stubfiles will be generated into docs/mkdocs/arcticdb_ext and so imported as arcticdb_ext by mkdocs when it builds
@@ -44,18 +43,13 @@ jobs:
           cd docs/mkdocs
           pybind11-stubgen arcticdb_ext.version_store --ignore-all-errors -o .
 
-      - name: MkDocs build
-        # FIXME mkdocs build --strict should be enabled when we are compliant
+      - name: List docs versions deployed to docs-pages branch
         run: |
-          cd docs/mkdocs  
-          mkdocs build -d /tmp/docs_build
+          cd docs/mkdocs
+          mike list
 
-      - name: Publish to Cloudflare Pages
-        if: inputs.environment && vars.CLOUDFLARE_PAGE_BRANCH
-        uses: cloudflare/pages-action@v1
-        with:
-          apiToken: ${{secrets.CLOUDFLARE_API_TOKEN}}
-          accountId: ${{vars.CLOUDFLARE_ACCOUNT_ID}}
-          projectName: ${{vars.CLOUDFLARE_PAGES_PROJECT}}
-          branch: ${{vars.CLOUDFLARE_PAGE_BRANCH}}
-          directory: /tmp/docs_build
+      - name: Versioned mkDocs build 
+        run: |
+          cd docs/mkdocs
+          mike set-default latest
+          mike deploy ${{inputs.deploy && '--push'}} ${{inputs.version || 'dev'}} ${{inputs.latest && 'latest'}} --message "Deploying docs for ${{inputs.version || 'dev'}} ${{inputs.latest && 'latest'}}"

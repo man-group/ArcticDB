@@ -1,0 +1,22 @@
+name: Docs Publish
+on:
+  workflow_dispatch:
+    inputs:
+      environment: { type: environment, required: false }
+jobs:
+  publish_docs:
+    runs-on: ubuntu-latest
+    environment: ${{inputs.environment}}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+        ref: docs-pages
+
+      - name: Publish docs-pages branch to Cloudflare Pages
+        if: inputs.environment && vars.CLOUDFLARE_PAGE_BRANCH
+        uses: cloudflare/pages-action@v1
+        with:
+          apiToken: ${{secrets.CLOUDFLARE_API_TOKEN}}
+          accountId: ${{vars.CLOUDFLARE_ACCOUNT_ID}}
+          projectName: ${{vars.CLOUDFLARE_PAGES_PROJECT}}
+          branch: ${{vars.CLOUDFLARE_PAGE_BRANCH}}
