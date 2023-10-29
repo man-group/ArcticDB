@@ -157,7 +157,22 @@ namespace aggregation_test
         ASSERT_EQ(dt, column.type().data_type());
         for(std::size_t idx = 0u; idx < ugv; ++idx)
         {
-            ASSERT_EQ(f(idx), column.scalar_at<T>(idx));
+            if constexpr (std::is_floating_point_v<T>)
+            {
+                T val = column.scalar_at<T>(idx).value();
+                if (std::isnan(val))
+                {
+                    ASSERT_TRUE(std::isnan(f(idx)));
+                }
+                else
+                {
+                    ASSERT_EQ(f(idx), val);
+                }
+            }
+            else
+            {
+                ASSERT_EQ(f(idx), column.scalar_at<T>(idx));
+            }
         }
     }
 }
@@ -184,8 +199,8 @@ TEST(Clause, AggregationColumn)
     check_column<int64_t>(slice_and_keys[0], "sum_int", unique_grouping_values, [](size_t idx) { return 450 + 10*idx; });
     check_column<int64_t>(slice_and_keys[0], "min_int", unique_grouping_values, [](size_t idx) { return idx; });
     check_column<int64_t>(slice_and_keys[0], "max_int", unique_grouping_values, [](size_t idx) { return 90+idx; });
-    check_column<double>(slice_and_keys[0], "mean_int", unique_grouping_values, [](size_t idx) { return 45+idx; });
-    check_column<uint64_t>(slice_and_keys[0], "count_int", unique_grouping_values, [](size_t idx) { return 10; });
+    check_column<double>(slice_and_keys[0], "mean_int", unique_grouping_values, [](size_t idx) { return double(45+idx); });
+    check_column<uint64_t>(slice_and_keys[0], "count_int", unique_grouping_values, [](size_t) { return 10; });
 }
 
 TEST(Clause, AggregationSparseColumn)
@@ -209,9 +224,39 @@ TEST(Clause, AggregationSparseColumn)
     using aggregation_test::check_column;
     check_column<int64_t>(slice_and_keys[0], "sum_int", unique_grouping_values, [](size_t idx) {
         if (idx%2 == 0) {
-            return 450 + 10*idx;
+            return 450 + 10*static_cast<int64_t>(idx);
         } else {
-            return size_t(0);
+            return int64_t(0);
+        }
+    });
+    check_column<int64_t>(slice_and_keys[0], "min_int", unique_grouping_values, [](size_t idx) {
+        if (idx%2 == 0) {
+            return static_cast<int64_t>(idx);
+        } else {
+            return std::numeric_limits<int64_t>::max();
+        }
+    });
+    check_column<int64_t>(slice_and_keys[0], "max_int", unique_grouping_values, [](size_t idx) {
+        if (idx%2 == 0) {
+            return 90 + static_cast<int64_t>(idx);
+        } else {
+            return std::numeric_limits<int64_t>::lowest();
+        }
+    });
+    check_column<double>(slice_and_keys[0], "mean_int", unique_grouping_values, [](size_t idx) {
+        if (idx%2 == 0) {
+            return double(45 + idx);
+        }
+        else {
+            return std::numeric_limits<double>::quiet_NaN();
+        }
+    });
+    check_column<uint64_t>(slice_and_keys[0], "count_int", unique_grouping_values, [](size_t idx) {
+        if (idx%2 == 0) {
+            return uint64_t(10);
+        }
+        else {
+            return uint64_t(0);
         }
     });
 }

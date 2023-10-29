@@ -73,17 +73,4 @@ struct IColumnStatsAggregator {
 
 using ColumnStatsAggregator = folly::Poly<IColumnStatsAggregator>;
 
-struct Fraction {
-    double numerator_{0.0};
-    uint64_t denominator_{0};
-
-    double to_double() const {
-        return denominator_ == 0 ? std::numeric_limits<double>::quiet_NaN(): numerator_ / static_cast<double>(denominator_);
-    }
-};
-
-struct CountAndTotals {
-    std::vector<Fraction> fractions_;
-};
-
 } //namespace arcticdb

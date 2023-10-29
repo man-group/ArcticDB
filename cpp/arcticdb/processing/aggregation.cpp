@@ -9,31 +9,8 @@
 
 #include <cmath>
 
-namespace arcticdb {
-
-void add_data_type_impl(DataType data_type, std::optional<DataType>& current_data_type) {
-    if (current_data_type.has_value()) {
-        auto common_type = has_valid_common_type(entity::TypeDescriptor(*current_data_type, 0),
-                                                 entity::TypeDescriptor(data_type, 0));
-        schema::check<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>(
-                common_type.has_value(),
-                "Cannot perform aggregation on column, incompatible types present: {} and {}",
-                entity::TypeDescriptor(*current_data_type, 0), entity::TypeDescriptor(data_type, 0));
-        current_data_type = common_type->data_type();
-    } else {
-        current_data_type = data_type;
-    }
-}
-
-namespace {
-    inline util::BitMagic::enumerator::value_type deref(util::BitMagic::enumerator iter) {
-        return *iter;
-    }
-
-    inline std::size_t deref(std::size_t index) {
-        return index;
-    }
-}
+namespace arcticdb
+{
 
 void MinMaxAggregatorData::aggregate(const ColumnWithStrings& input_column) {
     entity::details::visit_type(input_column.column_->type().data_type(), [&input_column, that=this] (auto type_desc_tag) {
@@ -84,7 +61,30 @@ SegmentInMemory MinMaxAggregatorData::finalize(const std::vector<ColumnName>& ou
     return seg;
 }
 
-// TODO: move this in anonymous namespace
+namespace
+{
+    void add_data_type_impl(DataType data_type, std::optional<DataType>& current_data_type) {
+        if (current_data_type.has_value()) {
+            auto common_type = has_valid_common_type(entity::TypeDescriptor(*current_data_type, 0),
+                                                     entity::TypeDescriptor(data_type, 0));
+            schema::check<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>(
+                    common_type.has_value(),
+                    "Cannot perform aggregation on column, incompatible types present: {} and {}",
+                    entity::TypeDescriptor(*current_data_type, 0), entity::TypeDescriptor(data_type, 0));
+            current_data_type = common_type->data_type();
+        } else {
+            current_data_type = data_type;
+        }
+    }
+
+    inline util::BitMagic::enumerator::value_type deref(util::BitMagic::enumerator iter) {
+        return *iter;
+    }
+
+    inline std::size_t deref(std::size_t index) {
+        return index;
+    }
+
     template<typename T, typename T2=void>
     struct OutputType;
 
@@ -117,7 +117,30 @@ SegmentInMemory MinMaxAggregatorData::finalize(const std::vector<ColumnName>& ou
     struct OutputType<DataTypeTag<DataType::EMPTYVAL>, void> {
         using type = ScalarTagType<DataTypeTag<DataType::EMPTYVAL>>;
     };
+}
 
+/*********************
+ * SumAggregatorData *
+ *********************/
+
+SumAggregatorData::SumAggregatorData(const SumAggregatorData& other)
+    : aggregated_(other.aggregated_)
+    , data_type_(other.data_type_)
+{
+    log::version().warn("Copying potentially large buffer in SumAggregatorData");
+}
+
+SumAggregatorData& SumAggregatorData::operator=(const SumAggregatorData& other)
+{
+    aggregated_ = other.aggregated_;
+    data_type_ = other.data_type_;
+    log::version().warn("Copying potentially large buffer in SumAggregatorData");
+    return *this;
+}
+ 
+void SumAggregatorData::add_data_type(DataType data_type) {
+    add_data_type_impl(data_type, data_type_);
+}
 
 void SumAggregatorData::aggregate(const std::optional<ColumnWithStrings>& input_column, const std::vector<size_t>& groups, size_t unique_values) {
     // If data_type_ has no value, it means there is no data for this aggregation
@@ -181,23 +204,33 @@ SegmentInMemory SumAggregatorData::finalize(const ColumnName& output_column_name
  * MinMaxAggregator *
  ********************/
 
-namespace min_max_aggregation
+namespace
 {
-
-
-    template <typename T>
-    struct MaybeValue {
-        bool written_ = false;
-        T value_ = std::numeric_limits<T>::lowest();
-    };
-
-    enum class Extremum {
+    enum class Extremum
+    {
         MAX,
         MIN
     };
 
+    template <typename T, Extremum E>
+    struct MaybeValue
+    {
+        bool written_ = false;
+        T value_ = init_value();
+
+    private:
+
+        static constexpr T init_value()
+        {
+            if constexpr (E == Extremum::MAX)
+                return std::numeric_limits<T>::lowest();
+            else
+                return std::numeric_limits<T>::max();
+        }
+    };
+
     template <Extremum T>
-    inline void aggregate(
+    inline void aggregate_impl(
         const std::optional<ColumnWithStrings>& input_column,
         const std::vector<size_t>& groups,
         size_t unique_values,
@@ -210,44 +243,49 @@ namespace min_max_aggregation
                 if constexpr(!is_sequence_type(GlobalInputType::DataTypeTag::data_type)) {
                     using GlobalTypeDescriptorTag =  typename OutputType<GlobalInputType>::type;
                     using GlobalRawType = typename GlobalTypeDescriptorTag::DataTypeTag::raw_type;
-                    auto prev_size = aggregated_.size() / sizeof(MaybeValue<GlobalRawType>);
-                    aggregated_.resize(sizeof(MaybeValue<GlobalRawType>) * unique_values);
+                    using MaybeValueType = MaybeValue<GlobalRawType, T>;
+                    auto prev_size = aggregated_.size() / sizeof(MaybeValueType);
+                    aggregated_.resize(sizeof(MaybeValueType) * unique_values);
                     auto col_data = input_column->column_->data();
-                    auto out_ptr = reinterpret_cast<MaybeValue<GlobalRawType>*>(aggregated_.data());
-                    std::fill(out_ptr + prev_size, out_ptr + unique_values, MaybeValue<GlobalRawType>{});
-                    entity::details::visit_type(input_column->column_->type().data_type(), [&groups, &out_ptr, &col_data] (auto type_desc_tag) {
+                    auto out_ptr = reinterpret_cast<MaybeValueType*>(aggregated_.data());
+                    std::fill(out_ptr + prev_size, out_ptr + unique_values, MaybeValueType{});
+                    entity::details::visit_type(input_column->column_->type().data_type(), [&input_column, &groups, &out_ptr, &col_data] (auto type_desc_tag) {
                         using ColumnTagType = std::decay_t<decltype(type_desc_tag)>;
                         using ColumnType =  typename ColumnTagType::raw_type;
                         if constexpr(!is_sequence_type(ColumnTagType::data_type)) {
-                            auto groups_pos = 0;
-                            while (auto block = col_data.next<TypeDescriptorTag<ColumnTagType, DimensionTag<entity::Dimension::Dim0>>>()) {
-                                auto ptr = reinterpret_cast<const ColumnType *>(block.value().data());
-                                for (auto i = 0u; i < block.value().row_count(); ++i, ++ptr) {
-                                    auto& val = out_ptr[groups[groups_pos]];
-                                    if constexpr(std::is_floating_point_v<ColumnType>) {
-                                        const auto& curr = GlobalRawType(*ptr);
-                                        if (!val.written_ || std::isnan(static_cast<ColumnType>(val.value_))) {
-                                            val.value_ = curr;
-                                            val.written_ = true;
-                                        } else if (!std::isnan(static_cast<ColumnType>(curr))) {
-                                            if constexpr(T == Extremum::MAX) {
-                                                val.value_ = std::max(val.value_, curr);
-                                            } else {
-                                                val.value_ = std::min(val.value_, curr);
+                            auto lambda = [&col_data, &out_ptr, &groups](auto iter) {
+                                while (auto block = col_data.next<TypeDescriptorTag<ColumnTagType, DimensionTag<entity::Dimension::Dim0>>>()) {
+                                    auto ptr = reinterpret_cast<const ColumnType *>(block.value().data());
+                                    for (auto i = 0u; i < block.value().row_count(); ++i, ++ptr, ++iter) {
+                                        auto& val = out_ptr[groups[deref(iter)]];
+                                        if constexpr(std::is_floating_point_v<ColumnType>) {
+                                            const auto& curr = GlobalRawType(*ptr);
+                                            if (!val.written_ || std::isnan(static_cast<ColumnType>(val.value_))) {
+                                                val.value_ = curr;
+                                                val.written_ = true;
+                                            } else if (!std::isnan(static_cast<ColumnType>(curr))) {
+                                                if constexpr(T == Extremum::MAX) {
+                                                    val.value_ = std::max(val.value_, curr);
+                                                } else {
+                                                    val.value_ = std::min(val.value_, curr);
+                                                }
                                             }
-                                        }
-                                    } else {
-                                        if constexpr(T == Extremum::MAX) {
-                                            val.value_ = std::max(val.value_, GlobalRawType(*ptr));
                                         } else {
-                                            // If unwritten, MaybeValue begins life with MIN_INT. That's always going to "win" when
-                                            // passed into `std::min`!
-                                            val.value_ = !val.written_ ? GlobalRawType(*ptr) : std::min(val.value_, GlobalRawType(*ptr));
+                                            if constexpr(T == Extremum::MAX) {
+                                                val.value_ = std::max(val.value_, GlobalRawType(*ptr));
+                                            } else {
+                                                val.value_ = std::min(val.value_, GlobalRawType(*ptr));
+                                            }
+                                            val.written_ = true;
                                         }
-                                        val.written_ = true;
                                     }
-                                    ++groups_pos;
                                 }
+                            };
+                            if (input_column->column_->is_sparse()) {
+                                lambda(col_data.bit_vector()->first());
+                            }
+                            else {
+                                lambda(std::size_t(0));
                             }
                         } else {
                             util::raise_rte("String aggregations not currently supported");
@@ -258,7 +296,8 @@ namespace min_max_aggregation
         }
     }
 
-    inline SegmentInMemory finalize(
+    template <Extremum T>
+    inline SegmentInMemory finalize_impl(
             const ColumnName& output_column_name,
             bool dynamic_schema,
             size_t unique_values,
@@ -270,11 +309,12 @@ namespace min_max_aggregation
             if(dynamic_schema) {
                 entity::details::visit_type(*data_type_, [&aggregated_, &data_type_, &res, &output_column_name, unique_values] (auto type_desc_tag) {
                     using RawType = typename decltype(type_desc_tag)::DataTypeTag::raw_type;
-                    auto prev_size = aggregated_.size() / sizeof(MaybeValue<RawType>);
-                    auto new_size = sizeof(MaybeValue<RawType>) * unique_values;
+                    using MaybeValueType = MaybeValue<RawType, T>;
+                    auto prev_size = aggregated_.size() / sizeof(MaybeValueType);
+                    auto new_size = sizeof(MaybeValueType) * unique_values;
                     aggregated_.resize(new_size);
-                    auto in_ptr =  reinterpret_cast<MaybeValue<RawType>*>(aggregated_.data());
-                    std::fill(in_ptr + prev_size, in_ptr + unique_values, MaybeValue<RawType>{});
+                    auto in_ptr =  reinterpret_cast<MaybeValueType*>(aggregated_.data());
+                    std::fill(in_ptr + prev_size, in_ptr + unique_values, MaybeValueType{});
                     auto col = std::make_shared<Column>(make_scalar_type(DataType::FLOAT64), unique_values, true, false);
                     auto out_ptr = reinterpret_cast<double*>(col->ptr());
                     for(auto i = 0u; i < unique_values; ++i, ++in_ptr, ++out_ptr) {
@@ -287,7 +327,7 @@ namespace min_max_aggregation
                 entity::details::visit_type(*data_type_, [&aggregated_, &data_type_, &res, output_column_name, unique_values] (auto type_desc_tag) {
                     using RawType = typename decltype(type_desc_tag)::DataTypeTag::raw_type;
                     auto col = std::make_shared<Column>(make_scalar_type(data_type_.value()), unique_values, true, false);
-                    const auto* in_ptr =  reinterpret_cast<const MaybeValue<RawType>*>(aggregated_.data());
+                    const auto* in_ptr =  reinterpret_cast<const MaybeValue<RawType, T>*>(aggregated_.data());
                     auto out_ptr = reinterpret_cast<RawType*>(col->ptr());
                     for(auto i = 0u; i < unique_values; ++i, ++in_ptr, ++out_ptr) {
                         *out_ptr = in_ptr->value_;
@@ -299,32 +339,92 @@ namespace min_max_aggregation
         }
         return res;
     }
+}
 
+/*********************
+ * MaxAggregatorData *
+ *********************/
+
+MaxAggregatorData::MaxAggregatorData(const MaxAggregatorData& other)
+    : aggregated_(other.aggregated_)
+    , data_type_(other.data_type_)
+{
+    log::version().warn("Copying potentially large buffer in MaxAggregatorData");
+}
+
+MaxAggregatorData& MaxAggregatorData::operator=(const MaxAggregatorData& other)
+{
+    aggregated_ = other.aggregated_;
+    data_type_ = other.data_type_;
+    log::version().warn("Copying potentially large buffer in MaxAggregatorData");
+    return *this;
+}
+
+void MaxAggregatorData::add_data_type(DataType data_type)
+{
+    add_data_type_impl(data_type, data_type_);
 }
 
 void MaxAggregatorData::aggregate(const std::optional<ColumnWithStrings>& input_column, const std::vector<size_t>& groups, size_t unique_values)
 {
-    min_max_aggregation::aggregate<min_max_aggregation::Extremum::MAX>(input_column, groups, unique_values, aggregated_, data_type_);
+    aggregate_impl<Extremum::MAX>(input_column, groups, unique_values, aggregated_, data_type_);
 }
 
 SegmentInMemory MaxAggregatorData::finalize(const ColumnName& output_column_name, bool dynamic_schema, size_t unique_values)
 {
-    return min_max_aggregation::finalize(output_column_name, dynamic_schema, unique_values, aggregated_, data_type_);
+    return finalize_impl<Extremum::MAX>(output_column_name, dynamic_schema, unique_values, aggregated_, data_type_);
+}
+
+/*********************
+ * MinAggregatorData *
+ *********************/
+
+MinAggregatorData::MinAggregatorData(const MinAggregatorData& other)
+    : aggregated_(other.aggregated_)
+    , data_type_(other.data_type_)
+{
+    log::version().warn("Copying potentially large buffer in MinAggregatorData");
+}
+
+MinAggregatorData& MinAggregatorData::operator=(const MinAggregatorData& other)
+{
+    aggregated_ = other.aggregated_;
+    data_type_ = other.data_type_;
+    log::version().warn("Copying potentially large buffer in MinAggregatorData");
+    return *this;
+}
+
+void MinAggregatorData::add_data_type(DataType data_type)
+{
+    add_data_type_impl(data_type, data_type_);
 }
 
 void MinAggregatorData::aggregate(const std::optional<ColumnWithStrings>& input_column, const std::vector<size_t>& groups, size_t unique_values)
 {
-    min_max_aggregation::aggregate<min_max_aggregation::Extremum::MIN>(input_column, groups, unique_values, aggregated_, data_type_);
+    aggregate_impl<Extremum::MIN>(input_column, groups, unique_values, aggregated_, data_type_);
 }
 
 SegmentInMemory MinAggregatorData::finalize(const ColumnName& output_column_name, bool dynamic_schema, size_t unique_values)
 {
-    return min_max_aggregation::finalize(output_column_name, dynamic_schema, unique_values, aggregated_, data_type_);
+    return finalize_impl<Extremum::MIN>(output_column_name, dynamic_schema, unique_values, aggregated_, data_type_);
 }
 
 /**********************
  * MeanAggregatorData *
  **********************/
+
+MeanAggregatorData::MeanAggregatorData(const MeanAggregatorData& other)
+    : fractions_(other.fractions_)
+{
+    log::version().warn("Copying potentially large buffer in MeanAggregatorData");
+}
+
+MeanAggregatorData& MeanAggregatorData::operator=(const MeanAggregatorData& other)
+{
+    fractions_ = other.fractions_;
+    log::version().warn("Copying potentially large buffer in MeanAggregatorData");
+    return *this;
+}
 
 void MeanAggregatorData::aggregate(const std::optional<ColumnWithStrings>& input_column, const std::vector<size_t>& groups, size_t unique_values) {
     if(input_column.has_value()) {
@@ -332,17 +432,24 @@ void MeanAggregatorData::aggregate(const std::optional<ColumnWithStrings>& input
             using TypeDescriptorTag =  decltype(type_desc_tag);
             using RawType = typename TypeDescriptorTag::DataTypeTag::raw_type;
 
-            data_.fractions_.resize(unique_values);
+            fractions_.resize(unique_values);
 
             auto col_data = input_column->column_->data();
-            while (auto block = col_data.next<TypeDescriptorTag>()) {
-                auto ptr = reinterpret_cast<const RawType *>(block.value().data());
-                for (auto i = 0u; i < block.value().row_count(); ++i) {
-                    auto group = groups[i];
-                    auto& fraction = data_.fractions_[group];
-                    fraction.numerator_ += double(*ptr++);
-                    ++fraction.denominator_;
+            auto lambda = [this, &col_data, &groups](auto iter) {
+                while (auto block = col_data.next<TypeDescriptorTag>()) {
+                    auto ptr = reinterpret_cast<const RawType *>(block.value().data());
+                    for (auto i = 0u; i < block.value().row_count(); ++i, ++ptr, ++iter) {
+                        auto& fraction = fractions_[groups[deref(iter)]];
+                        fraction.numerator_ += double(*ptr);
+                        ++fraction.denominator_;
+                    }
                 }
+            };
+            if (input_column->column_->is_sparse()) {
+                lambda(col_data.bit_vector()->first());
+            }
+            else {
+                lambda(std::size_t(0));
             }
         });
     }
@@ -350,18 +457,40 @@ void MeanAggregatorData::aggregate(const std::optional<ColumnWithStrings>& input
 
 SegmentInMemory MeanAggregatorData::finalize(const ColumnName& output_column_name,  bool, size_t unique_values) {
     SegmentInMemory res;
-    if(!data_.fractions_.empty()) {
-        data_.fractions_.resize(unique_values);
-        auto pos = res.add_column(scalar_field(DataType::FLOAT64, output_column_name.value), data_.fractions_.size(), true);
+    if(!fractions_.empty()) {
+        fractions_.resize(unique_values);
+        auto pos = res.add_column(scalar_field(DataType::FLOAT64, output_column_name.value), fractions_.size(), true);
         auto& column = res.column(pos);
         auto ptr = reinterpret_cast<double*>(column.ptr());
-        column.set_row_data(data_.fractions_.size() - 1);
+        column.set_row_data(fractions_.size() - 1);
 
-        for (const auto& fraction : folly::enumerate(data_.fractions_)) {
-            ptr[fraction.index] = fraction->to_double();
+        for (auto idx = 0u; idx < fractions_.size(); ++idx) {
+            ptr[idx] = fractions_[idx].to_double();
         }
     }
     return res;
+}
+
+double MeanAggregatorData::Fraction::to_double() const
+{
+    return denominator_ == 0 ? std::numeric_limits<double>::quiet_NaN(): numerator_ / static_cast<double>(denominator_);
+}
+
+/***********************
+ * CountAggregatorData *
+ ***********************/
+
+CountAggregatorData::CountAggregatorData(const CountAggregatorData& other)
+    : aggregated_(other.aggregated_)
+{
+    log::version().warn("Copying potentially large buffer in CountAggregatorData");
+}
+
+CountAggregatorData& CountAggregatorData::operator=(const CountAggregatorData& other)
+{
+    aggregated_ = other.aggregated_;
+    log::version().warn("Copying potentially large buffer in CountAggregatorData");
+    return *this;
 }
 
 void CountAggregatorData::aggregate(const std::optional<ColumnWithStrings>& input_column, const std::vector<size_t>& groups, size_t unique_values) {
@@ -371,24 +500,33 @@ void CountAggregatorData::aggregate(const std::optional<ColumnWithStrings>& inpu
             using RawType = typename TypeDescriptorTag::DataTypeTag::raw_type;
 
             aggregated_.resize(unique_values);
-
-            if constexpr (is_floating_point_type(TypeDescriptorTag::DataTypeTag::data_type)) {
-                auto col_data = input_column->column_->data();
-                while (auto block = col_data.next<TypeDescriptorTag>()) {
-                    auto ptr = reinterpret_cast<const RawType *>(block.value().data());
-                    for (auto i = 0u; i < block.value().row_count(); ++i) {
-                        if (!std::isnan(static_cast<double>(ptr[i]))) {
-                            auto group = groups[i];
-                            auto& val = aggregated_[group];
+            auto col_data = input_column->column_->data();
+            auto lambda = [this, &col_data, &groups](auto iter) {
+                if constexpr (is_floating_point_type(TypeDescriptorTag::DataTypeTag::data_type)) {
+                    while (auto block = col_data.next<TypeDescriptorTag>()) {
+                        auto ptr = reinterpret_cast<const RawType *>(block.value().data());
+                        for (auto i = 0u; i < block.value().row_count(); ++i, ++ptr, ++iter) {
+                            if (!std::isnan(static_cast<double>(*ptr))) {
+                                auto& val = aggregated_[groups[deref(iter)]];
+                                ++val;
+                            }
+                        }
+                    }
+                }
+                else {
+                    while (auto block = col_data.next<TypeDescriptorTag>()) {
+                        for (auto i = 0u; i < block.value().row_count(); ++i, ++iter) {
+                            auto& val = aggregated_[groups[deref(iter)]];
                             ++val;
                         }
                     }
                 }
-            } else {
-                for (auto group: groups) {
-                    auto& val = aggregated_[group];
-                    ++val;
-                }
+            };
+            if (input_column->column_->is_sparse()) {
+                lambda(col_data.bit_vector()->first());
+            }
+            else {
+                lambda(std::size_t(0));
             }
         });
     }
