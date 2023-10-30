@@ -11,6 +11,13 @@ import os
 import os.path as osp
 from abc import abstractmethod, ABCMeta
 
+import yaml
+
+try:
+    from yaml import CLoader as Loader
+except ImportError:
+    from yaml import Loader
+
 from arcticc.pb2.logger_pb2 import LoggersConfig, LoggerConfig
 from arcticc.pb2.config_pb2 import RuntimeConfig
 from arcticc.pb2.storage_pb2 import EnvironmentConfigsMap, EnvironmentConfig, LibraryConfig, LibraryDescriptor
@@ -49,9 +56,12 @@ def arctic_native_path(p=None):
 
 _LOCAL_ENV = "local"
 _DEFAULT_ENV = _LOCAL_ENV
+_DEFAULT_ENVS_PATH = arctic_native_path("conf/envs.yaml")
 _DEFAULT_LMDB_LIB = "lmdb.default"
+_DEFAULT_LOG_CONF = arctic_native_path("conf/loggers.yaml")
 _DEFAULT_LOG_DIR = arctic_native_path("logs")
 _DEFAULT_LOG_LEVEL = "INFO"
+_DEFAULT_RUNTIME_CONF = arctic_native_path("conf/runtime.yaml")
 _DEFAULT_DATA_DIR = arctic_native_path("data")
 
 
@@ -60,7 +70,10 @@ class Defaults(object):
     LOCAL_ENV = _LOCAL_ENV
     ENV = _DEFAULT_ENV
     LIB = _DEFAULT_LMDB_LIB
+    ENV_FILE_PATH = _DEFAULT_ENVS_PATH
+    LOG_CONF_FILE_PATH = _DEFAULT_LOG_CONF
     LOG_DIR = _DEFAULT_LOG_DIR
+    RUNTIME_CONF_FILE_PATH = _DEFAULT_RUNTIME_CONF
     DATA_DIR = _DEFAULT_DATA_DIR
     DEFAULT_LOG_LEVEL = _DEFAULT_LOG_LEVEL
 
@@ -75,6 +88,96 @@ def _extract_lib_config(env_cfg, lib_path):
     for sid in lib.storage_ids:
         cfg.storage_by_id[sid].CopyFrom(env_cfg.storage_by_id[sid])
     return cfg
+
+
+class ProtoConfConverter(object):
+    __metaclass__ = ABCMeta
+
+    def __init__(self, out_type):
+        # type: (Type)->None
+        if not issubclass(out_type, Message):
+            raise TypeError("ProtoConf loader can only load proto message type. Actual {}".format(out_type))
+        self._out_type = out_type
+
+    @abstractmethod
+    def loads(self, buf):
+        # type: (AnyStr)->Message
+        pass
+
+    @abstractmethod
+    def dumps(self, cfg):
+        # type: (Message)->AnyStr
+        pass
+
+
+class YamlProtoConverter(ProtoConfConverter):
+    def loads(self, buf):
+        cfg = self._out_type()
+        JsonToMessage(json.dumps(yaml.load(buf, Loader=Loader)), cfg, ignore_unknown_fields=True)
+        return cfg
+
+    def dumps(self, cfg):
+        if not isinstance(cfg, self._out_type):
+            raise TypeError("Unsupported type: {}, expected {}".format(type(cfg), self._out_type))
+        j = MessageToJson(cfg, preserving_proto_field_name=True)
+        return yaml.safe_dump(json.loads(j), default_flow_style=False)
+
+
+def _load_config(conf_path, conf_type):
+    # type: (FilePath, Type)->Any
+    p = _expand_path(conf_path)
+    if not osp.exists(p):
+        raise ArcticNativeException("Config file {} for type {} not found".format(p, conf_type))
+
+    converter = YamlProtoConverter(conf_type)
+    with open(p, "r") as _if:
+        return converter.loads(_if.read())
+
+
+def _save_config(config, conf_path, conf_type):
+    # type: (Any, FilePath, Type)->None
+    p = _expand_path(conf_path)
+    if not osp.exists(osp.dirname(p)):
+        os.makedirs(osp.dirname(p))
+    converter = YamlProtoConverter(conf_type)
+    with open(p, "w") as of:
+        of.write(converter.dumps(config))
+
+
+def load_envs_config(conf_path=_DEFAULT_ENVS_PATH):
+    # type: (Optional[AnyStr])->EnvironmentConfigsMap
+    return _load_config(conf_path, EnvironmentConfigsMap)
+
+
+def load_env_config(env=_DEFAULT_ENV, conf_path=_DEFAULT_ENVS_PATH):
+    return load_envs_config(conf_path).env_by_id[env]
+
+
+def save_envs_config(config, conf_path=_DEFAULT_ENVS_PATH):
+    # type: (EnvironmentConfigsMap, Optional[FilePath])->None
+    _save_config(config, conf_path, EnvironmentConfigsMap)
+
+
+def load_loggers_config(path=Defaults.LOG_CONF_FILE_PATH):
+    # type: (Optional[FilePath])->LoggersConfig
+    return _load_config(path, LoggersConfig)
+
+
+def save_loggers_config(config=None, path=Defaults.LOG_CONF_FILE_PATH):
+    # type: (Optional[LoggersConfig], Optional[FilePath])->None
+    config = config if config is not None else default_loggers_config()
+    _save_config(config, path, LoggersConfig)
+
+
+def load_runtime_config(path=Defaults.RUNTIME_CONF_FILE_PATH):
+    # type: (Optional[FilePath])->RuntimeConfig
+    return _load_config(path, RuntimeConfig)
+
+
+def save_runtime_config(config=None, path=Defaults.RUNTIME_CONF_FILE_PATH):
+    # type: (Optional[RuntimeConfig], Optional[FilePath])->None
+    config = config if config is not None else default_runtime_config()
+    _save_config(config, path, RuntimeConfig)
 
 
 def make_loggers_config(

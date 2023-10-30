@@ -80,6 +80,29 @@ class ArcticConfig(object):
         self.uri_builder = uri_builder
 
 
+class ArcticFileConfig(ArcticConfig):
+    def __init__(self, env=Defaults.ENV, config_path=Defaults.ENV_FILE_PATH):
+        # type: (EnvName, FilePath)->None
+        self._conf_path = _expand_path(config_path)
+        self._env = env
+
+    def _check_config(self):
+        if not osp.exists(self._conf_path):
+            raise ArcticNativeException("Config file {} not found".format(self._conf_path))
+
+    def __getitem__(self, lib_name):
+        self._check_config()
+        envs_cfg = load_envs_config(conf_path=self._conf_path)
+        lib_cfg = extract_lib_config(envs_cfg.env_by_id[self._env], lib_name)
+
+        # Local config assumes a read/write openmode
+        return NativeVersionStore.create_store_from_lib_config(lib_cfg, self._env, OpenMode.DELETE)
+
+    def list_libraries(self):
+        self._check_config()
+        return load_env_config(conf_path=self._conf_path, env=self._env).lib_by_path.keys()
+
+
 class ArcticMemoryConfig(ArcticConfig):
     def __init__(self, cfg, env):
         # type: (EnvironmentConfigsMap, Optional[EnvName])->None
