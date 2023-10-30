@@ -7,6 +7,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 """
 import multiprocessing as mp
 import pytest
+import numpy as np
 import pandas as pd
 import os
 import sys
@@ -111,6 +112,7 @@ def test_lmdb_mapsize(tmpdir):
         ac.create_library("test")
     # Then - even library creation fails so map size having an effect
     assert "MDB_MAP_FULL" in str(e.value)
+    assert "E5003" in str(e.value)
     assert issubclass(e.type, StorageException)
 
     # Given - larger map size
@@ -122,6 +124,21 @@ def test_lmdb_mapsize(tmpdir):
     lib.write("sym", df)
 
     # Then - operations succeed as usual
+
+
+def test_lmdb_mapsize_write(tmpdir):
+    ac = Arctic(f"lmdb://{tmpdir}?map_size=1MB")
+    df = pd.DataFrame(np.random.randint(0, 100, size=(int(1e6), 4)), columns=list('ABCD'))
+    lib = ac.create_library("test")
+
+    with pytest.raises(LmdbMapFullError) as e:
+        lib.write("sym", df)
+
+    assert "MDB_MAP_FULL" in str(e.value)
+    assert "E5003" in str(e.value)
+    assert "mdb_put" in str(e.value)
+    assert "-30792" in str(e.value)
+    assert issubclass(e.type, StorageException)
 
 
 @pytest.mark.parametrize(

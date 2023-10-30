@@ -56,6 +56,8 @@ void LmdbStorage::do_write_internal(Composite<KeySegmentPair>&& kvs, ::lmdb::txn
             int res = ::mdb_put(txn.handle(), dbi.handle(), &mdb_key, &mdb_val, MDB_RESERVE | overwrite_flag);
             if (res == MDB_KEYEXIST) {
                 throw DuplicateKeyException(kv.variant_key());
+            } else if (res == MDB_MAP_FULL) {
+                throw ::lmdb::map_full_error("mdb_put", res);
             } else if (res != 0) {
                 throw std::runtime_error(fmt::format("Invalid lmdb error code {} while putting key {}",
                                                      res, kv.key_view()));
