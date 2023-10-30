@@ -26,7 +26,7 @@ pip install mkdocs-material mkdocs-jupyter mkdocstrings[python] black pybind11-s
 - mkdocstrings[python]: python docstring support, like sphinx docs
 - black: for signature formatting
 - pybind11-stubgen: for generating stubs for pybind11 extensions, so that mkdocstrings can parse them
-- mke: for deploying versioned docs
+- mike: for deploying versioned docs
 
 You need to have ArcticDB installed to generate the API docs, so install it from source:
 
