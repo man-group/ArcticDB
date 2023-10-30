@@ -103,7 +103,6 @@
             "attrs": [""],
             "dataclasses": [""],
             "protobuf": [""],
-            "six": [""],
             "msgpack": [""],
             "packaging": [""],
             "pymongo": [""],

@@ -113,7 +113,6 @@ _SUPPORTED_NATIVE_RETURN_TYPES = Union[FrameData]
 def _accept_array_string(v):
     # TODO remove this once arctic keeps the string type under the hood
     # and does not transform string into bytes
-    # string_types and binary_type can be a single type or a tuple
     return type(v) in (str, bytes)
 
 
