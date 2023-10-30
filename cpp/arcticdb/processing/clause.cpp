@@ -70,8 +70,9 @@ std::vector<std::vector<size_t>> structure_by_column_slice(std::vector<RangesAnd
 Composite<ProcessingUnit> gather_entities(std::shared_ptr<ComponentManager> component_manager,
                                           Composite<EntityIds>&& entity_ids,
                                           bool include_atom_keys,
-                                          bool include_bucket) {
-    return entity_ids.transform([&component_manager, include_atom_keys, include_bucket]
+                                          bool include_bucket,
+                                          bool include_initial_expected_get_calls) {
+    return entity_ids.transform([&component_manager, include_atom_keys, include_bucket, include_initial_expected_get_calls]
     (const EntityIds& entity_ids) -> ProcessingUnit {
         ProcessingUnit res;
         std::vector<std::shared_ptr<SegmentInMemory>> segments;
@@ -111,6 +112,14 @@ Composite<ProcessingUnit> gather_entities(std::shared_ptr<ComponentManager> comp
                         );
                 res.set_bucket(buckets.at(0));
             }
+        }
+        if (include_initial_expected_get_calls) {
+            std::vector<uint64_t> segment_initial_expected_get_calls;
+            segment_initial_expected_get_calls.reserve(entity_ids.size());
+            for (auto entity_id: entity_ids) {
+                segment_initial_expected_get_calls.emplace_back(component_manager->get_initial_expected_get_calls<std::shared_ptr<SegmentInMemory>>(entity_id));
+            }
+            res.set_segment_initial_expected_get_calls(std::move(segment_initial_expected_get_calls));
         }
         return res;
     });
@@ -251,9 +260,8 @@ struct SegmentWrapper {
     }
 };
 
-Composite<EntityIds> PassthroughClause::process(Composite<EntityIds> &&p) const {
-    auto procs = std::move(p);
-    return procs;
+Composite<EntityIds> PassthroughClause::process(Composite<EntityIds>&& entity_ids) const {
+    return std::move(entity_ids);
 }
 
 Composite<EntityIds> FilterClause::process(
@@ -496,6 +504,79 @@ Composite<EntityIds> AggregationClause::process(Composite<EntityIds>&& entity_id
 
 [[nodiscard]] std::string AggregationClause::to_string() const {
     return fmt::format("AGGREGATE {}", aggregation_map_);
+}
+
+void ResampleClause::set_aggregations(const std::unordered_map<std::string, std::string>& aggregations) {
+    aggregation_map_ = aggregations;
+    clause_info_.input_columns_ = std::make_optional<std::unordered_set<std::string>>();
+    for (const auto& [column, _]: aggregation_map_) {
+        clause_info_.input_columns_->emplace(column);
+    }
+}
+
+std::vector<std::vector<size_t>> ResampleClause::structure_for_processing(
+        std::vector<RangesAndKey>& ranges_and_keys,
+        ARCTICDB_UNUSED size_t start_from) const {
+    ranges_and_keys.erase(std::remove_if(ranges_and_keys.begin(), ranges_and_keys.end(), [this](const RangesAndKey& ranges_and_key) {
+        auto [start_index, end_index] = ranges_and_key.key_.time_range();
+        // end_index from the key is 1 nanosecond larger than the index value of the last row in the row-slice
+        end_index--;
+        switch (closed_boundary_) {
+            case ResampleClosedBoundary::LEFT:
+                return start_index >= bucket_boundaries_.back() || end_index < bucket_boundaries_.front();
+            case ResampleClosedBoundary::RIGHT:
+            default:
+                return start_index > bucket_boundaries_.back() || end_index <= bucket_boundaries_.front();
+        }
+    }), ranges_and_keys.end());
+    auto res = structure_by_row_slice(ranges_and_keys, 0);
+    // Element i of res also needs the values from element i+1 if there is a bucket which incorporates the last index
+    // value of row-slice i and the first value of row-slice i+1
+    // Element i+1 should be removed if the last bucket involved in element i covers all the index values in element i+1
+    auto bucket_boundaries_it = std::begin(bucket_boundaries_);
+    for (auto it = res.begin(); it != res.end() && it != std::prev(res.end());) {
+        auto last_index_value = ranges_and_keys[it->at(0)].key_.end_time() - 1;
+        while(bucket_boundaries_it != bucket_boundaries_.end() &&
+              ((closed_boundary_ == ResampleClosedBoundary::LEFT && *bucket_boundaries_it <= last_index_value) ||
+               (closed_boundary_ == ResampleClosedBoundary::RIGHT && *bucket_boundaries_it < last_index_value))) {
+            bucket_boundaries_it++;
+        }
+        auto next_it = std::next(it);
+        while (next_it != res.end()) {
+            auto next_start_index_value = ranges_and_keys[next_it->at(0)].key_.start_time();
+            // end_index from the key is 1 nanosecond larger than the index value of the last row in the row-slice
+            auto next_end_index_value = ranges_and_keys[next_it->at(0)].key_.end_time() - 1;
+            if (bucket_boundaries_it != bucket_boundaries_.end() &&
+                ((closed_boundary_ == ResampleClosedBoundary::LEFT && *bucket_boundaries_it > next_start_index_value) ||
+                 (closed_boundary_ == ResampleClosedBoundary::RIGHT && *bucket_boundaries_it >= next_start_index_value))) {
+                it->insert(it->end(), next_it->begin(), next_it->end());
+                if (bucket_boundaries_it == std::prev(bucket_boundaries_.end()) ||
+                    (closed_boundary_ == ResampleClosedBoundary::LEFT && *bucket_boundaries_it > next_end_index_value) ||
+                    (closed_boundary_ == ResampleClosedBoundary::RIGHT && *bucket_boundaries_it >= next_end_index_value)) {
+                    next_it = res.erase(next_it);
+                } else {
+                    break;
+                }
+            } else {
+                break;
+            }
+        }
+        it = next_it;
+    }
+    return res;
+}
+
+Composite<EntityIds> ResampleClause::process(Composite<EntityIds>&& entity_ids) const {
+    auto procs = gather_entities(component_manager_, std::move(entity_ids), false, false, true);
+    Composite<EntityIds> output;
+    procs.broadcast([&output, this](auto& proc) {
+        output.push_back(push_entities(component_manager_, std::move(proc)));
+    });
+    return output;
+}
+
+[[nodiscard]] std::string ResampleClause::to_string() const {
+    return fmt::format("RESAMPLE({}) {}", rule_, aggregation_map_);
 }
 
 [[nodiscard]] Composite<EntityIds> RemoveColumnPartitioningClause::process(Composite<EntityIds>&& entity_ids) const {

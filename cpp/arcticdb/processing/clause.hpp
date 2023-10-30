@@ -117,7 +117,8 @@ std::vector<std::vector<size_t>> structure_by_column_slice(std::vector<RangesAnd
 Composite<ProcessingUnit> gather_entities(std::shared_ptr<ComponentManager> component_manager,
                                           Composite<EntityIds>&& entity_ids,
                                           bool include_atom_keys = false,
-                                          bool include_bucket = false);
+                                          bool include_bucket = false,
+                                          bool include_initial_expected_get_calls = false);
 
 EntityIds push_entities(std::shared_ptr<ComponentManager> component_manager, ProcessingUnit&& proc);
 
@@ -395,6 +396,70 @@ struct AggregationClause {
     }
 
     [[nodiscard]] std::string to_string() const;
+};
+
+enum class ResampleClosedBoundary {
+    LEFT,
+    RIGHT
+};
+
+struct ResampleClause {
+    ClauseInfo clause_info_;
+    std::shared_ptr<ComponentManager> component_manager_;
+    ProcessingConfig processing_config_;
+    std::string rule_;
+    ResampleClosedBoundary closed_boundary_;
+    std::vector<timestamp> bucket_boundaries_;
+    std::unordered_map<std::string, std::string> aggregation_map_;
+
+    ResampleClause() = delete;
+
+    ARCTICDB_MOVE_COPY_DEFAULT(ResampleClause)
+
+    ResampleClause(const std::string& rule, ResampleClosedBoundary closed_boundary):
+    rule_(rule),
+    closed_boundary_(closed_boundary){
+        clause_info_.can_combine_with_column_selection_ = false;
+        clause_info_.modifies_output_descriptor_ = true;
+    }
+
+    [[nodiscard]] std::vector<std::vector<size_t>> structure_for_processing(
+            std::vector<RangesAndKey>& ranges_and_keys,
+            size_t start_from) const;
+
+    [[nodiscard]] Composite<EntityIds> process(Composite<EntityIds>&& entity_ids) const;
+
+    [[nodiscard]] std::optional<std::vector<Composite<EntityIds>>> repartition(
+            ARCTICDB_UNUSED std::vector<Composite<EntityIds>>&&
+    ) const {
+        return std::nullopt;
+    }
+
+    [[nodiscard]] const ClauseInfo& clause_info() const {
+        return clause_info_;
+    }
+
+    void set_processing_config(const ProcessingConfig& processing_config) {
+        processing_config_ = processing_config;
+    }
+
+    void set_component_manager(std::shared_ptr<ComponentManager> component_manager) {
+        component_manager_ = component_manager;
+    }
+
+    [[nodiscard]] std::string to_string() const;
+
+    [[nodiscard]] std::string rule() const {
+        return rule_;
+    }
+
+    void set_aggregations(const std::unordered_map<std::string, std::string>& aggregations);
+
+    void set_bucket_boundaries(std::vector<timestamp>&& bucket_boundaries) {
+        bucket_boundaries_ = std::move(bucket_boundaries);
+        user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(bucket_boundaries_.size() >= 2,
+                                                              "Resampling requires at least one bucket");
+    }
 };
 
 struct RemoveColumnPartitioningClause {

@@ -267,6 +267,25 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
             .def(py::init<std::string, std::unordered_map<std::string, std::string>>())
             .def("__str__", &AggregationClause::to_string);
 
+    py::enum_<ResampleClosedBoundary>(version, "ResampleClosedBoundary")
+            .value("LEFT", ResampleClosedBoundary::LEFT)
+            .value("RIGHT", ResampleClosedBoundary::RIGHT);
+
+    py::class_<ResampleClause, std::shared_ptr<ResampleClause>>(version, "ResampleClause")
+            .def(py::init<std::string, ResampleClosedBoundary>())
+            .def_property_readonly("rule", &ResampleClause::rule)
+            .def("set_aggregations", &ResampleClause::set_aggregations)
+            .def("set_bucket_boundaries", [](ResampleClause& self, py::array_t<timestamp> py_bucket_boundaries) {
+                // TODO: Can we use memcpy here?
+                std::vector<timestamp> bucket_boundaries;
+                bucket_boundaries.reserve(py_bucket_boundaries.size());
+                for (py::ssize_t i = 0; i < py_bucket_boundaries.size(); i++) {
+                    bucket_boundaries.emplace_back(py_bucket_boundaries.at(i));
+                }
+                self.set_bucket_boundaries(std::move(bucket_boundaries));
+            })
+            .def("__str__", &ResampleClause::to_string);
+
     py::enum_<RowRangeClause::RowRangeType>(version, "RowRangeType")
             .value("HEAD", RowRangeClause::RowRangeType::HEAD)
             .value("TAIL", RowRangeClause::RowRangeType::TAIL)
@@ -295,6 +314,7 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
                                 std::shared_ptr<ProjectClause>,
                                 std::shared_ptr<GroupByClause>,
                                 std::shared_ptr<AggregationClause>,
+                                std::shared_ptr<ResampleClause>,
                                 std::shared_ptr<RowRangeClause>,
                                 std::shared_ptr<DateRangeClause>>> clauses) {
                 std::vector<std::shared_ptr<Clause>> _clauses;
