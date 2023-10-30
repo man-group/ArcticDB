@@ -51,7 +51,7 @@ ArcticDB is designed from the outset to be resilient; there is no single point o
 
 |                       | Linux | Windows | Mac |
 | --------------------- | - | - | - |
-| S3                 | ✔️ | ✔️ | ✔️ |
+| AWS S3             | ✔️ | ✔️ | ✔️ |
 | LMDB               | ✔️ | Beta | ✔️ |
 | Azure Blob Storage | ✔️ | ✔️ | ➖ |
 
