@@ -10,15 +10,9 @@ import numpy as np
 import pandas as pd
 import pytest
 import random
-from itertools import chain, product
-from datetime import datetime
-from tests.conftest import PERSISTENT_STORAGE_TESTS_ENABLED
 
-from arcticdb.config import MACOS_CONDA_BUILD
 from arcticdb_ext.storage import KeyType, NoDataFoundException
 from arcticdb.util.test import config_context, random_string, assert_frame_equal, distinct_timestamps
-
-from tests.conftest import PERSISTENT_STORAGE_TESTS_ENABLED
 
 
 def eprint(*args, **kwargs):
@@ -35,34 +29,13 @@ def comp_dict(d1, d2):
 
 
 SECOND = 1000000000
+MAP_TIMEOUTS = [0, SECOND * 5, SECOND * 10000]
 
 
-def get_map_timeouts():
-    return [0, SECOND * 5, SECOND * 10000]
-
-
-def gen_params_store_and_timeout():
-    p = [
-        [
-            "s3_version_store_v1",
-            "s3_version_store_v2",
-            "s3_version_store_v1",
-            "s3_version_store_v2",
-        ],
-        get_map_timeouts(),
-    ]
-    if not MACOS_CONDA_BUILD:
-        p[0].append("azure_version_store")
-
-    if PERSISTENT_STORAGE_TESTS_ENABLED:
-        p[0].append("real_s3_version_store")
-    return list(product(*p))
-
-
-@pytest.mark.parametrize("lib_type, map_timeout", gen_params_store_and_timeout())
-def test_delete_all(lib_type, map_timeout, sym, request):
+@pytest.mark.parametrize("map_timeout", MAP_TIMEOUTS)
+def test_delete_all(map_timeout, object_and_lmdb_version_store, sym):
     with config_context("VersionMap.ReloadInterval", map_timeout):
-        lib = request.getfixturevalue(lib_type)
+        lib = object_and_lmdb_version_store
         symbol = sym
         df1 = pd.DataFrame({"x": np.arange(10, dtype=np.int64)})
         lib.write(symbol, df1)
@@ -373,10 +346,10 @@ def test_delete_version_with_batch_write_metadata(object_version_store, idx, sym
     assert vit[sym_2].version == 4
 
 
-@pytest.mark.parametrize("lib_type, map_timeout", gen_params_store_and_timeout())
-def test_delete_version_with_snapshot(lib_type, map_timeout, sym, request):
+@pytest.mark.parametrize("map_timeout", MAP_TIMEOUTS)
+def test_delete_version_with_snapshot(map_timeout, object_and_lmdb_version_store, sym):
     with config_context("VersionMap.ReloadInterval", map_timeout):
-        lib = request.getfixturevalue(lib_type)
+        lib = object_and_lmdb_version_store
         symbol = sym
         df1 = pd.DataFrame({"x": np.arange(10, dtype=np.int64)})
         lib.write(symbol, df1)
@@ -435,7 +408,7 @@ def tests_with_pruning_and_tombstones(basic_store_tombstone_and_pruning, sym):
     assert lib.has_symbol(symbol) is False
 
 
-@pytest.mark.parametrize("map_timeout", get_map_timeouts())
+@pytest.mark.parametrize("map_timeout", MAP_TIMEOUTS)
 def test_with_snapshot_pruning_tombstones(basic_store_tombstone_and_pruning, map_timeout, sym):
     with config_context("VersionMap.ReloadInterval", map_timeout):
         symbol = sym
@@ -468,7 +441,7 @@ def test_with_snapshot_pruning_tombstones(basic_store_tombstone_and_pruning, map
         lib.read(symbol, 0)
 
 
-@pytest.mark.parametrize("map_timeout", get_map_timeouts())
+@pytest.mark.parametrize("map_timeout", MAP_TIMEOUTS)
 def test_normal_flow_with_snapshot_and_pruning(basic_store_tombstone_and_pruning, map_timeout, sym):
     with config_context("VersionMap.ReloadInterval", map_timeout):
         symbol = sym
@@ -523,7 +496,7 @@ def test_delete_multi_keys(object_version_store, sym):
     assert len(lt.find_keys(KeyType.TABLE_DATA)) == 0
 
 
-@pytest.mark.parametrize("map_timeout", get_map_timeouts())
+@pytest.mark.parametrize("map_timeout", MAP_TIMEOUTS)
 def test_delete_multi_keys_snapshot(basic_store, map_timeout, sym):
     data = {"e": np.arange(1000), "f": np.arange(8000), "g": None}
     basic_store.write(sym, data=data, metadata="realyolo2", recursive_normalizers=True)
@@ -567,7 +540,7 @@ def test_delete_date_range_with_strings(version_store_factory, index_start):
     assert_frame_equal(vit.data, df)
 
 
-@pytest.mark.parametrize("map_timeout", get_map_timeouts())
+@pytest.mark.parametrize("map_timeout", MAP_TIMEOUTS)
 def test_delete_date_range_remove_everything(version_store_factory, map_timeout):
     with config_context("VersionMap.ReloadInterval", map_timeout):
         lib = version_store_factory(column_group_size=3, segment_row_size=3)

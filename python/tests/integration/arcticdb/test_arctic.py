@@ -6,34 +6,25 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 import sys
-
+import time
 import pytz
-from arcticdb_ext.exceptions import InternalException
-from arcticdb.exceptions import ArcticDbNotYetImplemented, LibraryNotFound
-
-from arcticdb_ext.storage import NoDataFoundException
-
-from arcticdb.arctic import Arctic
-from arcticdb.exceptions import MismatchingLibraryOptions
-from arcticdb.encoding_version import EncodingVersion
-from arcticdb.options import LibraryOptions
-from arcticdb import QueryBuilder
-from arcticc.pb2.s3_storage_pb2 import Config as S3Config
-
 import math
 import re
 import pytest
 import pandas as pd
-from datetime import datetime, timezone
 import numpy as np
-
-from arcticdb.config import MACOS_CONDA_BUILD, MACOS_CONDA_BUILD_SKIP_REASON
-from arcticdb.util.test import assert_frame_equal, RUN_MONGO_TEST
-
+from datetime import datetime, timezone
 from botocore.client import BaseClient as BotoClient
-import time
 
-
+from arcticdb_ext.exceptions import InternalException
+from arcticdb_ext.storage import NoDataFoundException
+from arcticdb.exceptions import ArcticDbNotYetImplemented, LibraryNotFound, MismatchingLibraryOptions
+from arcticdb.arctic import Arctic
+from arcticdb.options import LibraryOptions
+from arcticdb.encoding_version import EncodingVersion
+from arcticdb import QueryBuilder
+from arcticc.pb2.s3_storage_pb2 import Config as S3Config
+from arcticdb.util.test import assert_frame_equal
 from arcticdb.version_store.library import (
     WritePayload,
     ArcticUnsupportedDataTypeException,
@@ -41,6 +32,8 @@ from arcticdb.version_store.library import (
     StagedDataFinalizeMethod,
     ArcticInvalidApiUsageException,
 )
+
+from tests.util.mark import AZURE_TESTS_MARK, MONGO_TESTS_MARK
 
 
 def test_library_creation_deletion(arctic_client):
@@ -243,17 +236,13 @@ def test_separation_between_libraries_with_prefixes(object_storage_uri_incl_buck
     ac_mars.delete_library("pytest_test_lib_2")
 
 
-def object_storage_uri_and_client():
-    if MACOS_CONDA_BUILD:
-        return [("moto_s3_uri_incl_bucket", "boto_client")]
-
-    return [
-        ("moto_s3_uri_incl_bucket", "boto_client"),
-        ("azurite_azure_uri_incl_bucket", "azure_client_and_create_container"),
-    ]
+OBJECT_STORAGE_URI_AND_CLIENT = [
+    ("moto_s3_uri_incl_bucket", "boto_client"),
+    pytest.param("azurite_azure_uri_incl_bucket", "azure_client_and_create_container", marks=AZURE_TESTS_MARK),
+]
 
 
-@pytest.mark.parametrize("connection_string, client", object_storage_uri_and_client())
+@pytest.mark.parametrize("connection_string, client", OBJECT_STORAGE_URI_AND_CLIENT)
 def test_library_management_path_prefix(connection_string, client, request):
     connection_string = request.getfixturevalue(request.getfixturevalue("connection_string"))
     client = request.getfixturevalue(request.getfixturevalue("client"))
@@ -567,7 +556,7 @@ def test_delete_date_range(arctic_library):
     assert lib["symbol"].version == 1
 
 
-@pytest.mark.skipif(not RUN_MONGO_TEST, reason="Mongo test on windows is fiddly")
+@MONGO_TESTS_MARK
 def test_mongo_repr(mongo_test_uri):
     max_pool_size = 10
     min_pool_size = 100
@@ -1032,7 +1021,7 @@ def test_segment_slicing(arctic_client):
     assert num_data_segments == math.ceil(rows / rows_per_segment) * math.ceil(columns / columns_per_segment)
 
 
-@pytest.mark.parametrize("connection_string, client", object_storage_uri_and_client())
+@pytest.mark.parametrize("connection_string, client", OBJECT_STORAGE_URI_AND_CLIENT)
 def test_reload_symbol_list(connection_string, client, request):
     connection_string = request.getfixturevalue(request.getfixturevalue("connection_string"))
     client = request.getfixturevalue(request.getfixturevalue("client"))
@@ -1099,7 +1088,7 @@ def test_azure_no_ca_path(azurite_azure_test_connection_setting):
     )
 
 
-@pytest.mark.skipif(MACOS_CONDA_BUILD, reason=MACOS_CONDA_BUILD_SKIP_REASON)
+@AZURE_TESTS_MARK
 def test_azure_sas_token(azure_account_sas_token, azurite_azure_test_connection_setting):
     endpoint, container, credential_name, _, _ = azurite_azure_test_connection_setting
     ac = Arctic(

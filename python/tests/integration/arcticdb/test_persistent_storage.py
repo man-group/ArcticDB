@@ -1,15 +1,14 @@
 import pytest
 import os
-import pandas as pd
 from arcticdb.arctic import Arctic
 from arcticdb.util.test import assert_frame_equal
+from tests.util.mark import PERSISTENT_STORAGE_TESTS_ENABLED, REAL_S3_TESTS_MARK
 from tests.util.storage_test import (
     get_seed_libraries,
     generate_pseudo_random_dataframe,
     generate_ascending_dataframe,
 )
 from arcticdb.version_store.library import WritePayload, ReadRequest
-from tests.conftest import PERSISTENT_STORAGE_TESTS_ENABLED
 
 if PERSISTENT_STORAGE_TESTS_ENABLED:
     LIBRARIES = get_seed_libraries()
@@ -19,9 +18,7 @@ else:
 
 # TODO: Add a check if the real storage tests are enabled
 @pytest.mark.parametrize("library", LIBRARIES)
-@pytest.mark.skipif(
-    not PERSISTENT_STORAGE_TESTS_ENABLED, reason="This test should run only if the persistent storage tests are enabled"
-)
+@REAL_S3_TESTS_MARK
 def test_real_s3_storage_read(shared_real_s3_uri, library):
     ac = Arctic(shared_real_s3_uri)
     lib = ac[library]
@@ -35,9 +32,7 @@ def test_real_s3_storage_read(shared_real_s3_uri, library):
         assert column_names == ["x", "y", "z"]
 
 
-@pytest.mark.skipif(
-    not PERSISTENT_STORAGE_TESTS_ENABLED, reason="This test should run only if the persistent storage tests are enabled"
-)
+@REAL_S3_TESTS_MARK
 def test_real_s3_storage_write(shared_real_s3_uri, three_col_df):
     strategy_branch = os.getenv("ARCTICDB_PERSISTENT_STORAGE_STRATEGY_BRANCH")
     library_to_write_to = f"test_{strategy_branch}"
@@ -84,17 +79,8 @@ def test_persistent_storage_read_write_large_data_ascending(persistent_arctic_cl
     assert_frame_equal(result_df, orig_df)
 
 
-@pytest.mark.parametrize(
-    "num_rows",
-    [
-        # 1_000_000,
-        # 10_000_000,
-        100_000_000
-    ],
-)
-@pytest.mark.skipif(
-    not PERSISTENT_STORAGE_TESTS_ENABLED, reason="This test should run only if the persistent storage tests are enabled"
-)
+@pytest.mark.parametrize("num_rows", [100_000_000])
+@REAL_S3_TESTS_MARK
 def test_persistent_storage_read_write_large_data_random(persistent_arctic_client, num_rows):
     ac = persistent_arctic_client
     ac.create_library("test_persistent_storage_read_write_large_data_random")
@@ -107,17 +93,8 @@ def test_persistent_storage_read_write_large_data_random(persistent_arctic_clien
     assert_frame_equal(result_df, orig_df)
 
 
-@pytest.mark.parametrize(
-    "num_syms",
-    [
-        1_000,
-        # 5_000,
-        # 10_000,
-    ],
-)
-@pytest.mark.skipif(
-    not PERSISTENT_STORAGE_TESTS_ENABLED, reason="This test should run only if the persistent storage tests are enabled"
-)
+@pytest.mark.parametrize("num_syms", [1_000])
+@REAL_S3_TESTS_MARK
 def test_persistent_storage_read_write_many_syms(persistent_arctic_client, num_syms, three_col_df):
     # For now, this tests only the breadth (e.g. number of symbols)
     # We have another test, that tests with "deeper" data frames
