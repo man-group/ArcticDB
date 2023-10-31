@@ -278,7 +278,7 @@ LmdbStorage::LmdbStorage(const LibraryPath &library_path, OpenMode mode, const C
 
     lib_dir_ = root_path / lib_path_str;
 
-    warn_if_lmdb_already_open(root_path, lib_path_str);
+    warn_if_lmdb_already_open();
 
     if (!fs::exists(lib_dir_)) {
         util::check_arg(mode > OpenMode::READ, "Missing dir {} for lib={}. mode={}",
@@ -326,27 +326,19 @@ LmdbStorage::LmdbStorage(const LibraryPath &library_path, OpenMode mode, const C
     ARCTICDB_DEBUG(log::storage(), "Opened lmdb storage at {} with map size {}", lib_dir_.string(), format_bytes(mapsize));
 }
 
-void LmdbStorage::warn_if_lmdb_already_open(const fs::path &root_path, const std::string &lib_path_str) {
-    uint64_t& count_for_pid = ++times_path_opened[(root_path / lib_path_str).string()];
-    if (count_for_pid != 1) {
+void LmdbStorage::warn_if_lmdb_already_open() {
+    uint64_t& count_for_pid = ++times_path_opened[lib_dir_.string()];
+    // Only warn for the "base" config library to avoid spamming users with more warnings if they decide to ignore it and continue
+    if (count_for_pid != 1 && lib_dir_.string().find(CONFIG_LIBRARY_NAME) != std::string::npos) {
+        std::filesystem::path user_facing_path = lib_dir_;
         // Strip magic name from warning as it will confuse users
-        if (lib_dir_.string().find(CONFIG_LIBRARY_NAME) == std::string::npos) {
-            log::storage().warn(fmt::format(
-                    "LMDB path at {} has already been opened in this process which is not supported by LMDB. "
-                    "To continue safely, you should delete all Library objects over the LMDB path in this "
-                    "process and then try again. This indicates a bug in ArcticDB. Please report at "
-                    "https://github.com/man-group/ArcticDB. Current process ID=[{}]",
-                    lib_dir_.string(), getpid()));
-        } else {
-            std::filesystem::path user_facing_path = lib_dir_;
-            user_facing_path.remove_filename();
-            log::storage().warn(fmt::format(
-                    "LMDB path at {} has already been opened in this process which is not supported by LMDB. "
-                    "You should only open a single Arctic instance over a given LMDB path. "
-                    "To continue safely, you should delete this Arctic instance and any others over the LMDB path in this "
-                    "process and then try again. Current process ID=[{}]",
-                    user_facing_path.string(), getpid()));
-        }
+        user_facing_path.remove_filename();
+        log::storage().warn(fmt::format(
+                "LMDB path at {} has already been opened in this process which is not supported by LMDB. "
+                "You should only open a single Arctic instance over a given LMDB path. "
+                "To continue safely, you should delete this Arctic instance and any others over the LMDB path in this "
+                "process and then try again. Current process ID=[{}]",
+                user_facing_path.string(), getpid()));
     }
 }
 
