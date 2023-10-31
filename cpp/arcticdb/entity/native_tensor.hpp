@@ -7,6 +7,8 @@
 
 #pragma once
 
+#include <numeric>
+
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/util/magic_num.hpp>
@@ -221,10 +223,6 @@ struct TypedTensor : public NativeTensor {
                 slice_num * stride_offset, tensor.extent(0));
     }
 };
-template<typename T>
-py::array to_py_array(const TypedTensor<T>& tensor) {
-    return py::array({tensor.shape(), tensor.shape() + tensor.ndim()}, reinterpret_cast<const T*>(tensor.data()));
-}
 
 template<typename T>
 using TensorType = TypedTensor<T>;

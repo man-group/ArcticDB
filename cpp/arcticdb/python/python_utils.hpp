@@ -22,6 +22,11 @@ namespace py = pybind11;
 
 namespace arcticdb::python_util {
 
+template<typename T>
+py::array to_py_array(const TypedTensor<T>& tensor) {
+    return py::array({tensor.shape(), tensor.shape() + tensor.ndim()}, reinterpret_cast<const T*>(tensor.data()));
+}
+
 class ARCTICDB_VISIBILITY_HIDDEN PyRowRef : public py::tuple {
   PYBIND11_OBJECT_DEFAULT(PyRowRef, py::tuple, PyTuple_Check)
 

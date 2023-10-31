@@ -252,7 +252,11 @@ class Aggregator {
         std::is_integral_v<T> || std::is_floating_point_v<T>,
         int> = 0>
     void set_array(position_t pos, py::array_t<T>& val) {
+#ifdef _MSC_VER
+        segment_.template set_array<T, py::array_t>(pos, val);
+#else
         segment_.set_array(pos, val);
+#endif
     }
     
     void set_string_array(position_t pos, size_t string_size, size_t num_strings, char *data) {

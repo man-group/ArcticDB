@@ -7,10 +7,10 @@
 
 #pragma once
 
-#include <arcticdb/column_store/memory_segment.hpp>
 #include <fmt/format.h>
 
-#include <pybind11/numpy.h>
+#include <arcticdb/column_store/memory_segment.hpp>
+#include <arcticdb/python/python_utils.hpp>
 
 //TODO this class is bogus and not part of the long-term plan. If it's only used for
 // testing and the toolbox then move it, otherwise get rid of it
@@ -83,7 +83,7 @@ public:
                         res.append(output);
                     }
                     else
-                        res.append(to_py_array(segment_.tensor_at<RawType>(row, col).value()));
+                        res.append(python_util::to_py_array(segment_.tensor_at<RawType>(row, col).value()));
                 }
             });
         }

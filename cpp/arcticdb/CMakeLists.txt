@@ -188,7 +188,6 @@ set(arcticdb_srcs
         column_store/chunked_buffer.hpp
         column_store/column_data.hpp
         column_store/column.hpp
-        column_store/column_utils.hpp
         column_store/memory_segment.hpp
         column_store/memory_segment_impl.hpp
         column_store/row_ref.hpp
