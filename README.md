@@ -48,12 +48,19 @@ ArcticDB is designed from the outset to be resilient; there is no single point o
 
 ### Storage compatibility
 
-
 |                       | Linux | Windows | Mac |
 | --------------------- | - | - | - |
 | S3                 | ✔️ | ✔️ | ✔️ |
-| LMDB               | ✔️ | Beta | ✔️ |
+| LMDB               | ✔️ | ✔️ | ✔️ |
 | Azure Blob Storage | ✔️ | ✔️ | ➖ |
+
+We have tested against the following S3 backends:
+
+- AWS S3
+- VAST Data S3
+- Pure Storage S3
+- Ceph
+- MinIO on Linux
 
 ### Installation
 
