@@ -1,3 +1,4 @@
+
 /* Copyright 2023 Man Group Operations Limited
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
@@ -26,6 +27,19 @@
 
 namespace arcticdb {
 
+/*
+ * ChunkedBufferImpl is an untyped buffer that is composed of blocks of data that can be either regularly or
+ * irregularly sized, with optimizations for the following representations:
+ *
+ *   - a single block
+ *   - multiple blocks that are all regularly sized
+ *   - multiple blocks that are regularly sized up until a point, and irregularly sized after that point
+ *
+ * No optimization is performed when the blocks are all irregularly sized.
+ *
+ * This class can be wrapped in a cursor for the purposes of linear reads and writes (see CursoredBuffer),
+ * and subsequently detached if required.
+ */
 template<size_t DefaultBlockSize>
 class ChunkedBufferImpl {
 
@@ -82,8 +96,9 @@ class ChunkedBufferImpl {
     ChunkedBufferImpl() = default;
 
     explicit ChunkedBufferImpl(size_t size) {
-        add_block(size ? size : DefaultBlockSize, 0u);
-        block_offsets_.push_back(0);
+        add_block(size != 0 ? size : DefaultBlockSize, 0u);
+        if(size != 0)
+            block_offsets_.push_back(0);
     }
 
     ChunkedBufferImpl &operator=(ChunkedBufferImpl &&other) noexcept {
@@ -148,16 +163,6 @@ class ChunkedBufferImpl {
     }
 
     const auto &blocks() const { return blocks_; }
-
-    void resize_first(size_t requested_size) {
-        util::check(num_blocks() == 1, "resize_first called on buffer with {} blocks", num_blocks());
-        if(requested_size <= blocks_[0]->capacity())
-            return;
-
-        free_last_block();
-        add_block(requested_size, 0);
-        bytes_ = requested_size;
-    }
 
     // If the extra space required does not fit in the current last block, and is <=DefaultBlockSize, then if aligned is
     // set to true, the current last block will be padded with zeros, and a new default sized block added. This allows
@@ -338,6 +343,7 @@ class ChunkedBufferImpl {
     size_t bytes() const { return bytes_; }
 
     friend struct BufferView;
+
     BlockType &last_block() {
         return **blocks_.rbegin();
     }

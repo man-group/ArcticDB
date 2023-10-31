@@ -351,7 +351,7 @@ struct EncodedField {
     }
 
     const EncodedBlock &values(size_t n) const {
-        util::check(n < items_count(), "Cannot return block {} from {} blocks", n, items_count());
+        util::check(n < values_count_ + shapes_count_, "Cannot return block {} from {} blocks ({} shapes)", n, values_count_, shapes_count_);
         return blocks()[shapes_count_ + n];
     }
 

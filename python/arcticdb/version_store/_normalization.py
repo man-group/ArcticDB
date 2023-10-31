@@ -15,7 +15,6 @@ import os
 import sys
 import pandas as pd
 import pickle
-import psutil
 from abc import ABCMeta, abstractmethod
 
 from pandas.api.types import is_integer_dtype
@@ -627,11 +626,6 @@ class NdArrayNormalizer(Normalizer):
         original_shape = tuple(norm_meta.shape)
         data = item.data[0]
         return data.reshape(original_shape)
-
-
-def print_current_rss():
-    process = psutil.Process(os.getpid())
-    log.debug("Current memory usage=", process.memory_info().rss / 1024 / 1024)  # in bytes
 
 
 from pandas.core.internals import BlockManager

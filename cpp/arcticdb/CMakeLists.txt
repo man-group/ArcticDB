@@ -56,6 +56,10 @@ if(NOT ${ARCTICDB_USING_CONDA})
     find_package(Libevent CONFIG REQUIRED)
     set(ARCTICDB_MONGO_LIBS mongo::mongocxx_static mongo::bsoncxx_static)
     set(Zstd_LIBRARY $<IF:$<TARGET_EXISTS:zstd::libzstd_shared>,zstd::libzstd_shared,zstd::libzstd_static>)
+
+    if(NOT DEFINED ARCTICDB_INCLUDE_ROCKSDB)
+        set(ARCTICDB_INCLUDE_ROCKSDB 1)
+    endif()
 else()
 
     # ARCTICDB_USING_CONDA is used in header of the files including vendored
@@ -93,6 +97,12 @@ else()
     list(REMOVE_ITEM NEW_FOLLY_DEPS "/usr/local/opt/openssl/include" )
     set_target_properties(Folly::folly_deps PROPERTIES INTERFACE_INCLUDE_DIRECTORIES "${NEW_FOLLY_DEPS}")
 
+endif()
+# RocksDB can be manually excluded with set(ARCTICDB_INCLUDE_ROCKSDB 0)
+# Default is to include on PyPI builds and exclude on conda builds
+if(${ARCTICDB_INCLUDE_ROCKSDB})
+    add_compile_definitions(ARCTICDB_INCLUDE_ROCKSDB)
+    find_package(RocksDB CONFIG REQUIRED)
 endif()
 
 # Libraries baked into the internal and external Linux images are found by searching various paths
@@ -187,7 +197,6 @@ set(arcticdb_srcs
         entity/frame_and_descriptor.hpp
         entity/index_range.hpp
         entity/key.hpp
-        entity/key-inl.hpp
         entity/metrics.hpp
         entity/data_error.hpp
         entity/native_tensor.hpp
@@ -239,6 +248,7 @@ set(arcticdb_srcs
         processing/clause.hpp
         processing/expression_context.hpp
         processing/expression_node.hpp
+        storage/constants.hpp
         storage/common.hpp
         storage/config_resolvers.hpp
         storage/failure_simulation.hpp
@@ -246,9 +256,7 @@ set(arcticdb_srcs
         storage/library_index.hpp
         storage/library_manager.hpp
         storage/azure/azure_storage.hpp
-        storage/azure/azure_storage-inl.hpp
         storage/lmdb/lmdb_storage.hpp
-        storage/lmdb/lmdb_storage-inl.hpp
         storage/memory/memory_storage.hpp
         storage/memory/memory_storage.cpp
         storage/mongo/mongo_client.hpp
@@ -256,11 +264,8 @@ set(arcticdb_srcs
         storage/mongo/mongo_storage.hpp
         storage/object_store_utils.hpp
         storage/s3/nfs_backed_storage.hpp
-        storage/s3/nfs_backed_storage-inl.hpp
         storage/s3/s3_client_accessor.hpp
-        storage/s3/s3_storage-inl.hpp
         storage/s3/s3_storage_tool.hpp
-        storage/s3/s3_storage_tool-inl.hpp
         storage/storage_factory.hpp
         storage/storage_options.hpp
         storage/storage.hpp
@@ -428,7 +433,15 @@ set(arcticdb_srcs
         version/version_core.cpp
         version/version_store_api.cpp
         version/version_utils.cpp
-        version/symbol_list.cpp)
+        version/symbol_list.cpp
+        )
+
+if(${ARCTICDB_INCLUDE_ROCKSDB})
+    list (APPEND arcticdb_srcs
+        storage/rocksdb/rocksdb_storage.hpp
+        storage/rocksdb/rocksdb_storage.cpp
+    )
+endif()
 
 # Exclude vendored sources when using conda.
 if(NOT ${ARCTICDB_USING_CONDA})
@@ -544,6 +557,10 @@ else ()
             ${Sasl2_LIBRARY}
             )
 endif ()
+
+if (${ARCTICDB_INCLUDE_ROCKSDB})
+    list (APPEND arcticdb_core_libraries RocksDB::rocksdb)
+endif()
 
 list (APPEND arcticdb_core_libraries Threads::Threads) # comes last for weakreference resolution pthread_atexit in folly
 
@@ -713,7 +730,7 @@ if(${TEST})
             processing/test/test_set_membership.cpp
             processing/test/test_signed_unsigned_comparison.cpp
             processing/test/test_type_comparison.cpp
-            storage/test/test_lmdb_storage.cpp
+            storage/test/test_embedded.cpp
             storage/test/test_memory_storage.cpp
             storage/test/test_mongo_storage.cpp
             storage/test/test_s3_storage.cpp

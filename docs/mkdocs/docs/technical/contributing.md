@@ -119,9 +119,9 @@ For instance:
   cmake -DTEST=off --preset linux-conda-debug cpp
   cd cpp
 
-  # You might need to use fewer threads than what's possible your machine
-  # not to have it swap and freeze (e.g. we use 4 of them here).
-  cmake --build --preset linux-conda-debug -j 4
+  # You might need to use fewer threads than what's possible on your machine
+  # to not have it swap and freeze (e.g. we use 1 here).
+  cmake --build --preset linux-conda-debug -j 1
   ```
 
  - for release build on MacOS with mamba and conda-forge, use:
@@ -132,8 +132,16 @@ For instance:
   cd cpp
 
   # You might need to use fewer threads than what's possible your machine
-  # not to have it swap and freeze (e.g. we use 4 of them here).
-  cmake --build --preset linux-conda-debug -j 4
+  # not to have it swap and freeze (e.g. we use 1 here).
+  cmake --build --preset linux-conda-debug -j 1
+  ```
+  **Note:** If you don't use presets, you may want to set some useful environment variables:
+
+  ```bash
+  # To define the number of threads to use
+  export CMAKE_BUILD_PARALLEL_LEVEL=1
+  # To enable C++ tests
+  export ARCTICDB_BUILD_CPP_TESTS=1
   ```
 
 #### Building and installing the Python Package
@@ -219,24 +227,12 @@ We recommend using Visual Studio 2022 (or later) to install the compiler (MSVC v
 The Python that comes with Visual Studio is sufficient for creating release builds, but for debug builds, you will have
 to separately download from [Python.org](https://www.python.org/downloads/windows/).
 
-pre-commit hooks setup
-----------------------
+After building `arcticdb_ext`, you need to symlink to the `.pyd` for the Python tests to run against it:
 
-We use [pre-commit](https://pre-commit.com/) to run some checks on the codebase before committing.
-
-To install the pre-commit hooks, run:
-
-```bash
-pip install pre-commit
-pre-commit install
-```
-
-This will install the pre-commit hooks into your local git repository.
-
-If you want to run the pre-commit hooks on all files, run:
-
-```bash
-pre-commit run --all-files
+```powershell
+# From the root of the ArcticDB git root checkout, in an administrator powershell session
+# Change Python version as appropriate - below is for Python 3.11.
+New-Item -Path .\python\arcticdb_ext.cp311-win_amd64.pyd -ItemType SymbolicLink -Value .\cpp\out\windows-cl-debug-build\arcticdb\arcticdb_ext.cp311-win_amd64.pyd
 ```
 
 Running Python tests
@@ -252,10 +248,16 @@ python -m pytest python/tests
 Running C++ tests
 -----------------
 
-Configure ArcticDB with TEST=on (default):
+Configure ArcticDB with TEST=ON (default is OFF):
 
 ```bash
-cmake -DPython_EXECUTABLE=<path to python> --preset linux-debug cpp
+cmake -DPython_EXECUTABLE=<path to python> -DTEST=ON --preset linux-debug cpp
+```
+
+Or you can set the following environment variable:
+
+```bash
+export ARCTICDB_BUILD_CPP_TESTS=1
 ```
 
 Note that `<path to python>` must point to a Python that is compatible with [Development.Embed](https://cmake.org/cmake/help/latest/module/FindPython.html). This will probably be the result of installing `python3-devel` from your dependency manager.
@@ -266,7 +268,14 @@ Inside the provided docker image, `python3-devel` resolves to Python 3.6 install
 cmake -DPython_EXECUTABLE=/usr/bin/python3 -DTEST=ON --preset linux-debug cpp
 ```
 
-Then invoke the CMake build as normal and run the compiled test binary.
+Then build and run the tests:
+
+```bash
+cd cpp/out/linux-debug-build
+make -j 1 arcticdb_rapidcheck_tests
+make -j 1 test_unit_arcticdb
+make test
+```
 
 CIBuildWheel
 ------------

@@ -91,7 +91,7 @@ RawType* flatten_tensor(
 }
 
 template<typename Tensor, typename Aggregator>
-void aggregator_set_data(
+std::optional<convert::StringEncodingError> aggregator_set_data(
     const TypeDescriptor &type_desc,
     Tensor &tensor,
     Aggregator &agg,
@@ -102,7 +102,7 @@ void aggregator_set_data(
     size_t regular_slice_size,
     bool sparsify_floats
 ) {
-    type_desc.visit_tag([&](auto &&tag) {
+    return type_desc.visit_tag([&](auto &&tag) {
         using RawType = typename std::decay_t<decltype(tag)>::DataTypeTag::raw_type;
         constexpr auto dt = std::decay_t<decltype(tag)>::DataTypeTag::data_type;
 
@@ -131,23 +131,38 @@ void aggregator_set_data(
                     ptr_data = flatten_tensor<PyObject*>(flattened_buffer, rows_to_write, tensor, slice_num, regular_slice_size);
 
                 auto none = py::none{};
+                std::variant<convert::StringEncodingError, convert::PyStringWrapper> wrapper_or_error;
                 // GIL will be acquired if there is a string that is not pure ASCII/UTF-8
                 // In this case a PyObject will be allocated by convert::py_unicode_to_buffer
                 // If such a string is encountered in a column, then the GIL will be held until that whole column has
                 // been processed, on the assumption that if a column has one such string it will probably have many.
                 std::optional<ScopedGILLock> scoped_gil_lock;
+                auto& column = agg.segment().column(col);
+                column.allocate_data(rows_to_write * sizeof(StringPool::offset_t));
+                auto out_ptr = reinterpret_cast<StringPool::offset_t*>(column.buffer().data());
+                auto& string_pool = agg.segment().string_pool();
                 for (size_t s = 0; s < rows_to_write; ++s, ++ptr_data) {
                     if (*ptr_data == none.ptr()) {
-                        agg.set_no_string_at(col, s, not_a_string());
+                        *out_ptr++ = not_a_string();
                     } else if(is_py_nan(*ptr_data)){
-                        agg.set_no_string_at(col, s, nan_placeholder());
+                        *out_ptr++ = nan_placeholder();
                     } else {
                         if constexpr (is_utf_type(slice_value_type(dt))) {
-                            auto wrapper= convert::py_unicode_to_buffer(*ptr_data, scoped_gil_lock);
-                            agg.set_string_at(col, s, wrapper.buffer_, wrapper.length_);
+                            wrapper_or_error = convert::py_unicode_to_buffer(*ptr_data, scoped_gil_lock);
                         } else {
-                            auto wrapper = convert::pystring_to_buffer(*ptr_data, false);
-                            agg.set_string_at(col, s, wrapper.buffer_, wrapper.length_);
+                            wrapper_or_error = convert::pystring_to_buffer(*ptr_data, false);
+                        }
+                        // Cannot use util::variant_match as only one of the branches would have a return type
+                        if (std::holds_alternative<convert::PyStringWrapper>(wrapper_or_error)) {
+                            convert::PyStringWrapper wrapper(std::move(std::get<convert::PyStringWrapper>(wrapper_or_error)));
+                            const auto offset = string_pool.get(wrapper.buffer_, wrapper.length_);
+                            *out_ptr++ = offset.offset();
+                        } else if (std::holds_alternative<convert::StringEncodingError>(wrapper_or_error)) {
+                            auto error = std::get<convert::StringEncodingError>(wrapper_or_error);
+                            error.row_index_in_slice_ = s;
+                            return std::optional<convert::StringEncodingError>(error);
+                        } else {
+                            internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Unexpected variant alternative");
                         }
                     }
                 }
@@ -178,16 +193,8 @@ void aggregator_set_data(
         }  else if constexpr (!is_empty_type(dt)) {
             static_assert(!sizeof(dt), "Unknown data type");
         }
+        return std::optional<convert::StringEncodingError>();
     });
-}
-
-inline TimeseriesDescriptor default_pandas_descriptor(const SegmentInMemory& segment) {
-    arcticdb::proto::descriptors::TimeSeriesDescriptor desc;
-    desc.mutable_stream_descriptor()->CopyFrom(segment.descriptor().proto());
-    desc.set_total_rows(segment.row_count());
-    arcticdb::proto::descriptors::NormalizationMetadata_PandasDataFrame pandas;
-    desc.mutable_normalization()->mutable_df()->CopyFrom(pandas);
-    return {std::make_shared<TimeseriesDescriptor::Proto>(std::move(desc)), std::make_shared<FieldCollection>(segment.descriptor().fields().clone())};
 }
 
 namespace pipelines {

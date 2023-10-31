@@ -11,6 +11,7 @@ import shutil
 import socket
 
 import boto3
+import moto.s3.responses
 import werkzeug
 from moto.server import DomainDispatcherApplication, create_backend_app
 
@@ -55,7 +56,10 @@ from arcticdb.options import LibraryOptions
 from arcticdb_ext.storage import Library
 from azure.storage.blob import BlobServiceClient, generate_account_sas, ResourceTypes, AccountSasPermissions
 
+
 PERSISTENT_STORAGE_TESTS_ENABLED = os.getenv("ARCTICDB_PERSISTENT_STORAGE_TESTS") == "1"
+FAST_TESTS_ONLY = os.getenv("ARCTICDB_FAST_TESTS_ONLY") == "1"
+
 
 configure_test_logger()
 
@@ -150,7 +154,8 @@ def azure_account_sas_token(azure_client_and_create_container, azurite_azure_tes
 def boto_client(_moto_s3_uri):
     endpoint = _moto_s3_uri
     client = boto3.client(
-        service_name="s3", endpoint_url=endpoint, aws_access_key_id="awd", aws_secret_access_key="awd"
+        service_name="s3", endpoint_url=endpoint, aws_access_key_id="awd", aws_secret_access_key="awd",
+        region_name=moto.s3.responses.DEFAULT_REGION_NAME
     )
 
     yield client
@@ -213,16 +218,17 @@ def unique_real_s3_uri():
         "MEM",
         pytest.param(
             "Azure",
-            marks=pytest.mark.skipif(MACOS_CONDA_BUILD, reason=MACOS_CONDA_BUILD_SKIP_REASON),
+            marks=pytest.mark.skipif(FAST_TESTS_ONLY or MACOS_CONDA_BUILD, reason=MACOS_CONDA_BUILD_SKIP_REASON),
         ),
         pytest.param(
             "Mongo",
-            marks=pytest.mark.skipif(not RUN_MONGO_TEST, reason="Mongo test on windows is fiddly"),
+            marks=pytest.mark.skipif(FAST_TESTS_ONLY or not RUN_MONGO_TEST, reason="Mongo test on windows is fiddly"),
         ),
         pytest.param(
             "Real_S3",
             marks=pytest.mark.skipif(
-                not PERSISTENT_STORAGE_TESTS_ENABLED, reason="Can be used only when persistent storage is enabled"
+                FAST_TESTS_ONLY or not PERSISTENT_STORAGE_TESTS_ENABLED,
+                reason="Can be used only when persistent storage is enabled"
             ),
         ),
     ],
@@ -235,7 +241,7 @@ def arctic_client(request, moto_s3_uri_incl_bucket, tmpdir, encoding_version):
     elif request.param == "Real_S3":
         ac = Arctic(request.getfixturevalue("unique_real_s3_uri"), encoding_version)
     elif request.param == "LMDB":
-        ac = Arctic(f"lmdb://{tmpdir}", encoding_version)
+        ac = Arctic(f"lmdb://{tmpdir}?map_size=16MB", encoding_version)
     elif request.param == "Mongo":
         ac = Arctic(request.getfixturevalue("mongo_test_uri"), encoding_version)
     elif request.param == "MEM":
@@ -398,7 +404,7 @@ def version_store_factory(lib_name, tmpdir):
     def create_version_store(
         col_per_group: Optional[int] = None,
         row_per_segment: Optional[int] = None,
-        lmdb_config: Dict[str, Any] = {},
+        lmdb_config: Dict[str, Any] = None,
         override_name: str = None,
         **kwargs,
     ) -> NativeVersionStore:
@@ -406,6 +412,9 @@ def version_store_factory(lib_name, tmpdir):
             kwargs["column_group_size"] = col_per_group
         if row_per_segment is not None and "segment_row_size" not in kwargs:
             kwargs["segment_row_size"] = row_per_segment
+        if lmdb_config is None:
+            # 128 MiB - needs to be reasonably small else Windows build runs out of disk
+            lmdb_config = {"map_size": 128 * (1 << 20)}
 
         if override_name is not None:
             library_name = override_name

@@ -52,8 +52,10 @@ For legacy reasons, the terms `symbol`, `stream`, and `stream ID` are used inter
 
 | Error Code | Cause                                                                  | Resolution                                                                                                                                          |
 |------------|------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------|
-| 5000       | A missing key has been requested.                                      | ArcticDB has requested a key that does not exist in storage. Please ensure that you have requested a `symbol`, `snapshot`, `version`, or column statistic that exists. |
+| 5000       | A missing key has been requested.                                      | ArcticDB has requested a key that does not exist in storage. Ensure that you have requested a `symbol`, `snapshot`, `version`, or column statistic that exists. |
 | 5001       | ArcticDB is attempting to write to an already-existing key in storage. | This error is unexpected - please ensure that no other tools are writing data the same storage location that may conflict with ArcticDB.            |
+| 5002       | The symbol being worked on does not exist.                             | ArcticDB has requested a key that does not exist in storage. Ensure that the symbol exists.                                                         |
+| 5003       | The LMDB map is full.                                                  | Close and reopen your LMDB backed Arctic instance with a larger map size. For example to open `/tmp/a/b/` with a map size of 5GB, use `Arctic("lmdb:///tmp/a/b?map_size=5GB")`. Also see the [LMDB documentation](http://www.lmdb.tech/doc/group__mdb.html#gaa2506ec8dab3d969b0e609cd82e619e5). |
 
 ### Sorting Errors
 
@@ -79,7 +81,7 @@ For legacy reasons, the terms `symbol`, `stream`, and `stream ID` are used inter
 
 ### Pickling errors
 
-These errors relate to data being pickled, which limits the operations available. Internally, pickled symbols are stored as opaque, serialised binary blobs in the [data layer](/technical/on_disk_storage/#data-layer). No index or column information is maintained in this serialised object which is in contrast to non-pickled data, where this information is stored in the [index layer](/technical/on_disk_storage/#index-layer).
+These errors relate to data being pickled, which limits the operations available. Internally, pickled symbols are stored as opaque, serialised binary blobs in the [data layer](technical/on_disk_storage.md#data-layer). No index or column information is maintained in this serialised object which is in contrast to non-pickled data, where this information is stored in the [index layer](technical/on_disk_storage.md#index-layer).
 
 Furthermore, it is not possible to partially read/update/append the data using the ArcticDB API or use the QueryBuilder with pickled symbols. 
 
@@ -136,8 +138,8 @@ All of these errors are of type `arcticdb.exceptions.ArcticException`.
 | Error messages | Cause | Resolution |
 |:--------------|:-------|:-----------|
 | Unexpected column name | A column name was specified with the `QueryBuilder` that does not exist for this symbol, and the library has dynamic schema disabled. | None of the supported `QueryBuilder` operations (filtering, projections, group-bys and aggregations) make sense with non-existent columns. |
-| Non-numeric type provided to binary operation: <typename\> | Error messages like this imply that an operation that ArcticDB does not support was provided in the `QueryBuilder` argument e.g. adding two string columns together. | The `get_description` method can be used to inspect the types of the columns. A full list of supported operations are provided in the `QueryBuilder` [API documentation](/api/query_builder). |
-| Cannot compare <typename 1\> to <typename 2\> (possible categorical?) | If `get_description` indicates that a column is of categorical type, and this categorical is being used to store string values, then comparisons to other strings will fail with an error message like this one. | Categorical support in ArcticDB is [extremely limited](/faq#does-arcticdb-support-categorical-data), but may be added in the future. |
+| Non-numeric type provided to binary operation: <typename\> | Error messages like this imply that an operation that ArcticDB does not support was provided in the `QueryBuilder` argument e.g. adding two string columns together. | The `get_description` method can be used to inspect the types of the columns. A full list of supported operations are provided in the `QueryBuilder` [API documentation](api/query_builder.md). |
+| Cannot compare <typename 1\> to <typename 2\> (possible categorical?) | If `get_description` indicates that a column is of categorical type, and this categorical is being used to store string values, then comparisons to other strings will fail with an error message like this one. | Categorical support in ArcticDB is [extremely limited](faq.md#does-arcticdb-support-categorical-data), but may be added in the future. |
 
 ### Encoding errors
 
@@ -167,7 +169,7 @@ RuntimeError
     |-- SortingException
     |   └-- UnsortedDataException
     |-- StorageException
+    |   └-- LmdbMapFullError
     |-- StreamDescriptorMismatch
     └-- InternalException
 ```
-

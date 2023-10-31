@@ -942,9 +942,9 @@ class Library:
         as_of : AsOf, default=None
             Return the data as it was as of the point in time. ``None`` means that the latest version should be read. The
             various types of this parameter mean:
-           - ``int``: specific version number. Negative indexing is supported, with -1 representing the latest version, -2 the version before that, etc.
-           - ``str``: snapshot name which contains the version
-           - ``datetime.datetime`` : the version of the data that existed ``as_of`` the requested point in time
+            - ``int``: specific version number. Negative indexing is supported, with -1 representing the latest version, -2 the version before that, etc.
+            - ``str``: snapshot name which contains the version
+            - ``datetime.datetime`` : the version of the data that existed ``as_of`` the requested point in time
 
         date_range: Tuple[Optional[Timestamp], Optional[Timestamp]], default=None
             DateRange to restrict read data to.
@@ -1151,26 +1151,7 @@ class Library:
         --------
         read_metadata
         """
-        symbol_strings = []
-        as_ofs = []
-
-        def handle_read_request(s_):
-            symbol_strings.append(s_.symbol)
-            as_ofs.append(s_.as_of)
-
-        def handle_symbol(s_):
-            symbol_strings.append(s_)
-            as_ofs.append(None)
-
-        for s in symbols:
-            if isinstance(s, str):
-                handle_symbol(s)
-            elif isinstance(s, ReadInfoRequest):
-                handle_read_request(s)
-            else:
-                raise ArcticInvalidApiUsageException(
-                    f"Invalid symbol type s=[{s}] type(s)=[{type(s)}]. Only [str] and [ReadInfoRequest] are supported."
-                )
+        symbol_strings, as_ofs = self.parse_list_of_symbols(symbols)
 
         include_errors_and_none_meta = True
         return self._nvs._batch_read_metadata_to_versioned_items(symbol_strings, as_ofs, include_errors_and_none_meta)
@@ -1213,7 +1194,7 @@ class Library:
         ----------
         write_metadata_payloads : `List[WriteMetadataPayload]`
             Symbols and their corresponding metadata. There must not be any duplicate symbols in `payload`.
-        prune_previous_version : `Optional[bool]`, default=None
+        prune_previous_versions : `Optional[bool]`, default=None
             Remove previous versions from version list. Uses library default if left as None.
 
         Returns
@@ -1541,28 +1522,8 @@ class Library:
         """
         return self._nvs.tail(symbol=symbol, n=n, as_of=as_of, columns=columns)
 
-    def get_description(self, symbol: str, as_of: Optional[AsOf] = None) -> SymbolDescription:
-        """
-        Returns descriptive data for ``symbol``.
-
-        Parameters
-        ----------
-        symbol
-            Symbol name.
-        as_of : AsOf, default=None
-            See documentation on `read`.
-
-        Returns
-        -------
-        SymbolDescription
-            Named tuple containing the descriptive data.
-
-        See Also
-        --------
-        SymbolDescription
-            For documentation on each field.
-        """
-        info = self._nvs.get_info(symbol, as_of)
+    @staticmethod
+    def _info_to_desc(info: Dict[str, Any]) -> SymbolDescription:
         last_update_time = pd.to_datetime(info["last_update"], utc=True)
         if IS_PANDAS_TWO:
             # Pandas 2.0.0 now uses `datetime.timezone.utc` instead of `pytz.UTC`.
@@ -1585,6 +1546,56 @@ class Library:
             index_type=info["index_type"],
             date_range=date_range,
         )
+
+    def get_description(self, symbol: str, as_of: Optional[AsOf] = None) -> SymbolDescription:
+        """
+        Returns descriptive data for ``symbol``.
+
+        Parameters
+        ----------
+        symbol
+            Symbol name.
+        as_of : AsOf, default=None
+            See documentation on `read`.
+
+        Returns
+        -------
+        SymbolDescription
+            Named tuple containing the descriptive data.
+
+        See Also
+        --------
+        SymbolDescription
+            For documentation on each field.
+        """
+        info = self._nvs.get_info(symbol, as_of)
+        return self._info_to_desc(info)
+
+    @staticmethod
+    def parse_list_of_symbols(symbols: List[Union[str, ReadInfoRequest]]) -> (List, List):
+        symbol_strings = []
+        as_ofs = []
+
+        def handle_read_request(s: ReadInfoRequest):
+            symbol_strings.append(s.symbol)
+            as_ofs.append(s.as_of)
+
+        def handle_symbol(s: str):
+            symbol_strings.append(s)
+            as_ofs.append(None)
+
+        for s in symbols:
+            if isinstance(s, str):
+                handle_symbol(s)
+            elif isinstance(s, ReadInfoRequest):
+                handle_read_request(s)
+            else:
+                raise ArcticInvalidApiUsageException(
+                    f"Unsupported item in the symbols argument s=[{s}] type(s)=[{type(s)}]. Only [str] and"
+                    " [ReadInfoRequest] are supported."
+                )
+
+        return (symbol_strings, as_ofs)
 
     def get_description_batch(
         self, symbols: List[Union[str, ReadInfoRequest]]
@@ -1610,57 +1621,16 @@ class Library:
         SymbolDescription
             For documentation on each field.
         """
-        symbol_strings = []
-        as_ofs = []
-
-        def handle_read_request(s):
-            symbol_strings.append(s.symbol)
-            as_ofs.append(s.as_of)
-
-        def handle_symbol(s):
-            symbol_strings.append(s)
-            as_ofs.append(None)
-
-        for s in symbols:
-            if isinstance(s, str):
-                handle_symbol(s)
-            elif isinstance(s, ReadInfoRequest):
-                handle_read_request(s)
-            else:
-                raise ArcticInvalidApiUsageException(
-                    f"Unsupported item in the symbols argument s=[{s}] type(s)=[{type(s)}]. Only [str] and"
-                    " [ReadInfoRequest] are supported."
-                )
+        symbol_strings, as_ofs = self.parse_list_of_symbols(symbols)
 
         throw_on_error = False
         descriptions = self._nvs._batch_read_descriptor(symbol_strings, as_ofs, throw_on_error)
 
-        description_results = []
-        for description in descriptions:
-            if isinstance(description, DataError):
-                description_results.append(description)
-            else:
-                last_update_time = pd.to_datetime(description["last_update"], utc=True)
-                columns = tuple(
-                    NameWithDType(n, t) for n, t in zip(description["col_names"]["columns"], description["dtype"])
-                )
-                index = NameWithDType(description["col_names"]["index"], description["col_names"]["index_dtype"])
-                date_range = tuple(
-                    map(
-                        lambda x: x.replace(tzinfo=datetime.timezone.utc) if not np.isnat(np.datetime64(x)) else x,
-                        description["date_range"],
-                    )
-                )
-                description_results.append(
-                    SymbolDescription(
-                        columns=columns,
-                        index=index,
-                        row_count=description["rows"],
-                        last_update_time=last_update_time,
-                        index_type=description["index_type"],
-                        date_range=date_range,
-                    )
-                )
+        description_results = [
+            description if isinstance(description, DataError) else self._info_to_desc(description)
+            for description in descriptions
+        ]
+
         return description_results
 
     def reload_symbol_list(self):

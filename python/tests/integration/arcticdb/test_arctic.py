@@ -17,7 +17,7 @@ from arcticdb.arctic import Arctic
 from arcticdb.exceptions import MismatchingLibraryOptions
 from arcticdb.encoding_version import EncodingVersion
 from arcticdb.options import LibraryOptions
-from arcticdb import QueryBuilder, DataError
+from arcticdb import QueryBuilder
 from arcticc.pb2.s3_storage_pb2 import Config as S3Config
 
 import math
@@ -173,6 +173,8 @@ def test_library_options(arctic_client):
 
 
 def test_separation_between_libraries(arctic_client):
+    # This fails for mem-backed without the library caching implemented in
+    # issue #520 then re-implemented in issue #889
     """Validate that symbols in one library are not exposed in another."""
     ac = arctic_client
     assert ac.list_libraries() == []

@@ -5,9 +5,6 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
-import sys
-import os
-
 import pytz
 from arcticdb_ext.exceptions import ErrorCode, ErrorCategory
 
@@ -15,7 +12,6 @@ from arcticdb.version_store import VersionedItem as PythonVersionedItem
 from arcticdb_ext.storage import KeyType
 from arcticdb_ext.version_store import VersionRequestType
 
-from arcticdb.arctic import Arctic
 from arcticdb.options import LibraryOptions
 from arcticdb import QueryBuilder, DataError
 
@@ -23,19 +19,17 @@ import pytest
 import pandas as pd
 from datetime import datetime, date, timezone, timedelta
 import numpy as np
-from numpy import datetime64
 from arcticdb.util.test import (
     assert_frame_equal,
     random_strings_of_length,
     random_floats,
 )
 from arcticdb.util._versions import IS_PANDAS_TWO
+from arcticdb_ext import set_config_int
 
 import random
-
-from azure.storage.blob import BlobServiceClient
-from botocore.client import BaseClient as BotoClient
-import time
+import threading
+import queue
 
 
 from arcticdb.version_store.library import (
@@ -1279,14 +1273,8 @@ def test_read_description_batch_high_amount(arctic_library):
                 result_last_update_time = results_list[idx].last_update_time
                 tz = result_last_update_time.tz
 
-                if IS_PANDAS_TWO:
-                    # Pandas 2.0.0 now uses `datetime.timezone.utc` instead of `pytz.UTC`.
-                    # See: https://github.com/pandas-dev/pandas/issues/34916
-                    # TODO: is there a better way to handle this edge case?
-                    assert tz == timezone.utc
-                else:
-                    assert isinstance(tz, pytz.BaseTzInfo)
-                    assert tz == pytz.UTC
+                assert isinstance(tz, pytz.BaseTzInfo)
+                assert tz == pytz.UTC
 
 
 def test_read_description_batch_empty_nat(arctic_library):
@@ -1299,3 +1287,51 @@ def test_read_description_batch_empty_nat(arctic_library):
     for sym in range(num_symbols):
         assert np.isnat(results_list[sym].date_range[0]) == True
         assert np.isnat(results_list[sym].date_range[1]) == True
+
+
+def test_mutlithread_read(library_factory):
+    set_config_int("VersionStore.NumCPUThreads", 2)
+    set_config_int("VersionStore.NumIOThreads", 2)
+    num_days = 2
+    num_symbols = 10
+    dt = datetime(2019, 4, 8, 0, 0, 0)
+    num_columns = 10
+    num_rows_per_day = 5
+    write_requests = []
+    read_requests = []
+    list_dataframes = {}
+    columns = random_strings_of_length(num_columns, num_columns, True)
+    df = generate_dataframe(random.sample(columns, num_columns), dt, num_days, num_rows_per_day)
+    for sym in range(num_symbols):
+        write_requests.append(WritePayload("sym_" + str(sym), df, metadata="great_metadata" + str(sym)))
+        read_requests.append("sym_" + str(sym))
+        list_dataframes[sym] = df
+    lib = library_factory(LibraryOptions(rows_per_segment=10, dedup=True))
+    lib.write_batch(write_requests)
+    q = queue.Queue()
+
+    def read_batch():
+        try:
+            read_batch_result = lib.read_batch(read_requests)
+            for sym in range(num_symbols):
+                assert read_batch_result[sym].metadata == "great_metadata" + str(sym)
+                assert_frame_equal(read_batch_result[sym].data, list_dataframes[sym])
+        except Exception as e:
+            q.put(e)
+
+    def read():
+        try:
+            for sym in range(num_symbols):
+                assert_frame_equal(lib.read("sym_" + str(sym)).data, list_dataframes[sym])
+        except Exception as e:
+            q.put(e)
+
+    read_th_count = 1
+    batch_read_th_count = 1
+    thread_list = []
+    [thread_list.append(threading.Thread(target=read)) for _ in range(read_th_count)]
+    [thread_list.append(threading.Thread(target=read_batch)) for _ in range(batch_read_th_count)]
+    [thread.start() for thread in thread_list]
+    [thread.join() for thread in thread_list]
+    if not q.empty():
+        raise Exception([e for e in q.queue])

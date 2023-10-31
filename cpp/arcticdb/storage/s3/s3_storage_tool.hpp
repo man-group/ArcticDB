@@ -28,7 +28,7 @@ public:
     std::string get_object(const std::string& key);
 
     size_t get_file_size(const std::string& key);
-    inline std::pair<size_t, size_t> get_prefix_info(const std::string& prefix = std::string());
+    std::pair<size_t, size_t> get_prefix_info(const std::string& prefix = std::string());
 
     void delete_object(const std::string& key);
 
@@ -39,6 +39,3 @@ private:
 };
 
 } // namespace arcticdb::storage::s3
-
-#define ARCTICDB_S3_STORAGE_TOOL_H_
-#include <arcticdb/storage/s3/s3_storage_tool-inl.hpp>

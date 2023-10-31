@@ -44,16 +44,16 @@ ArcticDB is designed from the outset to be resilient; there is no single point o
 | --------------------- | - | - |
 | Linux                 | ✔️ | ✔️ |
 | Windows               | ✔️ | ➖ |
-| MacOS (Apple Silicon) | ➖ | Beta️ |
+| MacOS                 | ➖ | Beta️ |
 
 ### Storage compatibility
 
 
-|                       | PyPI | conda-forge |
-| --------------------- | - | - |
-| S3                 | ✔️ | ✔️ |
-| LMDB               | ✔️ | ✔️ |
-| Azure Blob Storage | ✔️ | ✔️ |
+|                       | Linux | Windows | Mac |
+| --------------------- | - | - | - |
+| S3                 | ✔️ | ✔️ | ✔️ |
+| LMDB               | ✔️ | Beta | ✔️ |
+| Azure Blob Storage | ✔️ | ✔️ | ➖ |
 
 ### Installation
 
@@ -144,6 +144,7 @@ Please see version conversion dates in the below table:
 | 1.6 | Business Source License 1.1 | Jul  25, 2025 |
 | 2.0 | Business Source License 1.1 | Aug  29, 2025 |
 | 3.0 | Business Source License 1.1 | Sep  13, 2025 |
+| 4.0 | Business Source License 1.1 | Sep  27, 2025 |
 
 ## Code of Conduct
 

@@ -61,11 +61,11 @@ struct TypedBlockEncoderImpl {
      */
     template <typename EncodedFieldType>
     static void encode(
-        const arcticdb::proto::encoding::VariantCodec &codec_opts,
-       TypedBlock<TD> &typed_block,
-       EncodedFieldType &field,
-       Buffer &out,
-       std::ptrdiff_t &pos) {
+            const arcticdb::proto::encoding::VariantCodec &codec_opts,
+            TypedBlock<TD> &typed_block,
+            EncodedFieldType &field,
+            Buffer &out,
+            std::ptrdiff_t &pos) {
         switch (codec_opts.codec_case()) {
             case arcticdb::proto::encoding::VariantCodec::kZstd:
                 encode_zstd(codec_opts.zstd(), typed_block, field, out, pos);
@@ -179,15 +179,12 @@ std::size_t decode_ndarray(
         }
 
         auto data_size = encoding_sizes::data_uncompressed_size(field);
-        if(data_size == 0)
-            return;
-
-        // Note that when DS == StringPool (and probably other cases), this will result in a ChunkedBuffer with one massive chunk
         auto data_begin = static_cast<uint8_t *>(data_sink.allocate_data(data_size));
         util::check(data_begin != nullptr, "Failed to allocate data of size {}", data_size);
         auto data_out = data_begin;
         auto data_in = input;
         auto num_blocks = field.values_size();
+
         ARCTICDB_TRACE(log::codec(), "Decoding ndarray with type {}, uncompressing {} ({}) bytes in {} blocks",
             td, data_size, encoding_sizes::ndarray_field_compressed_size(field), num_blocks);
 

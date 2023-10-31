@@ -49,7 +49,7 @@ Other than this, there is no client-side caching in ArcticDB.
 
 ### SymbolList.MaxDelta
 
-The [symbol list cache](/technical/on_disk_storage#symbol-list-caching) is compacted when there are more than `SymbolList.MaxDelta` objects on disk in the symbol list cache.
+The [symbol list cache](technical/on_disk_storage.md#symbol-list-caching) is compacted when there are more than `SymbolList.MaxDelta` objects on disk in the symbol list cache.
 
 The default is 500.
 
@@ -85,7 +85,7 @@ If only `NumCPUThreads` is set, `NumIOThreads` will still default to x1.5 `NumCP
 ArcticDB has multiple log streams, and the verbosity of each can be configured independently. 
 The available streams are visible in the [source code](https://github.com/man-group/ArcticDB/blob/master/python/arcticdb/log.py), although the most commonly useful logs are in:
  
-* `version` - contains information about versions being read, created, or destroyed, and traversal of the [version layer](/technical/on_disk_storage#version-layer) linked list
+* `version` - contains information about versions being read, created, or destroyed, and traversal of the [version layer](technical/on_disk_storage.md#version-layer) linked list
 * `storage` - contains information about individual operations that interact with the storage device (read object, write object, delete object, etc)
 
 The available log levels in decreasing order of verbosity are are `TRACE`, `DEBUG`, `INFO`, `WARN`, `ERROR`, `CRITICAL`, `OFF`. 
