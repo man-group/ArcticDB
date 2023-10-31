@@ -60,7 +60,7 @@ class LmdbStorage final : public Storage {
 
     std::string do_key_path(const VariantKey&) const final { return {}; };
 
-    void warn_if_lmdb_already_open(const fs::path &root_path, const std::string &lib_path_str);
+    void warn_if_lmdb_already_open();
 
     // _internal methods assume the write mutex is already held
     void do_write_internal(Composite<KeySegmentPair>&& kvs, ::lmdb::txn& txn);
