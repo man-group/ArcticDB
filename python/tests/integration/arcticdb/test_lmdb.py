@@ -208,3 +208,10 @@ def test_arctic_instances_across_same_lmdb_multiprocessing(tmpdir):
     ac["test"].write("a", pd.DataFrame())
     with mp.Pool(5) as p:
         p.starmap(create_arctic_instance, [(tmpdir, i) for i in range(20)])
+
+
+def test_lmdb_warnings_when_reopened(tmpdir):
+    ac = Arctic(f"lmdb://{tmpdir}")
+    lib = ac.create_library("test")
+    ac = Arctic(f"lmdb://{tmpdir}")  # expect to warn
+    lib = ac["test"]
