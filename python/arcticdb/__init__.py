@@ -14,4 +14,4 @@ from arcticdb_ext.exceptions import ErrorCode, ErrorCategory
 
 set_config_from_env_vars(_os.environ)
 
-__version__ = "4.1.0rc1"
+__version__ = "4.1.0rc2"
