@@ -5,6 +5,8 @@
  * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
  */
 
+#include <folly/futures/FutureSplitter.h>
+
 #include <arcticdb/version/version_core.hpp>
 #include <arcticdb/pipeline/write_options.hpp>
 #include <arcticdb/stream/index.hpp>
@@ -412,19 +414,97 @@ FrameAndDescriptor read_multi_key(
 }
 
 Composite<EntityIds> process_clauses(
-        std::vector<Composite<EntityIds>>&& ids,
+        std::shared_ptr<ComponentManager> component_manager,
+        std::vector<folly::Future<pipelines::SegmentAndSlice>>&& segment_and_slice_futures,
+        const std::vector<std::vector<size_t>>& processing_unit_indexes,
         std::vector<std::shared_ptr<Clause>> clauses ) { // pass by copy deliberately as we don't want to modify read_query
-    auto vec_comp_entity_ids = std::move(ids);
+    std::vector<folly::FutureSplitter<pipelines::SegmentAndSlice>> segment_and_slice_future_splitters;
+    segment_and_slice_future_splitters.reserve(segment_and_slice_futures.size());
+    for (auto&& future: segment_and_slice_futures) {
+        segment_and_slice_future_splitters.emplace_back(folly::splitFuture(std::move(future)));
+    }
+
+    // Map from index in segment_and_slice_future_splitters to the number of processing units that require that segment
+    std::vector<size_t> segment_proc_unit_counts(segment_and_slice_futures.size(), 0);
+    for (const auto& list: processing_unit_indexes) {
+        for (auto idx: list) {
+            internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+                    idx < segment_proc_unit_counts.size(),
+                    "Index {} in processing_unit_indexes out of bounds >{}", idx, segment_proc_unit_counts.size() - 1);
+            segment_proc_unit_counts[idx]++;
+        }
+    }
+    internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+            std::all_of(segment_proc_unit_counts.begin(), segment_proc_unit_counts.end(), [](const size_t& val) { return val != 0; }),
+            "All segments should be needed by at least one ProcessingUnit");
+    // Convert vector of vectors into vector of 1-element composites
+    // At this stage, each Composite contains a single list of entity IDs, which may refer to a row-slice, a column-slice, a
+    // general rectangular slice, or some more exotic collection of segments based on the clause's processing
+    // parallelisation.
+    std::vector<Composite<EntityIds>> vec_comp_entity_ids;
+    vec_comp_entity_ids.reserve(processing_unit_indexes.size());
+    for (const auto& list: processing_unit_indexes) {
+        EntityIds entity_ids;
+        for (auto idx: list) {
+            entity_ids.emplace_back(idx);
+        }
+        vec_comp_entity_ids.emplace_back(Composite<EntityIds>(std::move(entity_ids)));
+    }
+
+    // Used to make sure each entity is only added into the component manager once
+    std::vector<std::mutex> entity_added_mtx(segment_and_slice_futures.size());
+    std::vector<bool> entity_added(segment_and_slice_futures.size(), false);
     std::vector<folly::Future<Composite<EntityIds>>> futures;
+    bool first_clause{true};
     while (!clauses.empty()) {
         for (auto&& comp_entity_ids: vec_comp_entity_ids) {
-            futures.emplace_back(
-                    async::submit_cpu_task(
-                            async::MemSegmentProcessingTask(clauses,
-                                                            std::move(comp_entity_ids))
-                    )
-            );
+            if (first_clause) {
+                internal::check<ErrorCode::E_ASSERTION_FAILURE>(comp_entity_ids.is_single(),
+                                                                "Expected Composite of size 1 on entry to process_clauses");
+                std::vector<folly::Future<pipelines::SegmentAndSlice>> local_futs;
+                for (auto id: std::get<EntityIds>(comp_entity_ids[0])) {
+                    local_futs.emplace_back(segment_and_slice_future_splitters[id].getFuture());
+                }
+                futures.emplace_back(
+                        folly::collect(local_futs)
+                        .via(&async::cpu_executor())
+                        .thenValue([component_manager,
+                                           &segment_proc_unit_counts,
+                                           &entity_added_mtx,
+                                           &entity_added,
+                                           &clauses,
+                                           comp_entity_ids = std::move(comp_entity_ids)](std::vector<pipelines::SegmentAndSlice>&& segment_and_slices) mutable {
+                            auto entity_ids = std::get<EntityIds>(comp_entity_ids[0]);
+                            for (auto&& [idx, segment_and_slice]: folly::enumerate(segment_and_slices)) {
+                                std::lock_guard<std::mutex> lock(entity_added_mtx[entity_ids[idx]]);
+                                if (!entity_added[entity_ids[idx]]) {
+                                    component_manager->add(
+                                            std::make_shared<SegmentInMemory>(std::move(segment_and_slice.segment_in_memory_)),
+                                            entity_ids[idx], segment_proc_unit_counts[entity_ids[idx]]);
+                                    component_manager->add(
+                                            std::make_shared<RowRange>(std::move(segment_and_slice.ranges_and_key_.row_range_)),
+                                            entity_ids[idx]);
+                                    component_manager->add(
+                                            std::make_shared<ColRange>(std::move(segment_and_slice.ranges_and_key_.col_range_)),
+                                            entity_ids[idx]);
+                                    component_manager->add(
+                                            std::make_shared<AtomKey>(std::move(segment_and_slice.ranges_and_key_.key_)),
+                                            entity_ids[idx]);
+                                    entity_added[entity_ids[idx]] = true;
+                                }
+                            }
+                            return async::submit_cpu_task(async::MemSegmentProcessingTask(clauses, std::move(comp_entity_ids)));
+                        }));
+            } else {
+                futures.emplace_back(
+                        async::submit_cpu_task(
+                                async::MemSegmentProcessingTask(clauses,
+                                                                std::move(comp_entity_ids))
+                        )
+                );
+            }
         }
+        first_clause = false;
         vec_comp_entity_ids = folly::collect(futures).get();
         futures.clear();
         // Erasing from front of vector not ideal, but they're just shared_ptr and there shouldn't be loads of clauses
@@ -560,41 +640,15 @@ std::vector<SliceAndKey> read_and_process(
     // i.e. if the first processing unit needs ranges_and_keys[0] and ranges_and_keys[1], and the second needs ranges_and_keys[2] and ranges_and_keys[3]
     // then the structure will be {{0, 1}, {2, 3}}
     std::vector<std::vector<size_t>> processing_unit_indexes = read_query.clauses_[0]->structure_for_processing(ranges_and_keys, start_from);
+        component_manager->set_next_entity_id(ranges_and_keys.size());
 
     // Start reading as early as possible
     auto segment_and_slice_futures = store->batch_read_uncompressed(std::move(ranges_and_keys), columns_to_decode(pipeline_context));
-    
-    // Map from index in segment_and_slice_futures to the number of processing units that require that segment
-    std::vector<size_t> segment_proc_unit_counts(segment_and_slice_futures.size(), 0);
-    for (const auto& list: processing_unit_indexes) {
-        for (auto idx: list) {
-            internal::check<ErrorCode::E_ASSERTION_FAILURE>(
-                    idx < segment_proc_unit_counts.size(),
-                    "Index {} in processing_unit_indexes out of bounds >{}", idx, segment_proc_unit_counts.size() - 1);
-            segment_proc_unit_counts[idx]++;
-        }
-    }
-    internal::check<ErrorCode::E_ASSERTION_FAILURE>(
-            std::all_of(segment_proc_unit_counts.begin(), segment_proc_unit_counts.end(), [](const size_t& val) { return val != 0; }),
-            "All segments should be needed by at least one ProcessingUnit");
-    std::vector<EntityId> ids;
-    ids.reserve(segment_and_slice_futures.size());
-    for (auto&& [idx, segment_and_slice_future]: folly::enumerate(segment_and_slice_futures)) {
-        ids.push_back(component_manager->add_segment_and_slice(std::move(segment_and_slice_future), segment_proc_unit_counts[idx]));
-    }
-    std::vector<Composite<EntityIds>> vec_comp_entity_ids;
-    vec_comp_entity_ids.reserve(processing_unit_indexes.size());
-    for (const auto& list: processing_unit_indexes) {
-        EntityIds entity_ids;
-        for (auto idx: list) {
-            entity_ids.emplace_back(ids[idx]);
-        }
-        vec_comp_entity_ids.emplace_back(Composite<EntityIds>(std::move(entity_ids)));
-    }
-    // At this stage, each Composite contains a single list of entity IDs, which may refer to a row-slice, a column-slice, a
-    // general rectangular slice, or some more exotic collection of segments based on the clause's processing
-    // parallelisation.
-    auto processed_entity_ids = process_clauses(std::move(vec_comp_entity_ids), read_query.clauses_);
+
+    auto processed_entity_ids = process_clauses(component_manager,
+                                                std::move(segment_and_slice_futures),
+                                                processing_unit_indexes,
+                                                read_query.clauses_);
     auto comp_processing_units = gather_entities(component_manager, std::move(processed_entity_ids));
 
     if (std::any_of(read_query.clauses_.begin(), read_query.clauses_.end(), [](const std::shared_ptr<Clause>& clause) {

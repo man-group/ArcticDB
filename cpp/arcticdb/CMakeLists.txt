@@ -313,7 +313,6 @@ set(arcticdb_srcs
         util/magic_num.hpp
         util/movable_priority_queue.hpp
         util/movable_priority_queue.hpp
-        util/object_or_future.hpp
         util/offset_string.hpp
         util/offset_string.hpp
         util/optional_defaults.hpp
@@ -757,7 +756,6 @@ if(${TEST})
             util/test/test_format_date.cpp
             util/test/test_hash.cpp
             util/test/test_id_transformation.cpp
-            util/test/test_object_or_future.cpp
             util/test/test_ranges_from_future.cpp
             util/test/test_runtime_config.cpp
             util/test/test_slab_allocator.cpp

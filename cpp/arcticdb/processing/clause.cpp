@@ -72,37 +72,36 @@ Composite<ProcessingUnit> gather_entities(std::shared_ptr<ComponentManager> comp
     return entity_ids.transform([&component_manager, include_atom_keys, include_bucket]
     (const EntityIds& entity_ids) -> ProcessingUnit {
         ProcessingUnit res;
-        std::vector<folly::Future<std::shared_ptr<SegmentInMemory>>> segment_futs;
-        std::vector<folly::Future<std::shared_ptr<RowRange>>> row_range_futs;
-        std::vector<folly::Future<std::shared_ptr<ColRange>>> col_range_futs;
-        segment_futs.reserve(entity_ids.size());
-        row_range_futs.reserve(entity_ids.size());
-        col_range_futs.reserve(entity_ids.size());
+        std::vector<std::shared_ptr<SegmentInMemory>> segments;
+        std::vector<std::shared_ptr<RowRange>> row_ranges;
+        std::vector<std::shared_ptr<ColRange>> col_ranges;
+        segments.reserve(entity_ids.size());
+        row_ranges.reserve(entity_ids.size());
+        col_ranges.reserve(entity_ids.size());
         for (auto entity_id: entity_ids) {
-            segment_futs.emplace_back(component_manager->get<std::shared_ptr<SegmentInMemory>>(entity_id));
-            row_range_futs.emplace_back(component_manager->get<std::shared_ptr<RowRange>>(entity_id));
-            col_range_futs.emplace_back(component_manager->get<std::shared_ptr<ColRange>>(entity_id));
+            segments.emplace_back(component_manager->get<std::shared_ptr<SegmentInMemory>>(entity_id));
+            row_ranges.emplace_back(component_manager->get<std::shared_ptr<RowRange>>(entity_id));
+            col_ranges.emplace_back(component_manager->get<std::shared_ptr<ColRange>>(entity_id));
         }
-        res.set_segments(folly::collect(segment_futs).get());
-        res.set_row_ranges(folly::collect(row_range_futs).get());
-        res.set_col_ranges(folly::collect(col_range_futs).get());
+        res.set_segments(std::move(segments));
+        res.set_row_ranges(std::move(row_ranges));
+        res.set_col_ranges(std::move(col_ranges));
 
         if (include_atom_keys) {
-            std::vector<folly::Future<std::shared_ptr<AtomKey>>> futs;
-            futs.reserve(entity_ids.size());
+            std::vector<std::shared_ptr<AtomKey>> keys;
+            keys.reserve(entity_ids.size());
             for (auto entity_id: entity_ids) {
-                futs.emplace_back(component_manager->get<std::shared_ptr<AtomKey>>(entity_id));
+                keys.emplace_back(component_manager->get<std::shared_ptr<AtomKey>>(entity_id));
             }
-            res.set_atom_keys(folly::collect(futs).get());
+            res.set_atom_keys(std::move(keys));
         }
         if (include_bucket) {
-            std::vector<folly::Future<size_t>> futs;
-            futs.reserve(entity_ids.size());
+            std::vector<size_t> buckets;
+            buckets.reserve(entity_ids.size());
             for (auto entity_id: entity_ids) {
-                futs.emplace_back(component_manager->get<size_t>(entity_id));
+                buckets.emplace_back(component_manager->get<size_t>(entity_id));
             }
             // Each entity_id has a bucket, but they must all be the same within one processing unit
-            auto buckets = folly::collect(futs).get();
             if (buckets.size() > 0) {
                 internal::check<ErrorCode::E_ASSERTION_FAILURE>(
                         std::adjacent_find(buckets.begin(), buckets.end(), std::not_equal_to<>() ) == buckets.end(),
