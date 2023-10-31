@@ -80,9 +80,14 @@ jobs:
           disk-root: "D:"  # This is also the checkout directory. Total size 12GB.
         continue-on-error: true
 
+      # TODO: this is very fragile as it does not necessarily
+      # use the latest compiler, and hardcodind the version is
+      # not a viable solution on the long run
       - name: Enable Windows compiler commands
         if: matrix.os == 'windows'
         uses: ilammy/msvc-dev-cmd@v1.12.1
+        with:
+          toolset: 14.37
 
       - name: Extra envs
         # This has to come after msvc-dev-cmd to overwrite the bad VCPKG_ROOT it sets
