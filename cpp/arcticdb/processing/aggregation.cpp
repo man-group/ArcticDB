@@ -119,25 +119,25 @@ namespace
     };
 }
 
+/**********************
+ * AggregatorDataBase *
+ **********************/
+
+AggregatorDataBase::AggregatorDataBase(const AggregatorDataBase&)
+{
+    log::version().warn("Copying potentially large buffer in AggregatorData");
+}
+
+AggregatorDataBase& AggregatorDataBase::operator=(const AggregatorDataBase&)
+{
+    log::version().warn("Copying potentially large buffer in AggregatorData");
+    return *this;
+}
+
 /*********************
  * SumAggregatorData *
  *********************/
 
-SumAggregatorData::SumAggregatorData(const SumAggregatorData& other)
-    : aggregated_(other.aggregated_)
-    , data_type_(other.data_type_)
-{
-    log::version().warn("Copying potentially large buffer in SumAggregatorData");
-}
-
-SumAggregatorData& SumAggregatorData::operator=(const SumAggregatorData& other)
-{
-    aggregated_ = other.aggregated_;
-    data_type_ = other.data_type_;
-    log::version().warn("Copying potentially large buffer in SumAggregatorData");
-    return *this;
-}
- 
 void SumAggregatorData::add_data_type(DataType data_type) {
     add_data_type_impl(data_type, data_type_);
 }
@@ -345,21 +345,6 @@ namespace
  * MaxAggregatorData *
  *********************/
 
-MaxAggregatorData::MaxAggregatorData(const MaxAggregatorData& other)
-    : aggregated_(other.aggregated_)
-    , data_type_(other.data_type_)
-{
-    log::version().warn("Copying potentially large buffer in MaxAggregatorData");
-}
-
-MaxAggregatorData& MaxAggregatorData::operator=(const MaxAggregatorData& other)
-{
-    aggregated_ = other.aggregated_;
-    data_type_ = other.data_type_;
-    log::version().warn("Copying potentially large buffer in MaxAggregatorData");
-    return *this;
-}
-
 void MaxAggregatorData::add_data_type(DataType data_type)
 {
     add_data_type_impl(data_type, data_type_);
@@ -379,21 +364,6 @@ SegmentInMemory MaxAggregatorData::finalize(const ColumnName& output_column_name
  * MinAggregatorData *
  *********************/
 
-MinAggregatorData::MinAggregatorData(const MinAggregatorData& other)
-    : aggregated_(other.aggregated_)
-    , data_type_(other.data_type_)
-{
-    log::version().warn("Copying potentially large buffer in MinAggregatorData");
-}
-
-MinAggregatorData& MinAggregatorData::operator=(const MinAggregatorData& other)
-{
-    aggregated_ = other.aggregated_;
-    data_type_ = other.data_type_;
-    log::version().warn("Copying potentially large buffer in MinAggregatorData");
-    return *this;
-}
-
 void MinAggregatorData::add_data_type(DataType data_type)
 {
     add_data_type_impl(data_type, data_type_);
@@ -412,19 +382,6 @@ SegmentInMemory MinAggregatorData::finalize(const ColumnName& output_column_name
 /**********************
  * MeanAggregatorData *
  **********************/
-
-MeanAggregatorData::MeanAggregatorData(const MeanAggregatorData& other)
-    : fractions_(other.fractions_)
-{
-    log::version().warn("Copying potentially large buffer in MeanAggregatorData");
-}
-
-MeanAggregatorData& MeanAggregatorData::operator=(const MeanAggregatorData& other)
-{
-    fractions_ = other.fractions_;
-    log::version().warn("Copying potentially large buffer in MeanAggregatorData");
-    return *this;
-}
 
 void MeanAggregatorData::aggregate(const std::optional<ColumnWithStrings>& input_column, const std::vector<size_t>& groups, size_t unique_values) {
     if(input_column.has_value()) {
@@ -479,19 +436,6 @@ double MeanAggregatorData::Fraction::to_double() const
 /***********************
  * CountAggregatorData *
  ***********************/
-
-CountAggregatorData::CountAggregatorData(const CountAggregatorData& other)
-    : aggregated_(other.aggregated_)
-{
-    log::version().warn("Copying potentially large buffer in CountAggregatorData");
-}
-
-CountAggregatorData& CountAggregatorData::operator=(const CountAggregatorData& other)
-{
-    aggregated_ = other.aggregated_;
-    log::version().warn("Copying potentially large buffer in CountAggregatorData");
-    return *this;
-}
 
 void CountAggregatorData::aggregate(const std::optional<ColumnWithStrings>& input_column, const std::vector<size_t>& groups, size_t unique_values) {
     if(input_column.has_value()) {

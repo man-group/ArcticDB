@@ -52,16 +52,21 @@ private:
     ColumnName output_column_name_max_;
 };
 
-class SumAggregatorData
+class AggregatorDataBase
 {
 public:
 
-    SumAggregatorData() = default;
-    // Warn on copies as aggregated_ could be a large buffer
-    SumAggregatorData(const SumAggregatorData& other);
-    SumAggregatorData& operator=(const SumAggregatorData& other);
+    AggregatorDataBase() = default;
+    // Warn on copies as inheriting classes may embed large buffers
+    AggregatorDataBase(const AggregatorDataBase&);
+    AggregatorDataBase& operator=(const AggregatorDataBase&);
 
-    ARCTICDB_MOVE(SumAggregatorData)
+    ARCTICDB_MOVE(AggregatorDataBase);
+};
+
+class SumAggregatorData : private AggregatorDataBase
+{
+public:
 
     void add_data_type(DataType data_type);
     void aggregate(const std::optional<ColumnWithStrings>& input_column, const std::vector<size_t>& groups, size_t unique_values);
@@ -73,16 +78,9 @@ private:
     std::optional<DataType> data_type_;
 };
 
-class MaxAggregatorData
+class MaxAggregatorData : private AggregatorDataBase
 {
 public:
-
-    MaxAggregatorData() = default;
-    // Warn on copies as aggregated_ could be a large buffer
-    MaxAggregatorData(const MaxAggregatorData& other);
-    MaxAggregatorData& operator=(const MaxAggregatorData& other);
-
-    ARCTICDB_MOVE(MaxAggregatorData)
 
     void add_data_type(DataType data_type);
     void aggregate(const std::optional<ColumnWithStrings>& input_column, const std::vector<size_t>& groups, size_t unique_values);
@@ -94,16 +92,9 @@ private:
     std::optional<DataType> data_type_;
 };
 
-class MinAggregatorData
+class MinAggregatorData : private AggregatorDataBase
 {
 public:
-
-    MinAggregatorData() = default;
-    // Warn on copies as aggregated_ could be a large buffer
-    MinAggregatorData(const MinAggregatorData& other);
-    MinAggregatorData& operator=(const MinAggregatorData& other);
-
-    ARCTICDB_MOVE(MinAggregatorData)
 
     void add_data_type(DataType data_type);
     void aggregate(const std::optional<ColumnWithStrings>& input_column, const std::vector<size_t>& groups, size_t unique_values);
@@ -115,16 +106,9 @@ private:
     std::optional<DataType> data_type_;
 };
 
-class MeanAggregatorData
+class MeanAggregatorData : private AggregatorDataBase
 {
 public:
-
-    MeanAggregatorData() = default;
-    // Warn on copies as data_ could be a large buffer
-    MeanAggregatorData(const MeanAggregatorData& other);
-    MeanAggregatorData& operator=(const MeanAggregatorData& other);
-
-    ARCTICDB_MOVE(MeanAggregatorData)
 
     // Mean values are always doubles so this is a no-op
     void add_data_type(DataType) {}
@@ -144,16 +128,9 @@ private:
     std::vector<Fraction> fractions_;
 };
 
-class CountAggregatorData
+class CountAggregatorData : private AggregatorDataBase
 {
 public:
-
-    CountAggregatorData() = default;
-    // Warn on copies as aggregated_ could be a large buffer
-    CountAggregatorData(const CountAggregatorData& other);
-    CountAggregatorData& operator=(const CountAggregatorData& other);
-
-    ARCTICDB_MOVE(CountAggregatorData)
 
     // Count values are always integers so this is a no-op
     void add_data_type(DataType) {}
