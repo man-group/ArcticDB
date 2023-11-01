@@ -45,7 +45,6 @@ from arcticdb.util.test import (
     assert_series_equal,
     config_context,
     distinct_timestamps,
-    RUN_MONGO_TEST,
 )
 from tests.util.date import DateRange
 
@@ -294,8 +293,7 @@ def test_prune_previous_versions_multiple_times(basic_store, symbol):
 
 
 def test_prune_previous_versions_write_batch(basic_store):
-    """Verify that the batch write method correctly prunes previous versions when the corresponding option is specified.
-    """
+    """Verify that the batch write method correctly prunes previous versions when the corresponding option is specified."""
     # Given
     lib = basic_store
     lib_tool = lib.library_tool()
@@ -325,8 +323,7 @@ def test_prune_previous_versions_write_batch(basic_store):
 
 
 def test_prune_previous_versions_batch_write_metadata(basic_store):
-    """Verify that the batch write metadata method correctly prunes previous versions when the corresponding option is specified.
-    """
+    """Verify that the batch write metadata method correctly prunes previous versions when the corresponding option is specified."""
     # Given
     lib = basic_store
     lib_tool = lib.library_tool()
@@ -356,8 +353,7 @@ def test_prune_previous_versions_batch_write_metadata(basic_store):
 
 
 def test_prune_previous_versions_append_batch(basic_store):
-    """Verify that the batch append method correctly prunes previous versions when the corresponding option is specified.
-    """
+    """Verify that the batch append method correctly prunes previous versions when the corresponding option is specified."""
     # Given
     lib = basic_store
     lib_tool = lib.library_tool()

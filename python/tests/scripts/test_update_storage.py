@@ -4,14 +4,13 @@ import pytest
 import pandas as pd
 
 from arcticdb import Arctic
-from arcticdb.config import MACOS_CONDA_BUILD, MACOS_CONDA_BUILD_SKIP_REASON
 from arcticdb.scripts.update_storage import run
 from arcticdb.options import LibraryOptions
 from arcticc.pb2.s3_storage_pb2 import Config as S3Config
 from arcticc.pb2.azure_storage_pb2 import Config as AzureConfig
 from arcticdb.util.test import assert_frame_equal
-
 from arcticdb.adapters.s3_library_adapter import USE_AWS_CRED_PROVIDERS_TOKEN
+from tests.util.mark import AZURE_TESTS_MARK
 
 LIB_NAME = "test_lib"
 
@@ -134,7 +133,7 @@ def test_aws_auth_with_storage_overrider(moto_s3_endpoint_and_credentials, monke
 
 
 # Side effect needed from "_create_container" fixture
-@pytest.mark.skipif(MACOS_CONDA_BUILD, reason=MACOS_CONDA_BUILD_SKIP_REASON)
+@AZURE_TESTS_MARK
 def test_upgrade_script_dryrun_azure(
     azurite_azure_test_connection_setting, azurite_azure_uri, azure_client_and_create_container
 ):
@@ -159,7 +158,7 @@ def test_upgrade_script_dryrun_azure(
 
 
 # Side effect needed from "_create_container" fixture
-@pytest.mark.skipif(MACOS_CONDA_BUILD, reason=MACOS_CONDA_BUILD_SKIP_REASON)
+@AZURE_TESTS_MARK
 def test_upgrade_script_azure(
     azurite_azure_test_connection_setting, azurite_azure_uri, azure_client_and_create_container
 ):
