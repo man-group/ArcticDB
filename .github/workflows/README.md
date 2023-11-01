@@ -50,10 +50,10 @@ flowchart LR
     leader --> follower
     leader --> cpp_tests
     leader --> persistent_storage{Should test against real storages?} --> persistent_storage_tests --> can_merge
-    follower --> docs
-    docs --> can_merge
     cpp_tests --> can_merge
     can_merge --> pub_check{publish_env} --> publish
+    A((manual)) --> docs_build
+    A((manual)) --> docs_publish
 ```
 
 This diagram shows the structure of the CI system.
@@ -87,12 +87,12 @@ They are designed to run concurrently with the Follower jobs, which test against
 
 After the leader jobs have passed successfully, we run Follower jobs that compile and test against the all of the supported Python versions.
 
-## Docs job
+## Docs jobs
 
-The Docs job compiles and publishes the latest docs.
-It needs a valid ArcticDB wheel to run, so it depends on the Linux jobs.
-Also currently, the automatic builds trigger only from changes in the code.
-**So if you make changes that are only in the docs, you will need to start a manual build and supply a valid ArcticDB wheel.**
+The docs_build job compiles and deploys versions of the docs into the `docs-pages` branch.
+The docs_publish job upload the complete `docs-pages` branch to Cloudflare Pages.
+See [Docs README](https://github.com/man-group/ArcticDB/blob/master/docs/README.md) for more info.
+Currently this is manual.  Automatic build (on push) and publish (for releases) is TODO.
 
 ## can_merge check
 
