@@ -973,6 +973,11 @@ def basic_store_dynamic_schema(basic_store_dynamic_schema_v1, basic_store_dynami
 
 
 @pytest.fixture
+def basic_store_delayed_deletes(basic_store_factory):
+    return basic_store_factory(delayed_deletes=True)
+
+
+@pytest.fixture
 def basic_store_delayed_deletes_v1(basic_store_factory):
     return basic_store_factory(delayed_deletes=True, dynamic_strings=True, prune_previous_version=True)
 

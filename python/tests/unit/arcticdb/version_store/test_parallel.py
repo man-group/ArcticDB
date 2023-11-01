@@ -21,8 +21,8 @@ from arcticdb.util._versions import IS_PANDAS_TWO
 from arcticdb_ext.storage import KeyType
 
 
-def test_remove_incomplete(lmdb_version_store):
-    lib = lmdb_version_store
+def test_remove_incomplete(basic_store):
+    lib = basic_store
     lib_tool = lib.library_tool()
     assert lib_tool.find_keys(KeyType.APPEND_DATA) == []
     assert lib.list_symbols_with_incomplete_data() == []
@@ -56,9 +56,9 @@ def test_remove_incomplete(lmdb_version_store):
     lib.remove_incomplete(sym3)
 
 
-def test_parallel_write(lmdb_version_store):
+def test_parallel_write(basic_store):
     sym = "parallel"
-    lmdb_version_store.remove_incomplete(sym)
+    basic_store.remove_incomplete(sym)
 
     num_rows = 1111
     dtidx = pd.date_range("1970-01-01", periods=num_rows)
@@ -70,11 +70,11 @@ def test_parallel_write(lmdb_version_store):
     random.shuffle(list_df)
 
     for df in list_df:
-        lmdb_version_store.write(sym, df, parallel=True)
+        basic_store.write(sym, df, parallel=True)
 
     user_meta = {"thing": 7}
-    lmdb_version_store.compact_incomplete(sym, False, False, metadata=user_meta)
-    vit = lmdb_version_store.read(sym)
+    basic_store.compact_incomplete(sym, False, False, metadata=user_meta)
+    vit = basic_store.read(sym)
     assert_frame_equal(test, vit.data)
     assert vit.metadata["thing"] == 7
 
@@ -126,7 +126,7 @@ def test_floats_to_nans(lmdb_version_store):
     assert_frame_equal(vit.data, df)
 
 
-def test_sort_merge_write(lmdb_version_store):
+def test_sort_merge_write(basic_store):
     num_rows_per_day = 10
     num_days = 10
     num_columns = 8
@@ -149,17 +149,17 @@ def test_sort_merge_write(lmdb_version_store):
 
     random.shuffle(dataframes)
     for d in dataframes:
-        lmdb_version_store.write(symbol, d, parallel=True)
-    lmdb_version_store.version_store.sort_merge(symbol)
-    vit = lmdb_version_store.read(symbol)
+        basic_store.write(symbol, d, parallel=True)
+    basic_store.version_store.sort_merge(symbol)
+    vit = basic_store.read(symbol)
     df.sort_index(axis=1, inplace=True)
     result = vit.data
     result.sort_index(axis=1, inplace=True)
     assert_frame_equal(vit.data, df)
 
 
-def test_sort_merge_append(lmdb_version_store_dynamic_schema):
-    lib = lmdb_version_store_dynamic_schema
+def test_sort_merge_append(basic_store_dynamic_schema):
+    lib = basic_store_dynamic_schema
     num_rows_per_day = 10
     num_days = 10
     num_columns = 8

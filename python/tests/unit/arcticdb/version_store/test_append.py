@@ -544,7 +544,7 @@ def test_append_with_defragmentation(
     dynamic_schema,
     dynamic_strings,
     df_in_str,
-    version_store_factory,
+    basic_store_factory,
 ):
     def get_wide_and_long_df(start_idx, end_idx, col_per_append_df, col_name_set, df_in_str):
         df = pd.DataFrame()
@@ -628,7 +628,7 @@ def test_append_with_defragmentation(
     set_config_int("SymbolDataCompact.SegmentCount", 1)
     before_compact = pd.DataFrame()
     index_offset = 0
-    lib = version_store_factory(
+    lib = basic_store_factory(
         column_group_size=column_group_size,
         segment_row_size=segment_row_size,
         dynamic_schema=dynamic_schema,

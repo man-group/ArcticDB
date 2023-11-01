@@ -61,25 +61,52 @@ def test_df_3_cols(start=0):
     )
 
 
+def read_persistent_library(lib):
+    symbols = lib.list_symbols()
+
+    for sym in ["one", "two", "three"]:
+        assert sym in symbols
+        df = lib.read(sym).data
+        column_names = df.columns.values.tolist()
+        assert column_names == ["x", "y", "z"]
+
+    # TODO: Fix me when the cast bug is fixed #940
+    # assert "empty_s" in symbols
+    # res = lib.read("empty_s").data
+    # assert res.empty
+    # assert str(res.dtype) == "datetime64[ns]"
+
+
 def verify_library(ac):
     libraries = get_test_libraries(ac)
     for lib_name in libraries:
         lib = ac[lib_name]
-
-        symbols = lib.list_symbols()
-        assert len(symbols) == 3
-        for sym in ["one", "two", "three"]:
-            assert sym in symbols
-        for sym in symbols:
-            df = lib.read(sym).data
-            column_names = df.columns.values.tolist()
-            assert column_names == ["x", "y", "z"]
+        read_persistent_library(lib)
 
 
 def is_strategy_branch_valid_format(input_string):
     pattern = r"^(linux|windows)_cp3(6|7|8|9|10|11).*$"
     match = re.match(pattern, input_string)
     return bool(match)
+
+
+def write_persistent_library(lib):
+    one_df = test_df_3_cols()
+    lib.write("one", one_df)
+
+    two_df = test_df_3_cols(1)
+    lib.write("two", two_df)
+
+    two_df = test_df_3_cols(2)
+    lib.append("two", two_df)
+
+    three_df = test_df_3_cols(3)
+    lib.append("three", three_df)
+
+    # TODO: Fix me when the cast bug is fixed #940
+    # sym = "empty_s"
+    # series = pd.Series(dtype="datetime64[ns]")
+    # lib.write(sym, series)
 
 
 def seed_library(ac, version: str = ""):
@@ -97,18 +124,7 @@ def seed_library(ac, version: str = ""):
     ac.create_library(lib_name)
 
     library = ac[lib_name]
-
-    one_df = test_df_3_cols()
-    library.write("one", one_df)
-
-    two_df = test_df_3_cols(1)
-    library.write("two", two_df)
-
-    two_df = test_df_3_cols(2)
-    library.append("two", two_df)
-
-    three_df = test_df_3_cols(3)
-    library.append("three", three_df)
+    write_persistent_library(library)
 
 
 def cleanup_libraries(ac):

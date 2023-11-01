@@ -9,6 +9,7 @@ import pytest
 import numpy as np
 
 from arcticdb_ext.exceptions import InternalException
+from arcticdb_ext.storage import NoDataFoundException
 from arcticdb.util.test import distinct_timestamps
 
 
@@ -300,6 +301,16 @@ def test_add_to_snapshot_simple(basic_store_tombstone_and_pruning):
     assert lib.read("s3", as_of="snap").data == 3
 
 
+def test_add_to_snapshot_missing_snap(basic_store_tombstone_and_pruning):
+    lib = basic_store_tombstone_and_pruning
+    lib.write("s1", 1)
+    lib.write("s2", 2)
+
+    lib.write("s3", 3)
+    with pytest.raises(NoDataFoundException):
+        lib.add_to_snapshot("snap", ["s3"])
+
+
 def test_add_to_snapshot_specific_version(basic_store_tombstone_and_pruning):
     lib = basic_store_tombstone_and_pruning
     lib.write("s1", 1)
@@ -396,6 +407,16 @@ def test_remove_from_snapshot(basic_store_tombstone_and_pruning):
     assert len(versions) == 2
 
     assert lib.read("s3", as_of="saved").data == 3
+
+
+def test_remove_from_snapshot_missing_snap(basic_store_tombstone_and_pruning):
+    lib = basic_store_tombstone_and_pruning
+    lib.write("s1", 1)
+    lib.write("s2", 2)
+    lib.write("s3", 3)
+
+    with pytest.raises(NoDataFoundException):
+        lib.remove_from_snapshot("snap", ["s3"], [0])
 
 
 def test_remove_from_snapshot_multiple(basic_store_tombstone_and_pruning):
