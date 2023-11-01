@@ -20,6 +20,8 @@
 #include <rocksdb/options.h>
 #include <rocksdb/utilities/options_util.h>
 #include <rocksdb/slice.h>
+#include <rocksdb/filter_policy.h>
+#include <rocksdb/table.h>
 
 namespace arcticdb::storage::rocksdb {
 
@@ -68,6 +70,13 @@ RocksDBStorage::RocksDBStorage(const LibraryPath &library_path, OpenMode mode, c
         fs::create_directories(lib_dir);
         db_options.create_if_missing = true;
         db_options.create_missing_column_families = true;
+        db_options.IncreaseParallelism(); // TODO: add a method to task_scheduler.hpp to return the nubmer of IOThreads configured there, and use that rather than the default 16.
+        for (auto& desc: column_families) {
+            desc.options.OptimizeLevelStyleCompaction();
+            ::rocksdb::BlockBasedTableOptions table_options;
+            table_options.filter_policy.reset(::rocksdb::NewBloomFilterPolicy(10));
+            desc.options.table_factory.reset(::rocksdb::NewBlockBasedTableFactory(table_options));
+        }
     } else {
         util::raise_rte(DEFAULT_ROCKSDB_NOT_OK_ERROR + s.ToString());
     }
@@ -85,14 +94,18 @@ RocksDBStorage::RocksDBStorage(const LibraryPath &library_path, OpenMode mode, c
 }
 
 RocksDBStorage::~RocksDBStorage() {
-    for (const auto& [key_type_name, handle]: handles_by_key_type_) {
-        auto s = db_->DestroyColumnFamilyHandle(handle);
+    if (db_ == nullptr) {
+        util::check(handles_by_key_type_.empty(), "Handles not empty but db_ is nullptr");
+    } else {
+        for (const auto &[key_type_name, handle]: handles_by_key_type_) {
+            auto s = db_->DestroyColumnFamilyHandle(handle);
+            util::check(s.ok(), DEFAULT_ROCKSDB_NOT_OK_ERROR + s.ToString());
+        }
+        handles_by_key_type_.clear();
+        auto s = db_->Close();
         util::check(s.ok(), DEFAULT_ROCKSDB_NOT_OK_ERROR + s.ToString());
+        delete db_;
     }
-    handles_by_key_type_.clear();
-    auto s = db_->Close();
-    util::check(s.ok(), DEFAULT_ROCKSDB_NOT_OK_ERROR + s.ToString());
-    delete db_;
 }
 
 void RocksDBStorage::do_write(Composite<KeySegmentPair>&& kvs) {
@@ -118,17 +131,26 @@ void RocksDBStorage::do_read(Composite<VariantKey>&& ks, const ReadVisitor& visi
     ARCTICDB_SAMPLE(RocksDBStorageRead, 0)
     auto grouper = [](auto &&k) { return variant_key_type(k); };
 
+    std::vector<VariantKey> failed_reads;
     (fg::from(ks.as_range()) | fg::move | fg::groupBy(grouper)).foreach([&](auto &&group) {
         auto key_type_name = fmt::format("{}", group.key());
         auto handle = handles_by_key_type_.at(key_type_name);
         for (const auto &k : group.values()) {
             std::string k_str = to_serialized_key(k);
             std::string value;
+            // TODO: Once PR: 975 has been merged we can use ::rocksdb::PinnableSlice to avoid the copy in
+            //       the consturction of the segment
             auto s = db_->Get(::rocksdb::ReadOptions(), handle, ::rocksdb::Slice(k_str), &value);
-            util::check(s.ok(), DEFAULT_ROCKSDB_NOT_OK_ERROR + s.ToString());
-            visitor(k, Segment::from_bytes(reinterpret_cast<uint8_t*>(value.data()), value.size()));
+            if (s.IsNotFound()) {
+                failed_reads.push_back(k);
+            } else {
+                util::check(s.ok(), DEFAULT_ROCKSDB_NOT_OK_ERROR + s.ToString());
+                visitor(k, Segment::from_bytes(reinterpret_cast<uint8_t*>(value.data()), value.size(), true));
+            }
         }
     });
+    if(!failed_reads.empty())
+        throw KeyNotFoundException(Composite<VariantKey>(std::move(failed_reads)));
 }
 
 bool RocksDBStorage::do_key_exists(const VariantKey& key) {

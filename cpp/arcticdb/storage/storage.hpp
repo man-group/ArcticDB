@@ -86,10 +86,7 @@ public:
         mode_(mode) {}
 
     virtual ~Storage() = default;
-    Storage(const Storage&) = delete;
-    Storage& operator=(const Storage&) = delete;
-    Storage(Storage&&) = default;
-    Storage& operator=(Storage&&) = delete;
+    ARCTICDB_NO_MOVE_OR_COPY(Storage)
 
     void write(Composite<KeySegmentPair> &&kvs) {
         ARCTICDB_SAMPLE(StorageWrite, 0)

@@ -17,6 +17,7 @@ from arcticdb.adapters.lmdb_library_adapter import LMDBLibraryAdapter
 from arcticdb.adapters.azure_library_adapter import AzureLibraryAdapter
 from arcticdb.adapters.mongo_library_adapter import MongoLibraryAdapter
 from arcticdb.adapters.in_memory_library_adapter import InMemoryLibraryAdapter
+from arcticdb.adapters.rocksdb_library_adapter import RocksDBLibraryAdapter
 from arcticdb.encoding_version import EncodingVersion
 
 
@@ -33,6 +34,8 @@ class Arctic:
         MongoLibraryAdapter,
         InMemoryLibraryAdapter,
     ]
+    if LibraryManager.rocksdb_support:
+        _LIBRARY_ADAPTERS.append(RocksDBLibraryAdapter)
 
     def __init__(self, uri: str, encoding_version: EncodingVersion = DEFAULT_ENCODING_VERSION):
         """

@@ -14,8 +14,8 @@ from arcticc.pb2.lmdb_storage_pb2 import Config as LmdbConfig
 from arcticc.pb2.s3_storage_pb2 import Config as S3Config
 from arcticc.pb2.azure_storage_pb2 import Config as AzureConfig
 from arcticc.pb2.in_memory_storage_pb2 import Config as MemoryConfig
+from arcticc.pb2.rocksdb_storage_pb2 import Config as RocksDBConfig
 from arcticc.pb2.mongo_storage_pb2 import Config as MongoConfig
-from arcticc.pb2.nfs_backed_storage_pb2 import Config as NfsConfig
 from arcticc.pb2.storage_pb2 import (
     EnvironmentConfigsMap,
     EnvironmentConfig,
@@ -187,6 +187,18 @@ def add_memory_library_to_env(cfg, lib_name, env_name, description=None):
 
     sid, storage = get_storage_for_lib_name(lib_name, env)
     storage.config.Pack(in_mem, type_url_prefix="cxx.arctic.org")
+    _add_lib_desc_to_env(env, lib_name, sid, description)
+
+
+def add_rocksdb_library_to_env(cfg, lib_name, env_name, db_dir=Defaults.DATA_DIR, description=None, rocksdb_config={}):
+    env = cfg.env_by_id[env_name]
+    rocksdb = RocksDBConfig()
+    rocksdb.path = db_dir
+    for k, v in rocksdb_config.items():
+        setattr(rocksdb, k, v)
+
+    sid, storage = get_storage_for_lib_name(lib_name, env)
+    storage.config.Pack(rocksdb, type_url_prefix="cxx.arctic.org")
     _add_lib_desc_to_env(env, lib_name, sid, description)
 
 
