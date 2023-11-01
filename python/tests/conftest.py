@@ -1114,6 +1114,7 @@ def object_and_mem_and_lmdb_version_store(request):
         "lmdb_version_store_dynamic_schema_v2",
         "s3_version_store_dynamic_schema_v1",
         "s3_version_store_dynamic_schema_v2",
+        "in_memory_version_store_dynamic_schema",
         pytest.param("azure_version_store_dynamic_schema", marks=AZURE_TESTS_MARK),
         pytest.param("real_s3_version_store_dynamic_schema", marks=REAL_S3_TESTS_MARK),
     ),
