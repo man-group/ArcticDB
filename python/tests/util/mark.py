@@ -31,7 +31,10 @@ FAST_TESTS_ONLY = os.getenv("ARCTICDB_FAST_TESTS_ONLY") == "1"
 AZURE_TESTS_MARK = pytest.mark.skipif(FAST_TESTS_ONLY or MACOS_CONDA_BUILD, reason=_MACOS_CONDA_BUILD_SKIP_REASON)
 """Mark to skip all Azure tests when MACOS_CONDA_BUILD or ARCTICDB_FAST_TESTS_ONLY is set."""
 
-MONGO_TESTS_MARK = pytest.mark.skipif(FAST_TESTS_ONLY, reason="Skipping mongo tests under ARCTICDB_FAST_TESTS_ONLY")
+MONGO_TESTS_MARK = pytest.mark.skipif(
+    FAST_TESTS_ONLY or sys.platform != "linux",
+    reason="Skipping mongo tests under ARCTICDB_FAST_TESTS_ONLY",
+)
 """Mark on tests using the mongo storage fixtures. Currently skips if ARCTICDB_FAST_TESTS_ONLY."""
 
 REAL_S3_TESTS_MARK = pytest.mark.skipif(
