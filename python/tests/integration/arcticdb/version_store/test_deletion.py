@@ -33,9 +33,9 @@ MAP_TIMEOUTS = [0, SECOND * 5, SECOND * 10000]
 
 
 @pytest.mark.parametrize("map_timeout", MAP_TIMEOUTS)
-def test_delete_all(map_timeout, object_and_lmdb_version_store, sym):
+def test_delete_all(map_timeout, object_and_mem_and_lmdb_version_store, sym):
     with config_context("VersionMap.ReloadInterval", map_timeout):
-        lib = object_and_lmdb_version_store
+        lib = object_and_mem_and_lmdb_version_store
         symbol = sym
         df1 = pd.DataFrame({"x": np.arange(10, dtype=np.int64)})
         lib.write(symbol, df1)
@@ -347,9 +347,9 @@ def test_delete_version_with_batch_write_metadata(object_version_store, idx, sym
 
 
 @pytest.mark.parametrize("map_timeout", MAP_TIMEOUTS)
-def test_delete_version_with_snapshot(map_timeout, object_and_lmdb_version_store, sym):
+def test_delete_version_with_snapshot(map_timeout, object_and_mem_and_lmdb_version_store, sym):
     with config_context("VersionMap.ReloadInterval", map_timeout):
-        lib = object_and_lmdb_version_store
+        lib = object_and_mem_and_lmdb_version_store
         symbol = sym
         df1 = pd.DataFrame({"x": np.arange(10, dtype=np.int64)})
         lib.write(symbol, df1)
