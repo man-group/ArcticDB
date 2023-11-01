@@ -2,23 +2,18 @@ name: Docs Build
 on:
   workflow_dispatch:
     inputs:
-      version: { type: string, required: false, description: The version to build docs for, used as git tag and pypi version.  If not specified then use master and wheel from the last successful build.}
-      latest: { type: boolean, required: false, description: Alias this version as the 'latest' stable docs.}
+      version: { type: string, required: false, description: The version to build docs for used as git tag and pypi version.  If not specified then use master and wheel from the last successful build.}
+      latest: { type: boolean, required: false, description: Alias this version as the 'latest' stable docs.  This should be set for the latest stable release.}
       deploy: { type: boolean, required: false, description: Push the built docs to the docs-pages branch on github.}
       
 jobs:
   docs_build:
     runs-on: ubuntu-latest
     steps:
-      - name: Display inputs
-        run: |
-          echo version=${{inputs.version}}
-          echo latest=${{inputs.latest}}
-          echo deploy=${{inputs.deploy}}
-
       - name: Checkout
         uses: actions/checkout@v3
-        ref: ${{inputs.version || 'master'}}
+        with:
+          ref: ${{inputs.version || 'master'}}
 
       - name: Detect runner Python implementation
         if: ${{!inputs.version}}
