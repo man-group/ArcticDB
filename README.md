@@ -61,6 +61,7 @@ We have tested against the following S3 backends:
 - Pure Storage S3
 - Ceph
 - MinIO on Linux
+- Scality S3
 
 ### Installation
 
