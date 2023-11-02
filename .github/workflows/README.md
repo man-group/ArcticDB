@@ -90,7 +90,7 @@ After the leader jobs have passed successfully, we run Follower jobs that compil
 ## Docs jobs
 
 The docs_build job compiles and deploys versions of the docs into the `docs-pages` branch.
-The docs_publish job upload the complete `docs-pages` branch to Cloudflare Pages.
+The docs_publish job uploads the complete `docs-pages` branch to Cloudflare Pages.
 See [Docs README](https://github.com/man-group/ArcticDB/blob/master/docs/README.md) for more info.
 Currently this is manual.  Automatic build (on push) and publish (for releases) is TODO.
 
