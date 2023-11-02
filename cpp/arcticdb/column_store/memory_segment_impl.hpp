@@ -1141,7 +1141,7 @@ public:
             size_t end_row) const {
         auto num_values = end_row - start_row;
         internal::check<ErrorCode::E_ASSERTION_FAILURE>(
-                is_sparse() || (start_row < row_count() && end_row <= row_count() && num_values > 0),
+                is_sparse() || (start_row < row_count() && end_row <= row_count()),
                 "Truncate bounds start_row={} end_row={} outside valid range {}", start_row, end_row, row_count());
 
         auto output = std::make_shared<SegmentInMemoryImpl>();
