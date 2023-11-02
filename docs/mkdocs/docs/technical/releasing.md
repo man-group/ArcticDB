@@ -121,7 +121,7 @@ schedule table [in the readme](https://github.com/man-group/ArcticDB/blob/master
 The conversion date will be two years from when the release is [published on GitHub](https://github.com/man-group/ArcticDB/releases/). This is not required if you are releasing a patch release.
 
 ## 6. Docs
-To release do docs,
+To release the docs,
 - Run the [Docs Build action](https://github.com/man-group/ArcticDB/actions/workflows/docs_build.yml) for your new tag with `deploy` selected.  If this is the latest stable release of ArcticDB (i.e. not a backport) then also select `latest`.
 - Run the [Docs Publish action](https://github.com/man-group/ArcticDB/actions/workflows/docs_publish.yml) with the Prod environment.  The Publish action needs approval and will upload to https://docs.arcticdb.io (hosted by Cloudflare Pages).
 
