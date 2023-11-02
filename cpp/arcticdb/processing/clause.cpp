@@ -235,9 +235,9 @@ AggregationClause::AggregationClause(const std::string& grouping_column,
         } else if (aggregation_operator == "mean") {
             aggregators_.emplace_back(MeanAggregator(typed_column_name, typed_column_name));
         } else if (aggregation_operator == "max") {
-            aggregators_.emplace_back(MaxOrMinAggregator(typed_column_name, typed_column_name, Extremum::MAX));
+            aggregators_.emplace_back(MaxAggregator(typed_column_name, typed_column_name));
         } else if (aggregation_operator == "min") {
-            aggregators_.emplace_back(MaxOrMinAggregator(typed_column_name, typed_column_name, Extremum::MIN));
+            aggregators_.emplace_back(MinAggregator(typed_column_name, typed_column_name));
         } else if (aggregation_operator == "count") {
             aggregators_.emplace_back(CountAggregator(typed_column_name, typed_column_name));
         } else {
