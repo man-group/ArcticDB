@@ -351,6 +351,10 @@ inline Index empty_index() {
     return RowCountIndex::default_index();
 }
 
+inline size_t index_field_count(const Index& index) {
+    return util::variant_match(index, [] (const auto& idx) { return idx.field_count(); });
+}
+
 }
 
 

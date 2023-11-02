@@ -173,6 +173,14 @@ endif ()
 ## Core library without python bindings ##
 set(arcticdb_srcs
         # header files
+        arrow/arrow_utils.hpp
+        arrow/arrow_c_data_interface.hpp
+        arrow/arrow_stream_interace.hpp
+        arrow/arrow_wrappers.h
+        arrow/arrow_schema.hpp
+        arrow/arrow_error.hpp
+        arrow/arrow_array.hpp
+        arrow/arrow_buffer.hpp
         async/async_store.hpp
         async/batch_read_args.hpp
         async/task_scheduler.hpp
@@ -352,7 +360,13 @@ set(arcticdb_srcs
         version/version_store_api.hpp
         version/version_store_objects.hpp
         version/version_utils.hpp
+        # Nanoarrow vendored files
+        arrow/nanoarrow/array.c
+        arrow/nanoarrow/utils.c
+        arrow/nanoarrow/schema.c
         # CPP files
+        arrow/arrow_schema.cpp
+        arrow/arrow_array.cpp
         async/async_store.cpp
         async/task_scheduler.cpp
         async/tasks.cpp
@@ -434,9 +448,9 @@ set(arcticdb_srcs
         version/version_core.cpp
         version/version_store_api.cpp
         version/version_utils.cpp
-        version/symbol_list.cpp
         version/version_map_batch_methods.cpp
-        )
+        arrow/arrow_utils.hpp arrow/arrow_c_data_interface.hpp arrow/arrow_stream_interace.hpp arrow/arrow_wrappers.h arrow/arrow_schema.hpp arrow/arrow_error.hpp arrow/arrow_array.hpp arrow/arrow_buffer.hpp arrow/arrow_schema.cpp arrow/arrow_array.cpp arrow/python_bindings.cpp arrow/python_bindings.hpp)
+        version/symbol_list.cpp arrow/arrow_common.hpp)
 
 if(${ARCTICDB_INCLUDE_ROCKSDB})
     list (APPEND arcticdb_srcs
@@ -609,6 +623,7 @@ GENERATE_EXPORT_HEADER(arcticdb_core)
 
 ## Core python bindings, private only ##
 set(arcticdb_python_srcs
+        arrow/python_bindings.cpp
         async/python_bindings.cpp
         codec/python_bindings.cpp
         column_store/python_bindings.cpp
@@ -773,7 +788,7 @@ if(${TEST})
             version/test/test_version_store.cpp
             version/test/test_sorting_info_state_machine.cpp
             version/test/version_map_model.hpp
-            )
+            arrow/test/test_arrow.cpp)
 
     set(EXECUTABLE_PERMS OWNER_WRITE OWNER_READ OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE) # 755
 

@@ -127,8 +127,18 @@ namespace compatibility {
 }
 
 namespace codec {
+
 template<ErrorCode code>
 constexpr auto check = util::detail::Check<code, ErrorCategory::CODEC>{};
+
+template<ErrorCode code>
+constexpr auto raise = check<code>.raise;
+}
+
+namespace arrow {
+
+template<ErrorCode code>
+constexpr auto check = util::detail::Check<code, ErrorCategory::ARROW>{};
 
 template<ErrorCode code>
 constexpr auto raise = check<code>.raise;

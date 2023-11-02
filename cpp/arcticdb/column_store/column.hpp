@@ -400,6 +400,13 @@ public:
 
     void set_allow_sparse(bool value);
 
+    void force_set_row_data(size_t row_id) {
+        last_physical_row_ = row_id;
+        last_logical_row_ = row_id;
+    }
+
+    size_t get_physical_offset(size_t row) const;
+
     void set_shapes_buffer(size_t row_count);
 
     // The following two methods inflate (reduplicate) numpy string arrays that are potentially multi-dimensional,

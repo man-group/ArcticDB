@@ -33,6 +33,7 @@ enum class ErrorCategory : detail::BaseType {
     USER_INPUT = 7,
     COMPATIBILITY = 8,
     CODEC = 9,
+    ARROW = 10,
     // NEW CATEGORIES MUST ALSO BE ADDED TO python_module.cpp:register_error_code_ecosystem
 };
 
@@ -48,6 +49,7 @@ inline std::unordered_map<ErrorCategory, const char*> get_error_category_names()
         {ErrorCategory::USER_INPUT, "USER_INPUT"},
         {ErrorCategory::COMPATIBILITY, "COMPATIBILITY"},
         {ErrorCategory::CODEC, "CODEC"},
+        {ErrorCategory::ARROW, "ARROW"},
     };
 }
 
@@ -80,8 +82,9 @@ inline std::unordered_map<ErrorCategory, const char*> get_error_category_names()
     ERROR_CODE(7000, E_INVALID_USER_ARGUMENT) \
     ERROR_CODE(7001, E_INVALID_DECIMAL_STRING)   \
     ERROR_CODE(7002, E_INVALID_CHAR_IN_SYMBOL) \
-    ERROR_CODE(8000, E_UNRECOGNISED_COLUMN_STATS_VERSION) \
+    ERROR_CODE(8000, E_UNRECOGNISED_COLUMN_STATS_VERSION)          \
     ERROR_CODE(9000, E_DECODE_ERROR)
+    ERROR_CODE(10000, E_ARROW_INVALID)
 
 enum class ErrorCode : detail::BaseType {
 #define ERROR_CODE(code, Name, ...) Name = code,
@@ -149,6 +152,7 @@ using UnsortedDataException = ArcticSpecificException<ErrorCode::E_UNSORTED_DATA
 using UserInputException = ArcticCategorizedException<ErrorCategory::USER_INPUT>;
 using CompatibilityException = ArcticCategorizedException<ErrorCategory::COMPATIBILITY>;
 using CodecException = ArcticCategorizedException<ErrorCategory::CODEC>;
+using ArrowException = ArcticCategorizedException<ErrorCategory::ARROW>;
 
 template<ErrorCode error_code>
 [[noreturn]] void throw_error(const std::string& msg) {
@@ -165,7 +169,7 @@ template<>
     throw ArcticSpecificException<ErrorCode::E_UNSORTED_DATA>(msg);
 }
 
-}
+} // namespace arcticdb
 
 namespace fmt {
 template<>
