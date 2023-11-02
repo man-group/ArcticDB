@@ -688,7 +688,7 @@ public:
 
     size_t num_fields() const { return descriptor().field_count(); }
 
-    size_t row_count() const { return size_t(row_id_ + 1); }
+    size_t row_count() const { return row_id_ + 1 < 0 ? 0 : size_t(row_id_ + 1); }
 
     void clear() {
         columns_.clear();

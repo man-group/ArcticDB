@@ -657,10 +657,22 @@ Composite<ProcessingUnit> RowRangeClause::process(std::shared_ptr<Store> store,
                 if (end_ > row_range.start() && end_ < row_range.end()) {
                     end_row = end_ - (row_range.start());
                 }
-                auto seg = truncate_segment(slice_and_key.segment(store), start_row, end_row);
-                slice_and_key.slice_.adjust_rows(seg.row_count());
-                slice_and_key.slice_.adjust_columns(seg.descriptor().field_count() - seg.descriptor().index().field_count());
-                slice_and_key.segment_ = std::move(seg);
+                auto original_segment = slice_and_key.segment(store);
+                auto truncated_segment = truncate_segment(original_segment, start_row, end_row);
+                if(!truncated_segment.is_null()) {
+                    const size_t truncated_segment_row_count = truncated_segment.row_count();
+                    const size_t truncated_segment_column_count = (
+                            truncated_segment.descriptor().field_count() -
+                            truncated_segment.descriptor().index().field_count()
+                    );
+
+                    slice_and_key.slice_.adjust_rows(truncated_segment_row_count);
+                    slice_and_key.slice_.adjust_columns(truncated_segment_column_count);
+                } else {
+                    slice_and_key.slice_.adjust_rows(0u);
+                    slice_and_key.slice_.adjust_columns(0u);
+                }
+                slice_and_key.segment_ = std::move(truncated_segment);
             } // else all rows in the slice and key are required, do nothing
         }
     });
