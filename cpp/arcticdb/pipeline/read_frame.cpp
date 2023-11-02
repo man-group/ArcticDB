@@ -221,7 +221,7 @@ void decode_or_expand_impl(
     size_t dest_bytes,
     std::shared_ptr<BufferHolder> buffers,
 	EncodingVersion encding_version) {
-    if(auto handler = TypeHandlerRegistry::instance()->get_handler(type_descriptor.data_type()); handler) {
+    if(auto handler = TypeHandlerRegistry::instance()->get_handler(type_descriptor); handler) {
         handler->handle_type(data, dest, VariantField{&encoded_field_info}, type_descriptor, dest_bytes, std::move(buffers), encding_version);
     } else {
         std::optional<util::BitMagic> bv;
