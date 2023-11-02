@@ -52,8 +52,8 @@ flowchart LR
     leader --> persistent_storage{Should test against real storages?} --> persistent_storage_tests --> can_merge
     cpp_tests --> can_merge
     can_merge --> pub_check{publish_env} --> publish
-    A((manual)) --> docs_build
-    A((manual)) --> docs_publish
+    B((manual)) --> docs_build
+    B((manual)) --> docs_publish
 ```
 
 This diagram shows the structure of the CI system.
