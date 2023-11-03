@@ -420,11 +420,15 @@ bool operator()(int64_t t, const std::unordered_set<uint64_t>& u, UInt64SpecialH
     else
         return u.count(t) > 0;
 }
-// This is the version called when checking string set membership with T = uint64_t and U = int64_t
-template<typename T>
-bool operator()(T t, const robin_hood::unordered_set<int64_t>& u) const {
+
+bool operator()(uint64_t t, const robin_hood::unordered_set<int64_t>& u) const {
     return u.contains(t);
 }
+
+bool operator()(int64_t t, const robin_hood::unordered_set<uint64_t>& u) const {
+    return u.contains(t);
+}
+
 };
 
 struct IsNotInOperator: MembershipOperator {
@@ -447,11 +451,13 @@ bool operator()(int64_t t, const std::unordered_set<uint64_t>& u, UInt64SpecialH
         return u.count(t) == 0;
 }
 
-// This is the version called when checking string set membership with T = uint64_t and U = int64_t
-template<typename T>
-bool operator()(T t, const robin_hood::unordered_set<int64_t>& u) const {
+bool operator()(uint64_t t, const robin_hood::unordered_set<int64_t>& u) const {
     return !u.contains(t);
 }
+bool operator()(int64_t t, const robin_hood::unordered_set<uint64_t>& u) const {
+    return !u.contains(t);
+}
+
 };
 
 } //namespace arcticdb
