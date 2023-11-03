@@ -75,8 +75,4 @@ include_directories(${CMAKE_CURRENT_BINARY_DIR}/proto/arcticc/pb2/proto/)
 # for IDE resolution otherwise it is lost
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 
-if("${BUILD_CYTHON}")
-    add_subdirectory(${BUILD_CYTHON_PATH})
-endif()
-
 add_subdirectory(arcticdb)
