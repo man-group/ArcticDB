@@ -17,6 +17,10 @@ jobs:
         with:
           ref: ${{inputs.version && format('v{0}', inputs.version) || 'master'}}
 
+      - name: Fetch docs-pages branch
+        if: ${{inputs.deploy}}
+        run: git fetch origin docs-pages --depth=1
+
       - name: Detect runner Python implementation
         if: ${{!inputs.version}}
         run: |
