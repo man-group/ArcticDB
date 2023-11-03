@@ -637,7 +637,7 @@ std::vector<Composite<SliceAndKey>> RowRangeClause::structure_for_processing(
     slice_and_keys.erase(std::remove_if(slice_and_keys.begin(), slice_and_keys.end(), [this](const SliceAndKey& slice_and_key) {
         return slice_and_key.slice_.row_range.start() >= end_ || slice_and_key.slice_.row_range.end() <= start_;
     }), slice_and_keys.end());
-    return structure_by_column_slice(slice_and_keys);
+    return structure_by_row_slice(slice_and_keys, start_from);
 }
 
 Composite<ProcessingUnit> RowRangeClause::process(std::shared_ptr<Store> store,
@@ -657,10 +657,22 @@ Composite<ProcessingUnit> RowRangeClause::process(std::shared_ptr<Store> store,
                 if (end_ > row_range.start() && end_ < row_range.end()) {
                     end_row = end_ - (row_range.start());
                 }
-                auto seg = truncate_segment(slice_and_key.segment(store), start_row, end_row);
-                slice_and_key.slice_.adjust_rows(seg.row_count());
-                slice_and_key.slice_.adjust_columns(seg.descriptor().field_count() - seg.descriptor().index().field_count());
-                slice_and_key.segment_ = std::move(seg);
+                auto original_segment = slice_and_key.segment(store);
+                auto truncated_segment = truncate_segment(original_segment, start_row, end_row);
+                if(!truncated_segment.is_null()) {
+                    const size_t truncated_segment_row_count = truncated_segment.row_count();
+                    const size_t truncated_segment_column_count = (
+                            truncated_segment.descriptor().field_count() -
+                            truncated_segment.descriptor().index().field_count()
+                    );
+
+                    slice_and_key.slice_.adjust_rows(truncated_segment_row_count);
+                    slice_and_key.slice_.adjust_columns(truncated_segment_column_count);
+                } else {
+                    slice_and_key.slice_.adjust_rows(0u);
+                    slice_and_key.slice_.adjust_columns(0u);
+                }
+                slice_and_key.segment_ = std::move(truncated_segment);
             } // else all rows in the slice and key are required, do nothing
         }
     });
@@ -672,8 +684,10 @@ void RowRangeClause::set_processing_config(const ProcessingConfig& processing_co
     switch(row_range_type_) {
         case RowRangeType::HEAD:
             if (n_ >= 0) {
+                start_ = 0;
                 end_ = std::min(n_, total_rows);
             } else {
+                start_ = 0;
                 end_ = std::max(static_cast<int64_t>(0), total_rows + n_);
             }
             break;
@@ -686,13 +700,31 @@ void RowRangeClause::set_processing_config(const ProcessingConfig& processing_co
                 end_ = total_rows;
             }
             break;
+        case RowRangeType::RANGE:
+            // Wrap around negative indices.
+            start_ = (
+                user_provided_start_ >= 0 ?
+                std::min(user_provided_start_, total_rows) :
+                std::max(total_rows + user_provided_start_, static_cast<int64_t>(0))
+            );
+            end_ = (
+                user_provided_end_ >= 0 ?
+                std::min(user_provided_end_, total_rows) :
+                std::max(total_rows + user_provided_end_, static_cast<int64_t>(0))
+            );
+            break;
+
         default:
             internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Unrecognised RowRangeType {}", static_cast<uint8_t>(row_range_type_));
     }
 }
 
 std::string RowRangeClause::to_string() const {
-    return fmt::format("{} {}", row_range_type_ == RowRangeType::HEAD ? "HEAD" : "TAIL", n_);
+    if (row_range_type_ == RowRangeType::RANGE) {
+        return fmt::format("ROWRANGE: RANGE, start={}, end ={}", start_, end_);
+    }
+
+    return fmt::format("ROWRANGE: {}, n={}", row_range_type_ == RowRangeType::HEAD ? "HEAD" : "TAIL", n_);
 }
 
 std::vector<Composite<SliceAndKey>> DateRangeClause::structure_for_processing(

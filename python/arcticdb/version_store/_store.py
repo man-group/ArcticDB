@@ -918,6 +918,7 @@ class NativeVersionStore:
         symbols: List[str],
         as_ofs: Optional[List[VersionQueryInput]] = None,
         date_ranges: Optional[List[Optional[DateRangeInput]]] = None,
+        row_ranges: Optional[List[Optional[Tuple[int, int]]]] = None,
         query_builder: Optional[Union[QueryBuilder, List[QueryBuilder]]] = None,
         columns: Optional[List[List[str]]] = None,
         **kwargs,
@@ -935,6 +936,9 @@ class NativeVersionStore:
             i-th entry corresponds to i-th element of `symbols`.
         date_ranges: `Optional[List[Optional[DateRangeInput]]]`, default=None
             List of date ranges to filter the symbols.
+            i-th entry corresponds to i-th element of `symbols`.
+        row_ranges: `Optional[List[Optional[Tuple[int, int]]]]`, default=None
+            List of row ranges to filter the symbols.
             i-th entry corresponds to i-th element of `symbols`.
         columns: `List[List[str]]`, default=None
             Which columns to return for a dataframe.
@@ -963,7 +967,14 @@ class NativeVersionStore:
         _check_batch_kwargs(NativeVersionStore.batch_read, NativeVersionStore.read, kwargs)
         throw_on_error = True
         versioned_items = self._batch_read_to_versioned_items(
-            symbols, as_ofs, date_ranges, columns, query_builder, throw_on_error, kwargs
+            symbols=symbols,
+            as_ofs=as_ofs,
+            date_ranges=date_ranges,
+            row_ranges=row_ranges,
+            columns=columns,
+            query_builder=query_builder,
+            throw_on_error=throw_on_error,
+            kwargs=kwargs,
         )
         check(
             all(v is not None for v in versioned_items),
@@ -972,12 +983,12 @@ class NativeVersionStore:
         return {v.symbol: v for v in versioned_items}
 
     def _batch_read_to_versioned_items(
-        self, symbols, as_ofs, date_ranges, columns, query_builder, throw_on_error, kwargs=None
+        self, symbols, as_ofs, date_ranges, row_ranges, columns, query_builder, throw_on_error, kwargs=None
     ):
         if kwargs is None:
             kwargs = dict()
         version_queries = self._get_version_queries(len(symbols), as_ofs, **kwargs)
-        read_queries = self._get_read_queries(len(symbols), date_ranges, columns, query_builder)
+        read_queries = self._get_read_queries(len(symbols), date_ranges, row_ranges, columns, query_builder)
         read_options = self._get_read_options(**kwargs)
         read_options.set_batch_throw_on_error(throw_on_error)
         read_results = self.version_store.batch_read(symbols, version_queries, read_queries, read_options)
@@ -1493,18 +1504,24 @@ class NativeVersionStore:
         else:
             return [self._get_version_query(None, **kwargs) for _ in range(num_symbols)]
 
-    def _get_read_query(self, date_range: Optional[DateRangeInput], row_range, columns, query_builder):
+    def _get_read_query(
+        self,
+        date_range: Optional[DateRangeInput],
+        row_range: Tuple[int, int],
+        columns: Optional[List[str]],
+        query_builder: QueryBuilder,
+    ):
         check(date_range is None or row_range is None, "Date range and row range both specified")
         read_query = _PythonVersionStoreReadQuery()
 
         if query_builder:
             read_query.add_clauses(query_builder.clauses)
 
+        if row_range is not None:
+            read_query.row_range = _SignedRowRange(row_range[0], row_range[1])
+
         if date_range is not None:
             read_query.row_filter = _normalize_dt_range(date_range)
-
-        if row_range is not None:
-            read_query.row_range = row_range
 
         if columns is not None:
             read_query.columns = list(columns)
@@ -1515,6 +1532,7 @@ class NativeVersionStore:
         self,
         num_symbols: int,
         date_ranges: Optional[List[Optional[DateRangeInput]]],
+        row_ranges: Optional[List[Optional[Tuple[int, int]]]],
         columns: Optional[List[List[str]]],
         query_builder: Optional[Union[QueryBuilder, List[QueryBuilder]]],
     ):
@@ -1526,6 +1544,13 @@ class NativeVersionStore:
                 "Mismatched number of symbols ({}) and date ranges ({}) supplied to batch read",
                 num_symbols,
                 len(date_ranges),
+            )
+        if row_ranges is not None:
+            check(
+                len(row_ranges) == num_symbols,
+                "Mismatched number of symbols ({}) and row ranges ({}) supplied to batch read",
+                num_symbols,
+                len(row_ranges),
             )
         if query_builder is not None and not isinstance(query_builder, QueryBuilder):
             check(
@@ -1544,15 +1569,26 @@ class NativeVersionStore:
 
         for idx in range(num_symbols):
             date_range = None
+            row_range = None
             these_columns = None
             query = None
             if date_ranges is not None:
                 date_range = date_ranges[idx]
+            if row_ranges is not None:
+                row_range = row_ranges[idx]
             if columns is not None:
                 these_columns = columns[idx]
             if query_builder is not None:
                 query = query_builder if isinstance(query_builder, QueryBuilder) else query_builder[idx]
-            read_queries.append(self._get_read_query(date_range, None, these_columns, query))
+
+            read_query = self._get_read_query(
+                date_range=date_range,
+                row_range=row_range,
+                columns=these_columns,
+                query_builder=query,
+            )
+
+            read_queries.append(read_query)
 
         return read_queries
 
@@ -1569,10 +1605,12 @@ class NativeVersionStore:
         read_options.set_incompletes(self.resolve_defaults("incomplete", proto_cfg, global_default=False, **kwargs))
         return read_options
 
-    def _get_queries(self, as_of, date_range, row_range, columns, query_builder, **kwargs):
+    def _get_queries(self, symbol, as_of, date_range, row_range, columns, query_builder, **kwargs):
         version_query = self._get_version_query(as_of, **kwargs)
         read_options = self._get_read_options(**kwargs)
-        read_query = self._get_read_query(date_range, row_range, columns, query_builder)
+        read_query = self._get_read_query(
+            date_range=date_range, row_range=row_range, columns=columns, query_builder=query_builder
+        )
         return version_query, read_options, read_query
 
     def _get_column_stats(self, column_stats):
@@ -1605,10 +1643,12 @@ class NativeVersionStore:
             of the data that falls within the given range. The same effect can be achieved by using the date_range
             clause of the QueryBuilder class, which will be slower, but return data with a smaller memory footprint.
             See the QueryBuilder.date_range docstring for more details.
+            Only one of date_range or row_range can be provided.
         row_range: `Optional[Tuple[int, int]]`, default=None
             Row range to read data for. Inclusive of the lower bound, exclusive of the upper bound
             lib.read(symbol, row_range=(start, end)).data should behave the same as df.iloc[start:end], including in
-            the handling of negative start/end values. Only one of date_range or row_range can be provided.
+            the handling of negative start/end values.
+            Only one of date_range or row_range can be provided.
         columns: `Optional[List[str]]`, default=None
             Applicable only for Pandas data. Determines which columns to return data for.
         query_builder: 'Optional[QueryBuilder]', default=None
@@ -1620,14 +1660,22 @@ class NativeVersionStore:
         -------
         VersionedItem
         """
-
-        if row_range is not None:
-            row_range = _SignedRowRange(row_range[0], row_range[1])
         if date_range is not None and query_builder is not None:
             q = QueryBuilder()
             query_builder = q.date_range(date_range).then(query_builder)
+
+        if row_range is not None and query_builder is not None:
+            q = QueryBuilder()
+            query_builder = q._row_range(row_range).then(query_builder)
+
         version_query, read_options, read_query = self._get_queries(
-            as_of, date_range, row_range, columns, query_builder, **kwargs
+            symbol=symbol,
+            as_of=as_of,
+            date_range=date_range,
+            row_range=row_range,
+            columns=columns,
+            query_builder=query_builder,
+            **kwargs,
         )
         read_result = self._read_dataframe(symbol, version_query, read_query, read_options)
         return self._post_process_dataframe(read_result, read_query, query_builder)
@@ -1662,7 +1710,9 @@ class NativeVersionStore:
 
         q = QueryBuilder()
         q = q._head(n)
-        version_query, read_options, read_query = self._get_queries(as_of, None, None, columns, q, **kwargs)
+        version_query, read_options, read_query = self._get_queries(
+            symbol=symbol, as_of=as_of, date_range=None, row_range=None, columns=columns, query_builder=q, **kwargs
+        )
         read_result = self._read_dataframe(symbol, version_query, read_query, read_options)
         return self._post_process_dataframe(read_result, read_query, q)
 
@@ -1691,7 +1741,9 @@ class NativeVersionStore:
 
         q = QueryBuilder()
         q = q._tail(n)
-        version_query, read_options, read_query = self._get_queries(as_of, None, None, columns, q, **kwargs)
+        version_query, read_options, read_query = self._get_queries(
+            symbol=symbol, as_of=as_of, date_range=None, row_range=None, columns=columns, query_builder=q, **kwargs
+        )
         read_result = self._read_dataframe(symbol, version_query, read_query, read_options)
         return self._post_process_dataframe(read_result, read_query, q)
 
