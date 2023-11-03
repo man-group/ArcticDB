@@ -8,15 +8,28 @@ As of the Change Date specified in that file, in accordance with the Business So
 import numpy as np
 import pytest
 
+from arcticdb.version_store.processing import QueryBuilder
 from arcticdb_ext.exceptions import InternalException
 
 
 def generic_row_range_test(version_store, symbol, df, start_row, end_row):
     version_store.write(symbol, df)
-    assert np.array_equal(df.iloc[start_row:end_row], version_store.read(symbol, row_range=(start_row, end_row)).data)
-    assert np.array_equal(
-        df.iloc[-end_row:-start_row], version_store.read(symbol, row_range=(-end_row, -start_row)).data
-    )
+
+    expected_array = df.iloc[start_row:end_row]
+    received_array = version_store.read(symbol, row_range=(start_row, end_row)).data
+    q = QueryBuilder()._row_range((start_row, end_row))
+    received_array_via_querybuilder = version_store.read(symbol, query_builder=q).data
+
+    np.testing.assert_array_equal(expected_array, received_array)
+    np.testing.assert_array_equal(expected_array, received_array_via_querybuilder)
+
+    expected_array = df.iloc[-end_row:-start_row]
+    received_array = version_store.read(symbol, row_range=(-end_row, -start_row)).data
+    q = QueryBuilder()._row_range((-end_row, -start_row))
+    received_array_via_querybuilder = version_store.read(symbol, query_builder=q).data
+
+    np.testing.assert_array_equal(expected_array, received_array)
+    np.testing.assert_array_equal(expected_array, received_array_via_querybuilder)
 
 
 def test_row_range_start_row_greater_than_end_row(lmdb_version_store, one_col_df):

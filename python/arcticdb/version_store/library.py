@@ -221,6 +221,8 @@ class ReadRequest(NamedTuple):
         See `read` method.
     date_range: Optional[Tuple[Optional[Timestamp], Optional[Timestamp]]], default=none
         See `read`method.
+    row_range: Optional[Tuple[int, int]], default=none
+        See `read` method.
     columns: Optional[List[str]], default=none
         See `read` method.
     query_builder: Optional[Querybuilder], default=none
@@ -234,6 +236,7 @@ class ReadRequest(NamedTuple):
     symbol: str
     as_of: Optional[AsOf] = None
     date_range: Optional[Tuple[Optional[Timestamp], Optional[Timestamp]]] = None
+    row_range: Optional[Tuple[int, int]] = None
     columns: Optional[List[str]] = None
     query_builder: Optional[QueryBuilder] = None
 
@@ -923,6 +926,7 @@ class Library:
         symbol: str,
         as_of: Optional[AsOf] = None,
         date_range: Optional[Tuple[Optional[Timestamp], Optional[Timestamp]]] = None,
+        row_range: Optional[Tuple[int, int]] = None,
         columns: Optional[List[str]] = None,
         query_builder: Optional[QueryBuilder] = None,
     ) -> VersionedItem:
@@ -952,6 +956,15 @@ class Library:
             The same effect can be achieved by using the date_range clause of the QueryBuilder class, which will be
             slower, but return data with a smaller memory footprint. See the QueryBuilder.date_range docstring for more
             details.
+
+            Only one of date_range or row_range can be provided.
+
+        row_range: `Optional[Tuple[int, int]]`, default=None
+            Row range to read data for. Inclusive of the lower bound, exclusive of the upper bound
+            lib.read(symbol, row_range=(start, end)).data should behave the same as df.iloc[start:end], including in
+            the handling of negative start/end values.
+
+            Only one of date_range or row_range can be provided.
 
         columns: List[str], default=None
             Applicable only for Pandas data. Determines which columns to return data for.
@@ -984,7 +997,12 @@ class Library:
         2       7
         """
         return self._nvs.read(
-            symbol=symbol, as_of=as_of, date_range=date_range, columns=columns, query_builder=query_builder
+            symbol=symbol,
+            as_of=as_of,
+            date_range=date_range,
+            row_range=row_range,
+            columns=columns,
+            query_builder=query_builder,
         )
 
     def read_batch(
@@ -1050,6 +1068,7 @@ class Library:
         symbol_strings = []
         as_ofs = []
         date_ranges = []
+        row_ranges = []
         columns = []
         query_builders = []
 
@@ -1057,6 +1076,8 @@ class Library:
             symbol_strings.append(s_.symbol)
             as_ofs.append(s_.as_of)
             date_ranges.append(s_.date_range)
+            row_ranges.append(s_.row_range)
+
             columns.append(s_.columns)
             if s_.query_builder is not None and query_builder is not None:
                 raise ArcticInvalidApiUsageException(
@@ -1068,7 +1089,7 @@ class Library:
 
         def handle_symbol(s_):
             symbol_strings.append(s_)
-            for l_ in (as_ofs, date_ranges, columns, query_builders):
+            for l_ in (as_ofs, date_ranges, row_ranges, columns, query_builders):
                 l_.append(None)
 
         for s in symbols:
@@ -1083,7 +1104,7 @@ class Library:
                 )
         throw_on_error = False
         return self._nvs._batch_read_to_versioned_items(
-            symbol_strings, as_ofs, date_ranges, columns, query_builder or query_builders, throw_on_error
+            symbol_strings, as_ofs, date_ranges, row_ranges, columns, query_builder or query_builders, throw_on_error
         )
 
     def read_metadata(self, symbol: str, as_of: Optional[AsOf] = None) -> VersionedItem:
