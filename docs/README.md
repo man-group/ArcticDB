@@ -17,17 +17,16 @@ and diagrams are generated, even undocumented classes / functions. This gives ab
 
 ### mkdocs
 
-
 Install
 ```
-pip install mkdocs-material mkdocs-jupyter mkdocstrings[python] black pybind11-stubgen
+pip install mkdocs-material mkdocs-jupyter mkdocstrings[python] black pybind11-stubgen mike
 ```
 - mkdocs-material: theme
 - mkdocs-jupyter: jupyter notebook support
 - mkdocstrings[python]: python docstring support, like sphinx docs
 - black: for signature formatting
 - pybind11-stubgen: for generating stubs for pybind11 extensions, so that mkdocstrings can parse them
-
+- mike: for deploying versioned docs
 
 You need to have ArcticDB installed to generate the API docs, so install it from source:
 
@@ -49,7 +48,7 @@ cd python
 pybind11-stubgen arcticdb_ext.version_store --ignore-all-errors -o .
 ```
 
-To build mkdocs to docs/mkdocs/site:
+To build the latest mkdocs to docs/mkdocs/site:
 ```
 cd docs/mkdocs
 mkdocs build -s
@@ -67,11 +66,12 @@ ERROR   -  mkdocstrings: Template 'alias.html' not found for 'python' handler an
 ERROR   -  Error reading page 'api/library.md': alias.html
 ```
 
+We use `mike` to version the docs.  The docs are first built into the `docs-pages` branch and then deployed to `docs.arcticdb.io` from there.
 
-## Deploying to `docs.arcticdb.io`
+To serve the versioned docs locally, run `mike serve` from the `docs/mkdocs` directory.
 
-Run the `Docs` github action.
-- Branch: Master
-- Environment: ProdPypi
-- Override: arcticdb
+## Publishing `docs.arcticdb.io`
 
+Run the `Docs Publish` github action.
+- Environment: ProdPypi, to push to docs.arcticdb.io
+- Environment: TestPypi, to push to a preview site

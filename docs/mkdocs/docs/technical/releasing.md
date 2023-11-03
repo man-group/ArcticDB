@@ -121,8 +121,12 @@ schedule table [in the readme](https://github.com/man-group/ArcticDB/blob/master
 The conversion date will be two years from when the release is [published on GitHub](https://github.com/man-group/ArcticDB/releases/). This is not required if you are releasing a patch release.
 
 ## 6. Docs
-The release worflow will also trigger the workflow releasing the documentation to the ArcticDB site. The documentation which will be uploaded is based of the branch from which the release will happen.
-In case a release candidate is promoted to a release the workflow will upload outdated docs to the site. In this case the documentation must be deployed again by running the [docs workflow](https://github.com/man-group/ArcticDB/tree/master/.github/workflows#docsyml).
+To release the docs,
+- Run the [Docs Build action](https://github.com/man-group/ArcticDB/actions/workflows/docs_build.yml) for your new tag with `deploy` selected.  If this is the latest stable release of ArcticDB (i.e. not a backport) then also select `latest`.
+- Run the [Docs Publish action](https://github.com/man-group/ArcticDB/actions/workflows/docs_publish.yml) with the Prod environment.  The Publish action needs approval and will upload to https://docs.arcticdb.io (hosted by Cloudflare Pages).
+
+See ths [Docs README](https://github.com/man-group/ArcticDB/blob/master/docs/README.md) for more information.
+
 
 # Removing a release
 
