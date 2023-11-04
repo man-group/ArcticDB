@@ -2,6 +2,13 @@
 
 This branch contains the built docs site.
 
+## Serve locally
+
+When on the docs-pages branch, run this command to serve the site locally:
+```bash
+python3 -m http.server
+```
+
 ## Download old versions of docs site and incorporate into this branch
 
 Login to cloudflare dashboard and find the deployment for the version you want to download.
@@ -34,6 +41,46 @@ for file in files:
 ```
 
 Commit the result.
+
+## Patch the version selector and warning into the pre-versioned docs
+
+Run this script in the subdir for the documentation version.
+
+```python
+from os import walk, path
+
+outdated = """
+<div data-md-color-scheme="default" data-md-component="outdated" hidden>
+    <aside class="md-banner md-banner--warning">
+        <div class="md-banner__inner md-grid md-typeset">           
+            You're not viewing the latest version.
+            <a href="../.">
+                <strong>Click here to go to latest.</strong>
+            </a>
+        </div>
+        <script>var el=document.querySelector("[data-md-component=outdated]"),outdated=__md_get("__outdated",sessionStorage);!0===outdated&&el&&(el.hidden=!1)</script>
+    </aside>
+</div>
+"""
+
+config = ', "version": {"default": "latest", "provider": "mike"}'
+
+
+for dirpath, _, fnames in walk("./"):
+    for f in fnames:
+        filename = path.join(dirpath, f)
+        if filename.endswith(".html"):
+            with open(filename, "r") as fobj:
+                filedata = fobj.read()
+            if outdated not in filedata:
+                print(filename, " adding outdated warning")
+                filedata = filedata.replace('<header class="md-header', outdated + '<header class="md-header')
+            if config not in filedata:
+                print(filename, " adding config")
+                filedata = filedata.replace('"Select version"}', '"Select version"}' + config)
+            with(open(filename, "w")) as fobj:
+                fobj.write(filedata)
+```
 
 ## Log
 
