@@ -2,7 +2,7 @@ name: Docs Publish
 on:
   workflow_dispatch:
     inputs:
-      environment: { type: environment, required: false }
+      environment: { type: environment, required: true }
 jobs:
   docs_publish:
     runs-on: ubuntu-latest
@@ -20,4 +20,5 @@ jobs:
           apiToken: ${{secrets.CLOUDFLARE_API_TOKEN}}
           accountId: ${{vars.CLOUDFLARE_ACCOUNT_ID}}
           projectName: ${{vars.CLOUDFLARE_PAGES_PROJECT}}
+          directory: .
           branch: ${{vars.CLOUDFLARE_PAGE_BRANCH}}
