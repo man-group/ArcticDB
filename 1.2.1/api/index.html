@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.18.1: http://docutils.sourceforge.net/" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ArcticDB Python Documentation &mdash; ArcticDB  documentation</title>
+      <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
+  <!--[if lt IE 9]>
+    <script src="_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script src="_static/jquery.js"></script>
+        <script src="_static/_sphinx_javascript_frameworks_compat.js"></script>
+        <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
+        <script src="_static/doctools.js"></script>
+        <script src="_static/sphinx_highlight.js"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Arctic API" href="arcticdb.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="#" class="icon icon-home">
+            ArcticDB
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="arcticdb.html">Arctic API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="library.html">Library API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="query_builder.html">Query Builder API</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="#">ArcticDB</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="#" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">ArcticDB Python Documentation</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/index.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="arcticdb-python-documentation">
+<h1>ArcticDB Python Documentation<a class="headerlink" href="#arcticdb-python-documentation" title="Permalink to this heading"></a></h1>
+<section id="introduction">
+<h2>Introduction<a class="headerlink" href="#introduction" title="Permalink to this heading"></a></h2>
+<p>This site documents the Python API of ArcticDB.</p>
+<p>Tutorials, guides and team contact details are available <a class="reference external" href="http://arcticdb.io/docs">here</a>.</p>
+<p>The API is structured into the following components:</p>
+<ul class="simple">
+<li><p><strong>Arctic</strong>: Arctic is the primary API used for accessing and manipulating ArcticDB libraries.</p></li>
+<li><p><strong>Library</strong>: The Library API enables reading and manipulating symbols inside ArcticDB libraries.</p></li>
+<li><p><strong>Query Builder</strong>: The QueryBuilder API enables the specification of complex queries, utilised in the Library API.</p></li>
+</ul>
+</section>
+<section id="contents">
+<h2>Contents<a class="headerlink" href="#contents" title="Permalink to this heading"></a></h2>
+<div class="toctree-wrapper compound">
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="arcticdb.html">Arctic API</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="arcticdb/arcticdb.Arctic.html">arcticdb.Arctic</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="arcticdb/arcticdb.Arctic.html#arcticdb.Arctic"><code class="docutils literal notranslate"><span class="pre">Arctic</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="arcticdb/arcticdb.Arctic.html#arcticdb.Arctic.__init__"><code class="docutils literal notranslate"><span class="pre">Arctic.__init__()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="arcticdb/arcticdb.LibraryOptions.html">arcticdb.LibraryOptions</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="arcticdb/arcticdb.LibraryOptions.html#arcticdb.LibraryOptions"><code class="docutils literal notranslate"><span class="pre">LibraryOptions</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="arcticdb/arcticdb.LibraryOptions.html#arcticdb.LibraryOptions.dynamic_schema"><code class="docutils literal notranslate"><span class="pre">LibraryOptions.dynamic_schema</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="arcticdb/arcticdb.LibraryOptions.html#arcticdb.LibraryOptions.dedup"><code class="docutils literal notranslate"><span class="pre">LibraryOptions.dedup</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="arcticdb/arcticdb.LibraryOptions.html#arcticdb.LibraryOptions.rows_per_segment"><code class="docutils literal notranslate"><span class="pre">LibraryOptions.rows_per_segment</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="arcticdb/arcticdb.LibraryOptions.html#arcticdb.LibraryOptions.columns_per_segment"><code class="docutils literal notranslate"><span class="pre">LibraryOptions.columns_per_segment</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="arcticdb/arcticdb.LibraryOptions.html#arcticdb.LibraryOptions.__init__"><code class="docutils literal notranslate"><span class="pre">LibraryOptions.__init__()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="arcticdb.html#arcticdb.Arctic"><code class="docutils literal notranslate"><span class="pre">Arctic</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="arcticdb.html#arcticdb.Arctic.__init__"><code class="docutils literal notranslate"><span class="pre">Arctic.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="arcticdb.html#arcticdb.Arctic.get_library"><code class="docutils literal notranslate"><span class="pre">Arctic.get_library()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="arcticdb.html#arcticdb.Arctic.create_library"><code class="docutils literal notranslate"><span class="pre">Arctic.create_library()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="arcticdb.html#arcticdb.Arctic.delete_library"><code class="docutils literal notranslate"><span class="pre">Arctic.delete_library()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="arcticdb.html#arcticdb.Arctic.list_libraries"><code class="docutils literal notranslate"><span class="pre">Arctic.list_libraries()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="arcticdb.html#arcticdb.LibraryOptions"><code class="docutils literal notranslate"><span class="pre">LibraryOptions</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="arcticdb.html#arcticdb.LibraryOptions.dynamic_schema"><code class="docutils literal notranslate"><span class="pre">LibraryOptions.dynamic_schema</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="arcticdb.html#arcticdb.LibraryOptions.dedup"><code class="docutils literal notranslate"><span class="pre">LibraryOptions.dedup</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="arcticdb.html#arcticdb.LibraryOptions.rows_per_segment"><code class="docutils literal notranslate"><span class="pre">LibraryOptions.rows_per_segment</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="arcticdb.html#arcticdb.LibraryOptions.columns_per_segment"><code class="docutils literal notranslate"><span class="pre">LibraryOptions.columns_per_segment</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="arcticdb.html#arcticdb.LibraryOptions.__init__"><code class="docutils literal notranslate"><span class="pre">LibraryOptions.__init__()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="library.html">Library API</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="library/arcticdb.version_store.library.Library.html">arcticdb.version_store.library.Library</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="library/arcticdb.version_store.library.Library.html#arcticdb.version_store.library.Library"><code class="docutils literal notranslate"><span class="pre">Library</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="library/arcticdb.version_store.library.Library.html#arcticdb.version_store.library.Library.__init__"><code class="docutils literal notranslate"><span class="pre">Library.__init__()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="library/arcticdb.version_store.library.NormalizableType.html">arcticdb.version_store.library.NormalizableType</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="library/arcticdb.version_store.library.NormalizableType.html#arcticdb.version_store.library.NormalizableType"><code class="docutils literal notranslate"><span class="pre">NormalizableType</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="library/arcticdb.version_store.library.ArcticInvalidApiUsageException.html">arcticdb.version_store.library.ArcticInvalidApiUsageException</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="library/arcticdb.version_store.library.ArcticInvalidApiUsageException.html#arcticdb.version_store.library.ArcticInvalidApiUsageException"><code class="docutils literal notranslate"><span class="pre">ArcticInvalidApiUsageException</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="library/arcticdb.version_store.library.ArcticDuplicateSymbolsInBatchException.html">arcticdb.version_store.library.ArcticDuplicateSymbolsInBatchException</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="library/arcticdb.version_store.library.ArcticDuplicateSymbolsInBatchException.html#arcticdb.version_store.library.ArcticDuplicateSymbolsInBatchException"><code class="docutils literal notranslate"><span class="pre">ArcticDuplicateSymbolsInBatchException</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="library/arcticdb.version_store.library.ArcticUnsupportedDataTypeException.html">arcticdb.version_store.library.ArcticUnsupportedDataTypeException</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="library/arcticdb.version_store.library.ArcticUnsupportedDataTypeException.html#arcticdb.version_store.library.ArcticUnsupportedDataTypeException"><code class="docutils literal notranslate"><span class="pre">ArcticUnsupportedDataTypeException</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="library/arcticdb.version_store.library.SymbolVersion.html">arcticdb.version_store.library.SymbolVersion</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="library/arcticdb.version_store.library.SymbolVersion.html#arcticdb.version_store.library.SymbolVersion"><code class="docutils literal notranslate"><span class="pre">SymbolVersion</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="library/arcticdb.version_store.library.SymbolVersion.html#arcticdb.version_store.library.SymbolVersion.symbol"><code class="docutils literal notranslate"><span class="pre">SymbolVersion.symbol</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="library/arcticdb.version_store.library.SymbolVersion.html#arcticdb.version_store.library.SymbolVersion.version"><code class="docutils literal notranslate"><span class="pre">SymbolVersion.version</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="library/arcticdb.version_store.library.SymbolVersion.html#arcticdb.version_store.library.SymbolVersion.__init__"><code class="docutils literal notranslate"><span class="pre">SymbolVersion.__init__()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="library/arcticdb.version_store.library.VersionInfo.html">arcticdb.version_store.library.VersionInfo</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="library/arcticdb.version_store.library.VersionInfo.html#arcticdb.version_store.library.VersionInfo"><code class="docutils literal notranslate"><span class="pre">VersionInfo</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="library/arcticdb.version_store.library.VersionInfo.html#arcticdb.version_store.library.VersionInfo.date"><code class="docutils literal notranslate"><span class="pre">VersionInfo.date</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="library/arcticdb.version_store.library.VersionInfo.html#arcticdb.version_store.library.VersionInfo.deleted"><code class="docutils literal notranslate"><span class="pre">VersionInfo.deleted</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="library/arcticdb.version_store.library.VersionInfo.html#arcticdb.version_store.library.VersionInfo.snapshots"><code class="docutils literal notranslate"><span class="pre">VersionInfo.snapshots</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="library/arcticdb.version_store.library.VersionInfo.html#arcticdb.version_store.library.VersionInfo.__init__"><code class="docutils literal notranslate"><span class="pre">VersionInfo.__init__()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="library/arcticdb.version_store.library.SymbolDescription.html">arcticdb.version_store.library.SymbolDescription</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="library/arcticdb.version_store.library.SymbolDescription.html#arcticdb.version_store.library.SymbolDescription"><code class="docutils literal notranslate"><span class="pre">SymbolDescription</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="library/arcticdb.version_store.library.SymbolDescription.html#arcticdb.version_store.library.SymbolDescription.columns"><code class="docutils literal notranslate"><span class="pre">SymbolDescription.columns</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="library/arcticdb.version_store.library.SymbolDescription.html#arcticdb.version_store.library.SymbolDescription.index"><code class="docutils literal notranslate"><span class="pre">SymbolDescription.index</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="library/arcticdb.version_store.library.SymbolDescription.html#arcticdb.version_store.library.SymbolDescription.index_type"><code class="docutils literal notranslate"><span class="pre">SymbolDescription.index_type</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="library/arcticdb.version_store.library.SymbolDescription.html#arcticdb.version_store.library.SymbolDescription.row_count"><code class="docutils literal notranslate"><span class="pre">SymbolDescription.row_count</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="library/arcticdb.version_store.library.SymbolDescription.html#arcticdb.version_store.library.SymbolDescription.last_update_time"><code class="docutils literal notranslate"><span class="pre">SymbolDescription.last_update_time</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="library/arcticdb.version_store.library.SymbolDescription.html#arcticdb.version_store.library.SymbolDescription.date_range"><code class="docutils literal notranslate"><span class="pre">SymbolDescription.date_range</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="library/arcticdb.version_store.library.SymbolDescription.html#arcticdb.version_store.library.SymbolDescription.__init__"><code class="docutils literal notranslate"><span class="pre">SymbolDescription.__init__()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="library/arcticdb.version_store.library.WritePayload.html">arcticdb.version_store.library.WritePayload</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="library/arcticdb.version_store.library.WritePayload.html#arcticdb.version_store.library.WritePayload"><code class="docutils literal notranslate"><span class="pre">WritePayload</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="library/arcticdb.version_store.library.WritePayload.html#arcticdb.version_store.library.WritePayload.__init__"><code class="docutils literal notranslate"><span class="pre">WritePayload.__init__()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="library/arcticdb.version_store.library.ReadRequest.html">arcticdb.version_store.library.ReadRequest</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="library/arcticdb.version_store.library.ReadRequest.html#arcticdb.version_store.library.ReadRequest"><code class="docutils literal notranslate"><span class="pre">ReadRequest</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="library/arcticdb.version_store.library.ReadRequest.html#arcticdb.version_store.library.ReadRequest.as_of"><code class="docutils literal notranslate"><span class="pre">ReadRequest.as_of</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="library/arcticdb.version_store.library.ReadRequest.html#arcticdb.version_store.library.ReadRequest.date_range"><code class="docutils literal notranslate"><span class="pre">ReadRequest.date_range</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="library/arcticdb.version_store.library.ReadRequest.html#arcticdb.version_store.library.ReadRequest.columns"><code class="docutils literal notranslate"><span class="pre">ReadRequest.columns</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="library/arcticdb.version_store.library.ReadRequest.html#arcticdb.version_store.library.ReadRequest.query_builder"><code class="docutils literal notranslate"><span class="pre">ReadRequest.query_builder</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="library/arcticdb.version_store.library.ReadRequest.html#arcticdb.version_store.library.ReadRequest.__init__"><code class="docutils literal notranslate"><span class="pre">ReadRequest.__init__()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="library/arcticdb.version_store.library.ReadInfoRequest.html">arcticdb.version_store.library.ReadInfoRequest</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="library/arcticdb.version_store.library.ReadInfoRequest.html#arcticdb.version_store.library.ReadInfoRequest"><code class="docutils literal notranslate"><span class="pre">ReadInfoRequest</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="library/arcticdb.version_store.library.ReadInfoRequest.html#arcticdb.version_store.library.ReadInfoRequest.symbol"><code class="docutils literal notranslate"><span class="pre">ReadInfoRequest.symbol</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="library/arcticdb.version_store.library.ReadInfoRequest.html#arcticdb.version_store.library.ReadInfoRequest.as_of"><code class="docutils literal notranslate"><span class="pre">ReadInfoRequest.as_of</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="library/arcticdb.version_store.library.ReadInfoRequest.html#arcticdb.version_store.library.ReadInfoRequest.__init__"><code class="docutils literal notranslate"><span class="pre">ReadInfoRequest.__init__()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="library.html#arcticdb.version_store.library.Library"><code class="docutils literal notranslate"><span class="pre">Library</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="library.html#arcticdb.version_store.library.Library.__init__"><code class="docutils literal notranslate"><span class="pre">Library.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="library.html#arcticdb.version_store.library.Library.write"><code class="docutils literal notranslate"><span class="pre">Library.write()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="library.html#arcticdb.version_store.library.Library.write_pickle"><code class="docutils literal notranslate"><span class="pre">Library.write_pickle()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="library.html#arcticdb.version_store.library.Library.write_batch"><code class="docutils literal notranslate"><span class="pre">Library.write_batch()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="library.html#arcticdb.version_store.library.Library.write_batch_pickle"><code class="docutils literal notranslate"><span class="pre">Library.write_batch_pickle()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="library.html#arcticdb.version_store.library.Library.append"><code class="docutils literal notranslate"><span class="pre">Library.append()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="library.html#arcticdb.version_store.library.Library.update"><code class="docutils literal notranslate"><span class="pre">Library.update()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="library.html#arcticdb.version_store.library.Library.finalize_staged_data"><code class="docutils literal notranslate"><span class="pre">Library.finalize_staged_data()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="library.html#arcticdb.version_store.library.Library.sort_and_finalize_staged_data"><code class="docutils literal notranslate"><span class="pre">Library.sort_and_finalize_staged_data()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="library.html#arcticdb.version_store.library.Library.get_staged_symbols"><code class="docutils literal notranslate"><span class="pre">Library.get_staged_symbols()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="library.html#arcticdb.version_store.library.Library.read"><code class="docutils literal notranslate"><span class="pre">Library.read()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="library.html#arcticdb.version_store.library.Library.read_batch"><code class="docutils literal notranslate"><span class="pre">Library.read_batch()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="library.html#arcticdb.version_store.library.Library.read_metadata"><code class="docutils literal notranslate"><span class="pre">Library.read_metadata()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="library.html#arcticdb.version_store.library.Library.read_metadata_batch"><code class="docutils literal notranslate"><span class="pre">Library.read_metadata_batch()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="library.html#arcticdb.version_store.library.Library.write_metadata"><code class="docutils literal notranslate"><span class="pre">Library.write_metadata()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="library.html#arcticdb.version_store.library.Library.snapshot"><code class="docutils literal notranslate"><span class="pre">Library.snapshot()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="library.html#arcticdb.version_store.library.Library.delete"><code class="docutils literal notranslate"><span class="pre">Library.delete()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="library.html#arcticdb.version_store.library.Library.prune_previous_versions"><code class="docutils literal notranslate"><span class="pre">Library.prune_previous_versions()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="library.html#arcticdb.version_store.library.Library.delete_data_in_range"><code class="docutils literal notranslate"><span class="pre">Library.delete_data_in_range()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="library.html#arcticdb.version_store.library.Library.delete_snapshot"><code class="docutils literal notranslate"><span class="pre">Library.delete_snapshot()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="library.html#arcticdb.version_store.library.Library.list_symbols"><code class="docutils literal notranslate"><span class="pre">Library.list_symbols()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="library.html#arcticdb.version_store.library.Library.has_symbol"><code class="docutils literal notranslate"><span class="pre">Library.has_symbol()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="library.html#arcticdb.version_store.library.Library.list_snapshots"><code class="docutils literal notranslate"><span class="pre">Library.list_snapshots()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="library.html#arcticdb.version_store.library.Library.list_versions"><code class="docutils literal notranslate"><span class="pre">Library.list_versions()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="library.html#arcticdb.version_store.library.Library.head"><code class="docutils literal notranslate"><span class="pre">Library.head()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="library.html#arcticdb.version_store.library.Library.tail"><code class="docutils literal notranslate"><span class="pre">Library.tail()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="library.html#arcticdb.version_store.library.Library.get_description"><code class="docutils literal notranslate"><span class="pre">Library.get_description()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="library.html#arcticdb.version_store.library.Library.get_description_batch"><code class="docutils literal notranslate"><span class="pre">Library.get_description_batch()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="library.html#arcticdb.version_store.library.Library.reload_symbol_list"><code class="docutils literal notranslate"><span class="pre">Library.reload_symbol_list()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="library.html#arcticdb.version_store.library.Library.is_symbol_fragmented"><code class="docutils literal notranslate"><span class="pre">Library.is_symbol_fragmented()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="library.html#arcticdb.version_store.library.Library.defragment_symbol_data"><code class="docutils literal notranslate"><span class="pre">Library.defragment_symbol_data()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="library.html#arcticdb.version_store.library.Library.name"><code class="docutils literal notranslate"><span class="pre">Library.name</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="query_builder.html">Query Builder API</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="query_builder.html#arcticdb.QueryBuilder"><code class="docutils literal notranslate"><span class="pre">QueryBuilder</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="query_builder.html#arcticdb.QueryBuilder.apply"><code class="docutils literal notranslate"><span class="pre">QueryBuilder.apply()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="query_builder.html#arcticdb.QueryBuilder.groupby"><code class="docutils literal notranslate"><span class="pre">QueryBuilder.groupby()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="query_builder.html#arcticdb.QueryBuilder.optimise_for_speed"><code class="docutils literal notranslate"><span class="pre">QueryBuilder.optimise_for_speed()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="query_builder.html#arcticdb.QueryBuilder.optimise_for_memory"><code class="docutils literal notranslate"><span class="pre">QueryBuilder.optimise_for_memory()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</div>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="arcticdb.html" class="btn btn-neutral float-right" title="Arctic API" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2022, Man Group.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

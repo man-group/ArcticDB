@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.18.1: http://docutils.sourceforge.net/" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Query Builder API &mdash; ArcticDB  documentation</title>
+      <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
+  <!--[if lt IE 9]>
+    <script src="_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script src="_static/jquery.js?v=5d32c60e"></script>
+        <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+        <script src="_static/documentation_options.js?v=5929fcd5"></script>
+        <script src="_static/doctools.js?v=888ff710"></script>
+        <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="prev" title="arcticdb.version_store.library.ReadInfoRequest" href="library/arcticdb.version_store.library.ReadInfoRequest.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            ArcticDB
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="arcticdb.html">Arctic API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="library.html">Library API</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Query Builder API</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#arcticdb.QueryBuilder"><code class="docutils literal notranslate"><span class="pre">QueryBuilder</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#arcticdb.QueryBuilder.apply"><code class="docutils literal notranslate"><span class="pre">QueryBuilder.apply()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#arcticdb.QueryBuilder.groupby"><code class="docutils literal notranslate"><span class="pre">QueryBuilder.groupby()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#arcticdb.QueryBuilder.optimise_for_speed"><code class="docutils literal notranslate"><span class="pre">QueryBuilder.optimise_for_speed()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#arcticdb.QueryBuilder.optimise_for_memory"><code class="docutils literal notranslate"><span class="pre">QueryBuilder.optimise_for_memory()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">ArcticDB</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Query Builder API</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/query_builder.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="query-builder-api">
+<h1>Query Builder API<a class="headerlink" href="#query-builder-api" title="Link to this heading"></a></h1>
+<dl class="py class">
+<dt class="sig sig-object py" id="arcticdb.QueryBuilder">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">arcticdb.</span></span><span class="sig-name descname"><span class="pre">QueryBuilder</span></span><a class="reference internal" href="_modules/arcticdb/version_store/processing.html#QueryBuilder"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#arcticdb.QueryBuilder" title="Link to this definition"></a></dt>
+<dd><p>Build a query to process read results with. Syntax is designed to be similar to Pandas:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">q</span> <span class="o">=</span> <span class="n">QueryBuilder</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">q</span> <span class="o">=</span> <span class="n">q</span><span class="p">[</span><span class="n">q</span><span class="p">[</span><span class="s2">&quot;a&quot;</span><span class="p">]</span> <span class="o">&lt;</span> <span class="mi">5</span><span class="p">]</span> <span class="p">(</span><span class="n">equivalent</span> <span class="n">to</span> <span class="n">q</span> <span class="o">=</span> <span class="n">q</span><span class="p">[</span><span class="n">q</span><span class="o">.</span><span class="n">a</span> <span class="o">&lt;</span> <span class="mi">5</span><span class="p">]</span> <span class="n">provided</span> <span class="n">the</span> <span class="n">column</span> <span class="n">name</span> <span class="ow">is</span> <span class="n">also</span> <span class="n">a</span> <span class="n">valid</span> <span class="n">Python</span> <span class="n">variable</span> <span class="n">name</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">dataframe</span> <span class="o">=</span> <span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">symbol</span><span class="p">,</span> <span class="n">query_builder</span><span class="o">=</span><span class="n">q</span><span class="p">)</span><span class="o">.</span><span class="n">data</span>
+</pre></div>
+</div>
+<p>For Group By and Aggregation functionality please see the documentation for the <cite>groupby</cite>. For projection
+functionality, see the documentation for the <cite>apply</cite> method.</p>
+<p>Supported arithmetic operations when projection or filtering:</p>
+<ul class="simple">
+<li><p>Binary arithmetic: +, -, <a href="#id1"><span class="problematic" id="id2">*</span></a>, /</p></li>
+<li><p>Unary arithmetic: -, abs</p></li>
+</ul>
+<p>Supported filtering operations:</p>
+<ul class="simple">
+<li><p>Binary comparisons: &lt;, &lt;=, &gt;, &gt;=, ==, !=</p></li>
+<li><p>Unary NOT: ~</p></li>
+<li><p>Binary combinators: &amp;, <a href="#id3"><span class="problematic" id="id4">|</span></a>, ^</p></li>
+<li><p>List membership: isin, isnotin (also accessible with == and !=)</p></li>
+</ul>
+<p>isin/isnotin accept lists, sets, frozensets, 1D ndarrays, or <a href="#id5"><span class="problematic" id="id6">*</span></a>args unpacking. For example:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">l</span> <span class="o">=</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">q</span><span class="o">.</span><span class="n">isin</span><span class="p">(</span><span class="n">l</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>is equivalent to…</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">q</span><span class="o">.</span><span class="n">isin</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Boolean columns can be filtered on directly:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">q</span> <span class="o">=</span> <span class="n">QueryBuilder</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">q</span> <span class="o">=</span> <span class="n">q</span><span class="p">[</span><span class="n">q</span><span class="p">[</span><span class="s2">&quot;boolean_column&quot;</span><span class="p">]]</span>
+</pre></div>
+</div>
+<p>and combined with other operations intuitively:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">q</span> <span class="o">=</span> <span class="n">QueryBuilder</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">q</span> <span class="o">=</span> <span class="n">q</span><span class="p">[(</span><span class="n">q</span><span class="p">[</span><span class="s2">&quot;boolean_column_1&quot;</span><span class="p">]</span> <span class="o">&amp;</span> <span class="o">~</span><span class="n">q</span><span class="p">[</span><span class="s2">&quot;boolean_column_2&quot;</span><span class="p">])</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">q</span><span class="p">[</span><span class="s2">&quot;numeric_column&quot;</span><span class="p">]</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">)]</span>
+</pre></div>
+</div>
+<p>Arbitrary combinations of these expressions is possible, for example:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">q</span> <span class="o">=</span> <span class="n">q</span><span class="p">[(((</span><span class="n">q</span><span class="p">[</span><span class="s2">&quot;a&quot;</span><span class="p">]</span> <span class="o">*</span> <span class="n">q</span><span class="p">[</span><span class="s2">&quot;b&quot;</span><span class="p">])</span> <span class="o">/</span> <span class="mi">5</span><span class="p">)</span> <span class="o">&lt;</span> <span class="p">(</span><span class="mf">0.7</span> <span class="o">*</span> <span class="n">q</span><span class="p">[</span><span class="s2">&quot;c&quot;</span><span class="p">]))</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">q</span><span class="p">[</span><span class="s2">&quot;b&quot;</span><span class="p">]</span> <span class="o">!=</span> <span class="mi">12</span><span class="p">)]</span>
+</pre></div>
+</div>
+<p>See tests/unit/arcticdb/version_store/test_filtering.py for more example uses.</p>
+<dl class="simple">
+<dt>Timestamp filtering:</dt><dd><p>pandas.Timestamp, datetime.datetime, pandas.Timedelta, and datetime.timedelta objects are supported.
+Note that internally all of these types are converted to nanoseconds (since epoch in the Timestamp/datetime
+cases). This means that nonsensical operations such as multiplying two times together are permitted (but not
+encouraged).</p>
+</dd>
+<dt>Restrictions:</dt><dd><p>String equality/inequality (and isin/isnotin) is supported for printable ASCII characters only.
+Although not prohibited, it is not recommended to use ==, !=, isin, or isnotin with floating point values.</p>
+</dd>
+<dt>Exceptions:</dt><dd><p>inf or -inf values are provided for comparison
+Column involved in query is a Categorical
+Symbol is pickled
+Column involved in query is not present in symbol
+Query involves comparing strings using &lt;, &lt;=, &gt;, or &gt;= operators
+Query involves comparing a string to one or more numeric values, or vice versa
+Query involves arithmetic with a column containing strings</p>
+</dd>
+</dl>
+<dl class="py method">
+<dt class="sig sig-object py" id="arcticdb.QueryBuilder.apply">
+<span class="sig-name descname"><span class="pre">apply</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">expr</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/arcticdb/version_store/processing.html#QueryBuilder.apply"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#arcticdb.QueryBuilder.apply" title="Link to this definition"></a></dt>
+<dd><p>Apply enables new columns to be created using supported QueryBuilder numeric operations. See the documentation for the
+QueryBuilder class for more information on supported expressions - any expression valid in a filter is valid when using
+<cite>apply</cite>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>name</strong> (<cite>str</cite>) – Name of the column to be created</p></li>
+<li><p><strong>expr</strong> – Expression</p></li>
+</ul>
+</dd>
+</dl>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span>
+<span class="go">    {</span>
+<span class="go">        &quot;VWAP&quot;: np.arange(0, 10, dtype=np.float64),</span>
+<span class="go">        &quot;ASK&quot;: np.arange(10, 20, dtype=np.uint16),</span>
+<span class="go">        &quot;VOL_ACC&quot;: np.arange(20, 30, dtype=np.int32),</span>
+<span class="go">    },</span>
+<span class="go">    index=np.arange(10),</span>
+<span class="go">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">&quot;expression&quot;</span><span class="p">,</span> <span class="n">df</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">q</span> <span class="o">=</span> <span class="n">QueryBuilder</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">q</span> <span class="o">=</span> <span class="n">q</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="s2">&quot;ADJUSTED&quot;</span><span class="p">,</span> <span class="n">q</span><span class="p">[</span><span class="s2">&quot;ASK&quot;</span><span class="p">]</span> <span class="o">*</span> <span class="n">q</span><span class="p">[</span><span class="s2">&quot;VOL_ACC&quot;</span><span class="p">]</span> <span class="o">+</span> <span class="mi">7</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s2">&quot;expression&quot;</span><span class="p">,</span> <span class="n">query_builder</span><span class="o">=</span><span class="n">q</span><span class="p">)</span><span class="o">.</span><span class="n">data</span>
+<span class="go">VOL_ACC  ASK  VWAP  ADJUSTED</span>
+<span class="go">0     20   10   0.0       207</span>
+<span class="go">1     21   11   1.0       238</span>
+<span class="go">2     22   12   2.0       271</span>
+<span class="go">3     23   13   3.0       306</span>
+<span class="go">4     24   14   4.0       343</span>
+<span class="go">5     25   15   5.0       382</span>
+<span class="go">6     26   16   6.0       423</span>
+<span class="go">7     27   17   7.0       466</span>
+<span class="go">8     28   18   8.0       511</span>
+<span class="go">9     29   19   9.0       558</span>
+</pre></div>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Modified QueryBuilder object.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference internal" href="#arcticdb.QueryBuilder" title="arcticdb.QueryBuilder">QueryBuilder</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="arcticdb.QueryBuilder.groupby">
+<span class="sig-name descname"><span class="pre">groupby</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/arcticdb/version_store/processing.html#QueryBuilder.groupby"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#arcticdb.QueryBuilder.groupby" title="Link to this definition"></a></dt>
+<dd><p>Group symbol by column name. GroupBy operations must be followed by an aggregation operator. Currently the following four aggregation
+operators are supported:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>“mean” - compute the mean of the group</p></li>
+<li><p>“sum” - compute the sum of the group</p></li>
+<li><p>“min” - compute the min of the group</p></li>
+<li><p>“max” - compute the max of the group</p></li>
+</ul>
+</div></blockquote>
+<p>For usage examples, see below.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>name</strong> (<cite>str</cite>) – Name of the column to group on. Note that currently GroupBy only supports single-column groupings.</p>
+</dd>
+</dl>
+<p class="rubric">Examples</p>
+<p>Average (mean) over two groups:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span>
+<span class="go">    {</span>
+<span class="go">        &quot;grouping_column&quot;: [&quot;group_1&quot;, &quot;group_1&quot;, &quot;group_1&quot;, &quot;group_2&quot;, &quot;group_2&quot;],</span>
+<span class="go">        &quot;to_mean&quot;: [1.1, 1.4, 2.5, np.nan, 2.2],</span>
+<span class="go">    },</span>
+<span class="go">    index=np.arange(5),</span>
+<span class="go">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">q</span> <span class="o">=</span> <span class="n">QueryBuilder</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">q</span> <span class="o">=</span> <span class="n">q</span><span class="o">.</span><span class="n">groupby</span><span class="p">(</span><span class="s2">&quot;grouping_column&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">agg</span><span class="p">({</span><span class="s2">&quot;to_mean&quot;</span><span class="p">:</span> <span class="s2">&quot;mean&quot;</span><span class="p">})</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">&quot;symbol&quot;</span><span class="p">,</span> <span class="n">df</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s2">&quot;symbol&quot;</span><span class="p">,</span> <span class="n">query_builder</span><span class="o">=</span><span class="n">q</span><span class="p">)</span><span class="o">.</span><span class="n">data</span>
+<span class="go">             to_mean</span>
+<span class="go">    group_1  1.666667</span>
+<span class="go">    group_2       NaN</span>
+</pre></div>
+</div>
+<p>Max over one group:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span>
+<span class="go">    {</span>
+<span class="go">        &quot;grouping_column&quot;: [&quot;group_1&quot;, &quot;group_1&quot;, &quot;group_1&quot;],</span>
+<span class="go">        &quot;to_max&quot;: [1, 5, 4],</span>
+<span class="go">    },</span>
+<span class="go">    index=np.arange(3),</span>
+<span class="go">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">q</span> <span class="o">=</span> <span class="n">QueryBuilder</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">q</span> <span class="o">=</span> <span class="n">q</span><span class="o">.</span><span class="n">groupby</span><span class="p">(</span><span class="s2">&quot;grouping_column&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">agg</span><span class="p">({</span><span class="s2">&quot;to_max&quot;</span><span class="p">:</span> <span class="s2">&quot;max&quot;</span><span class="p">})</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">&quot;symbol&quot;</span><span class="p">,</span> <span class="n">df</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s2">&quot;symbol&quot;</span><span class="p">,</span> <span class="n">query_builder</span><span class="o">=</span><span class="n">q</span><span class="p">)</span><span class="o">.</span><span class="n">data</span>
+<span class="go">             to_max</span>
+<span class="go">    group_1  5</span>
+</pre></div>
+</div>
+<p>Max and Mean:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span>
+<span class="go">    {</span>
+<span class="go">        &quot;grouping_column&quot;: [&quot;group_1&quot;, &quot;group_1&quot;, &quot;group_1&quot;],</span>
+<span class="go">        &quot;to_mean&quot;: [1.1, 1.4, 2.5],</span>
+<span class="go">        &quot;to_max&quot;: [1.1, 1.4, 2.5]</span>
+<span class="go">    },</span>
+<span class="go">    index=np.arange(3),</span>
+<span class="go">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">q</span> <span class="o">=</span> <span class="n">QueryBuilder</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">q</span> <span class="o">=</span> <span class="n">q</span><span class="o">.</span><span class="n">groupby</span><span class="p">(</span><span class="s2">&quot;grouping_column&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">agg</span><span class="p">({</span><span class="s2">&quot;to_max&quot;</span><span class="p">:</span> <span class="s2">&quot;max&quot;</span><span class="p">,</span> <span class="s2">&quot;to_mean&quot;</span><span class="p">:</span> <span class="s2">&quot;mean&quot;</span><span class="p">})</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">&quot;symbol&quot;</span><span class="p">,</span> <span class="n">df</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s2">&quot;symbol&quot;</span><span class="p">,</span> <span class="n">query_builder</span><span class="o">=</span><span class="n">q</span><span class="p">)</span><span class="o">.</span><span class="n">data</span>
+<span class="go">                to_max   to_mean</span>
+<span class="go">    group_1     2.5  1.666667</span>
+</pre></div>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Modified QueryBuilder object.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference internal" href="#arcticdb.QueryBuilder" title="arcticdb.QueryBuilder">QueryBuilder</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="arcticdb.QueryBuilder.optimise_for_speed">
+<span class="sig-name descname"><span class="pre">optimise_for_speed</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/arcticdb/version_store/processing.html#QueryBuilder.optimise_for_speed"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#arcticdb.QueryBuilder.optimise_for_speed" title="Link to this definition"></a></dt>
+<dd><p>Process query as fast as possible (the default behaviour)</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="arcticdb.QueryBuilder.optimise_for_memory">
+<span class="sig-name descname"><span class="pre">optimise_for_memory</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/arcticdb/version_store/processing.html#QueryBuilder.optimise_for_memory"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#arcticdb.QueryBuilder.optimise_for_memory" title="Link to this definition"></a></dt>
+<dd><p>Reduce peak memory usage during the query, at the expense of some performance.</p>
+<p>Optimisations applied:</p>
+<ul class="simple">
+<li><p>Memory used by strings that are present in segments read from storage, but are not required in the final dataframe that will be presented back to the user, is reclaimed earlier in the processing pipeline.</p></li>
+</ul>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="library/arcticdb.version_store.library.ReadInfoRequest.html" class="btn btn-neutral float-left" title="arcticdb.version_store.library.ReadInfoRequest" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2023, Man Group.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+<!-- Cloudflare Pages Analytics --><script defer src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "8ad6afad74694ea7b4567fe858931967"}'></script><!-- Cloudflare Pages Analytics --></body>
+</html>

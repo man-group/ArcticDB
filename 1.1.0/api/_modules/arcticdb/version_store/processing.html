@@ -1,0 +1,801 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>arcticdb.version_store.processing &mdash; ArcticDB  documentation</title>
+      <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="../../../_static/css/theme.css" type="text/css" />
+  <!--[if lt IE 9]>
+    <script src="../../../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script src="../../../_static/jquery.js"></script>
+        <script src="../../../_static/_sphinx_javascript_frameworks_compat.js"></script>
+        <script data-url_root="../../../" id="documentation_options" src="../../../_static/documentation_options.js"></script>
+        <script src="../../../_static/doctools.js"></script>
+        <script src="../../../_static/sphinx_highlight.js"></script>
+    <script src="../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../index.html" class="icon icon-home">
+            ArcticDB
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../arcticdb.html">Arctic API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../library.html">Library API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../query_builder.html">Query Builder API</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">ArcticDB</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">arcticdb.version_store.processing</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for arcticdb.version_store.processing</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">Copyright 2023 Man Group Operations Limited</span>
+
+<span class="sd">Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.</span>
+
+<span class="sd">As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+<span class="kn">import</span> <span class="nn">copy</span>
+<span class="kn">import</span> <span class="nn">datetime</span>
+<span class="kn">from</span> <span class="nn">math</span> <span class="kn">import</span> <span class="n">inf</span>
+
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+<span class="kn">import</span> <span class="nn">pandas</span> <span class="k">as</span> <span class="nn">pd</span>
+
+<span class="kn">from</span> <span class="nn">abc</span> <span class="kn">import</span> <span class="n">ABC</span><span class="p">,</span> <span class="n">abstractmethod</span>
+
+<span class="kn">from</span> <span class="nn">arcticdb.exceptions</span> <span class="kn">import</span> <span class="n">ArcticNativeException</span>
+<span class="kn">from</span> <span class="nn">arcticdb.supported_types</span> <span class="kn">import</span> <span class="n">time_types</span> <span class="k">as</span> <span class="n">supported_time_types</span>
+
+<span class="kn">from</span> <span class="nn">arcticdb_ext.version_store</span> <span class="kn">import</span> <span class="n">ExecutionContextOptimisation</span> <span class="k">as</span> <span class="n">_Optimisation</span>
+<span class="kn">from</span> <span class="nn">arcticdb_ext.version_store</span> <span class="kn">import</span> <span class="n">ExecutionContext</span> <span class="k">as</span> <span class="n">_ExecutionContext</span>
+<span class="kn">from</span> <span class="nn">arcticdb_ext.version_store</span> <span class="kn">import</span> <span class="n">ExpressionName</span> <span class="k">as</span> <span class="n">_ExpressionName</span>
+<span class="kn">from</span> <span class="nn">arcticdb_ext.version_store</span> <span class="kn">import</span> <span class="n">ColumnName</span> <span class="k">as</span> <span class="n">_ColumnName</span>
+<span class="kn">from</span> <span class="nn">arcticdb_ext.version_store</span> <span class="kn">import</span> <span class="n">ValueName</span> <span class="k">as</span> <span class="n">_ValueName</span>
+<span class="kn">from</span> <span class="nn">arcticdb_ext.version_store</span> <span class="kn">import</span> <span class="n">ValueSetName</span> <span class="k">as</span> <span class="n">_ValueSetName</span>
+<span class="kn">from</span> <span class="nn">arcticdb_ext.version_store</span> <span class="kn">import</span> <span class="n">Value</span> <span class="k">as</span> <span class="n">_Value</span>
+<span class="kn">from</span> <span class="nn">arcticdb_ext.version_store</span> <span class="kn">import</span> <span class="n">ValueSet</span> <span class="k">as</span> <span class="n">_ValueSet</span>
+<span class="kn">from</span> <span class="nn">arcticdb_ext.version_store</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">ValueBool</span><span class="p">,</span>
+    <span class="n">ValueUint8</span><span class="p">,</span>
+    <span class="n">ValueUint16</span><span class="p">,</span>
+    <span class="n">ValueUint32</span><span class="p">,</span>
+    <span class="n">ValueUint64</span><span class="p">,</span>
+    <span class="n">ValueInt8</span><span class="p">,</span>
+    <span class="n">ValueInt16</span><span class="p">,</span>
+    <span class="n">ValueInt32</span><span class="p">,</span>
+    <span class="n">ValueInt64</span><span class="p">,</span>
+    <span class="n">ValueFloat32</span><span class="p">,</span>
+    <span class="n">ValueFloat64</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span> <span class="nn">arcticdb_ext.version_store</span> <span class="kn">import</span> <span class="n">ExpressionNode</span> <span class="k">as</span> <span class="n">_ExpressionNode</span>
+<span class="kn">from</span> <span class="nn">arcticdb_ext.version_store</span> <span class="kn">import</span> <span class="n">OperationType</span> <span class="k">as</span> <span class="n">_OperationType</span>
+
+<span class="kn">from</span> <span class="nn">arcticdb_ext.version_store</span> <span class="kn">import</span> <span class="n">ClauseBuilder</span> <span class="k">as</span> <span class="n">_ClauseBuilder</span>
+
+<span class="n">COLUMN</span> <span class="o">=</span> <span class="s2">&quot;COLUMN&quot;</span>
+
+
+<span class="k">class</span> <span class="nc">ExpressionNode</span><span class="p">:</span>
+    <span class="c1"># Required so that comparisons like:</span>
+    <span class="c1"># np.int(0) &lt; &lt;ExpressionNode object&gt;</span>
+    <span class="c1"># work as we want</span>
+    <span class="n">__array_priority__</span> <span class="o">=</span> <span class="mi">100</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">left</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">right</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">operator</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">name</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span> <span class="nf">compose</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">left</span><span class="p">,</span> <span class="n">operator</span><span class="p">,</span> <span class="n">right</span><span class="p">):</span>
+        <span class="n">output</span> <span class="o">=</span> <span class="bp">cls</span><span class="p">()</span>
+        <span class="n">output</span><span class="o">.</span><span class="n">left</span> <span class="o">=</span> <span class="n">left</span>
+        <span class="n">output</span><span class="o">.</span><span class="n">operator</span> <span class="o">=</span> <span class="n">operator</span>
+        <span class="n">output</span><span class="o">.</span><span class="n">right</span> <span class="o">=</span> <span class="n">right</span>
+        <span class="k">return</span> <span class="n">output</span>
+
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span> <span class="nf">column_ref</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">left</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">cls</span><span class="o">.</span><span class="n">compose</span><span class="p">(</span><span class="n">left</span><span class="p">,</span> <span class="n">COLUMN</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_apply</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">right</span><span class="p">,</span> <span class="n">operator</span><span class="p">):</span>
+        <span class="n">left</span> <span class="o">=</span> <span class="n">ExpressionNode</span><span class="o">.</span><span class="n">compose</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">left</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">operator</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">right</span><span class="p">)</span>
+        <span class="bp">self</span> <span class="o">=</span> <span class="n">ExpressionNode</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">left</span> <span class="o">=</span> <span class="n">left</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">operator</span> <span class="o">=</span> <span class="n">operator</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">right</span> <span class="o">=</span> <span class="n">right</span>
+        <span class="k">return</span> <span class="bp">self</span>
+
+    <span class="k">def</span> <span class="nf">_rapply</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">left</span><span class="p">,</span> <span class="n">operator</span><span class="p">):</span>
+        <span class="n">right</span> <span class="o">=</span> <span class="n">ExpressionNode</span><span class="o">.</span><span class="n">compose</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">left</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">operator</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">right</span><span class="p">)</span>
+        <span class="bp">self</span> <span class="o">=</span> <span class="n">ExpressionNode</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">right</span> <span class="o">=</span> <span class="n">right</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">operator</span> <span class="o">=</span> <span class="n">operator</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">left</span> <span class="o">=</span> <span class="n">left</span>
+        <span class="k">return</span> <span class="bp">self</span>
+
+    <span class="k">def</span> <span class="fm">__abs__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">ExpressionNode</span><span class="o">.</span><span class="n">compose</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">_OperationType</span><span class="o">.</span><span class="n">ABS</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="fm">__neg__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">ExpressionNode</span><span class="o">.</span><span class="n">compose</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">_OperationType</span><span class="o">.</span><span class="n">NEG</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="fm">__invert__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">ExpressionNode</span><span class="o">.</span><span class="n">compose</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">_OperationType</span><span class="o">.</span><span class="n">NOT</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="fm">__add__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">right</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_apply</span><span class="p">(</span><span class="n">right</span><span class="p">,</span> <span class="n">_OperationType</span><span class="o">.</span><span class="n">ADD</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="fm">__sub__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">right</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_apply</span><span class="p">(</span><span class="n">right</span><span class="p">,</span> <span class="n">_OperationType</span><span class="o">.</span><span class="n">SUB</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="fm">__mul__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">right</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_apply</span><span class="p">(</span><span class="n">right</span><span class="p">,</span> <span class="n">_OperationType</span><span class="o">.</span><span class="n">MUL</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="fm">__truediv__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">right</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_apply</span><span class="p">(</span><span class="n">right</span><span class="p">,</span> <span class="n">_OperationType</span><span class="o">.</span><span class="n">DIV</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="fm">__eq__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">right</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">is_supported_sequence</span><span class="p">(</span><span class="n">right</span><span class="p">):</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">isin</span><span class="p">(</span><span class="n">right</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_apply</span><span class="p">(</span><span class="n">right</span><span class="p">,</span> <span class="n">_OperationType</span><span class="o">.</span><span class="n">EQ</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="fm">__ne__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">right</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">is_supported_sequence</span><span class="p">(</span><span class="n">right</span><span class="p">):</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">isnotin</span><span class="p">(</span><span class="n">right</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_apply</span><span class="p">(</span><span class="n">right</span><span class="p">,</span> <span class="n">_OperationType</span><span class="o">.</span><span class="n">NE</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="fm">__lt__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">right</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_apply</span><span class="p">(</span><span class="n">right</span><span class="p">,</span> <span class="n">_OperationType</span><span class="o">.</span><span class="n">LT</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="fm">__le__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">right</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_apply</span><span class="p">(</span><span class="n">right</span><span class="p">,</span> <span class="n">_OperationType</span><span class="o">.</span><span class="n">LE</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="fm">__gt__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">right</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_apply</span><span class="p">(</span><span class="n">right</span><span class="p">,</span> <span class="n">_OperationType</span><span class="o">.</span><span class="n">GT</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="fm">__ge__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">right</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_apply</span><span class="p">(</span><span class="n">right</span><span class="p">,</span> <span class="n">_OperationType</span><span class="o">.</span><span class="n">GE</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="fm">__and__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">right</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">right</span> <span class="ow">is</span> <span class="kc">True</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span>
+        <span class="k">elif</span> <span class="n">right</span> <span class="ow">is</span> <span class="kc">False</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">False</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_apply</span><span class="p">(</span><span class="n">right</span><span class="p">,</span> <span class="n">_OperationType</span><span class="o">.</span><span class="n">AND</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="fm">__or__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">right</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">right</span> <span class="ow">is</span> <span class="kc">True</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">True</span>
+        <span class="k">elif</span> <span class="n">right</span> <span class="ow">is</span> <span class="kc">False</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_apply</span><span class="p">(</span><span class="n">right</span><span class="p">,</span> <span class="n">_OperationType</span><span class="o">.</span><span class="n">OR</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="fm">__xor__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">right</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">right</span> <span class="ow">is</span> <span class="kc">True</span><span class="p">:</span>
+            <span class="k">return</span> <span class="o">~</span><span class="bp">self</span>
+        <span class="k">elif</span> <span class="n">right</span> <span class="ow">is</span> <span class="kc">False</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_apply</span><span class="p">(</span><span class="n">right</span><span class="p">,</span> <span class="n">_OperationType</span><span class="o">.</span><span class="n">XOR</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="fm">__radd__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">left</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_rapply</span><span class="p">(</span><span class="n">left</span><span class="p">,</span> <span class="n">_OperationType</span><span class="o">.</span><span class="n">ADD</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="fm">__rsub__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">left</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_rapply</span><span class="p">(</span><span class="n">left</span><span class="p">,</span> <span class="n">_OperationType</span><span class="o">.</span><span class="n">SUB</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="fm">__rmul__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">left</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_rapply</span><span class="p">(</span><span class="n">left</span><span class="p">,</span> <span class="n">_OperationType</span><span class="o">.</span><span class="n">MUL</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="fm">__rtruediv__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">left</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_rapply</span><span class="p">(</span><span class="n">left</span><span class="p">,</span> <span class="n">_OperationType</span><span class="o">.</span><span class="n">DIV</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="fm">__rand__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">left</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">left</span> <span class="ow">is</span> <span class="kc">True</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span>
+        <span class="k">elif</span> <span class="n">left</span> <span class="ow">is</span> <span class="kc">False</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">False</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_rapply</span><span class="p">(</span><span class="n">left</span><span class="p">,</span> <span class="n">_OperationType</span><span class="o">.</span><span class="n">AND</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="fm">__ror__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">left</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">left</span> <span class="ow">is</span> <span class="kc">True</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">True</span>
+        <span class="k">elif</span> <span class="n">left</span> <span class="ow">is</span> <span class="kc">False</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_rapply</span><span class="p">(</span><span class="n">left</span><span class="p">,</span> <span class="n">_OperationType</span><span class="o">.</span><span class="n">OR</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="fm">__rxor__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">left</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">left</span> <span class="ow">is</span> <span class="kc">True</span><span class="p">:</span>
+            <span class="k">return</span> <span class="o">~</span><span class="bp">self</span>
+        <span class="k">elif</span> <span class="n">left</span> <span class="ow">is</span> <span class="kc">False</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_rapply</span><span class="p">(</span><span class="n">left</span><span class="p">,</span> <span class="n">_OperationType</span><span class="o">.</span><span class="n">XOR</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">isin</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">):</span>
+        <span class="n">value_list</span> <span class="o">=</span> <span class="n">value_list_from_args</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_apply</span><span class="p">(</span><span class="n">value_list</span><span class="p">,</span> <span class="n">_OperationType</span><span class="o">.</span><span class="n">ISIN</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">isnotin</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">):</span>
+        <span class="n">value_list</span> <span class="o">=</span> <span class="n">value_list_from_args</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_apply</span><span class="p">(</span><span class="n">value_list</span><span class="p">,</span> <span class="n">_OperationType</span><span class="o">.</span><span class="n">ISNOTIN</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="fm">__str__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_name</span><span class="p">()</span>
+
+    <span class="k">def</span> <span class="nf">get_name</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">operator</span> <span class="o">==</span> <span class="n">COLUMN</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">name</span> <span class="o">=</span> <span class="s1">&#39;Column[&quot;</span><span class="si">{}</span><span class="s1">&quot;]&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">left</span><span class="p">)</span>
+            <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">operator</span> <span class="ow">in</span> <span class="p">[</span><span class="n">_OperationType</span><span class="o">.</span><span class="n">ABS</span><span class="p">,</span> <span class="n">_OperationType</span><span class="o">.</span><span class="n">NEG</span><span class="p">,</span> <span class="n">_OperationType</span><span class="o">.</span><span class="n">NOT</span><span class="p">]:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">name</span> <span class="o">=</span> <span class="s2">&quot;</span><span class="si">{}</span><span class="s2">(</span><span class="si">{}</span><span class="s2">)&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">operator</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">left</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">left</span><span class="p">,</span> <span class="n">ExpressionNode</span><span class="p">):</span>
+                    <span class="n">left</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">left</span><span class="p">)</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">left</span> <span class="o">=</span> <span class="n">to_string</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">left</span><span class="p">)</span>
+                <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">right</span><span class="p">,</span> <span class="n">ExpressionNode</span><span class="p">):</span>
+                    <span class="n">right</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">right</span><span class="p">)</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">right</span> <span class="o">=</span> <span class="n">to_string</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">right</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">name</span> <span class="o">=</span> <span class="s2">&quot;(</span><span class="si">{}</span><span class="s2"> </span><span class="si">{}</span><span class="s2"> </span><span class="si">{}</span><span class="s2">)&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">left</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">operator</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">right</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">name</span>
+
+
+<span class="k">def</span> <span class="nf">is_supported_sequence</span><span class="p">(</span><span class="n">obj</span><span class="p">):</span>
+    <span class="k">return</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="p">(</span><span class="nb">list</span><span class="p">,</span> <span class="nb">set</span><span class="p">,</span> <span class="nb">frozenset</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">))</span>
+
+
+<span class="k">def</span> <span class="nf">value_list_from_args</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">):</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">args</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span> <span class="ow">and</span> <span class="n">is_supported_sequence</span><span class="p">(</span><span class="n">args</span><span class="p">[</span><span class="mi">0</span><span class="p">]):</span>
+        <span class="n">collection</span> <span class="o">=</span> <span class="n">args</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">collection</span> <span class="o">=</span> <span class="n">args</span>
+    <span class="n">array_list</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">value_set</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">collection</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="k">for</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">collection</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">value</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">value_set</span><span class="p">:</span>
+                <span class="n">value_set</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+                <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">supported_time_types</span><span class="p">):</span>
+                    <span class="n">value</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">value</span><span class="o">.</span><span class="n">timestamp</span><span class="p">()</span> <span class="o">*</span> <span class="mi">1_000_000_000</span><span class="p">)</span>
+                <span class="n">dtype</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">min_scalar_type</span><span class="p">(</span><span class="n">value</span><span class="p">)</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="p">(</span><span class="nb">int</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">integer</span><span class="p">))</span> <span class="k">else</span> <span class="kc">None</span>
+                <span class="n">array_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">value</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">))</span>
+        <span class="n">value_list</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">(</span><span class="n">array_list</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">value_list</span><span class="o">.</span><span class="n">dtype</span> <span class="o">==</span> <span class="n">np</span><span class="o">.</span><span class="n">float16</span><span class="p">:</span>
+            <span class="n">value_list</span> <span class="o">=</span> <span class="n">value_list</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">value_list</span><span class="o">.</span><span class="n">dtype</span><span class="o">.</span><span class="n">kind</span> <span class="o">==</span> <span class="s2">&quot;U&quot;</span><span class="p">:</span>
+            <span class="n">value_list</span> <span class="o">=</span> <span class="n">value_list</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="c1"># Return an empty list. This will call the string ctor for ValueSet, but also set a bool flag so that numeric</span>
+        <span class="c1"># types also behave as expected</span>
+        <span class="n">value_list</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">return</span> <span class="n">value_list</span>
+
+
+<span class="k">class</span> <span class="nc">PyClauseBase</span><span class="p">(</span><span class="n">ABC</span><span class="p">):</span>
+    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span> <span class="nf">to_cpp</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">clause_builder</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">pass</span>
+
+
+<span class="k">class</span> <span class="nc">WhereClause</span><span class="p">(</span><span class="n">PyClauseBase</span><span class="p">):</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">expr</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">expr</span> <span class="o">=</span> <span class="n">expr</span>
+
+    <span class="k">def</span> <span class="fm">__str__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="s2">&quot;WhereClause: </span><span class="si">{}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">expr</span><span class="p">))</span>
+
+    <span class="k">def</span> <span class="nf">to_cpp</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">clause_builder</span><span class="p">):</span>
+        <span class="n">clause_builder</span><span class="o">.</span><span class="n">add_FilterClause</span><span class="p">(</span><span class="n">visit_expression</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">expr</span><span class="p">))</span>
+
+
+<span class="k">class</span> <span class="nc">ProjectClause</span><span class="p">(</span><span class="n">PyClauseBase</span><span class="p">):</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">expr</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">name</span> <span class="o">=</span> <span class="n">name</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">expr</span> <span class="o">=</span> <span class="n">expr</span>
+
+    <span class="k">def</span> <span class="fm">__str__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="s2">&quot;ProjectClause:</span><span class="si">{}</span><span class="s2"> -&gt; </span><span class="si">{}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">expr</span><span class="p">),</span> <span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">to_cpp</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">clause_builder</span><span class="p">):</span>
+        <span class="n">clause_builder</span><span class="o">.</span><span class="n">add_ProjectClause</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">visit_expression</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">expr</span><span class="p">))</span>
+
+
+<span class="k">class</span> <span class="nc">Aggregation</span><span class="p">:</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">source</span><span class="p">,</span> <span class="n">operator</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">source</span> <span class="o">=</span> <span class="n">source</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">operator</span> <span class="o">=</span> <span class="n">operator</span>
+
+    <span class="k">def</span> <span class="fm">__str__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="s2">&quot;</span><span class="si">{}</span><span class="s2">(</span><span class="si">{}</span><span class="s2">)&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">operator</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">source</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">to_cpp</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">clause_builder</span><span class="p">):</span>
+        <span class="c1"># TODO: Move to dictionary</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">operator</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="o">==</span> <span class="s2">&quot;sum&quot;</span><span class="p">:</span>
+            <span class="n">clause_builder</span><span class="o">.</span><span class="n">add_SumAggregationOperator</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">source</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">source</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">operator</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="o">==</span> <span class="s2">&quot;mean&quot;</span><span class="p">:</span>
+            <span class="n">clause_builder</span><span class="o">.</span><span class="n">add_MeanAggregationOperator</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">source</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">source</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">operator</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="o">==</span> <span class="s2">&quot;max&quot;</span><span class="p">:</span>
+            <span class="n">clause_builder</span><span class="o">.</span><span class="n">add_MaxAggregationOperator</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">source</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">source</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">operator</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="o">==</span> <span class="s2">&quot;min&quot;</span><span class="p">:</span>
+            <span class="n">clause_builder</span><span class="o">.</span><span class="n">add_MinAggregationOperator</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">source</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">source</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Aggregation operators are limited to &#39;sum&#39;, &#39;mean&#39;, &#39;max&#39; and &#39;min&#39;.&quot;</span><span class="p">)</span>
+
+
+<span class="k">class</span> <span class="nc">GroupByClause</span><span class="p">(</span><span class="n">PyClauseBase</span><span class="p">):</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="n">query_builder</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">key</span> <span class="o">=</span> <span class="n">key</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">query_builder</span> <span class="o">=</span> <span class="n">query_builder</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">aggregations</span> <span class="o">=</span> <span class="p">{}</span>
+
+    <span class="k">def</span> <span class="fm">__str__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="s2">&quot;GroupByClause: key=</span><span class="si">{}</span><span class="s2">, [</span><span class="si">{}</span><span class="s2">]&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+            <span class="nb">str</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">key</span><span class="p">),</span> <span class="s2">&quot;, &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">([</span><span class="s2">&quot;</span><span class="si">{}</span><span class="s2"> &lt;- </span><span class="si">{}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">k</span><span class="p">,</span> <span class="n">v</span><span class="p">)</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">aggregations</span><span class="o">.</span><span class="n">items</span><span class="p">()])</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">agg</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">aggregations</span><span class="p">):</span>
+        <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">aggregations</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">aggregations</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">Aggregation</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">query_builder</span>
+
+    <span class="k">def</span> <span class="nf">to_cpp</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">clause_builder</span><span class="p">):</span>
+        <span class="k">def</span> <span class="nf">_expression_root_only</span><span class="p">(</span><span class="n">col_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
+            <span class="n">_ec</span> <span class="o">=</span> <span class="n">_ExecutionContext</span><span class="p">()</span>
+            <span class="n">_ec</span><span class="o">.</span><span class="n">root_node_name</span> <span class="o">=</span> <span class="n">_ExpressionName</span><span class="p">(</span><span class="n">col_name</span><span class="p">)</span>
+
+            <span class="k">return</span> <span class="n">_ec</span>
+
+        <span class="n">clause_builder</span><span class="o">.</span><span class="n">prepare_AggregationClause</span><span class="p">(</span><span class="n">_expression_root_only</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">key</span><span class="p">))</span>
+        <span class="k">for</span> <span class="n">agg</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">aggregations</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
+            <span class="n">agg</span><span class="o">.</span><span class="n">to_cpp</span><span class="p">(</span><span class="n">clause_builder</span><span class="p">)</span>
+        <span class="n">clause_builder</span><span class="o">.</span><span class="n">finalize_AggregationClause</span><span class="p">()</span>
+
+
+<div class="viewcode-block" id="QueryBuilder"><a class="viewcode-back" href="../../../query_builder.html#arcticdb.QueryBuilder">[docs]</a><span class="k">class</span> <span class="nc">QueryBuilder</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Build a query to process read results with. Syntax is designed to be similar to Pandas:</span>
+
+<span class="sd">        &gt;&gt;&gt; q = QueryBuilder()</span>
+<span class="sd">        &gt;&gt;&gt; q = q[q[&quot;a&quot;] &lt; 5] (equivalent to q = q[q.a &lt; 5] provided the column name is also a valid Python variable name)</span>
+<span class="sd">        &gt;&gt;&gt; dataframe = lib.read(symbol, query_builder=q).data</span>
+
+<span class="sd">    QueryBuilder objects are stateful, and so should not be reused without reinitialising:</span>
+
+<span class="sd">    &gt;&gt;&gt; q = QueryBuilder()</span>
+
+<span class="sd">    For Group By and Aggregation functionality please see the documentation for the `groupby`. For projection</span>
+<span class="sd">    functionality, see the documentation for the `apply` method.</span>
+
+<span class="sd">    Supported numeric operations when filtering:</span>
+
+<span class="sd">    * Binary comparisons: &lt;, &lt;=, &gt;, &gt;=, ==, !=</span>
+
+<span class="sd">    * Unary NOT: ~</span>
+
+<span class="sd">    * Binary arithmetic: +, -, *, /</span>
+
+<span class="sd">    * Unary arithmetic: -, abs</span>
+
+<span class="sd">    * Binary combinators: &amp;, |, ^</span>
+
+<span class="sd">    * List membership: isin, isnotin (also accessible with == and !=)</span>
+
+<span class="sd">    isin/isnotin accept lists, sets, frozensets, 1D ndarrays, or *args unpacking. For example:</span>
+
+<span class="sd">    &gt;&gt;&gt; l = [1, 2, 3]</span>
+<span class="sd">    &gt;&gt;&gt; q.isin(l)</span>
+
+<span class="sd">    is equivalent to...</span>
+
+<span class="sd">    &gt;&gt;&gt; q.isin(1, 2, 3)</span>
+
+<span class="sd">    Boolean columns can be filtered on directly:</span>
+
+<span class="sd">    &gt;&gt;&gt; q = QueryBuilder()</span>
+<span class="sd">    &gt;&gt;&gt; q = q[q[&quot;boolean_column&quot;]]</span>
+
+<span class="sd">    and combined with other operations intuitively:</span>
+
+<span class="sd">    &gt;&gt;&gt; q = QueryBuilder()</span>
+<span class="sd">    &gt;&gt;&gt; q = q[(q[&quot;boolean_column_1&quot;] &amp; ~q[&quot;boolean_column_2&quot;]) &amp; (q[&quot;numeric_column&quot;] &gt; 0)]</span>
+
+<span class="sd">    Arbitrary combinations of these expressions is possible, for example:</span>
+
+<span class="sd">    &gt;&gt;&gt; q = q[(((q[&quot;a&quot;] * q[&quot;b&quot;]) / 5) &lt; (0.7 * q[&quot;c&quot;])) &amp; (q[&quot;b&quot;] != 12)]</span>
+
+<span class="sd">    See tests/unit/arcticdb/version_store/test_filtering.py for more example uses.</span>
+
+<span class="sd">    Timestamp filtering:</span>
+<span class="sd">        pandas.Timestamp, datetime.datetime, pandas.Timedelta, and datetime.timedelta objects are supported.</span>
+<span class="sd">        Note that internally all of these types are converted to nanoseconds (since epoch in the Timestamp/datetime</span>
+<span class="sd">        cases). This means that nonsensical operations such as multiplying two times together are permitted (but not</span>
+<span class="sd">        encouraged).</span>
+<span class="sd">    Restrictions:</span>
+<span class="sd">        String equality/inequality (and isin/isnotin) is supported for printable ASCII characters only.</span>
+<span class="sd">        Although not prohibited, it is not recommended to use ==, !=, isin, or isnotin with floating point values.</span>
+<span class="sd">    Exceptions:</span>
+<span class="sd">        inf or -inf values are provided for comparison</span>
+<span class="sd">        Column involved in query is a Categorical</span>
+<span class="sd">        Symbol is pickled</span>
+<span class="sd">        Column involved in query is not present in symbol</span>
+<span class="sd">        Query involves comparing strings using &lt;, &lt;=, &gt;, or &gt;= operators</span>
+<span class="sd">        Query involves comparing a string to one or more numeric values, or vice versa</span>
+<span class="sd">        Query involves arithmetic with a column containing strings</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">stages</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_optimisation</span> <span class="o">=</span> <span class="n">_Optimisation</span><span class="o">.</span><span class="n">SPEED</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_clause_builder</span> <span class="o">=</span> <span class="n">_ClauseBuilder</span><span class="p">()</span>
+
+<div class="viewcode-block" id="QueryBuilder.apply"><a class="viewcode-back" href="../../../query_builder.html#arcticdb.QueryBuilder.apply">[docs]</a>    <span class="k">def</span> <span class="nf">apply</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">expr</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Apply enables new columns to be created using supported QueryBuilder numeric operations. See the documentation for the </span>
+<span class="sd">        QueryBuilder class for more information on supported expressions - any expression valid in a filter is valid when using </span>
+<span class="sd">        `apply`.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        name: `str`</span>
+<span class="sd">            Name of the column to be created</span>
+<span class="sd">        expr:</span>
+<span class="sd">            Expression</span>
+
+<span class="sd">        Examples</span>
+<span class="sd">        --------</span>
+
+<span class="sd">        &gt;&gt;&gt; df = pd.DataFrame(</span>
+<span class="sd">            {</span>
+<span class="sd">                &quot;VWAP&quot;: np.arange(0, 10, dtype=np.float64),</span>
+<span class="sd">                &quot;ASK&quot;: np.arange(10, 20, dtype=np.uint16),</span>
+<span class="sd">                &quot;VOL_ACC&quot;: np.arange(20, 30, dtype=np.int32),</span>
+<span class="sd">            },</span>
+<span class="sd">            index=np.arange(10),</span>
+<span class="sd">        )</span>
+<span class="sd">        &gt;&gt;&gt; lib.write(&quot;expression&quot;, df)</span>
+<span class="sd">        &gt;&gt;&gt; q = QueryBuilder()</span>
+<span class="sd">        &gt;&gt;&gt; q = q.apply(&quot;ADJUSTED&quot;, q[&quot;ASK&quot;] * q[&quot;VOL_ACC&quot;] + 7)</span>
+<span class="sd">        &gt;&gt;&gt; lib.read(&quot;expression&quot;, query_builder=q).data</span>
+<span class="sd">        VOL_ACC  ASK  VWAP  ADJUSTED</span>
+<span class="sd">        0     20   10   0.0       207</span>
+<span class="sd">        1     21   11   1.0       238</span>
+<span class="sd">        2     22   12   2.0       271</span>
+<span class="sd">        3     23   13   3.0       306</span>
+<span class="sd">        4     24   14   4.0       343</span>
+<span class="sd">        5     25   15   5.0       382</span>
+<span class="sd">        6     26   16   6.0       423</span>
+<span class="sd">        7     27   17   7.0       466</span>
+<span class="sd">        8     28   18   8.0       511</span>
+<span class="sd">        9     29   19   9.0       558</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        QueryBuilder</span>
+<span class="sd">            Modified QueryBuilder object.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">stages</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">ProjectClause</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">expr</span><span class="p">))</span>
+        <span class="k">return</span> <span class="bp">self</span></div>
+
+<div class="viewcode-block" id="QueryBuilder.groupby"><a class="viewcode-back" href="../../../query_builder.html#arcticdb.QueryBuilder.groupby">[docs]</a>    <span class="k">def</span> <span class="nf">groupby</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">expr</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Group symbol by column name. GroupBy operations must be followed by an aggregation operator. Currently the following four aggregation </span>
+<span class="sd">        operators are supported:</span>
+<span class="sd">            * &quot;mean&quot; - compute the mean of the group</span>
+<span class="sd">            * &quot;sum&quot; - compute the sum of the group</span>
+<span class="sd">            * &quot;min&quot; - compute the min of the group</span>
+<span class="sd">            * &quot;max&quot; - compute the max of the group</span>
+<span class="sd">        </span>
+<span class="sd">        For usage examples, see below.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        expr: `str`</span>
+<span class="sd">            Name of the symbol to group on. Note that currently GroupBy only supports single-column groupings.</span>
+
+<span class="sd">        Examples</span>
+<span class="sd">        --------</span>
+<span class="sd">        Average (mean) over two groups:</span>
+
+<span class="sd">        &gt;&gt;&gt; df = pd.DataFrame(</span>
+<span class="sd">            {</span>
+<span class="sd">                &quot;grouping_column&quot;: [&quot;group_1&quot;, &quot;group_1&quot;, &quot;group_1&quot;, &quot;group_2&quot;, &quot;group_2&quot;],</span>
+<span class="sd">                &quot;to_mean&quot;: [1.1, 1.4, 2.5, np.nan, 2.2],</span>
+<span class="sd">            },</span>
+<span class="sd">            index=np.arange(5),</span>
+<span class="sd">        )</span>
+<span class="sd">        &gt;&gt;&gt; q = QueryBuilder()</span>
+<span class="sd">        &gt;&gt;&gt; q = q.groupby(&quot;grouping_column&quot;).agg({&quot;to_mean&quot;: &quot;mean&quot;})</span>
+<span class="sd">        &gt;&gt;&gt; lib.write(&quot;symbol&quot;, df)</span>
+<span class="sd">        &gt;&gt;&gt; lib.read(&quot;symbol&quot;, query_builder=q).data</span>
+<span class="sd">                     to_mean</span>
+<span class="sd">            group_1  1.666667</span>
+<span class="sd">            group_2       NaN</span>
+
+<span class="sd">        Max over one group:</span>
+
+<span class="sd">        &gt;&gt;&gt; df = pd.DataFrame(</span>
+<span class="sd">            {</span>
+<span class="sd">                &quot;grouping_column&quot;: [&quot;group_1&quot;, &quot;group_1&quot;, &quot;group_1&quot;],</span>
+<span class="sd">                &quot;to_max&quot;: [1, 5, 4],</span>
+<span class="sd">            },</span>
+<span class="sd">            index=np.arange(3),</span>
+<span class="sd">        )</span>
+<span class="sd">        &gt;&gt;&gt; q = QueryBuilder()</span>
+<span class="sd">        &gt;&gt;&gt; q = q.groupby(&quot;grouping_column&quot;).agg({&quot;to_max&quot;: &quot;max&quot;})</span>
+<span class="sd">        &gt;&gt;&gt; lib.write(&quot;symbol&quot;, df)</span>
+<span class="sd">        &gt;&gt;&gt; lib.read(&quot;symbol&quot;, query_builder=q).data</span>
+<span class="sd">                     to_max</span>
+<span class="sd">            group_1  5</span>
+
+<span class="sd">        Max and Mean:</span>
+
+<span class="sd">        &gt;&gt;&gt; df = pd.DataFrame(</span>
+<span class="sd">            {</span>
+<span class="sd">                &quot;grouping_column&quot;: [&quot;group_1&quot;, &quot;group_1&quot;, &quot;group_1&quot;],</span>
+<span class="sd">                &quot;to_mean&quot;: [1.1, 1.4, 2.5],</span>
+<span class="sd">                &quot;to_max&quot;: [1.1, 1.4, 2.5]</span>
+<span class="sd">            },</span>
+<span class="sd">            index=np.arange(3),</span>
+<span class="sd">        )</span>
+<span class="sd">        &gt;&gt;&gt; q = QueryBuilder()</span>
+<span class="sd">        &gt;&gt;&gt; q = q.groupby(&quot;grouping_column&quot;).agg({&quot;to_max&quot;: &quot;max&quot;, &quot;to_mean&quot;: &quot;mean&quot;})</span>
+<span class="sd">        &gt;&gt;&gt; lib.write(&quot;symbol&quot;, df)</span>
+<span class="sd">        &gt;&gt;&gt; lib.read(&quot;symbol&quot;, query_builder=q).data</span>
+<span class="sd">                        to_max   to_mean</span>
+<span class="sd">            group_1     2.5  1.666667</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        QueryBuilder</span>
+<span class="sd">            Modified QueryBuilder object.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">stages</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">GroupByClause</span><span class="p">(</span><span class="n">expr</span><span class="p">,</span> <span class="bp">self</span><span class="p">))</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">stages</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span></div>
+
+    <span class="k">def</span> <span class="fm">__eq__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">right</span><span class="p">):</span>
+        <span class="k">return</span> <span class="nb">str</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">==</span> <span class="nb">str</span><span class="p">(</span><span class="n">right</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="fm">__str__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="s2">&quot; | &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">)</span> <span class="k">for</span> <span class="n">e</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">stages</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="fm">__getitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">item</span><span class="p">):</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">item</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+            <span class="k">return</span> <span class="n">ExpressionNode</span><span class="o">.</span><span class="n">column_ref</span><span class="p">(</span><span class="n">item</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># This handles the case where the filtering is on a single boolean column</span>
+            <span class="c1"># e.g. q = q[q[&quot;col&quot;]]</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">item</span><span class="p">,</span> <span class="n">ExpressionNode</span><span class="p">)</span> <span class="ow">and</span> <span class="n">item</span><span class="o">.</span><span class="n">operator</span> <span class="o">==</span> <span class="n">COLUMN</span><span class="p">:</span>
+                <span class="n">item</span> <span class="o">=</span> <span class="n">ExpressionNode</span><span class="o">.</span><span class="n">compose</span><span class="p">(</span><span class="n">item</span><span class="p">,</span> <span class="n">_OperationType</span><span class="o">.</span><span class="n">IDENTITY</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">stages</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">WhereClause</span><span class="p">(</span><span class="n">item</span><span class="p">))</span>
+            <span class="k">return</span> <span class="bp">self</span>
+
+    <span class="k">def</span> <span class="fm">__getattr__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="p">[</span><span class="n">key</span><span class="p">]</span>
+
+    <span class="k">def</span> <span class="nf">__getstate__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">rv</span> <span class="o">=</span> <span class="nb">vars</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+        <span class="k">del</span> <span class="n">rv</span><span class="p">[</span><span class="s2">&quot;_clause_builder&quot;</span><span class="p">]</span>
+        <span class="k">return</span> <span class="n">rv</span>
+
+    <span class="k">def</span> <span class="nf">__setstate__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">):</span>
+        <span class="nb">vars</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">state</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_clause_builder</span> <span class="o">=</span> <span class="n">_ClauseBuilder</span><span class="p">()</span>
+
+    <span class="k">def</span> <span class="nf">__copy__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">cls</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span>
+        <span class="n">result</span> <span class="o">=</span> <span class="bp">cls</span><span class="o">.</span><span class="fm">__new__</span><span class="p">(</span><span class="bp">cls</span><span class="p">)</span>
+        <span class="n">result</span><span class="o">.</span><span class="vm">__dict__</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">result</span>
+
+    <span class="k">def</span> <span class="nf">__deepcopy__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">memo</span><span class="p">):</span>
+        <span class="bp">cls</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span>
+        <span class="n">result</span> <span class="o">=</span> <span class="bp">cls</span><span class="o">.</span><span class="fm">__new__</span><span class="p">(</span><span class="bp">cls</span><span class="p">)</span>
+        <span class="n">memo</span><span class="p">[</span><span class="nb">id</span><span class="p">(</span><span class="bp">self</span><span class="p">)]</span> <span class="o">=</span> <span class="n">result</span>
+        <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="k">if</span> <span class="n">k</span> <span class="o">!=</span> <span class="s2">&quot;_clause_builder&quot;</span><span class="p">:</span>
+                <span class="nb">setattr</span><span class="p">(</span><span class="n">result</span><span class="p">,</span> <span class="n">k</span><span class="p">,</span> <span class="n">copy</span><span class="o">.</span><span class="n">deepcopy</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="n">memo</span><span class="p">))</span>
+        <span class="n">result</span><span class="o">.</span><span class="n">_clause_builder</span> <span class="o">=</span> <span class="n">_ClauseBuilder</span><span class="p">()</span>
+        <span class="k">return</span> <span class="n">result</span>
+
+    <span class="c1"># Might want to apply different optimisations to different clauses once projections/group-bys are implemented</span>
+<div class="viewcode-block" id="QueryBuilder.optimise_for_speed"><a class="viewcode-back" href="../../../query_builder.html#arcticdb.QueryBuilder.optimise_for_speed">[docs]</a>    <span class="k">def</span> <span class="nf">optimise_for_speed</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Process query as fast as possible (the default behaviour)&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_optimisation</span> <span class="o">=</span> <span class="n">_Optimisation</span><span class="o">.</span><span class="n">SPEED</span></div>
+
+<div class="viewcode-block" id="QueryBuilder.optimise_for_memory"><a class="viewcode-back" href="../../../query_builder.html#arcticdb.QueryBuilder.optimise_for_memory">[docs]</a>    <span class="k">def</span> <span class="nf">optimise_for_memory</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Reduce peak memory usage during the query, at the expense of some performance.</span>
+
+<span class="sd">        Optimisations applied:</span>
+
+<span class="sd">        * Memory used by strings that are present in segments read from storage, but are not required in the final dataframe that will be presented back to the user, is reclaimed earlier in the processing pipeline.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_optimisation</span> <span class="o">=</span> <span class="n">_Optimisation</span><span class="o">.</span><span class="n">MEMORY</span></div>
+
+    <span class="k">def</span> <span class="nf">execution_contexts</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">res</span> <span class="o">=</span> <span class="p">[</span><span class="n">visit_expression</span><span class="p">(</span><span class="n">stage</span><span class="o">.</span><span class="n">expr</span><span class="p">)</span> <span class="k">for</span> <span class="n">stage</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">stages</span><span class="p">]</span>
+        <span class="k">for</span> <span class="n">execution_context</span> <span class="ow">in</span> <span class="n">res</span><span class="p">:</span>
+            <span class="n">execution_context</span><span class="o">.</span><span class="n">optimisation</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_optimisation</span>
+        <span class="k">return</span> <span class="n">res</span>
+
+    <span class="k">def</span> <span class="nf">finalize_clause_builder</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">for</span> <span class="n">py_clause</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">stages</span><span class="p">:</span>
+            <span class="n">py_clause</span><span class="o">.</span><span class="n">to_cpp</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_clause_builder</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_clause_builder</span></div>
+
+
+<span class="n">CONSTRUCTOR_MAP</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">&quot;u&quot;</span><span class="p">:</span> <span class="p">{</span><span class="mi">1</span><span class="p">:</span> <span class="n">ValueUint8</span><span class="p">,</span> <span class="mi">2</span><span class="p">:</span> <span class="n">ValueUint16</span><span class="p">,</span> <span class="mi">4</span><span class="p">:</span> <span class="n">ValueUint32</span><span class="p">,</span> <span class="mi">8</span><span class="p">:</span> <span class="n">ValueUint64</span><span class="p">},</span>
+    <span class="s2">&quot;i&quot;</span><span class="p">:</span> <span class="p">{</span><span class="mi">1</span><span class="p">:</span> <span class="n">ValueInt8</span><span class="p">,</span> <span class="mi">2</span><span class="p">:</span> <span class="n">ValueInt16</span><span class="p">,</span> <span class="mi">4</span><span class="p">:</span> <span class="n">ValueInt32</span><span class="p">,</span> <span class="mi">8</span><span class="p">:</span> <span class="n">ValueInt64</span><span class="p">},</span>
+    <span class="s2">&quot;f&quot;</span><span class="p">:</span> <span class="p">{</span><span class="mi">1</span><span class="p">:</span> <span class="n">ValueFloat32</span><span class="p">,</span> <span class="mi">2</span><span class="p">:</span> <span class="n">ValueFloat32</span><span class="p">,</span> <span class="mi">4</span><span class="p">:</span> <span class="n">ValueFloat32</span><span class="p">,</span> <span class="mi">8</span><span class="p">:</span> <span class="n">ValueFloat64</span><span class="p">},</span>
+<span class="p">}</span>
+
+
+<span class="k">def</span> <span class="nf">create_value</span><span class="p">(</span><span class="n">value</span><span class="p">):</span>
+    <span class="k">if</span> <span class="n">value</span> <span class="ow">in</span> <span class="p">[</span><span class="n">inf</span><span class="p">,</span> <span class="o">-</span><span class="n">inf</span><span class="p">]:</span>
+        <span class="k">raise</span> <span class="n">ArcticNativeException</span><span class="p">(</span><span class="s2">&quot;Infinite values not supported in queries&quot;</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">floating</span><span class="p">):</span>
+        <span class="n">f</span> <span class="o">=</span> <span class="n">CONSTRUCTOR_MAP</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">value</span><span class="o">.</span><span class="n">dtype</span><span class="o">.</span><span class="n">kind</span><span class="p">)</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">value</span><span class="o">.</span><span class="n">dtype</span><span class="o">.</span><span class="n">itemsize</span><span class="p">)</span>
+    <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">integer</span><span class="p">):</span>
+        <span class="n">min_scalar_type</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">min_scalar_type</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+        <span class="n">f</span> <span class="o">=</span> <span class="n">CONSTRUCTOR_MAP</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">min_scalar_type</span><span class="o">.</span><span class="n">kind</span><span class="p">)</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">min_scalar_type</span><span class="o">.</span><span class="n">itemsize</span><span class="p">)</span>
+    <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">supported_time_types</span><span class="p">):</span>
+        <span class="n">value</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">value</span><span class="o">.</span><span class="n">timestamp</span><span class="p">()</span> <span class="o">*</span> <span class="mi">1_000_000_000</span><span class="p">)</span>
+        <span class="n">f</span> <span class="o">=</span> <span class="n">ValueInt64</span>
+    <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">pd</span><span class="o">.</span><span class="n">Timedelta</span><span class="p">):</span>
+        <span class="n">value</span> <span class="o">=</span> <span class="n">value</span><span class="o">.</span><span class="n">value</span>
+        <span class="n">f</span> <span class="o">=</span> <span class="n">ValueInt64</span>
+    <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">datetime</span><span class="o">.</span><span class="n">timedelta</span><span class="p">):</span>
+        <span class="n">value</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">value</span><span class="o">.</span><span class="n">total_seconds</span><span class="p">()</span> <span class="o">*</span> <span class="mi">1_000_000_000</span><span class="p">)</span>
+        <span class="n">f</span> <span class="o">=</span> <span class="n">ValueInt64</span>
+    <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="nb">bool</span><span class="p">):</span>
+        <span class="n">f</span> <span class="o">=</span> <span class="n">ValueBool</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">f</span> <span class="o">=</span> <span class="n">_Value</span>
+    <span class="k">return</span> <span class="n">f</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+
+
+<span class="k">def</span> <span class="nf">to_string</span><span class="p">(</span><span class="n">leaf</span><span class="p">):</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">leaf</span><span class="p">,</span> <span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="nb">list</span><span class="p">)):</span>
+        <span class="c1"># Truncate value set keys to first 100 characters</span>
+        <span class="n">key</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">leaf</span><span class="p">)[:</span><span class="mi">100</span><span class="p">]</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">leaf</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+            <span class="n">key</span> <span class="o">=</span> <span class="s2">&quot;Str(</span><span class="si">{}</span><span class="s2">)&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">leaf</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">leaf</span><span class="p">,</span> <span class="nb">bool</span><span class="p">):</span>
+            <span class="n">key</span> <span class="o">=</span> <span class="s2">&quot;Bool(</span><span class="si">{}</span><span class="s2">)&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">leaf</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">key</span> <span class="o">=</span> <span class="s2">&quot;Num(</span><span class="si">{}</span><span class="s2">)&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">leaf</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">key</span>
+
+
+<span class="k">def</span> <span class="nf">visit_expression</span><span class="p">(</span><span class="n">expr</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">_visit</span><span class="p">(</span><span class="n">node</span><span class="p">):</span>
+        <span class="k">def</span> <span class="nf">_visit_child</span><span class="p">(</span><span class="n">node</span><span class="p">):</span>
+            <span class="k">def</span> <span class="nf">_handle_leaf</span><span class="p">(</span><span class="n">node</span><span class="p">):</span>
+                <span class="n">key</span> <span class="o">=</span> <span class="n">to_string</span><span class="p">(</span><span class="n">node</span><span class="p">)</span>
+                <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">node</span><span class="p">,</span> <span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="nb">list</span><span class="p">)):</span>
+                    <span class="c1"># There is a possibility that two distinct value sets have the same repr, eiter if the first 100</span>
+                    <span class="c1"># chars match, or if the repr is truncated like &#39;[   0    1    2 ... 9997 9998 9999]&#39;</span>
+                    <span class="c1"># Append -vX to handle this case, while keeping ValueSet keys short and readable in most cases</span>
+                    <span class="k">if</span> <span class="n">key</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">valueset_keys</span><span class="p">:</span>
+                        <span class="n">valueset_keys</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="mi">0</span>
+                    <span class="k">else</span><span class="p">:</span>
+                        <span class="n">valueset_keys</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">+=</span> <span class="mi">1</span>
+                    <span class="n">key</span> <span class="o">=</span> <span class="n">key</span> <span class="o">+</span> <span class="s2">&quot;-v&quot;</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">valueset_keys</span><span class="p">[</span><span class="n">key</span><span class="p">])</span>
+                    <span class="n">execution_context</span><span class="o">.</span><span class="n">add_value_set</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">_ValueSet</span><span class="p">(</span><span class="n">node</span><span class="p">))</span>
+                    <span class="k">return</span> <span class="n">_ValueSetName</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">execution_context</span><span class="o">.</span><span class="n">add_value</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">create_value</span><span class="p">(</span><span class="n">node</span><span class="p">))</span>
+                    <span class="k">return</span> <span class="n">_ValueName</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">node</span><span class="p">,</span> <span class="n">ExpressionNode</span><span class="p">):</span>
+                <span class="k">if</span> <span class="n">node</span><span class="o">.</span><span class="n">operator</span> <span class="o">==</span> <span class="n">COLUMN</span><span class="p">:</span>
+                    <span class="n">execution_context</span><span class="o">.</span><span class="n">add_column</span><span class="p">(</span><span class="n">node</span><span class="o">.</span><span class="n">left</span><span class="p">)</span>
+                    <span class="k">return</span> <span class="n">_ColumnName</span><span class="p">(</span><span class="n">node</span><span class="o">.</span><span class="n">left</span><span class="p">)</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">_visit</span><span class="p">(</span><span class="n">node</span><span class="p">)</span>
+                    <span class="k">return</span> <span class="n">_ExpressionName</span><span class="p">(</span><span class="n">node</span><span class="o">.</span><span class="n">get_name</span><span class="p">())</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">return</span> <span class="n">_handle_leaf</span><span class="p">(</span><span class="n">node</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">node</span><span class="p">,</span> <span class="nb">bool</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="n">ArcticNativeException</span><span class="p">(</span><span class="s2">&quot;Query is trivially </span><span class="si">{}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">node</span><span class="p">))</span>
+
+        <span class="n">left</span> <span class="o">=</span> <span class="n">_visit_child</span><span class="p">(</span><span class="n">node</span><span class="o">.</span><span class="n">left</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">node</span><span class="o">.</span><span class="n">right</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">right</span> <span class="o">=</span> <span class="n">_visit_child</span><span class="p">(</span><span class="n">node</span><span class="o">.</span><span class="n">right</span><span class="p">)</span>
+            <span class="n">expression_node</span> <span class="o">=</span> <span class="n">_ExpressionNode</span><span class="p">(</span><span class="n">left</span><span class="p">,</span> <span class="n">right</span><span class="p">,</span> <span class="n">node</span><span class="o">.</span><span class="n">operator</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">expression_node</span> <span class="o">=</span> <span class="n">_ExpressionNode</span><span class="p">(</span><span class="n">left</span><span class="p">,</span> <span class="n">node</span><span class="o">.</span><span class="n">operator</span><span class="p">)</span>
+        <span class="n">execution_context</span><span class="o">.</span><span class="n">add_expression_node</span><span class="p">(</span><span class="n">node</span><span class="o">.</span><span class="n">get_name</span><span class="p">(),</span> <span class="n">expression_node</span><span class="p">)</span>
+
+    <span class="n">execution_context</span> <span class="o">=</span> <span class="n">_ExecutionContext</span><span class="p">()</span>
+    <span class="n">valueset_keys</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>
+    <span class="n">_visit</span><span class="p">(</span><span class="n">expr</span><span class="p">)</span>
+    <span class="n">execution_context</span><span class="o">.</span><span class="n">root_node_name</span> <span class="o">=</span> <span class="n">_ExpressionName</span><span class="p">(</span><span class="n">expr</span><span class="o">.</span><span class="n">get_name</span><span class="p">())</span>
+    <span class="k">return</span> <span class="n">execution_context</span>
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2022, Man Group.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

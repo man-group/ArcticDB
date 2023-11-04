@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.18.1: http://docutils.sourceforge.net/" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Arctic API &mdash; ArcticDB  documentation</title>
+      <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
+  <!--[if lt IE 9]>
+    <script src="_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script src="_static/jquery.js"></script>
+        <script src="_static/_sphinx_javascript_frameworks_compat.js"></script>
+        <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
+        <script src="_static/doctools.js"></script>
+        <script src="_static/sphinx_highlight.js"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="arcticdb.Arctic" href="arcticdb/arcticdb.Arctic.html" />
+    <link rel="prev" title="ArcticDB Python Documentation" href="index.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            ArcticDB
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul class="current">
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Arctic API</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="arcticdb/arcticdb.Arctic.html">arcticdb.Arctic</a></li>
+<li class="toctree-l2"><a class="reference internal" href="arcticdb/arcticdb.LibraryOptions.html">arcticdb.LibraryOptions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#arcticdb.Arctic"><code class="docutils literal notranslate"><span class="pre">Arctic</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#arcticdb.Arctic.__init__"><code class="docutils literal notranslate"><span class="pre">Arctic.__init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#arcticdb.Arctic.get_library"><code class="docutils literal notranslate"><span class="pre">Arctic.get_library()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#arcticdb.Arctic.create_library"><code class="docutils literal notranslate"><span class="pre">Arctic.create_library()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#arcticdb.Arctic.delete_library"><code class="docutils literal notranslate"><span class="pre">Arctic.delete_library()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#arcticdb.Arctic.list_libraries"><code class="docutils literal notranslate"><span class="pre">Arctic.list_libraries()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#arcticdb.Arctic.get_uri"><code class="docutils literal notranslate"><span class="pre">Arctic.get_uri()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#arcticdb.LibraryOptions"><code class="docutils literal notranslate"><span class="pre">LibraryOptions</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#arcticdb.LibraryOptions.dynamic_schema"><code class="docutils literal notranslate"><span class="pre">LibraryOptions.dynamic_schema</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#arcticdb.LibraryOptions.dedup"><code class="docutils literal notranslate"><span class="pre">LibraryOptions.dedup</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#arcticdb.LibraryOptions.rows_per_segment"><code class="docutils literal notranslate"><span class="pre">LibraryOptions.rows_per_segment</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#arcticdb.LibraryOptions.columns_per_segment"><code class="docutils literal notranslate"><span class="pre">LibraryOptions.columns_per_segment</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#arcticdb.LibraryOptions.__init__"><code class="docutils literal notranslate"><span class="pre">LibraryOptions.__init__()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="library.html">Library API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="query_builder.html">Query Builder API</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">ArcticDB</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Arctic API</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/arcticdb.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="arctic-api">
+<h1>Arctic API<a class="headerlink" href="#arctic-api" title="Permalink to this heading"></a></h1>
+<p>The primary API used to access and manage ArcticDB libraries. Use this to get a handle to a
+<code class="docutils literal notranslate"><span class="pre">Library</span></code> instance, which can then be used for subsequent operations as documented in the
+Library API section.</p>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="arcticdb/arcticdb.Arctic.html#arcticdb.Arctic" title="arcticdb.Arctic"><code class="xref py py-obj docutils literal notranslate"><span class="pre">arcticdb.Arctic</span></code></a>(uri[, encoding_version])</p></td>
+<td><p>Top-level library management class.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="arcticdb/arcticdb.LibraryOptions.html#arcticdb.LibraryOptions" title="arcticdb.LibraryOptions"><code class="xref py py-obj docutils literal notranslate"><span class="pre">arcticdb.LibraryOptions</span></code></a>(*[, dynamic_schema, ...])</p></td>
+<td><p>Configuration options that can be applied when libraries are created.</p></td>
+</tr>
+</tbody>
+</table>
+<dl class="py class">
+<dt class="sig sig-object py" id="arcticdb.Arctic">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">arcticdb.</span></span><span class="sig-name descname"><span class="pre">Arctic</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">uri</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">encoding_version</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">EncodingVersion</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">EncodingVersion.V1</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/arcticdb/arctic.html#Arctic"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#arcticdb.Arctic" title="Permalink to this definition"></a></dt>
+<dd><p>Top-level library management class. Arctic instances can be configured against an S3 environment and enable the
+creation, deletion and retrieval of Arctic libraries.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="arcticdb.Arctic.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">uri</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">encoding_version</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">EncodingVersion</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">EncodingVersion.V1</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/arcticdb/arctic.html#Arctic.__init__"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#arcticdb.Arctic.__init__" title="Permalink to this definition"></a></dt>
+<dd><p>Initializes a top-level Arctic library management instance.</p>
+<p>For more information on how to use Arctic Library instances please see the documentation on Library.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>uri</strong> – <p>URI specifying the backing store used to access, configure, and create Arctic libraries.</p>
+<blockquote>
+<div><p>The S3 URI connection scheme has the form <code class="docutils literal notranslate"><span class="pre">s3(s)://&lt;s3</span> <span class="pre">end</span> <span class="pre">point&gt;:&lt;s3</span> <span class="pre">bucket&gt;[?options]</span></code>.</p>
+<p>Use s3s as the protocol if communicating with a secure endpoint.</p>
+<p>Options is a query string that specifies connection specific options as <code class="docutils literal notranslate"><span class="pre">&lt;name&gt;=&lt;value&gt;</span></code> pairs joined with
+<code class="docutils literal notranslate"><span class="pre">&amp;</span></code>.</p>
+<p>Available options for S3:</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Option</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>port</p></td>
+<td><p>port to use for S3 connection</p></td>
+</tr>
+<tr class="row-odd"><td><p>region</p></td>
+<td><p>S3 region</p></td>
+</tr>
+<tr class="row-even"><td><p>use_virtual_addressing</p></td>
+<td><p>Whether to use virtual addressing to access the S3 bucket</p></td>
+</tr>
+<tr class="row-odd"><td><p>access</p></td>
+<td><p>S3 access key</p></td>
+</tr>
+<tr class="row-even"><td><p>secret</p></td>
+<td><p>S3 secret access key</p></td>
+</tr>
+<tr class="row-odd"><td><p>path_prefix</p></td>
+<td><p>Path within S3 bucket to use for data storage</p></td>
+</tr>
+<tr class="row-even"><td><p>aws_auth</p></td>
+<td><p>If true, authentication to endpoint will be computed via AWS environment vars/config files. If no options are provided <cite>aws_auth</cite> will be assumed to be true.</p></td>
+</tr>
+<tr class="row-odd"><td><p>force_uri_lib_config</p></td>
+<td><p>Override the credentials and endpoint of an S3 storage with the URI of the Arctic object. Use if accessing a replicated (to different region/bucket) library.</p></td>
+</tr>
+</tbody>
+</table>
+<p>Note: When connecting to AWS, <cite>region</cite> can be automatically deduced from the endpoint if the given endpoint
+specifies the region and <cite>region</cite> is not set.</p>
+</div></blockquote>
+<blockquote>
+<div><p>The Azure URI connection scheme has the form <code class="docutils literal notranslate"><span class="pre">azure://[options]</span></code>.
+It is based on the Azure Connection String, with additional options for configuring ArcticDB.
+Please refer to <a class="reference external" href="https://learn.microsoft.com/en-us/azure/storage/common/storage-configure-connection-string">https://learn.microsoft.com/en-us/azure/storage/common/storage-configure-connection-string</a> for more details.</p>
+<p><code class="docutils literal notranslate"><span class="pre">options</span></code> is a string that specifies connection specific options as <code class="docutils literal notranslate"><span class="pre">&lt;name&gt;=&lt;value&gt;</span></code> pairs joined with <code class="docutils literal notranslate"><span class="pre">;</span></code> (the final key value pair should not include a trailing <code class="docutils literal notranslate"><span class="pre">;</span></code>).</p>
+<p>Additional options specific for ArcticDB:</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Option</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Container</p></td>
+<td><p>Azure container for blobs</p></td>
+</tr>
+<tr class="row-odd"><td><p>Path_prefix</p></td>
+<td><p>Path within Azure container to use for data storage</p></td>
+</tr>
+<tr class="row-even"><td><p>CA_cert_path</p></td>
+<td><p>Azure CA certificate path. If not set, default path will be used.
+Note: For Linux distribution, default path is set to <cite>/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem</cite>.
+If the certificate cannot be found in the provided path, an Azure exception with no meaningful error code will be thrown.
+For more details, please see <a class="reference external" href="https://github.com/Azure/azure-sdk-for-cpp/issues/4738">https://github.com/Azure/azure-sdk-for-cpp/issues/4738</a>.
+For example, <code class="docutils literal notranslate"><span class="pre">Failed</span> <span class="pre">to</span> <span class="pre">iterate</span> <span class="pre">azure</span> <span class="pre">blobs</span> <span class="pre">'C'</span> <span class="pre">0:</span></code>.</p>
+<p>Default certificate path in various Linux distributions:
+“/etc/ssl/certs/ca-certificates.crt”                  Debian/Ubuntu/Gentoo etc.
+“/etc/pki/tls/certs/ca-bundle.crt”                    Fedora/RHEL 6
+“/etc/ssl/ca-bundle.pem”                              OpenSUSE
+“/etc/pki/tls/cacert.pem”                             OpenELEC
+“/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem”   CentOS/RHEL 7
+“/etc/ssl/cert.pem”                                   Alpine Linux</p>
+</td>
+</tr>
+</tbody>
+</table>
+<p>Note: Support for Azure Blob Storage is currently only available in <em>non-Conda</em> binaries distribution.</p>
+<p>Exception: Azure exceptions message always ends with <cite>{AZURE_SDK_HTTP_STATUS_CODE}:{AZURE_SDK_REASON_PHRASE}</cite>.</p>
+<p>Please refer to <a class="reference external" href="https://github.com/Azure/azure-sdk-for-cpp/blob/24ed290815d8f9dbcd758a60fdc5b6b9205f74e0/sdk/core/azure-core/inc/azure/core/http/http_status_code.hpp">https://github.com/Azure/azure-sdk-for-cpp/blob/24ed290815d8f9dbcd758a60fdc5b6b9205f74e0/sdk/core/azure-core/inc/azure/core/http/http_status_code.hpp</a> for
+more details of provided status codes.</p>
+<p>Note that due to a bug in Azure C++ SDK (<a class="reference external" href="https://github.com/Azure/azure-sdk-for-cpp/issues/4738">https://github.com/Azure/azure-sdk-for-cpp/issues/4738</a>), Azure may not give meaningful status codes and
+reason phrases in the exception. To debug these instances, please set the environment variable <code class="docutils literal notranslate"><span class="pre">export</span> <span class="pre">AZURE_LOG_LEVEL</span></code> to <code class="docutils literal notranslate"><span class="pre">1</span></code> to turn on the SDK debug logging.</p>
+</div></blockquote>
+</p>
+</dd>
+</dl>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">ac</span> <span class="o">=</span> <span class="n">Arctic</span><span class="p">(</span><span class="s1">&#39;s3://MY_ENDPOINT:MY_BUCKET&#39;</span><span class="p">)</span>  <span class="c1"># Leave AWS to derive credential information</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">ac</span> <span class="o">=</span> <span class="n">Arctic</span><span class="p">(</span><span class="s1">&#39;s3://MY_ENDPOINT:MY_BUCKET?region=YOUR_REGION&amp;access=ABCD&amp;secret=DCBA&#39;</span><span class="p">)</span> <span class="c1"># Manually specify creds</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">ac</span> <span class="o">=</span> <span class="n">Arctic</span><span class="p">(</span><span class="s1">&#39;azure://CA_cert_path=/etc/ssl/certs/ca-certificates.crt;BlobEndpoint=https://arctic.blob.core.windows.net;Container=acblob;SharedAccessSignature=sp=sig&#39;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">ac</span><span class="o">.</span><span class="n">create_library</span><span class="p">(</span><span class="s1">&#39;travel_data&#39;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">ac</span><span class="o">.</span><span class="n">list_libraries</span><span class="p">()</span>
+<span class="go">[&#39;travel_data&#39;]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">travel_library</span> <span class="o">=</span> <span class="n">ac</span><span class="p">[</span><span class="s1">&#39;travel_data&#39;</span><span class="p">]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">ac</span><span class="o">.</span><span class="n">delete_library</span><span class="p">(</span><span class="s1">&#39;travel_data&#39;</span><span class="p">)</span>
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="arcticdb.Arctic.get_library">
+<span class="sig-name descname"><span class="pre">get_library</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">library</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="library/arcticdb.version_store.library.Library.html#arcticdb.version_store.library.Library" title="arcticdb.version_store.library.Library"><span class="pre">Library</span></a></span></span><a class="reference internal" href="_modules/arcticdb/arctic.html#Arctic.get_library"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#arcticdb.Arctic.get_library" title="Permalink to this definition"></a></dt>
+<dd><p>Returns the library named <cite>library</cite>.</p>
+<p>This method can also be invoked through subscripting. <code class="docutils literal notranslate"><span class="pre">Arctic('bucket').get_library(&quot;test&quot;)</span></code> is equivalent to
+<code class="docutils literal notranslate"><span class="pre">Arctic('bucket')[&quot;test&quot;]</span></code>.</p>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">arctic</span> <span class="o">=</span> <span class="n">Arctic</span><span class="p">(</span><span class="s1">&#39;s3://MY_ENDPOINT:MY_BUCKET&#39;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">arctic</span><span class="o">.</span><span class="n">create_library</span><span class="p">(</span><span class="s1">&#39;test.library&#39;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">my_library</span> <span class="o">=</span> <span class="n">arctic</span><span class="o">.</span><span class="n">get_library</span><span class="p">(</span><span class="s1">&#39;test.library&#39;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">my_library</span> <span class="o">=</span> <span class="n">arctic</span><span class="p">[</span><span class="s1">&#39;test.library&#39;</span><span class="p">]</span>
+</pre></div>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference internal" href="library/arcticdb.version_store.library.Library.html#arcticdb.version_store.library.Library" title="arcticdb.version_store.library.Library">Library</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="arcticdb.Arctic.create_library">
+<span class="sig-name descname"><span class="pre">create_library</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">library_options</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="arcticdb/arcticdb.LibraryOptions.html#arcticdb.LibraryOptions" title="arcticdb.options.LibraryOptions"><span class="pre">LibraryOptions</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="reference internal" href="_modules/arcticdb/arctic.html#Arctic.create_library"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#arcticdb.Arctic.create_library" title="Permalink to this definition"></a></dt>
+<dd><p>Creates the library named <code class="docutils literal notranslate"><span class="pre">name</span></code>.</p>
+<p>Arctic libraries contain named symbols which are the atomic unit of data storage within Arctic. Symbols
+contain data that in most cases strongly resembles a DataFrame and are versioned such that all modifying
+operations can be tracked and reverted.</p>
+<p>Arctic libraries support concurrent writes and reads to multiple symbols as well as concurrent reads to a single
+symbol. However, concurrent writers to a single symbol are not supported other than for primitives that
+explicitly state support for single-symbol concurrent writes.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>name</strong> (<em>str</em>) – The name of the library that you wish to create.</p></li>
+<li><p><strong>library_options</strong> (<em>Optional</em><em>[</em><a class="reference internal" href="arcticdb/arcticdb.LibraryOptions.html#arcticdb.LibraryOptions" title="arcticdb.LibraryOptions"><em>LibraryOptions</em></a><em>]</em>) – Options to use in configuring the library. Defaults if not provided are the same as are documented in LibraryOptions.</p></li>
+</ul>
+</dd>
+</dl>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">arctic</span> <span class="o">=</span> <span class="n">Arctic</span><span class="p">(</span><span class="s1">&#39;s3://MY_ENDPOINT:MY_BUCKET&#39;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">arctic</span><span class="o">.</span><span class="n">create_library</span><span class="p">(</span><span class="s1">&#39;test.library&#39;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">my_library</span> <span class="o">=</span> <span class="n">arctic</span><span class="p">[</span><span class="s1">&#39;test.library&#39;</span><span class="p">]</span>
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="arcticdb.Arctic.delete_library">
+<span class="sig-name descname"><span class="pre">delete_library</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="reference internal" href="_modules/arcticdb/arctic.html#Arctic.delete_library"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#arcticdb.Arctic.delete_library" title="Permalink to this definition"></a></dt>
+<dd><p>Removes the library called <code class="docutils literal notranslate"><span class="pre">name</span></code>. This will remove the underlying data contained within the library and as
+such will take as much time as the underlying delete operations take.</p>
+<p>If no library with <code class="docutils literal notranslate"><span class="pre">name</span></code> exists then this is a no-op. In particular this method does not raise in this case.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>name</strong> (<cite>str</cite>) – Name of the library to delete.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="arcticdb.Arctic.list_libraries">
+<span class="sig-name descname"><span class="pre">list_libraries</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="_modules/arcticdb/arctic.html#Arctic.list_libraries"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#arcticdb.Arctic.list_libraries" title="Permalink to this definition"></a></dt>
+<dd><p>Lists all libraries available.</p>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">arctic</span> <span class="o">=</span> <span class="n">Arctic</span><span class="p">(</span><span class="s1">&#39;s3://MY_ENDPOINT:MY_BUCKET&#39;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">arctic</span><span class="o">.</span><span class="n">list_libraries</span><span class="p">()</span>
+<span class="go">[&#39;test.library&#39;]</span>
+</pre></div>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>A list of all library names that exist in this Arctic instance.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="arcticdb.Arctic.get_uri">
+<span class="sig-name descname"><span class="pre">get_uri</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="reference internal" href="_modules/arcticdb/arctic.html#Arctic.get_uri"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#arcticdb.Arctic.get_uri" title="Permalink to this definition"></a></dt>
+<dd><p>Returns the URI that was used to create the Arctic instance.</p>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">arctic</span> <span class="o">=</span> <span class="n">Arctic</span><span class="p">(</span><span class="s1">&#39;s3://MY_ENDPOINT:MY_BUCKET&#39;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">arctic</span><span class="o">.</span><span class="n">get_uri</span><span class="p">()</span>
+</pre></div>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>s3</strong></p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>//MY_ENDPOINT:MY_BUCKET</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="arcticdb.LibraryOptions">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">arcticdb.</span></span><span class="sig-name descname"><span class="pre">LibraryOptions</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dynamic_schema</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dedup</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rows_per_segment</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">100000</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">columns_per_segment</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">127</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">encoding_version</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">EncodingVersion</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">EncodingVersion.V1</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/arcticdb/options.html#LibraryOptions"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#arcticdb.LibraryOptions" title="Permalink to this definition"></a></dt>
+<dd><p>Configuration options that can be applied when libraries are created.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="arcticdb.LibraryOptions.dynamic_schema">
+<span class="sig-name descname"><span class="pre">dynamic_schema</span></span><a class="headerlink" href="#arcticdb.LibraryOptions.dynamic_schema" title="Permalink to this definition"></a></dt>
+<dd><p>See <cite>__init__</cite> for details.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>bool</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="arcticdb.LibraryOptions.dedup">
+<span class="sig-name descname"><span class="pre">dedup</span></span><a class="headerlink" href="#arcticdb.LibraryOptions.dedup" title="Permalink to this definition"></a></dt>
+<dd><p>See <cite>__init__</cite> for details.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>bool</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="arcticdb.LibraryOptions.rows_per_segment">
+<span class="sig-name descname"><span class="pre">rows_per_segment</span></span><a class="headerlink" href="#arcticdb.LibraryOptions.rows_per_segment" title="Permalink to this definition"></a></dt>
+<dd><p>See <cite>__init__</cite> for details.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>int</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="arcticdb.LibraryOptions.columns_per_segment">
+<span class="sig-name descname"><span class="pre">columns_per_segment</span></span><a class="headerlink" href="#arcticdb.LibraryOptions.columns_per_segment" title="Permalink to this definition"></a></dt>
+<dd><p>See <cite>__init__</cite> for details.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>int</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="arcticdb.LibraryOptions.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dynamic_schema</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dedup</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rows_per_segment</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">100000</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">columns_per_segment</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">127</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">encoding_version</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">EncodingVersion</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">EncodingVersion.V1</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/arcticdb/options.html#LibraryOptions.__init__"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#arcticdb.LibraryOptions.__init__" title="Permalink to this definition"></a></dt>
+<dd><dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>dynamic_schema</strong> (<em>bool</em><em>, </em><em>default False</em>) – <p>Controls whether the library supports dynamically changing symbol schemas.</p>
+<p>The schema of a symbol refers to the order of the columns and the type of the columns.</p>
+<p>If False, then the schema for a symbol is set on each <cite>write</cite> call, and cannot then be
+modified by successive updates or appends. Each successive update or append must contain the same column set
+in the same order with the same types as the initial write.</p>
+<p>When disabled, ArcticDB will tile stored data across both the rows and columns. This enables highly efficient
+retrieval of specific columns regardless of the total number of columns stored in the symbol.</p>
+<p>If True, then updates and appends can contain columns not originally seen in the
+most recent write call. The data will be dynamically backfilled on read when required for the new columns.
+Furthermore, Arctic will support numeric type promotions should the type of a column change - for example,
+should column A be of type int32 on write, and of type float on the next append, the column will be returned as
+a float to Pandas on read. Supported promotions include (narrow) integer to (wider) integer, and integer to float.</p>
+<p>When enabled, ArcticDB will only tile across the rows of the data. This will result in slower column
+subsetting when storing a large number of columns (&gt;1,000).</p>
+</p></li>
+<li><p><strong>dedup</strong> (<em>bool</em><em>, </em><em>default False</em>) – <p>Controls whether calls to write and write_batch will attempt to deduplicate data segments against the
+previous live version of the specified symbol.</p>
+<p>If False, new data segments will always be written for the new version of the symbol being created.</p>
+<p>If True, the content hash, start index, and end index of data segments associated with the previous live
+version of this symbol will be compared with those about to be written, and will not be duplicated in the
+storage device if they match.</p>
+<p>Keep in mind that this is most effective when version n is equal to version n-1 plus additional data at the
+end - and only at the end! If there is additional data inserted at the start or into the the middle, then
+all segments occuring after that modification will almost certainly differ. ArcticDB creates new segments at
+fixed intervals and data is only de-duplicated if the hashes of the data segments are identical. A one row
+offset will therefore prevent this de-duplication.</p>
+<p>Note that these conditions will also be checked with write_pickle and write_pickle_batch. However, pickled
+objects are always written as a single data segment, and so dedup will only occur if the written object is
+identical to the previous version.</p>
+</p></li>
+<li><p><strong>rows_per_segment</strong> (<em>int</em><em>, </em><em>default 100_000</em>) – <p>Together with columns_per_segment, controls how data being written, appended, or updated is sliced into
+separate data segment objects before being written to storage.</p>
+<p>By splitting data across multiple objects in storage, calls to read and read_batch that include the
+date_range and/or columns parameters can reduce the amount of data read from storage by only reading those
+data segments that contain data requested by the reader.</p>
+<p>For example, if writing a dataframe with 250,000 rows and 200 columns, by default, this will be sliced into
+6 data segments:
+1 - rows 1-100,000 and columns 1-127
+2 - rows 100,001-200,000 and columns 1-127
+3 - rows 200,001-250,000 and columns 1-127
+4 - rows 1-100,000 and columns 128-200
+5 - rows 100,001-200,000 and columns 128-200
+6 - rows 200,001-250,000 and columns 128-200</p>
+<p>Data segments that cover the same range of rows are said to belong to the same row-slice (e.g. segments 2
+and 5 in the example above). Data segments that cover the same range of columns are said to belong to the
+same column-slice (e.g. segments 2 and 3 in the example above).</p>
+<p>Note that this slicing is only applied to the new data being written, existing data segments from previous
+versions that can remain the same will not be modified. For example, if a 50,000 row dataframe with a single
+column is written, and then another dataframe also with 50,000 rows and one column is appended to it, there
+will still be two data segments each with 50,000 rows.</p>
+<p>Note that for libraries with dynamic_schema enabled, columns_per_segment does not apply, and there is always
+a single column-slice. However, rows_per_segment is used, and there will be multiple row-slices.</p>
+</p></li>
+<li><p><strong>columns_per_segment</strong> (<em>int</em><em>, </em><em>default 127</em>) – See rows_per_segment</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="index.html" class="btn btn-neutral float-left" title="ArcticDB Python Documentation" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="arcticdb/arcticdb.Arctic.html" class="btn btn-neutral float-right" title="arcticdb.Arctic" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2022, Man Group.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

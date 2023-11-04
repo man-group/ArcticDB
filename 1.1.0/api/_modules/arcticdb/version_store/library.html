@@ -1,0 +1,1527 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>arcticdb.version_store.library &mdash; ArcticDB  documentation</title>
+      <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="../../../_static/css/theme.css" type="text/css" />
+  <!--[if lt IE 9]>
+    <script src="../../../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script src="../../../_static/jquery.js"></script>
+        <script src="../../../_static/_sphinx_javascript_frameworks_compat.js"></script>
+        <script data-url_root="../../../" id="documentation_options" src="../../../_static/documentation_options.js"></script>
+        <script src="../../../_static/doctools.js"></script>
+        <script src="../../../_static/sphinx_highlight.js"></script>
+    <script src="../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../index.html" class="icon icon-home">
+            ArcticDB
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../arcticdb.html">Arctic API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../library.html">Library API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../query_builder.html">Query Builder API</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">ArcticDB</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">arcticdb.version_store.library</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for arcticdb.version_store.library</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">Copyright 2023 Man Group Operations Limited</span>
+
+<span class="sd">Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.</span>
+
+<span class="sd">As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">import</span> <span class="nn">datetime</span>
+<span class="kn">from</span> <span class="nn">enum</span> <span class="kn">import</span> <span class="n">Enum</span><span class="p">,</span> <span class="n">auto</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Tuple</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">AnyStr</span><span class="p">,</span> <span class="n">Union</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Iterable</span><span class="p">,</span> <span class="n">NamedTuple</span>
+<span class="kn">from</span> <span class="nn">numpy</span> <span class="kn">import</span> <span class="n">datetime64</span>
+
+<span class="kn">from</span> <span class="nn">arcticdb.supported_types</span> <span class="kn">import</span> <span class="n">Timestamp</span>
+
+<span class="kn">from</span> <span class="nn">arcticdb.version_store.processing</span> <span class="kn">import</span> <span class="n">QueryBuilder</span>
+<span class="kn">from</span> <span class="nn">arcticdb.version_store._store</span> <span class="kn">import</span> <span class="n">NativeVersionStore</span><span class="p">,</span> <span class="n">VersionedItem</span><span class="p">,</span> <span class="n">VersionQueryInput</span>
+<span class="kn">from</span> <span class="nn">arcticdb_ext.exceptions</span> <span class="kn">import</span> <span class="n">ArcticException</span>
+<span class="kn">import</span> <span class="nn">pandas</span> <span class="k">as</span> <span class="nn">pd</span>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+<span class="kn">import</span> <span class="nn">logging</span>
+
+<span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
+
+
+<span class="n">AsOf</span> <span class="o">=</span> <span class="n">Union</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="n">datetime</span><span class="o">.</span><span class="n">datetime</span><span class="p">]</span>
+
+
+<span class="n">NORMALIZABLE_TYPES</span> <span class="o">=</span> <span class="p">(</span><span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">,</span> <span class="n">pd</span><span class="o">.</span><span class="n">Series</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span>
+
+
+<span class="n">NormalizableType</span> <span class="o">=</span> <span class="n">Union</span><span class="p">[</span><span class="n">NORMALIZABLE_TYPES</span><span class="p">]</span>
+<span class="sd">&quot;&quot;&quot;Types that can be normalised into Arctic&#39;s internal storage structure.</span>
+
+<span class="sd">See Also</span>
+<span class="sd">--------</span>
+
+<span class="sd">Library.write: for more documentation on normalisation.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+
+<div class="viewcode-block" id="ArcticInvalidApiUsageException"><a class="viewcode-back" href="../../../library/arcticdb.version_store.library.ArcticInvalidApiUsageException.html#arcticdb.version_store.library.ArcticInvalidApiUsageException">[docs]</a><span class="k">class</span> <span class="nc">ArcticInvalidApiUsageException</span><span class="p">(</span><span class="n">ArcticException</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Exception indicating an invalid call made to the Arctic API.&quot;&quot;&quot;</span></div>
+
+
+<div class="viewcode-block" id="ArcticDuplicateSymbolsInBatchException"><a class="viewcode-back" href="../../../library/arcticdb.version_store.library.ArcticDuplicateSymbolsInBatchException.html#arcticdb.version_store.library.ArcticDuplicateSymbolsInBatchException">[docs]</a><span class="k">class</span> <span class="nc">ArcticDuplicateSymbolsInBatchException</span><span class="p">(</span><span class="n">ArcticInvalidApiUsageException</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Exception indicating that duplicate symbols were passed to a batch method of this module.&quot;&quot;&quot;</span></div>
+
+
+<div class="viewcode-block" id="ArcticUnsupportedDataTypeException"><a class="viewcode-back" href="../../../library/arcticdb.version_store.library.ArcticUnsupportedDataTypeException.html#arcticdb.version_store.library.ArcticUnsupportedDataTypeException">[docs]</a><span class="k">class</span> <span class="nc">ArcticUnsupportedDataTypeException</span><span class="p">(</span><span class="n">ArcticInvalidApiUsageException</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Exception indicating that a method does not support the type of data provided.&quot;&quot;&quot;</span></div>
+
+
+<div class="viewcode-block" id="SymbolVersion"><a class="viewcode-back" href="../../../library/arcticdb.version_store.library.SymbolVersion.html#arcticdb.version_store.library.SymbolVersion">[docs]</a><span class="k">class</span> <span class="nc">SymbolVersion</span><span class="p">(</span><span class="n">NamedTuple</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;A named tuple. A symbol name - version pair.</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    symbol : str</span>
+<span class="sd">        Symbol name.</span>
+<span class="sd">    version : int</span>
+<span class="sd">        Version of the symbol.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">symbol</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">version</span><span class="p">:</span> <span class="nb">int</span>
+
+    <span class="k">def</span> <span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">symbol</span><span class="si">}</span><span class="s2">_v</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">version</span><span class="si">}</span><span class="s2">&quot;</span></div>
+
+
+<div class="viewcode-block" id="VersionInfo"><a class="viewcode-back" href="../../../library/arcticdb.version_store.library.VersionInfo.html#arcticdb.version_store.library.VersionInfo">[docs]</a><span class="k">class</span> <span class="nc">VersionInfo</span><span class="p">(</span><span class="n">NamedTuple</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;A named tuple. Descriptive information about a particular version of a symbol.</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    date: datetime.datetime</span>
+<span class="sd">        Time that the version was written in UTC.</span>
+<span class="sd">    deleted: bool</span>
+<span class="sd">        True if the version has been deleted and is only being kept alive via a snapshot.</span>
+<span class="sd">    snapshots: List[str]</span>
+<span class="sd">        Snapshots that refer to this version.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">date</span><span class="p">:</span> <span class="n">datetime</span><span class="o">.</span><span class="n">datetime</span>
+    <span class="n">deleted</span><span class="p">:</span> <span class="nb">bool</span>
+    <span class="n">snapshots</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span>
+
+    <span class="k">def</span> <span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">result</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;(date=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">date</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">deleted</span><span class="p">:</span>
+            <span class="n">result</span> <span class="o">+=</span> <span class="s2">&quot;, deleted&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">snapshots</span><span class="p">:</span>
+            <span class="n">result</span> <span class="o">+=</span> <span class="sa">f</span><span class="s2">&quot;, snapshots=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">snapshots</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="n">result</span> <span class="o">+=</span> <span class="s2">&quot;)&quot;</span>
+        <span class="k">return</span> <span class="n">result</span></div>
+
+
+<span class="k">class</span> <span class="nc">NameWithDType</span><span class="p">(</span><span class="n">NamedTuple</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;A named tuple. A name and dtype description pair.&quot;&quot;&quot;</span>
+
+    <span class="n">name</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">dtype</span><span class="p">:</span> <span class="nb">str</span>
+
+
+<div class="viewcode-block" id="SymbolDescription"><a class="viewcode-back" href="../../../library/arcticdb.version_store.library.SymbolDescription.html#arcticdb.version_store.library.SymbolDescription">[docs]</a><span class="k">class</span> <span class="nc">SymbolDescription</span><span class="p">(</span><span class="n">NamedTuple</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;A named tuple. Descriptive information about the data stored under a particular symbol.</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    columns: Tuple[NameWithDType]</span>
+<span class="sd">        Columns stored under the symbol.</span>
+<span class="sd">    index : NameWithDType</span>
+<span class="sd">        Index of the symbol.</span>
+<span class="sd">    index_type : str {&quot;NA&quot;, &quot;index&quot;, &quot;multi_index&quot;}</span>
+<span class="sd">        Whether the index is a simple index or a multi_index. ``NA`` indicates that the stored data does not have an index.</span>
+<span class="sd">    row_count : int</span>
+<span class="sd">        Number of rows.</span>
+<span class="sd">    last_update_time : datetime64</span>
+<span class="sd">        The time of the last update to the symbol, in UTC.</span>
+<span class="sd">    date_range : Tuple[datetime.datetime, datetime.datetime]</span>
+<span class="sd">        The times in UTC that data for this symbol spans. If the data is not timeseries indexed then this value will be</span>
+<span class="sd">        ``(datetime.datetime(1970, 1, 1), datetime.datetime(1970, 1, 1))``.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">columns</span><span class="p">:</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">NameWithDType</span><span class="p">]</span>
+    <span class="n">index</span><span class="p">:</span> <span class="n">NameWithDType</span>
+    <span class="n">index_type</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">row_count</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">last_update_time</span><span class="p">:</span> <span class="n">datetime</span><span class="o">.</span><span class="n">datetime</span>
+    <span class="n">date_range</span><span class="p">:</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">datetime</span><span class="o">.</span><span class="n">datetime</span><span class="p">,</span> <span class="n">datetime</span><span class="o">.</span><span class="n">datetime</span><span class="p">]</span></div>
+
+
+<div class="viewcode-block" id="WritePayload"><a class="viewcode-back" href="../../../library/arcticdb.version_store.library.WritePayload.html#arcticdb.version_store.library.WritePayload">[docs]</a><span class="k">class</span> <span class="nc">WritePayload</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    WritePayload is designed to enable batching of multiple operations with an API that mirrors the singular</span>
+<span class="sd">    ``write`` API.</span>
+
+<span class="sd">    Construction of ``WritePayload`` objects is only required for batch write operations.</span>
+
+<span class="sd">    One instance of ``WritePayload`` refers to one unit that can be written through to ArcticDB.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+<div class="viewcode-block" id="WritePayload.__init__"><a class="viewcode-back" href="../../../library/arcticdb.version_store.library.WritePayload.html#arcticdb.version_store.library.WritePayload.__init__">[docs]</a>    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">symbol</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">Any</span><span class="p">,</span> <span class="n">NormalizableType</span><span class="p">],</span> <span class="n">metadata</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Constructor.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        symbol : str</span>
+<span class="sd">            Symbol name. Limited to 255 characters. The following characters are not supported in symbols:</span>
+<span class="sd">            ``&quot;*&quot;, &quot;&amp;&quot;, &quot;&lt;&quot;, &quot;&gt;&quot;``</span>
+<span class="sd">        data : Any</span>
+<span class="sd">            Data to be written. If data is not of NormalizableType then it will be pickled.</span>
+<span class="sd">        metadata : Any, default=None</span>
+<span class="sd">            Optional metadata to persist along with the symbol.</span>
+
+<span class="sd">        See Also</span>
+<span class="sd">        --------</span>
+<span class="sd">        Library.write_pickle: For information on the implications of providing data that needs to be pickled.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">symbol</span> <span class="o">=</span> <span class="n">symbol</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">data</span> <span class="o">=</span> <span class="n">data</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">metadata</span> <span class="o">=</span> <span class="n">metadata</span></div>
+
+    <span class="k">def</span> <span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;WriteArgs(symbol=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">symbol</span><span class="si">}</span><span class="s2">, data_id=</span><span class="si">{</span><span class="nb">id</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">)</span><span class="si">}</span><span class="s2">, metadata=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">metadata</span><span class="si">}</span><span class="s2">)&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__iter__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">yield</span> <span class="bp">self</span><span class="o">.</span><span class="n">symbol</span>
+        <span class="k">yield</span> <span class="bp">self</span><span class="o">.</span><span class="n">data</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">metadata</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">yield</span> <span class="bp">self</span><span class="o">.</span><span class="n">metadata</span></div>
+
+
+<div class="viewcode-block" id="ReadRequest"><a class="viewcode-back" href="../../../library/arcticdb.version_store.library.ReadRequest.html#arcticdb.version_store.library.ReadRequest">[docs]</a><span class="k">class</span> <span class="nc">ReadRequest</span><span class="p">(</span><span class="n">NamedTuple</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;ReadRequest is designed to enable batching of read operations with an API that mirrors the singular ``read`` API.</span>
+<span class="sd">    Therefore, construction of this object is only required for batch read operations.</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    as_of: Optional[AsOf], default=none</span>
+<span class="sd">        See `read` method.</span>
+<span class="sd">    date_range: Optional[Tuple[Optional[Timestamp], Optional[Timestamp]]], default=none</span>
+<span class="sd">        See `read`method.</span>
+<span class="sd">    columns: Optional[List[str]], default=none</span>
+<span class="sd">        See `read` method.</span>
+<span class="sd">    query_builder: Optional[Querybuilder], default=none</span>
+<span class="sd">        See `read` method.</span>
+
+<span class="sd">    See Also</span>
+<span class="sd">    --------</span>
+<span class="sd">    Library.read: For documentation on the parameters.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">symbol</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">as_of</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">AsOf</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">date_range</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="n">Optional</span><span class="p">[</span><span class="n">Timestamp</span><span class="p">],</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Timestamp</span><span class="p">]]]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">columns</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">query_builder</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">QueryBuilder</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span></div>
+
+
+<div class="viewcode-block" id="ReadInfoRequest"><a class="viewcode-back" href="../../../library/arcticdb.version_store.library.ReadInfoRequest.html#arcticdb.version_store.library.ReadInfoRequest">[docs]</a><span class="k">class</span> <span class="nc">ReadInfoRequest</span><span class="p">(</span><span class="n">NamedTuple</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;ReadInfoRequest is useful for batch methods like read_metadata_batch and get_description_batch, where we</span>
+<span class="sd">    only need to specify the symbol and the version information. Therefore, construction of this object is </span>
+<span class="sd">    only required for these batch operations.</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    symbol : str</span>
+<span class="sd">        See `read_metadata` method.</span>
+<span class="sd">    as_of: Optional[AsOf], default=none</span>
+<span class="sd">        See `read_metadata` method.</span>
+
+<span class="sd">    See Also</span>
+<span class="sd">    --------</span>
+<span class="sd">    Library.read: For documentation on the parameters.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">symbol</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">as_of</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">AsOf</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span></div>
+
+<span class="k">class</span> <span class="nc">StagedDataFinalizeMethod</span><span class="p">(</span><span class="n">Enum</span><span class="p">):</span>
+    <span class="n">WRITE</span> <span class="o">=</span> <span class="n">auto</span><span class="p">()</span>
+    <span class="n">APPEND</span> <span class="o">=</span> <span class="n">auto</span><span class="p">()</span>
+
+
+<div class="viewcode-block" id="Library"><a class="viewcode-back" href="../../../library/arcticdb.version_store.library.Library.html#arcticdb.version_store.library.Library">[docs]</a><span class="k">class</span> <span class="nc">Library</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    The main interface exposing read/write functionality within a given Arctic instance.</span>
+
+<span class="sd">    Arctic libraries contain named symbols which are the atomic unit of data storage within Arctic. Symbols</span>
+<span class="sd">    contain data that in most cases resembles a DataFrame and are versioned such that all modifying</span>
+<span class="sd">    operations can be tracked and reverted.</span>
+
+<span class="sd">    Instances of this class provide a number of primitives to write, modify and remove symbols, as well as</span>
+<span class="sd">    also providing methods to manage library snapshots. For more information on snapshots please see the `snapshot`</span>
+<span class="sd">    method.</span>
+
+<span class="sd">    Arctic libraries support concurrent writes and reads to multiple symbols as well as concurrent reads to a single</span>
+<span class="sd">    symbol. However, concurrent writers to a single symbol are not supported other than for primitives that</span>
+<span class="sd">    explicitly state support for single-symbol concurrent writes.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+<div class="viewcode-block" id="Library.__init__"><a class="viewcode-back" href="../../../library/arcticdb.version_store.library.Library.html#arcticdb.version_store.library.Library.__init__">[docs]</a>    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">arctic_instance_description</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">nvs</span><span class="p">:</span> <span class="n">NativeVersionStore</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        arctic_instance_description</span>
+<span class="sd">            Human readable description of the Arctic instance to which this library belongs. Used for informational</span>
+<span class="sd">            purposes only.</span>
+<span class="sd">        nvs</span>
+<span class="sd">            The native version store that backs this library.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">arctic_instance_desc</span> <span class="o">=</span> <span class="n">arctic_instance_description</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_nvs</span> <span class="o">=</span> <span class="n">nvs</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_nvs</span><span class="o">.</span><span class="n">_normalizer</span><span class="o">.</span><span class="n">df</span><span class="o">.</span><span class="n">_skip_df_consolidation</span> <span class="o">=</span> <span class="kc">True</span></div>
+
+    <span class="k">def</span> <span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="s2">&quot;Library(</span><span class="si">%s</span><span class="s2">, path=</span><span class="si">%s</span><span class="s2">, storage=</span><span class="si">%s</span><span class="s2">)&quot;</span> <span class="o">%</span> <span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">arctic_instance_desc</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_nvs</span><span class="o">.</span><span class="n">_lib_cfg</span><span class="o">.</span><span class="n">lib_desc</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_nvs</span><span class="o">.</span><span class="n">get_backing_store</span><span class="p">(),</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span> <span class="fm">__getitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">symbol</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">VersionedItem</span><span class="p">:</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">symbol</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="fm">__contains__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">symbol</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">has_symbol</span><span class="p">(</span><span class="n">symbol</span><span class="p">)</span>
+
+<div class="viewcode-block" id="Library.write"><a class="viewcode-back" href="../../../library.html#arcticdb.version_store.library.Library.write">[docs]</a>    <span class="k">def</span> <span class="nf">write</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">symbol</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">data</span><span class="p">:</span> <span class="n">NormalizableType</span><span class="p">,</span>
+        <span class="n">metadata</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">prune_previous_versions</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">staged</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">validate_index</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">VersionedItem</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Write ``data`` to the specified ``symbol``. If ``symbol`` already exists then a new version will be created to</span>
+<span class="sd">        reference the newly written data. For more information on versions see the documentation for the `read`</span>
+<span class="sd">        primitive.</span>
+
+<span class="sd">        ``data`` must be of a format that can be normalised into Arctic&#39;s internal storage structure. Pandas</span>
+<span class="sd">        DataFrames, Pandas Series and Numpy NDArrays can all be normalised. Normalised data will be split along both the</span>
+<span class="sd">        columns and rows into segments. By default, a segment will contain 100,000 rows and 127 columns.</span>
+
+<span class="sd">        If this library has ``write_deduplication`` enabled then segments will be deduplicated against storage prior to</span>
+<span class="sd">        write to reduce required IO operations and storage requirements. Data will be effectively deduplicated for all</span>
+<span class="sd">        segments up until the first differing row when compared to storage. As a result, modifying the beginning</span>
+<span class="sd">        of ``data`` with respect to previously written versions may significantly reduce the effectiveness of</span>
+<span class="sd">        deduplication.</span>
+
+<span class="sd">        Note that `write` is not designed for multiple concurrent writers over a single symbol *unless the staged</span>
+<span class="sd">        keyword argument is set to True*. If ``staged`` is True, written segments will be staged and left in an</span>
+<span class="sd">        &quot;incomplete&quot; stage, unable to be read until they are finalized. This enables multiple</span>
+<span class="sd">        writers to a single symbol - all writing staged data at the same time - with one process able to later finalise</span>
+<span class="sd">        all staged data rendering the data readable by clients. To finalise staged data, see `finalize_staged_data`.</span>
+
+<span class="sd">        Note: ArcticDB will use the 0-th level index of the Pandas DataFrame for its on-disk index.</span>
+
+<span class="sd">        Any non-`DatetimeIndex` will converted into an internal `RowCount` index. That is, ArcticDB will assign each </span>
+<span class="sd">        row a monotonically increasing integer identifier and that will be used for the index. </span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        symbol : str</span>
+<span class="sd">            Symbol name. Limited to 255 characters. The following characters are not supported in symbols:</span>
+<span class="sd">            ``&quot;*&quot;, &quot;&amp;&quot;, &quot;&lt;&quot;, &quot;&gt;&quot;``</span>
+<span class="sd">        data : NormalizableType</span>
+<span class="sd">            Data to be written. To write non-normalizable data, use `write_pickle`.</span>
+<span class="sd">        metadata : Any, default=None</span>
+<span class="sd">            Optional metadata to persist along with the symbol.</span>
+<span class="sd">        prune_previous_versions : bool, default=True</span>
+<span class="sd">            Removes previous (non-snapshotted) versions from the database.</span>
+<span class="sd">        staged : bool, default=False</span>
+<span class="sd">            Whether to write to a staging area rather than immediately to the library.</span>
+<span class="sd">        validate_index: bool, default=False</span>
+<span class="sd">            If True, will verify that the index of `data` supports date range searches and update operations. This in effect tests that the data is sorted in ascending order. </span>
+<span class="sd">            ArcticDB relies on Pandas to detect if data is sorted - you can call DataFrame.index.is_monotonic_increasing on your input DataFrame to see if Pandas believes the </span>
+<span class="sd">            data to be sorted</span>
+
+<span class="sd">            Note that each unit of staged data must a) be datetime indexed and b) not overlap with any other unit of</span>
+<span class="sd">            staged data. Note that this will create symbols with Dynamic Schema enabled.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        VersionedItem</span>
+<span class="sd">            Structure containing metadata and version number of the written symbol in the store.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        ArcticUnsupportedDataTypeException</span>
+<span class="sd">            If ``data`` is not of NormalizableType.</span>
+<span class="sd">        UnsortedDataException</span>
+<span class="sd">            If data is unsorted, when validate_index is set to True.</span>
+
+<span class="sd">        Examples</span>
+<span class="sd">        --------</span>
+
+<span class="sd">        &gt;&gt;&gt; df = pd.DataFrame({&#39;column&#39;: [5,6,7]})</span>
+<span class="sd">        &gt;&gt;&gt; lib.write(&quot;symbol&quot;, df, metadata={&#39;my_dictionary&#39;: &#39;is_great&#39;})</span>
+<span class="sd">        &gt;&gt;&gt; lib.read(&quot;symbol&quot;).data</span>
+<span class="sd">           column</span>
+<span class="sd">        0       5</span>
+<span class="sd">        1       6</span>
+<span class="sd">        2       7</span>
+
+<span class="sd">        Staging data for later finalisation (enables concurrent writes):</span>
+
+<span class="sd">        &gt;&gt;&gt; df = pd.DataFrame({&#39;column&#39;: [5,6,7]}, index=pd.date_range(start=&#39;1/1/2000&#39;, periods=3))</span>
+<span class="sd">        &gt;&gt;&gt; lib.write(&quot;staged&quot;, df, staged=True)  # Multiple staged writes can occur in parallel</span>
+<span class="sd">        &gt;&gt;&gt; lib.finalize_staged_data(&quot;staged&quot;, StagedDataFinalizeMethod.WRITE)  # Must be run after all staged writes have completed</span>
+<span class="sd">        &gt;&gt;&gt; lib.read(&quot;staged&quot;).data  # Would return error if run before finalization</span>
+<span class="sd">                    column</span>
+<span class="sd">        2000-01-01       5</span>
+<span class="sd">        2000-01-02       6</span>
+<span class="sd">        2000-01-03       7</span>
+
+<span class="sd">        WritePayload objects can be unpacked and used as parameters:</span>
+
+<span class="sd">        &gt;&gt;&gt; w = WritePayload(&quot;symbol&quot;, df, metadata={&#39;the&#39;: &#39;metadata&#39;})</span>
+<span class="sd">        &gt;&gt;&gt; lib.write(*w, staged=True)</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">NORMALIZABLE_TYPES</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="n">ArcticUnsupportedDataTypeException</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;data is of a type that cannot be normalized. Consider using &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;write_pickle instead. type(data)=[</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">data</span><span class="p">)</span><span class="si">}</span><span class="s2">]&quot;</span>
+            <span class="p">)</span>
+
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_nvs</span><span class="o">.</span><span class="n">write</span><span class="p">(</span>
+            <span class="n">symbol</span><span class="o">=</span><span class="n">symbol</span><span class="p">,</span>
+            <span class="n">data</span><span class="o">=</span><span class="n">data</span><span class="p">,</span>
+            <span class="n">metadata</span><span class="o">=</span><span class="n">metadata</span><span class="p">,</span>
+            <span class="n">prune_previous_version</span><span class="o">=</span><span class="n">prune_previous_versions</span><span class="p">,</span>
+            <span class="n">pickle_on_failure</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+            <span class="n">parallel</span><span class="o">=</span><span class="n">staged</span><span class="p">,</span>
+            <span class="n">validate_index</span><span class="o">=</span><span class="n">validate_index</span><span class="p">,</span>
+        <span class="p">)</span></div>
+
+<div class="viewcode-block" id="Library.write_pickle"><a class="viewcode-back" href="../../../library.html#arcticdb.version_store.library.Library.write_pickle">[docs]</a>    <span class="k">def</span> <span class="nf">write_pickle</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">symbol</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">metadata</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">prune_previous_versions</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span> <span class="n">staged</span><span class="o">=</span><span class="kc">False</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">VersionedItem</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        See `write`. This method differs from `write` only in that ``data`` can be of any type that is serialisable via</span>
+<span class="sd">        the Pickle library. There are significant downsides to storing data in this way:</span>
+
+<span class="sd">        - Retrieval can only be done in bulk. Calls to `read` will not support `date_range`, `query_builder` or `columns`.</span>
+<span class="sd">        - The data cannot be updated or appended to via the update and append methods.</span>
+<span class="sd">        - Writes cannot be deduplicated in any way.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        symbol</span>
+<span class="sd">            See documentation on `write`.</span>
+<span class="sd">        data : `Any`</span>
+<span class="sd">            Data to be written.</span>
+<span class="sd">        metadata</span>
+<span class="sd">            See documentation on `write`.</span>
+<span class="sd">        prune_previous_versions</span>
+<span class="sd">            See documentation on `write`.</span>
+<span class="sd">        staged</span>
+<span class="sd">            See documentation on `write`.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        VersionedItem</span>
+<span class="sd">            See documentation on `write`.</span>
+
+<span class="sd">        Examples</span>
+<span class="sd">        --------</span>
+
+<span class="sd">        &gt;&gt;&gt; lib.write_pickle(&quot;symbol&quot;, [1,2,3])</span>
+<span class="sd">        &gt;&gt;&gt; lib.read(&quot;symbol&quot;).data</span>
+<span class="sd">        [1, 2, 3]</span>
+
+<span class="sd">        See Also</span>
+<span class="sd">        --------</span>
+<span class="sd">        write: For more detailed documentation.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_nvs</span><span class="o">.</span><span class="n">write</span><span class="p">(</span>
+            <span class="n">symbol</span><span class="o">=</span><span class="n">symbol</span><span class="p">,</span>
+            <span class="n">data</span><span class="o">=</span><span class="n">data</span><span class="p">,</span>
+            <span class="n">metadata</span><span class="o">=</span><span class="n">metadata</span><span class="p">,</span>
+            <span class="n">prune_previous_version</span><span class="o">=</span><span class="n">prune_previous_versions</span><span class="p">,</span>
+            <span class="n">pickle_on_failure</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="n">parallel</span><span class="o">=</span><span class="n">staged</span><span class="p">,</span>
+        <span class="p">)</span></div>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">_raise_if_duplicate_symbols_in_batch</span><span class="p">(</span><span class="n">batch</span><span class="p">):</span>
+        <span class="n">symbols</span> <span class="o">=</span> <span class="p">{</span><span class="n">p</span><span class="o">.</span><span class="n">symbol</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">batch</span><span class="p">}</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">symbols</span><span class="p">)</span> <span class="o">&lt;</span> <span class="nb">len</span><span class="p">(</span><span class="n">batch</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="n">ArcticDuplicateSymbolsInBatchException</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">_raise_if_unsupported_type_in_write_batch</span><span class="p">(</span><span class="n">payloads</span><span class="p">):</span>
+        <span class="n">bad_symbols</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">payloads</span><span class="p">:</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">p</span><span class="o">.</span><span class="n">data</span><span class="p">,</span> <span class="n">NORMALIZABLE_TYPES</span><span class="p">):</span>
+                <span class="n">bad_symbols</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">p</span><span class="o">.</span><span class="n">symbol</span><span class="p">,</span> <span class="nb">type</span><span class="p">(</span><span class="n">p</span><span class="o">.</span><span class="n">data</span><span class="p">)))</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">bad_symbols</span><span class="p">:</span>
+            <span class="k">return</span>
+
+        <span class="n">error_message</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="s2">&quot;payload contains some data of types that cannot be normalized. Consider using &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;write_batch_pickle instead. symbols with bad datatypes=</span><span class="si">{</span><span class="n">bad_symbols</span><span class="p">[:</span><span class="mi">5</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">bad_symbols</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">5</span><span class="p">:</span>
+            <span class="n">error_message</span> <span class="o">+=</span> <span class="sa">f</span><span class="s2">&quot; (and more)... </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">bad_symbols</span><span class="p">)</span><span class="si">}</span><span class="s2"> data in total have bad types.&quot;</span>
+        <span class="k">raise</span> <span class="n">ArcticUnsupportedDataTypeException</span><span class="p">(</span><span class="n">error_message</span><span class="p">)</span>
+
+<div class="viewcode-block" id="Library.write_batch"><a class="viewcode-back" href="../../../library.html#arcticdb.version_store.library.Library.write_batch">[docs]</a>    <span class="k">def</span> <span class="nf">write_batch</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">payloads</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">WritePayload</span><span class="p">],</span> <span class="n">prune_previous_versions</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span> <span class="n">staged</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">validate_index</span><span class="o">=</span><span class="kc">True</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">VersionedItem</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Write a batch of multiple symbols.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        payloads : `List[WritePayload]`</span>
+<span class="sd">            Symbols and their corresponding data. There must not be any duplicate symbols in `payload`.</span>
+<span class="sd">        prune_previous_versions: `bool`, default=True</span>
+<span class="sd">            See `write`.</span>
+<span class="sd">        staged: `bool`, default=False</span>
+<span class="sd">            See `write`.</span>
+<span class="sd">        validate_index: bool, default=False</span>
+<span class="sd">            If True, will verify for each entry in the batch hat the index of `data` supports date range searches and update operations. </span>
+<span class="sd">            This in effect tests that the data is sorted in ascending order. ArcticDB relies on Pandas to detect if data is sorted - </span>
+<span class="sd">            you can call DataFrame.index.is_monotonic_increasing on your input DataFrame to see if Pandas believes the data to be sorted</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        List[VersionedItem]</span>
+<span class="sd">            Structure containing metadata and version number of the written symbols in the store, in the</span>
+<span class="sd">            same order as `payload`.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        ArcticDuplicateSymbolsInBatchException</span>
+<span class="sd">            When duplicate symbols appear in payload.</span>
+<span class="sd">        ArcticUnsupportedDataTypeException</span>
+<span class="sd">            If data that is not of NormalizableType appears in any of the payloads.</span>
+<span class="sd">        UnsortedDataException</span>
+<span class="sd">            If data is unsorted, when validate_index is set to True.</span>
+
+<span class="sd">        See Also</span>
+<span class="sd">        --------</span>
+<span class="sd">        write: For more detailed documentation.</span>
+
+<span class="sd">        Examples</span>
+<span class="sd">        --------</span>
+
+<span class="sd">        Writing a simple batch:</span>
+
+<span class="sd">        &gt;&gt;&gt; df_1 = pd.DataFrame({&#39;column&#39;: [1,2,3]})</span>
+<span class="sd">        &gt;&gt;&gt; df_2 = pd.DataFrame({&#39;column&#39;: [4,5,6]})</span>
+<span class="sd">        &gt;&gt;&gt; payload_1 = WritePayload(&quot;symbol_1&quot;, df_1, metadata={&#39;the&#39;: &#39;metadata&#39;})</span>
+<span class="sd">        &gt;&gt;&gt; payload_2 = WritePayload(&quot;symbol_2&quot;, df_2)</span>
+<span class="sd">        &gt;&gt;&gt; items = lib.write_batch([payload_1, payload_2])</span>
+<span class="sd">        &gt;&gt;&gt; lib.read(&quot;symbol_1&quot;).data</span>
+<span class="sd">           column</span>
+<span class="sd">        0       1</span>
+<span class="sd">        1       2</span>
+<span class="sd">        2       3</span>
+<span class="sd">        &gt;&gt;&gt; lib.read(&quot;symbol_2&quot;).data</span>
+<span class="sd">           column</span>
+<span class="sd">        0       4</span>
+<span class="sd">        1       5</span>
+<span class="sd">        2       6</span>
+<span class="sd">        &gt;&gt;&gt; items[0].symbol, items[1].symbol</span>
+<span class="sd">        (&#39;symbol_1&#39;, &#39;symbol_2&#39;)</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_raise_if_duplicate_symbols_in_batch</span><span class="p">(</span><span class="n">payloads</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_raise_if_unsupported_type_in_write_batch</span><span class="p">(</span><span class="n">payloads</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_nvs</span><span class="o">.</span><span class="n">batch_write</span><span class="p">(</span>
+            <span class="p">[</span><span class="n">p</span><span class="o">.</span><span class="n">symbol</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">payloads</span><span class="p">],</span>
+            <span class="p">[</span><span class="n">p</span><span class="o">.</span><span class="n">data</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">payloads</span><span class="p">],</span>
+            <span class="p">[</span><span class="n">p</span><span class="o">.</span><span class="n">metadata</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">payloads</span><span class="p">],</span>
+            <span class="n">prune_previous_version</span><span class="o">=</span><span class="n">prune_previous_versions</span><span class="p">,</span>
+            <span class="n">pickle_on_failure</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+            <span class="n">parallel</span><span class="o">=</span><span class="n">staged</span><span class="p">,</span>
+            <span class="n">validate_index</span><span class="o">=</span><span class="n">validate_index</span><span class="p">,</span>
+        <span class="p">)</span></div>
+
+<div class="viewcode-block" id="Library.write_batch_pickle"><a class="viewcode-back" href="../../../library.html#arcticdb.version_store.library.Library.write_batch_pickle">[docs]</a>    <span class="k">def</span> <span class="nf">write_batch_pickle</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">payloads</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">WritePayload</span><span class="p">],</span> <span class="n">prune_previous_versions</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span> <span class="n">staged</span><span class="o">=</span><span class="kc">False</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">VersionedItem</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Write a batch of multiple symbols, pickling their data if necessary.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        payloads : `List[WritePayload]`</span>
+<span class="sd">            Symbols and their corresponding data. There must not be any duplicate symbols in `payload`.</span>
+<span class="sd">        prune_previous_versions: `bool`, default=True</span>
+<span class="sd">            See `write`.</span>
+<span class="sd">        staged: `bool`, default=False</span>
+<span class="sd">            See `write`.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        List[VersionedItem]</span>
+<span class="sd">            Structures containing metadata and version number of the written symbols in the store, in the</span>
+<span class="sd">            same order as `payload`.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        ArcticDuplicateSymbolsInBatchException</span>
+<span class="sd">            When duplicate symbols appear in payload.</span>
+
+<span class="sd">        See Also</span>
+<span class="sd">        --------</span>
+<span class="sd">        write: For more detailed documentation.</span>
+<span class="sd">        write_pickle: For information on the implications of providing data that needs to be pickled.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_raise_if_duplicate_symbols_in_batch</span><span class="p">(</span><span class="n">payloads</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_nvs</span><span class="o">.</span><span class="n">batch_write</span><span class="p">(</span>
+            <span class="p">[</span><span class="n">p</span><span class="o">.</span><span class="n">symbol</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">payloads</span><span class="p">],</span>
+            <span class="p">[</span><span class="n">p</span><span class="o">.</span><span class="n">data</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">payloads</span><span class="p">],</span>
+            <span class="p">[</span><span class="n">p</span><span class="o">.</span><span class="n">metadata</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">payloads</span><span class="p">],</span>
+            <span class="n">prune_previous_version</span><span class="o">=</span><span class="n">prune_previous_versions</span><span class="p">,</span>
+            <span class="n">pickle_on_failure</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="n">parallel</span><span class="o">=</span><span class="n">staged</span><span class="p">,</span>
+        <span class="p">)</span></div>
+
+<div class="viewcode-block" id="Library.append"><a class="viewcode-back" href="../../../library.html#arcticdb.version_store.library.Library.append">[docs]</a>    <span class="k">def</span> <span class="nf">append</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">symbol</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">data</span><span class="p">:</span> <span class="n">NormalizableType</span><span class="p">,</span>
+        <span class="n">metadata</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">prune_previous_versions</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">validate_index</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">VersionedItem</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Appends the given data to the existing, stored data. Append always appends along the index. A new version will</span>
+<span class="sd">        be created to reference the newly-appended data. Append only accepts data for which the index of the first </span>
+<span class="sd">        row is equal to or greater than the index of the last row in the existing data.</span>
+
+<span class="sd">        Appends containing differing column sets to the existing data are only possible if the library has been</span>
+<span class="sd">        configured to support dynamic schemas.</span>
+
+<span class="sd">        Note that `append` is not designed for multiple concurrent writers over a single symbol.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        symbol</span>
+<span class="sd">            Symbol name.</span>
+<span class="sd">        data</span>
+<span class="sd">            Data to be written.</span>
+<span class="sd">        metadata</span>
+<span class="sd">            Optional metadata to persist along with the new symbol version. Note that the metadata is</span>
+<span class="sd">            not combined in any way with the metadata stored in the previous version.</span>
+<span class="sd">        prune_previous_versions</span>
+<span class="sd">            Removes previous (non-snapshotted) versions from the database when True.</span>
+<span class="sd">        validate_index: bool, default=False</span>
+<span class="sd">            If True, will verify that resulting symbol will support date range searches and update operations. This in effect tests that the previous version of the </span>
+<span class="sd">            data and `data` are both sorted in ascending order. ArcticDB relies on Pandas to detect if data is sorted - you can call DataFrame.index.is_monotonic_increasing </span>
+<span class="sd">            on your input DataFrame to see if Pandas believes the data to be sorted</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        VersionedItem</span>
+<span class="sd">            Structure containing metadata and version number of the written symbol in the store.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        UnsortedDataException</span>
+<span class="sd">            If data is unsorted, when validate_index is set to True.</span>
+
+<span class="sd">        Examples</span>
+<span class="sd">        --------</span>
+
+<span class="sd">        &gt;&gt;&gt; df = pd.DataFrame(</span>
+<span class="sd">        ...    {&#39;column&#39;: [1,2,3]},</span>
+<span class="sd">        ...    index=pd.date_range(start=&#39;1/1/2018&#39;, end=&#39;1/03/2018&#39;)</span>
+<span class="sd">        ... )</span>
+<span class="sd">        &gt;&gt;&gt; df</span>
+<span class="sd">                    column</span>
+<span class="sd">        2018-01-01       1</span>
+<span class="sd">        2018-01-02       2</span>
+<span class="sd">        2018-01-03       3</span>
+<span class="sd">        &gt;&gt;&gt; lib.write(&quot;symbol&quot;, df)</span>
+<span class="sd">        &gt;&gt;&gt; to_append_df = pd.DataFrame(</span>
+<span class="sd">        ...    {&#39;column&#39;: [4,5,6]},</span>
+<span class="sd">        ...    index=pd.date_range(start=&#39;1/4/2018&#39;, end=&#39;1/06/2018&#39;)</span>
+<span class="sd">        ... )</span>
+<span class="sd">        &gt;&gt;&gt; to_append_df</span>
+<span class="sd">                    column</span>
+<span class="sd">        2018-01-04       4</span>
+<span class="sd">        2018-01-05       5</span>
+<span class="sd">        2018-01-06       6</span>
+<span class="sd">        &gt;&gt;&gt; lib.append(&quot;symbol&quot;, to_append_df)</span>
+<span class="sd">        &gt;&gt;&gt; lib.read(&quot;symbol&quot;).data</span>
+<span class="sd">                    column</span>
+<span class="sd">        2018-01-01       1</span>
+<span class="sd">        2018-01-02       2</span>
+<span class="sd">        2018-01-03       3</span>
+<span class="sd">        2018-01-04       4</span>
+<span class="sd">        2018-01-05       5</span>
+<span class="sd">        2018-01-06       6</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_nvs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+            <span class="n">symbol</span><span class="o">=</span><span class="n">symbol</span><span class="p">,</span>
+            <span class="n">dataframe</span><span class="o">=</span><span class="n">data</span><span class="p">,</span>
+            <span class="n">metadata</span><span class="o">=</span><span class="n">metadata</span><span class="p">,</span>
+            <span class="n">prune_previous_version</span><span class="o">=</span><span class="n">prune_previous_versions</span><span class="p">,</span>
+            <span class="n">validate_index</span><span class="o">=</span><span class="n">validate_index</span><span class="p">,</span>
+        <span class="p">)</span></div>
+
+<div class="viewcode-block" id="Library.update"><a class="viewcode-back" href="../../../library.html#arcticdb.version_store.library.Library.update">[docs]</a>    <span class="k">def</span> <span class="nf">update</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">symbol</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">data</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">,</span> <span class="n">pd</span><span class="o">.</span><span class="n">Series</span><span class="p">],</span>
+        <span class="n">metadata</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">upsert</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">date_range</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="n">Optional</span><span class="p">[</span><span class="n">Timestamp</span><span class="p">],</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Timestamp</span><span class="p">]]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">prune_previous_versions</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">VersionedItem</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Overwrites existing symbol data with the contents of ``data``. The entire range between the first and last index</span>
+<span class="sd">        entry in ``data`` is replaced in its entirety with the contents of ``data``, adding additional index entries if</span>
+<span class="sd">        required. `update` only operates over the outermost index level - this means secondary index rows will be</span>
+<span class="sd">        removed if not contained in ``data``.</span>
+
+<span class="sd">        Both the existing symbol version and ``data`` must be timeseries-indexed.</span>
+
+<span class="sd">        Note that `update` is not designed for multiple concurrent writers over a single symbol.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        symbol</span>
+<span class="sd">            Symbol name.</span>
+<span class="sd">        data</span>
+<span class="sd">            Timeseries indexed data to use for the update.</span>
+<span class="sd">        metadata</span>
+<span class="sd">            Metadata to persist along with the new symbol version.</span>
+<span class="sd">        upsert: bool, default=False</span>
+<span class="sd">            If True, will write the data even if the symbol does not exist.</span>
+<span class="sd">        date_range: `Tuple[Optional[Timestamp], Optional[Timestamp]]`, default=None</span>
+<span class="sd">            If a range is specified, it will delete the stored value within the range and overwrite it with the data in</span>
+<span class="sd">            ``data``. This allows the user to update with data that might only be a subset of the stored value. Leaving</span>
+<span class="sd">            any part of the tuple as None leaves that part of the range open ended. Only data with date_range will be</span>
+<span class="sd">            modified, even if ``data`` covers a wider date range.</span>
+<span class="sd">        prune_previous_versions, default=False</span>
+<span class="sd">            Removes previous (non-snapshotted) versions from the database when True.</span>
+
+<span class="sd">        Examples</span>
+<span class="sd">        --------</span>
+
+<span class="sd">        &gt;&gt;&gt; df = pd.DataFrame(</span>
+<span class="sd">        ...    {&#39;column&#39;: [1,2,3,4]},</span>
+<span class="sd">        ...    index=pd.date_range(start=&#39;1/1/2018&#39;, end=&#39;1/4/2018&#39;)</span>
+<span class="sd">        ... )</span>
+<span class="sd">        &gt;&gt;&gt; df</span>
+<span class="sd">                    column</span>
+<span class="sd">        2018-01-01       1</span>
+<span class="sd">        2018-01-02       2</span>
+<span class="sd">        2018-01-03       3</span>
+<span class="sd">        2018-01-04       4</span>
+<span class="sd">        &gt;&gt;&gt; lib.write(&quot;symbol&quot;, df)</span>
+<span class="sd">        &gt;&gt;&gt; update_df = pd.DataFrame(</span>
+<span class="sd">        ...    {&#39;column&#39;: [400, 40]},</span>
+<span class="sd">        ...    index=pd.date_range(start=&#39;1/1/2018&#39;, end=&#39;1/3/2018&#39;, freq=&#39;2D&#39;)</span>
+<span class="sd">        ... )</span>
+<span class="sd">        &gt;&gt;&gt; update_df</span>
+<span class="sd">                    column</span>
+<span class="sd">        2018-01-01     400</span>
+<span class="sd">        2018-01-03      40</span>
+<span class="sd">        &gt;&gt;&gt; lib.update(&quot;symbol&quot;, update_df)</span>
+<span class="sd">        &gt;&gt;&gt; # Note that 2018-01-02 is gone despite not being in update_df</span>
+<span class="sd">        &gt;&gt;&gt; lib.read(&quot;symbol&quot;).data</span>
+<span class="sd">                    column</span>
+<span class="sd">        2018-01-01     400</span>
+<span class="sd">        2018-01-03      40</span>
+<span class="sd">        2018-01-04       4</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_nvs</span><span class="o">.</span><span class="n">update</span><span class="p">(</span>
+            <span class="n">symbol</span><span class="o">=</span><span class="n">symbol</span><span class="p">,</span>
+            <span class="n">data</span><span class="o">=</span><span class="n">data</span><span class="p">,</span>
+            <span class="n">metadata</span><span class="o">=</span><span class="n">metadata</span><span class="p">,</span>
+            <span class="n">upsert</span><span class="o">=</span><span class="n">upsert</span><span class="p">,</span>
+            <span class="n">date_range</span><span class="o">=</span><span class="n">date_range</span><span class="p">,</span>
+            <span class="n">prune_previous_version</span><span class="o">=</span><span class="n">prune_previous_versions</span><span class="p">,</span>
+        <span class="p">)</span></div>
+
+<div class="viewcode-block" id="Library.finalize_staged_data"><a class="viewcode-back" href="../../../library.html#arcticdb.version_store.library.Library.finalize_staged_data">[docs]</a>    <span class="k">def</span> <span class="nf">finalize_staged_data</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">symbol</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">mode</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">StagedDataFinalizeMethod</span><span class="p">]</span> <span class="o">=</span> <span class="n">StagedDataFinalizeMethod</span><span class="o">.</span><span class="n">WRITE</span>
+    <span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Finalises staged data, making it available for reads.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        symbol : `str`</span>
+<span class="sd">            Symbol to finalize data for.</span>
+
+<span class="sd">        mode : `StagedDataFinalizeMethod`, default=StagedDataFinalizeMethod.WRITE</span>
+<span class="sd">            Finalise mode. Valid options are WRITE or APPEND. Write collects the staged data and writes them to a</span>
+<span class="sd">            new timeseries. Append collects the staged data and appends them to the latest version.</span>
+
+<span class="sd">        See Also</span>
+<span class="sd">        --------</span>
+<span class="sd">        write</span>
+<span class="sd">            Documentation on the ``staged`` parameter explains the concept of staged data in more detail.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_nvs</span><span class="o">.</span><span class="n">compact_incomplete</span><span class="p">(</span><span class="n">symbol</span><span class="p">,</span> <span class="n">mode</span> <span class="o">==</span> <span class="n">StagedDataFinalizeMethod</span><span class="o">.</span><span class="n">APPEND</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="Library.sort_and_finalize_staged_data"><a class="viewcode-back" href="../../../library.html#arcticdb.version_store.library.Library.sort_and_finalize_staged_data">[docs]</a>    <span class="k">def</span> <span class="nf">sort_and_finalize_staged_data</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">symbol</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">mode</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">StagedDataFinalizeMethod</span><span class="p">]</span> <span class="o">=</span> <span class="n">StagedDataFinalizeMethod</span><span class="o">.</span><span class="n">WRITE</span>
+    <span class="p">):</span>
+
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        sort_merge will sort and finalize staged data. This differs from `finalize_staged_data` in that it </span>
+<span class="sd">        can support staged segments with interleaved time periods - the end result will be ordered. This requires </span>
+<span class="sd">        performing a full sort in memory so can be time consuming.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        symbol : `str`</span>
+<span class="sd">            Symbol to finalize data for.</span>
+
+<span class="sd">        mode : `StagedDataFinalizeMethod`, default=StagedDataFinalizeMethod.WRITE</span>
+<span class="sd">            Finalise mode. Valid options are WRITE or APPEND. Write collects the staged data and writes them to a</span>
+<span class="sd">            new timeseries. Append collects the staged data and appends them to the latest version.</span>
+
+<span class="sd">        See Also</span>
+<span class="sd">        --------</span>
+<span class="sd">        write</span>
+<span class="sd">            Documentation on the ``staged`` parameter explains the concept of staged data in more detail.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_nvs</span><span class="o">.</span><span class="n">version_store</span><span class="o">.</span><span class="n">sort_merge</span><span class="p">(</span><span class="n">symbol</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="n">mode</span> <span class="o">==</span> <span class="n">StagedDataFinalizeMethod</span><span class="o">.</span><span class="n">APPEND</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="Library.get_staged_symbols"><a class="viewcode-back" href="../../../library.html#arcticdb.version_store.library.Library.get_staged_symbols">[docs]</a>    <span class="k">def</span> <span class="nf">get_staged_symbols</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Returns all symbols with staged, unfinalized data.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        List[str]</span>
+<span class="sd">            Symbol names.</span>
+
+<span class="sd">        See Also</span>
+<span class="sd">        --------</span>
+<span class="sd">        write</span>
+<span class="sd">            Documentation on the ``staged`` parameter explains the concept of staged data in more detail.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_nvs</span><span class="o">.</span><span class="n">version_store</span><span class="o">.</span><span class="n">get_incomplete_symbols</span><span class="p">()</span></div>
+
+<div class="viewcode-block" id="Library.read"><a class="viewcode-back" href="../../../library.html#arcticdb.version_store.library.Library.read">[docs]</a>    <span class="k">def</span> <span class="nf">read</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">symbol</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">as_of</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">AsOf</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">date_range</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="n">Optional</span><span class="p">[</span><span class="n">Timestamp</span><span class="p">],</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Timestamp</span><span class="p">]]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">columns</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">query_builder</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">QueryBuilder</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">VersionedItem</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Read data for the named symbol.  Returns a VersionedItem object with a data and metadata element (as passed into</span>
+<span class="sd">        write).</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        symbol : str</span>
+<span class="sd">            Symbol name.</span>
+
+<span class="sd">        as_of : AsOf, default=None</span>
+<span class="sd">            Return the data as it was as of the point in time. ``None`` means that the latest version should be read. The</span>
+<span class="sd">            various types of this parameter mean:</span>
+<span class="sd">           - ``int``: specific version number</span>
+<span class="sd">           - ``str``: snapshot name which contains the version</span>
+<span class="sd">           - ``datetime.datetime`` : the version of the data that existed ``as_of`` the requested point in time</span>
+
+<span class="sd">        date_range: Tuple[Optional[Timestamp], Optional[Timestamp]], default=None</span>
+<span class="sd">            DateRange to restrict read data to.</span>
+
+<span class="sd">            Applicable only for time-indexed Pandas dataframes or series. Returns only the</span>
+<span class="sd">            part of the data that falls withing the given range (inclusive). None on either end leaves that part of the</span>
+<span class="sd">            range open-ended. Hence specifying ``(None, datetime(2025, 1, 1)`` declares that you wish to read all data up</span>
+<span class="sd">            to and including 20250101.</span>
+
+<span class="sd">        columns: List[str], default=None</span>
+<span class="sd">            Applicable only for Pandas data. Determines which columns to return data for.</span>
+
+<span class="sd">        query_builder: Optional[QueryBuilder], default=None</span>
+<span class="sd">            A QueryBuilder object to apply to the dataframe before it is returned. For more information see the</span>
+<span class="sd">            documentation for the QueryBuilder class (``from arcticdb import QueryBuilder; help(QueryBuilder)``).</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        VersionedItem object that contains a .data and .metadata element</span>
+
+<span class="sd">        Examples</span>
+<span class="sd">        --------</span>
+
+<span class="sd">        &gt;&gt;&gt; df = pd.DataFrame({&#39;column&#39;: [5,6,7]})</span>
+<span class="sd">        &gt;&gt;&gt; lib.write(&quot;symbol&quot;, df, metadata={&#39;my_dictionary&#39;: &#39;is_great&#39;})</span>
+<span class="sd">        &gt;&gt;&gt; lib.read(&quot;symbol&quot;).data</span>
+<span class="sd">           column</span>
+<span class="sd">        0       5</span>
+<span class="sd">        1       6</span>
+<span class="sd">        2       7</span>
+
+<span class="sd">        The default read behaviour is also available through subscripting:</span>
+
+<span class="sd">        &gt;&gt;&gt; lib[&quot;symbol&quot;].data</span>
+<span class="sd">           column</span>
+<span class="sd">        0       5</span>
+<span class="sd">        1       6</span>
+<span class="sd">        2       7</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_nvs</span><span class="o">.</span><span class="n">read</span><span class="p">(</span>
+            <span class="n">symbol</span><span class="o">=</span><span class="n">symbol</span><span class="p">,</span> <span class="n">as_of</span><span class="o">=</span><span class="n">as_of</span><span class="p">,</span> <span class="n">date_range</span><span class="o">=</span><span class="n">date_range</span><span class="p">,</span> <span class="n">columns</span><span class="o">=</span><span class="n">columns</span><span class="p">,</span> <span class="n">query_builder</span><span class="o">=</span><span class="n">query_builder</span>
+        <span class="p">)</span></div>
+
+<div class="viewcode-block" id="Library.read_batch"><a class="viewcode-back" href="../../../library.html#arcticdb.version_store.library.Library.read_batch">[docs]</a>    <span class="k">def</span> <span class="nf">read_batch</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">symbols</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">ReadRequest</span><span class="p">]],</span> <span class="n">query_builder</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">QueryBuilder</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">VersionedItem</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Reads multiple symbols.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        symbols : List[Union[str, ReadRequest]]</span>
+<span class="sd">            List of symbols to read.</span>
+
+<span class="sd">        query_builder: Optional[QueryBuilder], default=None</span>
+<span class="sd">            A single QueryBuilder to apply to all the dataframes before they are returned. If this argument is passed</span>
+<span class="sd">            then none of the ``symbols`` may have their own query_builder specified in their request.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        List[VersionedItem]</span>
+<span class="sd">            A list of the read results, whose i-th element corresponds to the i-th element of the ``symbols`` parameter.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        ArcticInvalidApiUsageException</span>
+<span class="sd">            If kwarg query_builder and per-symbol query builders both used.</span>
+
+<span class="sd">        Examples</span>
+<span class="sd">        --------</span>
+
+<span class="sd">        &gt;&gt;&gt; lib.write(&quot;s1&quot;, pd.DataFrame())</span>
+<span class="sd">        &gt;&gt;&gt; lib.write(&quot;s2&quot;, pd.DataFrame({&quot;col&quot;: [1, 2, 3]}))</span>
+<span class="sd">        &gt;&gt;&gt; lib.write(&quot;s2&quot;, pd.DataFrame(), prune_previous_versions=False)</span>
+<span class="sd">        &gt;&gt;&gt; lib.write(&quot;s3&quot;, pd.DataFrame())</span>
+<span class="sd">        &gt;&gt;&gt; batch = lib.read_batch([&quot;s1&quot;, ReadRequest(&quot;s2&quot;, as_of=0), &quot;s3&quot;])</span>
+<span class="sd">        &gt;&gt;&gt; batch[0].data.empty</span>
+<span class="sd">        True</span>
+<span class="sd">        &gt;&gt;&gt; batch[1].data.empty</span>
+<span class="sd">        False</span>
+
+<span class="sd">        See Also</span>
+<span class="sd">        --------</span>
+<span class="sd">        read</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">symbol_strings</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">as_ofs</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">date_ranges</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">columns</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">query_builders</span> <span class="o">=</span> <span class="p">[]</span>
+
+        <span class="k">def</span> <span class="nf">handle_read_request</span><span class="p">(</span><span class="n">s_</span><span class="p">):</span>
+            <span class="n">symbol_strings</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">s_</span><span class="o">.</span><span class="n">symbol</span><span class="p">)</span>
+            <span class="n">as_ofs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">s_</span><span class="o">.</span><span class="n">as_of</span><span class="p">)</span>
+            <span class="n">date_ranges</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">s_</span><span class="o">.</span><span class="n">date_range</span><span class="p">)</span>
+            <span class="n">columns</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">s_</span><span class="o">.</span><span class="n">columns</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">s_</span><span class="o">.</span><span class="n">query_builder</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">query_builder</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="n">ArcticInvalidApiUsageException</span><span class="p">(</span>
+                    <span class="s2">&quot;kwarg query_builder and per-symbol query builders cannot &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;both be used but </span><span class="si">{</span><span class="n">s_</span><span class="si">}</span><span class="s2"> had its own query_builder specified.&quot;</span>
+                <span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">query_builders</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">s_</span><span class="o">.</span><span class="n">query_builder</span><span class="p">)</span>
+
+        <span class="k">def</span> <span class="nf">handle_symbol</span><span class="p">(</span><span class="n">s_</span><span class="p">):</span>
+            <span class="n">symbol_strings</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">s_</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">l_</span> <span class="ow">in</span> <span class="p">(</span><span class="n">as_ofs</span><span class="p">,</span> <span class="n">date_ranges</span><span class="p">,</span> <span class="n">columns</span><span class="p">,</span> <span class="n">query_builders</span><span class="p">):</span>
+                <span class="n">l_</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="kc">None</span><span class="p">)</span>
+
+        <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">symbols</span><span class="p">:</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">s</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+                <span class="n">handle_symbol</span><span class="p">(</span><span class="n">s</span><span class="p">)</span>
+            <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">s</span><span class="p">,</span> <span class="n">ReadRequest</span><span class="p">):</span>
+                <span class="n">handle_read_request</span><span class="p">(</span><span class="n">s</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="n">ArcticInvalidApiUsageException</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;Unsupported item in the symbols argument s=[</span><span class="si">{</span><span class="n">s</span><span class="si">}</span><span class="s2">] type(s)=[</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">s</span><span class="p">)</span><span class="si">}</span><span class="s2">]. Only [str] and [ReadRequest] are supported.&quot;</span>
+                <span class="p">)</span>
+
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_nvs</span><span class="o">.</span><span class="n">_batch_read_to_versioned_items</span><span class="p">(</span>
+            <span class="n">symbol_strings</span><span class="p">,</span> <span class="n">as_ofs</span><span class="p">,</span> <span class="n">date_ranges</span><span class="p">,</span> <span class="n">columns</span><span class="p">,</span> <span class="n">query_builder</span> <span class="ow">or</span> <span class="n">query_builders</span>
+        <span class="p">)</span></div>
+
+<div class="viewcode-block" id="Library.read_metadata"><a class="viewcode-back" href="../../../library.html#arcticdb.version_store.library.Library.read_metadata">[docs]</a>    <span class="k">def</span> <span class="nf">read_metadata</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">symbol</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">as_of</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">AsOf</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">VersionedItem</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Return the metadata saved for a symbol.  This method is faster than read as it only loads the metadata, not the</span>
+<span class="sd">        data itself.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        symbol</span>
+<span class="sd">            Symbol name</span>
+<span class="sd">        as_of : AsOf, default=None</span>
+<span class="sd">            Return the metadata as it was as of the point in time. See documentation on `read` for documentation on</span>
+<span class="sd">            the different forms this parameter can take.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        VersionedItem</span>
+<span class="sd">            Structure containing metadata and version number of the affected symbol in the store. The data attribute</span>
+<span class="sd">            will be None.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_nvs</span><span class="o">.</span><span class="n">read_metadata</span><span class="p">(</span><span class="n">symbol</span><span class="p">,</span> <span class="n">as_of</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="Library.read_metadata_batch"><a class="viewcode-back" href="../../../library.html#arcticdb.version_store.library.Library.read_metadata_batch">[docs]</a>    <span class="k">def</span> <span class="nf">read_metadata_batch</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">symbols</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">ReadInfoRequest</span><span class="p">]]</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">VersionedItem</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Reads the metadata of multiple symbols.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        symbols : List[Union[str, ReadInfoRequest]]</span>
+<span class="sd">            List of symbols to read.</span>
+<span class="sd">        </span>
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        List[VersionedItem]</span>
+<span class="sd">            A list of the read results, whose i-th element corresponds to the i-th element of the ``symbols`` parameter.</span>
+<span class="sd">            A VersionedItem object with the metadata field set as None will be returned if the requested version of the </span>
+<span class="sd">                symbol exists but there is no metadata</span>
+<span class="sd">            A None object will be returned if the requested version of the symbol does not exist</span>
+<span class="sd">        </span>
+<span class="sd">        See Also</span>
+<span class="sd">        --------</span>
+<span class="sd">        read_metadata</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">symbol_strings</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">as_ofs</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">def</span> <span class="nf">handle_read_request</span><span class="p">(</span><span class="n">s_</span><span class="p">):</span>
+            <span class="n">symbol_strings</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">s_</span><span class="o">.</span><span class="n">symbol</span><span class="p">)</span>
+            <span class="n">as_ofs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">s_</span><span class="o">.</span><span class="n">as_of</span><span class="p">)</span>
+
+        <span class="k">def</span> <span class="nf">handle_symbol</span><span class="p">(</span><span class="n">s_</span><span class="p">):</span>
+            <span class="n">symbol_strings</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">s_</span><span class="p">)</span>
+            <span class="n">as_ofs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="kc">None</span><span class="p">)</span>
+
+        <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">symbols</span><span class="p">:</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">s</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+                <span class="n">handle_symbol</span><span class="p">(</span><span class="n">s</span><span class="p">)</span>
+            <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">s</span><span class="p">,</span> <span class="n">ReadInfoRequest</span><span class="p">):</span>
+                <span class="n">handle_read_request</span><span class="p">(</span><span class="n">s</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="n">ArcticInvalidApiUsageException</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;Invalid symbol type s=[</span><span class="si">{</span><span class="n">s</span><span class="si">}</span><span class="s2">] type(s)=[</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">s</span><span class="p">)</span><span class="si">}</span><span class="s2">]. Only [str] and [ReadInfoRequest] are supported.&quot;</span>
+                <span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_nvs</span><span class="o">.</span><span class="n">_batch_read_meta_to_versioned_items</span><span class="p">(</span><span class="n">symbol_strings</span><span class="p">,</span> <span class="n">as_ofs</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="Library.write_metadata"><a class="viewcode-back" href="../../../library.html#arcticdb.version_store.library.Library.write_metadata">[docs]</a>    <span class="k">def</span> <span class="nf">write_metadata</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">symbol</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">metadata</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">VersionedItem</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Write metadata under the specified symbol name to this library. The data will remain unchanged.</span>
+<span class="sd">        A new version will be created.</span>
+
+<span class="sd">        If the symbol is missing, it causes a write with empty data (None, pickled, can&#39;t append) and the supplied</span>
+<span class="sd">        metadata.</span>
+
+<span class="sd">        This method should be faster than `write` as it involves no data segment read/write operations.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        symbol</span>
+<span class="sd">            Symbol name for the item</span>
+<span class="sd">        metadata</span>
+<span class="sd">            Metadata to persist along with the symbol</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        VersionedItem</span>
+<span class="sd">            Structure containing metadata and version number of the affected symbol in the store.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_nvs</span><span class="o">.</span><span class="n">write_metadata</span><span class="p">(</span><span class="n">symbol</span><span class="p">,</span> <span class="n">metadata</span><span class="p">,</span> <span class="n">prune_previous_version</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="Library.snapshot"><a class="viewcode-back" href="../../../library.html#arcticdb.version_store.library.Library.snapshot">[docs]</a>    <span class="k">def</span> <span class="nf">snapshot</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">snapshot_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">metadata</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">skip_symbols</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">versions</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Creates a named snapshot of the data within a library.</span>
+
+<span class="sd">        By default, the latest version of every symbol that has not been deleted will be contained within the snapshot.</span>
+<span class="sd">        You can change this behaviour with either ``versions`` (an allow-list) or with ``skip_symbols`` (a deny-list).</span>
+<span class="sd">        Concurrent writes with prune previous versions set while the snapshot is being taken can potentially lead to</span>
+<span class="sd">        corruption of the affected symbols in the snapshot.</span>
+
+<span class="sd">        The symbols and versions contained within the snapshot will persist regardless of new symbols and versions</span>
+<span class="sd">        being written to the library afterwards. If a version or symbol referenced in a snapshot is deleted then the</span>
+<span class="sd">        underlying data will be preserved to ensure the snapshot is still accessible. Only once all referencing</span>
+<span class="sd">        snapshots have been removed will the underlying data be removed as well.</span>
+
+<span class="sd">        At most one of ``skip_symbols`` and ``versions`` may be truthy.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        snapshot_name</span>
+<span class="sd">            Name of the snapshot.</span>
+<span class="sd">        metadata : Any, default=None</span>
+<span class="sd">            Optional metadata to persist along with the snapshot.</span>
+<span class="sd">        skip_symbols : List[str], default=None</span>
+<span class="sd">            Optional symbols to be excluded from the snapshot.</span>
+<span class="sd">        versions: Dict[str, int], default=None</span>
+<span class="sd">            Optional dictionary of versions of symbols to snapshot. For example `versions={&quot;a&quot;: 2, &quot;b&quot;: 3}` will</span>
+<span class="sd">            snapshot version 2 of symbol &quot;a&quot; and version 3 of symbol &quot;b&quot;.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        InternalException</span>
+<span class="sd">            If a snapshot already exists with ``snapshot_name``. You must explicitly delete the pre-existing snapshot.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_nvs</span><span class="o">.</span><span class="n">snapshot</span><span class="p">(</span><span class="n">snap_name</span><span class="o">=</span><span class="n">snapshot_name</span><span class="p">,</span> <span class="n">metadata</span><span class="o">=</span><span class="n">metadata</span><span class="p">,</span> <span class="n">skip_symbols</span><span class="o">=</span><span class="n">skip_symbols</span><span class="p">,</span> <span class="n">versions</span><span class="o">=</span><span class="n">versions</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="Library.delete"><a class="viewcode-back" href="../../../library.html#arcticdb.version_store.library.Library.delete">[docs]</a>    <span class="k">def</span> <span class="nf">delete</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">symbol</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">versions</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">Iterable</span><span class="p">[</span><span class="nb">int</span><span class="p">]]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Delete all versions of the symbol from the library, unless ``version`` is specified, in which case only those</span>
+<span class="sd">        versions are deleted.</span>
+
+<span class="sd">        This may not actually delete the underlying data if a snapshot still references the version. See `snapshot` for</span>
+<span class="sd">        more detail.</span>
+
+<span class="sd">        Note that this may require data to be removed from the underlying storage which can be slow.</span>
+
+<span class="sd">        If no symbol called ``symbol`` exists then this is a no-op. In particular this method does not raise in this case.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        symbol</span>
+<span class="sd">            Symbol to delete.</span>
+
+<span class="sd">        versions</span>
+<span class="sd">            Version or versions of symbol to delete. If ``None`` then all versions will be deleted.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">versions</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_nvs</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span><span class="n">symbol</span><span class="p">)</span>
+            <span class="k">return</span>
+
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">versions</span><span class="p">,</span> <span class="nb">int</span><span class="p">):</span>
+            <span class="n">versions</span> <span class="o">=</span> <span class="p">(</span><span class="n">versions</span><span class="p">,)</span>
+
+        <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">versions</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_nvs</span><span class="o">.</span><span class="n">delete_version</span><span class="p">(</span><span class="n">symbol</span><span class="p">,</span> <span class="n">v</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="Library.prune_previous_versions"><a class="viewcode-back" href="../../../library.html#arcticdb.version_store.library.Library.prune_previous_versions">[docs]</a>    <span class="k">def</span> <span class="nf">prune_previous_versions</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">symbol</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot; Removes all (non-snapshotted) versions from the database for the given symbol, except the latest.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        symbol : `str`</span>
+<span class="sd">            Symbol name to prune.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_nvs</span><span class="o">.</span><span class="n">prune_previous_versions</span><span class="p">(</span><span class="n">symbol</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="Library.delete_data_in_range"><a class="viewcode-back" href="../../../library.html#arcticdb.version_store.library.Library.delete_data_in_range">[docs]</a>    <span class="k">def</span> <span class="nf">delete_data_in_range</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">symbol</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">date_range</span><span class="p">:</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">Optional</span><span class="p">[</span><span class="n">Timestamp</span><span class="p">],</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Timestamp</span><span class="p">]]):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Delete data within the given date range, creating a new version of ``symbol``.</span>
+
+<span class="sd">        The existing symbol version must be timeseries-indexed.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        symbol</span>
+<span class="sd">            Symbol name.</span>
+
+<span class="sd">        date_range</span>
+<span class="sd">            The date range in which to delete data. Leaving any part of the tuple as None leaves that part of the range</span>
+<span class="sd">            open ended.</span>
+
+<span class="sd">        Examples</span>
+<span class="sd">        --------</span>
+<span class="sd">        &gt;&gt;&gt; df = pd.DataFrame({&quot;column&quot;: [5, 6, 7, 8]}, index=pd.date_range(start=&quot;1/1/2018&quot;, end=&quot;1/4/2018&quot;))</span>
+<span class="sd">        &gt;&gt;&gt; lib.write(&quot;symbol&quot;, df)</span>
+<span class="sd">        &gt;&gt;&gt; lib.delete_data_in_range(&quot;symbol&quot;, date_range=(datetime.datetime(2018, 1, 1), datetime.datetime(2018, 1, 2)))</span>
+<span class="sd">        &gt;&gt;&gt; lib[&quot;symbol&quot;].version</span>
+<span class="sd">        1</span>
+<span class="sd">        &gt;&gt;&gt; lib[&quot;symbol&quot;].data</span>
+<span class="sd">                        column</span>
+<span class="sd">        2018-01-03       7</span>
+<span class="sd">        2018-01-04       8</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">date_range</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">ArcticInvalidApiUsageException</span><span class="p">(</span><span class="s2">&quot;date_range must be given but was None&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_nvs</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span><span class="n">symbol</span><span class="p">,</span> <span class="n">date_range</span><span class="o">=</span><span class="n">date_range</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="Library.delete_snapshot"><a class="viewcode-back" href="../../../library.html#arcticdb.version_store.library.Library.delete_snapshot">[docs]</a>    <span class="k">def</span> <span class="nf">delete_snapshot</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">snapshot_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Delete a named snapshot. This may take time if the given snapshot is the last reference to the underlying</span>
+<span class="sd">        symbol(s) as the underlying data will be removed as well.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        snapshot_name</span>
+<span class="sd">            The snapshot name to delete.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        Exception</span>
+<span class="sd">            If the named snapshot does not exist.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_nvs</span><span class="o">.</span><span class="n">delete_snapshot</span><span class="p">(</span><span class="n">snapshot_name</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="Library.list_symbols"><a class="viewcode-back" href="../../../library.html#arcticdb.version_store.library.Library.list_symbols">[docs]</a>    <span class="k">def</span> <span class="nf">list_symbols</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">snapshot_name</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Return the symbols in this library.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        snapshot_name</span>
+<span class="sd">            Return the symbols available under the snapshot. If None then considers symbols that are live in the</span>
+<span class="sd">            library as of the current time.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        List[str]</span>
+<span class="sd">            Symbols in the library.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_nvs</span><span class="o">.</span><span class="n">list_symbols</span><span class="p">(</span><span class="n">snapshot</span><span class="o">=</span><span class="n">snapshot_name</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="Library.has_symbol"><a class="viewcode-back" href="../../../library.html#arcticdb.version_store.library.Library.has_symbol">[docs]</a>    <span class="k">def</span> <span class="nf">has_symbol</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">symbol</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">as_of</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">AsOf</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Whether this library contains the given symbol.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        symbol</span>
+<span class="sd">            Symbol name for the item</span>
+<span class="sd">        as_of : AsOf, default=None</span>
+<span class="sd">            Return the data as it was as_of the point in time. See `read` for more documentation. If absent then</span>
+<span class="sd">            considers symbols that are live in the library as of the current time.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        bool</span>
+<span class="sd">            True if the symbol is in the library, False otherwise.</span>
+
+<span class="sd">        Examples</span>
+<span class="sd">        --------</span>
+<span class="sd">        &gt;&gt;&gt; lib.write(&quot;symbol&quot;, pd.DataFrame())</span>
+<span class="sd">        &gt;&gt;&gt; lib.has_symbol(&quot;symbol&quot;)</span>
+<span class="sd">        True</span>
+<span class="sd">        &gt;&gt;&gt; lib.has_symbol(&quot;another_symbol&quot;)</span>
+<span class="sd">        False</span>
+
+<span class="sd">        The __contains__ operator also checks whether a symbol exists in this library as of now:</span>
+
+<span class="sd">        &gt;&gt;&gt; &quot;symbol&quot; in lib</span>
+<span class="sd">        True</span>
+<span class="sd">        &gt;&gt;&gt; &quot;another_symbol&quot; in lib</span>
+<span class="sd">        False</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_nvs</span><span class="o">.</span><span class="n">has_symbol</span><span class="p">(</span><span class="n">symbol</span><span class="p">,</span> <span class="n">as_of</span><span class="o">=</span><span class="n">as_of</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="Library.list_snapshots"><a class="viewcode-back" href="../../../library.html#arcticdb.version_store.library.Library.list_snapshots">[docs]</a>    <span class="k">def</span> <span class="nf">list_snapshots</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        List the snapshots in the library.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        Dict[str, Any]</span>
+<span class="sd">            Snapshots in the library. Keys are snapshot names, values are metadata associated with that snapshot.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_nvs</span><span class="o">.</span><span class="n">list_snapshots</span><span class="p">()</span></div>
+
+<div class="viewcode-block" id="Library.list_versions"><a class="viewcode-back" href="../../../library.html#arcticdb.version_store.library.Library.list_versions">[docs]</a>    <span class="k">def</span> <span class="nf">list_versions</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">symbol</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">snapshot</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">latest_only</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">skip_snapshots</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="n">SymbolVersion</span><span class="p">,</span> <span class="n">VersionInfo</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Get the versions in this library, filtered by the passed in parameters.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        symbol</span>
+<span class="sd">            Symbol to return versions for.  If None returns versions across all symbols in the library.</span>
+<span class="sd">        snapshot</span>
+<span class="sd">            Only return the versions contained in the named snapshot.</span>
+<span class="sd">        latest_only : bool, default=False</span>
+<span class="sd">            Only include the latest version for each returned symbol.</span>
+<span class="sd">        skip_snapshots : bool, default=False</span>
+<span class="sd">            Don&#39;t populate version list with snapshot information. Can improve performance significantly if there are</span>
+<span class="sd">            many snapshots.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        Dict[SymbolVersion, VersionInfo]</span>
+<span class="sd">            Dictionary describing the version for each symbol-version pair in the library. Since symbol version is a</span>
+<span class="sd">            (named) tuple you can index in to the dictionary simply as shown in the examples below.</span>
+
+<span class="sd">        Examples</span>
+<span class="sd">        --------</span>
+<span class="sd">        &gt;&gt;&gt; df = pd.DataFrame()</span>
+<span class="sd">        &gt;&gt;&gt; lib.write(&quot;symbol&quot;, df, metadata=10)</span>
+<span class="sd">        &gt;&gt;&gt; lib.write(&quot;symbol&quot;, df, metadata=11, prune_previous_versions=False)</span>
+<span class="sd">        &gt;&gt;&gt; lib.snapshot(&quot;snapshot&quot;)</span>
+<span class="sd">        &gt;&gt;&gt; lib.write(&quot;symbol&quot;, df, metadata=12, prune_previous_versions=False)</span>
+<span class="sd">        &gt;&gt;&gt; lib.delete(&quot;symbol&quot;, versions=(1, 2))</span>
+<span class="sd">        &gt;&gt;&gt; versions = lib.list_versions(&quot;symbol&quot;)</span>
+<span class="sd">        &gt;&gt;&gt; versions[&quot;symbol&quot;, 1].deleted</span>
+<span class="sd">        True</span>
+<span class="sd">        &gt;&gt;&gt; versions[&quot;symbol&quot;, 1].snapshots</span>
+<span class="sd">        [&quot;my_snap&quot;]</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">versions</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_nvs</span><span class="o">.</span><span class="n">list_versions</span><span class="p">(</span>
+            <span class="n">symbol</span><span class="o">=</span><span class="n">symbol</span><span class="p">,</span>
+            <span class="n">snapshot</span><span class="o">=</span><span class="n">snapshot</span><span class="p">,</span>
+            <span class="n">latest_only</span><span class="o">=</span><span class="n">latest_only</span><span class="p">,</span>
+            <span class="n">iterate_on_failure</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+            <span class="n">skip_snapshots</span><span class="o">=</span><span class="n">skip_snapshots</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="n">SymbolVersion</span><span class="p">(</span><span class="n">v</span><span class="p">[</span><span class="s2">&quot;symbol&quot;</span><span class="p">],</span> <span class="n">v</span><span class="p">[</span><span class="s2">&quot;version&quot;</span><span class="p">]):</span> <span class="n">VersionInfo</span><span class="p">(</span><span class="n">v</span><span class="p">[</span><span class="s2">&quot;date&quot;</span><span class="p">],</span> <span class="n">v</span><span class="p">[</span><span class="s2">&quot;deleted&quot;</span><span class="p">],</span> <span class="n">v</span><span class="p">[</span><span class="s2">&quot;snapshots&quot;</span><span class="p">])</span>
+            <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">versions</span>
+        <span class="p">}</span></div>
+
+<div class="viewcode-block" id="Library.head"><a class="viewcode-back" href="../../../library.html#arcticdb.version_store.library.Library.head">[docs]</a>    <span class="k">def</span> <span class="nf">head</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">symbol</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">n</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">5</span><span class="p">,</span> <span class="n">as_of</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">AsOf</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">columns</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">VersionedItem</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Read the first n rows of data for the named symbol. If n is negative, return all rows except the last n rows.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        symbol</span>
+<span class="sd">            Symbol name.</span>
+<span class="sd">        n : int, default=5</span>
+<span class="sd">            Number of rows to select if non-negative, otherwise number of rows to exclude.</span>
+<span class="sd">        as_of : AsOf, default=None</span>
+<span class="sd">            See documentation on `read`.</span>
+<span class="sd">        columns</span>
+<span class="sd">            See documentation on `read`.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        VersionedItem object that contains a .data and .metadata element.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_nvs</span><span class="o">.</span><span class="n">head</span><span class="p">(</span><span class="n">symbol</span><span class="o">=</span><span class="n">symbol</span><span class="p">,</span> <span class="n">n</span><span class="o">=</span><span class="n">n</span><span class="p">,</span> <span class="n">as_of</span><span class="o">=</span><span class="n">as_of</span><span class="p">,</span> <span class="n">columns</span><span class="o">=</span><span class="n">columns</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="Library.tail"><a class="viewcode-back" href="../../../library.html#arcticdb.version_store.library.Library.tail">[docs]</a>    <span class="k">def</span> <span class="nf">tail</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">symbol</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">n</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">5</span><span class="p">,</span> <span class="n">as_of</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">columns</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">VersionedItem</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Read the last n rows of data for the named symbol. If n is negative, return all rows except the first n rows.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        symbol</span>
+<span class="sd">            Symbol name.</span>
+<span class="sd">        n : int, default=5</span>
+<span class="sd">            Number of rows to select if non-negative, otherwise number of rows to exclude.</span>
+<span class="sd">        as_of : AsOf, default=None</span>
+<span class="sd">            See documentation on `read`.</span>
+<span class="sd">        columns</span>
+<span class="sd">            See documentation on `read`.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        VersionedItem object that contains a .data and .metadata element.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_nvs</span><span class="o">.</span><span class="n">tail</span><span class="p">(</span><span class="n">symbol</span><span class="o">=</span><span class="n">symbol</span><span class="p">,</span> <span class="n">n</span><span class="o">=</span><span class="n">n</span><span class="p">,</span> <span class="n">as_of</span><span class="o">=</span><span class="n">as_of</span><span class="p">,</span> <span class="n">columns</span><span class="o">=</span><span class="n">columns</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="Library.get_description"><a class="viewcode-back" href="../../../library.html#arcticdb.version_store.library.Library.get_description">[docs]</a>    <span class="k">def</span> <span class="nf">get_description</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">symbol</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">as_of</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">AsOf</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">SymbolDescription</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Returns descriptive data for ``symbol``.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        symbol</span>
+<span class="sd">            Symbol name.</span>
+<span class="sd">        as_of : AsOf, default=None</span>
+<span class="sd">            See documentation on `read`.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        SymbolDescription</span>
+<span class="sd">            Named tuple containing the descriptive data.</span>
+
+<span class="sd">        See Also</span>
+<span class="sd">        --------</span>
+<span class="sd">        SymbolDescription</span>
+<span class="sd">            For documentation on each field.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">info</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_nvs</span><span class="o">.</span><span class="n">get_info</span><span class="p">(</span><span class="n">symbol</span><span class="p">,</span> <span class="n">as_of</span><span class="p">)</span>
+
+        <span class="n">last_update_time</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">to_datetime</span><span class="p">(</span><span class="n">info</span><span class="p">[</span><span class="s2">&quot;last_update&quot;</span><span class="p">])</span>
+        <span class="n">columns</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">NameWithDType</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="n">t</span><span class="p">)</span> <span class="k">for</span> <span class="n">n</span><span class="p">,</span> <span class="n">t</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">info</span><span class="p">[</span><span class="s2">&quot;col_names&quot;</span><span class="p">][</span><span class="s2">&quot;columns&quot;</span><span class="p">],</span> <span class="n">info</span><span class="p">[</span><span class="s2">&quot;dtype&quot;</span><span class="p">]))</span>
+        <span class="n">index</span> <span class="o">=</span> <span class="n">NameWithDType</span><span class="p">(</span><span class="n">info</span><span class="p">[</span><span class="s2">&quot;col_names&quot;</span><span class="p">][</span><span class="s2">&quot;index&quot;</span><span class="p">],</span> <span class="n">info</span><span class="p">[</span><span class="s2">&quot;col_names&quot;</span><span class="p">][</span><span class="s2">&quot;index_dtype&quot;</span><span class="p">])</span>
+
+        <span class="k">return</span> <span class="n">SymbolDescription</span><span class="p">(</span>
+            <span class="n">columns</span><span class="o">=</span><span class="n">columns</span><span class="p">,</span>
+            <span class="n">index</span><span class="o">=</span><span class="n">index</span><span class="p">,</span>
+            <span class="n">row_count</span><span class="o">=</span><span class="n">info</span><span class="p">[</span><span class="s2">&quot;rows&quot;</span><span class="p">],</span>
+            <span class="n">last_update_time</span><span class="o">=</span><span class="n">last_update_time</span><span class="p">,</span>
+            <span class="n">index_type</span><span class="o">=</span><span class="n">info</span><span class="p">[</span><span class="s2">&quot;index_type&quot;</span><span class="p">],</span>
+            <span class="n">date_range</span><span class="o">=</span><span class="n">info</span><span class="p">[</span><span class="s2">&quot;date_range&quot;</span><span class="p">],</span>
+        <span class="p">)</span></div>
+
+<div class="viewcode-block" id="Library.get_description_batch"><a class="viewcode-back" href="../../../library.html#arcticdb.version_store.library.Library.get_description_batch">[docs]</a>    <span class="k">def</span> <span class="nf">get_description_batch</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">symbols</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">ReadInfoRequest</span><span class="p">]]</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">SymbolDescription</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Returns descriptive data for a list of ``symbols``.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        symbols : List[Union[str, ReadInfoRequest]]</span>
+<span class="sd">            List of symbols to read.</span>
+<span class="sd">            Params columns, date_range and query_builder from ReadInfoRequest are not used</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        List[SymbolDescription]</span>
+<span class="sd">            A list of the descriptive data, whose i-th element corresponds to the i-th element of the ``symbols`` parameter.</span>
+
+<span class="sd">        See Also</span>
+<span class="sd">        --------</span>
+<span class="sd">        SymbolDescription</span>
+<span class="sd">            For documentation on each field.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">symbol_strings</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">as_ofs</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">def</span> <span class="nf">handle_read_request</span><span class="p">(</span><span class="n">s</span><span class="p">):</span>
+            <span class="n">symbol_strings</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">s</span><span class="o">.</span><span class="n">symbol</span><span class="p">)</span>
+            <span class="n">as_ofs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">s</span><span class="o">.</span><span class="n">as_of</span><span class="p">)</span>
+
+        <span class="k">def</span> <span class="nf">handle_symbol</span><span class="p">(</span><span class="n">s</span><span class="p">):</span>
+            <span class="n">symbol_strings</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">s</span><span class="p">)</span>
+            <span class="n">as_ofs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="kc">None</span><span class="p">)</span>
+
+        <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">symbols</span><span class="p">:</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">s</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+                <span class="n">handle_symbol</span><span class="p">(</span><span class="n">s</span><span class="p">)</span>
+            <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">s</span><span class="p">,</span> <span class="n">ReadInfoRequest</span><span class="p">):</span>
+                <span class="n">handle_read_request</span><span class="p">(</span><span class="n">s</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="n">ArcticInvalidApiUsageException</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;Unsupported item in the symbols argument s=[</span><span class="si">{</span><span class="n">s</span><span class="si">}</span><span class="s2">] type(s)=[</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">s</span><span class="p">)</span><span class="si">}</span><span class="s2">]. Only [str] and [ReadInfoRequest] are supported.&quot;</span>
+                <span class="p">)</span>
+
+        <span class="n">infos</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_nvs</span><span class="o">.</span><span class="n">batch_get_info</span><span class="p">(</span><span class="n">symbol_strings</span><span class="p">,</span> <span class="n">as_ofs</span><span class="p">)</span>
+        <span class="n">list_descriptions</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">info</span> <span class="ow">in</span> <span class="n">infos</span><span class="p">:</span>
+            <span class="n">last_update_time</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">to_datetime</span><span class="p">(</span><span class="n">info</span><span class="p">[</span><span class="s2">&quot;last_update&quot;</span><span class="p">])</span>
+            <span class="n">columns</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">NameWithDType</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="n">t</span><span class="p">)</span> <span class="k">for</span> <span class="n">n</span><span class="p">,</span> <span class="n">t</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">info</span><span class="p">[</span><span class="s2">&quot;col_names&quot;</span><span class="p">][</span><span class="s2">&quot;columns&quot;</span><span class="p">],</span> <span class="n">info</span><span class="p">[</span><span class="s2">&quot;dtype&quot;</span><span class="p">]))</span>
+            <span class="n">index</span> <span class="o">=</span> <span class="n">NameWithDType</span><span class="p">(</span><span class="n">info</span><span class="p">[</span><span class="s2">&quot;col_names&quot;</span><span class="p">][</span><span class="s2">&quot;index&quot;</span><span class="p">],</span> <span class="n">info</span><span class="p">[</span><span class="s2">&quot;col_names&quot;</span><span class="p">][</span><span class="s2">&quot;index_dtype&quot;</span><span class="p">])</span>
+
+            <span class="n">list_descriptions</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                <span class="n">SymbolDescription</span><span class="p">(</span>
+                    <span class="n">columns</span><span class="o">=</span><span class="n">columns</span><span class="p">,</span>
+                    <span class="n">index</span><span class="o">=</span><span class="n">index</span><span class="p">,</span>
+                    <span class="n">row_count</span><span class="o">=</span><span class="n">info</span><span class="p">[</span><span class="s2">&quot;rows&quot;</span><span class="p">],</span>
+                    <span class="n">last_update_time</span><span class="o">=</span><span class="n">last_update_time</span><span class="p">,</span>
+                    <span class="n">index_type</span><span class="o">=</span><span class="n">info</span><span class="p">[</span><span class="s2">&quot;index_type&quot;</span><span class="p">],</span>
+                    <span class="n">date_range</span><span class="o">=</span><span class="n">info</span><span class="p">[</span><span class="s2">&quot;date_range&quot;</span><span class="p">],</span>
+                <span class="p">)</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="n">list_descriptions</span></div>
+
+<div class="viewcode-block" id="Library.reload_symbol_list"><a class="viewcode-back" href="../../../library.html#arcticdb.version_store.library.Library.reload_symbol_list">[docs]</a>    <span class="k">def</span> <span class="nf">reload_symbol_list</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Forces the symbol list cache to be reloaded</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_nvs</span><span class="o">.</span><span class="n">version_store</span><span class="o">.</span><span class="n">reload_symbol_list</span><span class="p">()</span></div>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">name</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;The name of this library.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_nvs</span><span class="o">.</span><span class="n">name</span><span class="p">()</span></div>
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2022, Man Group.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

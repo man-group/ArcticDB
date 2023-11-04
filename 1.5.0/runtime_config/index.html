@@ -1,0 +1,944 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+      
+        <link rel="prev" href="../lib_config/">
+      
+      
+        <link rel="next" href="../error_messages/">
+      
+      <link rel="icon" href="../images/FullWithBorder.png">
+      <meta name="generator" content="mkdocs-1.4.3, mkdocs-material-9.1.18">
+    
+    
+      
+        <title>Runtime Configuration - ArcticDB</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.26e3688c.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ecc896b0.min.css">
+      
+      
+
+    
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../stylesheets/extra.css">
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce((e,_)=>(e<<5)-e+_.charCodeAt(0),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="arcticdb" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#runtime-configuration" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="ArcticDB" class="md-header__button md-logo" aria-label="ArcticDB" data-md-component="logo">
+      
+  <img src="../images/FullWithBorder.png" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3V6m0 5h18v2H3v-2m0 5h18v2H3v-2Z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            ArcticDB
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Runtime Configuration
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+    
+    
+    
+      <label class="md-header__button md-icon" for="__search">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.516 6.516 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5Z"/></svg>
+      </label>
+      <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.516 6.516 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5Z"/></svg>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11h12Z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41Z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+    
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="ArcticDB" class="md-nav__button md-logo" aria-label="ArcticDB" data-md-component="logo">
+      
+  <img src="../images/FullWithBorder.png" alt="logo">
+
+    </a>
+    ArcticDB
+  </label>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+      
+
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        Getting Started
+      </a>
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+  
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+      
+      
+      
+        
+      
+      <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2" >
+      
+      
+      
+        <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+          Overview
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+        <label class="md-nav__title" for="__nav_2">
+          <span class="md-nav__icon md-icon"></span>
+          Overview
+        </label>
+        <ul class="md-nav__list" data-md-scrollfix>
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../history/" class="md-nav__link">
+        History of ArcticDB
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../faq/" class="md-nav__link">
+        Frequently Asked Questions
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../licensing/" class="md-nav__link">
+        Licensing FAQs
+      </a>
+    </li>
+  
+
+            
+          
+        </ul>
+      </nav>
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+  
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+      
+      
+      
+        
+      
+      <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3" >
+      
+      
+      
+        <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+          Tutorials
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+        <label class="md-nav__title" for="__nav_3">
+          <span class="md-nav__icon md-icon"></span>
+          Tutorials
+        </label>
+        <ul class="md-nav__list" data-md-scrollfix>
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tutorials/fundamentals/" class="md-nav__link">
+        Fundamentals
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tutorials/parallel_writes/" class="md-nav__link">
+        Parallel Writes
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tutorials/snapshots/" class="md-nav__link">
+        Snapshots
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tutorials/metadata/" class="md-nav__link">
+        Metadata
+      </a>
+    </li>
+  
+
+            
+          
+        </ul>
+      </nav>
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../lib_config/" class="md-nav__link">
+        Library Configuration
+      </a>
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+    
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          Runtime Configuration
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        Runtime Configuration
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#configuration-methods" class="md-nav__link">
+    Configuration methods
+  </a>
+  
+    <nav class="md-nav" aria-label="Configuration methods">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#in-code" class="md-nav__link">
+    In code
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#environment-variables" class="md-nav__link">
+    Environment variables
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#priority" class="md-nav__link">
+    Priority
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#reactivity" class="md-nav__link">
+    Reactivity
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#configuration-options" class="md-nav__link">
+    Configuration options
+  </a>
+  
+    <nav class="md-nav" aria-label="Configuration options">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#versionmapreloadinterval" class="md-nav__link">
+    VersionMap.ReloadInterval
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#symbollistmaxdelta" class="md-nav__link">
+    SymbolList.MaxDelta
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#s3storagedeletebatchsize" class="md-nav__link">
+    S3Storage.DeleteBatchSize
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#s3storageverifyssl" class="md-nav__link">
+    S3Storage.VerifySSL
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#versionstorenumcputhreads-and-versionstorenumiothreads" class="md-nav__link">
+    VersionStore.NumCPUThreads and VersionStore.NumIOThreads
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#logging-configuration" class="md-nav__link">
+    Logging configuration
+  </a>
+  
+    <nav class="md-nav" aria-label="Logging configuration">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#logging-destinations" class="md-nav__link">
+    Logging destinations
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../error_messages/" class="md-nav__link">
+        Error Messages
+      </a>
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+  
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+      
+      
+      
+        
+      
+      <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_7" >
+      
+      
+      
+        <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="0">
+          Technical Information
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+        <label class="md-nav__title" for="__nav_7">
+          <span class="md-nav__icon md-icon"></span>
+          Technical Information
+        </label>
+        <ul class="md-nav__list" data-md-scrollfix>
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../technical/architecture/" class="md-nav__link">
+        Architecture
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../technical/on_disk_storage/" class="md-nav__link">
+        On-Disk Storage
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../technical/migration/" class="md-nav__link">
+        Arctic Migration
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../technical/contributing/" class="md-nav__link">
+        Contributing
+      </a>
+    </li>
+  
+
+            
+          
+        </ul>
+      </nav>
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/index.html" class="md-nav__link">
+        Python API Reference
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#configuration-methods" class="md-nav__link">
+    Configuration methods
+  </a>
+  
+    <nav class="md-nav" aria-label="Configuration methods">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#in-code" class="md-nav__link">
+    In code
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#environment-variables" class="md-nav__link">
+    Environment variables
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#priority" class="md-nav__link">
+    Priority
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#reactivity" class="md-nav__link">
+    Reactivity
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#configuration-options" class="md-nav__link">
+    Configuration options
+  </a>
+  
+    <nav class="md-nav" aria-label="Configuration options">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#versionmapreloadinterval" class="md-nav__link">
+    VersionMap.ReloadInterval
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#symbollistmaxdelta" class="md-nav__link">
+    SymbolList.MaxDelta
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#s3storagedeletebatchsize" class="md-nav__link">
+    S3Storage.DeleteBatchSize
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#s3storageverifyssl" class="md-nav__link">
+    S3Storage.VerifySSL
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#versionstorenumcputhreads-and-versionstorenumiothreads" class="md-nav__link">
+    VersionStore.NumCPUThreads and VersionStore.NumIOThreads
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#logging-configuration" class="md-nav__link">
+    Logging configuration
+  </a>
+  
+    <nav class="md-nav" aria-label="Logging configuration">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#logging-destinations" class="md-nav__link">
+    Logging destinations
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+<h1 id="runtime-configuration">Runtime Configuration</h1>
+<p>ArcticDB features a variety of options that can be tuned at runtime. This page details the most commonly modified options, and how to configure them.</p>
+<h2 id="configuration-methods">Configuration methods</h2>
+<p>All of the integer options detailed on this page can be configured using the following two methods. All of the options listed on this page are integer options except for log levels, which will be explained in their own section.</p>
+<h3 id="in-code">In code</h3>
+<p>For integer options, the following code snippet demonstrates how to set values in code:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span> <span class="nn">arcticdb_ext</span> <span class="kn">import</span> <span class="n">set_config_int</span>
+<span class="n">set_config_int</span><span class="p">(</span><span class="n">setting</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
+</code></pre></div>
+<p>where <code>setting</code> is a string containing the setting name (e.g. <code>VersionMap.ReloadInterval</code>), and <code>value</code> is an int to set the option to.</p>
+<h3 id="environment-variables">Environment variables</h3>
+<p>For integer options, environment variables can be used to set options as follows:</p>
+<div class="highlight"><pre><span></span><code>ARCTICDB_&lt;setting&gt;_int=&lt;value&gt;
+</code></pre></div>
+<p>e.g. <code>ARCTICDB_VersionMap_ReloadInterval_int=0</code>. Note that <code>.</code> characters in setting names are replaced with underscores when setting them by environment variables.</p>
+<h3 id="priority">Priority</h3>
+<p>If both the environment variable is set, and <code>set_config_int</code> is called, then the latter takes priority.</p>
+<h3 id="reactivity">Reactivity</h3>
+<p>Configuration options are read once when the <code>Library</code> instance is created, and are not monitored after that point, so all options should be configured before the <code>Library</code> object is constructed.</p>
+<h2 id="configuration-options">Configuration options</h2>
+<h3 id="versionmapreloadinterval">VersionMap.ReloadInterval</h3>
+<p>ArcticDB library instances maintain a short-lived cache containing what it believes is the latest version for every encountered symbol.  This cache is invalidated after 5 seconds by default.</p>
+<p>As a result of this caching, it is theoretically possible for two independent library instances to disagree as to what the latest version of a symbol is for a short period of time.</p>
+<p>This caching is designed to reduce load on storage - if this is not a concern it can be safely disabled by setting this option to <code>0</code>.</p>
+<p>Other than this, there is no client-side caching in ArcticDB.</p>
+<h3 id="symbollistmaxdelta">SymbolList.MaxDelta</h3>
+<p>The <a href="/technical/on_disk_storage#symbol-list-caching">symbol list cache</a> is compacted when there are more than <code>SymbolList.MaxDelta</code> objects on disk in the symbol list cache.</p>
+<p>The default is 500.</p>
+<h3 id="s3storagedeletebatchsize">S3Storage.DeleteBatchSize</h3>
+<p>The S3 API supports the <code>DeleteObjects</code> method, whereby a single HTTP request can be used to delete multiple objects. This parameter can be used to control how many objects are requested to be deleted at a time.</p>
+<p>The default is 1000.</p>
+<h3 id="s3storageverifyssl">S3Storage.VerifySSL</h3>
+<p>Control whether the client should verify the SSL certificate of the storage. If set, this will override the library option set upon library creation.</p>
+<p>Values:
+* 0: Do not perform SSL verification.
+* 1: Perform SSL verification.</p>
+<h3 id="versionstorenumcputhreads-and-versionstorenumiothreads">VersionStore.NumCPUThreads and VersionStore.NumIOThreads</h3>
+<p>ArcticDB uses two threadpools in order to manage computational resources:</p>
+<ul>
+<li>CPU - used for CPU intensive tasks such as decompressing or filtering data</li>
+<li>IO - used to read/write data from/to the underlying storage</li>
+</ul>
+<p>By default, ArcticDB attempts to infer sensible sizes for these threadpools based on the number of cores<sup>*</sup> available on the host machine. The CPU threadpool size defaults to the number of cores available on the host machine, while the IO threadpool size defaults to x1.5 the CPU threadpool size. If these defaults are not suitable for a particular use case, these threadpool sizes can be set directly .</p>
+<p>If only <code>NumCPUThreads</code> is set, <code>NumIOThreads</code> will still default to x1.5 <code>NumCPUThreads</code>.</p>
+<p><sup>*</sup>On Linux machines, this core count takes cgroups into account. In particular, this means that CPU limits are respected in processes running in Kubernetes.</p>
+<h2 id="logging-configuration">Logging configuration</h2>
+<p>ArcticDB has multiple log streams, and the verbosity of each can be configured independently. 
+The available streams are visible in the <a href="https://github.com/man-group/ArcticDB/blob/master/python/arcticdb/log.py">source code</a>, although the most commonly useful logs are in:</p>
+<ul>
+<li><code>version</code> - contains information about versions being read, created, or destroyed, and traversal of the <a href="/technical/on_disk_storage#version-layer">version layer</a> linked list</li>
+<li><code>storage</code> - contains information about individual operations that interact with the storage device (read object, write object, delete object, etc)</li>
+</ul>
+<p>The available log levels in decreasing order of verbosity are are <code>TRACE</code>, <code>DEBUG</code>, <code>INFO</code>, <code>WARN</code>, <code>ERROR</code>, <code>CRITICAL</code>, <code>OFF</code>. 
+By default, all streams are set to the <code>INFO</code> level.</p>
+<p>There are two ways to configure log levels: </p>
+<ol>
+<li><strong>Setting an environment variable</strong>: <code>ARCTICDB_&lt;stream&gt;_loglevel=&lt;level&gt;</code>, for example: <code>ARCTICDB_version_loglevel=DEBUG</code>. All streams can be configured together via <code>ARCTICDB_all_loglevel</code>. </li>
+<li>
+<p><strong>In code</strong>: Calling <code>set_log_level</code> from the <code>arcticdb.config</code> module. This takes two optional arguments:</p>
+</li>
+<li>
+<p><code>default_level</code> - the default level for all streams. Should be a string such as <code>"DEBUG"</code></p>
+</li>
+<li><code>specific_log_levels</code> - a dictionary from stream names to log levels used to override the default such as <code>{"version": "DEBUG""}</code>.</li>
+</ol>
+<p>If both environment variables are set, and <code>set_log_level</code> is called, then the latter takes priority.</p>
+<p>S3 logging can also be enabled by setting the environment variable <code>ARCTICDB_AWS_LogLevel_int=6</code>, which will output all S3 logs to a file in the present working directory. 
+See the <a href="https://docs.aws.amazon.com/sdk-for-cpp/v1/developer-guide/logging.html">AWS documentation</a> for more details.</p>
+<h3 id="logging-destinations">Logging destinations</h3>
+<p>By default, all logging from ArcticDB goes to <code>stderr</code>. This can be configured using the <code>set_log_level</code> method.</p>
+<p>To configure logging to only a file:</p>
+<div class="highlight"><pre><span></span><code>from arcticdb.config import set_log_level
+set_log_level(console_output=False, file_output_path=&quot;/tmp/arcticdb.log&quot;)
+</code></pre></div>
+<p>To configure logging to both <code>stderr</code> and a file:</p>
+<div class="highlight"><pre><span></span><code>from arcticdb.config import set_log_level
+set_log_level(console_output=True, file_output_path=&quot;/tmp/arcticdb.log&quot;)
+</code></pre></div>
+<p>To configure logging to only <code>stderr</code> (this is the default configuration):</p>
+<div class="highlight"><pre><span></span><code>from arcticdb.config import set_log_level
+set_log_level(console_output=True, file_output_path=None)
+</code></pre></div>
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    <script id="__config" type="application/json">{"base": "..", "features": ["navigation.expand"], "search": "../assets/javascripts/workers/search.74e28a9f.min.js", "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.220ee61c.min.js"></script>
+      
+    
+  </body>
+</html>

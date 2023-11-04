@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.18.1: http://docutils.sourceforge.net/" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>arcticdb.version_store.library.Library &mdash; ArcticDB  documentation</title>
+      <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+  <!--[if lt IE 9]>
+    <script src="../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script src="../_static/jquery.js"></script>
+        <script src="../_static/_sphinx_javascript_frameworks_compat.js"></script>
+        <script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js"></script>
+        <script src="../_static/doctools.js"></script>
+        <script src="../_static/sphinx_highlight.js"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="arcticdb.version_store.library.NormalizableType" href="arcticdb.version_store.library.NormalizableType.html" />
+    <link rel="prev" title="Library API" href="../library.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            ArcticDB
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../arcticdb.html">Arctic API</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../library.html">Library API</a><ul class="current">
+<li class="toctree-l2 current"><a class="current reference internal" href="#">arcticdb.version_store.library.Library</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#arcticdb.version_store.library.Library"><code class="docutils literal notranslate"><span class="pre">Library</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#arcticdb.version_store.library.Library.__init__"><code class="docutils literal notranslate"><span class="pre">Library.__init__()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="arcticdb.version_store.library.NormalizableType.html">arcticdb.version_store.library.NormalizableType</a></li>
+<li class="toctree-l2"><a class="reference internal" href="arcticdb.version_store.library.ArcticInvalidApiUsageException.html">arcticdb.version_store.library.ArcticInvalidApiUsageException</a></li>
+<li class="toctree-l2"><a class="reference internal" href="arcticdb.version_store.library.ArcticDuplicateSymbolsInBatchException.html">arcticdb.version_store.library.ArcticDuplicateSymbolsInBatchException</a></li>
+<li class="toctree-l2"><a class="reference internal" href="arcticdb.version_store.library.ArcticUnsupportedDataTypeException.html">arcticdb.version_store.library.ArcticUnsupportedDataTypeException</a></li>
+<li class="toctree-l2"><a class="reference internal" href="arcticdb.version_store.library.SymbolVersion.html">arcticdb.version_store.library.SymbolVersion</a></li>
+<li class="toctree-l2"><a class="reference internal" href="arcticdb.version_store.library.VersionInfo.html">arcticdb.version_store.library.VersionInfo</a></li>
+<li class="toctree-l2"><a class="reference internal" href="arcticdb.version_store.library.SymbolDescription.html">arcticdb.version_store.library.SymbolDescription</a></li>
+<li class="toctree-l2"><a class="reference internal" href="arcticdb.version_store.library.WritePayload.html">arcticdb.version_store.library.WritePayload</a></li>
+<li class="toctree-l2"><a class="reference internal" href="arcticdb.version_store.library.ReadRequest.html">arcticdb.version_store.library.ReadRequest</a></li>
+<li class="toctree-l2"><a class="reference internal" href="arcticdb.version_store.library.ReadInfoRequest.html">arcticdb.version_store.library.ReadInfoRequest</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../library.html#arcticdb.version_store.library.Library"><code class="docutils literal notranslate"><span class="pre">Library</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../query_builder.html">Query Builder API</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">ArcticDB</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../library.html">Library API</a></li>
+      <li class="breadcrumb-item active">arcticdb.version_store.library.Library</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/library/arcticdb.version_store.library.Library.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="arcticdb-version-store-library-library">
+<h1>arcticdb.version_store.library.Library<a class="headerlink" href="#arcticdb-version-store-library-library" title="Permalink to this heading"></a></h1>
+<dl class="py class">
+<dt class="sig sig-object py" id="arcticdb.version_store.library.Library">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">arcticdb.version_store.library.</span></span><span class="sig-name descname"><span class="pre">Library</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">arctic_instance_description</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nvs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">NativeVersionStore</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/arcticdb/version_store/library.html#Library"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#arcticdb.version_store.library.Library" title="Permalink to this definition"></a></dt>
+<dd><p>The main interface exposing read/write functionality within a given Arctic instance.</p>
+<p>Arctic libraries contain named symbols which are the atomic unit of data storage within Arctic. Symbols
+contain data that in most cases resembles a DataFrame and are versioned such that all modifying
+operations can be tracked and reverted.</p>
+<p>Instances of this class provide a number of primitives to write, modify and remove symbols, as well as
+also providing methods to manage library snapshots. For more information on snapshots please see the <cite>snapshot</cite>
+method.</p>
+<p>Arctic libraries support concurrent writes and reads to multiple symbols as well as concurrent reads to a single
+symbol. However, concurrent writers to a single symbol are not supported other than for primitives that
+explicitly state support for single-symbol concurrent writes.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="arcticdb.version_store.library.Library.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">arctic_instance_description</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nvs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">NativeVersionStore</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/arcticdb/version_store/library.html#Library.__init__"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#arcticdb.version_store.library.Library.__init__" title="Permalink to this definition"></a></dt>
+<dd><dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>arctic_instance_description</strong> – Human readable description of the Arctic instance to which this library belongs. Used for informational
+purposes only.</p></li>
+<li><p><strong>nvs</strong> – The native version store that backs this library.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<p class="rubric">Methods</p>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#arcticdb.version_store.library.Library.__init__" title="arcticdb.version_store.library.Library.__init__"><code class="xref py py-obj docutils literal notranslate"><span class="pre">__init__</span></code></a>(arctic_instance_description, nvs)</p></td>
+<td><p><dl class="field-list simple">
+<dt class="field-odd">param arctic_instance_description<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Human readable description of the Arctic instance to which this library belongs. Used for informational</p>
+</dd>
+</dl>
+</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="../library.html#arcticdb.version_store.library.Library.append" title="arcticdb.version_store.library.Library.append"><code class="xref py py-obj docutils literal notranslate"><span class="pre">append</span></code></a>(symbol, data[, metadata, ...])</p></td>
+<td><p>Appends the given data to the existing, stored data.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="../library.html#arcticdb.version_store.library.Library.defragment_symbol_data" title="arcticdb.version_store.library.Library.defragment_symbol_data"><code class="xref py py-obj docutils literal notranslate"><span class="pre">defragment_symbol_data</span></code></a>(symbol[, segment_size])</p></td>
+<td><p>Compacts fragmented segments by merging row-sliced segments (<a class="reference external" href="https://docs.arcticdb.io/technical/on_disk_storage/#data-layer">https://docs.arcticdb.io/technical/on_disk_storage/#data-layer</a>).</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="../library.html#arcticdb.version_store.library.Library.delete" title="arcticdb.version_store.library.Library.delete"><code class="xref py py-obj docutils literal notranslate"><span class="pre">delete</span></code></a>(symbol[, versions])</p></td>
+<td><p>Delete all versions of the symbol from the library, unless <code class="docutils literal notranslate"><span class="pre">version</span></code> is specified, in which case only those versions are deleted.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="../library.html#arcticdb.version_store.library.Library.delete_data_in_range" title="arcticdb.version_store.library.Library.delete_data_in_range"><code class="xref py py-obj docutils literal notranslate"><span class="pre">delete_data_in_range</span></code></a>(symbol, date_range)</p></td>
+<td><p>Delete data within the given date range, creating a new version of <code class="docutils literal notranslate"><span class="pre">symbol</span></code>.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="../library.html#arcticdb.version_store.library.Library.delete_snapshot" title="arcticdb.version_store.library.Library.delete_snapshot"><code class="xref py py-obj docutils literal notranslate"><span class="pre">delete_snapshot</span></code></a>(snapshot_name)</p></td>
+<td><p>Delete a named snapshot.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="../library.html#arcticdb.version_store.library.Library.finalize_staged_data" title="arcticdb.version_store.library.Library.finalize_staged_data"><code class="xref py py-obj docutils literal notranslate"><span class="pre">finalize_staged_data</span></code></a>(symbol[, mode])</p></td>
+<td><p>Finalises staged data, making it available for reads.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="../library.html#arcticdb.version_store.library.Library.get_description" title="arcticdb.version_store.library.Library.get_description"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_description</span></code></a>(symbol[, as_of])</p></td>
+<td><p>Returns descriptive data for <code class="docutils literal notranslate"><span class="pre">symbol</span></code>.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="../library.html#arcticdb.version_store.library.Library.get_description_batch" title="arcticdb.version_store.library.Library.get_description_batch"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_description_batch</span></code></a>(symbols)</p></td>
+<td><p>Returns descriptive data for a list of <code class="docutils literal notranslate"><span class="pre">symbols</span></code>.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="../library.html#arcticdb.version_store.library.Library.get_staged_symbols" title="arcticdb.version_store.library.Library.get_staged_symbols"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_staged_symbols</span></code></a>()</p></td>
+<td><p>Returns all symbols with staged, unfinalized data.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="../library.html#arcticdb.version_store.library.Library.has_symbol" title="arcticdb.version_store.library.Library.has_symbol"><code class="xref py py-obj docutils literal notranslate"><span class="pre">has_symbol</span></code></a>(symbol[, as_of])</p></td>
+<td><p>Whether this library contains the given symbol.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="../library.html#arcticdb.version_store.library.Library.head" title="arcticdb.version_store.library.Library.head"><code class="xref py py-obj docutils literal notranslate"><span class="pre">head</span></code></a>(symbol[, n, as_of, columns])</p></td>
+<td><p>Read the first n rows of data for the named symbol.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="../library.html#arcticdb.version_store.library.Library.is_symbol_fragmented" title="arcticdb.version_store.library.Library.is_symbol_fragmented"><code class="xref py py-obj docutils literal notranslate"><span class="pre">is_symbol_fragmented</span></code></a>(symbol[, segment_size])</p></td>
+<td><p>Check whether the number of segments that would be reduced by compaction is more than or equal to the value specified by the configuration option &quot;SymbolDataCompact.SegmentCount&quot; (defaults to 100).</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="../library.html#arcticdb.version_store.library.Library.list_snapshots" title="arcticdb.version_store.library.Library.list_snapshots"><code class="xref py py-obj docutils literal notranslate"><span class="pre">list_snapshots</span></code></a>()</p></td>
+<td><p>List the snapshots in the library.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="../library.html#arcticdb.version_store.library.Library.list_symbols" title="arcticdb.version_store.library.Library.list_symbols"><code class="xref py py-obj docutils literal notranslate"><span class="pre">list_symbols</span></code></a>([snapshot_name])</p></td>
+<td><p>Return the symbols in this library.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="../library.html#arcticdb.version_store.library.Library.list_versions" title="arcticdb.version_store.library.Library.list_versions"><code class="xref py py-obj docutils literal notranslate"><span class="pre">list_versions</span></code></a>([symbol, snapshot, ...])</p></td>
+<td><p>Get the versions in this library, filtered by the passed in parameters.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="../library.html#arcticdb.version_store.library.Library.prune_previous_versions" title="arcticdb.version_store.library.Library.prune_previous_versions"><code class="xref py py-obj docutils literal notranslate"><span class="pre">prune_previous_versions</span></code></a>(symbol)</p></td>
+<td><p>Removes all (non-snapshotted) versions from the database for the given symbol, except the latest.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="../library.html#arcticdb.version_store.library.Library.read" title="arcticdb.version_store.library.Library.read"><code class="xref py py-obj docutils literal notranslate"><span class="pre">read</span></code></a>(symbol[, as_of, date_range, columns, ...])</p></td>
+<td><p>Read data for the named symbol.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="../library.html#arcticdb.version_store.library.Library.read_batch" title="arcticdb.version_store.library.Library.read_batch"><code class="xref py py-obj docutils literal notranslate"><span class="pre">read_batch</span></code></a>(symbols[, query_builder])</p></td>
+<td><p>Reads multiple symbols.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="../library.html#arcticdb.version_store.library.Library.read_metadata" title="arcticdb.version_store.library.Library.read_metadata"><code class="xref py py-obj docutils literal notranslate"><span class="pre">read_metadata</span></code></a>(symbol[, as_of])</p></td>
+<td><p>Return the metadata saved for a symbol.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="../library.html#arcticdb.version_store.library.Library.read_metadata_batch" title="arcticdb.version_store.library.Library.read_metadata_batch"><code class="xref py py-obj docutils literal notranslate"><span class="pre">read_metadata_batch</span></code></a>(symbols)</p></td>
+<td><p>Reads the metadata of multiple symbols.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="../library.html#arcticdb.version_store.library.Library.reload_symbol_list" title="arcticdb.version_store.library.Library.reload_symbol_list"><code class="xref py py-obj docutils literal notranslate"><span class="pre">reload_symbol_list</span></code></a>()</p></td>
+<td><p>Forces the symbol list cache to be reloaded</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="../library.html#arcticdb.version_store.library.Library.snapshot" title="arcticdb.version_store.library.Library.snapshot"><code class="xref py py-obj docutils literal notranslate"><span class="pre">snapshot</span></code></a>(snapshot_name[, metadata, ...])</p></td>
+<td><p>Creates a named snapshot of the data within a library.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="../library.html#arcticdb.version_store.library.Library.sort_and_finalize_staged_data" title="arcticdb.version_store.library.Library.sort_and_finalize_staged_data"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sort_and_finalize_staged_data</span></code></a>(symbol[, mode])</p></td>
+<td><p>sort_merge will sort and finalize staged data.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="../library.html#arcticdb.version_store.library.Library.tail" title="arcticdb.version_store.library.Library.tail"><code class="xref py py-obj docutils literal notranslate"><span class="pre">tail</span></code></a>(symbol[, n, as_of, columns])</p></td>
+<td><p>Read the last n rows of data for the named symbol.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="../library.html#arcticdb.version_store.library.Library.update" title="arcticdb.version_store.library.Library.update"><code class="xref py py-obj docutils literal notranslate"><span class="pre">update</span></code></a>(symbol, data[, metadata, upsert, ...])</p></td>
+<td><p>Overwrites existing symbol data with the contents of <code class="docutils literal notranslate"><span class="pre">data</span></code>.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="../library.html#arcticdb.version_store.library.Library.write" title="arcticdb.version_store.library.Library.write"><code class="xref py py-obj docutils literal notranslate"><span class="pre">write</span></code></a>(symbol, data[, metadata, ...])</p></td>
+<td><p>Write <code class="docutils literal notranslate"><span class="pre">data</span></code> to the specified <code class="docutils literal notranslate"><span class="pre">symbol</span></code>.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="../library.html#arcticdb.version_store.library.Library.write_batch" title="arcticdb.version_store.library.Library.write_batch"><code class="xref py py-obj docutils literal notranslate"><span class="pre">write_batch</span></code></a>(payloads[, ...])</p></td>
+<td><p>Write a batch of multiple symbols.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="../library.html#arcticdb.version_store.library.Library.write_batch_pickle" title="arcticdb.version_store.library.Library.write_batch_pickle"><code class="xref py py-obj docutils literal notranslate"><span class="pre">write_batch_pickle</span></code></a>(payloads[, ...])</p></td>
+<td><p>Write a batch of multiple symbols, pickling their data if necessary.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="../library.html#arcticdb.version_store.library.Library.write_metadata" title="arcticdb.version_store.library.Library.write_metadata"><code class="xref py py-obj docutils literal notranslate"><span class="pre">write_metadata</span></code></a>(symbol, metadata)</p></td>
+<td><p>Write metadata under the specified symbol name to this library.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="../library.html#arcticdb.version_store.library.Library.write_pickle" title="arcticdb.version_store.library.Library.write_pickle"><code class="xref py py-obj docutils literal notranslate"><span class="pre">write_pickle</span></code></a>(symbol, data[, metadata, ...])</p></td>
+<td><p>See <cite>write</cite>.</p></td>
+</tr>
+</tbody>
+</table>
+<p class="rubric">Attributes</p>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="../library.html#arcticdb.version_store.library.Library.name" title="arcticdb.version_store.library.Library.name"><code class="xref py py-obj docutils literal notranslate"><span class="pre">name</span></code></a></p></td>
+<td><p>The name of this library.</p></td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="../library.html" class="btn btn-neutral float-left" title="Library API" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="arcticdb.version_store.library.NormalizableType.html" class="btn btn-neutral float-right" title="arcticdb.version_store.library.NormalizableType" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2022, Man Group.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

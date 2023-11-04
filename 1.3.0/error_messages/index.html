@@ -1,0 +1,1246 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+      
+        <link rel="prev" href="../runtime_config/">
+      
+      
+        <link rel="next" href="../technical/architecture/">
+      
+      <link rel="icon" href="../images/FullWithBorder.png">
+      <meta name="generator" content="mkdocs-1.4.3, mkdocs-material-9.1.15">
+    
+    
+      
+        <title>Error Messages - ArcticDB</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.26e3688c.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ecc896b0.min.css">
+      
+      
+
+    
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../stylesheets/extra.css">
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce((e,_)=>(e<<5)-e+_.charCodeAt(0),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="arcticdb" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#error-messages" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="ArcticDB" class="md-header__button md-logo" aria-label="ArcticDB" data-md-component="logo">
+      
+  <img src="../images/FullWithBorder.png" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3V6m0 5h18v2H3v-2m0 5h18v2H3v-2Z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            ArcticDB
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Error Messages
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+    
+    
+    
+      <label class="md-header__button md-icon" for="__search">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.516 6.516 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5Z"/></svg>
+      </label>
+      <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.516 6.516 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5Z"/></svg>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11h12Z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41Z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+    
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="ArcticDB" class="md-nav__button md-logo" aria-label="ArcticDB" data-md-component="logo">
+      
+  <img src="../images/FullWithBorder.png" alt="logo">
+
+    </a>
+    ArcticDB
+  </label>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+      
+
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        Getting Started
+      </a>
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+  
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+      
+      
+      
+        
+      
+      <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2" >
+      
+      
+      
+        <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+          Overview
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+        <label class="md-nav__title" for="__nav_2">
+          <span class="md-nav__icon md-icon"></span>
+          Overview
+        </label>
+        <ul class="md-nav__list" data-md-scrollfix>
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../history/" class="md-nav__link">
+        History of ArcticDB
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../faq/" class="md-nav__link">
+        Frequently Asked Questions
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../licensing/" class="md-nav__link">
+        Licensing FAQs
+      </a>
+    </li>
+  
+
+            
+          
+        </ul>
+      </nav>
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+  
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+      
+      
+      
+        
+      
+      <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3" >
+      
+      
+      
+        <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+          Tutorials
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+        <label class="md-nav__title" for="__nav_3">
+          <span class="md-nav__icon md-icon"></span>
+          Tutorials
+        </label>
+        <ul class="md-nav__list" data-md-scrollfix>
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tutorials/fundamentals/" class="md-nav__link">
+        Fundamentals
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tutorials/parallel_writes/" class="md-nav__link">
+        Parallel Writes
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tutorials/snapshots/" class="md-nav__link">
+        Snapshots
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tutorials/metadata/" class="md-nav__link">
+        Metadata
+      </a>
+    </li>
+  
+
+            
+          
+        </ul>
+      </nav>
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../lib_config/" class="md-nav__link">
+        Library Configuration
+      </a>
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../runtime_config/" class="md-nav__link">
+        Runtime Configuration
+      </a>
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+    
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          Error Messages
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        Error Messages
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#errors-with-numeric-error-codes" class="md-nav__link">
+    Errors with numeric error codes
+  </a>
+  
+    <nav class="md-nav" aria-label="Errors with numeric error codes">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#internal-errors" class="md-nav__link">
+    Internal Errors
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#normalization-errors" class="md-nav__link">
+    Normalization Errors
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#missing-data-errors" class="md-nav__link">
+    Missing Data Errors
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#schema-error" class="md-nav__link">
+    Schema Error
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#storage-errors" class="md-nav__link">
+    Storage Errors
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#sorting-errors" class="md-nav__link">
+    Sorting Errors
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#user-input-errors" class="md-nav__link">
+    User Input Errors
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#compatibility-errors" class="md-nav__link">
+    Compatibility Errors
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#errors-without-numeric-error-codes" class="md-nav__link">
+    Errors without numeric error codes
+  </a>
+  
+    <nav class="md-nav" aria-label="Errors without numeric error codes">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#pickling-errors" class="md-nav__link">
+    Pickling errors
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#snapshot-errors" class="md-nav__link">
+    Snapshot errors
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#require-live-version-errors" class="md-nav__link">
+    Require live version errors
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#date-range-related-errors" class="md-nav__link">
+    Date-range related errors
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#querybuilder-errors" class="md-nav__link">
+    QueryBuilder errors
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#exception-hierarchy" class="md-nav__link">
+    Exception Hierarchy
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+  
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+      
+      
+      
+        
+      
+      <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_7" >
+      
+      
+      
+        <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="0">
+          Technical Information
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+        <label class="md-nav__title" for="__nav_7">
+          <span class="md-nav__icon md-icon"></span>
+          Technical Information
+        </label>
+        <ul class="md-nav__list" data-md-scrollfix>
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../technical/architecture/" class="md-nav__link">
+        Architecture
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../technical/on_disk_storage/" class="md-nav__link">
+        On-Disk Storage
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../technical/migration/" class="md-nav__link">
+        Arctic Migration
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../technical/contributing/" class="md-nav__link">
+        Contributing
+      </a>
+    </li>
+  
+
+            
+          
+        </ul>
+      </nav>
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/index.html" class="md-nav__link">
+        Python API Reference
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#errors-with-numeric-error-codes" class="md-nav__link">
+    Errors with numeric error codes
+  </a>
+  
+    <nav class="md-nav" aria-label="Errors with numeric error codes">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#internal-errors" class="md-nav__link">
+    Internal Errors
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#normalization-errors" class="md-nav__link">
+    Normalization Errors
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#missing-data-errors" class="md-nav__link">
+    Missing Data Errors
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#schema-error" class="md-nav__link">
+    Schema Error
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#storage-errors" class="md-nav__link">
+    Storage Errors
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#sorting-errors" class="md-nav__link">
+    Sorting Errors
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#user-input-errors" class="md-nav__link">
+    User Input Errors
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#compatibility-errors" class="md-nav__link">
+    Compatibility Errors
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#errors-without-numeric-error-codes" class="md-nav__link">
+    Errors without numeric error codes
+  </a>
+  
+    <nav class="md-nav" aria-label="Errors without numeric error codes">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#pickling-errors" class="md-nav__link">
+    Pickling errors
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#snapshot-errors" class="md-nav__link">
+    Snapshot errors
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#require-live-version-errors" class="md-nav__link">
+    Require live version errors
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#date-range-related-errors" class="md-nav__link">
+    Date-range related errors
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#querybuilder-errors" class="md-nav__link">
+    QueryBuilder errors
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#exception-hierarchy" class="md-nav__link">
+    Exception Hierarchy
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+<h1 id="error-messages">Error Messages</h1>
+<p>This page details the exceptions and associated error messages users are most likely to encounter,
+what they mean, and what (if anything) can be done to resolve the issue.</p>
+<p>For legacy reasons, the terms <code>symbol</code>, <code>stream</code>, and <code>stream ID</code> are used interchangeably.</p>
+<h2 id="errors-with-numeric-error-codes">Errors with numeric error codes</h2>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>We are in the process of adding error codes to all user-facing errors. As a result, this section will expand as error codes are added to existing errors.</p>
+</div>
+<h3 id="internal-errors">Internal Errors</h3>
+<table>
+<thead>
+<tr>
+<th>Error Code</th>
+<th>Cause</th>
+<th>Resolution</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1000</td>
+<td>An invalid date range has been passed in.</td>
+<td>ArcticDB date ranges must be in increasing order. Ensure the requested range is sorted.</td>
+</tr>
+<tr>
+<td>1001</td>
+<td>Invalid Argument</td>
+<td>An invalid argument has been passed in. This error is an internal error and not expected to be exposed to the user - please create an issue on the GitHub repository.</td>
+</tr>
+<tr>
+<td>1002</td>
+<td>An internal ArcticDB assertion has failed.</td>
+<td>This error is an internal error and not expected to be exposed to the user - please create an issue on the GitHub repository.</td>
+</tr>
+<tr>
+<td>1003</td>
+<td>ArcticDB has encountered an internal error.</td>
+<td>This error is an internal error and not expected to be exposed to the user - please create an issue on the GitHub repository.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="normalization-errors">Normalization Errors</h3>
+<table>
+<thead>
+<tr>
+<th>Error Code</th>
+<th>Cause</th>
+<th>Resolution</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>2000</td>
+<td>Attempting to update or append an existing type with an incompatible object type</td>
+<td>NumPy arrays or Pandas DataFrames can only be mutated by a matching type. Read the latest version of the symbol and update/append with the corresponding type.</td>
+</tr>
+<tr>
+<td>2001</td>
+<td>Input type cannot be converted to an ArcticDB type.</td>
+<td>Please ensure all input types match supported <a href="https://github.com/man-group/ArcticDB/blob/master/python/arcticdb/version_store/library.py#L25">ArcticDB types</a>.</td>
+</tr>
+<tr>
+<td>2003</td>
+<td>A write of an incompatible index type has been attempted.</td>
+<td>ArcticDB only supports defined Pandas index types. Please see the documentation for more information on what types are supported.</td>
+</tr>
+<tr>
+<td>2004</td>
+<td>A NumPy append is attempting to change the shape of the previous version.</td>
+<td>When storing NumPy arrays, append operations must have the same shape as the previous version.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="missing-data-errors">Missing Data Errors</h3>
+<table>
+<thead>
+<tr>
+<th>Error Code</th>
+<th>Cause</th>
+<th>Resolution</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>3000</td>
+<td>A missing version has been requested of a symbol.</td>
+<td>Please request a valid version - see the documentation for the <code>list_versions</code> method to enumerate existing versions.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="schema-error">Schema Error</h3>
+<table>
+<thead>
+<tr>
+<th>Error Code</th>
+<th>Cause</th>
+<th>Resolution</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>4000</td>
+<td>The number, type, or name of the columns has been changed.</td>
+<td>Ensure that the type and order of the columns has not changed when appending or updating the previous version. This restriction only applies when <code>Dynamic Schema</code> is disabled - if you require the columns sets to change, please enable the <code>Dynamic Schema</code> option on your library.</td>
+</tr>
+<tr>
+<td>4001</td>
+<td>The specified column does not exist.</td>
+<td>Please specify a valid column - use the <code>get_description</code> method to see all of the columns associated with a given symbol.</td>
+</tr>
+<tr>
+<td>4002</td>
+<td>The requested operation is not supported with the type of column provided.</td>
+<td>Certain operations are not supported over all column types e.g. arithmetic with the <code>QueryBuilder</code> over string columns - use the <code>get_description</code> method to see all of the columns associated with a given symbol, along with their types.</td>
+</tr>
+<tr>
+<td>4003</td>
+<td>The requested operation is not supported with the index type of the symbol provided.</td>
+<td>Certain operations are not supported over all index types e.g. column statistics generation with a string index - use the <code>get_description</code> method to see the index(es) associated with a given symbol, along with their types.</td>
+</tr>
+<tr>
+<td>4004</td>
+<td>The requested operation is not supported with pickled data.</td>
+<td>Certain operations are not supported with pickled data e.g. <code>date_range</code> filtering. If such operations are required, you must ensure that the data is of a normalizable type, such that it can be written using the <code>write</code> method, and does not require the <code>write_pickle</code> method.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="storage-errors">Storage Errors</h3>
+<table>
+<thead>
+<tr>
+<th>Error Code</th>
+<th>Cause</th>
+<th>Resolution</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>5000</td>
+<td>A missing key has been requested.</td>
+<td>ArcticDB has requested a key that does not exist in storage. Please ensure that you have requested a <code>symbol</code>, <code>snapshot</code>, <code>version</code>, or column statistic that exists.</td>
+</tr>
+<tr>
+<td>5001</td>
+<td>ArcticDB is attempting to write to an already-existing key in storage.</td>
+<td>This error is unexpected - please ensure that no other tools are writing data the same storage location that may conflict with ArcticDB.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="sorting-errors">Sorting Errors</h3>
+<table>
+<thead>
+<tr>
+<th>Error Code</th>
+<th>Cause</th>
+<th>Resolution</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>6000</td>
+<td>Data should be sorted for this operation.</td>
+<td>The requested operation requires data to be sorted. If this is a modification operation such as update, sort the input data. ArcticDB relies on Pandas to detect if data is sorted - you can call DataFrame.index.is_monotonic_increasing on your input DataFrame to see if Pandas believes the data to be sorted</td>
+</tr>
+</tbody>
+</table>
+<h3 id="user-input-errors">User Input Errors</h3>
+<table>
+<thead>
+<tr>
+<th>Error Code</th>
+<th>Cause</th>
+<th>Resolution</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>7000</td>
+<td>The input provided by the user is invalid in some fashion.</td>
+<td>The resolution will depend on the nature of the incorrect input, and should be explained in the associated error message.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="compatibility-errors">Compatibility Errors</h3>
+<table>
+<thead>
+<tr>
+<th>Error Code</th>
+<th>Cause</th>
+<th>Resolution</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>8000</td>
+<td>The version of ArcticDB being used to read the column statistics does not understand the statistics format.</td>
+<td>Update ArcticDB to (at least) the same version as that being used to create the column statistics.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="errors-without-numeric-error-codes">Errors without numeric error codes</h2>
+<h3 id="pickling-errors">Pickling errors</h3>
+<p>These errors relate to data being pickled, which limits the operations available. Internally, pickled symbols are stored as opaque, serialised binary blobs in the <a href="/technical/on_disk_storage/#data-layer">data layer</a>. No index or column information is maintained in this serialised object which is in contrast to non-pickled data, where this information is stored in the <a href="/technical/on_disk_storage/#index-layer">index layer</a>.</p>
+<p>Furthermore, it is not possible to partially read/update/append the data using the ArcticDB API or use the QueryBuilder with pickled symbols. </p>
+<p>All of these errors are of type <code>arcticdb.exceptions.ArcticException</code>.</p>
+<table>
+<thead>
+<tr>
+<th align="left">Error messages</th>
+<th align="left">Cause</th>
+<th align="left">Resolution</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td align="left">Cannot append to pickled data <br><br> Cannot update pickled data</td>
+<td align="left">A symbol has been created with the <code>write_pickle</code> method, and now <code>append</code>/<code>update</code> has been called on this symbol.</td>
+<td align="left">Pickled data cannot be appended to or updated, due to the lack of indexing or column information in the index layer as explained above. If appending is required, the symbol must be created with <code>write</code>, and must therefore only contain normalizeable data types.</td>
+</tr>
+<tr>
+<td align="left">Cannot delete date range of pickled data <br><br> Cannot use head/tail/row_range with pickled data, use plain read instead <br><br> Cannot filter pickled data <br> <br> The data for this symbol is pickled and does not support date_range, row_range, or column queries</td>
+<td align="left">A symbol has been created with the <code>write_pickle</code> method, and now <code>delete_data_in_range</code>/<code>head</code>/<code>tail</code>/<code>read</code> with a <code>QueryBuilder argument</code> has been called on this symbol.</td>
+<td align="left">For reading operations, unpickling is inherently a Python-layer process. Therefore any operation that would cut down the amount of data returned to a user compared to a call to <code>read</code> with no optional parameters cannot be performed in the C++ layer, and would be no faster than calling <code>read</code> and then filtering the result down in Python.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="snapshot-errors">Snapshot errors</h3>
+<p>Errors that can be encountered when creating  and deleting snapshots, or trying to read data from a specific snapshot.</p>
+<p>All of these errors are of type <code>arcticdb.exceptions.ArcticException</code>.</p>
+<table>
+<thead>
+<tr>
+<th align="left">Error messages</th>
+<th align="left">Cause</th>
+<th align="left">Resolution</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td align="left">Snapshot with name &lt;name> already exists</td>
+<td align="left">The <code>snapshot</code> method was called, but a snapshot with the specified name already exists.</td>
+<td align="left">The old snapshot must first be deleted with <code>delete_snapshot</code>.</td>
+</tr>
+<tr>
+<td align="left">Cannot snapshot version(s) that have been deleted...</td>
+<td align="left">A <code>versions</code> dictionary was provided to the <code>snapshot</code> method, but one of the symbol-version pairs specified does not exist.</td>
+<td align="left">The <code>list_versions</code> method can be used to see which versions of which symbols are in which snapshots.</td>
+</tr>
+<tr>
+<td align="left">Only one of skip_symbols and versions can be set</td>
+<td align="left">The <code>snapshot</code> method was called with both the <code>skip_symbols</code> and <code>versions</code> optional arguments set.</td>
+<td align="left">Just specify <code>versions</code> on its own in this case.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="require-live-version-errors">Require live version errors</h3>
+<p>A select few operations with ArcticDB require the symbol to exist and have at least one live version. These errors occur when this is not the case.</p>
+<p>All of these errors are of type <code>arcticdb.exceptions.ArcticException</code>.</p>
+<table>
+<thead>
+<tr>
+<th align="left">Error messages</th>
+<th align="left">Cause</th>
+<th align="left">Resolution</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td align="left">Cannot update non-existent stream &lt;symbol></td>
+<td align="left">The <code>update</code> method was called with the optional <code>upsert</code> defaulted or set to <code>False</code>, but this symbol has no live versions.</td>
+<td align="left">If the symbol is expected to have a live version, then this is a genuine error. Otherwise, set <code>upsert</code> to <code>True</code>.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="date-range-related-errors">Date-range related errors</h3>
+<p>All calls to <code>delete_data_in_range</code> and <code>update</code>, and calls to <code>read</code> using the <code>date_range</code> optional argument, require the existing data to have a <em>sorted</em> timestamp index. ArcticDB does not check this condition at write time.</p>
+<p>All of these errors are of type <code>arcticdb.exceptions.ArcticException</code>.</p>
+<table>
+<thead>
+<tr>
+<th align="left">Error messages</th>
+<th align="left">Cause</th>
+<th align="left">Resolution</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td align="left">Cannot apply date range filter to symbol with non-timestamp index</td>
+<td align="left"><code>read</code> method called with the optional <code>date_range</code> argument specified, but the symbol does not have a timestamp index.</td>
+<td align="left">None, the <code>date_range</code> parameter does not make sense without a timestamp index.</td>
+</tr>
+<tr>
+<td align="left">Non-contiguous rows, range search on unsorted data?...</td>
+<td align="left"><code>read</code> method called with the optional <code>date_range</code> argument specified, and the symbol has a timestamp index, but it is not sorted.</td>
+<td align="left">To use the <code>date_range</code> argument to <code>read</code>, the user must ensure the data is sorted on the index at write time.</td>
+</tr>
+<tr>
+<td align="left">Delete in range will not work as expected with a non-timeseries index</td>
+<td align="left"><code>delete_data_in_range</code> method called, but the symbol does not have a timestamp index.</td>
+<td align="left">None, the <code>delete_data_in_range</code> method does not make sense without a timestamp index.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="querybuilder-errors">QueryBuilder errors</h3>
+<p>Due to the client-only nature of ArcticDB, it is not possible to know if a <code>QueryBuilder</code> provided to <code>read</code> makes sense for the given symbol without interacting with the storage. In particular, we do not know:</p>
+<ul>
+<li>Whether a specified column exists</li>
+<li>What the type of the data held in a specified column is if it does exist</li>
+</ul>
+<p>All of these errors are of type <code>arcticdb.exceptions.ArcticException</code>.</p>
+<table>
+<thead>
+<tr>
+<th align="left">Error messages</th>
+<th align="left">Cause</th>
+<th align="left">Resolution</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td align="left">Unexpected column name</td>
+<td align="left">A column name was specified with the <code>QueryBuilder</code> that does not exist for this symbol, and the library has dynamic schema disabled.</td>
+<td align="left">None of the supported <code>QueryBuilder</code> operations (filtering, projections, group-bys and aggregations) make sense with non-existent columns.</td>
+</tr>
+<tr>
+<td align="left">Non-numeric type provided to binary operation: &lt;typename></td>
+<td align="left">Error messages like this imply that an operation that ArcticDB does not support was provided in the <code>QueryBuilder</code> argument e.g. adding two string columns together.</td>
+<td align="left">The <code>get_description</code> method can be used to inspect the types of the columns. A full list of supported operations are provided in the <code>QueryBuilder</code> <a href="/api/query_builder">API documentation</a>.</td>
+</tr>
+<tr>
+<td align="left">Cannot compare &lt;typename 1> to &lt;typename 2> (possible categorical?)</td>
+<td align="left">If <code>get_description</code> indicates that a column is of categorical type, and this categorical is being used to store string values, then comparisons to other strings will fail with an error message like this one.</td>
+<td align="left">Categorical support in ArcticDB is <a href="/faq#does-arcticdb-support-categorical-data">extremely limited</a>, but may be added in the future.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="exception-hierarchy">Exception Hierarchy</h2>
+<p>ArcticDB exceptions are exposed in <code>arcticdb.exceptions</code> and sit in a hierarchy:</p>
+<div class="highlight"><pre><span></span><code>RuntimeError
+└-- ArcticException
+    |-- ArcticNativeNotYetImplemented
+    |-- DuplicateKeyException
+    |-- MissingDataException
+    |-- NoDataFoundException
+    |-- NoSuchVersionException
+    |-- NormalizationException
+    |-- PermissionException
+    |-- SchemaException
+    |-- SortingException
+    |   └-- UnsortedDataException
+    |-- StorageException
+    |-- StreamDescriptorMismatch
+    └-- InternalException
+</code></pre></div>
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    <script id="__config" type="application/json">{"base": "..", "features": ["navigation.expand"], "search": "../assets/javascripts/workers/search.208ed371.min.js", "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.b4d07000.min.js"></script>
+      
+    
+  </body>
+</html>

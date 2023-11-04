@@ -1,0 +1,1044 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+      
+      
+      
+      <link rel="icon" href="../../images/FullWithBorder.png">
+      <meta name="generator" content="mkdocs-1.5.3, mkdocs-material-9.4.2">
+    
+    
+      
+        <title>Release Tooling - ArcticDB</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.d451bc0e.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.a5377069.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../stylesheets/extra.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce((e,_)=>(e<<5)-e+_.charCodeAt(0),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="arcticdb" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#release-tooling" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="ArcticDB" class="md-header__button md-logo" aria-label="ArcticDB" data-md-component="logo">
+      
+  <img src="../../images/FullWithBorder.png" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3V6m0 5h18v2H3v-2m0 5h18v2H3v-2Z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            ArcticDB
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Release Tooling
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+    
+    
+    
+      <label class="md-header__button md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.516 6.516 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5Z"/></svg>
+      </label>
+      <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.516 6.516 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5Z"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11h12Z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41Z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/man-group/ArcticDB" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.4.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2023 Fonticons, Inc.--><path d="M439.55 236.05 244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81z"/></svg>
+  </div>
+  <div class="md-source__repository">
+    man-group/ArcticDB
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="ArcticDB" class="md-nav__button md-logo" aria-label="ArcticDB" data-md-component="logo">
+      
+  <img src="../../images/FullWithBorder.png" alt="logo">
+
+    </a>
+    ArcticDB
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/man-group/ArcticDB" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.4.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2023 Fonticons, Inc.--><path d="M439.55 236.05 244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81z"/></svg>
+  </div>
+  <div class="md-source__repository">
+    man-group/ArcticDB
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Introduction
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  <span class="md-ellipsis">
+    Storage Guides
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            Storage Guides
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../aws/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Getting started with AWS S3
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../azure/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Getting started with Azure Blob Storage
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  <span class="md-ellipsis">
+    Overview
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            Overview
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../history/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    History of ArcticDB
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../faq/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Frequently Asked Questions
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../licensing/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Licensing FAQs
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  <span class="md-ellipsis">
+    Tutorials
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            Tutorials
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/fundamentals/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Fundamentals
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/parallel_writes/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Parallel Writes
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/snapshots/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Snapshots
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/metadata/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Metadata
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  <span class="md-ellipsis">
+    Notebooks
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            Notebooks
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../notebooks/ArcticDB_demo_lmdb/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Intro Notebook
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../lib_config/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Library Configuration
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../runtime_config/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Runtime Configuration
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../error_messages/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Error Messages
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_9" >
+        
+          
+          <label class="md-nav__link" for="__nav_9" id="__nav_9_label" tabindex="0">
+            
+  
+  <span class="md-ellipsis">
+    Technical Information
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_9_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_9">
+            <span class="md-nav__icon md-icon"></span>
+            Technical Information
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../architecture/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Architecture
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../on_disk_storage/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    On-Disk Storage
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../migration/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Arctic Migration
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../contributing/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Contributing
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/index.html" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Python API Reference
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#0-check-internal-tests" class="md-nav__link">
+    0. Check Internal Tests
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#1-create-a-new-tag" class="md-nav__link">
+    1. Create a new tag
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-update-conda-forge-recipe" class="md-nav__link">
+    2. Update conda-forge recipe
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-release-to-pypi" class="md-nav__link">
+    3. Release to PyPi
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-release-to-conda" class="md-nav__link">
+    4. Release to Conda
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5-update-the-bsl-conversion-table" class="md-nav__link">
+    5. Update the BSL conversion table
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#6-docs" class="md-nav__link">
+    6. Docs
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+
+
+
+                  
+
+  
+  
+
+
+<h1 id="release-tooling">Release Tooling</h1>
+<p>This document details the release process for ArcticDB. 
+ArcticDB is released onto <a href="https://pypi.org/project/arcticdb/">PyPi</a> and <a href="https://anaconda.org/conda-forge/arcticdb">conda-forge</a>.</p>
+<h2 id="0-check-internal-tests">0. Check Internal Tests</h2>
+<p>Check Man Group's internal tests against the release candidate. See "ArcticDB - Support Process" internal wiki page.</p>
+<h2 id="1-create-a-new-tag">1. Create a new tag</h2>
+<p>Navigate to the <a href="https://github.com/man-group/ArcticDB/actions/workflows/tag.yml">Tag and Release</a> Github Action.</p>
+<p>Click <code>Run Workflow</code> on the right hand side.</p>
+<blockquote>
+<p>[!IMPORTANT]<br />
+<strong>Release candidate, full release, or hotfix?</strong></p>
+<p>We release a new version of ArcticDB on a <a href="https://github.com/man-group/ArcticDB/milestones?direction=asc&amp;sort=due_date&amp;state=open">regular schedule</a>. 
+This may involve promoting a release candidate to a full release as well as releasing a new release candidate.</p>
+<p>If preparing a release for a new <em>major</em> or <em>minor</em> version (<a href="http://semver.org">SemVer versioning</a>), create a pre-release version (X.Y.ZrcN).</p>
+<p>If preparing a release for a new <em>patch</em> version, create a full release (X.Y.Z).</p>
+<p>If there is an outstanding release candidate (look <a href="https://pypi.org/project/arcticdb/#history">here</a>) and no issues have been found, promote the release candidate to a full release (X.Y.Z).</p>
+<p>We will create a new release candidate for an existing pre-release version only to correct an issue that has been found with the additional functionality included in the prior pre-release version. In other words, we will promote rc1 to rc2 only if a bug has been found in functionality added in rc1, and not to provide a bugfix to functionality present prior to rc1.  </p>
+</blockquote>
+<p>If creating a new release off master (pre-release or release version):
+1. Type in the new version number eg <code>1.6.0</code> or <code>1.6.0rc0</code>.
+2. Click <code>Run workflow</code>.</p>
+<p>If promoting a pre-release:
+1. Type in the new version number eg <code>1.6.0rc1</code> or <code>1.6.0</code>
+2. Select the workflow off the source tag (e.g. <code>1.6.0rc0</code>)
+3. Click <code>Run workflow</code></p>
+<p>If hotfixing an existing release (or pre-release) then branch off the previously-released tag, apply the necessary changes (cherry-picking from master if commits are on master), and:
+1. Type in the new version number eg <code>1.6.1</code> (or <code>1.6.0rc2</code> as an example of a pre-release version)
+2. Select the workflow off the source tag (e.g. <code>1.6.0</code> or <code>1.6.0rc1</code>)
+2. Click <code>Run workflow</code>.</p>
+<p>This will create a branch off of <code>master</code>, incrementing the version specified in code. </p>
+<p>The <a href="https://github.com/man-group/ArcticDB/actions/workflows/build.yml">build will now be running for the tag.</a></p>
+<h2 id="2-update-conda-forge-recipe">2. Update conda-forge recipe</h2>
+<p><a href="https://github.com/regro-cf-autotick-bot"><code>regro-cf-autotick-bot</code></a> generally opens a PR
+on <a href="https://github.com/conda-forge/arcticdb-feedstock">ArcticDB's feedstock</a>
+for each new release of ArcticDB upstream.</p>
+<blockquote>
+<p>[!IMPORTANT]<br />
+<strong>Do not commit directly to the feedstock repository.</strong>
+Commits to the repository release new versions to conda-forge. Instead, changes must be made via personal forks or via the PR
+created by the <a href="https://github.com/regro-cf-autotick-bot"><code>regro-cf-autotick-bot</code></a> as described above.</p>
+</blockquote>
+<p>You can update such a PR or create a new one to release a version, updating the
+conda recipe. <a href="https://github.com/conda-forge/arcticdb-feedstock/pull/10">Here's an example.</a></p>
+<p>You will need to update:</p>
+<ol>
+<li><code>version</code>, pointing to the tag created in step 1</li>
+<li>The <code>sha256sum</code> of the source tarball</li>
+<li>The build number (i.e. <code>number</code> under the <code>build</code> section) to <code>0</code></li>
+<li>Dependencies (if they have changed since the last version, see <code>setup.cfg</code>)</li>
+<li>Rerender the feedstock's recipe to create Azure CI jobs' specification for all variants of the package</li>
+</ol>
+<p>A PR is generally open with a todo-list summarizing all the required steps to perform,
+before an update to the feedstock.</p>
+<blockquote>
+<p>[!IMPORTANT]<br />
+If releasing a pre-release version, you <strong>must</strong> merge the created PR into the <code>pr</code> branch and not the <code>main</code> branch. 
+This will require modifying the base branch of the created PR.</p>
+</blockquote>
+<h2 id="3-release-to-pypi">3. Release to PyPi</h2>
+<p>The GitHub Actions "Build and Test" job kicked off automatically at the end of step 1 will wait on approval to deploy to PyPi.</p>
+<p>Find the job and click approve to deploy.</p>
+<h2 id="4-release-to-conda">4. Release to Conda</h2>
+<p>Merge the PR created in step 3.</p>
+<p>It will build packages, <a href="https://conda-forge.org/docs/maintainer/infrastructure.html#output-validation-and-feedstock-tokens">pushing them to the <code>cf-staging</code> channel before publishing them
+on the <code>conda-forge</code> channel for validation</a>.</p>
+<p>Packages are generally available a few dozen minutes after the CI runs' completion
+on <code>main</code>.</p>
+<h2 id="5-update-the-bsl-conversion-table">5. Update the BSL conversion table</h2>
+<p>If you are releasing either a major (e.g. 2.0.0) or a minor (e.g. 1.5.0) version, please update the license conversion
+schedule table <a href="https://github.com/man-group/ArcticDB/blob/master/README.md">in the readme</a>.</p>
+<p>The conversion date will be two years from when the release is <a href="https://github.com/man-group/ArcticDB/releases/">published on GitHub</a>. This is not required if you are releasing a patch release.</p>
+<h2 id="6-docs">6. Docs</h2>
+<p>The release worflow will also trigger the workflow releasing the documentation to the ArcticDB site. The documentation which will be uploaded is based of the branch from which the release will happen.
+In case a release candidate is promoted to a release the workflow will upload outdated docs to the site. In this case the documentation must be deployed again by running the <a href="https://github.com/man-group/ArcticDB/tree/master/.github/workflows#docsyml">docs workflow</a>.</p>
+<h1 id="removing-a-release">Removing a release</h1>
+<p><strong>Note</strong> - instructions in this section are only to be followed if a broken build has been released that needs to be removed. 
+This section can be ignored under normal circumstances.</p>
+<h2 id="conda-forge">Conda-forge</h2>
+<p>Conda-forge packages are immutable. As a result, packages cannot be removed entirely.</p>
+<p><a href="https://conda-forge.org/docs/maintainer/updating_pkgs.html#removing-broken-packages">They can, however, be marked as <code>broken</code>.</a> 
+This adds a new label to the package, <code>broken</code>. 
+Packages with the <code>broken</code> label must be installed via a special channel (<code>conda install -c conda-forge/label/broken</code>) and thus for most users won't be visible. </p>
+<p>To mark an ArcticDB package as broken:</p>
+<ol>
+<li><a href="https://anaconda.org/conda-forge/arcticdb/files?version=1.6.0rc0&amp;channel=main">Find all existing files for the given version</a></li>
+<li>Create a PR that adds a new file listing every file to be marked as broken. <a href="https://github.com/conda-forge/admin-requests/pull/765">Here's an example</a>.</li>
+<li>Wait for someone from the Core team to merge the PR.</li>
+</ol>
+
+
+
+
+
+                
+
+              </article>
+            </div>
+          
+          
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    <script id="__config" type="application/json">{"base": "../..", "features": ["navigation.expand"], "search": "../../assets/javascripts/workers/search.a264c092.min.js", "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.726fbb30.min.js"></script>
+      
+    
+  <!-- Cloudflare Pages Analytics --><script defer src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "8ad6afad74694ea7b4567fe858931967"}'></script><!-- Cloudflare Pages Analytics --></body>
+</html>
