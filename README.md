@@ -2,20 +2,43 @@
 
 This branch contains the built docs site.
 
-## To download old versions of docs site
+## Download old versions of docs site and incorporate into this branch
 
-e.g. for 4.0.2
+Login to cloudflare dashboard and find the deployment for the version you want to download.
 
-```bash
-mkdir 4.0.2
-cd 4.0.2
-wget --recursive --domains arcticdb-docs.pages.dev --no-clobber --page-requisites --no-parent --no-host-directories https://2dd5f5ed.arcticdb-docs.pages.dev/`
+Use the account-id and deployment-id from the URL to get the json details for the deployment from this url:
+`https://dash.cloudflare.com/api/v4/accounts/{account_id}/pages/projects/arcticdb-docs/deployments/{deployment_id}`
+
+Save the file into the dir for the version you want, e.g. `4.0.2/orig_deployment.json`.
+Run this code to download all the files using the json info.
+
+```python
+import requests
+import json
+import os
+
+data = json.load(open('orig_deployment.json'))
+url=data['result']['url']
+files=data['result']['files'].keys()
+
+for file in files:
+    response = requests.get(url+file)
+    if response.ok:
+        filename = '.'+file
+        os.makedirs(os.path.dirname(filename), exist_ok=True)
+        with open(filename, 'wb') as fobj:
+            fobj.write(response.content)
+    else:
+        print(f"Error downloading {f}")
+        exit(1)
 ```
+
+Commit the result.
 
 ## Log
 
-Version | Source
-------- | ------
+Version | Original deployment
+------- | -------------------
 1.1.0   | https://43b141e0.arcticdb-docs.pages.dev/
 1.2.0   | https://1d0c2f26.arcticdb-docs.pages.dev/
 1.2.1   | https://bd9d1e65.arcticdb-docs.pages.dev/
