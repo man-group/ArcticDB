@@ -20,7 +20,7 @@ To use ArcticDB for production use, please [contact us](http://arcticdb.io) to p
 
 ## Can I contribute to ArcticDB?
 
-Yes! Contributions are welcome - please see our [GitHub readme for more information.](https://github.com/man-group/ArcticDB/blob/docs/update-readme/README.md#Contributing)
+Yes! Contributions are welcome - please see our [GitHub readme for more information.](https://github.com/man-group/ArcticDB#contributingbuilding-from-source)
 
 ## Is ArcticDB part of Man Group?
 

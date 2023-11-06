@@ -48,7 +48,7 @@ The index layer primarily stores keys of type _Table Index_, as [documented belo
 
 ### Data Layer
 
-The data layer is an immutable layer that contains compressed data segments. Dataframes provided by the user are sliced by both columns and rows, in order to facilitate rapid date-range and column searching during read operations. See the [documentation](../api/arctic.md#LibraryOptions) for the `rows_per_segment` and `columns_per_segment` library configuration options for more details.
+The data layer is an immutable layer that contains compressed data segments. Dataframes provided by the user are sliced by both columns and rows, in order to facilitate rapid date-range and column searching during read operations. See the [documentation](../api/arctic.md#arcticdb.LibraryOptions) for the `rows_per_segment` and `columns_per_segment` library configuration options for more details.
 
 The data layer primarily stores keys of type _Table Data_, as [documented below](#key-types).
 
