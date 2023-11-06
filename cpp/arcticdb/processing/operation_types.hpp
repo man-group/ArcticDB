@@ -421,13 +421,24 @@ bool operator()(int64_t t, const std::unordered_set<uint64_t>& u, UInt64SpecialH
         return u.count(t) > 0;
 }
 
-bool operator()(uint64_t t, const robin_hood::unordered_set<int64_t>& u) const {
+#ifdef _WIN32
+// MSVC has bugs with template expansion when they are using `using`-declaration, as used by `robin_hood`.
+// Hence we explicitly define the concrete implementations here.
+template<typename T>
+bool operator()(T t, const robin_hood::unordered_set<uint64_t>& u) const {
     return u.contains(t);
 }
 
-bool operator()(int64_t t, const robin_hood::unordered_set<uint64_t>& u) const {
+template<typename T>
+bool operator()(T t, const robin_hood::unordered_set<int64_t>& u) const {
     return u.contains(t);
 }
+#else
+template<typename T, typename U>
+bool operator()(T t, const robin_hood::unordered_set<U>& u) const {
+    return u.contains(t);
+}
+#endif
 };
 
 struct IsNotInOperator: MembershipOperator {
@@ -450,13 +461,24 @@ bool operator()(int64_t t, const std::unordered_set<uint64_t>& u, UInt64SpecialH
         return u.count(t) == 0;
 }
 
-bool operator()(uint64_t t, const robin_hood::unordered_set<int64_t>& u) const {
+#ifdef _WIN32
+// MSVC has bugs with template expansion when they are using `using`-declaration, as used by `robin_hood`.
+// Hence we explicitly define the concrete implementations here.
+template<typename T>
+bool operator()(T t, const robin_hood::unordered_set<uint64_t>& u) const {
     return !u.contains(t);
 }
 
-bool operator()(int64_t t, const robin_hood::unordered_set<uint64_t>& u) const {
+template<typename T>
+bool operator()(T t, const robin_hood::unordered_set<int64_t>& u) const {
     return !u.contains(t);
 }
+#else
+template<typename T, typename U>
+bool operator()(T t, const robin_hood::unordered_set<U>& u) const {
+    return !u.contains(t);
+}
+#endif
 };
 
 } //namespace arcticdb
