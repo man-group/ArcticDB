@@ -15,7 +15,6 @@ import string
 import random
 import time
 import attr
-from six import PY3
 from copy import deepcopy
 from functools import wraps
 import sys
@@ -31,11 +30,6 @@ from arcticc.pb2.storage_pb2 import LibraryDescriptor, VersionStoreConfig
 from arcticdb.version_store.helper import ArcticFileConfig
 from arcticdb.config import _DEFAULT_ENVS_PATH
 from arcticdb_ext import set_config_int, get_config_int, unset_config_int
-
-# leave out Mongo as spinning up a Mongo instance in Windows CI is fiddly, and Mongo support is only
-# currently required for Linux for internal use.
-# We also skip it on Mac as github actions containers don't work with macos
-RUN_MONGO_TEST = sys.platform == "linux"
 
 
 def maybe_not_check_freq(f):
@@ -160,22 +154,8 @@ def config_context(name, value):
             unset_config_int(name)
 
 
-def get_artifact_path(frag, *fragments):
-    import tests
-
-    return os.path.join(tests.__path__, "artifacts", frag, *fragments)
-
-
-def param_dict(fields, cases=None, xfail=None, py2only=None, py3only=None):
-    # type: (List[AnyStr], Mapping[AnyStr, Any], Mapping[AnyStr, Any], Mapping[AnyStr, Any], Mapping[AnyStr, Any])->Any
+def param_dict(fields, cases=None, xfail=None):
     _cases = deepcopy(cases) if cases else dict()
-    if PY3:
-        if py3only is not None:
-            _cases.update(deepcopy(py3only))
-    else:
-        if py2only is not None:
-            _cases.update(deepcopy(py2only))
-
     if _cases:
         ids, params = zip(*list(sorted(_cases.items())))
     else:

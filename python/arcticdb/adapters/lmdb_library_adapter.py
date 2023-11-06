@@ -19,7 +19,7 @@ from arcticdb.version_store.helper import add_lmdb_library_to_env
 from arcticdb.config import _DEFAULT_ENV
 from arcticdb.version_store._store import NativeVersionStore
 from arcticdb.adapters.arctic_library_adapter import ArcticLibraryAdapter, set_library_options
-from arcticdb_ext.storage import StorageOverride, LmdbOverride
+from arcticdb_ext.storage import StorageOverride, LmdbOverride, CONFIG_LIBRARY_NAME
 from arcticdb.encoding_version import EncodingVersion
 from arcticdb.exceptions import ArcticDbNotYetImplemented, LmdbOptionsError
 
@@ -135,19 +135,19 @@ class LMDBLibraryAdapter(ArcticLibraryAdapter):
         config_library_config = {"map_size": 128 * (1 << 20)}
         add_lmdb_library_to_env(
             env_cfg,
-            lib_name=self.CONFIG_LIBRARY_NAME,
+            lib_name=CONFIG_LIBRARY_NAME,
             env_name=_DEFAULT_ENV,
             db_dir=self._path,
             lmdb_config=config_library_config,
         )
 
         lib = NativeVersionStore.create_store_from_config(
-            env_cfg, _DEFAULT_ENV, self.CONFIG_LIBRARY_NAME, encoding_version=self._encoding_version
+            env_cfg, _DEFAULT_ENV, CONFIG_LIBRARY_NAME, encoding_version=self._encoding_version
         )
 
         return lib._library
 
-    def create_library(self, name, library_options: LibraryOptions):
+    def get_library_config(self, name, library_options: LibraryOptions):
         env_cfg = EnvironmentConfigsMap()
 
         lmdb_config = {}
@@ -163,11 +163,9 @@ class LMDBLibraryAdapter(ArcticLibraryAdapter):
         )
         set_library_options(env_cfg.env_by_id[_DEFAULT_ENV].lib_by_path[name], library_options)
 
-        lib = NativeVersionStore.create_store_from_config(
+        return NativeVersionStore.create_library_config(
             env_cfg, _DEFAULT_ENV, name, encoding_version=library_options.encoding_version
         )
-
-        return lib
 
     def cleanup_library(self, library_name: str):
         lmdb_files_removed = True

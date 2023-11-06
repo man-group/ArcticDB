@@ -48,12 +48,20 @@ ArcticDB is designed from the outset to be resilient; there is no single point o
 
 ### Storage compatibility
 
-
 |                       | Linux | Windows | Mac |
 | --------------------- | - | - | - |
 | S3                 | ✔️ | ✔️ | ✔️ |
-| LMDB               | ✔️ | Beta | ✔️ |
+| LMDB               | ✔️ | ✔️ | ✔️ |
 | Azure Blob Storage | ✔️ | ✔️ | ➖ |
+
+We have tested against the following S3 backends:
+
+- AWS S3
+- VAST Data S3
+- Pure Storage S3
+- Ceph
+- MinIO on Linux
+- Scality S3
 
 ### Installation
 
@@ -145,6 +153,7 @@ Please see version conversion dates in the below table:
 | 2.0 | Business Source License 1.1 | Aug  29, 2025 |
 | 3.0 | Business Source License 1.1 | Sep  13, 2025 |
 | 4.0 | Business Source License 1.1 | Sep  27, 2025 |
+| 4.1 | Business Source Licesne 1.1 | Nov 1, 2025 |
 
 ## Code of Conduct
 

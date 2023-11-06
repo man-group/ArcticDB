@@ -12,7 +12,7 @@ from math import inf
 import numpy as np
 import pandas as pd
 
-from typing import Dict
+from typing import Dict, NamedTuple
 
 from arcticdb.exceptions import ArcticNativeException, UserInputException
 from arcticdb.version_store._normalization import normalize_dt_range_to_ts
@@ -266,8 +266,14 @@ PythonFilterClause = namedtuple("PythonFilterClause", ["expr"])
 PythonProjectionClause = namedtuple("PythonProjectionClause", ["name", "expr"])
 PythonGroupByClause = namedtuple("PythonGroupByClause", ["name"])
 PythonAggregationClause = namedtuple("PythonAggregationClause", ["aggregations"])
-PythonRowRangeClause = namedtuple("PythonRowRangeClause", ["row_range_type", "n"])
 PythonDateRangeClause = namedtuple("PythonDateRangeClause", ["start", "end"])
+
+
+class PythonRowRangeClause(NamedTuple):
+    row_range_type: _RowRangeType = None
+    n: int = None
+    start: int = None
+    end: int = None
 
 
 class QueryBuilder:
@@ -514,13 +520,22 @@ class QueryBuilder:
     def _head(self, n: int):
         check(not len(self.clauses), "Head only supported as first clause in the pipeline")
         self.clauses.append(_RowRangeClause(_RowRangeType.HEAD, n))
-        self._python_clauses.append(PythonRowRangeClause(_RowRangeType.HEAD, n))
+        self._python_clauses.append(PythonRowRangeClause(row_range_type=_RowRangeType.HEAD, n=n))
         return self
 
     def _tail(self, n: int):
         check(not len(self.clauses), "Tail only supported as first clause in the pipeline")
         self.clauses.append(_RowRangeClause(_RowRangeType.TAIL, n))
-        self._python_clauses.append(PythonRowRangeClause(_RowRangeType.TAIL, n))
+        self._python_clauses.append(PythonRowRangeClause(row_range_type=_RowRangeType.TAIL, n=n))
+        return self
+
+    def _row_range(self, row_range):
+        check(not len(self.clauses), "Row range only supported as first clause in the pipeline")
+        start = row_range[0]
+        end = row_range[1]
+
+        self.clauses.append(_RowRangeClause(start, end))
+        self._python_clauses.append(PythonRowRangeClause(start=start, end=end))
         return self
 
     def date_range(self, date_range: DateRangeInput):
@@ -594,7 +609,10 @@ class QueryBuilder:
             elif isinstance(python_clause, PythonAggregationClause):
                 self.clauses.append(_AggregationClause(self.clauses[-1].grouping_column, python_clause.aggregations))
             elif isinstance(python_clause, PythonRowRangeClause):
-                self.clauses.append(_RowRangeClause(python_clause.row_range_type, python_clause.n))
+                if python_clause.start is not None and python_clause.end is not None:
+                    self.clauses.append(_RowRangeClause(python_clause.start, python_clause.end))
+                else:
+                    self.clauses.append(_RowRangeClause(python_clause.row_range_type, python_clause.n))
             elif isinstance(python_clause, PythonDateRangeClause):
                 self.clauses.append(_DateRangeClause(python_clause.start, python_clause.end))
             else:

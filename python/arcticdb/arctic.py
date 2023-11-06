@@ -285,8 +285,8 @@ class Arctic:
         if library_options is None:
             library_options = LibraryOptions()
 
-        library = self._library_adapter.create_library(name, library_options)
-        self._library_manager.write_library_config(library._lib_cfg, name, self._library_adapter.get_masking_override())
+        cfg = self._library_adapter.get_library_config(name, library_options)
+        self._library_manager.write_library_config(cfg, name, self._library_adapter.get_masking_override())
         return self.get_library(name)
 
     def delete_library(self, name: str) -> None:

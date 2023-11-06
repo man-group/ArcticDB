@@ -89,6 +89,19 @@ inline Column generate_int_column(size_t num_rows) {
     return column;
 }
 
+// Generates an int64_t Column where the value in one row out of two is equal to the row index
+inline Column generate_int_sparse_column(size_t num_rows) {
+    using TDT = TypeDescriptorTag<DataTypeTag<DataType::INT64>, DimensionTag<Dimension ::Dim0>>;
+    Column column(static_cast<TypeDescriptor>(TDT{}), 0, false, true);
+    for(size_t idx = 0; idx < num_rows; ++idx) {
+        if (idx%2 == 0)
+        {
+            column.set_scalar<int64_t>(static_cast<ssize_t>(idx), static_cast<int64_t>(idx));
+        }
+    }
+    return column;
+}
+
 // Generates an int64_t Column where the value in each row is equal to the row index modulo the number of unique values
 inline Column generate_int_column_repeated_values(size_t num_rows, size_t unique_values) {
     using TDT = TypeDescriptorTag<DataTypeTag<DataType::INT64>, DimensionTag<Dimension ::Dim0>>;
@@ -109,7 +122,7 @@ inline Column generate_empty_column() {
 // Generate a segment in memory suitable for testing groupby's empty type column behaviour with 5 columns:
 // * int_repeating_values - an int64_t column with unique_values repeating values
 // * empty_<agg> - an empty column for each supported aggregation
-inline SegmentInMemory generate_groupby_testing_segment(size_t num_rows, size_t unique_values) {
+inline SegmentInMemory generate_groupby_testing_empty_segment(size_t num_rows, size_t unique_values) {
     SegmentInMemory seg;
     auto int_repeated_values_col = std::make_shared<Column>(generate_int_column_repeated_values(num_rows, unique_values));
     seg.add_column(scalar_field(int_repeated_values_col->type().data_type(), "int_repeated_values"), int_repeated_values_col);
@@ -117,6 +130,36 @@ inline SegmentInMemory generate_groupby_testing_segment(size_t num_rows, size_t 
     seg.add_column(scalar_field(DataType::EMPTYVAL, "empty_min"), std::make_shared<Column>(generate_empty_column()));
     seg.add_column(scalar_field(DataType::EMPTYVAL, "empty_max"), std::make_shared<Column>(generate_empty_column()));
     seg.add_column(scalar_field(DataType::EMPTYVAL, "empty_mean"), std::make_shared<Column>(generate_empty_column()));
+    seg.set_row_id(num_rows - 1);
+    return seg;
+}
+
+inline SegmentInMemory generate_groupby_testing_segment(size_t num_rows, size_t unique_values)
+{
+    SegmentInMemory seg;
+    auto int_repeated_values_col = std::make_shared<Column>(generate_int_column_repeated_values(num_rows, unique_values));
+    seg.add_column(scalar_field(int_repeated_values_col->type().data_type(), "int_repeated_values"), int_repeated_values_col);
+    std::vector<std::string> col_names = { "sum_int", "min_int", "max_int", "mean_int", "count_int" };
+    for (const auto& name: col_names)
+    {
+        auto col = std::make_shared<Column>(generate_int_column(num_rows));
+        seg.add_column(scalar_field(col->type().data_type(), name), col);
+    }
+    seg.set_row_id(num_rows - 1);
+    return seg;
+}
+
+inline SegmentInMemory generate_groupby_testing_sparse_segment(size_t num_rows, size_t unique_values)
+{
+    SegmentInMemory seg;
+    auto int_repeated_values_col = std::make_shared<Column>(generate_int_column_repeated_values(num_rows, unique_values));
+    seg.add_column(scalar_field(int_repeated_values_col->type().data_type(), "int_repeated_values"), int_repeated_values_col);
+    std::vector<std::string> col_names = { "sum_int", "min_int", "max_int", "mean_int", "count_int" };
+    for (const auto& name: col_names)
+    {
+        auto col = std::make_shared<Column>(generate_int_sparse_column(num_rows));
+        seg.add_column(scalar_field(col->type().data_type(), name), col);
+    }
     seg.set_row_id(num_rows - 1);
     return seg;
 }

@@ -45,7 +45,6 @@ from arcticdb.util.test import (
     assert_series_equal,
     config_context,
     distinct_timestamps,
-    RUN_MONGO_TEST,
 )
 from tests.util.date import DateRange
 
@@ -294,8 +293,7 @@ def test_prune_previous_versions_multiple_times(basic_store, symbol):
 
 
 def test_prune_previous_versions_write_batch(basic_store):
-    """Verify that the batch write method correctly prunes previous versions when the corresponding option is specified.
-    """
+    """Verify that the batch write method correctly prunes previous versions when the corresponding option is specified."""
     # Given
     lib = basic_store
     lib_tool = lib.library_tool()
@@ -325,8 +323,7 @@ def test_prune_previous_versions_write_batch(basic_store):
 
 
 def test_prune_previous_versions_batch_write_metadata(basic_store):
-    """Verify that the batch write metadata method correctly prunes previous versions when the corresponding option is specified.
-    """
+    """Verify that the batch write metadata method correctly prunes previous versions when the corresponding option is specified."""
     # Given
     lib = basic_store
     lib_tool = lib.library_tool()
@@ -356,8 +353,7 @@ def test_prune_previous_versions_batch_write_metadata(basic_store):
 
 
 def test_prune_previous_versions_append_batch(basic_store):
-    """Verify that the batch append method correctly prunes previous versions when the corresponding option is specified.
-    """
+    """Verify that the batch append method correctly prunes previous versions when the corresponding option is specified."""
     # Given
     lib = basic_store
     lib_tool = lib.library_tool()
@@ -732,6 +728,31 @@ def test_empty_pd_series(basic_store):
     series = pd.Series()
     basic_store.write(sym, series)
     assert basic_store.read(sym).data.empty
+    # basic_store.update(sym, series)
+    # assert basic_store.read(sym).data.empty
+    basic_store.append(sym, series)
+    assert basic_store.read(sym).data.empty
+
+
+def test_empty_pd_series_type_preservation(basic_store):
+    sym = "empty_s"
+    series = pd.Series(dtype="datetime64[ns]")
+    basic_store.write(sym, series)
+    res = basic_store.read(sym).data
+    assert res.empty
+    # TODO: Fix me when the cast bug is fixed
+    # assert str(res.dtype) == "datetime64[ns]"
+    assert basic_store.read(sym).data.empty
+
+    # basic_store.update(sym, series)
+    # res = basic_store.read(sym).data
+    # assert res.empty
+    # assert str(res.dtype) == "datetime64[ns]"
+
+    basic_store.append(sym, series)
+    res = basic_store.read(sym).data
+    assert res.empty
+    # assert str(res.dtype) == "datetime64[ns]"
 
 
 def test_empty_df(basic_store):
@@ -739,6 +760,10 @@ def test_empty_df(basic_store):
     df = pd.DataFrame()
     basic_store.write(sym, df)
     # if no index information is provided, we assume a datetimeindex
+    assert basic_store.read(sym).data.empty
+    # basic_store.update(sym, df)
+    # assert basic_store.read(sym).data.empty
+    basic_store.append(sym, df)
     assert basic_store.read(sym).data.empty
 
 
@@ -1498,6 +1523,23 @@ def test_force_delete(basic_store):
     assert_frame_equal(basic_store.read("sym1", as_of=0).data, df1)
 
 
+def test_force_delete_with_delayed_deletes(basic_store_delayed_deletes):
+    df1 = sample_dataframe()
+    basic_store_delayed_deletes.write("sym1", df1)
+    df2 = sample_dataframe(seed=1)
+    basic_store_delayed_deletes.write("sym1", df2)
+    df3 = sample_dataframe(seed=2)
+    basic_store_delayed_deletes.write("sym2", df3)
+    df4 = sample_dataframe(seed=3)
+    basic_store_delayed_deletes.write("sym2", df4)
+    basic_store_delayed_deletes.version_store.force_delete_symbol("sym2")
+    with pytest.raises(NoDataFoundException):
+        basic_store_delayed_deletes.read("sym2")
+
+    assert_frame_equal(basic_store_delayed_deletes.read("sym1").data, df2)
+    assert_frame_equal(basic_store_delayed_deletes.read("sym1", as_of=0).data, df1)
+
+
 def test_dataframe_with_NaN_in_timestamp_column(basic_store):
     normal_df = pd.DataFrame({"col": [pd.Timestamp("now"), pd.NaT]})
     basic_store.write("normal", normal_df)
@@ -1716,6 +1758,37 @@ def test_get_tombstone_deletion_state_without_delayed_del(basic_store_factory, s
     tombstoned_version_map = lib.version_store._get_all_tombstoned_versions(sym)
     assert len(tombstoned_version_map) == 3
     assert tombstoned_version_map[2] is False
+
+    lib.write(f"{sym}_new", 1)
+    lib.add_to_snapshot("snap", [f"{sym}_new"])
+    tombstoned_version_map = lib.version_store._get_all_tombstoned_versions(sym)
+    assert len(tombstoned_version_map) == 3
+
+
+def test_get_tombstone_deletion_state_with_delayed_del(basic_store_factory, sym):
+    lib = basic_store_factory(use_tombstones=True, delayed_deletes=True)
+    lib.write(sym, 1)
+
+    lib.write(sym, 2)
+
+    lib.snapshot("snap")
+    lib.write(sym, 3, prune_previous_version=True)
+    tombstoned_version_map = lib.version_store._get_all_tombstoned_versions(sym)
+    # v0 and v1
+    assert len(tombstoned_version_map) == 2
+    assert tombstoned_version_map[0] is True
+    assert tombstoned_version_map[1] is True
+
+    lib.write(sym, 3)
+    lib.delete_version(sym, 2)
+    tombstoned_version_map = lib.version_store._get_all_tombstoned_versions(sym)
+    assert len(tombstoned_version_map) == 3
+    assert tombstoned_version_map[2] is True
+
+    lib.write(f"{sym}_new", 1)
+    lib.add_to_snapshot("snap", [f"{sym}_new"])
+    tombstoned_version_map = lib.version_store._get_all_tombstoned_versions(sym)
+    assert len(tombstoned_version_map) == 3
 
 
 def test_get_timerange_for_symbol(basic_store, sym):

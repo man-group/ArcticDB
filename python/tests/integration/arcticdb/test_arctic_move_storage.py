@@ -7,7 +7,7 @@ import sys
 from arcticdb import Arctic
 from arcticdb.util.test import get_wide_dataframe
 from arcticdb.util.test import assert_frame_equal
-from arcticdb.exceptions import InternalException
+from arcticdb.exceptions import LmdbMapFullError
 
 
 def test_move_lmdb_library(tmpdir_factory):
@@ -79,11 +79,12 @@ def test_move_lmdb_library_map_size_reduction(tmpdir_factory):
     assert set(lib.list_symbols()) == {"sym", "another_sym"}
     assert_frame_equal(df, lib.read("sym").data)
 
-    # TODO #866 proper exception type for this
-    with pytest.raises(InternalException) as exc_info:
+    with pytest.raises(LmdbMapFullError) as e:
         lib.write("another_sym", df)
 
-    assert "lmdb error code -30792" in str(exc_info.value)
+    assert "MDB_MAP_FULL" in str(e.value)
+    assert "E5003" in str(e.value)
+    assert "-30792" in str(e.value)
 
     # stuff should still be readable despite the error
     assert_frame_equal(df, lib.read("sym").data)
