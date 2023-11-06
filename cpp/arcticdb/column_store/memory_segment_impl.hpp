@@ -959,6 +959,9 @@ public:
         // Map from offsets in the input stringpool to offsets in the output stringpool
         // Only used if filter_down_stringpool is true
         robin_hood::unordered_flat_map<StringPool::offset_t, StringPool::offset_t> input_to_output_offsets;
+        // Prepopulate with None and NaN placeholder values to avoid an if statement in a tight loop later
+        input_to_output_offsets.insert(robin_hood::pair(not_a_string(), not_a_string()));
+        input_to_output_offsets.insert(robin_hood::pair(nan_placeholder(), nan_placeholder()));
 
         // Index is built to make rank queries faster
         std::unique_ptr<util::BitIndex> filter_idx;

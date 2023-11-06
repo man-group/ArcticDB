@@ -428,7 +428,6 @@ bool operator()(uint64_t t, const robin_hood::unordered_set<int64_t>& u) const {
 bool operator()(int64_t t, const robin_hood::unordered_set<uint64_t>& u) const {
     return u.contains(t);
 }
-
 };
 
 struct IsNotInOperator: MembershipOperator {
@@ -454,10 +453,10 @@ bool operator()(int64_t t, const std::unordered_set<uint64_t>& u, UInt64SpecialH
 bool operator()(uint64_t t, const robin_hood::unordered_set<int64_t>& u) const {
     return !u.contains(t);
 }
+
 bool operator()(int64_t t, const robin_hood::unordered_set<uint64_t>& u) const {
     return !u.contains(t);
 }
-
 };
 
 } //namespace arcticdb
