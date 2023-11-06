@@ -32,6 +32,7 @@
 #include <pybind11/pybind11.h>
 #include <folly/system/ThreadName.h>
 #include <folly/portability/PThread.h>
+#include <mongocxx/exception/logic_error.hpp>
 
 namespace py = pybind11;
 
@@ -203,10 +204,15 @@ void register_error_code_ecosystem(py::module& m, py::exception<arcticdb::Arctic
     static py::exception<InternalException> internal_exception(m, "InternalException", compat_exception.ptr());
     static py::exception<StorageException> storage_exception(m, "StorageException", compat_exception.ptr());
     static py::exception<::lmdb::map_full_error> lmdb_map_full_error(m, "LmdbMapFullError", storage_exception.ptr());
+    static py::exception<UserInputException> user_input_exception(m, "UserInputException", compat_exception.ptr());
 
     py::register_exception_translator([](std::exception_ptr p) {
         try {
             if (p) std::rethrow_exception(p);
+        } catch (const mongocxx::v_noabi::logic_error& e){
+            user_input_exception(e.what());
+        } catch (const UserInputException& e){
+            user_input_exception(e.what());
         } catch (const arcticdb::InternalException& e){
             internal_exception(e.what());
         } catch (const ::lmdb::map_full_error& e) {
@@ -233,7 +239,6 @@ void register_error_code_ecosystem(py::module& m, py::exception<arcticdb::Arctic
     auto sorting_exception =
             py::register_exception<SortingException>(m, "SortingException", compat_exception.ptr());
     py::register_exception<UnsortedDataException>(m, "UnsortedDataException", sorting_exception.ptr());
-    py::register_exception<UserInputException>(m, "UserInputException", compat_exception.ptr());
     py::register_exception<CompatibilityException>(m, "CompatibilityException", compat_exception.ptr());
 }
 

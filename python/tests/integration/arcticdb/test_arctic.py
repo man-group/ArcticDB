@@ -16,7 +16,7 @@ import numpy as np
 from datetime import datetime, timezone
 from botocore.client import BaseClient as BotoClient
 
-from arcticdb_ext.exceptions import InternalException
+from arcticdb_ext.exceptions import InternalException, UserInputException
 from arcticdb_ext.storage import NoDataFoundException
 from arcticdb.exceptions import ArcticDbNotYetImplemented, LibraryNotFound, MismatchingLibraryOptions
 from arcticdb.arctic import Arctic
@@ -557,13 +557,31 @@ def test_delete_date_range(arctic_library):
 
 
 @MONGO_TESTS_MARK
-def test_mongo_repr(mongo_test_uri):
-    max_pool_size = 10
-    min_pool_size = 100
-    selection_timeout_ms = 1000
-    uri = f"{mongo_test_uri}/?maxPoolSize={max_pool_size}&minPoolSize={min_pool_size}&serverSelectionTimeoutMS={selection_timeout_ms}"
+def test_mongo_construction_with_pymongo(mongo_test_uri):
+    uri = f"{mongo_test_uri}/?maxPoolSize=10&minPoolSize=100&serverSelectionTimeoutMS=1000"
     ac = Arctic(uri)
     assert repr(ac) == f"Arctic(config=mongodb(endpoint={mongo_test_uri[len('mongodb://'):]}))"
+
+    # With pymongo, exception thrown in the uri_parser;
+    with pytest.raises(UserInputException):
+        uri = f"{mongo_test_uri}//"
+        ac = Arctic(uri)
+
+
+@MONGO_TESTS_MARK
+def test_mongo_construction_no_pymongo(monkeypatch, mongo_test_uri):
+    import arcticdb.adapters.mongo_library_adapter
+
+    monkeypatch.setattr(arcticdb.adapters.mongo_library_adapter, "_HAVE_PYMONGO", False)
+
+    uri = f"{mongo_test_uri}/?maxPoolSize=10&minPoolSize=100&serverSelectionTimeoutMS=1000"
+    ac = Arctic(uri)
+    assert repr(ac) == f"Arctic(config=mongodb(endpoint={mongo_test_uri[len('mongodb://'):]}))"
+
+    # Without pymongo, it gets thrown in the mongo C++ library
+    with pytest.raises(UserInputException):
+        uri = f"{mongo_test_uri}//"
+        ac = Arctic(uri)
 
 
 def test_s3_repr(moto_s3_uri_incl_bucket):
@@ -578,8 +596,7 @@ def test_s3_repr(moto_s3_uri_incl_bucket):
     s3_endpoint += f":{port}"
     bucket = moto_s3_uri_incl_bucket.split(":")[-1].split("?")[0]
     assert (
-        repr(lib)
-        == "Library("
+        repr(lib) == "Library("
         "Arctic("
         "config=S3("
         f"endpoint={s3_endpoint}, bucket={bucket})), path=pytest_test_lib, storage=s3_storage)"
