@@ -70,9 +70,9 @@ dependencies:
   - hypothesis < 6.73
   - pytest-sugar
   - pytest-xdist
-  - pymongo
   # Python dependencies (for tests only)
   - azure-storage-blob
   - azure-identity
   - pyarrow
   - asv
+  - pymongo
