@@ -114,7 +114,8 @@ jobs:
 
       - name: CMake compile
         if: inputs.job_type != 'follower'
-        uses: lukka/run-cmake@v10
+        # We are pinning the version to 10.6 because >= 10.7, use node20 which is not supported in the container
+        uses: lukka/run-cmake@v10.6
         with:
           cmakeListsTxtPath: ${{github.workspace}}/cpp/CMakeLists.txt
           configurePreset: ${{env.ARCTIC_CMAKE_PRESET}}
