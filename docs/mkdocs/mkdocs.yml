@@ -40,6 +40,7 @@ extra_css:
 
 plugins:
   - search
+  - autorefs
   - mkdocs-jupyter:
       ignore_h1_titles: True
       include_source: True
