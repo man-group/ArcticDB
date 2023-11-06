@@ -19,7 +19,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <mutex>
-#include <arcticdb/util/third_party/emilib_set.hpp>
 
 #ifdef ARCTICDB_USING_CONDA
     #include <robin_hood.h>
@@ -249,7 +248,7 @@ class StringPool {
     py::buffer_info as_buffer_info() const;
 
     std::optional<position_t> get_offset_for_column(std::string_view str, const Column& column);
-    emilib::HashSet<position_t> get_offsets_for_column(const std::shared_ptr<std::unordered_set<std::string>>& strings, const Column& column);
+    robin_hood::unordered_set<position_t> get_offsets_for_column(const std::shared_ptr<std::unordered_set<std::string>>& strings, const Column& column);
   private:
     MapType map_;
     mutable StringBlock block_;

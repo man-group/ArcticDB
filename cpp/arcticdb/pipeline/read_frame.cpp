@@ -22,7 +22,11 @@
 #include <arcticdb/storage/store.hpp>
 #include <arcticdb/stream/index.hpp>
 #include <arcticdb/pipeline/column_mapping.hpp>
-#include <arcticdb/util/third_party/emilib_map.hpp>
+#ifdef ARCTICDB_USING_CONDA
+    #include <robin_hood.h>
+#else
+    #include <arcticdb/util/third_party/robin_hood.hpp>
+#endif
 #include <arcticdb/codec/variant_encoded_field_collection.hpp>
 
 #include <google/protobuf/util/message_differencer.h>
@@ -803,7 +807,7 @@ class DynamicStringReducer : public StringReducer {
         auto none = std::make_unique<py::none>(py::none{});
         LockPolicy::unlock(*lock_);
         size_t none_count = 0u;
-        emilib::HashMap<StringPool::offset_t, std::pair<PyObject*, folly::SpinLock>> local_map;
+        robin_hood::unordered_flat_map<StringPool::offset_t, std::pair<PyObject*, folly::SpinLock>> local_map;
         local_map.reserve(end - row_);
         // TODO this is no good for non-contigous blocks, but we currently expect
         // output data to be contiguous
@@ -828,7 +832,7 @@ class DynamicStringReducer : public StringReducer {
                     *ptr_dest_ = StringCreator::create(sv, has_type_conversion);
                     LockPolicy::unlock(*lock_);
                     PyObject* dest = *ptr_dest_;
-                    local_map.insert_unique(std::move(offset), std::make_pair(std::move(dest), folly::SpinLock{}));
+                    local_map.insert(robin_hood::pair(std::move(offset), std::make_pair(std::move(dest), folly::SpinLock{})));
                 }
             }
         }
