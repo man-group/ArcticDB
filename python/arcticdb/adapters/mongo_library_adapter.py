@@ -14,23 +14,31 @@ from arcticdb.adapters.arctic_library_adapter import ArcticLibraryAdapter, set_l
 from arcticdb_ext.storage import CONFIG_LIBRARY_NAME
 from arcticdb.encoding_version import EncodingVersion
 from arcticdb.exceptions import UserInputException
-from collections import namedtuple
-import pymongo
+import re
 
-PARSED_QUERY = namedtuple("PARSED_QUERY", ["region"])
+try:
+    from pymongo.uri_parser import parse_uri
+
+    _HAVE_PYMONGO = True
+except ImportError:
+    _HAVE_PYMONGO = False
 
 
 class MongoLibraryAdapter(ArcticLibraryAdapter):
     @staticmethod
     def supports_uri(uri: str) -> bool:
-        return uri.startswith("mongodb://")
+        return uri.startswith("mongodb://")  # mongo+srv:// support?
 
     def __init__(self, uri: str, encoding_version: EncodingVersion, *args, **kwargs):
         try:
-            parameters = pymongo.uri_parser.parse_uri(
-                uri
-            )  # also checks pymongo uri syntax, throw exception as early as possible if syntax is incorrect
-            self._endpoint = f"{parameters['nodelist'][0][0]}:{parameters['nodelist'][0][1]}"
+            if _HAVE_PYMONGO:
+                parameters = parse_uri(
+                    uri
+                )  # also checks pymongo uri syntax, throw exception as early as possible if syntax is incorrect
+                self._endpoint = f"{parameters['nodelist'][0][0]}:{parameters['nodelist'][0][1]}"
+            else:
+                match = re.search(r"\/\/(?P<endpoint>[^\/]*)", uri)
+                self._endpoint = match["endpoint"]
         except Exception as e:
             raise UserInputException(
                 f"Invalid connection string format. {e} Correct format: mongodb://[HOST]/[DATABASE][?OPTIONS]"
