@@ -15,7 +15,6 @@ import os
 import sys
 import pandas as pd
 import pickle
-import psutil
 from abc import ABCMeta, abstractmethod
 
 from pandas.api.types import is_integer_dtype
@@ -23,14 +22,14 @@ from arcticc.pb2.descriptors_pb2 import UserDefinedMetadata, NormalizationMetada
 from arcticc.pb2.storage_pb2 import VersionStoreConfig
 from mmap import mmap
 from collections import Counter
-from arcticdb.exceptions import ArcticNativeException, ArcticNativeNotYetImplemented
-from arcticdb.supported_types import time_types as supported_time_types
+from arcticdb.exceptions import ArcticNativeException, ArcticDbNotYetImplemented
+from arcticdb.supported_types import DateRangeInput, time_types as supported_time_types
+from arcticdb.util._versions import IS_PANDAS_TWO, IS_PANDAS_ZERO
 from arcticdb.version_store.read_result import ReadResult
 from arcticdb_ext.version_store import SortedValue as _SortedValue
 from pandas.core.internals import make_block
 
 from pandas import DataFrame, MultiIndex, Series, DatetimeIndex, Index, RangeIndex
-from six import string_types, text_type, binary_type, PY3
 from typing import NamedTuple, List, Union, Mapping, Any, TypeVar, Tuple
 
 from arcticdb import _msgpack_compat
@@ -97,6 +96,13 @@ class FrameData(
             return FrameData(fd.value.data, fd.names, fd.index_columns)
 
 
+# NOTE: When using Pandas < 2.0, `datetime64` _always_ uses nanosecond resolution,
+# i.e. Pandas < 2.0 _always_ provides `datetime64[ns]` and ignores any other resolution.
+# Yet, this has changed in Pandas 2.0 and other resolution can be used,
+# i.e. Pandas >= 2.0 will also provides `datetime64[us]`, `datetime64[ms]` and `datetime64[s]`.
+# See: https://pandas.pydata.org/docs/dev/whatsnew/v2.0.0.html#construction-with-datetime64-or-timedelta64-dtype-with-unsupported-resolution  # noqa: E501
+# TODO: for the support of Pandas>=2.0, convert any `datetime` to `datetime64[ns]` before-hand and do not
+# rely uniquely on the resolution-less 'M' specifier if it this doable.
 DTN64_DTYPE = "datetime64[ns]"
 NP_OBJECT_DTYPE = np.dtype("O")
 
@@ -104,17 +110,10 @@ _SUPPORTED_TYPES = Union[DataFrame]  # , Series]
 _SUPPORTED_NATIVE_RETURN_TYPES = Union[FrameData]
 
 
-if PY3:
-
-    def _accept_array_string(v):
-        # TODO remove this once arctic keeps the string type under the hood
-        # and does not transform string into bytes
-        return isinstance(v, string_types) or isinstance(v, binary_type)
-
-else:
-
-    def _accept_array_string(v):
-        return isinstance(v, string_types)
+def _accept_array_string(v):
+    # TODO remove this once arctic keeps the string type under the hood
+    # and does not transform string into bytes
+    return type(v) in (str, bytes)
 
 
 def _is_nan(element):
@@ -137,7 +136,7 @@ def get_sample_from_non_empty_arr(arr, arr_name):
 
 def coerce_string_column_to_fixed_length_array(arr, to_type, string_max_len):
     # in python3 all text will be treated as unicode
-    if to_type == text_type:
+    if to_type == str:
         if sys.platform == "win32":
             # See https://sourceforge.net/p/numpy/mailman/numpy-discussion/thread/1139250278.7538.52.camel%40localhost.localdomain/#msg11998404
             # Different wchar size on Windows is not compatible with our current internal representation of Numpy strings
@@ -161,6 +160,15 @@ def get_timezone_from_metadata(norm_meta):
 
 
 def _to_primitive(arr, arr_name, dynamic_strings, string_max_len=None, coerce_column_type=None, norm_meta=None):
+    arr_dtype_as_str = str(arr.dtype)
+    if "pyarrow" in arr_dtype_as_str:
+        raise ArcticDbNotYetImplemented(
+            "PyArrow-backed pandas DataFrame and Series are not currently supported by ArcticDB. \n"
+            "Please convert your pandas DataFrame and Series to use NumPy array before using them with ArcticDB. \n"
+            "If you are interested in the support of PyArrow-backed pandas DataFrame and Series, please upvote this \n"
+            "GitHub issue and participate to its discussions: https://github.com/man-group/ArcticDB/issues/881"
+        )
+
     if isinstance(arr.dtype, pd.core.dtypes.dtypes.CategoricalDtype):
         if is_integer_dtype(arr.categories.dtype):
             norm_meta.common.int_categories[arr_name].category.extend(arr.categories)
@@ -169,6 +177,14 @@ def _to_primitive(arr, arr_name, dynamic_strings, string_max_len=None, coerce_co
         return arr.codes
 
     obj_tokens = (object, "object", "O")
+    if np.issubdtype(arr.dtype, np.datetime64):
+        # ArcticDB only operates at nanosecond resolution (i.e. `datetime64[ns]`) type because so did Pandas < 2.
+        # In Pandas >= 2.0, other resolution are supported (namely `ms`, `s`, and `us`).
+        # See: https://pandas.pydata.org/docs/dev/whatsnew/v2.0.0.html#construction-with-datetime64-or-timedelta64-dtype-with-unsupported-resolution  # noqa: E501
+        # We want to maintain consistent behaviour, so we convert any other resolution
+        # to `datetime64[ns]`.
+        arr = arr.astype(DTN64_DTYPE, copy=False)
+
     if arr.dtype.hasobject is False and not (
         dynamic_strings and arr.dtype == "float" and coerce_column_type in obj_tokens
     ):
@@ -177,13 +193,7 @@ def _to_primitive(arr, arr_name, dynamic_strings, string_max_len=None, coerce_co
         return arr
 
     if len(arr) == 0:
-        if coerce_column_type is None:
-            raise ArcticNativeNotYetImplemented(
-                "coercing column type is required when empty column of object type, Column type={} for column={}"
-                .format(arr.dtype, arr_name)
-            )
-        else:
-            return arr.astype(coerce_column_type)
+        return arr.astype(coerce_column_type)
 
     # Coerce column allows us to force a column to the given type, which means we can skip expensive iterations in
     # Python with the caveat that if the user gave an invalid type it's going to blow up in the core.
@@ -219,7 +229,7 @@ def _to_primitive(arr, arr_name, dynamic_strings, string_max_len=None, coerce_co
     elif dynamic_strings and sample is None:  # arr is entirely empty
         return arr
     else:
-        raise ArcticNativeNotYetImplemented(
+        raise ArcticDbNotYetImplemented(
             "Support for arbitrary objects in an array is not implemented apart from string, unicode, Timestamp. "
             "Column type={} for column={}. Do you have mixed dtypes in your column?".format(arr.dtype, arr_name)
         )
@@ -229,12 +239,12 @@ def _to_primitive(arr, arr_name, dynamic_strings, string_max_len=None, coerce_co
         return casted_arr
     else:
         if None in arr:
-            raise ArcticNativeNotYetImplemented(
+            raise ArcticDbNotYetImplemented(
                 "You have a None object in the numpy array at positions={} Column type={} for column={} "
                 "which cannot be normalized.".format(np.where(arr is None)[0], arr.dtype, arr_name)
             )
         else:
-            raise ArcticNativeNotYetImplemented(
+            raise ArcticDbNotYetImplemented(
                 "Could not convert this column={} of type 'O' to a primitive type. ".format(arr_name)
             )
 
@@ -258,7 +268,7 @@ def _to_tz_timestamp(dt):
 
 def _from_tz_timestamp(ts, tz):
     # type: (int, Optional[str])->(datetime.datetime)
-    return pd.Timestamp(ts).tz_localize(tz).to_pydatetime()
+    return pd.Timestamp(ts).tz_localize(tz).to_pydatetime(warn=False)
 
 
 _range_index_props_are_public = hasattr(RangeIndex, "start")
@@ -267,10 +277,11 @@ _range_index_props_are_public = hasattr(RangeIndex, "start")
 def _normalize_single_index(index, index_names, index_norm, dynamic_strings=None, string_max_len=None):
     # index: pd.Index or np.ndarray -> np.ndarray
     index_tz = None
+
     if isinstance(index, RangeIndex):
         # skip index since we can reconstruct it, so no need to actually store it
         if index.name:
-            if not isinstance(index.name, string_types):
+            if not isinstance(index.name, str):
                 raise ArcticNativeException(
                     "Cannot use non string type as index name. Actual {} with type {}".format(
                         index.name, type(index.name)
@@ -497,6 +508,20 @@ class _PandasNormalizer(Normalizer):
             df.reset_index(fields, inplace=True)
             index = df.index
         else:
+            n_rows = len(index)
+            n_categorical_columns = len(df.select_dtypes(include="category").columns)
+            if IS_PANDAS_TWO and isinstance(index, RangeIndex) and n_rows == 0 and n_categorical_columns == 0:
+                # In Pandas 1.0, an Index is used by default for any empty dataframe or series, except if
+                # there are categorical columns in which case a RangeIndex is used.
+                #
+                # In Pandas 2.0, RangeIndex is used by default for _any_ empty dataframe or series.
+                # See: https://github.com/pandas-dev/pandas/issues/49572
+                # Yet internally, ArcticDB uses a DatetimeIndex for empty dataframes and series without categorical
+                # columns.
+                #
+                # The index is converted to a DatetimeIndex for preserving the behavior of ArcticDB with Pandas 1.0.
+                index = DatetimeIndex([])
+
             index_norm = pd_norm.index
             index_norm.is_not_range_index = not isinstance(index, RangeIndex)
 
@@ -553,6 +578,13 @@ class SeriesNormalizer(_PandasNormalizer):
         else:
             s.name = None
 
+        if s.empty:
+            # Before Pandas 2.0, empty series' dtype was float, but as of Pandas 2.0. empty series' dtype became object.
+            # See: https://github.com/pandas-dev/pandas/issues/17261
+            # We want to maintain consistent behaviour, so we return empty series as containing objects
+            # when the Pandas version is >= 2.0
+            s = s.astype("object") if IS_PANDAS_TWO else s.astype("float")
+
         return s
 
 
@@ -561,7 +593,7 @@ class NdArrayNormalizer(Normalizer):
 
     def normalize(self, item, **kwargs):
         if IS_WINDOWS and item.dtype.char == "U":
-            raise ArcticNativeNotYetImplemented("Numpy strings are not yet implemented on Windows")  # SKIP_WIN
+            raise ArcticDbNotYetImplemented("Numpy strings are not yet implemented on Windows")  # SKIP_WIN
         norm_meta = NormalizationMetadata()
         norm_meta.np.shape.extend(item.shape)
 
@@ -583,11 +615,6 @@ class NdArrayNormalizer(Normalizer):
         original_shape = tuple(norm_meta.shape)
         data = item.data[0]
         return data.reshape(original_shape)
-
-
-def print_current_rss():
-    process = psutil.Process(os.getpid())
-    log.debug("Current memory usage=", process.memory_info().rss / 1024 / 1024)  # in bytes
 
 
 from pandas.core.internals import BlockManager
@@ -649,7 +676,7 @@ class DataFrameNormalizer(_PandasNormalizer):
         # type: (_FrameData, NormalizationMetadata.PandaDataFrame)->DataFrame
 
         if norm_meta.HasField("multi_columns"):
-            raise ArcticNativeNotYetImplemented(
+            raise ArcticDbNotYetImplemented(
                 "MultiColumns are not implemented. Normalization meta: {}".format(str(norm_meta))
             )
 
@@ -660,7 +687,23 @@ class DataFrameNormalizer(_PandasNormalizer):
         columns, denormed_columns, data = _denormalize_columns(item, norm_meta, idx_type, n_indexes)
 
         if not self._skip_df_consolidation:
+            columns_dtype = {} if data is None else {name: np_array.dtype for name, np_array in data.items()}
             df = DataFrame(data, index=index, columns=columns)
+
+            # Setting the columns' dtype manually, since pandas might just convert the dtype of some
+            # (empty) columns to another one and since the `dtype` keyword for `pd.DataFrame` constructor
+            # does not accept a mapping such as `columns_dtype`.
+            # For instance the following code has been tried but returns a pandas.DataFrame full of NaNs:
+            #
+            #       columns_mapping = {} if data is None else {
+            #           name: pd.Series(np_array, index=index, dtype=np_array.dtype)
+            #           for name, np_array in data.items()
+            #       }
+            #       df = DataFrame(index=index, columns=columns_mapping, copy=False)
+            #
+            for column_name, dtype in columns_dtype.items():
+                df[column_name] = df[column_name].astype(dtype, copy=False)
+
         else:
             if index is not None:
                 df = self.df_without_consolidation(columns, index, item, n_indexes, data)
@@ -674,8 +717,13 @@ class DataFrameNormalizer(_PandasNormalizer):
         for key in norm_meta.common.categories:
             if key in data:
                 category_info = list(norm_meta.common.categories[key].category)
-                res = pd.Categorical.from_codes(codes=data[key], categories=category_info)
-                df[key] = res
+                codes = data[key]
+                if IS_PANDAS_ZERO:
+                    # `pd.Categorical.from_codes` from `pandas~=0.25.x` (pandas' supported version for python 3.6)
+                    # does not support `codes` of `dtype=object`: it has to have an integral dtype.
+                    # See: https://github.com/pandas-dev/pandas/blob/0.25.x/pandas/core/arrays/categorical.py#L688-L704
+                    codes = np.asarray(codes, dtype=int)
+                df[key] = pd.Categorical.from_codes(codes=codes, categories=category_info)
         for key in norm_meta.common.int_categories:
             if key in data:
                 category_info = list(norm_meta.common.int_categories[key].category)
@@ -762,7 +810,7 @@ class DataFrameNormalizer(_PandasNormalizer):
             item = item.copy()
 
         if isinstance(item.columns, MultiIndex):
-            raise ArcticNativeNotYetImplemented("MultiIndex column are not supported yet")
+            raise ArcticDbNotYetImplemented("MultiIndex column are not supported yet")
 
         index_names, ix_vals = self._index_to_records(
             item, norm_meta.df.common, dynamic_strings, string_max_len=string_max_len
@@ -864,9 +912,7 @@ class MsgPackNormalizer(Normalizer):
             self._msgpack_pack(obj, buffer)
         except ValueError as e:
             if str(e) == "data out of range":
-                raise ArcticNativeNotYetImplemented(
-                    "Fallback normalized msgpack size cannot exceed {}B".format(self._size)
-                )
+                raise ArcticDbNotYetImplemented("Fallback normalized msgpack size cannot exceed {}B".format(self._size))
             else:
                 raise
 
@@ -932,7 +978,7 @@ class MsgPackNormalizer(Normalizer):
             raise TypeError("Normalisation is running in strict mode, writing pickled data is disabled.")
         else:
             return ExtType(
-                MsgPackSerialization.PY_PICKLE_3 if PY3 else MsgPackSerialization.PY_PICKLE_2,
+                MsgPackSerialization.PY_PICKLE_3,
                 MsgPackNormalizer._nested_msgpack_packb(Pickler.write(obj)),
             )
 
@@ -956,8 +1002,6 @@ class MsgPackNormalizer(Normalizer):
             return Pickler.read(data, pickled_in_python2=True)
 
         if code == MsgPackSerialization.PY_PICKLE_3:
-            if not PY3:
-                raise ArcticNativeNotYetImplemented("Data has been pickled in Py3. Reading from Py2 is not supported.")
             data = MsgPackNormalizer._nested_msgpack_unpackb(data, raw=False)
             return Pickler.read(data, pickled_in_python2=False)
 
@@ -983,13 +1027,12 @@ class MsgPackNormalizer(Normalizer):
 class Pickler(object):
     @staticmethod
     def read(data, pickled_in_python2=False):
-        if PY3:
-            if isinstance(data, string_types):
-                return pickle.loads(data.encode("ascii"), encoding="bytes")
-            elif isinstance(data, binary_type):
-                if not pickled_in_python2:
-                    # Use the default encoding for python2 pickled objects similar to what's being done for PY2.
-                    return pickle.loads(data, encoding="bytes")
+        if isinstance(data, str):
+            return pickle.loads(data.encode("ascii"), encoding="bytes")
+        elif isinstance(data, str):
+            if not pickled_in_python2:
+                # Use the default encoding for python2 pickled objects similar to what's being done for PY2.
+                return pickle.loads(data, encoding="bytes")
 
         try:
             return pickle.loads(data)
@@ -1158,11 +1201,7 @@ class CompositeNormalizer(Normalizer):
                 "You can set pickle_on_failure param to force pickling of this object instead."
                 "(Note: Pickling has worse performance and stricter memory limitations)"
             )
-            log.error(
-                error_message,
-                type(item),
-                ex,
-            )
+            log.error(error_message, type(item), ex)
             raise
 
     def denormalize(self, item, norm_meta):
@@ -1218,7 +1257,7 @@ def normalize_metadata(d):
     try:
         _msgpack_metadata._msgpack_pack(d, m)
     except ValueError:
-        raise ArcticNativeNotYetImplemented("User defined metadata cannot exceed {}B".format(_MAX_USER_DEFINED_META))
+        raise ArcticDbNotYetImplemented("User defined metadata cannot exceed {}B".format(_MAX_USER_DEFINED_META))
 
     udm = UserDefinedMetadata()
     udm.inline_payload = memoryview(m[: m.tell()]).tobytes()
@@ -1233,7 +1272,7 @@ def denormalize_user_metadata(udm, ext_obj=None):
     elif storage_type is None:
         return None
     else:
-        raise ArcticNativeNotYetImplemented("Extra object reference is not supported yet")
+        raise ArcticDbNotYetImplemented("Extra object reference is not supported yet")
 
 
 def denormalize_dataframe(ret):
@@ -1264,11 +1303,15 @@ def restrict_data_to_date_range_only(data: T, *, start: Timestamp, end: Timestam
     else:  # non-Pandas, try to slice it anyway
         if not getattr(data, "timezone", None):
             start, end = _strip_tz(start, end)
-        data = data[start.to_pydatetime() - timedelta(microseconds=1) : end.to_pydatetime() + timedelta(microseconds=1)]
+        data = data[
+            start.to_pydatetime(warn=False)
+            - timedelta(microseconds=1) : end.to_pydatetime(warn=False)
+            + timedelta(microseconds=1)
+        ]
     return data
 
 
-def normalize_dt_range_to_ts(dtr: "DateRangeInput") -> Tuple[Timestamp, Timestamp]:
+def normalize_dt_range_to_ts(dtr: DateRangeInput) -> Tuple[Timestamp, Timestamp]:
     def _to_utc_ts(v: "ExplicitlySupportedDates", bound_name: str) -> Timestamp:
         if not isinstance(v, supported_time_types):
             raise TypeError(

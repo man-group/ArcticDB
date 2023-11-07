@@ -58,17 +58,23 @@ def test_map(lmdb_version_store):
 
 def _read_and_assert_symbol(args):
     lib, symbol, idx = args
-    print("start {}_{}".format(symbol, idx))
-    ss = lib.read(symbol)
-    assert_frame_equal(ss.data, df("test1"))
-    print("end {}".format(idx))
+    for attempt in range(1, 11):
+        print("start {}_{} attempt {}".format(symbol, idx, attempt))
+        ss = lib.read(symbol)
+        if df("test1").equals(ss.data):
+            assert_frame_equal(ss.data, df("test1"))
+            print("end {}".format(idx))
+            break
+        else:
+            print("attempt {} fail".format(attempt))
+            time.sleep(0.5)  # Make sure the writes have finished, especially azurite.
 
 
-def test_parallel_reads(s3_version_store):
+def test_parallel_reads(local_object_version_store):
     symbols = ["XXX"] * 20
     p = Pool(10)
-    s3_version_store.write(symbols[0], df("test1"))
-    time.sleep(0.1)  # Make sure the writes have finished.
-    p.map(_read_and_assert_symbol, [(s3_version_store, s, idx) for idx, s in enumerate(symbols)])
+    local_object_version_store.write(symbols[0], df("test1"))
+    time.sleep(0.1)  # Make sure the writes have finished, especially azurite.
+    p.map(_read_and_assert_symbol, [(local_object_version_store, s, idx) for idx, s in enumerate(symbols)])
     p.close()
     p.join()

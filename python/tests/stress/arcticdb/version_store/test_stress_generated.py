@@ -39,6 +39,15 @@ def generate_data(total_size, ncols, pct_null=0.1, repeats=1, dtype="float"):
     return pd.DataFrame(data)
 
 
+def generate_perf_data(nrows, ncols, pct_null=0.1, repeats=1, dtype="float"):
+    type_ = np.dtype(float)
+
+    datagen_func = DATA_GENERATORS[dtype]
+
+    data = {"c" + str(i): datagen_func(nrows, pct_null, repeats) for i in range(ncols)}
+    return pd.DataFrame(data)
+
+
 def write_to_arctic(df, symbol, version_store):
     start = time.time()
     vit = version_store.write(symbol, df)
@@ -59,26 +68,27 @@ def param_dict(*fields, **cases):
 
 
 @param_dict("pct_null", "repeats", "symbol", high_entropy=(0.0, 1), low_entropy=(0.0, 1000))
-def test_stress(pct_null, repeats, symbol, s3_version_store):
+def test_stress(pct_null, repeats, symbol, object_version_store):
     print("Testing symbol " + symbol)
     df = generate_data(DATA_SIZE, NCOLS, pct_null, repeats)
     print("Generated data, starting write")
-    write_to_arctic(df, symbol, s3_version_store)
+    write_to_arctic(df, symbol, object_version_store)
     start = time.time()
-    test_df = s3_version_store.read(symbol).data
+    test_df = object_version_store.read(symbol).data
     elapsed = time.time() - start
     print("arctic read time: " + str(elapsed))
     assert_frame_equal(test_df, df)
 
 
+# This test is running only against LMDB because it is **very** slow, if ran against a persistent storage
 @param_dict("pct_null", "repeats", "symbol", high_entropy=(0.0, 1), low_entropy=(0.0, 1000))
-def test_stress_small_row(pct_null, repeats, symbol, lmdb_version_store_tiny_segment):
+def test_stress_small_row(pct_null, repeats, symbol, lmdb_or_in_memory_version_store_tiny_segment):
     print("Testing symbol " + symbol)
     df = generate_data(MEGABYTE, NCOLS, pct_null, repeats)
     print("Generated data, starting write")
-    write_to_arctic(df, symbol, lmdb_version_store_tiny_segment)
+    write_to_arctic(df, symbol, lmdb_or_in_memory_version_store_tiny_segment)
     start = time.time()
-    test_df = lmdb_version_store_tiny_segment.read(symbol).data
+    test_df = lmdb_or_in_memory_version_store_tiny_segment.read(symbol).data
     elapsed = time.time() - start
     print("arctic read time: " + str(elapsed))
     assert_frame_equal(test_df, df)

@@ -11,6 +11,39 @@
 
 namespace arcticdb{
 
+struct IGroupingAggregatorData {
+    template<class Base>
+    struct Interface : Base {
+        void add_data_type(DataType data_type) { folly::poly_call<0>(*this, data_type); }
+
+        void aggregate(const std::optional<ColumnWithStrings>& input_column, const std::vector<size_t>& groups, size_t unique_values) {
+            folly::poly_call<1>(*this, input_column, groups, unique_values);
+        }
+        [[nodiscard]] SegmentInMemory finalize(const ColumnName& output_column_name, bool dynamic_schema, size_t unique_values) {
+            return folly::poly_call<2>(*this, output_column_name, dynamic_schema, unique_values);
+        }
+    };
+
+    template<class T>
+    using Members = folly::PolyMembers<&T::add_data_type, &T::aggregate, &T::finalize>;
+};
+
+using GroupingAggregatorData = folly::Poly<IGroupingAggregatorData>;
+
+struct IGroupingAggregator {
+    template<class Base>
+    struct Interface : Base {
+        [[nodiscard]] ColumnName get_input_column_name() const { return folly::poly_call<0>(*this); };
+        [[nodiscard]] ColumnName get_output_column_name() const { return folly::poly_call<1>(*this); };
+        [[nodiscard]] GroupingAggregatorData get_aggregator_data() const { return folly::poly_call<2>(*this); }
+    };
+
+    template<class T>
+    using Members = folly::PolyMembers<&T::get_input_column_name, &T::get_output_column_name, &T::get_aggregator_data>;
+};
+
+using GroupingAggregator = folly::Poly<IGroupingAggregator>;
+
 struct IColumnStatsAggregatorData {
     template<class Base>
     struct Interface : Base {
@@ -39,52 +72,5 @@ struct IColumnStatsAggregator {
 };
 
 using ColumnStatsAggregator = folly::Poly<IColumnStatsAggregator>;
-
-struct Fraction {
-    double numerator_{0.0};
-    uint64_t denominator_{0};
-
-    double to_double() const {
-        return denominator_ == 0 ? std::numeric_limits<double>::quiet_NaN(): numerator_ / static_cast<double>(denominator_);
-    }
-};
-
-struct CountAndTotals {
-    std::vector<Fraction> fractions_;
-};
-
-struct IAggregation {
-    template<class Base>
-    struct Interface : Base {
-        void aggregate(const std::optional<ColumnWithStrings>& input_column, const std::vector<size_t>& groups, size_t unique_values) { folly::poly_call<0>(*this, input_column, groups, unique_values); }
-
-        std::optional<DataType> finalize(SegmentInMemory& seg, bool dynamic_schema, size_t unique_values) { return folly::poly_call<1>(*this, seg, dynamic_schema, unique_values); }
-
-        [[nodiscard]] ColumnName get_input_column_name() const { return folly::poly_call<2>(*this); };
-
-        [[nodiscard]] ColumnName get_output_column_name() const { return folly::poly_call<3>(*this); };
-
-        void set_data_type(DataType data_type_) { folly::poly_call<4>(*this, data_type_); }
-    };
-
-    template<class T>
-    using Members = folly::PolyMembers<&T::aggregate, &T::finalize, &T::get_input_column_name, &T::get_output_column_name, &T::set_data_type>;
-};
-
-using Aggregation = folly::Poly<IAggregation>;
-
-struct IAggregationFactory {
-    template<class Base>
-    struct Interface : Base {
-
-        [[nodiscard]] Aggregation construct() const { return folly::poly_call<0>(*this); }
-
-    };
-
-    template<class T>
-    using Members = folly::PolyMembers<&T::construct>;
-};
-
-using AggregationFactory = folly::Poly<IAggregationFactory>;
 
 } //namespace arcticdb

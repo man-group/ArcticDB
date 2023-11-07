@@ -20,14 +20,13 @@
 using namespace arcticdb;
 
 template<typename DTT, Dimension DIM, NumericId def_tsid = 123, int def_field_count = 4>
-StreamDescriptor::Proto create_tsd(StreamId tsid = def_tsid, std::size_t field_count = def_field_count) {
+StreamDescriptor create_tsd(StreamId tsid = def_tsid, std::size_t field_count = def_field_count) {
 
     using TDT = TypeDescriptorTag<DTT, DimensionTag<DIM>>;
 
     auto tsd = stream_descriptor(tsid, stream::TimeseriesIndex::default_index(), {});
     for (std::size_t i = 0; i < field_count; ++i) {
-        auto ptr = tsd.mutable_fields()->Add();
-        ptr->CopyFrom(scalar_field_proto(TDT::DataTypeTag::data_type, fmt::format("col_{}", i)));
+        tsd.add_field(scalar_field(TDT::DataTypeTag::data_type, fmt::format("col_{}", i)));
     }
     return tsd;
 }

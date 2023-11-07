@@ -49,7 +49,7 @@ Other than this, there is no client-side caching in ArcticDB.
 
 ### SymbolList.MaxDelta
 
-The [symbol list cache](/technical/on_disk_storage#symbol-list-caching) is compacted when there are more than `SymbolList.MaxDelta` objects on disk in the symbol list cache.
+The [symbol list cache](technical/on_disk_storage.md#symbol-list-caching) is compacted when there are more than `SymbolList.MaxDelta` objects on disk in the symbol list cache.
 
 The default is 500.
 
@@ -58,6 +58,14 @@ The default is 500.
 The S3 API supports the `DeleteObjects` method, whereby a single HTTP request can be used to delete multiple objects. This parameter can be used to control how many objects are requested to be deleted at a time.
 
 The default is 1000.
+
+### S3Storage.VerifySSL
+
+Control whether the client should verify the SSL certificate of the storage. If set, this will override the library option set upon library creation.
+
+Values:
+* 0: Do not perform SSL verification.
+* 1: Perform SSL verification.
 
 ### VersionStore.NumCPUThreads and VersionStore.NumIOThreads
 
@@ -74,21 +82,49 @@ If only `NumCPUThreads` is set, `NumIOThreads` will still default to x1.5 `NumCP
 
 ## Logging configuration
 
-ArcticDB has multiple log streams, and the verbosity of each can be configured independently. The available streams are visible in the [source code](https://github.com/man-group/ArcticDB/blob/master/python/arcticdb/log.py), although the most commonly useful logs are in:
+ArcticDB has multiple log streams, and the verbosity of each can be configured independently. 
+The available streams are visible in the [source code](https://github.com/man-group/ArcticDB/blob/master/python/arcticdb/log.py), although the most commonly useful logs are in:
  
-* `version` - contains information about versions being read, created, or destroyed, and traversal of the [version layer](/technical/on_disk_storage#version-layer) linked list
+* `version` - contains information about versions being read, created, or destroyed, and traversal of the [version layer](technical/on_disk_storage.md#version-layer) linked list
 * `storage` - contains information about individual operations that interact with the storage device (read object, write object, delete object, etc)
 
-The available log levels in decreasing order of verbosity are are `TRACE`, `DEBUG`, `INFO`, `WARN`, `ERROR`, `CRITICAL`, `OFF`. By default, all streams are set to the `INFO` level.
+The available log levels in decreasing order of verbosity are are `TRACE`, `DEBUG`, `INFO`, `WARN`, `ERROR`, `CRITICAL`, `OFF`. 
+By default, all streams are set to the `INFO` level.
 
-There are two ways to configure log levels. The first is via environment variables e.g. `ARCTICDB_version_loglevel=DEBUG`. All of the streams can be configured together via `ARCTICDB_all_loglevel=DEBUG`. The second is in code by calling `set_log_level` from the `arcticdb.config` module. This takes two optional arguments:
+There are two ways to configure log levels: 
+
+1. **Setting an environment variable**: `ARCTICDB_<stream>_loglevel=<level>`, for example: `ARCTICDB_version_loglevel=DEBUG`. All streams can be configured together via `ARCTICDB_all_loglevel`. 
+2. **In code**: Calling `set_log_level` from the `arcticdb.config` module. This takes two optional arguments:
 
 * `default_level` - the default level for all streams. Should be a string such as `"DEBUG"`
 * `specific_log_levels` - a dictionary from stream names to log levels used to override the default such as `{"version": "DEBUG""}`.
 
 If both environment variables are set, and `set_log_level` is called, then the latter takes priority.
 
-Note that all logging from ArcticDB goes to `stderr`, and this is not configurable.
+S3 logging can also be enabled by setting the environment variable `ARCTICDB_AWS_LogLevel_int=6`, which will output all S3 logs to a file in the present working directory. 
+See the [AWS documentation](https://docs.aws.amazon.com/sdk-for-cpp/v1/developer-guide/logging.html) for more details.
 
-S3 logging can also be enabled by setting the environment variable `ARCTICDB_AWS_LogLevel_int=6`, which will output all S3 logs to a file in the present working directory. See the [AWS documentation](https://docs.aws.amazon.com/sdk-for-cpp/v1/developer-guide/logging.html) for more details.
+### Logging destinations
 
+By default, all logging from ArcticDB goes to `stderr`. This can be configured using the `set_log_level` method.
+
+To configure logging to only a file:
+
+```
+from arcticdb.config import set_log_level
+set_log_level(console_output=False, file_output_path="/tmp/arcticdb.log")
+```
+
+To configure logging to both `stderr` and a file:
+
+```
+from arcticdb.config import set_log_level
+set_log_level(console_output=True, file_output_path="/tmp/arcticdb.log")
+```
+
+To configure logging to only `stderr` (this is the default configuration):
+
+```
+from arcticdb.config import set_log_level
+set_log_level(console_output=True, file_output_path=None)
+```

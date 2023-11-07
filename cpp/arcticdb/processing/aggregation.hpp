@@ -7,154 +7,168 @@
 
 #pragma once
 
-#include <arcticdb/processing/expression_node.hpp>
-#include <arcticdb/processing/processing_segment.hpp>
-#include <arcticdb/processing/bucketizer.hpp>
+#include <arcticdb/column_store/memory_segment.hpp>
 #include <arcticdb/entity/types.hpp>
-#include <arcticdb/pipeline/value.hpp>
-#include <arcticdb/pipeline/value_set.hpp>
-#include <arcticdb/processing/aggregation_interface.hpp>
-
-#include <folly/Poly.h>
+#include <arcticdb/entity/type_utils.hpp>
+#include <arcticdb/processing/expression_node.hpp>
 
 namespace arcticdb {
 
-template<typename T, typename T2=void>
-struct OutputType;
+class MinMaxAggregatorData
+{
+public:
 
-template <typename InputType>
-struct OutputType <InputType, typename std::enable_if_t<is_floating_point_type(InputType::DataTypeTag::data_type)>> {
-    using type = ScalarTagType<DataTypeTag<DataType::FLOAT64>>;
-};
+    MinMaxAggregatorData() = default;
+    ARCTICDB_MOVE_COPY_DEFAULT(MinMaxAggregatorData)
 
-template <typename InputType>
-struct OutputType <InputType, typename std::enable_if_t<is_unsigned_type(InputType::DataTypeTag::data_type)>> {
-    using type = ScalarTagType<DataTypeTag<DataType::UINT64>>;
-};
-
-template <typename InputType>
-struct OutputType<InputType, typename std::enable_if_t<is_signed_type(InputType::DataTypeTag::data_type) && is_integer_type(InputType::DataTypeTag::data_type)>> {
-    using type = ScalarTagType<DataTypeTag<DataType::INT64>>;
-};
-
-template<>
-struct OutputType<DataTypeTag<DataType::BOOL8>, void> {
-    using type = ScalarTagType<DataTypeTag<DataType::BOOL8>>;
-};
-
-template<>
-struct OutputType<DataTypeTag<DataType::MICROS_UTC64>, void> {
-    using type = ScalarTagType<DataTypeTag<DataType::MICROS_UTC64>>;
-};
-
-struct MinMaxAggregatorData {
-    std::optional<Value> min_;
-    std::optional<Value> max_;
     void aggregate(const ColumnWithStrings& input_column);
     SegmentInMemory finalize(const std::vector<ColumnName>& output_column_names) const;
+
+private:
+
+    std::optional<Value> min_;
+    std::optional<Value> max_;
 };
 
-struct MinMaxAggregator {
+class MinMaxAggregator
+{
+public:
+
+    explicit MinMaxAggregator(ColumnName column_name, ColumnName output_column_name_min, ColumnName output_column_name_max)
+        : column_name_(std::move(column_name))
+        , output_column_name_min_(std::move(output_column_name_min))
+        , output_column_name_max_(std::move(output_column_name_max))
+    {}
+    ARCTICDB_MOVE_COPY_DEFAULT(MinMaxAggregator)
+
+    [[nodiscard]] ColumnName get_input_column_name() const { return column_name_; }
+    [[nodiscard]] std::vector<ColumnName> get_output_column_names() const { return {output_column_name_min_, output_column_name_max_}; }
+    [[nodiscard]] MinMaxAggregatorData get_aggregator_data() const { return MinMaxAggregatorData(); }
+
+private:
+
     ColumnName column_name_;
     ColumnName output_column_name_min_;
     ColumnName output_column_name_max_;
-
-    MinMaxAggregator(ColumnName column_name, ColumnName output_column_name_min, ColumnName output_column_name_max) :
-            column_name_(std::move(column_name)),
-            output_column_name_min_(std::move(output_column_name_min)),
-            output_column_name_max_(std::move(output_column_name_max)){
-    }
-    [[nodiscard]] ColumnName get_input_column_name() const { return column_name_; }
-    [[nodiscard]] std::vector<ColumnName> get_output_column_names() const { return {output_column_name_min_, output_column_name_max_}; }
-    [[nodiscard]] ColumnStatsAggregatorData get_aggregator_data() const { return MinMaxAggregatorData(); }
 };
 
-struct Sum {
+class AggregatorDataBase
+{
+public:
+
+    AggregatorDataBase() = default;
+    // Warn on copies as inheriting classes may embed large buffers
+    AggregatorDataBase(const AggregatorDataBase&);
+    AggregatorDataBase& operator=(const AggregatorDataBase&);
+
+    ARCTICDB_MOVE(AggregatorDataBase);
+};
+
+class SumAggregatorData : private AggregatorDataBase
+{
+public:
+
+    void add_data_type(DataType data_type);
+    void aggregate(const std::optional<ColumnWithStrings>& input_column, const std::vector<size_t>& groups, size_t unique_values);
+    SegmentInMemory finalize(const ColumnName& output_column_name,  bool dynamic_schema, size_t unique_values);
+
+private:
+
     std::vector<uint8_t> aggregated_;
-    ColumnName input_column_name_;
-    ColumnName output_column_name_;
-    DataType data_type_ = {};
+    std::optional<DataType> data_type_;
+};
 
-    Sum(ColumnName input_column_name, ColumnName output_column_name) :
-        input_column_name_(std::move(input_column_name)),
-        output_column_name_(std::move(output_column_name)) {
-    }
+class MaxAggregatorData : private AggregatorDataBase
+{
+public:
 
+    void add_data_type(DataType data_type);
     void aggregate(const std::optional<ColumnWithStrings>& input_column, const std::vector<size_t>& groups, size_t unique_values);
+    SegmentInMemory finalize(const ColumnName& output_column_name, bool dynamic_schema, size_t unique_values);
 
-    std::optional<DataType> finalize(SegmentInMemory& seg, bool dynamic_schema, size_t unique_values);
+private:
 
-    [[nodiscard]] ColumnName get_input_column_name() const { return input_column_name_; }
-
-    [[nodiscard]] ColumnName get_output_column_name() const { return output_column_name_; }
-
-    [[nodiscard]] Sum construct() const { return {input_column_name_, output_column_name_}; }
-
-    void set_data_type(DataType data_type) { data_type_ = data_type; }
-
-};
-
-template <typename T>
-struct MaybeValue {
-    bool written_ = false;
-    T value_ = std::numeric_limits<T>::lowest();
-};
-
-enum class Extremum {
-    max, min
-};
-
-struct MaxOrMin {
     std::vector<uint8_t> aggregated_;
-    ColumnName input_column_name_;
-    ColumnName output_column_name_;
-    DataType data_type_ = {};
-    Extremum extremum_;
-
-    MaxOrMin(ColumnName input_column_name, ColumnName output_column_name, Extremum extremum) :
-        input_column_name_(std::move(input_column_name)),
-        output_column_name_(std::move(output_column_name)),
-        extremum_(extremum){
-    }
-
-    void aggregate(const std::optional<ColumnWithStrings>& input_column, const std::vector<size_t>& groups, size_t unique_values);
-
-    std::optional<DataType> finalize(SegmentInMemory& seg, bool dynamic_schema, size_t unique_values);
-
-    [[nodiscard]] ColumnName get_input_column_name() const { return input_column_name_; }
-
-    [[nodiscard]] ColumnName get_output_column_name() const { return output_column_name_; }
-
-    [[nodiscard]] MaxOrMin construct() const { return {input_column_name_, output_column_name_, extremum_}; }
-
-    void set_data_type(DataType data_type) { data_type_ = data_type; }
-
+    std::optional<DataType> data_type_;
 };
 
-struct Mean {
-    ColumnName input_;
-    CountAndTotals data_;
-    ColumnName input_column_name_;
-    ColumnName output_column_name_;
-    DataType data_type_ = {};
+class MinAggregatorData : private AggregatorDataBase
+{
+public:
 
-    explicit Mean(ColumnName input_column_name, ColumnName output_column_name) :
-        input_column_name_(std::move(input_column_name)),
-        output_column_name_(std::move(output_column_name)) {
+    void add_data_type(DataType data_type);
+    void aggregate(const std::optional<ColumnWithStrings>& input_column, const std::vector<size_t>& groups, size_t unique_values);
+    SegmentInMemory finalize(const ColumnName& output_column_name, bool dynamic_schema, size_t unique_values);
+
+private:
+
+    std::vector<uint8_t> aggregated_;
+    std::optional<DataType> data_type_;
+};
+
+class MeanAggregatorData : private AggregatorDataBase
+{
+public:
+
+    // Mean values are always doubles so this is a no-op
+    void add_data_type(DataType) {}
+    void aggregate(const std::optional<ColumnWithStrings>& input_column, const std::vector<size_t>& groups, size_t unique_values);
+    SegmentInMemory finalize(const ColumnName& output_column_name,  bool dynamic_schema, size_t unique_values);
+
+private:
+
+    struct Fraction
+    {
+        double numerator_{0.0};
+        uint64_t denominator_{0};
+
+        double to_double() const;
+    };
+
+    std::vector<Fraction> fractions_;
+};
+
+class CountAggregatorData : private AggregatorDataBase
+{
+public:
+
+    // Count values are always integers so this is a no-op
+    void add_data_type(DataType) {}
+    void aggregate(const std::optional<ColumnWithStrings>& input_column, const std::vector<size_t>& groups, size_t unique_values);
+    SegmentInMemory finalize(const ColumnName& output_column_name,  bool dynamic_schema, size_t unique_values);
+
+private:
+
+    std::vector<uint64_t> aggregated_;
+};
+
+template <class AggregatorData>
+class GroupingAggregatorImpl
+{
+public:
+
+    explicit GroupingAggregatorImpl(ColumnName input_column_name, ColumnName output_column_name)
+        : input_column_name_(std::move(input_column_name))
+        , output_column_name_(std::move(output_column_name))
+    {
     }
 
-    void aggregate(const std::optional<ColumnWithStrings>& input_column, const std::vector<size_t>& groups, size_t unique_values);
-
-    std::optional<DataType> finalize(SegmentInMemory& seg, bool dynamic_schema, size_t unique_values);
+    ARCTICDB_MOVE_COPY_DEFAULT(GroupingAggregatorImpl);
 
     [[nodiscard]] ColumnName get_input_column_name() const { return input_column_name_; }
-
     [[nodiscard]] ColumnName get_output_column_name() const { return output_column_name_; }
+    [[nodiscard]] AggregatorData get_aggregator_data() const { return AggregatorData(); }
 
-    [[nodiscard]] Mean construct() const { return Mean(input_column_name_, output_column_name_); }
+private:
 
-    void set_data_type(DataType data_type) { data_type_ = data_type; }
-
+    ColumnName input_column_name_;
+    ColumnName output_column_name_;
 };
+
+using SumAggregator = GroupingAggregatorImpl<SumAggregatorData>;
+using MinAggregator = GroupingAggregatorImpl<MinAggregatorData>;
+using MaxAggregator = GroupingAggregatorImpl<MaxAggregatorData>;
+using MeanAggregator = GroupingAggregatorImpl<MeanAggregatorData>;
+using CountAggregator = GroupingAggregatorImpl<CountAggregatorData>;
 
 } //namespace arcticdb

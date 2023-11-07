@@ -12,80 +12,51 @@
 #include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/util/composite.hpp>
 #include <folly/Range.h>
+#include <folly/concurrency/ConcurrentHashMap.h>
 #include <arcticdb/storage/key_segment_pair.hpp>
 
 namespace arcticdb::storage::memory {
 
-    class MemoryStorage final : public Storage<MemoryStorage> {
-
-        using Parent = Storage<MemoryStorage>;
-        friend Parent;
-
+    class MemoryStorage final : public Storage {
     public:
         using Config = arcticdb::proto::memory_storage::Config;
 
         MemoryStorage(const LibraryPath &lib, OpenMode mode, const Config &conf);
 
-    protected:
-        void do_write(Composite<KeySegmentPair>&& kvs);
+    private:
+        void do_write(Composite<KeySegmentPair>&& kvs) final;
 
-        void do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts opts);
+        void do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts opts) final;
 
-        template<class Visitor>
-        void do_read(Composite<VariantKey>&& ks, Visitor &&visitor, ReadKeyOpts opts);
+        void do_read(Composite<VariantKey>&& ks, const ReadVisitor& visitor, ReadKeyOpts opts) final;
 
-        void do_remove(Composite<VariantKey>&& ks, RemoveOpts opts);
+        void do_remove(Composite<VariantKey>&& ks, RemoveOpts opts) final;
 
-        bool do_key_exists(const VariantKey& key);
+        bool do_key_exists(const VariantKey& key) final;
 
-        bool do_supports_prefix_matching() {
+        bool do_supports_prefix_matching() const final {
             return false;
         }
 
-        inline bool do_fast_delete();
+        inline bool do_fast_delete() final;
 
-        template<class Visitor>
-        void do_iterate_type(KeyType key_type, Visitor &&visitor, const std::string &prefix);
+        void do_iterate_type(KeyType key_type, const IterateTypeVisitor& visitor, const std::string & prefix) final;
 
-    private:
-        using KeyMap = std::unordered_map<VariantKey, Segment>;
+        std::string do_key_path(const VariantKey&) const final { return {}; };
+
+        using KeyMap = folly::ConcurrentHashMap<VariantKey, Segment>;
+        // This is pre-populated so that concurrent access is fine.
+        // An outer folly::ConcurrentHashMap would only return const inner hash maps which is no good.
         using TypeMap = std::unordered_map<KeyType, KeyMap>;
-        using MutexType = std::recursive_mutex;
 
         TypeMap data_;
-        std::unique_ptr<MutexType> mutex_;  // Methods taking functions pointers may call back into the storage
     };
 
-    class MemoryStorageFactory final : public StorageFactory<MemoryStorageFactory> {
-
-        using Parent = StorageFactory<MemoryStorageFactory>;
-        friend Parent;
-
-    public:
-        using Config = arcticdb::proto::memory_storage::Config;
-        using StorageType = MemoryStorage;
-
-        MemoryStorageFactory(Config conf) :
-                conf_(std::move(conf)) {}
-
-    private:
-        auto do_create_storage(LibraryPath lib, OpenMode mode) {
-            return MemoryStorage(std::move(lib), mode, conf_);
-        }
-
-        Config conf_;
-    };
-
-    inline arcticdb::proto::storage::VariantStorage pack_config(uint64_t cache_size) {
+    inline arcticdb::proto::storage::VariantStorage pack_config() {
         arcticdb::proto::storage::VariantStorage output;
         arcticdb::proto::memory_storage::Config cfg;
-        cfg.set_cache_size(cache_size);
         util::pack_to_any(cfg, *output.mutable_config());
         return output;
     }
 
 }//namespace arcticdbx::storage
-
-#define ARCTICDB_MEMORY_STORAGE_H_
-#include <arcticdb/storage/memory/memory_storage-inl.hpp>
-#undef ARCTICDB_MEMORY_STORAGE_H_

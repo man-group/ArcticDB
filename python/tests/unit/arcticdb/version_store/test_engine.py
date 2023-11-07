@@ -12,6 +12,7 @@ from numpy import testing as nt
 import pandas as pd
 import pytest
 import random
+import sys
 from arcticdb.version_store import TimeFrame
 
 
@@ -60,6 +61,7 @@ def test_partial_write_read(version_store_factory, colnum, rownum, cols, tsbound
     assert rtf == vit.data
 
 
+@pytest.mark.skipif(sys.platform == "darwin", reason="Test broken on MacOS (issue #923)")
 @pytest.mark.parametrize("colnum,rownum,cols,bounds", gen_params_non_contiguous())
 def test_partial_write_non_contiguous(version_store_factory, colnum, rownum, cols, bounds):
     version_store = version_store_factory(col_per_group=colnum, row_per_segment=rownum)

@@ -29,6 +29,7 @@
 #include <arcticdb/pipeline/column_mapping.hpp>
 #include <arcticdb/version/schema_checks.hpp>
 #include <arcticdb/version/version_utils.hpp>
+#include <arcticdb/entity/merge_descriptors.hpp>
 
 namespace arcticdb::version_store {
 
@@ -39,35 +40,29 @@ void modify_descriptor(const std::shared_ptr<pipelines::PipelineContext>& pipeli
 
     auto& desc = *pipeline_context->desc_;
     if (opt_false(read_options.force_strings_to_object_)) {
-        auto& fields = desc.mutable_fields();
-        std::transform(
+        auto& fields = desc.fields();
+        std::for_each(
             std::begin(fields),
             std::end(fields),
-            std::begin(fields),
             [](auto& field_desc) {
-                if (data_type_from_proto(field_desc.type_desc()) == DataType::ASCII_FIXED64)
-                    set_data_type(DataType::ASCII_DYNAMIC64, *field_desc.mutable_type_desc());
+                if (field_desc.type().data_type() == DataType::ASCII_FIXED64)
+                    set_data_type(DataType::ASCII_DYNAMIC64, field_desc.mutable_type());
 
-                if (data_type_from_proto(field_desc.type_desc()) == DataType::UTF_FIXED64)
-                    set_data_type(DataType::UTF_DYNAMIC64, *field_desc.mutable_type_desc());
-
-                return field_desc;
+                if (field_desc.type().data_type() == DataType::UTF_FIXED64)
+                    set_data_type(DataType::UTF_DYNAMIC64, field_desc.mutable_type());
             });
     }
     else if (opt_false(read_options.force_strings_to_fixed_)) {
-        auto& fields = desc.mutable_fields();
-        std::transform(
+        auto& fields = desc.fields();
+        std::for_each(
             std::begin(fields),
             std::end(fields),
-            std::begin(fields),
             [](auto& field_desc) {
-                if (data_type_from_proto(field_desc.type_desc()) == DataType::ASCII_DYNAMIC64)
-                    set_data_type(DataType::ASCII_FIXED64, *field_desc.mutable_type_desc());
+                if (field_desc.type().data_type() == DataType::ASCII_DYNAMIC64)
+                    set_data_type(DataType::ASCII_FIXED64, field_desc.mutable_type());
 
-                if (data_type_from_proto(field_desc.type_desc()) == DataType::UTF_DYNAMIC64)
-                    set_data_type(DataType::UTF_FIXED64, *field_desc.mutable_type_desc());
-
-                return field_desc;
+                if (field_desc.type().data_type() == DataType::UTF_DYNAMIC64)
+                    set_data_type(DataType::UTF_FIXED64, field_desc.mutable_type());
             });
     }
 }
@@ -81,13 +76,10 @@ VersionedItem write_dataframe_impl(
     bool sparsify_floats,
     bool validate_index
     ) {
-    auto atom_key_fut = async_write_dataframe_impl(store, version_id, std::move(frame), options, de_dup_map, sparsify_floats, validate_index);
-
     ARCTICDB_SUBSAMPLE_DEFAULT(WaitForWriteCompletion)
-    auto atom_key = std::move(atom_key_fut).get();
-    auto versioned_item = VersionedItem(std::move(atom_key));
     ARCTICDB_DEBUG(log::version(), "write_dataframe_impl stream_id: {} , version_id: {}, {} rows", frame.desc.id(), version_id, frame.num_rows);
-    return versioned_item;
+    auto atom_key_fut = async_write_dataframe_impl(store, version_id, std::move(frame), options, de_dup_map, sparsify_floats, validate_index);
+    return VersionedItem(std::move(atom_key_fut).get());
 }
 
 folly::Future<entity::AtomKey> async_write_dataframe_impl(
@@ -100,14 +92,15 @@ folly::Future<entity::AtomKey> async_write_dataframe_impl(
     bool validate_index
     ) {
     ARCTICDB_SAMPLE(DoWrite, 0)
-
+    if (0 == version_id)
+        verify_stream_id(frame.desc.id());
     // Slice the frame according to the write options
     frame.set_bucketize_dynamic(options.bucketize_dynamic);
     auto slicing_arg = get_slicing_policy(options, frame);
     auto partial_key = IndexPartialKey{frame.desc.id(), version_id};
-    sorting::check<ErrorCode::E_UNSORTED_DATA>(!validate_index || frame.desc.get_sorted() == arcticdb::proto::descriptors::SortedValue::ASCENDING || !std::holds_alternative<stream::TimeseriesIndex>(frame.index),
+    sorting::check<ErrorCode::E_UNSORTED_DATA>(!validate_index || frame.desc.get_sorted() == SortedValue::ASCENDING || !std::holds_alternative<stream::TimeseriesIndex>(frame.index),
                 "When calling write with validate_index enabled, input data must be sorted.");
-    return write_frame(partial_key, std::move(frame), slicing_arg, store, de_dup_map, sparsify_floats);
+    return write_frame(std::move(partial_key), std::move(frame), slicing_arg, store, de_dup_map, sparsify_floats);
 }
 
 namespace {
@@ -125,12 +118,12 @@ IndexDescriptor::Proto check_index_match(const arcticdb::stream::Index& index, c
 
 void sorted_data_check_append(InputTensorFrame& frame, index::IndexSegmentReader& index_segment_reader, bool validate_index){
     bool is_time_series = std::holds_alternative<stream::TimeseriesIndex>(frame.index);
-    bool input_data_is_sorted = frame.desc.get_sorted() == arcticdb::proto::descriptors::SortedValue::ASCENDING;
+    bool input_data_is_sorted = frame.desc.get_sorted() == SortedValue::ASCENDING;
     sorting::check<ErrorCode::E_UNSORTED_DATA>(
         input_data_is_sorted || !validate_index || !is_time_series,
         "validate_index set but input data index is not sorted");
 
-    bool existing_data_is_sorted = index_segment_reader.mutable_tsd().stream_descriptor().sorted() == arcticdb::proto::descriptors::SortedValue::ASCENDING;
+    bool existing_data_is_sorted = index_segment_reader.mutable_tsd().mutable_proto().stream_descriptor().sorted() == arcticdb::proto::descriptors::SortedValue::ASCENDING;
     sorting::check<ErrorCode::E_UNSORTED_DATA>(
         existing_data_is_sorted || !validate_index || !is_time_series,
         "validate_index set but existing data index is not sorted");
@@ -148,7 +141,7 @@ folly::Future<AtomKey> async_append_impl(
     ARCTICDB_DEBUG(log::version(), "append stream_id: {} , version_id: {}", stream_id, update_info.next_version_id_);
     auto index_segment_reader = index::get_index_reader(*(update_info.previous_index_key_), store);
     bool bucketize_dynamic = index_segment_reader.bucketize_dynamic();
-    auto row_offset = index_segment_reader.tsd().total_rows();
+    auto row_offset = index_segment_reader.tsd().proto().total_rows();
     util::check_rte(!index_segment_reader.is_pickled(), "Cannot append to pickled data");
     sorted_data_check_append(frame, index_segment_reader, validate_index);
     frame.set_offset(static_cast<ssize_t>(row_offset));
@@ -248,7 +241,8 @@ VersionedItem delete_range_impl(
 
     auto index_segment_reader = index::get_index_reader(prev, store);
     util::check_rte(!index_segment_reader.is_pickled(), "Cannot delete date range of pickled data");
-    auto index = index_type_from_descriptor(index_segment_reader.tsd().stream_descriptor());
+
+    auto index = index_type_from_descriptor(index_segment_reader.tsd().as_stream_descriptor());
     util::check(std::holds_alternative<TimeseriesIndex>(index), "Delete in range will not work as expected with a non-timeseries index");
 
     std::vector<FilterQuery<index::IndexSegmentReader>> queries =
@@ -277,7 +271,7 @@ VersionedItem delete_range_impl(
 
     std::sort(std::begin(flattened_slice_and_keys), std::end(flattened_slice_and_keys));
     bool bucketize_dynamic = index_segment_reader.bucketize_dynamic();
-    auto time_series = make_descriptor(row_count, std::move(index_segment_reader), std::nullopt, bucketize_dynamic);
+    auto time_series = timseries_descriptor_from_index_segment(row_count, std::move(index_segment_reader), std::nullopt, bucketize_dynamic);
     auto version_key_fut = util::variant_match(index, [&time_series, &flattened_slice_and_keys, &stream_id, &version_id, &store] (auto idx) {
         using IndexType = decltype(idx);
         return pipelines::index::write_index<IndexType>(std::move(time_series), std::move(flattened_slice_and_keys), IndexPartialKey{stream_id, version_id}, store);
@@ -293,13 +287,13 @@ void sorted_data_check_update(InputTensorFrame& frame, index::IndexSegmentReader
     sorting::check<ErrorCode::E_UNSORTED_DATA>(
         is_time_series,
         "When calling update, the input data must be a time series.");
-    bool input_data_is_sorted = frame.desc.get_sorted() == arcticdb::proto::descriptors::SortedValue::ASCENDING || 
-                                frame.desc.get_sorted() == arcticdb::proto::descriptors::SortedValue::UNKNOWN;
+    bool input_data_is_sorted = frame.desc.get_sorted() == SortedValue::ASCENDING ||
+                                frame.desc.get_sorted() == SortedValue::UNKNOWN;
     sorting::check<ErrorCode::E_UNSORTED_DATA>(
         input_data_is_sorted,
         "When calling update, the input data must be sorted.");
-    bool existing_data_is_sorted = index_segment_reader.mutable_tsd().stream_descriptor().sorted() == arcticdb::proto::descriptors::SortedValue::ASCENDING || 
-                                    index_segment_reader.mutable_tsd().stream_descriptor().sorted() == arcticdb::proto::descriptors::SortedValue::UNKNOWN;
+    bool existing_data_is_sorted = index_segment_reader.get_sorted() == SortedValue::ASCENDING ||
+                                    index_segment_reader.get_sorted() == SortedValue::UNKNOWN;
     sorting::check<ErrorCode::E_UNSORTED_DATA>(
          existing_data_is_sorted,
         "When calling update, the existing data must be sorted.");
@@ -317,12 +311,12 @@ VersionedItem update_impl(
     ARCTICDB_DEBUG(log::version(), "Update versioned dataframe for stream_id: {} , version_id = {}", stream_id, update_info.previous_index_key_->version_id());
     auto index_segment_reader = index::get_index_reader(*(update_info.previous_index_key_), store);
     util::check_rte(!index_segment_reader.is_pickled(), "Cannot update pickled data");
-    auto index_desc = check_index_match(frame.index, index_segment_reader.tsd().stream_descriptor().index());
+    auto index_desc = check_index_match(frame.index, index_segment_reader.tsd().proto().stream_descriptor().index());
     util::check(index_desc.kind() == IndexDescriptor::TIMESTAMP, "Update not supported for non-timeseries indexes");
     sorted_data_check_update(frame, index_segment_reader);
     bool bucketize_dynamic = index_segment_reader.bucketize_dynamic();
     (void)check_and_mark_slices(index_segment_reader, dynamic_schema, false, std::nullopt, bucketize_dynamic);
-    auto combined_sorting_info = deduce_sorted(frame.desc.get_sorted(), index_segment_reader.mutable_tsd().stream_descriptor().sorted());
+    auto combined_sorting_info = deduce_sorted(frame.desc.get_sorted(), index_segment_reader.get_sorted());
     fix_descriptor_mismatch_or_throw(UPDATE, dynamic_schema, index_segment_reader, frame);
 
     std::vector<FilterQuery<index::IndexSegmentReader>> queries =
@@ -336,11 +330,13 @@ VersionedItem update_impl(
                         std::end(affected_keys),
                         std::back_inserter(unaffected_keys));
 
+    util::check(affected_keys.size() + unaffected_keys.size() == index_segment_reader.size(), "Unaffected vs affected keys split was inconsistent {} + {} != {}",
+                affected_keys.size(), unaffected_keys.size(), index_segment_reader.size());
+
     frame.set_bucketize_dynamic(bucketize_dynamic);
     auto slicing_arg = get_slicing_policy(options, frame);
 
-    auto fut_slice_keys = slice_and_write(frame, slicing_arg, get_partial_key_gen(frame, IndexPartialKey{stream_id, update_info.next_version_id_}), store);
-    auto new_slice_and_keys = folly::collect(fut_slice_keys).wait().value();
+    auto new_slice_and_keys = slice_and_write(frame, slicing_arg, get_partial_key_gen(frame, IndexPartialKey{stream_id, update_info.next_version_id_}), store).wait().value();
     std::sort(std::begin(new_slice_and_keys), std::end(new_slice_and_keys));
 
     IndexRange orig_filter_range;
@@ -357,13 +353,13 @@ VersionedItem update_impl(
                             orig_filter_range = idx_range;
                             return intersecting_segments(affected_keys, idx_range, idx_range, update_info.next_version_id_, store);
                         },
-                        [](const RowRange&) {
+                        [](const RowRange&)-> std::pair<std::vector<SliceAndKey>, std::vector<SliceAndKey>> {
                             util::raise_rte("Unexpected row_range in update query");
-                            return std::pair(std::vector<SliceAndKey>{}, std::vector<SliceAndKey>{});  // unreachable
                         }
     );
 
     size_t row_count = 0;
+    const size_t new_keys_size = new_slice_and_keys.size();
     auto flattened_slice_and_keys = flatten_and_fix_rows(std::vector<std::vector<SliceAndKey>>{
         strictly_before(orig_filter_range, unaffected_keys),
         std::move(intersect_before),
@@ -373,12 +369,16 @@ VersionedItem update_impl(
                                                          row_count
                                                          );
 
+    util::check(unaffected_keys.size() + new_keys_size + (affected_keys.size() * 2) >= flattened_slice_and_keys.size(),
+                "Output size mismatch: {} + {} + (2 * {}) < {}",
+                unaffected_keys.size(), new_keys_size, affected_keys.size(), flattened_slice_and_keys.size());
+
     std::sort(std::begin(flattened_slice_and_keys), std::end(flattened_slice_and_keys));
-    auto desc = stream::merge_descriptors(StreamDescriptor{std::move(*index_segment_reader.mutable_tsd().mutable_stream_descriptor())}, { frame.desc.fields() }, {});
-    // At this stage the updated data must be sorted
+    auto existing_desc = index_segment_reader.tsd().as_stream_descriptor();
+    auto desc = merge_descriptors(existing_desc, std::vector<std::shared_ptr<FieldCollection>>{ frame.desc.fields_ptr() }, {});
     desc.set_sorted(combined_sorting_info);
-    auto time_series = make_descriptor(row_count, std::move(desc), frame.norm_meta, std::move(frame.user_meta), std::nullopt, bucketize_dynamic);
-    auto index = index_type_from_descriptor(time_series.stream_descriptor());
+    auto time_series = make_timeseries_descriptor(row_count, std::move(desc), std::move(frame.norm_meta), std::move(frame.user_meta), std::nullopt, std::nullopt, bucketize_dynamic);
+    auto index = index_type_from_descriptor(time_series.as_stream_descriptor());
 
     auto version_key_fut = util::variant_match(index, [&time_series, &flattened_slice_and_keys, &stream_id, &update_info, &store] (auto idx) {
         using IndexType = decltype(idx);
@@ -394,8 +394,8 @@ FrameAndDescriptor read_multi_key(
     const std::shared_ptr<Store>& store,
     const SegmentInMemory& index_key_seg) {
     const auto& multi_index_seg = index_key_seg;
-    arcticdb::proto::descriptors::TimeSeriesDescriptor tsd;
-    multi_index_seg.metadata()->UnpackTo(&tsd);
+    TimeseriesDescriptor tsd;
+    multi_index_seg.metadata()->UnpackTo(&tsd.mutable_proto());
     std::vector<AtomKey> keys;
     for (size_t idx = 0; idx < index_key_seg.row_count(); idx++) {
         keys.push_back(stream::read_key_row(index_key_seg, static_cast<ssize_t>(idx)));
@@ -405,16 +405,109 @@ FrameAndDescriptor read_multi_key(
     ReadQuery read_query;
     auto res = read_dataframe_impl(store, VersionedItem{std::move(dup)}, read_query, {});
 
-    arcticdb::proto::descriptors::TimeSeriesDescriptor multi_key_desc{tsd};
-    multi_key_desc.mutable_normalization()->CopyFrom(res.desc_.normalization());
+    TimeseriesDescriptor multi_key_desc{tsd};
+    multi_key_desc.mutable_proto().mutable_normalization()->CopyFrom(res.desc_.proto().normalization());
     return {res.frame_, multi_key_desc, keys, std::shared_ptr<BufferHolder>{}};
+}
+
+Composite<ProcessingUnit> process_remaining_clauses(
+        const std::shared_ptr<Store>& store,
+        std::vector<Composite<ProcessingUnit>>&& procs,
+        std::vector<std::shared_ptr<Clause>> clauses ) { // pass by copy deliberately as we don't want to modify read_query
+    while (!clauses.empty()) {
+        if (clauses[0]->clause_info().requires_repartition_) {
+            std::vector<Composite<ProcessingUnit>> repartitioned_procs = clauses[0]->repartition(std::move(procs)).value();
+            // Erasing from front of vector not ideal, but they're just shared_ptr and there shouldn't be loads of clauses
+            clauses.erase(clauses.begin());
+            std::vector<folly::Future<Composite<ProcessingUnit>>> fut_procs;
+            for (auto&& proc : repartitioned_procs) {
+                fut_procs.emplace_back(
+                        async::submit_cpu_task(
+                                async::MemSegmentProcessingTask(store,
+                                                                clauses,
+                                                                std::move(proc))
+                        )
+                );
+            }
+            procs = folly::collect(fut_procs).get();
+        } else {
+            // Erasing from front of vector not ideal, but they're just shared_ptr and there shouldn't be loads of clauses
+            clauses.erase(clauses.begin());
+        }
+    }
+    return merge_composites(std::move(procs));
+}
+
+void set_output_descriptors(
+        const Composite<ProcessingUnit>& merged_procs,
+        const std::vector<std::shared_ptr<Clause>>& clauses,
+        const std::shared_ptr<PipelineContext>& pipeline_context) {
+    std::optional<std::string> index_column;
+    for (auto clause = clauses.rbegin(); clause != clauses.rend(); ++clause) {
+        if (auto new_index = (*clause)->clause_info().new_index_; new_index.has_value()) {
+            index_column = new_index;
+            pipeline_context->norm_meta_->mutable_df()->mutable_common()->mutable_index()->set_name(*new_index);
+            pipeline_context->norm_meta_->mutable_df()->mutable_common()->mutable_index()->clear_fake_name();
+            pipeline_context->norm_meta_->mutable_df()->mutable_common()->mutable_index()->set_is_not_range_index(
+                    true);
+            break;
+        }
+    }
+    std::optional<StreamDescriptor> new_stream_descriptor;
+    merged_procs.broadcast([&new_stream_descriptor](const auto& proc) {
+        if (!new_stream_descriptor.has_value()) {
+            if (proc.data_.size() > 0) {
+                new_stream_descriptor = std::make_optional<StreamDescriptor>();
+                new_stream_descriptor->set_index(proc.data_[0].segment_->descriptor().index());
+                for (size_t idx = 0; idx < new_stream_descriptor->index().field_count(); idx++) {
+                    new_stream_descriptor->add_field(proc.data_[0].segment_->descriptor().field(idx));
+                }
+            }
+        }
+        if (new_stream_descriptor.has_value()) {
+            std::vector<std::shared_ptr<FieldCollection>> fields;
+            for (const auto &slice_and_key: proc.data_) {
+                fields.push_back(slice_and_key.segment_->descriptor().fields_ptr());
+            }
+            new_stream_descriptor = merge_descriptors(*new_stream_descriptor,
+                                                      fields,
+                                                      std::vector<std::string>{});
+        }
+    });
+    if (new_stream_descriptor.has_value()) {
+        // Columns might be in a different order to the original dataframe, so reorder here
+        auto original_stream_descriptor = pipeline_context->descriptor();
+        StreamDescriptor final_stream_descriptor{original_stream_descriptor.id()};
+        final_stream_descriptor.set_index(new_stream_descriptor->index());
+        // Erase field from new_stream_descriptor as we add them to final_stream_descriptor, as all fields left in new_stream_descriptor
+        // after these operations were created by the processing pipeline, and so should be appended
+        // Index columns should always appear first
+        if (index_column.has_value()) {
+            auto opt_idx = new_stream_descriptor->find_field(*index_column);
+            internal::check<ErrorCode::E_ASSERTION_FAILURE>(opt_idx.has_value(), "New index column not found in processing pipeline");
+            final_stream_descriptor.add_field(new_stream_descriptor->field(*opt_idx));
+            new_stream_descriptor->erase_field(*opt_idx);
+        }
+        for (const auto& field: original_stream_descriptor.fields()) {
+            if (auto position = new_stream_descriptor->find_field(field.name()); position.has_value()) {
+                final_stream_descriptor.add_field(new_stream_descriptor->field(*position));
+
+                new_stream_descriptor->erase_field(*position);
+            }
+        }
+        for (const auto& field: new_stream_descriptor->fields()) {
+            final_stream_descriptor.add_field(field);
+        }
+        pipeline_context->set_descriptor(final_stream_descriptor);
+    }
 }
 
 /*
  * Processes the slices in the given pipeline_context.
  *
- * Slices are processed in order, with slices corresponding to the same row group collected into a single
- * Composite<SliceAndKey>. Slices contained within a single Composite<SliceAndKey> are processed within a single thread.
+ * Slices are processed in an order defined by the first clause in the pipeline, with slices corresponding to the same
+ * processing unit collected into a single Composite<SliceAndKey>. Slices contained within a single
+ * Composite<SliceAndKey> are processed within a single thread.
  *
  * The processing of a Composite<SliceAndKey> is scheduled via the Async Store. Within a single thread, the
  * segments will be retrieved from storage and decompressed before being passed to a MemSegmentProcessingTask which
@@ -427,85 +520,44 @@ std::vector<SliceAndKey> read_and_process(
     const ReadOptions& read_options,
     size_t start_from
     ) {
-    std::vector<Composite<SliceAndKey>> rows;
-    if(!read_query.query_->empty()) {
-        if(auto execution_context = read_query.query_->begin()->execution_context(); execution_context) {
-            execution_context->set_descriptor(pipeline_context->descriptor());
-            execution_context->set_norm_meta_descriptor(pipeline_context->norm_meta_);
-        }
-
-        for(auto& clause : *read_query.query_) {
-            if(auto execution_context = clause.execution_context(); execution_context)
-                execution_context->set_dynamic_schema(opt_false(read_options.dynamic_schema_));
-        }
-    }
-
-    std::sort(std::begin(pipeline_context->slice_and_keys_), std::end(pipeline_context->slice_and_keys_), [] (const SliceAndKey& left, const SliceAndKey& right) {
-        return std::tie(left.slice().row_range.first, left.slice().col_range.first) < std::tie(right.slice().row_range.first, right.slice().col_range.first);
-    });
-
-    auto sk_it = std::begin(pipeline_context->slice_and_keys_);
-    std::advance(sk_it, start_from);
-    while(sk_it != std::end(pipeline_context->slice_and_keys_)) {
-        RowRange row_range{sk_it->slice().row_range};
-        auto sk = Composite{std::move(*sk_it)};
-        // Iterate through all SliceAndKeys that contain data for the same RowRange - i.e., iterate along column segments
-        // for same row group
-        while(++sk_it != std::end(pipeline_context->slice_and_keys_) && sk_it->slice().row_range == row_range) {
-            sk.push_back(std::move(*sk_it));
-        }
-
-        util::check(!sk.empty(), "Should not push empty slice/key pairs to the pipeline");
-        rows.emplace_back(std::move(sk));
-    }
     std::shared_ptr<std::unordered_set<std::string>> filter_columns;
     if(pipeline_context->overall_column_bitset_) {
         filter_columns = std::make_shared<std::unordered_set<std::string>>();
         auto en = pipeline_context->overall_column_bitset_->first();
         auto en_end = pipeline_context->overall_column_bitset_->end();
         while (en < en_end) {
-            filter_columns->insert(pipeline_context->desc_->field(*en++).name());
+            filter_columns->insert(std::string(pipeline_context->desc_->field(*en++).name()));
         }
     }
 
-    auto parallel_output = store->batch_read_uncompressed(std::move(rows), read_query.query_, pipeline_context->descriptor(), filter_columns, BatchReadArgs{});
-
-    size_t clause_index = 0;
-    for (const auto& clause : *read_query.query_) {
-        if (clause.requires_repartition()) {
-            std::vector<Composite<ProcessingSegment>> composites = clause.repartition(std::move(parallel_output)).value();
-
-            std::vector<folly::Future<Composite<ProcessingSegment>>> batch;
-            std::vector<Composite<ProcessingSegment>> res;
-            res.reserve(composites.size());
-            for (auto&& val : composites){
-                auto clause_copy = std::make_shared<std::vector<Clause>>(read_query.query_->begin() + clause_index + 1, read_query.query_->end());
-                batch.emplace_back(
-                        async::submit_cpu_task(
-                                async::MemSegmentPassthroughProcessingTask(store, clause_copy, std::move(val))
-                        )
-                );
-            }
-
-            if(!batch.empty()) {
-                auto segments = folly::collect(batch).get();
-                res.insert(std::end(res), std::make_move_iterator(std::begin(segments)), std::make_move_iterator(std::end(segments)));
-            }
-
-            parallel_output = std::move(res);
-        }
-
-        clause_index++;
+    ProcessingConfig processing_config{opt_false(read_options.dynamic_schema_), pipeline_context->rows_};
+    for (auto& clause: read_query.clauses_) {
+        clause->set_processing_config(processing_config);
     }
 
-    //TODO split pipeline context into load_context and output_context
-        for(auto clause  = read_query.query_->rbegin(); clause != read_query.query_->rend(); ++clause ) {
-        if(clause->execution_context() && clause->execution_context()->output_descriptor_)
-            pipeline_context->set_descriptor(clause->execution_context()->output_descriptor_.value());
-    }
+    std::vector<Composite<SliceAndKey>> processing_groups = read_query.clauses_[0]->structure_for_processing(
+            pipeline_context->slice_and_keys_, start_from);
 
-    auto merged = merge_composites(std::move(parallel_output));
-    return collect_segments(std::move(merged));
+    // At this stage, each Composite contains a single ProcessingUnit, which may hold a row-slice, a column-slice, a
+    // general rectangular slice, or some more exotic collection of segments based on the clause's processing
+    // parallelisation.
+    // All clauses that do not require repartitioning (e.g. filters and projections) will have already been applied
+    // to these processing units
+    std::vector<Composite<ProcessingUnit>> procs = store->batch_read_uncompressed(
+            std::move(processing_groups),
+            read_query.clauses_,
+            filter_columns,
+            BatchReadArgs{}
+            );
+
+    auto merged_procs = process_remaining_clauses(store, std::move(procs), read_query.clauses_);
+
+    if (std::any_of(read_query.clauses_.begin(), read_query.clauses_.end(), [](const std::shared_ptr<Clause>& clause) {
+        return clause->clause_info().modifies_output_descriptor_;
+    })) {
+        set_output_descriptors(merged_procs, read_query.clauses_, pipeline_context);
+    }
+    return collect_segments(std::move(merged_procs));
 }
 
 SegmentInMemory read_direct(const std::shared_ptr<Store>& store,
@@ -523,7 +575,7 @@ SegmentInMemory read_direct(const std::shared_ptr<Store>& store,
     return frame;
 }
 
-void add_index_columns_to_query(const ReadQuery& read_query, const arcticdb::proto::descriptors::TimeSeriesDescriptor& desc) {
+void add_index_columns_to_query(const ReadQuery& read_query, const TimeseriesDescriptor& desc) {
     if(!read_query.columns.empty()) {
         auto index_columns = stream::get_index_columns_from_descriptor(desc);
         if(index_columns.empty())
@@ -543,9 +595,9 @@ FrameAndDescriptor read_index_impl(
     const VersionedItem& version) {
     auto fut_index = store->read(version.key_);
     auto [index_key, index_seg] = std::move(fut_index).get();
-    arcticdb::proto::descriptors::TimeSeriesDescriptor tsd;
-    tsd.set_total_rows(index_seg.row_count());
-    tsd.mutable_stream_descriptor()->CopyFrom(index_seg.descriptor().proto());
+    TimeseriesDescriptor tsd;
+    tsd.mutable_proto().set_total_rows(index_seg.row_count());
+    tsd.mutable_proto().mutable_stream_descriptor()->CopyFrom(index_seg.descriptor().proto());
     return {SegmentInMemory(std::move(index_seg)), tsd, {}, {}};
 }
 
@@ -597,9 +649,9 @@ void read_indexed_keys_to_pipeline(
 
     add_index_columns_to_query(read_query, index_segment_reader.tsd());
 
-    read_query.calculate_row_filter(static_cast<int64_t>(index_segment_reader.tsd().total_rows()));
+    read_query.calculate_row_filter(static_cast<int64_t>(index_segment_reader.tsd().proto().total_rows()));
     bool bucketize_dynamic = index_segment_reader.bucketize_dynamic();
-    pipeline_context->desc_ = StreamDescriptor{std::move(*index_segment_reader.mutable_tsd().mutable_stream_descriptor())};
+    pipeline_context->desc_ = index_segment_reader.tsd().as_stream_descriptor();
 
     bool dynamic_schema = opt_false(read_options.dynamic_schema_);
     auto queries = get_column_bitset_and_query_functions<index::IndexSegmentReader>(
@@ -609,10 +661,11 @@ void read_indexed_keys_to_pipeline(
         bucketize_dynamic);
 
     pipeline_context->slice_and_keys_ = filter_index(index_segment_reader, combine_filter_functions(queries));
-    pipeline_context->bucketize_dynamic_ = bucketize_dynamic;
     pipeline_context->total_rows_ = pipeline_context->calc_rows();
-    pipeline_context->norm_meta_ = std::make_shared<arcticdb::proto::descriptors::NormalizationMetadata>(std::move(*index_segment_reader.mutable_tsd().mutable_normalization()));
-    pipeline_context->user_meta_ = std::make_unique<arcticdb::proto::descriptors::UserDefinedMetadata>(std::move(*index_segment_reader.mutable_tsd().mutable_user_meta()));
+    pipeline_context->rows_ = index_segment_reader.tsd().proto().total_rows();
+    pipeline_context->norm_meta_ = std::make_unique<arcticdb::proto::descriptors::NormalizationMetadata>(std::move(*index_segment_reader.mutable_tsd().mutable_proto().mutable_normalization()));
+    pipeline_context->user_meta_ = std::make_unique<arcticdb::proto::descriptors::UserDefinedMetadata>(std::move(*index_segment_reader.mutable_tsd().mutable_proto().mutable_user_meta()));
+    pipeline_context->bucketize_dynamic_ = bucketize_dynamic;
 }
 
 void read_incompletes_to_pipeline(
@@ -624,7 +677,7 @@ void read_incompletes_to_pipeline(
     bool via_iteration,
     bool sparsify) {
 
-    auto incomplete_segments = stream::get_incomplete(
+    auto incomplete_segments = get_incomplete(
         store,
         pipeline_context->stream_id_,
         read_query.row_filter,
@@ -640,8 +693,7 @@ void read_incompletes_to_pipeline(
 
     // If there are only incompletes we need to add the index here
     if(pipeline_context->slice_and_keys_.empty()) {
-        auto tsd = timeseries_descriptor_from_any(*incomplete_segments.begin()->segment(store).metadata());
-        add_index_columns_to_query(read_query, tsd);
+        add_index_columns_to_query(read_query, incomplete_segments.begin()->segment(store).index_descriptor());
     }
 
     auto first_seg = incomplete_segments.begin()->segment(store);
@@ -649,13 +701,13 @@ void read_incompletes_to_pipeline(
         pipeline_context->desc_ = first_seg.descriptor();
 
     if (!pipeline_context->norm_meta_) {
-        pipeline_context->norm_meta_ = std::make_shared<arcticdb::proto::descriptors::NormalizationMetadata>();
-        auto segment_tsd = timeseries_descriptor_from_segment(first_seg);
-        pipeline_context->norm_meta_->CopyFrom(segment_tsd.normalization());
+        pipeline_context->norm_meta_ = std::make_unique<arcticdb::proto::descriptors::NormalizationMetadata>();
+        auto segment_tsd = first_seg.index_descriptor();
+        pipeline_context->norm_meta_->CopyFrom(segment_tsd.proto().normalization());
         ensure_norm_meta(*pipeline_context->norm_meta_, pipeline_context->stream_id_, sparsify);
     }
 
-    pipeline_context->desc_ = stream::merge_descriptors(pipeline_context->descriptor(), incomplete_segments, read_query.columns);
+    pipeline_context->desc_ = merge_descriptors(pipeline_context->descriptor(), incomplete_segments, read_query.columns);
     modify_descriptor(pipeline_context, read_options);
     if (convert_int_to_float) {
         stream::convert_descriptor_types(*pipeline_context->desc_);
@@ -717,6 +769,10 @@ void copy_segments_to_frame(const std::shared_ptr<Store>& store, const std::shar
         }
 
         auto field_count = context_row->slice_and_key().slice_.col_range.diff() + index_field_count;
+        internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+                field_count == segment.descriptor().field_count(),
+                "Column range does not match segment descriptor field count in copy_segments_to_frame: {} != {}",
+                field_count, segment.descriptor().field_count());
         for (auto field_col = index_field_count; field_col < field_count; ++field_col) {
             const auto& field_name = context_row->descriptor().fields(field_col).name();
             auto frame_loc_opt = frame.column_index(field_name);
@@ -773,7 +829,7 @@ void create_column_stats_impl(
         log::version().warn("Cannot create empty column stats");
         return;
     }
-    ReadQuery read_query({*clause});
+    ReadQuery read_query({std::make_shared<Clause>(std::move(*clause))});
 
     auto column_stats_key = index_key_to_column_stats_key(versioned_item.key_);
     std::optional<SegmentInMemory> old_segment;
@@ -856,9 +912,10 @@ void drop_column_stats_impl(
             // Drop all column stats
             store->remove_key(column_stats_key, remove_opts).get();
         } else {
-            for (const auto& field: segment_in_memory.fields()) {
+            auto old_fields = segment_in_memory.fields().clone();
+            for (const auto& field: old_fields) {
                 auto column_name = field.name();
-                if (!columns_to_keep.contains(column_name) && column_name != start_index_column_name && column_name != end_index_column_name) {
+                if (!columns_to_keep.contains(std::string{column_name}) && column_name != start_index_column_name && column_name != end_index_column_name) {
                     segment_in_memory.drop_column(column_name);
                 }
             }
@@ -876,9 +933,9 @@ FrameAndDescriptor read_column_stats_impl(
     // Remove try-catch once AsyncStore methods raise the new error codes themselves
     try {
         auto segment_in_memory = store->read(column_stats_key).get().second;
-        proto::descriptors::TimeSeriesDescriptor tsd;
-        tsd.set_total_rows(segment_in_memory.row_count());
-        tsd.mutable_stream_descriptor()->CopyFrom(segment_in_memory.descriptor().proto());
+        TimeseriesDescriptor tsd;
+        tsd.mutable_proto().set_total_rows(segment_in_memory.row_count());
+        tsd.set_stream_descriptor(segment_in_memory.descriptor());
         return {SegmentInMemory(std::move(segment_in_memory)), tsd, {}, {}};
     } catch (const std::exception& e) {
         storage::raise<ErrorCode::E_KEY_NOT_FOUND>("Failed to read column stats key: {}", e.what());
@@ -891,7 +948,7 @@ ColumnStats get_column_stats_info_impl(
     auto column_stats_key = index_key_to_column_stats_key(versioned_item.key_);
     // Remove try-catch once AsyncStore methods raise the new error codes themselves
     try {
-        auto stream_descriptor = std::get<StreamDescriptor::Proto>(store->read_metadata_and_descriptor(column_stats_key).get());
+        auto stream_descriptor = std::get<StreamDescriptor>(store->read_metadata_and_descriptor(column_stats_key).get());
         return ColumnStats(stream_descriptor.fields());
     } catch (const std::exception& e) {
         storage::raise<ErrorCode::E_KEY_NOT_FOUND>("Failed to read column stats key: {}", e.what());
@@ -930,7 +987,7 @@ FrameAndDescriptor read_dataframe_impl(
     ARCTICDB_DEBUG(log::version(), "Fetching data to frame");
     SegmentInMemory frame;
     auto buffers = std::make_shared<BufferHolder>();
-    if(!read_query.query_->empty()) {
+    if(!read_query.clauses_.empty()) {
         ARCTICDB_SAMPLE(RunPipelineAndOutput, 0)
         util::check_rte(!pipeline_context->is_pickled(),"Cannot filter pickled data");
         auto segs = read_and_process(store, pipeline_context, read_query, read_options, 0u);
@@ -945,7 +1002,7 @@ FrameAndDescriptor read_dataframe_impl(
 
     ARCTICDB_DEBUG(log::version(), "Reduce and fix columns");
     reduce_and_fix_columns(pipeline_context, frame, read_options);
-    return {frame, make_descriptor(pipeline_context, {}, pipeline_context->bucketize_dynamic_), {}, buffers};
+    return {frame, timeseries_descriptor_from_pipeline_context(pipeline_context, {}, pipeline_context->bucketize_dynamic_), {}, buffers};
 }
 
 VersionedItem collate_and_write(
@@ -957,13 +1014,13 @@ VersionedItem collate_and_write(
     const std::optional<arcticdb::proto::descriptors::UserDefinedMetadata>& user_meta
     ) {
     util::check(keys.size() == slices.size(), "Mismatch between slices size and key size");
-    arcticdb::proto::descriptors::TimeSeriesDescriptor tsd;
-    tsd.set_total_rows(pipeline_context->total_rows_);
-    //TODO eliminate copies
-    tsd.mutable_stream_descriptor()->CopyFrom(pipeline_context->descriptor().proto());
-    tsd.mutable_normalization()->CopyFrom(*pipeline_context->norm_meta_);
+    TimeseriesDescriptor tsd;
+
+    tsd.set_stream_descriptor(pipeline_context->descriptor());
+    tsd.mutable_proto().set_total_rows(pipeline_context->total_rows_);
+    tsd.mutable_proto().mutable_normalization()->CopyFrom(*pipeline_context->norm_meta_);
     if(user_meta)
-        tsd.mutable_user_meta()->CopyFrom(*user_meta);
+        tsd.mutable_proto().mutable_user_meta()->CopyFrom(*user_meta);
 
     auto index = stream::index_type_from_descriptor(pipeline_context->descriptor());
     return util::variant_match(index, [&store, &pipeline_context, &slices, &keys, &append_after, &tsd] (auto idx) {
@@ -1017,15 +1074,11 @@ VersionedItem sort_merge_impl(
     auto index = stream::index_type_from_descriptor(pipeline_context->descriptor());
     util::variant_match(index,
         [&](const stream::TimeseriesIndex &timeseries_index) {
-        read_query.query_->emplace_back(SortClause{timeseries_index.name()});
-            ExecutionContext remove_column_partition_context{};
-            remove_column_partition_context.set_descriptor(pipeline_context->descriptor());
-            read_query.query_->emplace_back(RemoveColumnPartitioningClause{std::make_shared<ExecutionContext>(std::move(remove_column_partition_context))});
+            read_query.clauses_.emplace_back(std::make_shared<Clause>(SortClause{timeseries_index.name()}));
+            read_query.clauses_.emplace_back(std::make_shared<Clause>(RemoveColumnPartitioningClause{}));
             const auto split_size = ConfigsMap::instance()->get_int("Split.RowCount", 10000);
-            read_query.query_->emplace_back(SplitClause{static_cast<size_t>(split_size)});
-            ExecutionContext merge_clause_context{};
-            merge_clause_context.set_descriptor(pipeline_context->descriptor());
-            read_query.query_->emplace_back(MergeClause{timeseries_index, DenseColumnPolicy{}, stream_id, std::make_shared<ExecutionContext>(std::move(merge_clause_context))});
+            read_query.clauses_.emplace_back(std::make_shared<Clause>(SplitClause{static_cast<size_t>(split_size)}));
+            read_query.clauses_.emplace_back(std::make_shared<Clause>(MergeClause{timeseries_index, DenseColumnPolicy{}, stream_id, pipeline_context->descriptor()}));
             auto segments = read_and_process(store, pipeline_context, read_query, ReadOptions{}, pipeline_context->incompletes_after());
             pipeline_context->total_rows_ = num_versioned_rows + get_slice_rowcounts(segments);
 
@@ -1141,6 +1194,7 @@ VersionedItem compact_incomplete_impl(
         user_meta
         );
 
+
     store->remove_keys(delete_keys).get();
     return vit;
 }
@@ -1220,9 +1274,7 @@ VersionedItem defragment_symbol_data_impl(
 
     util::variant_match(std::move(policies), [
         &fut_vec, &slices, &store, &options, &pre_defragmentation_info, segment_size=segment_size] (auto &&idx, auto &&schema) {
-        ExecutionContext remove_column_partition_context{};
-        remove_column_partition_context.set_descriptor(pre_defragmentation_info.pipeline_context->descriptor());
-        pre_defragmentation_info.read_query.query_->emplace_back(RemoveColumnPartitioningClause{std::make_shared<ExecutionContext>(std::move(remove_column_partition_context))});
+        pre_defragmentation_info.read_query.clauses_.emplace_back(std::make_shared<Clause>(RemoveColumnPartitioningClause{}));
         auto segments = read_and_process(store, pre_defragmentation_info.pipeline_context, pre_defragmentation_info.read_query, defragmentation_read_options_generator(options), pre_defragmentation_info.append_after.value());
         using IndexType = std::remove_reference_t<decltype(idx)>;
         using SchemaType = std::remove_reference_t<decltype(schema)>;
@@ -1246,7 +1298,7 @@ VersionedItem defragment_symbol_data_impl(
             pre_defragmentation_info.append_after.value(),
             std::nullopt);
     
-    store->remove_keys(delete_keys);
+    store->remove_keys(delete_keys).get();
     return vit;
 }
 

@@ -36,14 +36,14 @@ StreamDescriptor idx_stream_desc(StreamId stream_id, IndexType index) {
     // All index segments are row-count indexed in the sense that the keys are
     // already ordered - they don't need an additional index
     return StreamDescriptor{index_descriptor(stream_id, index, {
-        scalar_field_proto(DataTypeTag::data_type, "start_index"),
-        scalar_field_proto(DataTypeTag::data_type, "end_index"),
-        scalar_field_proto(DataType::UINT64, "version_id"),
-        scalar_field_proto(stream_id_data_type(stream_id), "stream_id"),
-        scalar_field_proto(DataType::UINT64, "creation_ts"),
-        scalar_field_proto(DataType::UINT64, "content_hash"),
-        scalar_field_proto(DataType::UINT8, "index_type"),
-        scalar_field_proto(DataType::UINT8, "key_type")
+        scalar_field(DataTypeTag::data_type, "start_index"),
+        scalar_field(DataTypeTag::data_type, "end_index"),
+        scalar_field(DataType::UINT64, "version_id"),
+        scalar_field(stream_id_data_type(stream_id), "stream_id"),
+        scalar_field(DataType::UINT64, "creation_ts"),
+        scalar_field(DataType::UINT64, "content_hash"),
+        scalar_field(DataType::UINT8, "index_type"),
+        scalar_field(DataType::UINT8, "key_type")
     })};
 }
 
@@ -56,26 +56,25 @@ struct IndexSliceDescriptor : StreamDescriptor {
     explicit IndexSliceDescriptor(const StreamId &stream_id, bool has_column_groups)
             : StreamDescriptor(stream_descriptor(stream_id, IndexType(), {
 
-        scalar_field_proto(DataTypeTag::data_type, "start_index"),
-        scalar_field_proto(DataTypeTag::data_type, "end_index"),
+        scalar_field(DataTypeTag::data_type, "start_index"),
+        scalar_field(DataTypeTag::data_type, "end_index"),
 
-        scalar_field_proto(DataType::UINT64, "version_id"),
-        scalar_field_proto(stream_id_data_type(stream_id), "stream_id"),
-        scalar_field_proto(DataType::UINT64, "creation_ts"),
-        scalar_field_proto(DataType::UINT64, "content_hash"),
-        scalar_field_proto(DataType::UINT8, "index_type"),
-        scalar_field_proto(DataType::UINT8, "key_type"),
+        scalar_field(DataType::UINT64, "version_id"),
+        scalar_field(stream_id_data_type(stream_id), "stream_id"),
+        scalar_field(DataType::UINT64, "creation_ts"),
+        scalar_field(DataType::UINT64, "content_hash"),
+        scalar_field(DataType::UINT8, "index_type"),
+        scalar_field(DataType::UINT8, "key_type"),
 
-        scalar_field_proto(DataType::UINT64, "start_col"),
-        scalar_field_proto(DataType::UINT64, "end_col"),
-        scalar_field_proto(DataType::UINT64, "start_row"),
-        scalar_field_proto(DataType::UINT64, "end_row")
+        scalar_field(DataType::UINT64, "start_col"),
+        scalar_field(DataType::UINT64, "end_col"),
+        scalar_field(DataType::UINT64, "start_row"),
+        scalar_field(DataType::UINT64, "end_row")
     })) {
         if(has_column_groups) {
-            add_field(scalar_field_proto(DataType::UINT64, "hash_bucket"));
-            add_field(scalar_field_proto(DataType::UINT64, "num_buckets"));
+            add_field(scalar_field(DataType::UINT64, "hash_bucket"));
+            add_field(scalar_field(DataType::UINT64, "num_buckets"));
         }
-
     }
 
     static stream::FixedSchema schema(const StreamId &stream_id, bool has_column_groups) {
@@ -116,7 +115,7 @@ inline KeyType key_type_from_segment(const SegmentInMemory& seg, ssize_t row) {
 
 template<typename FieldType>
 inline StreamId stream_id_from_segment(const SegmentInMemory &seg, ssize_t row) {
-    if (const auto fd = seg.descriptor()[int(FieldType::stream_id)]; is_sequence_type(data_type_from_proto(fd.type_desc())))
+    if (const auto& fd = seg.descriptor()[int(FieldType::stream_id)]; is_sequence_type(fd.type().data_type()))
         return std::string(seg.string_at(row, int(FieldType::stream_id)).value());
     else
         return seg.scalar_at<timestamp>(row, int(FieldType::stream_id)).value();
@@ -199,20 +198,19 @@ class KeyRangeIterator : public IndexRangeFilter {
 
 inline auto generate_segments_from_keys(
     arcticdb::stream::StreamSource &read_store,
-    folly::Duration timeout,
     std::size_t prefetch_window,
     const storage::ReadKeyOpts opts) {
     using namespace folly::gen;
     return
         map([&read_store](auto &&key) {
             ARCTICDB_DEBUG(log::inmem(), "Getting segment for key {}: {}", key.type(), key.view());
-            return read_store.read(std::forward<decltype(key)>(key));
+            return read_store.read_sync(std::forward<decltype(key)>(key));
         })
             | window(prefetch_window)
             | move
-            | map([timeout, opts](auto &&fut_key_seg) {
+            | map([opts](auto &&key_seg) {
                 try {
-                    return std::make_optional(std::forward<decltype(fut_key_seg)>(fut_key_seg).get(timeout));
+                    return std::make_optional(std::forward<decltype(key_seg)>(key_seg));
                 } catch(storage::KeyNotFoundException& e) {
                     if (opts.ignores_missing_key_) {
                         return std::optional<ReadKeyOutput>();
@@ -230,10 +228,10 @@ inline auto generate_keys_from_segments(
     std::optional<entity::KeyType> expected_index_type = std::nullopt) {
     return folly::gen::map([expected_key_type, expected_index_type, &read_store](auto &&key_seg) {
         return folly::gen::detail::GeneratorBuilder<entity::AtomKey>() + [&](auto &&yield) {
-            std::stack<folly::Future<std::pair<entity::VariantKey, SegmentInMemory>>> key_segs;
-            key_segs.push(folly::makeFuture(std::forward<decltype(key_seg)>(key_seg)));
+            std::stack<std::pair<entity::VariantKey, SegmentInMemory>> key_segs;
+            key_segs.push(std::forward<decltype(key_seg)>(key_seg));
             while(!key_segs.empty()) {
-                auto [key, seg] = std::move(key_segs.top()).get();
+                auto [key, seg] = std::move(key_segs.top());
                 key_segs.pop();
                 for (ssize_t i = 0; i < ssize_t(seg.row_count()); ++i) {
                     auto read_key = read_key_row(seg, i);
@@ -242,7 +240,7 @@ inline auto generate_keys_from_segments(
                             "Found unsupported key type in index segment. Expected {} or (index) {}, actual {}",
                             expected_key_type, expected_index_type.value(), read_key
                         );
-                        key_segs.push(read_store.read(read_key));
+                        key_segs.push(read_store.read_sync(read_key));
                     }
                     yield(read_key);
                 }
@@ -368,9 +366,9 @@ inline std::set<StreamId> filter_by_regex(const std::set<StreamId>& results, con
     return filtered_results;
 }
 
-inline std::vector<std::string> get_index_columns_from_descriptor(const arcticdb::proto::descriptors::TimeSeriesDescriptor& descriptor) {
-    const auto& norm_info = descriptor.normalization();
-    const auto& stream_descriptor = descriptor.stream_descriptor();
+inline std::vector<std::string> get_index_columns_from_descriptor(const TimeseriesDescriptor& descriptor) {
+    const auto& norm_info = descriptor.proto().normalization();
+    const auto& stream_descriptor = descriptor.proto().stream_descriptor();
     // For explicit integer indexes, the index is actually present in the first column even though the field_count
     // is 0.
     ssize_t index_till;
@@ -405,22 +403,15 @@ storage::KeySegmentPair make_target_key(KeyType key_type,
     if (is_ref_key_class(key_type)) {
         return {RefKey{stream_id, key_type}, std::move(segment)};
     } else {
-        if (is_ref_key_class(variant_key_type(source_key))) {
-            auto return_segment = std::move(segment);
-            auto clone = return_segment;
-            auto decoded = decode(std::move(clone));
-            auto index = index_type_from_descriptor(decoded.descriptor());
-            auto range = get_range_from_segment(index, decoded);
-            auto new_key = atom_key_builder().version_id(version_id).creation_ts(ClockType::nanos_since_epoch()).start_index(range.start_).end_index(
-                range.end_).build(stream_id, key_type);
+        util::check(!is_ref_key_class(variant_key_type(source_key)),
+            "Cannot convert ref key {} to {}", source_key, key_type);
+        auto& atom_source_key = to_atom(source_key);
+        auto new_key = atom_key_builder().version_id(version_id).creation_ts(ClockType::nanos_since_epoch())
+            .start_index(atom_source_key.start_index()).end_index(atom_source_key.end_index())
+            .content_hash(atom_source_key.content_hash())
+            .build(stream_id, key_type);
 
-            return {new_key, std::move(return_segment)};
-        } else {
-            auto new_key = atom_key_builder().version_id(version_id).creation_ts(ClockType::nanos_since_epoch()).start_index(
-                to_atom(source_key).start_index()).end_index(to_atom(source_key).end_index()).build(stream_id, key_type);
-
-            return {new_key, std::move(segment)};
-        }
+        return {new_key, std::move(segment)};
     }
 }
 

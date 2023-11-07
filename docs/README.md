@@ -1,30 +1,34 @@
 ## Building
 
-Work in this directory.
+Work in this directory, except for the `doxygen` documentation.
+The `doxygen` documentation needs to be build from `docs/doxygen`
+
+### doxygen
+
+The doxygen documentation is built from the `docs/doxygen` directory.
+Doxygen does not need articdb installed, or built, to build the documentation.
+The only requirement are `doxygen` itself and `graphviz` for the diagrams.
+Both can be installed via `conda` / `mamba` or other package managers.
+To build the documentation, run `doxygen` from the `docs/doxygen` directory.
+This will create a `docs/doxygen/docs/html`  directory with the documentation.
+Open `docs/doxygen/docs/html/index.html` in the browser of your choice to just view the doxygen docs.
+Note that we currently set the `Doxyfile` in such a way that **everything** is documented
+and diagrams are generated, even undocumented classes / functions. This gives about 400 MB of documentation (including diagrams).
 
 ### mkdocs
 
-To build mkdocs (to `/tmp/docs_build/` as an example):
-
+Install
 ```
-mkdir /tmp/docs_build/
+pip install mkdocs-material mkdocs-jupyter mkdocstrings[python] black pybind11-stubgen mike
 ```
+- mkdocs-material: theme
+- mkdocs-jupyter: jupyter notebook support
+- mkdocstrings[python]: python docstring support, like sphinx docs
+- black: for signature formatting
+- pybind11-stubgen: for generating stubs for pybind11 extensions, so that mkdocstrings can parse them
+- mike: for deploying versioned docs
 
-Working in Man Group:
-
-```
-sudo docker run --rm --user $(id -u):$(id -g) -v /tmp/docs_build:/tmp/docs_build -v $(pwd)/mkdocs:/docs external-sandbox-docker.repo.prod.m/squidfunk/mkdocs-material:latest build -f mkdocs.yml -d /tmp/docs_build
-```
-
-Working externally:
-
-```
-docker run --rm -v /tmp/docs_build:/tmp/docs_build -v $(pwd)/mkdocs:/docs squidfunk/mkdocs-material:latest build -f mkdocs.yml -d /tmp/docs_build
-```
-
-### Sphinx
-
-You need to have the ArcticDB wheel installed, so install it from source:
+You need to have ArcticDB installed to generate the API docs, so install it from source:
 
 ```
 cd $PROJECT_ROOT
@@ -33,35 +37,41 @@ pip install <generated wheel>
 ```
 
 or from PyPi,
-
 ```
 pip install arcticdb
 ```
 
-Install dependencies,
-
+`mkdocstrings[python]` doesn't support python extensions very well, so create interface files (pyi) for the extensions first.
 ```
-pip install sphinx sphinx_rtd_theme
-```
-
-Build,
-
-```
-cd sphinxdocs
-make html
-cd ..
+cd python
+# TODO fix these errors!
+pybind11-stubgen arcticdb_ext.version_store --ignore-all-errors -o .
 ```
 
-This writes build files to `./sphinxdocs/build/html`.
-
-## Uploading
-
-Add the Sphinxdocs to the build:
-
+To build the latest mkdocs to docs/mkdocs/site:
 ```
-mkdir /tmp/docs_build/api
-cp -r ./sphinxdocs/build/html/* /tmp/mkdocs_build/api
+cd docs/mkdocs
+mkdocs build -s
 ```
 
-Then `/tmp/docs_build/` forms the docs site.
+Development server 
+```
+mkdocs serve -s -a 0.0.0.0:8000
+```
 
+The python docstring parser, griffe, will struggle with some built-in (C++) modules
+You'll see 'alias' errors as this when it can't resolve something:
+```
+ERROR   -  mkdocstrings: Template 'alias.html' not found for 'python' handler and theme 'material'.
+ERROR   -  Error reading page 'api/library.md': alias.html
+```
+
+We use `mike` to version the docs.  The docs are first built into the `docs-pages` branch and then deployed to `docs.arcticdb.io` from there.
+
+To serve the versioned docs locally, run `mike serve` from the `docs/mkdocs` directory.
+
+## Publishing `docs.arcticdb.io`
+
+Run the `Docs Publish` github action.
+- Environment: ProdPypi, to push to docs.arcticdb.io
+- Environment: TestPypi, to push to a preview site

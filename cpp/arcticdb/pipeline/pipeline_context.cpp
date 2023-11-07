@@ -102,9 +102,9 @@ bool PipelineContextRow::compacted() const {
     return parent_->compacted_[index_];
 }
 
-void PipelineContextRow::set_descriptor(arcticdb::proto::descriptors::StreamDescriptor&& proto_desc) {
-    auto desc = std::make_shared<StreamDescriptor>(std::move(proto_desc));
-    set_descriptor(std::move(desc));
+void PipelineContextRow::set_descriptor(StreamDescriptor&& desc) {
+    auto shared_desc = std::make_shared<StreamDescriptor>(std::move(desc));
+    set_descriptor(std::move(shared_desc));
 }
 
 } //namespace arcticdb::pipelines

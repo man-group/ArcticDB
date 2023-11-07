@@ -170,6 +170,10 @@ void read_indexed_keys_to_pipeline(
     ReadQuery& read_query,
     const ReadOptions& read_options);
 
+void add_index_columns_to_query(
+    const ReadQuery& read_query, 
+    const TimeseriesDescriptor& desc);
+
 } //namespace arcticdb::version_store
 
 #define ARCTICDB_VERSION_CORE_H_

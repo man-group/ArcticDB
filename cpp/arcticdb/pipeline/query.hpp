@@ -9,7 +9,7 @@
 
 #include <arcticdb/util/bitset.hpp>
 #include <arcticdb/entity/index_range.hpp>
-#include <arcticdb/processing/execution_context.hpp>
+#include <arcticdb/processing/expression_context.hpp>
 #include <arcticdb/entity/versioned_item.hpp>
 #include <arcticdb/pipeline/python_output_frame.hpp>
 #include <arcticdb/pipeline/write_frame.hpp>
@@ -33,14 +33,9 @@ namespace arcticdb::pipelines {
 
 using FilterRange = std::variant<std::monostate, IndexRange, RowRange>;
 
-struct HeadRange {
-    int64_t num_rows_;
-};
-
-struct TailRange {
-    int64_t num_rows_;
-};
-
+/*
+ * A structure which is used to store the potentially negative values for indices of a row range
+ */
 struct SignedRowRange {
     int64_t start_;
     int64_t end_;
@@ -48,56 +43,35 @@ struct SignedRowRange {
 
 struct ReadQuery {
     mutable std::vector<std::string> columns; // empty <=> all columns
-    std::variant<std::monostate, HeadRange, TailRange, SignedRowRange> row_range;
+    std::optional<SignedRowRange> row_range;
     FilterRange row_filter; // no filter by default
-    std::shared_ptr<std::vector<Clause>> query_ = std::make_shared<std::vector<Clause>>();
+    std::vector<std::shared_ptr<Clause>> clauses_;
 
     ReadQuery() = default;
 
-    explicit ReadQuery(std::vector<Clause>&& query) {
-        query_ = std::make_shared<std::vector<Clause>>(std::move(query));
+    explicit ReadQuery(std::vector<std::shared_ptr<Clause>>&& clauses):
+            clauses_(std::move(clauses)) {
     }
 
-    void set_clause_builder(ClauseBuilder& builder) {
-        ClauseBuilder b = std::move(builder);
-        for (auto&& c: b.get_clauses()) {
-            query_->emplace_back(std::move(c));
-        }
+    void add_clauses(std::vector<std::shared_ptr<Clause>>& clauses) {
+        clauses_ = clauses;
     }
 
-    void calculate_row_filter(int64_t total_rows) {
-        util::variant_match(row_range,
-            [&](const HeadRange &head_range) {
-            if (head_range.num_rows_ >= 0) {
-                row_filter = RowRange(0, std::min(head_range.num_rows_, total_rows));
-            } else {
-                row_filter = RowRange(0, std::max(static_cast<int64_t>(0), total_rows + head_range.num_rows_));
-            }
-            if (query_->empty() && columns.empty() && head_range.num_rows_ > 0) {
-                // TODO: columns aren't supported due to AN-334
-                query_->emplace_back(RowNumberLimitClause{static_cast<size_t>(head_range.num_rows_)});
-            } else {
-                log::version().info("Arguments not compatible with head() memory usage optimisation");
-            }
-            },
-            [&](const TailRange &tail_range) {
-            if (tail_range.num_rows_ >= 0) {
-                row_filter = RowRange(std::max(static_cast<int64_t>(0), total_rows - tail_range.num_rows_), total_rows);
-            } else {
-                row_filter = RowRange(std::min(-tail_range.num_rows_, total_rows), total_rows);
-            }
-            },
-            [&](const SignedRowRange &signed_row_range) {
-            size_t start = signed_row_range.start_ >= 0 ?
-                    std::min(signed_row_range.start_, total_rows) :
-                    std::max(total_rows + signed_row_range.start_, static_cast<int64_t>(0));
-            size_t end = signed_row_range.end_ >= 0 ?
-                    std::min(signed_row_range.end_, total_rows) :
-                    std::max(total_rows + signed_row_range.end_, static_cast<int64_t>(0));
+    /*
+     * This is used to set the row filter to a row range not to perform a query of the index key
+     * to get the total number of rows in the index, preventing the cost of performing an extra request.
+     */
+     void calculate_row_filter(int64_t total_rows) {
+        if (row_range.has_value()) {
+            size_t start = row_range->start_ >= 0 ?
+                           std::min(row_range->start_, total_rows) :
+                           std::max(total_rows + row_range->start_,
+                                    static_cast<int64_t>(0));
+            size_t end = row_range->end_ >= 0 ?
+                         std::min(row_range->end_, total_rows) :
+                         std::max(total_rows + row_range->end_, static_cast<int64_t>(0));
             row_filter = RowRange(start, end);
-            },
-            [](const auto &) {}
-            );
+        }
     }
 };
 
@@ -110,11 +84,18 @@ struct TimestampVersionQuery {
 };
 
 struct SpecificVersionQuery {
-    VersionId version_id_;
+    SignedVersionId version_id_;
 };
 
+using VersionQueryType = std::variant<
+        std::monostate, // Represents "latest"
+        SnapshotVersionQuery,
+        TimestampVersionQuery,
+        SpecificVersionQuery
+        >;
+
 struct VersionQuery {
-    std::variant<std::monostate, SnapshotVersionQuery, TimestampVersionQuery, SpecificVersionQuery> content_;
+    VersionQueryType content_;
     std::optional<bool> skip_compat_;
     std::optional<bool> iterate_on_failure_;
 
@@ -126,7 +107,7 @@ struct VersionQuery {
         content_ = TimestampVersionQuery{ts};
     }
 
-    void set_version(VersionId version) {
+    void set_version(SignedVersionId version) {
         content_ = SpecificVersionQuery{version};
     }
 

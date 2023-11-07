@@ -9,7 +9,6 @@ import numpy as np
 import pandas as pd
 import random
 import datetime
-import pytest
 
 from arcticdb.util.test import (
     assert_frame_equal,
@@ -18,11 +17,48 @@ from arcticdb.util.test import (
     random_floats,
     random_dates,
 )
+from arcticdb.util._versions import IS_PANDAS_TWO
+from arcticdb_ext.storage import KeyType
 
 
-def test_parallel_write(lmdb_version_store):
+def test_remove_incomplete(basic_store):
+    lib = basic_store
+    lib_tool = lib.library_tool()
+    assert lib_tool.find_keys(KeyType.APPEND_DATA) == []
+    assert lib.list_symbols_with_incomplete_data() == []
+
+    sym1 = "test_remove_incomplete_1"
+    sym2 = "test_remove_incomplete_2"
+    num_chunks = 10
+    df1 = pd.DataFrame({"col": np.arange(10)}, index=pd.date_range("2000-01-01", periods=num_chunks))
+    df2 = pd.DataFrame({"col": np.arange(100, 110)}, index=pd.date_range("2001-01-01", periods=num_chunks))
+    for idx in range(num_chunks):
+        lib.write(sym1, df1.iloc[idx : idx + 1, :], parallel=True)
+        lib.write(sym2, df2.iloc[idx : idx + 1, :], parallel=True)
+
+    assert len(lib_tool.find_keys_for_symbol(KeyType.APPEND_DATA, sym1)) == num_chunks
+    assert len(lib_tool.find_keys_for_symbol(KeyType.APPEND_DATA, sym2)) == num_chunks
+    assert sorted(lib.list_symbols_with_incomplete_data()) == [sym1, sym2]
+
+    lib.remove_incomplete(sym1)
+    assert lib_tool.find_keys_for_symbol(KeyType.APPEND_DATA, sym1) == []
+    assert len(lib_tool.find_keys_for_symbol(KeyType.APPEND_DATA, sym2)) == num_chunks
+    assert lib.list_symbols_with_incomplete_data() == [sym2]
+
+    lib.remove_incomplete(sym2)
+    assert lib_tool.find_keys(KeyType.APPEND_DATA) == []
+    assert lib.list_symbols_with_incomplete_data() == []
+
+    # Removing incompletes from a symbol that doesn't exist, or a symbol with no incompletes, is a no-op
+    lib.remove_incomplete("non-existent-symbol")
+    sym3 = "test_remove_incomplete_3"
+    lib.write(sym3, df1)
+    lib.remove_incomplete(sym3)
+
+
+def test_parallel_write(basic_store):
     sym = "parallel"
-    lmdb_version_store.version_store.remove_incomplete(sym)
+    basic_store.remove_incomplete(sym)
 
     num_rows = 1111
     dtidx = pd.date_range("1970-01-01", periods=num_rows)
@@ -34,11 +70,11 @@ def test_parallel_write(lmdb_version_store):
     random.shuffle(list_df)
 
     for df in list_df:
-        lmdb_version_store.write(sym, df, parallel=True)
+        basic_store.write(sym, df, parallel=True)
 
     user_meta = {"thing": 7}
-    lmdb_version_store.compact_incomplete(sym, False, False, metadata=user_meta)
-    vit = lmdb_version_store.read(sym)
+    basic_store.compact_incomplete(sym, False, False, metadata=user_meta)
+    vit = basic_store.read(sym)
     assert_frame_equal(test, vit.data)
     assert vit.metadata["thing"] == 7
 
@@ -90,8 +126,7 @@ def test_floats_to_nans(lmdb_version_store):
     assert_frame_equal(vit.data, df)
 
 
-@pytest.mark.skip("index refact")
-def test_sort_merge_write(lmdb_version_store):
+def test_sort_merge_write(basic_store):
     num_rows_per_day = 10
     num_days = 10
     num_columns = 8
@@ -109,23 +144,22 @@ def test_sort_merge_write(lmdb_version_store):
         new_df = pd.DataFrame(data=vals, index=index)
 
         dataframes.append(new_df)
-        df = df.append(new_df)
+        df = pd.concat((df, new_df))
         dt = dt + datetime.timedelta(days=1)
 
     random.shuffle(dataframes)
     for d in dataframes:
-        lmdb_version_store.write(symbol, d, parallel=True)
-    lmdb_version_store.version_store.sort_merge(symbol)
-    vit = lmdb_version_store.read(symbol)
+        basic_store.write(symbol, d, parallel=True)
+    basic_store.version_store.sort_merge(symbol)
+    vit = basic_store.read(symbol)
     df.sort_index(axis=1, inplace=True)
     result = vit.data
     result.sort_index(axis=1, inplace=True)
     assert_frame_equal(vit.data, df)
 
 
-@pytest.mark.skip("index refact")
-def test_sort_merge_append(lmdb_version_store_dynamic_schema):
-    lib = lmdb_version_store_dynamic_schema
+def test_sort_merge_append(basic_store_dynamic_schema):
+    lib = basic_store_dynamic_schema
     num_rows_per_day = 10
     num_days = 10
     num_columns = 8
@@ -141,7 +175,7 @@ def test_sort_merge_append(lmdb_version_store_dynamic_schema):
         vals = {c: random_floats(num_rows_per_day) for c in cols}
         new_df = pd.DataFrame(data=vals, index=index)
         dataframes.append(new_df)
-        df = df.append(new_df)
+        df = pd.concat((df, new_df))
         dt = dt + datetime.timedelta(days=1)
 
     half_way = len(dataframes) / 2
@@ -184,7 +218,6 @@ def test_datetimes_to_nats(lmdb_version_store):
         index = pd.Index([dt + datetime.timedelta(seconds=s) for s in range(num_rows_per_day)])
         vals = {c: random_dates(num_rows_per_day) for c in cols}
         new_df = pd.DataFrame(data=vals, index=index)
-
         dataframes.append(new_df)
         df = pd.concat((df, new_df))
         dt = dt + datetime.timedelta(days=1)
@@ -198,4 +231,12 @@ def test_datetimes_to_nats(lmdb_version_store):
     df.sort_index(axis=1, inplace=True)
     result = vit.data
     result.sort_index(axis=1, inplace=True)
-    assert_frame_equal(vit.data, df)
+
+    if IS_PANDAS_TWO:
+        # In Pandas < 2.0, `datetime64[ns]` was _always_ used. `datetime64[ns]` is also used by ArcticDB.
+        # In Pandas >= 2.0, the `datetime64` can be used with other resolutions (namely 's', 'ms', and 'us').
+        # See: https://pandas.pydata.org/docs/dev/whatsnew/v2.0.0.html#construction-with-datetime64-or-timedelta64-dtype-with-unsupported-resolution  # noqa
+        # Hence, we convert to the largest resolution (which is guaranteed to be the ones of the original `df`).
+        result = result.astype(df.dtypes)
+
+    assert_frame_equal(result, df)

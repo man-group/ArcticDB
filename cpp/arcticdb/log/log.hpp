@@ -16,7 +16,6 @@
 
 #include <memory>
 #include <mutex>
-
 #ifdef DEBUG_BUILD
 #define ARCTICDB_DEBUG(logger, ...) logger.debug(__VA_ARGS__)
 #define ARCTICDB_TRACE(logger, ...) logger.trace(__VA_ARGS__)

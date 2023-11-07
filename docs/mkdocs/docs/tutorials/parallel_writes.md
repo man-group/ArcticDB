@@ -1,6 +1,6 @@
 # Parallel Writes
 
-[As mentioned](../../faq#how-does-arcticdb-handle-concurrent-writers), ArcticDB fundamentally does not support concurrent writers to a single symbol - *unless the data is concurrently written as staged data*!
+[As mentioned](../faq.md#how-does-arcticdb-handle-concurrent-writers), ArcticDB fundamentally does not support concurrent writers to a single symbol - *unless the data is concurrently written as staged data*!
 
 Staged data is not available to read, and requires a process to finalize all staged data prior to it being available for reading. **Each unit of staged data must not overlap with any other unit of staged data** - 
 as a result **staged data must be timeseries indexed**. The below code uses Spark to concurrently write to a single symbol in parallel, before finalizing the data:

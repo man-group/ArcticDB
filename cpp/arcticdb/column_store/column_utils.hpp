@@ -22,63 +22,77 @@ inline py::array array_at(const SegmentInMemory& frame, std::size_t col_pos, py:
             using TypeTag = std::decay_t<decltype(tag)>;
             constexpr auto data_type = TypeTag::DataTypeTag::data_type;
             std::string dtype;
-            py::array::ShapeContainer shapes{0};
-            ssize_t esize = get_type_size(data_type);
+            constexpr ssize_t esize = is_sequence_type(data_type) && is_fixed_string_type(data_type) ? 1 : get_type_size(data_type);
             if constexpr (is_sequence_type(data_type)) {
-                if(is_fixed_string_type(data_type)) {
+                if constexpr (is_fixed_string_type(data_type)) {
                     dtype = data_type == DataType::ASCII_FIXED64 ? "<S0" : "<U0";
-                    esize = 1;
-                }
-                else {
+                } else {
                     dtype = "O";
                 }
-            } else {
+            } else if constexpr(is_numeric_type(data_type) || is_bool_type(data_type)) {
                 constexpr auto dim = TypeTag::DimensionTag::value;
                 util::check(dim == Dimension::Dim0, "Only scalars supported, {}", data_type);
-                if constexpr (data_type == DataType::MICROS_UTC64) {
+                if constexpr (data_type == DataType::NANOSECONDS_UTC64) {
+                    // NOTE: this is safe as of Pandas < 2.0 because `datetime64` _always_ has been using nanosecond resolution,
+                    // i.e. Pandas < 2.0 _always_ provides `datetime64[ns]` and ignores any other resolution.
+                    // Yet, this has changed in Pandas 2.0 and other resolution can be used,
+                    // i.e. Pandas >= 2.0 will also provides `datetime64[us]`, `datetime64[ms]` and `datetime64[s]`.
+                    // See: https://pandas.pydata.org/docs/dev/whatsnew/v2.0.0.html#construction-with-datetime64-or-timedelta64-dtype-with-unsupported-resolution
+                    // TODO: for the support of Pandas>=2.0, convert any `datetime` to `datetime64[ns]` before-hand and do not
+                    // rely uniquely on the resolution-less 'M' specifier if it this doable.
                     dtype = "datetime64[ns]";
                 } else {
                     dtype = fmt::format("{}{:d}", get_dtype_specifier(data_type), esize);
                 }
+            } else if constexpr (is_empty_type(data_type)) {
+                dtype= "O";
+            } else {
+                static_assert(!sizeof(data_type), "Unhandled data type");
             }
-            py::array::StridesContainer strides{esize};
-            return py::array{py::dtype{dtype}, std::move(shapes), std::move(strides)};
+            return py::array{py::dtype{dtype}, py::array::ShapeContainer{0}, py::array::StridesContainer{esize}};
         });
     }
     return visit_field(frame.field(col_pos), [&, frame=frame, col_pos=col_pos] (auto &&tag) {
         using TypeTag = std::decay_t<decltype(tag)>;
-        constexpr auto dt = TypeTag::DataTypeTag::data_type;
-        auto &buffer = frame.column(col_pos).data().buffer();
+        constexpr auto data_type = TypeTag::DataTypeTag::data_type;
+        const auto &buffer = frame.column(col_pos).data().buffer();
         std::string dtype;
-        std::vector<shape_t> shapes;
-        shapes.push_back(frame.row_count());
-        ssize_t esize = get_type_size(dt);
-        if constexpr (is_sequence_type(dt)) {
-            if (is_fixed_string_type(dt)) {
+        ssize_t esize = get_type_size(data_type);
+        if constexpr (is_sequence_type(data_type)) {
+            if (is_fixed_string_type(data_type)) {
                 esize = buffer.bytes() / frame.row_count();
                 auto char_count = esize;
-                if (dt == DataType::UTF_FIXED64) {
+                if (data_type == DataType::UTF_FIXED64) {
                     char_count /= UNICODE_WIDTH;
                 }
-                dtype = fmt::format((dt == DataType::ASCII_FIXED64 ? "<S{:d}" : "<U{:d}"), char_count);
+                dtype = fmt::format((data_type == DataType::ASCII_FIXED64 ? "<S{:d}" : "<U{:d}"), char_count);
             } else {
                 dtype = "O";
             }
-        } else {
+        } else if constexpr(is_numeric_type(data_type) || is_bool_type(data_type)) {
             constexpr auto dim = TypeTag::DimensionTag::value;
             util::check(dim == Dimension::Dim0, "Only scalars supported, {}", frame.field(col_pos));
-            if constexpr (dt == DataType::MICROS_UTC64) {
+            if constexpr (data_type == DataType::NANOSECONDS_UTC64) {
+                // NOTE: this is safe as of Pandas < 2.0 because `datetime64` _always_ has been using nanosecond resolution,
+                // i.e. Pandas < 2.0 _always_ provides `datetime64[ns]` and ignores any other resolution.
+                // Yet, this has changed in Pandas 2.0 and other resolution can be used,
+                // i.e. Pandas >= 2.0 will also provides `datetime64[us]`, `datetime64[ms]` and `datetime64[s]`.
+                // See: https://pandas.pydata.org/docs/dev/whatsnew/v2.0.0.html#construction-with-datetime64-or-timedelta64-dtype-with-unsupported-resolution
+                // TODO: for the support of Pandas>=2.0, convert any `datetime` to `datetime64[ns]` before-hand and do not
+                // rely uniquely on the resolution-less 'M' specifier if it this doable.
                 dtype = "datetime64[ns]";
             } else {
-                dtype = fmt::format("{}{:d}", get_dtype_specifier(dt), esize);
+                dtype = fmt::format("{}{:d}", get_dtype_specifier(data_type), esize);
             }
+        } else if constexpr (is_empty_type(data_type)) {
+            dtype = "O";
+        } else {
+            static_assert(!sizeof(data_type), "Unhandled data type");
         }
-        std::vector<stride_t> strides;
-        strides.push_back(esize);
         // Note how base is passed to the array to register the data owner.
         // It's especially important to keep the frame data object alive for as long as the array is alive
         // so that regular python ref counting logic handles the liveness
-        return py::array(py::dtype{dtype}, std::move(shapes), std::move(strides), buffer.data(), anchor);
+        return py::array(py::dtype{dtype}, {frame.row_count()}, {esize}, buffer.data(), anchor);
     });
 }
 

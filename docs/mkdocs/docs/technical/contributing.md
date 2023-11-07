@@ -83,15 +83,15 @@ $MY_PYTHON -m pip install -ve .
 
 Note that as this will copy the binary to your Python installation this will have to be run after each and every change of a C++ file.
 
-mamba and conda-forge Quickstart
-================================
+Building using mamba and conda-forge
+====================================
 
-This quickstart uses build dependencies from [conda-forge](https://conda-forge.org/).
+This section uses build dependencies from [conda-forge](https://conda-forge.org/).
 It is a pre-requisite for releasing ArcticDB on conda-forge.
 
 **⚠️ At the time of writing, installing ArcticDB with this setup under Windows is not possible
-since [no distribution of folly for Windows is not available on conda-forge](https://anaconda.org/conda-forge/folly).
-For tracking progress on packaging folly for Windows on conda-forge, see: [`conda-forge/folly-feedstock#98`](https://github.com/conda-forge/folly-feedstock/pull/98)**
+due to a linkage problems with libprotobuf.
+See: https://github.com/man-group/ArcticDB/pull/449**
 
  - [Install `mamba`](https://mamba.readthedocs.io/en/latest/installation.html)
  - Create the `arcticdb` environment from its specification (`environment_unix.yml`):
@@ -106,11 +106,54 @@ For tracking progress on packaging folly for Windows on conda-forge, see: [`cond
   mamba activate arcticdb
   ```
 
- - Build and install ArcticDB in the `arcticdb` environment using dependencies installed in this environement:
+#### Building CMake targets
+
+[Several CMake presets](https://github.com/man-group/ArcticDB/blob/master/cpp/CMakePresets.json) are defined for build types, OS's, and build system.
+
+For instance:
+
+ - for debug build on Linux with mamba and conda-forge, use:
+ 
+  ```bash
+  export ARCTICDB_USING_CONDA=1
+  cmake -DTEST=off --preset linux-conda-debug cpp
+  cd cpp
+
+  # You might need to use fewer threads than what's possible on your machine
+  # to not have it swap and freeze (e.g. we use 1 here).
+  cmake --build --preset linux-conda-debug -j 1
+  ```
+
+ - for release build on MacOS with mamba and conda-forge, use:
+
+  ```bash
+  export ARCTICDB_USING_CONDA=1
+  cmake -DTEST=off --preset darwin-conda-release cpp
+  cd cpp
+
+  # You might need to use fewer threads than what's possible your machine
+  # not to have it swap and freeze (e.g. we use 1 here).
+  cmake --build --preset linux-conda-debug -j 1
+  ```
+  **Note:** If you don't use presets, you may want to set some useful environment variables:
+
+  ```bash
+  # To define the number of threads to use
+  export CMAKE_BUILD_PARALLEL_LEVEL=1
+  # To enable C++ tests
+  export ARCTICDB_BUILD_CPP_TESTS=1
+  ```
+
+#### Building and installing the Python Package
+
+ - Build and install ArcticDB in the `arcticdb` environment using dependencies installed in this environment.
    We recommend using the [`editable` installation](https://setuptools.pypa.io/en/latest/userguide/development_mode.html) for development:
 
   ```bash
-  ARCTICDB_USING_CONDA=1 python -m pip install --verbose --editable .
+  export ARCTICDB_USING_CONDA=1
+  # Adapt the CMake preset to your setup.
+  export ARCTIC_CMAKE_PRESET=linux-conda-debug
+  python -m pip install --no-build-isolation --no-deps --verbose --editable .
   ```
 
  - Use ArcticDB from Python:
@@ -184,24 +227,12 @@ We recommend using Visual Studio 2022 (or later) to install the compiler (MSVC v
 The Python that comes with Visual Studio is sufficient for creating release builds, but for debug builds, you will have
 to separately download from [Python.org](https://www.python.org/downloads/windows/).
 
-pre-commit hooks setup
-----------------------
+After building `arcticdb_ext`, you need to symlink to the `.pyd` for the Python tests to run against it:
 
-We use [pre-commit](https://pre-commit.com/) to run some checks on the codebase before committing.
-
-To install the pre-commit hooks, run:
-
-```bash
-pip install pre-commit
-pre-commit install
-```
-
-This will install the pre-commit hooks into your local git repository.
-
-If you want to run the pre-commit hooks on all files, run:
-
-```bash
-pre-commit run --all-files
+```powershell
+# From the root of the ArcticDB git root checkout, in an administrator powershell session
+# Change Python version as appropriate - below is for Python 3.11.
+New-Item -Path .\python\arcticdb_ext.cp311-win_amd64.pyd -ItemType SymbolicLink -Value .\cpp\out\windows-cl-debug-build\arcticdb\arcticdb_ext.cp311-win_amd64.pyd
 ```
 
 Running Python tests
@@ -217,10 +248,16 @@ python -m pytest python/tests
 Running C++ tests
 -----------------
 
-Configure ArcticDB with TEST=on (default):
+Configure ArcticDB with TEST=ON (default is OFF):
 
 ```bash
-cmake -DPython_EXECUTABLE=<path to python> --preset linux-debug cpp
+cmake -DPython_EXECUTABLE=<path to python> -DTEST=ON --preset linux-debug cpp
+```
+
+Or you can set the following environment variable:
+
+```bash
+export ARCTICDB_BUILD_CPP_TESTS=1
 ```
 
 Note that `<path to python>` must point to a Python that is compatible with [Development.Embed](https://cmake.org/cmake/help/latest/module/FindPython.html). This will probably be the result of installing `python3-devel` from your dependency manager.
@@ -231,7 +268,14 @@ Inside the provided docker image, `python3-devel` resolves to Python 3.6 install
 cmake -DPython_EXECUTABLE=/usr/bin/python3 -DTEST=ON --preset linux-debug cpp
 ```
 
-Then invoke the CMake build as normal and run the compiled test binary.
+Then build and run the tests:
+
+```bash
+cd cpp/out/linux-debug-build
+make -j 1 arcticdb_rapidcheck_tests
+make -j 1 test_unit_arcticdb
+make test
+```
 
 CIBuildWheel
 ------------
@@ -332,3 +376,83 @@ To override that, use one of the following CMake variables*:
 
    (Only) `Python_ROOT_DIR` can also be set as an environment variable.
    Setting the others in the environment might have no effect.)
+
+Development Guidelines
+======================
+
+ArcticDB has a lot of write-time options to configure how the data is stored on disk.
+When adding new features, it is important to test not only the simplest case, but also how the new feature interacts with these various options.
+This section serves as a guide as to what should be considered when adding a new feature.
+
+## Backwards compatibility
+
+### Data stored on disk
+
+Due to ArcticDB being a purely client-side database, it is possible for data to be written by clients that are of later versions than clients that need to read the same data.
+If the change is breaking, such that older clients will not be able to read the data, then this should be clearly documented both in the PR and in the online documentation.
+If possible, a version number should also be added such that future changes in the same area will display a more clear error message.
+
+### API
+
+Any changes to the API (including when exceptions are thrown and the type of the exception) must be weighed up against the change breaking behaviour for existing users.
+Please make this as clear to reviewers as possible by ensuring **API changes are clearly described in the PR description**. 
+If the change is breaking, please also ensure that that is appropriately highlighted in the PR description as well.
+This is particularly true of the `NativeVersionStore` API, as this has many users inside Man Group.
+
+### Snapshots
+
+Symbols are almost completely decoupled from one another in ArcticDB.
+The major feature for which this is not the case is snapshots.
+Whenever a change involves deleting any keys from the storage, care must be taken that those keys are not in fact still needed by a snapshot.
+Similarly, any operation that modifies a snapshot, including deleting it, must ensure that any keys for which this snapshot was the last reference are also deleted.
+See the [tutorial](https://docs.arcticdb.io/tutorials/snapshots/) and [API documentation](https://docs.arcticdb.io/api/library#arcticdb.version_store.library.Library.snapshot) for more details.
+
+## Batch methods
+
+Almost all of the major reading and writing methods have batch equivalents.
+If a feature is added for the non-batch version, it should almost always work with the batch version as well.
+We should also strive for consistency of behaviour across the batch methods in circumstances that could be encountered by any of them.
+e.g. `read_batch` and `read_metadata_batch` should have the same behaviour if the specified version does not exist.
+
+## Dynamic schema
+
+Static schema is much simpler than dynamic schema, and so features added and only tested with static schema may not "just work" with dynamic schema.
+In particular, the following cases should be considered:
+
+* A column that **is not** present in an initial call to `write` **is** present in a subsequent call to `append`.
+* A column that **is** present in an initial call to `write` **is not** present in a subsequent call to `append`.
+* A numeric column with a "small" type (e.g. `uint8`) is appended to with a numeric column of a larger type (e.g. int16), and vice versa.
+
+## Segmentation
+
+Most tests are written with small amounts of data to keep the runtime down as low as possible.
+However, many bugs are only exposed when data being written is column-sliced and/or row-sliced.
+Using test fixtures configured to slice into small data segments (e.g. 2x2) can help to catch these issues early.
+
+## Data sub-selection
+
+Many use cases of ArcticDB involve writing huge symbols with hundreds of thousands of columns or billions of rows.
+In these cases, methods for reading data will almost never be called without some parameters to cut down the amount of data returned to the user. The most commonly used are:
+
+* The stand-alone methods `head` and `tail`*
+* `columns` - select only a subset of the columns
+* `date_range` and `row_range` - select a contiguous range of rows
+* `query_builder` - see section on processing pipeline
+
+## Processing pipeline
+
+Reading data using only `columns`, `date_range`, and `row_range` arguments is heavily optimised to avoid copying data in memory unnecessarily.
+ Any read-like method provided with the `query_builder` optional argument takes quite a different code path, as we do not know the shape of the output data a priori.
+ While it is not necessary to exhaustively test all new features against every possible `query_builder` argument, it is generally worth having a test using a simple filter that excludes some of the data that would otherwise be returned to the user.
+
+## Sparse columns
+
+The majority of data written into ArcticDB uses dense columns, meaning that within a given row-slice, every row has an associated value in every column (even if that value is `NaN`).
+The concept of sparse columns is implemented as well, where columns may have values missing for none, some, or all rows within a row-slice.
+Any read-like method should be able to handle both types of stored column.
+
+## Pickling
+
+When data that cannot be normalized to a supported data type in ArcticDB, it can still be stored using `write_pickle` and similar.
+There are many operations that cannot be performed on pickled data, such as `append`, `update`, `date_range` search, and many more.
+It is important that if a user attempts an operation that is not supported with pickled data, that they receive a helpful error message.

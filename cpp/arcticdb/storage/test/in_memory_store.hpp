@@ -12,12 +12,20 @@
 #include <arcticdb/entity/key.hpp>
 #include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/util/variant.hpp>
-#include <folly/futures/Future.h>
 #include <arcticdb/stream/test/stream_test_common.hpp>
-#include <vector>
 #include <arcticdb/storage/storage.hpp>
 
+#include <folly/futures/Future.h>
+
+#include <vector>
+
 namespace arcticdb {
+    /*
+     * In-memory implementation of Store for testing purposes.
+     *
+     * InMemoryStore only implements a fraction of all the methods from Store.
+     *
+     */
     class InMemoryStore : public Store {
 
     public:
@@ -31,7 +39,7 @@ namespace arcticdb {
             util::raise_rte("Not implemented");
         }
 
-        bool supports_prefix_matching() override {
+        bool supports_prefix_matching() const override {
             return false;
         }
 
@@ -39,10 +47,9 @@ namespace arcticdb {
             return false;
         }
 
-        std::vector<Composite<ProcessingSegment>> batch_read_uncompressed(
+        std::vector<Composite<ProcessingUnit>> batch_read_uncompressed(
                 std::vector<Composite<pipelines::SliceAndKey>> &&,
-                const std::shared_ptr<std::vector<Clause>>&,
-                const StreamDescriptor&,
+                const std::vector<std::shared_ptr<Clause>>&,
                 const std::shared_ptr<std::unordered_set<std::string>>&,
                 const BatchReadArgs &) override {
             throw std::runtime_error("Not implemented for tests");
@@ -201,7 +208,7 @@ namespace arcticdb {
             util::raise_rte("Not implemented");
         }
 
-        RemoveKeyResultType remove_key_sync(const entity::VariantKey &key, RemoveOpts opts) override {
+        RemoveKeyResultType remove_key_sync(const entity::VariantKey &key, storage::RemoveOpts opts) override {
             StorageFailureSimulator::instance()->go(FailureType::DELETE);
             std::lock_guard lock{mutex_};
             size_t removed = util::variant_match(key,
@@ -223,7 +230,7 @@ namespace arcticdb {
         }
 
 
-        void iterate_type(KeyType kt, std::function<void(entity::VariantKey &&)> func, const std::string& prefix = "")
+        void iterate_type(KeyType kt, entity::IterateTypeVisitor func, const std::string& prefix = "")
         override {
             auto prefix_matcher = stream_id_prefix_matcher(prefix);
             auto failure_sim = StorageFailureSimulator::instance();
@@ -303,6 +310,16 @@ namespace arcticdb {
             return output;
         }
 
+        folly::Future<std::vector<RemoveKeyResultType>>
+        remove_keys(std::vector<entity::VariantKey> &&keys, storage::RemoveOpts opts) override {
+            std::vector<RemoveKeyResultType> output;
+            for (const auto &key: keys) {
+                output.emplace_back(remove_key_sync(key, opts));
+            }
+
+            return output;
+        }
+
         void insert_atom_key(const AtomKey &key) {
             seg_by_atom_key_.insert(std::make_pair(key, std::make_unique<SegmentInMemory>()));
         }
@@ -350,17 +367,17 @@ namespace arcticdb {
                                        });
         }
 
-        folly::Future<std::tuple<VariantKey, std::optional<google::protobuf::Any>, StreamDescriptor::Proto>>
+        folly::Future<std::tuple<VariantKey, std::optional<google::protobuf::Any>, StreamDescriptor>>
         read_metadata_and_descriptor(
             const entity::VariantKey& key, storage::ReadKeyOpts) override {
-            return util::variant_match(key,
+            auto components =  util::variant_match(key,
                                        [&](const AtomKey &ak) {
                 auto it = seg_by_atom_key_.find(ak);
                 // util::check_rte(it != seg_by_atom_key_.end(), "atom key {} not found in remove", ak);
                 if (it == seg_by_atom_key_.end())
                     throw storage::KeyNotFoundException(Composite<VariantKey>(ak));
                 ARCTICDB_DEBUG(log::storage(), "Mock store removing data for atom key {}", ak);
-                return std::make_tuple(key, std::make_optional<google::protobuf::Any>(*it->second->metadata()), it->second->descriptor().proto());
+                return std::make_tuple(key, std::make_optional<google::protobuf::Any>(*it->second->metadata()), it->second->descriptor());
                 },
                 [&](const RefKey &rk) {
                 auto it = seg_by_ref_key_.find(rk);
@@ -368,9 +385,30 @@ namespace arcticdb {
                 if (it == seg_by_ref_key_.end())
                     throw storage::KeyNotFoundException(Composite<VariantKey>(rk));
                 ARCTICDB_DEBUG(log::storage(), "Mock store removing data for ref key {}", rk);
-                return std::make_tuple(key, std::make_optional<google::protobuf::Any>(*it->second->metadata()), it->second->descriptor().proto());
+                return std::make_tuple(key, std::make_optional<google::protobuf::Any>(*it->second->metadata()), it->second->descriptor());
+            });
+            return folly::makeFuture(std::move(components));
+        }
+
+
+        folly::Future<std::pair<std::variant<arcticdb::entity::AtomKeyImpl, arcticdb::entity::RefKey>, arcticdb::TimeseriesDescriptor>>
+        read_timeseries_descriptor(const entity::VariantKey& key) override {
+            return util::variant_match(key, [&](const AtomKey &ak) {
+                auto it = seg_by_atom_key_.find(ak);
+                if (it == seg_by_atom_key_.end())
+                    throw storage::KeyNotFoundException(Composite<VariantKey>(ak));
+                ARCTICDB_DEBUG(log::storage(), "Mock store removing data for atom key {}", ak);
+                return std::make_pair(key, it->second->index_descriptor());
+                },
+                [&](const RefKey &rk) {
+                auto it = seg_by_ref_key_.find(rk);
+                if (it == seg_by_ref_key_.end())
+                    throw storage::KeyNotFoundException(Composite<VariantKey>(rk));
+                ARCTICDB_DEBUG(log::storage(), "Mock store removing data for ref key {}", rk);
+                return std::make_pair(key, it->second->index_descriptor());
             });
         }
+
 
         void set_failure_sim(const arcticdb::proto::storage::VersionStoreConfig::StorageFailureSimulator &) override {}
 

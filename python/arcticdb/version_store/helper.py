@@ -5,14 +5,17 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+import os.path as osp
 import re
 import time
 from typing import Iterable, Dict, Any, Union
 
 from arcticc.pb2.lmdb_storage_pb2 import Config as LmdbConfig
 from arcticc.pb2.s3_storage_pb2 import Config as S3Config
+from arcticc.pb2.azure_storage_pb2 import Config as AzureConfig
 from arcticc.pb2.in_memory_storage_pb2 import Config as MemoryConfig
 from arcticc.pb2.mongo_storage_pb2 import Config as MongoConfig
+from arcticc.pb2.nfs_backed_storage_pb2 import Config as NfsConfig
 from arcticc.pb2.storage_pb2 import (
     EnvironmentConfigsMap,
     EnvironmentConfig,
@@ -25,7 +28,7 @@ from arcticc.pb2.storage_pb2 import (
 
 from arcticdb.config import *  # for backward compat after moving to config
 from arcticdb.config import _expand_path
-from arcticdb.exceptions import ArcticNativeException, LibraryNotFound
+from arcticdb.exceptions import ArcticNativeException, LibraryNotFound, UserInputException
 from arcticdb.version_store._store import NativeVersionStore
 from arcticdb.authorization.permissions import OpenMode
 
@@ -77,7 +80,7 @@ class ArcticConfig(object):
         self.uri_builder = uri_builder
 
 
-class ArcticcFileConfig(ArcticConfig):
+class ArcticFileConfig(ArcticConfig):
     def __init__(self, env=Defaults.ENV, config_path=Defaults.ENV_FILE_PATH):
         # type: (EnvName, FilePath)->None
         self._conf_path = _expand_path(config_path)
@@ -187,7 +190,7 @@ def add_memory_library_to_env(cfg, lib_name, env_name, description=None):
     _add_lib_desc_to_env(env, lib_name, sid, description)
 
 
-def add_mongo_library_to_env(cfg, lib_name, env_name, uri=None, description=None):
+def get_mongo_proto(cfg, lib_name, env_name, uri):
     env = cfg.env_by_id[env_name]
     mongo = MongoConfig()
     if uri is not None:
@@ -195,6 +198,18 @@ def add_mongo_library_to_env(cfg, lib_name, env_name, uri=None, description=None
 
     sid, storage = get_storage_for_lib_name(lib_name, env)
     storage.config.Pack(mongo, type_url_prefix="cxx.arctic.org")
+    return sid, storage
+
+
+def add_mongo_library_to_env(cfg, lib_name, env_name, uri=None, description=None):
+    env = cfg.env_by_id[env_name]
+    sid, storage = get_mongo_proto(
+        cfg=cfg,
+        lib_name=lib_name,
+        env_name=env_name,
+        uri=uri,
+    )
+
     _add_lib_desc_to_env(env, lib_name, sid, description)
 
 
@@ -213,11 +228,18 @@ def get_s3_proto(
 ):
     env = cfg.env_by_id[env_name]
     s3 = S3Config()
-    s3.bucket_name = bucket_name
-    s3.credential_name = credential_name
-    s3.credential_key = credential_key
-    s3.endpoint = endpoint
-    s3.https = is_https
+    if bucket_name is not None:
+        s3.bucket_name = bucket_name
+    if credential_name is not None:
+        s3.credential_name = credential_name
+    if credential_key is not None:
+        s3.credential_key = credential_key
+    if endpoint is not None:
+        s3.endpoint = endpoint
+    if is_https is not None:
+        s3.https = is_https
+    if use_virtual_addressing is not None:
+        s3.use_virtual_addressing = use_virtual_addressing
     # adding time to prefix - so that the s3 root folder is unique and we can delete and recreate fast
     if with_prefix:
         if isinstance(with_prefix, str):
@@ -230,7 +252,6 @@ def get_s3_proto(
     if region:
         s3.region = region
 
-    s3.use_virtual_addressing = use_virtual_addressing
     sid, storage = get_storage_for_lib_name(s3.prefix, env)
     storage.config.Pack(s3, type_url_prefix="cxx.arctic.org")
     return sid, storage
@@ -250,8 +271,13 @@ def add_s3_library_to_env(
     region=None,
     use_virtual_addressing=False,
 ):
-    # type: (EnvironmentConfigsMap, LibName, EnvName, AnyStr, AnyStr, Optional[AnyStr], Optional[AnyStr], Optional[AnyStr], Optional[AnyStr], bool, Optional[AnyStr], bool)->None
     env = cfg.env_by_id[env_name]
+    if with_prefix and isinstance(with_prefix, str) and (with_prefix.endswith("/") or "//" in with_prefix):
+        raise UserInputException(
+            "path_prefix cannot contain // or end with a / because this breaks some S3 API calls, path_prefix was"
+            f" [{with_prefix}]"
+        )
+
     sid, storage = get_s3_proto(
         cfg=cfg,
         lib_name=lib_name,
@@ -282,9 +308,14 @@ def create_test_s3_cfg(
     bucket_name: str,
     endpoint: str,
     *,
+    is_https: bool = False,
     with_prefix: Union[str, bool, None] = True,
+    region: str = None,
 ) -> EnvironmentConfigsMap:
     cfg = EnvironmentConfigsMap()
+    if with_prefix and isinstance(with_prefix, str):
+        with_prefix = f"{with_prefix}/{lib_name}"
+
     add_s3_library_to_env(
         cfg,
         lib_name=lib_name,
@@ -294,6 +325,21 @@ def create_test_s3_cfg(
         bucket_name=bucket_name,
         endpoint=endpoint,
         with_prefix=with_prefix,
+        is_https=is_https,
+        region=region,
+    )
+    return cfg
+
+
+def create_test_azure_cfg(lib_name, credential_name, credential_key, container_name, endpoint, ca_cert_path):
+    cfg = EnvironmentConfigsMap()
+    add_azure_library_to_env(
+        cfg=cfg,
+        lib_name=lib_name,
+        env_name=Defaults.ENV,
+        container_name=container_name,
+        endpoint=endpoint,
+        ca_cert_path=ca_cert_path,
     )
     return cfg
 
@@ -308,6 +354,59 @@ def create_test_mongo_cfg(lib_name=Defaults.LIB, uri="mongodb://localhost:27017"
     cfg = EnvironmentConfigsMap()
     add_mongo_library_to_env(cfg, lib_name=lib_name, env_name=Defaults.ENV, uri=uri, description=description)
     return cfg
+
+
+def get_azure_proto(
+    cfg,
+    lib_name,
+    env_name,
+    container_name,
+    endpoint,
+    with_prefix: Optional[bool] = True,
+    ca_cert_path: str = "",
+):
+    env = cfg.env_by_id[env_name]
+    azure = AzureConfig()
+    if not container_name:
+        raise UserInputException("Container needs to be specified")
+    azure.container_name = container_name
+    azure.endpoint = endpoint
+    if with_prefix:
+        if isinstance(with_prefix, str):
+            azure.prefix = with_prefix
+        else:
+            azure.prefix = f"{lib_name}{time.time() * 1e9:.0f}"
+    else:
+        azure.prefix = lib_name
+    azure.ca_cert_path = ca_cert_path
+
+    sid, storage = get_storage_for_lib_name(azure.prefix, env)
+    storage.config.Pack(azure, type_url_prefix="cxx.arctic.org")
+    return sid, storage
+
+
+def add_azure_library_to_env(
+    cfg,
+    lib_name,
+    env_name,
+    container_name,
+    endpoint,
+    description: Optional[bool] = None,
+    with_prefix: Optional[bool] = True,
+    ca_cert_path: str = "",
+):
+    env = cfg.env_by_id[env_name]
+    sid, storage = get_azure_proto(
+        cfg=cfg,
+        lib_name=lib_name,
+        env_name=env_name,
+        container_name=container_name,
+        endpoint=endpoint,
+        with_prefix=with_prefix,
+        ca_cert_path=ca_cert_path,
+    )
+
+    _add_lib_desc_to_env(env, lib_name, sid, description)
 
 
 # see https://regex101.com/r/mBCS80/1
@@ -334,4 +433,4 @@ def get_arctic_native_lib(lib_fqn):
     if m is None:
         raise LibraryNotFound(lib_fqn)
     lib, path = m.group(1), m.group(2)
-    return ArcticcFileConfig(config_path=path)[lib]
+    return ArcticFileConfig(config_path=path)[lib]

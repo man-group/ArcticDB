@@ -21,6 +21,11 @@ ARCTICDB_USING_CONDA = os.environ.get("ARCTICDB_USING_CONDA", "0")
 ARCTICDB_USING_CONDA = ARCTICDB_USING_CONDA != "0"
 print(f"ARCTICDB_USING_CONDA={ARCTICDB_USING_CONDA}")
 
+# flag to indicate if we want to build the tests
+ARCTICDB_BUILD_CPP_TESTS = os.environ.get("ARCTICDB_BUILD_CPP_TESTS", "0")
+ARCTICDB_BUILD_CPP_TESTS = ARCTICDB_BUILD_CPP_TESTS != "0"
+print(f"ARCTICDB_BUILD_CPP_TESTS={ARCTICDB_BUILD_CPP_TESTS}")
+
 
 def _log_and_run(*cmd, **kwargs):
     print("Running " + " ".join(cmd))
@@ -57,7 +62,9 @@ class CompileProto(Command):
         python = sys.version_info[:2]
         print(f"\nProtoc compilation (into '{output_dir}') for versions '{self.proto_vers}':")
         for proto_ver in self.proto_vers:
-            if (python <= (3, 6) and proto_ver >= "4") or (python >= (3, 11) and proto_ver == "3"):
+            if python >= (3, 11) and proto_ver == "3":
+                print(f"Python protobuf {proto_ver} is not officially supported on Python {python}. Skipping...") # e.g. https://pypi.org/project/protobuf/3.20.3/#files
+            elif python <= (3, 6) and proto_ver >= "4":
                 print(f"Python protobuf {proto_ver} do not run on Python {python}. Skipping...")
             else:
                 self._compile_one_version(proto_ver, os.path.join(output_dir, proto_ver))
@@ -136,15 +143,21 @@ class CMakeBuild(build_ext):
             suffix = "-debug" if self.debug else "-release"
             suffix = conda_suffix + suffix
             preset = ("windows-cl" if platform.system() == "Windows" else platform.system().lower()) + suffix
-        _log_and_run(
+
+        cmd = [
             cmake,
-            "-DTEST=NO",
+            f"-DTEST={ARCTICDB_BUILD_CPP_TESTS}",
             f"-DBUILD_PYTHON_VERSION={sys.version_info[0]}.{sys.version_info[1]}",
             f"-DCMAKE_INSTALL_PREFIX={os.path.dirname(dest)}",
             "--preset",
             preset,
-            cwd="cpp",
-        )
+        ]
+        vcpkg_installed_dir = os.getenv("ARCTICDB_VCPKG_INSTALLED_DIR")
+        print(f"ARCTICDB_VCPKG_INSTALLED_DIR={vcpkg_installed_dir}")
+        if vcpkg_installed_dir:
+            cmd.append(f"-DVCPKG_INSTALLED_DIR={vcpkg_installed_dir}")
+
+        _log_and_run(*cmd, cwd="cpp")
 
         search = f"cpp/out/{preset}-build"
         candidates = glob.glob(search)

@@ -121,7 +121,27 @@ struct StreamSink {
     [[nodiscard]] virtual folly::Future<std::vector<RemoveKeyResultType>> remove_keys(
         const std::vector<entity::VariantKey> &keys, storage::RemoveOpts opts = storage::RemoveOpts{}) = 0;
 
+    [[nodiscard]] virtual folly::Future<std::vector<RemoveKeyResultType>> remove_keys(
+        std::vector<entity::VariantKey> &&keys, storage::RemoveOpts opts = storage::RemoveOpts{}) = 0;
+
     virtual timestamp current_timestamp() = 0;
 };
 
 } // namespace arcticdb::stream
+
+namespace fmt {
+    using namespace arcticdb::stream;
+
+    template<>
+    struct formatter<StreamSink::PartialKey> {
+        template<typename ParseContext>
+        constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
+
+        template<typename FormatContext>
+        auto format(const StreamSink::PartialKey &pk, FormatContext &ctx) const {
+            return format_to(ctx.out(), "'{}:{}:{}:{}:{}",
+                             pk.key_type, pk.stream_id, pk.version_id, pk.start_index, pk.end_index);
+        }
+    };
+}
+

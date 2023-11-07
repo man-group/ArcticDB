@@ -103,12 +103,21 @@ https://github.com/hogliux/semimap/blob/master/LICENSE.md
 This product includes software from the spdlog project (MIT).
 * Copyright (c) 2016 Gabi Melman.
 
-This product includes software from emilib
-  * https://github.com/emilk/emilib
-  
 This product includes software from robin_hood hashmap and hashset (MIT)
-  * Copyright (c) 2018-2021 Martin Ankerl
-  * https://github.com/martinus/robin-hood-hashing
+* Copyright (c) 2018-2021 Martin Ankerl
+* https://github.com/martinus/robin-hood-hashing
+
+This product include software from azure-sdk-for-cpp (MIT)
+* Copyright (c) Microsoft Corporation.
+* https://github.com/Azure/azure-sdk-for-cpp
+
+This product include software from trustme (APACHE2/MIT)
+* Copyright 2017, Nathaniel J. Smith
+* https://github.com/python-trio/trustme
+
+This product include software from pymongo (APACHE2)
+* Copyright MongoDB, Inc.
+* https://github.com/mongodb/mongo-python-driver
 
 ---------------------------------------------------------------------------------------------------------------
 
@@ -224,6 +233,28 @@ The licenses for these third party components are included in LICENSE.txt
 
 ---------------------------------------------------------------------------------------------------------------
 
+This product includes code from azure-sdk-for-python (MIT), which includes the following in its NOTICE file:
+
+NOTICES AND INFORMATION
+Do Not Translate or Localize
+
+This software incorporates material from third parties. Microsoft makes certain
+open source code available at https://3rdpartysource.microsoft.com, or you may
+send a check or money order for US $5.00, including the product name, the open
+source component name, and version number, to:
+
+Source Code Compliance Team
+Microsoft Corporation
+One Microsoft Way
+Redmond, WA 98052
+USA
+
+Notwithstanding any other terms, you may reverse engineer this software to the
+extent required to debug changes to any libraries licensed under the GNU Lesser
+General Public License.
+
+---------------------------------------------------------------------------------------------------------------
+
 
 MIT License
 
@@ -245,9 +276,9 @@ MIT License
   LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
   OF CONTRACT, TORT OR OTHERWISE,  ARISING FROM, OUT OF OR IN CONNECTION
   WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
-  
+
 ---------------------------------------------------------------------------------------------------------------
-  
+
   The OpenLDAP Public License
   Version 2.8, 17 August 2003
 

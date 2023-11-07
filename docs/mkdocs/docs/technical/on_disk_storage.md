@@ -34,7 +34,7 @@ The reference layer primarily stores keys of type _Version Reference_, as [docum
 
 The version layer contains a linked list of immutable atom keys/values. Each element of the linked list contains two pointers in the data segment; one points to the next entry in the linked list, and the other points to an index key, providing a route through to the index layer of the storage structure. As a result, traversing the version layer linked list for a symbol allows you to travel backwards through time to retrieve data as it were at a previous version/point in time. The version layer also contains information about which versions have been deleted, and which are still "live".
 
-This means that for symbols with a lot of versions, this linked list can get quite long, and so reading old versions (using the `as_of` argument) can become slower as lots of tiny object reads are required in order to find the relevant index key. A method will soon be added to the `Library` [API](/api/library) allowing users to "compact" this linked list into a few larger objects.
+This means that for symbols with a lot of versions, this linked list can get quite long, and so reading old versions (using the `as_of` argument) can become slower as lots of tiny object reads are required in order to find the relevant index key. A method will soon be added to the `Library` [API](../api/library.md) allowing users to "compact" this linked list into a few larger objects.
 
 The version layer primarily stores keys of type _Version_, as [documented below](#key-types).
 
@@ -48,7 +48,7 @@ The index layer primarily stores keys of type _Table Index_, as [documented belo
 
 ### Data Layer
 
-The data layer is an immutable layer that contains compressed data segments. Dataframes provided by the user are sliced by both columns and rows, in order to facilitate rapid date-range and column searching during read operations. See the [documentation](/api/arcticdb/arcticdb.LibraryOptions) for the `rows_per_segment` and `columns_per_segment` library configuration options for more details.
+The data layer is an immutable layer that contains compressed data segments. Dataframes provided by the user are sliced by both columns and rows, in order to facilitate rapid date-range and column searching during read operations. See the [documentation](../api/arctic.md#LibraryOptions) for the `rows_per_segment` and `columns_per_segment` library configuration options for more details.
 
 The data layer primarily stores keys of type _Table Data_, as [documented below](#key-types).
 
@@ -72,7 +72,7 @@ Note that where this documentation refers to a _Key Type_ key (for example a _ve
 
 Note that **Atom** keys are immutable. **Reference** keys are not immutable and therefore the associated value can be updated. 
 
-!!! Version Ref
+!!! info "Version Ref"
 
     In this documentation, `Version Reference key` is sometimes shortened to `Version Ref key`. 
 
@@ -99,6 +99,16 @@ We will soon be adding an API to perform exactly this operation, re-slicing data
 
 ### Symbol List Caching
 
+
+!!! info "Speeding up listing symbols"
+
+    The below documentation details the architecture for the symbol list cache.
+    
+    It explains that to speed up `list_symbols`, **simply run `list_symbols` through to completion frequently**. 
+    The cache is built on first run and _compacted_ afterwards. 
+    This will speed up `list_symbols` for **all accessors of the library - not just the user that runs **`list_symbols`. 
+
+
 `list_symbols` is a common operation to perform on an ArcticDB library. As this returns a list of "live" symbols (those for which at least one version has not been deleted), using the data structures described above, this involves:
 
 * Loading a list of [version reference keys](#key-types) in the library.
@@ -121,7 +131,7 @@ The operation to list symbols then involves:
 
 Symbols for which the latest operation is a creation are then returned to the caller of `list_symbols`.
 
-Without any housekeeping, this process could lead to unbounded growth in the number of symbol list atom keys in the library. Even worse, many of these keys would contain redundant information, as we only care about the latest operation for each symbol. Therefore, whenever `list_symbols` is called by a client with write permissions on the library, if there are too many (500 by default, see the [Runtime Configuration](/runtime_config) page for details on how to configure) symbol list atom keys, all of the information from these keys is compacted into a single symbol list atom key, and the old keys are deleted. For example, if there were 4 symbol list atom keys:
+Without any housekeeping, this process could lead to unbounded growth in the number of symbol list atom keys in the library. Even worse, many of these keys would contain redundant information, as we only care about the latest operation for each symbol. Therefore, whenever `list_symbols` is called by a client with write permissions on the library, if there are too many (500 by default, see the [Runtime Configuration](../runtime_config.md) page for details on how to configure) symbol list atom keys, all of the information from these keys is compacted into a single symbol list atom key, and the old keys are deleted. For example, if there were 4 symbol list atom keys:
 
 * `<library prefix>/sl/*sSt*__add__*0*t0*<content hash>*symbol1*symbol1` Create "symbol1" at t0
 * `<library prefix>/sl/*sSt*__delete__*0*t1*<content hash>*symbol1*symbol1` Delete "symbol1" at t1
@@ -130,4 +140,4 @@ Without any housekeeping, this process could lead to unbounded growth in the num
 
 They would be compacted into a single object stating that "symbol1" and "symbol2" were both alive at time t3. The key for this object is of the form `<library prefix>/sl/*sSt*__symbols__*0*t3*<content hash>*0*0`.
 
-Astute observers will correctly take issue with basing logical decisions on timestamps in a purely client-side database with no synchronisation between clocks of different clients enforced. As such, this cache can diverge from reality, if two different clients create and delete the same symbol at about the same time, and this is the most likely cause of odd behaviour such as `lib.read(symbol)` working, but `symbol in lib.list_symols()` returning `False`. If this happens, `lib.reload_symbol_list()` should resolve the issue.
+Astute observers will correctly take issue with basing logical decisions on timestamps in a purely client-side database with no synchronisation between clocks of different clients enforced. As such, this cache can diverge from reality, if two different clients create and delete the same symbol at about the same time, and this is the most likely cause of odd behaviour such as `lib.read(symbol)` working, but `symbol in lib.list_symbols()` returning `False`. If this happens, `lib.reload_symbol_list()` should resolve the issue.

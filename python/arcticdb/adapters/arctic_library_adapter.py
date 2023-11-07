@@ -5,9 +5,10 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
-from arcticdb.options import LibraryOptions
+from arcticdb.options import DEFAULT_ENCODING_VERSION, LibraryOptions
 from arcticc.pb2.storage_pb2 import LibraryConfig
-from arcticdb_ext.storage import Library
+from arcticdb_ext.storage import Library, StorageOverride, CONFIG_LIBRARY_NAME
+from arcticdb.encoding_version import EncodingVersion
 from abc import ABC, abstractmethod
 
 
@@ -30,12 +31,14 @@ def set_library_options(lib_desc: "LibraryConfig", options: LibraryOptions):
     write_options.segment_row_size = options.rows_per_segment
     write_options.column_group_size = options.columns_per_segment
 
+    lib_desc.version.encoding_version = (
+        options.encoding_version if options.encoding_version is not None else DEFAULT_ENCODING_VERSION
+    )
+
 
 class ArcticLibraryAdapter(ABC):
-    CONFIG_LIBRARY_NAME = "_arctic_cfg"  # TODO: Should come from native module
-
     @abstractmethod
-    def __init__(self, uri: str):
+    def __init__(self, uri: str, encoding_version: EncodingVersion):
         pass
 
     @abstractmethod
@@ -53,12 +56,15 @@ class ArcticLibraryAdapter(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def create_library_config(self, name: str, library_options: LibraryOptions) -> LibraryConfig:
+    def get_library_config(self, name: str, library_options: LibraryOptions):
         raise NotImplementedError
 
-    @abstractmethod
-    def initialize_library(self, name: str, config: LibraryConfig):
-        raise NotImplementedError
+    def cleanup_library(self, library_name: str):
+        pass
 
-    def delete_library(self, library: Library, library_config: LibraryConfig):
-        return library._nvs.version_store.clear()
+    def get_storage_override(self) -> StorageOverride:
+        return StorageOverride()
+
+    def get_masking_override(self) -> StorageOverride:
+        """Override that clears any storage config that should not be persisted."""
+        return StorageOverride()

@@ -13,25 +13,23 @@ import pandas as pd
 import pytest
 import string
 import random
-from six import PY3
+import time
+import attr
 from copy import deepcopy
 from functools import wraps
-from packaging import version
+import sys
 
 from arcticdb.config import Defaults
 from arcticdb.log import configure, logger_by_name
+from arcticdb.util._versions import PANDAS_VERSION, CHECK_FREQ_VERSION
+from arcticdb.version_store import NativeVersionStore
 from arcticdb.version_store._custom_normalizers import CustomNormalizer
 from arcticc.pb2.descriptors_pb2 import NormalizationMetadata
 from arcticc.pb2.logger_pb2 import LoggerConfig, LoggersConfig
 from arcticc.pb2.storage_pb2 import LibraryDescriptor, VersionStoreConfig
-from arcticdb.version_store.helper import ArcticcFileConfig
+from arcticdb.version_store.helper import ArcticFileConfig
 from arcticdb.config import _DEFAULT_ENVS_PATH
 from arcticdb_ext import set_config_int, get_config_int, unset_config_int
-
-
-PANDAS_VERSION = version.parse(pd.__version__)
-CHECK_FREQ_VERSION = version.Version("1.1")
-IS_PANDAS_ZERO = PANDAS_VERSION < version.Version("1.0")
 
 
 def maybe_not_check_freq(f):
@@ -138,7 +136,7 @@ def get_sample_dataframe_no_strings(size=1000, seed=0):
 
 
 def get_lib_by_name(lib_name, env, conf_path=_DEFAULT_ENVS_PATH):
-    local_conf = ArcticcFileConfig(env, conf_path)
+    local_conf = ArcticFileConfig(env, conf_path)
     lib = local_conf[lib_name]
     return lib
 
@@ -156,22 +154,8 @@ def config_context(name, value):
             unset_config_int(name)
 
 
-def get_artifact_path(frag, *fragments):
-    import tests
-
-    return os.path.join(tests.__path__, "artifacts", frag, *fragments)
-
-
-def param_dict(fields, cases=None, xfail=None, py2only=None, py3only=None):
-    # type: (List[AnyStr], Mapping[AnyStr, Any], Mapping[AnyStr, Any], Mapping[AnyStr, Any], Mapping[AnyStr, Any])->Any
+def param_dict(fields, cases=None, xfail=None):
     _cases = deepcopy(cases) if cases else dict()
-    if PY3:
-        if py3only is not None:
-            _cases.update(deepcopy(py3only))
-    else:
-        if py2only is not None:
-            _cases.update(deepcopy(py2only))
-
     if _cases:
         ids, params = zip(*list(sorted(_cases.items())))
     else:
@@ -490,3 +474,31 @@ def regularize_dataframe(df):
     output = output.reset_index(drop=True)
     output = output.astype("float", errors="ignore")
     return output
+
+
+@attr.s(slots=True, auto_attribs=True)
+class BeforeAfterTimestamp:
+    before: pd.Timestamp
+    after: Optional[pd.Timestamp]
+
+
+@contextmanager
+def distinct_timestamps(lib: NativeVersionStore):
+    """Ensures the timestamp used by ArcticDB operations before, during and leaving the context are all different.
+
+    Yields
+    ------
+    BeforeAfterTimestamp
+    """
+    get_ts = lib.version_store.get_store_current_timestamp_for_tests
+    before = get_ts()
+    while get_ts() == before:
+        time.sleep(0.000001)  # 1us - The worst resolution in our clock implementations
+    out = BeforeAfterTimestamp(pd.Timestamp(before, unit="ns"), None)
+    try:
+        yield out
+    finally:
+        right_after = get_ts()
+        while get_ts() == right_after:
+            time.sleep(0.000001)
+        out.after = pd.Timestamp(get_ts(), unit="ns")

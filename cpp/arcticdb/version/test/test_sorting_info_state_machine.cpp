@@ -12,15 +12,14 @@
 #include <arcticdb/util/buffer.hpp>
 #include <arcticdb/util/bitset.hpp>
 
-#include <msgpack.hpp>
 #include <arcticdb/util/test/generators.hpp>
 #include <arcticdb/version/version_store_api.hpp>
 
 using namespace arcticdb;
-constexpr auto UNKNOWN = proto::descriptors::SortedValue::UNKNOWN;
-constexpr auto ASCENDING = proto::descriptors::SortedValue::ASCENDING;
-constexpr auto DESCENDING = proto::descriptors::SortedValue::DESCENDING;
-constexpr auto UNSORTED = proto::descriptors::SortedValue::UNSORTED;
+constexpr auto UNKNOWN = SortedValue::UNKNOWN;
+constexpr auto ASCENDING = SortedValue::ASCENDING;
+constexpr auto DESCENDING = SortedValue::DESCENDING;
+constexpr auto UNSORTED = SortedValue::UNSORTED;
 
 TEST(Sorting, ExistingUnknown) {
     //               existing_frame, input_frame

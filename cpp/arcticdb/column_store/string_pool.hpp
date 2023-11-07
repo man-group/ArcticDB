@@ -12,13 +12,13 @@
 #include <arcticdb/util/buffer.hpp>
 #include <arcticdb/util/cursored_buffer.hpp>
 #include <arcticdb/column_store/chunked_buffer.hpp>
+#include <arcticdb/column_store/column_data.hpp>
 
 #include <string_view>
 #include <unordered_map>
 #include <cstddef>
 #include <cstdint>
 #include <mutex>
-#include <arcticdb/util/third_party/emilib_set.hpp>
 
 #ifdef ARCTICDB_USING_CONDA
     #include <robin_hood.h>
@@ -29,6 +29,13 @@
 namespace arcticdb {
 class StringPool;
 class Column;
+
+
+static FieldRef string_pool_descriptor() {
+    static TypeDescriptor type{ DataType::UINT8, Dimension::Dim1 };
+    static std::string_view name{ "__string_pool__" };
+    return FieldRef{type, name};
+}
 
 class StringBlock {
     friend class StringPool;
@@ -174,6 +181,16 @@ class StringPool {
         return *this;
     }
 
+
+    ColumnData column_data() const {
+        return {
+          &block_.buffer(),
+          &shapes_.buffer(),
+          string_pool_descriptor().type(),
+          nullptr
+        };
+    }
+
     OffsetString get(const char *data, size_t size, bool deduplicate = true);
 
     shape_t *allocate_shapes(size_t size) {
@@ -231,7 +248,7 @@ class StringPool {
     py::buffer_info as_buffer_info() const;
 
     std::optional<position_t> get_offset_for_column(std::string_view str, const Column& column);
-    emilib::HashSet<position_t> get_offsets_for_column(const std::shared_ptr<std::unordered_set<std::string>>& strings, const Column& column);
+    robin_hood::unordered_set<position_t> get_offsets_for_column(const std::shared_ptr<std::unordered_set<std::string>>& strings, const Column& column);
   private:
     MapType map_;
     mutable StringBlock block_;

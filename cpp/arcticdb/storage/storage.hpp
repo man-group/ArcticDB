@@ -25,7 +25,7 @@
 
 namespace arcticdb::storage {
 
-struct StorageBase {}; // marker class for type checking
+using ReadVisitor = std::function<void(const VariantKey&, Segment &&)>;
 
 class DuplicateKeyException : public ArcticSpecificException<ErrorCode::E_DUPLICATE_KEY> {
 public:
@@ -78,17 +78,22 @@ private:
     mutable std::string msg_;
 };
 
-template<class Impl>
-class Storage : public StorageBase {
+class Storage {
 public:
 
     Storage(LibraryPath library_path, OpenMode mode) :
         lib_path_(std::move(library_path)),
         mode_(mode) {}
 
+    virtual ~Storage() = default;
+    Storage(const Storage&) = delete;
+    Storage& operator=(const Storage&) = delete;
+    Storage(Storage&&) = default;
+    Storage& operator=(Storage&&) = delete;
+
     void write(Composite<KeySegmentPair> &&kvs) {
-        ARCTICDB_SAMPLE(VariantStorageWrite, 0)
-        return derived().do_write(std::move(kvs));
+        ARCTICDB_SAMPLE(StorageWrite, 0)
+        return do_write(std::move(kvs));
     }
 
     void write(KeySegmentPair &&kv) {
@@ -96,69 +101,86 @@ public:
     }
 
     void update(Composite<KeySegmentPair> &&kvs, UpdateOpts opts) {
-        ARCTICDB_SAMPLE(VariantStorageUpdate, 0)
-        return derived().do_update(std::move(kvs), opts);
+        ARCTICDB_SAMPLE(StorageUpdate, 0)
+        return do_update(std::move(kvs), opts);
     }
 
     void update(KeySegmentPair &&kv, UpdateOpts opts) {
         return update(Composite<KeySegmentPair>{std::move(kv)}, opts);
     }
 
-    template<class Visitor>
-    void read(Composite<VariantKey> &&ks, Visitor &&visitor, ReadKeyOpts opts) {
-        return derived().do_read(std::move(ks), std::forward<Visitor>(visitor), opts);
+    void read(Composite<VariantKey> &&ks, const ReadVisitor& visitor, ReadKeyOpts opts) {
+        return do_read(std::move(ks), visitor, opts);
     }
 
-    template<class Visitor>
-    void read(VariantKey&& key, Visitor &&visitor, ReadKeyOpts opts) {
-        return read(Composite<VariantKey>{std::move(key)}, std::forward<Visitor>(visitor), opts);
+    void read(VariantKey&& key, const ReadVisitor& visitor, ReadKeyOpts opts) {
+        return read(Composite<VariantKey>{std::move(key)}, visitor, opts);
     }
 
     template<class KeyType>
     KeySegmentPair read(KeyType&& key, ReadKeyOpts opts) {
         KeySegmentPair key_seg;
-         read(std::forward<KeyType>(key), [&key_seg](auto && vk, auto &&value) {
-             key_seg.variant_key() = std::forward<VariantKey>(vk);
-             key_seg.segment() = std::forward<Segment>(value);
-        }, opts);
-         return key_seg;
+        const ReadVisitor& visitor = [&key_seg](const VariantKey & vk, Segment&& value) {
+            key_seg.variant_key() = vk;
+            key_seg.segment() = value;
+        };
+
+        read(std::forward<KeyType>(key), visitor, opts);
+        return key_seg;
     }
 
     void remove(Composite<VariantKey> &&ks, RemoveOpts opts) {
-        derived().do_remove(std::move(ks), opts);
+        do_remove(std::move(ks), opts);
     }
 
     void remove(VariantKey&& key, RemoveOpts opts) {
         return remove(Composite<VariantKey>{std::move(key)}, opts);
     }
 
-    bool supports_prefix_matching() {
-        return derived().do_supports_prefix_matching();
+    bool supports_prefix_matching() const {
+        return do_supports_prefix_matching();
     }
 
     bool fast_delete() {
-        return derived().do_fast_delete();
+        return do_fast_delete();
     }
 
     inline bool key_exists(const VariantKey &key) {
-        return derived().do_key_exists(key);
+        return do_key_exists(key);
     }
 
-    template<class Visitor>
-    void iterate_type(KeyType key_type, Visitor &&visitor, const std::string &prefix = std::string()) {
-        derived().do_iterate_type(key_type, std::forward<Visitor>(visitor), prefix);
+    void iterate_type(KeyType key_type, const IterateTypeVisitor& visitor, const std::string &prefix = std::string()) {
+        do_iterate_type(key_type, visitor, prefix);
+    }
+
+    std::string key_path(const VariantKey& key) const {
+        return do_key_path(key);
     }
 
     [[nodiscard]] const LibraryPath &library_path() const { return lib_path_; }
     [[nodiscard]] OpenMode open_mode() const { return mode_; }
 
 private:
+    virtual void do_write(Composite<KeySegmentPair>&& kvs) = 0;
+
+    virtual void do_update(Composite<KeySegmentPair>&& kvs, UpdateOpts opts) = 0;
+
+    virtual void do_read(Composite<VariantKey>&& ks, const ReadVisitor& visitor, ReadKeyOpts opts) = 0;
+
+    virtual void do_remove(Composite<VariantKey>&& ks, RemoveOpts opts) = 0;
+
+    virtual bool do_key_exists(const VariantKey& key) = 0;
+
+    virtual bool do_supports_prefix_matching() const = 0;
+
+    virtual bool do_fast_delete() = 0;
+
+    virtual void do_iterate_type(KeyType key_type, const IterateTypeVisitor& visitor, const std::string & prefix) = 0;
+
+    virtual std::string do_key_path(const VariantKey& key) const = 0;
+
     LibraryPath lib_path_;
     OpenMode mode_;
-
-    Impl &derived() {
-        return *static_cast<Impl *>(this);
-    }
 };
 
 }

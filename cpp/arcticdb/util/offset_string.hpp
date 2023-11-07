@@ -9,7 +9,11 @@
 
 #include <limits>
 #include <arcticdb/entity/types.hpp>
-#include <arcticdb/util/third_party/emilib_set.hpp>
+#ifdef ARCTICDB_USING_CONDA
+    #include <robin_hood.h>
+#else
+    #include <arcticdb/util/third_party/robin_hood.hpp>
+#endif
 
 namespace arcticdb {
 
@@ -36,12 +40,12 @@ inline constexpr OffsetString::offset_t not_a_string() { return std::numeric_lim
 inline constexpr OffsetString::offset_t nan_placeholder() { return not_a_string() - 1; }
 
 // Returns true if the provided offset does not represent None or NaN
-inline bool is_a_string(OffsetString::offset_t offset) {
+inline constexpr bool is_a_string(OffsetString::offset_t offset) {
     return offset < nan_placeholder();
 }
 
 // Given a set of string pool offsets, removes any that represent None or NaN
-inline void remove_nones_and_nans(emilib::HashSet<OffsetString::offset_t>& offsets) {
+inline void remove_nones_and_nans(robin_hood::unordered_set<OffsetString::offset_t>& offsets) {
     offsets.erase(not_a_string());
     offsets.erase(nan_placeholder());
 }

@@ -46,10 +46,10 @@ struct InputTensorFrame {
 
     void set_sorted(SortedValue sorted) {
         switch (sorted) {
-            case SortedValue::UNSORTED:desc.set_sorted(arcticdb::proto::descriptors::SortedValue::UNSORTED);break;
-            case SortedValue::DESCENDING:desc.set_sorted(arcticdb::proto::descriptors::SortedValue::DESCENDING);break;
-            case SortedValue::ASCENDING:desc.set_sorted(arcticdb::proto::descriptors::SortedValue::ASCENDING);break;
-            default:desc.set_sorted(arcticdb::proto::descriptors::SortedValue::UNKNOWN);
+            case SortedValue::UNSORTED:desc.set_sorted(SortedValue::UNSORTED);break;
+            case SortedValue::DESCENDING:desc.set_sorted(SortedValue::DESCENDING);break;
+            case SortedValue::ASCENDING:desc.set_sorted(SortedValue::ASCENDING);break;
+            default:desc.set_sorted(SortedValue::UNKNOWN);
         }
     }
 
