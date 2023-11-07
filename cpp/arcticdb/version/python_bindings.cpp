@@ -580,14 +580,7 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
              py::call_guard<SingleThreadMutexHolder>(), "Restore a previous version of a symbol.")
         .def("check_ref_key",
              &PythonVersionStore::check_ref_key,
-<<<<<<< HEAD
              py::call_guard<SingleThreadMutexHolder>(), "Fix reference keys.")
-=======
-             "Fix reference keys.")
-        .def("indexes_sorted",
-             &PythonVersionStore::indexes_sorted,
-             "Assert indexes are sorted.")
->>>>>>> 6ea4115 (Refactor symbol list to used observed version ids)
         .def("dump_versions",
              &PythonVersionStore::dump_versions,
              py::call_guard<SingleThreadMutexHolder>(), "Dump version data.")
