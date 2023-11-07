@@ -70,9 +70,14 @@ void register_bindings(py::module& storage, py::exception<arcticdb::ArcticExcept
         .value("WRITE", OpenMode::WRITE)
         .value("DELETE", OpenMode::DELETE);
 
-    py::class_<Azure::Core::Credentials::TokenCredential, std::shared_ptr<Azure::Core::Credentials::TokenCredential>>(storage, "TokenCredential");
+    py::class_<Azure::Core::Credentials::TokenCredential, std::shared_ptr<Azure::Core::Credentials::TokenCredential>>(storage, "TokenCredential")
+        .def(py::init<const std::string&>());
     py::class_<Azure::Identity::DefaultAzureCredential, std::shared_ptr<Azure::Identity::DefaultAzureCredential>, Azure::Core::Credentials::TokenCredential>(storage, "DefaultAzureCredential")
         .def(py::init<>());
+
+    py::class_<StorageCredential>(storage, "StorageCredential")
+        .def(py::init<>())
+        .def("set_azure_credential", &StorageCredential::set_azure_credential);
 
     storage.def("create_library_index", &create_library_index, py::arg("environment_name"), py::arg("py_envs"), py::arg("storage_credential") = StorageCredential());
 

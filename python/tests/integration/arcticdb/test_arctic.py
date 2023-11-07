@@ -17,7 +17,7 @@ from datetime import datetime, timezone
 from botocore.client import BaseClient as BotoClient
 
 from arcticdb_ext.exceptions import InternalException
-from arcticdb_ext.storage import NoDataFoundException
+from arcticdb_ext.storage import NoDataFoundException, DefaultAzureCredential
 from arcticdb.exceptions import ArcticDbNotYetImplemented, LibraryNotFound, MismatchingLibraryOptions
 from arcticdb.arctic import Arctic
 from arcticdb.options import LibraryOptions

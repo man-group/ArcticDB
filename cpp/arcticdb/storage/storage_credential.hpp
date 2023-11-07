@@ -9,6 +9,7 @@ namespace arcticdb::storage {
     using VariantStorageCredential = std::variant<std::monostate, std::shared_ptr<Azure::Core::Credentials::TokenCredential>>;
 
     class StorageCredential {
+    private:
         VariantStorageCredential storage_credential_;
 
     public:
