@@ -149,11 +149,7 @@ TEST_P(SimpleTestSuite, Example) {
     ASSERT_TRUE(executed);
 }
 
-<<<<<<< HEAD:cpp/arcticdb/storage/test/test_embedded.cpp
 TEST_P(SimpleTestSuite, Strings) {
-=======
-TEST(TestLmdbStorage, Strings) {
->>>>>>> 6ea4115 (Refactor symbol list to used observed version ids):cpp/arcticdb/storage/test/test_lmdb_storage.cpp
     auto tsd = create_tsd<DataTypeTag<DataType::ASCII_DYNAMIC64>, Dimension::Dim0>();
     SegmentInMemory s{StreamDescriptor{std::move(tsd)}};
     s.set_scalar(0, timestamp(123));
@@ -186,11 +182,6 @@ TEST(TestLmdbStorage, Strings) {
 
     std::unique_ptr<as::Storage> storage = GetParam().new_backend();
 
-<<<<<<< HEAD:cpp/arcticdb/storage/test/test_embedded.cpp
-=======
-    asl::LmdbStorage storage({"A", "BB"}, as::OpenMode::WRITE, cfg);
-    std::array<std::string, 2> lib_parts{"A", "BB"};
->>>>>>> 6ea4115 (Refactor symbol list to used observed version ids):cpp/arcticdb/storage/test/test_lmdb_storage.cpp
     ac::entity::AtomKey k = ac::entity::atom_key_builder().gen_id(1).build<ac::entity::KeyType::TABLE_DATA>(999);
     auto save_k = k;
     as::KeySegmentPair kv(std::move(k), std::move(seg));
