@@ -220,7 +220,7 @@ public:
         size_t expected_rows,
         bool presize,
         bool allow_sparse) :
-            data_(expected_rows * get_type_size(type.data_type()), presize),
+            data_(expected_rows * (type.dimension() == Dimension::Dim0 ? get_type_size(type.data_type()) : sizeof(void*)), presize),
             type_(type),
             allow_sparse_(allow_sparse){
         ARCTICDB_TRACE(log::inmem(), "Creating column with descriptor {}", type);
@@ -426,7 +426,7 @@ public:
     }
 
     void set_empty_array(ssize_t row_offset, int dimension_count);
-
+    void set_type(TypeDescriptor td);
     ssize_t last_row() const {
         return last_logical_row_;
     }
@@ -840,19 +840,6 @@ public:
         return orig_type_.value();
     }
 
-    void set_secondary_type(TypeDescriptor type) {
-        secondary_type_ = std::move(type);
-    }
-
-    bool has_secondary_type() const {
-        return secondary_type_.has_value();
-    }
-
-    const TypeDescriptor& secondary_type() const {
-        util::check(secondary_type_.has_value(), "Requesting secondary type in a column that does not have one");
-        return *secondary_type_;
-    }
-
     void compact_blocks() {
         data_.compact_blocks();
     }
@@ -1028,8 +1015,6 @@ private:
     bool inflated_ = false;
     bool allow_sparse_ = false;
     std::optional<util::BitMagic> sparse_map_;
-    // For types that are arrays or matrices, the member type
-    std::optional<TypeDescriptor> secondary_type_;
     util::MagicNum<'D', 'C', 'o', 'l'> magic_;
 };
 

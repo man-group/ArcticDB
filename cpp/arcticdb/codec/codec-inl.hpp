@@ -93,14 +93,13 @@ std::size_t decode_ndarray(
         using T = typename TD::DataTypeTag::raw_type;
 
         const auto data_size = encoding_sizes::data_uncompressed_size(field);
-        const bool is_empty_array = (data_size == 0) && is_array_type(TD::DataTypeTag::data_type);
+        const bool is_empty_array = (data_size == 0) && type_desc_tag.dimension() > Dimension::Dim0;
         // Empty array will not contain actual data, however, its sparse map should be loaded
         // so that we can distinguish None from []
         if(data_size == 0 && !is_empty_array) {
             return;
         }
 
-        // Note that when DS == StringPool (and probably other cases), this will result in a ChunkedBuffer with one massive chunk
         auto data_begin = is_empty_array ? nullptr : static_cast<uint8_t*>(data_sink.allocate_data(data_size));
         util::check(is_empty_array || data_begin != nullptr, "Failed to allocate data of size {}", data_size);
         auto data_out = data_begin;

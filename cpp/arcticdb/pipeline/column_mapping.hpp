@@ -12,7 +12,7 @@ namespace arcticdb {
 inline std::size_t sizeof_datatype(const TypeDescriptor &td) {
     return td.visit_tag([](auto dt) {
         using RawType = typename std::decay_t<decltype(dt)>::DataTypeTag::raw_type;
-        return sizeof(RawType);
+        return dt.dimension() == Dimension::Dim0 ? sizeof(RawType) : sizeof(void*);
     });
 }
 

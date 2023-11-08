@@ -233,7 +233,6 @@ struct EncodedField {
     uint16_t values_count_ = 0u;
     uint32_t sparse_map_bytes_ = 0u;
     uint64_t items_count_ = 0u;
-    TypeDescriptor arr_desc_ = {DataType::UNKNOWN, Dimension::Dim0};
     std::array<EncodedBlock, 1> blocks_;
 
     static constexpr EncodedFieldType kNdarray = EncodedFieldType::kNdarray;
@@ -243,8 +242,7 @@ struct EncodedField {
             sizeof(shapes_count_) +
             sizeof(values_count_) +
             sizeof(sparse_map_bytes_) +
-            sizeof(items_count_) +
-            sizeof(arr_desc_);
+            sizeof(items_count_);
 
     EncodedField() = default;
 
@@ -411,18 +409,6 @@ struct EncodedField {
 
     bool has_ndarray() const {
         return type_ == EncodedFieldType::kNdarray;
-    }
-
-    bool has_arr_desc() const {
-        return arr_desc_.data_type_ != DataType::UNKNOWN;
-    }
-
-    const TypeDescriptor& arr_desc() const {
-        return arr_desc_;
-    }
-
-    TypeDescriptor* mutable_arr_desc() {
-        return &arr_desc_;
     }
 
     std::string DebugString() const {

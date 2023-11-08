@@ -262,7 +262,7 @@ void register_metrics(py::module && m){
 void register_type_handlers() {
     using namespace arcticdb;
     TypeHandlerRegistry::instance()->register_handler(TypeDescriptor{DataType::EMPTYVAL, Dimension::Dim0}, arcticdb::EmptyHandler());
-    constexpr std::array<DataType, 4> allowed_array_types = {DataType::INT32, DataType::INT64, DataType::FLOAT32, DataType::FLOAT64};
+    constexpr std::array<DataType, 5> allowed_array_types = {DataType::INT64, DataType::FLOAT64, DataType::EMPTYVAL, DataType::FLOAT32, DataType::INT32};
     for(const DataType& data_type : allowed_array_types) {
         TypeHandlerRegistry::instance()->register_handler(TypeDescriptor{data_type, Dimension::Dim1}, arcticdb::ArrayHandler());
     }

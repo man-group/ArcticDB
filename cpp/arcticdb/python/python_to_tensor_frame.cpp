@@ -48,13 +48,32 @@ std::variant<StringEncodingError, PyStringWrapper> pystring_to_buffer(PyObject *
 }
 
 std::tuple<ValueType, uint8_t, ssize_t> determine_python_object_type(PyObject* obj) {
-    if(is_py_array(obj))
-        return {ValueType::ARRAY, 8, 1};
-
     if(is_py_boolean(obj))
         return {ValueType::PYBOOL, 1, 1};
 
     return {ValueType::BYTES, 8, 1};
+}
+
+/// @brief Determine the type for column composed of arrays
+/// In case column is composed of arrays all arrays must have the same element type. This iterates until if finds the
+/// first non-empty array and returns its type.
+/// @todo We will iterate over all arrays in a column in aggregator_set_data anyways, so this is redundant, however
+///     we the type is determined at the point when obj_to_tensor is called. We need to make it possible to change the
+///     the column type in aggregator_set_data in order not to iterate all arrays twice.
+std::tuple<ValueType, uint8_t, ssize_t> determine_python_array_type(PyObject** begin, PyObject** end) {
+    while(begin != end) {
+        const auto arr = pybind11::detail::array_proxy(*begin);
+        normalization::check<ErrorCode::E_UNIMPLEMENTED_COLUMN_SECONDARY_TYPE>(arr->nd == 1, "Only one dimensional arrays are supported in columns.");
+        const auto descr = pybind11::detail::array_descriptor_proxy(arr->descr);
+        const ssize_t element_count = arr->dimensions[0];
+        if(element_count != 0) {
+            ValueType value_type = get_value_type(descr->kind);
+            const uint8_t value_bytes = static_cast<uint8_t>(descr->elsize);
+            return {value_type, value_bytes, 2};
+        }
+        begin++;
+    }
+    return {ValueType::EMPTY, 8, 2};
 }
 
 std::variant<StringEncodingError, PyStringWrapper> py_unicode_to_buffer(PyObject *obj, std::optional<ScopedGILLock>& scoped_gil_lock) {
@@ -85,7 +104,6 @@ std::variant<StringEncodingError, PyStringWrapper> py_unicode_to_buffer(PyObject
 }
 
 NativeTensor obj_to_tensor(PyObject *ptr) {
-//    ARCTICDB_SAMPLE(ObjToTensor, RMTSF_Aggregate)
     auto& api = pybind11::detail::npy_api::get();
     util::check(api.PyArray_Check_(ptr), "Expected Python array");
     const auto arr = pybind11::detail::array_proxy(ptr);
@@ -112,6 +130,7 @@ NativeTensor obj_to_tensor(PyObject *ptr) {
             bool empty = false;
             bool all_nans = false;
             PyObject *sample = *obj;
+            PyObject** current_object = obj;
             // Arctic allows both None and NaN to represent a string with no value. We have 3 options:
             // * In case all values are None we can mark this column segment as EmptyType and avoid allocating storage
             //      memory for it
@@ -125,7 +144,6 @@ NativeTensor obj_to_tensor(PyObject *ptr) {
                 empty = true;
                 all_nans = true;
                 util::check(c_style, "Non contiguous columns with first element as None not supported yet.");
-                PyObject** current_object = obj;
                 while(current_object < obj + element_count) {
                     if(*current_object == none.ptr()) {
                         all_nans = false;
@@ -146,6 +164,8 @@ NativeTensor obj_to_tensor(PyObject *ptr) {
                 val_type = ValueType::UTF_DYNAMIC;
             } else if (PYBIND11_BYTES_CHECK(sample)) {
                 val_type = ValueType::ASCII_DYNAMIC;
+            } else if(is_py_array(sample)) {
+                std::tie(val_type, val_bytes, ndim) = determine_python_array_type(current_object, current_object + element_count);
             } else {
                 std::tie(val_type, val_bytes, ndim) = determine_python_object_type(sample);
             }
@@ -218,9 +238,9 @@ InputTensorFrame py_ndf_to_frame(
     for (auto i = 0u; i < col_vals.size(); ++i) {
         auto tensor = obj_to_tensor(col_vals[i].ptr());
         res.num_rows = std::max(res.num_rows, tensor.shape(0));
-        if(tensor.ndim() == 1 && !is_array_type(tensor.data_type())) {
+        if(tensor.ndim() == 1) {
             res.desc.add_field(scalar_field(tensor.data_type(), col_names[i]));
-        } else {
+        } else if(tensor.ndim() == 2) {
             res.desc.add_field(FieldRef{TypeDescriptor{tensor.data_type(), Dimension::Dim1}, col_names[i]});
         }
         res.field_tensors.push_back(std::move(tensor));

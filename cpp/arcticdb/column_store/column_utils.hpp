@@ -18,7 +18,7 @@ namespace arcticdb::detail {
 inline py::array array_at(const SegmentInMemory& frame, std::size_t col_pos, py::object &anchor) {
     ARCTICDB_SAMPLE_DEFAULT(PythonOutputFrameArrayAt)
     if (frame.empty()) {
-        return visit_field(frame.field(col_pos), [] (auto &&tag) {
+        return visit_field(frame.field(col_pos), [] (auto tag) {
             using TypeTag = std::decay_t<decltype(tag)>;
             constexpr auto data_type = TypeTag::DataTypeTag::data_type;
             std::string dtype;
@@ -29,7 +29,7 @@ inline py::array array_at(const SegmentInMemory& frame, std::size_t col_pos, py:
                 } else {
                     dtype = "O";
                 }
-            } else if constexpr(is_numeric_type(data_type) || is_bool_type(data_type)) {
+            } else if constexpr((is_numeric_type(data_type) || is_bool_type(data_type)) && tag.dimension() == Dimension::Dim0) {
                 constexpr auto dim = TypeTag::DimensionTag::value;
                 util::check(dim == Dimension::Dim0, "Only scalars supported, {}", data_type);
                 if constexpr (data_type == DataType::NANOSECONDS_UTC64) {
@@ -44,7 +44,8 @@ inline py::array array_at(const SegmentInMemory& frame, std::size_t col_pos, py:
                 } else {
                     dtype = fmt::format("{}{:d}", get_dtype_specifier(data_type), esize);
                 }
-            } else if constexpr (is_empty_type(data_type) || is_py_bool_type(data_type) || is_array_type(data_type)) {
+            } else if constexpr ((is_empty_type(data_type) || is_py_bool_type(data_type)) || (tag.dimension() > Dimension::Dim0 &&
+                    (is_numeric_type(data_type) || is_bool_type(data_type)))) {
                 dtype= "O";
             } else {
                 static_assert(!sizeof(data_type), "Unhandled data type");
@@ -52,7 +53,7 @@ inline py::array array_at(const SegmentInMemory& frame, std::size_t col_pos, py:
             return py::array{py::dtype{dtype}, py::array::ShapeContainer{0}, py::array::StridesContainer{esize}};
         });
     }
-    return visit_field(frame.field(col_pos), [&, frame=frame, col_pos=col_pos] (auto &&tag) {
+    return visit_field(frame.field(col_pos), [&, frame=frame, col_pos=col_pos] (auto tag) {
         using TypeTag = std::decay_t<decltype(tag)>;
         constexpr auto data_type = TypeTag::DataTypeTag::data_type;
         const auto &buffer = frame.column(col_pos).data().buffer();
@@ -69,7 +70,7 @@ inline py::array array_at(const SegmentInMemory& frame, std::size_t col_pos, py:
             } else {
                 dtype = "O";
             }
-        } else if constexpr(is_numeric_type(data_type) || is_bool_type(data_type)) {
+        } else if constexpr((is_numeric_type(data_type) || is_bool_type(data_type)) && tag.dimension() == Dimension::Dim0) {
             constexpr auto dim = TypeTag::DimensionTag::value;
             util::check(dim == Dimension::Dim0, "Only scalars supported, {}", frame.field(col_pos));
             if constexpr (data_type == DataType::NANOSECONDS_UTC64) {
@@ -84,7 +85,8 @@ inline py::array array_at(const SegmentInMemory& frame, std::size_t col_pos, py:
             } else {
                 dtype = fmt::format("{}{:d}", get_dtype_specifier(data_type), esize);
             }
-        } else if constexpr (is_empty_type(data_type) || is_py_bool_type(data_type) || is_array_type(data_type)) {
+        } else if constexpr ((is_empty_type(data_type) || is_py_bool_type(data_type)) || (tag.dimension() > Dimension::Dim0 &&
+                (is_numeric_type(data_type) || is_bool_type(data_type)))) {
             dtype = "O";
         } else {
             static_assert(!sizeof(data_type), "Unhandled data type");

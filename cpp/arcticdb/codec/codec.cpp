@@ -95,7 +95,7 @@ std::pair<size_t, size_t> ColumnEncoder_v1::max_compressed_size(
         ARCTICDB_TRACE(log::codec(), "Column data has {} blocks", column_data.num_blocks());
         while (auto block = column_data.next<TDT>()) {
             const auto nbytes = block.value().nbytes();
-            if constexpr(must_contain_data(TDT::DataTypeTag::data_type)) {
+            if constexpr(must_contain_data(static_cast<TypeDescriptor>(type_desc_tag))) {
                 util::check(nbytes > 0, "Zero-sized block");
             }
 	        uncompressed_bytes += nbytes;
@@ -121,7 +121,7 @@ void ColumnEncoder_v1::encode(
         using Encoder = BlockEncoder<TDT, EncodingVersion::V1>;
         ARCTICDB_TRACE(log::codec(), "Column data has {} blocks", column_data.num_blocks());
         while (auto block = column_data.next<TDT>()) {
-            if constexpr(must_contain_data(TDT::DataTypeTag::data_type)) {
+            if constexpr(must_contain_data(static_cast<TypeDescriptor>(type_desc_tag))) {
                 util::check(block.value().nbytes() > 0, "Zero-sized block");
             }
             std::visit([&](auto field){
@@ -169,7 +169,7 @@ void ColumnEncoder_v2::encode_blocks(
         using TDT = decltype(type_desc_tag);
         ARCTICDB_TRACE(log::codec(), "Column data has {} blocks", column_data.num_blocks());
         while (auto block = column_data.next<TDT>()) {
-            if constexpr(must_contain_data(TDT::DataTypeTag::data_type)) {
+            if constexpr(must_contain_data(static_cast<TypeDescriptor>(type_desc_tag))) {
                 util::check(block.value().nbytes() > 0, "Zero-sized block");
             }
             util::variant_match(variant_field, [&](auto field) {
@@ -194,7 +194,7 @@ std::pair<size_t, size_t> ColumnEncoder_v2::max_compressed_size(
         uncompressed_bytes += shapes_byte_count;
         while (auto block = column_data.next<TDT>()) {
             const auto nbytes = block.value().nbytes();
-            if constexpr(must_contain_data(TDT::DataTypeTag::data_type)) {
+            if constexpr(must_contain_data(static_cast<TypeDescriptor>(type_desc_tag))) {
                 util::check(nbytes > 0, "Zero-sized block");
             }
             uncompressed_bytes += nbytes;
@@ -553,9 +553,6 @@ Segment encode_v2(SegmentInMemory&& s, const arcticdb::proto::encoding::VariantC
         for (std::size_t column_index = 0; column_index < in_mem_seg.num_columns(); ++column_index) {
             write_magic<ColumnMagic>(*out_buffer, pos);
             auto column_field = new(encoded_fields_buffer.data() + encoded_field_pos) EncodedField;
-            if(in_mem_seg.column(column_index).has_secondary_type()) {
-                *(column_field->mutable_ndarray()->mutable_arr_desc()) = in_mem_seg.column(column_index).secondary_type();
-            }
             ARCTICDB_TRACE(log::codec(),"Beginning encoding of column {}: ({}) to position {}", column_index, in_mem_seg.descriptor().field(column_index).name(), pos);
             auto column_data = in_mem_seg.column_data(column_index);
             encoder.encode(codec_opts, column_data, column_field, *out_buffer, pos);
@@ -614,10 +611,6 @@ Segment encode_v1(SegmentInMemory&& s, const arcticdb::proto::encoding::VariantC
         for (std::size_t column_index = 0; column_index < in_mem_seg.num_columns(); ++column_index) {
             auto column_data = in_mem_seg.column_data(column_index);
             auto *encoded_field = segment_header->mutable_fields()->Add();
-            if(in_mem_seg.column(column_index).has_secondary_type()) {
-                const TypeDescriptor::Proto secondary_type(in_mem_seg.column(column_index).secondary_type());
-                *(encoded_field->mutable_ndarray()->mutable_arr_desc()) = secondary_type;
-            }
             encoder.encode(codec_opts, column_data, encoded_field, *out_buffer, pos);
             ARCTICDB_TRACE(log::codec(), "Encoded column {}: ({}) to position {}", column_index, in_mem_seg.descriptor().fields(column_index).name(), pos);
         }

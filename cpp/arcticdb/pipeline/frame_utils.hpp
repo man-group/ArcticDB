@@ -104,7 +104,7 @@ std::optional<convert::StringEncodingError> aggregator_set_data(
     size_t regular_slice_size,
     bool sparsify_floats
 ) {
-    return type_desc.visit_tag([&](auto &&tag) {
+    return type_desc.visit_tag([&](auto tag) {
         using RawType = typename std::decay_t<decltype(tag)>::DataTypeTag::raw_type;
         constexpr auto dt = std::decay_t<decltype(tag)>::DataTypeTag::data_type;
 
@@ -164,7 +164,7 @@ std::optional<convert::StringEncodingError> aggregator_set_data(
                     }
                 }
             }
-        } else if constexpr (is_numeric_type(dt) || is_bool_type(dt)) {
+        } else if constexpr ((is_numeric_type(dt) || is_bool_type(dt)) && tag.dimension() == Dimension::Dim0) {
             auto ptr = tensor.template ptr_cast<RawType>(row);
             if (sparsify_floats) {
                 if constexpr (is_floating_point_type(dt)) {
@@ -210,10 +210,9 @@ std::optional<convert::StringEncodingError> aggregator_set_data(
             if(bitset.count() > 0)
                 agg.set_sparse_block(col, std::move(bool_buffer), std::move(bitset));
 
-        } else if constexpr(is_array_type(dt)) {
+        } else if constexpr((is_numeric_type(dt) || is_bool_type(dt) || is_empty_type(dt)) && (tag.dimension() > Dimension::Dim0)) {
             auto data = const_cast<void*>(tensor.data());
-            const auto ptr_data = c_style ? reinterpret_cast<PyObject**>(data) + row
-                                          : flatten_tensor<PyObject*>(flattened_buffer, rows_to_write, tensor, slice_num, regular_slice_size);
+            const auto ptr_data = reinterpret_cast<PyObject**>(data) + row;
 
             util::BitSet values_bitset = util::scan_object_type_to_sparse(ptr_data, rows_to_write);
             if(values_bitset.empty())
@@ -221,24 +220,19 @@ std::optional<convert::StringEncodingError> aggregator_set_data(
 
             ssize_t last_logical_row{0};
             const auto column_type_descriptor = TypeDescriptor{tensor.data_type(), Dimension::Dim2};
-            std::optional<TypeDescriptor> secondary_type;
+            TypeDescriptor secondary_type = type_desc;
             Column arr_col{column_type_descriptor, true};
             for (auto en = values_bitset.first(); en < values_bitset.end(); ++en) {
                 const auto arr_pos = *en;
                 const auto row_tensor = convert::obj_to_tensor(ptr_data[arr_pos]);
                 const auto row_type_descriptor = TypeDescriptor{row_tensor.data_type(), Dimension::Dim1};
-                if(!secondary_type.has_value()) {
-                    secondary_type = row_type_descriptor;
-                } else {
-                    const std::optional<TypeDescriptor>& common_type = has_valid_common_type(row_type_descriptor, *secondary_type);
-                    normalization::check<ErrorCode::E_COLUMN_SECONDARY_TYPE_MISMATCH>(
-                        common_type.has_value(),
-                        "Numpy arrays in the same column must be of compatible types {} {}",
-                        datatype_to_str(secondary_type->data_type()),
-                        datatype_to_str(row_type_descriptor.data_type())
-                    );
-                    secondary_type = common_type;
-                }
+                const std::optional<TypeDescriptor>& common_type = has_valid_common_type(row_type_descriptor, secondary_type);
+                normalization::check<ErrorCode::E_COLUMN_SECONDARY_TYPE_MISMATCH>(
+                    common_type.has_value(),
+                    "Numpy arrays in the same column must be of compatible types {} {}",
+                    datatype_to_str(secondary_type.data_type()),
+                    datatype_to_str(row_type_descriptor.data_type()));
+                secondary_type = *common_type;
                 // TODO: If the input array contains unexpected elements such as None, NaN, string the type
                 //  descriptor will have data_type == BYTES_DYNAMIC64. TypeDescriptor::visit_tag does not have a
                 //  case for it and it will throw exception which is not meaningful. Adding BYTES_DYNAMIC64 in
@@ -263,10 +257,10 @@ std::optional<convert::StringEncodingError> aggregator_set_data(
                 });
                 last_logical_row++;
             }
+            arr_col.set_type(TypeDescriptor{secondary_type.data_type(), column_type_descriptor.dimension()});
             agg.set_sparse_block(col, arr_col.release_buffer(), arr_col.release_shapes(), std::move(values_bitset));
-            agg.set_secondary_type(col, *secondary_type);
         } else if constexpr (!is_empty_type(dt)) {
-            static_assert(!sizeof(dt), "Unknown data type");
+            // static_assert(!sizeof(dt), "Unknown data type");
         }
         return std::optional<convert::StringEncodingError>();
     });

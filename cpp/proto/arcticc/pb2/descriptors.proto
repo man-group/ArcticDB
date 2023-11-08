@@ -32,7 +32,6 @@ message TypeDescriptor {
         DYNAMIC_UTF8 = 12;
         EMPTY = 13;
         PYBOOL = 14; // Nullable boolean
-        ARRAY = 15; // Numpy array
     }
 
     enum SizeBits {

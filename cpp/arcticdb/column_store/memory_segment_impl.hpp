@@ -529,10 +529,6 @@ public:
         column_unchecked(idx).set_sparse_block(std::move(buffer), std::move(shapes), std::move(bitset));
     }
 
-    void set_secondary_type(position_t idx, TypeDescriptor type) {
-        column_unchecked(idx).set_secondary_type(type);
-    }
-
     template<class T, std::enable_if_t<std::is_same_v<std::decay_t<T>, std::string>, int> = 0>
         void set_scalar(position_t idx, T val) {
         set_string(idx, val);
