@@ -11,6 +11,10 @@
         <link rel="canonical" href="https://docs.arcticdb.io/dev/notebooks/ArcticDB_aws_public_blockchain/">
       
       
+        <link rel="prev" href="../ArcticDB_demo_querybuilder/">
+      
+      
+        <link rel="next" href="../../api/">
       
       
       <link rel="icon" href="../../images/FullWithBorder.png">
@@ -18,7 +22,7 @@
     
     
       
-        <title>ArcticDB aws public blockchain - ArcticDB</title>
+        <title>AWS Blockchain Notebook - ArcticDB</title>
       
     
     
@@ -126,7 +130,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              ArcticDB aws public blockchain
+              AWS Blockchain Notebook
             
           </span>
         </div>
@@ -249,10 +253,12 @@
         
   
   
+    
+  
   
     
     
-      <li class="md-tabs__item">
+      <li class="md-tabs__item md-tabs__item--active">
         <a href="../ArcticDB_demo_lmdb/" class="md-tabs__link">
           
   
@@ -970,6 +976,8 @@
       
   
   
+    
+  
   
     
     
@@ -979,12 +987,12 @@
       
       
     
-    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
       
         
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" checked>
         
           
           <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
@@ -998,7 +1006,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_3">
             <span class="md-nav__icon md-icon"></span>
             Notebooks
@@ -1040,6 +1048,159 @@
   
 
       </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  <span class="md-ellipsis">
+    AWS Blockchain Notebook
+  </span>
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  <span class="md-ellipsis">
+    AWS Blockchain Notebook
+  </span>
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#in-this-demo-we-illustrate-how-to-use-aws-with-arcticdb-we-are-going-to" class="md-nav__link">
+    In this demo, we illustrate how to use AWS with ArcticDB. We are going to
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#install-arcticdb-and-s3-libraries" class="md-nav__link">
+    Install ArcticDB and S3 libraries
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#imports" class="md-nav__link">
+    Imports
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#read-or-create-aws-config" class="md-nav__link">
+    Read or Create AWS config
+  </a>
+  
+    <nav class="md-nav" aria-label="Read or Create AWS config">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#create-a-config-file" class="md-nav__link">
+    Create a config file
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#set-up-the-aws-bucket" class="md-nav__link">
+    Set up the AWS bucket
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#initialise-arcticdb" class="md-nav__link">
+    Initialise ArcticDB
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#mark-the-btc-blockchain-data-from-june-2023-for-processing" class="md-nav__link">
+    Mark the BTC blockchain data from June 2023 for processing
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#read-the-data-from-an-aws-public-dataset-as-parquet-files" class="md-nav__link">
+    Read the data from an AWS public dataset as parquet files
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#write-the-data-to-arcticdb" class="md-nav__link">
+    Write the data to ArcticDB
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#read-the-data-from-arcticdb" class="md-nav__link">
+    Read the data from ArcticDB
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#chart-the-transaction-fees-per-day" class="md-nav__link">
+    Chart the transaction fees per day
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#conclusions" class="md-nav__link">
+    Conclusions
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
