@@ -76,7 +76,7 @@ inline std::vector<std::pair<std::string, MemConfig>> convert_environment_config
     for (auto&[env_key, env_config] : envs.env_by_id()) {
         MemConfig current;
         for (auto &[storage_key, storage_value] : env_config.storage_by_id())
-            current.storages_.insert(std::make_pair(storage::StorageName(storage_key), StorageConfig{storage_value, storage_credential.variant()}));
+            current.storages_.insert(std::make_pair(storage::StorageName(storage_key), StorageConfig{storage_value, storage_credential}));
 
         for (auto &[library_key, library_value] : env_config.lib_by_path())
             current.libraries_.insert(std::make_pair(LibraryPath::from_delim_path(library_key), library_value));

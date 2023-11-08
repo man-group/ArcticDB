@@ -13,6 +13,7 @@
 #include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/entity/variant_key.hpp>
 #include <arcticdb/entity/performance_tracing.hpp>
+#include <arcticdb/storage/storage_credential.hpp>
 #include <sstream>
 
 namespace arcticdb::storage {
@@ -44,6 +45,11 @@ struct LibraryDescriptor {
      >;
 
      VariantStoreConfig config_ = std::monostate{};
+};
+
+struct StorageConfig{
+    arcticdb::proto::storage::VariantStorage pb_config;
+    StorageCredential credential;
 };
 
 inline std::vector<char> stream_to_vector(std::vector<char> &src) {

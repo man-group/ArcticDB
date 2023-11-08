@@ -16,7 +16,13 @@ from arcticdb.version_store.helper import add_azure_library_to_env
 from arcticdb.config import _DEFAULT_ENV
 from arcticdb.version_store._store import NativeVersionStore
 from arcticdb.adapters.arctic_library_adapter import ArcticLibraryAdapter, set_library_options
-from arcticdb_ext.storage import StorageOverride, AzureOverride, CONFIG_LIBRARY_NAME, TokenCredential
+from arcticdb_ext.storage import (
+    StorageOverride,
+    AzureOverride,
+    CONFIG_LIBRARY_NAME,
+    AzureBaseCredential,
+    StorageCredential,
+)
 from arcticdb.encoding_version import EncodingVersion
 from collections import namedtuple
 from dataclasses import dataclass, fields
@@ -38,7 +44,7 @@ class AzureLibraryAdapter(ArcticLibraryAdapter):
     def supports_uri(uri: str) -> bool:
         return uri.startswith("azure://")
 
-    def __init__(self, uri: str, encoding_version: EncodingVersion, token_credential: TokenCredential, *args, **kwargs):
+    def __init__(self, uri: str, encoding_version: EncodingVersion, credential: AzureBaseCredential, *args, **kwargs):
         self._uri = uri
         match = re.match(self.REGEX, uri)
 
@@ -59,6 +65,8 @@ class AzureLibraryAdapter(ArcticLibraryAdapter):
             raise ValueError(f"CA_cert_path cannot be set on Windows platform")
         self._ca_cert_path = self._query_params.CA_cert_path
         self._encoding_version = encoding_version
+        self._credential = StorageCredential()
+        self._credential.set_azure_credential(credential)
 
         super().__init__(uri, self._encoding_version)
 
@@ -83,7 +91,11 @@ class AzureLibraryAdapter(ArcticLibraryAdapter):
         )
 
         lib = NativeVersionStore.create_store_from_config(
-            env_cfg, _DEFAULT_ENV, CONFIG_LIBRARY_NAME, encoding_version=self._encoding_version
+            env_cfg,
+            _DEFAULT_ENV,
+            CONFIG_LIBRARY_NAME,
+            encoding_version=self._encoding_version,
+            credential=self._credential,
         )
 
         return lib._library
@@ -150,6 +162,9 @@ class AzureLibraryAdapter(ArcticLibraryAdapter):
         return NativeVersionStore.create_library_config(
             env_cfg, _DEFAULT_ENV, name, encoding_version=library_options.encoding_version
         )
+
+    def get_credential(self) -> StorageCredential:
+        return self._credential
 
     @property
     def path_prefix(self):

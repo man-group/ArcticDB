@@ -19,7 +19,7 @@ namespace arcticdb {
         std::unique_ptr<Storage> create_storage(
                 const LibraryPath& library_path,
                 OpenMode mode,
-                const arcticdb::proto::storage::VariantStorage &storage_config);
+                const StorageConfig& storage_conf);
 
     } // namespace storage
 } // namespace arcticdb

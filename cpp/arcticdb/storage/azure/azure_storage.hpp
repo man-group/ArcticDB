@@ -28,7 +28,7 @@ class AzureStorage final : public Storage {
     // friend class AzureTestClientAccessor<AzureStorage>;
     using Config = arcticdb::proto::azure_storage::Config;
 
-    AzureStorage(const LibraryPath &lib, OpenMode mode, const Config &conf);
+    AzureStorage(const LibraryPath &lib, OpenMode mode, const Config &conf, const std::shared_ptr<AzureBaseCredential>& storage_credential);
 
     /**
      * Full object path in Azure bucket.
@@ -64,8 +64,6 @@ class AzureStorage final : public Storage {
     unsigned int request_timeout_;
     Azure::Storage::Blobs::UploadBlockBlobFromOptions upload_option_;
     Azure::Storage::Blobs::DownloadBlobToOptions download_option_;
-
-    Azure::Storage::Blobs::BlobClientOptions get_client_options(const Config &conf);
 };
 
 inline arcticdb::proto::storage::VariantStorage pack_config(const std::string &container_name) {

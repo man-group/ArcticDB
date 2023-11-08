@@ -125,7 +125,7 @@ void LibraryManager::remove_library_config(const LibraryPath& path) const {
     store_->remove_key(RefKey{StreamId(path.to_delim_path()), entity::KeyType::LIBRARY_CONFIG}).wait();
 }
 
-std::shared_ptr<Library> LibraryManager::get_library(const LibraryPath& path, const StorageOverride& storage_override) {
+std::shared_ptr<Library> LibraryManager::get_library(const LibraryPath& path, const StorageOverride& storage_override, const StorageCredential& storage_credential) { //Currently only support one storage per library with external API
     {
         // Check global cache first, important for LMDB and RocksDB to only open once from a given process
         std::lock_guard<std::mutex> lock{open_libraries_mutex_};
@@ -136,9 +136,9 @@ std::shared_ptr<Library> LibraryManager::get_library(const LibraryPath& path, co
 
     arcticdb::proto::storage::LibraryConfig config = get_config_internal(path, storage_override);
 
-    std::vector<arcticdb::proto::storage::VariantStorage> st;
+    std::vector<arcticdb::storage::StorageConfig> st;
     for(const auto& storage: config.storage_by_id()){
-        st.emplace_back(storage.second);
+        st.push_back({storage.second, storage_credential});
     }
     auto storages = create_storages(path, OpenMode::DELETE, st);
 

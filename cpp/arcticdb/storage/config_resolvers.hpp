@@ -18,11 +18,6 @@
 
 namespace arcticdb::storage {
 
-struct StorageConfig{
-    arcticdb::proto::storage::VariantStorage pb_config;
-    VariantStorageCredential credential;
-};
-
 class ConfigResolver {
   public:
     virtual ~ConfigResolver() = default;

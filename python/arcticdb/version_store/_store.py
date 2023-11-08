@@ -33,6 +33,7 @@ from arcticdb_ext.storage import (
     create_mem_config_resolver as _create_mem_config_resolver,
     LibraryIndex as _LibraryIndex,
     Library as _Library,
+    StorageCredential,
 )
 from arcticdb.version_store.read_result import ReadResult
 from arcticdb_ext.version_store import IndexRange as _IndexRange
@@ -210,11 +211,11 @@ class NativeVersionStore:
 
     _warned_about_list_version_latest_only_and_snapshot: bool = False
 
-    def __init__(self, library, env, lib_cfg=None, open_mode=OpenMode.DELETE):
-        # type: (_Library, Optional[str], Optional[LibraryConfig], OpenMode)->None
+    def __init__(self, library, env, lib_cfg=None, open_mode=OpenMode.DELETE, credential=StorageCredential()):
+        # type: (_Library, Optional[str], Optional[LibraryConfig], OpenMode, StorageCredential)->None
         fail_on_missing = library.config.fail_on_missing_custom_normalizer if library.config is not None else False
         custom_normalizer = get_custom_normalizer(fail_on_missing)
-        self._initialize(library, env, lib_cfg, custom_normalizer, open_mode)
+        self._initialize(library, env, lib_cfg, custom_normalizer, open_mode, credential)
 
     def _init_norm_failure_handler(self):
         # init normalization failure handler
@@ -233,7 +234,7 @@ class NativeVersionStore:
         else:
             raise ArcticDbNotYetImplemented("No other normalization failure handler")
 
-    def _initialize(self, library, env, lib_cfg, custom_normalizer, open_mode):
+    def _initialize(self, library, env, lib_cfg, custom_normalizer, open_mode, credential):
         self._library = library
         self._cfg = library.config
         self.version_store = _PythonVersionStore(self._library)
@@ -242,42 +243,46 @@ class NativeVersionStore:
         self._custom_normalizer = custom_normalizer
         self._init_norm_failure_handler()
         self._open_mode = open_mode
+        self._credential = credential
 
     @classmethod
-    def create_store_from_lib_config(cls, lib_cfg, env, open_mode=OpenMode.DELETE):
-        lib = cls.create_lib_from_lib_config(lib_cfg, env, open_mode)
+    def create_store_from_lib_config(cls, lib_cfg, env, open_mode=OpenMode.DELETE, credential=StorageCredential()):
+        lib = cls.create_lib_from_lib_config(lib_cfg, env, open_mode, credential)
         return cls(library=lib, lib_cfg=lib_cfg, env=env, open_mode=open_mode)
 
     @staticmethod
-    def create_library_config(
-            cfg, env, lib_name, encoding_version=EncodingVersion.V1
-    ):
+    def create_library_config(cfg, env, lib_name, encoding_version=EncodingVersion.V1):
         from arcticdb.version_store.helper import extract_lib_config
+
         lib_cfg = extract_lib_config(cfg.env_by_id[env], lib_name)
         lib_cfg.lib_desc.version.encoding_version = encoding_version
         return lib_cfg
 
     @classmethod
     def create_store_from_config(
-        cls, cfg, env, lib_name, open_mode=OpenMode.DELETE, encoding_version=EncodingVersion.V1
+        cls,
+        cfg,
+        env,
+        lib_name,
+        open_mode=OpenMode.DELETE,
+        encoding_version=EncodingVersion.V1,
+        credential=StorageCredential(),
     ):
-        lib_cfg = NativeVersionStore.create_library_config(
-            cfg, env, lib_name, encoding_version=encoding_version
-        )
-        lib = cls.create_lib_from_lib_config(lib_cfg, env, open_mode)
+        lib_cfg = NativeVersionStore.create_library_config(cfg, env, lib_name, encoding_version=encoding_version)
+        lib = cls.create_lib_from_lib_config(lib_cfg, env, open_mode, credential)
         return cls(library=lib, lib_cfg=lib_cfg, env=env, open_mode=open_mode)
 
     @staticmethod
-    def create_lib_from_lib_config(lib_cfg, env, open_mode):
+    def create_lib_from_lib_config(lib_cfg, env, open_mode, credential):
         envs_cfg = _env_config_from_lib_config(lib_cfg, env)
-        cfg_resolver = _create_mem_config_resolver(envs_cfg)
+        cfg_resolver = _create_mem_config_resolver(envs_cfg, credential)
         lib_idx = _LibraryIndex.create_from_resolver(env, cfg_resolver)
         return lib_idx.get_library(lib_cfg.lib_desc.name, _OpenMode(open_mode))
 
     @staticmethod
-    def create_lib_from_config(cfg, env, lib_name):
+    def create_lib_from_config(cfg, env, lib_name, credential):
         cfg_resolver = _create_mem_config_resolver(cfg)
-        lib_idx = _LibraryIndex.create_from_resolver(env, cfg_resolver)
+        lib_idx = _LibraryIndex.create_from_resolver(env, cfg_resolver, credential)
         return lib_idx.get_library(lib_name, _OpenMode(OpenMode.DELETE))
 
     def __setstate__(self, state):
@@ -287,12 +292,14 @@ class NativeVersionStore:
         custom_norm.__setstate__(state["custom_norm"])
         env = state["env"]
         open_mode = state["open_mode"]
+        credential = state["credential"]
         self._initialize(
-            library=NativeVersionStore.create_lib_from_lib_config(lib_cfg, env, open_mode),
+            library=NativeVersionStore.create_lib_from_lib_config(lib_cfg, env, open_mode, credential),
             env=env,
             lib_cfg=lib_cfg,
             custom_normalizer=custom_norm,
             open_mode=open_mode,
+            credential=credential,
         )
 
     def __getstate__(self):
@@ -301,6 +308,7 @@ class NativeVersionStore:
             "lib_cfg": self._lib_cfg.SerializeToString(),
             "custom_norm": self._custom_normalizer.__getstate__() if self._custom_normalizer is not None else "",
             "open_mode": self._open_mode,
+            "credential": self._credential,
         }
 
     def __repr__(self):

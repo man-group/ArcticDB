@@ -327,7 +327,7 @@ inline std::shared_ptr<storage::Library> test_library_from_config(const storage:
             : std::monostate{};
     return std::make_shared<storage::Library>(
             lib_path,
-            storage::create_storages(lib_path, storage::OpenMode::DELETE, storage_cfg),
+            storage::create_storages(lib_path, storage::OpenMode::DELETE, {storage_cfg, StorageCredential{}}),
             std::move(vs_cfg)
             );
 

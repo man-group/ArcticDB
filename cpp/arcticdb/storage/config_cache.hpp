@@ -76,20 +76,18 @@ class ConfigCache {
         std::vector<std::unique_ptr<Storage>> storages;
         for (const auto& storage_name : descriptor.storage_ids_) {
             // Otherwise see if we have the storage config.
-            arcticdb::proto::storage::VariantStorage storage_conf;
-            VariantStorageCredential storage_credential;
+            StorageConfig storage_conf;
             
-            auto update_config = [&storage_configs_ = std::as_const(storage_configs_), &storage_name = std::as_const(storage_name)](auto &storage_conf, auto &storage_credential){
+            auto update_config = [&storage_configs_ = std::as_const(storage_configs_), &storage_name = std::as_const(storage_name)](auto &storage_conf){
                 auto storage_conf_pos = storage_configs_.find(storage_name);
                 if(storage_conf_pos != storage_configs_.end()){
-                    storage_conf = storage_conf_pos->second.pb_config;
-                    storage_credential = storage_conf_pos->second.credential;
+                    storage_conf = storage_conf_pos->second;
                 }
             };
-            update_config(storage_conf, storage_credential);
+            update_config(storage_conf);
             // As a last resort, get the whole environment config from the resolver.
             refresh_config();
-            update_config(storage_conf, storage_credential);
+            update_config(storage_conf);
 
             storages.emplace_back(create_storage(path, mode, storage_conf));
         }

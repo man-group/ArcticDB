@@ -70,9 +70,8 @@ void register_bindings(py::module& storage, py::exception<arcticdb::ArcticExcept
         .value("WRITE", OpenMode::WRITE)
         .value("DELETE", OpenMode::DELETE);
 
-    py::class_<Azure::Core::Credentials::TokenCredential, std::shared_ptr<Azure::Core::Credentials::TokenCredential>>(storage, "TokenCredential")
-        .def(py::init<const std::string&>());
-    py::class_<Azure::Identity::DefaultAzureCredential, std::shared_ptr<Azure::Identity::DefaultAzureCredential>, Azure::Core::Credentials::TokenCredential>(storage, "DefaultAzureCredential")
+    py::class_<AzureBaseCredential, std::shared_ptr<AzureBaseCredential>>(storage, "AzureBaseCredential");
+    py::class_<Azure::Identity::DefaultAzureCredential, std::shared_ptr<Azure::Identity::DefaultAzureCredential>, AzureBaseCredential>(storage, "AzureDefaultCredential")
         .def(py::init<>());
 
     py::class_<StorageCredential>(storage, "StorageCredential")
@@ -88,7 +87,7 @@ void register_bindings(py::module& storage, py::exception<arcticdb::ArcticExcept
         for(auto &[env, cfg] :ecm.env_by_id()){
             EnvironmentName env_name{env};
             for(auto &[id, variant_storage]: cfg.storage_by_id()){
-                resolver->add_storage(env_name, StorageName{id}, {variant_storage, storage_credential.variant()});
+                resolver->add_storage(env_name, StorageName{id}, {variant_storage, storage_credential});
             }
             for(auto &[id, lib_desc]: cfg.lib_by_path()){
                 resolver->add_library(env_name, lib_desc);

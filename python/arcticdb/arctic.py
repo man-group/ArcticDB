@@ -34,7 +34,7 @@ class Arctic:
         InMemoryLibraryAdapter,
     ]
 
-    def __init__(self, uri: str, encoding_version: EncodingVersion = DEFAULT_ENCODING_VERSION, credential = None):
+    def __init__(self, uri: str, encoding_version: EncodingVersion = DEFAULT_ENCODING_VERSION, credential=None):
         """
         Initializes a top-level Arctic library management instance.
 
@@ -187,9 +187,10 @@ class Arctic:
 
         storage_override = self._library_adapter.get_storage_override()
         lib = NativeVersionStore(
-            self._library_manager.get_library(name, storage_override),
+            self._library_manager.get_library(name, storage_override, self._library_adapter.get_credential()),
             repr(self._library_adapter),
             lib_cfg=self._library_manager.get_library_config(name, storage_override),
+            credential=self._library_adapter.get_credential(),
         )
         return Library(repr(self), lib)
 

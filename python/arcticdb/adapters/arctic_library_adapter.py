@@ -7,7 +7,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 """
 from arcticdb.options import DEFAULT_ENCODING_VERSION, LibraryOptions
 from arcticc.pb2.storage_pb2 import LibraryConfig
-from arcticdb_ext.storage import Library, StorageOverride, CONFIG_LIBRARY_NAME
+from arcticdb_ext.storage import Library, StorageOverride, CONFIG_LIBRARY_NAME, StorageCredential
 from arcticdb.encoding_version import EncodingVersion
 from abc import ABC, abstractmethod
 
@@ -68,3 +68,6 @@ class ArcticLibraryAdapter(ABC):
     def get_masking_override(self) -> StorageOverride:
         """Override that clears any storage config that should not be persisted."""
         return StorageOverride()
+
+    def get_credential(self) -> StorageCredential:
+        return StorageCredential()

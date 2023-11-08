@@ -28,6 +28,7 @@
 
 #include <azure/core.hpp>
 #include <azure/storage/blobs.hpp>
+#include <azure/storage/blobs/blob_service_client.hpp>
 
 #include <boost/interprocess/streams/bufferstream.hpp>
 #include <folly/ThreadLocal.h>
@@ -333,9 +334,29 @@ using namespace Azure::Storage;
 using namespace Azure::Storage::Blobs;
 
 
-AzureStorage::AzureStorage(const LibraryPath &library_path, OpenMode mode, const Config &conf) :
+Azure::Storage::Blobs::BlobClientOptions get_client_options(const arcticdb::proto::azure_storage::Config &conf) {
+    BlobClientOptions client_options;
+    if (!conf.ca_cert_path().empty()) {//WARNING: Setting ca_cert_path will force Azure sdk uses libcurl as backend support, instead of winhttp
+        Azure::Core::Http::CurlTransportOptions curl_transport_options;
+        curl_transport_options.CAInfo = conf.ca_cert_path();
+        client_options.Transport.Transport = std::make_shared<Azure::Core::Http::CurlTransport>(curl_transport_options);
+    }
+    return client_options;
+}
+
+BlobContainerClient get_blob_container_client(const arcticdb::proto::azure_storage::Config &conf, const std::shared_ptr<AzureBaseCredential>& storage_credential) {
+    if (storage_credential) {
+        auto blob_service_client = Azure::Storage::Blobs::BlobServiceClient(conf.endpoint(), storage_credential, get_client_options(conf));
+        return blob_service_client.GetBlobContainerClient(conf.container_name());
+    }
+    else
+        return BlobContainerClient::CreateFromConnectionString(conf.endpoint(), conf.container_name(), get_client_options(conf));
+}
+
+
+AzureStorage::AzureStorage(const LibraryPath &library_path, OpenMode mode, const Config &conf, const std::shared_ptr<AzureBaseCredential>& storage_credential) :
     Storage(library_path, mode),
-    container_client_(BlobContainerClient::CreateFromConnectionString(conf.endpoint(), conf.container_name(), get_client_options(conf))),
+    container_client_(get_blob_container_client(conf, storage_credential)),
     root_folder_(object_store_utils::get_root_folder(library_path)),
     request_timeout_(conf.request_timeout() == 0 ? 60000 : conf.request_timeout()){
         if (conf.ca_cert_path().empty())
@@ -354,15 +375,4 @@ AzureStorage::AzureStorage(const LibraryPath &library_path, OpenMode mode, const
         upload_option_.TransferOptions.Concurrency = max_connections;
         download_option_.TransferOptions.Concurrency = max_connections;
 }
-
-Azure::Storage::Blobs::BlobClientOptions AzureStorage::get_client_options(const Config &conf) {
-    BlobClientOptions client_options;
-    if (!conf.ca_cert_path().empty()) {//WARNING: Setting ca_cert_path will force Azure sdk uses libcurl as backend support, instead of winhttp
-        Azure::Core::Http::CurlTransportOptions curl_transport_options;
-        curl_transport_options.CAInfo = conf.ca_cert_path();
-        client_options.Transport.Transport = std::make_shared<Azure::Core::Http::CurlTransport>(curl_transport_options);
-    }
-    return client_options;
-}
-
 } // namespace arcticdb::storage::azure

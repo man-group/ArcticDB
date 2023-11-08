@@ -31,14 +31,15 @@ from arcticdb.config import _expand_path
 from arcticdb.exceptions import ArcticNativeException, LibraryNotFound, UserInputException
 from arcticdb.version_store._store import NativeVersionStore
 from arcticdb.authorization.permissions import OpenMode
+from arcticdb_ext.storage import StorageCredential
 
 
-def create_lib_from_config(cfg, env=Defaults.ENV, lib_name=Defaults.LIB):
-    return NativeVersionStore.create_lib_from_config(cfg, env, lib_name)
+def create_lib_from_config(cfg, env=Defaults.ENV, lib_name=Defaults.LIB, credential=StorageCredential()):
+    return NativeVersionStore.create_lib_from_config(cfg, env, lib_name, credential)
 
 
-def create_lib_from_lib_config(lib_config, env=Defaults.ENV, open_mode=OpenMode.DELETE):
-    return NativeVersionStore.create_lib_from_lib_config(lib_config, env, open_mode)
+def create_lib_from_lib_config(lib_config, env=Defaults.ENV, open_mode=OpenMode.DELETE, credential=StorageCredential()):
+    return NativeVersionStore.create_lib_from_lib_config(lib_config, env, open_mode, credential)
 
 
 def extract_lib_config(env_cfg, lib_path):

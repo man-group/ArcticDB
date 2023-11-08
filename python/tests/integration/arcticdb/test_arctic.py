@@ -17,7 +17,7 @@ from datetime import datetime, timezone
 from botocore.client import BaseClient as BotoClient
 
 from arcticdb_ext.exceptions import InternalException
-from arcticdb_ext.storage import NoDataFoundException, DefaultAzureCredential
+from arcticdb_ext.storage import NoDataFoundException, AzureDefaultCredential
 from arcticdb.exceptions import ArcticDbNotYetImplemented, LibraryNotFound, MismatchingLibraryOptions
 from arcticdb.arctic import Arctic
 from arcticdb.options import LibraryOptions
@@ -1116,5 +1116,10 @@ def test_azure_credential_auth(azurite_azure_test_connection_setting):
     endpoint, container, credential_name, _, _ = azurite_azure_test_connection_setting
     ac = Arctic(
         f"azure://DefaultEndpointsProtocol=http;BlobEndpoint={endpoint}/{credential_name};Container={container}",
-        DefaultAzureCredential(),
+        credential=AzureDefaultCredential(),
     )
+    expected = pd.DataFrame({"col1": [1, 2, 3], "col2": [4, 5, 6]})
+    sym = "test"
+    lib = "lib"
+    ac.create_library(lib)
+    ac[lib].write(sym, expected)
