@@ -69,9 +69,6 @@ This project includes software from the BitMagic project (Apache 2).
 * Copyright(c) 2002-2019 Anatoliy Kuznetsov(anatoliy_kuznetsov at yahoo.com)
 https://github.com/tlk00/BitMagic/blob/master/LICENSE
 
-This project includes software from the Wangle project (Apache 2).
-https://github.com/facebook/wangle/blob/main/LICENSE
-
 This project includes software from the librdkafka project (BSD, 2-Clause).
 * Copyright (c) 2012-2020, Magnus Edenhill. All rights reserved.
 https://github.com/edenhill/librdkafka/blob/master/LICENSE
