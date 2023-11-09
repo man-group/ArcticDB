@@ -281,7 +281,7 @@ class NativeVersionStore:
 
     @staticmethod
     def create_lib_from_config(cfg, env, lib_name, credential):
-        cfg_resolver = _create_mem_config_resolver(cfg)
+        cfg_resolver = _create_mem_config_resolver(cfg, credential)
         lib_idx = _LibraryIndex.create_from_resolver(env, cfg_resolver, credential)
         return lib_idx.get_library(lib_name, _OpenMode(OpenMode.DELETE))
 
