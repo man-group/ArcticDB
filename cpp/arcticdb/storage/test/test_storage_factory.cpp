@@ -47,7 +47,7 @@ TEST(TestStorageFactory, LmdbLookup) {
     auto& storage = storages[0];
     ASSERT_EQ(storage.first.value, "lmdb_local");
     arcticdb::proto::lmdb_storage::Config config;
-    storage.second.config().UnpackTo(&config);
+    storage.second.pb_config.config().UnpackTo(&config);
     ASSERT_EQ(config.path(), "./"); //bit non-standard
 }
 

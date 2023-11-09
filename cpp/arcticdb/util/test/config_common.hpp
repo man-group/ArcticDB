@@ -9,6 +9,7 @@
 
 #include <arcticdb/storage/config_resolvers.hpp>
 #include <arcticdb/storage/common.hpp>
+#include <arcticdb/storage/storage_credential.hpp>
 #include <arcticdb/entity/protobufs.hpp>
 #include <string>
 
@@ -28,7 +29,7 @@ inline auto get_test_environment_config(
     cfg.set_path("./"); //TODO local path is a bit annoying. TMPDIR?
     cfg.set_recreate_if_exists(true);
     util::pack_to_any(cfg, *storage_conf.mutable_config());
-    mem_config.storages_.insert(std::make_pair(storage_name, storage_conf));
+    mem_config.storages_.emplace(storage_name, StorageConfig{storage_conf, StorageCredential{}});
 
     arcticdb::proto::storage::LibraryDescriptor library_descriptor;
     library_descriptor.add_storage_ids(storage_name.value);
