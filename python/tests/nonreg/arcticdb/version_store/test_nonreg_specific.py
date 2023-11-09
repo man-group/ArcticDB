@@ -14,6 +14,8 @@ import sys
 from arcticdb.util.test import assert_frame_equal
 from arcticc.pb2.descriptors_pb2 import TypeDescriptor
 
+from arcticdb.util._versions import IS_PANDAS_TWO
+
 
 def test_read_keys(object_and_mem_and_lmdb_version_store_dynamic_schema):
     lib = object_and_mem_and_lmdb_version_store_dynamic_schema
@@ -200,31 +202,65 @@ def test_batch_write_unicode_strings(lmdb_version_store):
 
 
 def test_pandas_object_dtype(lmdb_version_store):
+    # Non-regression test for https://github.com/man-group/ArcticDB/issues/987
     lib = lmdb_version_store
-    symbol = "test_pandas_object_dtype"
 
     # Columns of numeric (which includes datetimes) dtype != float64 with no values
     # must always be stored with the provided dtype (never empty-type).
+
+    symbol_info_series_index = 1 if IS_PANDAS_TWO else 0
+    def get_symbol_value_type(symbol_info):
+        symbol_info = lib.get_info(symbol)
+        return symbol_info["dtype"][symbol_info_series_index].value_type
+
+    symbol = "empty_as_int"
     series = pd.Series([], dtype=int)
+    lib.write(symbol, series)
+    assert get_symbol_value_type(symbol) == TypeDescriptor.ValueType.INT
     result = lib.read(symbol).data
-    assert series.dtype == result.dtype
+    assert result.dtype == int
+
+    symbol = "empty_as_datetime"
+    series = pd.Series([], dtype="datetime64[ns]")
+    lib.write(symbol, series)
+    assert get_symbol_value_type(symbol) == TypeDescriptor.ValueType.NANOSECONDS_UTC
+    result = lib.read(symbol).data
+    assert result.dtype == "datetime64[ns]"
 
     if IS_PANDAS_TWO:
-        # In Pandas 2.0, columns with no values of dtype float64 must be stored with dtype float64.
+        # With Pandas>=2.0, empty columns of dtype "float64" must be stored as "FLOAT" and returned as "float64".
+        symbol = "empty_as_float"
         series = pd.Series([], dtype=float)
-        result = lib.read(symbol).data
-        assert_frame_equal(series, result)
+        lib.write(symbol, series)
+        assert get_symbol_value_type(symbol) == TypeDescriptor.ValueType.FLOAT
 
-        # In Pandas 2.0, columns with no values of dtype object must be stored with empty-type.
-        series = pd.Series([], dtype=object)
         result = lib.read(symbol).data
-        assert_frame_equal(series, result)
+        assert result.dtype == float
+
+        # With Pandas>=2.0, empty columns of dtype "object" must be stored as "empty" and returned as "object".
+        symbol = "empty_as_object"
+        series = pd.Series([], dtype=object)
+        lib.write(symbol, series)
+        assert get_symbol_value_type(symbol) == TypeDescriptor.ValueType.EMPTY
+
+        result = lib.read(symbol).data
+        assert result.dtype == object
 
     else:
-        # Columns with no values of dtype float64 or object in Pandas 1.X should be stored with empty-type.
+        # With Pandas<2.0, empty columns of dtype "float64" must be stored using "EMPTY" and returned as "float64".
+        symbol = "empty_as_float"
         series = pd.Series([], dtype=float)
-        result = lib.read(symbol).data
-        assert result.dtype == ""
+        lib.write(symbol, series)
+        assert get_symbol_value_type(symbol) == TypeDescriptor.ValueType.EMPTY
 
-        series = pd.Series([], dtype=object)
         result = lib.read(symbol).data
+        assert result.dtype == float
+
+        # With Pandas<2.0, empty columns of dtype "object" must be stored using "EMPTY" and returned as "float64".
+        symbol = "empty_as_object"
+        series = pd.Series([], dtype=object)
+        lib.write(symbol, series)
+        assert get_symbol_value_type(symbol) == TypeDescriptor.ValueType.EMPTY
+
+        result = lib.read(symbol).data
+        assert result.dtype == float
