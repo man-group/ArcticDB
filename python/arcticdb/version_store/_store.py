@@ -34,6 +34,7 @@ from arcticdb_ext.storage import (
     LibraryIndex as _LibraryIndex,
     Library as _Library,
 )
+from arcticdb.util.telemetry import telemetry_trace
 from arcticdb.version_store.read_result import ReadResult
 from arcticdb_ext.version_store import IndexRange as _IndexRange
 from arcticdb_ext.version_store import RowRange as _RowRange
@@ -249,10 +250,9 @@ class NativeVersionStore:
         return cls(library=lib, lib_cfg=lib_cfg, env=env, open_mode=open_mode)
 
     @staticmethod
-    def create_library_config(
-            cfg, env, lib_name, encoding_version=EncodingVersion.V1
-    ):
+    def create_library_config(cfg, env, lib_name, encoding_version=EncodingVersion.V1):
         from arcticdb.version_store.helper import extract_lib_config
+
         lib_cfg = extract_lib_config(cfg.env_by_id[env], lib_name)
         lib_cfg.lib_desc.version.encoding_version = encoding_version
         return lib_cfg
@@ -261,9 +261,7 @@ class NativeVersionStore:
     def create_store_from_config(
         cls, cfg, env, lib_name, open_mode=OpenMode.DELETE, encoding_version=EncodingVersion.V1
     ):
-        lib_cfg = NativeVersionStore.create_library_config(
-            cfg, env, lib_name, encoding_version=encoding_version
-        )
+        lib_cfg = NativeVersionStore.create_library_config(cfg, env, lib_name, encoding_version=encoding_version)
         lib = cls.create_lib_from_lib_config(lib_cfg, env, open_mode)
         return cls(library=lib, lib_cfg=lib_cfg, env=env, open_mode=open_mode)
 
@@ -321,6 +319,7 @@ class NativeVersionStore:
             log.error("Could not get primary backing store for lib due to: {}".format(e))
         return backing_store
 
+    @telemetry_trace
     def _try_normalize(self, symbol, dataframe, metadata, pickle_on_failure, dynamic_strings, coerce_columns, **kwargs):
         dynamic_schema = self.resolve_defaults(
             "dynamic_schema", self._lib_cfg.lib_desc.version.write_options, False, **kwargs
@@ -366,6 +365,7 @@ class NativeVersionStore:
                 f"The symbol '{symbol}' has one or more unsupported characters({','.join(UNSUPPORTED_S3_CHARS)})."
             )
 
+    @telemetry_trace
     def _try_flatten_and_write_composite_object(
         self, symbol, data, metadata, pickle_on_failure, dynamic_strings, prune_previous
     ):
@@ -449,6 +449,7 @@ class NativeVersionStore:
 
         return global_default
 
+    @telemetry_trace
     def write(
         self,
         symbol: str,
@@ -587,6 +588,7 @@ class NativeVersionStore:
                 host=self.env,
             )
 
+    @telemetry_trace
     def _resolve_dynamic_strings(self, kwargs):
         proto_cfg = self._lib_cfg.lib_desc.version.write_options
         if IS_WINDOWS:
@@ -603,6 +605,7 @@ class NativeVersionStore:
 
     last_mismatch_msg: Optional[str] = None
 
+    @telemetry_trace
     def append(
         self,
         symbol: str,
@@ -707,6 +710,7 @@ class NativeVersionStore:
                         host=self.env,
                     )
 
+    @telemetry_trace
     def update(
         self,
         symbol: str,
@@ -806,6 +810,7 @@ class NativeVersionStore:
                 host=self.env,
             )
 
+    @telemetry_trace
     def create_column_stats(
         self, symbol: str, column_stats: Dict[str, Set[str]], as_of: Optional[VersionQueryInput] = None
     ) -> None:
@@ -834,6 +839,7 @@ class NativeVersionStore:
         version_query = self._get_version_query(as_of)
         self.version_store.create_column_stats_version(symbol, column_stats, version_query)
 
+    @telemetry_trace
     def drop_column_stats(
         self, symbol: str, column_stats: Optional[Dict[str, Set[str]]] = None, as_of: Optional[VersionQueryInput] = None
     ) -> None:
@@ -858,6 +864,7 @@ class NativeVersionStore:
         version_query = self._get_version_query(as_of)
         self.version_store.drop_column_stats_version(symbol, column_stats, version_query)
 
+    @telemetry_trace
     def read_column_stats(self, symbol: str, as_of: Optional[VersionQueryInput] = None, **kwargs) -> pd.DataFrame:
         """
         Read all the column statistics data that has been generated for the given symbol.
@@ -878,6 +885,7 @@ class NativeVersionStore:
         data = denormalize_dataframe(self.version_store.read_column_stats_version(symbol, version_query))
         return data
 
+    @telemetry_trace
     def get_column_stats_info(
         self, symbol: str, as_of: Optional[VersionQueryInput] = None, **kwargs
     ) -> Dict[str, Set[str]]:
@@ -900,12 +908,14 @@ class NativeVersionStore:
         version_query = self._get_version_query(as_of, **kwargs)
         return self.version_store.get_column_stats_info_version(symbol, version_query).to_map()
 
+    @telemetry_trace
     def _batch_read_keys(self, atom_keys):
         for result in self.version_store.batch_read_keys(atom_keys):
             read_result = ReadResult(*result)
             vitem = self._adapt_read_res(read_result)
             yield vitem
 
+    @telemetry_trace
     def trim(self) -> None:
         """
         Calls trim on the allocator of the underlying version_store
@@ -913,6 +923,7 @@ class NativeVersionStore:
         """
         self.version_store.trim()
 
+    @telemetry_trace
     def batch_read(
         self,
         symbols: List[str],
@@ -982,6 +993,7 @@ class NativeVersionStore:
         )
         return {v.symbol: v for v in versioned_items}
 
+    @telemetry_trace
     def _batch_read_to_versioned_items(
         self, symbols, as_ofs, date_ranges, row_ranges, columns, query_builder, throw_on_error, kwargs=None
     ):
@@ -1006,6 +1018,7 @@ class NativeVersionStore:
                 versioned_items.append(vitem)
         return versioned_items
 
+    @telemetry_trace
     def batch_read_metadata(
         self, symbols: List[str], as_ofs: Optional[List[VersionQueryInput]] = None, **kwargs
     ) -> Dict[str, VersionedItem]:
@@ -1043,6 +1056,7 @@ class NativeVersionStore:
         )
         return {v.symbol: v for v in meta_items}
 
+    @telemetry_trace
     def _batch_read_metadata_to_versioned_items(self, symbols, as_ofs, include_errors_and_none_meta, **kwargs):
         version_queries = self._get_version_queries(len(symbols), as_ofs, **kwargs)
         read_options = self._get_read_options(**kwargs)
@@ -1071,6 +1085,7 @@ class NativeVersionStore:
                     )
         return meta_items
 
+    @telemetry_trace
     def batch_read_metadata_multi(
         self, symbols: List[str], as_ofs: Optional[List[VersionQueryInput]] = None, **kwargs
     ) -> Dict[str, Dict[int, VersionedItem]]:
@@ -1126,6 +1141,7 @@ class NativeVersionStore:
 
         return results_dict
 
+    @telemetry_trace
     def _convert_thin_cxx_item_to_python(self, v) -> VersionedItem:
         """Convert a cxx versioned item that does not contain data or metadata to a Python equivalent."""
         return VersionedItem(
@@ -1137,6 +1153,7 @@ class NativeVersionStore:
             host=self.env,
         )
 
+    @telemetry_trace
     def batch_write(
         self,
         symbols: List[str],
@@ -1207,6 +1224,7 @@ class NativeVersionStore:
             **kwargs,
         )
 
+    @telemetry_trace
     def _batch_write_internal(
         self,
         symbols: List[str],
@@ -1263,6 +1281,7 @@ class NativeVersionStore:
                 write_results.append(self._convert_thin_cxx_item_to_python(result))
         return write_results
 
+    @telemetry_trace
     def _batch_write_metadata_to_versioned_items(
         self, symbols: List[str], metadata_vector: List[Any], prune_previous_version, throw_on_error
     ):
@@ -1285,6 +1304,7 @@ class NativeVersionStore:
                 write_metadata_results.append(self._convert_thin_cxx_item_to_python(result))
         return write_metadata_results
 
+    @telemetry_trace
     def batch_write_metadata(
         self, symbols: List[str], metadata_vector: List[Any], prune_previous_version=None
     ) -> List[Union[VersionedItem, DataError]]:
@@ -1318,6 +1338,7 @@ class NativeVersionStore:
             symbols, metadata_vector, prune_previous_version, throw_on_error
         )
 
+    @telemetry_trace
     def batch_append(
         self,
         symbols: List[str],
@@ -1376,6 +1397,7 @@ class NativeVersionStore:
             **kwargs,
         )
 
+    @telemetry_trace
     def _batch_append_to_versioned_items(
         self,
         symbols,
@@ -1438,6 +1460,7 @@ class NativeVersionStore:
                 append_results.append(self._convert_thin_cxx_item_to_python(result))
         return append_results
 
+    @telemetry_trace
     def batch_restore_version(
         self, symbols: List[str], as_ofs: Optional[List[VersionQueryInput]] = None, **kwargs
     ) -> List[VersionedItem]:
@@ -1476,6 +1499,7 @@ class NativeVersionStore:
             for result, meta in zip(read_results, metadatas)
         ]
 
+    @telemetry_trace
     def _get_version_query(self, as_of: VersionQueryInput, **kwargs):
         version_query = _PythonVersionStoreVersionQuery()
         version_query.set_skip_compat(_assume_true("skip_compat", kwargs))
@@ -1492,6 +1516,7 @@ class NativeVersionStore:
 
         return version_query
 
+    @telemetry_trace
     def _get_version_queries(self, num_symbols: int, as_ofs: Optional[List[VersionQueryInput]], **kwargs):
         if as_ofs is not None:
             check(
@@ -1504,6 +1529,7 @@ class NativeVersionStore:
         else:
             return [self._get_version_query(None, **kwargs) for _ in range(num_symbols)]
 
+    @telemetry_trace
     def _get_read_query(
         self,
         date_range: Optional[DateRangeInput],
@@ -1528,6 +1554,7 @@ class NativeVersionStore:
 
         return read_query
 
+    @telemetry_trace
     def _get_read_queries(
         self,
         num_symbols: int,
@@ -1592,6 +1619,7 @@ class NativeVersionStore:
 
         return read_queries
 
+    @telemetry_trace
     def _get_read_options(self, **kwargs):
         proto_cfg = self._lib_cfg.lib_desc.version.write_options
         read_options = _PythonVersionStoreReadOptions()
@@ -1605,6 +1633,7 @@ class NativeVersionStore:
         read_options.set_incompletes(self.resolve_defaults("incomplete", proto_cfg, global_default=False, **kwargs))
         return read_options
 
+    @telemetry_trace
     def _get_queries(self, symbol, as_of, date_range, row_range, columns, query_builder, **kwargs):
         version_query = self._get_version_query(as_of, **kwargs)
         read_options = self._get_read_options(**kwargs)
@@ -1616,6 +1645,7 @@ class NativeVersionStore:
     def _get_column_stats(self, column_stats):
         return None if column_stats is None else _ColumnStats(column_stats)
 
+    @telemetry_trace
     def read(
         self,
         symbol: str,

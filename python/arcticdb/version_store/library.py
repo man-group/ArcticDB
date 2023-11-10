@@ -15,6 +15,7 @@ from numpy import datetime64
 from arcticdb.options import LibraryOptions
 from arcticdb.supported_types import Timestamp
 from arcticdb.util._versions import IS_PANDAS_TWO
+from arcticdb.util.telemetry import telemetry_trace
 
 from arcticdb.version_store.processing import QueryBuilder
 from arcticdb.version_store._store import NativeVersionStore, VersionedItem, VersionQueryInput
@@ -23,10 +24,10 @@ from arcticdb_ext.exceptions import ArcticException
 from arcticdb_ext.version_store import DataError
 import pandas as pd
 import numpy as np
+
 import logging
 
 logger = logging.getLogger(__name__)
-
 
 AsOf = Union[int, str, datetime.datetime]
 
@@ -321,6 +322,7 @@ class Library:
             encoding_version=self._nvs.lib_cfg().lib_desc.version.encoding_version,
         )
 
+    @telemetry_trace
     def write(
         self,
         symbol: str,
@@ -432,6 +434,7 @@ class Library:
             validate_index=validate_index,
         )
 
+    @telemetry_trace
     def write_pickle(
         self, symbol: str, data: Any, metadata: Any = None, prune_previous_versions: bool = False, staged=False
     ) -> VersionedItem:
@@ -505,6 +508,7 @@ class Library:
             error_message += f" (and more)... {len(bad_symbols)} data in total have bad types."
         raise ArcticUnsupportedDataTypeException(error_message)
 
+    @telemetry_trace
     def write_batch(
         self, payloads: List[WritePayload], prune_previous_versions: bool = False, validate_index=True
     ) -> List[Union[VersionedItem, DataError]]:
@@ -580,6 +584,7 @@ class Library:
             throw_on_error=throw_on_error,
         )
 
+    @telemetry_trace
     def write_pickle_batch(
         self, payloads: List[WritePayload], prune_previous_versions: bool = False, staged=False
     ) -> List[VersionedItem]:
@@ -622,6 +627,7 @@ class Library:
             parallel=staged,
         )
 
+    @telemetry_trace
     def append(
         self,
         symbol: str,
@@ -706,6 +712,7 @@ class Library:
             validate_index=validate_index,
         )
 
+    @telemetry_trace
     def append_batch(
         self, append_payloads: List[WritePayload], prune_previous_versions: bool = False, validate_index=True
     ) -> List[Union[VersionedItem, DataError]]:
@@ -756,6 +763,7 @@ class Library:
             throw_on_error=throw_on_error,
         )
 
+    @telemetry_trace
     def update(
         self,
         symbol: str,
@@ -832,6 +840,7 @@ class Library:
             prune_previous_version=prune_previous_versions,
         )
 
+    @telemetry_trace
     def delete_staged_data(self, symbol: str):
         """
         Removes staged data.
@@ -848,6 +857,7 @@ class Library:
         """
         self._nvs.remove_incomplete(symbol)
 
+    @telemetry_trace
     def finalize_staged_data(
         self,
         symbol: str,
@@ -880,6 +890,7 @@ class Library:
             prune_previous_version=prune_previous_versions,
         )
 
+    @telemetry_trace
     def sort_and_finalize_staged_data(
         self, symbol: str, mode: Optional[StagedDataFinalizeMethod] = StagedDataFinalizeMethod.WRITE
     ):
@@ -905,6 +916,7 @@ class Library:
 
         self._nvs.version_store.sort_merge(symbol, None, mode == StagedDataFinalizeMethod.APPEND, False)
 
+    @telemetry_trace
     def get_staged_symbols(self) -> List[str]:
         """
         Returns all symbols with staged, unfinalized data.
@@ -921,6 +933,7 @@ class Library:
         """
         return self._nvs.list_symbols_with_incomplete_data()
 
+    @telemetry_trace
     def read(
         self,
         symbol: str,
@@ -1005,6 +1018,7 @@ class Library:
             query_builder=query_builder,
         )
 
+    @telemetry_trace
     def read_batch(
         self, symbols: List[Union[str, ReadRequest]], query_builder: Optional[QueryBuilder] = None
     ) -> List[Union[VersionedItem, DataError]]:
@@ -1107,6 +1121,7 @@ class Library:
             symbol_strings, as_ofs, date_ranges, row_ranges, columns, query_builder or query_builders, throw_on_error
         )
 
+    @telemetry_trace
     def read_metadata(self, symbol: str, as_of: Optional[AsOf] = None) -> VersionedItem:
         """
         Return the metadata saved for a symbol.  This method is faster than read as it only loads the metadata, not the
@@ -1128,6 +1143,7 @@ class Library:
         """
         return self._nvs.read_metadata(symbol, as_of)
 
+    @telemetry_trace
     def read_metadata_batch(self, symbols: List[Union[str, ReadInfoRequest]]) -> List[Union[VersionedItem, DataError]]:
         """
         Reads the metadata of multiple symbols.
@@ -1156,6 +1172,7 @@ class Library:
         include_errors_and_none_meta = True
         return self._nvs._batch_read_metadata_to_versioned_items(symbol_strings, as_ofs, include_errors_and_none_meta)
 
+    @telemetry_trace
     def write_metadata(self, symbol: str, metadata: Any) -> VersionedItem:
         """
         Write metadata under the specified symbol name to this library. The data will remain unchanged.
@@ -1180,6 +1197,7 @@ class Library:
         """
         return self._nvs.write_metadata(symbol, metadata, prune_previous_version=False)
 
+    @telemetry_trace
     def write_metadata_batch(
         self, write_metadata_payloads: List[WriteMetadataPayload], prune_previous_versions=None
     ) -> List[Union[VersionedItem, DataError]]:
@@ -1234,6 +1252,7 @@ class Library:
             throw_on_error=throw_on_error,
         )
 
+    @telemetry_trace
     def snapshot(
         self,
         snapshot_name: str,
@@ -1275,6 +1294,7 @@ class Library:
         """
         self._nvs.snapshot(snap_name=snapshot_name, metadata=metadata, skip_symbols=skip_symbols, versions=versions)
 
+    @telemetry_trace
     def delete(self, symbol: str, versions: Optional[Union[int, Iterable[int]]] = None):
         """
         Delete all versions of the symbol from the library, unless ``version`` is specified, in which case only those
@@ -1305,6 +1325,7 @@ class Library:
         for v in versions:
             self._nvs.delete_version(symbol, v)
 
+    @telemetry_trace
     def prune_previous_versions(self, symbol):
         """Removes all (non-snapshotted) versions from the database for the given symbol, except the latest.
 
@@ -1315,6 +1336,7 @@ class Library:
         """
         self._nvs.prune_previous_versions(symbol)
 
+    @telemetry_trace
     def delete_data_in_range(self, symbol: str, date_range: Tuple[Optional[Timestamp], Optional[Timestamp]]):
         """Delete data within the given date range, creating a new version of ``symbol``.
 
@@ -1345,6 +1367,7 @@ class Library:
             raise ArcticInvalidApiUsageException("date_range must be given but was None")
         self._nvs.delete(symbol, date_range=date_range)
 
+    @telemetry_trace
     def delete_snapshot(self, snapshot_name: str) -> None:
         """
         Delete a named snapshot. This may take time if the given snapshot is the last reference to the underlying
@@ -1362,6 +1385,7 @@ class Library:
         """
         return self._nvs.delete_snapshot(snapshot_name)
 
+    @telemetry_trace
     def list_symbols(self, snapshot_name: Optional[str] = None) -> List[str]:
         """
         Return the symbols in this library.
@@ -1379,6 +1403,7 @@ class Library:
         """
         return self._nvs.list_symbols(snapshot=snapshot_name)
 
+    @telemetry_trace
     def has_symbol(self, symbol: str, as_of: Optional[AsOf] = None) -> bool:
         """
         Whether this library contains the given symbol.
@@ -1413,6 +1438,7 @@ class Library:
         """
         return self._nvs.has_symbol(symbol, as_of=as_of)
 
+    @telemetry_trace
     def list_snapshots(self) -> Dict[str, Any]:
         """
         List the snapshots in the library.
@@ -1424,6 +1450,7 @@ class Library:
         """
         return self._nvs.list_snapshots()
 
+    @telemetry_trace
     def list_versions(
         self,
         symbol: Optional[str] = None,
@@ -1478,6 +1505,7 @@ class Library:
             for v in versions
         }
 
+    @telemetry_trace
     def head(self, symbol: str, n: int = 5, as_of: Optional[AsOf] = None, columns: List[str] = None) -> VersionedItem:
         """
         Read the first n rows of data for the named symbol. If n is negative, return all rows except the last n rows.
@@ -1499,6 +1527,7 @@ class Library:
         """
         return self._nvs.head(symbol=symbol, n=n, as_of=as_of, columns=columns)
 
+    @telemetry_trace
     def tail(
         self, symbol: str, n: int = 5, as_of: Optional[Union[int, str]] = None, columns: List[str] = None
     ) -> VersionedItem:
@@ -1547,6 +1576,7 @@ class Library:
             date_range=date_range,
         )
 
+    @telemetry_trace
     def get_description(self, symbol: str, as_of: Optional[AsOf] = None) -> SymbolDescription:
         """
         Returns descriptive data for ``symbol``.
@@ -1597,6 +1627,7 @@ class Library:
 
         return (symbol_strings, as_ofs)
 
+    @telemetry_trace
     def get_description_batch(
         self, symbols: List[Union[str, ReadInfoRequest]]
     ) -> List[Union[SymbolDescription, DataError]]:
@@ -1633,6 +1664,7 @@ class Library:
 
         return description_results
 
+    @telemetry_trace
     def reload_symbol_list(self):
         """
         Forces the symbol list cache to be reloaded.
@@ -1642,6 +1674,7 @@ class Library:
         """
         self._nvs.version_store.reload_symbol_list()
 
+    @telemetry_trace
     def is_symbol_fragmented(self, symbol: str, segment_size: Optional[int] = None) -> bool:
         """
         Check whether the number of segments that would be reduced by compaction is more than or equal to the
@@ -1666,6 +1699,7 @@ class Library:
         """
         return self._nvs.is_symbol_fragmented(symbol, segment_size)
 
+    @telemetry_trace
     def defragment_symbol_data(self, symbol: str, segment_size: Optional[int] = None) -> VersionedItem:
         """
         Compacts fragmented segments by merging row-sliced segments (https://docs.arcticdb.io/technical/on_disk_storage/#data-layer).
