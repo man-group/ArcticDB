@@ -741,7 +741,7 @@ def test_empty_pd_series_type_preservation(basic_store):
     res = basic_store.read(sym).data
     assert res.empty
     # TODO: Fix me when the cast bug is fixed
-    # assert str(res.dtype) == "datetime64[ns]"
+    assert str(res.dtype) == "datetime64[ns]"
     assert basic_store.read(sym).data.empty
 
     # basic_store.update(sym, series)

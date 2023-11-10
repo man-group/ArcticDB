@@ -186,19 +186,19 @@ def _to_primitive(arr, arr_name, dynamic_strings, string_max_len=None, coerce_co
         # to `datetime64[ns]`.
         arr = arr.astype(DTN64_DTYPE, copy=False)
 
-    if arr.dtype.hasobject is False and not (
-        dynamic_strings and arr.dtype == "float" and coerce_column_type in OBJECT_TOKENS
-    ):
-        # not an object type numpy column and not going to later be
-        # coerced to an object type column - does not require conversion to a primitive type.
-        return arr
-
     # TODO(jjerphan): Remove once pandas < 2 is not supported anymore.
     if not IS_PANDAS_TWO and len(arr) == 0 and arr.dtype == "float":
         # In Pandas < 2, empty series dtype is `"float"`, but as of Pandas 2.0, empty series dtype is `"object"`
         # We cast its array to `"object"` so that the EMPTY type can be used, and the type can be promoted correctly
         # then.
         return arr.astype("object")
+
+    if arr.dtype.hasobject is False and not (
+        dynamic_strings and arr.dtype == "float" and coerce_column_type in OBJECT_TOKENS
+    ):
+        # not an object type numpy column and not going to later be
+        # coerced to an object type column - does not require conversion to a primitive type.
+        return arr
 
     if len(arr) == 0:
         if coerce_column_type is not None:
@@ -584,21 +584,23 @@ class SeriesNormalizer(_PandasNormalizer):
         # type: (_FrameData, NormalizationMetadata.PandaDataFrame)->DataFrame
 
         df = self._df_norm.denormalize(item, norm_meta)
-        s = df.iloc[:, 0] if not df.columns.empty else df
+
+        series = pd.Series() if df.columns.empty else df.iloc[:, 0]
+
         if norm_meta.common.name:
-            s.name = norm_meta.common.name
+            series.name = norm_meta.common.name
         else:
-            s.name = None
+            series.name = None
 
         # TODO(jjerphan): Remove once pandas < 2 is not supported anymore.
-        if s.empty and not IS_PANDAS_TWO and s.dtype in OBJECT_TOKENS:
+        if series.empty and not IS_PANDAS_TWO and series.dtype in OBJECT_TOKENS:
             # Before Pandas 2.0, empty series' dtype was float, but as of Pandas 2.0. empty series' dtype became object.
             # See: https://github.com/pandas-dev/pandas/issues/17261
             # EMPTY type column are returned as pandas.Series with "object" dtype to match Pandas 2.0 default.
             # We cast it back to "float" to that it matches Pandas 1.0 default for empty series.
-            s = s.astype("float")
+            series = series.astype("float")
 
-        return s
+        return series
 
 
 class NdArrayNormalizer(Normalizer):
