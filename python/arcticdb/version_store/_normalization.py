@@ -592,14 +592,6 @@ class SeriesNormalizer(_PandasNormalizer):
         else:
             series.name = None
 
-        # TODO(jjerphan): Remove once pandas < 2 is not supported anymore.
-        if series.empty and not IS_PANDAS_TWO and series.dtype in OBJECT_TOKENS:
-            # Before Pandas 2.0, empty series' dtype was float, but as of Pandas 2.0. empty series' dtype became object.
-            # See: https://github.com/pandas-dev/pandas/issues/17261
-            # EMPTY type column are returned as pandas.Series with "object" dtype to match Pandas 2.0 default.
-            # We cast it back to "float" to that it matches Pandas 1.0 default for empty series.
-            series = series.astype("float")
-
         return series
 
 
@@ -717,7 +709,15 @@ class DataFrameNormalizer(_PandasNormalizer):
             #       df = DataFrame(index=index, columns=columns_mapping, copy=False)
             #
             for column_name, dtype in columns_dtype.items():
-                df[column_name] = df[column_name].astype(dtype, copy=False)
+                # TODO(jjerphan): Remove once pandas < 2 is not supported anymore.
+                if len(df[column_name]) == 0 and not IS_PANDAS_TWO and dtype in OBJECT_TOKENS:
+                    # Before Pandas 2.0, empty series' dtype was float, but as of Pandas 2.0. empty series' dtype became object.
+                    # See: https://github.com/pandas-dev/pandas/issues/17261
+                    # EMPTY type column are returned as pandas.Series with "object" dtype to match Pandas 2.0 default.
+                    # We cast it back to "float" so that it matches Pandas 1.0 default for empty series.
+                    df[column_name] = pd.Series([], dtype='float64')
+                else:
+                    df[column_name] = df[column_name].astype(dtype, copy=False)
 
         else:
             if index is not None:
