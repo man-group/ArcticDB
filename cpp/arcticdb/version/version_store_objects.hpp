@@ -9,6 +9,7 @@
 
 #include <arcticdb/entity/atom_key.hpp>
 #include <arcticdb/version/version_map_entry.hpp>
+#include <arcticdb/pipelines/input_tensor_frame.hpp>
 
 namespace arcticdb::version_store {
 
@@ -86,6 +87,20 @@ struct UpdateInfo {
      * The smallest version ID not in use (live or deleted). Zero iff no versions exist for the specified symbol
      */
     VersionId next_version_id_;
+};
+
+struct UpdateInfoWithStream {
+    StreamId id_;
+    /**
+     * The index key of the latest live version, or std::nullopt if no versions are live
+     */
+    std::optional<AtomKey> previous_index_key_;
+    /**
+     * The smallest version ID not in use (live or deleted). Zero iff no versions exist for the specified symbol
+     */
+    VersionId next_version_id_;
+
+    pipelines::InputTensorFrame frame_;
 };
 
 } // namespace

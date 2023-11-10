@@ -108,8 +108,9 @@ std::vector<std::variant<VersionedItem, DataError>> PythonVersionStore::batch_wr
     bool prune_previous_versions,
     bool validate_index,
     bool throw_on_error) {
-
+    ARCTICDB_RUNTIME_INFO(log::version(), "Starting batch write");
     auto frames = create_input_tensor_frames(stream_ids, items, norms, user_metas);
+    ARCTICDB_RUNTIME_INFO(log::version(), "Calling internal");
     return batch_write_versioned_dataframe_internal(stream_ids, std::move(frames), prune_previous_versions, validate_index, throw_on_error);
 }
 

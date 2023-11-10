@@ -14,6 +14,7 @@
 #include <arcticdb/pipeline/query.hpp>
 #include <arcticdb/version/version_functions.hpp>
 #include <folly/futures/FutureSplitter.h>
+#include <arcticdb/piplines/input_tensor_frame.hpp>
 
 namespace arcticdb {
 
@@ -37,6 +38,26 @@ inline std::shared_ptr<std::unordered_map<StreamId, AtomKey>> batch_get_latest_v
             });
 
     return output;
+}
+
+folly::Future<version_store::UpdateInfoWithStream> get_latest_undeleted_version_and_next_version_id_async(
+    const std::shared_ptr<Store> &store,
+    const std::shared_ptr<VersionMap> &version_map,
+    const StreamId &stream_id,
+    pipelines::InputTensorFrame&& f
+    ) {
+    return async::submit_io_task(CheckReloadWithIdTask{store,
+                                          version_map,
+                                          stream_id,
+                                          LoadParameter{LoadType::LOAD_LATEST_UNDELETED},
+                                 std::move(f)})
+        .thenValue([](auto&& result) {
+            auto [id, entry, frame] = std::move(result);
+            auto latest_version = entry->get_first_index(true);
+            auto latest_undeleted_version = entry->get_first_index(false);
+            VersionId next_version_id = latest_version.has_value() ? latest_version->version_id() + 1 : 0;
+            return version_store::UpdateInfoWithStream{id, latest_undeleted_version, next_version_id, std::move(frame)};
+        });
 }
 
 // The logic here is the same as get_latest_undeleted_version_and_next_version_id

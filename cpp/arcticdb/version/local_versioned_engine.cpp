@@ -1303,7 +1303,7 @@ std::vector<folly::Future<AtomKey>> LocalVersionedEngine::batch_write_internal(
     bool validate_index
 ) {
     ARCTICDB_SAMPLE(WriteDataFrame, 0)
-    ARCTICDB_DEBUG(log::version(), "Batch writing {} dataframes", stream_ids.size());
+    ARCTICDB_RUNTIME_INFO(log::version(), "Batch writing {} dataframes", stream_ids.size());
     std::vector<folly::Future<entity::AtomKey>> results_fut;
     for (size_t idx = 0; idx < stream_ids.size(); idx++) {
         results_fut.push_back(async_write_dataframe_impl(
@@ -1319,16 +1319,52 @@ std::vector<folly::Future<AtomKey>> LocalVersionedEngine::batch_write_internal(
     return results_fut;
 }
 
-VersionIdAndDedupMapInfo LocalVersionedEngine::create_version_id_and_dedup_map(
-    const version_store::UpdateInfo&& update_info, 
-    const StreamId& stream_id, 
+std::shared_ptr<DeDupMap> get_de_dup_map(
+    const std::shared_ptr<Store> store,
+    const std::shared_ptr<VersionMap> version_map,
+    const StreamId& stream_id,
+    const std::optional<AtomKey>& maybe_prev,
+    const WriteOptions& write_options
+){
+    auto de_dup_map = std::make_shared<DeDupMap>();
+    if (!write_options.de_duplication)
+        return de_dup_map;
+
+    auto maybe_undeleted_prev = get_latest_undeleted_version(store, version_map, stream_id, VersionQuery{}, ReadOptions{});
+    if (maybe_undeleted_prev) {
+        // maybe_undeleted_prev is index key
+        auto data_keys = get_data_keys(store, {maybe_undeleted_prev.value()}, storage::ReadKeyOpts{});
+        for (const auto& data_key: data_keys) {
+            de_dup_map->insert_key(data_key);
+        }
+    } else if(maybe_prev && write_options.snapshot_dedup) {
+        // This means we don't have any live versions(all tombstoned), so will try to dedup from snapshot versions
+        auto snap_versions = get_index_keys_in_snapshots(store(), stream_id);
+        auto max_iter = std::max_element(std::begin(snap_versions), std::end(snap_versions),
+                                         [](const auto &k1, const auto &k2){return k1.version_id() < k2.version_id();});
+        if (max_iter != snap_versions.end()) {
+            auto data_keys = get_data_keys(store(), {*max_iter}, storage::ReadKeyOpts{});
+            for (const auto& data_key: data_keys) {
+                de_dup_map->insert_key(data_key);
+            }
+        }
+    }
+    return de_dup_map;
+}
+
+VersionIdAndDedupMapInfo create_version_id_and_dedup_map(
+    const std::shared_ptr<Store> store,
+    const std::shared_ptr<VersionMap> version_map,
+    const version_store::UpdateInfoWithStream&& update_info,
     const WriteOptions& write_options){
-    if(cfg().write_options().de_duplication()) {
-        return VersionIdAndDedupMapInfo{update_info.next_version_id_, get_de_dup_map(stream_id, update_info.previous_index_key_, write_options), std::move(update_info)};
+    if(write_options.de_duplication) {
+        return VersionIdAndDedupMapInfo{update_info.next_version_id_, get_de_dup_map(store, version_map, update_info.id_, update_info.previous_index_key_, write_options), std::move(update_info)};
     } else {
         return VersionIdAndDedupMapInfo{update_info.next_version_id_, std::make_shared<DeDupMap>(), std::move(update_info)};
     }
 }
+
+
 
 std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_write_versioned_dataframe_internal(
     const std::vector<StreamId>& stream_ids,
@@ -1340,41 +1376,56 @@ std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_
     py::gil_scoped_release release_gil;
 
     auto write_options = get_write_options();
-    auto update_info_futs = batch_get_latest_undeleted_version_and_next_version_id_async(store(),
-                                                                                         version_map(),
-                                                                                         stream_ids);
-    internal::check<ErrorCode::E_ASSERTION_FAILURE>(stream_ids.size() == update_info_futs.size(), "stream_ids and update_info_futs must be of the same size");
-    std::vector<folly::Future<VersionedItem>> version_futures;
-    for(auto&& update_info_fut : folly::enumerate(update_info_futs)) {
-        auto idx = update_info_fut.index;
-        version_futures.push_back(std::move(*update_info_fut)
-            .thenValue([this, &stream_id = stream_ids[idx], &write_options](auto&& update_info){
-                return create_version_id_and_dedup_map(std::move(update_info), stream_id, write_options);
-            }).via(&async::cpu_executor())
-            .thenValue([this, &stream_id = stream_ids[idx], &write_options, &validate_index, &frame = frames[idx]](
+
+
+    ARCTICDB_RUNTIME_INFO(log::version(), "Getting latest versions");
+    std::vector<std::pair<StreamId, InputTensorFrame>> work;
+    for(auto item : folly::enumerate(stream_ids))
+        work.emplace_back(*item, std::move(frames[item.index]));
+
+    bool do_dedup = write_options.de_duplication;
+
+    auto version_futures = folly::window(work, [store=store(), version_map=version_map(), write_options, prune_previous_versions] (auto&& item) {
+        auto [stream_id, frame] = std::move(item);
+        return async::submit_io_task(CheckReloadWithIdTask{store,
+                                                           version_map,
+                                                           stream_id,
+                                                           LoadParameter{LoadType::LOAD_LATEST_UNDELETED},
+                                                           std::move(frame)})
+            .thenValue([write_options, store, version_map](auto&& result) {
+                auto [id, entry, f] = std::move(result);
+                auto latest_version = entry->get_first_index(true);
+                auto latest_undeleted_version = entry->get_first_index(false);
+                VersionId next_version_id = latest_version.has_value() ? latest_version->version_id() + 1 : 0;
+                return version_store::UpdateInfoWithStream{id, latest_undeleted_version, next_version_id, std::move(f)};
+            })
+            .thenValue([write_options, store, version_map, prune_previous_versions](auto&& update_info){
+                return create_version_id_and_dedup_map(std::move(update_info), write_options);
+            })
+            .via(&async::cpu_executor())
+            .thenValue([write_options, version_map, store, prune_previous_versions](
                 auto&& version_id_and_dedup_map){
                     auto& [version_id, de_dup_map, update_info] = version_id_and_dedup_map;
                     ARCTICDB_SAMPLE(WriteDataFrame, 0)
                     ARCTICDB_DEBUG(log::version(), "Writing dataframe for stream id {}", stream_id);
-                    auto write_fut = async_write_dataframe_impl( store(),
+                    auto write_fut = async_write_dataframe_impl(store,
                         version_id,
                         std::move(frame),
                         write_options,
                         de_dup_map,
                         false,
-                        validate_index
+                        false
                     );
                     return std::move(write_fut)
                     .thenValue([update_info = std::move(update_info)](auto&& index_key) mutable {
                         return IndexKeyAndUpdateInfo{std::move(index_key), std::move(update_info)};
                     });
             })
-            .thenValue([this, prune_previous_versions](auto&& index_key_and_update_info){
+            .thenValue([prune_previous_versions](auto&& index_key_and_update_info){
                 auto&& [index_key, update_info] = index_key_and_update_info;
-                return write_index_key_to_version_map_async(version_map(), std::move(index_key), std::move(update_info), prune_previous_versions);
-            })
-        );
-    }
+                return write_index_key_to_version_map_async(version_map, std::move(index_key), std::move(update_info), prune_previous_versions);
+            }), 100);
+
     auto write_versions = folly::collectAll(version_futures).get();
     std::vector<std::variant<VersionedItem, DataError>> write_versions_or_errors;
     write_versions_or_errors.reserve(write_versions.size());

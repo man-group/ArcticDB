@@ -35,7 +35,7 @@ using SpecificAndLatestVersionKeys = std::pair<std::shared_ptr<std::unordered_ma
 struct VersionIdAndDedupMapInfo{
     VersionId version_id;
     std::shared_ptr<DeDupMap> de_dup_map;
-    version_store::UpdateInfo update_info;
+    version_store::UpdateInfoWithStream update_info;
 };
 
 struct IndexKeyAndUpdateInfo{
@@ -385,11 +385,6 @@ public:
         bool validate_index,
         bool throw_on_error
     );
-
-    VersionIdAndDedupMapInfo create_version_id_and_dedup_map(
-        const version_store::UpdateInfo&& update_info, 
-        const StreamId& stream_id, 
-        const WriteOptions& write_options);
 
     std::unordered_map<KeyType, std::pair<size_t, size_t>> scan_object_sizes();
     std::shared_ptr<Store>& _test_get_store() { return store_; }

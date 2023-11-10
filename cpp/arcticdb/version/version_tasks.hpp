@@ -11,6 +11,7 @@
 #include <arcticdb/pipeline/read_frame.hpp>
 #include <arcticdb/pipeline/index_utils.hpp>
 #include <arcticdb/version/version_store_objects.hpp>
+#include <arcticdb/pipeline/input_tensor_frame.hpp>
 
 namespace arcticdb {
 
@@ -122,7 +123,38 @@ struct CheckReloadTask : async::BaseTask {
     }
 
     std::shared_ptr<VersionMapEntry> operator()() const {
+        ScopedTimer timer{"version_map", [](auto time) {
+            log::version().info(time);
+        }};
         return version_map_->check_reload(store_, stream_id_, load_param_, __FUNCTION__);
+    }
+};
+
+struct CheckReloadWithIdTask : async::BaseTask {
+    const std::shared_ptr<Store> store_;
+    const std::shared_ptr<VersionMap> version_map_;
+    const StreamId stream_id_;
+    const LoadParameter load_param_;
+    mutable pipelines::InputTensorFrame frame_;
+
+    CheckReloadWithIdTask(
+        std::shared_ptr<Store> store,
+        std::shared_ptr<VersionMap> version_map,
+        StreamId stream_id,
+        LoadParameter load_param,
+        pipelines::InputTensorFrame&& frame) :
+        store_(std::move(store)),
+        version_map_(std::move(version_map)),
+        stream_id_(std::move(stream_id)),
+        load_param_(load_param),
+        frame_(std::move(frame)) {
+    }
+
+    std::tuple<StreamId, std::shared_ptr<VersionMapEntry>, pipelines::InputTensorFrame> operator()() const {
+        ScopedTimer timer{"version_map", [](auto time) {
+            log::version().info(time);
+        }};
+        return std::make_tuple(stream_id_, version_map_->check_reload(store_, stream_id_, load_param_, __FUNCTION__), std::move(frame_));
     }
 };
 

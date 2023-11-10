@@ -20,10 +20,12 @@ folly::Future<entity::AtomKey> write_index(
     const std::shared_ptr<stream::StreamSink> &sink
     ) {
     auto slice_and_keys = std::move(sk);
+    auto id = metadata.proto().stream_descriptor().str_id();
     IndexWriter<IndexType> writer(sink, partial_key, std::move(metadata));
     for (const auto &slice_and_key : slice_and_keys) {
         writer.add(slice_and_key.key(), slice_and_key.slice_);
     }
+    log::version().info("Writing index for {}", id);
     return writer.commit();
 }
 
