@@ -22,7 +22,7 @@ inline py::array array_at(const SegmentInMemory& frame, std::size_t col_pos, py:
             using TypeTag = std::decay_t<decltype(tag)>;
             constexpr auto data_type = TypeTag::DataTypeTag::data_type;
             std::string dtype;
-            constexpr ssize_t esize = is_sequence_type(data_type) && is_fixed_string_type(data_type) ? 1 : get_type_size(data_type);
+            ssize_t esize = is_sequence_type(data_type) && is_fixed_string_type(data_type) ? 1 : get_type_size(data_type);
             if constexpr (is_sequence_type(data_type)) {
                 if constexpr (is_fixed_string_type(data_type)) {
                     dtype = data_type == DataType::ASCII_FIXED64 ? "<S0" : "<U0";
@@ -47,6 +47,14 @@ inline py::array array_at(const SegmentInMemory& frame, std::size_t col_pos, py:
             } else if constexpr ((is_empty_type(data_type) || is_py_bool_type(data_type)) || (tag.dimension() > Dimension::Dim0 &&
                     (is_numeric_type(data_type) || is_bool_type(data_type)))) {
                 dtype= "O";
+                // The python representation of multidimensional columns differs from the in-memory/on-storage. In memory,
+                // we hold all scalars in a contiguous buffer with the shapes buffer telling us how many elements are there
+                // per array. Each element is of size sizeof(DataTypeTag::raw_type). For the python representation the column
+                // is represented as an array of (numpy) arrays. Each nested arrays is represented as a pointer to the
+                // (numpy) array, thus the size of the element is not the size of the raw type, but the size of a pointer.
+                if constexpr(tag.dimension() > Dimension::Dim0) {
+                    esize = sizeof(PyObject*);
+                }
             } else {
                 static_assert(!sizeof(data_type), "Unhandled data type");
             }
@@ -56,7 +64,7 @@ inline py::array array_at(const SegmentInMemory& frame, std::size_t col_pos, py:
     return visit_field(frame.field(col_pos), [&, frame=frame, col_pos=col_pos] (auto tag) {
         using TypeTag = std::decay_t<decltype(tag)>;
         constexpr auto data_type = TypeTag::DataTypeTag::data_type;
-        const auto &buffer = frame.column(col_pos).data().buffer();
+        const auto& buffer = frame.column(col_pos).data().buffer();
         std::string dtype;
         ssize_t esize = get_type_size(data_type);
         if constexpr (is_sequence_type(data_type)) {
@@ -88,6 +96,14 @@ inline py::array array_at(const SegmentInMemory& frame, std::size_t col_pos, py:
         } else if constexpr ((is_empty_type(data_type) || is_py_bool_type(data_type)) || (tag.dimension() > Dimension::Dim0 &&
                 (is_numeric_type(data_type) || is_bool_type(data_type)))) {
             dtype = "O";
+            // The python representation of multidimensional columns differs from the in-memory/on-storage. In memory,
+            // we hold all scalars in a contiguous buffer with the shapes buffer telling us how many elements are there
+            // per array. Each element is of size sizeof(DataTypeTag::raw_type). For the python representation the column
+            // is represented as an array of (numpy) arrays. Each nested arrays is represented as a pointer to the
+            // (numpy) array, thus the size of the element is not the size of the raw type, but the size of a pointer.
+            if constexpr(tag.dimension() > Dimension::Dim0) {
+                esize = sizeof(PyObject*);
+            }
         } else {
             static_assert(!sizeof(data_type), "Unhandled data type");
         }

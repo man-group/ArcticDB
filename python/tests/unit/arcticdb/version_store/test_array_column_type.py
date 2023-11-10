@@ -13,7 +13,7 @@ import numpy as np
 import pytest
 
 
-@pytest.fixture(params=("float", "int"))
+@pytest.fixture(params=("int32", "float32", "int64", "float64"))
 def array_type(request):
     yield request.param
 
@@ -34,9 +34,26 @@ class TestEmptyArrays:
         assert_db_in_out_match(lmdb_version_store, df_in, "test_multiple_empty_arrays")
 
     def test_empty_array_can_coexist_with_nonempty_arrays(self, lmdb_version_store, array_type):
-        df_in = pd.DataFrame({"col1": [np.array([]), np.array([1, 2, 3]).astype(array_type), np.array([])]})
+        df_in = pd.DataFrame({"col1": [np.array([]).astype(array_type), np.array([1, 2, 3, 4, 5]).astype(array_type), np.array([]).astype(array_type)]})
         assert_db_in_out_match(lmdb_version_store, df_in, "test_empty_array_can_coexist_with_nonempty_arrays")
 
+    def test_append_to_colum_with_empty_array(self, lmdb_version_store, array_type):
+        df_empty = pd.DataFrame({"col1": [np.array([]), np.array([])]})
+        lmdb_version_store.write("test_append_to_colum_with_empty_array", df_empty)
+        df_to_append = pd.DataFrame({"col1": [np.array([1, 2, 3]).astype(array_type)]})
+        lmdb_version_store.append("test_append_to_colum_with_empty_array", df_to_append)
+        df_out = lmdb_version_store.read("test_append_to_colum_with_empty_array")
+        df_target = pd.concat([df_empty, df_to_append], ignore_index=True)
+        assert_frame_equal(df_target, df_out.data)
+
+    def test_append_empty_arrays_to_column(self, lmdb_version_store, array_type):
+        df = pd.DataFrame({"col1": [np.array([1, 2, 3]).astype(array_type)]})
+        lmdb_version_store.write("test_append_to_colum_with_empty_array", df)
+        df_to_append = pd.DataFrame({"col1": [np.array([])]})
+        lmdb_version_store.append("test_append_to_colum_with_empty_array", df_to_append)
+        df_out = lmdb_version_store.read("test_append_to_colum_with_empty_array")
+        df_target = pd.concat([df, df_to_append], ignore_index=True)
+        assert_frame_equal(df_target, df_out.data)
 
 class TestNonEmptyArrays:
     def test_single_array(self, lmdb_version_store, array_type):

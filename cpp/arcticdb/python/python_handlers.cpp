@@ -19,8 +19,10 @@ namespace arcticdb {
     /// i) There is no equivalent to empty value
     /// ii) We want input dataframes to be exact match of the output and that includes the type
     [[nodiscard]] static inline py::dtype generate_python_dtype(const TypeDescriptor& td, shape_t type_byte_size) {
-        const char type_specifier = is_empty_type(td.data_type()) ? 'f' : get_dtype_specifier(td.data_type());
-        return py::dtype{fmt::format("{}{:d}", type_specifier, type_byte_size)};
+        if(is_empty_type(td.data_type())) {
+            return py::dtype{"f8"};
+        }
+        return py::dtype{fmt::format("{}{:d}", get_dtype_specifier(td.data_type()), type_byte_size)};
     }
 
     [[nodiscard]] static inline PyObject* initialize_array(
@@ -33,7 +35,7 @@ namespace arcticdb {
         ARCTICDB_SAMPLE(InitializeArray, 0)
         util::check(source_ptr != nullptr, "Null pointer passed in");
         const auto flags = py::detail::npy_api::NPY_ARRAY_WRITEABLE_;
-        const auto &api = py::detail::npy_api::get();
+        const auto& api = py::detail::npy_api::get();
         ARCTICDB_SUBSAMPLE(InitArrayCreateArray, 0)
         auto tmp = py::reinterpret_steal<py::object>(api.PyArray_NewFromDescr_(
             api.PyArray_Type_,
@@ -44,9 +46,9 @@ namespace arcticdb {
             const_cast<void*>(source_ptr),
             flags,
             nullptr));
-        ARCTICDB_SUBSAMPLE(ArrayCopy, 0)
+        ARCTICDB_SUBSAMPLE(ArrayCopy, 0);
+        // util::check(static_cast<bool>(tmp), "Got null pointer in array allocation");
         tmp = py::reinterpret_steal<py::object>(api.PyArray_NewCopy_(tmp.ptr(), -1));
-        util::check(static_cast<bool>(tmp), "Got null pointer in array allocation");
         return tmp.release().ptr();
     }
 
@@ -183,13 +185,11 @@ namespace arcticdb {
                     const auto offset = *en;
                     ptr_dest = fill_with_none(ptr_dest, offset - last_row);
                     last_row = offset;
-
                     *ptr_dest++ = initialize_array(py_dtype,
                         shape,
                         &stride,
                         static_cast<size_t>(type_descriptor.dimension()),
                         ptr_src + block_pos);
-
                     block_pos += *shape * stride;
                     ++shape;
                     if(block_it != blocks.end() && block_pos == (*block_it)->bytes() && ++block_it != blocks.end()) {

@@ -38,23 +38,12 @@ inline std::optional<entity::TypeDescriptor> has_valid_type_promotion(entity::Ty
     if (source == target)
         return target;
 
-    // Empty type is coercible to any type
+    // Everything is compatible with the empty type with the common type being the non-empty one
     if(is_empty_type(source.data_type())) {
         return target;
     }
-
-    if(source.dimension() != target.dimension()) {
-        return std::nullopt;
-    }
-
-    // Empty type is coercible to any type
-    if(is_empty_type(source.data_type())) {
-        return target;
-    }
-
-    // Nothing is coercible to the empty type.
     if(is_empty_type(target.data_type())) {
-        return std::nullopt;
+        return source;
     }
 
     auto source_type = source.data_type();

@@ -260,7 +260,7 @@ std::optional<convert::StringEncodingError> aggregator_set_data(
             arr_col.set_type(TypeDescriptor{secondary_type.data_type(), column_type_descriptor.dimension()});
             agg.set_sparse_block(col, arr_col.release_buffer(), arr_col.release_shapes(), std::move(values_bitset));
         } else if constexpr (!is_empty_type(dt)) {
-            // static_assert(!sizeof(dt), "Unknown data type");
+            static_assert(!sizeof(dt), "Unknown data type");
         }
         return std::optional<convert::StringEncodingError>();
     });
