@@ -41,6 +41,8 @@ def telemetry_trace(func):
             bound = sig.bind(*args, **kwargs)
             bound.apply_defaults()
             if 'symbol' in bound.arguments:
-                current_span.set_attribute(f"{func.__qualname__}.symbol", bound.arguments['symbol'])
+                current_span.set_attribute(f"{func.__qualname__}.symbol", str(bound.arguments['symbol']))
+            if 'symbols' in bound.arguments:
+                current_span.set_attribute(f"{func.__qualname__}.symbols", str(bound.arguments['symbols']))
             return func(*args, **kwargs)
     return wrapper

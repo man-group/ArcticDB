@@ -66,6 +66,7 @@ dependencies:
   - msgpack-python
   - opentelemetry-api
   - opentelemetry-sdk
+  - opentelemetry-exporter-otlp-proto-http 
   # Pinned to avoid test disruption (in phase with the pin in setup.cfg)
   # See: https://github.com/man-group/ArcticDB/pull/291
   - hypothesis < 6.73
