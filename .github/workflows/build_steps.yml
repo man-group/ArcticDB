@@ -133,10 +133,6 @@ jobs:
           configurePresetAdditionalArgs: "['-DVCPKG_INSTALL_OPTIONS=--clean-after-build']"
           buildPreset: ${{env.ARCTIC_CMAKE_PRESET}}
 
-      - name: Get number of CPU cores
-        uses: SimenB/github-actions-cpu-cores@v1.1.0
-        id: cpu-cores
-
       - name: Compile C++ tests
         if: inputs.job_type == 'cpp-tests'
         run: cd cpp; cmake --build --preset $ARCTIC_CMAKE_PRESET --target install
@@ -296,7 +292,7 @@ jobs:
             echo "Using deps ${{matrix.python_deps}}"
             python -m pip install --force-reinstall -r $GITHUB_WORKSPACE/build_tooling/${{matrix.python_deps}}
           fi
-          python -m pip install arcticdb[Testing] pytest-split
+          python -m pip install arcticdb[Testing]
           python -m pip uninstall -y pytest-cpp || true # No longer works on 3.6
           python -m pip list
           echo -e "${{matrix.envs || ''}}" | tee -a $GITHUB_ENV
@@ -322,10 +318,6 @@ jobs:
           TEST_OUTPUT_DIR: ${{runner.temp}}
           # Use the Mongo created in the service container above to test against
           CI_MONGO_HOST: mongodb
-          CI_MONGO_HOST_2: mongodb_2
-          # On windows, we can allocate more threads for running the tests
-          # because we are not testing against mongo
-          PYTEST_THREADS: ${{ (matrix.os == 'windows' && matrix.type != 'stress') && 4 || 0}}
           HYPOTHESIS_PROFILE: ci_${{matrix.os}}
 
       - name: Collect crash dumps (Windows)

@@ -56,8 +56,6 @@ jobs:
                 test_services:
                   mongodb:
                     image: "mongo:4.4"
-                  mongodb_2:
-                    image: "mongo:4.4"
                 container:
                   image: ${{needs.cibw_docker_image.outputs.tag}}
                   volumes:

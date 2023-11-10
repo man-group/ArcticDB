@@ -44,6 +44,14 @@ from arcticdb.version_store.library import (
 )
 
 
+@pytest.fixture
+def library_factory(arctic_client, lib_name):
+    def create_library(library_options=None, name: str = lib_name):
+        return arctic_client.create_library(name, library_options)
+
+    return create_library
+
+
 def generate_dataframe(columns, dt, num_days, num_rows_per_day):
     dataframes = []
     for _ in range(num_days):
