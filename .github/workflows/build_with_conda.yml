@@ -9,153 +9,88 @@ on:
   # been introduced in the target branch last commits.
   # See: https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows#pull_request
   pull_request:
-
+  workflow_dispatch:
+concurrency:
+  group: ${{github.ref}}
+  cancel-in-progress: true
 jobs:
-  linux:
+  multi_os:
     strategy:
-      matrix:
-        # we use two jobs for python and cpp tests st. they can run in parallel
-        include:
-          - os: ubuntu-latest
-            cpp_tests: "1"
-            python_tests: "0"
-
-          - os: ubuntu-latest
-            cpp_tests: "0"
-            python_tests: "1"
-
       fail-fast: false
-    runs-on: ${{ matrix.os }}
+      matrix:
+        os: [linux, macos]
+        tests: [cpp, python] # we use two jobs for python and cpp tests so they can run in parallel
+        include:
+          - os: linux
+            run_on: ${{ fromJson(vars.CONDA_LINUX_RUN_ON || '"ubuntu-latest"') }}
+            services:
+              mongodb:
+                image: mongo:4.4
+                ports:
+                  - 27017:27017
+          - os: macos
+            run_on: ${{ fromJson(vars.CONDA_MACOS_RUN_ON || '"macos-latest"') }}
+            services: {}
 
-    services:
-      mongodb:
-        image: mongo:4.4
-        ports:
-          - 27017:27017
+    name: ${{ matrix.os }} ${{ matrix.tests }} tests
+    runs-on: ${{ matrix.run_on }}
+    services: ${{ matrix.services }}
 
+    env:
+      ARCTICDB_REDUCE_CORE_COUNT_TO_MATCH_FREE_RAM: 1
+      ARCTICDB_USING_CONDA: 1
+    defaults:
+      run:
+        shell: micromamba-shell {0}
     steps:
       - uses: actions/checkout@v3
         with:
           submodules: recursive
-
-      - name: Get number of CPU cores
-        uses: SimenB/github-actions-cpu-cores@v1
-        id: cpu-cores
-
-      - name: Install Conda environment from environment_unix.yml
-        uses: mamba-org/setup-micromamba@v1
-        with:
-          environment-file: environment_unix.yml
-          init-shell: >-
-            bash
-          cache-environment: true
-          post-cleanup: 'all'
-
-      - name: Build ArcticDB with conda (ARCTICDB_USING_CONDA=1)
-        shell: bash -l {0}
-        run: |
-          # Protocol buffers compilation require not using build isolation.
-          python -m pip install --no-build-isolation --no-deps -v -e .
-        env:
-          ARCTICDB_USING_CONDA: 1
-          # Using one thread to avoid swapping which might freeze CI machines.
-          CMAKE_BUILD_PARALLEL_LEVEL: 1
-          ARCTICDB_BUILD_CPP_TESTS: ${{ matrix.cpp_tests }}
-
-      - name: Build C++ Tests
-        if: matrix.cpp_tests == '1'
-        shell: bash -l {0}
-        run: |
-          cd cpp/out/linux-conda-release-build/
-          make -j ${{ steps.cpu-cores.outputs.count }} arcticdb_rapidcheck_tests
-          make -j ${{ steps.cpu-cores.outputs.count }} test_unit_arcticdb
-
-      - name: Run C++ Tests
-        if: matrix.cpp_tests == '1'
-        shell: bash -l {0}
-        run: |
-          cd cpp/out/linux-conda-release-build/
-          make test
-
-      - name: Install npm # Linux github runner image does not come with npm
-        if: matrix.os == 'linux'
-        uses: actions/setup-node@v3.3.0
-        with:
-          node-version: '16'
-
-      - name: Test with pytest
-        shell: bash -l {0}
-        if: matrix.python_tests == '1'
-        run: |
-          npm install -g azurite
-          cd python
-          python -m pytest tests
-        env:
-          ARCTICDB_USING_CONDA: 1
-
-  macos:
-    strategy:
-      matrix:
-        include:
-          - os: macos-latest
-
-      fail-fast: false
-    runs-on: ${{ matrix.os }}
-
-    steps:
-      - uses: actions/checkout@v3
-        with:
-          submodules: recursive
-
-      - name: Get number of CPU cores
-        uses: SimenB/github-actions-cpu-cores@v1
-        id: cpu-cores
 
       - name: Install Conda environment from environment_unix.yml
         uses: mamba-org/setup-micromamba@v1
         with:
           environment-file: environment_unix.yml
           environment-name: arcticdb
-          init-shell: >-
-            bash
+          init-shell: none
+          generate-run-shell: true
           cache-environment: true
-          post-cleanup: 'all'
+          post-cleanup: ${{ runner.debug && 'none' || 'environment' }}
+        # "init-shell" don't work very reliably on our build VMs, so use initialising it by hand below
 
       - name: Build ArcticDB with conda (ARCTICDB_USING_CONDA=1)
-        shell: bash -l {0}
         run: |
+          cmake -P cpp/CMake/CpuCount.cmake | sed 's/^-- //' | tee -a $GITHUB_ENV
+          which clang
+          clang --version
+
           # Protocol buffers compilation require not using build isolation.
           python -m pip install --no-build-isolation --no-deps -v -e .
         env:
-          ARCTICDB_USING_CONDA: 1
-          # Using one thread to avoid swapping which might freeze the CI machine.
-          CMAKE_BUILD_PARALLEL_LEVEL: 1
-          ARCTICDB_BUILD_CPP_TESTS: 1
+          ARCTICDB_BUILD_CPP_TESTS: ${{ matrix.tests == 'cpp' && 1 || 0 }}
 
       - name: Build C++ Tests
-        shell: bash -l {0}
+        if: matrix.tests == 'cpp'
         run: |
-          cd cpp/out/darwin-conda-release-build/
-          make -j ${{ steps.cpu-cores.outputs.count }} arcticdb_rapidcheck_tests
-          make -j ${{ steps.cpu-cores.outputs.count }} test_unit_arcticdb
+          cd cpp/out/*-conda-release-build/
+          make -j $CMAKE_BUILD_PARALLEL_LEVEL arcticdb_rapidcheck_tests
+          make -j $CMAKE_BUILD_PARALLEL_LEVEL test_unit_arcticdb
 
       - name: Run C++ Tests
-        shell: bash -l {0}
+        if: matrix.tests == 'cpp'
         run: |
-          cd cpp/out/darwin-conda-release-build/
+          cd cpp/out/*-conda-release-build/
           make test
 
       - name: Install npm
+        if: matrix.tests == 'python'
         uses: actions/setup-node@v3.3.0
         with:
           node-version: '16'
 
       - name: Test with pytest
-        shell: bash -l {0}
+        if: matrix.tests == 'python'
         run: |
           npm install -g azurite
           cd python
           python -m pytest tests
-        env:
-          ARCTICDB_USING_CONDA: 1
-
