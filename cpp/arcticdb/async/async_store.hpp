@@ -422,36 +422,30 @@ public:
         const std::shared_ptr<DeDupMap> &de_dup_map,
         const BatchWriteArgs &args) override {
         auto key_segments = std::move(key_seg_pairs);
-        std::vector<folly::Future<VariantKey>> futs;
-        futs.reserve(key_seg_pairs.size());
         std::size_t write_count = args.lib_write_count == 0 ? 16ULL : args.lib_write_count;
 
-        auto encode_futs = folly::window(key_segments, [*this](auto &&ks) {
+        auto futs = folly::window(key_segments, [this, &de_dup_map](auto &&ks) {
             auto [key, seg] = std::forward<decltype(ks)>(ks);
             return async::submit_cpu_task(
                 EncodeAtomTask(std::move(key),
                                ClockType::nanos_since_epoch(),
                                std::move(seg),
                                codec_,
-                               encoding_version_));
+                               encoding_version_))
+                .thenValue([de_dup_map](auto &&ks) -> std::pair<VariantKey, std::optional<Segment>> {
+                    auto key_seg = std::forward<decltype(ks)>(ks);
+                    return lookup_match_in_dedup_map(de_dup_map, std::move(key_seg));
+                })
+                .via(&async::io_executor())
+                .thenValue([lib = library_](auto &&item) {
+                    auto key_opt_segment = std::forward<decltype(item)>(item);
+                    if (key_opt_segment.second)
+                        lib->write(Composite<storage::KeySegmentPair>({VariantKey{key_opt_segment.first},
+                                                                       std::move(*key_opt_segment.second)}));
+
+                    return key_opt_segment.first;
+                });
         }, write_count);
-
-        for (folly::Future<storage::KeySegmentPair>& encode_fut : encode_futs) {
-            futs.emplace_back(
-                std::move(encode_fut).thenValue([de_dup_map](auto &&ks) -> std::pair<VariantKey,
-                                                                                     std::optional<Segment>> {
-                        auto key_seg = std::forward<decltype(ks)>(ks);
-                        return lookup_match_in_dedup_map(de_dup_map, std::move(key_seg));
-                    })
-                    .via(&async::io_executor()).thenValue([lib = library_](auto &&item) {
-                        auto key_opt_segment = std::forward<decltype(item)>(item);
-                        if (key_opt_segment.second)
-                            lib->write(Composite<storage::KeySegmentPair>({VariantKey{key_opt_segment.first},
-                                                                           std::move(*key_opt_segment.second)}));
-
-                        return key_opt_segment.first;
-                    }));
-        }
 
         return folly::collect(futs).via(&async::io_executor());
     }
