@@ -322,7 +322,7 @@ def test_stateful(lib_type, request):
         settings=settings(  # Note: timeout is a legacy parameter
             max_examples=int(os.getenv("HYPOTHESIS_EXAMPLES", 100)),
             deadline=None,
-            stateful_step_count=10,
+            stateful_step_count=100,
             suppress_health_check=[HealthCheck.filter_too_much],
         ),
     )
