@@ -232,29 +232,33 @@ def test_update_with_empty_dataframe_with_index(lmdb_version_store):
     lib.read(symbol, as_of=0).data
 
 
-def test_pandas_object_dtype(lmdb_version_store):
+def test_empty_column_handling(lmdb_version_store):
     # Non-regression test for https://github.com/man-group/ArcticDB/issues/987
     lib = lmdb_version_store
 
     # Columns of numeric (which includes datetimes) dtype != float64 with no values
     # must always be stored with the provided dtype (never empty-type).
 
-    symbol_info_series_index = 1 if IS_PANDAS_TWO else 0
-    def get_symbol_value_type(symbol_info):
+    symbol_type_descriptor_series_index = 1 if IS_PANDAS_TWO else 0
+    def get_symbol_type_descriptor(symbol):
         symbol_info = lib.get_info(symbol)
-        return symbol_info["dtype"][symbol_info_series_index].value_type
+        return symbol_info["dtype"][symbol_type_descriptor_series_index]
 
     symbol = "empty_as_int"
     series = pd.Series([], dtype=int)
     lib.write(symbol, series)
-    assert get_symbol_value_type(symbol) == TypeDescriptor.ValueType.INT
+    symbol_type_info = get_symbol_type_descriptor(symbol)
+    assert symbol_type_info.value_type == TypeDescriptor.ValueType.INT
+    assert symbol_type_info.size_bits == TypeDescriptor.SizeBits.S64
     result = lib.read(symbol).data
     assert result.dtype == int
 
     symbol = "empty_as_datetime"
     series = pd.Series([], dtype="datetime64[ns]")
     lib.write(symbol, series)
-    assert get_symbol_value_type(symbol) == TypeDescriptor.ValueType.NANOSECONDS_UTC
+    symbol_type_info = get_symbol_type_descriptor(symbol)
+    assert symbol_type_info.value_type == TypeDescriptor.ValueType.NANOSECONDS_UTC
+    assert symbol_type_info.size_bits == TypeDescriptor.SizeBits.S64
     result = lib.read(symbol).data
     assert result.dtype == "datetime64[ns]"
 
@@ -263,7 +267,9 @@ def test_pandas_object_dtype(lmdb_version_store):
         symbol = "empty_as_float"
         series = pd.Series([], dtype=float)
         lib.write(symbol, series)
-        assert get_symbol_value_type(symbol) == TypeDescriptor.ValueType.FLOAT
+        symbol_type_info = get_symbol_type_descriptor(symbol)
+        assert symbol_type_info.value_type == TypeDescriptor.ValueType.FLOAT
+        assert symbol_type_info.size_bits == TypeDescriptor.SizeBits.S64
 
         result = lib.read(symbol).data
         assert result.dtype == float
@@ -272,7 +278,9 @@ def test_pandas_object_dtype(lmdb_version_store):
         symbol = "empty_as_object"
         series = pd.Series([], dtype=object)
         lib.write(symbol, series)
-        assert get_symbol_value_type(symbol) == TypeDescriptor.ValueType.EMPTY
+        symbol_type_info = get_symbol_type_descriptor(symbol)
+        assert symbol_type_info.value_type == TypeDescriptor.ValueType.EMPTY
+        assert symbol_type_info.size_bits == TypeDescriptor.SizeBits.S64
 
         result = lib.read(symbol).data
         assert result.dtype == object
@@ -282,7 +290,9 @@ def test_pandas_object_dtype(lmdb_version_store):
         symbol = "empty_as_float"
         series = pd.Series([], dtype=float)
         lib.write(symbol, series)
-        assert get_symbol_value_type(symbol) == TypeDescriptor.ValueType.EMPTY
+        symbol_type_info = get_symbol_type_descriptor(symbol)
+        assert symbol_type_info.value_type == TypeDescriptor.ValueType.EMPTY
+        assert symbol_type_info.size_bits == TypeDescriptor.SizeBits.S64
 
         result = lib.read(symbol).data
         assert result.dtype == float
@@ -291,7 +301,9 @@ def test_pandas_object_dtype(lmdb_version_store):
         symbol = "empty_as_object"
         series = pd.Series([], dtype=object)
         lib.write(symbol, series)
-        assert get_symbol_value_type(symbol) == TypeDescriptor.ValueType.EMPTY
+        symbol_type_info = get_symbol_type_descriptor(symbol)
+        assert symbol_type_info.value_type == TypeDescriptor.ValueType.EMPTY
+        assert symbol_type_info.size_bits == TypeDescriptor.SizeBits.S64
 
         result = lib.read(symbol).data
         assert result.dtype == float
