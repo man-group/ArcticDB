@@ -1115,7 +1115,7 @@ def test_s3_force_uri_lib_config_handling(moto_s3_uri_incl_bucket):
 def test_azure_credential_auth(azurite_azure_test_connection_setting):
     endpoint, container, credential_name, _, _ = azurite_azure_test_connection_setting
     ac = Arctic(
-        f"azure://DefaultEndpointsProtocol=http;BlobEndpoint={endpoint}/{credential_name};Container={container}",
+        f"azure://DefaultEndpointsProtocol=https;BlobEndpoint={endpoint}/{credential_name};Container={container}",
         credential=AzureDefaultCredential(),
     )
     expected = pd.DataFrame({"col1": [1, 2, 3], "col2": [4, 5, 6]})

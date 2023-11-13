@@ -63,7 +63,9 @@ class CompileProto(Command):
         print(f"\nProtoc compilation (into '{output_dir}') for versions '{self.proto_vers}':")
         for proto_ver in self.proto_vers:
             if python >= (3, 11) and proto_ver == "3":
-                print(f"Python protobuf {proto_ver} is not officially supported on Python {python}. Skipping...") # e.g. https://pypi.org/project/protobuf/3.20.3/#files
+                print(
+                    f"Python protobuf {proto_ver} is not officially supported on Python {python}. Skipping..."
+                )  # e.g. https://pypi.org/project/protobuf/3.20.3/#files
             elif python <= (3, 6) and proto_ver >= "4":
                 print(f"Python protobuf {proto_ver} do not run on Python {python}. Skipping...")
             else:

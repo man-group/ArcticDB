@@ -1060,6 +1060,7 @@ def azurite_container():
     return container
 
 
+@pytest.fixture(scope="module")
 def temp_folder():
     return tempfile.TemporaryDirectory()
 
@@ -1078,8 +1079,7 @@ def temp_cert(temp_folder):
 
 
 @pytest.fixture(scope="module")
-def spawn_azurite(azurite_port, temp_cert):
-    temp_folder = tempfile.TemporaryDirectory()
+def spawn_azurite(temp_folder, azurite_port, temp_cert):
     key_file, cert_file, _ = temp_cert
     try:  # Awaiting fix for cleanup in windows file-in-use problem
         p = subprocess.Popen(
