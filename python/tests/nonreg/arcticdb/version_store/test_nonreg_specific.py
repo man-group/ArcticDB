@@ -200,6 +200,25 @@ def test_batch_write_unicode_strings(lmdb_version_store):
         lib.batch_append(syms, data)
 
 
+def test_update_with_empty_series_or_dataframe(lmdb_version_store):
+    # Non-regression test for https://github.com/man-group/ArcticDB/issues/892
+    lib = lmdb_version_store
+
+    symbol = "test_update_with_empty_dataframe"
+
+    lib.write(symbol, pd.DataFrame())
+
+    # This must not fail.
+    lib.update(symbol, pd.DataFrame())
+
+    symbol = "test_update_with_empty_series"
+
+    lib.write(symbol, pd.Series())
+
+    # This must not fail.
+    lib.update(symbol, pd.Series())
+
+
 def test_pandas_object_dtype(lmdb_version_store):
     # Non-regression test for https://github.com/man-group/ArcticDB/issues/987
     lib = lmdb_version_store
