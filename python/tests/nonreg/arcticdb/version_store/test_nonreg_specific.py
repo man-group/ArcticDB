@@ -12,9 +12,8 @@ import pytest
 import sys
 
 from arcticdb.util.test import assert_frame_equal
-from arcticc.pb2.descriptors_pb2 import TypeDescriptor
-
 from arcticdb.util._versions import IS_PANDAS_TWO
+from arcticc.pb2.descriptors_pb2 import TypeDescriptor
 
 
 def test_read_keys(object_and_mem_and_lmdb_version_store_dynamic_schema):
