@@ -70,11 +70,10 @@ def read_persistent_library(lib):
         column_names = df.columns.values.tolist()
         assert column_names == ["x", "y", "z"]
 
-    # TODO: Fix me when the cast bug is fixed #940
-    # assert "empty_s" in symbols
-    # res = lib.read("empty_s").data
-    # assert res.empty
-    # assert str(res.dtype) == "datetime64[ns]"
+    assert "empty_s" in symbols
+    res = lib.read("empty_s").data
+    assert res.empty
+    assert str(res.dtype) == "datetime64[ns]"
 
 
 def verify_library(ac):
@@ -103,10 +102,9 @@ def write_persistent_library(lib):
     three_df = test_df_3_cols(3)
     lib.append("three", three_df)
 
-    # TODO: Fix me when the cast bug is fixed #940
-    # sym = "empty_s"
-    # series = pd.Series(dtype="datetime64[ns]")
-    # lib.write(sym, series)
+    sym = "empty_s"
+    series = pd.Series(dtype="datetime64[ns]")
+    lib.write(sym, series)
 
 
 def seed_library(ac, version: str = ""):
