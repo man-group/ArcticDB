@@ -422,7 +422,7 @@ public:
         const std::shared_ptr<DeDupMap> &de_dup_map,
         const BatchWriteArgs &args) override {
         auto key_segments = std::move(key_seg_pairs);
-        std::size_t write_count = args.lib_write_count == 0 ? 16ULL : args.lib_write_count;
+        std::size_t write_count = args.lib_write_count == 0 ? 100ULL : args.lib_write_count;
 
         auto futs = folly::window(key_segments, [this, &de_dup_map](auto &&ks) {
             auto [key, seg] = std::forward<decltype(ks)>(ks);
