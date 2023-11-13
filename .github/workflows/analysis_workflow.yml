@@ -241,6 +241,7 @@ jobs:
           python -m asv machine -v --yes --machine ArcticDB-Runner-Medium
           python -m asv run -v --show-stderr HASHFILE:python/hashes_to_benchmark.txt
         env:
+          # this is potentially overflowing the cache, so should be looked into after we address issue #1057
           SCCACHE_GHA_VERSION: ${{vars.SCCACHE_GHA_VERSION || 1}} # Setting this env var enables the caching
           VCPKG_NUGET_USER: ${{secrets.VCPKG_NUGET_USER || github.repository_owner}}
           VCPKG_NUGET_TOKEN: ${{secrets.VCPKG_NUGET_TOKEN || secrets.GITHUB_TOKEN}}
@@ -258,6 +259,7 @@ jobs:
           python -m asv run -v --show-stderr HEAD^!
           git log HEAD^..HEAD --oneline -n1 --decorate=no | awk '{print $1;}' >> python/hashes_to_benchmark.txt
         env:
+          # this is potentially overflowing the cache, so should be looked into after we address issue #1057
           SCCACHE_GHA_VERSION: ${{vars.SCCACHE_GHA_VERSION || 1}} # Setting this env var enables the caching
           VCPKG_NUGET_USER: ${{secrets.VCPKG_NUGET_USER || github.repository_owner}}
           VCPKG_NUGET_TOKEN: ${{secrets.VCPKG_NUGET_TOKEN || secrets.GITHUB_TOKEN}}
@@ -274,6 +276,7 @@ jobs:
           python -m asv machine -v --yes --machine ArcticDB-Runner-Medium
           python -m asv continuous -v --show-stderr origin/master HEAD -f 1.15
         env:
+          # this is potentially overflowing the cache, so should be looked into after we address issue #1057
           SCCACHE_GHA_VERSION: ${{vars.SCCACHE_GHA_VERSION || 1}} # Setting this env var enables the caching
           VCPKG_NUGET_USER: ${{secrets.VCPKG_NUGET_USER || github.repository_owner}}
           VCPKG_NUGET_TOKEN: ${{secrets.VCPKG_NUGET_TOKEN || secrets.GITHUB_TOKEN}}
