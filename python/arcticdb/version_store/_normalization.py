@@ -202,7 +202,7 @@ def _to_primitive(arr, arr_name, dynamic_strings, string_max_len=None, coerce_co
 
     if len(arr) == 0:
         if coerce_column_type is not None:
-            # Casting using None, use float64 in any version of pandas…
+            # Casting an empty Series using None returns a Series with of "float64" dtype in any version of pandas…
             return arr.astype(coerce_column_type)
         else:
             return arr

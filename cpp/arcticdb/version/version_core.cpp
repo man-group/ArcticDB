@@ -344,6 +344,10 @@ VersionedItem update_impl(
                         [&](std::monostate) {
                             util::check(std::holds_alternative<TimeseriesIndex>(frame.index), "Update with row count index is not permitted");
                             orig_filter_range = frame.index_range;
+                            if (new_slice_and_keys.empty()) {
+                                // If there are no new keys, then we can't intersect with the existing data.
+                                return std::make_pair(std::vector<SliceAndKey>{}, std::vector<SliceAndKey>{});
+                            }
                             auto front_range = new_slice_and_keys.begin()->key().index_range();
                             auto back_range = new_slice_and_keys.rbegin()->key().index_range();
                             back_range.adjust_open_closed_interval();
