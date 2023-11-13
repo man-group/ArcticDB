@@ -11,7 +11,7 @@ import datetime
 import pytest
 import sys
 
-from arcticdb.util.test import assert_frame_equal
+from arcticdb.util.test import assert_frame_equal, assert_series_equal
 from arcticdb.util._versions import IS_PANDAS_TWO
 from arcticc.pb2.descriptors_pb2 import TypeDescriptor
 
@@ -217,6 +217,19 @@ def test_update_with_empty_series_or_dataframe(lmdb_version_store):
 
     # This must not fail.
     lib.update(symbol, pd.Series())
+
+
+def test_update_with_empty_dataframe_with_index(lmdb_version_store):
+    # Non-regression test for https://github.com/man-group/ArcticDB/issues/940
+    lib = lmdb_version_store
+
+    symbol = "test_update_with_empty_dataframe_with_index"
+
+    series = pd.Series(dtype="datetime64[ns]")
+    lib.write(symbol, series)
+
+    # This must not fail.
+    lib.read(symbol, as_of=0).data
 
 
 def test_pandas_object_dtype(lmdb_version_store):
