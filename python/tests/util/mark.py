@@ -14,7 +14,8 @@ from numpy import datetime64
 
 # TODO: Some tests are either segfaulting or failing on MacOS with conda builds.
 # This is meant to be used as a temporary flag to skip/xfail those tests.
-MACOS_CONDA_BUILD = sys.platform == "darwin" and os.getenv("ARCTICDB_USING_CONDA", "0") == "1"
+ARCTICDB_USING_CONDA = os.getenv("ARCTICDB_USING_CONDA", "0") == "1"
+MACOS_CONDA_BUILD = sys.platform == "darwin" and ARCTICDB_USING_CONDA
 _MACOS_CONDA_BUILD_SKIP_REASON = (
     "Tests fail for macOS conda builds, either because Azurite is improperly configured"
     "on the CI or because there's problem with Azure SDK for C++ in this configuration."
@@ -27,6 +28,7 @@ FAST_TESTS_ONLY = os.getenv("ARCTICDB_FAST_TESTS_ONLY") == "1"
 
 # !!!!!!!!!!!!!!!!!!!!!! Below mark (variable) names should reflect where they will be used, not what they do.
 # This is to avoid the risk of the name becoming out of sync with the actual condition.
+SLOW_TESTS_MARK = pytest.mark.skipif(FAST_TESTS_ONLY, reason="Skipping test as it takes a long time to run")
 
 AZURE_TESTS_MARK = pytest.mark.skipif(FAST_TESTS_ONLY or MACOS_CONDA_BUILD, reason=_MACOS_CONDA_BUILD_SKIP_REASON)
 """Mark to skip all Azure tests when MACOS_CONDA_BUILD or ARCTICDB_FAST_TESTS_ONLY is set."""
@@ -43,6 +45,13 @@ REAL_S3_TESTS_MARK = pytest.mark.skipif(
 )
 """Mark on tests using the real (i.e. hosted by AWS as opposed to moto) S3.
 Currently controlled by the ARCTICDB_PERSISTENT_STORAGE_TESTS and ARCTICDB_FAST_TESTS_ONLY env vars."""
+
+
+def xfail_on_linux_conda(reason=""):
+    def decorator(func):
+        return pytest.mark.xfail(ARCTICDB_USING_CONDA and sys.platform == "linux", reason=reason)(func)
+
+    return decorator
 
 
 def _no_op_decorator(fun):

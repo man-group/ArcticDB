@@ -50,17 +50,6 @@ def get_test_libraries(ac=None):
     return [lib for lib in ac.list_libraries() if lib.startswith("test_")]
 
 
-def test_df_3_cols(start=0):
-    return pd.DataFrame(
-        {
-            "x": np.arange(start, start + 10, dtype=np.int64),
-            "y": np.arange(start + 10, start + 20, dtype=np.int64),
-            "z": np.arange(start + 20, start + 30, dtype=np.int64),
-        },
-        index=np.arange(start, start + 10, dtype=np.int64),
-    )
-
-
 def read_persistent_library(lib):
     symbols = lib.list_symbols()
 
@@ -91,16 +80,16 @@ def is_strategy_branch_valid_format(input_string):
 
 
 def write_persistent_library(lib):
-    one_df = test_df_3_cols()
+    one_df = three_col_df()
     lib.write("one", one_df)
 
-    two_df = test_df_3_cols(1)
+    two_df = three_col_df(1)
     lib.write("two", two_df)
 
-    two_df = test_df_3_cols(2)
+    two_df = three_col_df(2)
     lib.append("two", two_df)
 
-    three_df = test_df_3_cols(3)
+    three_df = three_col_df(3)
     lib.append("three", three_df)
 
     # TODO: Fix me when the cast bug is fixed #940

@@ -1,0 +1,27 @@
+name: 'Run Local Pytest'
+description: 'Installs Python dependencies and runs Pytest against locally built ArcticDB binaries'
+inputs:
+  build_type:        {default: 'release', type: string, description: Specifies whether the build that we are testing is release or debug}
+  threads:           {default: '1', type: string, description: Specifies the number of threads that will be used for tests }
+  fast_tests_only:   {default: '0', type: string, description: Specifies whether we want to run only the fast tests or not }
+  other_params:      {default: '', type: string, description: Other params that should be passed to the python command }
+runs:
+  using: "composite"
+  steps:
+    - name: Run local pytests
+      shell: bash
+      run: |
+        yum install nodejs npm -y
+        npm config set strict-ssl false
+        npm install -g azurite
+        
+        cd python
+        ln -s ../cpp/out/linux-${{ inputs.build_type }}-build/arcticdb/arcticdb_ext.cpython-36m-x86_64-linux-gnu.so
+        export ARCTICDB_RAND_SEED=$RANDOM
+        python ${{inputs.other_params}} -m pytest -n ${{ inputs.threads }} tests
+      env:
+        TEST_OUTPUT_DIR: ${{ runner.temp }}
+        ARCTICDB_FAST_TESTS_ONLY: ${{ inputs.fast_tests_only }}
+        # Use the Mongo created in the service container above to test against
+        CI_MONGO_HOST: mongodb
+        CI_MONGO_HOST_2: mongodb_2

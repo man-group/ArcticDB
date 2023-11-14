@@ -46,7 +46,6 @@ jobs:
           # Please declare any key you added below in build_steps.yaml's dummy matrix as well to aid the linting tools
           - linux_matrix:
               - os: linux
-                distro: ubuntu-latest
                 cmake_preset_prefix: linux
                 cibw_build_suffix: manylinux_x86_64
                 build_dir: /tmp/cpp_build
@@ -64,7 +63,6 @@ jobs:
                     - /:/mnt
             windows_matrix:
               - os: windows
-                distro: windows-latest
                 cmake_preset_prefix: windows-cl
                 cibw_build_suffix: win_amd64
                 build_dir: C:/cpp_build
@@ -145,22 +143,8 @@ jobs:
       matrix: ${{toJson(matrix.matrix_override)}}
       python_deps_ids: ${{toJson(matrix.python_deps_ids)}}
 
-  leader-compile-linux:
-    # First do the C++ core compilation using one Python version to seed the compilation caches (and fail quicker)
+  cpp-test-linux:
     needs: [cibw_docker_image, common_config]
-    name: Linux Compile
-    uses: ./.github/workflows/build_steps.yml
-    secrets: inherit
-    permissions: {packages: write}
-    with:
-      job_type: leader-compile
-      cmake_preset_type: ${{needs.common_config.outputs.cmake_preset_type_resolved}}
-      cibw_image_tag: ${{needs.cibw_docker_image.outputs.tag}}
-      matrix: ${{needs.common_config.outputs.linux_matrix}}
-
-  leader-cpp-test-linux:
-    # Compile and run the C++ tests separately concurrently with the following job
-    needs: [leader-compile-linux, cibw_docker_image, common_config]
     name: Linux C++ Tests
     uses: ./.github/workflows/build_steps.yml
     secrets: inherit
@@ -169,10 +153,11 @@ jobs:
       cmake_preset_type: ${{needs.common_config.outputs.cmake_preset_type_resolved}}
       cibw_image_tag: ${{needs.cibw_docker_image.outputs.tag}}
       matrix: ${{needs.common_config.outputs.linux_matrix}}
+      distro: compile-on-ec2
 
-  follower-linux:
+  build-python-wheels-linux:
     # Then use the cached compilation artifacts to build other python versions concurrently in cibuildwheels
-    needs: [leader-compile-linux, cibw_docker_image, common_config]
+    needs: [cibw_docker_image, common_config]
     strategy:
       fail-fast: false
       matrix:
@@ -197,7 +182,7 @@ jobs:
     secrets: inherit
     permissions: {packages: write}
     with:
-      job_type: follower
+      job_type: build-python-wheels
       python3: ${{matrix.python3}}
       cibw_image_tag: ${{needs.cibw_docker_image.outputs.tag}}
       cibw_version: ${{needs.common_config.outputs.cibuildwheel_ver}}
@@ -205,20 +190,10 @@ jobs:
       matrix: ${{toJson(matrix.matrix_override)}}
       python_deps_ids: ${{toJson(matrix.python_deps_ids)}}
       persistent_storage: ${{inputs.persistent_storage}}
-  
-  leader-compile-windows:
-    needs: [common_config]
-    name: Windows Compile
-    uses: ./.github/workflows/build_steps.yml
-    secrets: inherit
-    permissions: {packages: write}
-    with:
-      job_type: leader-compile
-      cmake_preset_type: ${{needs.common_config.outputs.cmake_preset_type_resolved}}
-      matrix: ${{needs.common_config.outputs.windows_matrix}}
+      distro: compile-on-ec2
 
-  leader-cpp-test-windows:
-    needs: [leader-compile-windows, common_config]
+  cpp-test-windows:
+    needs: [common_config]
     name: Windows C++ Tests
     uses: ./.github/workflows/build_steps.yml
     secrets: inherit
@@ -226,9 +201,10 @@ jobs:
       job_type: cpp-tests
       cmake_preset_type: ${{needs.common_config.outputs.cmake_preset_type_resolved}}
       matrix: ${{needs.common_config.outputs.windows_matrix}}
+      distro: windows-latest
 
-  follower-windows:
-    needs: [leader-compile-windows, common_config]
+  build-python-wheels-windows:
+    needs: [common_config]
     strategy:
       fail-fast: false
       matrix:
@@ -238,15 +214,16 @@ jobs:
     secrets: inherit
     permissions: {packages: write}
     with:
-      job_type: follower
+      job_type: build-python-wheels
       python3: ${{matrix.python3}}
       cibw_version: ${{needs.common_config.outputs.cibuildwheel_ver}}
       cmake_preset_type: ${{needs.common_config.outputs.cmake_preset_type_resolved}}
       matrix: ${{needs.common_config.outputs.windows_matrix}}
       persistent_storage: ${{ inputs.persistent_storage }}
+      distro: windows-latest
 
   persistent_storage_verify_linux:
-    needs: [common_config, follower-linux, follower-windows]
+    needs: [common_config, build-python-wheels-linux, build-python-wheels-windows]
     if: inputs.persistent_storage == true
     strategy:
       fail-fast: false
@@ -268,7 +245,7 @@ jobs:
       python_deps_ids: ${{toJson(matrix.python_deps_ids)}}
 
   persistent_storage_verify_windows:
-    needs: [common_config, follower-windows, follower-linux]
+    needs: [common_config, build-python-wheels-windows, build-python-wheels-linux]
     if: inputs.persistent_storage == true
     strategy:
       fail-fast: false
@@ -299,7 +276,7 @@ jobs:
       job_type: cleanup
 
   can_merge:
-    needs: [leader-cpp-test-linux, leader-cpp-test-windows, follower-linux, follower-windows, persistent_storage_verify_linux, persistent_storage_verify_windows]
+    needs: [cpp-test-linux, cpp-test-windows, build-python-wheels-linux, build-python-wheels-windows, persistent_storage_verify_linux, persistent_storage_verify_windows]
     if: |
       always() &&
       !failure() &&

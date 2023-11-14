@@ -145,8 +145,11 @@ def test_move_s3_library(moto_s3_endpoint_and_credentials):
 
     # When - we move the data
     client = boto3.client(
-        service_name="s3", endpoint_url=endpoint, aws_access_key_id=aws_access_key, aws_secret_access_key=aws_secret_key,
-        region_name=moto.s3.responses.DEFAULT_REGION_NAME
+        service_name="s3",
+        endpoint_url=endpoint,
+        aws_access_key_id=aws_access_key,
+        aws_secret_access_key=aws_secret_key,
+        region_name=moto.s3.responses.DEFAULT_REGION_NAME,
     )
     new_bucket = f"{bucket}-dest"
     client.create_bucket(Bucket=new_bucket)
