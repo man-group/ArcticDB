@@ -169,8 +169,29 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
 
             _MAP = {"localhost": "s3", "127.0.0.1": "iam"}
 
+            _reqs_till_rate_limit = -1
+
             def get_backend_for_host(self, host):
                 return self._MAP.get(host, host)
+
+            def __call__(self, environ, start_response):
+                path_info: bytes = environ.get("PATH_INFO", "")
+
+                with self.lock:
+                    if path_info in ("/rate_limit", b"/rate_limit"):
+                        length = int(environ["CONTENT_LENGTH"])
+                        body = environ["wsgi.input"].read(length).decode("ascii")
+                        self._reqs_till_rate_limit = int(body)
+                        start_response("200 OK", [("Content-Type", "text/plain")])
+                        return [b"Limit accepted"]
+
+                    if self._reqs_till_rate_limit == 0:
+                        start_response("503 Slow down", [("Content-Type", "text/plain")])
+                        return [b"Simulating rate limit"]
+                    else:
+                        self._reqs_till_rate_limit -= 1
+
+                return super().__call__(environ, start_response)
 
         werkzeug.run_simple(
             "0.0.0.0",
