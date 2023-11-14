@@ -20,6 +20,7 @@ from hypothesis.stateful import RuleBasedStateMachine, Bundle, rule, invariant, 
 from arcticdb.version_store import NativeVersionStore
 from arcticdb.util.test import assert_frame_equal
 
+from tests.util.mark import SLOW_TESTS_MARK
 
 # Patches future hypothesis features
 consumes = getattr(stateful, "consumes", lambda x: x)  # consumes() first introduced in hypothesis 3.85
@@ -313,6 +314,7 @@ class VersionStoreComparison(RuleBasedStateMachine):
 
 
 @pytest.mark.parametrize("lib_type", ["lmdb_version_store_delayed_deletes_v1", "lmdb_version_store_delayed_deletes_v2"])
+@SLOW_TESTS_MARK
 def test_stateful(lib_type, request):
     VersionStoreComparison._lib = request.getfixturevalue(lib_type)
     run_state_machine_as_test(

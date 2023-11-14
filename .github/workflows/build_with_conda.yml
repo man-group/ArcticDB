@@ -11,28 +11,19 @@ on:
   pull_request:
 
 jobs:
+  start_ec2_runner:
+    uses: ./.github/workflows/ec2_runner_jobs.yml
+    secrets: inherit
+    permissions: write-all
+    with:
+      job_type: start
+
   linux:
-    strategy:
-      matrix:
-        # we use two jobs for python and cpp tests st. they can run in parallel
-        include:
-          - os: ubuntu-latest
-            cpp_tests: "1"
-            python_tests: "0"
-
-          - os: ubuntu-latest
-            cpp_tests: "0"
-            python_tests: "1"
-
-      fail-fast: false
-    runs-on: ${{ matrix.os }}
-
+    needs: [start_ec2_runner]
+    runs-on: ${{ needs.start_ec2_runner.outputs.label }}
     services:
       mongodb:
         image: mongo:4.4
-        ports:
-          - 27017:27017
-
     steps:
       - uses: actions/checkout@v3
         with:
@@ -58,12 +49,9 @@ jobs:
           python -m pip install --no-build-isolation --no-deps -v -e .
         env:
           ARCTICDB_USING_CONDA: 1
-          # Using one thread to avoid swapping which might freeze CI machines.
-          CMAKE_BUILD_PARALLEL_LEVEL: 1
-          ARCTICDB_BUILD_CPP_TESTS: ${{ matrix.cpp_tests }}
+          ARCTICDB_BUILD_CPP_TESTS: 1
 
       - name: Build C++ Tests
-        if: matrix.cpp_tests == '1'
         shell: bash -l {0}
         run: |
           cd cpp/out/linux-conda-release-build/
@@ -71,33 +59,42 @@ jobs:
           make -j ${{ steps.cpu-cores.outputs.count }} test_unit_arcticdb
 
       - name: Run C++ Tests
-        if: matrix.cpp_tests == '1'
         shell: bash -l {0}
         run: |
           cd cpp/out/linux-conda-release-build/
           make test
 
       - name: Install npm # Linux github runner image does not come with npm
-        if: matrix.os == 'linux'
         uses: actions/setup-node@v3.3.0
         with:
           node-version: '16'
 
       - name: Test with pytest
         shell: bash -l {0}
-        if: matrix.python_tests == '1'
         run: |
           npm install -g azurite
           cd python
+          export ARCTICDB_RAND_SEED=$RANDOM
           python -m pytest tests
         env:
           ARCTICDB_USING_CONDA: 1
+
+  stop-ec2-runner:
+    needs: [start_ec2_runner, linux]
+    if: ${{ always() }}
+    uses: ./.github/workflows/ec2_runner_jobs.yml
+    secrets: inherit
+    permissions: write-all
+    with:
+      job_type: stop
+      label: ${{ needs.start_ec2_runner.outputs.label }}
+      ec2-instance-id: ${{ needs.start_ec2_runner.outputs.ec2-instance-id }}
 
   macos:
     strategy:
       matrix:
         include:
-          - os: macos-latest
+          - os: macos-13
 
       fail-fast: false
     runs-on: ${{ matrix.os }}
@@ -128,8 +125,6 @@ jobs:
           python -m pip install --no-build-isolation --no-deps -v -e .
         env:
           ARCTICDB_USING_CONDA: 1
-          # Using one thread to avoid swapping which might freeze the CI machine.
-          CMAKE_BUILD_PARALLEL_LEVEL: 1
           ARCTICDB_BUILD_CPP_TESTS: 1
 
       - name: Build C++ Tests
@@ -155,7 +150,8 @@ jobs:
         run: |
           npm install -g azurite
           cd python
-          python -m pytest tests
+          export ARCTICDB_RAND_SEED=$RANDOM
+          python -m pytest -n ${{ steps.cpu-cores.outputs.count }} tests
         env:
           ARCTICDB_USING_CONDA: 1
 
