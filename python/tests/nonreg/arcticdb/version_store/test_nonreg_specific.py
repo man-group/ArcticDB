@@ -220,18 +220,16 @@ def test_update_with_empty_series_or_dataframe(lmdb_version_store):
     lib.append(symbol, empty_df)
     lib.update(symbol, one_row_df)
     received_df = lib.read(symbol).data
-
     assert_frame_equal(one_row_df, received_df)
 
     symbol = "test_update_with_empty_dataframe_second"
 
     lib.write(symbol, one_row_df)
+    # Appending and updating with an empty dataframe must not have any effect but must not fail.
     lib.append(symbol, empty_df)
     lib.update(symbol, empty_df)
     received_df = lib.read(symbol).data
-
-    # TODO: currently the update call with empty data does not overwrite the existing data.
-    # assert_frame_equal(empty_df, received_df)
+    assert_frame_equal(one_row_df, received_df)
 
     empty_series = pd.Series([], dtype=float)
     one_row_series = pd.Series([1.0], dtype=float, index=pd.DatetimeIndex([datetime.datetime(2019, 4, 9, 10, 5, 2, 1)]))
@@ -242,18 +240,16 @@ def test_update_with_empty_series_or_dataframe(lmdb_version_store):
     lib.append(symbol, empty_series)
     lib.update(symbol, one_row_series)
     received_series = lib.read(symbol).data
-
     assert_series_equal(one_row_series, received_series)
 
     symbol = "test_update_with_empty_series_second"
 
     lib.write(symbol, one_row_series)
+    # Appending and updating with an empty series must not have any effect but must not fail.
     lib.append(symbol, empty_series)
     lib.update(symbol, empty_series)
     received_series = lib.read(symbol).data
-
-    # TODO: currently the update call with empty data does not overwrite the existing data.
-    # assert_series_equal(empty_series, received_series)
+    assert_series_equal(one_row_series, received_series)
 
 
 def test_update_with_empty_dataframe_with_index(lmdb_version_store):
