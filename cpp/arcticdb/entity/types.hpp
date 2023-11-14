@@ -115,7 +115,7 @@ enum class ValueType : uint8_t {
 
     UTF_DYNAMIC = 11,
     ASCII_DYNAMIC = 12,
-    // EMPTY is used by empty columns whose type has not been explicitly.
+    // EMPTY is used by empty columns whose type has not been explicitly specified.
     // EMPTY can be promoted to any type.
     // For instance, Pandas empty series whose types has not been specified is mapping to EMPTY.
     // When data is appended, the column type is inferred from the data and the column is promoted to the inferred type.
