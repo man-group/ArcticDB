@@ -128,7 +128,7 @@ def test_lmdb_mapsize(tmpdir):
 
 def test_lmdb_mapsize_write(tmpdir):
     ac = Arctic(f"lmdb://{tmpdir}?map_size=1MB")
-    df = pd.DataFrame(np.random.randint(0, 100, size=(int(1e6), 4)), columns=list('ABCD'))
+    df = pd.DataFrame(np.random.randint(0, 100, size=(int(1e6), 4)), columns=list("ABCD"))
     lib = ac.create_library("test")
 
     with pytest.raises(LmdbMapFullError) as e:

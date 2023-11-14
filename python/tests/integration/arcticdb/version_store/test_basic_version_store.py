@@ -75,14 +75,20 @@ def test_simple_flow(basic_store_no_symbol_list, symbol):
     assert basic_store_no_symbol_list.list_symbols() == basic_store_no_symbol_list.list_versions() == []
 
 
-@pytest.mark.parametrize("special_char", list("$@=;/:+ ,?\\{^}%`[]\"'~#|!-_.()"))
-def test_special_chars(object_version_store, special_char):
+def test_special_chars(object_version_store):
     """Test chars with special URI encoding under RFC 3986"""
-    sym = f"prefix{special_char}postfix"
-    df = sample_dataframe()
-    object_version_store.write(sym, df)
-    vitem = object_version_store.read(sym)
-    assert_frame_equal(vitem.data, df)
+    errors = []
+    # we are doing manual iteration due to a limitation that should be fixed by issue #1053
+    for special_char in list("$@=;/:+ ,?\\{^}%`[]\"'~#|!-_.()"):
+        try:
+            sym = f"prefix{special_char}postfix"
+            df = sample_dataframe()
+            object_version_store.write(sym, df)
+            vitem = object_version_store.read(sym)
+            assert_frame_equal(vitem.data, df)
+        except AssertionError as e:
+            errors.append(f"Failed for character {special_char}: {str(e)}")
+    assert not errors, "errors occurred:\n" + "\n".join(errors)
 
 
 @pytest.mark.parametrize("breaking_char", [chr(0), "\0", "*", "<", ">"])
@@ -293,7 +299,8 @@ def test_prune_previous_versions_multiple_times(basic_store, symbol):
 
 
 def test_prune_previous_versions_write_batch(basic_store):
-    """Verify that the batch write method correctly prunes previous versions when the corresponding option is specified."""
+    """Verify that the batch write method correctly prunes previous versions when the corresponding option is specified.
+    """
     # Given
     lib = basic_store
     lib_tool = lib.library_tool()
@@ -323,7 +330,8 @@ def test_prune_previous_versions_write_batch(basic_store):
 
 
 def test_prune_previous_versions_batch_write_metadata(basic_store):
-    """Verify that the batch write metadata method correctly prunes previous versions when the corresponding option is specified."""
+    """Verify that the batch write metadata method correctly prunes previous versions when the corresponding option is specified.
+    """
     # Given
     lib = basic_store
     lib_tool = lib.library_tool()
@@ -353,7 +361,8 @@ def test_prune_previous_versions_batch_write_metadata(basic_store):
 
 
 def test_prune_previous_versions_append_batch(basic_store):
-    """Verify that the batch append method correctly prunes previous versions when the corresponding option is specified."""
+    """Verify that the batch append method correctly prunes previous versions when the corresponding option is specified.
+    """
     # Given
     lib = basic_store
     lib_tool = lib.library_tool()

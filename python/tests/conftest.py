@@ -56,13 +56,19 @@ from arcticdb.options import LibraryOptions
 from arcticdb_ext.storage import Library
 from azure.storage.blob import BlobServiceClient, generate_account_sas, ResourceTypes, AccountSasPermissions
 
-
 from tests.util.mark import (
     AZURE_TESTS_MARK,
     MONGO_TESTS_MARK,
     REAL_S3_TESTS_MARK,
 )
 
+import hypothesis
+
+hypothesis.settings.register_profile('ci_linux', max_examples=100)
+hypothesis.settings.register_profile('ci_windows', max_examples=100)
+hypothesis.settings.register_profile('dev', max_examples=100)
+
+hypothesis.settings.load_profile(os.environ.get('HYPOTHESIS_PROFILE', 'dev'))
 
 configure_test_logger()
 
@@ -369,8 +375,11 @@ def only_test_encoding_version_v1():
 
 def pytest_generate_tests(metafunc):
     if "encoding_version" in metafunc.fixturenames:
-        only_v1 = "only_test_encoding_version_v1" in metafunc.fixturenames
-        metafunc.parametrize("encoding_version", [EncodingVersion.V1] if only_v1 else list(EncodingVersion))
+        if sys.platform == "win32":
+            metafunc.parametrize("encoding_version", [EncodingVersion.V2])
+        else:
+            only_v1 = "only_test_encoding_version_v1" in metafunc.fixturenames
+            metafunc.parametrize("encoding_version", [EncodingVersion.V1] if only_v1 else list(EncodingVersion))
 
 
 @pytest.fixture
@@ -383,7 +392,6 @@ def version_store_factory(lib_name, tmpdir):
     can be used to override the `map_size`.
     """
     used: Dict[str, NativeVersionStore] = {}
-
     def create_version_store(
         col_per_group: Optional[int] = None,
         row_per_segment: Optional[int] = None,

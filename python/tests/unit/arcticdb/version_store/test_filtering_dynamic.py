@@ -249,12 +249,12 @@ def test_filter_numeric_isnotin_unsigned(lmdb_version_store_dynamic_schema, df, 
     ),
     vals=st.frozensets(string_strategy, min_size=1),
 )
-def test_filter_string_isin(lmdb_version_store_dynamic_schema, df, vals):
+def test_filter_string_isin(in_memory_version_store_dynamic_schema, df, vals):
     assume(not df.empty)
     q = QueryBuilder()
     q = q[q["a"].isin(vals)]
     pandas_query = "a in {}".format(list(vals))
-    generic_dynamic_filter_test(lmdb_version_store_dynamic_schema, "test_filter_string_isin", df, q, pandas_query)
+    generic_dynamic_filter_test(in_memory_version_store_dynamic_schema, "test_filter_string_isin", df, q, pandas_query)
 
 
 @use_of_function_scoped_fixtures_in_hypothesis_checked
@@ -264,14 +264,14 @@ def test_filter_string_isin(lmdb_version_store_dynamic_schema, df, vals):
         [column("a", elements=string_strategy), column("b", elements=string_strategy)], index=range_indexes()
     )
 )
-def test_filter_string_isin_empty_set(lmdb_version_store_dynamic_schema, df):
+def test_filter_string_isin_empty_set(in_memory_version_store_dynamic_schema, df):
     assume(not df.empty)
     vals = []
     q = QueryBuilder()
     q = q[q["a"].isin(vals)]
     pandas_query = "a in {}".format(list(vals))
     generic_dynamic_filter_test(
-        lmdb_version_store_dynamic_schema, "test_filter_string_isin_empty_set", df, q, pandas_query
+        in_memory_version_store_dynamic_schema, "test_filter_string_isin_empty_set", df, q, pandas_query
     )
 
 
@@ -283,12 +283,12 @@ def test_filter_string_isin_empty_set(lmdb_version_store_dynamic_schema, df):
     ),
     vals=st.frozensets(string_strategy, min_size=1),
 )
-def test_filter_string_isnotin(lmdb_version_store_dynamic_schema, df, vals):
+def test_filter_string_isnotin(in_memory_version_store_dynamic_schema, df, vals):
     assume(not df.empty)
     q = QueryBuilder()
     q = q[q["a"].isnotin(vals)]
     pandas_query = "a not in {}".format(list(vals))
-    generic_dynamic_filter_test(lmdb_version_store_dynamic_schema, "test_filter_string_isnotin", df, q, pandas_query)
+    generic_dynamic_filter_test(in_memory_version_store_dynamic_schema, "test_filter_string_isnotin", df, q, pandas_query)
 
 
 def test_numeric_filter_dynamic_schema(lmdb_version_store_tiny_segment_dynamic):
