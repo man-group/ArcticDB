@@ -1,6 +1,8 @@
 site_name: ArcticDB
+site_url: https://docs.arcticdb.io/
 repo_url: https://github.com/man-group/ArcticDB
 repo_name: man-group/ArcticDB
+remote_branch: docs-pages
 
 markdown_extensions:
   - admonition
@@ -25,6 +27,11 @@ theme:
   features:
     - navigation.tabs
     - navigation.sections
+
+extra:
+  version:
+    provider: mike
+    default: latest
 
 extra_css:
   - stylesheets/extra.css
