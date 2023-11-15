@@ -240,7 +240,6 @@ void register_error_code_ecosystem(py::module& m, py::exception<arcticdb::Arctic
 
     auto sorting_exception = py::register_exception<SortingException>(m, "SortingException", compat_exception.ptr());
     py::register_exception<UnsortedDataException>(m, "UnsortedDataException", sorting_exception.ptr());
-    py::register_exception<UserInputException>(m, "UserInputException", compat_exception.ptr());
     py::register_exception<CompatibilityException>(m, "CompatibilityException", compat_exception.ptr());
     py::register_exception<CodecException>(m, "CodecException", compat_exception.ptr());
 }
