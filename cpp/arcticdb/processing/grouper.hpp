@@ -23,7 +23,6 @@
 #include <folly/Poly.h>
 #include <arcticdb/column_store/string_pool.hpp>
 #include <arcticdb/util/hash.hpp>
-#include <arcticdb/util/third_party/emilib_map.hpp>
 
 namespace arcticdb::grouping {
 
@@ -46,10 +45,10 @@ public:
                 } else {
                     if (is_a_string(key)) {
                         auto hashed_value = hash(sp->get_view(key));
-                        cache_.insert_unique(std::move(key), std::move(hashed_value));
+                        cache_.insert(robin_hood::pair(std::move(key), std::optional<size_t>(hashed_value)));
                         return hashed_value;
                     } else {
-                        cache_.insert(key, std::nullopt);
+                        cache_.insert(robin_hood::pair(std::move(key), std::optional<size_t>()));
                         return std::nullopt;
                     }
                 }
@@ -72,7 +71,7 @@ public:
         // 10.39 seconds without caching
         // 11.01 seconds with caching
         // Not worth worrying about right now
-        emilib::HashMap<RawType, std::optional<size_t>> cache_;
+        robin_hood::unordered_flat_map<RawType, std::optional<size_t>> cache_;
     };
 };
 

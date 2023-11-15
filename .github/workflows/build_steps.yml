@@ -5,9 +5,10 @@ on:
       job_type:          {required: true, type: string, description: Selects the steps to enable}
       cmake_preset_type: {required: true, type: string, description: release/debug}
       matrix:            {required: true, type: string, description: JSON string to feed into the matrix}
+      distro:            {required: true, type: string, description: Label of the runner that will be used for running the workflow}
       cibw_image_tag:    {required: false, type: string, description: Linux only. As built by cibw_docker_image.yml workflow}
-      cibw_version:      {required: false, type: string, description: Follower only. Must match the cibw_image_tag}
-      python_deps_ids:   {default: '[""]', type: string, description: Follower test matrix parameter. JSON string.}
+      cibw_version:      {required: false, type: string, description: build-python-wheels only. Must match the cibw_image_tag}
+      python_deps_ids:   {default: '[""]', type: string, description: build-python-wheels test matrix parameter. JSON string.}
       python3:           {default: -1, type: number, description: Python 3 minor version}
       persistent_storage:      {default: "false", type: string, description: Specifies whether the python tests should tests against real storages e.g. AWS S3  }
       # TODO: Maybe we should add these as GitHub variables
@@ -16,19 +17,30 @@ on:
       region:            {default: 'eu-west-2', type: string, description: The S3 region of the bucket}
       clear:             {default: 1, type: number, description: Controls wheather we will clear the libraries in the versions stores that we test against}
 jobs:
+  start_ec2_runner:
+    if: inputs.distro == 'compile-on-ec2'
+    uses: ./.github/workflows/ec2_runner_jobs.yml
+    secrets: inherit
+    with:
+      job_type: start
+
   compile:
+    needs: [start_ec2_runner]
+    if: |
+      always() &&
+      !failure() &&
+      !cancelled()
     strategy:
       matrix:
         # Declaring the dummy fields here to aid the Github Actions linting in VSCode and to provide documentation
         os: [0] # Decouples the steps from any distro version changes
-        distro: [0]
         cmake_preset_prefix: [0]
         cibw_build_suffix: [0]
         envs: [0]
         build_dir: [0] # Must be an absolute path
         vcpkg_installed_dir: [0]
         vcpkg_packages_dir: [0]
-        symbols: [0] # Glob for symbol symbol files. Used for including in follower builds and exclusion on others.
+        symbols: [0] # Glob for symbol symbol files. Used for including in build-python-wheels builds and exclusion on others.
         do_not_archive: [0]
         test_services: [0] # Github service containers to spin up for the pytest run
         container: [0]
@@ -37,8 +49,8 @@ jobs:
         include:
             - ${{fromJSON(inputs.matrix)[0]}} # The items after 0 are for tests only
 
-    runs-on: ${{matrix.distro}}
-    container: ${{ (matrix.os == 'linux' && inputs.job_type != 'follower') && matrix.container || null}}
+    runs-on: ${{ needs.start_ec2_runner.outputs.label || inputs.distro}}
+    container: ${{ (matrix.os == 'linux' && inputs.job_type != 'build-python-wheels') && matrix.container || null}}
     env:
       SCCACHE_GHA_VERSION: ${{vars.SCCACHE_GHA_VERSION || 1}} # Setting this env var enables the caching
       VCPKG_NUGET_USER: ${{secrets.VCPKG_NUGET_USER || github.repository_owner}}
@@ -89,7 +101,7 @@ jobs:
       - name: Extra envs
         # This has to come after msvc-dev-cmd to overwrite the bad VCPKG_ROOT it sets
         run: |
-          . build_tooling/vcpkg_caching.sh # Linux follower needs another call in CIBW
+          HOME=~ . build_tooling/vcpkg_caching.sh # Linux build-python-wheels needs another call in CIBW
           echo -e "VCPKG_BINARY_SOURCES=$VCPKG_BINARY_SOURCES
           VCPKG_ROOT=$PLATFORM_VCPKG_ROOT
           ${{matrix.envs || ''}}" | tee -a $GITHUB_ENV
@@ -109,28 +121,26 @@ jobs:
         run: rm $(which ccache) || true
 
       - name: Prepare C++ compilation env
-        if: inputs.job_type != 'follower'
+        if: inputs.job_type != 'build-python-wheels'
         run: . build_tooling/prep_cpp_build.sh # Also applies to Windows
 
       - name: CMake compile
-        if: inputs.job_type != 'follower'
-        uses: lukka/run-cmake@v10
+        if: inputs.job_type != 'build-python-wheels'
+        # We are pinning the version to 10.6 because >= 10.7, use node20 which is not supported in the container
+        uses: lukka/run-cmake@v10.6
         with:
           cmakeListsTxtPath: ${{github.workspace}}/cpp/CMakeLists.txt
           configurePreset: ${{env.ARCTIC_CMAKE_PRESET}}
           configurePresetAdditionalArgs: "['-DVCPKG_INSTALL_OPTIONS=--clean-after-build']"
           buildPreset: ${{env.ARCTIC_CMAKE_PRESET}}
 
+      - name: Get number of CPU cores
+        uses: SimenB/github-actions-cpu-cores@v1
+        id: cpu-cores
+
       - name: Compile C++ tests
         if: inputs.job_type == 'cpp-tests'
         run: cd cpp; cmake --build --preset $ARCTIC_CMAKE_PRESET --target install
-
-      - name: Clean up build dir # To save disk space as we're close to the limit on Linux
-        if: inputs.job_type == 'cpp-tests' && matrix.os == 'linux'
-        run: |
-          cd $ARCTICDB_BUILD_DIR/*-build
-          du -m --max-depth=2 | sort -n | tail -n 50
-          nohup rm -rf * &  # Clean up while the test is running to save build time
 
       - name: C++ Rapidcheck
         if: inputs.job_type == 'cpp-tests'
@@ -148,9 +158,9 @@ jobs:
         env:
           ARCTICDB_memory_loglevel: INFO
 
-      # ========================= Follower (CIBW) steps =========================
+      # ========================= build-python-wheels (CIBW) steps =========================
       - name: Get CIBuildWheel image & metadata
-        if: inputs.job_type == 'follower' && matrix.os == 'linux'
+        if: inputs.job_type == 'build-python-wheels' && matrix.os == 'linux'
         run: |
             docker login ghcr.io -u token -p "${{secrets.GITHUB_TOKEN}}"
             docker pull "${{inputs.cibw_image_tag}}"
@@ -158,23 +168,23 @@ jobs:
               --format='manylinux_image={{index .Config.Labels "io.arcticdb.base"}}' | tee -a $GITHUB_ENV
 
       - name: Build wheel
-        if: inputs.job_type == 'follower'
+        if: inputs.job_type == 'build-python-wheels'
         run: pipx run cibuildwheel==${{inputs.cibw_version}}
         env:
           CIBW_MANYLINUX_X86_64_IMAGE: ${{inputs.cibw_image_tag}}
 
       - name: Store wheel artifact
-        if: inputs.job_type == 'follower'
+        if: inputs.job_type == 'build-python-wheels'
         uses: actions/upload-artifact@v3
         with:
           name: wheel-${{env.CIBW_BUILD}}
           path: wheelhouse/*.whl
 
       - name: Discover test directory names
-        if: inputs.job_type == 'follower'
+        if: inputs.job_type == 'build-python-wheels'
         # There are so few nonreg tests, run them in the hypothesis runner
-        run: find python/tests/* -maxdepth 0 -type d ! -regex '.*\(__pycache__\|util\|nonreg\)' -printf '"%f",' |
-              sed 's/^/test_dirs=[/ ; s/"hypothesis"/"{hypothesis,nonreg}"/ ; s/,$/]/' | tee -a $GITHUB_ENV
+        run: find python/tests/* -maxdepth 0 -type d ! -regex '.*\(__pycache__\|util\|nonreg\|scripts\)' -printf '"%f",' |
+              sed 's/^/test_dirs=[/ ; s/"hypothesis"/"{hypothesis,nonreg,scripts}"/ ; s/,$/]/' | tee -a $GITHUB_ENV
 
       # ========================= Common =========================
       - name: Disk usage
@@ -183,7 +193,7 @@ jobs:
         continue-on-error: true
 
       - name: Make build directory readable for archiving
-        if: inputs.job_type == 'follower' && matrix.os == 'linux' && always()
+        if: inputs.job_type == 'build-python-wheels' && matrix.os == 'linux' && always()
         run: sudo chown -R $UID ${{matrix.build_dir}}
 
       - name: Archive build metadata
@@ -197,7 +207,7 @@ jobs:
           # On Windows, exclusions like "!**/*.ext" are prefixed with a drive letter (D:\) of the current working dir
           # before matching. This breaks since we moved the build_dir to C:. Work around by templating exclusions:
           path: ${{matrix.build_dir}}/*-build
-            ${{env._exclusion}}${{inputs.job_type == 'follower' && 'nofile' || matrix.symbols}}
+            ${{env._exclusion}}${{inputs.job_type == 'build-python-wheels' && 'nofile' || matrix.symbols}}
             ${{env._exclusion}}${{join(matrix.do_not_archive, env._exclusion)}}
 
     outputs:
@@ -206,8 +216,24 @@ jobs:
       test_dirs: ${{env.test_dirs}}
       cibw_build: ${{env.CIBW_BUILD}}
 
+  stop-ec2-runner:
+    needs: [start_ec2_runner, compile]
+    if: |
+      always() &&
+      inputs.distro == 'compile-on-ec2'
+    uses: ./.github/workflows/ec2_runner_jobs.yml
+    secrets: inherit
+    with:
+      job_type: stop
+      label: ${{ needs.start_ec2_runner.outputs.label }}
+      ec2-instance-id: ${{ needs.start_ec2_runner.outputs.ec2-instance-id }}
+
   python_tests:
-    if: inputs.job_type == 'follower'
+    if: |
+      always() &&
+      !failure() &&
+      !cancelled() &&
+      inputs.job_type == 'build-python-wheels'
     needs: [compile]
     strategy:
       fail-fast: false
@@ -217,7 +243,7 @@ jobs:
         include:
           ${{fromJSON(inputs.matrix)}}
     name: ${{matrix.type}}${{matrix.python_deps_id}}
-    runs-on: ${{matrix.distro}}
+    runs-on: ${{inputs.distro != 'compile-on-ec2' && inputs.distro || 'ubuntu-latest'}}
     container: ${{matrix.os == 'linux' && needs.compile.outputs.manylinux_image || null}}
     defaults:
       run: {shell: bash}
@@ -298,6 +324,10 @@ jobs:
           # Use the Mongo created in the service container above to test against
           CI_MONGO_HOST: mongodb
           CI_MONGO_HOST_2: mongodb_2
+          # On windows, we can allocate more threads for running the tests
+          # because we are not testing against mongo
+          PYTEST_THREADS: ${{ (matrix.os == 'windows' && matrix.type != 'stress') && 4 || 0}}
+          HYPOTHESIS_PROFILE: ci_${{matrix.os}}
 
       - name: Collect crash dumps (Windows)
         if: matrix.os == 'windows' && failure()

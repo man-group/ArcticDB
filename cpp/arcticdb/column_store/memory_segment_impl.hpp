@@ -19,7 +19,6 @@
 #include <arcticdb/util/constructors.hpp>
 #include <arcticdb/column_store/column_map.hpp>
 #include <arcticdb/pipeline/string_pool_utils.hpp>
-#include <arcticdb/util/third_party/emilib_map.hpp>
 #include <arcticdb/util/format_date.hpp>
 #include <arcticdb/stream/index.hpp>
 #include <arcticdb/util/hash.hpp>
@@ -959,10 +958,10 @@ public:
         auto output_string_pool = filter_down_stringpool ? std::make_shared<StringPool>() : string_pool_;
         // Map from offsets in the input stringpool to offsets in the output stringpool
         // Only used if filter_down_stringpool is true
-        emilib::HashMap<StringPool::offset_t, StringPool::offset_t> input_to_output_offsets;
+        robin_hood::unordered_flat_map<StringPool::offset_t, StringPool::offset_t> input_to_output_offsets;
         // Prepopulate with None and NaN placeholder values to avoid an if statement in a tight loop later
-        input_to_output_offsets.insert(not_a_string(), not_a_string());
-        input_to_output_offsets.insert(nan_placeholder(), nan_placeholder());
+        input_to_output_offsets.insert(robin_hood::pair(not_a_string(), not_a_string()));
+        input_to_output_offsets.insert(robin_hood::pair(nan_placeholder(), nan_placeholder()));
 
         // Index is built to make rank queries faster
         std::unique_ptr<util::BitIndex> filter_idx;
@@ -1032,7 +1031,7 @@ public:
                                         auto str = string_pool_->get_const_view(value);
                                         auto output_string_pool_offset = output_string_pool->get(str, false).offset();
                                         *output_ptr = output_string_pool_offset;
-                                        input_to_output_offsets.insert_unique(std::move(value), std::move(output_string_pool_offset));
+                                        input_to_output_offsets.insert(robin_hood::pair(StringPool::offset_t(value), std::move(output_string_pool_offset)));
                                     }
                                 } else {
                                     *output_ptr = value;
@@ -1066,7 +1065,7 @@ public:
                                         auto str = string_pool_->get_const_view(value);
                                         auto output_string_pool_offset = output_string_pool->get(str, false).offset();
                                         *output_ptr = output_string_pool_offset;
-                                        input_to_output_offsets.insert_unique(std::move(value), std::move(output_string_pool_offset));
+                                        input_to_output_offsets.insert(robin_hood::pair(StringPool::offset_t(value), std::move(output_string_pool_offset)));
                                     }
                                 } else {
                                     *output_ptr = value;

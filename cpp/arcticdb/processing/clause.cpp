@@ -13,11 +13,13 @@
 #include <arcticdb/processing/clause.hpp>
 #include <arcticdb/pipeline/column_stats.hpp>
 #include <arcticdb/pipeline/value_set.hpp>
-
-#include <arcticdb/util/third_party/emilib_set.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>
 #include <arcticdb/stream/segment_aggregator.hpp>
-
+#ifdef ARCTICDB_USING_CONDA
+    #include <robin_hood.h>
+#else
+    #include <arcticdb/util/third_party/robin_hood.hpp>
+#endif
 namespace arcticdb {
 
 std::vector<Composite<SliceAndKey>> structure_by_row_slice(std::vector<SliceAndKey>& slice_and_keys, size_t start_from) {
@@ -74,17 +76,17 @@ std::vector<Composite<ProcessingUnit>> single_partition(std::vector<Composite<Pr
 class GroupingMap {
     using NumericMapType = std::variant<
             std::monostate,
-            std::shared_ptr<emilib::HashMap<bool, size_t>>,
-            std::shared_ptr<emilib::HashMap<uint8_t, size_t>>,
-            std::shared_ptr<emilib::HashMap<uint16_t, size_t>>,
-            std::shared_ptr<emilib::HashMap<uint32_t, size_t>>,
-            std::shared_ptr<emilib::HashMap<uint64_t, size_t>>,
-            std::shared_ptr<emilib::HashMap<int8_t, size_t>>,
-            std::shared_ptr<emilib::HashMap<int16_t, size_t>>,
-            std::shared_ptr<emilib::HashMap<int32_t, size_t>>,
-            std::shared_ptr<emilib::HashMap<int64_t, size_t>>,
-            std::shared_ptr<emilib::HashMap<float, size_t>>,
-            std::shared_ptr<emilib::HashMap<double, size_t>>>;
+            std::shared_ptr<robin_hood::unordered_flat_map<bool, size_t>>,
+            std::shared_ptr<robin_hood::unordered_flat_map<uint8_t, size_t>>,
+            std::shared_ptr<robin_hood::unordered_flat_map<uint16_t, size_t>>,
+            std::shared_ptr<robin_hood::unordered_flat_map<uint32_t, size_t>>,
+            std::shared_ptr<robin_hood::unordered_flat_map<uint64_t, size_t>>,
+            std::shared_ptr<robin_hood::unordered_flat_map<int8_t, size_t>>,
+            std::shared_ptr<robin_hood::unordered_flat_map<int16_t, size_t>>,
+            std::shared_ptr<robin_hood::unordered_flat_map<int32_t, size_t>>,
+            std::shared_ptr<robin_hood::unordered_flat_map<int64_t, size_t>>,
+            std::shared_ptr<robin_hood::unordered_flat_map<float, size_t>>,
+            std::shared_ptr<robin_hood::unordered_flat_map<double, size_t>>>;
 
     NumericMapType map_;
 
@@ -100,16 +102,16 @@ public:
     }
 
     template<typename T>
-    std::shared_ptr<emilib::HashMap<T, size_t>> get() {
+    std::shared_ptr<robin_hood::unordered_flat_map<T, size_t>> get() {
         return util::variant_match(map_,
                                    [that = this](const std::monostate &) {
-                                       that->map_ = std::make_shared<emilib::HashMap<T, size_t>>();
-                                       return std::get<std::shared_ptr<emilib::HashMap<T, size_t>>>(that->map_);
+                                       that->map_ = std::make_shared<robin_hood::unordered_flat_map<T, size_t>>();
+                                       return std::get<std::shared_ptr<robin_hood::unordered_flat_map<T, size_t>>>(that->map_);
                                    },
-                                   [](const std::shared_ptr<emilib::HashMap<T, size_t>> &ptr) {
+                                   [](const std::shared_ptr<robin_hood::unordered_flat_map<T, size_t>> &ptr) {
                                        return ptr;
                                    },
-                                   [](const auto &) -> std::shared_ptr<emilib::HashMap<T, size_t>> {
+                                   [](const auto &) -> std::shared_ptr<robin_hood::unordered_flat_map<T, size_t>> {
                                        schema::raise<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>(
                                                "GroupBy does not support the grouping column type changing with dynamic schema");
                                    });
@@ -301,7 +303,7 @@ Composite<ProcessingUnit> AggregationClause::process(std::shared_ptr<Store> stor
                                                 // 11.14 seconds without caching
                                                 // 11.01 seconds with caching
                                                 // Not worth worrying about right now
-                                                emilib::HashMap<RawType, size_t> offset_to_group;
+                                                robin_hood::unordered_flat_map<RawType, size_t> offset_to_group;
                                                 while (auto block = input_data.next<ScalarTagType<DataTypeTagType>>()) {
                                                     const auto row_count = block->row_count();
                                                     auto ptr = block->data();
@@ -319,7 +321,7 @@ Composite<ProcessingUnit> AggregationClause::process(std::shared_ptr<Store> stor
                                                                     val = offset;
                                                                 }
                                                                 RawType val_copy(val);
-                                                                offset_to_group.insert_unique(std::move(offset), std::move(val_copy));
+                                                                offset_to_group.insert(robin_hood::pair<RawType, size_t>(offset, val_copy));
                                                             }
                                                         } else {
                                                             val = *ptr;
@@ -327,7 +329,7 @@ Composite<ProcessingUnit> AggregationClause::process(std::shared_ptr<Store> stor
                                                         if (auto it = hash_to_group->find(val); it == hash_to_group->end()) {
                                                             row_to_group.emplace_back(next_group_id);
                                                             auto group_id = next_group_id++;
-                                                            hash_to_group->insert_unique(std::move(val), std::move(group_id));
+                                                            hash_to_group->insert(robin_hood::pair<RawType, size_t>(val, group_id));
                                                         } else {
                                                             row_to_group.emplace_back(it->second);
                                                         }
@@ -367,7 +369,7 @@ Composite<ProcessingUnit> AggregationClause::process(std::shared_ptr<Store> stor
         auto index_ptr = reinterpret_cast<RawType *>(seg.column(index_pos).ptr());
         std::vector<std::pair<RawType, size_t>> elements;
         for (const auto &hash : *hashes)
-            elements.push_back(hash);
+            elements.push_back(std::make_pair(hash.first, hash.second));
 
         std::sort(std::begin(elements),
                   std::end(elements),
@@ -576,8 +578,8 @@ Composite<ProcessingUnit> ColumnStatsGenerationClause::process(std::shared_ptr<S
         aggregators_data.emplace_back(agg.get_aggregator_data());
     }
 
-    emilib::HashSet<IndexValue> start_indexes;
-    emilib::HashSet<IndexValue> end_indexes;
+    robin_hood::unordered_set<IndexValue> start_indexes;
+    robin_hood::unordered_set<IndexValue> end_indexes;
 
     internal::check<ErrorCode::E_INVALID_ARGUMENT>(
             !procs.empty(),

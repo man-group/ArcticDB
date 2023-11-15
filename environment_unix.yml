@@ -18,7 +18,8 @@ dependencies:
   - lz4-c
   - double-conversion
   - libevent
-  - libmongocxx
+  # TODO: Fix builds for missing symbols.
+  - libmongocxx < 3.9
   - zstd
   # TODO: pybind 2.11.X became stricter regarding the handling of reference counts
   # See: https://github.com/pybind/pybind11/issues/4748#issuecomment-1639445403
@@ -68,6 +69,7 @@ dependencies:
   # See: https://github.com/man-group/ArcticDB/pull/291
   - hypothesis < 6.73
   - pytest-sugar
+  - pytest-xdist
   - pymongo
   # Python dependencies (for tests only)
   - azure-storage-blob

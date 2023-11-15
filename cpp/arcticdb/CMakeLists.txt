@@ -328,8 +328,6 @@ set(arcticdb_srcs
         util/sparse_utils.hpp
         util/storage_lock.hpp
         util/string_utils.hpp
-        util/third_party/emilib_map.hpp
-        util/third_party/emilib_set.hpp
         util/timeouts.hpp
         util/timer.hpp
         util/trace.hpp

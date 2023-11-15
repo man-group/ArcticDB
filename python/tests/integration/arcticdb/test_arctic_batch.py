@@ -21,6 +21,7 @@ from datetime import datetime, date, timezone, timedelta
 import numpy as np
 from arcticdb.util.test import (
     assert_frame_equal,
+    distinct_timestamps,
     random_strings_of_length,
     random_floats,
 )
@@ -528,12 +529,13 @@ def test_read_batch_time_stamp(arctic_library):
             WritePayload(sym + str(sym_num), pd.DataFrame({"col": [sym_num + v_num, sym_num * v_num, sym_num - v_num]}))
             for sym_num in range(num_symbols)
         ]
-        lib.write_batch(write_requests)
+        with distinct_timestamps(lib._nvs):
+            lib.write_batch(write_requests)
 
-    microsecond_delta = timedelta(microseconds=1)
+    nanosecond_delta = pd.Timedelta(1, unit="ns")
 
     requests_batch = [
-        ReadRequest(sym + str(sym_num), as_of=version_info.date + microsecond_delta)
+        ReadRequest(sym + str(sym_num), as_of=version_info.date + nanosecond_delta)
         for sym_num in range(num_symbols)
         for key, version_info in lib.list_versions(sym + str(sym_num)).items()
     ]
