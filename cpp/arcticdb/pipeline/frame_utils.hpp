@@ -215,8 +215,19 @@ std::optional<convert::StringEncodingError> aggregator_set_data(
             const auto ptr_data = reinterpret_cast<PyObject**>(data) + row;
 
             util::BitSet values_bitset = util::scan_object_type_to_sparse(ptr_data, rows_to_write);
-            if(values_bitset.empty())
-                return std::optional<convert::StringEncodingError>();
+            util::check(!values_bitset.empty(),
+                "Empty bit set means empty colum and should be processed by the empty column code path.");
+            if constexpr (is_empty_type(dt)) {
+                // If we have a column of type {EMPTYVAL, Dim1} and all values of the bitset are set to 1 this means
+                // that we have a column full of empty arrays. In this case there is no need to proceed further and
+                // store anything on disc. Empty arrays can be reconstructed given the type descriptor. However, if
+                // there is at least one "missing" value this means that we're mixing empty arrays and None values.
+                // In that case we need to save the bitset so that we can distinguish empty array from None during the
+                // read.
+                if(values_bitset.size() == values_bitset.count()) {
+                    return std::optional<convert::StringEncodingError>();
+                }
+            }
 
             ssize_t last_logical_row{0};
             const auto column_type_descriptor = TypeDescriptor{tensor.data_type(), Dimension::Dim2};

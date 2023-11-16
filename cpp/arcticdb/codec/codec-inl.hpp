@@ -113,9 +113,9 @@ std::size_t decode_ndarray(
             const auto shape_size = encoding_sizes::shape_uncompressed_size(field);
             if(shape_size > 0) {
                 shapes_out = data_sink.allocate_shapes(shape_size);
-            }
-            if(encoding_version == EncodingVersion::V2) {
-                read_shapes(field, data_sink, data_in, 0, shapes_out);
+                if(encoding_version == EncodingVersion::V2) {
+                    read_shapes(field, data_sink, data_in, 0, shapes_out);
+                }
             }
         }
         for (auto block_num = 0; block_num < num_blocks; ++block_num) {

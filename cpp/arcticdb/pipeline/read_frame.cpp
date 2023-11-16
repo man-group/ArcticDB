@@ -315,6 +315,7 @@ bool remaining_fields_empty(IteratorType it, const PipelineContextRow& context) 
         if(!is_empty_type(field.type().data_type())) {
             return false;
         }
+        it.advance();
     }
     return true;
 }
@@ -337,9 +338,11 @@ void decode_into_frame_static(
     ARCTICDB_DEBUG(log::version(), "Num fields: {}", seg.header().fields_size());
     const EncodingVersion encoding_version = EncodingVersion(hdr.encoding_version());
     const bool has_magic_nums = encoding_version == EncodingVersion::V2;
+    VariantEncodedFieldCollection fields(seg);
 
-    if (data != end) {
-        VariantEncodedFieldCollection fields(seg);
+    // data == end in case we have empty data types (e.g. {EMPTYVAL, Dim0}, {EMPTYVAL, Dim1}) for which we store nothing
+    // in storage as they can be reconstructed in the type handler on the read path.
+    if (data != end || fields.size() >= 0) {
         auto index_field = fields.at(0u);
         decode_index_field(frame, index_field, data, begin, end, context, encoding_version);
 

@@ -32,19 +32,22 @@ inline bool trivially_compatible_types(entity::TypeDescriptor left, entity::Type
 }
 
 inline std::optional<entity::TypeDescriptor> has_valid_type_promotion(entity::TypeDescriptor source, entity::TypeDescriptor target) {
-    if(source.dimension() != target.dimension())
+
+    if(source.dimension() != target.dimension()) {
+        // Empty of dimension 0 means lack of any given type and can be promoted to anything (even if the dimensions don't
+        // match), e.g. empty type can become int or array of ints. Empty type of higher dimension is used to specify an
+        // empty array or an empty matrix, thus it cannot become any other type unless the dimensionality matches
+        if(is_empty_type(source.data_type()) && source.dimension() == Dimension::Dim0)
+            return target;
         return std::nullopt;
+    }
 
     if (source == target)
         return target;
 
-    // Everything is compatible with the empty type with the common type being the non-empty one
-    if(is_empty_type(source.data_type())) {
+    // Empty type can become any other type
+    if(is_empty_type(source.data_type()))
         return target;
-    }
-    if(is_empty_type(target.data_type())) {
-        return source;
-    }
 
     auto source_type = source.data_type();
     auto target_type = target.data_type();

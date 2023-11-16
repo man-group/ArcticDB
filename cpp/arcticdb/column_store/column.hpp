@@ -363,7 +363,7 @@ public:
 
     template<class T, std::enable_if_t<std::is_integral_v<T> || std::is_floating_point_v<T>, int> = 0>
     inline void set_sparse_block(ssize_t row_offset, T *ptr, size_t rows_to_write) {
-        util::check(row_offset == 0, "Cannot write sparse column  with existing data");
+        util::check(row_offset == 0, "Cannot write sparse column with existing data");
         auto new_buffer = util::scan_floating_point_to_sparse(ptr, rows_to_write, sparse_map());
         std::swap(data_.buffer(), new_buffer);
     }
@@ -647,7 +647,8 @@ public:
                 ndim,
                 type().data_type(),
                 get_type_size(type().data_type()),
-                reinterpret_cast<const T*>(data_.buffer().ptr_cast<uint8_t>(bytes_offset(idx), calc_elements(shape_ptr, ndim))));
+                reinterpret_cast<const T*>(data_.buffer().ptr_cast<uint8_t>(bytes_offset(idx), calc_elements(shape_ptr, ndim))),
+                ndim);
     }
 
     void set_allow_sparse(bool value) {

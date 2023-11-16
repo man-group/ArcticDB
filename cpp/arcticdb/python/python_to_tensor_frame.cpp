@@ -58,10 +58,15 @@ std::tuple<ValueType, uint8_t, ssize_t> determine_python_object_type(PyObject* o
 /// In case column is composed of arrays all arrays must have the same element type. This iterates until if finds the
 /// first non-empty array and returns its type.
 /// @todo We will iterate over all arrays in a column in aggregator_set_data anyways, so this is redundant, however
-///     we the type is determined at the point when obj_to_tensor is called. We need to make it possible to change the
+///     the type is determined at the point when obj_to_tensor is called. We need to make it possible to change the
 ///     the column type in aggregator_set_data in order not to iterate all arrays twice.
 std::tuple<ValueType, uint8_t, ssize_t> determine_python_array_type(PyObject** begin, PyObject** end) {
-    while(begin != end) {
+        auto none = py::none{};
+        while(begin != end) {
+        if(none.ptr() == *begin) {
+            ++begin;
+            continue;
+        }
         const auto arr = pybind11::detail::array_proxy(*begin);
         normalization::check<ErrorCode::E_UNIMPLEMENTED_COLUMN_SECONDARY_TYPE>(arr->nd == 1, "Only one dimensional arrays are supported in columns.");
         const auto descr = pybind11::detail::array_descriptor_proxy(arr->descr);
@@ -156,7 +161,9 @@ NativeTensor obj_to_tensor(PyObject *ptr) {
                     }
                     ++current_object;
                 }
-                sample = *current_object;
+                if(!empty) {
+                    sample = *current_object;
+                }
             }
             if (empty) {
                 val_type = ValueType::EMPTY;
@@ -177,7 +184,7 @@ NativeTensor obj_to_tensor(PyObject *ptr) {
     const SizeBits size_bits = val_type == ValueType::EMPTY ? SizeBits::S64 : get_size_bits(val_bytes);
     const auto dt = combine_data_type(val_type, size_bits);
     const ssize_t nbytes = element_count * descr->elsize;
-    return {nbytes, ndim, arr->strides, arr->dimensions, dt, descr->elsize, arr->data};
+    return {nbytes, arr->nd, arr->strides, arr->dimensions, dt, descr->elsize, arr->data, ndim};
 }
 
 InputTensorFrame py_ndf_to_frame(
@@ -238,9 +245,9 @@ InputTensorFrame py_ndf_to_frame(
     for (auto i = 0u; i < col_vals.size(); ++i) {
         auto tensor = obj_to_tensor(col_vals[i].ptr());
         res.num_rows = std::max(res.num_rows, tensor.shape(0));
-        if(tensor.ndim() == 1) {
+        if(tensor.expanded_dim() == 1) {
             res.desc.add_field(scalar_field(tensor.data_type(), col_names[i]));
-        } else if(tensor.ndim() == 2) {
+        } else if(tensor.expanded_dim() == 2) {
             res.desc.add_field(FieldRef{TypeDescriptor{tensor.data_type(), Dimension::Dim1}, col_names[i]});
         }
         res.field_tensors.push_back(std::move(tensor));
@@ -271,10 +278,10 @@ InputTensorFrame py_none_to_frame() {
 
     res.set_sorted(sorted);
 
-    ssize_t strides = 8;
-    ssize_t shapes = 1;
-
-    auto tensor = NativeTensor{8, 1, &strides, &shapes, DataType::UINT64, 8, none_char};
+    const ssize_t strides = 8;
+    const ssize_t shapes = 1;
+    constexpr ssize_t ndim = 1;
+    auto tensor = NativeTensor{8, ndim, &strides, &shapes, DataType::UINT64, 8, none_char, ndim};
     res.num_rows = std::max(res.num_rows, tensor.shape(0));
     res.desc.add_field(scalar_field(tensor.data_type(), col_name));
     res.field_tensors.push_back(std::move(tensor));

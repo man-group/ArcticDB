@@ -64,6 +64,9 @@ namespace arcticdb {
             static_assert(encoder_version == EncodingVersion::V2,
                 "Encoding values separately from the shapes is allowed only in V2 encoding");
             auto* ndarray = field.mutable_ndarray();
+            if(typed_block.nbytes() == 0) {
+                return;
+            }
             auto* values_encoded_block = ndarray->add_values();
             visit_encoder(codec_opts, [&](auto encoder_tag) {
                 if constexpr(std::is_same_v<typename decltype(encoder_tag)::Encoder, PassthroughEncoder>) {
@@ -90,6 +93,9 @@ namespace arcticdb {
         ) {
             static_assert(encoder_version == EncodingVersion::V2,
                 "Encoding shapes separately from the values is allowed only in V2 encoding");
+            if(typed_block.nbytes() == 0) {
+                return;
+            }
             auto* ndarray = field.mutable_ndarray();
             auto* shapes_encoded_block = ndarray->add_shapes();
             visit_encoder(codec_opts, [&](auto encoder_tag) {

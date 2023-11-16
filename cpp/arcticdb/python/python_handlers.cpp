@@ -47,7 +47,7 @@ namespace arcticdb {
             flags,
             nullptr));
         ARCTICDB_SUBSAMPLE(ArrayCopy, 0);
-        // util::check(static_cast<bool>(tmp), "Got null pointer in array allocation");
+        util::check(static_cast<bool>(tmp), "Got null pointer in array allocation");
         tmp = py::reinterpret_steal<py::object>(api.PyArray_NewCopy_(tmp.ptr(), -1));
         return tmp.release().ptr();
     }
@@ -177,21 +177,24 @@ namespace arcticdb {
                     return;
 
                 auto block_it = blocks.begin();
-                const ssize_t* shape = data_sink->shape_ptr();
+                const ssize_t* shapes = data_sink->shape_ptr();
                 auto block_pos = 0u;
                 const auto* ptr_src = (*block_it)->data();
                 constexpr shape_t stride = static_cast<TypeDescriptor>(tdt).get_type_byte_size();
                 for (auto en = bv->first(); en < bv->end(); ++en) {
+                    const ssize_t shape = shapes ? *shapes : 0;
                     const auto offset = *en;
                     ptr_dest = fill_with_none(ptr_dest, offset - last_row);
                     last_row = offset;
                     *ptr_dest++ = initialize_array(py_dtype,
-                        shape,
+                        &shape,
                         &stride,
                         static_cast<size_t>(type_descriptor.dimension()),
                         ptr_src + block_pos);
-                    block_pos += *shape * stride;
-                    ++shape;
+                    block_pos += shape * stride;
+                    if(shapes) {
+                        ++shapes;
+                    }
                     if(block_it != blocks.end() && block_pos == (*block_it)->bytes() && ++block_it != blocks.end()) {
                         ptr_src = (*block_it)->data();
                         block_pos = 0;

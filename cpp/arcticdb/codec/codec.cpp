@@ -150,7 +150,10 @@ void ColumnEncoder_v2::encode_shapes(
     Buffer& out,
     std::ptrdiff_t& pos_in_buffer
 ) {
-    if(column_data.type().dimension() != Dimension::Dim0) {
+    // There is no need to store the shapes for a column of empty type as they will be all 0. The type handler will
+    // assign 0 for the shape upon reading. There is one edge case - when we have None in the column, as it should not
+    // have shape at all (since it's not an array). This is handled by the sparse map.
+    if(column_data.type().dimension() != Dimension::Dim0 && !is_empty_type(column_data.type().data_type())) {
         ShapesBlock shapes_block = create_shapes_typed_block(column_data);
         util::variant_match(variant_field, [&](auto field){
             ShapesEncoder::encode_shapes(shapes_encoding_opts(), shapes_block, *field, out, pos_in_buffer);
