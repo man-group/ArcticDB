@@ -220,7 +220,11 @@ public:
         size_t expected_rows,
         bool presize,
         bool allow_sparse) :
-            data_(expected_rows * get_type_size(type.data_type()), presize),
+            // Array types are stored on disk as flat sequences. The python layer cannot work with this. We need to pass
+            // it pointers to an array type (at numpy arrays at the moment). When we allocate a column for an array we
+            // need to allocate space for one pointer per row. This also affects how we handle arrays to python as well.
+            // Check cpp/arcticdb/column_store/column_utils.hpp::array_at and cpp/arcticdb/column_store/column.hpp::Column
+            data_(expected_rows * (type.dimension() == Dimension::Dim0 ? get_type_size(type.data_type()) : sizeof(void*)), presize),
             type_(type),
             allow_sparse_(allow_sparse){
         ARCTICDB_TRACE(log::inmem(), "Creating column with descriptor {}", type);
@@ -363,7 +367,7 @@ public:
 
     template<class T, std::enable_if_t<std::is_integral_v<T> || std::is_floating_point_v<T>, int> = 0>
     inline void set_sparse_block(ssize_t row_offset, T *ptr, size_t rows_to_write) {
-        util::check(row_offset == 0, "Cannot write sparse column  with existing data");
+        util::check(row_offset == 0, "Cannot write sparse column with existing data");
         auto new_buffer = util::scan_floating_point_to_sparse(ptr, rows_to_write, sparse_map());
         std::swap(data_.buffer(), new_buffer);
     }
@@ -426,7 +430,7 @@ public:
     }
 
     void set_empty_array(ssize_t row_offset, int dimension_count);
-
+    void set_type(TypeDescriptor td);
     ssize_t last_row() const {
         return last_logical_row_;
     }
@@ -647,7 +651,8 @@ public:
                 ndim,
                 type().data_type(),
                 get_type_size(type().data_type()),
-                reinterpret_cast<const T*>(data_.buffer().ptr_cast<uint8_t>(bytes_offset(idx), calc_elements(shape_ptr, ndim))));
+                reinterpret_cast<const T*>(data_.buffer().ptr_cast<uint8_t>(bytes_offset(idx), calc_elements(shape_ptr, ndim))),
+                ndim);
     }
 
     void set_allow_sparse(bool value) {
@@ -840,19 +845,6 @@ public:
         return orig_type_.value();
     }
 
-    void set_secondary_type(TypeDescriptor type) {
-        secondary_type_ = std::move(type);
-    }
-
-    bool has_secondary_type() const {
-        return secondary_type_.has_value();
-    }
-
-    const TypeDescriptor& secondary_type() const {
-        util::check(secondary_type_.has_value(), "Requesting secondary type in a column that does not have one");
-        return *secondary_type_;
-    }
-
     void compact_blocks() {
         data_.compact_blocks();
     }
@@ -1028,8 +1020,6 @@ private:
     bool inflated_ = false;
     bool allow_sparse_ = false;
     std::optional<util::BitMagic> sparse_map_;
-    // For types that are arrays or matrices, the member type
-    std::optional<TypeDescriptor> secondary_type_;
     util::MagicNum<'D', 'C', 'o', 'l'> magic_;
 };
 

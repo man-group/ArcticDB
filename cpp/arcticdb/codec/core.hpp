@@ -185,7 +185,11 @@ struct GenericBlockEncoder {
     GenericBlockEncoder() = delete;
     GenericBlockEncoder(GenericBlockEncoder &&enc) = delete;
 
-    static size_t max_compressed_size(const BlockType &block) {
+    static size_t max_compressed_size(const BlockType& block) {
+        if(block.nbytes() == 0) {
+            return 0;
+        }
+
         Helper helper;
         helper.hasher_.reset(helper.seed);
         std::size_t block_row_count = block.row_count();
@@ -220,6 +224,10 @@ struct GenericBlockEncoder {
         Helper helper;
         helper.hasher_.reset(helper.seed);
         const std::size_t block_row_count = block.row_count();
+        auto *field_nd_array = field.mutable_ndarray();
+        if(block.nbytes() == 0) {
+            return;
+        }
 
         if constexpr (Helper::dim == Dimension::Dim0) {
             // Only store data, no shapes since dimension is 0
@@ -233,13 +241,17 @@ struct GenericBlockEncoder {
             // doing copy + hash in one pass, this might have a negative effect on perf
             // since the hashing is path dependent. This is a toy example though so not critical
             auto t_out = reinterpret_cast<T *>(out.data() + pos);
-            auto *field_nd_array = field.mutable_ndarray();
             const auto total_items_count = field_nd_array->items_count() + block_row_count;
             field_nd_array->set_items_count(total_items_count);
             auto value_pb = field_nd_array->add_values();
-            const auto compressed_size = EncoderType::encode_block(opts, block.data(), helper_scalar_block, helper.hasher_, t_out,
-                                                           max_compressed_size, pos, *value_pb->mutable_codec());
-
+            const auto compressed_size = EncoderType::encode_block(opts,
+                block.data(),
+                helper_scalar_block,
+                helper.hasher_,
+                t_out,
+                max_compressed_size,
+                pos,
+                *value_pb->mutable_codec());
             helper_scalar_block.set_block_data(*value_pb, helper.hasher_.digest(), compressed_size);
             helper_scalar_block.set_version(*value_pb, EncoderType::VERSION);
         } else {
@@ -251,7 +263,6 @@ struct GenericBlockEncoder {
             const std::size_t helper_buffer_size = max_compressed_data_size + max_compressed_shapes_size;
 
             helper.ensure_buffer(out, pos, helper_buffer_size);
-            auto field_nd_array = field.mutable_ndarray();
             auto shape_pb = field_nd_array->add_shapes();
 
             // write shapes
@@ -302,6 +313,9 @@ public:
 
     static size_t max_compressed_size(const BlockType &block) {
         const auto uncompressed_size = block.nbytes();
+        if(uncompressed_size == 0) {
+            return 0;
+        }
         const auto compressed = EncoderType::max_compressed_size(uncompressed_size);
         ARCTICDB_TRACE(log::codec(), "Scalar block has {} bytes", compressed);
         return compressed;
@@ -315,6 +329,10 @@ public:
         std::ptrdiff_t& pos,
         EncodedBlockType* encoded_block
     ) {
+        if(block.nbytes() == 0) {
+            return;
+        }
+
         Helper helper;
         helper.hasher_.reset(helper.seed);
         auto helper_scalar_block = BlockProtobufHelper{block.nbytes() / sizeof(T), block.nbytes()};

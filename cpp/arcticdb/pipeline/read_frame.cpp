@@ -221,7 +221,7 @@ void decode_or_expand_impl(
     size_t dest_bytes,
     std::shared_ptr<BufferHolder> buffers,
 	EncodingVersion encding_version) {
-    if(auto handler = TypeHandlerRegistry::instance()->get_handler(type_descriptor.data_type()); handler) {
+    if(auto handler = TypeHandlerRegistry::instance()->get_handler(type_descriptor); handler) {
         handler->handle_type(data, dest, VariantField{&encoded_field_info}, type_descriptor, dest_bytes, std::move(buffers), encding_version);
     } else {
         std::optional<util::BitMagic> bv;
@@ -315,6 +315,7 @@ bool remaining_fields_empty(IteratorType it, const PipelineContextRow& context) 
         if(!is_empty_type(field.type().data_type())) {
             return false;
         }
+        it.advance();
     }
     return true;
 }
@@ -337,9 +338,11 @@ void decode_into_frame_static(
     ARCTICDB_DEBUG(log::version(), "Num fields: {}", seg.header().fields_size());
     const EncodingVersion encoding_version = EncodingVersion(hdr.encoding_version());
     const bool has_magic_nums = encoding_version == EncodingVersion::V2;
+    VariantEncodedFieldCollection fields(seg);
 
-    if (data != end) {
-        VariantEncodedFieldCollection fields(seg);
+    // data == end in case we have empty data types (e.g. {EMPTYVAL, Dim0}, {EMPTYVAL, Dim1}) for which we store nothing
+    // in storage as they can be reconstructed in the type handler on the read path.
+    if (data != end || fields.size() >= 0) {
         auto index_field = fields.at(0u);
         decode_index_field(frame, index_field, data, begin, end, context, encoding_version);
 
@@ -357,14 +360,15 @@ void decode_into_frame_static(
             auto field_name = context.descriptor().fields(it.source_field_pos()).name();
             auto& buffer = frame.column(static_cast<ssize_t>(it.dest_col())).data().buffer();
             ColumnMapping m{frame, it.dest_col(), it.source_field_pos(), context};
-            util::check(trivially_compatible_types(m.source_type_desc_, m.dest_type_desc_), "Column type conversion from {} to {} not implemented in column {}:{} -> {}:{}",
-                        m.source_type_desc_,
-                        m.dest_type_desc_,
-                        it.source_col(),
-                        field_name,
-                        it.dest_col(),
-                        m.frame_field_descriptor_.name());
-
+            if(!(is_empty_type(m.source_type_desc_.data_type()) || is_empty_type(m.dest_type_desc_.data_type()))) {
+                util::check(trivially_compatible_types(m.source_type_desc_, m.dest_type_desc_), "Column type conversion from {} to {} not implemented in column {}:{} -> {}:{}",
+                            m.source_type_desc_,
+                            m.dest_type_desc_,
+                            it.source_col(),
+                            field_name,
+                            it.dest_col(),
+                            m.frame_field_descriptor_.name());
+            }
             util::check(data != end || remaining_fields_empty(it, context), "Reached end of input block with {} fields to decode", it.remaining_fields());
             decode_or_expand(data, buffer.data() + m.offset_bytes_, encoded_field, m.source_type_desc_,  m.dest_bytes_, buffers, encoding_version);
             ARCTICDB_TRACE(log::codec(), "Decoded column {} to position {}", field_name, data - begin);

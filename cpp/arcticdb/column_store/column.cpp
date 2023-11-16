@@ -236,4 +236,8 @@ void Column::set_empty_array(ssize_t row_offset, int dimension_count) {
     ++last_logical_row_;
 }
 
+void Column::set_type(TypeDescriptor td) {
+    type_ = td;
+}
+
 } //namespace arcticdb

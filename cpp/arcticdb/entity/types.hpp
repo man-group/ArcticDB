@@ -119,8 +119,6 @@ enum class ValueType : uint8_t {
     EMPTY = 13,
     /// Nullable booleans
     PYBOOL = 14,
-    /// Numpy arrays
-    ARRAY = 15,
     COUNT // Not a real value type, should not be added to proto descriptor. Used to count the number of items in the enum
 };
 
@@ -181,6 +179,16 @@ constexpr SizeBits get_size_bits(uint8_t size) {
     }
 }
 
+[[nodiscard]] constexpr int get_byte_count(SizeBits size_bits) {
+    switch(size_bits) {
+        case SizeBits::S8: return 1;
+        case SizeBits::S16: return 2;
+        case SizeBits::S32: return 4;
+        case SizeBits::S64: return 8;
+        default: util::raise_rte("Unknown size bits");
+    }
+}
+
 namespace detail{
 
 constexpr uint8_t combine_val_bits(ValueType v, SizeBits b = SizeBits::UNKNOWN_SIZE_BITS) {
@@ -209,7 +217,6 @@ enum class DataType : uint8_t {
     EMPTYVAL = detail::combine_val_bits(ValueType::EMPTY, SizeBits::S64),
     PYBOOL8 = detail::combine_val_bits(ValueType::PYBOOL, SizeBits::S8),
     PYBOOL64 = detail::combine_val_bits(ValueType::PYBOOL, SizeBits::S64),
-    ARRAY64 = detail::combine_val_bits(ValueType::ARRAY, SizeBits::S64),
     UNKNOWN = 0,
 };
 
@@ -303,23 +310,10 @@ constexpr bool is_empty_type(DataType v){
     return is_empty_type(slice_value_type(v));
 }
 
-constexpr bool is_array_type(DataType dt) {
-    return slice_value_type(dt) == ValueType::ARRAY;
-}
-
-/// @brief Check if the type must contain data
-/// Some types are allowed not to have any data, e.g. empty arrays or the empty type (which by design denotes the
-/// lack of data).
-/// @return true if the type must contain data, false it it's allowed for the type to have 0 bytes of data
-constexpr bool must_contain_data(DataType dt) {
-    return !(is_empty_type(dt) || is_array_type((dt)));
-}
-
 constexpr bool is_pyobject_type(DataType v) {
+    // TODO: Handle numpy arrays
     return is_dynamic_string_type(slice_value_type(v)) ||
-        slice_value_type(v) == ValueType::PYBOOL ||
-        //v == DataType::DECIMAL64 ||
-        slice_value_type(v) == ValueType::ARRAY;
+        slice_value_type(v) == ValueType::PYBOOL;
 }
 
 static_assert(slice_value_type((DataType::UINT16)) == ValueType(1));
@@ -415,7 +409,6 @@ DATA_TYPE_TAG(UTF_DYNAMIC64, std::uint64_t)
 DATA_TYPE_TAG(EMPTYVAL, std::uint64_t)
 DATA_TYPE_TAG(PYBOOL8, uint8_t)
 DATA_TYPE_TAG(PYBOOL64, std::uint64_t)
-DATA_TYPE_TAG(ARRAY64, std::uint64_t)
 #undef DATA_TYPE_TAG
 
 enum class Dimension : uint8_t {
@@ -481,11 +474,11 @@ struct TypeDescriptor {
         return !(*this == o);
     }
 
-    [[nodiscard]] DataType data_type() const {
+    [[nodiscard]] constexpr DataType data_type() const {
         return data_type_;
     }
 
-    [[nodiscard]] Dimension dimension() const {
+    [[nodiscard]] constexpr Dimension dimension() const {
         return dimension_;
     }
 
@@ -504,7 +497,19 @@ struct TypeDescriptor {
     void set_size_bits(SizeBits new_size_bits) {
         data_type_ = combine_data_type(slice_value_type(data_type_), new_size_bits);
     }
+
+    [[nodiscard]] constexpr int get_type_byte_size() const {
+        return get_byte_count(slice_bit_size(data_type_));
+    }
 };
+
+/// @brief Check if the type must contain data
+/// Some types are allowed not to have any data, e.g. empty arrays or the empty type (which by design denotes the
+/// lack of data).
+/// @return true if the type must contain data, false it it's allowed for the type to have 0 bytes of data
+constexpr bool must_contain_data(TypeDescriptor td) {
+    return !(is_empty_type(td.data_type()) || td.dimension() > Dimension::Dim0);
+}
 
 inline void set_data_type(DataType data_type, TypeDescriptor& type_desc) {
     type_desc.data_type_ = data_type;
@@ -522,6 +527,14 @@ struct TypeDescriptorTag {
     using DimensionTag = D;
     explicit constexpr operator TypeDescriptor() const {
         return TypeDescriptor{DataTypeTag::data_type, DimensionTag::value};
+    }
+
+    [[nodiscard]] constexpr Dimension dimension() const {
+        return DimensionTag::value;
+    }
+
+    [[nodiscard]] constexpr DataType data_type() const {
+        return DataTypeTag::data_type;
     }
 };
 

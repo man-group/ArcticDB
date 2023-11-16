@@ -38,13 +38,16 @@ endif()
 if(ARCTICDB_SANITIZER_FLAGS)
     list(APPEND ARCTICDB_SANITIZER_FLAGS "-g;-fno-omit-frame-pointer;-fno-optimize-sibling-calls;")
     if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-        # ld cannot be used if sanitizers are enabled
-        # TODO: Check if mold supports sanitizers
         add_link_options(-fuse-ld=lld)
+        # According to clang's docs only LLD can be used for lining https://clang.llvm.org/docs/AddressSanitizer.html#usage
+        message(STATUS "Clang compiler detected. Enforcing lld compiler.")
+    else()
+        message(WARNING "Sanitizers are tested only under Clang compiler and LLD linker.")
     endif()
     # Note: Sanitizer flags are set globally for all targets created after
     add_compile_options("${ARCTICDB_SANITIZER_FLAGS}")
     add_link_options(${ARCTICDB_SANITIZER_FLAGS})
+    message(STATUS "Building ArcticDB with sanitizers. Compiler flags: ${ARCTICDB_SANITIZER_FLAGS}")
 endif()
 
 if(WIN32)

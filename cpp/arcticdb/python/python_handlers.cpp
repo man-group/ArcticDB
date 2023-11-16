@@ -19,8 +19,10 @@ namespace arcticdb {
     /// i) There is no equivalent to empty value
     /// ii) We want input dataframes to be exact match of the output and that includes the type
     [[nodiscard]] static inline py::dtype generate_python_dtype(const TypeDescriptor& td, shape_t type_byte_size) {
-        const char type_specifier = is_empty_type(td.data_type()) ? 'f' : get_dtype_specifier(td.data_type());
-        return py::dtype{fmt::format("{}{:d}", type_specifier, type_byte_size)};
+        if(is_empty_type(td.data_type())) {
+            return py::dtype{"f8"};
+        }
+        return py::dtype{fmt::format("{}{:d}", get_dtype_specifier(td.data_type()), type_byte_size)};
     }
 
     [[nodiscard]] static inline PyObject* initialize_array(
@@ -33,7 +35,7 @@ namespace arcticdb {
         ARCTICDB_SAMPLE(InitializeArray, 0)
         util::check(source_ptr != nullptr, "Null pointer passed in");
         const auto flags = py::detail::npy_api::NPY_ARRAY_WRITEABLE_;
-        const auto &api = py::detail::npy_api::get();
+        const auto& api = py::detail::npy_api::get();
         ARCTICDB_SUBSAMPLE(InitArrayCreateArray, 0)
         auto tmp = py::reinterpret_steal<py::object>(api.PyArray_NewFromDescr_(
             api.PyArray_Type_,
@@ -44,9 +46,9 @@ namespace arcticdb {
             const_cast<void*>(source_ptr),
             flags,
             nullptr));
-        ARCTICDB_SUBSAMPLE(ArrayCopy, 0)
-        tmp = py::reinterpret_steal<py::object>(api.PyArray_NewCopy_(tmp.ptr(), -1));
+        ARCTICDB_SUBSAMPLE(ArrayCopy, 0);
         util::check(static_cast<bool>(tmp), "Got null pointer in array allocation");
+        tmp = py::reinterpret_steal<py::object>(api.PyArray_NewCopy_(tmp.ptr(), -1));
         return tmp.release().ptr();
     }
 
@@ -139,14 +141,6 @@ namespace arcticdb {
         }, encoded_field_info);
     }
 
-    static inline TypeDescriptor get_numpy_array_type(const EncodedField* field) {
-        return field->ndarray().arr_desc();
-    }
-
-    static inline TypeDescriptor get_numpy_array_type(const arcticdb::proto::encoding::EncodedField* field) {
-        return type_desc_from_proto(field->ndarray().arr_desc());
-    }
-
     void ArrayHandler::handle_type(
         const uint8_t*& data,
         uint8_t* dest,
@@ -167,9 +161,7 @@ namespace arcticdb {
                 fill_with_none(ptr_dest, row_count);
                 return;
             }
-            util::check(field->ndarray().has_arr_desc(), "Array type descriptor required in array object handler");
-            const TypeDescriptor array_type_descriptor = get_numpy_array_type(field);
-            auto data_sink = buffers->get_buffer(array_type_descriptor, true);
+            auto data_sink = buffers->get_buffer(type_descriptor, true);
             data_sink->check_magic();
             log::version().info("Column got buffer at {}", uintptr_t(data_sink.get()));
             auto bv = std::make_optional(util::BitSet{});
@@ -177,33 +169,32 @@ namespace arcticdb {
 
             auto last_row = 0u;
             ARCTICDB_SUBSAMPLE(InitArrayAcquireGIL, 0)
-            const shape_t strides = get_type_size(array_type_descriptor.data_type());
-            const auto py_dtype = generate_python_dtype(array_type_descriptor, strides);
-            array_type_descriptor.visit_tag([&] (auto tdt) {
-                using RawType = typename decltype(tdt)::DataTypeTag::raw_type;
+            const shape_t strides = get_type_size(type_descriptor.data_type());
+            const auto py_dtype = generate_python_dtype(type_descriptor, strides);
+            type_descriptor.visit_tag([&] (auto tdt) {
                 const auto& blocks = data_sink->blocks();
                 if(blocks.empty())
                     return;
 
                 auto block_it = blocks.begin();
-                const ssize_t* shape = data_sink->shape_ptr();
+                const ssize_t* shapes = data_sink->shape_ptr();
                 auto block_pos = 0u;
                 const auto* ptr_src = (*block_it)->data();
-                const shape_t stride = sizeof(RawType);
+                constexpr shape_t stride = static_cast<TypeDescriptor>(tdt).get_type_byte_size();
                 for (auto en = bv->first(); en < bv->end(); ++en) {
+                    const ssize_t shape = shapes ? *shapes : 0;
                     const auto offset = *en;
                     ptr_dest = fill_with_none(ptr_dest, offset - last_row);
                     last_row = offset;
-
-                    *ptr_dest++ = initialize_array(
-                        py_dtype,
-                        shape,
+                    *ptr_dest++ = initialize_array(py_dtype,
+                        &shape,
                         &stride,
-                        static_cast<size_t>(array_type_descriptor.dimension()),
+                        static_cast<size_t>(type_descriptor.dimension()),
                         ptr_src + block_pos);
-
-                    block_pos += *shape * stride;
-                    ++shape;
+                    block_pos += shape * stride;
+                    if(shapes) {
+                        ++shapes;
+                    }
                     if(block_it != blocks.end() && block_pos == (*block_it)->bytes() && ++block_it != blocks.end()) {
                         ptr_src = (*block_it)->data();
                         block_pos = 0;
