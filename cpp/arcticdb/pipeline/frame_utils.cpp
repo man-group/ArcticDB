@@ -75,19 +75,19 @@ TimeseriesDescriptor timeseries_descriptor_from_pipeline_context(
 }
 
 TimeseriesDescriptor index_descriptor_from_frame(
-        pipelines::InputTensorFrame&& frame,
+        const std::shared_ptr<pipelines::InputTensorFrame>& frame,
         size_t existing_rows,
         std::optional<entity::AtomKey>&& prev_key
 ) {
     return make_timeseries_descriptor(
-        frame.num_rows + existing_rows,
-        StreamDescriptor{std::make_shared<StreamDescriptor::Proto>(std::move(frame.desc.mutable_proto())),
-           frame.desc.fields_ptr()},
-        std::move(frame.norm_meta),
-        std::move(frame.user_meta),
+        frame->num_rows + existing_rows,
+        StreamDescriptor{std::make_shared<StreamDescriptor::Proto>(std::move(frame->desc.mutable_proto())),
+           frame->desc.fields_ptr()},
+        std::move(frame->norm_meta),
+        std::move(frame->user_meta),
         std::move(prev_key),
         std::nullopt,
-        frame.bucketize_dynamic);
+        frame->bucketize_dynamic);
 }
 
 void adjust_slice_rowcounts(const std::shared_ptr<pipelines::PipelineContext>& pipeline_context) {

@@ -206,7 +206,7 @@ struct TestTensorFrame {
         segment_(std::move(desc), num_rows) {}
 
     SegmentInMemory segment_;
-    arcticdb::pipelines::InputTensorFrame frame_;
+    std::shared_ptr<arcticdb::pipelines::InputTensorFrame> frame_ = std::make_shared<arcticdb::pipelines::InputTensorFrame>();
 };
 
 template<class ContainerType, typename DTT>
@@ -275,14 +275,14 @@ TestTensorFrame get_test_frame(const StreamId &id,
     using namespace arcticdb::pipelines;
     TestTensorFrame output(get_test_descriptor<IndexType>(id, fields), num_rows);
 
-    output.frame_.desc = get_test_descriptor<IndexType>(id, fields);
-    output.frame_.index = index_type_from_descriptor(output.frame_.desc);
-    output.frame_.num_rows = num_rows;
-    output.frame_.desc.set_sorted(SortedValue::ASCENDING);
+    output.frame_->desc = get_test_descriptor<IndexType>(id, fields);
+    output.frame_->index = index_type_from_descriptor(output.frame_->desc);
+    output.frame_->num_rows = num_rows;
+    output.frame_->desc.set_sorted(SortedValue::ASCENDING);
 
-    fill_test_frame(output.segment_, output.frame_, num_rows, start_val, opt_row_offset);
+    fill_test_frame(output.segment_, *output.frame_, num_rows, start_val, opt_row_offset);
 
-    output.frame_.set_index_range();
+    output.frame_->set_index_range();
 
     return output;
 }
