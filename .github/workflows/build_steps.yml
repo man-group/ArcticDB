@@ -5,7 +5,7 @@ on:
       job_type:          {required: true, type: string, description: Selects the steps to enable}
       cmake_preset_type: {required: true, type: string, description: release/debug}
       matrix:            {required: true, type: string, description: JSON string to feed into the matrix}
-      distro:            {required: true, type: string, description: Label of the runner that will be used for running the workflow}
+      compile-override:  {required: false, type: string, description: Parameter to override the agent that is used for compiling e.g. compile-on-ec2}
       cibw_image_tag:    {required: false, type: string, description: Linux only. As built by cibw_docker_image.yml workflow}
       cibw_version:      {required: false, type: string, description: build-python-wheels only. Must match the cibw_image_tag}
       python_deps_ids:   {default: '[""]', type: string, description: build-python-wheels test matrix parameter. JSON string.}
@@ -18,7 +18,7 @@ on:
       clear:             {default: 1, type: number, description: Controls wheather we will clear the libraries in the versions stores that we test against}
 jobs:
   start_ec2_runner:
-    if: inputs.distro == 'compile-on-ec2'
+    if: inputs.compile-override == 'compile-on-ec2'
     uses: ./.github/workflows/ec2_runner_jobs.yml
     secrets: inherit
     with:
@@ -28,7 +28,6 @@ jobs:
     needs: [start_ec2_runner]
     if: |
       always() &&
-      !failure() &&
       !cancelled()
     strategy:
       matrix:
@@ -49,7 +48,7 @@ jobs:
         include:
             - ${{fromJSON(inputs.matrix)[0]}} # The items after 0 are for tests only
 
-    runs-on: ${{ needs.start_ec2_runner.outputs.label || inputs.distro}}
+    runs-on: ${{ needs.start_ec2_runner.result != 'failure' && needs.start_ec2_runner.outputs.label || matrix.distro}}
     container: ${{ (matrix.os == 'linux' && inputs.job_type != 'build-python-wheels') && matrix.container || null}}
     env:
       SCCACHE_GHA_VERSION: ${{vars.SCCACHE_GHA_VERSION || 1}} # Setting this env var enables the caching
@@ -220,7 +219,7 @@ jobs:
     needs: [start_ec2_runner, compile]
     if: |
       always() &&
-      inputs.distro == 'compile-on-ec2'
+      inputs.compile-override == 'compile-on-ec2'
     uses: ./.github/workflows/ec2_runner_jobs.yml
     secrets: inherit
     with:
@@ -243,7 +242,7 @@ jobs:
         include:
           ${{fromJSON(inputs.matrix)}}
     name: ${{matrix.type}}${{matrix.python_deps_id}}
-    runs-on: ${{inputs.distro != 'compile-on-ec2' && inputs.distro || 'ubuntu-latest'}}
+    runs-on: ${{matrix.distro}}
     container: ${{matrix.os == 'linux' && needs.compile.outputs.manylinux_image || null}}
     defaults:
       run: {shell: bash}
