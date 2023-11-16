@@ -19,6 +19,7 @@ jobs:
     if: inputs.job_type == 'start'
     name: Start self-hosted EC2 runner
     runs-on: ubuntu-latest
+    continue-on-error: true
     outputs:
       label: ${{ steps.start-ec2-runner.outputs.label }}
       ec2-instance-id: ${{ steps.start-ec2-runner.outputs.ec2-instance-id }}
@@ -45,6 +46,7 @@ jobs:
     name: Stop self-hosted EC2 runner
     if: inputs.job_type == 'stop'
     runs-on: ubuntu-latest
+    continue-on-error: true
     steps:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v1
