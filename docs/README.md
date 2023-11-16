@@ -70,6 +70,29 @@ We use `mike` to version the docs.  The docs are first built into the `docs-page
 
 To serve the versioned docs locally, run `mike serve` from the `docs/mkdocs` directory.
 
+## Building Docs using the Github Action
+
+To use the `Docs Build` github action follow these steps:
+
+* It will use the git branch selected for the code to run the action
+* The version text for the action should be in the form `4.0.2` (as an example)
+* This use git tag `v4.0.2-docs` to build the docs
+* Tick the `latest` box if are working on docs for the latest stable release
+* Tick the push to github box unless you are testing the build. This is where the publish action reads from. Normally you would tick this.
+
+For managing git, please follow these conventions:
+
+* To make the first mod to the docs for an older version please branch from the `v4.0.2` tag with a branch called `v4.0.2-docs-branch`
+* If the branch and docs tag already exist for the version the just checkout the branch
+* Commit the changes you want to see in the docs for that version
+* If it exists already, delete the `v4.0.2-docs` tag using `git tag -d v4.0.2-docs` (local) then `git push origin :v4.0.2-docs` (remote)
+* Recreate the tag for your latest commit using `git tag v4.0.2-docs`
+* Push your commit (`git push`) and new tag (`git push origin v4.0.2-docs`) to the remote
+* Run the action
+
+The reason for the separate docs tags is to allow improvements to the docs to be made to recent versions without re-tagging the release. The docs branches can eventually be deleted for older versions. The tags should not be deleted.
+
+
 ## Publishing `docs.arcticdb.io`
 
 Run the `Docs Publish` github action.
