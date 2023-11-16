@@ -200,66 +200,65 @@ def test_batch_write_unicode_strings(lmdb_version_store):
         lib.batch_append(syms, data)
 
 
-def test_update_with_empty_series_or_dataframe(lmdb_version_store):
+@pytest.mark.parametrize("PandasType, assert_pandas_container_equal", [
+    (pd.Series, assert_series_equal),
+    (pd.DataFrame, assert_frame_equal),
+])
+def test_update_with_empty_series_or_dataframe(lmdb_version_store, PandasType, assert_pandas_container_equal):
     # Non-regression test for https://github.com/man-group/ArcticDB/issues/892
     lib = lmdb_version_store
 
-    empty_df = pd.DataFrame([], columns=["a", "b", "c"], dtype=float)
-    one_row_df = pd.DataFrame(
-        data=np.array([[1.0, 2.0, 3.0]]),
-        columns=["a", "b", "c"],
+    kwargs = { "name": "a" } if PandasType == pd.Series else { "columns": ["a"] }
+    data = np.array([1.0]) if PandasType == pd.Series else np.array([[1.0]])
+
+    empty = PandasType(data=[], dtype=float, index=pd.DatetimeIndex([]), **kwargs)
+    one_row = PandasType(
+        data=data,
         dtype=float,
         index=pd.DatetimeIndex([
             datetime.datetime(2019, 4, 9, 10, 5, 2, 1)
         ]),
+        **kwargs,
     )
 
-    symbol = "test_update_with_empty_dataframe_first"
+    symbol = "test_update_with_empty_series_or_dataframe_first"
 
-    lib.write(symbol, empty_df)
-    lib.append(symbol, empty_df)
-    lib.update(symbol, one_row_df)
-    received_df = lib.read(symbol).data
-    assert_frame_equal(one_row_df, received_df)
+    first_operation = lib.write(symbol, empty)
 
-    symbol = "test_update_with_empty_dataframe_second"
+    assert first_operation.version == 0
 
-    lib.write(symbol, one_row_df)
-    if IS_PANDAS_TWO:
-        # Appending and updating with an empty dataframe must not have any effect but must not fail.
-        # TODO: Currently Pandas 1 default empty dtype series being corced to EMPTY is causing problems
-        # with changing the stored descriptors, making updating or reading symbol back impossible
-        # when empty dataframes are appended.
-        lib.append(symbol, empty_df)
-        lib.update(symbol, empty_df)
+    # Has no effect, but must not fail.
+    second_operation = lib.append(symbol, empty)
 
-    received_df = lib.read(symbol).data
-    assert_frame_equal(one_row_df, received_df)
+    # No new version is created.
+    assert second_operation.version == first_operation.version
 
-    empty_series = pd.Series([], dtype=float, index=pd.DatetimeIndex([]))
-    one_row_series = pd.Series([1.0], dtype=float, index=pd.DatetimeIndex([datetime.datetime(2019, 4, 9, 10, 5, 2, 1)]))
+    third_operation = lib.update(symbol, one_row)
 
-    symbol = "test_update_with_empty_series_first"
+    # A new version is created in this case.
+    assert third_operation.version == second_operation.version + 1
 
-    lib.write(symbol, empty_series)
-    lib.append(symbol, empty_series)
-    lib.update(symbol, one_row_series)
-    received_series = lib.read(symbol).data
-    assert_series_equal(one_row_series, received_series)
+    received = lib.read(symbol).data
+    assert_pandas_container_equal(one_row, received)
 
-    symbol = "test_update_with_empty_series_second"
+    symbol = "test_update_with_empty_series_or_dataframe_second"
 
-    lib.write(symbol, one_row_series)
-    if IS_PANDAS_TWO:
-        # Appending and updating with an empty series must not have any effect but must not fail.
-        # TODO: Currently Pandas 1 default empty dtype series being corced to EMPTY is causing problems
-        # with changing the stored descriptors, making updating or reading symbol back impossible
-        # when empty series are appended.
-        lib.append(symbol, empty_series)
-        lib.update(symbol, empty_series)
+    first_operation = lib.write(symbol, one_row)
 
-    received_series = lib.read(symbol).data
-    assert_series_equal(one_row_series, received_series)
+    # Has no effect, but must not fail.
+    second_operation = lib.append(symbol, empty)
+
+    # No new version is created.
+    assert first_operation.version == second_operation.version
+
+    # Has no effect, but must not fail.
+    third_operation = lib.update(symbol, empty)
+
+    # No new version is created as well.
+    assert third_operation.version == first_operation.version
+
+    received = lib.read(symbol).data
+    assert_pandas_container_equal(one_row, received)
 
 
 def test_update_with_empty_dataframe_with_index(lmdb_version_store):
