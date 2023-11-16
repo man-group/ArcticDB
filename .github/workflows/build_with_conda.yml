@@ -23,7 +23,7 @@ jobs:
       always() &&
       !cancelled()
     needs: [start_ec2_runner]
-    runs-on: ${{ !failure() && needs.start_ec2_runner.outputs.label || 'ubuntu-latest'}}
+    runs-on: ${{ needs.start_ec2_runner.result != 'failure' && needs.start_ec2_runner.outputs.label || 'ubuntu-latest'}}
     services:
       mongodb:
         image: mongo:4.4
