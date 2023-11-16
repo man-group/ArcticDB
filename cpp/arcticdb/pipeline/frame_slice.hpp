@@ -10,6 +10,7 @@
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/entity/atom_key.hpp>
 #include <arcticdb/column_store/memory_segment.hpp>
+#include <arcticdb/util/magic_num.hpp>
 
 namespace arcticdb {
     class Store;
@@ -159,12 +160,17 @@ struct FrameSlice {
         return a.row_range == b.row_range && a.col_range == b.col_range;
     }
 
+    void check_magic() const {
+        magic_.check();
+    }
+
 private:
     // never contains index field
     std::shared_ptr<entity::StreamDescriptor> desc_;
     std::optional<uint64_t> hash_bucket_;
     std::optional<uint64_t> num_buckets_;
     std::optional<std::vector<size_t>> indices_;
+    util::MagicNum<'F', 's', 'l', 'c'> magic_;
 };
 
 // Collection of these objects is the input to batch_read_uncompressed

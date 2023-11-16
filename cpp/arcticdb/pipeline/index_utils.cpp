@@ -41,27 +41,27 @@ folly::Future<entity::AtomKey> write_index(
 }
 
 folly::Future<entity::AtomKey> write_index(
-    InputTensorFrame&& frame,
+    const std::shared_ptr<InputTensorFrame>& frame,
     std::vector<SliceAndKey> &&slice_and_keys,
     const IndexPartialKey &partial_key,
     const std::shared_ptr<stream::StreamSink> &sink
     ) {
-    auto offset = frame.offset;
-    auto index = stream::index_type_from_descriptor(frame.desc);
-    auto timeseries_desc = index_descriptor_from_frame(std::move(frame), offset);
+    auto offset = frame->offset;
+    auto index = stream::index_type_from_descriptor(frame->desc);
+    auto timeseries_desc = index_descriptor_from_frame(frame, offset);
     return write_index(index, std::move(timeseries_desc), std::move(slice_and_keys), partial_key, sink);
 }
 
 folly::Future<entity::AtomKey> write_index(
-    InputTensorFrame&& frame,
+    const std::shared_ptr<InputTensorFrame>& frame,
     std::vector<folly::Future<SliceAndKey>> &&slice_and_keys,
     const IndexPartialKey &partial_key,
     const std::shared_ptr<stream::StreamSink> &sink
     ) {
     auto keys_fut = folly::collect(std::move(slice_and_keys)).via(&async::cpu_executor());
     return std::move(keys_fut)
-    .thenValue([frame = std::move(frame), &partial_key, &sink](auto&& slice_and_keys_vals) mutable {
-        return write_index(std::move(frame), std::move(slice_and_keys_vals), partial_key, sink);
+    .thenValue([frame = frame, &partial_key, &sink](auto&& slice_and_keys_vals) mutable {
+        return write_index(frame, std::move(slice_and_keys_vals), partial_key, sink);
     });
 }
 

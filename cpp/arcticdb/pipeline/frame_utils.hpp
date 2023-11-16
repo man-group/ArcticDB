@@ -71,7 +71,7 @@ TimeseriesDescriptor timeseries_descriptor_from_pipeline_context(
 
 
 TimeseriesDescriptor index_descriptor_from_frame(
-    pipelines::InputTensorFrame&& frame,
+    const std::shared_ptr<pipelines::InputTensorFrame>& frame,
     size_t existing_rows,
     std::optional<entity::AtomKey>&& prev_key = {});
 

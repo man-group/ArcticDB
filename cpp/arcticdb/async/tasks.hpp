@@ -39,16 +39,30 @@ struct EncodeAtomTask : BaseTask {
     std::shared_ptr<arcticdb::proto::encoding::VariantCodec> codec_meta_;
     EncodingVersion encoding_version_;
 
-    EncodeAtomTask(PartialKey &&pk,
-                   timestamp creation_ts,
-                   SegmentInMemory &&segment,
-                   std::shared_ptr<arcticdb::proto::encoding::VariantCodec> codec_meta,
-                   EncodingVersion encoding_version)
-        : partial_key_(std::move(pk)),
-          creation_ts_(creation_ts),
-          segment_(std::move(segment)),
-          codec_meta_(std::move(codec_meta)),
-          encoding_version_(encoding_version){}
+    EncodeAtomTask(
+        PartialKey &&pk,
+        timestamp creation_ts,
+        SegmentInMemory &&segment,
+        std::shared_ptr<arcticdb::proto::encoding::VariantCodec> codec_meta,
+        EncodingVersion encoding_version) :
+            partial_key_(std::move(pk)),
+            creation_ts_(creation_ts),
+            segment_(std::move(segment)),
+            codec_meta_(std::move(codec_meta)),
+            encoding_version_(encoding_version) {
+    }
+
+    EncodeAtomTask(
+        std::pair<PartialKey, SegmentInMemory>&& pk_seg,
+        timestamp creation_ts,
+        std::shared_ptr<arcticdb::proto::encoding::VariantCodec> codec_meta,
+        EncodingVersion encoding_version) :
+            partial_key_(std::move(pk_seg.first)),
+            creation_ts_(creation_ts),
+            segment_(std::move(pk_seg.second)),
+            codec_meta_(std::move(codec_meta)),
+            encoding_version_(encoding_version) {
+    }
 
     EncodeAtomTask(
         KeyType key_type,
@@ -59,11 +73,13 @@ struct EncodeAtomTask : BaseTask {
         timestamp creation_ts,
         SegmentInMemory &&segment,
         const std::shared_ptr<arcticdb::proto::encoding::VariantCodec> &codec_meta,
-        EncodingVersion encoding_version
-    )
-        : EncodeAtomTask(PartialKey{key_type, gen_id, std::move(stream_id), std::move(start_index),
-                                    std::move(end_index)}, creation_ts,
-                         std::move(segment), codec_meta, encoding_version) {
+        EncodingVersion encoding_version) :
+            EncodeAtomTask(
+                PartialKey{key_type, gen_id, std::move(stream_id), std::move(start_index), std::move(end_index)},
+                creation_ts,
+                std::move(segment),
+                codec_meta,
+                encoding_version) {
     }
 
     ARCTICDB_MOVE_ONLY_DEFAULT(EncodeAtomTask)
