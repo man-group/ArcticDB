@@ -35,7 +35,8 @@ jobs:
         uses: machulav/ec2-github-runner@v2
         with:
           mode: start
-          github-token: ${{ secrets.ARCTICDB_TEST_PAT }}
+          # DON'T MERGE: only for testing
+          github-token: ${{ secrets.GITHUB_TOKEN }}
           ec2-image-id: ${{ inputs.image-id }}
           ec2-instance-type: ${{ inputs.instance-type }}
           subnet-id: ${{ inputs.subnet-id }}
