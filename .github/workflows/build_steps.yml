@@ -242,7 +242,7 @@ jobs:
         include:
           ${{fromJSON(inputs.matrix)}}
     name: ${{matrix.type}}${{matrix.python_deps_id}}
-    runs-on: ${{inputs.distro != 'compile-on-ec2' && inputs.distro || 'ubuntu-latest'}}
+    runs-on: ${{matrix.distro}}
     container: ${{matrix.os == 'linux' && needs.compile.outputs.manylinux_image || null}}
     defaults:
       run: {shell: bash}
