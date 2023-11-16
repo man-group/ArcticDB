@@ -59,6 +59,8 @@ struct InputTensorFrame {
 
     bool has_index() const { return desc.index().field_count() != 0ULL; }
 
+    bool empty() const { return num_rows == 0; }
+
     void set_index_range() {
         // Fill index range
         // Note RowCountIndex will normally have an index field count of 0

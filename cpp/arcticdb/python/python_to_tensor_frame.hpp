@@ -82,12 +82,12 @@ std::variant<StringEncodingError, PyStringWrapper> py_unicode_to_buffer(
 
 NativeTensor obj_to_tensor(PyObject *ptr);
 
-pipelines::InputTensorFrame py_ndf_to_frame(
+std::shared_ptr<pipelines::InputTensorFrame> py_ndf_to_frame(
     const StreamId& stream_name,
     const py::tuple &item,
     const py::object &norm_meta,
     const py::object &user_meta);
 
-pipelines::InputTensorFrame py_none_to_frame();
+std::shared_ptr<pipelines::InputTensorFrame> py_none_to_frame();
 
 } // namespace arcticdb::convert

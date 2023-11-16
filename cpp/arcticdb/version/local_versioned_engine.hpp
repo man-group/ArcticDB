@@ -56,14 +56,14 @@ public:
     VersionedItem update_internal(
         const StreamId& stream_id,
         const UpdateQuery & query,
-        InputTensorFrame&& frame,
+        const std::shared_ptr<InputTensorFrame>& frame,
         bool upsert,
         bool dynamic_schema,
         bool prune_previous_versions) override;
 
     VersionedItem append_internal(
         const StreamId& stream_id,
-        InputTensorFrame&& frame,
+        const std::shared_ptr<InputTensorFrame>& frame,
         bool upsert,
         bool prune_previous_versions,
         bool validate_index) override;
@@ -84,7 +84,7 @@ public:
 
     void append_incomplete_frame(
         const StreamId& stream_id,
-        InputTensorFrame&& frame) const override;
+        const std::shared_ptr<InputTensorFrame>& frame) const override;
 
     void remove_incomplete(
         const StreamId& stream_id
@@ -140,7 +140,7 @@ public:
 
     void write_parallel_frame(
         const StreamId& stream_id,
-        InputTensorFrame&& frame) const override;
+        const std::shared_ptr<InputTensorFrame>& frame) const override;
 
     bool has_stream(
         const StreamId & stream_id
@@ -180,7 +180,7 @@ public:
 
     VersionedItem  write_versioned_dataframe_internal(
         const StreamId& stream_id,
-        InputTensorFrame&& frame,
+        const std::shared_ptr<InputTensorFrame>& frame,
         bool prune_previous_versions,
         bool allow_sparse,
         bool validate_index
@@ -266,7 +266,7 @@ public:
     std::vector<folly::Future<AtomKey>> batch_write_internal(
         const std::vector<VersionId>& version_ids,
         const std::vector<StreamId>& stream_ids,
-        std::vector<InputTensorFrame>&& frames,
+        std::vector<std::shared_ptr<pipelines::InputTensorFrame>>&& frames,
         std::vector<std::shared_ptr<DeDupMap>> de_dup_maps,
         bool validate_index
     );
@@ -279,7 +279,7 @@ public:
 
     std::vector<std::variant<VersionedItem, DataError>> batch_append_internal(
         const std::vector<StreamId>& stream_ids,
-        std::vector<InputTensorFrame>&& frames,
+        std::vector<std::shared_ptr<pipelines::InputTensorFrame>>&& frames,
         bool prune_previous_versions,
         bool validate_index,
         bool upsert,
@@ -366,7 +366,7 @@ public:
         bool prune_previous_versions,
         bool add_new_symbol);
 
-    void write_version_and_prune_previous_if_needed(
+    void write_version_and_prune_previous(
         bool prune_previous_versions,
         const AtomKey& new_version,
         const std::optional<IndexTypeKey>& previous_key);
@@ -378,7 +378,7 @@ public:
 
     std::vector<std::variant<VersionedItem, DataError>> batch_write_versioned_dataframe_internal(
         const std::vector<StreamId>& stream_ids,
-        std::vector<InputTensorFrame>&& frames,
+        std::vector<std::shared_ptr<pipelines::InputTensorFrame>>&& frames,
         bool prune_previous_versions,
         bool validate_index,
         bool throw_on_error

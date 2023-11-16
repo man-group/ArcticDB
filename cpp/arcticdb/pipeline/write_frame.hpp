@@ -27,26 +27,26 @@ namespace arcticdb::pipelines {
 using namespace arcticdb::stream;
 
 folly::Future<std::vector<SliceAndKey>> slice_and_write(
-        InputTensorFrame &frame,
+        const std::shared_ptr<InputTensorFrame> &frame,
         const SlicingPolicy &slicing,
-        folly::Function<stream::StreamSink::PartialKey(const FrameSlice &)> &&partial_key_gen,
+        IndexPartialKey&& partial_key,
         const std::shared_ptr<stream::StreamSink> &sink,
         const std::shared_ptr<DeDupMap>& de_dup_map = std::make_shared<DeDupMap>(),
         bool allow_sparse = false
 );
 
 folly::Future<std::vector<SliceAndKey>> write_slices(
-        const InputTensorFrame &frame,
+        const std::shared_ptr<InputTensorFrame> &frame,
         std::vector<FrameSlice>&& slices,
         const SlicingPolicy &slicing,
-        folly::Function<stream::StreamSink::PartialKey(const FrameSlice &)>&& partial_key_gen,
+        IndexPartialKey&& partial_key,
         const std::shared_ptr<stream::StreamSink>& sink,
         const std::shared_ptr<DeDupMap>& de_dup_map,
         bool sparsify_floats);
 
 folly::Future<entity::AtomKey> write_frame(
     IndexPartialKey &&key,
-    InputTensorFrame&& frame,
+    const std::shared_ptr<InputTensorFrame>& frame,
     const SlicingPolicy &slicing,
     const std::shared_ptr<Store> &store,
     const std::shared_ptr<DeDupMap>& de_dup_map = std::make_shared<DeDupMap>(),
@@ -54,8 +54,8 @@ folly::Future<entity::AtomKey> write_frame(
 );
 
 folly::Future<entity::AtomKey> append_frame(
-        const IndexPartialKey& key,
-        InputTensorFrame&& frame,
+        IndexPartialKey&& key,
+        const std::shared_ptr<InputTensorFrame>& frame,
         const SlicingPolicy& slicing,
         index::IndexSegmentReader &index_segment_reader,
         const std::shared_ptr<Store>& store,

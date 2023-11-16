@@ -101,14 +101,14 @@ folly::Future<entity::AtomKey> write_index(
     const std::shared_ptr<stream::StreamSink> &sink);
 
 folly::Future<entity::AtomKey> write_index(
-    InputTensorFrame&& frame,
+    const std::shared_ptr<InputTensorFrame>& frame,
     std::vector<folly::Future<SliceAndKey>> &&slice_and_keys,
     const IndexPartialKey &partial_key,
     const std::shared_ptr<stream::StreamSink> &sink
     );
 
 folly::Future<entity::AtomKey> write_index(
-    InputTensorFrame&& frame,
+    const std::shared_ptr<InputTensorFrame>& frame,
     std::vector<SliceAndKey> &&slice_and_keys,
     const IndexPartialKey &partial_key,
     const std::shared_ptr<stream::StreamSink> &sink

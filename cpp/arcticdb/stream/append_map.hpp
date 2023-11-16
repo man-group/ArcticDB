@@ -47,13 +47,13 @@ void remove_incomplete_segments(
 /*folly::Future<entity::VariantKey> write_incomplete_frame(
     const std::shared_ptr<Store>& store,
     const StreamId& stream_id,
-    pipelines::InputTensorFrame&& frame,
+    pipelines::std::shared_ptr<InputTensorFrame>& frame,
     std::optional<AtomKey>&& next_key);
 */
 void write_parallel(
     const std::shared_ptr<Store>& store,
     const StreamId& stream_id,
-    pipelines::InputTensorFrame&& frame);
+    const std::shared_ptr<pipelines::InputTensorFrame>& frame);
 
 void write_head(
     const std::shared_ptr<Store>& store,
@@ -68,7 +68,7 @@ void append_incomplete_segment(
 void append_incomplete(
     const std::shared_ptr<Store>& store,
     const StreamId& stream_id,
-    pipelines::InputTensorFrame&& frame);
+    const std::shared_ptr<pipelines::InputTensorFrame>& frame);
 
 std::optional<int64_t> latest_incomplete_timestamp(
     const std::shared_ptr<Store>& store,
