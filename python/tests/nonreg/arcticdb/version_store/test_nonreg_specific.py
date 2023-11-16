@@ -278,7 +278,7 @@ def test_update_with_empty_dataframe_with_index(lmdb_version_store):
     "input_empty_col_dtype, output_empty_col_dtype, value_type, size_bits",
     [
         (np.uint8, np.uint8, TypeDescriptor.ValueType.UINT, TypeDescriptor.SizeBits.S8),
-        (int, int, TypeDescriptor.ValueType.INT, TypeDescriptor.SizeBits.S64),
+        (np.int32, np.int32, TypeDescriptor.ValueType.INT, TypeDescriptor.SizeBits.S32),
         ("datetime64[ns]", "datetime64[ns]", TypeDescriptor.ValueType.NANOSECONDS_UTC, TypeDescriptor.SizeBits.S64),
 
         # For rationale see: https://github.com/man-group/ArcticDB/pull/1049
