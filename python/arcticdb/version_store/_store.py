@@ -688,6 +688,19 @@ class NativeVersionStore:
         write_if_missing = kwargs.get("write_if_missing", True)
 
         if isinstance(item, NPDDataFrame):
+            item_has_no_row = len(item.columns_values) == 0 or len(item.columns_values[0]) == 0
+
+            if item_has_no_row:
+                log.warn(
+                    'Appending an empty item to existing data has no effect. '
+                    f'No new version has been created for symbol="{symbol}", '
+                    f'and the last version is returned',
+                    UserWarning,
+                )
+
+                return self._find_version(symbol)
+
+
             with _diff_long_stream_descriptor_mismatch(self):
                 if incomplete:
                     self.version_store.append_incomplete(symbol, item, norm_meta, udm)
@@ -790,6 +803,17 @@ class NativeVersionStore:
         udm, item, norm_meta = self._try_normalize(symbol, data, metadata, False, dynamic_strings, coerce_columns)
 
         if isinstance(item, NPDDataFrame):
+            item_has_no_row = len(item.columns_values) == 0 or len(item.columns_values[0]) == 0
+
+            if item_has_no_row:
+                log.warn(
+                    'Updating existing data with an empty has no effect. '
+                    f'No new version has been created for symbol="{symbol}", '
+                    'and the last version is returned', UserWarning,
+                )
+
+                return self._find_version(symbol)
+
             with _diff_long_stream_descriptor_mismatch(self):
                 vit = self.version_store.update(
                     symbol, update_query, item, norm_meta, udm, upsert, dynamic_schema, prune_previous_version
