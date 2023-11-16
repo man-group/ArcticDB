@@ -576,6 +576,15 @@ VersionedItem LocalVersionedEngine::update_internal(
                                                                         VersionQuery{},
                                                                         ReadOptions{});
     if (update_info.previous_index_key_.has_value()) {
+        bool frame_is_empty = frame.num_rows == 0;
+
+        if (frame_is_empty) {
+            ARCTICDB_DEBUG(log::version(), "Updating existing data with an empty item has no effect. \n"
+                                           "No new version is being created for symbol='{}', "
+                                           "and the last version is returned", stream_id);
+            return get_version_to_read(stream_id, VersionQuery{}, ReadOptions{}).value();
+        }
+
         auto versioned_item = update_impl(store(),
                                           update_info,
                                           query,
@@ -1411,6 +1420,15 @@ VersionedItem LocalVersionedEngine::append_internal(
                                                                         ReadOptions{});
 
     if(update_info.previous_index_key_.has_value()) {
+
+        bool frame_is_empty = frame.num_rows == 0;
+
+        if (frame_is_empty) {
+            ARCTICDB_DEBUG(log::version(), "Appending an empty item to existing data has no effect. \n"
+                                           "No new version has been created for symbol='{}', "
+                                           "and the last version is returned", stream_id);
+            return get_version_to_read(stream_id, VersionQuery{}, ReadOptions{}).value();
+        }
         auto versioned_item = append_impl(store(),
                                           update_info,
                                           std::move(frame),

@@ -56,7 +56,12 @@ StreamDescriptor merge_descriptors(
                 if(auto existing = merged_fields_map.find(field.name()); existing != merged_fields_map.end()) {
                     auto existing_type_desc = existing->second;
                     if(existing_type_desc != type_desc) {
-                        log::version().info("Got incompatible types: {} {}", existing_type_desc, type_desc);
+                        log::version().info(
+                                "Merging different type descriptors for column: {}\n"
+                                "Existing type descriptor                : {}\n"
+                                "New type descriptor                     : {}",
+                                field.name(), existing_type_desc, type_desc
+                        );
                         auto new_descriptor = has_valid_common_type(existing_type_desc, type_desc);
                         if(new_descriptor) {
                             merged_fields_map[field.name()] = *new_descriptor;
