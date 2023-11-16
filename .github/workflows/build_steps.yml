@@ -26,9 +26,6 @@ jobs:
 
   compile:
     needs: [start_ec2_runner]
-    if: |
-      always() &&
-      !cancelled()
     strategy:
       matrix:
         # Declaring the dummy fields here to aid the Github Actions linting in VSCode and to provide documentation
@@ -229,9 +226,6 @@ jobs:
 
   python_tests:
     if: |
-      always() &&
-      !failure() &&
-      !cancelled() &&
       inputs.job_type == 'build-python-wheels'
     needs: [compile]
     strategy:
