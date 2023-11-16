@@ -226,9 +226,9 @@ struct GenericBlockEncoder {
         const std::size_t block_row_count = block.row_count();
         auto *field_nd_array = field.mutable_ndarray();
         if(block.nbytes() == 0) {
-            ARCTICDB_TRACE(log::codec(), "Generic block encoder got 0 bytes to encode, nothing to do.");
             return;
         }
+
         if constexpr (Helper::dim == Dimension::Dim0) {
             // Only store data, no shapes since dimension is 0
             auto helper_scalar_block = Helper::scalar_block(block_row_count);

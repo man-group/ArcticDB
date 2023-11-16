@@ -220,6 +220,10 @@ public:
         size_t expected_rows,
         bool presize,
         bool allow_sparse) :
+            // Array types are stored on disk as flat sequences. The python layer cannot work with this. We need to pass
+            // it pointers to an array type (at numpy arrays at the moment). When we allocate a column for an array we
+            // need to allocate space for one pointer per row. This also affects how we handle arrays to python as well.
+            // Check cpp/arcticdb/column_store/column_utils.hpp::array_at and cpp/arcticdb/column_store/column.hpp::Column
             data_(expected_rows * (type.dimension() == Dimension::Dim0 ? get_type_size(type.data_type()) : sizeof(void*)), presize),
             type_(type),
             allow_sparse_(allow_sparse){

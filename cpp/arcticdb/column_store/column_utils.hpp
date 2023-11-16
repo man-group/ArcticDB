@@ -52,6 +52,8 @@ inline py::array array_at(const SegmentInMemory& frame, std::size_t col_pos, py:
                 // per array. Each element is of size sizeof(DataTypeTag::raw_type). For the python representation the column
                 // is represented as an array of (numpy) arrays. Each nested arrays is represented as a pointer to the
                 // (numpy) array, thus the size of the element is not the size of the raw type, but the size of a pointer.
+                // This also affects how we allocate columns. Check cpp/arcticdb/column_store/column.hpp::Column and
+                // cpp/arcticdb/pipeline/column_mapping.hpp::sizeof_datatype
                 if constexpr(tag.dimension() > Dimension::Dim0) {
                     esize = sizeof(PyObject*);
                 }
@@ -101,6 +103,8 @@ inline py::array array_at(const SegmentInMemory& frame, std::size_t col_pos, py:
             // per array. Each element is of size sizeof(DataTypeTag::raw_type). For the python representation the column
             // is represented as an array of (numpy) arrays. Each nested arrays is represented as a pointer to the
             // (numpy) array, thus the size of the element is not the size of the raw type, but the size of a pointer.
+            // This also affects how we allocate columns. Check cpp/arcticdb/column_store/column.hpp::Column and
+            // cpp/arcticdb/pipeline/column_mapping.hpp::sizeof_datatype
             if constexpr(tag.dimension() > Dimension::Dim0) {
                 esize = sizeof(PyObject*);
             }
