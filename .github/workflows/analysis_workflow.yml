@@ -56,7 +56,7 @@ jobs:
         run: . build_tooling/prep_cpp_build.sh 
       
       - name: CMake compile
-        uses: lukka/run-cmake@v10
+        uses: lukka/run-cmake@v10.6
         with:
           cmakeListsTxtPath: ${{github.workspace}}/cpp/CMakeLists.txt
           configurePreset: ${{env.ARCTIC_CMAKE_PRESET}}
