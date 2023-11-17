@@ -104,7 +104,7 @@ jobs:
 
       - name: CMake compile
         if: inputs.job_type != 'follower'
-        uses: lukka/run-cmake@v10
+        uses: lukka/run-cmake@v10.6
         with:
           cmakeListsTxtPath: ${{github.workspace}}/cpp/CMakeLists.txt
           configurePreset: ${{env.ARCTIC_CMAKE_PRESET}}
@@ -163,8 +163,8 @@ jobs:
       - name: Discover test directory names
         if: inputs.job_type == 'follower'
         # There are so few nonreg tests, run them in the hypothesis runner
-        run: find python/tests/* -maxdepth 0 -type d ! -regex '.*\(__pycache__\|util\|nonreg\)' -printf '"%f",' |
-              sed 's/^/test_dirs=[/ ; s/"hypothesis"/"{hypothesis,nonreg}"/ ; s/,$/]/' | tee -a $GITHUB_ENV
+        run: find python/tests/* -maxdepth 0 -type d ! -regex '.*\(__pycache__\|util\|nonreg\|scripts\)' -printf '"%f",' |
+              sed 's/^/test_dirs=[/ ; s/"hypothesis"/"{hypothesis,nonreg,scripts}"/ ; s/,$/]/' | tee -a $GITHUB_ENV
 
       # ========================= Common =========================
       - name: Disk usage
