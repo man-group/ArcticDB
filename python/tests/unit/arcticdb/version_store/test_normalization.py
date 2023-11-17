@@ -94,8 +94,7 @@ def test_empty_df():
         d = pd.DataFrame(data={"C": []}, index=pd.MultiIndex(levels=[["A"], ["B"]], codes=[[], []], names=["X", "Y"]))
 
     norm = CompositeNormalizer()
-    # TODO: Remove coerce_columns (#224) and/or hard-coded index column name (#222)
-    df, norm_meta = norm.normalize(d, coerce_columns={"__idx__Y": "O", "C": "float64"})
+    df, norm_meta = norm.normalize(d)
     fd = FrameData.from_npd_df(df)
     D = norm.denormalize(fd, norm_meta)
     if not IS_PANDAS_ZERO:

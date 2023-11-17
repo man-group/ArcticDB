@@ -104,7 +104,9 @@ class FrameData(
 # TODO: for the support of Pandas>=2.0, convert any `datetime` to `datetime64[ns]` before-hand and do not
 # rely uniquely on the resolution-less 'M' specifier if it this doable.
 DTN64_DTYPE = "datetime64[ns]"
-NP_OBJECT_DTYPE = np.dtype("O")
+
+# All possible value of the "object" dtype for pandas.Series.
+OBJECT_TOKENS = (object, "object", "O")
 
 _SUPPORTED_TYPES = Union[DataFrame]  # , Series]
 _SUPPORTED_NATIVE_RETURN_TYPES = Union[FrameData]
@@ -176,7 +178,6 @@ def _to_primitive(arr, arr_name, dynamic_strings, string_max_len=None, coerce_co
             norm_meta.common.categories[arr_name].category.extend(arr.categories)
         return arr.codes
 
-    obj_tokens = (object, "object", "O")
     if np.issubdtype(arr.dtype, np.datetime64):
         # ArcticDB only operates at nanosecond resolution (i.e. `datetime64[ns]`) type because so did Pandas < 2.
         # In Pandas >= 2.0, other resolution are supported (namely `ms`, `s`, and `us`).
@@ -185,15 +186,26 @@ def _to_primitive(arr, arr_name, dynamic_strings, string_max_len=None, coerce_co
         # to `datetime64[ns]`.
         arr = arr.astype(DTN64_DTYPE, copy=False)
 
+    # TODO(jjerphan): Remove once pandas < 2 is not supported anymore.
+    if not IS_PANDAS_TWO and len(arr) == 0 and arr.dtype == "float":
+        # In Pandas < 2, empty series dtype is `"float"`, but as of Pandas 2.0, empty series dtype is `"object"`
+        # We cast its array to `"object"` so that the EMPTY type can be used, and the type can be promoted correctly
+        # then.
+        return arr.astype("object")
+
     if arr.dtype.hasobject is False and not (
-        dynamic_strings and arr.dtype == "float" and coerce_column_type in obj_tokens
+        dynamic_strings and arr.dtype == "float" and coerce_column_type in OBJECT_TOKENS
     ):
         # not an object type numpy column and not going to later be
         # coerced to an object type column - does not require conversion to a primitive type.
         return arr
 
     if len(arr) == 0:
-        return arr.astype(coerce_column_type)
+        if coerce_column_type is not None:
+            # Casting an empty Series using None returns a Series with of "float64" dtype in any version of pandas…
+            return arr.astype(coerce_column_type)
+        else:
+            return arr
 
     # Coerce column allows us to force a column to the given type, which means we can skip expensive iterations in
     # Python with the caveat that if the user gave an invalid type it's going to blow up in the core.
@@ -204,7 +216,7 @@ def _to_primitive(arr, arr_name, dynamic_strings, string_max_len=None, coerce_co
         and the string element was reset to np.nan which doesn't fix the dtype and would force pickling.
         """
         return arr.astype("f")
-    elif coerce_column_type and coerce_column_type in obj_tokens and dynamic_strings:
+    elif coerce_column_type and coerce_column_type in OBJECT_TOKENS and dynamic_strings:
         return arr.astype("object")
     elif coerce_column_type and _accept_array_string(coerce_column_type()):
         # Save the time for iteration if the user tells us explicitly it's a string column.
@@ -572,20 +584,15 @@ class SeriesNormalizer(_PandasNormalizer):
         # type: (_FrameData, NormalizationMetadata.PandaDataFrame)->DataFrame
 
         df = self._df_norm.denormalize(item, norm_meta)
-        s = df.iloc[:, 0] if not df.columns.empty else df
+
+        series = pd.Series() if df.columns.empty else df.iloc[:, 0]
+
         if norm_meta.common.name:
-            s.name = norm_meta.common.name
+            series.name = norm_meta.common.name
         else:
-            s.name = None
+            series.name = None
 
-        if s.empty:
-            # Before Pandas 2.0, empty series' dtype was float, but as of Pandas 2.0. empty series' dtype became object.
-            # See: https://github.com/pandas-dev/pandas/issues/17261
-            # We want to maintain consistent behaviour, so we return empty series as containing objects
-            # when the Pandas version is >= 2.0
-            s = s.astype("object") if IS_PANDAS_TWO else s.astype("float")
-
-        return s
+        return series
 
 
 class NdArrayNormalizer(Normalizer):
@@ -702,7 +709,15 @@ class DataFrameNormalizer(_PandasNormalizer):
             #       df = DataFrame(index=index, columns=columns_mapping, copy=False)
             #
             for column_name, dtype in columns_dtype.items():
-                df[column_name] = df[column_name].astype(dtype, copy=False)
+                # TODO(jjerphan): Remove once pandas < 2 is not supported anymore.
+                if len(df[column_name]) == 0 and not IS_PANDAS_TWO and dtype in OBJECT_TOKENS:
+                    # Before Pandas 2.0, empty series' dtype was float, but as of Pandas 2.0. empty series' dtype became object.
+                    # See: https://github.com/pandas-dev/pandas/issues/17261
+                    # EMPTY type column are returned as pandas.Series with "object" dtype to match Pandas 2.0 default.
+                    # We cast it back to "float" so that it matches Pandas 1.0 default for empty series.
+                    df[column_name] = pd.Series([], dtype='float64')
+                else:
+                    df[column_name] = df[column_name].astype(dtype, copy=False)
 
         else:
             if index is not None:
