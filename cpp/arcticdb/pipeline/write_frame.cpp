@@ -183,10 +183,9 @@ folly::Future<entity::AtomKey> append_frame(
                             util::check(frame.has_index(), "Cannot append timeseries without index");
                             util::check(static_cast<bool>(frame.index_tensor), "Got null index tensor in append_frame");
                             auto& frame_index = frame.index_tensor.value();
-                            util::check(frame_index.size() > 0, "Cannot append empty frame");
                             util::check(frame_index.data_type() == DataType::NANOSECONDS_UTC64,
                                         "Expected timestamp index in append, got type {}", frame_index.data_type());
-                            if (index_segment_reader.tsd().proto().total_rows() != 0) {
+                            if (index_segment_reader.tsd().proto().total_rows() != 0 && frame_index.size() != 0) {
                                 auto first_index = NumericIndex{*frame_index.ptr_cast<timestamp>(0)};
                                 auto prev = std::get<NumericIndex>(index_segment_reader.last()->key().end_index());
                                 util::check(ignore_sort_order || prev - 1 <= first_index,
