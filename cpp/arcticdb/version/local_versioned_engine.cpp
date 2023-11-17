@@ -582,7 +582,7 @@ VersionedItem LocalVersionedEngine::update_internal(
             ARCTICDB_DEBUG(log::version(), "Updating existing data with an empty item has no effect. \n"
                                            "No new version is being created for symbol='{}', "
                                            "and the last version is returned", stream_id);
-            return get_version_to_read(stream_id, VersionQuery{}, ReadOptions{}).value();
+            return VersionedItem(*update_info.previous_index_key_);
         }
 
         auto versioned_item = update_impl(store(),
@@ -1427,7 +1427,7 @@ VersionedItem LocalVersionedEngine::append_internal(
             ARCTICDB_DEBUG(log::version(), "Appending an empty item to existing data has no effect. \n"
                                            "No new version has been created for symbol='{}', "
                                            "and the last version is returned", stream_id);
-            return get_version_to_read(stream_id, VersionQuery{}, ReadOptions{}).value();
+            return VersionedItem(*update_info.previous_index_key_);
         }
         auto versioned_item = append_impl(store(),
                                           update_info,
