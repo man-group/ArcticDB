@@ -274,7 +274,7 @@ TEST(Clause, AggregationSparseGroupby) {
     ASSERT_EQ(1, slice_and_keys.size());
 
     using aggregation_test::check_column;
-    check_column<int64_t>(slice_and_keys[0], "sum_int", unique_groups, [unique_groups](size_t idx) -> int64_t {
+    check_column<int64_t>(slice_and_keys[0], "sum_int", unique_groups, [unique_grouping_values](size_t idx) -> int64_t {
         if (idx == 0) {
             return 495;
         } else {
@@ -288,7 +288,7 @@ TEST(Clause, AggregationSparseGroupby) {
             return idx;
         }
     });
-    check_column<int64_t>(slice_and_keys[0], "max_int", unique_groups, [unique_groups](size_t idx) -> int64_t {
+    check_column<int64_t>(slice_and_keys[0], "max_int", unique_groups, [unique_grouping_values](size_t idx) -> int64_t {
         if (idx == 0) {
             return 99;
         }
