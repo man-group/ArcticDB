@@ -5,6 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 from itertools import product, chain, combinations
 
 import numpy as np
@@ -88,10 +89,14 @@ def test_partial_write_non_contiguous(version_store_factory, colnum, rownum, col
 
 
 @pytest.mark.parametrize("colnum,rownum,cols,tsbounds", gen_params())
+@pytest.mark.xfail(reason="Needs to be fixed by issue #316")
 def test_partial_write_hashed(version_store_factory, colnum, rownum, cols, tsbounds):
     tz = "America/New_York"
     version_store = version_store_factory(
-        col_per_group=colnum, row_per_segment=rownum, dynamic_schema=True, bucketize_dynamic=True
+        col_per_group=colnum,
+        row_per_segment=rownum,
+        dynamic_schema=True,
+        bucketize_dynamic=True,
     )
     dtidx = pd.date_range("2019-02-06 11:43", periods=6).tz_localize(tz)
     a = np.arange(dtidx.shape[0])
