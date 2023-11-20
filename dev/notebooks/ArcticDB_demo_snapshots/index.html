@@ -8,13 +8,13 @@
       
       
       
-        <link rel="canonical" href="https://docs.arcticdb.io/dev/notebooks/ArcticDB_demo_querybuilder/">
+        <link rel="canonical" href="https://docs.arcticdb.io/dev/notebooks/ArcticDB_demo_snapshots/">
       
       
-        <link rel="prev" href="../ArcticDB_demo_lmdb/">
+        <link rel="prev" href="../ArcticDB_aws_public_blockchain/">
       
       
-        <link rel="next" href="../ArcticDB_aws_public_blockchain/">
+        <link rel="next" href="../ArcticDB_demo_equity_analytics/">
       
       
       <link rel="icon" href="../../images/FullWithBorder.png">
@@ -22,7 +22,7 @@
     
     
       
-        <title>Querybuilder Notebook - ArcticDB</title>
+        <title>Snapshots Notebook - ArcticDB</title>
       
     
     
@@ -81,7 +81,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#in-this-demo-we-will-explore-the-different-functionalities-of-the-querybuilder-for-arcticdb-we-will-cover-various-possibilities-of-this-api-including" class="md-skip">
+        <a href="#an-introduction-to-snapshots" class="md-skip">
           Skip to content
         </a>
       
@@ -130,7 +130,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Querybuilder Notebook
+              Snapshots Notebook
             
           </span>
         </div>
@@ -1037,27 +1037,9 @@
                 
   
   
-    
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  <span class="md-ellipsis">
-    Querybuilder Notebook
-  </span>
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="./" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../ArcticDB_demo_querybuilder/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -1066,135 +1048,6 @@
   
 
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#in-this-demo-we-will-explore-the-different-functionalities-of-the-querybuilder-for-arcticdb-we-will-cover-various-possibilities-of-this-api-including" class="md-nav__link">
-    <span class="md-ellipsis">
-      In this demo, we will explore the different functionalities of the QueryBuilder for ArcticDB. We will cover various possibilities of this API, including:
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#why-use-querybuilder" class="md-nav__link">
-    <span class="md-ellipsis">
-      Why use QueryBuilder?
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#demo-setup" class="md-nav__link">
-    <span class="md-ellipsis">
-      Demo setup
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Demo setup">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#choose-which-symbol-you-want-to-work-with" class="md-nav__link">
-    <span class="md-ellipsis">
-      Choose which symbol you want to work with
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#run-this-cell-to-set-up-the-dataframe-according-to-the-symbol-name" class="md-nav__link">
-    <span class="md-ellipsis">
-      Run this cell to set up the dataframe according to the symbol name
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#demo-starts" class="md-nav__link">
-    <span class="md-ellipsis">
-      DEMO STARTS
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="DEMO STARTS">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#reading" class="md-nav__link">
-    <span class="md-ellipsis">
-      Reading
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#filtering" class="md-nav__link">
-    <span class="md-ellipsis">
-      Filtering
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#projections" class="md-nav__link">
-    <span class="md-ellipsis">
-      Projections
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#groupbys-and-aggregations" class="md-nav__link">
-    <span class="md-ellipsis">
-      Groupbys and Aggregations
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#combinations" class="md-nav__link">
-    <span class="md-ellipsis">
-      Combinations
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -1224,9 +1077,27 @@
                 
   
   
+    
   
-    <li class="md-nav__item">
-      <a href="../ArcticDB_demo_snapshots/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  <span class="md-ellipsis">
+    Snapshots Notebook
+  </span>
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   <span class="md-ellipsis">
@@ -1235,6 +1106,174 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#an-introduction-to-snapshots" class="md-nav__link">
+    <span class="md-ellipsis">
+      An Introduction to Snapshots
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#installs-and-imports" class="md-nav__link">
+    <span class="md-ellipsis">
+      Installs and Imports
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#set-up-articdb" class="md-nav__link">
+    <span class="md-ellipsis">
+      Set up ArticDB
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#create-some-symbols" class="md-nav__link">
+    <span class="md-ellipsis">
+      Create some symbols
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#create-the-snapshot" class="md-nav__link">
+    <span class="md-ellipsis">
+      Create the snapshot
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#functions-to-discover-and-inspect-snapshots" class="md-nav__link">
+    <span class="md-ellipsis">
+      Functions to discover and inspect snapshots
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#reading-a-snapshot-version-of-a-symbol" class="md-nav__link">
+    <span class="md-ellipsis">
+      Reading a snapshot version of a symbol
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#demonstration-that-snapshot-versions-are-protected-from-deletion" class="md-nav__link">
+    <span class="md-ellipsis">
+      Demonstration that snapshot versions are protected from deletion
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#although-it-works-we-advise-not-to-read-snapshot-versions-directly-using-the-version-number" class="md-nav__link">
+    <span class="md-ellipsis">
+      Although it works, we advise not to read snapshot versions directly using the version number
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#deleting-a-snapshot" class="md-nav__link">
+    <span class="md-ellipsis">
+      Deleting a snapshot
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#snapshot-names-must-be-unique" class="md-nav__link">
+    <span class="md-ellipsis">
+      Snapshot names must be unique
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#modifiers-for-snapshot-creation-exclude-or-include-symbols" class="md-nav__link">
+    <span class="md-ellipsis">
+      Modifiers for snapshot creation: exclude or include symbols
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#snapshots-why-and-why-not-to-use-them" class="md-nav__link">
+    <span class="md-ellipsis">
+      Snapshots: why and why not to use them
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Snapshots: why and why not to use them">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#why" class="md-nav__link">
+    <span class="md-ellipsis">
+      Why
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#why-not" class="md-nav__link">
+    <span class="md-ellipsis">
+      Why Not
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#further-info-extras" class="md-nav__link">
+    <span class="md-ellipsis">
+      Further Info / Extras
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -1458,46 +1497,136 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#in-this-demo-we-will-explore-the-different-functionalities-of-the-querybuilder-for-arcticdb-we-will-cover-various-possibilities-of-this-api-including" class="md-nav__link">
+  <a href="#an-introduction-to-snapshots" class="md-nav__link">
     <span class="md-ellipsis">
-      In this demo, we will explore the different functionalities of the QueryBuilder for ArcticDB. We will cover various possibilities of this API, including:
+      An Introduction to Snapshots
     </span>
   </a>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#why-use-querybuilder" class="md-nav__link">
+  <a href="#installs-and-imports" class="md-nav__link">
     <span class="md-ellipsis">
-      Why use QueryBuilder?
+      Installs and Imports
     </span>
   </a>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#demo-setup" class="md-nav__link">
+  <a href="#set-up-articdb" class="md-nav__link">
     <span class="md-ellipsis">
-      Demo setup
+      Set up ArticDB
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="Demo setup">
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#create-some-symbols" class="md-nav__link">
+    <span class="md-ellipsis">
+      Create some symbols
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#create-the-snapshot" class="md-nav__link">
+    <span class="md-ellipsis">
+      Create the snapshot
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#functions-to-discover-and-inspect-snapshots" class="md-nav__link">
+    <span class="md-ellipsis">
+      Functions to discover and inspect snapshots
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#reading-a-snapshot-version-of-a-symbol" class="md-nav__link">
+    <span class="md-ellipsis">
+      Reading a snapshot version of a symbol
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#demonstration-that-snapshot-versions-are-protected-from-deletion" class="md-nav__link">
+    <span class="md-ellipsis">
+      Demonstration that snapshot versions are protected from deletion
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#although-it-works-we-advise-not-to-read-snapshot-versions-directly-using-the-version-number" class="md-nav__link">
+    <span class="md-ellipsis">
+      Although it works, we advise not to read snapshot versions directly using the version number
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#deleting-a-snapshot" class="md-nav__link">
+    <span class="md-ellipsis">
+      Deleting a snapshot
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#snapshot-names-must-be-unique" class="md-nav__link">
+    <span class="md-ellipsis">
+      Snapshot names must be unique
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#modifiers-for-snapshot-creation-exclude-or-include-symbols" class="md-nav__link">
+    <span class="md-ellipsis">
+      Modifiers for snapshot creation: exclude or include symbols
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#snapshots-why-and-why-not-to-use-them" class="md-nav__link">
+    <span class="md-ellipsis">
+      Snapshots: why and why not to use them
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Snapshots: why and why not to use them">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#choose-which-symbol-you-want-to-work-with" class="md-nav__link">
+  <a href="#why" class="md-nav__link">
     <span class="md-ellipsis">
-      Choose which symbol you want to work with
+      Why
     </span>
   </a>
   
 </li>
         
           <li class="md-nav__item">
-  <a href="#run-this-cell-to-set-up-the-dataframe-according-to-the-symbol-name" class="md-nav__link">
+  <a href="#why-not" class="md-nav__link">
     <span class="md-ellipsis">
-      Run this cell to set up the dataframe according to the symbol name
+      Why Not
     </span>
   </a>
   
@@ -1509,62 +1638,11 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#demo-starts" class="md-nav__link">
+  <a href="#further-info-extras" class="md-nav__link">
     <span class="md-ellipsis">
-      DEMO STARTS
+      Further Info / Extras
     </span>
   </a>
-  
-    <nav class="md-nav" aria-label="DEMO STARTS">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#reading" class="md-nav__link">
-    <span class="md-ellipsis">
-      Reading
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#filtering" class="md-nav__link">
-    <span class="md-ellipsis">
-      Filtering
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#projections" class="md-nav__link">
-    <span class="md-ellipsis">
-      Projections
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#groupbys-and-aggregations" class="md-nav__link">
-    <span class="md-ellipsis">
-      Groupbys and Aggregations
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#combinations" class="md-nav__link">
-    <span class="md-ellipsis">
-      Combinations
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
   
 </li>
       
@@ -1582,8 +1660,8 @@
                 
 
 <p>
-<h1>ArcticDB_demo_querybuilder</h1>
-<a href="https://github.com/man-group/ArcticDB/blob/master/docs/mkdocs/docs/notebooks/ArcticDB_demo_querybuilder.ipynb">
+<h1>ArcticDB_demo_snapshots</h1>
+<a href="https://github.com/man-group/ArcticDB/blob/master/docs/mkdocs/docs/notebooks/ArcticDB_demo_snapshots.ipynb">
     <span class="twemoji">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
             <title>github</title>
@@ -1595,7 +1673,7 @@
 </a>
 |
 <a
-    href="https://colab.research.google.com/github/man-group/ArcticDB/blob/master/docs/mkdocs/docs/notebooks/ArcticDB_demo_querybuilder.ipynb">
+    href="https://colab.research.google.com/github/man-group/ArcticDB/blob/master/docs/mkdocs/docs/notebooks/ArcticDB_demo_snapshots.ipynb">
     <span class="twemoji">
         <svg viewBox="0 0 24 24" preserveAspectRatio="xMidYMid meet" focusable="false" width="977" height="602"
             style="height: 28px; width: 28px;">
@@ -2035,7 +2113,29 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 </div>
 <div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
 </div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
-<h1 align="center">ArcticDB Query Builder demo</h1>
+<hr/>
+<h1 align="center">Snapshots: how to use them and why they are useful</h1>
+<center><img alt="ArcticDB Logo" src="https://raw.githubusercontent.com/man-group/ArcticDB/master/static/ArcticDBCropped.png" width="400"/>
+<hr/>
+</center></div>
+</div>
+</div>
+</div>
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
+</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
+<h3 id="an-introduction-to-snapshots">An Introduction to Snapshots<a class="anchor-link" href="#an-introduction-to-snapshots">¶</a></h3><p>In order to understand snapshots we first need to be clear about versions.</p>
+<p>In ArcticDB, every time a change is made to a symbol a new version is created. So each symbol has a sequence of versions through time.</p>
+<p>In a library there will typically be many symbols with each having many versions.</p>
+<p>Suppose we reach a point where we wish to record the current state of the data in the library. This is exactly the purpose of a snapshot.</p>
+<p><em>A snapshot records the current versions of all the symbols in the library (or a custom set of versions, see below)</em></p>
+<p>The data recorded in the snapshot can then be read back using the <code>as_of</code> parameter in the read.</p>
+<p>Versions that are part of a snapshot are protected from deletion, even if their symbol is deleted.</p>
+<p>Below is a simple example that demonstrates snapshots in action.</p>
+<hr/>
 </div>
 </div>
 </div>
@@ -2046,40 +2146,7 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 </div>
 <div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
 </div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
-<img alt="ArcticDB Logo" src="https://raw.githubusercontent.com/man-group/ArcticDB/master/static/ArcticDBCropped.png" width="400"/>
-<h3 id="in-this-demo-we-will-explore-the-different-functionalities-of-the-querybuilder-for-arcticdb-we-will-cover-various-possibilities-of-this-api-including">In this demo, we will explore the different functionalities of the QueryBuilder for ArcticDB. We will cover various possibilities of this API, including:<a class="anchor-link" href="#in-this-demo-we-will-explore-the-different-functionalities-of-the-querybuilder-for-arcticdb-we-will-cover-various-possibilities-of-this-api-including">¶</a></h3><ul>
-<li><em><strong>Filtering</strong></em></li>
-<li><em><strong>Projections</strong></em></li>
-<li><em><strong>Groupbys and Aggregations</strong></em></li>
-<li><em><strong>Combinations of the above features</strong></em></li>
-</ul>
-<h3 id="why-use-querybuilder">Why use QueryBuilder?<a class="anchor-link" href="#why-use-querybuilder">¶</a></h3><ul>
-<li><em><strong>Performance boost via efficient C++ implementation that uses multi-threading</strong></em></li>
-<li><em><strong>Efficient data access - only reads the data needed</strong></em></li>
-<li><em><strong>For very large data sets some queries are possible that would not fit into memory</strong></em></li>
-</ul>
-</div>
-</div>
-</div>
-</div>
-<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell">
-<div class="jp-Cell-inputWrapper" tabindex="0">
-<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
-</div>
-<div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
-</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
-<h1 id="demo-setup">Demo setup<a class="anchor-link" href="#demo-setup">¶</a></h1>
-</div>
-</div>
-</div>
-</div>
-<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell">
-<div class="jp-Cell-inputWrapper" tabindex="0">
-<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
-</div>
-<div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
-</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
-<p>Necessary packages installation</p>
+<h3 id="installs-and-imports">Installs and Imports<a class="anchor-link" href="#installs-and-imports">¶</a></h3>
 </div>
 </div>
 </div>
@@ -2089,7 +2156,7 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [ ]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [1]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="CodeMirror cm-s-jupyter">
 <div class="zeroclipboard-container">
 <clipboard-copy for="cell-1">
@@ -2110,24 +2177,13 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 </div>
 </div>
 </div>
-</div>
-<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell">
-<div class="jp-Cell-inputWrapper" tabindex="0">
-<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
-</div>
-<div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
-</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
-<p>Necessary libraries imports</p>
-</div>
-</div>
-</div>
 </div><div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs">
 <div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [3]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [2]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="CodeMirror cm-s-jupyter">
 <div class="zeroclipboard-container">
 <clipboard-copy for="cell-2">
@@ -2140,19 +2196,13 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 </div>
 </clipboard-copy>
 </div>
-<div class="highlight-ipynb hl-python"><pre><span></span><span class="kn">import</span> <span class="nn">os</span>
-<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
-<span class="kn">import</span> <span class="nn">pandas</span> <span class="k">as</span> <span class="nn">pd</span>
-<span class="kn">import</span> <span class="nn">random</span>
-<span class="kn">from</span> <span class="nn">arcticdb</span> <span class="kn">import</span> <span class="n">Arctic</span><span class="p">,</span> <span class="n">QueryBuilder</span>
-<span class="kn">from</span> <span class="nn">arcticdb.util.test</span> <span class="kn">import</span> <span class="n">random_strings_of_length</span>
+<div class="highlight-ipynb hl-python"><pre><span></span><span class="kn">import</span> <span class="nn">pandas</span> <span class="k">as</span> <span class="nn">pd</span>
+<span class="kn">import</span> <span class="nn">logging</span>
+<span class="kn">import</span> <span class="nn">arcticdb</span> <span class="k">as</span> <span class="nn">adb</span>
 </pre></div>
-<div class="clipboard-copy-txt" id="cell-2">import os
-import numpy as np
-import pandas as pd
-import random
-from arcticdb import Arctic, QueryBuilder
-from arcticdb.util.test import random_strings_of_length</div>
+<div class="clipboard-copy-txt" id="cell-2">import pandas as pd
+import logging
+import arcticdb as adb</div>
 </div>
 </div>
 </div>
@@ -2165,7 +2215,8 @@ from arcticdb.util.test import random_strings_of_length</div>
 </div>
 <div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
 </div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
-<p>For this demo we will configure the LMDB file based backend.  ArcticDB achieves its high performance and scale when configured with an object store backend (e.g. S3).</p>
+<h3 id="set-up-articdb">Set up ArticDB<a class="anchor-link" href="#set-up-articdb">¶</a></h3><p><b>Note</b>: In this example we delete the library if it exists. That is not normal but we want to make sure we have a clean libary in this case.</p>
+<p>Don't copy those lines unless you are sure that is what you need.</p>
 </div>
 </div>
 </div>
@@ -2175,7 +2226,7 @@ from arcticdb.util.test import random_strings_of_length</div>
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [4]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [3]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="CodeMirror cm-s-jupyter">
 <div class="zeroclipboard-container">
 <clipboard-copy for="cell-3">
@@ -2188,9 +2239,17 @@ from arcticdb.util.test import random_strings_of_length</div>
 </div>
 </clipboard-copy>
 </div>
-<div class="highlight-ipynb hl-python"><pre><span></span><span class="n">arctic</span> <span class="o">=</span> <span class="n">Arctic</span><span class="p">(</span><span class="s2">"lmdb://arcticdb_demo"</span><span class="p">)</span>
+<div class="highlight-ipynb hl-python"><pre><span></span><span class="n">lib_name</span> <span class="o">=</span> <span class="s1">'demo'</span>
+<span class="n">arctic</span> <span class="o">=</span> <span class="n">adb</span><span class="o">.</span><span class="n">Arctic</span><span class="p">(</span><span class="s2">"lmdb://arcticdb_snapshot_demo"</span><span class="p">)</span>
+<span class="k">if</span> <span class="n">lib_name</span> <span class="ow">in</span> <span class="n">arctic</span><span class="o">.</span><span class="n">list_libraries</span><span class="p">():</span>
+    <span class="n">arctic</span><span class="o">.</span><span class="n">delete_library</span><span class="p">(</span><span class="n">lib_name</span><span class="p">)</span>
+<span class="n">lib</span> <span class="o">=</span> <span class="n">arctic</span><span class="o">.</span><span class="n">get_library</span><span class="p">(</span><span class="s1">'demo'</span><span class="p">,</span> <span class="n">create_if_missing</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 </pre></div>
-<div class="clipboard-copy-txt" id="cell-3">arctic = Arctic("lmdb://arcticdb_demo")</div>
+<div class="clipboard-copy-txt" id="cell-3">lib_name = 'demo'
+arctic = adb.Arctic("lmdb://arcticdb_snapshot_demo")
+if lib_name in arctic.list_libraries():
+    arctic.delete_library(lib_name)
+lib = arctic.get_library('demo', create_if_missing=True)</div>
 </div>
 </div>
 </div>
@@ -2203,17 +2262,17 @@ from arcticdb.util.test import random_strings_of_length</div>
 </div>
 <div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
 </div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
-<p>You can have an unlimited number of libraries, but we will just create one to start with.</p>
+<h3 id="create-some-symbols">Create some symbols<a class="anchor-link" href="#create-some-symbols">¶</a></h3>
 </div>
 </div>
 </div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs">
-<div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs">
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell">
+<div class="jp-Cell jp-CodeCell jp-Notebook-cell">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [5]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [4]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="CodeMirror cm-s-jupyter">
 <div class="zeroclipboard-container">
 <clipboard-copy for="cell-4">
@@ -2226,28 +2285,33 @@ from arcticdb.util.test import random_strings_of_length</div>
 </div>
 </clipboard-copy>
 </div>
-<div class="highlight-ipynb hl-python"><pre><span></span><span class="k">if</span> <span class="s1">'sample'</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">arctic</span><span class="o">.</span><span class="n">list_libraries</span><span class="p">():</span>
-    <span class="c1"># library does not already exist</span>
-    <span class="n">arctic</span><span class="o">.</span><span class="n">create_library</span><span class="p">(</span><span class="s1">'sample'</span><span class="p">)</span>
-<span class="n">lib</span> <span class="o">=</span> <span class="n">arctic</span><span class="o">.</span><span class="n">get_library</span><span class="p">(</span><span class="s1">'sample'</span><span class="p">)</span>
+<div class="highlight-ipynb hl-python"><pre><span></span><span class="n">num_symbols</span> <span class="o">=</span> <span class="mi">4</span>
+<span class="n">symbols</span> <span class="o">=</span> <span class="p">[</span><span class="sa">f</span><span class="s2">"sym_</span><span class="si">{</span><span class="n">idx</span><span class="si">}</span><span class="s2">"</span> <span class="k">for</span> <span class="n">idx</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num_symbols</span><span class="p">)]</span>
+<span class="n">half_symbols</span> <span class="o">=</span> <span class="n">symbols</span><span class="p">[:</span><span class="n">num_symbols</span> <span class="o">//</span> <span class="mi">2</span><span class="p">]</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">symbols</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">half_symbols</span><span class="p">)</span>
 </pre></div>
-<div class="clipboard-copy-txt" id="cell-4">if 'sample' not in arctic.list_libraries():
-    # library does not already exist
-    arctic.create_library('sample')
-lib = arctic.get_library('sample')</div>
+<div class="clipboard-copy-txt" id="cell-4">num_symbols = 4
+symbols = [f"sym_{idx}" for idx in range(num_symbols)]
+half_symbols = symbols[:num_symbols // 2]
+print(symbols)
+print(half_symbols)</div>
 </div>
 </div>
 </div>
 </div>
+<div class="jp-Cell-outputWrapper">
+<div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
+</div>
+<div class="jp-OutputArea jp-Cell-outputArea">
+<div class="jp-OutputArea-child">
+<div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
+<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
+<pre>['sym_0', 'sym_1', 'sym_2', 'sym_3']
+['sym_0', 'sym_1']
+</pre>
 </div>
 </div>
-<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell">
-<div class="jp-Cell-inputWrapper" tabindex="0">
-<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
-</div>
-<div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
-</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
-<p>Run the cell to set up preliminary variables. 100,000 unique strings is a pathological case for us, as with the default row-slicing policy there are 100,000 rows per data segment, and so each unique strings will appear around once per data segment in this column.</p>
 </div>
 </div>
 </div>
@@ -2257,7 +2321,7 @@ lib = arctic.get_library('sample')</div>
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [6]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [5]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="CodeMirror cm-s-jupyter">
 <div class="zeroclipboard-container">
 <clipboard-copy for="cell-5">
@@ -2270,42 +2334,15 @@ lib = arctic.get_library('sample')</div>
 </div>
 </clipboard-copy>
 </div>
-<div class="highlight-ipynb hl-python"><pre><span></span><span class="n">ten_grouping_values</span> <span class="o">=</span> <span class="n">random_strings_of_length</span><span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="mi">10</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
-<span class="n">one_hundred_thousand_grouping_values</span> <span class="o">=</span> <span class="n">random_strings_of_length</span><span class="p">(</span><span class="mi">100_000</span><span class="p">,</span> <span class="mi">10</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
-<span class="n">rng</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">RandomState</span><span class="p">()</span>
-
-<span class="n">sym_10M</span> <span class="o">=</span> <span class="s2">"demo_10M"</span>
-<span class="n">sym_100M</span> <span class="o">=</span> <span class="s2">"demo_100M"</span>
-<span class="n">sym_1B</span> <span class="o">=</span> <span class="s2">"demo_1B"</span>
+<div class="highlight-ipynb hl-python"><pre><span></span><span class="c1"># write data for each symbol</span>
+<span class="k">for</span> <span class="n">idx</span><span class="p">,</span> <span class="n">symbol</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">symbols</span><span class="p">):</span>
+    <span class="n">lib</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">symbol</span><span class="p">,</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span><span class="s2">"col"</span><span class="p">:</span> <span class="p">[</span><span class="n">idx</span><span class="p">]}))</span>
 </pre></div>
-<div class="clipboard-copy-txt" id="cell-5">ten_grouping_values = random_strings_of_length(10, 10, True)
-one_hundred_thousand_grouping_values = random_strings_of_length(100_000, 10, True)
-rng = np.random.RandomState()
-
-sym_10M = "demo_10M"
-sym_100M = "demo_100M"
-sym_1B = "demo_1B"</div>
+<div class="clipboard-copy-txt" id="cell-5"># write data for each symbol
+for idx, symbol in enumerate(symbols):
+    lib.write(symbol, pd.DataFrame({"col": [idx]}))</div>
 </div>
 </div>
-</div>
-</div>
-</div>
-</div>
-<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell">
-<div class="jp-Cell-inputWrapper" tabindex="0">
-<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
-</div>
-<div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
-</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
-<h3 id="choose-which-symbol-you-want-to-work-with">Choose which symbol you want to work with<a class="anchor-link" href="#choose-which-symbol-you-want-to-work-with">¶</a></h3><ul>
-<li>sym_10M: symbol with 10 million rows</li>
-<li>sym_100M: symbol with 100 million rows</li>
-<li>sym_1B: symbol with 1 billion rows</li>
-</ul>
-<p>assign the symbol you want to work with to the sym variable</p>
-<ul>
-<li>example: sym = sym_10M</li>
-</ul>
 </div>
 </div>
 </div>
@@ -2315,7 +2352,7 @@ sym_1B = "demo_1B"</div>
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [7]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [6]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="CodeMirror cm-s-jupyter">
 <div class="zeroclipboard-container">
 <clipboard-copy for="cell-6">
@@ -2328,9 +2365,13 @@ sym_1B = "demo_1B"</div>
 </div>
 </clipboard-copy>
 </div>
-<div class="highlight-ipynb hl-python"><pre><span></span><span class="n">sym</span> <span class="o">=</span> <span class="n">sym_10M</span>
+<div class="highlight-ipynb hl-python"><pre><span></span><span class="c1"># write data only for the first half of the symbols</span>
+<span class="k">for</span> <span class="n">idx</span><span class="p">,</span> <span class="n">symbol</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">half_symbols</span><span class="p">):</span>
+    <span class="n">lib</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">symbol</span><span class="p">,</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span><span class="s2">"col"</span><span class="p">:</span> <span class="p">[</span><span class="n">idx</span><span class="o">+</span><span class="mi">10</span><span class="p">]}))</span>
 </pre></div>
-<div class="clipboard-copy-txt" id="cell-6">sym = sym_10M</div>
+<div class="clipboard-copy-txt" id="cell-6"># write data only for the first half of the symbols
+for idx, symbol in enumerate(half_symbols):
+    lib.write(symbol, pd.DataFrame({"col": [idx+10]}))</div>
 </div>
 </div>
 </div>
@@ -2343,7 +2384,7 @@ sym_1B = "demo_1B"</div>
 </div>
 <div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
 </div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
-<h3 id="run-this-cell-to-set-up-the-dataframe-according-to-the-symbol-name">Run this cell to set up the dataframe according to the symbol name<a class="anchor-link" href="#run-this-cell-to-set-up-the-dataframe-according-to-the-symbol-name">¶</a></h3>
+<h3 id="create-the-snapshot">Create the snapshot<a class="anchor-link" href="#create-the-snapshot">¶</a></h3><p>The metadata is optional</p>
 </div>
 </div>
 </div>
@@ -2353,7 +2394,7 @@ sym_1B = "demo_1B"</div>
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [8]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [7]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="CodeMirror cm-s-jupyter">
 <div class="zeroclipboard-container">
 <clipboard-copy for="cell-7">
@@ -2366,33 +2407,9 @@ sym_1B = "demo_1B"</div>
 </div>
 </clipboard-copy>
 </div>
-<div class="highlight-ipynb hl-python"><pre><span></span><span class="k">if</span> <span class="n">sym</span><span class="o">==</span><span class="n">sym_10M</span><span class="p">:</span>
-    <span class="n">num_rows</span> <span class="o">=</span> <span class="mi">10_000_000</span>
-<span class="k">elif</span> <span class="n">sym</span><span class="o">==</span><span class="n">sym_100M</span><span class="p">:</span>
-    <span class="n">num_rows</span> <span class="o">=</span> <span class="mi">100_000_000</span>
-<span class="k">elif</span> <span class="n">sym</span><span class="o">==</span><span class="n">sym_1B</span><span class="p">:</span>
-    <span class="n">num_rows</span> <span class="o">=</span> <span class="mi">1_000_000_000</span>
-<span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span>
-    <span class="p">{</span>
-        <span class="s2">"grouping_column_10"</span><span class="p">:</span> <span class="nb">list</span><span class="p">(</span><span class="n">random</span><span class="o">.</span><span class="n">choices</span><span class="p">(</span><span class="n">ten_grouping_values</span><span class="p">,</span> <span class="n">k</span><span class="o">=</span><span class="n">num_rows</span><span class="p">)),</span>
-        <span class="s2">"grouping_column_100_000"</span><span class="p">:</span> <span class="nb">list</span><span class="p">(</span><span class="n">random</span><span class="o">.</span><span class="n">choices</span><span class="p">(</span><span class="n">one_hundred_thousand_grouping_values</span><span class="p">,</span> <span class="n">k</span><span class="o">=</span><span class="n">num_rows</span><span class="p">)),</span>
-        <span class="s2">"numeric_column"</span><span class="p">:</span> <span class="n">rng</span><span class="o">.</span><span class="n">rand</span><span class="p">((</span><span class="n">num_rows</span><span class="p">))</span>
-    <span class="p">}</span>
-<span class="p">)</span>
+<div class="highlight-ipynb hl-python"><pre><span></span><span class="n">lib</span><span class="o">.</span><span class="n">snapshot</span><span class="p">(</span><span class="s2">"snapshot_0"</span><span class="p">,</span> <span class="n">metadata</span><span class="o">=</span><span class="s2">"this is the core of the demo"</span><span class="p">)</span>
 </pre></div>
-<div class="clipboard-copy-txt" id="cell-7">if sym==sym_10M:
-    num_rows = 10_000_000
-elif sym==sym_100M:
-    num_rows = 100_000_000
-elif sym==sym_1B:
-    num_rows = 1_000_000_000
-df = pd.DataFrame(
-    {
-        "grouping_column_10": list(random.choices(ten_grouping_values, k=num_rows)),
-        "grouping_column_100_000": list(random.choices(one_hundred_thousand_grouping_values, k=num_rows)),
-        "numeric_column": rng.rand((num_rows))
-    }
-)</div>
+<div class="clipboard-copy-txt" id="cell-7">lib.snapshot("snapshot_0", metadata="this is the core of the demo")</div>
 </div>
 </div>
 </div>
@@ -2405,17 +2422,17 @@ df = pd.DataFrame(
 </div>
 <div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
 </div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
-<h1 id="demo-starts">DEMO STARTS<a class="anchor-link" href="#demo-starts">¶</a></h1>
+<h3 id="functions-to-discover-and-inspect-snapshots">Functions to discover and inspect snapshots<a class="anchor-link" href="#functions-to-discover-and-inspect-snapshots">¶</a></h3>
 </div>
 </div>
 </div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs">
-<div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs">
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell">
+<div class="jp-Cell jp-CodeCell jp-Notebook-cell">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [ ]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [8]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="CodeMirror cm-s-jupyter">
 <div class="zeroclipboard-container">
 <clipboard-copy for="cell-8">
@@ -2428,32 +2445,35 @@ df = pd.DataFrame(
 </div>
 </clipboard-copy>
 </div>
-<div class="highlight-ipynb hl-python"><pre><span></span><span class="n">lib</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">sym</span><span class="p">,</span> <span class="n">df</span><span class="p">)</span>
+<div class="highlight-ipynb hl-python"><pre><span></span><span class="c1"># list all snapshots</span>
+<span class="n">lib</span><span class="o">.</span><span class="n">list_snapshots</span><span class="p">()</span>
 </pre></div>
-<div class="clipboard-copy-txt" id="cell-8">lib.write(sym, df)</div>
+<div class="clipboard-copy-txt" id="cell-8"># list all snapshots
+lib.list_snapshots()</div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell-outputWrapper">
+<div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
+</div>
+<div class="jp-OutputArea jp-Cell-outputArea">
+<div class="jp-OutputArea-child jp-OutputArea-executeResult">
+<div class="jp-OutputPrompt jp-OutputArea-prompt">Out[8]:</div>
+<div class="jp-RenderedText jp-OutputArea-output jp-OutputArea-executeResult" data-mime-type="text/plain" tabindex="0">
+<pre>{'snapshot_0': 'this is the core of the demo'}</pre>
 </div>
 </div>
 </div>
 </div>
 </div>
-</div>
-<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell">
-<div class="jp-Cell-inputWrapper" tabindex="0">
-<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
-</div>
-<div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
-</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
-<p>Show how the data has been sliced and written to disk.</p>
-</div>
-</div>
-</div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs">
-<div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs">
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell">
+<div class="jp-Cell jp-CodeCell jp-Notebook-cell">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [ ]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [9]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="CodeMirror cm-s-jupyter">
 <div class="zeroclipboard-container">
 <clipboard-copy for="cell-9">
@@ -2466,32 +2486,35 @@ df = pd.DataFrame(
 </div>
 </clipboard-copy>
 </div>
-<div class="highlight-ipynb hl-python"><pre><span></span><span class="n">lib</span><span class="o">.</span><span class="n">_nvs</span><span class="o">.</span><span class="n">read_index</span><span class="p">(</span><span class="n">sym</span><span class="p">)</span>
+<div class="highlight-ipynb hl-python"><pre><span></span><span class="c1"># list the symbols in a snapshot</span>
+<span class="n">lib</span><span class="o">.</span><span class="n">list_symbols</span><span class="p">(</span><span class="n">snapshot_name</span><span class="o">=</span><span class="s2">"snapshot_0"</span><span class="p">)</span>
 </pre></div>
-<div class="clipboard-copy-txt" id="cell-9">lib._nvs.read_index(sym)</div>
+<div class="clipboard-copy-txt" id="cell-9"># list the symbols in a snapshot
+lib.list_symbols(snapshot_name="snapshot_0")</div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell-outputWrapper">
+<div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
+</div>
+<div class="jp-OutputArea jp-Cell-outputArea">
+<div class="jp-OutputArea-child jp-OutputArea-executeResult">
+<div class="jp-OutputPrompt jp-OutputArea-prompt">Out[9]:</div>
+<div class="jp-RenderedText jp-OutputArea-output jp-OutputArea-executeResult" data-mime-type="text/plain" tabindex="0">
+<pre>['sym_2', 'sym_1', 'sym_0', 'sym_3']</pre>
 </div>
 </div>
 </div>
 </div>
 </div>
-</div>
-<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell">
-<div class="jp-Cell-inputWrapper" tabindex="0">
-<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
-</div>
-<div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
-</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
-<p>Show the first 100 rows of data as a sample.</p>
-</div>
-</div>
-</div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs">
-<div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs">
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell">
+<div class="jp-Cell jp-CodeCell jp-Notebook-cell">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [ ]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [10]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="CodeMirror cm-s-jupyter">
 <div class="zeroclipboard-container">
 <clipboard-copy for="cell-10">
@@ -2504,43 +2527,38 @@ df = pd.DataFrame(
 </div>
 </clipboard-copy>
 </div>
-<div class="highlight-ipynb hl-python"><pre><span></span><span class="n">lib</span><span class="o">.</span><span class="n">head</span><span class="p">(</span><span class="n">sym</span><span class="p">,</span> <span class="n">n</span><span class="o">=</span><span class="mi">100</span><span class="p">)</span><span class="o">.</span><span class="n">data</span>
+<div class="highlight-ipynb hl-python"><pre><span></span><span class="c1"># list the versions in a snapshot</span>
+<span class="n">lib</span><span class="o">.</span><span class="n">list_versions</span><span class="p">(</span><span class="n">snapshot</span><span class="o">=</span><span class="s2">"snapshot_0"</span><span class="p">)</span>
 </pre></div>
-<div class="clipboard-copy-txt" id="cell-10">lib.head(sym, n=100).data</div>
+<div class="clipboard-copy-txt" id="cell-10"># list the versions in a snapshot
+lib.list_versions(snapshot="snapshot_0")</div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell-outputWrapper">
+<div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
+</div>
+<div class="jp-OutputArea jp-Cell-outputArea">
+<div class="jp-OutputArea-child jp-OutputArea-executeResult">
+<div class="jp-OutputPrompt jp-OutputArea-prompt">Out[10]:</div>
+<div class="jp-RenderedText jp-OutputArea-output jp-OutputArea-executeResult" data-mime-type="text/plain" tabindex="0">
+<pre>{sym_3_v0: (date=2023-11-20 10:24:45.103129257+00:00, snapshots=['snapshot_0']),
+ sym_2_v0: (date=2023-11-20 10:24:45.086132551+00:00, snapshots=['snapshot_0']),
+ sym_1_v1: (date=2023-11-20 10:24:45.431966093+00:00, snapshots=['snapshot_0']),
+ sym_0_v1: (date=2023-11-20 10:24:45.413203317+00:00, snapshots=['snapshot_0'])}</pre>
 </div>
 </div>
 </div>
 </div>
 </div>
-</div>
-<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell">
-<div class="jp-Cell-inputWrapper" tabindex="0">
-<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
-</div>
-<div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
-</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
-<h2 id="reading">Reading<a class="anchor-link" href="#reading">¶</a></h2>
-</div>
-</div>
-</div>
-</div>
-<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell">
-<div class="jp-Cell-inputWrapper" tabindex="0">
-<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
-</div>
-<div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
-</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
-<p>Read the symbol without any filtering.</p>
-</div>
-</div>
-</div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs">
-<div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs">
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell">
+<div class="jp-Cell jp-CodeCell jp-Notebook-cell">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [ ]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [11]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="CodeMirror cm-s-jupyter">
 <div class="zeroclipboard-container">
 <clipboard-copy for="cell-11">
@@ -2553,11 +2571,28 @@ df = pd.DataFrame(
 </div>
 </clipboard-copy>
 </div>
-<div class="highlight-ipynb hl-python"><pre><span></span><span class="o">%%</span><span class="n">time</span>
-<span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">sym</span><span class="p">)</span>
+<div class="highlight-ipynb hl-python"><pre><span></span><span class="c1"># list all versions in the library, with associated snapshots</span>
+<span class="n">lib</span><span class="o">.</span><span class="n">list_versions</span><span class="p">()</span>
 </pre></div>
-<div class="clipboard-copy-txt" id="cell-11">%%time
-lib.read(sym)</div>
+<div class="clipboard-copy-txt" id="cell-11"># list all versions in the library, with associated snapshots
+lib.list_versions()</div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell-outputWrapper">
+<div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
+</div>
+<div class="jp-OutputArea jp-Cell-outputArea">
+<div class="jp-OutputArea-child jp-OutputArea-executeResult">
+<div class="jp-OutputPrompt jp-OutputArea-prompt">Out[11]:</div>
+<div class="jp-RenderedText jp-OutputArea-output jp-OutputArea-executeResult" data-mime-type="text/plain" tabindex="0">
+<pre>{sym_3_v0: (date=2023-11-20 10:24:45.103129257+00:00, snapshots=['snapshot_0']),
+ sym_2_v0: (date=2023-11-20 10:24:45.086132551+00:00, snapshots=['snapshot_0']),
+ sym_1_v1: (date=2023-11-20 10:24:45.431966093+00:00, snapshots=['snapshot_0']),
+ sym_1_v0: (date=2023-11-20 10:24:45.066268214+00:00),
+ sym_0_v1: (date=2023-11-20 10:24:45.413203317+00:00, snapshots=['snapshot_0']),
+ sym_0_v0: (date=2023-11-20 10:24:45.041944641+00:00)}</pre>
 </div>
 </div>
 </div>
@@ -2570,17 +2605,17 @@ lib.read(sym)</div>
 </div>
 <div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
 </div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
-<p>Most of the time is spent allocating Python strings in the column with 100,000 unique strings, so omitting this column is much faster.</p>
+<h3 id="reading-a-snapshot-version-of-a-symbol">Reading a snapshot version of a symbol<a class="anchor-link" href="#reading-a-snapshot-version-of-a-symbol">¶</a></h3>
 </div>
 </div>
 </div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs">
-<div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs">
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell">
+<div class="jp-Cell jp-CodeCell jp-Notebook-cell">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [ ]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [12]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="CodeMirror cm-s-jupyter">
 <div class="zeroclipboard-container">
 <clipboard-copy for="cell-12">
@@ -2593,45 +2628,40 @@ lib.read(sym)</div>
 </div>
 </clipboard-copy>
 </div>
-<div class="highlight-ipynb hl-python"><pre><span></span><span class="o">%%</span><span class="n">time</span>
-<span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">sym</span><span class="p">,</span> <span class="n">columns</span><span class="o">=</span><span class="p">[</span><span class="s2">"grouping_column_10"</span><span class="p">,</span> <span class="s2">"numeric_column"</span><span class="p">])</span>
+<div class="highlight-ipynb hl-python"><pre><span></span><span class="n">vit</span> <span class="o">=</span> <span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s2">"sym_0"</span><span class="p">,</span> <span class="n">as_of</span><span class="o">=</span><span class="s2">"snapshot_0"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">vit</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">vit</span><span class="o">.</span><span class="n">data</span><span class="p">)</span>
 </pre></div>
-<div class="clipboard-copy-txt" id="cell-12">%%time
-lib.read(sym, columns=["grouping_column_10", "numeric_column"])</div>
+<div class="clipboard-copy-txt" id="cell-12">vit = lib.read("sym_0", as_of="snapshot_0")
+print(vit)
+print(vit.data)</div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell-outputWrapper">
+<div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
+</div>
+<div class="jp-OutputArea jp-Cell-outputArea">
+<div class="jp-OutputArea-child">
+<div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
+<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
+<pre>VersionedItem(symbol='sym_0', library='demo', data=&lt;class 'pandas.core.frame.DataFrame'&gt;, version=1, metadata=None, host='LMDB(path=/users/isys/nclarke/jupyter/arctic/demos/arcticdb_snapshot_demo)')
+   col
+0   10
+</pre>
 </div>
 </div>
 </div>
 </div>
 </div>
-</div>
-<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell">
-<div class="jp-Cell-inputWrapper" tabindex="0">
-<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
-</div>
-<div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
-</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
-<h2 id="filtering">Filtering<a class="anchor-link" href="#filtering">¶</a></h2>
-</div>
-</div>
-</div>
-</div>
-<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell">
-<div class="jp-Cell-inputWrapper" tabindex="0">
-<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
-</div>
-<div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
-</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
-<p>Note that all of the values in the numeric column are between 0 and 1. Thisquery therefore does not filter out any data. This demonstrates that doing a full table scan does not significantly impact the performance.</p>
-</div>
-</div>
-</div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs">
-<div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs">
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell">
+<div class="jp-Cell jp-CodeCell jp-Notebook-cell">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [16]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [13]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="CodeMirror cm-s-jupyter">
 <div class="zeroclipboard-container">
 <clipboard-copy for="cell-13">
@@ -2644,13 +2674,41 @@ lib.read(sym, columns=["grouping_column_10", "numeric_column"])</div>
 </div>
 </clipboard-copy>
 </div>
-<div class="highlight-ipynb hl-python"><pre><span></span><span class="n">q</span> <span class="o">=</span> <span class="n">QueryBuilder</span><span class="p">()</span>
-<span class="n">q</span> <span class="o">=</span> <span class="n">q</span><span class="p">[</span><span class="n">q</span><span class="p">[</span><span class="s2">"numeric_column"</span><span class="p">]</span> <span class="o">&lt;</span> <span class="mf">2.0</span><span class="p">]</span>
+<div class="highlight-ipynb hl-python"><pre><span></span><span class="n">vit</span> <span class="o">=</span> <span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s2">"sym_3"</span><span class="p">,</span> <span class="n">as_of</span><span class="o">=</span><span class="s2">"snapshot_0"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">vit</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">vit</span><span class="o">.</span><span class="n">data</span><span class="p">)</span>
 </pre></div>
-<div class="clipboard-copy-txt" id="cell-13">q = QueryBuilder()
-q = q[q["numeric_column"] &lt; 2.0]</div>
+<div class="clipboard-copy-txt" id="cell-13">vit = lib.read("sym_3", as_of="snapshot_0")
+print(vit)
+print(vit.data)</div>
 </div>
 </div>
+</div>
+</div>
+<div class="jp-Cell-outputWrapper">
+<div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
+</div>
+<div class="jp-OutputArea jp-Cell-outputArea">
+<div class="jp-OutputArea-child">
+<div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
+<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
+<pre>VersionedItem(symbol='sym_3', library='demo', data=&lt;class 'pandas.core.frame.DataFrame'&gt;, version=0, metadata=None, host='LMDB(path=/users/isys/nclarke/jupyter/arctic/demos/arcticdb_snapshot_demo)')
+   col
+0    3
+</pre>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
+</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
+<h3 id="demonstration-that-snapshot-versions-are-protected-from-deletion">Demonstration that snapshot versions are protected from deletion<a class="anchor-link" href="#demonstration-that-snapshot-versions-are-protected-from-deletion">¶</a></h3>
 </div>
 </div>
 </div>
@@ -2660,7 +2718,7 @@ q = q[q["numeric_column"] &lt; 2.0]</div>
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [ ]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [14]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="CodeMirror cm-s-jupyter">
 <div class="zeroclipboard-container">
 <clipboard-copy for="cell-14">
@@ -2673,34 +2731,23 @@ q = q[q["numeric_column"] &lt; 2.0]</div>
 </div>
 </clipboard-copy>
 </div>
-<div class="highlight-ipynb hl-python"><pre><span></span><span class="o">%%</span><span class="n">time</span>
-<span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">sym</span><span class="p">,</span> <span class="n">query_builder</span><span class="o">=</span><span class="n">q</span><span class="p">)</span>
+<div class="highlight-ipynb hl-python"><pre><span></span><span class="c1"># delete the symbol sym_0</span>
+<span class="n">lib</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span><span class="s2">"sym_0"</span><span class="p">)</span>
 </pre></div>
-<div class="clipboard-copy-txt" id="cell-14">%%time
-lib.read(sym, query_builder=q)</div>
+<div class="clipboard-copy-txt" id="cell-14"># delete the symbol sym_0
+lib.delete("sym_0")</div>
 </div>
 </div>
 </div>
 </div>
 </div>
-</div>
-<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell">
-<div class="jp-Cell-inputWrapper" tabindex="0">
-<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
-</div>
-<div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
-</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
-<p>Now we are filtering down to approximately 10% of the rows in the symbol. This is faster than reading, as there are now fewer Python strings to allocate.</p>
-</div>
-</div>
-</div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs">
-<div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs">
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell">
+<div class="jp-Cell jp-CodeCell jp-Notebook-cell">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [18]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [15]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="CodeMirror cm-s-jupyter">
 <div class="zeroclipboard-container">
 <clipboard-copy for="cell-15">
@@ -2713,23 +2760,35 @@ lib.read(sym, query_builder=q)</div>
 </div>
 </clipboard-copy>
 </div>
-<div class="highlight-ipynb hl-python"><pre><span></span><span class="n">q</span> <span class="o">=</span> <span class="n">QueryBuilder</span><span class="p">()</span>
-<span class="n">q</span> <span class="o">=</span> <span class="n">q</span><span class="p">[</span><span class="n">q</span><span class="p">[</span><span class="s2">"numeric_column"</span><span class="p">]</span> <span class="o">&lt;</span> <span class="mf">0.1</span><span class="p">]</span>
+<div class="highlight-ipynb hl-python"><pre><span></span><span class="c1"># show that sym_0 has been deleted</span>
+<span class="n">lib</span><span class="o">.</span><span class="n">list_symbols</span><span class="p">()</span>
 </pre></div>
-<div class="clipboard-copy-txt" id="cell-15">q = QueryBuilder()
-q = q[q["numeric_column"] &lt; 0.1]</div>
+<div class="clipboard-copy-txt" id="cell-15"># show that sym_0 has been deleted
+lib.list_symbols()</div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell-outputWrapper">
+<div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
+</div>
+<div class="jp-OutputArea jp-Cell-outputArea">
+<div class="jp-OutputArea-child jp-OutputArea-executeResult">
+<div class="jp-OutputPrompt jp-OutputArea-prompt">Out[15]:</div>
+<div class="jp-RenderedText jp-OutputArea-output jp-OutputArea-executeResult" data-mime-type="text/plain" tabindex="0">
+<pre>['sym_2', 'sym_1', 'sym_3']</pre>
 </div>
 </div>
 </div>
 </div>
 </div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs">
-<div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs">
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell">
+<div class="jp-Cell jp-CodeCell jp-Notebook-cell">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [ ]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [16]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="CodeMirror cm-s-jupyter">
 <div class="zeroclipboard-container">
 <clipboard-copy for="cell-16">
@@ -2742,23 +2801,38 @@ q = q[q["numeric_column"] &lt; 0.1]</div>
 </div>
 </clipboard-copy>
 </div>
-<div class="highlight-ipynb hl-python"><pre><span></span><span class="o">%%</span><span class="n">time</span>
-<span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">sym</span><span class="p">,</span> <span class="n">query_builder</span><span class="o">=</span><span class="n">q</span><span class="p">)</span><span class="o">.</span><span class="n">data</span>
+<div class="highlight-ipynb hl-python"><pre><span></span><span class="c1"># sym_0 does not appear in the current library versions</span>
+<span class="n">lib</span><span class="o">.</span><span class="n">list_versions</span><span class="p">()</span>
 </pre></div>
-<div class="clipboard-copy-txt" id="cell-16">%%time
-lib.read(sym, query_builder=q).data</div>
+<div class="clipboard-copy-txt" id="cell-16"># sym_0 does not appear in the current library versions
+lib.list_versions()</div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell-outputWrapper">
+<div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
+</div>
+<div class="jp-OutputArea jp-Cell-outputArea">
+<div class="jp-OutputArea-child jp-OutputArea-executeResult">
+<div class="jp-OutputPrompt jp-OutputArea-prompt">Out[16]:</div>
+<div class="jp-RenderedText jp-OutputArea-output jp-OutputArea-executeResult" data-mime-type="text/plain" tabindex="0">
+<pre>{sym_3_v0: (date=2023-11-20 10:24:45.103129257+00:00, snapshots=['snapshot_0']),
+ sym_2_v0: (date=2023-11-20 10:24:45.086132551+00:00, snapshots=['snapshot_0']),
+ sym_1_v1: (date=2023-11-20 10:24:45.431966093+00:00, snapshots=['snapshot_0']),
+ sym_1_v0: (date=2023-11-20 10:24:45.066268214+00:00)}</pre>
 </div>
 </div>
 </div>
 </div>
 </div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs">
-<div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs">
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell">
+<div class="jp-Cell jp-CodeCell jp-Notebook-cell">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [ ]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [17]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="CodeMirror cm-s-jupyter">
 <div class="zeroclipboard-container">
 <clipboard-copy for="cell-17">
@@ -2771,9 +2845,30 @@ lib.read(sym, query_builder=q).data</div>
 </div>
 </clipboard-copy>
 </div>
-<div class="highlight-ipynb hl-python"><pre><span></span><span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">sym</span><span class="p">,</span> <span class="n">query_builder</span><span class="o">=</span><span class="n">q</span><span class="p">)</span><span class="o">.</span><span class="n">data</span>
+<div class="highlight-ipynb hl-python"><pre><span></span><span class="c1"># however we can still read the version of sym_0 that was recorded in the snapshot</span>
+<span class="n">vit</span> <span class="o">=</span> <span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s2">"sym_0"</span><span class="p">,</span> <span class="n">as_of</span><span class="o">=</span><span class="s2">"snapshot_0"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">vit</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">vit</span><span class="o">.</span><span class="n">data</span><span class="p">)</span>
 </pre></div>
-<div class="clipboard-copy-txt" id="cell-17">lib.read(sym, query_builder=q).data</div>
+<div class="clipboard-copy-txt" id="cell-17"># however we can still read the version of sym_0 that was recorded in the snapshot
+vit = lib.read("sym_0", as_of="snapshot_0")
+print(vit)
+print(vit.data)</div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell-outputWrapper">
+<div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
+</div>
+<div class="jp-OutputArea jp-Cell-outputArea">
+<div class="jp-OutputArea-child">
+<div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
+<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
+<pre>VersionedItem(symbol='sym_0', library='demo', data=&lt;class 'pandas.core.frame.DataFrame'&gt;, version=1, metadata=None, host='LMDB(path=/users/isys/nclarke/jupyter/arctic/demos/arcticdb_snapshot_demo)')
+   col
+0   10
+</pre>
 </div>
 </div>
 </div>
@@ -2786,28 +2881,18 @@ lib.read(sym, query_builder=q).data</div>
 </div>
 <div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
 </div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
-<h2 id="projections">Projections<a class="anchor-link" href="#projections">¶</a></h2>
+<h3 id="although-it-works-we-advise-not-to-read-snapshot-versions-directly-using-the-version-number">Although it works, we advise not to read snapshot versions directly using the version number<a class="anchor-link" href="#although-it-works-we-advise-not-to-read-snapshot-versions-directly-using-the-version-number">¶</a></h3><p>These versions only exist because they are in a snapshot, so it is much more obvious to code to access them via the snapshot.</p>
+<p>Accessing snapshot protected versions via the version number leads to code that will fail (if the snapshot is deleted) in a way that is difficult to understand.</p>
 </div>
 </div>
 </div>
-</div>
-<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell">
-<div class="jp-Cell-inputWrapper" tabindex="0">
-<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
-</div>
-<div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
-</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
-<p>Creating a new column as a funtion of existing columns and constants is approximately the same speed as a filter that doesn't reduce the amount of data displayed.</p>
-</div>
-</div>
-</div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs">
-<div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs">
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell">
+<div class="jp-Cell jp-CodeCell jp-Notebook-cell">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [21]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [18]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="CodeMirror cm-s-jupyter">
 <div class="zeroclipboard-container">
 <clipboard-copy for="cell-18">
@@ -2820,23 +2905,40 @@ lib.read(sym, query_builder=q).data</div>
 </div>
 </clipboard-copy>
 </div>
-<div class="highlight-ipynb hl-python"><pre><span></span><span class="n">q</span> <span class="o">=</span> <span class="n">QueryBuilder</span><span class="p">()</span>
-<span class="n">q</span> <span class="o">=</span> <span class="n">q</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="s2">"new_column"</span><span class="p">,</span> <span class="n">q</span><span class="p">[</span><span class="s2">"numeric_column"</span><span class="p">]</span> <span class="o">*</span> <span class="mf">2.0</span><span class="p">)</span>
+<div class="highlight-ipynb hl-python"><pre><span></span><span class="n">vit</span> <span class="o">=</span> <span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s2">"sym_0"</span><span class="p">,</span> <span class="n">as_of</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">vit</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">vit</span><span class="o">.</span><span class="n">data</span><span class="p">)</span>
 </pre></div>
-<div class="clipboard-copy-txt" id="cell-18">q = QueryBuilder()
-q = q.apply("new_column", q["numeric_column"] * 2.0)</div>
+<div class="clipboard-copy-txt" id="cell-18">vit = lib.read("sym_0", as_of=1)
+print(vit)
+print(vit.data)</div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell-outputWrapper">
+<div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
+</div>
+<div class="jp-OutputArea jp-Cell-outputArea">
+<div class="jp-OutputArea-child">
+<div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
+<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
+<pre>VersionedItem(symbol='sym_0', library='demo', data=&lt;class 'pandas.core.frame.DataFrame'&gt;, version=1, metadata=None, host='LMDB(path=/users/isys/nclarke/jupyter/arctic/demos/arcticdb_snapshot_demo)')
+   col
+0   10
+</pre>
 </div>
 </div>
 </div>
 </div>
 </div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs">
-<div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs">
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell">
+<div class="jp-Cell jp-CodeCell jp-Notebook-cell">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [ ]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [19]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="CodeMirror cm-s-jupyter">
 <div class="zeroclipboard-container">
 <clipboard-copy for="cell-19">
@@ -2849,13 +2951,48 @@ q = q.apply("new_column", q["numeric_column"] * 2.0)</div>
 </div>
 </clipboard-copy>
 </div>
-<div class="highlight-ipynb hl-python"><pre><span></span><span class="o">%%</span><span class="n">time</span>
-<span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">sym</span><span class="p">,</span> <span class="n">query_builder</span><span class="o">=</span><span class="n">q</span><span class="p">)</span>
+<div class="highlight-ipynb hl-python"><pre><span></span><span class="c1"># version 0 was not in the snapshot, so it has been removed</span>
+<span class="k">try</span><span class="p">:</span>
+    <span class="n">vit</span> <span class="o">=</span> <span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s2">"sym_0"</span><span class="p">,</span> <span class="n">as_of</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">vit</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">vit</span><span class="o">.</span><span class="n">data</span><span class="p">)</span>
+<span class="k">except</span> <span class="n">adb</span><span class="o">.</span><span class="n">exceptions</span><span class="o">.</span><span class="n">NoSuchVersionException</span><span class="p">:</span>
+    <span class="n">logging</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">"Version not found"</span><span class="p">)</span>
 </pre></div>
-<div class="clipboard-copy-txt" id="cell-19">%%time
-lib.read(sym, query_builder=q)</div>
+<div class="clipboard-copy-txt" id="cell-19"># version 0 was not in the snapshot, so it has been removed
+try:
+    vit = lib.read("sym_0", as_of=0)
+    print(vit)
+    print(vit.data)
+except adb.exceptions.NoSuchVersionException:
+    logging.error("Version not found")
 </div>
 </div>
+</div>
+</div>
+</div>
+<div class="jp-Cell-outputWrapper">
+<div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
+</div>
+<div class="jp-OutputArea jp-Cell-outputArea">
+<div class="jp-OutputArea-child">
+<div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
+<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="application/vnd.jupyter.stderr" tabindex="0">
+<pre>ERROR:root:Version not found
+</pre>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
+</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
+<h3 id="deleting-a-snapshot">Deleting a snapshot<a class="anchor-link" href="#deleting-a-snapshot">¶</a></h3><p>When we delete a snapshot, any versions that are only referenced by that snapshot will be deleted.</p>
 </div>
 </div>
 </div>
@@ -2865,7 +3002,7 @@ lib.read(sym, query_builder=q)</div>
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [ ]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [20]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="CodeMirror cm-s-jupyter">
 <div class="zeroclipboard-container">
 <clipboard-copy for="cell-20">
@@ -2878,43 +3015,21 @@ lib.read(sym, query_builder=q)</div>
 </div>
 </clipboard-copy>
 </div>
-<div class="highlight-ipynb hl-python"><pre><span></span><span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">sym</span><span class="p">,</span> <span class="n">query_builder</span><span class="o">=</span><span class="n">q</span><span class="p">)</span><span class="o">.</span><span class="n">data</span>
+<div class="highlight-ipynb hl-python"><pre><span></span><span class="n">lib</span><span class="o">.</span><span class="n">delete_snapshot</span><span class="p">(</span><span class="s2">"snapshot_0"</span><span class="p">)</span>
 </pre></div>
-<div class="clipboard-copy-txt" id="cell-20">lib.read(sym, query_builder=q).data</div>
+<div class="clipboard-copy-txt" id="cell-20">lib.delete_snapshot("snapshot_0")</div>
 </div>
 </div>
 </div>
 </div>
 </div>
-</div>
-<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell">
-<div class="jp-Cell-inputWrapper" tabindex="0">
-<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
-</div>
-<div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
-</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
-<h2 id="groupbys-and-aggregations">Groupbys and Aggregations<a class="anchor-link" href="#groupbys-and-aggregations">¶</a></h2>
-</div>
-</div>
-</div>
-</div>
-<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell">
-<div class="jp-Cell-inputWrapper" tabindex="0">
-<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
-</div>
-<div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
-</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
-<p>Grouping is again faster than just reading due to the reduced number of Python string allocations, even with the extra computation performed.</p>
-</div>
-</div>
-</div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs">
-<div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs">
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell">
+<div class="jp-Cell jp-CodeCell jp-Notebook-cell">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [24]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [21]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="CodeMirror cm-s-jupyter">
 <div class="zeroclipboard-container">
 <clipboard-copy for="cell-21">
@@ -2927,23 +3042,33 @@ lib.read(sym, query_builder=q)</div>
 </div>
 </clipboard-copy>
 </div>
-<div class="highlight-ipynb hl-python"><pre><span></span><span class="n">q</span> <span class="o">=</span> <span class="n">QueryBuilder</span><span class="p">()</span>
-<span class="n">q</span> <span class="o">=</span> <span class="n">q</span><span class="o">.</span><span class="n">groupby</span><span class="p">(</span><span class="s2">"grouping_column_10"</span><span class="p">)</span><span class="o">.</span><span class="n">agg</span><span class="p">({</span><span class="s2">"numeric_column"</span><span class="p">:</span> <span class="s2">"mean"</span><span class="p">})</span>
+<div class="highlight-ipynb hl-python"><pre><span></span><span class="n">lib</span><span class="o">.</span><span class="n">list_snapshots</span><span class="p">()</span>
 </pre></div>
-<div class="clipboard-copy-txt" id="cell-21">q = QueryBuilder()
-q = q.groupby("grouping_column_10").agg({"numeric_column": "mean"})</div>
+<div class="clipboard-copy-txt" id="cell-21">lib.list_snapshots()</div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell-outputWrapper">
+<div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
+</div>
+<div class="jp-OutputArea jp-Cell-outputArea">
+<div class="jp-OutputArea-child jp-OutputArea-executeResult">
+<div class="jp-OutputPrompt jp-OutputArea-prompt">Out[21]:</div>
+<div class="jp-RenderedText jp-OutputArea-output jp-OutputArea-executeResult" data-mime-type="text/plain" tabindex="0">
+<pre>{}</pre>
 </div>
 </div>
 </div>
 </div>
 </div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs">
-<div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs">
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell">
+<div class="jp-Cell jp-CodeCell jp-Notebook-cell">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [ ]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [22]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="CodeMirror cm-s-jupyter">
 <div class="zeroclipboard-container">
 <clipboard-copy for="cell-22">
@@ -2956,23 +3081,46 @@ q = q.groupby("grouping_column_10").agg({"numeric_column": "mean"})</div>
 </div>
 </clipboard-copy>
 </div>
-<div class="highlight-ipynb hl-python"><pre><span></span><span class="o">%%</span><span class="n">time</span>
-<span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">sym</span><span class="p">,</span> <span class="n">query_builder</span><span class="o">=</span><span class="n">q</span><span class="p">)</span>
+<div class="highlight-ipynb hl-python"><pre><span></span><span class="c1"># version 1, which was kept as part of the snapshot, has now been deleted</span>
+<span class="k">try</span><span class="p">:</span>
+    <span class="n">vit</span> <span class="o">=</span> <span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s2">"sym_0"</span><span class="p">,</span> <span class="n">as_of</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">vit</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">vit</span><span class="o">.</span><span class="n">data</span><span class="p">)</span>
+<span class="k">except</span> <span class="n">adb</span><span class="o">.</span><span class="n">exceptions</span><span class="o">.</span><span class="n">NoSuchVersionException</span><span class="p">:</span>
+    <span class="n">logging</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">"Version not found"</span><span class="p">)</span>
 </pre></div>
-<div class="clipboard-copy-txt" id="cell-22">%%time
-lib.read(sym, query_builder=q)</div>
+<div class="clipboard-copy-txt" id="cell-22"># version 1, which was kept as part of the snapshot, has now been deleted
+try:
+    vit = lib.read("sym_0", as_of=1)
+    print(vit)
+    print(vit.data)
+except adb.exceptions.NoSuchVersionException:
+    logging.error("Version not found")</div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell-outputWrapper">
+<div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
+</div>
+<div class="jp-OutputArea jp-Cell-outputArea">
+<div class="jp-OutputArea-child">
+<div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
+<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="application/vnd.jupyter.stderr" tabindex="0">
+<pre>ERROR:root:Version not found
+</pre>
 </div>
 </div>
 </div>
 </div>
 </div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs">
-<div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs">
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell">
+<div class="jp-Cell jp-CodeCell jp-Notebook-cell">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [ ]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [23]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="CodeMirror cm-s-jupyter">
 <div class="zeroclipboard-container">
 <clipboard-copy for="cell-23">
@@ -2985,9 +3133,24 @@ lib.read(sym, query_builder=q)</div>
 </div>
 </clipboard-copy>
 </div>
-<div class="highlight-ipynb hl-python"><pre><span></span><span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">sym</span><span class="p">,</span> <span class="n">query_builder</span><span class="o">=</span><span class="n">q</span><span class="p">)</span><span class="o">.</span><span class="n">data</span>
+<div class="highlight-ipynb hl-python"><pre><span></span><span class="n">lib</span><span class="o">.</span><span class="n">list_versions</span><span class="p">()</span>
 </pre></div>
-<div class="clipboard-copy-txt" id="cell-23">lib.read(sym, query_builder=q).data</div>
+<div class="clipboard-copy-txt" id="cell-23">lib.list_versions()</div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell-outputWrapper">
+<div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
+</div>
+<div class="jp-OutputArea jp-Cell-outputArea">
+<div class="jp-OutputArea-child jp-OutputArea-executeResult">
+<div class="jp-OutputPrompt jp-OutputArea-prompt">Out[23]:</div>
+<div class="jp-RenderedText jp-OutputArea-output jp-OutputArea-executeResult" data-mime-type="text/plain" tabindex="0">
+<pre>{sym_3_v0: (date=2023-11-20 10:24:45.103129257+00:00),
+ sym_2_v0: (date=2023-11-20 10:24:45.086132551+00:00),
+ sym_1_v1: (date=2023-11-20 10:24:45.431966093+00:00),
+ sym_1_v0: (date=2023-11-20 10:24:45.066268214+00:00)}</pre>
 </div>
 </div>
 </div>
@@ -3000,7 +3163,7 @@ lib.read(sym, query_builder=q)</div>
 </div>
 <div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
 </div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
-<p>Even grouping on a pathologically large number of unique values does not significantly reduce the performance.</p>
+<h3 id="snapshot-names-must-be-unique">Snapshot names must be unique<a class="anchor-link" href="#snapshot-names-must-be-unique">¶</a></h3><p>Creating a snapshot with a name that already has a snapshot causes an error.</p>
 </div>
 </div>
 </div>
@@ -3010,7 +3173,7 @@ lib.read(sym, query_builder=q)</div>
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [27]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [24]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="CodeMirror cm-s-jupyter">
 <div class="zeroclipboard-container">
 <clipboard-copy for="cell-24">
@@ -3023,23 +3186,21 @@ lib.read(sym, query_builder=q)</div>
 </div>
 </clipboard-copy>
 </div>
-<div class="highlight-ipynb hl-python"><pre><span></span><span class="n">q</span> <span class="o">=</span> <span class="n">QueryBuilder</span><span class="p">()</span>
-<span class="n">q</span> <span class="o">=</span> <span class="n">q</span><span class="o">.</span><span class="n">groupby</span><span class="p">(</span><span class="s2">"grouping_column_100_000"</span><span class="p">)</span><span class="o">.</span><span class="n">agg</span><span class="p">({</span><span class="s2">"numeric_column"</span><span class="p">:</span> <span class="s2">"mean"</span><span class="p">})</span>
+<div class="highlight-ipynb hl-python"><pre><span></span><span class="n">lib</span><span class="o">.</span><span class="n">snapshot</span><span class="p">(</span><span class="s2">"snapshot_1"</span><span class="p">,</span> <span class="n">metadata</span><span class="o">=</span><span class="s2">"demo snapshot names need to be unique"</span><span class="p">)</span>
 </pre></div>
-<div class="clipboard-copy-txt" id="cell-24">q = QueryBuilder()
-q = q.groupby("grouping_column_100_000").agg({"numeric_column": "mean"})</div>
+<div class="clipboard-copy-txt" id="cell-24">lib.snapshot("snapshot_1", metadata="demo snapshot names need to be unique")</div>
 </div>
 </div>
 </div>
 </div>
 </div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs">
-<div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs">
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell">
+<div class="jp-Cell jp-CodeCell jp-Notebook-cell">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [ ]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [25]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="CodeMirror cm-s-jupyter">
 <div class="zeroclipboard-container">
 <clipboard-copy for="cell-25">
@@ -3052,23 +3213,40 @@ q = q.groupby("grouping_column_100_000").agg({"numeric_column": "mean"})</div>
 </div>
 </clipboard-copy>
 </div>
-<div class="highlight-ipynb hl-python"><pre><span></span><span class="o">%%</span><span class="n">time</span>
-<span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">sym</span><span class="p">,</span> <span class="n">query_builder</span><span class="o">=</span><span class="n">q</span><span class="p">)</span>
+<div class="highlight-ipynb hl-python"><pre><span></span><span class="k">try</span><span class="p">:</span>
+    <span class="n">lib</span><span class="o">.</span><span class="n">snapshot</span><span class="p">(</span><span class="s2">"snapshot_1"</span><span class="p">)</span>
+<span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+    <span class="n">logging</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="n">e</span><span class="p">)</span>
 </pre></div>
-<div class="clipboard-copy-txt" id="cell-25">%%time
-lib.read(sym, query_builder=q)</div>
+<div class="clipboard-copy-txt" id="cell-25">try:
+    lib.snapshot("snapshot_1")
+except Exception as e:
+    logging.error(e)</div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell-outputWrapper">
+<div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
+</div>
+<div class="jp-OutputArea jp-Cell-outputArea">
+<div class="jp-OutputArea-child">
+<div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
+<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="application/vnd.jupyter.stderr" tabindex="0">
+<pre>ERROR:root:E_ASSERTION_FAILURE Snapshot with name snapshot_1 already exists
+</pre>
 </div>
 </div>
 </div>
 </div>
 </div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs">
-<div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs">
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell">
+<div class="jp-Cell jp-CodeCell jp-Notebook-cell">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [ ]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [26]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="CodeMirror cm-s-jupyter">
 <div class="zeroclipboard-container">
 <clipboard-copy for="cell-26">
@@ -3081,9 +3259,21 @@ lib.read(sym, query_builder=q)</div>
 </div>
 </clipboard-copy>
 </div>
-<div class="highlight-ipynb hl-python"><pre><span></span><span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">sym</span><span class="p">,</span> <span class="n">query_builder</span><span class="o">=</span><span class="n">q</span><span class="p">)</span><span class="o">.</span><span class="n">data</span>
+<div class="highlight-ipynb hl-python"><pre><span></span><span class="n">lib</span><span class="o">.</span><span class="n">list_snapshots</span><span class="p">()</span>
 </pre></div>
-<div class="clipboard-copy-txt" id="cell-26">lib.read(sym, query_builder=q).data</div>
+<div class="clipboard-copy-txt" id="cell-26">lib.list_snapshots()</div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell-outputWrapper">
+<div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
+</div>
+<div class="jp-OutputArea jp-Cell-outputArea">
+<div class="jp-OutputArea-child jp-OutputArea-executeResult">
+<div class="jp-OutputPrompt jp-OutputArea-prompt">Out[26]:</div>
+<div class="jp-RenderedText jp-OutputArea-output jp-OutputArea-executeResult" data-mime-type="text/plain" tabindex="0">
+<pre>{'snapshot_1': 'demo snapshot names need to be unique'}</pre>
 </div>
 </div>
 </div>
@@ -3096,18 +3286,7 @@ lib.read(sym, query_builder=q)</div>
 </div>
 <div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
 </div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
-<h2 id="combinations">Combinations<a class="anchor-link" href="#combinations">¶</a></h2>
-</div>
-</div>
-</div>
-</div>
-<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell">
-<div class="jp-Cell-inputWrapper" tabindex="0">
-<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
-</div>
-<div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
-</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
-<p>These operations can be arbitrarily combined in a seqential pipeline.</p>
+<h3 id="modifiers-for-snapshot-creation-exclude-or-include-symbols">Modifiers for snapshot creation: exclude or include symbols<a class="anchor-link" href="#modifiers-for-snapshot-creation-exclude-or-include-symbols">¶</a></h3>
 </div>
 </div>
 </div>
@@ -3117,7 +3296,7 @@ lib.read(sym, query_builder=q)</div>
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [30]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [27]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="CodeMirror cm-s-jupyter">
 <div class="zeroclipboard-container">
 <clipboard-copy for="cell-27">
@@ -3130,23 +3309,23 @@ lib.read(sym, query_builder=q)</div>
 </div>
 </clipboard-copy>
 </div>
-<div class="highlight-ipynb hl-python"><pre><span></span><span class="n">q</span> <span class="o">=</span> <span class="n">QueryBuilder</span><span class="p">()</span>
-<span class="n">q</span> <span class="o">=</span> <span class="n">q</span><span class="p">[</span><span class="n">q</span><span class="p">[</span><span class="s2">"numeric_column"</span><span class="p">]</span> <span class="o">&lt;</span> <span class="mf">0.1</span><span class="p">]</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="s2">"new_column"</span><span class="p">,</span> <span class="n">q</span><span class="p">[</span><span class="s2">"numeric_column"</span><span class="p">]</span> <span class="o">*</span> <span class="mf">2.0</span><span class="p">)</span><span class="o">.</span><span class="n">groupby</span><span class="p">(</span><span class="s2">"grouping_column_10"</span><span class="p">)</span><span class="o">.</span><span class="n">agg</span><span class="p">({</span><span class="s2">"numeric_column"</span><span class="p">:</span> <span class="s2">"mean"</span><span class="p">,</span> <span class="s2">"new_column"</span><span class="p">:</span> <span class="s2">"max"</span><span class="p">})</span>
+<div class="highlight-ipynb hl-python"><pre><span></span><span class="c1"># exclude sym_1 from snapshot</span>
+<span class="n">lib</span><span class="o">.</span><span class="n">snapshot</span><span class="p">(</span><span class="s2">"snapshot_2"</span><span class="p">,</span> <span class="n">skip_symbols</span><span class="o">=</span><span class="p">[</span><span class="s2">"sym_1"</span><span class="p">],</span> <span class="n">metadata</span><span class="o">=</span><span class="s2">"demo skip_symbols"</span><span class="p">)</span>
 </pre></div>
-<div class="clipboard-copy-txt" id="cell-27">q = QueryBuilder()
-q = q[q["numeric_column"] &lt; 0.1].apply("new_column", q["numeric_column"] * 2.0).groupby("grouping_column_10").agg({"numeric_column": "mean", "new_column": "max"})</div>
+<div class="clipboard-copy-txt" id="cell-27"># exclude sym_1 from snapshot
+lib.snapshot("snapshot_2", skip_symbols=["sym_1"], metadata="demo skip_symbols")</div>
 </div>
 </div>
 </div>
 </div>
 </div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs">
-<div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs">
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell">
+<div class="jp-Cell jp-CodeCell jp-Notebook-cell">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [ ]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [28]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="CodeMirror cm-s-jupyter">
 <div class="zeroclipboard-container">
 <clipboard-copy for="cell-28">
@@ -3159,11 +3338,24 @@ q = q[q["numeric_column"] &lt; 0.1].apply("new_column", q["numeric_column"] * 2.
 </div>
 </clipboard-copy>
 </div>
-<div class="highlight-ipynb hl-python"><pre><span></span><span class="o">%%</span><span class="n">time</span>
-<span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">sym</span><span class="p">,</span> <span class="n">query_builder</span><span class="o">=</span><span class="n">q</span><span class="p">)</span>
+<div class="highlight-ipynb hl-python"><pre><span></span><span class="n">lib</span><span class="o">.</span><span class="n">list_versions</span><span class="p">()</span>
 </pre></div>
-<div class="clipboard-copy-txt" id="cell-28">%%time
-lib.read(sym, query_builder=q)</div>
+<div class="clipboard-copy-txt" id="cell-28">lib.list_versions()</div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell-outputWrapper">
+<div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
+</div>
+<div class="jp-OutputArea jp-Cell-outputArea">
+<div class="jp-OutputArea-child jp-OutputArea-executeResult">
+<div class="jp-OutputPrompt jp-OutputArea-prompt">Out[28]:</div>
+<div class="jp-RenderedText jp-OutputArea-output jp-OutputArea-executeResult" data-mime-type="text/plain" tabindex="0">
+<pre>{sym_3_v0: (date=2023-11-20 10:24:45.103129257+00:00, snapshots=['snapshot_1', 'snapshot_2']),
+ sym_2_v0: (date=2023-11-20 10:24:45.086132551+00:00, snapshots=['snapshot_1', 'snapshot_2']),
+ sym_1_v1: (date=2023-11-20 10:24:45.431966093+00:00, snapshots=['snapshot_1']),
+ sym_1_v0: (date=2023-11-20 10:24:45.066268214+00:00)}</pre>
 </div>
 </div>
 </div>
@@ -3175,7 +3367,7 @@ lib.read(sym, query_builder=q)</div>
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [ ]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [29]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="CodeMirror cm-s-jupyter">
 <div class="zeroclipboard-container">
 <clipboard-copy for="cell-29">
@@ -3188,11 +3380,134 @@ lib.read(sym, query_builder=q)</div>
 </div>
 </clipboard-copy>
 </div>
-<div class="highlight-ipynb hl-python"><pre><span></span><span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">sym</span><span class="p">,</span> <span class="n">query_builder</span><span class="o">=</span><span class="n">q</span><span class="p">)</span><span class="o">.</span><span class="n">data</span>
+<div class="highlight-ipynb hl-python"><pre><span></span><span class="c1"># include specific versions of sym_1 and sym_2 from snapshot</span>
+<span class="n">lib</span><span class="o">.</span><span class="n">snapshot</span><span class="p">(</span><span class="s2">"snapshot_3"</span><span class="p">,</span> <span class="n">versions</span><span class="o">=</span><span class="p">{</span><span class="s2">"sym_1"</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span> <span class="s2">"sym_2"</span><span class="p">:</span> <span class="mi">0</span><span class="p">},</span> <span class="n">metadata</span><span class="o">=</span><span class="s2">"demo versions"</span><span class="p">)</span>
 </pre></div>
-<div class="clipboard-copy-txt" id="cell-29">lib.read(sym, query_builder=q).data</div>
+<div class="clipboard-copy-txt" id="cell-29"># include specific versions of sym_1 and sym_2 from snapshot
+lib.snapshot("snapshot_3", versions={"sym_1": 0, "sym_2": 0}, metadata="demo versions")</div>
 </div>
 </div>
+</div>
+</div>
+</div>
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell">
+<div class="jp-Cell jp-CodeCell jp-Notebook-cell">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [30]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="CodeMirror cm-s-jupyter">
+<div class="zeroclipboard-container">
+<clipboard-copy for="cell-30">
+<div>
+<span class="notice" hidden="">Copied!</span>
+<svg aria-hidden="true" class="clipboard-copy-icon" data-view-component="true" height="20" version="1.1" viewbox="0 0 16 16" width="20">
+<path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 010 1.5h-1.5a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-1.5a.75.75 0 011.5 0v1.5A1.75 1.75 0 019.25 16h-7.5A1.75 1.75 0 010 14.25v-7.5z" fill="currentColor" fill-rule="evenodd"></path>
+<path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0114.25 11h-7.5A1.75 1.75 0 015 9.25v-7.5zm1.75-.25a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-7.5a.25.25 0 00-.25-.25h-7.5z" fill="currentColor" fill-rule="evenodd"></path>
+</svg>
+</div>
+</clipboard-copy>
+</div>
+<div class="highlight-ipynb hl-python"><pre><span></span><span class="n">lib</span><span class="o">.</span><span class="n">list_versions</span><span class="p">(</span><span class="n">snapshot</span><span class="o">=</span><span class="s2">"snapshot_3"</span><span class="p">)</span>
+</pre></div>
+<div class="clipboard-copy-txt" id="cell-30">lib.list_versions(snapshot="snapshot_3")</div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell-outputWrapper">
+<div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
+</div>
+<div class="jp-OutputArea jp-Cell-outputArea">
+<div class="jp-OutputArea-child jp-OutputArea-executeResult">
+<div class="jp-OutputPrompt jp-OutputArea-prompt">Out[30]:</div>
+<div class="jp-RenderedText jp-OutputArea-output jp-OutputArea-executeResult" data-mime-type="text/plain" tabindex="0">
+<pre>{sym_2_v0: (date=2023-11-20 10:24:45.086132551+00:00, snapshots=['snapshot_1', 'snapshot_2', 'snapshot_3']),
+ sym_1_v0: (date=2023-11-20 10:24:45.066268214+00:00, snapshots=['snapshot_3'])}</pre>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell">
+<div class="jp-Cell jp-CodeCell jp-Notebook-cell">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [31]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="CodeMirror cm-s-jupyter">
+<div class="zeroclipboard-container">
+<clipboard-copy for="cell-31">
+<div>
+<span class="notice" hidden="">Copied!</span>
+<svg aria-hidden="true" class="clipboard-copy-icon" data-view-component="true" height="20" version="1.1" viewbox="0 0 16 16" width="20">
+<path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 010 1.5h-1.5a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-1.5a.75.75 0 011.5 0v1.5A1.75 1.75 0 019.25 16h-7.5A1.75 1.75 0 010 14.25v-7.5z" fill="currentColor" fill-rule="evenodd"></path>
+<path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0114.25 11h-7.5A1.75 1.75 0 015 9.25v-7.5zm1.75-.25a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-7.5a.25.25 0 00-.25-.25h-7.5z" fill="currentColor" fill-rule="evenodd"></path>
+</svg>
+</div>
+</clipboard-copy>
+</div>
+<div class="highlight-ipynb hl-python"><pre><span></span><span class="n">lib</span><span class="o">.</span><span class="n">list_snapshots</span><span class="p">()</span>
+</pre></div>
+<div class="clipboard-copy-txt" id="cell-31">lib.list_snapshots()</div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell-outputWrapper">
+<div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
+</div>
+<div class="jp-OutputArea jp-Cell-outputArea">
+<div class="jp-OutputArea-child jp-OutputArea-executeResult">
+<div class="jp-OutputPrompt jp-OutputArea-prompt">Out[31]:</div>
+<div class="jp-RenderedText jp-OutputArea-output jp-OutputArea-executeResult" data-mime-type="text/plain" tabindex="0">
+<pre>{'snapshot_1': 'demo snapshot names need to be unique',
+ 'snapshot_2': 'demo skip_symbols',
+ 'snapshot_3': 'demo versions'}</pre>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
+</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
+<hr/>
+<h3 id="snapshots-why-and-why-not-to-use-them">Snapshots: why and why not to use them<a class="anchor-link" href="#snapshots-why-and-why-not-to-use-them">¶</a></h3><h4 id="why">Why<a class="anchor-link" href="#why">¶</a></h4><ul>
+<li>Snapshots record the current state of the library</li>
+<li>They can be thought of a recoverable checkpoints in the evolution of the data</li>
+<li>Snapshots can create an audit trail</li>
+<li>Snapshots protect their data from deletion by other acticity in the library</li>
+</ul>
+<h4 id="why-not">Why Not<a class="anchor-link" href="#why-not">¶</a></h4><ul>
+<li>Generally we encourage the use of snapshots</li>
+<li>However if many snapshots are created they can impose a slight performance penalty on some operations due to the deletion protection</li>
+<li>Snapshots can also increase the storage used by ArcticDB, through protecting older versions that would otherwise be deleted</li>
+<li>Use snapshots in a considered fashion and delete them when they are no longer needed</li>
+</ul>
+<hr/>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
+</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
+<h3 id="further-info-extras">Further Info / Extras<a class="anchor-link" href="#further-info-extras">¶</a></h3><p>For full descriptions of the functions used above, please see the ArcticDb documentation:</p>
+<ul>
+<li><code>snapshot()</code> <a href="https://docs.arcticdb.io/latest/api/library/#arcticdb.version_store.library.Library.snapshot">https://docs.arcticdb.io/latest/api/library/#arcticdb.version_store.library.Library.snapshot</a></li>
+<li><code>list_snapshots()</code> <a href="https://docs.arcticdb.io/latest/api/library/#arcticdb.version_store.library.Library.list_snapshots">https://docs.arcticdb.io/latest/api/library/#arcticdb.version_store.library.Library.list_snapshots</a></li>
+<li><code>list_versions()</code> <a href="https://docs.arcticdb.io/latest/api/library/#arcticdb.version_store.library.Library.list_versions">https://docs.arcticdb.io/latest/api/library/#arcticdb.version_store.library.Library.list_versions</a></li>
+</ul>
 </div>
 </div>
 </div>
