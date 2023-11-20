@@ -13,6 +13,7 @@
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/entity/variant_key.hpp>
 #include <arcticdb/storage/storage.hpp>
+#include <arcticdb/entity/read_result.hpp>
 
 #include <memory>
 
@@ -30,6 +31,8 @@ class LibraryTool {
 
 public:
     explicit LibraryTool(std::shared_ptr<storage::Library> lib) : lib_(std::move(lib)) {}
+
+    ReadResult read(const VariantKey& key);
 
     Segment read_to_segment(const VariantKey& key);
 

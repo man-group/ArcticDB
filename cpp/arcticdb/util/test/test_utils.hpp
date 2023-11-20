@@ -92,7 +92,7 @@ struct TestValue {
     TensorType<raw_type> get_tensor() const {
         util::check_arg(dimensions != Dimension::Dim0, "get tensor called on scalar test value");
         reconstruct_strides();
-        return TensorType<raw_type>{shapes_.data(), ssize_t(dimensions), DataTypeTag::data_type, get_type_size(DataTypeTag::data_type), data_.data()};
+        return TensorType<raw_type>{shapes_.data(), ssize_t(dimensions), DataTypeTag::data_type, get_type_size(DataTypeTag::data_type), data_.data(), ssize_t(dimensions)};
     }
 
     bool check_tensor(TensorType<raw_type> &t) const {
@@ -143,7 +143,7 @@ struct TestRow {
         values_() {
         std::iota(std::begin(starts_), std::end(starts_), start_val);
         for (auto &s : starts_)
-            values_.push_back(TestValue<TDT>{s, num_vals});
+            values_.emplace_back(TestValue<TDT>{s, num_vals});
         auto prev_size = bitset_.size();
         bitset_.resize(num_columns + 1);
         bitset_.set_range(prev_size, bitset_.size() - 1, true);
@@ -162,4 +162,3 @@ struct TestRow {
     mutable util::BitSet bitset_;
     std::vector<TestValue<TDT>> values_;
 };
-

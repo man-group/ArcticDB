@@ -10,7 +10,6 @@ from typing import Sequence, Union, TYPE_CHECKING
 
 import numpy as np
 import pandas as pd
-import six
 from arcticdb_ext.types import DataType, TypeDescriptor, FieldDescriptor
 
 sint_types = [np.int8, np.int16, np.int32, np.int64]
@@ -48,7 +47,7 @@ _np_by_dt = {
     DataType.FLOAT64: np.float64,
 }
 
-_dt_by_np = {v: k for k, v in six.iteritems(_np_by_dt)}
+_dt_by_np = {v: k for k, v in _np_by_dt.items()}
 
 
 def get_numpy_dtype(dt):

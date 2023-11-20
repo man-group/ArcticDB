@@ -9,21 +9,13 @@ import collections
 from datetime import datetime
 
 import numpy as np
-import six
 from numpy import datetime64
 from pandas import Timestamp
-from six import PY3
 from typing import NamedTuple, List, AnyStr
 
-if PY3:
 
-    def _stringify(v):
-        return str(v, "utf-8")
-
-else:
-
-    def _stringify(v):
-        return str(v)
+def _stringify(v):
+    return str(v, "utf-8")
 
 
 # NOTE: When using Pandas < 2.0, `datetime64` _always_ has the nanosecond resolution,
@@ -84,7 +76,7 @@ class TimeFrame(
                 dst = TimeFrame(self.times, self.columns_names[col_filter], self.columns_values[col_filter])
             elif isinstance(col_filter, int):
                 dst = TimeFrame(self.times, [self.columns_names[col_filter]], [self.columns_values[col_filter]])
-            elif isinstance(col_filter, six.string_types):
+            elif isinstance(col_filter, str):
                 idx = self.columns_names.index(col_filter)
                 if idx == -1:
                     raise KeyError("Cannot find column {} in {}".format(col_filter, self.columns_names))
@@ -114,7 +106,7 @@ class TimeFrame(
 
         def _resolve_slice(self, item):
             def _normalize(v):
-                if isinstance(v, six.string_types) or isinstance(v, datetime):
+                if isinstance(v, str) or isinstance(v, datetime):
                     return datetime64(Timestamp(v).value, "ns")
                 return datetime64(item, "ns")
 
@@ -146,9 +138,9 @@ class TimeFrame(
 
 
 def _column_name_to_strings(name):
-    if isinstance(name, six.string_types):
+    if isinstance(name, str):
         return name
-    elif isinstance(name, six.binary_type):
+    elif isinstance(name, bytes):
         # XXX: should we assume that bytes in Python 3 are UTF-8?
         return name.decode("utf8")
     elif isinstance(name, tuple):

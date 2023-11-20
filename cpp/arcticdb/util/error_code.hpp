@@ -18,12 +18,12 @@
 
 namespace arcticdb {
 
-namespace {
+namespace detail {
 using BaseType = std::uint32_t;
 constexpr BaseType error_category_scale = 1000u;
 }
 
-enum class ErrorCategory : BaseType {
+enum class ErrorCategory : detail::BaseType {
     INTERNAL = 1,
     NORMALIZATION = 2,
     MISSING_DATA = 3,
@@ -77,16 +77,19 @@ inline std::unordered_map<ErrorCategory, const char*> get_error_category_names()
     ERROR_CODE(5000, E_KEY_NOT_FOUND) \
     ERROR_CODE(5001, E_DUPLICATE_KEY) \
     ERROR_CODE(5002, E_SYMBOL_NOT_FOUND) \
+    ERROR_CODE(5003, E_LMDB_MAP_FULL) \
     ERROR_CODE(6000, E_UNSORTED_DATA) \
     ERROR_CODE(7000, E_INVALID_USER_ARGUMENT) \
     ERROR_CODE(7001, E_INVALID_DECIMAL_STRING)   \
     ERROR_CODE(7002, E_INVALID_CHAR_IN_SYMBOL) \
     ERROR_CODE(8000, E_UNRECOGNISED_COLUMN_STATS_VERSION)   \
-    ERROR_CODE(9000, E_UNKNOWN_CODEC) \
-    ERROR_CODE(9001, E_ZSDT_ENCODING) \
-    ERROR_CODE(9002, E_LZ4_ENCODING)  \
-    ERROR_CODE(9003, E_INPUT_TOO_LARGE)
-enum class ErrorCode : BaseType {
+    ERROR_CODE(9000, E_DECODE_ERROR) \
+    ERROR_CODE(9001, E_UNKNOWN_CODEC) \
+    ERROR_CODE(9002, E_ZSDT_ENCODING) \
+    ERROR_CODE(9003, E_LZ4_ENCODING)  \
+    ERROR_CODE(9004, E_INPUT_TOO_LARGE)
+
+enum class ErrorCode : detail::BaseType {
 #define ERROR_CODE(code, Name, ...) Name = code,
     ARCTIC_ERROR_CODES
 #undef ERROR_CODE
@@ -117,7 +120,7 @@ inline std::vector<ErrorCode> get_error_codes() {
 ErrorCodeData get_error_code_data(ErrorCode code);
 
 constexpr ErrorCategory get_error_category(ErrorCode code) {
-    return static_cast<ErrorCategory>(static_cast<BaseType>(code) / error_category_scale);
+    return static_cast<ErrorCategory>(static_cast<detail::BaseType>(code) / detail::error_category_scale);
 }
 
 struct ArcticException : public std::runtime_error {

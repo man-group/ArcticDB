@@ -6,34 +6,25 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 import sys
-
+import time
 import pytz
-from arcticdb_ext.exceptions import InternalException
-from arcticdb.exceptions import ArcticDbNotYetImplemented, LibraryNotFound
-
-from arcticdb_ext.storage import NoDataFoundException
-
-from arcticdb.arctic import Arctic
-from arcticdb.exceptions import MismatchingLibraryOptions
-from arcticdb.encoding_version import EncodingVersion
-from arcticdb.options import LibraryOptions
-from arcticdb import QueryBuilder, DataError
-from arcticc.pb2.s3_storage_pb2 import Config as S3Config
-
 import math
 import re
 import pytest
 import pandas as pd
-from datetime import datetime, timezone
 import numpy as np
-
-from arcticdb.config import MACOS_CONDA_BUILD, MACOS_CONDA_BUILD_SKIP_REASON
-from arcticdb.util.test import assert_frame_equal, RUN_MONGO_TEST
-
+from datetime import datetime, timezone
 from botocore.client import BaseClient as BotoClient
-import time
 
-
+from arcticdb_ext.exceptions import InternalException, UserInputException
+from arcticdb_ext.storage import NoDataFoundException
+from arcticdb.exceptions import ArcticDbNotYetImplemented, LibraryNotFound, MismatchingLibraryOptions
+from arcticdb.arctic import Arctic
+from arcticdb.options import LibraryOptions
+from arcticdb.encoding_version import EncodingVersion
+from arcticdb import QueryBuilder
+from arcticc.pb2.s3_storage_pb2 import Config as S3Config
+from arcticdb.util.test import assert_frame_equal
 from arcticdb.version_store.library import (
     WritePayload,
     ArcticUnsupportedDataTypeException,
@@ -41,6 +32,8 @@ from arcticdb.version_store.library import (
     StagedDataFinalizeMethod,
     ArcticInvalidApiUsageException,
 )
+
+from tests.util.mark import AZURE_TESTS_MARK, MONGO_TESTS_MARK
 
 
 def test_library_creation_deletion(arctic_client):
@@ -173,6 +166,8 @@ def test_library_options(arctic_client):
 
 
 def test_separation_between_libraries(arctic_client):
+    # This fails for mem-backed without the library caching implemented in
+    # issue #520 then re-implemented in issue #889
     """Validate that symbols in one library are not exposed in another."""
     ac = arctic_client
     assert ac.list_libraries() == []
@@ -241,17 +236,13 @@ def test_separation_between_libraries_with_prefixes(object_storage_uri_incl_buck
     ac_mars.delete_library("pytest_test_lib_2")
 
 
-def object_storage_uri_and_client():
-    if MACOS_CONDA_BUILD:
-        return [("moto_s3_uri_incl_bucket", "boto_client")]
-
-    return [
-        ("moto_s3_uri_incl_bucket", "boto_client"),
-        ("azurite_azure_uri_incl_bucket", "azure_client_and_create_container"),
-    ]
+OBJECT_STORAGE_URI_AND_CLIENT = [
+    ("moto_s3_uri_incl_bucket", "boto_client"),
+    pytest.param("azurite_azure_uri_incl_bucket", "azure_client_and_create_container", marks=AZURE_TESTS_MARK),
+]
 
 
-@pytest.mark.parametrize("connection_string, client", object_storage_uri_and_client())
+@pytest.mark.parametrize("connection_string, client", OBJECT_STORAGE_URI_AND_CLIENT)
 def test_library_management_path_prefix(connection_string, client, request):
     connection_string = request.getfixturevalue(request.getfixturevalue("connection_string"))
     client = request.getfixturevalue(request.getfixturevalue("client"))
@@ -565,14 +556,32 @@ def test_delete_date_range(arctic_library):
     assert lib["symbol"].version == 1
 
 
-@pytest.mark.skipif(not RUN_MONGO_TEST, reason="Mongo test on windows is fiddly")
-def test_mongo_repr(mongo_test_uri):
-    max_pool_size = 10
-    min_pool_size = 100
-    selection_timeout_ms = 1000
-    uri = f"{mongo_test_uri}/?maxPoolSize={max_pool_size}&minPoolSize={min_pool_size}&serverSelectionTimeoutMS={selection_timeout_ms}"
+@MONGO_TESTS_MARK
+def test_mongo_construction_with_pymongo(mongo_test_uri):
+    uri = f"{mongo_test_uri}/?maxPoolSize=10&minPoolSize=100&serverSelectionTimeoutMS=1000"
     ac = Arctic(uri)
     assert repr(ac) == f"Arctic(config=mongodb(endpoint={mongo_test_uri[len('mongodb://'):]}))"
+
+    # With pymongo, exception thrown in the uri_parser;
+    with pytest.raises(UserInputException):
+        uri = f"{mongo_test_uri}//"
+        ac = Arctic(uri)
+
+
+@MONGO_TESTS_MARK
+def test_mongo_construction_no_pymongo(monkeypatch, mongo_test_uri):
+    import arcticdb.adapters.mongo_library_adapter
+
+    monkeypatch.setattr(arcticdb.adapters.mongo_library_adapter, "_HAVE_PYMONGO", False)
+
+    uri = f"{mongo_test_uri}/?maxPoolSize=10&minPoolSize=100&serverSelectionTimeoutMS=1000"
+    ac = Arctic(uri)
+    assert repr(ac) == f"Arctic(config=mongodb(endpoint={mongo_test_uri[len('mongodb://'):]}))"
+
+    # Without pymongo, it gets thrown in the mongo C++ library
+    with pytest.raises(UserInputException):
+        uri = f"{mongo_test_uri}//"
+        ac = Arctic(uri)
 
 
 def test_s3_repr(moto_s3_uri_incl_bucket):
@@ -587,8 +596,7 @@ def test_s3_repr(moto_s3_uri_incl_bucket):
     s3_endpoint += f":{port}"
     bucket = moto_s3_uri_incl_bucket.split(":")[-1].split("?")[0]
     assert (
-        repr(lib)
-        == "Library("
+        repr(lib) == "Library("
         "Arctic("
         "config=S3("
         f"endpoint={s3_endpoint}, bucket={bucket})), path=pytest_test_lib, storage=s3_storage)"
@@ -996,17 +1004,23 @@ def test_tail(arctic_library):
     )
 
 
-@pytest.mark.parametrize("dedup", [True, False])
-def test_dedup(arctic_client, dedup):
+def test_dedup(arctic_client):
     ac = arctic_client
     assert ac.list_libraries() == []
-    ac.create_library("pytest_test_library", LibraryOptions(dedup=dedup))
-    lib = ac["pytest_test_library"]
-    symbol = "test_dedup"
-    lib.write_pickle(symbol, 1)
-    lib.write_pickle(symbol, 1, prune_previous_versions=False)
-    data_key_version = lib._nvs.read_index(symbol)["version_id"][0]
-    assert data_key_version == 0 if dedup else 1
+    errors = []
+    # we are doing manual iteration due to a limitation that should be fixed by issue #1053
+    for dedup in [True, False]:
+        try:
+            ac.create_library(f"pytest_test_library_{dedup}", LibraryOptions(dedup=dedup))
+            lib = ac[f"pytest_test_library_{dedup}"]
+            symbol = "test_dedup"
+            lib.write_pickle(symbol, 1)
+            lib.write_pickle(symbol, 1, prune_previous_versions=False)
+            data_key_version = lib._nvs.read_index(symbol)["version_id"][0]
+            assert data_key_version == 0 if dedup else 1
+        except AssertionError as e:
+            errors.append(f"Failed when using dedup value {dedup}: {str(e)}")
+    assert not errors, "errors occurred:\n" + "\n".join(errors)
 
 
 def test_segment_slicing(arctic_client):
@@ -1030,7 +1044,7 @@ def test_segment_slicing(arctic_client):
     assert num_data_segments == math.ceil(rows / rows_per_segment) * math.ceil(columns / columns_per_segment)
 
 
-@pytest.mark.parametrize("connection_string, client", object_storage_uri_and_client())
+@pytest.mark.parametrize("connection_string, client", OBJECT_STORAGE_URI_AND_CLIENT)
 def test_reload_symbol_list(connection_string, client, request):
     connection_string = request.getfixturevalue(request.getfixturevalue("connection_string"))
     client = request.getfixturevalue(request.getfixturevalue("client"))
@@ -1097,7 +1111,7 @@ def test_azure_no_ca_path(azurite_azure_test_connection_setting):
     )
 
 
-@pytest.mark.skipif(MACOS_CONDA_BUILD, reason=MACOS_CONDA_BUILD_SKIP_REASON)
+@AZURE_TESTS_MARK
 def test_azure_sas_token(azure_account_sas_token, azurite_azure_test_connection_setting):
     endpoint, container, credential_name, _, _ = azurite_azure_test_connection_setting
     ac = Arctic(

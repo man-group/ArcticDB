@@ -19,23 +19,16 @@ and diagrams are generated, even undocumented classes / functions. This gives ab
 
 Install
 ```
-pip install mkdocs-material mkdocs-jupyter
+pip install mkdocs-material mkdocs-jupyter mkdocstrings[python] black pybind11-stubgen mike
 ```
+- mkdocs-material: theme
+- mkdocs-jupyter: jupyter notebook support
+- mkdocstrings[python]: python docstring support, like sphinx docs
+- black: for signature formatting
+- pybind11-stubgen: for generating stubs for pybind11 extensions, so that mkdocstrings can parse them
+- mike: for deploying versioned docs
 
-To build mkdocs (to `/tmp/docs_build/` as an example):
-```
-cd docs/mkdocs
-mkdocs build -d /tmp/docs_build
-```
-
-Development server 
-```
-mkdocs serve -a 0.0.0.0:8000
-```
-
-### Sphinx
-
-You need to have the ArcticDB wheel installed, so install it from source:
+You need to have ArcticDB installed to generate the API docs, so install it from source:
 
 ```
 cd $PROJECT_ROOT
@@ -44,45 +37,70 @@ pip install <generated wheel>
 ```
 
 or from PyPi,
-
 ```
 pip install arcticdb
 ```
 
-Install dependencies,
-
+`mkdocstrings[python]` doesn't support python extensions very well, so create interface files (pyi) for the extensions first.
 ```
-pip install sphinx sphinx_rtd_theme
-```
-
-Build,
-
-```
-cd sphinxdocs
-make html
-cd ..
+cd python
+# TODO fix these errors!
+pybind11-stubgen arcticdb_ext.version_store --ignore-all-errors -o .
 ```
 
-This writes build files to `./sphinxdocs/build/html`.
-Open `./sphinxdocs/build/html/index.html` in the browser of your choice to just view the Sphinx docs.
-
-## Uploading
-
-Add the Sphinxdocs to the build:
-
+To build the latest mkdocs to docs/mkdocs/site:
 ```
-mkdir /tmp/docs_build/api
-cp -r ./sphinxdocs/build/html/* /tmp/mkdocs_build/api
+cd docs/mkdocs
+mkdocs build -s
 ```
 
-Then `/tmp/docs_build/` forms the docs site.
+Development server 
+```
+mkdocs serve -s -a 0.0.0.0:8000
+```
 
-## Deploying to `docs.arcticdb.io`
+The python docstring parser, griffe, will struggle with some built-in (C++) modules
+You'll see 'alias' errors as this when it can't resolve something:
+```
+ERROR   -  mkdocstrings: Template 'alias.html' not found for 'python' handler and theme 'material'.
+ERROR   -  Error reading page 'api/library.md': alias.html
+```
 
-Run the `Docs` github action.
-- Branch: Master
-- Environment: ProdPypi
-- Override: arcticdb
+We use `mike` to version the docs.  The docs are first built into the `docs-pages` branch and then deployed to `docs.arcticdb.io` from there.
 
-This will generate both the mkdocs and sphinx pages.
+To serve the versioned docs locally, run `mike serve` from the `docs/mkdocs` directory.
 
+## Building Docs using the Github Action
+
+To use the `Docs Build` github action follow these steps:
+
+* Click the `run workflow` dropdown
+* Select a git branch for the code to run the action (normally `master`)
+* The version text for the action should be in the form `4.0.2` (as an example)
+* This will use git tag `v4.0.2-docs` to build the docs
+* Tick the `latest` box if are working on docs for the latest stable release
+* Tick the push to github box unless you are testing the docs build. Normally you would tick this, because the publish action reads from there.
+
+For managing git, please follow these conventions:
+
+* To make the first mod to the docs for an older version please branch from the `v4.0.2` tag with a branch called `v4.0.2-docs-branch`
+* If the branch and docs tag already exist for the version the just checkout the branch
+* Commit the changes you want to see in the docs for that version
+* If it exists already, delete the `v4.0.2-docs` tag using 
+    * `git tag -d v4.0.2-docs` (local)
+    * `git push origin :v4.0.2-docs` (remote)
+* Recreate the tag for your latest commit using
+    * `git tag v4.0.2-docs`
+* Push your commit and new tag using
+    * `git push` (changes)
+    * `git push origin v4.0.2-docs` (tag)
+* Run the action
+
+The reason for the separate docs tags is to allow improvements to the docs to be made to recent versions without re-tagging the release. The docs branches can eventually be deleted for older versions. The tags should not be deleted.
+
+
+## Publishing `docs.arcticdb.io`
+
+Run the `Docs Publish` github action.
+- Environment: ProdPypi, to push to docs.arcticdb.io
+- Environment: TestPypi, to push to a preview site

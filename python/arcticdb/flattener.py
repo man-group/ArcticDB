@@ -8,7 +8,6 @@ As of the Change Date specified in that file, in accordance with the Business So
 import collections
 import hashlib
 import msgpack
-import six
 
 from arcticdb import _msgpack_compat
 from arcticdb.log import version as log
@@ -101,19 +100,13 @@ class Flattener:
     @staticmethod
     def try_serialize_as_primitive(obj):
         try:
-            if six.PY3:
-                return msgpack.packb(obj, use_bin_type=True, strict_types=True)  # TODO: use msgpacknormalizer
-            else:
-                return msgpack.packb(obj, strict_types=True)
+            return msgpack.packb(obj, use_bin_type=True, strict_types=True)  # TODO: use msgpacknormalizer
         except TypeError:
             return None
 
     @staticmethod
     def deserialize_primitives(obj):
-        if six.PY3:
-            return _msgpack_compat.unpackb(obj, raw=False)
-        else:
-            return msgpack.unpackb(obj)
+        return _msgpack_compat.unpackb(obj, raw=False)
 
     def will_obj_be_partially_pickled(self, obj):
         to_write = dict()

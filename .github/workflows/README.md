@@ -50,10 +50,10 @@ flowchart LR
     leader --> follower
     leader --> cpp_tests
     leader --> persistent_storage{Should test against real storages?} --> persistent_storage_tests --> can_merge
-    follower --> docs
-    docs --> can_merge
     cpp_tests --> can_merge
     can_merge --> pub_check{publish_env} --> publish
+    B((manual)) --> docs_build
+    B((manual)) --> docs_publish
 ```
 
 This diagram shows the structure of the CI system.
@@ -87,12 +87,12 @@ They are designed to run concurrently with the Follower jobs, which test against
 
 After the leader jobs have passed successfully, we run Follower jobs that compile and test against the all of the supported Python versions.
 
-## Docs job
+## Docs jobs
 
-The Docs job compiles and publishes the latest docs.
-It needs a valid ArcticDB wheel to run, so it depends on the Linux jobs.
-Also currently, the automatic builds trigger only from changes in the code.
-**So if you make changes that are only in the docs, you will need to start a manual build and supply a valid ArcticDB wheel.**
+The docs_build job compiles and deploys versions of the docs into the `docs-pages` branch.
+The docs_publish job uploads the complete `docs-pages` branch to Cloudflare Pages.
+See [Docs README](https://github.com/man-group/ArcticDB/blob/master/docs/README.md) for more info.
+Currently this is manual.  Automatic build (on push) and publish (for releases) is TODO.
 
 ## can_merge check
 
@@ -197,21 +197,31 @@ See also: [`twine` docs](https://twine.readthedocs.io/en/stable/#environment-var
 <tr><th>vars.TWINE_CERT</th><td>SSL CA</td>
 </table>
 
-## [docs.yml](docs.yml)
+## [docs_build.yml](docs_build.yml)
 
-**Runs on forks**: Yes. Must supply a CloudFlare Pages site to upload to
+* Checks out suppied git tag  `v{version}-docs` or `master`
+* Fetches shallow copy of `docs-pages` branch.
+* Downloads and install wheel for API docs (either version or from last good build)
+* Install docs tools
+* Builds docs
+* Commits to docs-pages branch
 
 ### Call patterns
 | Called from       | Environment   | Intended effect
 |-------------------|---------------|----------------
-| master build      | TestPypi      | Updates the preview site
-| version tag build | ProdPypi      | Updates the public/`main` site
-| other build^      | null          | Doc syntax check only
-| workflow_dispatch | user supplied | Per environment settings
+| workflow_dispatch (manual) | user supplied | Per environment settings
 
-^ `build.yml` is triggered by changes to the code directories only.
-If you pushed only docs changes, please use the workflow dispatch to run a build manually
-(and supply a suitable ArcticDB wheel from a previous build).
+## [docs_publish.yml](docs_publish.yml)
+
+* Checks out docs-pages branch
+* Uploads to cloudflare, with as preview (TestPyPi) or `docs.arcticdb.io` (ProdPyPi).
+
+### Call patterns
+| Called from       | Environment   | Intended effect
+|-------------------|---------------|----------------
+
+| workflow_dispatch (manual) | user supplied | Per environment settings
+
 
 ### Settings
 <table>

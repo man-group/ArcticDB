@@ -173,7 +173,6 @@ folly::Future<std::string> do_read(folly::Future<IndexSegmentReader>&& fut) {
 TEST(Async, SemiFuturePassing) {
     using namespace folly;
     using namespace arcticdb;
-    StreamId id{"thing"};
     Promise<StreamId> p;
     Future<StreamId> f = p.getFuture();
     auto f2 = get_index_segment_reader(std::move(f));
@@ -215,12 +214,10 @@ auto multiplex(folly::Future<int> &&n) {
 TEST(Async, DynamicSizing) {
     using namespace folly;
     using namespace arcticdb;
-    StreamId id{"thing"};
     Promise<int> p;
     Future<int> f = p.getFuture();
     auto f1 = num_slices(std::move(f));
     auto f2 = multiplex(std::move(f1));
     p.setValue(5);
     auto v = std::move(f2).get();
-    std::cout << "thing" << std::endl;
 }

@@ -21,7 +21,7 @@ find immediately familiar.
 
 ###*How does ArcticDB differ from the version of Arctic on GitHub?*
 
-Please see the [history page](../history).
+Please see the [history page](history.md).
 
 ###*How does ArcticDB differ from Apache Parquet?*
 
@@ -59,7 +59,7 @@ Bindings are currently only available for Python.
 
 ###*How can I get started using ArcticDB?*
 
-Please see our [getting started guide](../)!
+Please see our [getting started guide](index.md)!
 
 ## Technical
 
@@ -71,9 +71,9 @@ No. ArcticDB enables data access and modifications with a Python API that speaks
 
 Yes.
 
-On each `write`, ArcticDB will check the previous version of the symbol that you are writing (and _only_ this version - other symbols will not be scanned!) and skip the write of identical [segments](../technical/on_disk_storage). Please keep in mind however that this is most effective when version `n` is equal to version `n-1` plus additional data at the end - and only at the end! If there is additional data inserted into the in the middle, then all segments occuring after that modification will almost certainly differ. ArcticDB segments data at fixed intervals and data is only de-duplicated if the hashes of the data segments are identical - as a result, a one row offset will prevent effective de-duplication.
+On each `write`, ArcticDB will check the previous version of the symbol that you are writing (and _only_ this version - other symbols will not be scanned!) and skip the write of identical [segments](technical/on_disk_storage.md). Please keep in mind however that this is most effective when version `n` is equal to version `n-1` plus additional data at the end - and only at the end! If there is additional data inserted into the in the middle, then all segments occuring after that modification will almost certainly differ. ArcticDB segments data at fixed intervals and data is only de-duplicated if the hashes of the data segments are identical - as a result, a one row offset will prevent effective de-duplication.
 
-Note that this is a library configuration option that is off by default, see [`help(LibraryOptions)`](https://docs.arcticdb.io/api/arcticdb/arcticdb.LibraryOptions) for details of how to enable it.
+Note that this is a library configuration option that is off by default, see [`help(LibraryOptions)`](api/arctic.md#LibraryOptions) for details of how to enable it.
 
 ### *How does ArcticDB enable advanced analytics?*
 
@@ -85,7 +85,7 @@ That said, ArcticDB does offer a limited set of analytical functions that are ex
 
 ArcticDB has two means for storing data:
 
-1. ArcticDB can store your data using the [Arctic On-Disk Storage Format](../technical/on_disk_storage).
+1. ArcticDB can store your data using the [Arctic On-Disk Storage Format](technical/on_disk_storage.md).
 2. ArcticDB can [Pickle](https://docs.python.org/3/library/pickle.html) your data, storing it as a giant binary blob.
 
 (1) is vastly more performant (i.e. reads and writes are faster), space efficient and unlocks data slicing as described in the getting started guide. There are no practical advantages to storing your data as a Pickled binary-blob - _other than_ certain data types must be Pickled for ArcticDB to be able to store them at all!
@@ -104,7 +104,7 @@ Pickled data cannot be index or column-sliced, and neither `update` nor `append`
 
 ### *How does indexing work in ArcticDB?*
 
-See the [Getting Started](../#reading-and-writing-dataframes) page for details of supported index types.
+See the [Getting Started](index.md#reading-and-writing-dataframes) page for details of supported index types.
 
 ### *Can I `append` with additional columns / What is Dynamic Schema?*
 
@@ -114,7 +114,7 @@ You can also change the type of numerical columns - for example, integers will b
 
 ### *How does ArcticDB segment data?*
 
-See [On Disk Storage Format](../technical/on_disk_storage) and the [documentation](/api/arcticdb/arcticdb.LibraryOptions) for the `rows_per_segment` and `columns_per_segment` library configuration options for more details. 
+See [On Disk Storage Format](technical/on_disk_storage.md) and the [documentation](api/arctic.md#LibraryOptions) for the `rows_per_segment` and `columns_per_segment` library configuration options for more details. 
 
 ### *How does ArcticDB handle streaming data?*
 
@@ -134,15 +134,15 @@ To reiterate, ArcticDB supports concurrent writers to multiple symbols, even wit
 
 ### *Does ArcticDB cache any data locally?*
 
-Yes, please see the [Runtime Configuration](/runtime_config#versionmapreloadinterval) page for details.
+Yes, please see the [Runtime Configuration](runtime_config.md#versionmapreloadinterval) page for details.
 
 ### *How can I enable detailed logging?*
 
-Please see the [Runtime Configuration](/runtime_config#logging-configuration) page for details.
+Please see the [Runtime Configuration](runtime_config.md#logging-configuration) page for details.
 
 ### *How can I tune the performance of ArcticDB?*
 
-Please see the [Runtime Configuration](/runtime_config#versionstorenumcputhreads-and-versionstorenumiothreads) page for details.
+Please see the [Runtime Configuration](runtime_config.md#versionstorenumcputhreads-and-versionstorenumiothreads) page for details.
 
 ### Does ArcticDB support categorical data?
 
@@ -154,4 +154,4 @@ The handling of `NaN` in ArcticDB depends on the type of the column under consid
 
 * For string columns, `NaN`, as well as Python `None`, are fully supported.
 * For floating-point numeric columns, `NaN` is also fully supported.
-* For integer numeric columns `NaN` is not supported. A column that otherwise contains only integers will be treated as a floating point column if a `NaN` is encountered by ArcticDB, at which point [the usual rules](/api/arcticdb/arcticdb.LibraryOptions) around type promotion for libraries configured with or without dynamic schema all apply as usual.
+* For integer numeric columns `NaN` is not supported. A column that otherwise contains only integers will be treated as a floating point column if a `NaN` is encountered by ArcticDB, at which point [the usual rules](api/arctic.md#LibraryOptions) around type promotion for libraries configured with or without dynamic schema all apply as usual.

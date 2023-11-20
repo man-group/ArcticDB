@@ -227,24 +227,12 @@ We recommend using Visual Studio 2022 (or later) to install the compiler (MSVC v
 The Python that comes with Visual Studio is sufficient for creating release builds, but for debug builds, you will have
 to separately download from [Python.org](https://www.python.org/downloads/windows/).
 
-pre-commit hooks setup
-----------------------
+After building `arcticdb_ext`, you need to symlink to the `.pyd` for the Python tests to run against it:
 
-We use [pre-commit](https://pre-commit.com/) to run some checks on the codebase before committing.
-
-To install the pre-commit hooks, run:
-
-```bash
-pip install pre-commit
-pre-commit install
-```
-
-This will install the pre-commit hooks into your local git repository.
-
-If you want to run the pre-commit hooks on all files, run:
-
-```bash
-pre-commit run --all-files
+```powershell
+# From the root of the ArcticDB git root checkout, in an administrator powershell session
+# Change Python version as appropriate - below is for Python 3.11.
+New-Item -Path .\python\arcticdb_ext.cp311-win_amd64.pyd -ItemType SymbolicLink -Value .\cpp\out\windows-cl-debug-build\arcticdb\arcticdb_ext.cp311-win_amd64.pyd
 ```
 
 Running Python tests

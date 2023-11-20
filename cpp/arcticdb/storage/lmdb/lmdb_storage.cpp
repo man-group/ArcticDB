@@ -11,12 +11,12 @@
 
 #include <arcticdb/log/log.hpp>
 #include <arcticdb/entity/atom_key.hpp>
+#include <arcticdb/storage/constants.hpp>
 #include <arcticdb/storage/library_path.hpp>
 #include <arcticdb/storage/open_mode.hpp>
 #include <arcticdb/util/format_bytes.hpp>
 #include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/util/pb_util.hpp>
-#include <arcticdb/log/log.hpp>
 #include <arcticdb/entity/serialized_key.hpp>
 #include <arcticdb/storage/storage.hpp>
 #include <arcticdb/storage/storage_options.hpp>
@@ -56,6 +56,8 @@ void LmdbStorage::do_write_internal(Composite<KeySegmentPair>&& kvs, ::lmdb::txn
             int res = ::mdb_put(txn.handle(), dbi.handle(), &mdb_key, &mdb_val, MDB_RESERVE | overwrite_flag);
             if (res == MDB_KEYEXIST) {
                 throw DuplicateKeyException(kv.variant_key());
+            } else if (res == MDB_MAP_FULL) {
+                throw ::lmdb::map_full_error("mdb_put", res);
             } else if (res != 0) {
                 throw std::runtime_error(fmt::format("Invalid lmdb error code {} while putting key {}",
                                                      res, kv.key_view()));
@@ -265,25 +267,30 @@ T or_else(T val, T or_else_val, T def = T()) {
 } // anonymous
 
 LmdbStorage::LmdbStorage(const LibraryPath &library_path, OpenMode mode, const Config &conf) :
-        Storage(library_path, mode),
-        write_mutex_(new std::mutex{}),
-        env_(std::make_unique<::lmdb::env>(::lmdb::env::create(conf.flags()))),
-        dbi_by_key_type_() {
+        Storage(library_path, mode) {
+
+    write_mutex_ = std::make_unique<std::mutex>();
+    env_ = std::make_unique<::lmdb::env>(::lmdb::env::create(conf.flags()));
+    dbi_by_key_type_ = std::unordered_map<std::string, ::lmdb::dbi>{};
+
     fs::path root_path = conf.path().c_str();
     auto lib_path_str = library_path.to_delim_path(fs::path::preferred_separator);
 
-    auto lib_dir = root_path / lib_path_str;
-    if (!fs::exists(lib_dir)) {
-        util::check_arg(mode > OpenMode::READ, "Missing dir {} for lib={}. mode={}",
-                        lib_dir.generic_string(), lib_path_str, mode);
+    lib_dir_ = root_path / lib_path_str;
 
-        fs::create_directories(lib_dir);
+    warn_if_lmdb_already_open();
+
+    if (!fs::exists(lib_dir_)) {
+        util::check_arg(mode > OpenMode::READ, "Missing dir {} for lib={}. mode={}",
+                        lib_dir_.generic_string(), lib_path_str, mode);
+
+        fs::create_directories(lib_dir_);
     }
 
-    if (fs::exists(lib_dir / "data.mdb")) {
+    if (fs::exists(lib_dir_ / "data.mdb")) {
         if (conf.recreate_if_exists() && mode >= OpenMode::WRITE) {
-            fs::remove(lib_dir / "data.mdb");
-            fs::remove(lib_dir / "lock.mdb");
+            fs::remove(lib_dir_ / "data.mdb");
+            fs::remove(lib_dir_ / "lock.mdb");
         }
     }
 
@@ -295,27 +302,63 @@ LmdbStorage::LmdbStorage(const LibraryPath &library_path, OpenMode mode, const C
     // Windows needs a sensible size as it allocates disk for the whole file even before any writes. Linux just gets an arbitrarily large size
     // that it probably won't ever reach.
 #ifdef _WIN32
-    constexpr uint64_t default_map_size = 1ULL << 27; /* 128 MiB */
+    // At least enough for 300 cols and 1M rows
+    constexpr uint64_t default_map_size = 2ULL * (1ULL << 30); /* 2 GiB */
 #else
-    constexpr uint64_t default_map_size = 100ULL * (4ULL << 30); /* 400 GiB */
+    constexpr uint64_t default_map_size = 400ULL * (1ULL << 30); /* 400 GiB */
 #endif
     auto mapsize = or_else(static_cast<uint64_t>(conf.map_size()), default_map_size);
     env().set_mapsize(mapsize);
     env().set_max_dbs(or_else(static_cast<unsigned int>(conf.max_dbs()), 1024U));
     env().set_max_readers(or_else(conf.max_readers(), 1024U));
-    env().open(lib_dir.generic_string().c_str(), MDB_NOTLS);
+    env().open(lib_dir_.generic_string().c_str(), MDB_NOTLS);
 
     auto txn = ::lmdb::txn::begin(env());
 
     arcticdb::entity::foreach_key_type([&txn, this](KeyType&& key_type) {
         std::string db_name = fmt::format("{}", key_type);
         ::lmdb::dbi dbi = ::lmdb::dbi::open(txn, db_name.data(), MDB_CREATE);
-        dbi_by_key_type_.insert({std::move(db_name), std::move(dbi)});
+        dbi_by_key_type_.insert(std::make_pair(std::move(db_name), std::move(dbi)));
     });
 
     txn.commit();
 
-    ARCTICDB_DEBUG(log::storage(), "Opened lmdb storage at {} with map size {}", lib_dir.generic_string(), format_bytes(mapsize));
+    ARCTICDB_DEBUG(log::storage(), "Opened lmdb storage at {} with map size {}", lib_dir_.string(), format_bytes(mapsize));
+}
+
+void LmdbStorage::warn_if_lmdb_already_open() {
+    uint64_t& count_for_pid = ++times_path_opened[lib_dir_.string()];
+    // Only warn for the "base" config library to avoid spamming users with more warnings if they decide to ignore it and continue
+    if (count_for_pid != 1 && lib_dir_.string().find(CONFIG_LIBRARY_NAME) != std::string::npos) {
+        std::filesystem::path user_facing_path = lib_dir_;
+        // Strip magic name from warning as it will confuse users
+        user_facing_path.remove_filename();
+        log::storage().warn(fmt::format(
+                "LMDB path at {} has already been opened in this process which is not supported by LMDB. "
+                "You should only open a single Arctic instance over a given LMDB path. "
+                "To continue safely, you should delete this Arctic instance and any others over the LMDB path in this "
+                "process and then try again. Current process ID=[{}]",
+                user_facing_path.string(), getpid()));
+    }
+}
+
+LmdbStorage::LmdbStorage(LmdbStorage&& other)  noexcept
+    : Storage(std::move(static_cast<Storage&>(other))),
+    write_mutex_(std::move(other.write_mutex_)),
+    env_(std::move(other.env_)),
+    dbi_by_key_type_(std::move(other.dbi_by_key_type_)),
+    lib_dir_(std::move(other.lib_dir_)) {
+    other.lib_dir_ = "";
+}
+
+LmdbStorage::~LmdbStorage() {
+    if (!lib_dir_.empty()) {
+        --times_path_opened[lib_dir_.string()];
+    }
+}
+
+void LmdbStorage::reset_warning_counter() {
+    times_path_opened = std::unordered_map<std::string, uint64_t>{};
 }
 
 } // namespace arcticdb::storage::lmdb

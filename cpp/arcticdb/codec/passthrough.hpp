@@ -149,8 +149,6 @@ struct PassthroughDecoder {
         arcticdb::util::check_arg(in_bytes == out_bytes, "expected  in_bytes==out_bytes, actual {} != {}", in_bytes,
                                  out_bytes);
         memcpy(t_out, in, in_bytes);
-        in += in_bytes;
-        t_out += in_bytes / sizeof(T);
     }
 };
 

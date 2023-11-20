@@ -13,6 +13,7 @@
 #include <spdlog/sinks/stdout_color_sinks.h>
 #include <spdlog/async.h>
 #include <spdlog/async_logger.h>
+#include <spdlog/sinks/stdout_sinks.h>
 
 #include <memory>
 #include <mutex>
@@ -24,9 +25,7 @@
 #define ARCTICDB_TRACE(logger, ...) (void)0
 #endif
 
-#define ARCTICDB_RUNTIME_INFO(logger, ...) logger.info(__VA_ARGS__)
 #define ARCTICDB_RUNTIME_DEBUG(logger, ...) logger.debug(__VA_ARGS__)
-#define ARCTICDB_RUNTIME_TRACE(logger, ...) logger.trace(__VA_ARGS__)
 
 namespace arcticdb::log {
 class Loggers : public std::enable_shared_from_this<Loggers> {
@@ -58,6 +57,7 @@ class Loggers : public std::enable_shared_from_this<Loggers> {
     spdlog::logger &lock();
     spdlog::logger &schedule();
     spdlog::logger &message();
+    spdlog::logger &symbol();
 
     void flush_all();
 
@@ -71,7 +71,8 @@ class Loggers : public std::enable_shared_from_this<Loggers> {
 
     std::mutex config_mutex_;
     std::unordered_map<std::string, spdlog::sink_ptr> sink_by_id_;
-    std::unique_ptr<spdlog::logger> unconfigured_;
+    std::unique_ptr<spdlog::logger> unconfigured_ = std::make_unique<spdlog::logger>("arcticdb",
+                                                                                     std::make_shared<spdlog::sinks::stderr_sink_mt>());
     std::unique_ptr<spdlog::logger> root_;
     std::unique_ptr<spdlog::logger> storage_;
     std::unique_ptr<spdlog::logger> inmem_;
@@ -82,6 +83,7 @@ class Loggers : public std::enable_shared_from_this<Loggers> {
     std::unique_ptr<spdlog::logger> lock_;
     std::unique_ptr<spdlog::logger> schedule_;
     std::unique_ptr<spdlog::logger> message_;
+    std::unique_ptr<spdlog::logger> symbol_;
     std::shared_ptr<spdlog::details::thread_pool> thread_pool_;
     std::unique_ptr<spdlog::details::periodic_worker> periodic_worker_;
 };
@@ -98,6 +100,7 @@ spdlog::logger &timings();
 spdlog::logger &lock();
 spdlog::logger &schedule();
 spdlog::logger &message();
+spdlog::logger &symbol();
 
 inline std::unordered_map<std::string, spdlog::logger*> get_loggers_by_name() {
     return {
@@ -110,32 +113,9 @@ inline std::unordered_map<std::string, spdlog::logger*> get_loggers_by_name() {
         {"timings", &timings()},
         {"lock", &lock()},
         {"schedule", &schedule()},
-        {"message", &message()}
+        {"message", &message()},
+        {"symbol", &symbol()}
     };
-}
-
-inline void set_levels(spdlog::level::level_enum default_level, std::unordered_map<std::string, spdlog::level::level_enum> specific_log_levels) {
-    auto log_cfgs = arcticdb::proto::logger::LoggersConfig{};
-
-    auto sink_config = arcticdb::proto::logger::SinkConfig{};
-    sink_config.mutable_console()->set_std_err(true);
-    log_cfgs.mutable_sink_by_id()->insert({std::string{"console"}, sink_config});
-
-
-    auto logger_by_name = get_loggers_by_name();
-    for(const auto& entry : logger_by_name) {
-        const auto& logger_name = entry.first;
-        auto it = specific_log_levels.find(logger_name);
-        auto level_to_set = (it == specific_log_levels.end() ? default_level : it->second);
-        auto logger = arcticdb::proto::logger::LoggerConfig{};
-        sink_config.mutable_console()->set_std_err(true);
-        logger.set_level(arcticdb::proto::logger::LoggerConfig_Level(int(level_to_set)));
-        auto logger_id = fmt::format("{}",  logger_name != "root" ? fmt::format("arcticdb.{}", logger_name) : "arcticdb");
-        logger.set_pattern(fmt::format("%Y%m%d_%H%M%S.%f %t %L %n %P | %v", logger_id));
-        log_cfgs.mutable_logger_by_id()->insert({logger_name, logger});
-    }
-
-    Loggers::instance()->configure(log_cfgs, true);
 }
 
 } //namespace arcticdb::log

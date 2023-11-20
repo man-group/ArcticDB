@@ -19,7 +19,7 @@ struct UpdateMetadataTask : async::BaseTask {
     const version_store::UpdateInfo update_info_;
     const AtomKey index_key_;
     arcticdb::proto::descriptors::UserDefinedMetadata user_meta_;
-    VersionId version_id_;
+    VersionId version_id_ = 0;
 
     UpdateMetadataTask(
         std::shared_ptr<Store> store,

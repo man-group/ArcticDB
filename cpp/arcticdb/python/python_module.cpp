@@ -10,6 +10,7 @@
 #include <arcticdb/column_store/python_bindings.hpp>
 #include <arcticdb/storage/python_bindings.hpp>
 #include <arcticdb/storage/storage.hpp>
+#include <arcticdb/storage/lmdb/lmdb_storage.hpp>
 #include <arcticdb/stream/python_bindings.hpp>
 #include <arcticdb/toolbox/python_bindings.hpp>
 #include <arcticdb/version/python_bindings.hpp>
@@ -18,7 +19,6 @@
 #include <arcticdb/util/trace.hpp>
 #include <arcticdb/python/python_utils.hpp>
 #include <arcticdb/python/arctic_version.hpp>
-#include <arcticdb/entity/performance_tracing.hpp>
 #include <arcticdb/entity/metrics.hpp>
 #include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/async/task_scheduler.hpp>
@@ -27,10 +27,12 @@
 #include <arcticdb/util/error_code.hpp>
 #include <arcticdb/util/type_handler.hpp>
 #include <arcticdb/python/python_handlers.hpp>
+#include <arcticdb/util/pybind_mutex.hpp>
 
 #include <pybind11/pybind11.h>
 #include <folly/system/ThreadName.h>
 #include <folly/portability/PThread.h>
+#include <mongocxx/exception/logic_error.hpp>
 
 namespace py = pybind11;
 
@@ -76,6 +78,7 @@ void register_log(py::module && log) {
              .value("TIMINGS", LoggerId::TIMINGS)
              .value("LOCK", LoggerId::LOCK)
              .value("SCHEDULE", LoggerId::SCHEDULE)
+             .value("SYMBOL", LoggerId::SCHEDULE)
              .export_values()
     ;
     auto choose_logger = [&](LoggerId log_id) -> decltype(arcticdb::log::storage()) /* logger ref */{
@@ -200,12 +203,28 @@ void register_error_code_ecosystem(py::module& m, py::exception<arcticdb::Arctic
             m, "_ArcticLegacyCompatibilityException", base_exception);
 
     static py::exception<InternalException> internal_exception(m, "InternalException", compat_exception.ptr());
+    static py::exception<StorageException> storage_exception(m, "StorageException", compat_exception.ptr());
+    static py::exception<::lmdb::map_full_error> lmdb_map_full_error(m, "LmdbMapFullError", storage_exception.ptr());
+    static py::exception<UserInputException> user_input_exception(m, "UserInputException", compat_exception.ptr());
 
     py::register_exception_translator([](std::exception_ptr p) {
         try {
             if (p) std::rethrow_exception(p);
-        } catch (const arcticdb::InternalException & e){
+        } catch (const mongocxx::v_noabi::logic_error& e){
+            user_input_exception(e.what());
+        } catch (const UserInputException& e){
+            user_input_exception(e.what());
+        } catch (const arcticdb::InternalException& e){
             internal_exception(e.what());
+        } catch (const ::lmdb::map_full_error& e) {
+            std::string msg = fmt::format("E5003: LMDB map is full. Close and reopen your LMDB backed Arctic instance with a "
+                                          "larger map size. For example to open `/tmp/a/b/` with a map size of 5GB, "
+                                          "use `Arctic(\"lmdb:///tmp/a/b?map_size=5GB\")`. Also see the "
+                                          "[LMDB documentation](http://www.lmdb.tech/doc/group__mdb.html#gaa2506ec8dab3d969b0e609cd82e619e5). "
+                                          "LMDB info: code=[{}] origin=[{}] message=[{}]", e.code(), e.origin(), e.what());
+            lmdb_map_full_error(msg.c_str());
+        } catch (const StorageException& e) {
+            storage_exception(e.what());
         } catch (const py::stop_iteration &e){
             // let stop iteration bubble up, since this is how python implements iteration termination
             std::rethrow_exception(p);
@@ -217,12 +236,10 @@ void register_error_code_ecosystem(py::module& m, py::exception<arcticdb::Arctic
 
     py::register_exception<SchemaException>(m, "SchemaException", compat_exception.ptr());
     py::register_exception<NormalizationException>(m, "NormalizationException", compat_exception.ptr());
-    py::register_exception<StorageException>(m, "StorageException", compat_exception.ptr());
     py::register_exception<MissingDataException>(m, "MissingDataException", compat_exception.ptr());
-    auto sorting_exception =
-            py::register_exception<SortingException>(m, "SortingException", compat_exception.ptr());
+
+    auto sorting_exception = py::register_exception<SortingException>(m, "SortingException", compat_exception.ptr());
     py::register_exception<UnsortedDataException>(m, "UnsortedDataException", sorting_exception.ptr());
-    py::register_exception<UserInputException>(m, "UserInputException", compat_exception.ptr());
     py::register_exception<CompatibilityException>(m, "CompatibilityException", compat_exception.ptr());
     py::register_exception<CodecException>(m, "CodecException", compat_exception.ptr());
 }
@@ -230,6 +247,11 @@ void register_error_code_ecosystem(py::module& m, py::exception<arcticdb::Arctic
 void reinit_scheduler() {
     ARCTICDB_DEBUG(arcticdb::log::version(), "Post-fork, reinitializing the task scheduler");
     arcticdb::async::TaskScheduler::reattach_instance();
+}
+
+void reinit_lmdb_warning() {
+    ARCTICDB_DEBUG(arcticdb::log::version(), "Post-fork in child, resetting LMDB warning counter");
+    arcticdb::storage::lmdb::LmdbStorage::reset_warning_counter();
 }
 
 void register_instrumentation(py::module && m){
@@ -279,7 +301,9 @@ PYBIND11_MODULE(arcticdb_ext, m) {
     initialize_folly();
 #ifndef WIN32
     // No fork() in Windows, so no need to register the handler
+    pthread_atfork(nullptr, nullptr, &SingleThreadMutexHolder::reset_mutex);
     pthread_atfork(nullptr, nullptr, &reinit_scheduler);
+    pthread_atfork(nullptr, nullptr, &reinit_lmdb_warning);
 #endif
     // Set up the global exception handlers first, so module-specific exception handler can override it:
     auto exceptions = m.def_submodule("exceptions");

@@ -11,6 +11,7 @@ import shutil
 import socket
 
 import boto3
+import moto.s3.responses
 import werkzeug
 from moto.server import DomainDispatcherApplication, create_backend_app
 
@@ -44,8 +45,8 @@ from arcticdb.version_store.helper import (
     create_test_azure_cfg,
     create_test_memory_cfg,
 )
-from arcticdb.config import Defaults, MACOS_CONDA_BUILD, MACOS_CONDA_BUILD_SKIP_REASON
-from arcticdb.util.test import configure_test_logger, apply_lib_cfg, RUN_MONGO_TEST
+from arcticdb.config import Defaults
+from arcticdb.util.test import configure_test_logger, apply_lib_cfg
 from tests.util.storage_test import get_real_s3_uri, real_s3_credentials
 
 from arcticdb.version_store.helper import ArcticMemoryConfig
@@ -55,7 +56,19 @@ from arcticdb.options import LibraryOptions
 from arcticdb_ext.storage import Library
 from azure.storage.blob import BlobServiceClient, generate_account_sas, ResourceTypes, AccountSasPermissions
 
-PERSISTENT_STORAGE_TESTS_ENABLED = os.getenv("ARCTICDB_PERSISTENT_STORAGE_TESTS") == "1"
+from tests.util.mark import (
+    AZURE_TESTS_MARK,
+    MONGO_TESTS_MARK,
+    REAL_S3_TESTS_MARK,
+)
+
+import hypothesis
+
+hypothesis.settings.register_profile('ci_linux', max_examples=100)
+hypothesis.settings.register_profile('ci_windows', max_examples=100)
+hypothesis.settings.register_profile('dev', max_examples=100)
+
+hypothesis.settings.load_profile(os.environ.get('HYPOTHESIS_PROFILE', 'dev'))
 
 configure_test_logger()
 
@@ -150,7 +163,11 @@ def azure_account_sas_token(azure_client_and_create_container, azurite_azure_tes
 def boto_client(_moto_s3_uri):
     endpoint = _moto_s3_uri
     client = boto3.client(
-        service_name="s3", endpoint_url=endpoint, aws_access_key_id="awd", aws_secret_access_key="awd"
+        service_name="s3",
+        endpoint_url=endpoint,
+        aws_access_key_id="awd",
+        aws_secret_access_key="awd",
+        region_name=moto.s3.responses.DEFAULT_REGION_NAME,
     )
 
     yield client
@@ -211,20 +228,9 @@ def unique_real_s3_uri():
         "S3",
         "LMDB",
         "MEM",
-        pytest.param(
-            "Azure",
-            marks=pytest.mark.skipif(MACOS_CONDA_BUILD, reason=MACOS_CONDA_BUILD_SKIP_REASON),
-        ),
-        pytest.param(
-            "Mongo",
-            marks=pytest.mark.skipif(not RUN_MONGO_TEST, reason="Mongo test on windows is fiddly"),
-        ),
-        pytest.param(
-            "Real_S3",
-            marks=pytest.mark.skipif(
-                not PERSISTENT_STORAGE_TESTS_ENABLED, reason="Can be used only when persistent storage is enabled"
-            ),
-        ),
+        pytest.param("Azure", marks=AZURE_TESTS_MARK),
+        pytest.param("Mongo", marks=MONGO_TESTS_MARK),
+        pytest.param("Real_S3", marks=REAL_S3_TESTS_MARK),
     ],
 )
 def arctic_client(request, moto_s3_uri_incl_bucket, tmpdir, encoding_version):
@@ -235,7 +241,7 @@ def arctic_client(request, moto_s3_uri_incl_bucket, tmpdir, encoding_version):
     elif request.param == "Real_S3":
         ac = Arctic(request.getfixturevalue("unique_real_s3_uri"), encoding_version)
     elif request.param == "LMDB":
-        ac = Arctic(f"lmdb://{tmpdir}", encoding_version)
+        ac = Arctic(f"lmdb://{tmpdir}?map_size=16MB", encoding_version)
     elif request.param == "Mongo":
         ac = Arctic(request.getfixturevalue("mongo_test_uri"), encoding_version)
     elif request.param == "MEM":
@@ -254,15 +260,7 @@ def arctic_client(request, moto_s3_uri_incl_bucket, tmpdir, encoding_version):
 
 @pytest.fixture(
     scope="function",
-    params=[
-        pytest.param(
-            "REAL_S3",
-            marks=pytest.mark.skipif(
-                not PERSISTENT_STORAGE_TESTS_ENABLED,
-                reason="This store can be used only if the persistent storage tests are enabled",
-            ),
-        ),
-    ],
+    params=[pytest.param("REAL_S3", marks=REAL_S3_TESTS_MARK)],
 )
 def persistent_arctic_client(request, encoding_version):
     # Similar to the regulat arctic_client, but specifically for tests that are design for persistent storages
@@ -304,9 +302,6 @@ def azurite_azure_uri_incl_bucket(azurite_azure_uri, azure_client_and_create_con
 
 @pytest.fixture(scope="function")
 def arctic_library(request, arctic_client):
-    if not MACOS_CONDA_BUILD:
-        request.getfixturevalue("azure_client_and_create_container")
-
     arctic_client.create_library("pytest_test_lib")
 
     yield arctic_client["pytest_test_lib"]
@@ -380,8 +375,11 @@ def only_test_encoding_version_v1():
 
 def pytest_generate_tests(metafunc):
     if "encoding_version" in metafunc.fixturenames:
-        only_v1 = "only_test_encoding_version_v1" in metafunc.fixturenames
-        metafunc.parametrize("encoding_version", [EncodingVersion.V1] if only_v1 else list(EncodingVersion))
+        if sys.platform == "win32":
+            metafunc.parametrize("encoding_version", [EncodingVersion.V2])
+        else:
+            only_v1 = "only_test_encoding_version_v1" in metafunc.fixturenames
+            metafunc.parametrize("encoding_version", [EncodingVersion.V1] if only_v1 else list(EncodingVersion))
 
 
 @pytest.fixture
@@ -394,11 +392,10 @@ def version_store_factory(lib_name, tmpdir):
     can be used to override the `map_size`.
     """
     used: Dict[str, NativeVersionStore] = {}
-
     def create_version_store(
         col_per_group: Optional[int] = None,
         row_per_segment: Optional[int] = None,
-        lmdb_config: Dict[str, Any] = {},
+        lmdb_config: Dict[str, Any] = None,
         override_name: str = None,
         **kwargs,
     ) -> NativeVersionStore:
@@ -406,6 +403,9 @@ def version_store_factory(lib_name, tmpdir):
             kwargs["column_group_size"] = col_per_group
         if row_per_segment is not None and "segment_row_size" not in kwargs:
             kwargs["segment_row_size"] = row_per_segment
+        if lmdb_config is None:
+            # 128 MiB - needs to be reasonably small else Windows build runs out of disk
+            lmdb_config = {"map_size": 128 * (1 << 20)}
 
         if override_name is not None:
             library_name = override_name
@@ -439,7 +439,6 @@ def version_store_factory(lib_name, tmpdir):
 
 def _arctic_library_factory_impl(used, name, arctic_client, library_options) -> Library:
     """Common logic behind all the factory fixtures"""
-    name = name or default_name
     if name == "_unique_":
         name = name + str(len(used))
     assert name not in used, f"{name} is already in use"
@@ -652,20 +651,8 @@ def mongo_version_store(mongo_store_factory):
     scope="function",
     params=[
         "s3_store_factory",
-        pytest.param(
-            "azure_store_factory",
-            marks=pytest.mark.skipif(
-                MACOS_CONDA_BUILD,
-                reason=MACOS_CONDA_BUILD_SKIP_REASON,
-            ),
-        ),
-        pytest.param(
-            "real_s3_store_factory",
-            marks=pytest.mark.skipif(
-                not PERSISTENT_STORAGE_TESTS_ENABLED,
-                reason="This store can be used only if the persistent storage tests are enabled",
-            ),
-        ),
+        pytest.param("azure_store_factory", marks=AZURE_TESTS_MARK),
+        pytest.param("real_s3_store_factory", marks=REAL_S3_TESTS_MARK),
     ],
 )
 def object_store_factory(request):
@@ -699,13 +686,7 @@ def object_version_store_prune_previous(object_store_factory):
     scope="function",
     params=[
         "s3_store_factory",
-        pytest.param(
-            "azure_store_factory",
-            marks=pytest.mark.skipif(
-                MACOS_CONDA_BUILD,
-                reason=MACOS_CONDA_BUILD_SKIP_REASON,
-            ),
-        ),
+        pytest.param("azure_store_factory", marks=AZURE_TESTS_MARK),
     ],
 )
 def local_object_store_factory(request):
@@ -738,13 +719,7 @@ def local_object_version_store_prune_previous(local_object_store_factory):
 @pytest.fixture(
     params=[
         "version_store_factory",
-        pytest.param(
-            "real_s3_store_factory",
-            marks=pytest.mark.skipif(
-                not PERSISTENT_STORAGE_TESTS_ENABLED,
-                reason="This store can be used only if the persistent storage tests are enabled",
-            ),
-        ),
+        pytest.param("real_s3_store_factory", marks=REAL_S3_TESTS_MARK),
     ],
 )
 def version_store_and_real_s3_basic_store_factory(request):
@@ -759,13 +734,7 @@ def version_store_and_real_s3_basic_store_factory(request):
     params=[
         "version_store_factory",
         "in_memory_store_factory",
-        pytest.param(
-            "real_s3_store_factory",
-            marks=pytest.mark.skipif(
-                not PERSISTENT_STORAGE_TESTS_ENABLED,
-                reason="This store can be used only if the persistent storage tests are enabled",
-            ),
-        ),
+        pytest.param("real_s3_store_factory", marks=REAL_S3_TESTS_MARK),
     ],
 )
 def basic_store_factory(request):
@@ -964,6 +933,11 @@ def basic_store_dynamic_schema(basic_store_dynamic_schema_v1, basic_store_dynami
 
 
 @pytest.fixture
+def basic_store_delayed_deletes(basic_store_factory):
+    return basic_store_factory(delayed_deletes=True)
+
+
+@pytest.fixture
 def basic_store_delayed_deletes_v1(basic_store_factory):
     return basic_store_factory(delayed_deletes=True, dynamic_strings=True, prune_previous_version=True)
 
@@ -1116,20 +1090,9 @@ def spawn_azurite(azurite_port):
     params=(
         [
             "moto_s3_uri_incl_bucket",
-            pytest.param(
-                "azurite_azure_uri_incl_bucket",
-                marks=pytest.mark.skipif(MACOS_CONDA_BUILD, reason=MACOS_CONDA_BUILD_SKIP_REASON),
-            ),
-            pytest.param(
-                "mongo_test_uri",
-                marks=pytest.mark.skipif(not RUN_MONGO_TEST, reason="Mongo test on windows is fiddly"),
-            ),
-            pytest.param(
-                "unique_real_s3_uri",
-                marks=pytest.mark.skipif(
-                    not PERSISTENT_STORAGE_TESTS_ENABLED, reason="Can be used only when persistent storage is enabled"
-                ),
-            ),
+            pytest.param("azurite_azure_uri_incl_bucket", marks=AZURE_TESTS_MARK),
+            pytest.param("mongo_test_uri", marks=MONGO_TESTS_MARK),
+            pytest.param("unique_real_s3_uri", marks=REAL_S3_TESTS_MARK),
         ]
     ),
 )
@@ -1140,29 +1103,14 @@ def object_storage_uri_incl_bucket(request):
 @pytest.fixture(
     scope="function",
     params=(
-        [
-            "lmdb_version_store_v1",
-            "lmdb_version_store_v2",
-            "s3_version_store_v1",
-            "s3_version_store_v2",
-            "in_memory_version_store",
-            pytest.param(
-                "azure_version_store",
-                marks=pytest.mark.skipif(MACOS_CONDA_BUILD, reason=MACOS_CONDA_BUILD_SKIP_REASON),
-            ),
-            pytest.param(
-                "mongo_version_store",
-                marks=pytest.mark.skipif(sys.platform != "linux", reason="The mongo store is only supported on Linux"),
-            ),
-            pytest.param(
-                "real_s3_version_store",
-                marks=pytest.mark.skipif(
-                    not PERSISTENT_STORAGE_TESTS_ENABLED, reason="Can be used only when persistent storage is enabled"
-                ),
-            ),
-        ]
-        if not MACOS_CONDA_BUILD
-        else ["lmdb_version_store_v1", "lmdb_version_store_v2", "s3_version_store_v1", "s3_version_store_v2"]
+        "lmdb_version_store_v1",
+        "lmdb_version_store_v2",
+        "s3_version_store_v1",
+        "s3_version_store_v2",
+        "in_memory_version_store",
+        pytest.param("azure_version_store", marks=AZURE_TESTS_MARK),
+        pytest.param("mongo_version_store", marks=MONGO_TESTS_MARK),
+        pytest.param("real_s3_version_store", marks=REAL_S3_TESTS_MARK),
     ),
 )
 def object_and_mem_and_lmdb_version_store(request):
@@ -1175,23 +1123,13 @@ def object_and_mem_and_lmdb_version_store(request):
 @pytest.fixture(
     scope="function",
     params=(
-        [
-            "lmdb_version_store_dynamic_schema_v1",
-            "lmdb_version_store_dynamic_schema_v2",
-            "s3_version_store_dynamic_schema_v1",
-            "s3_version_store_dynamic_schema_v2",
-            "in_memory_version_store_dynamic_schema",
-            pytest.param(
-                "azure_version_store_dynamic_schema",
-                marks=pytest.mark.skipif(MACOS_CONDA_BUILD, reason=MACOS_CONDA_BUILD_SKIP_REASON),
-            ),
-            pytest.param(
-                "real_s3_version_store_dynamic_schema",
-                marks=pytest.mark.skipif(
-                    not PERSISTENT_STORAGE_TESTS_ENABLED, reason="Can be used only when persistent storage is enabled"
-                ),
-            ),
-        ]
+        "lmdb_version_store_dynamic_schema_v1",
+        "lmdb_version_store_dynamic_schema_v2",
+        "s3_version_store_dynamic_schema_v1",
+        "s3_version_store_dynamic_schema_v2",
+        "in_memory_version_store_dynamic_schema",
+        pytest.param("azure_version_store_dynamic_schema", marks=AZURE_TESTS_MARK),
+        pytest.param("real_s3_version_store_dynamic_schema", marks=REAL_S3_TESTS_MARK),
     ),
 )
 def object_and_mem_and_lmdb_version_store_dynamic_schema(request):

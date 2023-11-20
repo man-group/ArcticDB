@@ -13,8 +13,8 @@ auto get_f_tensor(size_t num_rows) {
     using namespace arcticdb::entity;
     using data_t = uint32_t;
     auto data = std::make_shared<std::vector<data_t>>(num_rows);
-    const std::vector<stride_t>  strides = {4u, 40u};
-    const std::vector<shape_t> shapes = {10u, 10u};
+    const std::array<stride_t, 2>  strides = {4u, 40u};
+    const std::array<shape_t, 2> shapes = {10u, 10u};
     size_t count = 0;
     for(auto i = 0u; i < shapes[0]; ++i) {
         auto row = i * (strides[0] / sizeof(data_t));
@@ -28,7 +28,7 @@ auto get_f_tensor(size_t num_rows) {
     const auto ndim = 2;
     const DataType dt = DataType::UINT32;
 
-    NativeTensor tensor{nbytes, ndim, strides.data(), shapes.data(), dt, get_type_size(dt), static_cast<const void*>(data->data())};
+    NativeTensor tensor{nbytes, ndim, strides.data(), shapes.data(), dt, get_type_size(dt), static_cast<const void*>(data->data()), ndim};
     return std::make_pair(data, tensor);
 }
 
@@ -36,8 +36,8 @@ auto get_c_tensor(size_t num_rows) {
     using namespace arcticdb::entity;
     using data_t = uint32_t;
     auto data = std::make_shared<std::vector<data_t>>(num_rows);
-    const std::vector<stride_t>  strides = {40u, 4u};
-    const std::vector<shape_t> shapes = {10u, 10u};
+    const std::array<stride_t, 2>  strides = {40u, 4u};
+    const std::array<shape_t, 2>shapes = {10u, 10u};
     for(auto i = 0u; i < num_rows; ++i) {
             (*data)[i] = i;
     }
@@ -46,7 +46,7 @@ auto get_c_tensor(size_t num_rows) {
     const auto ndim = 2;
     const DataType dt = DataType::UINT32;
 
-    NativeTensor tensor{nbytes, ndim, strides.data(), shapes.data(), dt, get_type_size(dt), static_cast<const void*>(data->data())};
+    NativeTensor tensor{nbytes, ndim, strides.data(), shapes.data(), dt, get_type_size(dt), static_cast<const void*>(data->data()), ndim};
     return std::make_pair(data, tensor);
 }
 
@@ -148,8 +148,8 @@ auto get_sparse_array(size_t num_rows) {
     using namespace arcticdb::entity;
     using data_t = uint32_t;
     auto data = std::make_shared<std::vector<data_t>>(num_rows * 2);
-    const std::vector<stride_t>  strides = {8u, 0u};
-    const std::vector<shape_t> shapes = {100u, 0u};
+    const std::array<stride_t, 2>  strides = {8u, 0u};
+    const std::array<shape_t, 2>shapes = {100u, 0u};
 
     for(auto i = 0u; i < num_rows; ++i) {
         (*data)[i * 2] = i;
@@ -159,7 +159,7 @@ auto get_sparse_array(size_t num_rows) {
     const auto ndim = 1;
     const DataType dt = DataType::UINT32;
 
-    NativeTensor tensor{nbytes, ndim, strides.data(), shapes.data(), dt, get_type_size(dt), static_cast<const void*>(data->data())};
+    NativeTensor tensor{nbytes, ndim, strides.data(), shapes.data(), dt, get_type_size(dt), static_cast<const void*>(data->data()), ndim};
     return std::make_pair(data, tensor);
 }
 
@@ -214,8 +214,8 @@ auto get_sparse_array_funky_strides() {
     const auto num_rows = 100u;
     using data_t = uint32_t;
     auto data = std::make_shared<std::vector<uint8_t>>(num_rows * 19 * sizeof(data_t));
-    const std::vector<stride_t>  strides = {19u, 0u};
-    const std::vector<shape_t> shapes = {100u, 0u};
+    const std::array<stride_t, 2>  strides = {19u, 0u};
+    const std::array<shape_t, 2>shapes = {100u, 0u};
 
     for(auto i = 0u; i < num_rows; ++i) {
         *reinterpret_cast<data_t*>(&(*data)[i * 19] )= i;
@@ -225,7 +225,7 @@ auto get_sparse_array_funky_strides() {
     const auto ndim = 1;
     const DataType dt = DataType::UINT32;
 
-    NativeTensor tensor{nbytes, ndim, strides.data(), shapes.data(), dt, get_type_size(dt), static_cast<const void*>(data->data())};
+    NativeTensor tensor{nbytes, ndim, strides.data(), shapes.data(), dt, get_type_size(dt), static_cast<const void*>(data->data()), ndim};
     return std::make_pair(data, tensor);
 }
 
@@ -279,18 +279,18 @@ auto get_sparse_array_uneven(size_t num_rows) {
     using namespace arcticdb::entity;
     using data_t = uint32_t;
     auto data = std::make_shared<std::vector<data_t>>(num_rows * 2);
-    const std::vector<stride_t>  strides = {8u, 0u};
-    const std::vector<shape_t> shapes = {109u, 0u};
+    const std::array<stride_t, 2>  strides = {8u, 0u};
+    const std::array<shape_t, 2>shapes = {109u, 0u};
 
     for(auto i = 0u; i < num_rows; ++i) {
         (*data)[i * 2] = i;
     }
 
-    const ssize_t nbytes = num_rows * sizeof(data_t);
+    const auto nbytes = static_cast<ssize_t>(num_rows * sizeof(data_t));
     const auto ndim = 1;
     const DataType dt = DataType::UINT32;
 
-    NativeTensor tensor{nbytes, ndim, strides.data(), shapes.data(), dt, get_type_size(dt), static_cast<const void*>(data->data())};
+    NativeTensor tensor{nbytes, ndim, strides.data(), shapes.data(), dt, get_type_size(dt), static_cast<const void*>(data->data()), ndim};
     return std::make_pair(data, tensor);
 }
 

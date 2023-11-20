@@ -34,14 +34,14 @@ struct Lz4BlockEncoder {
 
     template<class T, class CodecType>
     static std::size_t encode_block(
-            const Opts &opts,
+            const Opts& opts,
             const T *in,
             BlockProtobufHelper &block_utils,
             HashAccum &hasher,
             T *out,
             std::size_t out_capacity,
             std::ptrdiff_t &pos,
-            CodecType &out_codec) {
+            CodecType& out_codec) {
         int compressed_bytes = LZ4_compress_default(
             reinterpret_cast<const char *>(in),
             reinterpret_cast<char *>(out),
@@ -90,14 +90,14 @@ struct Lz4Decoder {
             int(out_bytes)
         );
         util::check_arg(decompressed_size >= 0,
-                        "Error while decoding with lz4 at address {:x} with size {}. Code {}",
-                        uintptr_t(in),
-                        in_bytes,
-                        decompressed_size);
+            "Error while decoding with lz4 at address {:x} with size {}. Code {}",
+            uintptr_t(in),
+            in_bytes,
+            decompressed_size);
         util::check_arg(std::size_t(decompressed_size) == out_bytes,
-                        "expected out_bytes == lz4 decompressed bytes, actual {} != {}",
-                        out_bytes,
-                        decompressed_size);
+            "expected out_bytes == lz4 decompressed bytes, actual {} != {}",
+            out_bytes,
+            decompressed_size);
     }
 
 #pragma GCC diagnostic pop

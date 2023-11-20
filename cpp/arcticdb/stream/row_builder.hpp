@@ -214,7 +214,7 @@ class RowBuilder {
     }
     
     const IndexType& index() const {
-        return schema_->index();
+        return index_;
     }
 
     IndexType& index() {

@@ -102,7 +102,7 @@ std::pair<size_t, size_t> ColumnEncoder_v1::max_compressed_size(
 	        // For the empty type the column will contain 0 size of user data however the encoder might need add some
             // encoder specific data to the buffer, thus the uncompressed size will be 0 but the max_compressed_bytes
             // might be non-zero.
-            max_compressed_bytes += Encoder::max_compressed_size(codec_opts, block.value());
+            max_compressed_bytes += Encoder::max_compressed_size(codec_opts, *block);
         }
         add_bitmagic_compressed_size_if_any(column_data, uncompressed_bytes, max_compressed_bytes);
         return std::make_pair(uncompressed_bytes, max_compressed_bytes);
@@ -529,7 +529,8 @@ Segment encode_v2(SegmentInMemory&& s, const arcticdb::proto::encoding::VariantC
     auto in_mem_seg = std::move(s);
     auto arena = std::make_unique<google::protobuf::Arena>();
     auto segment_header = google::protobuf::Arena::CreateMessage<arcticdb::proto::encoding::SegmentHeader>(arena.get());
-    *segment_header->mutable_stream_descriptor() = std::move(in_mem_seg.descriptor().mutable_proto());
+    auto& seg_descriptor = in_mem_seg.descriptor();
+    *segment_header->mutable_stream_descriptor() = std::move(seg_descriptor.mutable_proto());
     segment_header->set_compacted(in_mem_seg.compacted());
     segment_header->set_encoding_version(static_cast<uint16_t>(EncodingVersion::V2));
 
@@ -581,7 +582,7 @@ Segment encode_v2(SegmentInMemory&& s, const arcticdb::proto::encoding::VariantC
     ARCTICDB_DEBUG(log::codec(), "Block count {} header size {} ratio {}",
         in_mem_seg.num_blocks(), segment_header->ByteSizeLong(),
         in_mem_seg.num_blocks() ? segment_header->ByteSizeLong() / in_mem_seg.num_blocks() : 0);
-    return {std::move(arena), segment_header, std::move(out_buffer), in_mem_seg.descriptor().fields_ptr()};
+    return {std::move(arena), segment_header, std::move(out_buffer), seg_descriptor.fields_ptr()};
 }
 
 Segment encode_v1(SegmentInMemory&& s, const arcticdb::proto::encoding::VariantCodec &codec_opts) {
@@ -699,7 +700,7 @@ void decode_metadata(
     SegmentInMemory& res) {
     auto maybe_any = decode_metadata(hdr, data, begin);
     if(maybe_any)
-        res.set_metadata(std::move(maybe_any.value()));
+        res.set_metadata(std::move(*maybe_any));
 }
 
 std::optional<google::protobuf::Any> decode_metadata_from_segment(const Segment &segment) {
@@ -720,11 +721,12 @@ Buffer decode_encoded_fields(
     const uint8_t* begin ARCTICDB_UNUSED) {
         ARCTICDB_TRACE(log::codec(), "Decoding encoded fields");
         MetaBuffer meta_buffer;
-        constexpr auto type_desc = encoded_blocks_type_desc();
         std::optional<util::BitMagic> bv;
-        if(hdr.has_column_fields())
-            decode_field(type_desc, hdr.column_fields(), data, meta_buffer, bv, static_cast<EncodingVersion>(hdr.encoding_version()));
-
+        if(hdr.has_column_fields()) {
+            const auto encoding_version = static_cast<EncodingVersion>(hdr.encoding_version());
+            constexpr auto type_desc = encoded_blocks_type_desc();
+            decode_field(type_desc, hdr.column_fields(), data, meta_buffer, bv, encoding_version);
+        }
         ARCTICDB_TRACE(log::codec(), "Decoded encoded fields at position {}", data-begin);
         return meta_buffer.detach_buffer();
 }
@@ -800,7 +802,7 @@ std::optional<std::tuple<google::protobuf::Any, arcticdb::proto::descriptors::Ti
     if(!maybe_any)
         return std::nullopt;
 
-    auto tsd = timeseries_descriptor_from_any(maybe_any.value());
+    auto tsd = timeseries_descriptor_from_any(*maybe_any);
 
     if(has_magic_numbers)
         check_magic<DescriptorMagic>(data);
@@ -814,11 +816,11 @@ std::optional<std::tuple<google::protobuf::Any, arcticdb::proto::descriptors::Ti
     auto maybe_fields = decode_index_fields(hdr, data, begin, end);
     if(!maybe_fields) {
         auto old_fields = fields_from_proto(tsd.stream_descriptor());
-        return std::make_optional(std::make_tuple(std::move(maybe_any.value()), std::move(tsd), std::move(old_fields)));
+        return std::make_optional(std::make_tuple(std::move(*maybe_any), std::move(tsd), std::move(old_fields)));
     }
 
     maybe_fields->regenerate_offsets();
-    return std::make_tuple(std::move(maybe_any.value()), std::move(tsd), std::move(maybe_fields.value()));
+    return std::make_tuple(std::move(*maybe_any), std::move(tsd), std::move(*maybe_fields));
 }
 
 std::optional<std::tuple<google::protobuf::Any, arcticdb::proto::descriptors::TimeSeriesDescriptor, FieldCollection>> decode_timeseries_descriptor(

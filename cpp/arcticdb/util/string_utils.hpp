@@ -60,7 +60,7 @@ inline std::vector<std::string_view> split_to_vector(std::string_view strv, char
     while (first != strv.end()) {
         const auto second = std::find(first, last, delim);
         if (first != second)
-            output.push_back(strv.substr(std::distance(strv.begin(), first), std::distance(first, second)));
+            output.emplace_back(strv.substr(std::distance(strv.begin(), first), std::distance(first, second)));
 
         if (second == strv.end())
             break;

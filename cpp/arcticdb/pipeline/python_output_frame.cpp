@@ -41,7 +41,7 @@ PythonOutputFrame::~PythonOutputFrame() {
                 using TDT = decltype(type_desc_tag);
                 if constexpr (is_pyobject_type(TDT::DataTypeTag::data_type)) {
                     while (auto block = column_data.next<TDT>()) {
-                        for (auto item : block.value()) {
+                        for (auto item : *block) {
                           util::check(reinterpret_cast<PyObject *>(item) != nullptr, "Can't delete null item");
                           Py_DECREF(reinterpret_cast<PyObject *>(item));
                         }

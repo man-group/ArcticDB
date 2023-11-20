@@ -8,7 +8,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 from typing import List, Optional
 
 from arcticdb.options import DEFAULT_ENCODING_VERSION, LibraryOptions
-from arcticdb_ext.storage import LibraryManager, StorageOverride
+from arcticdb_ext.storage import LibraryManager
 from arcticdb.exceptions import LibraryNotFound, MismatchingLibraryOptions
 from arcticdb.version_store.library import ArcticInvalidApiUsageException, Library
 from arcticdb.version_store._store import NativeVersionStore
@@ -138,7 +138,7 @@ class Arctic:
                 |                           | The only supported units are MB / GB / TB.                                                                                                                    |
                 |                           |                                                                                                                                                               |
                 |                           | On Windows and MacOS, LMDB will materialize a file of this size, so you need to set it to a reasonable value that your system has                             |
-                |                           | room for, and it has a small default (order of 100MB). On Linux, this is an upper bound on the space used by LMDB and the default is large                    |
+                |                           | room for, and it has a small default (order of 1GB). On Linux, this is an upper bound on the space used by LMDB and the default is large                      |
                 |                           | (order of 100GB).                                                                                                                                             |
                 +---------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------+
 
@@ -180,13 +180,8 @@ class Arctic:
         self._library_adapter = _cls(uri, self._encoding_version)
         self._library_manager = LibraryManager(self._library_adapter.config_library)
         self._uri = uri
-        self._open_libraries = dict()
 
     def __getitem__(self, name: str) -> Library:
-        already_open = self._open_libraries.get(name)
-        if already_open:
-            return already_open
-
         if not self._library_manager.has_library(name):
             raise LibraryNotFound(name)
 
@@ -290,11 +285,8 @@ class Arctic:
         if library_options is None:
             library_options = LibraryOptions()
 
-        library = self._library_adapter.create_library(name, library_options)
-        library.env = repr(self._library_adapter)
-        lib = Library(repr(self), library)
-        self._open_libraries[name] = lib
-        self._library_manager.write_library_config(library._lib_cfg, name, self._library_adapter.get_masking_override())
+        cfg = self._library_adapter.get_library_config(name, library_options)
+        self._library_manager.write_library_config(cfg, name, self._library_adapter.get_masking_override())
         return self.get_library(name)
 
     def delete_library(self, name: str) -> None:
@@ -309,11 +301,10 @@ class Arctic:
         name: str
             Name of the library to delete.
         """
-        already_open = self._open_libraries.pop(name, None)
-        if not already_open and not self._library_manager.has_library(name):
+        if not self._library_manager.has_library(name):
             return
-        (already_open or self[name])._nvs.version_store.clear()
-        del already_open  # essential to free resources held by the library
+        self[name]._nvs.version_store.clear()
+        self._library_manager.close_library_if_open(name)
         try:
             self._library_adapter.cleanup_library(name)
         finally:
@@ -332,7 +323,7 @@ class Arctic:
         -------
         True if the library exists, False otherwise.
         """
-        return name in self._open_libraries or self._library_manager.has_library(name)
+        return self._library_manager.has_library(name)
 
     def list_libraries(self) -> List[str]:
         """

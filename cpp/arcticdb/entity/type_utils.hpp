@@ -37,7 +37,7 @@ inline std::optional<entity::TypeDescriptor> has_valid_type_promotion(entity::Ty
         // Empty of dimension 0 means lack of any given type and can be promoted to anything (even if the dimensions don't
         // match), e.g. empty type can become int or array of ints. Empty type of higher dimension is used to specify an
         // empty array or an empty matrix, thus it cannot become any other type unless the dimensionality matches
-        if(is_empty_type(source.data_type()) && source.dimension() == Dimension::Dim0)
+        if(is_empty_type(source.data_type()) && source.dimension() == entity::Dimension::Dim0)
             return target;
         return std::nullopt;
     }

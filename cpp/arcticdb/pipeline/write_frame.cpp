@@ -60,7 +60,7 @@ folly::Future<std::vector<SliceAndKey>> write_slices(
             if(!first_row)
                 first_row = slice.row_range.first;
 
-            if(slice.row_range.first == first_row.value())
+            if(slice.row_range.first == *first_row)
                 slice_num_for_column = 0;
 
             SingleSegmentAggregator agg{FixedSchema{*slice.desc(), frame.index}, [&](auto &&segment) {
@@ -183,10 +183,9 @@ folly::Future<entity::AtomKey> append_frame(
                             util::check(frame.has_index(), "Cannot append timeseries without index");
                             util::check(static_cast<bool>(frame.index_tensor), "Got null index tensor in append_frame");
                             auto& frame_index = frame.index_tensor.value();
-                            util::check(frame_index.size() > 0, "Cannot append empty frame");
                             util::check(frame_index.data_type() == DataType::NANOSECONDS_UTC64,
                                         "Expected timestamp index in append, got type {}", frame_index.data_type());
-                            if (index_segment_reader.tsd().proto().total_rows() != 0) {
+                            if (index_segment_reader.tsd().proto().total_rows() != 0 && frame_index.size() != 0) {
                                 auto first_index = NumericIndex{*frame_index.ptr_cast<timestamp>(0)};
                                 auto prev = std::get<NumericIndex>(index_segment_reader.last()->key().end_index());
                                 util::check(ignore_sort_order || prev - 1 <= first_index,
@@ -202,7 +201,7 @@ folly::Future<entity::AtomKey> append_frame(
     auto existing_slices = unfiltered_index(index_segment_reader);
     auto keys_fut = slice_and_write(frame, slicing, get_partial_key_gen(frame, key), store);
     return std::move(keys_fut)
-    .thenValue([dynamic_schema, slices_to_write = std::move(existing_slices), frame = std::move(frame), index_segment_reader = std::move(index_segment_reader), key = std::move(key), &store](auto&& slice_and_keys_to_append) mutable {
+    .thenValue([dynamic_schema, slices_to_write = std::move(existing_slices), frame = std::move(frame), index_segment_reader = std::move(index_segment_reader), key = key, &store](auto&& slice_and_keys_to_append) mutable {
         slices_to_write.insert(std::end(slices_to_write), std::make_move_iterator(std::begin(slice_and_keys_to_append)), std::make_move_iterator(std::end(slice_and_keys_to_append)));
         std::sort(std::begin(slices_to_write), std::end(slices_to_write));
         if(dynamic_schema) {

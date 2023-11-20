@@ -12,6 +12,7 @@ from arcticdb_ext.storage import KeyType
 from arcticdb_ext.stream import SegmentInMemory
 from arcticdb_ext.tools import LibraryTool as LibraryToolImpl
 from arcticdb_ext.version_store import AtomKey, PythonOutputFrame, RefKey
+from arcticdb.version_store._normalization import denormalize_dataframe
 
 VariantKey = Union[AtomKey, RefKey]
 
@@ -48,7 +49,7 @@ class LibraryTool(LibraryToolImpl):
                         int(row.version_id),
                         int(row.creation_ts),
                         int(row.content_hash),
-                        row.start_index.value,
+                        int(index.timestamp()),
                         row.end_index.value,
                         key_type,
                     )
@@ -85,13 +86,7 @@ class LibraryTool(LibraryToolImpl):
           start_index                     end_index  version_id stream_id          creation_ts         content_hash  index_type  key_type
         0  2023-01-01 2023-01-02 00:00:00.000000001           0      None  1681399019580103187  3563433649738173789          84         3
         """
-        segment = self.read_to_segment(key)
-        field_names = [f for f in segment.fields()]
-        frame_data = FrameData.from_cpp(PythonOutputFrame(decode_segment(segment)))
-        cols = {}
-        for idx, field_name in enumerate(field_names):
-            cols[field_name] = frame_data.data[idx]
-        return pd.DataFrame(cols, columns=field_names)
+        return denormalize_dataframe(self.read_to_read_result(key))
 
     def read_to_keys(
         self, key: VariantKey, id: Optional[Union[str, int]] = None, filter_key_type: Optional[KeyType] = None

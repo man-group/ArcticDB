@@ -17,6 +17,7 @@ struct StreamDescriptor {
 
     std::shared_ptr<Proto> data_ = std::make_shared<Proto>();
     std::shared_ptr<FieldCollection> fields_ = std::make_shared<FieldCollection>();
+    ;
 
     StreamDescriptor() = default;
     ~StreamDescriptor() = default;
@@ -32,16 +33,6 @@ struct StreamDescriptor {
             set_data_type(field.type().data_type(), *new_field->mutable_type_desc());
         }
         return proto;
-    }
-
-    void copy_to_self_proto() {
-        data_->mutable_fields()->Clear();
-        for(const auto& field : *fields_) {
-            auto new_field = data_->mutable_fields()->Add();
-            new_field->set_name(std::string(field.name()));
-            new_field->mutable_type_desc()->set_dimension(static_cast<uint32_t>(field.type().dimension()));
-            set_data_type(field.type().data_type(), *new_field->mutable_type_desc());
-        }
     }
 
     void set_id(const StreamId& id) {
@@ -118,6 +109,7 @@ struct StreamDescriptor {
     }
 
     StreamDescriptor(const StreamDescriptor& other) = default;
+    StreamDescriptor& operator=(const StreamDescriptor& other) = default;
 
     friend void swap(StreamDescriptor& left, StreamDescriptor& right) noexcept {
         using std::swap;
@@ -129,7 +121,7 @@ struct StreamDescriptor {
         swap(left.fields_, right.fields_);
     }
 
-    StreamDescriptor& operator=(StreamDescriptor other) {
+    StreamDescriptor& operator=(StreamDescriptor&& other) {
         swap(*this, other);
         return *this;
     }

@@ -16,6 +16,7 @@
 #include <arcticdb/processing/processing_unit.hpp>
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/processing/aggregation.hpp>
+#include <arcticdb/processing/aggregation_interface.hpp>
 #include <arcticdb/processing/grouper.hpp>
 #include <arcticdb/stream/aggregator.hpp>
 #include <arcticdb/util/movable_priority_queue.hpp>
@@ -57,7 +58,7 @@ struct ClauseInfo {
 // Changes how the clause behaves based on information only available after it is constructed
 struct ProcessingConfig {
     bool dynamic_schema_{false};
-    uint64_t total_rows_;
+    uint64_t total_rows_ = 0;
 };
 
 
@@ -225,6 +226,7 @@ struct PartitionClause {
     std::string grouping_column_;
 
     explicit PartitionClause(const std::string& grouping_column) :
+            processing_config_(),
             grouping_column_(grouping_column) {
         clause_info_.input_columns_ = {grouping_column_};
         clause_info_.requires_repartition_ = true;
@@ -317,8 +319,8 @@ struct AggregationClause {
                       const std::unordered_map<std::string,
                       std::string>& aggregations);
 
-    [[nodiscard]] std::vector<Composite<SliceAndKey>> structure_for_processing(
-            ARCTICDB_UNUSED const std::vector<SliceAndKey>& slice_and_keys, ARCTICDB_UNUSED size_t start_from) const {
+    [[noreturn]] std::vector<Composite<SliceAndKey>> structure_for_processing(
+        const std::vector<SliceAndKey>&, size_t) const {
         internal::raise<ErrorCode::E_ASSERTION_FAILURE>(
                 "AggregationClause::structure_for_processing should never be called"
                 );
@@ -475,8 +477,10 @@ struct ColumnStatsGenerationClause {
     ProcessingConfig processing_config_;
     std::shared_ptr<std::vector<ColumnStatsAggregator>> column_stats_aggregators_;
 
-    explicit ColumnStatsGenerationClause(std::unordered_set<std::string>&& input_columns,
-                                         std::shared_ptr<std::vector<ColumnStatsAggregator>> column_stats_aggregators) :
+    explicit ColumnStatsGenerationClause(
+        std::unordered_set<std::string>&& input_columns,
+        std::shared_ptr<std::vector<ColumnStatsAggregator>> column_stats_aggregators) :
+            processing_config_(),
             column_stats_aggregators_(std::move(column_stats_aggregators)) {
         clause_info_.input_columns_ = std::move(input_columns);
         clause_info_.can_combine_with_column_selection_ = false;
@@ -511,22 +515,37 @@ struct ColumnStatsGenerationClause {
 struct RowRangeClause {
     enum class RowRangeType: uint8_t {
         HEAD,
-        TAIL
+        TAIL,
+        RANGE
     };
 
     ClauseInfo clause_info_;
     RowRangeType row_range_type_;
     // As passed into head or tail
-    int64_t n_;
+    int64_t n_{0};
 
-    // Row range to keep. Zero-indexed, inclusive of start, exclusive of end
-    // Calculated from n, whether the RowRangeType is head or tail, and the total rows as passed in by set_processing_config
+    // User provided values, which are used to calculate start and end.
+    // Both can be provided with negative values to wrap indices.
+    int64_t user_provided_start_;
+    int64_t user_provided_end_;
+
+    // Row range to keep. Zero-indexed, inclusive of start, exclusive of end.
+    // If the RowRangeType is `HEAD` or `TAIL`, this is calculated from `n` and
+    // the total rows as passed in by `set_processing_config`.
+    // If the RowRangeType is `RANGE`, then start and end are set using the
+    // user-provided values as passed in by `set_processing_config`.
     uint64_t start_{0};
     uint64_t end_{0};
 
     explicit RowRangeClause(RowRangeType row_range_type, int64_t n):
             row_range_type_(row_range_type),
             n_(n) {
+    }
+
+    explicit RowRangeClause(int64_t start, int64_t end):
+            row_range_type_(RowRangeType::RANGE),
+            user_provided_start_(start),
+            user_provided_end_(end) {
     }
 
     RowRangeClause() = delete;

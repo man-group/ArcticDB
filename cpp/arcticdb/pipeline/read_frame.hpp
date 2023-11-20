@@ -40,12 +40,15 @@ std::optional<util::BitSet> check_and_mark_slices(
     std::set<RowRange> row_ranges;
     for (auto[opt_seg, slice, key] : slice_and_keys) {
         is_first = row_ranges.insert(slice.row_range).second;
-        if(return_bitset)
-            output.value()[output.value().size()] = (dynamic_schema && !has_column_groups) || is_first || (incompletes_after && count >= incompletes_after.value());
+        if(return_bitset) {
+            util::check(static_cast<bool>(output), "Expected output bitset to be none-null");
+            output.value()[output->size()] = (dynamic_schema && !has_column_groups) || is_first
+                || (incompletes_after && count >= *incompletes_after);
+        }
 
         ++count;
     }
-    util::check(!return_bitset || slice_and_keys.size() == output.value().size(),
+    util::check(!return_bitset || (output && slice_and_keys.size() == output->size()),
                 "Index fetch vector size should match slice and key size");
 
     if(!row_ranges.empty()) {

@@ -199,7 +199,7 @@ class KeyRangeIterator : public IndexRangeFilter {
 inline auto generate_segments_from_keys(
     arcticdb::stream::StreamSource &read_store,
     std::size_t prefetch_window,
-    const storage::ReadKeyOpts opts) {
+    const storage::ReadKeyOpts& opts) {
     using namespace folly::gen;
     return
         map([&read_store](auto &&key) {
@@ -213,7 +213,7 @@ inline auto generate_segments_from_keys(
                     return std::make_optional(std::forward<decltype(key_seg)>(key_seg));
                 } catch(storage::KeyNotFoundException& e) {
                     if (opts.ignores_missing_key_) {
-                        return std::optional<ReadKeyOutput>();
+                        return std::optional<std::pair<entity::VariantKey, SegmentInMemory>>();
                     }
                     throw storage::KeyNotFoundException(std::move(e.keys()));
                 }
@@ -236,9 +236,9 @@ inline auto generate_keys_from_segments(
                 for (ssize_t i = 0; i < ssize_t(seg.row_count()); ++i) {
                     auto read_key = read_key_row(seg, i);
                     if(read_key.type() != expected_key_type) {
-                        util::check_arg(expected_index_type && read_key.type() == expected_index_type.value(),
+                        util::check_arg(expected_index_type && read_key.type() == *expected_index_type,
                             "Found unsupported key type in index segment. Expected {} or (index) {}, actual {}",
-                            expected_key_type, expected_index_type.value(), read_key
+                            expected_key_type, expected_index_type.value_or(KeyType::UNDEFINED), read_key
                         );
                         key_segs.push(read_store.read_sync(read_key));
                     }
@@ -257,7 +257,7 @@ std::optional<KeyMemSegmentPair> next_non_empty_segment(SegmentIteratorType &ite
         ks_pair = std::move(iterator_segments.next(timeout));
         if (!ks_pair)
             return std::nullopt;
-        if (ks_pair.value().second.row_count() == 0)
+        if (ks_pair->second.row_count() == 0)
             ks_pair.reset();
     }
     return ks_pair;
@@ -334,7 +334,7 @@ class KeysFromSegIterator : public IndexRangeFilter {
             if (!key_seg_ && !(row_id = 0, key_seg_ = next_non_empty_segment(seg_it_, timeout)))
                 return std::nullopt;
 
-            auto val = read_key_row(key_seg_.value().second, row_id);
+            auto val = read_key_row(key_seg_->second, row_id);
             ++row_id;
             if (row_id == key_seg_.value().second.row_count()) {
                 key_seg_ = std::nullopt;
@@ -354,7 +354,7 @@ inline std::set<StreamId> filter_by_regex(const std::set<StreamId>& results, con
         return results;
     }
     std::set<StreamId> filtered_results;
-    util::RegexPattern pattern(opt_regex.value());
+    util::RegexPattern pattern(*opt_regex);
     util::Regex regex{pattern};
 
     for (auto &s_id: results) {

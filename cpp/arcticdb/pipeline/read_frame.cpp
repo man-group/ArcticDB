@@ -22,7 +22,11 @@
 #include <arcticdb/storage/store.hpp>
 #include <arcticdb/stream/index.hpp>
 #include <arcticdb/pipeline/column_mapping.hpp>
-#include <arcticdb/util/third_party/emilib_map.hpp>
+#ifdef ARCTICDB_USING_CONDA
+    #include <robin_hood.h>
+#else
+    #include <arcticdb/util/third_party/robin_hood.hpp>
+#endif
 #include <arcticdb/codec/variant_encoded_field_collection.hpp>
 
 #include <google/protobuf/util/message_differencer.h>
@@ -93,7 +97,7 @@ SegmentInMemory allocate_frame(const std::shared_ptr<PipelineContext>& context) 
             if(!col_index)
                 continue;
 
-            auto& column = output.column(static_cast<position_t>(col_index.value()));
+            auto& column = output.column(static_cast<position_t>(*col_index));
             if(field.type().data_type() != column.type().data_type())
                 column.set_orig_type(field.type());
         }
@@ -180,12 +184,13 @@ void decode_index_field_impl(
             auto &buffer = frame.column(0).data().buffer(); // TODO assert size
             auto &frame_field_descriptor = frame.field(0); //TODO better method
             auto sz = sizeof_datatype(frame_field_descriptor.type());
-            auto offset = sz * (context.slice_and_key().slice_.row_range.first - frame.offset());
-            auto tot_size = sz * context.slice_and_key().slice_.row_range.diff();
+            const auto& slice_and_key = context.slice_and_key();
+            auto offset = sz * (slice_and_key.slice_.row_range.first - frame.offset());
+            auto tot_size = sz * slice_and_key.slice_.row_range.diff();
 
             SliceDataSink sink(buffer.data() + offset, tot_size);
             ARCTICDB_DEBUG(log::storage(), "Creating index slice with total size {} ({} - {})", tot_size, sz,
-                                 context.slice_and_key().slice_.row_range.diff());
+                           slice_and_key.slice_.row_range.diff());
 
             const auto fields_match = frame_field_descriptor.type() == context.descriptor().fields(0).type();
             util::check(fields_match, "Cannot coerce index type from {} to {}",
@@ -342,7 +347,7 @@ void decode_into_frame_static(
 
     // data == end in case we have empty data types (e.g. {EMPTYVAL, Dim0}, {EMPTYVAL, Dim1}) for which we store nothing
     // in storage as they can be reconstructed in the type handler on the read path.
-    if (data != end || fields.size() >= 0) {
+    if (data != end || fields.size() > 0) {
         auto index_field = fields.at(0u);
         decode_index_field(frame, index_field, data, begin, end, context, encoding_version);
 
@@ -422,7 +427,7 @@ void decode_into_frame_dynamic(
                 continue;
             }
 
-            auto dst_col = frame_loc_opt.value();
+            auto dst_col = *frame_loc_opt;
             auto& buffer = frame.column(static_cast<position_t>(dst_col)).data().buffer();
             if(ColumnMapping m{frame, dst_col, field_col, context};!trivially_compatible_types(m.source_type_desc_, m.dest_type_desc_)) {
                 util::check(static_cast<bool>(has_valid_type_promotion(m.source_type_desc_, m.dest_type_desc_)), "Can't promote type {} to type {} in field {}",
@@ -695,7 +700,7 @@ public:
         SegmentInMemory frame,
         const Field& frame_field,
         size_t alloc_width) :
-        StringReducer(column, std::move(context), std::move(frame), std::move(frame_field), alloc_width * UNICODE_WIDTH),
+        StringReducer(column, std::move(context), std::move(frame), frame_field, alloc_width * UNICODE_WIDTH),
         conv_("UTF32", "UTF8"),
         buf_(new uint8_t[column_width_ + UNICODE_PREFIX]) {
     }
@@ -823,7 +828,7 @@ class DynamicStringReducer : public StringReducer {
         auto none = std::make_unique<py::none>(py::none{});
         LockPolicy::unlock(*lock_);
         size_t none_count = 0u;
-        emilib::HashMap<StringPool::offset_t, std::pair<PyObject*, folly::SpinLock>> local_map;
+        robin_hood::unordered_flat_map<StringPool::offset_t, std::pair<PyObject*, folly::SpinLock>> local_map;
         local_map.reserve(end - row_);
         // TODO this is no good for non-contigous blocks, but we currently expect
         // output data to be contiguous
@@ -838,17 +843,18 @@ class DynamicStringReducer : public StringReducer {
             } else {
                 auto it = local_map.find(offset);
                 if(it != local_map.end()) {
-                    *ptr_dest_ = it->second.first;
-                    LockPolicy::lock(it->second.second);
+                    auto& object_and_lock = it->second;
+                    *ptr_dest_ = object_and_lock.first;
+                    LockPolicy::lock(object_and_lock.second);
                     Py_INCREF(*ptr_dest_);
-                    LockPolicy::unlock(it->second.second);
+                    LockPolicy::unlock(object_and_lock.second);
                 } else {
                     const auto sv = get_string_from_pool(offset, string_pool);
                     LockPolicy::lock(*lock_);
                     *ptr_dest_ = StringCreator::create(sv, has_type_conversion);
                     LockPolicy::unlock(*lock_);
                     PyObject* dest = *ptr_dest_;
-                    local_map.insert_unique(std::move(offset), std::make_pair(std::move(dest), folly::SpinLock{}));
+                    local_map.insert(robin_hood::pair(std::move(offset), std::make_pair(std::move(dest), folly::SpinLock{})));
                 }
             }
         }

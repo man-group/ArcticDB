@@ -95,14 +95,14 @@ public:
 
         void set_block_range() {
             if(block_) {
-                block_pos_ = std::begin(block_.value());
-                block_end_ = std::end(block_.value());
+                block_pos_ = std::begin(*block_);
+                block_end_ = std::end(*block_);
             }
         }
 
         void set_next_block() {
             if(auto block  = parent_.next<TDT>(); block)
-                block_.emplace(std::move(block.value()));
+                block_.emplace(std::move(*block));
             else
                 block_ = std::nullopt;
 
@@ -131,7 +131,7 @@ public:
                 if(!other.block_)
                     return false;
 
-                return block_.value() == other.block_.value() && block_pos_ == other.block_pos_;
+                return *block_ == *other.block_ && block_pos_ == other.block_pos_;
             }
             return !other.block_;
         }
@@ -155,8 +155,8 @@ public:
                 }
             } else {
                 --block_pos_;
-                if (block_pos_ < block_.value().begin()) {
-                    auto offset = block_.value().offset() - type_size;
+                if (block_pos_ < block_->begin()) {
+                    auto offset = block_->offset() - type_size;
                     set_offset(offset);
                 }
             }
@@ -166,8 +166,8 @@ public:
             if(!block_)
                 return parent_.buffer().bytes() / type_size;
 
-            const auto off = block_.value().offset();
-            const auto dist = std::distance(std::begin(block_.value()), block_pos_);
+            const auto off = block_->offset();
+            const auto dist = std::distance(std::begin(*block_), block_pos_);
             return off + dist;
         }
 
@@ -175,7 +175,7 @@ public:
             const auto bytes = offset * type_size;
             auto block_and_offset = parent_.buffer().block_and_offset(bytes);
             block_ = ColumnData::make_typed_block<TDT>(block_and_offset.block_);
-            block_pos_ = std::begin(block_.value());
+            block_pos_ = std::begin(*block_);
             std::advance(block_pos_, block_and_offset.offset_ / type_size);
             block_end_ = std::end(block_.value());
         }
@@ -542,7 +542,7 @@ public:
                 if (last_physical_row_ != -1)
                     backfill_sparse_map(last_physical_row_);
                 else
-                    sparse_map();
+                    (void)sparse_map();
             }
             last_logical_row_ += static_cast<ssize_t>(num_rows);
         } else {
@@ -575,7 +575,7 @@ public:
         last_logical_row_ = row_id;
         const auto last_stored_row = row_count() - 1;
         if(sparse_map_) {
-            last_physical_row_ = sparse_map_.value().count() - 1;
+            last_physical_row_ = sparse_map_->count() - 1;
         }
         else if (last_logical_row_ != last_stored_row) {
             last_physical_row_ = last_stored_row;
@@ -594,7 +594,7 @@ public:
             return 0u;
 
         // TODO: cache index
-        std::unique_ptr<bm::bvector<>::rs_index_type> rs(new bm::bvector<>::rs_index_type());
+        auto rs = std::make_unique<bm::bvector<>::rs_index_type>();
         sparse_map().build_rs_index(rs.get());
         return sparse_map().count_to(bv_size(row - 1), *rs);
     }
@@ -624,7 +624,7 @@ public:
         if(!physical_row)
             return std::nullopt;
 
-        return *data_.buffer().ptr_cast<T>(bytes_offset(physical_row.value()), sizeof(T));
+        return *data_.buffer().ptr_cast<T>(bytes_offset(*physical_row), sizeof(T));
     }
 
     bool has_value_at(position_t row) const {
@@ -749,6 +749,10 @@ public:
         return const_cast<T*>(const_cast<const Column*>(this)->ptr_cast<T>(idx, required_bytes));
     }
 
+    [[nodiscard]] auto& buffer() {
+        return data_.buffer();
+    }
+
     void change_type(DataType target_type) {
         util::check(shapes_.empty(), "Can't change type on multi-dimensional column with type {}", type_);
         if(type_.data_type() == target_type)
@@ -812,7 +816,7 @@ public:
     }
 
     ColumnData data() const {
-        return ColumnData(&data_.buffer(), &shapes_.buffer(), type_, sparse_map_ ? &sparse_map_.value() : nullptr);
+        return ColumnData(&data_.buffer(), &shapes_.buffer(), type_, sparse_map_ ? &*sparse_map_ : nullptr);
     }
 
     const uint8_t* ptr() const {
@@ -977,7 +981,7 @@ private:
         sparse_map()[bv_size(sparse_location)] = true;
     }
 
-    util::BitMagic& sparse_map() {
+    [[nodiscard]] util::BitMagic& sparse_map() {
         if(!sparse_map_)
             sparse_map_ = std::make_optional<util::BitMagic>(0);
 

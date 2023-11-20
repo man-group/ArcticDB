@@ -14,6 +14,7 @@
 #include <arcticdb/pipeline/write_options.hpp>
 #include <arcticdb/entity/versioned_item.hpp>
 #include <arcticdb/pipeline/query.hpp>
+#include <arcticdb/util/storage_lock.hpp>
 #include <arcticdb/pipeline/input_tensor_frame.hpp>
 #include <arcticdb/version/version_core.hpp>
 #include <arcticdb/version/version_store_objects.hpp>
@@ -94,7 +95,7 @@ public:
      */
     virtual void delete_tree(
         const std::vector<IndexTypeKey>& idx_to_be_deleted,
-        const PreDeleteChecks& checks = default_pre_delete_checks
+        const PreDeleteChecks& checks
     ) = 0;
 
     virtual std::pair<VersionedItem,   TimeseriesDescriptor> restore_version(
@@ -146,8 +147,6 @@ public:
 
     virtual std::set<StreamId> get_active_incomplete_refs() = 0;
 
-    virtual void push_incompletes_to_symbol_list(const std::set<StreamId>& incompletes) = 0;
-
     virtual bool is_symbol_fragmented(const StreamId& stream_id, std::optional<size_t> segment_size) = 0;
 
     virtual VersionedItem defragment_symbol_data(const StreamId& stream_id, std::optional<size_t> segment_size) = 0;
@@ -165,10 +164,10 @@ public:
     virtual void configure(
         const storage::LibraryDescriptor::VariantStoreConfig & cfg) = 0;
 
-    virtual WriteOptions get_write_options() const = 0;
+    [[nodiscard]] virtual WriteOptions get_write_options() const = 0;
 
     virtual std::shared_ptr<Store>& store() = 0;
-    virtual const arcticdb::proto::storage::VersionStoreConfig& cfg() const  = 0;
+    [[nodiscard]] virtual const arcticdb::proto::storage::VersionStoreConfig& cfg() const  = 0;
     virtual std::shared_ptr<VersionMap>& version_map() = 0;
     virtual SymbolList& symbol_list() = 0;
     virtual void set_store(std::shared_ptr<Store> store)= 0;

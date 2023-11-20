@@ -51,7 +51,7 @@ class RowsFromSegIterator : public IndexRangeFilter {
             }
 
             auto index_type = seg_->descriptor().index().type();
-            auto res = std::make_optional<RowType>(seg_.value().template make_row_ref<RowType>(row_id));
+            auto res = std::make_optional<RowType>(seg_->template make_row_ref<RowType>(row_id));
 
             // Not filtering rows where we have a rowcount index - the assumption is that it's essentially an un-indexed blob
             // that we need to segment somehow.
@@ -85,7 +85,7 @@ class StreamReader {
     using DataSegmentIteratorType = SegmentIterator<KeysFromSegIteratorType, DATA_PREFETCH_WINDOW>;
     using RowsIteratorType = RowsFromSegIterator<DataSegmentIteratorType, RowType>;
 
-    StreamReader(KeySupplierType &&gen, std::shared_ptr<StreamSource> store, const storage::ReadKeyOpts opts = storage::ReadKeyOpts{},  const IndexRange &index_range = unspecified_range()) :
+    StreamReader(KeySupplierType &&gen, std::shared_ptr<StreamSource> store, const storage::ReadKeyOpts& opts = storage::ReadKeyOpts{},  const IndexRange &index_range = unspecified_range()) :
         key_gen_(std::move(gen)),
         index_range_(index_range),
         store_(store),

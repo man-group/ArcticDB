@@ -118,10 +118,11 @@ struct TestAggregation {
         aggregation_func_(std::move(func)) {}
 
     SegmentInMemory operator()(SegmentInMemory input) {
-        auto index_field_count = input.descriptor().index().field_count();
-        StreamDescriptor desc{input.descriptor().id(), input.descriptor().index()};
+        const auto& input_desc = input.descriptor();
+        auto index_field_count = input_desc.index().field_count();
+        StreamDescriptor desc{input_desc.id(), input_desc.index()};
         for(auto i = 0u; i < index_field_count; ++i) {
-            const auto& field = input.descriptor().fields(i);
+            const auto& field = input_desc.fields(i);
             desc.add_field(FieldRef{field.type(), field.name()});
         }
 

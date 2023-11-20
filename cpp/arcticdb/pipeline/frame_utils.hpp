@@ -139,11 +139,15 @@ std::optional<convert::StringEncodingError> aggregator_set_data(
                 // If such a string is encountered in a column, then the GIL will be held until that whole column has
                 // been processed, on the assumption that if a column has one such string it will probably have many.
                 std::optional<ScopedGILLock> scoped_gil_lock;
+                auto& column = agg.segment().column(col);
+                column.allocate_data(rows_to_write * sizeof(StringPool::offset_t));
+                auto out_ptr = reinterpret_cast<StringPool::offset_t*>(column.buffer().data());
+                auto& string_pool = agg.segment().string_pool();
                 for (size_t s = 0; s < rows_to_write; ++s, ++ptr_data) {
                     if (*ptr_data == none.ptr()) {
-                        agg.set_no_string_at(col, s, not_a_string());
+                        *out_ptr++ = not_a_string();
                     } else if(is_py_nan(*ptr_data)){
-                        agg.set_no_string_at(col, s, nan_placeholder());
+                        *out_ptr++ = nan_placeholder();
                     } else {
                         if constexpr (is_utf_type(slice_value_type(dt))) {
                             wrapper_or_error = convert::py_unicode_to_buffer(*ptr_data, scoped_gil_lock);
@@ -153,7 +157,8 @@ std::optional<convert::StringEncodingError> aggregator_set_data(
                         // Cannot use util::variant_match as only one of the branches would have a return type
                         if (std::holds_alternative<convert::PyStringWrapper>(wrapper_or_error)) {
                             convert::PyStringWrapper wrapper(std::move(std::get<convert::PyStringWrapper>(wrapper_or_error)));
-                            agg.set_string_at(col, s, wrapper.buffer_, wrapper.length_);
+                            const auto offset = string_pool.get(wrapper.buffer_, wrapper.length_);
+                            *out_ptr++ = offset.offset();
                         } else if (std::holds_alternative<convert::StringEncodingError>(wrapper_or_error)) {
                             auto error = std::get<convert::StringEncodingError>(wrapper_or_error);
                             error.row_index_in_slice_ = s;
@@ -275,15 +280,6 @@ std::optional<convert::StringEncodingError> aggregator_set_data(
         }
         return std::optional<convert::StringEncodingError>();
     });
-}
-
-inline TimeseriesDescriptor default_pandas_descriptor(const SegmentInMemory& segment) {
-    arcticdb::proto::descriptors::TimeSeriesDescriptor desc;
-    desc.mutable_stream_descriptor()->CopyFrom(segment.descriptor().proto());
-    desc.set_total_rows(segment.row_count());
-    arcticdb::proto::descriptors::NormalizationMetadata_PandasDataFrame pandas;
-    desc.mutable_normalization()->mutable_df()->CopyFrom(pandas);
-    return {std::make_shared<TimeseriesDescriptor::Proto>(std::move(desc)), std::make_shared<FieldCollection>(segment.descriptor().fields().clone())};
 }
 
 namespace pipelines {

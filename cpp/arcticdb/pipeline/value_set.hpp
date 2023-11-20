@@ -55,7 +55,7 @@ public:
     std::shared_ptr<std::unordered_set<std::string>> get_fixed_width_string_set(size_t width);
 
 private:
-    bool empty_;
+    bool empty_ = false;
     entity::TypeDescriptor base_type_;
     NumericSetType numeric_base_set_;
 

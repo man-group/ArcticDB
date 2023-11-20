@@ -138,7 +138,7 @@ struct DefaultStringGenerator {
         vec.resize(num_rows * strides_);
         const char *strings[] = {"dog", "cat", "horse"};
         for (size_t i = 0; i < num_rows; ++i) {
-            memcpy(&vec[i * strides_], &strings[i % 3], sizeof(strings[i % 3]));
+            memcpy(&vec[i * strides_], &strings[i % 3], strlen(strings[i % 3]));
         }
     }
 };
@@ -162,7 +162,7 @@ NativeTensor test_column(ContainerType &container, DTT, size_t num_rows, size_t 
         fill_test_value_vector(container, RawType{}, num_rows, start_val);
 
     ssize_t bytes = shapes * strides;
-    return NativeTensor{bytes, 1, &strides, &shapes, dt, elsize, container.ptr()};
+    return NativeTensor{bytes, 1, &strides, &shapes, dt, elsize, container.ptr(), 1};
 }
 
 template<class ContainerType, typename DTT, class StringGenerator = DefaultStringGenerator>
@@ -178,7 +178,7 @@ NativeTensor test_string_column(ContainerType &vec, DTT, size_t num_rows) {
     string_gen.fill_string_vector(vec, num_rows);
 
     ssize_t bytes = shapes * strides;
-    return NativeTensor{bytes, 1, &strides, &shapes, dt, elsize, vec.data()};
+    return NativeTensor{bytes, 1, &strides, &shapes, dt, elsize, vec.data(), 1};
 }
 
 inline std::vector<entity::FieldRef> get_test_timeseries_fields() {
@@ -219,9 +219,9 @@ void fill_test_column(arcticdb::pipelines::InputTensorFrame &frame,
     using RawType = typename decltype(data_type_tag)::raw_type;
     if (!is_index) {
         if constexpr (std::is_integral_v<RawType> || std::is_floating_point_v<RawType>)
-            frame.field_tensors.push_back(test_column(container, data_type_tag, num_rows, start_val, is_index));
+            frame.field_tensors.emplace_back(test_column(container, data_type_tag, num_rows, start_val, is_index));
         else
-            frame.field_tensors.push_back(test_string_column(container, data_type_tag, num_rows, start_val, is_index));
+            frame.field_tensors.emplace_back(test_string_column(container, data_type_tag, num_rows, start_val, is_index));
     } else {
         if constexpr (std::is_integral_v<RawType>)
             frame.index_tensor =
@@ -306,7 +306,13 @@ inline std::pair<storage::LibraryPath, arcticdb::proto::storage::LibraryConfig> 
     config.mutable_lib_desc()->set_name(unique_lib_name);
     auto temp_path = std::filesystem::temp_directory_path();
     // on windows, path is only implicitly converted to wstring, not string
-    auto lmdb_config =  arcticdb::storage::lmdb::pack_config(temp_path.string());
+    arcticdb::proto::storage::VariantStorage lmdb_config;
+    arcticdb::proto::lmdb_storage::Config cfg;
+    cfg.set_path(temp_path.string());
+    // 128 MiB - needs to be reasonably small else Windows build runs out of disk
+    cfg.set_map_size(128ULL * (1ULL << 20) );
+    util::pack_to_any(cfg, *lmdb_config.mutable_config());
+
     auto library_path = storage::LibraryPath::from_delim_path(unique_lib_name);
     auto storage_id = fmt::format("{}_store", unique_lib_name);
     config.mutable_lib_desc()->add_storage_ids(storage_id);

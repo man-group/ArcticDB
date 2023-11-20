@@ -134,7 +134,6 @@ namespace codec {
     constexpr auto raise = check<code>.raise;
 }
 
-
 // TODO Change legacy codes to internal::
 namespace util {
 

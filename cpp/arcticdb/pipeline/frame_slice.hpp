@@ -20,19 +20,19 @@ namespace arcticdb::pipelines {
 struct AxisRange : std::pair<std::size_t, std::size_t> {
     using std::pair<std::size_t, std::size_t>::pair;
 
-    [[nodiscard]] auto diff() const {
-        return second - first;
+    [[nodiscard]] std::size_t diff() const {
+        return first > second ? 0 : second - first;
     }
 
     [[nodiscard]] bool contains(std::size_t v) const {
         return first <= v && v < second;
     }
 
-    [[nodiscard]] auto start() const {
+    [[nodiscard]] std::size_t start() const {
         return first;
     }
 
-    [[nodiscard]] auto end() const {
+    [[nodiscard]] std::size_t end() const {
         return second;
     }
 
@@ -227,7 +227,7 @@ struct SliceAndKey {
     }
 
     bool invalid() const {
-        return (!segment_ && !key_) || segment_->is_null();
+        return (!segment_ && !key_) || (segment_ && segment_->is_null());
     }
 
     const AtomKey& key() const {

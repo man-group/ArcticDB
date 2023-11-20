@@ -32,8 +32,15 @@ class TestEmptyArrays:
         assert_db_in_out_match(lmdb_version_store, df_in, "test_multiple_empty_arrays")
 
     def test_empty_array_can_coexist_with_nonempty_arrays(self, lmdb_version_store, array_type):
-        df_in = pd.DataFrame({"col1": [np.array([]).astype(array_type), np.array([1, 2, 3, 4, 5]).astype(array_type),
-                                       np.array([]).astype(array_type)]})
+        df_in = pd.DataFrame(
+            {
+                "col1": [
+                    np.array([]).astype(array_type),
+                    np.array([1, 2, 3, 4, 5]).astype(array_type),
+                    np.array([]).astype(array_type)
+                ]
+            }
+        )
         assert_db_in_out_match(lmdb_version_store, df_in, "test_empty_array_can_coexist_with_nonempty_arrays")
 
     def test_append_to_colum_with_empty_array(self, lmdb_version_store, array_type):
@@ -77,6 +84,7 @@ class TestEmptyArrays:
         df_target = pd.concat([df, df_to_append], ignore_index=True)
         assert_frame_equal(df_target, df_out.data)
 
+
 class TestNonEmptyArrays:
     def test_single_array(self, lmdb_version_store, array_type):
         df_in = pd.DataFrame({"col1": [np.array([1, 2, 3]).astype(array_type)]})
@@ -108,7 +116,8 @@ class TestNonEmptyArrays:
         df = pd.DataFrame({"col1": [np.array([1, 2, 3]).astype(array_type)]})
         lmdb_version_store.write("test_can_append", df)
         df_to_append = pd.DataFrame(
-            {"col1": [np.array([10]).astype(array_type), np.array([20, 30, 40, 50]).astype(array_type)]})
+            {"col1": [np.array([10]).astype(array_type), np.array([20, 30, 40, 50]).astype(array_type)]}
+        )
         lmdb_version_store.append("test_can_append", df_to_append)
         df_out = lmdb_version_store.read("test_can_append")
         df_target = pd.concat([df, df_to_append], ignore_index=True)

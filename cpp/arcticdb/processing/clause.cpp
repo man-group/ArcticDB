@@ -13,11 +13,13 @@
 #include <arcticdb/processing/clause.hpp>
 #include <arcticdb/pipeline/column_stats.hpp>
 #include <arcticdb/pipeline/value_set.hpp>
-
-#include <arcticdb/util/third_party/emilib_set.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>
 #include <arcticdb/stream/segment_aggregator.hpp>
-
+#ifdef ARCTICDB_USING_CONDA
+    #include <robin_hood.h>
+#else
+    #include <arcticdb/util/third_party/robin_hood.hpp>
+#endif
 namespace arcticdb {
 
 std::vector<Composite<SliceAndKey>> structure_by_row_slice(std::vector<SliceAndKey>& slice_and_keys, size_t start_from) {
@@ -67,24 +69,24 @@ std::vector<Composite<SliceAndKey>> structure_by_column_slice(std::vector<SliceA
 
 std::vector<Composite<ProcessingUnit>> single_partition(std::vector<Composite<ProcessingUnit>> &&comps) {
     std::vector<Composite<ProcessingUnit>> v;
-    v.push_back(merge_composites_shallow(std::move(comps)));
+    v.emplace_back(merge_composites_shallow(std::move(comps)));
     return v;
 }
 
 class GroupingMap {
     using NumericMapType = std::variant<
             std::monostate,
-            std::shared_ptr<emilib::HashMap<bool, size_t>>,
-            std::shared_ptr<emilib::HashMap<uint8_t, size_t>>,
-            std::shared_ptr<emilib::HashMap<uint16_t, size_t>>,
-            std::shared_ptr<emilib::HashMap<uint32_t, size_t>>,
-            std::shared_ptr<emilib::HashMap<uint64_t, size_t>>,
-            std::shared_ptr<emilib::HashMap<int8_t, size_t>>,
-            std::shared_ptr<emilib::HashMap<int16_t, size_t>>,
-            std::shared_ptr<emilib::HashMap<int32_t, size_t>>,
-            std::shared_ptr<emilib::HashMap<int64_t, size_t>>,
-            std::shared_ptr<emilib::HashMap<float, size_t>>,
-            std::shared_ptr<emilib::HashMap<double, size_t>>>;
+            std::shared_ptr<robin_hood::unordered_flat_map<bool, size_t>>,
+            std::shared_ptr<robin_hood::unordered_flat_map<uint8_t, size_t>>,
+            std::shared_ptr<robin_hood::unordered_flat_map<uint16_t, size_t>>,
+            std::shared_ptr<robin_hood::unordered_flat_map<uint32_t, size_t>>,
+            std::shared_ptr<robin_hood::unordered_flat_map<uint64_t, size_t>>,
+            std::shared_ptr<robin_hood::unordered_flat_map<int8_t, size_t>>,
+            std::shared_ptr<robin_hood::unordered_flat_map<int16_t, size_t>>,
+            std::shared_ptr<robin_hood::unordered_flat_map<int32_t, size_t>>,
+            std::shared_ptr<robin_hood::unordered_flat_map<int64_t, size_t>>,
+            std::shared_ptr<robin_hood::unordered_flat_map<float, size_t>>,
+            std::shared_ptr<robin_hood::unordered_flat_map<double, size_t>>>;
 
     NumericMapType map_;
 
@@ -100,16 +102,16 @@ public:
     }
 
     template<typename T>
-    std::shared_ptr<emilib::HashMap<T, size_t>> get() {
+    std::shared_ptr<robin_hood::unordered_flat_map<T, size_t>> get() {
         return util::variant_match(map_,
                                    [that = this](const std::monostate &) {
-                                       that->map_ = std::make_shared<emilib::HashMap<T, size_t>>();
-                                       return std::get<std::shared_ptr<emilib::HashMap<T, size_t>>>(that->map_);
+                                       that->map_ = std::make_shared<robin_hood::unordered_flat_map<T, size_t>>();
+                                       return std::get<std::shared_ptr<robin_hood::unordered_flat_map<T, size_t>>>(that->map_);
                                    },
-                                   [](const std::shared_ptr<emilib::HashMap<T, size_t>> &ptr) {
+                                   [](const std::shared_ptr<robin_hood::unordered_flat_map<T, size_t>> &ptr) {
                                        return ptr;
                                    },
-                                   [](const auto &) -> std::shared_ptr<emilib::HashMap<T, size_t>> {
+                                   [](const auto &) -> std::shared_ptr<robin_hood::unordered_flat_map<T, size_t>> {
                                        schema::raise<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>(
                                                "GroupBy does not support the grouping column type changing with dynamic schema");
                                    });
@@ -235,9 +237,9 @@ AggregationClause::AggregationClause(const std::string& grouping_column,
         } else if (aggregation_operator == "mean") {
             aggregators_.emplace_back(MeanAggregator(typed_column_name, typed_column_name));
         } else if (aggregation_operator == "max") {
-            aggregators_.emplace_back(MaxOrMinAggregator(typed_column_name, typed_column_name, Extremum::MAX));
+            aggregators_.emplace_back(MaxAggregator(typed_column_name, typed_column_name));
         } else if (aggregation_operator == "min") {
-            aggregators_.emplace_back(MaxOrMinAggregator(typed_column_name, typed_column_name, Extremum::MIN));
+            aggregators_.emplace_back(MinAggregator(typed_column_name, typed_column_name));
         } else if (aggregation_operator == "count") {
             aggregators_.emplace_back(CountAggregator(typed_column_name, typed_column_name));
         } else {
@@ -301,7 +303,7 @@ Composite<ProcessingUnit> AggregationClause::process(std::shared_ptr<Store> stor
                                                 // 11.14 seconds without caching
                                                 // 11.01 seconds with caching
                                                 // Not worth worrying about right now
-                                                emilib::HashMap<RawType, size_t> offset_to_group;
+                                                robin_hood::unordered_flat_map<RawType, size_t> offset_to_group;
                                                 while (auto block = input_data.next<ScalarTagType<DataTypeTagType>>()) {
                                                     const auto row_count = block->row_count();
                                                     auto ptr = block->data();
@@ -319,7 +321,7 @@ Composite<ProcessingUnit> AggregationClause::process(std::shared_ptr<Store> stor
                                                                     val = offset;
                                                                 }
                                                                 RawType val_copy(val);
-                                                                offset_to_group.insert_unique(std::move(offset), std::move(val_copy));
+                                                                offset_to_group.insert(robin_hood::pair<RawType, size_t>(offset, val_copy));
                                                             }
                                                         } else {
                                                             val = *ptr;
@@ -327,7 +329,7 @@ Composite<ProcessingUnit> AggregationClause::process(std::shared_ptr<Store> stor
                                                         if (auto it = hash_to_group->find(val); it == hash_to_group->end()) {
                                                             row_to_group.emplace_back(next_group_id);
                                                             auto group_id = next_group_id++;
-                                                            hash_to_group->insert_unique(std::move(val), std::move(group_id));
+                                                            hash_to_group->insert(robin_hood::pair<RawType, size_t>(val, group_id));
                                                         } else {
                                                             row_to_group.emplace_back(it->second);
                                                         }
@@ -367,7 +369,7 @@ Composite<ProcessingUnit> AggregationClause::process(std::shared_ptr<Store> stor
         auto index_ptr = reinterpret_cast<RawType *>(seg.column(index_pos).ptr());
         std::vector<std::pair<RawType, size_t>> elements;
         for (const auto &hash : *hashes)
-            elements.push_back(hash);
+            elements.push_back(std::make_pair(hash.first, hash.second));
 
         std::sort(std::begin(elements),
                   std::end(elements),
@@ -405,13 +407,14 @@ Composite<ProcessingUnit> AggregationClause::process(std::shared_ptr<Store> stor
         size_t max_end_col = 0;
         std::optional<SegmentInMemory> output_seg;
         for (auto& slice_and_key: proc.data()) {
-            min_start_row = std::min(min_start_row, slice_and_key.slice().row_range.start());
-            max_end_row = std::max(max_end_row, slice_and_key.slice().row_range.end());
-            min_start_col = std::min(min_start_col, slice_and_key.slice().col_range.start());
-            max_end_col = std::max(max_end_col, slice_and_key.slice().col_range.end());
+            const auto& slice = slice_and_key.slice();
+            min_start_row = std::min(min_start_row, slice.row_range.start());
+            max_end_row = std::max(max_end_row, slice.row_range.end());
+            min_start_col = std::min(min_start_col, slice.col_range.start());
+            max_end_col = std::max(max_end_col, slice.col_range.end());
             auto segment = std::move(slice_and_key.segment(store));
             if (output_seg.has_value()) {
-                stream::merge_string_columns(segment, output_seg->string_pool_ptr(), false);
+                merge_string_columns(segment, output_seg->string_pool_ptr(), false);
                 output_seg->concatenate(std::move(segment), true);
             } else {
                 output_seg = std::make_optional<SegmentInMemory>(std::move(segment));
@@ -469,8 +472,8 @@ void merge_impl(
         QueueType &input_streams,
         bool add_symbol_column,
         StreamId stream_id,
-        const arcticdb::pipelines::RowRange row_range,
-        const arcticdb::pipelines::ColRange col_range,
+        const arcticdb::pipelines::RowRange& row_range,
+        const arcticdb::pipelines::ColRange& col_range,
         IndexType index,
         const StreamDescriptor& stream_descriptor) {
     using namespace arcticdb::pipelines;
@@ -526,13 +529,14 @@ Composite<ProcessingUnit> MergeClause::process(std::shared_ptr<Store> store,
     procs.broadcast([&input_streams, &store, &min_start_row, &max_end_row, &min_start_col, &max_end_col](auto &&proc) {
         auto slice_and_keys = proc.release_data();
         for (auto &&slice_and_key: slice_and_keys) {
-            size_t start_row = slice_and_key.slice().row_range.start();
+            const auto& slice = slice_and_key.slice();
+            size_t start_row = slice.row_range.start();
             min_start_row = start_row < min_start_row ? start_row : min_start_row;
-            size_t end_row = slice_and_key.slice().row_range.end();
+            size_t end_row = slice.row_range.end();
             max_end_row = end_row > max_end_row ? end_row : max_end_row;
-            size_t start_col = slice_and_key.slice().col_range.start();
+            size_t start_col = slice.col_range.start();
             min_start_col = start_col < min_start_col ? start_col : min_start_col;
-            size_t end_col = slice_and_key.slice().col_range.end();
+            size_t end_col = slice.col_range.end();
             max_end_col = end_col > max_end_col ? end_col : max_end_col;
             input_streams.push(
                     std::make_unique<SliceAndKeyWrapper>(std::forward<pipelines::SliceAndKey>(slice_and_key),
@@ -576,8 +580,8 @@ Composite<ProcessingUnit> ColumnStatsGenerationClause::process(std::shared_ptr<S
         aggregators_data.emplace_back(agg.get_aggregator_data());
     }
 
-    emilib::HashSet<IndexValue> start_indexes;
-    emilib::HashSet<IndexValue> end_indexes;
+    robin_hood::unordered_set<IndexValue> start_indexes;
+    robin_hood::unordered_set<IndexValue> end_indexes;
 
     internal::check<ErrorCode::E_INVALID_ARGUMENT>(
             !procs.empty(),
@@ -637,7 +641,7 @@ std::vector<Composite<SliceAndKey>> RowRangeClause::structure_for_processing(
     slice_and_keys.erase(std::remove_if(slice_and_keys.begin(), slice_and_keys.end(), [this](const SliceAndKey& slice_and_key) {
         return slice_and_key.slice_.row_range.start() >= end_ || slice_and_key.slice_.row_range.end() <= start_;
     }), slice_and_keys.end());
-    return structure_by_column_slice(slice_and_keys);
+    return structure_by_row_slice(slice_and_keys, start_from);
 }
 
 Composite<ProcessingUnit> RowRangeClause::process(std::shared_ptr<Store> store,
@@ -657,10 +661,22 @@ Composite<ProcessingUnit> RowRangeClause::process(std::shared_ptr<Store> store,
                 if (end_ > row_range.start() && end_ < row_range.end()) {
                     end_row = end_ - (row_range.start());
                 }
-                auto seg = truncate_segment(slice_and_key.segment(store), start_row, end_row);
-                slice_and_key.slice_.adjust_rows(seg.row_count());
-                slice_and_key.slice_.adjust_columns(seg.descriptor().field_count() - seg.descriptor().index().field_count());
-                slice_and_key.segment_ = std::move(seg);
+                auto original_segment = slice_and_key.segment(store);
+                auto truncated_segment = truncate_segment(original_segment, start_row, end_row);
+                if(!truncated_segment.is_null()) {
+                    const size_t truncated_segment_row_count = truncated_segment.row_count();
+                    const size_t truncated_segment_column_count = (
+                            truncated_segment.descriptor().field_count() -
+                            truncated_segment.descriptor().index().field_count()
+                    );
+
+                    slice_and_key.slice_.adjust_rows(truncated_segment_row_count);
+                    slice_and_key.slice_.adjust_columns(truncated_segment_column_count);
+                } else {
+                    slice_and_key.slice_.adjust_rows(0u);
+                    slice_and_key.slice_.adjust_columns(0u);
+                }
+                slice_and_key.segment_ = std::move(truncated_segment);
             } // else all rows in the slice and key are required, do nothing
         }
     });
@@ -672,8 +688,10 @@ void RowRangeClause::set_processing_config(const ProcessingConfig& processing_co
     switch(row_range_type_) {
         case RowRangeType::HEAD:
             if (n_ >= 0) {
+                start_ = 0;
                 end_ = std::min(n_, total_rows);
             } else {
+                start_ = 0;
                 end_ = std::max(static_cast<int64_t>(0), total_rows + n_);
             }
             break;
@@ -686,13 +704,31 @@ void RowRangeClause::set_processing_config(const ProcessingConfig& processing_co
                 end_ = total_rows;
             }
             break;
+        case RowRangeType::RANGE:
+            // Wrap around negative indices.
+            start_ = (
+                user_provided_start_ >= 0 ?
+                std::min(user_provided_start_, total_rows) :
+                std::max(total_rows + user_provided_start_, static_cast<int64_t>(0))
+            );
+            end_ = (
+                user_provided_end_ >= 0 ?
+                std::min(user_provided_end_, total_rows) :
+                std::max(total_rows + user_provided_end_, static_cast<int64_t>(0))
+            );
+            break;
+
         default:
             internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Unrecognised RowRangeType {}", static_cast<uint8_t>(row_range_type_));
     }
 }
 
 std::string RowRangeClause::to_string() const {
-    return fmt::format("{} {}", row_range_type_ == RowRangeType::HEAD ? "HEAD" : "TAIL", n_);
+    if (row_range_type_ == RowRangeType::RANGE) {
+        return fmt::format("ROWRANGE: RANGE, start={}, end ={}", start_, end_);
+    }
+
+    return fmt::format("ROWRANGE: {}, n={}", row_range_type_ == RowRangeType::HEAD ? "HEAD" : "TAIL", n_);
 }
 
 std::vector<Composite<SliceAndKey>> DateRangeClause::structure_for_processing(
