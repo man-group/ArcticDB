@@ -220,6 +220,91 @@ def test_count_aggregation(local_object_version_store):
     assert_frame_equal(res.data, df)
 
 
+@use_of_function_scoped_fixtures_in_hypothesis_checked
+@settings(deadline=None)
+@given(
+    df=data_frames(
+        [
+            column("grouping_column", elements=string_strategy, fill=string_strategy),
+            column("a", elements=numeric_type_strategies()),
+        ],
+        index=range_indexes(),
+    )
+)
+def test_hypothesis_first_agg_numeric(lmdb_version_store, df):
+    lib = lmdb_version_store
+    assume(not df.empty)
+
+    q = QueryBuilder()
+    q = q.groupby("grouping_column").agg({"a": "first"})
+    expected = df.groupby("grouping_column").agg({"a": "first"})
+    expected.replace(
+        np.nan, np.inf, inplace=True
+    )  # New version of pandas treats values which exceeds limits as np.nan rather than np.inf, as in old version and arcticdb
+
+    symbol = "first_agg"
+    lib.write(symbol, df)
+    vit = lib.read(symbol, query_builder=q)
+    vit.data.sort_index(inplace=True)
+
+    assert_frame_equal(expected, vit.data)
+
+
+# TODO TO BE FACTORIZED WITH NUMERIC
+# not working for now
+#@use_of_function_scoped_fixtures_in_hypothesis_checked
+#@settings(deadline=None)
+#@given(
+    #df=data_frames(
+        #[
+            #column("grouping_column", elements=string_strategy, fill=string_strategy),
+            #column("a", elements=string_strategy),
+        #],
+        #index=range_indexes(),
+    #)
+#)
+#def test_hypothesis_first_agg_strings(lmdb_version_store, df):
+    #lib = lmdb_version_store
+    #assume(not df.empty)
+
+    #q = QueryBuilder()
+    #q = q.groupby("grouping_column").agg({"a": "first"})
+    #expected = df.groupby("grouping_column").agg({"a": "first"})
+    #expected.replace(
+        #np.nan, np.inf, inplace=True
+    #)  # New version of pandas treats values which exceeds limits as np.nan rather than np.inf, as in old version and arcticdb
+
+    #symbol = "first_agg"
+    #lib.write(symbol, df)
+    #vit = lib.read(symbol, query_builder=q)
+    #vit.data.sort_index(inplace=True)
+
+    #assert_frame_equal(expected, vit.data)
+
+
+def test_first_aggregation(local_object_version_store):
+    df = DataFrame(
+        {
+            "grouping_column": ["group_1", "group_2", "group_4", "group_2", "group_1", "group_3", "group_1"],
+            "get_first": [100.0, np.nan, np.nan, 2.7, 1.4, 5.8, 3.45],
+        },
+        index=np.arange(7),
+    )
+    q = QueryBuilder()
+    q = q.groupby("grouping_column").agg({"get_first": "first"})
+    symbol = "test_first_aggregation"
+    local_object_version_store.write(symbol, df)
+
+    res = local_object_version_store.read(symbol, query_builder=q)
+    res.data.sort_index(inplace=True)
+
+    df = pd.DataFrame({"get_first": [100.0, 2.7, 5.8, np.nan]}, index=["group_1", "group_2", "group_3", "group_4"])
+    df.index.rename("grouping_column", inplace=True)
+    res.data.sort_index(inplace=True)
+
+    assert_frame_equal(res.data, df)
+
+
 def test_sum_aggregation(local_object_version_store):
     df = DataFrame(
         {"grouping_column": ["group_1", "group_1", "group_1", "group_2", "group_2"], "to_sum": [1, 1, 2, 2, 2]},
