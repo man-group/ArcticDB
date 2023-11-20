@@ -412,6 +412,7 @@ Composite<EntityIds> AggregationClause::process(Composite<EntityIds>&& entity_id
                                                 using optional_iter_type = std::optional<decltype(input_data.bit_vector()->first())>;
                                                 optional_iter_type iter = std::nullopt;
                                                 size_t previous_value_index = 0;
+                                                constexpr size_t missing_value_group_id = 0;
 
                                                 if (is_sparse)
                                                 {
@@ -443,10 +444,10 @@ Composite<EntityIds> AggregationClause::process(Composite<EntityIds>&& entity_id
                                                             val = *ptr;
                                                         }
                                                         if (is_sparse) {
-                                                            for (size_t j = previous_value_index; j != *(iter.value()); ++j) {
-                                                                row_to_group.emplace_back(size_t(0));
+                                                            for (size_t j = previous_value_index + 1; j != *(iter.value()); ++j) {
+                                                                row_to_group.emplace_back(missing_value_group_id);
                                                             }
-                                                            previous_value_index = *(iter.value()) + 1;
+                                                            previous_value_index = *(iter.value());
                                                             ++(iter.value());
                                                         }
 

@@ -259,6 +259,8 @@ TEST(Clause, AggregationSparseGroupby) {
     std::shared_ptr<Store> empty_store;
     size_t num_rows{100};
     size_t unique_grouping_values{10};
+    // 1 more group because of missing values
+    size_t unique_groups{unique_grouping_values + 1};
     auto seg = generate_sparse_groupby_testing_segment(num_rows, unique_grouping_values);
 
     ProcessingUnit processing_unit(std::move(seg), pipelines::FrameSlice{});
@@ -272,21 +274,21 @@ TEST(Clause, AggregationSparseGroupby) {
     ASSERT_EQ(1, slice_and_keys.size());
 
     using aggregation_test::check_column;
-    check_column<int64_t>(slice_and_keys[0], "sum_int", unique_grouping_values + 1, [&](size_t idx) -> int64_t {
+    check_column<int64_t>(slice_and_keys[0], "sum_int", unique_groups, [unique_groups](size_t idx) -> int64_t {
         if (idx == 0) {
             return 495;
         } else {
             return 450 - static_cast<int64_t>(idx % unique_grouping_values);
         }
     });
-    check_column<int64_t>(slice_and_keys[0], "min_int", unique_grouping_values + 1, [](size_t idx) -> int64_t {
+    check_column<int64_t>(slice_and_keys[0], "min_int", unique_groups, [](size_t idx) -> int64_t {
         if (idx == 0) {
             return 0;
         } else {
             return idx;
         }
     });
-    check_column<int64_t>(slice_and_keys[0], "max_int", unique_grouping_values + 1, [&](size_t idx) -> int64_t {
+    check_column<int64_t>(slice_and_keys[0], "max_int", unique_groups, [unique_groups](size_t idx) -> int64_t {
         if (idx == 0) {
             return 99;
         }
@@ -296,14 +298,14 @@ TEST(Clause, AggregationSparseGroupby) {
             return 90 + idx % unique_grouping_values;
         }
     });
-    check_column<double>(slice_and_keys[0], "mean_int", unique_grouping_values + 1, [&](size_t idx) -> double {
+    check_column<double>(slice_and_keys[0], "mean_int", unique_groups, [unique_grouping_values](size_t idx) -> double {
         if (idx == 0) {
             return 49.5;
         } else {
             return (450 - static_cast<int64_t>(idx % unique_grouping_values)) / 9.;
         }
     });
-    check_column<uint64_t>(slice_and_keys[0], "count_int", unique_grouping_values + 1, [](size_t idx) -> uint64_t {
+    check_column<uint64_t>(slice_and_keys[0], "count_int", unique_groups, [](size_t idx) -> uint64_t {
         if (idx == 0) {
             return 10;
         } else {
