@@ -460,8 +460,9 @@ Composite<EntityIds> AggregationClause::process(Composite<EntityIds>&& entity_id
                                                     }
                                                 }
 
+                                                # Marking all the last non-represented values as missing.
                                                 for (size_t i = row_to_group.size(); i <= size_t(col.column_->last_row()); ++i) {
-                                                    row_to_group.emplace_back(0);
+                                                    row_to_group.emplace_back(missing_values_group_id);
                                                 }
 
                                                 num_unique = next_group_id;
