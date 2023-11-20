@@ -243,7 +243,7 @@ struct ColumnData {
                 // conditions are satisfied:
                 // i) The processed size becomes equal to the block size
                 // ii) All zero-sized shapes are parsed (i.e. the shape of the current tensor is not 0)
-                while (is_current_tensor_empty() || size < block->bytes()) {
+                while (current_tensor_is_empty() || size < block->bytes()) {
                     if constexpr (dim == Dimension::Dim1) {
                         size += next_shape() * raw_type_sz;
                     } else {
@@ -271,7 +271,7 @@ struct ColumnData {
 
     /// @brief Check if the current tensor is of size 0
     /// @note The size of the current tensor is written in #shapes_ under #shapes_pos_
-    [[nodiscard]] bool is_current_tensor_empty() const;
+    [[nodiscard]] bool current_tensor_is_empty() const;
 
     const ChunkedBuffer* data_;
     const Buffer* shapes_;

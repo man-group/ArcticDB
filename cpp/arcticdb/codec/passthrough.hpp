@@ -20,6 +20,8 @@ namespace arcticdb::detail {
 template<template<typename> class BlockType, class TD>
 struct PassthroughEncoder {
 
+    using Opts = arcticdb::proto::encoding::VariantCodec::Passthrough;
+
     static size_t max_compressed_size(const BlockType<TD> &block ) {
         using Helper = CodecHelper<TD>;
         if constexpr (Helper::dim == entity::Dimension::Dim0) {
@@ -33,7 +35,7 @@ struct PassthroughEncoder {
     }
 
     template <typename EncodedFieldType>
-    static void encode(const BlockType<TD>& block, EncodedFieldType& field, Buffer& out, std::ptrdiff_t& pos) {
+    static void encode(const Opts&, const BlockType<TD>& block, EncodedFieldType& field, Buffer& out, std::ptrdiff_t& pos) {
         using namespace arcticdb::entity;
         using Helper = CodecHelper<TD>;
         using T = typename Helper::T;
@@ -97,7 +99,9 @@ private:
 /// the latter does not care about the shapes array.
 /// @see arcticdb::ColumnEncoder2 arcticdb::detail::GenericBlockEncoder2
 template<template<typename> class BlockType, class TD>
-struct PassthroughEncoder2 {
+struct PassthroughEncoderV2 {
+
+    using Opts = arcticdb::proto::encoding::VariantCodec::Passthrough;
 
     static size_t max_compressed_size(const BlockType<TD> &block) {
         return block.nbytes();
@@ -105,6 +109,7 @@ struct PassthroughEncoder2 {
 
     template <typename EncodedBlockType>
     static void encode(
+        const Opts&,
         const BlockType<TD> &block,
         Buffer &out,
         std::ptrdiff_t &pos,

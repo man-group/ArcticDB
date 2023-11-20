@@ -41,15 +41,11 @@ namespace arcticdb {
             static_assert(encoder_version == EncodingVersion::V1,
                 "Encoding of both shapes and values at the same time is allowed only in V1 encoding");
             visit_encoder(codec_opts, [&](auto encoder_tag) {
-                if constexpr(std::is_same_v<typename decltype(encoder_tag)::Encoder, PassthroughEncoder>) {
-                    decltype(encoder_tag)::Encoder::encode(typed_block, field, out, pos);
-                } else {
-                    decltype(encoder_tag)::Encoder::encode(get_opts(codec_opts, encoder_tag),
-                        typed_block,
-                        field,
-                        out,
-                        pos);
-                }
+                decltype(encoder_tag)::Encoder::encode(get_opts(codec_opts, encoder_tag),
+                    typed_block,
+                    field,
+                    out,
+                    pos);
             });
         }
 
@@ -65,19 +61,16 @@ namespace arcticdb {
                 "Encoding values separately from the shapes is allowed only in V2 encoding");
             auto* ndarray = field.mutable_ndarray();
             if(typed_block.nbytes() == 0) {
+                ARCTICDB_TRACE(log::codec(), "Encoder got values of size 0. Noting to encode.");
                 return;
             }
             auto* values_encoded_block = ndarray->add_values();
             visit_encoder(codec_opts, [&](auto encoder_tag) {
-                if constexpr(std::is_same_v<typename decltype(encoder_tag)::Encoder, PassthroughEncoder>) {
-                    decltype(encoder_tag)::Encoder::encode(typed_block, out, pos, values_encoded_block);
-                } else {
-                    decltype(encoder_tag)::Encoder::encode(get_opts(codec_opts, encoder_tag),
-                        typed_block,
-                        out,
-                        pos,
-                        values_encoded_block);
-                }
+                decltype(encoder_tag)::Encoder::encode(get_opts(codec_opts, encoder_tag),
+                    typed_block,
+                    out,
+                    pos,
+                    values_encoded_block);
             });
             const auto existing_items_count = ndarray->items_count();
             ndarray->set_items_count(existing_items_count + typed_block.row_count());
@@ -94,34 +87,31 @@ namespace arcticdb {
             static_assert(encoder_version == EncodingVersion::V2,
                 "Encoding shapes separately from the values is allowed only in V2 encoding");
             if(typed_block.nbytes() == 0) {
+                ARCTICDB_TRACE(log::codec(), "Encoder got shapes of size 0. Noting to encode.");
                 return;
             }
             auto* ndarray = field.mutable_ndarray();
             auto* shapes_encoded_block = ndarray->add_shapes();
             visit_encoder(codec_opts, [&](auto encoder_tag) {
-                if constexpr(std::is_same_v<typename decltype(encoder_tag)::Encoder, PassthroughEncoder>) {
-                    decltype(encoder_tag)::Encoder::encode(typed_block, out, pos, shapes_encoded_block);
-                } else {
-                    decltype(encoder_tag)::Encoder::encode(get_opts(codec_opts, encoder_tag),
-                        typed_block,
-                        out,
-                        pos,
-                        shapes_encoded_block);
-                }
+                decltype(encoder_tag)::Encoder::encode(get_opts(codec_opts, encoder_tag),
+                    typed_block,
+                    out,
+                    pos,
+                    shapes_encoded_block);
             });
         }
     private:
         using ZstdEncoder = std::conditional_t<encoder_version == EncodingVersion::V1,
-                arcticdb::detail::ZstdEncoder<TypedBlock, TD>,
-                arcticdb::detail::GenericBlockEncoder2<TypedBlock<TD>, TD, arcticdb::detail::ZstdBlockEncoder>>;
+            arcticdb::detail::ZstdEncoder<TypedBlock, TD>,
+            arcticdb::detail::GenericBlockEncoderV2<TypedBlock<TD>, TD, arcticdb::detail::ZstdBlockEncoder>>;
 
         using Lz4Encoder = std::conditional_t<encoder_version == EncodingVersion::V1,
-                arcticdb::detail::Lz4Encoder<TypedBlock, TD>,
-                arcticdb::detail::GenericBlockEncoder2<TypedBlock<TD>, TD, arcticdb::detail::Lz4BlockEncoder>>;
+            arcticdb::detail::Lz4Encoder<TypedBlock, TD>,
+            arcticdb::detail::GenericBlockEncoderV2<TypedBlock<TD>, TD, arcticdb::detail::Lz4BlockEncoder>>;
 
         using PassthroughEncoder = std::conditional_t<encoder_version == EncodingVersion::V1,
-                arcticdb::detail::PassthroughEncoder<TypedBlock, TD>,
-                arcticdb::detail::PassthroughEncoder2<TypedBlock, TD>>;
+            arcticdb::detail::PassthroughEncoder<TypedBlock, TD>,
+            arcticdb::detail::PassthroughEncoderV2<TypedBlock, TD>>;
 
         template<typename EncoderT>
         struct EncoderTag {
@@ -148,6 +138,10 @@ namespace arcticdb {
 
         static auto get_opts(const arcticdb::proto::encoding::VariantCodec& codec_opts, EncoderTag<ZstdEncoder>) {
             return codec_opts.zstd();
+        }
+
+        static auto get_opts(const arcticdb::proto::encoding::VariantCodec& codec_opts, EncoderTag<PassthroughEncoder>) {
+            return codec_opts.passthrough();
         }
     };
 }

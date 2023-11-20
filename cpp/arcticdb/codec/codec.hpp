@@ -73,7 +73,7 @@ using BlockEncoder = BlockEncoderHelper<TypedBlockData, TD, v>;
 arcticdb::proto::encoding::VariantCodec shapes_encoding_opts();
 
 /// @brief Utility class used to encode and compute the max encoding size for regular data columns for V1 encoding
-struct ColumnEncoder_v1 {
+struct ColumnEncoderV1 {
     static std::pair<size_t, size_t> max_compressed_size(
         const arcticdb::proto::encoding::VariantCodec& codec_opts,
         ColumnData& column_data);
@@ -94,7 +94,7 @@ struct ColumnEncoder_v1 {
 /// internal data was multidimensional and used ColumnEncoder. More specifically: string pool and metadata.
 /// @note This should be used for V2 encoding. V1 encoding can't use it as there is already data written the other
 ///	way and it will be hard to distinguish both.
-struct ColumnEncoder_v2 {
+struct ColumnEncoderV2 {
 public:
     static void encode(
         const arcticdb::proto::encoding::VariantCodec &codec_opts,
@@ -124,7 +124,7 @@ private:
 };
 
 template<EncodingVersion v>
-using ColumnEncoder = std::conditional_t<v == EncodingVersion::V1, ColumnEncoder_v1, ColumnEncoder_v2>;
+using ColumnEncoder = std::conditional_t<v == EncodingVersion::V1, ColumnEncoderV1, ColumnEncoderV2>;
 
 Segment encode_v2(
     SegmentInMemory&& in_mem_seg,

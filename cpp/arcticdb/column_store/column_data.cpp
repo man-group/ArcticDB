@@ -8,7 +8,7 @@
 #include "column_data.hpp"
 
 namespace arcticdb {
-    bool ColumnData::is_current_tensor_empty() const {
+    bool ColumnData::current_tensor_is_empty() const {
         return shape_pos_ < shapes_->bytes() && *shapes_->ptr_cast<shape_t>(shape_pos_, sizeof(shape_t)) == 0;
     }
 

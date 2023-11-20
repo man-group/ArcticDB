@@ -84,7 +84,7 @@ std::size_t decode_ndarray(
     const std::uint8_t* input,
     DataSink& data_sink,
     std::optional<util::BitMagic>& bv,
-    arcticdb::EncodingVersion encoding_version
+    EncodingVersion encoding_version
 ) {
     ARCTICDB_SUBSAMPLE_AGG(DecodeNdArray)
     std::size_t read_bytes = 0;
@@ -97,6 +97,9 @@ std::size_t decode_ndarray(
         // Empty array will not contain actual data, however, its sparse map should be loaded
         // so that we can distinguish None from []
         if(data_size == 0 && !is_empty_array) {
+            util::check(type_desc_tag.data_type() == DataType::EMPTYVAL,
+                "NDArray of type {} should not be of size 0!",
+                datatype_to_str(type_desc_tag.data_type()));
             return;
         }
 
@@ -113,9 +116,8 @@ std::size_t decode_ndarray(
             const auto shape_size = encoding_sizes::shape_uncompressed_size(field);
             if(shape_size > 0) {
                 shapes_out = data_sink.allocate_shapes(shape_size);
-                if(encoding_version == EncodingVersion::V2) {
+                if(encoding_version == EncodingVersion::V2)
                     read_shapes(field, data_sink, data_in, 0, shapes_out);
-                }
             }
         }
         for (auto block_num = 0; block_num < num_blocks; ++block_num) {
@@ -164,9 +166,9 @@ std::size_t decode_field(
     const std::uint8_t *input,
     DataSink &data_sink,
     std::optional<util::BitMagic>& bv,
-    arcticdb::EncodingVersion encoding_version) {
+    EncodingVersion encoding_version) {
     size_t magic_size = 0u;
-    if constexpr(std::is_same_v<EncodedFieldType, arcticdb::EncodedField>) {
+    if constexpr(std::is_same_v<EncodedFieldType, EncodedField>) {
         magic_size += sizeof(ColumnMagic);
         check_magic<ColumnMagic>(input);
     }

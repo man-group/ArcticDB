@@ -29,7 +29,7 @@ namespace arcticdb {
     bm::serializer<bm::bvector<> >::buffer sbuf;
     bvs.serialize(sparse_map, sbuf);
     auto sz = sbuf.size();
-    auto total_sz = sz + sizeof(util::BitMagicStart) + sizeof(util::BitMagicEnd);
+    auto total_sz = sz + util::combined_bit_magic_delimiters_size();
     out.assert_size(pos + total_sz);
 
     uint8_t* target = out.data() + pos;
@@ -52,7 +52,7 @@ static ShapesBlock create_shapes_typed_block(const ColumnData& column_data) {
             nullptr};
 }
 
-static void encode_sparse_map_if_available(
+static void encode_sparse_map(
 	ColumnData& column_data,
 	MutableVariantField variant_field,
 	Buffer& out,
@@ -84,7 +84,7 @@ arcticdb::proto::encoding::VariantCodec shapes_encoding_opts() {
     return codec::default_lz4_codec();
 }
 
-std::pair<size_t, size_t> ColumnEncoder_v1::max_compressed_size(
+std::pair<size_t, size_t> ColumnEncoderV1::max_compressed_size(
         const arcticdb::proto::encoding::VariantCodec& codec_opts,
         ColumnData& column_data) {
     return column_data.type().visit_tag([&codec_opts, &column_data](auto type_desc_tag) {
@@ -109,7 +109,7 @@ std::pair<size_t, size_t> ColumnEncoder_v1::max_compressed_size(
     });
 }
 
-void ColumnEncoder_v1::encode(
+void ColumnEncoderV1::encode(
     const arcticdb::proto::encoding::VariantCodec& codec_opts,
     ColumnData& column_data,
     MutableVariantField variant_field,
@@ -129,10 +129,10 @@ void ColumnEncoder_v1::encode(
             }, variant_field);
         }
     });
-    encode_sparse_map_if_available(column_data, variant_field, out, pos);
+    encode_sparse_map(column_data, variant_field, out, pos);
 }
 
-void ColumnEncoder_v2::encode(
+void ColumnEncoderV2::encode(
     const arcticdb::proto::encoding::VariantCodec& codec_opts,
     ColumnData& column_data,
     MutableVariantField variant_field,
@@ -141,10 +141,10 @@ void ColumnEncoder_v2::encode(
 ) {
     encode_shapes(column_data, variant_field, out, pos);
     encode_blocks(codec_opts, column_data, variant_field, out, pos);
-    encode_sparse_map_if_available(column_data, variant_field, out, pos);
+    encode_sparse_map(column_data, variant_field, out, pos);
 }
 
-void ColumnEncoder_v2::encode_shapes(
+void ColumnEncoderV2::encode_shapes(
     const ColumnData& column_data,
     MutableVariantField variant_field,
     Buffer& out,
@@ -161,7 +161,7 @@ void ColumnEncoder_v2::encode_shapes(
     }
 }
 
-void ColumnEncoder_v2::encode_blocks(
+void ColumnEncoderV2::encode_blocks(
     const arcticdb::proto::encoding::VariantCodec &codec_opts,
     ColumnData& column_data,
     MutableVariantField variant_field,
@@ -182,7 +182,7 @@ void ColumnEncoder_v2::encode_blocks(
     });
 }
 
-std::pair<size_t, size_t> ColumnEncoder_v2::max_compressed_size(
+std::pair<size_t, size_t> ColumnEncoderV2::max_compressed_size(
     const arcticdb::proto::encoding::VariantCodec& codec_opts,
     ColumnData& column_data
 ) {
@@ -680,7 +680,7 @@ std::optional<google::protobuf::Any> decode_metadata(
         auto meta_type_desc = metadata_type_desc();
         MetaBuffer meta_buf;
         std::optional<util::BitMagic> bv;
-        data += decode_field(meta_type_desc, hdr.metadata_field(), data, meta_buf, bv, static_cast<EncodingVersion>(hdr.encoding_version()));
+        data += decode_field(meta_type_desc, hdr.metadata_field(), data, meta_buf, bv, to_encoding_version(hdr.encoding_version()));
         ARCTICDB_TRACE(log::codec(), "Decoded metadata to position {}", data - begin);
         google::protobuf::io::ArrayInputStream ais(meta_buf.buffer().data(),
                                                    static_cast<int>(meta_buf.buffer().bytes()));
@@ -723,9 +723,8 @@ Buffer decode_encoded_fields(
         MetaBuffer meta_buffer;
         std::optional<util::BitMagic> bv;
         if(hdr.has_column_fields()) {
-            const auto encoding_version = static_cast<EncodingVersion>(hdr.encoding_version());
             constexpr auto type_desc = encoded_blocks_type_desc();
-            decode_field(type_desc, hdr.column_fields(), data, meta_buffer, bv, encoding_version);
+            decode_field(type_desc, hdr.column_fields(), data, meta_buffer, bv, to_encoding_version(hdr.encoding_version()));
         }
         ARCTICDB_TRACE(log::codec(), "Decoded encoded fields at position {}", data-begin);
         return meta_buffer.detach_buffer();
@@ -747,7 +746,7 @@ std::optional<FieldCollection> decode_index_fields(
                        data,
                        fields,
                        bv,
-                       static_cast<EncodingVersion>(hdr.encoding_version()));
+                       to_encoding_version(hdr.encoding_version()));
 
         ARCTICDB_TRACE(log::codec(), "Decoded index descriptor to position {}", data-begin);
         return std::make_optional<FieldCollection>(std::move(fields));
@@ -779,7 +778,7 @@ std::optional<FieldCollection> decode_descriptor_fields(
                        data,
                        fields,
                        bv,
-                       static_cast<EncodingVersion>(hdr.encoding_version()));
+                       to_encoding_version(hdr.encoding_version()));
 
         ARCTICDB_TRACE(log::codec(), "Decoded descriptor fields to position {}", data-begin);
         return std::make_optional<FieldCollection>(std::move(fields));
@@ -882,7 +881,7 @@ void decode_string_pool( const arcticdb::proto::encoding::SegmentHeader& hdr,
                        data,
                        res.string_pool(),
                        bv,
-                       static_cast<EncodingVersion>(hdr.encoding_version()));
+                       to_encoding_version(hdr.encoding_version()));
 
         ARCTICDB_TRACE(log::codec(), "Decoded string pool to position {}", data-begin);
     }
@@ -927,7 +926,7 @@ void decode_v2(const Segment& segment,
             util::check(data!=end, "Reached end of input block with {} fields to decode", fields_size-i);
             if(auto col_index = res.column_index(field_name)) {
                 auto& col = res.column(static_cast<position_t>(*col_index));
-                data += decode_field(res.field(*col_index).type(), encoded_field, data, col, col.opt_sparse_map(), static_cast<EncodingVersion>(hdr.encoding_version()));
+                data += decode_field(res.field(*col_index).type(), encoded_field, data, col, col.opt_sparse_map(), to_encoding_version(hdr.encoding_version()));
             } else {
                 data += encoding_sizes::field_compressed_size(encoded_field) + sizeof(ColumnMagic);
             }
@@ -968,7 +967,7 @@ void decode_v1(const Segment& segment,
             util::check(data!=end, "Reached end of input block with {} fields to decode", fields_size-i);
             if(auto col_index = res.column_index(field_name)) {
                 auto& col = res.column(static_cast<position_t>(*col_index));
-                data += decode_field(res.field(*col_index).type(), field, data, col, col.opt_sparse_map(), static_cast<EncodingVersion>(hdr.encoding_version()));
+                data += decode_field(res.field(*col_index).type(), field, data, col, col.opt_sparse_map(), to_encoding_version(hdr.encoding_version()));
             } else
                 data += encoding_sizes::field_compressed_size(field);
 

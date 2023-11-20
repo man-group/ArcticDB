@@ -157,7 +157,7 @@ void decode_string_pool(const arcticdb::proto::encoding::SegmentHeader & hdr, co
                        data,
                        context.string_pool(),
                        bv,
-                       static_cast<EncodingVersion>(hdr.encoding_version()));
+                       to_encoding_version(hdr.encoding_version()));
 
         ARCTICDB_TRACE(log::codec(), "Decoded string pool to position {}", data - begin);
     }

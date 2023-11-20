@@ -187,6 +187,7 @@ struct GenericBlockEncoder {
 
     static size_t max_compressed_size(const BlockType& block) {
         if(block.nbytes() == 0) {
+            ARCTICDB_TRACE(log::codec(), "GenericBlockEncoder got empty block. Max compressed size is 0.");
             return 0;
         }
 
@@ -226,6 +227,7 @@ struct GenericBlockEncoder {
         const std::size_t block_row_count = block.row_count();
         auto *field_nd_array = field.mutable_ndarray();
         if(block.nbytes() == 0) {
+            ARCTICDB_TRACE(log::codec(), "GenericBlockEncoder got empty block. There's nothing to encode");
             return;
         }
 
@@ -306,7 +308,7 @@ struct GenericBlockEncoder {
 /// block, which is suboptimal. arcticdb::detail::GenericBlockEncoder2 does not care about dimensionality and
 /// does not encode the shapes of the block. For more information see comment above arcticdb::ColumnEncoder2
 template<class BlockType, class TD, class EncoderType>
-struct GenericBlockEncoder2 {
+struct GenericBlockEncoderV2 {
 public:
     using Helper = CodecHelper<TD>;
     using T = typename Helper::T;
@@ -314,6 +316,7 @@ public:
     static size_t max_compressed_size(const BlockType &block) {
         const auto uncompressed_size = block.nbytes();
         if(uncompressed_size == 0) {
+            ARCTICDB_TRACE(log::codec(), "GenericBlockEncoderV2 got empty block. Max compressed size is 0.");
             return 0;
         }
         const auto compressed = EncoderType::max_compressed_size(uncompressed_size);
@@ -330,6 +333,7 @@ public:
         EncodedBlockType* encoded_block
     ) {
         if(block.nbytes() == 0) {
+            ARCTICDB_TRACE(log::codec(), "GenericBlockEncoderV2 got empty block. There's nothing to encode.");
             return;
         }
 
