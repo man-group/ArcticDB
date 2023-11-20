@@ -38,7 +38,7 @@ jobs:
       run: {shell: bash}
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v3.3.0
 
       - name: Select Python (Linux)
         if: matrix.os == 'linux'
@@ -46,7 +46,7 @@ jobs:
 
       - name: Select Python (Windows)
         if: matrix.os == 'windows'
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v4.7.1
         with:
           python-version: "3.${{inputs.python3}}"
 
@@ -89,7 +89,7 @@ jobs:
       run: {shell: bash}
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v3.3.0
 
       - name: Select Python (Linux)
         run: echo /opt/python/${{env.python_impl_name}}*/bin >> $GITHUB_PATH

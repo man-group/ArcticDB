@@ -28,16 +28,16 @@ jobs:
       mongodb:
         image: mongo:4.4
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v3.3.0
         with:
           submodules: recursive
 
       - name: Get number of CPU cores
-        uses: SimenB/github-actions-cpu-cores@v1
+        uses: SimenB/github-actions-cpu-cores@v1.1.0
         id: cpu-cores
 
       - name: Install Conda environment from environment_unix.yml
-        uses: mamba-org/setup-micromamba@v1
+        uses: mamba-org/setup-micromamba@v1.6.0
         with:
           environment-file: environment_unix.yml
           init-shell: >-
@@ -103,16 +103,16 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v3.3.0
         with:
           submodules: recursive
 
       - name: Get number of CPU cores
-        uses: SimenB/github-actions-cpu-cores@v1
+        uses: SimenB/github-actions-cpu-cores@v1.1.0
         id: cpu-cores
 
       - name: Install Conda environment from environment_unix.yml
-        uses: mamba-org/setup-micromamba@v1
+        uses: mamba-org/setup-micromamba@v1.6.0
         with:
           environment-file: environment_unix.yml
           environment-name: arcticdb
