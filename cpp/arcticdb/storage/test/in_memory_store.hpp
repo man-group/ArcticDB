@@ -49,6 +49,12 @@ namespace arcticdb {
             throw std::runtime_error("Not implemented for tests");
         }
 
+        folly::Future<std::vector<VariantKey>> batch_read_compressed(
+            std::vector<std::pair<entity::VariantKey, ReadContinuation>>&&,
+            const BatchReadArgs&) override {
+            throw std::runtime_error("Not implemented for tests");
+        }
+
         folly::Future<VariantKey> write(
                 KeyType key_type,
                 VersionId gen_id,
