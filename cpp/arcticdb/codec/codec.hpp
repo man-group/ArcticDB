@@ -22,6 +22,9 @@
 #include <memory>
 #include <variant>
 
+#include <arcticdb/codec/codec_v1.hpp>
+
+
 namespace arcticdb {
 
 using DescriptorMagic = util::MagicNum<'D','e','s','c'>;
@@ -71,20 +74,6 @@ using BlockEncoder = BlockEncoderHelper<TypedBlockData, TD, v>;
 
 /// @brief Options used by default to encode the shapes array of a column
 arcticdb::proto::encoding::VariantCodec shapes_encoding_opts();
-
-/// @brief Utility class used to encode and compute the max encoding size for regular data columns for V1 encoding
-struct ColumnEncoderV1 {
-    static std::pair<size_t, size_t> max_compressed_size(
-        const arcticdb::proto::encoding::VariantCodec& codec_opts,
-        ColumnData& column_data);
-
-    static void encode(
-        const arcticdb::proto::encoding::VariantCodec &codec_opts,
-        ColumnData& column_data,
-        MutableVariantField variant_field,
-        Buffer& out,
-        std::ptrdiff_t& pos);
-};
 
 /// @brief Utility class used to encode and compute the max encoding size for regular data columns for V2 encoding
 /// What differs this from the already existing ColumnEncoder is that ColumnEncoder encodes the shapes of

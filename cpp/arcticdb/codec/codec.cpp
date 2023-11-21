@@ -5,6 +5,9 @@
  * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
  */
 
+#include <arcticdb/codec/codec_utils.hpp>
+
+
 #include <arcticdb/codec/codec.hpp>
 #include <arcticdb/stream/protobuf_mappings.hpp>
 #include <arcticdb/entity/performance_tracing.hpp>
@@ -18,28 +21,10 @@
 #include <string>
 #include <google/protobuf/io/zero_copy_stream_impl.h>
 
+
+
+
 namespace arcticdb {
-
-/// @brief Write the sparse map to the out buffer
-/// Bitmagic achieves the theoretical best compression for booleans. Adding additional encoding (lz4, zstd, etc...)
-/// will not improve anything and in fact it might worsen the encoding.
-[[nodiscard]] static size_t encode_bitmap(const util::BitMagic& sparse_map, Buffer& out, std::ptrdiff_t& pos) {
-    ARCTICDB_DEBUG(log::version(), "Encoding sparse map of count: {}", sparse_map.count());
-    bm::serializer<bm::bvector<> > bvs;
-    bm::serializer<bm::bvector<> >::buffer sbuf;
-    bvs.serialize(sparse_map, sbuf);
-    auto sz = sbuf.size();
-    auto total_sz = sz + util::combined_bit_magic_delimiters_size();
-    out.assert_size(pos + total_sz);
-
-    uint8_t* target = out.data() + pos;
-    util::write_magic<util::BitMagicStart>(target);
-    std::memcpy(target, sbuf.data(), sz);
-    target += sz;
-    util::write_magic<util::BitMagicEnd>(target);
-    pos = pos + static_cast<ptrdiff_t>(total_sz);
-    return total_sz;
-}
 
 static ShapesBlock create_shapes_typed_block(const ColumnData& column_data) {
     static_assert(std::is_same_v<ShapesBlockTDT::DataTypeTag::raw_type, shape_t>,
@@ -52,84 +37,8 @@ static ShapesBlock create_shapes_typed_block(const ColumnData& column_data) {
             nullptr};
 }
 
-static void encode_sparse_map(
-	ColumnData& column_data,
-	MutableVariantField variant_field,
-	Buffer& out,
-	std::ptrdiff_t& pos
-) {
-	if (column_data.bit_vector() != nullptr && column_data.bit_vector()->count() > 0)   {
-		ARCTICDB_DEBUG(log::codec(), "Sparse map count = {} pos = {}", column_data.bit_vector()->count(), pos);
-		const size_t sparse_bm_bytes = encode_bitmap(*column_data.bit_vector(), out, pos);
-		util::variant_match(variant_field, [&](auto field) {
-			field->mutable_ndarray()->set_sparse_map_bytes(static_cast<int>(sparse_bm_bytes));
-		});
-	}
-}
-
-static void add_bitmagic_compressed_size_if_any(
-    const ColumnData& column_data,
-    size_t& max_compressed_bytes,
-    size_t& uncompressed_bytes
-) {
-    if (column_data.bit_vector() != nullptr && column_data.bit_vector()->count() > 0)   {
-        bm::serializer<util::BitMagic>::statistics_type stat{};
-        column_data.bit_vector()->calc_stat(&stat);
-        uncompressed_bytes += stat.memory_used;
-        max_compressed_bytes += stat.max_serialize_mem;
-    }
-}
-
 arcticdb::proto::encoding::VariantCodec shapes_encoding_opts() {
     return codec::default_lz4_codec();
-}
-
-std::pair<size_t, size_t> ColumnEncoderV1::max_compressed_size(
-        const arcticdb::proto::encoding::VariantCodec& codec_opts,
-        ColumnData& column_data) {
-    return column_data.type().visit_tag([&codec_opts, &column_data](auto type_desc_tag) {
-        size_t max_compressed_bytes = 0;
-        size_t uncompressed_bytes = 0;
-        using TDT = decltype(type_desc_tag);
-        using Encoder = BlockEncoder<TDT, EncodingVersion::V1>;
-        ARCTICDB_TRACE(log::codec(), "Column data has {} blocks", column_data.num_blocks());
-        while (auto block = column_data.next<TDT>()) {
-            const auto nbytes = block.value().nbytes();
-            if constexpr(must_contain_data(static_cast<TypeDescriptor>(type_desc_tag))) {
-                util::check(nbytes > 0, "Zero-sized block");
-            }
-	        uncompressed_bytes += nbytes;
-	        // For the empty type the column will contain 0 size of user data however the encoder might need add some
-            // encoder specific data to the buffer, thus the uncompressed size will be 0 but the max_compressed_bytes
-            // might be non-zero.
-            max_compressed_bytes += Encoder::max_compressed_size(codec_opts, *block);
-        }
-        add_bitmagic_compressed_size_if_any(column_data, uncompressed_bytes, max_compressed_bytes);
-        return std::make_pair(uncompressed_bytes, max_compressed_bytes);
-    });
-}
-
-void ColumnEncoderV1::encode(
-    const arcticdb::proto::encoding::VariantCodec& codec_opts,
-    ColumnData& column_data,
-    MutableVariantField variant_field,
-    Buffer& out,
-    std::ptrdiff_t& pos
-) {
-    column_data.type().visit_tag([&](auto type_desc_tag) {
-        using TDT = decltype(type_desc_tag);
-        using Encoder = BlockEncoder<TDT, EncodingVersion::V1>;
-        ARCTICDB_TRACE(log::codec(), "Column data has {} blocks", column_data.num_blocks());
-        while (auto block = column_data.next<TDT>()) {
-            if constexpr(must_contain_data(static_cast<TypeDescriptor>(type_desc_tag))) {
-                util::check(block.value().nbytes() > 0, "Zero-sized block");
-            }
-            std::visit([&](auto field){
-                Encoder::encode(codec_opts, block.value(), *field, out, pos);
-            }, variant_field);
-        }
-    });
-    encode_sparse_map(column_data, variant_field, out, pos);
 }
 
 void ColumnEncoderV2::encode(
@@ -206,7 +115,7 @@ std::pair<size_t, size_t> ColumnEncoderV2::max_compressed_size(
             // might be non-zero.
             max_compressed_bytes += Encoder<TDT>::max_compressed_size(codec_opts, block.value());
         }
-        add_bitmagic_compressed_size_if_any(column_data, uncompressed_bytes, max_compressed_bytes);
+        add_bitmagic_compressed_size(column_data, uncompressed_bytes, max_compressed_bytes);
         return std::make_pair(uncompressed_bytes, max_compressed_bytes);
     });
 }

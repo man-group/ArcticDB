@@ -13,6 +13,8 @@ namespace arcticdb {
     /// encode_shapes were added).
     template<template<typename> class TypedBlock, class TD, EncodingVersion encoder_version>
     struct TypedBlockEncoderImpl {
+        using ShapesBlockTDT = TypeDescriptorTag<DataTypeTag<DataType::INT64>, DimensionTag<Dimension::Dim0>>;
+
         static size_t max_compressed_size(
             const arcticdb::proto::encoding::VariantCodec& codec_opts,
             const TypedBlock<TD>& typed_block
@@ -79,7 +81,7 @@ namespace arcticdb {
         template<typename EncodedFieldType>
         static void encode_shapes(
             const arcticdb::proto::encoding::VariantCodec& codec_opts,
-            const TypedBlockData<arcticdb::ShapesBlockTDT>& typed_block,
+            const TypedBlockData<ShapesBlockTDT>& typed_block,
             EncodedFieldType& field,
             Buffer& out,
             std::ptrdiff_t& pos
