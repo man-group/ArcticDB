@@ -967,7 +967,7 @@ def test_filter_numeric_isin_unsigned(lmdb_version_store):
     df=dataframes_with_names_and_dtypes(["a"], integral_type_strategies()),
     vals=st.frozensets(unsigned_integral_type_strategies(), min_size=1),
 )
-@pytest.mark.skipif(PANDAS_VERSION < Version("1.2"), reason="Early Pandas filtering does not handle unsigned well")
+@pytest.mark.skipif(PANDAS_VERSION < Version("2.0.0"), reason="Early Pandas filtering does not handle unsigned well")
 def test_filter_numeric_isnotin_unsigned(lmdb_version_store, df, vals):
     assume(not df.empty)
     q = QueryBuilder()
