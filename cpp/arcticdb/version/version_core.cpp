@@ -460,6 +460,8 @@ Composite<EntityIds> process_clauses(
     std::vector<bool> entity_added(segment_and_slice_futures.size(), false);
     std::vector<folly::Future<Composite<EntityIds>>> futures;
     bool first_clause{true};
+    // Reverse the order of clauses and iterate through them backwards so that the erase is efficient
+    std::reverse(clauses.begin(), clauses.end());
     while (!clauses.empty()) {
         for (auto&& comp_entity_ids: vec_comp_entity_ids) {
             if (first_clause) {
@@ -511,13 +513,12 @@ Composite<EntityIds> process_clauses(
         first_clause = false;
         vec_comp_entity_ids = folly::collect(futures).get();
         futures.clear();
-        // Erasing from front of vector not ideal, but they're just shared_ptr and there shouldn't be loads of clauses
-        while (clauses.size() > 0 && !clauses[0]->clause_info().requires_repartition_) {
-            clauses.erase(clauses.begin());
+        while (clauses.size() > 0 && !clauses.back()->clause_info().requires_repartition_) {
+            clauses.erase(clauses.end() - 1);
         }
-        if (clauses.size() > 0 && clauses[0]->clause_info().requires_repartition_) {
-            vec_comp_entity_ids = clauses[0]->repartition(std::move(vec_comp_entity_ids)).value();
-            clauses.erase(clauses.begin());
+        if (clauses.size() > 0 && clauses.back()->clause_info().requires_repartition_) {
+            vec_comp_entity_ids = clauses.back()->repartition(std::move(vec_comp_entity_ids)).value();
+            clauses.erase(clauses.end() - 1);
         }
     }
     return merge_composites(std::move(vec_comp_entity_ids));

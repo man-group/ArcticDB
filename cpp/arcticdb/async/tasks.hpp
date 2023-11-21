@@ -368,10 +368,11 @@ struct MemSegmentProcessingTask : BaseTask {
     ARCTICDB_MOVE_ONLY_DEFAULT(MemSegmentProcessingTask)
 
     Composite<EntityIds> operator()() {
-        for(const auto& clause : clauses_) {
-            entity_ids_ = clause->process(std::move(entity_ids_));
+        // TODO: Use std::ranges::reverse_view and range based for loop when we migrate to C++20
+        for(auto it = clauses_.rbegin(); it != clauses_.rend(); it++) {
+            entity_ids_ = (*it)->process(std::move(entity_ids_));
 
-            if(clause->clause_info().requires_repartition_)
+            if((*it)->clause_info().requires_repartition_)
                 break;
         }
         return std::move(entity_ids_);
