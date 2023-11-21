@@ -38,8 +38,7 @@ std::optional<IndexValue> index_value_from_row(const RowType &row, IndexDescript
     std::optional<IndexValue> index_value;
     switch (index_type) {
         case IndexDescriptor::ROWCOUNT:
-            // TODO: use decltype of the field.
-            index_value = row.template scalar_at<timestamp>(field_num);
+            index_value = row.template scalar_at<int64_t>(field_num);
             break;
         case IndexDescriptor::TIMESTAMP:
             index_value = row.template scalar_at<timestamp>(field_num);
@@ -61,20 +60,22 @@ std::optional<IndexValue> index_start_from_row(const RowType &row, IndexDescript
 }
 
 template<typename SegmentType, typename FieldType=pipelines::index::Fields>
-    IndexValue index_value_from_segment(const SegmentType &seg, size_t row_id, FieldType field) {
+IndexValue index_value_from_segment(const SegmentType &seg, size_t row_id, FieldType field) {
     auto index_type = seg.template scalar_at<uint8_t>(row_id, int(FieldType::index_type));
     IndexValue index_value;
     switch (index_type.value()) {
-    case IndexDescriptor::TIMESTAMP:
         case IndexDescriptor::ROWCOUNT:
+            index_value = seg.template scalar_at<int64_t>(row_id, int(field)).value();
+            break;
+        case IndexDescriptor::TIMESTAMP:
             index_value = seg.template scalar_at<timestamp>(row_id, int(field)).value();
             break;
-            case IndexDescriptor::STRING:
-                index_value = std::string(seg.string_at(row_id, int(field)).value());
-                break;
-                default:
-                    util::raise_rte("Unknown index type {} for column {} and row {}",
-                                    uint32_t(index_type.value()), uint32_t(field), row_id);
+        case IndexDescriptor::STRING:
+            index_value = std::string(seg.string_at(row_id, int(field)).value());
+            break;
+        default:
+            util::raise_rte("Unknown index type {} for column {} and row {}",
+                            uint32_t(index_type.value()), uint32_t(field), row_id);
     }
     return index_value;
 }

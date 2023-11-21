@@ -622,8 +622,9 @@ void merge_impl(
             std::move(func), std::move(segmentation_policy), desc, std::nullopt
     };
 
+    const IndexDescriptor::Type index_type = stream_descriptor.index().type();
     stream::do_merge<IndexType, SegmentWrapper, AggregatorType, decltype(input_streams)>(
-        input_streams, agg, add_symbol_column);
+        input_streams, agg, add_symbol_column, index_type);
 }
 
 // MergeClause receives a list of DataFrames as input and merge them into a single one where all 
@@ -631,15 +632,16 @@ void merge_impl(
 Composite<EntityIds> MergeClause::process(Composite<EntityIds>&& entity_ids) const {
     auto procs = gather_entities(component_manager_, std::move(entity_ids));
 
-    auto compare =
-            [](const std::unique_ptr<SegmentWrapper> &left,
-               const std::unique_ptr<SegmentWrapper> &right) {
-                const auto left_index = index::index_value_from_row(left->row(),
-                                                                               IndexDescriptor::TIMESTAMP, 0);
-                const auto right_index = index::index_value_from_row(right->row(),
-                                                                                IndexDescriptor::TIMESTAMP, 0);
-                return left_index > right_index;
-            };
+    auto compare = [](
+            const std::unique_ptr<SegmentWrapper> &left,
+            const std::unique_ptr<SegmentWrapper> &right
+        ) {
+        const IndexDescriptor::Type left_index_type = left->seg_.descriptor().index().type();
+        const IndexDescriptor::Type right_index_type = left->seg_.descriptor().index().type();
+        const auto left_index = index::index_value_from_row(left->row(), left_index_type, 0);
+        const auto right_index = index::index_value_from_row(right->row(), right_index_type, 0);
+        return left_index > right_index;
+    };
 
     movable_priority_queue<std::unique_ptr<SegmentWrapper>, std::vector<std::unique_ptr<SegmentWrapper>>, decltype(compare)> input_streams{
             compare};

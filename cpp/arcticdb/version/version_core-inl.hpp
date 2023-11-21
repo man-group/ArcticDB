@@ -78,7 +78,9 @@ void merge_frames_for_keys_impl(
 
     using AggregatorType = Aggregator<IndexType, DynamicSchema, SegmentationPolicy, DensityPolicy>;
     AggregatorType agg{DynamicSchema{index.create_stream_descriptor(target_id, {}), index}, std::move(func), std::move(segmentation_policy)};
-    do_merge<IndexType, StreamMergeWrapper, AggregatorType, decltype(input_streams)>(input_streams, agg, true);
+
+    const IndexDescriptor::Type index_type = index.type();
+    do_merge<IndexType, StreamMergeWrapper, AggregatorType, decltype(input_streams)>(input_streams, agg, true, index_type);
 }
 
 template <typename SegmentationPolicy, typename Callable>
