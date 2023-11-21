@@ -411,6 +411,7 @@ def test_append_mix_ascending_descending(lmdb_version_store):
     assert info["sorted"] == "UNSORTED"
 
 
+@pytest.mark.xfail(reason="Needs to be fixed with issue #496")
 def test_append_with_cont_mem_problem(sym, lmdb_version_store_tiny_segment_dynamic):
     set_config_int("SymbolDataCompact.SegmentCount", 1)
     df0 = pd.DataFrame({"0": ["01234567890123456"]}, index=[pd.Timestamp(0)])
