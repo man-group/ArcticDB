@@ -623,7 +623,7 @@ void merge_impl(
     };
 
     const IndexDescriptor::Type index_type = stream_descriptor.index().type();
-    stream::do_merge<IndexType, SegmentWrapper, AggregatorType, decltype(input_streams)>(
+    stream::do_merge<IndexType, AggregatorType, decltype(input_streams)>(
         input_streams, agg, add_symbol_column, index_type);
 }
 

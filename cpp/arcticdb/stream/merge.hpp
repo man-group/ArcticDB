@@ -10,7 +10,7 @@
 #include <arcticdb/pipeline/index_utils.hpp>
 
 namespace arcticdb::stream {
-template<typename IndexType, typename WrapperType, typename AggregatorType, typename QueueType>
+template<typename IndexType, typename AggregatorType, typename QueueType>
 void do_merge(
     QueueType& input_streams,
     AggregatorType& agg,
