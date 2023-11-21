@@ -264,10 +264,13 @@ def value_list_from_args(*args):
 # These are just used for shallow/deep copying, pickling, and equality checks
 PythonFilterClause = namedtuple("PythonFilterClause", ["expr"])
 PythonProjectionClause = namedtuple("PythonProjectionClause", ["name", "expr"])
-PythonGroupByClause = namedtuple("PythonGroupByClause", ["name"])
 PythonAggregationClause = namedtuple("PythonAggregationClause", ["aggregations"])
 PythonDateRangeClause = namedtuple("PythonDateRangeClause", ["start", "end"])
 
+
+class PythonGroupByClause(NamedTuple):
+    name: str
+    sort: bool = True
 
 class PythonRowRangeClause(NamedTuple):
     row_range_type: _RowRangeType = None
@@ -403,7 +406,7 @@ class QueryBuilder:
         self._python_clauses.append(PythonProjectionClause(name, expr))
         return self
 
-    def groupby(self, name: str):
+    def groupby(self, name: str, sort: bool = True):
         """
         Group symbol by column name. GroupBy operations must be followed by an aggregation operator. Currently the following five aggregation
         operators are supported:
@@ -419,6 +422,9 @@ class QueryBuilder:
         ----------
         name: `str`
             Name of the column to group on. Note that currently GroupBy only supports single-column groupings.
+
+        sort: `bool`
+            Whether to sort the groups by the grouping column. Defaults to True.
 
         Examples
         --------
@@ -477,8 +483,8 @@ class QueryBuilder:
         QueryBuilder
             Modified QueryBuilder object.
         """
-        self.clauses.append(_GroupByClause(name))
-        self._python_clauses.append(PythonGroupByClause(name))
+        self.clauses.append(_GroupByClause(name, sort))
+        self._python_clauses.append(PythonGroupByClause(name, sort))
         return self
 
     def agg(self, aggregations: Dict[str, str]):
@@ -605,7 +611,7 @@ class QueryBuilder:
                 input_columns, expression_context = visit_expression(python_clause.expr)
                 self.clauses.append(_ProjectClause(input_columns, python_clause.name, expression_context))
             elif isinstance(python_clause, PythonGroupByClause):
-                self.clauses.append(_GroupByClause(python_clause.name))
+                self.clauses.append(_GroupByClause(python_clause.name, python_clause.sort))
             elif isinstance(python_clause, PythonAggregationClause):
                 self.clauses.append(_AggregationClause(self.clauses[-1].grouping_column, python_clause.aggregations))
             elif isinstance(python_clause, PythonRowRangeClause):

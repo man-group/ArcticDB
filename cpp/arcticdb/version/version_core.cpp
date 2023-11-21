@@ -632,6 +632,7 @@ std::vector<SliceAndKey> read_and_process(
     ) {
     auto component_manager = std::make_shared<ComponentManager>();
     ProcessingConfig processing_config{opt_false(read_options.dynamic_schema_), pipeline_context->rows_};
+
     for (auto& clause: read_query.clauses_) {
         clause->set_processing_config(processing_config);
         clause->set_component_manager(component_manager);

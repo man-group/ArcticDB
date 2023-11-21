@@ -37,16 +37,19 @@ template<typename RowType>
 std::optional<IndexValue> index_value_from_row(const RowType &row, IndexDescriptor::Type index_type, int field_num) {
     std::optional<IndexValue> index_value;
     switch (index_type) {
-    case IndexDescriptor::TIMESTAMP:
         case IndexDescriptor::ROWCOUNT:
+            // TODO: use decltype of the field.
             index_value = row.template scalar_at<timestamp>(field_num);
             break;
-            case IndexDescriptor::STRING: {
-                auto opt = row.string_at(field_num);
-                index_value = opt ? std::make_optional<IndexValue>(std::string(opt.value())) : std::nullopt;
-                break;
-            }
-            default:
+        case IndexDescriptor::TIMESTAMP:
+            index_value = row.template scalar_at<timestamp>(field_num);
+            break;
+        case IndexDescriptor::STRING: {
+            auto opt = row.string_at(field_num);
+            index_value = opt ? std::make_optional<IndexValue>(std::string(opt.value())) : std::nullopt;
+            break;
+        }
+        default:
                 util::raise_rte("Unknown index type {} for column {}", int(index_type), field_num);
     }
     return index_value;

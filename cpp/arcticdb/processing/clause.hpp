@@ -256,10 +256,10 @@ struct PartitionClause {
     std::shared_ptr<ComponentManager> component_manager_;
     ProcessingConfig processing_config_;
     std::string grouping_column_;
+    bool sort_;
 
-    explicit PartitionClause(const std::string& grouping_column) :
-            processing_config_(),
-            grouping_column_(grouping_column) {
+    explicit PartitionClause(const std::string& grouping_column, bool sort) :
+            grouping_column_(grouping_column), sort_(sort) {
         clause_info_.input_columns_ = {grouping_column_};
         clause_info_.requires_repartition_ = true;
         clause_info_.modifies_output_descriptor_ = true;

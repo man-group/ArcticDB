@@ -257,9 +257,12 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
     using GroupByClause = PartitionClause<arcticdb::grouping::HashingGroupers, arcticdb::grouping::ModuloBucketizer>;
 
     py::class_<GroupByClause, std::shared_ptr<GroupByClause>>(version, "GroupByClause")
-            .def(py::init<std::string>())
+            .def(py::init<std::string, bool>())
             .def_property_readonly("grouping_column", [](const GroupByClause& self) {
                 return self.grouping_column_;
+            })
+            .def_property_readonly("sort", [](const GroupByClause& self) {
+                return self.sort_;
             })
             .def("__str__", &GroupByClause::to_string);
 
