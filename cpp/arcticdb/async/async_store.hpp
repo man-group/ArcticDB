@@ -291,9 +291,8 @@ public:
         return folly::window(
             std::move(ranges_and_keys),
             [this, columns_to_decode](auto&& ranges_and_key) {
-                return async::submit_io_task(ReadCompressedTask(ranges_and_key.key_, library_, storage::ReadKeyOpts{}))
-                .via(&async::cpu_executor())
-                .thenValue(DecodeSliceTask(std::move(ranges_and_key), columns_to_decode));
+                const auto key = ranges_and_key.key_;
+                return read_and_continue(key, library_, storage::ReadKeyOpts{}, DecodeSliceTask{std::move(ranges_and_key), columns_to_decode});
             }, async::TaskScheduler::instance()->io_thread_count() * 2);
     }
 
