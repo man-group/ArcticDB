@@ -14,6 +14,9 @@ namespace arcticdb {
     class Buffer;
     class EncodedField;
 
+    /// @brief Options used by default to encode the shapes array of a column
+    arcticdb::proto::encoding::VariantCodec shapes_encoding_opts();
+
     void add_bitmagic_compressed_size(
         const ColumnData& column_data,
         size_t& max_compressed_bytes,
@@ -26,4 +29,5 @@ namespace arcticdb {
         Buffer& out,
         std::ptrdiff_t& pos
     );
+
 }

@@ -6,11 +6,11 @@
  */
 
 #include <arcticdb/codec/codec_utils.hpp>
+#include <arcticdb/codec/default_codecs.hpp>
 #include <arcticdb/codec/encoded_field.hpp>
 #include <arcticdb/column_store/column_data.hpp>
 #include <arcticdb/util/bitset.hpp>
 #include <bitmagic/bmsparsevec_serial.h>
-
 
 namespace arcticdb {
     void add_bitmagic_compressed_size(
@@ -60,5 +60,9 @@ namespace arcticdb {
                 field->mutable_ndarray()->set_sparse_map_bytes(static_cast<int>(sparse_bm_bytes));
             });
         }
+    }
+
+    arcticdb::proto::encoding::VariantCodec shapes_encoding_opts() {
+        return codec::default_lz4_codec();
     }
 }

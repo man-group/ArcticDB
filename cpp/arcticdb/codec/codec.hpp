@@ -23,7 +23,7 @@
 #include <variant>
 
 #include <arcticdb/codec/codec_v1.hpp>
-
+#include <arcticdb/codec/codec_v2.hpp>
 
 namespace arcticdb {
 
@@ -51,66 +51,6 @@ void write_magic(Buffer& buffer, std::ptrdiff_t& pos) {
     new (buffer.data() + pos) MagicType{};
     pos += sizeof(MagicType);
 }
-
-/// @brief This should be the block data type descriptor when the shapes array is encoded as a block
-using ShapesBlockTDT = TypeDescriptorTag<DataTypeTag<DataType::INT64>, DimensionTag<Dimension::Dim0>>;
-/// @brief The type to be used for a block which represents shapes
-using ShapesBlock = TypedBlockData<ShapesBlockTDT>;
-
-//TODO  Provide tuning parameters to choose the encoding through encoding tags (also acting as config options)
-template<template<typename> class TypedBlock, class TD, EncodingVersion encoder_version>
-struct TypedBlockEncoderImpl;
-
-template<template<typename> class F, class TD, EncodingVersion v>
-struct BlockEncoderHelper : public TypedBlockEncoderImpl<F, TD, v> {
-    using ValuesBlockType = F<TD>;
-    using TypeDescriptorTag = TD;
-    using DimTag = typename TD::DimensionTag;
-    using DataTag = typename TD::DataTypeTag;
-};
-
-template<typename TD, EncodingVersion v>
-using BlockEncoder = BlockEncoderHelper<TypedBlockData, TD, v>;
-
-/// @brief Options used by default to encode the shapes array of a column
-arcticdb::proto::encoding::VariantCodec shapes_encoding_opts();
-
-/// @brief Utility class used to encode and compute the max encoding size for regular data columns for V2 encoding
-/// What differs this from the already existing ColumnEncoder is that ColumnEncoder encodes the shapes of
-/// multidimensional data as part of each block. ColumnEncoder2 uses a better strategy and encodes the shapes for the
-/// whole column upfront (before all blocks).
-/// @note Although ArcticDB did not support multidimensional user data prior to creating ColumnEncoder2 some of the
-/// internal data was multidimensional and used ColumnEncoder. More specifically: string pool and metadata.
-/// @note This should be used for V2 encoding. V1 encoding can't use it as there is already data written the other
-///	way and it will be hard to distinguish both.
-struct ColumnEncoderV2 {
-public:
-    static void encode(
-        const arcticdb::proto::encoding::VariantCodec &codec_opts,
-        ColumnData& column_data,
-        MutableVariantField variant_field,
-        Buffer& out,
-        std::ptrdiff_t& pos);
-    static std::pair<size_t, size_t> max_compressed_size(
-        const arcticdb::proto::encoding::VariantCodec& codec_opts,
-        ColumnData& column_data);
-private:
-    template<typename TypeDescriptor>
-    using Encoder = BlockEncoder<TypeDescriptor, EncodingVersion::V2>;
-	using ShapesEncoder = Encoder<ShapesBlockTDT>;
-
-	static void encode_shapes(
-        const ColumnData& column_data,
-        MutableVariantField variant_field,
-        Buffer& out,
-        std::ptrdiff_t& pos_in_buffer);
-    static void encode_blocks(
-        const arcticdb::proto::encoding::VariantCodec &codec_opts,
-        ColumnData& column_data,
-        MutableVariantField variant_field,
-        Buffer& out,
-        std::ptrdiff_t& pos);
-};
 
 template<EncodingVersion v>
 using ColumnEncoder = std::conditional_t<v == EncodingVersion::V1, ColumnEncoderV1, ColumnEncoderV2>;
