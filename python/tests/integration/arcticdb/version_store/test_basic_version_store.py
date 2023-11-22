@@ -749,36 +749,36 @@ def test_empty_pd_series(lmdb_version_store):
     assert lmdb_version_store.read(sym).data.empty
 
 
-def test_empty_pd_series_type_preservation(basic_store):
+def test_empty_pd_series_type_preservation(lmdb_version_store):
     sym = "empty_s"
     series = pd.Series(dtype="datetime64[ns]")
-    basic_store.write(sym, series)
-    res = basic_store.read(sym).data
+    lmdb_version_store.write(sym, series)
+    res = lmdb_version_store.read(sym).data
     assert res.empty
     assert str(res.dtype) == "datetime64[ns]"
-    assert basic_store.read(sym).data.empty
+    assert lmdb_version_store.read(sym).data.empty
 
-    basic_store.update(sym, series)
-    res = basic_store.read(sym).data
-    assert res.empty
-    assert str(res.dtype) == "datetime64[ns]"
-
-    basic_store.append(sym, series)
-    res = basic_store.read(sym).data
+    lmdb_version_store.update(sym, series)
+    res = lmdb_version_store.read(sym).data
     assert res.empty
     assert str(res.dtype) == "datetime64[ns]"
 
+    lmdb_version_store.append(sym, series)
+    res = lmdb_version_store.read(sym).data
+    assert res.empty
+    assert str(res.dtype) == "datetime64[ns]"
 
-def test_empty_df(basic_store):
+
+def test_empty_df(lmdb_version_store):
     sym = "empty_s"
     df = pd.DataFrame()
-    basic_store.write(sym, df)
+    lmdb_version_store.write(sym, df)
     # if no index information is provided, we assume a datetimeindex
-    assert basic_store.read(sym).data.empty
-    basic_store.update(sym, df)
-    assert basic_store.read(sym).data.empty
-    basic_store.append(sym, df)
-    assert basic_store.read(sym).data.empty
+    assert lmdb_version_store.read(sym).data.empty
+    lmdb_version_store.update(sym, df)
+    assert lmdb_version_store.read(sym).data.empty
+    lmdb_version_store.append(sym, df)
+    assert lmdb_version_store.read(sym).data.empty
 
 
 def test_empty_ndarr(lmdb_version_store):
