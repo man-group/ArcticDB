@@ -11,7 +11,8 @@ import datetime
 import pytest
 import sys
 
-from arcticdb.util.test import assert_frame_equal
+from arcticdb.util.test import assert_frame_equal, assert_series_equal
+from arcticdb.util._versions import IS_PANDAS_TWO
 from arcticc.pb2.descriptors_pb2 import TypeDescriptor
 
 
@@ -269,3 +270,107 @@ def test_batch_write_unicode_strings(lmdb_version_store):
     for _ in range(5):
         lib.batch_write(syms, data)
         lib.batch_append(syms, data)
+
+
+@pytest.mark.parametrize("PandasType, assert_pandas_container_equal", [
+    (pd.Series, assert_series_equal),
+    (pd.DataFrame, assert_frame_equal),
+])
+def test_update_with_empty_series_or_dataframe(lmdb_version_store, PandasType, assert_pandas_container_equal):
+    # Non-regression test for https://github.com/man-group/ArcticDB/issues/892
+    lib = lmdb_version_store
+
+    kwargs = { "name": "a" } if PandasType == pd.Series else { "columns": ["a"] }
+    data = np.array([1.0]) if PandasType == pd.Series else np.array([[1.0]])
+
+    empty = PandasType(data=[], dtype=float, index=pd.DatetimeIndex([]), **kwargs)
+    one_row = PandasType(
+        data=data,
+        dtype=float,
+        index=pd.DatetimeIndex([
+            datetime.datetime(2019, 4, 9, 10, 5, 2, 1)
+        ]),
+        **kwargs,
+    )
+
+    symbol = "test_update_with_empty_series_or_dataframe_first"
+
+    first_operation = lib.write(symbol, empty)
+
+    assert first_operation.version == 0
+
+    # Has no effect, but must not fail.
+    second_operation = lib.append(symbol, empty)
+
+    # No new version is created.
+    assert second_operation.version == first_operation.version
+
+    third_operation = lib.update(symbol, one_row)
+
+    # A new version is created in this case.
+    assert third_operation.version == second_operation.version + 1
+
+    received = lib.read(symbol).data
+    assert_pandas_container_equal(one_row, received)
+
+    symbol = "test_update_with_empty_series_or_dataframe_second"
+
+    first_operation = lib.write(symbol, one_row)
+
+    # Has no effect, but must not fail.
+    second_operation = lib.append(symbol, empty)
+
+    # No new version is created.
+    assert first_operation.version == second_operation.version
+
+    # Has no effect, but must not fail.
+    third_operation = lib.update(symbol, empty)
+
+    # No new version is created as well.
+    assert third_operation.version == first_operation.version
+
+    received = lib.read(symbol).data
+    assert_pandas_container_equal(one_row, received)
+
+
+def test_update_with_empty_dataframe_with_index(lmdb_version_store):
+    # Non-regression test for https://github.com/man-group/ArcticDB/issues/940
+    lib = lmdb_version_store
+
+    symbol = "test_update_with_empty_dataframe_with_index"
+
+    series = pd.Series(dtype="datetime64[ns]")
+    lib.write(symbol, series)
+
+    # This must not fail.
+    lib.read(symbol, as_of=0).data
+
+
+@pytest.mark.parametrize(
+    "input_empty_col_dtype, output_empty_col_dtype, value_type, size_bits",
+    [
+        (np.uint8, np.uint8, TypeDescriptor.ValueType.UINT, TypeDescriptor.SizeBits.S8),
+        (np.int32, np.int32, TypeDescriptor.ValueType.INT, TypeDescriptor.SizeBits.S32),
+        ("datetime64[ns]", "datetime64[ns]", TypeDescriptor.ValueType.NANOSECONDS_UTC, TypeDescriptor.SizeBits.S64),
+
+        # For rationale see: https://github.com/man-group/ArcticDB/pull/1049
+        (float, float, TypeDescriptor.ValueType.FLOAT if IS_PANDAS_TWO else TypeDescriptor.ValueType.EMPTY, TypeDescriptor.SizeBits.S64),  # noqa: E501
+        (object, object if IS_PANDAS_TWO else float, TypeDescriptor.ValueType.EMPTY, TypeDescriptor.SizeBits.S64),
+])
+def test_empty_column_handling(lmdb_version_store, input_empty_col_dtype, output_empty_col_dtype, value_type, size_bits):
+    # Non-regression test for https://github.com/man-group/ArcticDB/issues/987
+    lib = lmdb_version_store
+
+    symbol_type_descriptor_series_index = 1 if IS_PANDAS_TWO else 0
+    def get_symbol_type_descriptor(symbol):
+        symbol_info = lib.get_info(symbol)
+        return symbol_info["dtype"][symbol_type_descriptor_series_index]
+
+    symbol = "empty"
+    series = pd.Series([], dtype=input_empty_col_dtype)
+    lib.write(symbol, series)
+    symbol_type_info = get_symbol_type_descriptor(symbol)
+    assert symbol_type_info.value_type == value_type
+    assert symbol_type_info.size_bits == size_bits
+    result = lib.read(symbol).data
+    assert result.dtype == output_empty_col_dtype
