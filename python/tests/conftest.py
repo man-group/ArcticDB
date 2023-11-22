@@ -233,7 +233,7 @@ def unique_real_s3_uri():
         pytest.param("Real_S3", marks=REAL_S3_TESTS_MARK),
     ],
 )
-def arctic_client(request, moto_s3_uri_incl_bucket, tmpdir, encoding_version):
+def arctic_client(request, moto_s3_uri_incl_bucket, tmp_path, encoding_version):
     if request.param == "S3":
         ac = Arctic(moto_s3_uri_incl_bucket, encoding_version)
     elif request.param == "Azure":
@@ -241,7 +241,7 @@ def arctic_client(request, moto_s3_uri_incl_bucket, tmpdir, encoding_version):
     elif request.param == "Real_S3":
         ac = Arctic(request.getfixturevalue("unique_real_s3_uri"), encoding_version)
     elif request.param == "LMDB":
-        ac = Arctic(f"lmdb://{tmpdir}?map_size=16MB", encoding_version)
+        ac = Arctic(f"lmdb://{tmp_path}?map_size=16MB", encoding_version)
     elif request.param == "Mongo":
         ac = Arctic(request.getfixturevalue("mongo_test_uri"), encoding_version)
     elif request.param == "MEM":
@@ -383,7 +383,7 @@ def pytest_generate_tests(metafunc):
 
 
 @pytest.fixture
-def version_store_factory(lib_name, tmpdir):
+def version_store_factory(lib_name, tmp_path):
     """Factory to create any number of distinct LMDB libs with the given WriteOptions or VersionStoreConfig.
 
     Accepts legacy options col_per_group and row_per_segment.
@@ -412,7 +412,7 @@ def version_store_factory(lib_name, tmpdir):
         else:
             library_name = lib_name
 
-        cfg_factory = functools.partial(create_test_lmdb_cfg, db_dir=str(tmpdir), lmdb_config=lmdb_config)
+        cfg_factory = functools.partial(create_test_lmdb_cfg, db_dir=str(tmp_path), lmdb_config=lmdb_config)
         return _version_store_factory_impl(used, cfg_factory, library_name, **kwargs)
 
     try:
@@ -434,7 +434,7 @@ def version_store_factory(lib_name, tmpdir):
             result.version_store = None
             result._library = None
 
-        shutil.rmtree(tmpdir, ignore_errors=True)
+        shutil.rmtree(tmp_path, ignore_errors=True)
 
 
 def _arctic_library_factory_impl(used, name, arctic_client, library_options) -> Library:
