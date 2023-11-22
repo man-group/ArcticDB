@@ -5,7 +5,7 @@
  * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
  */
 
-#include <arcticdb/codec/codec_utils.hpp>
+#include <arcticdb/codec/column_encoder_utils.hpp>
 #include <arcticdb/codec/default_codecs.hpp>
 #include <arcticdb/codec/encoded_field.hpp>
 #include <arcticdb/column_store/column_data.hpp>
@@ -60,9 +60,5 @@ namespace arcticdb {
                 field->mutable_ndarray()->set_sparse_map_bytes(static_cast<int>(sparse_bm_bytes));
             });
         }
-    }
-
-    arcticdb::proto::encoding::VariantCodec shapes_encoding_opts() {
-        return codec::default_lz4_codec();
     }
 }

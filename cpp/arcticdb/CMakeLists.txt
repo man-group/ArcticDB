@@ -179,8 +179,7 @@ set(arcticdb_srcs
         async/tasks.hpp
         codec/codec.hpp
         codec/codec_utils.hpp
-        codec/codec_v1.hpp
-        codec/codec_v2.hpp
+        codec/column_encoder_utils.hpp
         codec/codec-inl.hpp
         codec/core.hpp
         codec/lz4.hpp
@@ -360,9 +359,9 @@ set(arcticdb_srcs
         async/task_scheduler.cpp
         async/tasks.cpp
         codec/codec.cpp
-        codec/codec_utils.cpp
         codec/codec_v1.cpp
         codec/codec_v2.cpp
+        codec/column_encoder_utils.cpp
         codec/encoding_sizes.cpp
         codec/segment.cpp
         codec/variant_encoded_field_collection.cpp

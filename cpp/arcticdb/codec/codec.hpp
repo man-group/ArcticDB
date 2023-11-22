@@ -22,9 +22,6 @@
 #include <memory>
 #include <variant>
 
-#include <arcticdb/codec/codec_v1.hpp>
-#include <arcticdb/codec/codec_v2.hpp>
-
 namespace arcticdb {
 
 using DescriptorMagic = util::MagicNum<'D','e','s','c'>;
@@ -37,6 +34,9 @@ using ColumnMagic = util::MagicNum<'C','l','m','n'>;
 /// @brief This should be the block data type descriptor when the shapes array is encoded as a block
 using ShapesBlockTDT = TypeDescriptorTag<DataTypeTag<DataType::INT64>, DimensionTag<Dimension::Dim0>>;
 
+/// @brief Options used by default to encode the shapes array of a column
+arcticdb::proto::encoding::VariantCodec shapes_encoding_opts();
+
 template<typename MagicType>
 void check_magic_in_place(const uint8_t* data) {
     const auto magic = reinterpret_cast<const MagicType*>(data);
@@ -48,15 +48,6 @@ void check_magic(const uint8_t*& data) {
     check_magic_in_place<MagicType>(data);
     data += sizeof(MagicType);
 }
-
-template<typename MagicType>
-void write_magic(Buffer& buffer, std::ptrdiff_t& pos) {
-    new (buffer.data() + pos) MagicType{};
-    pos += sizeof(MagicType);
-}
-
-template<EncodingVersion v>
-using ColumnEncoder = std::conditional_t<v == EncodingVersion::V1, ColumnEncoderV1, ColumnEncoderV2>;
 
 Segment encode_v2(
     SegmentInMemory&& in_mem_seg,
