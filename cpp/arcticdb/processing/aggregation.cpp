@@ -489,4 +489,10 @@ SegmentInMemory CountAggregatorData::finalize(const ColumnName& output_column_na
     return res;
 }
 
+Column SortedSumAggregator::aggregate(ARCTICDB_UNUSED size_t num_buckets,
+                                      ARCTICDB_UNUSED const std::vector<std::vector<size_t>>& bucket_boundary_indexes,
+                                      ARCTICDB_UNUSED const std::vector<std::optional<ColumnWithStrings>>& input_columns) {
+    return Column();
+}
+
 } //namespace arcticdb

@@ -73,4 +73,22 @@ struct IColumnStatsAggregator {
 
 using ColumnStatsAggregator = folly::Poly<IColumnStatsAggregator>;
 
+struct ISortedAggregator {
+    template<class Base>
+    struct Interface : Base {
+        [[nodiscard]] ColumnName get_input_column_name() const { return folly::poly_call<0>(*this); };
+        [[nodiscard]] ColumnName get_output_column_name() const { return folly::poly_call<1>(*this); };
+        [[nodiscard]] Column aggregate(size_t num_buckets,
+                                       const std::vector<std::vector<size_t>>& bucket_boundary_indexes,
+                                       const std::vector<std::optional<ColumnWithStrings>>& input_columns) {
+            return folly::poly_call<2>(*this, num_buckets, bucket_boundary_indexes, input_columns);
+        }
+    };
+
+    template<class T>
+    using Members = folly::PolyMembers<&T::get_input_column_name, &T::get_output_column_name, &T::aggregate>;
+};
+
+using SortedAggregator = folly::Poly<ISortedAggregator>;
+
 } //namespace arcticdb

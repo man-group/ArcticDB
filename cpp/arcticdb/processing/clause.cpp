@@ -509,8 +509,17 @@ Composite<EntityIds> AggregationClause::process(Composite<EntityIds>&& entity_id
 void ResampleClause::set_aggregations(const std::unordered_map<std::string, std::string>& aggregations) {
     aggregation_map_ = aggregations;
     clause_info_.input_columns_ = std::make_optional<std::unordered_set<std::string>>();
-    for (const auto& [column, _]: aggregation_map_) {
-        clause_info_.input_columns_->emplace(column);
+    for (const auto& [column_name, aggregation_operator]: aggregations) {
+        auto [_, inserted] = clause_info_.input_columns_->insert(column_name);
+        user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(inserted,
+                                                              "Cannot perform two aggregations over the same column: {}",
+                                                              column_name);
+        auto typed_column_name = ColumnName(column_name);
+        if (aggregation_operator == "sum") {
+            aggregators_.emplace_back(SortedSumAggregator(typed_column_name, typed_column_name));
+        } else {
+            user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>("Unknown aggregation operator provided to resample: {}", aggregation_operator);
+        }
     }
 }
 

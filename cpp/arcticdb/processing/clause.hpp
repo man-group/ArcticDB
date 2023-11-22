@@ -411,6 +411,7 @@ struct ResampleClause {
     ResampleClosedBoundary closed_boundary_;
     std::vector<timestamp> bucket_boundaries_;
     std::unordered_map<std::string, std::string> aggregation_map_;
+    std::vector<SortedAggregator> aggregators_;
 
     ResampleClause() = delete;
 
