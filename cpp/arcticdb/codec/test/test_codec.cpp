@@ -19,6 +19,8 @@
 
 using namespace arcticdb;
 
+
+
 class FieldEncoderTestDim0Base : public testing::Test {
 protected:
     using ValuesTypeDescriptorTag = TypeDescriptorTag<DataTypeTag<DataType::FLOAT64>, DimensionTag<Dimension::Dim0>>;
@@ -37,7 +39,7 @@ using EncodedFieldsType = ::testing::Types<arcticdb::proto::encoding::EncodedFie
 TYPED_TEST_SUITE(FieldEncoderTestDim0, EncodedFieldsType);
 
 TYPED_TEST(FieldEncoderTestDim0, Passthrough_v1) {
-    using Encoder = BlockEncoder<typename TestFixture::ValuesTypeDescriptorTag, EncodingVersion::V1>;
+    using Encoder = TypedBlockEncoderImpl<TypedBlockData, typename TestFixture::ValuesTypeDescriptorTag, EncodingVersion::V1>;
     const TypedBlockData<typename TestFixture::ValuesTypeDescriptorTag> values_block(
         TestFixture::values.data(),
         nullptr,
@@ -59,7 +61,7 @@ TYPED_TEST(FieldEncoderTestDim0, Passthrough_v1) {
 }
 
 TYPED_TEST(FieldEncoderTestDim0, Passthrough_v2) {
-    using Encoder = BlockEncoder<typename TestFixture::ValuesTypeDescriptorTag, EncodingVersion::V2>;
+    using Encoder = TypedBlockEncoderImpl<TypedBlockData, typename TestFixture::ValuesTypeDescriptorTag, EncodingVersion::V2>;
     const TypedBlockData<typename TestFixture::ValuesTypeDescriptorTag> values_block(
         TestFixture::values.data(),
         nullptr,
@@ -142,7 +144,7 @@ protected:
 TYPED_TEST_SUITE(FieldEncoderTestDim1, EncodedFieldsType);
 
 TYPED_TEST(FieldEncoderTestDim1, PassthroughV1) {
-    using Encoder = BlockEncoder<typename TestFixture::ValuesTypeDescriptorTag, EncodingVersion::V1>;
+    using Encoder = TypedBlockEncoderImpl<TypedBlockData, typename TestFixture::ValuesTypeDescriptorTag, EncodingVersion::V1>;
     const TypedBlockData<typename TestFixture::ValuesTypeDescriptorTag> block(
         TestFixture::values.data(),
         TestFixture::shapes.data(),
@@ -170,8 +172,8 @@ TYPED_TEST(FieldEncoderTestDim1, PassthroughV1) {
 }
 
 TYPED_TEST(FieldEncoderTestDim1, PassthroughV2) {
-    using Encoder = BlockEncoder<typename TestFixture::ValuesTypeDescriptorTag, EncodingVersion::V2>;
-    using ShapesEncoder = BlockEncoder<arcticdb::ShapesBlockTDT, EncodingVersion::V2>;
+    using Encoder = TypedBlockEncoderImpl<TypedBlockData, typename TestFixture::ValuesTypeDescriptorTag, EncodingVersion::V2>;
+    using ShapesEncoder = TypedBlockEncoderImpl<TypedBlockData, arcticdb::ShapesBlockTDT, EncodingVersion::V2>;
     const TypedBlockData<typename TestFixture::ValuesTypeDescriptorTag> values_block(
         TestFixture::values.data(),
         TestFixture::shapes.data(),

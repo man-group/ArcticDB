@@ -34,6 +34,9 @@ using MetadataMagic = util::MagicNum<'M','e','t','a'>;
 using IndexMagic = util::MagicNum<'I','n','d','x'>;
 using ColumnMagic = util::MagicNum<'C','l','m','n'>;
 
+/// @brief This should be the block data type descriptor when the shapes array is encoded as a block
+using ShapesBlockTDT = TypeDescriptorTag<DataTypeTag<DataType::INT64>, DimensionTag<Dimension::Dim0>>;
+
 template<typename MagicType>
 void check_magic_in_place(const uint8_t* data) {
     const auto magic = reinterpret_cast<const MagicType*>(data);

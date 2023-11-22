@@ -25,9 +25,6 @@
 
 
 namespace arcticdb {
-
-/// @brief This should be the block data type descriptor when the shapes array is encoded as a block
-using ShapesBlockTDT = TypeDescriptorTag<DataTypeTag<DataType::INT64>, DimensionTag<Dimension::Dim0>>;
 /// @brief The type to be used for a block which represents shapes
 using ShapesBlock = TypedBlockData<ShapesBlockTDT>;
 
@@ -213,22 +210,20 @@ void calc_encoded_blocks_size(
     result.max_compressed_bytes_ += BytesEncoder<EncodingVersion::V2>::max_compressed_size(codec_opts, result.encoded_blocks_bytes_);
 }
 
-template<EncodingVersion v, typename = std::enable_if_t<v == EncodingVersion::V2>>
 void calc_stream_descriptor_fields_size(
     const SegmentInMemory& in_mem_seg,
     const arcticdb::proto::encoding::VariantCodec& codec_opts,
     SizeResult& result
-    ) {
-    ColumnEncoder<v> encoder;
+) {
     auto segment_fields = in_mem_seg.descriptor().fields().column_data();
-    const auto [uncompressed, required] = encoder.max_compressed_size(codec_opts, segment_fields);
+    const auto [uncompressed, required] = ColumnEncoderV2::max_compressed_size(codec_opts, segment_fields);
     result.uncompressed_bytes_ += uncompressed;
     result.max_compressed_bytes_ += required;
 
     // Calculate index fields size
     if(in_mem_seg.index_fields()) {
         auto index_field_data = in_mem_seg.index_fields()->column_data();
-        const auto [idx_uncompressed, idx_required] = encoder.max_compressed_size(codec_opts, index_field_data);
+        const auto [idx_uncompressed, idx_required] = ColumnEncoderV2::max_compressed_size(codec_opts, index_field_data);
         result.uncompressed_bytes_ += idx_uncompressed;
         result.max_compressed_bytes_ += idx_required;
     }
@@ -241,7 +236,7 @@ SizeResult max_compressed_size_v2(const SegmentInMemory &in_mem_seg, const arcti
     calc_metadata_size<EncodingVersion::V2>(in_mem_seg, codec_opts, result);
     result.max_compressed_bytes_ += sizeof(DescriptorMagic);
     result.max_compressed_bytes_ += sizeof(IndexMagic);
-    calc_stream_descriptor_fields_size<EncodingVersion::V2>(in_mem_seg, codec_opts, result);
+    calc_stream_descriptor_fields_size(in_mem_seg, codec_opts, result);
     result.max_compressed_bytes_ += sizeof(EncodedMagic);
     calc_encoded_blocks_size(in_mem_seg, codec_opts, result);
 
