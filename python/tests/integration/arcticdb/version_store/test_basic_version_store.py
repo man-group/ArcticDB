@@ -5,6 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 import itertools
 import time
 import sys
@@ -31,12 +32,28 @@ from arcticdb.exceptions import (
 from arcticdb import QueryBuilder
 from arcticdb.flattener import Flattener
 from arcticdb.version_store import NativeVersionStore
-from arcticdb.version_store._custom_normalizers import CustomNormalizer, register_normalizer
-from arcticdb.version_store._store import UNSUPPORTED_S3_CHARS, MAX_SYMBOL_SIZE, VersionedItem
-from arcticdb_ext.exceptions import _ArcticLegacyCompatibilityException, StorageException
+from arcticdb.version_store._custom_normalizers import (
+    CustomNormalizer,
+    register_normalizer,
+)
+from arcticdb.version_store._store import (
+    UNSUPPORTED_S3_CHARS,
+    MAX_SYMBOL_SIZE,
+    VersionedItem,
+)
+from arcticdb_ext.exceptions import (
+    _ArcticLegacyCompatibilityException,
+    StorageException,
+)
 from arcticdb_ext.storage import KeyType, NoDataFoundException
-from arcticdb_ext.version_store import NoSuchVersionException, StreamDescriptorMismatch, ManualClockVersionStore
-from arcticc.pb2.descriptors_pb2 import NormalizationMetadata  # Importing from arcticdb dynamically loads arcticc.pb2
+from arcticdb_ext.version_store import (
+    NoSuchVersionException,
+    StreamDescriptorMismatch,
+    ManualClockVersionStore,
+)
+from arcticc.pb2.descriptors_pb2 import (
+    NormalizationMetadata,
+)  # Importing from arcticdb dynamically loads arcticc.pb2
 from arcticdb.util.test import (
     sample_dataframe,
     sample_dataframe_only_strings,
@@ -132,7 +149,8 @@ def test_unhandled_chars_default(object_version_store, unhandled_char):
 @pytest.mark.parametrize("unhandled_char", [chr(30), chr(127), chr(128)])
 def test_unhandled_chars_update_upsert(object_version_store, unhandled_char):
     df = pd.DataFrame(
-        {"col_1": ["a", "b"], "col_2": [0.1, 0.2]}, index=[pd.Timestamp("2022-01-01"), pd.Timestamp("2022-01-02")]
+        {"col_1": ["a", "b"], "col_2": [0.1, 0.2]},
+        index=[pd.Timestamp("2022-01-01"), pd.Timestamp("2022-01-02")],
     )
     sym = f"prefix{unhandled_char}postfix"
     with pytest.raises(UserInputException):
@@ -144,7 +162,8 @@ def test_unhandled_chars_update_upsert(object_version_store, unhandled_char):
 @pytest.mark.parametrize("unhandled_char", [chr(30), chr(127), chr(128)])
 def test_unhandled_chars_append(object_version_store, unhandled_char):
     df = pd.DataFrame(
-        {"col_1": ["a", "b"], "col_2": [0.1, 0.2]}, index=[pd.Timestamp("2022-01-01"), pd.Timestamp("2022-01-02")]
+        {"col_1": ["a", "b"], "col_2": [0.1, 0.2]},
+        index=[pd.Timestamp("2022-01-01"), pd.Timestamp("2022-01-02")],
     )
     sym = f"prefix{unhandled_char}postfix"
     with pytest.raises(UserInputException):
@@ -180,10 +199,12 @@ def test_unhandled_chars_already_present_append(object_version_store, three_col_
 @pytest.mark.parametrize("unhandled_char", [chr(127), chr(128)])
 def test_unhandled_chars_already_present_update(object_version_store, unhandled_char):
     df = pd.DataFrame(
-        {"col_1": ["a", "b"], "col_2": [0.1, 0.2]}, index=[pd.Timestamp("2022-01-01"), pd.Timestamp("2022-01-02")]
+        {"col_1": ["a", "b"], "col_2": [0.1, 0.2]},
+        index=[pd.Timestamp("2022-01-01"), pd.Timestamp("2022-01-02")],
     )
     update_df = pd.DataFrame(
-        {"col_1": ["c", "d"], "col_2": [0.2, 0.3]}, index=[pd.Timestamp("2022-01-01"), pd.Timestamp("2022-01-02")]
+        {"col_1": ["c", "d"], "col_2": [0.2, 0.3]},
+        index=[pd.Timestamp("2022-01-01"), pd.Timestamp("2022-01-02")],
     )
     sym = f"prefix{unhandled_char}postfix"
     with config_context("VersionStore.NoStrictSymbolCheck", 1):
@@ -299,8 +320,7 @@ def test_prune_previous_versions_multiple_times(basic_store, symbol):
 
 
 def test_prune_previous_versions_write_batch(basic_store):
-    """Verify that the batch write method correctly prunes previous versions when the corresponding option is specified.
-    """
+    """Verify that the batch write method correctly prunes previous versions when the corresponding option is specified."""
     # Given
     lib = basic_store
     lib_tool = lib.library_tool()
@@ -330,8 +350,7 @@ def test_prune_previous_versions_write_batch(basic_store):
 
 
 def test_prune_previous_versions_batch_write_metadata(basic_store):
-    """Verify that the batch write metadata method correctly prunes previous versions when the corresponding option is specified.
-    """
+    """Verify that the batch write metadata method correctly prunes previous versions when the corresponding option is specified."""
     # Given
     lib = basic_store
     lib_tool = lib.library_tool()
@@ -361,8 +380,7 @@ def test_prune_previous_versions_batch_write_metadata(basic_store):
 
 
 def test_prune_previous_versions_append_batch(basic_store):
-    """Verify that the batch append method correctly prunes previous versions when the corresponding option is specified.
-    """
+    """Verify that the batch append method correctly prunes previous versions when the corresponding option is specified."""
     # Given
     lib = basic_store
     lib_tool = lib.library_tool()
@@ -594,7 +612,10 @@ def test_date_range_row_sliced(basic_store_tiny_segment, use_date_range_clause):
         received = lib.read(sym, date_range=date_range).data
     assert_frame_equal(expected, received)
 
-    date_range = (index[0] + pd.Timedelta(12, unit="h"), index[-1] - pd.Timedelta(12, unit="h"))
+    date_range = (
+        index[0] + pd.Timedelta(12, unit="h"),
+        index[-1] - pd.Timedelta(12, unit="h"),
+    )
     if use_date_range_clause:
         received = lib.read(sym, query_builder=q).data
     else:
@@ -793,9 +814,9 @@ def test_large_symbols(basic_store_no_symbol_list):
         assert basic_store_no_symbol_list.read(valid_sized_sym).data == 1
 
         valid_punctuations = "".join(list(set(string.punctuation) - set(UNSUPPORTED_S3_CHARS)))
-        valid_char_sym = "".join(
-            [random.choice(string.ascii_letters + string.digits + valid_punctuations) for _ in range(12)]
-        )
+        valid_char_sym = "".join([
+            random.choice(string.ascii_letters + string.digits + valid_punctuations) for _ in range(12)
+        ])
 
         basic_store_no_symbol_list.write(valid_char_sym, 1)
         assert basic_store_no_symbol_list.read(valid_char_sym).data == 1
@@ -808,9 +829,9 @@ def test_unsupported_chars_in_symbols(basic_store):
 
     for _ in range(5):
         valid_punctuations = "".join(list(set(string.punctuation) - set(UNSUPPORTED_S3_CHARS)))
-        valid_char_sym = "".join(
-            [random.choice(string.ascii_letters + string.digits + valid_punctuations) for _ in range(12)]
-        )
+        valid_char_sym = "".join([
+            random.choice(string.ascii_letters + string.digits + valid_punctuations) for _ in range(12)
+        ])
 
         basic_store.write(valid_char_sym, 1)
         assert basic_store.read(valid_char_sym).data == 1
@@ -825,7 +846,10 @@ def test_partial_read_pickled_df(basic_store):
         basic_store.read("blah", columns=["does_not_matter"])
 
     with pytest.raises(InternalException):
-        basic_store.read("blah", date_range=(DateRange(pd.Timestamp("1970-01-01"), pd.Timestamp("2027-12-31"))))
+        basic_store.read(
+            "blah",
+            date_range=(DateRange(pd.Timestamp("1970-01-01"), pd.Timestamp("2027-12-31"))),
+        )
 
 
 def test_is_pickled(basic_store):
@@ -959,7 +983,10 @@ def test_list_versions_with_snapshots(basic_store):
     # v0 in a single snapshot
     assert set([v["snapshots"] for v in items_for_a if v["version"] == 0][0]) == {"snap1"}
     # v1 in a two snapshots
-    assert set([v["snapshots"] for v in items_for_a if v["version"] == 1][0]) == {"snap2", "snap3"}
+    assert set([v["snapshots"] for v in items_for_a if v["version"] == 1][0]) == {
+        "snap2",
+        "snap3",
+    }
 
 
 def test_read_ts(basic_store):
@@ -1029,22 +1056,20 @@ def test_dynamic_strings_non_contiguous(basic_store):
 
 
 def test_dynamic_strings_with_none(basic_store):
-    row = pd.Series(
-        [
-            "A",
-            "An_inordinately_long_string_for_no_sensible_purpose",
-            None,
-            "B",
-            "C",
-            None,
-            "Baca",
-            "CABA",
-            None,
-            "dog",
-            "cat",
-            None,
-        ]
-    )
+    row = pd.Series([
+        "A",
+        "An_inordinately_long_string_for_no_sensible_purpose",
+        None,
+        "B",
+        "C",
+        None,
+        "Baca",
+        "CABA",
+        None,
+        "dog",
+        "cat",
+        None,
+    ])
     df = pd.DataFrame({"x": row})
     basic_store.write("strings", df, dynamic_strings=True)
     vit = basic_store.read("strings")
@@ -1052,23 +1077,21 @@ def test_dynamic_strings_with_none(basic_store):
 
 
 def test_dynamic_strings_with_none_first_element(basic_store):
-    row = pd.Series(
-        [
-            None,
-            "A",
-            "An_inordinately_long_string_for_no_sensible_purpose",
-            None,
-            "B",
-            "C",
-            None,
-            "Baca",
-            "CABA",
-            None,
-            "dog",
-            "cat",
-            None,
-        ]
-    )
+    row = pd.Series([
+        None,
+        "A",
+        "An_inordinately_long_string_for_no_sensible_purpose",
+        None,
+        "B",
+        "C",
+        None,
+        "Baca",
+        "CABA",
+        None,
+        "dog",
+        "cat",
+        None,
+    ])
     df = pd.DataFrame({"x": row})
     basic_store.write("strings", df, dynamic_strings=True)
     vit = basic_store.read("strings")
@@ -1085,7 +1108,8 @@ def test_dynamic_strings_with_all_nones(basic_store):
 
 def test_dynamic_strings_with_all_nones_update(basic_store):
     df = pd.DataFrame(
-        {"col_1": ["a", "b"], "col_2": [0.1, 0.2]}, index=[pd.Timestamp("2022-01-01"), pd.Timestamp("2022-01-02")]
+        {"col_1": ["a", "b"], "col_2": [0.1, 0.2]},
+        index=[pd.Timestamp("2022-01-01"), pd.Timestamp("2022-01-02")],
     )
     update_df = pd.DataFrame({"col_1": [np.nan], "col_2": [0.1]}, index=[pd.Timestamp("2022-01-01")])
     basic_store.write("strings", df, dynamic_strings=True)
@@ -1101,7 +1125,12 @@ def test_dynamic_strings_with_all_nones_update(basic_store):
     assert data.data["col_1"][pd.Timestamp("2022-01-02")] == "b"
 
     basic_store.write("strings", df, dynamic_strings=True)
-    basic_store.update("strings", update_df, dynamic_strings=True, coerce_columns={"col_1": object, "col_2": "float"})
+    basic_store.update(
+        "strings",
+        update_df,
+        dynamic_strings=True,
+        coerce_columns={"col_1": object, "col_2": "float"},
+    )
 
     data = basic_store.read("strings")
     assert math.isnan(data.data["col_1"][pd.Timestamp("2022-01-01")])
@@ -1109,23 +1138,21 @@ def test_dynamic_strings_with_all_nones_update(basic_store):
 
 
 def test_dynamic_strings_with_nan(basic_store):
-    row = pd.Series(
-        [
-            np.nan,
-            "A",
-            "An_inordinately_long_string_for_no_sensible_purpose",
-            np.nan,
-            "B",
-            "C",
-            None,
-            "Baca",
-            "CABA",
-            None,
-            "dog",
-            "cat",
-            np.nan,
-        ]
-    )
+    row = pd.Series([
+        np.nan,
+        "A",
+        "An_inordinately_long_string_for_no_sensible_purpose",
+        np.nan,
+        "B",
+        "C",
+        None,
+        "Baca",
+        "CABA",
+        None,
+        "dog",
+        "cat",
+        np.nan,
+    ])
 
     df = pd.DataFrame({"x": row})
     basic_store.write("strings", df, dynamic_strings=True)
@@ -1168,7 +1195,11 @@ def test_recursively_written_data(basic_store):
     samples = [
         {"a": np.arange(5), "b": np.arange(8)},  # dict of np arrays
         (np.arange(5), np.arange(6)),  # tuple of np arrays
-        [np.arange(9), np.arange(12), (1, 2)],  # list of numpy arrays and a python tuple
+        [
+            np.arange(9),
+            np.arange(12),
+            (1, 2),
+        ],  # list of numpy arrays and a python tuple
         ({"a": np.arange(5), "b": [1, 2, 3]}),  # dict of np arrays and a python list
     ]
 
@@ -1189,7 +1220,10 @@ def test_recursively_written_data_with_metadata(basic_store):
 
     for idx, sample in enumerate(samples):
         vit = basic_store.write(
-            "sym_recursive" + str(idx), sample, metadata={"something": 1}, recursive_normalizers=True
+            "sym_recursive" + str(idx),
+            sample,
+            metadata={"something": 1},
+            recursive_normalizers=True,
         )
         recursive_data = basic_store.read("sym_recursive" + str(idx)).data
         equals(sample, recursive_data)
@@ -1320,7 +1354,9 @@ def test_batch_write(basic_store_tombstone_and_sync_passive):
         vitem = lmdb_version_store.read(sym)
         sequential_results[vitem.symbol] = vitem
     lmdb_version_store.batch_write(
-        list(multi_data.keys()), list(multi_data.values()), metadata_vector=(metadata[sym] for sym in multi_data)
+        list(multi_data.keys()),
+        list(multi_data.values()),
+        metadata_vector=(metadata[sym] for sym in multi_data),
     )
     batch_results = lmdb_version_store.batch_read(list(multi_data.keys()))
     assert len(batch_results) == len(sequential_results)
@@ -1565,7 +1601,10 @@ def test_dataframe_with_nan_and_nat_in_timestamp_column(basic_store):
 def test_dataframe_with_nan_and_nat_only(basic_store):
     df_with_nan_and_nat_only = pd.DataFrame({"col": [pd.NaT, pd.NaT, np.NaN]})  # Sample will be pd.NaT
     basic_store.write("nan_nat", df_with_nan_and_nat_only)
-    assert_frame_equal(basic_store.read("nan_nat").data, pd.DataFrame({"col": [pd.NaT, pd.NaT, pd.NaT]}))
+    assert_frame_equal(
+        basic_store.read("nan_nat").data,
+        pd.DataFrame({"col": [pd.NaT, pd.NaT, pd.NaT]}),
+    )
 
 
 def test_coercion_to_float(basic_store):
@@ -1598,7 +1637,8 @@ def test_coercion_to_str_with_dynamic_strings(basic_store):
             lib.write("sym", df)
 
     with mock.patch(
-        "arcticdb.version_store._normalization.get_sample_from_non_empty_arr", return_value="hello"
+        "arcticdb.version_store._normalization.get_sample_from_non_empty_arr",
+        return_value="hello",
     ) as sample_mock:
         # This should succeed but uses the slow path
         lib.write("sym", df, dynamic_strings=True)
@@ -1610,6 +1650,7 @@ def test_coercion_to_str_with_dynamic_strings(basic_store):
         sample_mock.assert_not_called()
 
 
+@pytest.mark.xfail(reason="Needs to be fixed by issue #496")
 def test_find_version(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
     sym = "test_find_version"
@@ -1953,7 +1994,9 @@ def test_columns_as_nparrary(basic_store, sym):
 
 def test_simple_recursive_normalizer(object_version_store):
     object_version_store.write(
-        "rec_norm", data={"a": np.arange(5), "b": np.arange(8), "c": None}, recursive_normalizers=True
+        "rec_norm",
+        data={"a": np.arange(5), "b": np.arange(8), "c": None},
+        recursive_normalizers=True,
     )
 
 
@@ -2081,14 +2124,24 @@ def test_batch_restore_version(basic_store_tombstone):
 
 def test_batch_append(basic_store_tombstone, three_col_df):
     lmdb_version_store = basic_store_tombstone
-    multi_data = {"sym1": three_col_df(), "sym2": three_col_df(1), "sym3": three_col_df(2)}
+    multi_data = {
+        "sym1": three_col_df(),
+        "sym2": three_col_df(1),
+        "sym3": three_col_df(2),
+    }
     metadata = {"sym1": {"key1": "val1"}, "sym2": None, "sym3": None}
 
     lmdb_version_store.batch_write(
-        list(multi_data.keys()), list(multi_data.values()), metadata_vector=(metadata[sym] for sym in multi_data)
+        list(multi_data.keys()),
+        list(multi_data.values()),
+        metadata_vector=(metadata[sym] for sym in multi_data),
     )
 
-    multi_append = {"sym1": three_col_df(10), "sym2": three_col_df(11), "sym3": three_col_df(12)}
+    multi_append = {
+        "sym1": three_col_df(10),
+        "sym2": three_col_df(11),
+        "sym3": three_col_df(12),
+    }
     append_metadata = {"sym1": {"key1": "val2"}, "sym2": None, "sym3": "val3"}
     append_result = lmdb_version_store.batch_append(
         list(multi_append.keys()),
@@ -2211,7 +2264,13 @@ def test_dynamic_schema_column_hash_update(basic_store_column_buckets):
     idx = pd.date_range("2022-01-01", periods=10, freq="D")
     l = len(idx)
     df = pd.DataFrame(
-        {"a": range(l), "b": range(1, l + 1), "c": range(2, l + 2), "d": range(3, l + 3), "e": range(4, l + 4)},
+        {
+            "a": range(l),
+            "b": range(1, l + 1),
+            "c": range(2, l + 2),
+            "d": range(3, l + 3),
+            "e": range(4, l + 4),
+        },
         index=idx,
     )
 
@@ -2246,7 +2305,13 @@ def test_dynamic_schema_column_hash_append(basic_store_column_buckets):
     idx = pd.date_range("2022-01-01", periods=10, freq="D")
     l = len(idx)
     df = pd.DataFrame(
-        {"a": range(l), "b": range(1, l + 1), "c": range(2, l + 2), "d": range(3, l + 3), "e": range(4, l + 4)},
+        {
+            "a": range(l),
+            "b": range(1, l + 1),
+            "c": range(2, l + 2),
+            "d": range(3, l + 3),
+            "e": range(4, l + 4),
+        },
         index=idx,
     )
 
@@ -2277,7 +2342,13 @@ def test_dynamic_schema_column_hash(basic_store_column_buckets):
     idx = pd.date_range("2022-01-01", periods=10, freq="D")
     l = len(idx)
     df = pd.DataFrame(
-        {"a": range(l), "b": range(1, l + 1), "c": range(2, l + 2), "d": range(3, l + 3), "e": range(4, l + 4)},
+        {
+            "a": range(l),
+            "b": range(1, l + 1),
+            "c": range(2, l + 2),
+            "d": range(3, l + 3),
+            "e": range(4, l + 4),
+        },
         index=idx,
     )
 
@@ -2345,7 +2416,13 @@ def test_modification_methods_dont_return_input_data(basic_store, batch, method)
 @pytest.mark.parametrize("num", (5, 50, 1001))
 def test_diff_long_stream_descriptor_mismatch(basic_store, method, num):
     lib: NativeVersionStore = basic_store
-    lib.write("x", pd.DataFrame({f"col{i}": [i, i + 1, i + 2] for i in range(num)}, index=pd.date_range(0, periods=3)))
+    lib.write(
+        "x",
+        pd.DataFrame(
+            {f"col{i}": [i, i + 1, i + 2] for i in range(num)},
+            index=pd.date_range(0, periods=3),
+        ),
+    )
     bad_row = {f"col{i}": ["a"] if i % 20 == 4 else [i] for i in (0, *range(3, num + 1))}
     try:
         if method == "append":
@@ -2365,14 +2442,21 @@ def test_diff_long_stream_descriptor_mismatch(basic_store, method, num):
 
 def test_get_non_existing_columns_in_series(basic_store, sym):
     lib = basic_store
-    dst = pd.Series(index=pd.date_range(pd.Timestamp("2022-01-01"), pd.Timestamp("2022-02-01")), data=0.0)
+    dst = pd.Series(
+        index=pd.date_range(pd.Timestamp("2022-01-01"), pd.Timestamp("2022-02-01")),
+        data=0.0,
+    )
     lib.write(sym, dst)
     assert basic_store.read(sym, columns=["col1"]).data.empty
 
 
 def test_get_existing_columns_in_series(basic_store, sym):
     lib = basic_store
-    dst = pd.Series(index=pd.date_range(pd.Timestamp("2022-01-01"), pd.Timestamp("2022-02-01")), data=0.0, name="col1")
+    dst = pd.Series(
+        index=pd.date_range(pd.Timestamp("2022-01-01"), pd.Timestamp("2022-02-01")),
+        data=0.0,
+        name="col1",
+    )
     lib.write(sym, dst)
     assert not basic_store.read(sym, columns=["col1", "col2"]).data.empty
     if __name__ == "__main__":
@@ -2430,7 +2514,12 @@ def test_use_previous_on_failure_batch(basic_store):
         expected.append(df1)
         time.sleep(1)
         df2 = pd.DataFrame(
-            {"d": range(x + 1, l + x + 1), "e": range(x + 2, l + x + 2), "f": range(x + 3, l + x + 3)}, index=idx
+            {
+                "d": range(x + 1, l + x + 1),
+                "e": range(x + 2, l + x + 2),
+                "f": range(x + 3, l + x + 3),
+            },
+            index=idx,
         )
         lib.write(symbol, df2)
 

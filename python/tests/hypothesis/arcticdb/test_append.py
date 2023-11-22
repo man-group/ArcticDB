@@ -3,7 +3,11 @@ import pandas as pd
 import numpy as np
 import pytest
 from arcticdb.version_store import NativeVersionStore
-from arcticdb_ext.exceptions import InternalException, NormalizationException, SortingException
+from arcticdb_ext.exceptions import (
+    InternalException,
+    NormalizationException,
+    SortingException,
+)
 from arcticdb_ext import set_config_int
 from hypothesis import given, assume, settings, strategies as st
 from itertools import chain, product, combinations
@@ -11,7 +15,10 @@ from tests.util.mark import SLOW_TESTS_MARK
 from arcticdb.version_store._common import TimeFrame
 
 from arcticdb.util.test import assert_frame_equal, random_seed_context
-from arcticdb.util.hypothesis import InputFactories, use_of_function_scoped_fixtures_in_hypothesis_checked
+from arcticdb.util.hypothesis import (
+    InputFactories,
+    use_of_function_scoped_fixtures_in_hypothesis_checked,
+)
 
 
 def gen_params_append():
@@ -104,12 +111,22 @@ def test_incomplete_append_partial_read(version_store_factory, colnum, periods, 
         # (InputFactories.DF_RC_NON_RANGE, InputFactories.DF_DTI, "TODO(AN-722)"),
         (InputFactories.DF_RC, InputFactories.ND_ARRAY_1D, "(Pandas|ndarray)"),
         (InputFactories.DF_RC, InputFactories.DF_MULTI_RC, "index type incompatible"),
-        (InputFactories.DF_RC, InputFactories.DF_RC_NON_RANGE, "range.*index which is incompatible"),
+        (
+            InputFactories.DF_RC,
+            InputFactories.DF_RC_NON_RANGE,
+            "range.*index which is incompatible",
+        ),
         (InputFactories.DF_RC, InputFactories.DF_RC_STEP, "different.*step"),
     ],
 )
 @pytest.mark.parametrize("swap", ["swap", ""])
-def test_(initial: InputFactories, append: InputFactories, match, swap, lmdb_version_store: NativeVersionStore):
+def test_(
+    initial: InputFactories,
+    append: InputFactories,
+    match,
+    swap,
+    lmdb_version_store: NativeVersionStore,
+):
     lib = lmdb_version_store
     if swap:
         initial, append = append, initial
@@ -119,7 +136,6 @@ def test_(initial: InputFactories, append: InputFactories, match, swap, lmdb_ver
     to_append, _ = append.make(abs(next_start), 1)
     with pytest.raises(NormalizationException):
         lib.append("s", to_append, match=match)
-
 
 
 @use_of_function_scoped_fixtures_in_hypothesis_checked
@@ -135,7 +151,7 @@ def test_(initial: InputFactories, append: InputFactories, match, swap, lmdb_ver
     df_in_str=st.booleans(),
 )
 @SLOW_TESTS_MARK
-@pytest.mark.xfail(reason="Needs to be fixed with issue #496")
+@pytest.mark.xfail(reason="Needs to be fixed by issue #496")
 def test_append_with_defragmentation(
     sym,
     col_per_append_df,
@@ -217,7 +233,10 @@ def test_append_with_defragmentation(
             indexs = (
                 seg_details["end_index"].astype(str).str.rsplit(" ", n=2).agg(" ".join).reset_index()
             )  # start_index and end_index got merged into one column
-            assert np.array_equal(indexs.iloc[1:, 0].astype(str).values, indexs.iloc[:-1, 1].astype(str).values)
+            assert np.array_equal(
+                indexs.iloc[1:, 0].astype(str).values,
+                indexs.iloc[:-1, 1].astype(str).values,
+            )
         else:
             with pytest.raises(InternalException):
                 lib.defragment_symbol_data(sym, None)
@@ -249,4 +268,3 @@ def test_append_with_defragmentation(
             index_offset,
             num_of_rows,
         )
-
