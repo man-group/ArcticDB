@@ -401,7 +401,8 @@ public:
         // For compacting an entry, we compact from the second version key in the chain
         // This makes it concurrent safe (when use_tombstones is enabled)
         // The first version key is in head and the second version key is first in entry.keys_
-        entry->validate();
+        if (validate_)
+            entry->validate();
         util::check(entry->head_.value().type() == KeyType::VERSION, "Type of head must be version");
         auto new_entry = std::make_shared<VersionMapEntry>(*entry);
 
