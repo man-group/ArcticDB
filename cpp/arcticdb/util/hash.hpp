@@ -27,12 +27,12 @@
 
 namespace arcticdb {
 
-using HashedValue = XXH64_hash_t;
+using HashedValue = XXH32_hash_t;
 constexpr std::size_t DEFAULT_SEED = 0x42;
 
 template<class T, std::size_t seed = DEFAULT_SEED>
 HashedValue hash(T *d, std::size_t count = 1) {
-    return XXH3_64bits_withSeed(reinterpret_cast<const void *>(d), count * sizeof(T), seed);
+    return XXH32(reinterpret_cast<const void *>(d), count * sizeof(T), seed);
 }
 
 inline HashedValue hash(std::string_view sv) {
@@ -46,19 +46,19 @@ class HashAccum {
     }
 
     void reset(HashedValue seed = DEFAULT_SEED) {
-        XXH3_64bits_reset_withSeed(&state_, seed);
+        XXH32_reset(&state_, seed);
     }
 
     template<typename T>
     void operator()(T *d, std::size_t count = 1) {
-        XXH3_64bits_update(&state_, d, sizeof(T) * count);
+        XXH32_update(&state_, d, sizeof(T) * count);
     }
 
     [[nodiscard]] HashedValue digest() const {
-        return XXH3_64bits_digest(&state_);
+        return XXH32_digest(&state_);
     }
   private:
-    XXH3_state_t state_ = XXH3_state_t{};
+    XXH32_state_t state_ = XXH32_state_t{};
 };
 
 } // namespace arcticdb
