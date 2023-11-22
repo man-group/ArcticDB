@@ -576,12 +576,36 @@ std::vector<std::vector<size_t>> ResampleClause::structure_for_processing(
 }
 
 Composite<EntityIds> ResampleClause::process(Composite<EntityIds>&& entity_ids) const {
-    auto procs = gather_entities(component_manager_, std::move(entity_ids), false, false, true);
-    Composite<EntityIds> output;
-    procs.broadcast([&output, this](auto& proc) {
-        output.push_back(push_entities(component_manager_, std::move(proc)));
-    });
-    return output;
+    auto procs = gather_entities(component_manager_, std::move(entity_ids), false, false, true).as_range();
+    internal::check<ErrorCode::E_ASSERTION_FAILURE>(procs.size() == 1, "Expected a single ProcessingUnit on entry to ResampleClause::process");
+    auto row_slices = split_by_row_slice(std::move(procs[0]));
+    // If the expected get calls for the segments in the first row slice are 2, the first bucket overlapping this row
+    // slice is being computed by the call to process dealing with the row slices above these. Otherwise, this call
+    // should do it
+    ARCTICDB_UNUSED bool responsible_for_first_overlapping_bucket = row_slices.front().segment_initial_expected_get_calls_->at(0) == 1;
+    // Calculate bucket_boundary_indexes:
+    // - std::vector<std::vector<offset_t>> - Each element of the outer vector corresponds to a row slice
+    //                                      - For each row slice, the vector elements represent the index of the bucket boundaries
+    //                                        Repeated values indicate an empty bucket
+    ARCTICDB_UNUSED std::vector<std::vector<position_t>> bucket_boundary_indexes(row_slices.size());
+    for (const auto& [idx, row_slice]: folly::enumerate(row_slices)) {
+        // All segments contain the same index column, so just grab it from the first one
+        const auto& index_column = row_slice.segments_->at(0)->column(0);
+        // Resampling only makes sense for timestamp indexes
+        internal::check<ErrorCode::E_ASSERTION_FAILURE>(is_time_type(index_column.type().data_type()),
+                                                        "Cannot resample data with index column of type {}", index_column.type().data_type());
+        using TDT = TypeDescriptorTag<DataTypeTag<DataType::NANOSECONDS_UTC64>, DimensionTag<Dimension ::Dim0>>;
+        auto index_column_data = index_column.data();
+        auto pos = 0u;
+        while (auto block = index_column_data.next<TDT>()) {
+            auto ptr = reinterpret_cast<const timestamp*>(block->data());
+            const auto row_count = block->row_count();
+            for (auto i = 0u; i < row_count; ++i, ++pos) {
+                ptr++;
+            }
+        }
+    }
+    return Composite<EntityIds>();
 }
 
 [[nodiscard]] std::string ResampleClause::to_string() const {

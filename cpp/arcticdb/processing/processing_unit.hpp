@@ -112,6 +112,8 @@ namespace arcticdb {
         VariantData get(const VariantNode &name);
     };
 
+    std::vector<ProcessingUnit> split_by_row_slice(ProcessingUnit&& proc);
+
     inline std::vector<pipelines::SliceAndKey> collect_segments(Composite<ProcessingUnit>&& p) {
         auto procs = std::move(p);
         std::vector<pipelines::SliceAndKey> output;
