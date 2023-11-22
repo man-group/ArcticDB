@@ -407,6 +407,20 @@ Composite<EntityIds> AggregationClause::process(Composite<EntityIds>&& entity_id
                                                 // 11.01 seconds with caching
                                                 // Not worth worrying about right now
                                                 robin_hood::unordered_flat_map<RawType, size_t> offset_to_group;
+
+                                                const bool is_sparse = col.column_->is_sparse();
+                                                using optional_iter_type = std::optional<decltype(input_data.bit_vector()->first())>;
+                                                optional_iter_type iter = std::nullopt;
+                                                size_t previous_value_index = 0;
+                                                constexpr size_t missing_value_group_id = 0;
+
+                                                if (is_sparse)
+                                                {
+                                                    iter = std::make_optional(input_data.bit_vector()->first());
+                                                    // We use 0 for the missing value group id
+                                                    next_group_id++;
+                                                }
+
                                                 while (auto block = input_data.next<ScalarTagType<DataTypeTagType>>()) {
                                                     const auto row_count = block->row_count();
                                                     auto ptr = block->data();
@@ -429,6 +443,14 @@ Composite<EntityIds> AggregationClause::process(Composite<EntityIds>&& entity_id
                                                         } else {
                                                             val = *ptr;
                                                         }
+                                                        if (is_sparse) {
+                                                            for (size_t j = previous_value_index; j != *(iter.value()); ++j) {
+                                                                row_to_group.emplace_back(missing_value_group_id);
+                                                            }
+                                                            previous_value_index = *(iter.value()) + 1;
+                                                            ++(iter.value());
+                                                        }
+
                                                         if (auto it = hash_to_group->find(val); it == hash_to_group->end()) {
                                                             row_to_group.emplace_back(next_group_id);
                                                             auto group_id = next_group_id++;
@@ -437,6 +459,11 @@ Composite<EntityIds> AggregationClause::process(Composite<EntityIds>&& entity_id
                                                             row_to_group.emplace_back(it->second);
                                                         }
                                                     }
+                                                }
+
+                                                // Marking all the last non-represented values as missing.
+                                                for (size_t i = row_to_group.size(); i <= size_t(col.column_->last_row()); ++i) {
+                                                    row_to_group.emplace_back(missing_value_group_id);
                                                 }
 
                                                 num_unique = next_group_id;

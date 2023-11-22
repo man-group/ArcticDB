@@ -253,6 +253,67 @@ TEST(Clause, AggregationSparseColumn)
     });
 }
 
+TEST(Clause, AggregationSparseGroupby) {
+    using namespace arcticdb;
+    auto component_manager = std::make_shared<ComponentManager>();
+
+    AggregationClause aggregation("int_sparse_repeated_values", {{"sum_int", "sum"}, {"min_int", "min"}, {"max_int", "max"}, {"mean_int", "mean"}, {"count_int", "count"}});
+    aggregation.set_component_manager(component_manager);
+
+    size_t num_rows{100};
+    size_t unique_grouping_values{10};
+    // 1 more group because of missing values
+    size_t unique_groups{unique_grouping_values + 1};
+    auto proc_unit = ProcessingUnit{generate_sparse_groupby_testing_segment(num_rows, unique_grouping_values)};
+    auto entity_ids = Composite<EntityIds>(push_entities(component_manager, std::move(proc_unit)));
+
+    auto aggregated = gather_entities(component_manager, aggregation.process(std::move(entity_ids))).as_range();
+    ASSERT_EQ(1, aggregated.size());
+    ASSERT_TRUE(aggregated[0].segments_.has_value());
+    auto segments = aggregated[0].segments_.value();
+    ASSERT_EQ(1, segments.size());
+
+    using aggregation_test::check_column;
+    check_column<int64_t>(*segments[0], "sum_int", unique_groups, [unique_grouping_values](size_t idx) -> int64_t {
+        if (idx == 0) {
+            return 495;
+        } else {
+            return 450 - static_cast<int64_t>(idx % unique_grouping_values);
+        }
+    });
+    check_column<int64_t>(*segments[0], "min_int", unique_groups, [](size_t idx) -> int64_t {
+        if (idx == 0) {
+            return 0;
+        } else {
+            return idx;
+        }
+    });
+    check_column<int64_t>(*segments[0], "max_int", unique_groups, [unique_grouping_values](size_t idx) -> int64_t {
+        if (idx == 0) {
+            return 99;
+        }
+        else if (idx == 9) {
+            return 89;
+        } else {
+            return 90 + idx % unique_grouping_values;
+        }
+    });
+    check_column<double>(*segments[0], "mean_int", unique_groups, [unique_grouping_values](size_t idx) -> double {
+        if (idx == 0) {
+            return 49.5;
+        } else {
+            return (450 - static_cast<int64_t>(idx % unique_grouping_values)) / 9.;
+        }
+    });
+    check_column<uint64_t>(*segments[0], "count_int", unique_groups, [](size_t idx) -> uint64_t {
+        if (idx == 0) {
+            return 10;
+        } else {
+            return 9;
+        }
+    });
+}
+
 TEST(Clause, Passthrough) {
     using namespace arcticdb;
     auto component_manager = std::make_shared<ComponentManager>();
