@@ -30,10 +30,12 @@ void TypeHandlerRegistry::register_handler(const util::TypeDescriptor& type_desc
      handlers_.try_emplace(type_descriptor, std::make_shared<TypeHandler>(std::move(handler)));
 }
 
-size_t TypeHandlerRegistry::Hasher::operator()(const util::TypeDescriptor val) const {
-    static_assert(sizeof(val) == sizeof(uint16_t), "Cannot compute util::TypeDescriptor's hash. The size is wrong.");
+size_t TypeHandlerRegistry::Hasher::operator()(const util::TypeDescriptor descriptor) const {
+    static_assert(sizeof(descriptor) == sizeof(uint16_t), "Cannot compute util::TypeDescriptor's hash. The size is wrong.");
+    static_assert(sizeof(decltype(descriptor.data_type())) == 1);
+    static_assert(sizeof(decltype(descriptor.dimension())) == 1);
     const std::hash<uint16_t> hasher;
-    return hasher(*reinterpret_cast<const uint16_t*>(&val));
+    return hasher(uint16_t(descriptor.data_type()) << 8 | uint16_t(descriptor.dimension()));
 }
 
 } //namespace arcticdb
