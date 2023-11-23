@@ -4,12 +4,24 @@
  *
  * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
  */
-#include <arcticdb/codec/codec_utils.hpp>
+#include <arcticdb/codec/encode_common.hpp>
 #include <arcticdb/codec/typed_block_encoder_impl.hpp>
-#include <arcticdb/codec/column_encoder_utils.hpp>
 #include <arcticdb/column_store/memory_segment.hpp>
 
 namespace arcticdb {
+    void add_bitmagic_compressed_size(
+        const ColumnData& column_data,
+        size_t& max_compressed_bytes,
+        size_t& uncompressed_bytes
+    );
+
+    void encode_sparse_map(
+        ColumnData& column_data,
+        std::variant<EncodedField*, arcticdb::proto::encoding::EncodedField*> variant_field,
+        Buffer& out,
+        std::ptrdiff_t& pos
+    );
+
     /// @brief Utility class used to encode and compute the max encoding size for regular data columns for V1 encoding
     struct ColumnEncoderV1 {
         static std::pair<size_t, size_t> max_compressed_size(
@@ -73,20 +85,25 @@ namespace arcticdb {
         encode_sparse_map(column_data, variant_field, out, pos);
     }
 
-    SizeResult max_compressed_size_v1(const SegmentInMemory &in_mem_seg, const arcticdb::proto::encoding::VariantCodec &codec_opts) {
+    using EncodingPolicyV1 = EncodingPolicyType<EncodingVersion::V1, ColumnEncoderV1>;
+
+    [[nodiscard]] static SizeResult max_compressed_size_v1(
+        const SegmentInMemory& in_mem_seg,
+        const arcticdb::proto::encoding::VariantCodec& codec_opts
+    ) {
         ARCTICDB_SAMPLE(GetSegmentCompressedSize, 0)
         SizeResult result{};
-        calc_metadata_size<EncodingVersion::V1>(in_mem_seg, codec_opts, result);
+        calc_metadata_size<EncodingPolicyV1>(in_mem_seg, codec_opts, result);
 
         if(in_mem_seg.row_count() > 0) {
-            calc_columns_size<ColumnEncoderV1>(in_mem_seg, codec_opts, result);
-            calc_string_pool_size<ColumnEncoderV1>(in_mem_seg, codec_opts, result);
+            calc_columns_size<EncodingPolicyV1>(in_mem_seg, codec_opts, result);
+            calc_string_pool_size<EncodingPolicyV1>(in_mem_seg, codec_opts, result);
         }
         ARCTICDB_TRACE(log::codec(), "Max compressed size {}", result.max_compressed_bytes_);
         return result;
     }
 
-    Segment encode_v1(SegmentInMemory&& s, const arcticdb::proto::encoding::VariantCodec &codec_opts) {
+    [[nodiscard]] Segment encode_v1(SegmentInMemory&& s, const arcticdb::proto::encoding::VariantCodec &codec_opts) {
         /*
          * This takes an in memory segment with all the metadata, column tensors etc., loops through each column
          * and based on the type of the column, calls the typed block encoder for that column.
@@ -109,7 +126,7 @@ namespace arcticdb {
         auto *tsd = segment_header->mutable_stream_descriptor();
         tsd->set_in_bytes(uncompressed_size);
 
-        encode_metadata<EncodingVersion::V1>(in_mem_seg, *segment_header, codec_opts, *out_buffer, pos);
+        encode_metadata<EncodingPolicyV1>(in_mem_seg, *segment_header, codec_opts, *out_buffer, pos);
 
         if(in_mem_seg.row_count() > 0) {
             ARCTICDB_TRACE(log::codec(), "Encoding fields");
@@ -119,7 +136,7 @@ namespace arcticdb {
                 encoder.encode(codec_opts, column_data, encoded_field, *out_buffer, pos);
                 ARCTICDB_TRACE(log::codec(), "Encoded column {}: ({}) to position {}", column_index, in_mem_seg.descriptor().fields(column_index).name(), pos);
             }
-            encode_string_pool<ColumnEncoderV1>(in_mem_seg, *segment_header, codec_opts, *out_buffer, pos);
+            encode_string_pool<EncodingPolicyV1>(in_mem_seg, *segment_header, codec_opts, *out_buffer, pos);
         }
         ARCTICDB_DEBUG(log::codec(), "Setting buffer bytes to {}", pos);
         out_buffer->set_bytes(pos);

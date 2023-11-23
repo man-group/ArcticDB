@@ -18,7 +18,7 @@
 namespace arcticdb::detail {
 
 template<template<typename> class BlockType, class TD>
-struct PassthroughEncoder {
+struct PassthroughEncoderV1 {
 
     using Opts = arcticdb::proto::encoding::VariantCodec::Passthrough;
 

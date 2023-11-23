@@ -103,16 +103,16 @@ namespace arcticdb {
             });
         }
     private:
-        using ZstdEncoder = std::conditional_t<encoder_version == EncodingVersion::V1,
-            arcticdb::detail::ZstdEncoder<TypedBlock, TD>,
-            arcticdb::detail::GenericBlockEncoderV2<TypedBlock<TD>, TD, arcticdb::detail::ZstdBlockEncoder>>;
+        template<class EncoderType>
+        using BlockEncoder = std::conditional_t<encoder_version == EncodingVersion::V1,
+            arcticdb::detail::GenericBlockEncoder<TypedBlock<TD>, TD, EncoderType>,
+            arcticdb::detail::GenericBlockEncoderV2<TypedBlock<TD>, TD, EncoderType>>;
 
-        using Lz4Encoder = std::conditional_t<encoder_version == EncodingVersion::V1,
-            arcticdb::detail::Lz4Encoder<TypedBlock, TD>,
-            arcticdb::detail::GenericBlockEncoderV2<TypedBlock<TD>, TD, arcticdb::detail::Lz4BlockEncoder>>;
+        using ZstdEncoder = BlockEncoder<arcticdb::detail::ZstdBlockEncoder>;
+        using Lz4Encoder = BlockEncoder<arcticdb::detail::Lz4BlockEncoder>;
 
         using PassthroughEncoder = std::conditional_t<encoder_version == EncodingVersion::V1,
-            arcticdb::detail::PassthroughEncoder<TypedBlock, TD>,
+            arcticdb::detail::PassthroughEncoderV1<TypedBlock, TD>,
             arcticdb::detail::PassthroughEncoderV2<TypedBlock, TD>>;
 
         template<typename EncoderT>

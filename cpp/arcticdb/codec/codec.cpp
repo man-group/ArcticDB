@@ -4,31 +4,32 @@
  *
  * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
  */
-
-#include <arcticdb/codec/column_encoder_utils.hpp>
-
-
 #include <arcticdb/codec/codec.hpp>
 #include <arcticdb/stream/protobuf_mappings.hpp>
 #include <arcticdb/entity/performance_tracing.hpp>
-#include <arcticdb/util/configs_map.hpp>
 #include <arcticdb/codec/default_codecs.hpp>
 #include <arcticdb/codec/encoded_field.hpp>
 #include <arcticdb/codec/encoded_field_collection.hpp>
-#include <arcticdb//codec/typed_block_encoder_impl.hpp>
 
 
 #include <string>
 #include <google/protobuf/io/zero_copy_stream_impl.h>
 
 
-#include <arcticdb/codec/codec_utils.hpp>
+#include <arcticdb/codec/encode_common.hpp>
 
 
 namespace arcticdb {
-arcticdb::proto::encoding::VariantCodec shapes_encoding_opts() {
-    return codec::default_lz4_codec();
-}
+
+Segment encode_v2(
+    SegmentInMemory&& in_mem_seg,
+    const arcticdb::proto::encoding::VariantCodec& codec_opts
+);
+
+Segment encode_v1(
+    SegmentInMemory&& in_mem_seg,
+    const arcticdb::proto::encoding::VariantCodec& codec_opts
+);
 
 constexpr TypeDescriptor metadata_type_desc() {
     return TypeDescriptor{
@@ -41,12 +42,17 @@ constexpr TypeDescriptor encoded_blocks_type_desc() {
         DataType::UINT8, Dimension::Dim1
     };
 }
-/// @brief The type to be used for a block which represents shapes
-using ShapesBlock = TypedBlockData<ShapesBlockTDT>;
 
-//TODO  Provide tuning parameters to choose the encoding through encoding tags (also acting as config options)
-template<template<typename> class TypedBlock, class TD, EncodingVersion encoder_version>
-struct TypedBlockEncoderImpl;
+Segment encode_dispatch(
+    SegmentInMemory&& in_mem_seg,
+    const arcticdb::proto::encoding::VariantCodec &codec_opts,
+    EncodingVersion encoding_version) {
+    if(encoding_version == EncodingVersion::V2) {
+        return encode_v2(std::move(in_mem_seg), codec_opts);
+    } else {
+        return encode_v1(std::move(in_mem_seg), codec_opts);
+    }
+}
 
 namespace {
 class MetaBuffer {
@@ -126,7 +132,7 @@ std::optional<google::protobuf::Any> decode_metadata_from_segment(const Segment 
     const auto begin = data;
     const auto has_magic_numbers = EncodingVersion(hdr.encoding_version()) == EncodingVersion::V2;
     if(has_magic_numbers)
-        check_magic<MetadataMagic>(data);
+        util::check_magic<MetadataMagic>(data);
 
     return decode_metadata(hdr, data, begin);
 }
@@ -211,7 +217,7 @@ std::optional<std::tuple<google::protobuf::Any, arcticdb::proto::descriptors::Ti
     util::check(data != nullptr, "Got null data ptr from segment");
     const auto has_magic_numbers = EncodingVersion(hdr.encoding_version()) == EncodingVersion::V2;
     if(has_magic_numbers)
-        check_magic<MetadataMagic>(data);
+        util::check_magic<MetadataMagic>(data);
 
     auto maybe_any = decode_metadata(hdr, data, begin);
     if(!maybe_any)
@@ -220,13 +226,13 @@ std::optional<std::tuple<google::protobuf::Any, arcticdb::proto::descriptors::Ti
     auto tsd = timeseries_descriptor_from_any(*maybe_any);
 
     if(has_magic_numbers)
-        check_magic<DescriptorMagic>(data);
+        util::check_magic<DescriptorMagic>(data);
 
     if(hdr.has_descriptor_field() && hdr.descriptor_field().has_ndarray())
         data += encoding_sizes::ndarray_field_compressed_size(hdr.descriptor_field().ndarray());
 
     if(has_magic_numbers)
-        check_magic<IndexMagic>(data);
+        util::check_magic<IndexMagic>(data);
 
     auto maybe_fields = decode_index_fields(hdr, data, begin, end);
     if(!maybe_fields) {
@@ -257,11 +263,11 @@ std::pair<std::optional<google::protobuf::Any>, StreamDescriptor> decode_metadat
     const uint8_t* end) {
     util::check(data != nullptr, "Got null data ptr from segment");
     if(EncodingVersion(hdr.encoding_version()) == EncodingVersion::V2)
-        check_magic<MetadataMagic>(data);
+        util::check_magic<MetadataMagic>(data);
 
     auto maybe_any = decode_metadata(hdr, data, begin);
     if(EncodingVersion(hdr.encoding_version()) == EncodingVersion::V2)
-        check_magic<DescriptorMagic>(data);
+        util::check_magic<DescriptorMagic>(data);
 
     auto maybe_fields = decode_descriptor_fields(hdr, data, begin, end);
     if(!maybe_fields) {
@@ -312,20 +318,20 @@ void decode_v2(const Segment& segment,
     const auto [begin, end] = get_segment_begin_end(segment, hdr);
     auto encoded_fields_ptr = end;
     auto data = begin;
-    check_magic<MetadataMagic>(data);
+    util::check_magic<MetadataMagic>(data);
     decode_metadata(hdr, data, begin, res);
     util::check(hdr.has_descriptor_field(), "Expected descriptor field in v2 encoding");
-    check_magic<DescriptorMagic>(data);
+    util::check_magic<DescriptorMagic>(data);
     if(hdr.has_descriptor_field() && hdr.descriptor_field().has_ndarray())
         data += encoding_sizes::field_compressed_size(hdr.descriptor_field());
 
-    check_magic<IndexMagic>(data);
+    util::check_magic<IndexMagic>(data);
     auto index_fields = decode_index_fields(hdr, data, begin, end);
     if(index_fields)
         res.set_index_fields(std::make_shared<FieldCollection>(std::move(*index_fields)));
 
     util::check(hdr.has_column_fields(), "Expected column fields in v2 encoding");
-    check_magic<EncodedMagic>(encoded_fields_ptr);
+    util::check_magic<EncodedMagic>(encoded_fields_ptr);
     if (data!=end) {
         auto encoded_fields_buffer = decode_encoded_fields(hdr, encoded_fields_ptr, begin);
         const auto fields_size = desc.fields().size();
@@ -350,7 +356,7 @@ void decode_v2(const Segment& segment,
             ARCTICDB_TRACE(log::codec(), "Decoded column {} to position {}", i, data-begin);
         }
 
-        check_magic<StringPoolMagic>(data);
+        util::check_magic<StringPoolMagic>(data);
         decode_string_pool(hdr, data, begin, end, res);
 
         res.set_row_data(static_cast<ssize_t>(start_row + seg_row_count-1));
@@ -426,4 +432,79 @@ SegmentInMemory decode_segment(Segment&& s) {
     return res;
 }
 
+static void hash_field(const arcticdb::proto::encoding::EncodedField &field, HashAccum &accum) {
+    auto &n = field.ndarray();
+    for(auto i = 0; i < n.shapes_size(); ++i) {
+        auto v = n.shapes(i).hash();
+        accum(&v);
+    }
+
+    for(auto j = 0; j < n.values_size(); ++j) {
+        auto v = n.values(j).hash();
+        accum(&v);
+    }
+}
+
+HashedValue hash_segment_header(const arcticdb::proto::encoding::SegmentHeader &hdr) {
+    HashAccum accum;
+    if (hdr.has_metadata_field()) {
+        hash_field(hdr.metadata_field(), accum);
+    }
+    for (int i = 0; i < hdr.fields_size(); ++i) {
+        hash_field(hdr.fields(i), accum);
+    }
+    if(hdr.has_string_pool_field()) {
+        hash_field(hdr.string_pool_field(), accum);
+    }
+    return accum.digest();
+}
+
+void add_bitmagic_compressed_size(
+    const ColumnData& column_data,
+    size_t& max_compressed_bytes,
+    size_t& uncompressed_bytes
+) {
+    if (column_data.bit_vector() != nullptr && column_data.bit_vector()->count() > 0)   {
+        bm::serializer<util::BitMagic>::statistics_type stat{};
+        column_data.bit_vector()->calc_stat(&stat);
+        uncompressed_bytes += stat.memory_used;
+        max_compressed_bytes += stat.max_serialize_mem;
+    }
+}
+
+/// @brief Write the sparse map to the out buffer
+/// Bitmagic achieves the theoretical best compression for booleans. Adding additional encoding (lz4, zstd, etc...)
+/// will not improve anything and in fact it might worsen the encoding.
+[[nodiscard]] static size_t encode_bitmap(const util::BitMagic& sparse_map, Buffer& out, std::ptrdiff_t& pos) {
+    ARCTICDB_DEBUG(log::version(), "Encoding sparse map of count: {}", sparse_map.count());
+    bm::serializer<bm::bvector<> > bvs;
+    bm::serializer<bm::bvector<> >::buffer sbuf;
+    bvs.serialize(sparse_map, sbuf);
+    auto sz = sbuf.size();
+    auto total_sz = sz + util::combined_bit_magic_delimiters_size();
+    out.assert_size(pos + total_sz);
+
+    uint8_t* target = out.data() + pos;
+    util::write_magic<util::BitMagicStart>(target);
+    std::memcpy(target, sbuf.data(), sz);
+    target += sz;
+    util::write_magic<util::BitMagicEnd>(target);
+    pos = pos + static_cast<ptrdiff_t>(total_sz);
+    return total_sz;
+}
+
+void encode_sparse_map(
+    ColumnData& column_data,
+    std::variant<EncodedField*, arcticdb::proto::encoding::EncodedField*> variant_field,
+    Buffer& out,
+    std::ptrdiff_t& pos
+) {
+    if (column_data.bit_vector() != nullptr && column_data.bit_vector()->count() > 0)   {
+        ARCTICDB_DEBUG(log::codec(), "Sparse map count = {} pos = {}", column_data.bit_vector()->count(), pos);
+        const size_t sparse_bm_bytes = encode_bitmap(*column_data.bit_vector(), out, pos);
+        util::variant_match(variant_field, [&](auto field) {
+            field->mutable_ndarray()->set_sparse_map_bytes(static_cast<int>(sparse_bm_bytes));
+        });
+    }
+}
 } // namespace arcticdb
