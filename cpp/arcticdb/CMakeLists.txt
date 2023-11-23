@@ -178,9 +178,11 @@ set(arcticdb_srcs
         async/task_scheduler.hpp
         async/tasks.hpp
         codec/codec.hpp
+        codec/encode_common.hpp
         codec/codec-inl.hpp
         codec/core.hpp
         codec/lz4.hpp
+        codec/magic_words.hpp
         codec/passthrough.hpp
         codec/slice_data_sink.hpp
         codec/typed_block_encoder_impl.hpp
@@ -357,6 +359,8 @@ set(arcticdb_srcs
         async/task_scheduler.cpp
         async/tasks.cpp
         codec/codec.cpp
+        codec/encode_v1.cpp
+        codec/encode_v2.cpp
         codec/encoding_sizes.cpp
         codec/segment.cpp
         codec/variant_encoded_field_collection.cpp
@@ -821,6 +825,7 @@ if(${TEST})
             ${COMMON_PUBLIC_TEST_LIBRARIES}
             PRIVATE
             ${AWSSDK_LINK_LIBRARIES}
+            arcticdb_core_static
             )
 
         target_include_directories(test_unit_arcticdb PRIVATE

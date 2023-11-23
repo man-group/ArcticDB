@@ -14,16 +14,11 @@
 #include <arcticdb/codec/zstd.hpp>
 #include <arcticdb/codec/lz4.hpp>
 #include <arcticdb/codec/encoded_field.hpp>
-#include <arcticdb/codec/slice_data_sink.hpp>
+#include <arcticdb/codec/magic_words.hpp>
 
-#include <arcticdb/util/pb_util.hpp>
 #include <arcticdb/util/bitset.hpp>
-#include <arcticdb/entity/performance_tracing.hpp>
 
 #include <arcticdb/util/buffer.hpp>
-#include <arcticdb/util/hash.hpp>
-#include <arcticdb/util/sparse_utils.hpp>
-
 
 #include <google/protobuf/text_format.h>
 
@@ -170,7 +165,7 @@ std::size_t decode_field(
     size_t magic_size = 0u;
     if constexpr(std::is_same_v<EncodedFieldType, EncodedField>) {
         magic_size += sizeof(ColumnMagic);
-        check_magic<ColumnMagic>(input);
+        util::check_magic<ColumnMagic>(input);
     }
 
     switch (field.encoding_case()) {

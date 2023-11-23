@@ -6,7 +6,6 @@ project(arcticdb VERSION 0.0.1)
 
 enable_testing()
 
-
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 option(
@@ -16,7 +15,6 @@ option(
 )
 option(ARCTICDB_USING_ADDRESS_SANITIZER "Enable address sanitizer." OFF)
 option(ARCTICDB_USING_THREAD_SANITIZER "Enable thread sanitizer." OFF)
-option(ARCTICDB_USING_MEMORY_SANITIZER "Enable memory sanitizer. Does not play well with address sanitizer." OFF)
 option(ARCTICDB_USING_UB_SANITIZER "Enable undefined behavior sanitizer." OFF)
 
 set(ARCTICDB_SANITIZER_FLAGS)

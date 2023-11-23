@@ -77,7 +77,7 @@ namespace arcticdb {
         util::variant_match(variant_field, [&input](const auto &field) {
             using EncodedFieldType = std::decay_t<decltype(*field)>;
             if constexpr (std::is_same_v<EncodedFieldType, arcticdb::EncodedField>)
-                check_magic<ColumnMagic>(input);
+                util::check_magic<ColumnMagic>(input);
 
             if (field->encoding_case() == EncodedFieldType::kNdarray) {
                 const auto &ndarray_field = field->ndarray();

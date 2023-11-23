@@ -17,7 +17,51 @@
 
 #include <gtest/gtest.h>
 
+namespace arcticdb {
+    struct ColumnEncoderV1 {
+        static std::pair<size_t, size_t> max_compressed_size(
+            const arcticdb::proto::encoding::VariantCodec& codec_opts,
+            ColumnData& column_data);
+
+        static void encode(
+            const arcticdb::proto::encoding::VariantCodec &codec_opts,
+            ColumnData& column_data,
+            std::variant<EncodedField*, arcticdb::proto::encoding::EncodedField*> variant_field,
+            Buffer& out,
+            std::ptrdiff_t& pos);
+    };
+
+    struct ColumnEncoderV2 {
+    public:
+        static void encode(
+            const arcticdb::proto::encoding::VariantCodec &codec_opts,
+            ColumnData& column_data,
+            std::variant<EncodedField*, arcticdb::proto::encoding::EncodedField*> variant_field,
+            Buffer& out,
+            std::ptrdiff_t& pos);
+        static std::pair<size_t, size_t> max_compressed_size(
+            const arcticdb::proto::encoding::VariantCodec& codec_opts,
+            ColumnData& column_data);
+    private:
+        static void encode_shapes(
+            const ColumnData& column_data,
+            std::variant<EncodedField*, arcticdb::proto::encoding::EncodedField*> variant_field,
+            Buffer& out,
+            std::ptrdiff_t& pos_in_buffer);
+        static void encode_blocks(
+            const arcticdb::proto::encoding::VariantCodec &codec_opts,
+            ColumnData& column_data,
+            std::variant<EncodedField*, arcticdb::proto::encoding::EncodedField*> variant_field,
+            Buffer& out,
+            std::ptrdiff_t& pos);
+    };
+}
+
 using namespace arcticdb;
+
+using EncoginVersions = ::testing::Types<
+    std::integral_constant<EncodingVersion, EncodingVersion::V1>,
+    std::integral_constant<EncodingVersion, EncodingVersion::V2>>;
 
 class FieldEncoderTestDim0Base : public testing::Test {
 protected:
@@ -37,7 +81,7 @@ using EncodedFieldsType = ::testing::Types<arcticdb::proto::encoding::EncodedFie
 TYPED_TEST_SUITE(FieldEncoderTestDim0, EncodedFieldsType);
 
 TYPED_TEST(FieldEncoderTestDim0, Passthrough_v1) {
-    using Encoder = BlockEncoder<typename TestFixture::ValuesTypeDescriptorTag, EncodingVersion::V1>;
+    using Encoder = TypedBlockEncoderImpl<TypedBlockData, typename TestFixture::ValuesTypeDescriptorTag, EncodingVersion::V1>;
     const TypedBlockData<typename TestFixture::ValuesTypeDescriptorTag> values_block(
         TestFixture::values.data(),
         nullptr,
@@ -59,7 +103,7 @@ TYPED_TEST(FieldEncoderTestDim0, Passthrough_v1) {
 }
 
 TYPED_TEST(FieldEncoderTestDim0, Passthrough_v2) {
-    using Encoder = BlockEncoder<typename TestFixture::ValuesTypeDescriptorTag, EncodingVersion::V2>;
+    using Encoder = TypedBlockEncoderImpl<TypedBlockData, typename TestFixture::ValuesTypeDescriptorTag, EncodingVersion::V2>;
     const TypedBlockData<typename TestFixture::ValuesTypeDescriptorTag> values_block(
         TestFixture::values.data(),
         nullptr,
@@ -83,21 +127,18 @@ TYPED_TEST(FieldEncoderTestDim0, Passthrough_v2) {
 template<typename EncodingVersionConstant>
 class FieldEncoderTestFromColumnDim0 : public FieldEncoderTestDim0Base{};
 
-template<EncodingVersion v>
-using EncodingVersionT = std::integral_constant<EncodingVersion, v>;
-
 /// @brief Cartesian product between the type of the encoded field and the encoding version.
 /// (EncodedField, arcticdb::proto::encoding::EncodedField) x (EncodingVersion::V1, EncodingVersion::V2)
 using FieldVersionT = ::testing::Types<
-    std::pair<arcticdb::proto::encoding::EncodedField, EncodingVersionT<EncodingVersion::V1>>,
-	std::pair<arcticdb::proto::encoding::EncodedField, EncodingVersionT<EncodingVersion::V2>>,
-	std::pair<EncodedField, EncodingVersionT<EncodingVersion::V1>>,
-	std::pair<EncodedField, EncodingVersionT<EncodingVersion::V2>>>;
+    std::pair<arcticdb::proto::encoding::EncodedField, ColumnEncoderV1>,
+	std::pair<arcticdb::proto::encoding::EncodedField, ColumnEncoderV2>,
+	std::pair<EncodedField, ColumnEncoderV1>,
+	std::pair<EncodedField, ColumnEncoderV2>>;
 TYPED_TEST_SUITE(FieldEncoderTestFromColumnDim0, FieldVersionT);
 
 TYPED_TEST(FieldEncoderTestFromColumnDim0, Passthrough) {
-    constexpr EncodingVersion encoding_version = TypeParam::second_type::value;
     using EncodedFieldType = typename TypeParam::first_type;
+    using ColumnEncoder = typename TypeParam::second_type;
 
     ChunkedBuffer values_buffer;
     values_buffer.ensure(TestFixture::values_byte_size);
@@ -108,12 +149,11 @@ TYPED_TEST(FieldEncoderTestFromColumnDim0, Passthrough) {
     ColumnData column_data(&values_buffer, &shapes_buffer, TestFixture::type_descriptor, nullptr);
     EncodedFieldType field;
     std::ptrdiff_t pos = 0;
-    ColumnEncoder<encoding_version> enc;
-    const auto [_, max_compressed_size] = enc.max_compressed_size(TestFixture::passthorugh_encoding_options,
+    const auto [_, max_compressed_size] = ColumnEncoder::max_compressed_size(TestFixture::passthorugh_encoding_options,
         column_data);
     Buffer out(max_compressed_size);
     column_data.reset();
-    enc.encode(TestFixture::passthorugh_encoding_options, column_data, &field, out, pos);
+    ColumnEncoder::encode(TestFixture::passthorugh_encoding_options, column_data, &field, out, pos);
     auto& nd = field.ndarray();
     ASSERT_EQ(nd.items_count(), TestFixture::values.size());
     ASSERT_EQ(nd.shapes_size(), 0);
@@ -142,7 +182,7 @@ protected:
 TYPED_TEST_SUITE(FieldEncoderTestDim1, EncodedFieldsType);
 
 TYPED_TEST(FieldEncoderTestDim1, PassthroughV1) {
-    using Encoder = BlockEncoder<typename TestFixture::ValuesTypeDescriptorTag, EncodingVersion::V1>;
+    using Encoder = TypedBlockEncoderImpl<TypedBlockData, typename TestFixture::ValuesTypeDescriptorTag, EncodingVersion::V1>;
     const TypedBlockData<typename TestFixture::ValuesTypeDescriptorTag> block(
         TestFixture::values.data(),
         TestFixture::shapes.data(),
@@ -170,8 +210,8 @@ TYPED_TEST(FieldEncoderTestDim1, PassthroughV1) {
 }
 
 TYPED_TEST(FieldEncoderTestDim1, PassthroughV2) {
-    using Encoder = BlockEncoder<typename TestFixture::ValuesTypeDescriptorTag, EncodingVersion::V2>;
-    using ShapesEncoder = BlockEncoder<arcticdb::ShapesBlockTDT, EncodingVersion::V2>;
+    using Encoder = TypedBlockEncoderImpl<TypedBlockData, typename TestFixture::ValuesTypeDescriptorTag, EncodingVersion::V2>;
+    using ShapesEncoder = TypedBlockEncoderImpl<TypedBlockData, arcticdb::ShapesBlockTDT, EncodingVersion::V2>;
     const TypedBlockData<typename TestFixture::ValuesTypeDescriptorTag> values_block(
         TestFixture::values.data(),
         TestFixture::shapes.data(),
@@ -246,12 +286,11 @@ protected:
 TEST_F(TestMultiblockData_Dim1, EncodingVersion_1) {
     arcticdb::proto::encoding::EncodedField encoded_field;
     ColumnData column_data(&data_buffer, &shapes_buffer, type_descriptor, nullptr);
-    using ColumnEncoder = ColumnEncoder<EncodingVersion::V1>;
-    const auto [_, max_compressed_size] = ColumnEncoder::max_compressed_size(passthorugh_encoding_options, column_data);
+    const auto [_, max_compressed_size] = ColumnEncoderV1::max_compressed_size(passthorugh_encoding_options, column_data);
     Buffer out(max_compressed_size);
     ptrdiff_t out_pos = 0;
     column_data.reset();
-    ColumnEncoder::encode(passthorugh_encoding_options, column_data, &encoded_field, out, out_pos);
+    ColumnEncoderV1::encode(passthorugh_encoding_options, column_data, &encoded_field, out, out_pos);
     const auto ndarray = encoded_field.ndarray();
     ASSERT_EQ(ndarray.shapes_size(), 2);
     ASSERT_EQ(ndarray.values_size(), 2);
@@ -261,19 +300,23 @@ TEST_F(TestMultiblockData_Dim1, EncodingVersion_1) {
 TEST_F(TestMultiblockData_Dim1, EncodingVersion_2) {
     arcticdb::EncodedField encoded_field;
     ColumnData column_data(&data_buffer, &shapes_buffer, type_descriptor, nullptr);
-    using ColumnEncoder = ColumnEncoder<EncodingVersion::V2>;
-    const auto [_, max_compressed_size] = ColumnEncoder::max_compressed_size(passthorugh_encoding_options, column_data);
+    const auto [_, max_compressed_size] = ColumnEncoderV2::max_compressed_size(passthorugh_encoding_options, column_data);
     Buffer out(max_compressed_size);
     ptrdiff_t out_pos = 0;
     column_data.reset();
-    ColumnEncoder::encode(passthorugh_encoding_options, column_data, &encoded_field, out, out_pos);
+    ColumnEncoderV2::encode(passthorugh_encoding_options, column_data, &encoded_field, out, out_pos);
     const auto ndarray = encoded_field.ndarray();
     ASSERT_EQ(ndarray.shapes_size(), 1);
     ASSERT_EQ(ndarray.values_size(), 2);
     ASSERT_EQ(ndarray.items_count(), shapes_data.size());
 }
 
-TEST(SegmentEncoderTest, EncodeSingleStringV1) {
+template<typename EncodedFieldType>
+class SegmentStringEncodingTest : public testing::Test{};
+
+TYPED_TEST_SUITE(SegmentStringEncodingTest, EncoginVersions);
+
+TYPED_TEST(SegmentStringEncodingTest, EncodeSingleString) {
     const auto tsd = create_tsd<DataTypeTag<DataType::ASCII_DYNAMIC64>, Dimension::Dim0>("thing", 1);
     SegmentInMemory s(StreamDescriptor{tsd});
     s.set_scalar(0, timestamp(123));
@@ -283,31 +326,15 @@ TEST(SegmentEncoderTest, EncodeSingleStringV1) {
     auto lz4ptr = opt.mutable_lz4();
     lz4ptr->set_acceleration(1);
     auto copy = s.clone();
-    Segment seg = encode_v1(s.clone(), opt);
+    constexpr EncodingVersion encoding_version = TypeParam::value;
+    Segment seg = encode_dispatch(s.clone(), opt, encoding_version);
 
     SegmentInMemory res = decode_segment(std::move(seg));
     ASSERT_EQ(copy.string_at(0, 1), res.string_at(0, 1));
     ASSERT_EQ(std::string("happy"), res.string_at(0, 1));
 }
 
-TEST(SegmentEncoderTest, EncodeSingleStringV2) {
-    const auto tsd = create_tsd<DataTypeTag<DataType::ASCII_DYNAMIC64>, Dimension::Dim0>("thing", 1);
-    SegmentInMemory s(StreamDescriptor{tsd});
-    s.set_scalar(0, timestamp(123));
-    s.set_string(1, "happy");
-    s.end_row();
-    arcticdb::proto::encoding::VariantCodec opt;
-    auto lz4ptr = opt.mutable_lz4();
-    lz4ptr->set_acceleration(1);
-    auto copy = s.clone();
-    Segment seg = encode_v2(SegmentInMemory{s}, opt);
-
-    SegmentInMemory res = decode_segment(std::move(seg));
-    ASSERT_EQ(copy.string_at(0, 1), res.string_at(0, 1));
-    ASSERT_EQ(std::string("happy"), res.string_at(0, 1));
-}
-
-TEST(SegmentencoderTest, EncodeStringsBasic) {
+TYPED_TEST(SegmentStringEncodingTest, EncodeStringsBasic) {
     const auto tsd = create_tsd<DataTypeTag<DataType::ASCII_DYNAMIC64>, Dimension::Dim0>();
     SegmentInMemory s(StreamDescriptor{tsd});
     s.set_scalar(0, timestamp(123));
@@ -326,7 +353,8 @@ TEST(SegmentencoderTest, EncodeStringsBasic) {
     auto lz4ptr = opt.mutable_lz4();
     lz4ptr->set_acceleration(1);
     auto copy = s.clone();
-    Segment seg = encode_v1(SegmentInMemory{s}, opt);
+    constexpr EncodingVersion encoding_version = TypeParam::value;
+    Segment seg = encode_dispatch(SegmentInMemory{s}, opt, encoding_version);
 
     SegmentInMemory res = decode_segment(std::move(seg));
     ASSERT_EQ(copy.string_at(0, 1), res.string_at(0, 1));

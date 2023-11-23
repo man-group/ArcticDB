@@ -60,9 +60,6 @@ struct Lz4BlockEncoder {
     }
 };
 
-template<template<typename> class F, class TD>
-using Lz4Encoder = GenericBlockEncoder<F<TD>, TD, Lz4BlockEncoder>;
-
 struct Lz4Decoder {
 /*
  * encoder_version is here to support multiple versions but won't be used before we have them

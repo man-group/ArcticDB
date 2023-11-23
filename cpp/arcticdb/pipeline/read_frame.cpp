@@ -28,7 +28,7 @@
     #include <arcticdb/util/third_party/robin_hood.hpp>
 #endif
 #include <arcticdb/codec/variant_encoded_field_collection.hpp>
-
+#include <arcticdb/util/magic_num.hpp>
 #include <google/protobuf/util/message_differencer.h>
 #include <folly/SpinLock.h>
 #include <folly/gen/Base.h>
@@ -113,7 +113,7 @@ size_t get_index_field_count(const SegmentInMemory& frame) {
 const uint8_t* skip_heading_fields(const arcticdb::proto::encoding::SegmentHeader & hdr, const uint8_t*& data) {
     const auto has_magic_numbers = EncodingVersion(hdr.encoding_version()) == EncodingVersion::V2;
     if(has_magic_numbers)
-        check_magic<MetadataMagic>(data);
+        util::check_magic<MetadataMagic>(data);
 
     if (hdr.has_metadata_field()) {
         auto metadata_size = encoding_sizes::ndarray_field_compressed_size(hdr.metadata_field().ndarray());
@@ -122,7 +122,7 @@ const uint8_t* skip_heading_fields(const arcticdb::proto::encoding::SegmentHeade
     }
 
     if(has_magic_numbers)
-        check_magic<DescriptorMagic>(data);
+        util::check_magic<DescriptorMagic>(data);
 
     if(hdr.has_descriptor_field()) {
         auto descriptor_field_size = encoding_sizes::ndarray_field_compressed_size(hdr.descriptor_field().ndarray());
@@ -131,7 +131,7 @@ const uint8_t* skip_heading_fields(const arcticdb::proto::encoding::SegmentHeade
     }
 
     if(has_magic_numbers)
-        check_magic<IndexMagic>(data);
+        util::check_magic<IndexMagic>(data);
 
     if(hdr.has_index_descriptor_field()) {
         auto index_fields_size = encoding_sizes::ndarray_field_compressed_size(hdr.index_descriptor_field().ndarray());
@@ -150,7 +150,7 @@ void decode_string_pool(const arcticdb::proto::encoding::SegmentHeader & hdr, co
 
         // Note that this will decode the entire string pool into a ChunkedBuffer with exactly 1 chunk
         if(EncodingVersion(hdr.encoding_version()) == EncodingVersion::V2)
-            check_magic<StringPoolMagic>(data);
+            util::check_magic<StringPoolMagic>(data);
 
         data += decode_field(string_pool_descriptor().type(),
                        hdr.string_pool_field(),
@@ -358,7 +358,7 @@ void decode_into_frame_static(
         while (it.has_next()) {
             advance_skipped_cols(data, static_cast<ssize_t>(it.prev_col_offset()), it.source_col(), it.first_slice_col_offset(), index_fieldcount, fields, hdr);
             if(has_magic_nums)
-                check_magic_in_place<ColumnMagic>(data);
+                util::check_magic<ColumnMagic>(data);
 
             auto encoded_field = fields.at(it.source_field_pos());
             util::check(it.source_field_pos() < size_t(fields.size()), "Field index out of range: {} !< {}", it.source_field_pos(), fields.size());
@@ -385,7 +385,7 @@ void decode_into_frame_static(
                 break;
             } else {
                 if(has_magic_nums)
-                    check_magic_in_place<ColumnMagic>(data);
+                    util::check_magic<ColumnMagic>(data);
             }
         }
 
