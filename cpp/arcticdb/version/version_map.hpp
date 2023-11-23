@@ -427,7 +427,8 @@ public:
                 [](const auto& k){return k.type() == KeyType::VERSION;}),
             std::end(new_entry->keys_));
 
-        new_entry->validate();
+        if (validate_)
+            new_entry->validate();
         return new_entry;
     }
 
