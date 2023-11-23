@@ -517,6 +517,13 @@ constexpr bool must_contain_data(TypeDescriptor td) {
     return !(is_empty_type(td.data_type()) || td.dimension() > Dimension::Dim0);
 }
 
+/// @biref Check if type descriptor corresponds to numpy array type
+/// @important Be sure to match this with the type handler registry in: cpp/arcticdb/python/python_module.cpp#register_type_handlers
+constexpr bool is_numpy_array(TypeDescriptor td) {
+    return (is_numeric_type(td.data_type()) || is_bool_type(td.data_type()) || is_empty_type(td.data_type())) &&
+           (td.dimension() == Dimension::Dim1);
+}
+
 inline void set_data_type(DataType data_type, TypeDescriptor& type_desc) {
     type_desc.data_type_ = data_type;
 }

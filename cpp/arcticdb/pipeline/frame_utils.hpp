@@ -114,6 +114,8 @@ std::optional<convert::StringEncodingError> aggregator_set_data(
         const auto c_style = util::is_cstyle_array<RawType>(tensor);
         std::optional<ChunkedBuffer> flattened_buffer;
         if constexpr (is_sequence_type(dt)) {
+            normalization::check<ErrorCode::E_UNIMPLEMENTED_INPUT_TYPE>(tag.dimension() == Dimension::Dim0,
+                "Multidimensional string types are not supported.");
             ARCTICDB_SUBSAMPLE_AGG(SetDataString)
             if (is_fixed_string_type(dt)) {
                 // deduplicate the strings
@@ -193,6 +195,8 @@ std::optional<convert::StringEncodingError> aggregator_set_data(
                 }
             }
         } else if constexpr(is_py_bool_type(dt)) {
+            normalization::check<ErrorCode::E_UNIMPLEMENTED_INPUT_TYPE>(tag.dimension() == Dimension::Dim0,
+                "Multidimensional nullable booleans are not supported");
             auto data = const_cast<void *>(tensor.data());
             auto ptr_data = reinterpret_cast<PyObject **>(data);
             ptr_data += row;
@@ -215,7 +219,7 @@ std::optional<convert::StringEncodingError> aggregator_set_data(
             if(bitset.count() > 0)
                 agg.set_sparse_block(col, std::move(bool_buffer), std::move(bitset));
 
-        } else if constexpr((is_numeric_type(dt) || is_bool_type(dt) || is_empty_type(dt)) && (tag.dimension() > Dimension::Dim0)) {
+        } else if constexpr(is_numpy_array(TypeDescriptor(tag))) {
             auto data = const_cast<void*>(tensor.data());
             const auto ptr_data = reinterpret_cast<PyObject**>(data) + row;
 
@@ -275,7 +279,11 @@ std::optional<convert::StringEncodingError> aggregator_set_data(
             }
             arr_col.set_type(TypeDescriptor{secondary_type.data_type(), column_type_descriptor.dimension()});
             agg.set_sparse_block(col, arr_col.release_buffer(), arr_col.release_shapes(), std::move(values_bitset));
-        } else if constexpr (!is_empty_type(dt)) {
+        } else if constexpr(tag.dimension() == Dimension::Dim2) {
+            normalization::raise<ErrorCode::E_UNIMPLEMENTED_INPUT_TYPE>(
+                "Trying to add matrix of base type {}. Matrix types are not supported.",
+                datatype_to_str(tag.data_type()));
+        } else if constexpr(!is_empty_type(dt)) {
             static_assert(!sizeof(dt), "Unknown data type");
         }
         return std::optional<convert::StringEncodingError>();
