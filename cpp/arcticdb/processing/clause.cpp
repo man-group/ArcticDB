@@ -582,19 +582,27 @@ Composite<EntityIds> ResampleClause::process(Composite<EntityIds>&& entity_ids) 
     // If the expected get calls for the segments in the first row slice are 2, the first bucket overlapping this row
     // slice is being computed by the call to process dealing with the row slices above these. Otherwise, this call
     // should do it
-    ARCTICDB_UNUSED bool responsible_for_first_overlapping_bucket = row_slices.front().segment_initial_expected_get_calls_->at(0) == 1;
+    bool responsible_for_first_overlapping_bucket = row_slices.front().segment_initial_expected_get_calls_->at(0) == 1;
+    // Find the iterators into bucket_boundaries_ of the start of the first and one past the end of the last bucket this call to process is
+    // responsible for calculating
+    // All segments contain the same index column, so just grab it from the first one
+    const auto& first_row_slice_index_col = row_slices.front().segments_->at(0)->column(0);
+    const auto& last_row_slice_index_col = row_slices.back().segments_->at(0)->column(0);
+    // Resampling only makes sense for timestamp indexes
+    internal::check<ErrorCode::E_ASSERTION_FAILURE>(is_time_type(first_row_slice_index_col.type().data_type()) &&
+                                                    is_time_type(last_row_slice_index_col.type().data_type()),
+                                                    "Cannot resample data with index column of non-timestamp type");
+    auto first_ts = first_row_slice_index_col.scalar_at<timestamp>(0).value();
+    auto last_ts = last_row_slice_index_col.scalar_at<timestamp>(last_row_slice_index_col.row_count() - 1).value();
+    ARCTICDB_UNUSED auto [first_it, last_it] = find_buckets(first_ts, last_ts, responsible_for_first_overlapping_bucket);
     // Calculate bucket_boundary_indexes:
     // - std::vector<std::vector<offset_t>> - Each element of the outer vector corresponds to a row slice
     //                                      - For each row slice, the vector elements represent the index of the bucket boundaries
     //                                        Repeated values indicate an empty bucket
     ARCTICDB_UNUSED std::vector<std::vector<position_t>> bucket_boundary_indexes(row_slices.size());
+    using TDT = TypeDescriptorTag<DataTypeTag<DataType::NANOSECONDS_UTC64>, DimensionTag<Dimension ::Dim0>>;
     for (const auto& [idx, row_slice]: folly::enumerate(row_slices)) {
-        // All segments contain the same index column, so just grab it from the first one
         const auto& index_column = row_slice.segments_->at(0)->column(0);
-        // Resampling only makes sense for timestamp indexes
-        internal::check<ErrorCode::E_ASSERTION_FAILURE>(is_time_type(index_column.type().data_type()),
-                                                        "Cannot resample data with index column of type {}", index_column.type().data_type());
-        using TDT = TypeDescriptorTag<DataTypeTag<DataType::NANOSECONDS_UTC64>, DimensionTag<Dimension ::Dim0>>;
         auto index_column_data = index_column.data();
         auto pos = 0u;
         while (auto block = index_column_data.next<TDT>()) {
@@ -610,6 +618,39 @@ Composite<EntityIds> ResampleClause::process(Composite<EntityIds>&& entity_ids) 
 
 [[nodiscard]] std::string ResampleClause::to_string() const {
     return fmt::format("RESAMPLE({}) {}", rule_, aggregation_map_);
+}
+
+std::pair<std::vector<timestamp>::const_iterator, std::vector<timestamp>::const_iterator> ResampleClause::find_buckets(
+        timestamp first_ts,
+        timestamp last_ts,
+        bool responsible_for_first_overlapping_bucket) const {
+    auto first_it = std::lower_bound(bucket_boundaries_.begin(), bucket_boundaries_.end(), first_ts,
+                                     [this](timestamp boundary, timestamp first_ts) {
+                                         switch (closed_boundary_) {
+                                             case ResampleClosedBoundary::LEFT:
+                                                 return boundary <= first_ts;
+                                             case ResampleClosedBoundary::RIGHT:
+                                             default:
+                                                 return boundary < first_ts;
+                                         }
+    });
+    if (responsible_for_first_overlapping_bucket && first_it != bucket_boundaries_.begin()) {
+        --first_it;
+    }
+    auto last_it = std::upper_bound(first_it, bucket_boundaries_.end(), last_ts,
+                                    [this](timestamp last_ts, timestamp boundary) {
+                                        switch (closed_boundary_) {
+                                            case ResampleClosedBoundary::LEFT:
+                                                return last_ts < boundary;
+                                            case ResampleClosedBoundary::RIGHT:
+                                            default:
+                                                return last_ts <= boundary;
+                                        }
+                                    });
+    if (last_it != bucket_boundaries_.end()) {
+        ++last_it;
+    }
+    return {first_it, last_it};
 }
 
 [[nodiscard]] Composite<EntityIds> RemoveColumnPartitioningClause::process(Composite<EntityIds>&& entity_ids) const {

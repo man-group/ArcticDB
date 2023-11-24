@@ -461,6 +461,11 @@ struct ResampleClause {
         user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(bucket_boundaries_.size() >= 2,
                                                               "Resampling requires at least one bucket");
     }
+
+    std::pair<std::vector<timestamp>::const_iterator, std::vector<timestamp>::const_iterator> find_buckets(
+            timestamp first_ts,
+            timestamp last_ts,
+            bool responsible_for_first_overlapping_bucket) const;
 };
 
 struct RemoveColumnPartitioningClause {
