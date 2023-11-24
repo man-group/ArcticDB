@@ -835,7 +835,6 @@ if(${TEST})
                 )
     endif()
 
-    target_compile_options(test_unit_arcticdb PRIVATE -fsanitize-recover=address)
     gtest_discover_tests(test_unit_arcticdb PROPERTIES DISCOVERY_TIMEOUT 60)
 
     set(rapidcheck_srcs
@@ -852,7 +851,6 @@ if(${TEST})
             version/test/rapidcheck_version_map.cpp)
 
     add_executable(arcticdb_rapidcheck_tests ${rapidcheck_srcs})
-    target_compile_options(arcticdb_rapidcheck_tests PRIVATE -fsanitize-recover=address)
     install(TARGETS arcticdb_rapidcheck_tests RUNTIME
                 DESTINATION .
                 PERMISSIONS ${EXECUTABLE_PERMS}
