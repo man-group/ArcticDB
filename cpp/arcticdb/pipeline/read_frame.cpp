@@ -358,7 +358,7 @@ void decode_into_frame_static(
         while (it.has_next()) {
             advance_skipped_cols(data, static_cast<ssize_t>(it.prev_col_offset()), it.source_col(), it.first_slice_col_offset(), index_fieldcount, fields, hdr);
             if(has_magic_nums)
-                util::check_magic<ColumnMagic>(data);
+                util::check_magic_in_place<ColumnMagic>(data);
 
             auto encoded_field = fields.at(it.source_field_pos());
             util::check(it.source_field_pos() < size_t(fields.size()), "Field index out of range: {} !< {}", it.source_field_pos(), fields.size());
@@ -381,16 +381,23 @@ void decode_into_frame_static(
             it.advance();
 
             if(it.at_end_of_selected()) {
-                advance_skipped_cols(data, static_cast<ssize_t>(it.prev_col_offset()), it.last_slice_col_offset(), it.first_slice_col_offset(), it.index_fieldcount(), fields, hdr);
+                advance_skipped_cols(data,
+                    static_cast<ssize_t>(it.prev_col_offset()),
+                    it.last_slice_col_offset(),
+                    it.first_slice_col_offset(),
+                    it.index_fieldcount(),
+                    fields,
+                    hdr);
                 break;
             } else {
                 if(has_magic_nums)
-                    util::check_magic<ColumnMagic>(data);
+                    util::check_magic_in_place<ColumnMagic>(data);
             }
         }
 
         decode_string_pool(hdr, data, begin, end, context);
     }
+    ARCTICDB_TRACE(log::codec(), "Frame decoded into static schema");
 }
 
 void decode_into_frame_dynamic(

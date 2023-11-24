@@ -27,8 +27,7 @@ struct MagicNum {
 
     void check() const {
         std::string_view expected(reinterpret_cast<const char*>(&Magic), 4);
-        std::string_view passed(reinterpret_cast<const char*>(const_cast<const uint64_t*>(&magic_)), 4);
-        util::check(magic_ == Magic, "Magic number failure, expected {}({}) got {}({})", expected, Magic, passed, magic_);
+        util::check(magic_ == Magic, "Magic number failure, expected {}({}) got {}({})", Magic, expected, magic_);
     }
 
   private:
@@ -49,8 +48,7 @@ struct SmallMagicNum {
 
     void check() const {
         std::string_view expected(reinterpret_cast<const char*>(&Magic), 2);
-        std::string_view passed(reinterpret_cast<const char*>(const_cast<const uint16_t*>(&magic_)), 2);
-        util::check(magic_ == Magic, "Magic number failure, expected {}({}) got {}({})", expected, Magic, passed, magic_);
+        util::check(magic_ == Magic, "Magic number failure, expected {}({}) got {}", Magic, expected, magic_);
     }
 
 private:
@@ -58,9 +56,14 @@ private:
 };
 
 template <typename MagicNumType>
-void check_magic(const uint8_t*& pos) {
+void check_magic_in_place(const uint8_t*& pos) {
     const auto magic_num = reinterpret_cast<const MagicNumType*>(pos);
     magic_num->check();
+}
+
+template <typename MagicNumType>
+void check_magic(const uint8_t*& pos) {
+    check_magic_in_place<MagicNumType>(pos);
     pos += sizeof(MagicNumType);
 }
 

@@ -274,6 +274,7 @@ struct formatter<arcticdb::EncodingVersion> {
             break;
         case arcticdb::EncodingVersion::V2:c = '2';
             break;
+        default:break;
         }
         return format_to(ctx.out(), "{:c}", c);
     }
