@@ -113,9 +113,9 @@ struct NativeTensor {
     [[nodiscard]] ssize_t expanded_dim() const { return expanded_dim_; }
     template<typename T>
     const T *ptr_cast(size_t pos) const {
-        bool dimension_condition = ndim() == 1;
-        bool elsize_condition = elsize_ != 0;
-        bool strides_condition = strides_[0] % elsize_ == 0;
+        const bool dimension_condition = ndim() == 1;
+        const bool elsize_condition = elsize_ != 0;
+        const bool strides_condition = strides_[0] % elsize_ == 0;
         util::warn(dimension_condition, "Cannot safely ptr_cast matrices in NativeTensor");
         util::warn(elsize_condition, "Cannot safely ptr_cast when elsize_ is zero in NativeTensor");
         util::warn(strides_condition,
@@ -129,7 +129,7 @@ struct NativeTensor {
     }
 
     // returns number of elements, not bytesize
-    ssize_t size() const {
+    [[nodiscard]] ssize_t size() const {
         return calc_elements(shape(), ndim());
     }
 

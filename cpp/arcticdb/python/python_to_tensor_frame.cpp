@@ -123,7 +123,7 @@ NativeTensor obj_to_tensor(PyObject *ptr) {
     const ssize_t element_count = ndim == 1 ? arr->dimensions[0] : arr->dimensions[0] * arr->dimensions[1];
     const auto c_style = arr->strides[0] == val_bytes;
 
-    if(element_count == 0) {
+    if(is_empty_type(val_type)) {
         val_bytes = 8;
         val_type = ValueType::EMPTY;
     } else if (is_sequence_type(val_type)) {
@@ -169,7 +169,7 @@ NativeTensor obj_to_tensor(PyObject *ptr) {
                     sample = *current_object;
                 }
             }
-            if (empty) {
+            if (empty && descr->kind == 'O') {
                 val_type = ValueType::EMPTY;
             } else if(all_nans || is_unicode(sample)){
                 val_type = ValueType::UTF_DYNAMIC;
@@ -185,10 +185,11 @@ NativeTensor obj_to_tensor(PyObject *ptr) {
 
     // When processing empty collections, the size bits have to be `SizeBits::S64`,
     // and we can't use `val_bytes` to get this information since some dtype have another `elsize` than 8.
-    const SizeBits size_bits = val_type == ValueType::EMPTY ? SizeBits::S64 : get_size_bits(val_bytes);
+    const SizeBits size_bits = is_empty_type(val_type) ? SizeBits::S64 : get_size_bits(val_bytes);
     const auto dt = combine_data_type(val_type, size_bits);
     const ssize_t nbytes = element_count * descr->elsize;
-    return {nbytes, arr->nd, arr->strides, arr->dimensions, dt, descr->elsize, arr->data, ndim};
+    const void* data = nbytes ? arr->data : nullptr;
+    return {nbytes, arr->nd, arr->strides, arr->dimensions, dt, descr->elsize, data, ndim};
 }
 
 InputTensorFrame py_ndf_to_frame(
