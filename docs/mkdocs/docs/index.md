@@ -189,7 +189,9 @@ Now we have a library set up, we can get to reading and writing data! ArcticDB e
 Let's first look at writing a DataFrame to storage:
 
 ```Python
-# 50 columns, 25 rows, random data, datetime indexed. 
+# 50 columns, 25 rows, random data, datetime indexed.
+>>> import pandas as pd
+>>> import numpy as np
 >>> from datetime import datetime
 >>> cols = ['COL_%d' % i for i in range(50)]
 >>> df = pd.DataFrame(np.random.randint(0, 50, size=(25, 50)), columns=cols)
@@ -218,8 +220,8 @@ The `'test_frame'` DataFrame will be used for the remainder of this guide.
     * `DatetimeIndex`
     * `MultiIndex` composed of above supported types
     
-    Currently, ArcticDB only supports `append()`-ing to a `RangeIndex` with a continuing `RangeIndex` (i.e. the appending `RangeIndex.start` == `RangeIndex.stop` of the existing data and they have the same `RangeIndex.step`). If a DataFrame with a non-continuing `RangeIndex` is passed to `append()`, ArcticDB does _not_ convert it `Int64Index` like Pandas and will produce an error.
-    
+    Currently, ArcticDB allows `append()`-ing to a `RangeIndex` only with a continuing `RangeIndex` (i.e. the appending `RangeIndex.start` == `RangeIndex.stop` of the existing data and they have the same `RangeIndex.step`). If a DataFrame with a non-continuing `RangeIndex` is passed to `append()`, ArcticDB does _not_ convert it `Int64Index` like Pandas and will produce an error.
+
     Also note, the "row" concept in `head()/tail()` refers to the physical row, not the value in the `pandas.Index`.
 
 Read it back:
@@ -316,7 +318,7 @@ VersionedItem(symbol=test_frame,library=data,data=n/a,version=1,metadata=None,ho
 Now let's look at the first 2 rows in the symbol:
 
 ```Python
->>> library.head('test_frame', 2)  # head/tail are similar to the equivalent Pandas operations
+>>> library.head('test_frame', 2).data  # head/tail are similar to the equivalent Pandas operations
                      COL_0  COL_1  COL_2  COL_3  COL_4  COL_5  COL_6  COL_7  ...
 2000-01-01 05:00:00     46     24      4     20      7     32      1     18  ...
 2000-01-01 07:00:00     44     37     16     27     30      1     35     25  ...
@@ -339,7 +341,7 @@ Let's append data to the end of the timeseries:
 2000-01-02 11:00:00     30     47     14     41     43     40     22     45  ...
 ```
 
-** Note the starting date of this DataFrame is after the final row written previously! **
+** Note the starting datetime of this DataFrame is after the final row written previously! **
 
 Let's now _append_ that DataFrame to what was written previously, and then pull back the final 7 rows from storage:
 
