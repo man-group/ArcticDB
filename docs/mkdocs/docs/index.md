@@ -222,7 +222,7 @@ The `'test_frame'` DataFrame will be used for the remainder of this guide.
     
     Currently, ArcticDB allows `append()`-ing to a `RangeIndex` only with a continuing `RangeIndex` (i.e. the appending `RangeIndex.start` == `RangeIndex.stop` of the existing data and they have the same `RangeIndex.step`). If a DataFrame with a non-continuing `RangeIndex` is passed to `append()`, ArcticDB does _not_ convert it `Int64Index` like Pandas and will produce an error.
 
-    Also note, the "row" concept in `head()/tail()` refers to the physical row, not the value in the `pandas.Index`.
+    The "row" concept in `head()/tail()` refers to the row number, not the value in the `pandas.Index`.
 
 Read it back:
 
