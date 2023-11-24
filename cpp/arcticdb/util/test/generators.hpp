@@ -230,6 +230,26 @@ inline SegmentInMemory get_groupable_timeseries_segment(const std::string& name,
     return wrapper.segment();
 }
 
+inline SegmentInMemory get_groupable_timeseries_segment_floats(const std::string& name, size_t rows_per_group, std::initializer_list<double> group_ids) {
+    auto wrapper = SinkWrapper(name, {
+            scalar_field(DataType::FLOAT64, "double"),
+            scalar_field(DataType::UTF_DYNAMIC64, "strings"),
+    });
+
+    int i = 0;
+    for (auto group_id : group_ids) {
+        for (size_t j = 0; j < rows_per_group; j++) {
+            wrapper.aggregator_.start_row(timestamp{static_cast<timestamp>(rows_per_group*i + j)})([&](auto &&rb) {
+                rb.set_scalar(1, double(group_id));
+                rb.set_string(2, fmt::format("string_{}", group_id));
+            });
+        }
+        i++;
+    }
+    wrapper.aggregator_.commit();
+    return wrapper.segment();
+}
+
 inline SegmentInMemory get_sparse_timeseries_segment(const std::string& name, size_t num_rows = 10) {
     auto wrapper = SparseSinkWrapper(name, {
         scalar_field(DataType::INT8, "int8"),
