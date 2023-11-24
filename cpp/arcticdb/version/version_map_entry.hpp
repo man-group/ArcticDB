@@ -277,7 +277,7 @@ struct VersionMapEntry {
                 }
             }
             if (is_index_key_type(key.type())) {
-                util::check(key.version_id() <= version_id, "Out of order version ids");
+                util::check(key.version_id() <= version_id, "Out of order version ids: {} > {}", key.version_id(), version_id);
                 version_id = key.version_id();
             }
         }
