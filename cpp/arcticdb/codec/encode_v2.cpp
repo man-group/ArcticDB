@@ -185,7 +185,7 @@ namespace arcticdb {
         }
     }
 
-    [[nodiscard]] static size_t calc_column_blocks_size(const Column& col) {
+    [[nodiscard]] size_t calc_column_blocks_size(const Column& col) {
         size_t bytes = EncodedField::Size;
         if(col.type().dimension() != entity::Dimension::Dim0)
             bytes += sizeof(EncodedBlock);
