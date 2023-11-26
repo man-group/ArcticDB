@@ -15,6 +15,18 @@ inline bool trivially_compatible_types(entity::TypeDescriptor left, entity::Type
     if(left == right)
         return true;
 
+    // Multidimensional types are pointers
+    if(left.dimension() >= entity::Dimension::Dim1 && right.dimension() >= entity::Dimension::Dim1)
+        return true;
+
+    // Multidimensional types are pointer the empty type is pointer as well
+    if(left.dimension() >= entity::Dimension::Dim1 && is_empty_type(right.data_type()))
+        return true;
+    
+    // Multidimensional types are pointer the empty type is pointer as well
+    if(right.dimension() >= entity::Dimension::Dim1 && is_empty_type(left.data_type()))
+        return true;
+
     if(is_sequence_type(left.data_type()) && is_sequence_type(right.data_type())) {
         //TODO coercion of utf strings is not always safe, should allow safe conversion and reinstate the
         //stronger requirement for trivial conversion below.
