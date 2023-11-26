@@ -316,12 +316,6 @@ constexpr bool is_empty_type(DataType v){
     return is_empty_type(slice_value_type(v));
 }
 
-constexpr bool is_pyobject_type(DataType v) {
-    // TODO: Handle numpy arrays
-    return is_dynamic_string_type(slice_value_type(v)) ||
-        slice_value_type(v) == ValueType::PYBOOL;
-}
-
 static_assert(slice_value_type((DataType::UINT16)) == ValueType(1));
 static_assert(get_type_size(DataType::UINT32) == 4);
 static_assert(get_type_size(DataType::UINT64) == 8);
@@ -523,6 +517,13 @@ constexpr bool is_numpy_array(TypeDescriptor td) {
     return (is_numeric_type(td.data_type()) || is_bool_type(td.data_type()) || is_empty_type(td.data_type())) &&
            (td.dimension() == Dimension::Dim1);
 }
+
+constexpr bool is_pyobject_type(TypeDescriptor dt) {
+    return is_dynamic_string_type(slice_value_type(dt.data_type())) ||
+           slice_value_type(dt.data_type()) == ValueType::PYBOOL;
+    // TODO: Should we check for is_numpy_array(dt)?
+}
+
 
 inline void set_data_type(DataType data_type, TypeDescriptor& type_desc) {
     type_desc.data_type_ = data_type;

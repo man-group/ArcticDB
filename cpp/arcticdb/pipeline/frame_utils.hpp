@@ -268,8 +268,12 @@ std::optional<convert::StringEncodingError> aggregator_set_data(
                     if constexpr(is_empty_type(ArrayDataTypeTag::data_type)) {
                         arr_col.set_empty_array(last_logical_row, row_tensor.ndim());
                     } else if constexpr(is_numeric_type(ArrayDataTypeTag::data_type)) {
-                        TypedTensor<ArrayType> typed_tensor{row_tensor};
-                        arr_col.set_array(last_logical_row, typed_tensor);
+                        if(row_tensor.nbytes()) {
+                            TypedTensor<ArrayType> typed_tensor{row_tensor};
+                            arr_col.set_array(last_logical_row, typed_tensor);
+                        } else {
+                            arr_col.set_empty_array(last_logical_row, row_tensor.ndim());
+                        }
                     } else {
                         normalization::raise<ErrorCode::E_UNIMPLEMENTED_COLUMN_SECONDARY_TYPE>(
                             "Numpy array type is not implemented. Only dense int and float arrays are supported.");
