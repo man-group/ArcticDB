@@ -215,6 +215,68 @@ def test_count_aggregation_dynamic(s3_version_store_dynamic_schema_v2):
     assert_frame_equal(received, expected)
 
 
+@use_of_function_scoped_fixtures_in_hypothesis_checked
+@settings(deadline=None)
+@given(
+    df=data_frames(
+        [
+            column("grouping_column", elements=string_strategy, fill=string_strategy),
+            column("a", elements=numeric_type_strategies()),
+        ],
+        index=range_indexes(),
+    )
+)
+@pytest.mark.xfail(reason="Not supported yet")
+def test_hypothesis_first_agg_dynamic_numeric(lmdb_version_store_dynamic_schema_v1, df):
+    lib = lmdb_version_store_dynamic_schema_v1
+    assume(not df.empty)
+
+    symbol = f"first_agg-{uuid.uuid4().hex}"
+    expected, slices = make_dynamic(df)
+    for df_slice in slices:
+        lib.append(symbol, df_slice, write_if_missing=True)
+
+    try:
+        q = QueryBuilder()
+        q = q.groupby("grouping_column").agg({"a": "first"})
+
+        vit = lib.read(symbol, query_builder=q)
+        vit.data.sort_index(inplace=True)
+
+        expected = expected.groupby("grouping_column").agg({"a": "first"})
+
+        assert_frame_equal(vit.data, expected)
+    # pandas 1.0 raises SpecificationError rather than KeyError if the column in "agg" doesn't exist
+    except (KeyError, SpecificationError):
+        pass
+
+
+@pytest.mark.xfail(reason="Not supported yet")
+def test_first_aggregation_dynamic(s3_version_store_dynamic_schema_v2):
+    lib = s3_version_store_dynamic_schema_v2
+    df = DataFrame(
+        {
+            "grouping_column": ["group_1", "group_2", "group_4", "group_2", "group_1", "group_3", "group_1"],
+            "get_first": [100.0, np.nan, np.nan, 2.7, 1.4, 5.8, 3.45],
+        },
+        index=np.arange(7),
+    )
+    symbol = "test_first_aggregation_dynamic"
+    expected, slices = make_dynamic(df)
+    for df_slice in slices:
+        lib.append(symbol, df_slice, write_if_missing=True)
+
+    q = QueryBuilder()
+    q = q.groupby("grouping_column").agg({"get_first": "first"})
+
+    received = lib.read(symbol, query_builder=q).data
+    received.sort_index(inplace=True)
+
+    expected = expected.groupby("grouping_column").agg({"get_first": "first"})
+
+    assert_frame_equal(received, expected)
+
+
 def test_sum_aggregation_dynamic(s3_version_store_dynamic_schema_v2):
     lib = s3_version_store_dynamic_schema_v2
     df = DataFrame(
