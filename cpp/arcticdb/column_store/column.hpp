@@ -7,30 +7,25 @@
 
 #pragma once
 
+#include <arcticdb/column_store/chunked_buffer.hpp>
+#include <arcticdb/column_store/column_data.hpp>
+#include <arcticdb/column_store/string_pool.hpp>
+#include <arcticdb/entity/native_tensor.hpp>
+#include <arcticdb/entity/performance_tracing.hpp>
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/util/bitset.hpp>
-#include <arcticdb/util/cursor.hpp>
-#include <arcticdb/util/preconditions.hpp>
-#include <arcticdb/column_store/string_pool.hpp>
-#include <arcticdb/util/offset_string.hpp>
-#include <arcticdb/column_store/column_data.hpp>
-#include <arcticdb/entity/performance_tracing.hpp>
-#include <arcticdb/column_store/chunked_buffer.hpp>
 #include <arcticdb/util/cursored_buffer.hpp>
 #include <arcticdb/util/flatten_utils.hpp>
-#include <arcticdb/entity/native_tensor.hpp>
+#include <arcticdb/util/offset_string.hpp>
+#include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/util/sparse_utils.hpp>
 
-#include <folly/Likely.h>
 #include <folly/container/Enumerate.h>
 #include <pybind11/pybind11.h>
 #include <pybind11/numpy.h>
-#include <bitmagic/bm.h>
-#include <bitmagic/bmserial.h>
 
-#include <optional>
 #include <numeric>
-
+#include <optional>
 
 namespace py = pybind11;
 
