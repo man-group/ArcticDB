@@ -15,7 +15,7 @@ def element_type_constructor(request):
     yield request.param
 
 
-@pytest.mark.skip(reason="Not implemented")
+@pytest.mark.xfail(reason="Not implemented")
 class TestEmptyColumnTypeAppend:
     def test_can_append_non_empty_to_empty(self, lmdb_version_store, element_type_constructor):
         df_empty = pd.DataFrame({"col1": [None, None]})
