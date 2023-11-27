@@ -346,11 +346,14 @@ Azure::Storage::Blobs::BlobClientOptions get_client_options(const arcticdb::prot
 
 BlobContainerClient get_blob_container_client(const arcticdb::proto::azure_storage::Config &conf, const std::shared_ptr<AzureBaseCredential>& storage_credential) {
     if (storage_credential) {
-        auto blob_service_client = Azure::Storage::Blobs::BlobServiceClient(conf.endpoint(), storage_credential, get_client_options(conf));
+        auto client = BlobContainerClient::CreateFromConnectionString(conf.endpoint(), conf.container_name(), get_client_options(conf));
+        auto blob_service_client = Azure::Storage::Blobs::BlobServiceClient(client.GetUrl(), storage_credential, get_client_options(conf));
         return blob_service_client.GetBlobContainerClient(conf.container_name());
     }
-    else
-        return BlobContainerClient::CreateFromConnectionString(conf.endpoint(), conf.container_name(), get_client_options(conf));
+    else {
+        auto client = BlobContainerClient::CreateFromConnectionString(conf.endpoint(), conf.container_name(), get_client_options(conf));
+        return client;
+    }
 }
 
 
