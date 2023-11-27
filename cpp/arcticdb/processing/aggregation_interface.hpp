@@ -78,10 +78,10 @@ struct ISortedAggregator {
     struct Interface : Base {
         [[nodiscard]] ColumnName get_input_column_name() const { return folly::poly_call<0>(*this); };
         [[nodiscard]] ColumnName get_output_column_name() const { return folly::poly_call<1>(*this); };
-        [[nodiscard]] Column aggregate(size_t num_buckets,
-                                       const std::vector<std::vector<size_t>>& bucket_boundary_indexes,
-                                       const std::vector<std::optional<ColumnWithStrings>>& input_columns) {
-            return folly::poly_call<2>(*this, num_buckets, bucket_boundary_indexes, input_columns);
+        [[nodiscard]] Column aggregate(const std::vector<std::shared_ptr<Column>>& input_index_columns,
+                                       const std::vector<std::optional<ColumnWithStrings>>& input_agg_columns,
+                                       const std::vector<timestamp>& bucket_boundaries) const {
+            return folly::poly_call<2>(*this, input_index_columns, input_agg_columns, bucket_boundaries);
         }
     };
 

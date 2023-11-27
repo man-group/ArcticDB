@@ -583,9 +583,10 @@ Composite<EntityIds> ResampleClause::process(Composite<EntityIds>&& entity_ids) 
     // slice is being computed by the call to process dealing with the row slices above these. Otherwise, this call
     // should do it
     bool responsible_for_first_overlapping_bucket = row_slices.front().segment_initial_expected_get_calls_->at(0) == 1;
-    // Find the iterators into bucket_boundaries_ of the start of the first and one past the end of the last bucket this call to process is
+    // Find the iterators into bucket_boundaries_ of the start of the first and the end of the last bucket this call to process is
     // responsible for calculating
-    // All segments contain the same index column, so just grab it from the first one
+    // All segments in a given row slice contain the same index column, so just grab info from the first one
+    const auto& index_column_name = row_slices.front().segments_->at(0)->field(0).name();
     const auto& first_row_slice_index_col = row_slices.front().segments_->at(0)->column(0);
     const auto& last_row_slice_index_col = row_slices.back().segments_->at(0)->column(0);
     // Resampling only makes sense for timestamp indexes
@@ -594,26 +595,38 @@ Composite<EntityIds> ResampleClause::process(Composite<EntityIds>&& entity_ids) 
                                                     "Cannot resample data with index column of non-timestamp type");
     auto first_ts = first_row_slice_index_col.scalar_at<timestamp>(0).value();
     auto last_ts = last_row_slice_index_col.scalar_at<timestamp>(last_row_slice_index_col.row_count() - 1).value();
-    ARCTICDB_UNUSED auto [first_it, last_it] = find_buckets(first_ts, last_ts, responsible_for_first_overlapping_bucket);
-    // Calculate bucket_boundary_indexes:
-    // - std::vector<std::vector<offset_t>> - Each element of the outer vector corresponds to a row slice
-    //                                      - For each row slice, the vector elements represent the index of the bucket boundaries
-    //                                        Repeated values indicate an empty bucket
-    ARCTICDB_UNUSED std::vector<std::vector<position_t>> bucket_boundary_indexes(row_slices.size());
-    using TDT = TypeDescriptorTag<DataTypeTag<DataType::NANOSECONDS_UTC64>, DimensionTag<Dimension ::Dim0>>;
-    for (const auto& [idx, row_slice]: folly::enumerate(row_slices)) {
-        const auto& index_column = row_slice.segments_->at(0)->column(0);
-        auto index_column_data = index_column.data();
-        auto pos = 0u;
-        while (auto block = index_column_data.next<TDT>()) {
-            auto ptr = reinterpret_cast<const timestamp*>(block->data());
-            const auto row_count = block->row_count();
-            for (auto i = 0u; i < row_count; ++i, ++pos) {
-                ptr++;
-            }
+    auto [first_it, last_it] = find_buckets(first_ts, last_ts, responsible_for_first_overlapping_bucket);
+    // Construct the output index column and the bucket boundaries this call to process is responsible for
+    // TODO: Use iterators instead of copying range of bucket_boundaries_
+    auto [output_index_column, bucket_boundaries] = generate_buckets(first_it, last_it);
+    SegmentInMemory seg;
+    seg.set_row_id(output_index_column->row_count() - 1);
+    seg.add_column(scalar_field(DataType::NANOSECONDS_UTC64, index_column_name), output_index_column);
+    seg.descriptor().set_index(IndexDescriptor(1, IndexDescriptor::TIMESTAMP));
+    for (const auto& aggregator: aggregators_) {
+        std::vector<std::shared_ptr<Column>> input_index_columns;
+        std::vector<std::optional<ColumnWithStrings>> input_agg_columns;
+        input_index_columns.reserve(row_slices.size());
+        input_agg_columns.reserve(row_slices.size());
+        for (auto& row_slice: row_slices) {
+            input_index_columns.emplace_back(row_slice.segments_->at(0)->column_ptr(0));
+            auto variant_data = row_slice.get(aggregator.get_input_column_name());
+            util::variant_match(variant_data,
+                                [&input_agg_columns](const ColumnWithStrings& column_with_strings) {
+                                    input_agg_columns.emplace_back(column_with_strings);
+                                },
+                                [&input_agg_columns](const EmptyResult&) {
+                                    input_agg_columns.emplace_back();
+                                },
+                                [](const auto&) {
+                                    internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Unexpected return type from ProcessingUnit::get, expected column-like");
+                                }
+            );
         }
+        auto aggregated_column = std::make_shared<Column>(aggregator.aggregate(input_index_columns, input_agg_columns, bucket_boundaries));
+        seg.add_column(scalar_field(aggregated_column->type().data_type(), aggregator.get_output_column_name().value), aggregated_column);
     }
-    return Composite<EntityIds>();
+    return Composite<EntityIds>(push_entities(component_manager_, ProcessingUnit(std::move(seg))));
 }
 
 [[nodiscard]] std::string ResampleClause::to_string() const {
@@ -647,10 +660,28 @@ std::pair<std::vector<timestamp>::const_iterator, std::vector<timestamp>::const_
                                                 return last_ts <= boundary;
                                         }
                                     });
-    if (last_it != bucket_boundaries_.end()) {
-        ++last_it;
+    if (last_it == bucket_boundaries_.end()) {
+        --last_it;
     }
     return {first_it, last_it};
+}
+
+std::pair<std::shared_ptr<Column>, std::vector<timestamp>> ResampleClause::generate_buckets(const std::vector<timestamp>::const_iterator& first_it,
+                                                                                            const std::vector<timestamp>::const_iterator last_it) const {
+    auto data_type = DataType::NANOSECONDS_UTC64;
+    auto num_rows = std::distance(first_it, last_it);
+    auto column = std::make_shared<Column>(TypeDescriptor(data_type, Dimension::Dim0), false);
+    auto ptr = reinterpret_cast<timestamp*>(column->allocate_data(get_type_size(data_type) * num_rows));
+    std::vector<timestamp> bucket_boundaries;
+    bucket_boundaries.reserve(num_rows + 1);
+    // TODO: Also support labelling buckets based on right boundary
+    for (auto it = first_it; it != last_it; it++) {
+        *ptr++ = *it;
+        bucket_boundaries.emplace_back(*it);
+    }
+    bucket_boundaries.emplace_back(*last_it);
+    column->set_row_data(num_rows - 1);
+    return {column, bucket_boundaries};
 }
 
 [[nodiscard]] Composite<EntityIds> RemoveColumnPartitioningClause::process(Composite<EntityIds>&& entity_ids) const {

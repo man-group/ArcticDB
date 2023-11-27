@@ -183,9 +183,9 @@ public:
 
     [[nodiscard]] ColumnName get_input_column_name() const { return input_column_name_; }
     [[nodiscard]] ColumnName get_output_column_name() const { return output_column_name_; }
-    [[nodiscard]] Column aggregate(size_t num_buckets,
-                                   const std::vector<std::vector<size_t>>& bucket_boundary_indexes,
-                                   const std::vector<std::optional<ColumnWithStrings>>& input_columns);
+    [[nodiscard]] Column aggregate(const std::vector<std::shared_ptr<Column>>& input_index_columns,
+                                   const std::vector<std::optional<ColumnWithStrings>>& input_agg_columns,
+                                   const std::vector<timestamp>& bucket_boundaries) const;
 
 private:
 

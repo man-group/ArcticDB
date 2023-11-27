@@ -466,6 +466,9 @@ struct ResampleClause {
             timestamp first_ts,
             timestamp last_ts,
             bool responsible_for_first_overlapping_bucket) const;
+
+    std::pair<std::shared_ptr<Column>, std::vector<timestamp>> generate_buckets(const std::vector<timestamp>::const_iterator& first_it,
+                                                                                const std::vector<timestamp>::const_iterator last_it) const;
 };
 
 struct RemoveColumnPartitioningClause {
