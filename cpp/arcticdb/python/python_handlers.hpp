@@ -59,6 +59,6 @@ namespace arcticdb {
             size_t dest_bytes,
             std::shared_ptr<BufferHolder> buffers,
             EncodingVersion encding_version);
+        static std::mutex initialize_array_mutex;
     };
-
-    } //namespace arcticdb
+} //namespace arcticdb

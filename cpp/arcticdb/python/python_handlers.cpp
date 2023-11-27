@@ -25,13 +25,18 @@ namespace arcticdb {
         return py::dtype{fmt::format("{}{:d}", get_dtype_specifier(td.data_type()), type_byte_size)};
     }
 
+    /// @important This calls pybind's initialize array function which is NOT thread safe. Even if the GIL is locked
+    /// numpy arrays can't be created in parallel.
     [[nodiscard]] static inline PyObject* initialize_array(
         pybind11::dtype descr,
         const shape_t* shapes,
         const shape_t* strides,
         size_t ndim,
-        const void* source_ptr
+        const void* source_ptr,
+        std::mutex& creation_mutex
     ) {
+        std::lock_guard creation_guard{creation_mutex};
+
         ARCTICDB_SAMPLE(InitializeArray, 0)
         util::check(source_ptr != nullptr, "Null pointer passed in");
         const auto flags = py::detail::npy_api::NPY_ARRAY_WRITEABLE_;
@@ -141,6 +146,8 @@ namespace arcticdb {
         }, encoded_field_info);
     }
 
+    std::mutex ArrayHandler::initialize_array_mutex;
+
     void ArrayHandler::handle_type(
         const uint8_t*& data,
         uint8_t* dest,
@@ -190,7 +197,8 @@ namespace arcticdb {
                         &shape,
                         &stride,
                         static_cast<size_t>(type_descriptor.dimension()),
-                        ptr_src + block_pos);
+                        ptr_src + block_pos,
+                        initialize_array_mutex);
                     block_pos += shape * stride;
                     if(shapes) {
                         ++shapes;
