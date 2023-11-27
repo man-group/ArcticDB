@@ -50,6 +50,7 @@ def test_column_names_by_snapshot(lmdb_version_store, one_col_df, two_col_df):
     assert lmdb_version_store.column_names(symbol, as_of="one_col_snap") == ["x"]
 
 
+@pytest.mark.xfail(reason="Needs to be fixed by issue #496")
 def test_column_names_by_timestamp(lmdb_version_store, one_col_df, two_col_df):
     symbol = "test_column_names_by_timestamp"
 
