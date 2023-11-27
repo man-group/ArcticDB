@@ -712,6 +712,7 @@ if(${TEST})
             async/test/test_async.cpp
             codec/test/test_codec.cpp
             column_store/test/ingestion_stress_test.cpp
+            column_store/test/concurrent_read_stress_test.cpp
             column_store/test/test_column.cpp
             column_store/test/test_index_filtering.cpp
             column_store/test/test_memory_segment.cpp
