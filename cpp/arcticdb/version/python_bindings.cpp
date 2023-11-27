@@ -262,7 +262,7 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
                 return self.grouping_column_;
             })
             .def_property_readonly("sort", [](const GroupByClause& self) {
-                return self.sort_;
+                return self.sort_output_on_index_;
             })
             .def("__str__", &GroupByClause::to_string);
 
@@ -286,6 +286,15 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
             .def_property_readonly("end", &DateRangeClause::end)
             .def("__str__", &DateRangeClause::to_string);
 
+    py::class_<MergeClause, std::shared_ptr<MergeClause>>(version, "MergeClause")
+            .def(py::init<>());
+
+    py::class_<SortClause, std::shared_ptr<SortClause>>(version, "SortClause")
+            .def(py::init<std::string>())
+            .def_property_readonly("column", [](const SortClause& self) {
+                return self.column_;
+            });
+
     py::class_<ReadQuery>(version, "PythonVersionStoreReadQuery")
             .def(py::init())
             .def_readwrite("columns",&ReadQuery::columns)
@@ -299,7 +308,9 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
                                 std::shared_ptr<GroupByClause>,
                                 std::shared_ptr<AggregationClause>,
                                 std::shared_ptr<RowRangeClause>,
-                                std::shared_ptr<DateRangeClause>>> clauses) {
+                                std::shared_ptr<DateRangeClause>,
+                                std::shared_ptr<MergeClause>,
+                                std::shared_ptr<SortClause>>> clauses) {
                 std::vector<std::shared_ptr<Clause>> _clauses;
                 for (auto&& clause: clauses) {
                     util::variant_match(

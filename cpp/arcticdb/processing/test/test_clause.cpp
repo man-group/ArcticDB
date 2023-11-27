@@ -396,10 +396,7 @@ TEST(Clause, Merge) {
     ScopedConfig max_blocks("Merge.SegmentSize", seg_size);
     auto component_manager = std::make_shared<ComponentManager>();
 
-    auto stream_id = StreamId("Merge");
-    StreamDescriptor descriptor{};
-    descriptor.add_field(FieldRef{make_scalar_type(DataType::NANOSECONDS_UTC64),"time"});
-    MergeClause merge_clause{TimeseriesIndex{"time"}, DenseColumnPolicy{}, stream_id, descriptor};
+    MergeClause merge_clause;
     merge_clause.set_component_manager(component_manager);
 
     Composite<EntityIds> entity_ids;

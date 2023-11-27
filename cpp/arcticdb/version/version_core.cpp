@@ -1177,7 +1177,7 @@ VersionedItem sort_merge_impl(
             read_query.clauses_.emplace_back(std::make_shared<Clause>(RemoveColumnPartitioningClause{}));
             const auto split_size = ConfigsMap::instance()->get_int("Split.RowCount", 10000);
             read_query.clauses_.emplace_back(std::make_shared<Clause>(SplitClause{static_cast<size_t>(split_size)}));
-            read_query.clauses_.emplace_back(std::make_shared<Clause>(MergeClause{timeseries_index, DenseColumnPolicy{}, stream_id, pipeline_context->descriptor()}));
+            read_query.clauses_.emplace_back(std::make_shared<Clause>(MergeClause()));
             auto segments = read_and_process(store, pipeline_context, read_query, ReadOptions{}, pipeline_context->incompletes_after());
             pipeline_context->total_rows_ = num_versioned_rows + get_slice_rowcounts(segments);
 

@@ -256,10 +256,10 @@ struct PartitionClause {
     std::shared_ptr<ComponentManager> component_manager_;
     ProcessingConfig processing_config_;
     std::string grouping_column_;
-    bool sort_;
+    bool sort_output_on_index_;
 
-    explicit PartitionClause(const std::string& grouping_column, bool sort) :
-            grouping_column_(grouping_column), sort_(sort) {
+    explicit PartitionClause(const std::string& grouping_column, bool sort = true) :
+            grouping_column_(grouping_column), sort_output_on_index_(sort) {
         clause_info_.input_columns_ = {grouping_column_};
         clause_info_.requires_repartition_ = true;
         clause_info_.modifies_output_descriptor_ = true;
@@ -474,6 +474,8 @@ struct SortClause {
             column_(std::move(column)) {
     }
 
+    ARCTICDB_MOVE_COPY_DEFAULT(SortClause)
+
     [[nodiscard]] std::vector<std::vector<size_t>> structure_for_processing(
             std::vector<RangesAndKey>& ranges_and_keys,
             size_t start_from) const {
@@ -501,24 +503,15 @@ struct SortClause {
 struct MergeClause {
     ClauseInfo clause_info_;
     std::shared_ptr<ComponentManager> component_manager_;
-    stream::Index index_;
-    stream::VariantColumnPolicy density_policy_;
-    StreamId stream_id_;
+    stream::VariantColumnPolicy density_policy_ = stream::DenseColumnPolicy{};
     bool add_symbol_column_ = false;
-    StreamId target_id_;
-    StreamDescriptor stream_descriptor_;
 
-    MergeClause(
-            stream::Index index,
-            const stream::VariantColumnPolicy &density_policy,
-            const StreamId& stream_id,
-            const StreamDescriptor& stream_descriptor) :
-            index_(std::move(index)),
-            density_policy_(density_policy),
-            stream_id_(stream_id),
-            stream_descriptor_(stream_descriptor) {
+    explicit MergeClause() {
         clause_info_.requires_repartition_ = true;
-    }
+    };
+
+    ARCTICDB_MOVE_COPY_DEFAULT(MergeClause)
+
 
     [[nodiscard]] std::vector<std::vector<size_t>> structure_for_processing(
             std::vector<RangesAndKey>& ranges_and_keys,

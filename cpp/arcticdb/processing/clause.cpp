@@ -590,7 +590,7 @@ Composite<EntityIds> SortClause::process(Composite<EntityIds>&& entity_ids) cons
     return output;
 }
 
-template<typename IndexType, typename DensityPolicy, typename QueueType, typename Comparator, typename StreamId>
+template<typename IndexType, typename DensityPolicy, typename QueueType, typename StreamId>
 void merge_impl(
         std::shared_ptr<ComponentManager> component_manager,
         Composite<EntityIds> &ret,
@@ -637,7 +637,7 @@ Composite<EntityIds> MergeClause::process(Composite<EntityIds>&& entity_ids) con
             const std::unique_ptr<SegmentWrapper> &right
         ) {
         const IndexDescriptor::Type left_index_type = left->seg_.descriptor().index().type();
-        const IndexDescriptor::Type right_index_type = left->seg_.descriptor().index().type();
+        const IndexDescriptor::Type right_index_type = right->seg_.descriptor().index().type();
         const auto left_index = index::index_value_from_row(left->row(), left_index_type, 0);
         const auto right_index = index::index_value_from_row(right->row(), right_index_type, 0);
         return left_index > right_index;
@@ -650,7 +650,24 @@ Composite<EntityIds> MergeClause::process(Composite<EntityIds>&& entity_ids) con
     size_t max_end_row = 0;
     size_t min_start_col = std::numeric_limits<size_t>::max();
     size_t max_end_col = 0;
-    procs.broadcast([&input_streams, &min_start_row, &max_end_row, &min_start_col, &max_end_col](auto&& proc) {
+
+    bool stream_attributes_set = false;
+    stream::Index index = stream::TimeseriesIndex::default_index();
+    StreamId stream_id;
+    StreamDescriptor stream_descriptor;
+
+    procs.broadcast([&stream_attributes_set, &index, &stream_id, &stream_descriptor, &input_streams, &min_start_row, &max_end_row, &min_start_col, &max_end_col](auto&& proc) {
+        if (!stream_attributes_set) {
+            // TODO: is there a nicer way to get those pieces of information at the moment?
+            // Assumptions:
+            //  - the segments' indexes are all identical
+            //  - the segments' stream descriptors are all identical
+            //  - the stream id is the same for all segments
+            stream_descriptor = StreamDescriptor(*proc.segments_.value().at(0)->descriptor_ptr());
+            index = stream::default_index_type_from_descriptor(stream_descriptor.index());
+            stream_id = stream_descriptor.id();
+            stream_attributes_set = true;
+        }
         for (auto&& [idx, segment]: folly::enumerate(proc.segments_.value())) {
             size_t start_row = proc.row_ranges_->at(idx)->start();
             min_start_row = start_row < min_start_row ? start_row : min_start_row;
@@ -667,8 +684,8 @@ Composite<EntityIds> MergeClause::process(Composite<EntityIds>&& entity_ids) con
     const ColRange col_range{min_start_col, max_end_col};
     Composite<EntityIds> ret;
     std::visit(
-            [this, &ret, &input_streams, &comp=compare, stream_id=stream_id_, &row_range, &col_range](auto idx, auto density) {
-                merge_impl<decltype(idx), decltype(density), decltype(input_streams), decltype(comp), decltype(stream_id)>(component_manager_,
+            [this, &ret, &input_streams, &stream_id=stream_id, &stream_descriptor=stream_descriptor, &row_range, &col_range](auto idx, auto density) {
+                merge_impl<decltype(idx), decltype(density), decltype(input_streams), decltype(stream_id)>(component_manager_,
                                                                                                       ret,
                                                                                                       input_streams,
                                                                                                       add_symbol_column_,
@@ -676,8 +693,8 @@ Composite<EntityIds> MergeClause::process(Composite<EntityIds>&& entity_ids) con
                                                                                                       row_range,
                                                                                                       col_range,
                                                                                                       idx,
-                                                                                                      stream_descriptor_);
-            }, index_, density_policy_);
+                                                                                                      stream_descriptor);
+            }, index, density_policy_);
 
     return ret;
 }
