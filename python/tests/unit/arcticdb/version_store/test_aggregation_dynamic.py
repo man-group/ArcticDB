@@ -23,7 +23,6 @@ from arcticdb_ext.exceptions import InternalException, SchemaException
 from arcticdb.util.test import make_dynamic, assert_frame_equal
 from arcticdb.util.hypothesis import (
     use_of_function_scoped_fixtures_in_hypothesis_checked,
-    non_zero_numeric_type_strategies,
     numeric_type_strategies,
     string_strategy,
 )
@@ -42,7 +41,7 @@ def assert_equal_value(data, expected):
     df=data_frames(
         [
             column("grouping_column", elements=string_strategy, fill=string_strategy),
-            column("a", elements=non_zero_numeric_type_strategies()),
+            column("a", elements=numeric_type_strategies()),
         ],
         index=range_indexes(),
     )
@@ -74,7 +73,7 @@ def test_hypothesis_mean_agg_dynamic(lmdb_version_store_dynamic_schema_v1, df):
     df=data_frames(
         [
             column("grouping_column", elements=string_strategy, fill=string_strategy),
-            column("a", elements=non_zero_numeric_type_strategies()),
+            column("a", elements=numeric_type_strategies()),
         ],
         index=range_indexes(),
     )
@@ -106,7 +105,7 @@ def test_hypothesis_sum_agg_dynamic(s3_version_store_dynamic_schema_v2, df):
     df=data_frames(
         [
             column("grouping_column", elements=string_strategy, fill=string_strategy),
-            column("a", elements=non_zero_numeric_type_strategies()),
+            column("a", elements=numeric_type_strategies()),
         ],
         index=range_indexes(),
     )
