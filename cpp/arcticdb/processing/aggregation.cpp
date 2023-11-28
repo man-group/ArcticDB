@@ -627,15 +627,17 @@ void LastAggregatorData::aggregate(const std::optional<ColumnWithStrings>& input
                 using ColumnType =  typename ColumnTagType::raw_type;
                 auto groups_pos = 0;
                 auto grp_idx = groups[0];
+                bool is_first_group_el = true;
                 while (auto block = col_data.next<TypeDescriptorTag<ColumnTagType, DimensionTag<entity::Dimension::Dim0>>>()) {
                     auto ptr = reinterpret_cast<const ColumnType *>(block.value().data());
                     for (auto i = 0u; i < block.value().row_count(); ++i, ++ptr) {
                         auto& val = out_ptr[groups[groups_pos]];
                         if constexpr(std::is_floating_point_v<ColumnType>) {
                             const auto& curr = GlobalRawType(*ptr);
-                            if ((grp_idx == groups[groups_pos]) && !std::isnan(static_cast<ColumnType>(curr))) {
+                            if ((grp_idx == groups[groups_pos]) && (is_first_group_el || !std::isnan(static_cast<ColumnType>(curr)))) {
                                 groups_cache.insert(groups[groups_pos]);
                                 val = curr;
+                                is_first_group_el = false;
                             }
                             else if (grp_idx != groups[groups_pos]) { // Updating when changing group
                                 if (auto iter = groups_cache.find(groups[groups_pos]); iter == groups_cache.end()) { // Group not seen yet
