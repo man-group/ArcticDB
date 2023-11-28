@@ -22,12 +22,12 @@ def test_config_roundtrip(version_store_factory):
     assert loaded._lib_cfg == vs._lib_cfg
 
 
-def test_runtime_config_roundtrip(tmpdir):
+def test_runtime_config_roundtrip(tmp_path):
     runtime_cfg = RuntimeConfig()
     runtime_cfg.string_values["string"] = "stuff"
     runtime_cfg.double_values["double"] = 2.5
     runtime_cfg.int_values["int"] = 11
-    conf_path = "{}/{}".format(tmpdir, "test_rt_conf.yaml")
+    conf_path = str(tmp_path / "test_rt_conf.yaml")
     save_runtime_config(runtime_cfg, conf_path)
     read_conf = load_runtime_config(conf_path)
     assert read_conf.string_values["string"] == "stuff"
