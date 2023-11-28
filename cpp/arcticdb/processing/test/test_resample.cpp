@@ -168,6 +168,7 @@
 //}
 
 TEST(Resample, FindBuckets) {
+    // TODO: Remove this
     using namespace arcticdb;
     ResampleClause resample_left("left", ResampleClosedBoundary::LEFT);
     ResampleClause resample_right("right", ResampleClosedBoundary::RIGHT);
