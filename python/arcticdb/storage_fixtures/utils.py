@@ -7,23 +7,41 @@ As of the Change Date specified in that file, in accordance with the Business So
 """
 
 import multiprocessing
+import shutil
 import subprocess
 import os
 import platform
+import sys
+from types import TracebackType
+
 import requests
 import signal
 import socketserver
 import time
 import warnings
 from typing import Union, Any
-from contextlib import contextmanager
+from contextlib import AbstractContextManager
+from dataclasses import dataclass, field
 
 _WINDOWS = platform.system() == "Windows"
+_DEBUG = os.getenv("ACTIONS_RUNNER_DEBUG", default=None) in (1, "True")
 
 
-def get_ephemeral_port():  # https://stackoverflow.com/a/61685162/
-    with socketserver.TCPServer(("localhost", 0), None) as s:
-        return s.server_address[1]
+def get_ephemeral_port(seed=0):
+    # Some OS has a tendency to reuse a port number that has just been closed, so if we use the trick from
+    # https://stackoverflow.com/a/61685162/ and multiple test runners call this function at roughly the same time, they
+    # may get the same port! Below more sophisticated implementation uses the PID to avoid that:
+    pid = os.getpid()
+    port = (pid // 1000 + pid) % 1000 + seed * 1000 + 10000  # Crude hash
+    while port < 65535:
+        try:
+            with socketserver.TCPServer(("localhost", port), None):
+                time.sleep(10)  # Hold the port open for a while to improve the chance of collision detection
+                return port
+        except OSError as e:
+            print(repr(e), file=sys.stderr)
+            port += 1000
+    raise Exception(f"Cannot find a free port for PID {pid}")
 
 
 ProcessUnion = Union[multiprocessing.Process, subprocess.Popen]
@@ -82,7 +100,7 @@ def wait_for_server_to_come_up(url: str, service: str, process: ProcessUnion, *,
         time.sleep(sleep)
         try:
             response = requests.get(url, timeout=req_timeout)  # head() confuses Mongo
-            if response.status_code < 500:  # We might not have permission
+            if response.status_code < 500:  # We might not have permission, so not requiring 2XX response
                 break
         except (requests.exceptions.ConnectionError, requests.exceptions.Timeout):
             pass
@@ -92,14 +110,30 @@ class ExceptionInCleanUpWarning(Warning):
     pass
 
 
-@contextmanager
-def handle_cleanup_exception(fixture, item: Any = "", consequence=""):
+@dataclass
+class handle_cleanup_exception(AbstractContextManager):
     """Provides uniform warning containing the given arguments for exceptions in cleanup/__exit__ calls."""
-    try:
-        yield
-    except Exception as e:
-        warning = ExceptionInCleanUpWarning(
-            f"Error while cleaning up {item}{' in ' if item else ''}{fixture}. {consequence}{type(e).__qualname__}: {e}"
-        )
-        warning.__cause__ = e
-        warnings.warn(warning)
+
+    fixture: Any
+    item: Any = ""
+    consequence: str = ""
+    had_exception: bool = field(default=False, repr=False)
+
+    def __exit__(self, exc_type, e, _):
+        if exc_type:
+            self.had_exception = True
+            warning = ExceptionInCleanUpWarning(f"Error while cleaning up {self}: {exc_type.__qualname__}: {e}")
+            warning.__cause__ = e
+            warnings.warn(warning)
+            return not _DEBUG
+
+
+def safer_rmtree(fixture, path):
+    """Compared to ``shutil.rmtree(ignore_errors=False)`` this will log a warning, so we know something is buggy"""
+    handler = handle_cleanup_exception(fixture, "files", consequence="Disk might fill up")
+    with handler:
+        shutil.rmtree(path, ignore_errors=False)
+    if handler.had_exception:
+        time.sleep(1)
+        with handler:  # Even with ignore_errors=True, rmtree might still throw on Windows....
+            shutil.rmtree(path, ignore_errors=True)

@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Optional
 from tempfile import mkdtemp
 
 from .api import *
-from .utils import get_ephemeral_port, GracefulProcessUtils, wait_for_server_to_come_up
+from .utils import get_ephemeral_port, GracefulProcessUtils, wait_for_server_to_come_up, safer_rmtree
 from arcticc.pb2.storage_pb2 import EnvironmentConfigsMap
 from arcticdb.version_store.helper import add_azure_library_to_env
 
@@ -135,7 +135,7 @@ class AzuriteStorageFixtureFactory(StorageFixtureFactory):
     """Set to True to create AzureContainer with SAS authentication"""
 
     def __init__(self, port=0, working_dir: Optional[str] = None):
-        self.port = port or get_ephemeral_port()
+        self.port = port or get_ephemeral_port(0)
         self.endpoint_root = f"http://{self.host}:{self.port}"
         self.working_dir = str(working_dir) if working_dir else mkdtemp(suffix="AzuriteStorageFixtureFactory")
 
@@ -151,7 +151,7 @@ class AzuriteStorageFixtureFactory(StorageFixtureFactory):
     def __exit__(self, exc_type, exc_value, traceback):
         with handle_cleanup_exception(self, "process", consequence="Subsequent file deletion may also fail. "):
             GracefulProcessUtils.terminate(self._p)
-        shutil.rmtree(self.working_dir, ignore_errors=True)
+        safer_rmtree(self, self.working_dir)
 
     def create_fixture(self) -> AzureContainer:
         return AzureContainer(self)
