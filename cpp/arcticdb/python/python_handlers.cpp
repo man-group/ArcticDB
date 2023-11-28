@@ -25,36 +25,26 @@ namespace arcticdb {
         return py::dtype{fmt::format("{}{:d}", get_dtype_specifier(td.data_type()), type_byte_size)};
     }
 
-    /// @important This calls pybind's initialize array function which is NOT thread safe. Even if the GIL is locked
-    /// numpy arrays can't be created in parallel.
+    /// @important This calls pybind's initialize array function which is NOT thread safe. Moreover, numpy arrays can
+    /// be created only by the thread holindg the GIL. In practice we can get away with allocating arrays only from
+    /// a sigle thread (enve if it's not the one holding the GIL). This, however, is not guranteed to work.
+    /// @todo Allocate numpy arrays only from the thread holding the GIL
     [[nodiscard]] static inline PyObject* initialize_array(
         pybind11::dtype descr,
         const shape_t* shapes,
         const shape_t* strides,
-        size_t ndim,
         const void* source_ptr,
+        std::shared_ptr<Column> owner,
         std::mutex& creation_mutex
     ) {
         std::lock_guard creation_guard{creation_mutex};
-
-        ARCTICDB_SAMPLE(InitializeArray, 0)
-        util::check(source_ptr != nullptr, "Null pointer passed in");
-        const auto flags = py::detail::npy_api::NPY_ARRAY_WRITEABLE_;
-        const auto& api = py::detail::npy_api::get();
-        ARCTICDB_SUBSAMPLE(InitArrayCreateArray, 0)
-        auto tmp = py::reinterpret_steal<py::object>(api.PyArray_NewFromDescr_(
-            api.PyArray_Type_,
-            descr.release().ptr(),
-            static_cast<int>(ndim),
-            reinterpret_cast<Py_intptr_t*>(const_cast<shape_t*>(shapes)),
-            reinterpret_cast<Py_intptr_t*>(const_cast<shape_t*>(strides)),
-            const_cast<void*>(source_ptr),
-            flags,
-            nullptr));
-        ARCTICDB_SUBSAMPLE(ArrayCopy, 0);
-        util::check(static_cast<bool>(tmp), "Got null pointer in array allocation");
-        tmp = py::reinterpret_steal<py::object>(api.PyArray_NewCopy_(tmp.ptr(), -1));
-        return tmp.release().ptr();
+        // TODO: Py capsule can take only void ptr as input. We need a better way to handle destruction
+        //  Allocating shared ptr on the heap is sad.
+        auto* object = new std::shared_ptr<Column>(std::move(owner));
+        auto arr = py::array(descr, {*shapes}, {*strides}, source_ptr, py::capsule(object, [](void* obj){
+            delete reinterpret_cast<std::shared_ptr<Column>*>(obj);
+        }));
+        return arr.release().ptr();
     }
 
     static inline const PyObject** fill_with_none(const PyObject** dest, size_t count) {
@@ -168,23 +158,23 @@ namespace arcticdb {
                 fill_with_none(ptr_dest, row_count);
                 return;
             }
-            auto data_sink = buffers->get_buffer(type_descriptor, true);
-            data_sink->check_magic();
-            log::version().info("Column got buffer at {}", uintptr_t(data_sink.get()));
+            std::shared_ptr<Column> column = buffers->get_buffer(type_descriptor, true);
+            column->check_magic();
+            log::version().info("Column got buffer at {}", uintptr_t(column.get()));
             auto bv = std::make_optional(util::BitSet{});
-            data += decode_field(type_descriptor, *field, data, *data_sink, bv, encoding_version);
+            data += decode_field(type_descriptor, *field, data, *column, bv, encoding_version);
 
             auto last_row = 0u;
             ARCTICDB_SUBSAMPLE(InitArrayAcquireGIL, 0)
             const shape_t strides = get_type_size(type_descriptor.data_type());
             const auto py_dtype = generate_python_dtype(type_descriptor, strides);
             type_descriptor.visit_tag([&] (auto tdt) {
-                const auto& blocks = data_sink->blocks();
+                const auto& blocks = column->blocks();
                 if(blocks.empty())
                     return;
 
                 auto block_it = blocks.begin();
-                const ssize_t* shapes = data_sink->shape_ptr();
+                const ssize_t* shapes = column->shape_ptr();
                 auto block_pos = 0u;
                 const auto* ptr_src = (*block_it)->data();
                 constexpr shape_t stride = static_cast<TypeDescriptor>(tdt).get_type_byte_size();
@@ -196,8 +186,8 @@ namespace arcticdb {
                     *ptr_dest++ = initialize_array(py_dtype,
                         &shape,
                         &stride,
-                        static_cast<size_t>(type_descriptor.dimension()),
                         ptr_src + block_pos,
+                        column,
                         initialize_array_mutex);
                     block_pos += shape * stride;
                     if(shapes) {

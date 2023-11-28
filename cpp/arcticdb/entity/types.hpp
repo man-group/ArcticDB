@@ -518,10 +518,10 @@ constexpr bool is_numpy_array(TypeDescriptor td) {
            (td.dimension() == Dimension::Dim1);
 }
 
-constexpr bool is_pyobject_type(TypeDescriptor dt) {
-    return is_dynamic_string_type(slice_value_type(dt.data_type())) ||
-           slice_value_type(dt.data_type()) == ValueType::PYBOOL;
-    // TODO: Should we check for is_numpy_array(dt)?
+constexpr bool is_pyobject_type(TypeDescriptor td) {
+    return is_dynamic_string_type(slice_value_type(td.data_type())) ||
+           slice_value_type(td.data_type()) == ValueType::PYBOOL ||
+           is_numpy_array(td);
 }
 
 

@@ -234,6 +234,8 @@ std::optional<convert::StringEncodingError> aggregator_set_data(
                 // In that case we need to save the bitset so that we can distinguish empty array from None during the
                 // read.
                 if(values_bitset.size() == values_bitset.count()) {
+                    Column arr_col{TypeDescriptor{DataType::EMPTYVAL, Dimension::Dim2}, true};
+                    agg.set_sparse_block(col, arr_col.release_buffer(), arr_col.release_shapes(), std::move(values_bitset));
                     return std::optional<convert::StringEncodingError>();
                 }
             }
