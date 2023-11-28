@@ -14,6 +14,7 @@
 #include <arcticdb/util/hash.hpp>
 #include <arcticdb/stream/stream_utils.hpp>
 #include <arcticdb/stream/protobuf_mappings.hpp>
+#include <arcticdb/stream/stream_source.hpp>
 #include <arcticdb/column_store/memory_segment.hpp>
 #include <arcticdb/entity/variant_key.hpp>
 #include <arcticdb/stream/stream_sink.hpp>
@@ -182,15 +183,30 @@ struct UpdateSegmentTask : BaseTask {
     }
 };
 
+template <typename Callable>
+struct KeySegmentContinuation {
+    storage::KeySegmentPair key_seg_;
+    Callable continuation_;
+};
+
+inline storage::KeySegmentPair read_dispatch(const entity::VariantKey& variant_key, const std::shared_ptr<storage::Library>& lib, const storage::ReadKeyOpts& opts) {
+    return util::variant_match(variant_key, [&lib, &opts](const auto &key) { return lib->read(key, opts); });
+}
+
+template <typename Callable>
 struct ReadCompressedTask : BaseTask {
     entity::VariantKey key_;
     std::shared_ptr<storage::Library> lib_;
     storage::ReadKeyOpts opts_;
+    Callable continuation_;
 
-    ReadCompressedTask(entity::VariantKey key, std::shared_ptr<storage::Library> lib, storage::ReadKeyOpts opts)
+    using ContinuationType = Callable;
+
+    ReadCompressedTask(entity::VariantKey key, std::shared_ptr<storage::Library> lib, storage::ReadKeyOpts opts, Callable&& continuation)
         : key_(std::move(key)),
         lib_(std::move(lib)),
-        opts_(opts) {
+        opts_(opts),
+        continuation_(std::move(continuation)){
         ARCTICDB_DEBUG(log::storage(), "Creating read compressed task for key {}: {}",
                              variant_key_type(key_),
                              variant_key_view(key_));
@@ -198,13 +214,17 @@ struct ReadCompressedTask : BaseTask {
 
     ARCTICDB_MOVE_ONLY_DEFAULT(ReadCompressedTask)
 
-    storage::KeySegmentPair read() {
-        return std::visit([that=this](const auto &key) { return that->lib_->read(key, that->opts_); }, key_);
-    }
-
-    storage::KeySegmentPair operator()() {
+    KeySegmentContinuation<ContinuationType> operator()() {
         ARCTICDB_SAMPLE(ReadCompressed, 0)
-        return read();
+        return KeySegmentContinuation<decltype(continuation_)>{read_dispatch(key_, lib_, opts_), std::move(continuation_)};
+    }
+};
+
+struct PassThroughTask : BaseTask {
+    PassThroughTask() = default;
+
+   storage::KeySegmentPair operator()(storage::KeySegmentPair &&ks) const {
+        return ks;
     }
 };
 
@@ -292,6 +312,28 @@ struct DecodeSegmentTask : BaseTask {
     }
 };
 
+struct DecodeSliceTask : BaseTask {
+    ARCTICDB_MOVE_ONLY_DEFAULT(DecodeSliceTask)
+
+    pipelines::RangesAndKey ranges_and_key_;
+    std::shared_ptr<std::unordered_set<std::string>> columns_to_decode_;
+
+    explicit DecodeSliceTask(
+            pipelines::RangesAndKey&& ranges_and_key,
+            std::shared_ptr<std::unordered_set<std::string>> columns_to_decode):
+            ranges_and_key_(std::move(ranges_and_key)),
+            columns_to_decode_(columns_to_decode) {
+    }
+
+    pipelines::SegmentAndSlice operator()(storage::KeySegmentPair&& key_segment_pair) {
+        ARCTICDB_SAMPLE(DecodeSliceTask, 0)
+        return decode_into_slice(std::move(key_segment_pair));
+    }
+
+private:
+    pipelines::SegmentAndSlice decode_into_slice(storage::KeySegmentPair&& key_segment_pair);
+};
+
 struct DecodeSlicesTask : BaseTask {
     ARCTICDB_MOVE_ONLY_DEFAULT(DecodeSlicesTask)
 
@@ -303,7 +345,7 @@ struct DecodeSlicesTask : BaseTask {
             }
 
     Composite<pipelines::SliceAndKey> operator()(Composite<std::pair<Segment, pipelines::SliceAndKey>> && skp) const {
-        ARCTICDB_SAMPLE(DecodeAtomTask, 0)
+        ARCTICDB_SAMPLE(DecodeSlicesTask, 0)
         auto sk_pairs = std::move(skp);
         return sk_pairs.transform([that=this] (auto&& ssp){
             auto seg_slice_pair = std::forward<decltype(ssp)>(ssp);
@@ -333,47 +375,26 @@ struct SegmentFunctionTask : BaseTask {
 };
 
 struct MemSegmentProcessingTask : BaseTask {
-    std::shared_ptr<Store> store_;
     std::vector<std::shared_ptr<Clause>> clauses_;
-    std::optional<Composite<ProcessingUnit>> procs_;
+    Composite<EntityIds> entity_ids_;
 
     explicit MemSegmentProcessingTask(
-           const std::shared_ptr<Store>& store,
            std::vector<std::shared_ptr<Clause>> clauses,
-           std::optional<Composite<ProcessingUnit>>&& procs = std::nullopt) :
-        store_(store),
+           Composite<EntityIds>&& entity_ids) :
         clauses_(std::move(clauses)),
-        procs_(std::move(procs)) {
-    }
-
-   static ProcessingUnit slice_to_segment(Composite<pipelines::SliceAndKey>&& is) {
-        auto inputs = std::move(is);
-        return ProcessingUnit(inputs.as_range());
-    }
-
-    [[nodiscard]]
-    Composite<ProcessingUnit> process(Composite<ProcessingUnit>&& proc){
-        auto procs = std::move(proc);
-        for(const auto& clause : clauses_) {
-            procs = clause->process(store_, std::move(procs));
-
-            if(clause->clause_info().requires_repartition_)
-                break;
-        }
-        return procs;
+        entity_ids_(std::move(entity_ids)) {
     }
 
     ARCTICDB_MOVE_ONLY_DEFAULT(MemSegmentProcessingTask)
 
-    Composite<ProcessingUnit> operator()(Composite<pipelines::SliceAndKey>&& sk) {
-        return process(Composite<ProcessingUnit>(slice_to_segment(std::move(sk))));
-    }
+    Composite<EntityIds> operator()() {
+        for(const auto& clause : clauses_) {
+            entity_ids_ = clause->process(std::move(entity_ids_));
 
-    Composite<ProcessingUnit> operator()() {
-        internal::check<ErrorCode::E_ASSERTION_FAILURE>(
-                procs_.has_value(),
-                "MemSegmentProcessingTask () operator expects processing units to be provided in ctor");
-        return process(std::move(*procs_));
+            if(clause->clause_info().requires_repartition_)
+                break;
+        }
+        return std::move(entity_ids_);
     }
 
 };

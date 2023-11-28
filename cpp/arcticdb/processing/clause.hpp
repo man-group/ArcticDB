@@ -13,10 +13,10 @@
 #include <arcticdb/pipeline/value.hpp>
 #include <arcticdb/processing/expression_context.hpp>
 #include <arcticdb/processing/expression_node.hpp>
-#include <arcticdb/processing/processing_unit.hpp>
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/processing/aggregation.hpp>
 #include <arcticdb/processing/aggregation_interface.hpp>
+#include <arcticdb/processing/processing_unit.hpp>
 #include <arcticdb/processing/grouper.hpp>
 #include <arcticdb/stream/aggregator.hpp>
 #include <arcticdb/util/movable_priority_queue.hpp>
@@ -36,6 +36,7 @@
 
 namespace arcticdb {
 
+using RangesAndKey = pipelines::RangesAndKey;
 using SliceAndKey = pipelines::SliceAndKey;
 
 using NormMetaDescriptor = std::shared_ptr<arcticdb::proto::descriptors::NormalizationMetadata>;
@@ -61,31 +62,39 @@ struct ProcessingConfig {
     uint64_t total_rows_ = 0;
 };
 
+using EntityIds = std::vector<EntityId>;
 
 struct IClause {
     template<class Base>
     struct Interface : Base {
-        // (at least) the first clause in the pipeline will be parallelied over elements of the returned vector
+        // Reorders ranges_and_keys into the order they should be queued up to be read from storage.
+        // Returns a vector where each element is a vector of indexes into ranges_and_keys representing the segments needed
+        // for one ProcessingUnit.
         // TODO #732: Factor out start_from as part of https://github.com/man-group/ArcticDB/issues/732
-        [[nodiscard]] std::vector<Composite<SliceAndKey>>
-        structure_for_processing(std::vector<SliceAndKey>& slice_and_keys, size_t start_from) const {
-            return std::move(folly::poly_call<0>(*this, slice_and_keys, start_from));
+        [[nodiscard]] std::vector<std::vector<size_t>>
+        structure_for_processing(std::vector<RangesAndKey>& ranges_and_keys,
+                                 size_t start_from) const {
+            return std::move(folly::poly_call<0>(*this, ranges_and_keys, start_from));
         }
 
-        [[nodiscard]] Composite<ProcessingUnit>
-        process(std::shared_ptr<Store> store, Composite<ProcessingUnit> &&segs) const {
-            return std::move(folly::poly_call<1>(*this, store, std::move(segs)));
+        [[nodiscard]] Composite<EntityIds>
+        process(Composite<EntityIds>&& entity_ids) const {
+            return std::move(folly::poly_call<1>(*this, std::move(entity_ids)));
         }
 
-        [[nodiscard]] std::optional<std::vector<Composite<ProcessingUnit>>> repartition(
-                [[maybe_unused]] std::vector<Composite<ProcessingUnit>> &&comps) const {
-            return folly::poly_call<2>(*this, std::move(comps));
+        [[nodiscard]] std::optional<std::vector<Composite<EntityIds>>> repartition(
+                std::vector<Composite<EntityIds>>&& entity_ids) const {
+            return folly::poly_call<2>(*this, std::move(entity_ids));
         }
 
         [[nodiscard]] const ClauseInfo& clause_info() const { return folly::poly_call<3>(*this); };
 
         void set_processing_config(const ProcessingConfig& processing_config) {
             folly::poly_call<4>(*this, processing_config);
+        }
+
+        void set_component_manager(std::shared_ptr<ComponentManager> component_manager) {
+            folly::poly_call<5>(*this, component_manager);
         }
     };
 
@@ -95,31 +104,40 @@ struct IClause {
             &T::process,
             &T::repartition,
             &T::clause_info,
-            &T::set_processing_config>;
+            &T::set_processing_config,
+            &T::set_component_manager>;
 };
 
 using Clause = folly::Poly<IClause>;
 
-std::vector<Composite<SliceAndKey>> structure_by_row_slice(std::vector<SliceAndKey>& slice_and_keys, size_t start_from);
-std::vector<Composite<SliceAndKey>> structure_by_column_slice(std::vector<SliceAndKey>& slice_and_keys);
+std::vector<std::vector<size_t>> structure_by_row_slice(std::vector<RangesAndKey>& ranges_and_keys,
+                                                        size_t start_from);
+std::vector<std::vector<size_t>> structure_by_column_slice(std::vector<RangesAndKey>& ranges_and_keys);
+
+Composite<ProcessingUnit> gather_entities(std::shared_ptr<ComponentManager> component_manager,
+                                          Composite<EntityIds>&& entity_ids,
+                                          bool include_atom_keys = false,
+                                          bool include_bucket = false);
+
+EntityIds push_entities(std::shared_ptr<ComponentManager> component_manager, ProcessingUnit&& proc);
 
 struct PassthroughClause {
     ClauseInfo clause_info_;
     PassthroughClause() = default;
     ARCTICDB_MOVE_COPY_DEFAULT(PassthroughClause)
 
-    [[nodiscard]] std::vector<Composite<SliceAndKey>> structure_for_processing(
-            std::vector<SliceAndKey>& slice_and_keys, size_t start_from) const {
-        return structure_by_row_slice(slice_and_keys, start_from);
+    [[nodiscard]] std::vector<std::vector<size_t>> structure_for_processing(
+            std::vector<RangesAndKey>& ranges_and_keys,
+            size_t start_from) const {
+        return structure_by_row_slice(ranges_and_keys, start_from);
     }
 
-    [[nodiscard]] Composite<ProcessingUnit> process(
-            ARCTICDB_UNUSED const std::shared_ptr<Store> &store,
-            Composite<ProcessingUnit> &&p
+    [[nodiscard]] Composite<EntityIds> process(
+            Composite<EntityIds>&& entity_ids
             ) const;
 
-    [[nodiscard]] std::optional<std::vector<Composite<ProcessingUnit>>> repartition(
-            ARCTICDB_UNUSED std::vector<Composite<ProcessingUnit>> &&comps) const {
+    [[nodiscard]] std::optional<std::vector<Composite<EntityIds>>> repartition(
+            ARCTICDB_UNUSED std::vector<Composite<EntityIds>>&&) const {
         return std::nullopt;
     }
 
@@ -127,11 +145,14 @@ struct PassthroughClause {
         return clause_info_;
     }
 
-    void set_processing_config(ARCTICDB_UNUSED const ProcessingConfig& processing_config) {}
+    void set_processing_config(ARCTICDB_UNUSED const ProcessingConfig&) {}
+
+    void set_component_manager(ARCTICDB_UNUSED std::shared_ptr<ComponentManager>) {}
 };
 
 struct FilterClause {
     ClauseInfo clause_info_;
+    std::shared_ptr<ComponentManager> component_manager_;
     std::shared_ptr<ExpressionContext> expression_context_;
     PipelineOptimisation optimisation_;
 
@@ -147,18 +168,18 @@ struct FilterClause {
 
     ARCTICDB_MOVE_COPY_DEFAULT(FilterClause)
 
-    [[nodiscard]] std::vector<Composite<SliceAndKey>> structure_for_processing(
-            std::vector<SliceAndKey>& slice_and_keys, size_t start_from) const {
-        return structure_by_row_slice(slice_and_keys, start_from);
+    [[nodiscard]] std::vector<std::vector<size_t>> structure_for_processing(
+            std::vector<RangesAndKey>& ranges_and_keys,
+            size_t start_from) const {
+        return structure_by_row_slice(ranges_and_keys, start_from);
     }
 
-    [[nodiscard]] Composite<ProcessingUnit> process(
-            std::shared_ptr<Store> store,
-            Composite<ProcessingUnit> &&p
+    [[nodiscard]] Composite<EntityIds> process(
+            Composite<EntityIds>&& entity_ids
             ) const;
 
-    [[nodiscard]] std::optional<std::vector<Composite<ProcessingUnit>>> repartition(
-            ARCTICDB_UNUSED std::vector<Composite<ProcessingUnit>> &&) const {
+    [[nodiscard]] std::optional<std::vector<Composite<EntityIds>>> repartition(
+            ARCTICDB_UNUSED std::vector<Composite<EntityIds>> &&) const {
         return std::nullopt;
     }
 
@@ -170,6 +191,10 @@ struct FilterClause {
         expression_context_->dynamic_schema_ = processing_config.dynamic_schema_;
     }
 
+    void set_component_manager(std::shared_ptr<ComponentManager> component_manager) {
+        component_manager_ = component_manager;
+    }
+
     [[nodiscard]] std::string to_string() const;
 
     void set_pipeline_optimisation(PipelineOptimisation pipeline_optimisation) {
@@ -179,6 +204,7 @@ struct FilterClause {
 
 struct ProjectClause {
     ClauseInfo clause_info_;
+    std::shared_ptr<ComponentManager> component_manager_;
     std::string output_column_;
     std::shared_ptr<ExpressionContext> expression_context_;
 
@@ -195,16 +221,17 @@ struct ProjectClause {
 
     ARCTICDB_MOVE_COPY_DEFAULT(ProjectClause)
 
-    [[nodiscard]] std::vector<Composite<SliceAndKey>> structure_for_processing(
-            std::vector<SliceAndKey>& slice_and_keys, size_t start_from) const {
-        return structure_by_row_slice(slice_and_keys, start_from);
+    [[nodiscard]] std::vector<std::vector<size_t>> structure_for_processing(
+            std::vector<RangesAndKey>& ranges_and_keys,
+            size_t start_from) const {
+        return structure_by_row_slice(ranges_and_keys, start_from);
     }
 
-    [[nodiscard]] Composite<ProcessingUnit>
-    process(std::shared_ptr<Store> store, Composite<ProcessingUnit> &&p) const;
+    [[nodiscard]] Composite<EntityIds>
+    process(Composite<EntityIds>&& entity_ids) const;
 
-    [[nodiscard]] std::optional<std::vector<Composite<ProcessingUnit>>> repartition(
-            ARCTICDB_UNUSED std::vector<Composite<ProcessingUnit>> &&comps) const {
+    [[nodiscard]] std::optional<std::vector<Composite<EntityIds>>> repartition(
+            ARCTICDB_UNUSED std::vector<Composite<EntityIds>>&&) const {
         return std::nullopt;
     }
 
@@ -216,12 +243,17 @@ struct ProjectClause {
         expression_context_->dynamic_schema_ = processing_config.dynamic_schema_;
     }
 
+    void set_component_manager(std::shared_ptr<ComponentManager> component_manager) {
+        component_manager_ = component_manager;
+    }
+
     [[nodiscard]] std::string to_string() const;
 };
 
 template<typename GrouperType, typename BucketizerType>
 struct PartitionClause {
     ClauseInfo clause_info_;
+    std::shared_ptr<ComponentManager> component_manager_;
     ProcessingConfig processing_config_;
     std::string grouping_column_;
 
@@ -236,50 +268,60 @@ struct PartitionClause {
 
     ARCTICDB_MOVE_COPY_DEFAULT(PartitionClause)
 
-    [[nodiscard]] std::vector<Composite<SliceAndKey>> structure_for_processing(
-            std::vector<SliceAndKey>& slice_and_keys, size_t start_from) const {
-        return structure_by_row_slice(slice_and_keys, start_from);
+    [[nodiscard]] std::vector<std::vector<size_t>> structure_for_processing(
+            std::vector<RangesAndKey>& ranges_and_keys,
+            size_t start_from) const {
+        return structure_by_row_slice(ranges_and_keys, start_from);
     }
 
-    [[nodiscard]] Composite<ProcessingUnit> process(std::shared_ptr<Store> store,
-                                                    Composite<ProcessingUnit> &&p) const {
-        Composite<ProcessingUnit> output;
-        auto procs = std::move(p);
-        procs.broadcast([&output, &store, that=this](auto &proc) {
-            output.push_back(partition_processing_segment<GrouperType, BucketizerType>(store,
-                                                                                       proc,
-                                                                                       ColumnName(that->grouping_column_),
-                                                                                       that->processing_config_.dynamic_schema_));
+    [[nodiscard]] Composite<EntityIds> process(Composite<EntityIds>&& entity_ids) const {
+        auto procs = gather_entities(component_manager_, std::move(entity_ids));
+        Composite<EntityIds> output;
+        procs.broadcast([&output, this](auto &proc) {
+            Composite<ProcessingUnit> partitioned_proc = partition_processing_segment<GrouperType, BucketizerType>(proc,
+                                                                                                                   ColumnName(grouping_column_),
+                                                                                                                   processing_config_.dynamic_schema_);
+            partitioned_proc.broadcast([&output, this](auto& p) {
+                output.push_back(push_entities(component_manager_, std::move(p)));
+            });
         });
         return output;
     }
 
-    [[nodiscard]] std::optional<std::vector<Composite<ProcessingUnit>>> repartition(
-            ARCTICDB_UNUSED std::vector<Composite<ProcessingUnit>> &&c) const {
-        auto comps = std::move(c);
+    [[nodiscard]] std::optional<std::vector<Composite<EntityIds>>> repartition(
+            std::vector<Composite<EntityIds>>&& entity_ids) const {
+        std::vector<Composite<ProcessingUnit>> input_procs;
+        input_procs.reserve(entity_ids.size());
+        for (auto&& comp: entity_ids) {
+            input_procs.emplace_back(gather_entities(component_manager_, std::move(comp), false, true));
+        }
         std::unordered_map<size_t, Composite<ProcessingUnit>> partition_map;
         schema::check<ErrorCode::E_COLUMN_DOESNT_EXIST>(
-                std::any_of(comps.begin(), comps.end(), [](const Composite<ProcessingUnit>& proc) {
+                std::any_of(input_procs.begin(), input_procs.end(), [](const Composite<ProcessingUnit>& proc) {
                     return !proc.empty();
                 }),
                 "Grouping column {} does not exist or is empty", grouping_column_
         );
 
-        for (auto &comp : comps) {
+        for (auto &comp : input_procs) {
             comp.broadcast([&partition_map](auto &proc) {
-                auto bucket_id = proc.get_bucket();
+                internal::check<ErrorCode::E_ASSERTION_FAILURE>(proc.bucket_.has_value(),
+                                                                "PartitionClause::repartition failed, all processing units must have a bucket ID");
 
-                if (partition_map.find(bucket_id) == partition_map.end()) {
-                    partition_map[bucket_id] = Composite<ProcessingUnit>(std::move(proc));
+                if (partition_map.find(*proc.bucket_) == partition_map.end()) {
+                    partition_map[*proc.bucket_] = Composite<ProcessingUnit>(std::move(proc));
                 } else {
-                    partition_map[bucket_id].push_back(std::move(proc));
+                    partition_map[*proc.bucket_].push_back(std::move(proc));
                 }
             });
         }
 
-        std::vector<Composite<ProcessingUnit>> ret;
-        for (auto &[key, value] : partition_map) {
-            ret.push_back(std::move(value));
+        std::vector<Composite<EntityIds>> ret;
+        ret.reserve(partition_map.size());
+        for (auto&& [_, comp] : partition_map) {
+            ret.emplace_back(comp.transform([this](auto&& proc) {
+                return push_entities(component_manager_, std::move(proc));
+            }));
         }
 
         return ret;
@@ -291,6 +333,10 @@ struct PartitionClause {
 
     void set_processing_config(const ProcessingConfig& processing_config) {
         processing_config_ = processing_config;
+    }
+
+    void set_component_manager(std::shared_ptr<ComponentManager> component_manager) {
+        component_manager_ = component_manager;
     }
 
     [[nodiscard]] std::string to_string() const {
@@ -306,6 +352,7 @@ inline StreamDescriptor empty_descriptor(arcticdb::proto::descriptors::IndexDesc
 
 struct AggregationClause {
     ClauseInfo clause_info_;
+    std::shared_ptr<ComponentManager> component_manager_;
     ProcessingConfig processing_config_;
     std::string grouping_column_;
     std::unordered_map<std::string, std::string> aggregation_map_;
@@ -319,18 +366,18 @@ struct AggregationClause {
                       const std::unordered_map<std::string,
                       std::string>& aggregations);
 
-    [[noreturn]] std::vector<Composite<SliceAndKey>> structure_for_processing(
-        const std::vector<SliceAndKey>&, size_t) const {
+    [[noreturn]] std::vector<std::vector<size_t>> structure_for_processing(
+            ARCTICDB_UNUSED const std::vector<RangesAndKey>&,
+            ARCTICDB_UNUSED size_t) const {
         internal::raise<ErrorCode::E_ASSERTION_FAILURE>(
                 "AggregationClause::structure_for_processing should never be called"
                 );
     }
 
-    [[nodiscard]] Composite<ProcessingUnit> process(std::shared_ptr<Store> store,
-                                                    Composite<ProcessingUnit> &&p) const;
+    [[nodiscard]] Composite<EntityIds> process(Composite<EntityIds>&& entity_ids) const;
 
-    [[nodiscard]] std::optional<std::vector<Composite<ProcessingUnit>>> repartition(
-            ARCTICDB_UNUSED std::vector<Composite<ProcessingUnit>> &&comps
+    [[nodiscard]] std::optional<std::vector<Composite<EntityIds>>> repartition(
+            ARCTICDB_UNUSED std::vector<Composite<EntityIds>>&&
             ) const {
         return std::nullopt;
     }
@@ -343,11 +390,16 @@ struct AggregationClause {
         processing_config_ = processing_config;
     }
 
+    void set_component_manager(std::shared_ptr<ComponentManager> component_manager) {
+        component_manager_ = component_manager;
+    }
+
     [[nodiscard]] std::string to_string() const;
 };
 
 struct RemoveColumnPartitioningClause {
     ClauseInfo clause_info_;
+    std::shared_ptr<ComponentManager> component_manager_;
     mutable bool warning_shown = false; // folly::Poly can't deal with atomic_bool
 
     RemoveColumnPartitioningClause() {
@@ -355,16 +407,16 @@ struct RemoveColumnPartitioningClause {
     }
     ARCTICDB_MOVE_COPY_DEFAULT(RemoveColumnPartitioningClause)
 
-    [[nodiscard]] std::vector<Composite<SliceAndKey>> structure_for_processing(
-            std::vector<SliceAndKey>& slice_and_keys, size_t start_from) const {
-        return structure_by_row_slice(slice_and_keys, start_from);
+    [[nodiscard]] std::vector<std::vector<size_t>> structure_for_processing(
+            std::vector<RangesAndKey>& ranges_and_keys,
+            size_t start_from) const {
+        return structure_by_row_slice(ranges_and_keys, start_from);
     }
 
-    [[nodiscard]] Composite<ProcessingUnit> process(std::shared_ptr<Store> store,
-                                                    Composite<ProcessingUnit> &&p) const;
+    [[nodiscard]] Composite<EntityIds> process(Composite<EntityIds>&& entity_ids) const;
 
-    [[nodiscard]] std::optional<std::vector<Composite<ProcessingUnit>>> repartition(
-            ARCTICDB_UNUSED std::vector<Composite<ProcessingUnit>> &&) const {
+    [[nodiscard]] std::optional<std::vector<Composite<EntityIds>>> repartition(
+            ARCTICDB_UNUSED std::vector<Composite<EntityIds>>&&) const {
         return std::nullopt;
     }
 
@@ -374,26 +426,31 @@ struct RemoveColumnPartitioningClause {
 
     void set_processing_config(ARCTICDB_UNUSED const ProcessingConfig& processing_config) {
     }
+
+    void set_component_manager(std::shared_ptr<ComponentManager> component_manager) {
+        component_manager_ = component_manager;
+    }
 };
 
 struct SplitClause {
     ClauseInfo clause_info_;
+    std::shared_ptr<ComponentManager> component_manager_;
     const size_t rows_;
 
     explicit SplitClause(size_t rows) :
             rows_(rows) {
     }
 
-    [[nodiscard]] std::vector<Composite<SliceAndKey>> structure_for_processing(
-            std::vector<SliceAndKey>& slice_and_keys, size_t start_from) const {
-        return structure_by_row_slice(slice_and_keys, start_from);
+    [[nodiscard]] std::vector<std::vector<size_t>> structure_for_processing(
+            std::vector<RangesAndKey>& ranges_and_keys,
+            size_t start_from) const {
+        return structure_by_row_slice(ranges_and_keys, start_from);
     }
 
-    [[nodiscard]] Composite<ProcessingUnit> process(std::shared_ptr<Store> store,
-                                                    Composite<ProcessingUnit> &&procs) const;
+    [[nodiscard]] Composite<EntityIds> process(Composite<EntityIds>&& entity_ids) const;
 
-    [[nodiscard]] std::optional<std::vector<Composite<ProcessingUnit>>> repartition(
-            ARCTICDB_UNUSED std::vector<Composite<ProcessingUnit>> &&comps) const {
+    [[nodiscard]] std::optional<std::vector<Composite<EntityIds>>> repartition(
+            ARCTICDB_UNUSED std::vector<Composite<EntityIds>>&&) const {
         return std::nullopt;
     }
 
@@ -402,26 +459,31 @@ struct SplitClause {
     }
 
     void set_processing_config(ARCTICDB_UNUSED const ProcessingConfig& processing_config) {}
+
+    void set_component_manager(std::shared_ptr<ComponentManager> component_manager) {
+        component_manager_ = component_manager;
+    }
 };
 
 struct SortClause {
     ClauseInfo clause_info_;
+    std::shared_ptr<ComponentManager> component_manager_;
     const std::string column_;
 
     explicit SortClause(std::string column) :
             column_(std::move(column)) {
     }
 
-    [[nodiscard]] std::vector<Composite<SliceAndKey>> structure_for_processing(
-            std::vector<SliceAndKey>& slice_and_keys, size_t start_from) const {
-        return structure_by_row_slice(slice_and_keys, start_from);
+    [[nodiscard]] std::vector<std::vector<size_t>> structure_for_processing(
+            std::vector<RangesAndKey>& ranges_and_keys,
+            size_t start_from) const {
+        return structure_by_row_slice(ranges_and_keys, start_from);
     }
 
-    [[nodiscard]] Composite<ProcessingUnit> process(std::shared_ptr<Store> store,
-                                                    Composite<ProcessingUnit> &&p) const;
+    [[nodiscard]] Composite<EntityIds> process(Composite<EntityIds>&& entity_ids) const;
 
-    [[nodiscard]] std::optional<std::vector<Composite<ProcessingUnit>>> repartition(
-            ARCTICDB_UNUSED std::vector<Composite<ProcessingUnit>> &&comps) const {
+    [[nodiscard]] std::optional<std::vector<Composite<EntityIds>>> repartition(
+            ARCTICDB_UNUSED std::vector<Composite<EntityIds>>&&) const {
         return std::nullopt;
     }
 
@@ -430,10 +492,15 @@ struct SortClause {
     }
 
     void set_processing_config(ARCTICDB_UNUSED const ProcessingConfig& processing_config) {}
+
+    void set_component_manager(std::shared_ptr<ComponentManager> component_manager) {
+        component_manager_ = component_manager;
+    }
 };
 
 struct MergeClause {
     ClauseInfo clause_info_;
+    std::shared_ptr<ComponentManager> component_manager_;
     stream::Index index_;
     stream::VariantColumnPolicy density_policy_;
     StreamId stream_id_;
@@ -453,16 +520,16 @@ struct MergeClause {
         clause_info_.requires_repartition_ = true;
     }
 
-    [[nodiscard]] std::vector<Composite<SliceAndKey>> structure_for_processing(
-            std::vector<SliceAndKey>& slice_and_keys, size_t start_from) const {
-        return structure_by_row_slice(slice_and_keys, start_from);
+    [[nodiscard]] std::vector<std::vector<size_t>> structure_for_processing(
+            std::vector<RangesAndKey>& ranges_and_keys,
+            size_t start_from) const {
+        return structure_by_row_slice(ranges_and_keys, start_from);
     }
 
-    [[nodiscard]] Composite<ProcessingUnit> process(std::shared_ptr<Store> store,
-                                                    Composite<ProcessingUnit> &&p) const;
+    [[nodiscard]] Composite<EntityIds> process(Composite<EntityIds>&& entity_ids) const;
 
-    [[nodiscard]] std::optional<std::vector<Composite<ProcessingUnit>>> repartition(
-            std::vector<Composite<ProcessingUnit>> &&comps) const;
+    [[nodiscard]] std::optional<std::vector<Composite<EntityIds>>> repartition(
+            std::vector<Composite<EntityIds>>&& entity_ids) const;
 
     [[nodiscard]] const ClauseInfo& clause_info() const {
         return clause_info_;
@@ -470,10 +537,15 @@ struct MergeClause {
 
     void set_processing_config(ARCTICDB_UNUSED const ProcessingConfig& processing_config) {
     }
+
+    void set_component_manager(std::shared_ptr<ComponentManager> component_manager) {
+        component_manager_ = component_manager;
+    }
 };
 
 struct ColumnStatsGenerationClause {
     ClauseInfo clause_info_;
+    std::shared_ptr<ComponentManager> component_manager_;
     ProcessingConfig processing_config_;
     std::shared_ptr<std::vector<ColumnStatsAggregator>> column_stats_aggregators_;
 
@@ -489,16 +561,16 @@ struct ColumnStatsGenerationClause {
 
     ARCTICDB_MOVE_COPY_DEFAULT(ColumnStatsGenerationClause)
 
-    [[nodiscard]] std::vector<Composite<SliceAndKey>> structure_for_processing(
-            std::vector<SliceAndKey>& slice_and_keys, size_t start_from) const {
-        return structure_by_row_slice(slice_and_keys, start_from);
+    [[nodiscard]] std::vector<std::vector<size_t>> structure_for_processing(
+            std::vector<RangesAndKey>& ranges_and_keys,
+            size_t start_from) const {
+        return structure_by_row_slice(ranges_and_keys, start_from);
     }
 
-    [[nodiscard]] Composite<ProcessingUnit> process(std::shared_ptr<Store> store,
-                                                    Composite<ProcessingUnit> &&p) const;
+    [[nodiscard]] Composite<EntityIds> process(Composite<EntityIds>&& entity_ids) const;
 
-    [[nodiscard]] std::optional<std::vector<Composite<ProcessingUnit>>> repartition(
-            ARCTICDB_UNUSED std::vector<Composite<ProcessingUnit>> &&) const {
+    [[nodiscard]] std::optional<std::vector<Composite<EntityIds>>> repartition(
+            ARCTICDB_UNUSED std::vector<Composite<EntityIds>>&&) const {
         return std::nullopt;
     }
 
@@ -508,6 +580,10 @@ struct ColumnStatsGenerationClause {
 
     void set_processing_config(const ProcessingConfig& processing_config) {
         processing_config_ = processing_config;
+    }
+
+    void set_component_manager(std::shared_ptr<ComponentManager> component_manager) {
+        component_manager_ = component_manager;
     }
 };
 
@@ -520,6 +596,7 @@ struct RowRangeClause {
     };
 
     ClauseInfo clause_info_;
+    std::shared_ptr<ComponentManager> component_manager_;
     RowRangeType row_range_type_;
     // As passed into head or tail
     int64_t n_{0};
@@ -552,14 +629,14 @@ struct RowRangeClause {
 
     ARCTICDB_MOVE_COPY_DEFAULT(RowRangeClause)
 
-    [[nodiscard]] std::vector<Composite<SliceAndKey>> structure_for_processing(
-            std::vector<SliceAndKey>& slice_and_keys, ARCTICDB_UNUSED size_t start_from) const;
+    [[nodiscard]] std::vector<std::vector<size_t>> structure_for_processing(
+            std::vector<RangesAndKey>& ranges_and_keys,
+            ARCTICDB_UNUSED size_t start_from) const;
 
-    [[nodiscard]] Composite<ProcessingUnit> process(std::shared_ptr<Store> store,
-                                                    Composite<ProcessingUnit> &&p) const;
+    [[nodiscard]] Composite<EntityIds> process(Composite<EntityIds>&& entity_ids) const;
 
-    [[nodiscard]] std::optional<std::vector<Composite<ProcessingUnit>>> repartition(
-            ARCTICDB_UNUSED std::vector<Composite<ProcessingUnit>> &&) const {
+    [[nodiscard]] std::optional<std::vector<Composite<EntityIds>>> repartition(
+            ARCTICDB_UNUSED std::vector<Composite<EntityIds>>&&) const {
         return std::nullopt;
     }
 
@@ -569,12 +646,17 @@ struct RowRangeClause {
 
     void set_processing_config(const ProcessingConfig& processing_config);
 
+    void set_component_manager(std::shared_ptr<ComponentManager> component_manager) {
+        component_manager_ = component_manager;
+    }
+
     [[nodiscard]] std::string to_string() const;
 };
 
 struct DateRangeClause {
 
     ClauseInfo clause_info_;
+    std::shared_ptr<ComponentManager> component_manager_;
     // Time range to keep, inclusive of start and end
     timestamp start_;
     timestamp end_;
@@ -588,14 +670,14 @@ struct DateRangeClause {
 
     ARCTICDB_MOVE_COPY_DEFAULT(DateRangeClause)
 
-    [[nodiscard]] std::vector<Composite<SliceAndKey>> structure_for_processing(
-            std::vector<SliceAndKey>& slice_and_keys, size_t start_from) const;
+    [[nodiscard]] std::vector<std::vector<size_t>> structure_for_processing(
+            std::vector<RangesAndKey>& ranges_and_keys,
+            size_t start_from) const;
 
-    [[nodiscard]] Composite<ProcessingUnit> process(std::shared_ptr<Store> store,
-                                                    Composite<ProcessingUnit> &&p) const;
+    [[nodiscard]] Composite<EntityIds> process(Composite<EntityIds>&& entity_ids) const;
 
-    [[nodiscard]] std::optional<std::vector<Composite<ProcessingUnit>>> repartition(
-            ARCTICDB_UNUSED std::vector<Composite<ProcessingUnit>> &&) const {
+    [[nodiscard]] std::optional<std::vector<Composite<EntityIds>>> repartition(
+            ARCTICDB_UNUSED std::vector<Composite<EntityIds>>&&) const {
         return std::nullopt;
     }
 
@@ -604,6 +686,10 @@ struct DateRangeClause {
     }
 
     void set_processing_config(ARCTICDB_UNUSED const ProcessingConfig& processing_config) {
+    }
+
+    void set_component_manager(std::shared_ptr<ComponentManager> component_manager) {
+        component_manager_ = component_manager;
     }
 
     [[nodiscard]] timestamp start() const {

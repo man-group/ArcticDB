@@ -59,6 +59,9 @@ struct RowRange : AxisRange {
 };
 
 /*
+ * This class is mostly (exclusively?) used in SliceAndKey objects, where the duplication of the StreamDescriptor
+ * with the SegmentInMemory is confusing and error-prone. Where possible do not add more uses of this class and
+ * SliceAndKey, prefer RangesAndKey or SegmentAndSlice depending on requirements.
  * FrameSlice stores the vertical (RowRange) and horizontal (ColRange) offsets for a table-subsection, as well as
  * (optionally) a descriptor for the source stream/index data. For dynamic_schema's bucketizing, it also stores
  * the hash bucket it represents and the number of total buckets that are present for the current calculation
@@ -164,7 +167,45 @@ private:
     std::optional<std::vector<size_t>> indices_;
 };
 
+// Collection of these objects is the input to batch_read_uncompressed
+struct RangesAndKey {
+    explicit RangesAndKey(const FrameSlice& frame_slice, entity::AtomKey&& key):
+    row_range_(frame_slice.rows()),
+    col_range_(frame_slice.columns()),
+    key_(std::move(key)) {
+    }
+    explicit RangesAndKey(const RowRange& row_range, const ColRange& col_range, const entity::AtomKey& key):
+            row_range_(row_range),
+            col_range_(col_range),
+            key_(key) {
+    }
+    RangesAndKey() = delete;
+    ARCTICDB_MOVE_COPY_DEFAULT(RangesAndKey)
+
+    RowRange row_range_;
+    ColRange col_range_;
+    entity::AtomKey key_;
+};
+
 /*
+ * The return type of batch_read_uncompressed, the entry point to the processing pipeline.
+ * Intended as a replacement for SliceAndKey without the baggage that class has accumulated, use in preference where
+ * possible.
+ */
+struct SegmentAndSlice {
+    explicit SegmentAndSlice(RangesAndKey&& ranges_and_key, SegmentInMemory&& segment_in_memory):
+            ranges_and_key_(std::move(ranges_and_key)),
+            segment_in_memory_(std::move(segment_in_memory)) {
+    }
+    SegmentAndSlice() = delete;
+    ARCTICDB_MOVE_COPY_DEFAULT(SegmentAndSlice)
+
+    RangesAndKey ranges_and_key_;
+    SegmentInMemory segment_in_memory_;
+};
+
+/*
+ * Deprecated, use SegmentAndSlice or RangesAndKey where possible.
  * SliceAndKey is a composite type, wrapping:
  * 1. A FrameSlice instance, detailing the context of contained data
  * 2. An optional AtomKey instance, enabling retrieval of segment data from storage

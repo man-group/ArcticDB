@@ -62,8 +62,8 @@
   ],
   "overrides": [
     { "name": "openssl", "version-string": "1.1.1n#1" },
-    { "name": "aws-sdk-cpp", "version": "1.11.4#0" },
-    { "name": "aws-c-s3", "version": "0.2.3#0" },
+    { "name": "aws-sdk-cpp", "version": "1.11.201" },
+    { "name": "aws-c-s3", "version": "0.3.24" },
     { "name": "bitmagic", "version": "7.12.3" },
     { "name": "boost-algorithm", "version": "1.80.0#1" },
     { "name": "boost-align", "version": "1.80.0#1" },
@@ -168,5 +168,5 @@
     "overlay-ports": ["third_party/vcpkg_overlays"]
   },
   "$note on builtin-baseline": "Remember to regenerate third_party/vcpkg_overlays",
-  "builtin-baseline": "d4d39d71b3e6dd7536592c36ab2f7e84a8a64942"
+  "builtin-baseline": "0c20b2a97c390e106150837042d921b0939e7ecb"
 }

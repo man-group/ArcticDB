@@ -401,7 +401,8 @@ public:
         // For compacting an entry, we compact from the second version key in the chain
         // This makes it concurrent safe (when use_tombstones is enabled)
         // The first version key is in head and the second version key is first in entry.keys_
-        entry->validate();
+        if (validate_)
+            entry->validate();
         util::check(entry->head_.value().type() == KeyType::VERSION, "Type of head must be version");
         auto new_entry = std::make_shared<VersionMapEntry>(*entry);
 
@@ -426,7 +427,8 @@ public:
                 [](const auto& k){return k.type() == KeyType::VERSION;}),
             std::end(new_entry->keys_));
 
-        new_entry->validate();
+        if (validate_)
+            new_entry->validate();
         return new_entry;
     }
 
@@ -815,7 +817,6 @@ public:
         auto entry = get_entry(stream_id);
         entry->clear();
         load_via_iteration(store, stream_id, entry, false);
-        fix_stream_ids_of_index_keys(store, stream_id, entry);
         remove_duplicate_index_keys(entry);
         (void)rewrite_entry(store, stream_id, entry);
     }
@@ -826,7 +827,6 @@ public:
         auto old_entry = entry;
         entry->clear();
         load_via_iteration(store, stream_id, entry, true);
-        fix_stream_ids_of_index_keys(store, stream_id, entry);
         remove_duplicate_index_keys(entry);
         (void)rewrite_entry(store, stream_id, entry);
         remove_entry_version_keys(store, old_entry, stream_id);

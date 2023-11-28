@@ -124,20 +124,6 @@ folly::Future<std::vector<SliceAndKey>> write_slices(
     });
 }
 
-folly::Future<entity::VariantKey> write_multi_index(
-        InputTensorFrame&& frame,
-        std::vector<SliceAndKey>&& slice_and_keys,
-        const IndexPartialKey& partial_key,
-        const std::shared_ptr<stream::StreamSink>& sink
-) {
-    auto timeseries_desc = index_descriptor_from_frame(std::move(frame), frame.offset);
-    index::IndexWriter<stream::RowCountIndex> writer(sink, partial_key, std::move(timeseries_desc));
-    for (auto &slice_and_key : slice_and_keys) {
-        writer.add(slice_and_key.key(), slice_and_key.slice_);
-    }
-    return writer.commit();
-}
-
 folly::Future<std::vector<SliceAndKey>> slice_and_write(
         InputTensorFrame &frame,
         const SlicingPolicy &slicing,

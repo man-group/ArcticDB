@@ -205,14 +205,15 @@ void decode_index_field_impl(
 }
 
 void decode_index_field(
-        SegmentInMemory &frame,
-        VariantField field,
-        const uint8_t*& data,
-        const uint8_t *begin ARCTICDB_UNUSED,
-        const uint8_t* end ARCTICDB_UNUSED,
-        PipelineContextRow &context,
-        EncodingVersion encoding_version) {
-    util::variant_match(field, [&] (auto field) {
+    SegmentInMemory& frame,
+    VariantField variant_field,
+    const uint8_t*& data,
+    const uint8_t* begin ARCTICDB_UNUSED,
+    const uint8_t* end ARCTICDB_UNUSED,
+    PipelineContextRow& context,
+    EncodingVersion encoding_version
+) {
+    util::variant_match(variant_field, [&](auto field) {
         decode_index_field_impl(frame, *field, data, begin, end, context, encoding_version);
     });
 }
@@ -275,12 +276,13 @@ size_t get_field_range_compressed_size(size_t start_idx, size_t num_fields,
 void decode_or_expand(
     const uint8_t*& data,
     uint8_t* dest,
-    const VariantField& field,
+    const VariantField& variant_field,
     const TypeDescriptor& type_descriptor,
     size_t dest_bytes,
     std::shared_ptr<BufferHolder> buffers,
-	EncodingVersion encoding_version) {
-    util::variant_match(field, [&] (auto field) {
+    EncodingVersion encoding_version
+) {
+    util::variant_match(variant_field, [&](auto field) {
         decode_or_expand_impl(data, dest, *field, type_descriptor, dest_bytes, buffers, encoding_version);
     });
 }
@@ -1145,31 +1147,25 @@ folly::Future<std::vector<VariantKey>> fetch_data(
     if (frame.empty())
         return folly::Future<std::vector<VariantKey>>(std::vector<VariantKey>{});
 
-    std::vector<VariantKey> keys;
-    keys.reserve(context->slice_and_keys_.size());
-    std::vector<stream::StreamSource::ReadContinuation> continuations;
-    continuations.reserve(keys.capacity());
+    std::vector<std::pair<VariantKey, stream::StreamSource::ReadContinuation>> keys_and_continuations;
+    keys_and_continuations.reserve(context->slice_and_keys_.size());
     context->ensure_vectors();
     {
         ARCTICDB_SUBSAMPLE_DEFAULT(QueueReadContinuations)
         for ( auto& row : *context) {
-            keys.push_back(row.slice_and_key().key());
-            continuations.emplace_back([
-                row = row,
-                frame = frame,
-                dynamic_schema=dynamic_schema,
-                buffers](auto &&ks) mutable {
+            keys_and_continuations.emplace_back(row.slice_and_key().key(),
+            [row=row, frame=frame, dynamic_schema=dynamic_schema, buffers](auto &&ks) mutable {
                 auto key_seg = std::forward<storage::KeySegmentPair>(ks);
                 if(dynamic_schema)
                     decode_into_frame_dynamic(frame, row, std::move(key_seg.segment()), buffers);
                 else
                     decode_into_frame_static(frame, row, std::move(key_seg.segment()), buffers);
-                return std::get<AtomKey>(key_seg.variant_key());
+                return key_seg.variant_key();
             });
         }
     }
     ARCTICDB_SUBSAMPLE_DEFAULT(DoBatchReadCompressed)
-    return ssource->batch_read_compressed(std::move(keys), std::move(continuations), BatchReadArgs{});
+    return ssource->batch_read_compressed(std::move(keys_and_continuations), BatchReadArgs{});
 }
 
 } // namespace read

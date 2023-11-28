@@ -26,11 +26,11 @@ ExpressionNode::ExpressionNode(VariantNode left, OperationType op) :
     util::check(!is_binary_operation(op), "Binary expression expects both left and right children");
 }
 
-VariantData ExpressionNode::compute(ProcessingUnit& seg, const std::shared_ptr<Store>& store) const {
+VariantData ExpressionNode::compute(ProcessingUnit& seg) const {
     if (is_binary_operation(operation_type_)) {
-        return dispatch_binary(seg.get(left_, store), seg.get(right_, store), operation_type_);
+        return dispatch_binary(seg.get(left_), seg.get(right_), operation_type_);
     } else {
-        return dispatch_unary(seg.get(left_, store), operation_type_);
+        return dispatch_unary(seg.get(left_), operation_type_);
     }
 }
 

@@ -471,3 +471,28 @@ TEST(SegmentEncoderTest, StressTestString) {
         });
     }
 }
+
+struct TransactionalThing {
+    arcticdb::util::MagicNum<'K', 'e', 'e', 'p'> magic_;
+    static bool destroyed;
+    ~TransactionalThing() {
+        TransactionalThing::destroyed = true;
+    }
+};
+
+bool TransactionalThing::destroyed = false;
+
+TEST(Segment, KeepAlive) {
+    {
+        Segment segment;
+        segment.set_keepalive(std::any(TransactionalThing{}));
+
+        auto seg1 = std::move(segment);
+        Segment seg2{std::move(seg1)};
+        auto seg3 = seg2;
+        Segment seg4{seg3};
+
+        std::any_cast<TransactionalThing>(seg4.keepalive()).magic_.check();
+    }
+    ASSERT_EQ(TransactionalThing::destroyed, true);
+}

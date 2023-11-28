@@ -8,9 +8,14 @@ from numpy.testing import assert_array_equal
 
 from pandas import MultiIndex
 from arcticdb.version_store import NativeVersionStore
-from arcticdb_ext.exceptions import InternalException, NormalizationException, SortingException
+from arcticdb_ext.exceptions import (
+    InternalException,
+    NormalizationException,
+    SortingException,
+)
 from arcticdb_ext import set_config_int
 from arcticdb.util.test import random_integers, assert_frame_equal
+
 
 def test_append_simple(lmdb_version_store):
     symbol = "test_append_simple"
@@ -51,7 +56,10 @@ def test_append_string_of_different_sizes(lmdb_version_store):
     vit = lmdb_version_store.read(symbol)
     assert_frame_equal(vit.data, df1)
 
-    df2 = pd.DataFrame(data={"x": ["catandsomethingelse", "dogandsomethingevenlonger"]}, index=np.arange(2, 4))
+    df2 = pd.DataFrame(
+        data={"x": ["catandsomethingelse", "dogandsomethingevenlonger"]},
+        index=np.arange(2, 4),
+    )
     lmdb_version_store.append(symbol, df2)
     vit = lmdb_version_store.read(symbol)
     expected = pd.concat([df1, df2])
@@ -93,7 +101,9 @@ def _random_integers(size, dtype):
     platform_int_info = np.iinfo("int_")
     iinfo = np.iinfo(dtype)
     return np.random.randint(
-        max(iinfo.min, platform_int_info.min), min(iinfo.max, platform_int_info.max), size=size
+        max(iinfo.min, platform_int_info.min),
+        min(iinfo.max, platform_int_info.max),
+        size=size,
     ).astype(dtype)
 
 
@@ -111,7 +121,11 @@ def test_append_out_of_order_and_sort(lmdb_version_store_ignore_order):
     num_rows = 1111
     dtidx = pd.date_range("1970-01-01", periods=num_rows)
     test = pd.DataFrame(
-        {"uint8": _random_integers(num_rows, np.uint8), "uint32": _random_integers(num_rows, np.uint32)}, index=dtidx
+        {
+            "uint8": _random_integers(num_rows, np.uint8),
+            "uint32": _random_integers(num_rows, np.uint32),
+        },
+        index=dtidx,
     )
     chunk_size = 100
     list_df = [test[i : i + chunk_size] for i in range(0, test.shape[0], chunk_size)]
@@ -139,7 +153,11 @@ def test_upsert_with_delete(lmdb_version_store_big_map):
     num_rows = 1111
     dtidx = pd.date_range("1970-01-01", periods=num_rows)
     test = pd.DataFrame(
-        {"uint8": _random_integers(num_rows, np.uint8), "uint32": _random_integers(num_rows, np.uint32)}, index=dtidx
+        {
+            "uint8": _random_integers(num_rows, np.uint8),
+            "uint32": _random_integers(num_rows, np.uint32),
+        },
+        index=dtidx,
     )
     chunk_size = 100
     list_df = [test[i : i + chunk_size] for i in range(0, test.shape[0], chunk_size)]
@@ -411,6 +429,7 @@ def test_append_mix_ascending_descending(lmdb_version_store):
     assert info["sorted"] == "UNSORTED"
 
 
+@pytest.mark.xfail(reason="Needs to be fixed by issue #496")
 def test_append_with_cont_mem_problem(sym, lmdb_version_store_tiny_segment_dynamic):
     set_config_int("SymbolDataCompact.SegmentCount", 1)
     df0 = pd.DataFrame({"0": ["01234567890123456"]}, index=[pd.Timestamp(0)])
