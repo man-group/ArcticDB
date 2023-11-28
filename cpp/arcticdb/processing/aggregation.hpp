@@ -142,6 +142,20 @@ private:
     std::vector<uint64_t> aggregated_;
 };
 
+class LastAggregatorData : private AggregatorDataBase
+{
+public:
+
+    void add_data_type(DataType data_type);
+    void aggregate(const std::optional<ColumnWithStrings>& input_column, const std::vector<size_t>& groups, size_t unique_values);
+    SegmentInMemory finalize(const ColumnName& output_column_name, bool dynamic_schema, size_t unique_values);
+
+private:
+
+    std::vector<uint8_t> aggregated_;
+    std::optional<DataType> data_type_;
+};
+
 template <class AggregatorData>
 class GroupingAggregatorImpl
 {
@@ -170,5 +184,6 @@ using MinAggregator = GroupingAggregatorImpl<MinAggregatorData>;
 using MaxAggregator = GroupingAggregatorImpl<MaxAggregatorData>;
 using MeanAggregator = GroupingAggregatorImpl<MeanAggregatorData>;
 using CountAggregator = GroupingAggregatorImpl<CountAggregatorData>;
+using LastAggregator = GroupingAggregatorImpl<LastAggregatorData>;
 
 } //namespace arcticdb
