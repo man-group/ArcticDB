@@ -1,5 +1,6 @@
 import shutil
 import pytest
+from pathlib import Path
 
 from arcticdb import Arctic
 from arcticdb.storage_fixtures.lmdb import LmdbStorageFixture
@@ -52,9 +53,10 @@ def test_move_storage(storage_type, host_attr, request):
         assert dest_host in lib.read("sym").host
 
 
-def test_move_lmdb_library_map_size_reduction(tmpdir_factory):
+def test_move_lmdb_library_map_size_reduction(tmp_path: Path):
     # Given - any LMDB library
-    original = tmpdir_factory.mktemp("original")
+    original = tmp_path / "original"
+    original.mkdir()
     ac = Arctic(f"lmdb://{original}?map_size=1MB")
     ac.create_library("lib")
     lib = ac["lib"]
@@ -67,7 +69,8 @@ def test_move_lmdb_library_map_size_reduction(tmpdir_factory):
     del ac
 
     # When - we move the data
-    dest = str(tmpdir_factory.mktemp("dest"))
+    dest = tmp_path / "dest"
+    dest.mkdir()
     shutil.move(str(original / "_arctic_cfg"), dest)
     shutil.move(str(original / "lib"), dest)
 
@@ -103,9 +106,10 @@ def test_move_lmdb_library_map_size_reduction(tmpdir_factory):
     assert_frame_equal(df, lib.read("sym").data)
 
 
-def test_move_lmdb_library_map_size_increase(tmpdir_factory):
+def test_move_lmdb_library_map_size_increase(tmp_path: Path):
     # Given - any LMDB library
-    original = tmpdir_factory.mktemp("original")
+    original = tmp_path / "original"
+    original.mkdir()
     ac = Arctic(f"lmdb://{original}?map_size=500KB")
     ac.create_library("lib")
     lib = ac["lib"]
@@ -119,7 +123,8 @@ def test_move_lmdb_library_map_size_increase(tmpdir_factory):
     del ac
 
     # When - we move the data
-    dest = str(tmpdir_factory.mktemp("dest"))
+    dest = tmp_path / "dest"
+    dest.mkdir()
     shutil.move(str(original / "_arctic_cfg"), dest)
     shutil.move(str(original / "lib"), dest)
 
