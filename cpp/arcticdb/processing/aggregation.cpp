@@ -604,5 +604,75 @@ SegmentInMemory FirstAggregatorData::finalize(const ColumnName& output_column_na
     return res;
 }
 
+/***********************
+ * LastAggregatorData *
+ ***********************/
+
+void LastAggregatorData::add_data_type(DataType data_type) {
+    add_data_type_impl(data_type, data_type_);
+}
+
+void LastAggregatorData::aggregate(const std::optional<ColumnWithStrings>& input_column, const std::vector<size_t>& groups, size_t unique_values) {
+    if(data_type_.has_value() && *data_type_ != DataType::EMPTYVAL && input_column.has_value()) {
+        entity::details::visit_type(*data_type_, [&input_column, unique_values, &groups, that=this] (auto global_type_desc_tag) {
+            using GlobalInputType = decltype(global_type_desc_tag);
+            using GlobalTypeDescriptorTag =  typename OutputType<GlobalInputType>::type;
+            using GlobalRawType = typename GlobalTypeDescriptorTag::DataTypeTag::raw_type;
+            that->aggregated_.resize(sizeof(GlobalRawType)* unique_values);
+            auto col_data = input_column->column_->data();
+            auto out_ptr = reinterpret_cast<GlobalRawType*>(that->aggregated_.data());
+            std::unordered_set<size_t> groups_cache;
+            entity::details::visit_type(input_column->column_->type().data_type(), [&groups, &groups_cache, &out_ptr, &col_data] (auto type_desc_tag) {
+                using ColumnTagType = std::decay_t<decltype(type_desc_tag)>;
+                using ColumnType =  typename ColumnTagType::raw_type;
+                auto groups_pos = 0;
+                auto grp_idx = groups[0];
+                while (auto block = col_data.next<TypeDescriptorTag<ColumnTagType, DimensionTag<entity::Dimension::Dim0>>>()) {
+                    auto ptr = reinterpret_cast<const ColumnType *>(block.value().data());
+                    for (auto i = 0u; i < block.value().row_count(); ++i, ++ptr) {
+                        auto& val = out_ptr[groups[groups_pos]];
+                        if constexpr(std::is_floating_point_v<ColumnType>) {
+                            const auto& curr = GlobalRawType(*ptr);
+                            if ((grp_idx == groups[groups_pos]) && !std::isnan(static_cast<ColumnType>(curr))) {
+                                groups_cache.insert(groups[groups_pos]);
+                                val = curr;
+                            }
+                            else if (grp_idx != groups[groups_pos]) { // Updating when changing group
+                                if (auto iter = groups_cache.find(groups[groups_pos]); iter == groups_cache.end()) { // Group not seen yet
+                                    groups_cache.insert(groups[groups_pos]);
+                                    val = curr;
+                                }
+                                else {
+                                    if (!std::isnan(static_cast<ColumnType>(curr))) {
+                                        val = curr;
+                                    }
+                                }
+                                grp_idx = groups[groups_pos];
+                            }
+                        } else {
+                            val = GlobalRawType(*ptr);
+                        }
+                        ++groups_pos;
+                    }
+                }
+            });
+        });
+    }
+}
+
+SegmentInMemory LastAggregatorData::finalize(const ColumnName& output_column_name, bool, size_t unique_values) {
+    SegmentInMemory res;
+    if(!aggregated_.empty()) {
+        entity::details::visit_type(*data_type_, [that=this, &res, &output_column_name, unique_values] (auto type_desc_tag) {
+            using RawType = typename decltype(type_desc_tag)::DataTypeTag::raw_type;
+            that->aggregated_.resize(sizeof(RawType)* unique_values);
+            auto col = std::make_shared<Column>(make_scalar_type(that->data_type_.value()), unique_values, true, false);
+            memcpy(col->ptr(), that->aggregated_.data(), that->aggregated_.size());
+            res.add_column(scalar_field(that->data_type_.value(), output_column_name.value), col);
+            col->set_row_data(unique_values - 1);
+        });
+    }
+    return res;
+}
 
 } //namespace arcticdb

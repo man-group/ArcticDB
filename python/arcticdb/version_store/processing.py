@@ -405,7 +405,7 @@ class QueryBuilder:
 
     def groupby(self, name: str):
         """
-        Group symbol by column name. GroupBy operations must be followed by an aggregation operator. Currently the following six aggregation
+        Group symbol by column name. GroupBy operations must be followed by an aggregation operator. Currently the following seven aggregation
         operators are supported:
             * "mean" - compute the mean of the group
             * "sum" - compute the sum of the group
@@ -413,6 +413,7 @@ class QueryBuilder:
             * "max" - compute the max of the group
             * "count" - compute the count of group
             * "first" - compute the first element of the group
+            * "last" - compute the last element of the group
 
         For usage examples, see below.
 
