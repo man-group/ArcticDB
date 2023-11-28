@@ -14,9 +14,7 @@
 #include <arcticdb/entity/protobufs.hpp>
 #include <google/protobuf/util/message_differencer.h>
 
-#include <folly/Range.h>
 #include <fmt/format.h>
-#include <folly/Likely.h>
 #include <pybind11/pybind11.h>
 #include <pybind11/numpy.h>
 
