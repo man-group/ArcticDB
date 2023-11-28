@@ -7,13 +7,12 @@ As of the Change Date specified in that file, in accordance with the Business So
 """
 
 import os
-import shutil
 import tempfile
 import time
 from typing import TYPE_CHECKING, Optional
 
 from .api import *
-from .utils import get_ephemeral_port, GracefulProcessUtils, wait_for_server_to_come_up
+from .utils import get_ephemeral_port, GracefulProcessUtils, wait_for_server_to_come_up, safer_rmtree
 from arcticc.pb2.storage_pb2 import EnvironmentConfigsMap
 from arcticdb.version_store.helper import add_mongo_library_to_env
 from arcticdb.adapters.prefixing_library_adapter_decorator import PrefixingLibraryAdapterDecorator
@@ -95,7 +94,7 @@ class ManagedMongoDBServer(StorageFixtureFactory):
 
     def __init__(self, data_dir: Optional[str] = None, port=0, executable="mongod"):
         self._data_dir = data_dir or tempfile.mkdtemp("ManagedMongoDBServer")
-        self._port = port or get_ephemeral_port()
+        self._port = port or get_ephemeral_port(5)
         self._executable = executable
 
     def _safe_enter(self):
@@ -115,13 +114,7 @@ class ManagedMongoDBServer(StorageFixtureFactory):
         with handle_cleanup_exception(self, "process", consequence="On-disk data might not be delete-able. "):
             GracefulProcessUtils.terminate(self._p)
 
-        try:
-            shutil.rmtree(self._data_dir, ignore_errors=False)
-        except:
-            time.sleep(1)
-            # Even with ignore_errors=True, rmtree might still throw on Windows....
-            with handle_cleanup_exception(self, "files (best effort)", consequence="Disk might get used up"):
-                shutil.rmtree(self._data_dir, ignore_errors=True)
+        safer_rmtree(self, self._data_dir)
 
     def create_fixture(self) -> StorageFixture:
         self._count += 1

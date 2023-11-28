@@ -205,7 +205,7 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
         )
 
     def _safe_enter(self):
-        port = self.port = get_ephemeral_port()
+        port = self.port = get_ephemeral_port(2)
         self.endpoint = f"http://{self.host}:{port}"
         self._iam_endpoint = f"http://127.0.0.1:{port}"
 
