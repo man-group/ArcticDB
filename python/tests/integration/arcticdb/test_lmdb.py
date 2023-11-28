@@ -5,6 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 import multiprocessing as mp
 import pytest
 import numpy as np
@@ -20,6 +21,7 @@ from arcticdb.exceptions import LmdbMapFullError, StorageException
 from arcticdb.util.test import get_wide_dataframe
 import arcticdb.adapters.lmdb_library_adapter as la
 from arcticdb.exceptions import LmdbOptionsError
+from arcticdb_ext.log import flush_all
 
 
 def test_batch_read_only_segfault_regression(lmdb_storage):
@@ -180,27 +182,36 @@ def create_arctic_instance(td, i):
     assert lib.read(f"{i}")
 
 
-def test_warnings_arctic_instance(tmp_path, capfd):
+@pytest.fixture
+def get_stderr(capfd):
+    def _get():
+        flush_all()
+        return capfd.readouterr().err
+
+    return _get
+
+
+def test_warnings_arctic_instance(tmp_path, get_stderr):
     ac = Arctic(f"lmdb://{tmp_path}")
-    capfd.readouterr()  # Clear buffer
+    get_stderr()  # Clear buffer
 
     # should warn
     ac = Arctic(f"lmdb://{tmp_path}")
-    assert re.search(r"W .*LMDB path at.*has already been opened in this process", capfd.readouterr().err)
+    assert re.search(r"W .*LMDB path at.*has already been opened in this process", get_stderr())
 
     del ac
     # should not warn
     ac = Arctic(f"lmdb://{tmp_path}")
-    assert not re.search(r"W .*LMDB path at.*has already been opened in this process", capfd.readouterr().err)
+    assert not re.search(r"W .*LMDB path at.*has already been opened in this process", get_stderr())
 
 
-def test_warnings_library(lmdb_storage, capfd):
+def test_warnings_library(lmdb_storage, get_stderr):
     """Should not warn - library caching prevents us opening LMDB env twice."""
     ac = lmdb_storage.create_arctic()
     lib = ac.get_library("lib", create_if_missing=True)
     lib2 = ac.get_library("lib")
     lib3 = ac.get_library("lib")
-    assert " W " not in capfd.readouterr().err
+    assert " W " not in get_stderr()
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="Windows pessimistic file-locking")
@@ -211,4 +222,3 @@ def test_arctic_instances_across_same_lmdb_multiprocessing(tmp_path):
     ac["test"].write("a", pd.DataFrame())
     with mp.Pool(5) as p:
         p.starmap(create_arctic_instance, [(tmp_path, i) for i in range(20)])
-
