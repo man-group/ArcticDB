@@ -16,7 +16,6 @@ from arcticdb_ext.exceptions import InternalException, SchemaException
 from arcticdb.util.test import assert_frame_equal
 from arcticdb.util.hypothesis import (
     use_of_function_scoped_fixtures_in_hypothesis_checked,
-    non_zero_numeric_type_strategies,
     numeric_type_strategies,
     string_strategy,
 )
@@ -50,7 +49,7 @@ def test_group_on_float_column_with_nans(lmdb_version_store):
     df=data_frames(
         [
             column("grouping_column", elements=string_strategy, fill=string_strategy),
-            column("a", elements=non_zero_numeric_type_strategies()),
+            column("a", elements=numeric_type_strategies()),
         ],
         index=range_indexes(),
     )
@@ -85,7 +84,7 @@ def test_hypothesis_mean_agg(lmdb_version_store, df):
     df=data_frames(
         [
             column("grouping_column", elements=string_strategy, fill=string_strategy),
-            column("a", elements=non_zero_numeric_type_strategies()),
+            column("a", elements=numeric_type_strategies()),
         ],
         index=range_indexes(),
     )
@@ -123,8 +122,8 @@ def test_hypothesis_sum_agg(lmdb_version_store, df):
     df=data_frames(
         [
             column("grouping_column", elements=string_strategy, fill=string_strategy),
-            column("a", elements=non_zero_numeric_type_strategies()),
-            column("b", elements=non_zero_numeric_type_strategies()),
+            column("a", elements=numeric_type_strategies()),
+            column("b", elements=numeric_type_strategies()),
         ],
         index=range_indexes(),
     )
