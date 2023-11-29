@@ -7,7 +7,7 @@
 
 #pragma once
 
-#include <arcticdb/entity/protobufs.hpp>
+#include <logger.pb.h>
 
 #include <spdlog/spdlog.h>
 #include <spdlog/sinks/stdout_color_sinks.h>
@@ -26,6 +26,10 @@
 #endif
 
 #define ARCTICDB_RUNTIME_DEBUG(logger, ...) logger.debug(__VA_ARGS__)
+
+namespace arcticdb::proto {
+    namespace logger = arcticc::pb2::logger_pb2;
+}
 
 namespace arcticdb::log {
 class Loggers : public std::enable_shared_from_this<Loggers> {
