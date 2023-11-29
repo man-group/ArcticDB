@@ -129,15 +129,21 @@ class CMakeBuild(build_ext):
             suffix = "-debug" if self.debug else "-release"
             suffix = conda_suffix + suffix
             preset = ("windows-cl" if platform.system() == "Windows" else platform.system().lower()) + suffix
-        _log_and_run(
+
+        cmd = [
             cmake,
             f"-DTEST={ARCTICDB_BUILD_CPP_TESTS}",
             f"-DBUILD_PYTHON_VERSION={sys.version_info[0]}.{sys.version_info[1]}",
             f"-DCMAKE_INSTALL_PREFIX={os.path.dirname(dest)}",
             "--preset",
             preset,
-            cwd="cpp",
-        )
+        ]
+        vcpkg_installed_dir = os.getenv("ARCTICDB_VCPKG_INSTALLED_DIR")
+        print(f"ARCTICDB_VCPKG_INSTALLED_DIR={vcpkg_installed_dir}")
+        if vcpkg_installed_dir:
+            cmd.append(f"-DVCPKG_INSTALLED_DIR={vcpkg_installed_dir}")
+
+        _log_and_run(*cmd, cwd="cpp")
 
         search = f"cpp/out/{preset}-build"
         candidates = glob.glob(search)

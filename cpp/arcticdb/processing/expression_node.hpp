@@ -84,7 +84,7 @@ struct ColumnWithStrings {
         for(position_t i = 0; i < column_->row_count(); ++i) {
             auto offset = column_->scalar_at<StringPool::offset_t>(i);
             if (offset != std::nullopt) {
-                std::string_view raw = string_pool_->get_view(offset.value());
+                std::string_view raw = string_pool_->get_view(*offset);
                 return raw.size();
             }
         }
@@ -110,7 +110,7 @@ struct ExpressionNode {
 
     ExpressionNode(VariantNode left, OperationType op);
 
-    VariantData compute(ProcessingUnit& seg, const std::shared_ptr<Store>& store) const;
+    VariantData compute(ProcessingUnit& seg) const;
 };
 
 } //namespace arcticdb

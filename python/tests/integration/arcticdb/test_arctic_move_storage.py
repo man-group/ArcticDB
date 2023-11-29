@@ -1,46 +1,62 @@
 import shutil
-import boto3
 import pytest
-import sys
+from pathlib import Path
 
 from arcticdb import Arctic
+from arcticdb.storage_fixtures.lmdb import LmdbStorageFixture
 from arcticdb.util.test import get_wide_dataframe
 from arcticdb.util.test import assert_frame_equal
-from arcticdb.exceptions import InternalException
+from arcticdb.exceptions import LmdbMapFullError
+
+from tests.util.mark import AZURE_TESTS_MARK
 
 
-def test_move_lmdb_library(tmpdir_factory):
+@pytest.fixture()
+def lmdb_storage_factory():  # LmdbStorageFixtures aren't produced by a factory, however to fit the pattern:
+    class Dummy:
+        create_fixture = LmdbStorageFixture
+
+    return Dummy()
+
+
+@pytest.mark.parametrize(
+    "storage_type, host_attr",
+    [("lmdb", "db_dir"), ("s3", "bucket"), pytest.param("azurite", "container", marks=AZURE_TESTS_MARK)],
+)
+def test_move_storage(storage_type, host_attr, request):
+    storage_factory = request.getfixturevalue(storage_type + "_storage_factory")
+
+    with storage_factory.create_fixture() as dest_storage:
+        with storage_factory.create_fixture() as source_storage:
+            # Given - a library
+            ac = source_storage.create_arctic()
+            lib = ac.create_library("lib")
+
+            df = get_wide_dataframe(size=100)
+            lib.write("sym", df)
+
+            dest_host = getattr(dest_storage, host_attr)
+            assert dest_host not in lib.read("sym").host
+
+            # When - we copy the underlying objects without using the Arctic API
+            source_storage.copy_underlying_objects_to(dest_storage)
+
+        # When - we leave the source_storage context, the storage should have been cleaned up
+        assert not source_storage.create_arctic().list_libraries()
+
+        # Then - should be readable at new location
+        new_ac = dest_storage.create_arctic()
+        assert new_ac.list_libraries() == ["lib"]
+        lib = new_ac["lib"]
+        assert lib.list_symbols() == ["sym"]
+        assert_frame_equal(df, lib.read("sym").data)
+        assert dest_host in lib.read("sym").host
+
+
+def test_move_lmdb_library_map_size_reduction(tmp_path: Path):
     # Given - any LMDB library
-    original = tmpdir_factory.mktemp("original")
-    ac = Arctic(f"lmdb://{original}")
-    ac.create_library("lib")
-    lib = ac["lib"]
-
-    df = get_wide_dataframe(size=100)
-    lib.write("sym", df)
-
-    # Free resources to release the filesystem lock held by Windows
-    del lib
-    del ac
-
-    # When - we move the data
-    dest = str(tmpdir_factory.mktemp("dest"))
-    shutil.move(str(original / "_arctic_cfg"), dest)
-    shutil.move(str(original / "lib"), dest)
-
-    # Then - should be readable at new location
-    ac = Arctic(f"lmdb://{dest}")
-    assert ac.list_libraries() == ["lib"]
-    lib = ac["lib"]
-    assert lib.list_symbols() == ["sym"]
-    assert_frame_equal(df, lib.read("sym").data)
-    assert "dest" in lib.read("sym").host
-    assert "original" not in lib.read("sym").host
-
-
-def test_move_lmdb_library_map_size_reduction(tmpdir_factory):
-    # Given - any LMDB library
-    original = tmpdir_factory.mktemp("original")
+    original = tmp_path / "original"
+    original.mkdir()
     ac = Arctic(f"lmdb://{original}?map_size=1MB")
     ac.create_library("lib")
     lib = ac["lib"]
@@ -53,7 +69,8 @@ def test_move_lmdb_library_map_size_reduction(tmpdir_factory):
     del ac
 
     # When - we move the data
-    dest = str(tmpdir_factory.mktemp("dest"))
+    dest = tmp_path / "dest"
+    dest.mkdir()
     shutil.move(str(original / "_arctic_cfg"), dest)
     shutil.move(str(original / "lib"), dest)
 
@@ -78,19 +95,21 @@ def test_move_lmdb_library_map_size_reduction(tmpdir_factory):
     assert set(lib.list_symbols()) == {"sym", "another_sym"}
     assert_frame_equal(df, lib.read("sym").data)
 
-    # TODO #866 proper exception type for this
-    with pytest.raises(InternalException) as exc_info:
+    with pytest.raises(LmdbMapFullError) as e:
         lib.write("another_sym", df)
 
-    assert "lmdb error code -30792" in str(exc_info.value)
+    assert "MDB_MAP_FULL" in str(e.value)
+    assert "E5003" in str(e.value)
+    assert "-30792" in str(e.value)
 
     # stuff should still be readable despite the error
     assert_frame_equal(df, lib.read("sym").data)
 
 
-def test_move_lmdb_library_map_size_increase(tmpdir_factory):
+def test_move_lmdb_library_map_size_increase(tmp_path: Path):
     # Given - any LMDB library
-    original = tmpdir_factory.mktemp("original")
+    original = tmp_path / "original"
+    original.mkdir()
     ac = Arctic(f"lmdb://{original}?map_size=500KB")
     ac.create_library("lib")
     lib = ac["lib"]
@@ -104,7 +123,8 @@ def test_move_lmdb_library_map_size_increase(tmpdir_factory):
     del ac
 
     # When - we move the data
-    dest = str(tmpdir_factory.mktemp("dest"))
+    dest = tmp_path / "dest"
+    dest.mkdir()
     shutil.move(str(original / "_arctic_cfg"), dest)
     shutil.move(str(original / "lib"), dest)
 
@@ -116,88 +136,3 @@ def test_move_lmdb_library_map_size_increase(tmpdir_factory):
         df = get_wide_dataframe(size=100)
         lib.write(f"more_sym_{i}", df)
     assert len(lib.list_symbols()) == 30
-
-
-def test_move_s3_library(moto_s3_endpoint_and_credentials):
-    # Given - any S3 library
-    endpoint, port, bucket, aws_access_key, aws_secret_key = moto_s3_endpoint_and_credentials
-
-    original_uri = (
-        endpoint.replace("http://", "s3://").rsplit(":", 1)[0]
-        + ":"
-        + bucket
-        + "?access="
-        + aws_access_key
-        + "&secret="
-        + aws_secret_key
-        + "&port="
-        + port
-    )
-
-    ac = Arctic(original_uri)
-    ac.create_library("lib")
-    lib = ac["lib"]
-
-    df = get_wide_dataframe(size=100)
-    lib.write("sym", df)
-
-    # When - we move the data
-    client = boto3.client(
-        service_name="s3", endpoint_url=endpoint, aws_access_key_id=aws_access_key, aws_secret_access_key=aws_secret_key
-    )
-    new_bucket = f"{bucket}-dest"
-    client.create_bucket(Bucket=new_bucket)
-
-    s3 = boto3.resource(
-        service_name="s3", endpoint_url=endpoint, aws_access_key_id=aws_access_key, aws_secret_access_key=aws_secret_key
-    )
-    source = s3.Bucket(bucket)
-    dest = s3.Bucket(new_bucket)
-
-    for obj in source.objects.filter():
-        dest.copy({"Bucket": bucket, "Key": obj.key}, obj.key)
-
-    # Then - should be readable at new location
-    new_uri = original_uri.replace(f":{bucket}", f":{new_bucket}")
-    new_ac = Arctic(new_uri)
-    assert new_ac.list_libraries() == ["lib"]
-    lib = new_ac["lib"]
-    assert lib.list_symbols() == ["sym"]
-    assert_frame_equal(df, lib.read("sym").data)
-    assert "dest" in lib.read("sym").host
-
-
-@pytest.mark.skipif(sys.platform == "darwin", reason="Test broken on MacOS (issue #909)")
-def test_move_azure_library(azure_client_and_create_container, azurite_azure_uri, azurite_container):
-    # Given - any Azure library
-    original_uri = azurite_azure_uri
-    ac = Arctic(original_uri)
-    ac.create_library("lib")
-    lib = ac["lib"]
-
-    df = get_wide_dataframe(size=100)
-    lib.write("sym", df)
-
-    # When - we move the data
-    new_container = f"{azurite_container}-new"
-    client = azure_client_and_create_container
-    client.create_container(name=new_container)
-
-    container_client = client.get_container_client(container=azurite_container)
-    new_container_client = client.get_container_client(container=new_container)
-
-    for b in container_client.list_blobs():
-        source = container_client.get_blob_client(b.name)
-        target = new_container_client.get_blob_client(b.name)
-        target.start_copy_from_url(source.url, requires_sync=True)
-        props = target.get_blob_properties()
-        assert props.copy.status == "success"
-
-    # Then - should be readable at new location
-    new_uri = original_uri.replace(f"Container={azurite_container};", f"Container={azurite_container}-new;")
-    new_ac = Arctic(new_uri)
-    assert new_ac.list_libraries() == ["lib"]
-    lib = new_ac["lib"]
-    assert lib.list_symbols() == ["sym"]
-    assert_frame_equal(df, lib.read("sym").data)
-    assert "-new" in lib.read("sym").host

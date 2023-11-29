@@ -33,6 +33,9 @@ namespace arcticdb::pipelines {
 
 using FilterRange = std::variant<std::monostate, IndexRange, RowRange>;
 
+/*
+ * A structure which is used to store the potentially negative values for indices of a row range
+ */
 struct SignedRowRange {
     int64_t start_;
     int64_t end_;
@@ -54,7 +57,11 @@ struct ReadQuery {
         clauses_ = clauses;
     }
 
-    void calculate_row_filter(int64_t total_rows) {
+    /*
+     * This is used to set the row filter to a row range not to perform a query of the index key
+     * to get the total number of rows in the index, preventing the cost of performing an extra request.
+     */
+     void calculate_row_filter(int64_t total_rows) {
         if (row_range.has_value()) {
             size_t start = row_range->start_ >= 0 ?
                            std::min(row_range->start_, total_rows) :
@@ -300,12 +307,12 @@ inline std::vector<FilterQuery<ContainerType>> build_read_query_filters(
 
     util::variant_match(range,
                         [&](const RowRange &row_range) {
-                            queries.push_back(
+                            queries.emplace_back(
                                     create_row_filter<ContainerType>(RowRange{row_range.first, row_range.second}));
                         },
                         [&](const IndexRange &index_range) {
                             if (index_range.specified_) {
-                                queries.push_back(create_index_filter<ContainerType>(index_range, dynamic_schema, column_groups));
+                                queries.emplace_back(create_index_filter<ContainerType>(index_range, dynamic_schema, column_groups));
                             }
                         },
                         [](const auto &) {}
@@ -315,9 +322,9 @@ inline std::vector<FilterQuery<ContainerType>> build_read_query_filters(
         util::check(!dynamic_schema || column_groups, "Did not expect a column bitset with dynamic schema");
 
         if(column_groups)
-            queries.push_back(create_dynamic_col_filter(util::BitSet(col_bitset.value()), pipeline_context));
+            queries.emplace_back(create_dynamic_col_filter(util::BitSet(*col_bitset), pipeline_context));
         else
-            queries.push_back(create_static_col_filter(util::BitSet(col_bitset.value())));
+            queries.emplace_back(create_static_col_filter(util::BitSet(*col_bitset)));
     }
 
     return queries;
@@ -342,21 +349,21 @@ inline std::vector<FilterQuery<ContainerType>> build_update_query_filters(
     util::variant_match(range,
                         [&](const  RowRange &row_range) {
                             util::check(std::holds_alternative<stream::RowCountIndex>(index), "Cannot partition by row count when a timeseries-indexed frame was supplied");
-                            queries.push_back(
+                            queries.emplace_back(
                                     create_row_filter<ContainerType>(RowRange{row_range.first, row_range.second}));
                         },
                         [&](const IndexRange &index_range) {
                             util::check(std::holds_alternative<stream::TimeseriesIndex>(index), "Cannot partition by time when a rowcount-indexed frame was supplied");
-                            queries.push_back(create_index_filter<ContainerType>(IndexRange{index_range}, dynamic_schema, column_groups));
+                            queries.emplace_back(create_index_filter<ContainerType>(IndexRange{index_range}, dynamic_schema, column_groups));
                         },
                         [&](const auto &) {
                             util::variant_match(index,
                                                 [&](const stream::TimeseriesIndex &) {
-                                                    queries.push_back(create_index_filter<ContainerType>(IndexRange{index_range}, dynamic_schema, column_groups));
+                                                    queries.emplace_back(create_index_filter<ContainerType>(IndexRange{index_range}, dynamic_schema, column_groups));
                                                 },
                                                 [&](const stream::RowCountIndex &) {
                                                     RowRange row_range{std::get<NumericId>(index_range.start_), std::get<NumericIndex>(index_range.end_)};
-                                                    queries.push_back(create_row_filter<ContainerType>(std::move(row_range)));
+                                                    queries.emplace_back(create_row_filter<ContainerType>(std::move(row_range)));
                                                 },
                                                 [&](const auto &) {
                                                 });

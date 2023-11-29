@@ -150,7 +150,7 @@ folly::Future<arcticdb::entity::VariantKey> write_frame_data(const TestDataFrame
     return writer.commit();
 }
 
-inline folly::Future<arcticdb::entity::VariantKey> write_test_frame(StreamId stream_id,
+inline folly::Future<arcticdb::entity::VariantKey> write_test_frame(const StreamId& stream_id,
                                                                 const TestDataFrame &data_frame,
                                                                 std::shared_ptr<StreamSink> store) {
     auto schema = schema_from_test_frame(data_frame, stream_id);
@@ -182,13 +182,13 @@ bool check_read_frame(const TestDataFrame &data_frame, ReaderType &reader, std::
                 arcticdb::entity::DataType
                     stored_dt = row_ref.segment().column_descriptor(col + 1).type().data_type();
                 if (dt != stored_dt) {
-                    errors.push_back(fmt::format("Type mismatch {} != {} at pos {}:{}", dt, stored_dt, col, row));
+                    errors.emplace_back(fmt::format("Type mismatch {} != {} at pos {}:{}", dt, stored_dt, col, row));
                     success = false;
                 }
                 auto dimension = static_cast<uint64_t>(TypeDescriptor(type_desc_tag).dimension());
                 auto stored_dimension = row_ref.segment().column_descriptor(col + 1).type().dimension();
                 if (dimension != static_cast<uint64_t>(stored_dimension)) {
-                    errors.push_back(fmt::format("Dimension mismatch {} != {} at pos {}:{}",
+                    errors.emplace_back(fmt::format("Dimension mismatch {} != {} at pos {}:{}",
                                                  dimension,
                                                  stored_dimension,
                                                  col,

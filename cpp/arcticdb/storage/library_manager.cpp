@@ -24,7 +24,7 @@ const std::string BAD_CONFIG_IN_STORAGE_ERROR = "Current library config is unsup
                                                 "https://github.com/man-group/ArcticDB/blob/master/docs/mkdocs/docs/technical/upgrade_storage.md";
 
 const std::string BAD_CONFIG_IN_ATTEMPTED_WRITE = "Attempting to write forbidden storage config. This indicates a "
-                                                  "bug in ArcticDB.zz";
+                                                  "bug in ArcticDB.";
 
 template<typename T>
 struct StorageVisitor {
@@ -77,7 +77,8 @@ bool is_storage_config_ok(const arcticdb::proto::storage::VariantStorage& storag
 
 LibraryManager::LibraryManager(const std::shared_ptr<storage::Library>& library) :
             store_(std::make_shared<async::AsyncStore<util::SysClock>>(library, codec::default_lz4_codec(),
-                    encoding_version(library->config()))){
+                    encoding_version(library->config()))),
+                    open_libraries_() {
 }
 
 void LibraryManager::write_library_config(const py::object& lib_cfg, const LibraryPath& path, const StorageOverride& storage_override,
@@ -124,7 +125,15 @@ void LibraryManager::remove_library_config(const LibraryPath& path) const {
     store_->remove_key(RefKey{StreamId(path.to_delim_path()), entity::KeyType::LIBRARY_CONFIG}).wait();
 }
 
-std::shared_ptr<Library> LibraryManager::get_library(const LibraryPath& path, const StorageOverride& storage_override) const {
+std::shared_ptr<Library> LibraryManager::get_library(const LibraryPath& path, const StorageOverride& storage_override) {
+    {
+        // Check global cache first, important for LMDB and RocksDB to only open once from a given process
+        std::lock_guard<std::mutex> lock{open_libraries_mutex_};
+        if (auto cached = open_libraries_.find(path); cached != open_libraries_.end()) {
+            return cached -> second;
+        }
+    }
+
     arcticdb::proto::storage::LibraryConfig config = get_config_internal(path, storage_override);
 
     std::vector<arcticdb::proto::storage::VariantStorage> st;
@@ -133,7 +142,19 @@ std::shared_ptr<Library> LibraryManager::get_library(const LibraryPath& path, co
     }
     auto storages = create_storages(path, OpenMode::DELETE, st);
 
-    return std::make_shared<Library>(path, std::move(storages), config.lib_desc().version());
+    auto lib = std::make_shared<Library>(path, std::move(storages), config.lib_desc().version());
+
+    {
+        std::lock_guard<std::mutex> lock{open_libraries_mutex_};
+        open_libraries_[path] = lib;
+    }
+
+    return lib;
+}
+
+void LibraryManager::close_library_if_open(const LibraryPath &path) {
+    std::lock_guard<std::mutex> lock{open_libraries_mutex_};
+    open_libraries_.erase(path);
 }
 
 std::vector<LibraryPath> LibraryManager::get_library_paths() const {

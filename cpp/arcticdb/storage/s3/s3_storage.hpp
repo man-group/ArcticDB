@@ -197,13 +197,13 @@ inline Aws::Client::ClientConfiguration get_proxy_config(Aws::Http::Scheme endpo
         for (const auto& env_var_name: {"no_proxy", "NO_PROXY"}) {
             char* opt_env_var = std::getenv(env_var_name);
             auto non_proxy_hosts = parse_no_proxy_env_var(opt_env_var);
-            if (non_proxy_hosts.has_value()) {
-                client_configuration->nonProxyHosts = non_proxy_hosts.value();
+            if (non_proxy_hosts) {
+                client_configuration->nonProxyHosts = *non_proxy_hosts;
                 log::storage().info("S3 proxy exclusion list set from env var '{}'", opt_env_var);
                 break;
             }
         }
-        return client_configuration.value();
+        return *client_configuration;
     } else {
         return Aws::Client::ClientConfiguration();
     }

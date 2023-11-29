@@ -12,7 +12,7 @@ from math import inf
 import numpy as np
 import pandas as pd
 
-from typing import Dict
+from typing import Dict, NamedTuple
 
 from arcticdb.exceptions import ArcticNativeException, UserInputException
 from arcticdb.version_store._normalization import normalize_dt_range_to_ts
@@ -266,8 +266,14 @@ PythonFilterClause = namedtuple("PythonFilterClause", ["expr"])
 PythonProjectionClause = namedtuple("PythonProjectionClause", ["name", "expr"])
 PythonGroupByClause = namedtuple("PythonGroupByClause", ["name"])
 PythonAggregationClause = namedtuple("PythonAggregationClause", ["aggregations"])
-PythonRowRangeClause = namedtuple("PythonRowRangeClause", ["row_range_type", "n"])
 PythonDateRangeClause = namedtuple("PythonDateRangeClause", ["start", "end"])
+
+
+class PythonRowRangeClause(NamedTuple):
+    row_range_type: _RowRangeType = None
+    n: int = None
+    start: int = None
+    end: int = None
 
 
 class QueryBuilder:
@@ -299,45 +305,45 @@ class QueryBuilder:
 
     isin/isnotin accept lists, sets, frozensets, 1D ndarrays, or *args unpacking. For example:
 
-    >>> l = [1, 2, 3]
-    >>> q.isin(l)
+        >>> l = [1, 2, 3]
+        >>> q.isin(l)
 
     is equivalent to...
 
-    >>> q.isin(1, 2, 3)
+        >>> q.isin(1, 2, 3)
 
     Boolean columns can be filtered on directly:
 
-    >>> q = QueryBuilder()
-    >>> q = q[q["boolean_column"]]
+        >>> q = QueryBuilder()
+        >>> q = q[q["boolean_column"]]
 
     and combined with other operations intuitively:
 
-    >>> q = QueryBuilder()
-    >>> q = q[(q["boolean_column_1"] & ~q["boolean_column_2"]) & (q["numeric_column"] > 0)]
+        >>> q = QueryBuilder()
+        >>> q = q[(q["boolean_column_1"] & ~q["boolean_column_2"]) & (q["numeric_column"] > 0)]
 
     Arbitrary combinations of these expressions is possible, for example:
 
-    >>> q = q[(((q["a"] * q["b"]) / 5) < (0.7 * q["c"])) & (q["b"] != 12)]
+        >>> q = q[(((q["a"] * q["b"]) / 5) < (0.7 * q["c"])) & (q["b"] != 12)]
 
     See tests/unit/arcticdb/version_store/test_filtering.py for more example uses.
 
-    Timestamp filtering:
-        pandas.Timestamp, datetime.datetime, pandas.Timedelta, and datetime.timedelta objects are supported.
-        Note that internally all of these types are converted to nanoseconds (since epoch in the Timestamp/datetime
-        cases). This means that nonsensical operations such as multiplying two times together are permitted (but not
-        encouraged).
-    Restrictions:
-        String equality/inequality (and isin/isnotin) is supported for printable ASCII characters only.
-        Although not prohibited, it is not recommended to use ==, !=, isin, or isnotin with floating point values.
-    Exceptions:
-        inf or -inf values are provided for comparison
-        Column involved in query is a Categorical
-        Symbol is pickled
-        Column involved in query is not present in symbol
-        Query involves comparing strings using <, <=, >, or >= operators
-        Query involves comparing a string to one or more numeric values, or vice versa
-        Query involves arithmetic with a column containing strings
+    #Timestamp filtering
+    pandas.Timestamp, datetime.datetime, pandas.Timedelta, and datetime.timedelta objects are supported.
+    Note that internally all of these types are converted to nanoseconds (since epoch in the Timestamp/datetime
+    cases). This means that nonsensical operations such as multiplying two times together are permitted (but not
+    encouraged).
+    #Restrictions
+    String equality/inequality (and isin/isnotin) is supported for printable ASCII characters only.
+    Although not prohibited, it is not recommended to use ==, !=, isin, or isnotin with floating point values.
+    #Exceptions
+    inf or -inf values are provided for comparison
+    Column involved in query is a Categorical
+    Symbol is pickled
+    Column involved in query is not present in symbol
+    Query involves comparing strings using <, <=, >, or >= operators
+    Query involves comparing a string to one or more numeric values, or vice versa
+    Query involves arithmetic with a column containing strings
     """
 
     def __init__(self):
@@ -399,12 +405,13 @@ class QueryBuilder:
 
     def groupby(self, name: str):
         """
-        Group symbol by column name. GroupBy operations must be followed by an aggregation operator. Currently the following four aggregation
+        Group symbol by column name. GroupBy operations must be followed by an aggregation operator. Currently the following five aggregation
         operators are supported:
             * "mean" - compute the mean of the group
             * "sum" - compute the sum of the group
             * "min" - compute the min of the group
             * "max" - compute the max of the group
+            * "count" - compute the count of group
 
         For usage examples, see below.
 
@@ -513,13 +520,22 @@ class QueryBuilder:
     def _head(self, n: int):
         check(not len(self.clauses), "Head only supported as first clause in the pipeline")
         self.clauses.append(_RowRangeClause(_RowRangeType.HEAD, n))
-        self._python_clauses.append(PythonRowRangeClause(_RowRangeType.HEAD, n))
+        self._python_clauses.append(PythonRowRangeClause(row_range_type=_RowRangeType.HEAD, n=n))
         return self
 
     def _tail(self, n: int):
         check(not len(self.clauses), "Tail only supported as first clause in the pipeline")
         self.clauses.append(_RowRangeClause(_RowRangeType.TAIL, n))
-        self._python_clauses.append(PythonRowRangeClause(_RowRangeType.TAIL, n))
+        self._python_clauses.append(PythonRowRangeClause(row_range_type=_RowRangeType.TAIL, n=n))
+        return self
+
+    def _row_range(self, row_range):
+        check(not len(self.clauses), "Row range only supported as first clause in the pipeline")
+        start = row_range[0]
+        end = row_range[1]
+
+        self.clauses.append(_RowRangeClause(start, end))
+        self._python_clauses.append(PythonRowRangeClause(start=start, end=end))
         return self
 
     def date_range(self, date_range: DateRangeInput):
@@ -593,7 +609,10 @@ class QueryBuilder:
             elif isinstance(python_clause, PythonAggregationClause):
                 self.clauses.append(_AggregationClause(self.clauses[-1].grouping_column, python_clause.aggregations))
             elif isinstance(python_clause, PythonRowRangeClause):
-                self.clauses.append(_RowRangeClause(python_clause.row_range_type, python_clause.n))
+                if python_clause.start is not None and python_clause.end is not None:
+                    self.clauses.append(_RowRangeClause(python_clause.start, python_clause.end))
+                else:
+                    self.clauses.append(_RowRangeClause(python_clause.row_range_type, python_clause.n))
             elif isinstance(python_clause, PythonDateRangeClause):
                 self.clauses.append(_DateRangeClause(python_clause.start, python_clause.end))
             else:

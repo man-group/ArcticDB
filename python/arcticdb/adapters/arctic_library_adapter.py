@@ -5,12 +5,14 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
+from abc import ABC, abstractmethod
+from typing import Iterable, List
+
 from arcticdb.options import DEFAULT_ENCODING_VERSION, LibraryOptions
 from arcticc.pb2.storage_pb2 import LibraryConfig
-from arcticdb_ext.storage import Library, StorageOverride
+from arcticdb_ext.storage import Library, StorageOverride, CONFIG_LIBRARY_NAME
 from arcticdb.encoding_version import EncodingVersion
-from arcticdb.version_store._store import NativeVersionStore
-from abc import ABC, abstractmethod
 
 
 def set_library_options(lib_desc: "LibraryConfig", options: LibraryOptions):
@@ -38,8 +40,6 @@ def set_library_options(lib_desc: "LibraryConfig", options: LibraryOptions):
 
 
 class ArcticLibraryAdapter(ABC):
-    CONFIG_LIBRARY_NAME = "_arctic_cfg"  # TODO: Should come from native module
-
     @abstractmethod
     def __init__(self, uri: str, encoding_version: EncodingVersion):
         pass
@@ -59,7 +59,7 @@ class ArcticLibraryAdapter(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def create_library(self, name: str, library_options: LibraryOptions) -> NativeVersionStore:
+    def get_library_config(self, name: str, library_options: LibraryOptions):
         raise NotImplementedError
 
     def cleanup_library(self, library_name: str):
@@ -71,3 +71,11 @@ class ArcticLibraryAdapter(ABC):
     def get_masking_override(self) -> StorageOverride:
         """Override that clears any storage config that should not be persisted."""
         return StorageOverride()
+
+    def get_name_for_library_manager(self, user_facing_name: str) -> str:
+        """Can override to translate user-supplied library names to a format more stuiable to the Storage."""
+        return user_facing_name
+
+    def library_manager_names_to_user_facing(self, names: Iterable[str]) -> List[str]:
+        """The inverse of `get_name_for_library_manager`."""
+        return names

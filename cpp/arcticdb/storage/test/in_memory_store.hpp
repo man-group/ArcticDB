@@ -35,10 +35,6 @@ namespace arcticdb {
             util::raise_rte("Not implemented");
         }
 
-        bool batch_all_keys_exist_sync(const std::unordered_set<entity::VariantKey>&) override {
-            util::raise_rte("Not implemented");
-        }
-
         bool supports_prefix_matching() const override {
             return false;
         }
@@ -47,11 +43,15 @@ namespace arcticdb {
             return false;
         }
 
-        std::vector<Composite<ProcessingUnit>> batch_read_uncompressed(
-                std::vector<Composite<pipelines::SliceAndKey>> &&,
-                const std::vector<std::shared_ptr<Clause>>&,
-                const std::shared_ptr<std::unordered_set<std::string>>&,
-                const BatchReadArgs &) override {
+        std::vector<folly::Future<pipelines::SegmentAndSlice>> batch_read_uncompressed(
+                std::vector<pipelines::RangesAndKey>&&,
+                std::shared_ptr<std::unordered_set<std::string>>) override {
+            throw std::runtime_error("Not implemented for tests");
+        }
+
+        folly::Future<std::vector<VariantKey>> batch_read_compressed(
+            std::vector<std::pair<entity::VariantKey, ReadContinuation>>&&,
+            const BatchReadArgs&) override {
             throw std::runtime_error("Not implemented for tests");
         }
 
@@ -230,8 +230,7 @@ namespace arcticdb {
         }
 
 
-        void iterate_type(KeyType kt, entity::IterateTypeVisitor func, const std::string& prefix = "")
-        override {
+        void iterate_type(KeyType kt, const entity::IterateTypeVisitor& func, const std::string& prefix = "") override {
             auto prefix_matcher = stream_id_prefix_matcher(prefix);
             auto failure_sim = StorageFailureSimulator::instance();
 
@@ -273,30 +272,12 @@ namespace arcticdb {
             for(const auto& key : keys) {
                 util::variant_match(key,
                                     [&output, &refs=seg_by_ref_key_] (const RefKey& ref) {
-                    output.push_back(folly::makeFuture<bool>(refs.find(ref) != refs.end()));
+                    output.emplace_back(folly::makeFuture<bool>(refs.find(ref) != refs.end()));
                 },
                 [&output, &atoms=seg_by_atom_key_] (const AtomKey& atom) {
-                    output.push_back(folly::makeFuture<bool>(atoms.find(atom) != atoms.end()));
+                    output.emplace_back(folly::makeFuture<bool>(atoms.find(atom) != atoms.end()));
                 });
             }
-            return output;
-        }
-
-        std::vector<storage::KeySegmentPair>
-        batch_read_compressed(std::vector<entity::VariantKey> &&, const BatchReadArgs &, bool) override {
-            throw std::runtime_error("Not implemented");
-        }
-
-        folly::Future<std::vector<VariantKey>> batch_read_compressed(
-                std::vector<entity::VariantKey>&& keys,
-                std::vector<ReadContinuation>&&,
-                const BatchReadArgs &
-        ) override {
-            std::lock_guard lock{mutex_};
-            std::vector<VariantKey> output;
-            for (auto &key : keys)
-                output.push_back(key);
-
             return output;
         }
 
@@ -318,10 +299,6 @@ namespace arcticdb {
             }
 
             return output;
-        }
-
-        void insert_atom_key(const AtomKey &key) {
-            seg_by_atom_key_.insert(std::make_pair(key, std::make_unique<SegmentInMemory>()));
         }
 
         size_t num_atom_keys() const { return seg_by_atom_key_.size(); }

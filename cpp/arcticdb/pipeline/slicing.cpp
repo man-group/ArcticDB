@@ -140,7 +140,7 @@ std::vector<FrameSlice> HashedSlicer::operator()(const arcticdb::pipelines::Inpu
         
         for (std::size_t r = first_row, end = last_row; r < end; r += row_per_slice_) {
             auto rdist = std::min(last_row-r, row_per_slice_);
-            slices.push_back(FrameSlice(desc,
+            slices.emplace_back(FrameSlice(desc,
                                         ColRange{col, col + distance},
                                         RowRange{r, r+rdist},
                                         current_bucket,

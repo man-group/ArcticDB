@@ -99,7 +99,7 @@ struct SharedMemoryAllocator {
         if (!ptr)
             return nullptr;
 
-        allocations_.insert(std::make_pair(ptr, size));
+        allocations_.try_emplace(ptr, size);
         return ptr;
     }
 

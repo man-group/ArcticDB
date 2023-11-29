@@ -119,7 +119,7 @@ public:
 
     ~interval_timer() {
         for (const auto &current : intervals_) {
-            if (current.second != NULL)
+            if (current.second != nullptr)
                 delete (current.second);
         }
     }
@@ -128,7 +128,7 @@ public:
         auto it = intervals_.find(name);
         if (it == intervals_.end()) {
             auto created = new interval();
-            intervals_.insert(interval_type(name, created));
+            intervals_.try_emplace(name, created);
             created->start();
         } else
             (*it).second->start();

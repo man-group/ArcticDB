@@ -107,11 +107,13 @@ public:
                             static_cast<uint32_t>(*version_request_type_));
             }
         }
+        auto category = error_category();
+        auto category_name = category ? get_error_category_names().at(*category) : "UNKNOWN";
         return fmt::format(
                 "Version {} of symbol '{}' unable to be retrieved: Error Category: '{}' Exception String: '{}'",
                 version_request_explanation,
                 symbol_,
-                error_category().has_value() ? get_error_category_names().at(*error_category()) : "UNKNOWN",
+                category_name,
                 exception_string_);
     }
 private:

@@ -11,7 +11,6 @@
 
 #include <arcticdb/util/pb_util.hpp>
 #include <arcticdb/util/dump_bytes.hpp>
-#include <arcticdb/codec/encoded_field_collection.hpp>
 #include <arcticdb/codec/codec.hpp>
 
 namespace arcticdb {
@@ -91,7 +90,7 @@ Segment Segment::from_bytes(const std::uint8_t* src, std::size_t readable_size, 
                        arcticdb::Segment::FIXED_HEADER_SIZE,
                        fixed_hdr->header_bytes,
                        header_bytes);
-    google::protobuf::io::ArrayInputStream ais(src + arcticdb::Segment::FIXED_HEADER_SIZE, fixed_hdr->header_bytes);
+    google::protobuf::io::ArrayInputStream ais(src + arcticdb::Segment::FIXED_HEADER_SIZE, static_cast<int>(fixed_hdr->header_bytes));
     auto arena = std::make_unique<google::protobuf::Arena>();
     auto seg_hdr = google::protobuf::Arena::CreateMessage<arcticdb::proto::encoding::SegmentHeader>(arena.get());
     seg_hdr->ParseFromZeroCopyStream(&ais);
@@ -197,8 +196,6 @@ Segment Segment::from_buffer(std::shared_ptr<Buffer>&& buffer) {
         check_magic<DescriptorMagic>(fields_ptr);
         if(seg_hdr->has_descriptor_field() && seg_hdr->descriptor_field().has_ndarray())
             fields = decode_fields(*seg_hdr, fields_ptr);
-
-        preamble_size = fields_ptr - buffer->data();
     }
 
     buffer->set_preamble(arcticdb::Segment::FIXED_HEADER_SIZE + fixed_hdr->header_bytes);
@@ -207,7 +204,7 @@ Segment Segment::from_buffer(std::shared_ptr<Buffer>&& buffer) {
 
 }
 
-void Segment::write_header(uint8_t* dst, size_t hdr_size) {
+void Segment::write_header(uint8_t* dst, size_t hdr_size) const {
     FixedHeader hdr = {MAGIC_NUMBER, HEADER_VERSION_V1, std::uint32_t(hdr_size)};
     hdr.write(dst);
     if(!header_->has_metadata_field())

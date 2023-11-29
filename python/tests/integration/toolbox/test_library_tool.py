@@ -3,6 +3,7 @@ Copyright 2023 Man Group Operations Limited
 Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+import pandas as pd
 import numpy as np
 import pytest
 
@@ -40,7 +41,7 @@ def test_get_types(object_and_mem_and_lmdb_version_store):
     index_keys = lib_tool.read_to_keys(key)
     assert len(index_keys) == 1
     index_df = lib_tool.read_to_dataframe(index_keys[0])
-    assert index_df.at[0, "version_id"] == 0
+    assert index_df.at[pd.Timestamp(0), "version_id"] == 0
 
 
 def test_read_keys(object_and_mem_and_lmdb_version_store):

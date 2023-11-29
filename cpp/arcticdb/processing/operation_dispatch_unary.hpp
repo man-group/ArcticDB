@@ -76,7 +76,7 @@ VariantData unary_operator(const Column& col, Func&& func) {
         output = std::make_unique<Column>(make_scalar_type(output_data_type), col.is_sparse());
         auto data = col.data();
         while(auto opt_block = data.next<DT>()) {
-            auto block = opt_block.value();
+            const auto& block = *opt_block;
             const auto nbytes = sizeof(TargetType) * block.row_count();
             auto ptr = reinterpret_cast<TargetType*>(output->allocate_data(nbytes));
             for(auto idx = 0u; idx < block.row_count(); ++idx)

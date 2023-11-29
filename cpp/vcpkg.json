@@ -15,7 +15,6 @@
       "default-features": false,
       "features": [ "lz4" ]
     },
-    "wangle",
     "zstd",
     {
       "name": "libsodium",
@@ -58,12 +57,13 @@
       "default-features": false
     },
     "azure-identity-cpp",
-    "azure-storage-blobs-cpp"
+    "azure-storage-blobs-cpp",
+    "rocksdb"
   ],
   "overrides": [
     { "name": "openssl", "version-string": "1.1.1n#1" },
-    { "name": "aws-sdk-cpp", "version": "1.11.4#0" },
-    { "name": "aws-c-s3", "version": "0.2.3#0" },
+    { "name": "aws-sdk-cpp", "version": "1.11.201" },
+    { "name": "aws-c-s3", "version": "0.3.24" },
     { "name": "bitmagic", "version": "7.12.3" },
     { "name": "boost-algorithm", "version": "1.80.0#1" },
     { "name": "boost-align", "version": "1.80.0#1" },
@@ -142,9 +142,8 @@
     { "name": "boost-vcpkg-helpers", "version": "1.80.0#1" },
     { "name": "boost-winapi", "version": "1.80.0#1" },
     { "name": "civetweb", "version": "1.15#2" },
-    { "name": "curl", "version": "7.88.1#1" },
+    { "name": "curl", "version": "8.4.0" },
     { "name": "double-conversion", "version": "3.2.1" },
-    { "name": "fizz", "version-string": "2022.10.31.00" },
     { "name": "fmt", "version": "9.1.0#1" },
     { "name": "folly", "version-string": "2023.05.22.00" },
     { "name": "gflags", "version": "2.2.2#5" },
@@ -162,7 +161,6 @@
     { "name": "rapidcheck", "version": "2021-12-20" },
     { "name": "s2n", "version": "1.3.5" },
     { "name": "spdlog", "version": "1.11.0" },
-    { "name": "wangle", "version-string": "2022.03.21.00" },
     { "name": "zlib", "version": "1.2.13" },
     { "name": "zstd", "version": "1.5.2" }
   ],
@@ -170,5 +168,5 @@
     "overlay-ports": ["third_party/vcpkg_overlays"]
   },
   "$note on builtin-baseline": "Remember to regenerate third_party/vcpkg_overlays",
-  "builtin-baseline": "d4d39d71b3e6dd7536592c36ab2f7e84a8a64942"
+  "builtin-baseline": "0c20b2a97c390e106150837042d921b0939e7ecb"
 }

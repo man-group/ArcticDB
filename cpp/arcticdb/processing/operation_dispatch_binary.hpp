@@ -85,8 +85,8 @@ VariantData binary_membership(const ColumnWithStrings& column_with_strings, Valu
                     util::BitSet::bulk_insert_iterator inserter(*output);
                     auto pos = 0u;
                     while (auto block = column_data.next<TypeDescriptorTag<ColumnTagType, DimensionTag<entity::Dimension::Dim0>>>()) {
-                        auto ptr = reinterpret_cast<const StringPool::offset_t*>(block.value().data());
-                        const auto row_count = block.value().row_count();
+                        auto ptr = reinterpret_cast<const StringPool::offset_t*>(block->data());
+                        const auto row_count = block->row_count();
                         for (auto i = 0u; i < row_count; ++i, ++pos) {
                             auto offset = *ptr++;
                             if(func(offset, offset_set))
@@ -106,8 +106,8 @@ VariantData binary_membership(const ColumnWithStrings& column_with_strings, Valu
                     util::BitSet::bulk_insert_iterator inserter(*output);
                     auto pos = 0u;
                     while (auto block = column_data.next<ScalarTagType<ColumnTagType>>()) {
-                        auto ptr = reinterpret_cast<const ColumnType*>(block.value().data());
-                        const auto row_count = block.value().row_count();
+                        auto ptr = reinterpret_cast<const ColumnType*>(block->data());
+                        const auto row_count = block->row_count();
                         for (auto i = 0u; i < row_count; ++i, ++pos) {
                             if constexpr (MembershipOperator::needs_uint64_special_handling<ColumnType, ValueSetBaseType>) {
                                 // Avoid narrowing conversion on *ptr:
@@ -196,8 +196,8 @@ VariantData binary_comparator(const Value& val, const ColumnWithStrings& column_
                 util::BitSet::bulk_insert_iterator inserter(*output);
                 auto pos = 0u;
                 while (auto block = column_data.next<TypeDescriptorTag<ColumnTagType, DimensionTag<entity::Dimension::Dim0>>>()) {
-                    auto ptr = reinterpret_cast<const StringPool::offset_t*>(block.value().data());
-                    const auto row_count = block.value().row_count();
+                    auto ptr = reinterpret_cast<const StringPool::offset_t*>(block->data());
+                    const auto row_count = block->row_count();
                     for (auto i = 0u; i < row_count; ++i, ++pos) {
                         auto offset = *ptr++;
                         if(func(offset, value_offset))
@@ -215,8 +215,8 @@ VariantData binary_comparator(const Value& val, const ColumnWithStrings& column_
                 util::BitSet::bulk_insert_iterator inserter(*output);
                 auto pos = 0u;
                 while (auto block = column_data.next<ColumnDescriptorType>()) {
-                    auto ptr = reinterpret_cast<const ColumnType*>(block.value().data());
-                    const auto row_count = block.value().row_count();
+                    auto ptr = reinterpret_cast<const ColumnType*>(block->data());
+                    const auto row_count = block->row_count();
                     for (auto i = 0u; i < row_count; ++i, ++pos) {
                         if(func(value, static_cast<typename comp::right_type>(*ptr++)))
                             inserter = pos;
@@ -262,9 +262,9 @@ VariantData binary_comparator(const ColumnWithStrings& left, const ColumnWithStr
                 auto pos = 0u;
                 while (auto left_block = left_column_data.next<LeftDescriptorType>()) {
                     auto right_block = right_column_data.next<RightDescriptorType>();
-                    auto left_ptr = reinterpret_cast<const LeftType*>(left_block.value().data());
-                    auto right_ptr = reinterpret_cast<const RightType*>(right_block.value().data());
-                    const auto row_count = left_block.value().row_count();
+                    auto left_ptr = reinterpret_cast<const LeftType*>(left_block->data());
+                    auto right_ptr = reinterpret_cast<const RightType*>(right_block->data());
+                    const auto row_count = left_block->row_count();
                     for (auto i = 0u; i < row_count; ++i, ++pos) {
                         if(func(left.string_at_offset(*left_ptr++, strip_fixed_width_trailing_nulls), right.string_at_offset(*right_ptr++, strip_fixed_width_trailing_nulls)))
                             inserter = pos;
@@ -282,9 +282,9 @@ VariantData binary_comparator(const ColumnWithStrings& left, const ColumnWithStr
                 auto pos = 0u;
                 while (auto left_block = left_column_data.next<LeftDescriptorType>()) {
                     auto right_block = right_column_data.next<RightDescriptorType>();
-                    auto left_ptr = reinterpret_cast<const LeftType*>(left_block.value().data());
-                    auto right_ptr = reinterpret_cast<const RightType*>(right_block.value().data());
-                    const auto row_count = left_block.value().row_count();
+                    auto left_ptr = reinterpret_cast<const LeftType*>(left_block->data());
+                    auto right_ptr = reinterpret_cast<const RightType*>(right_block->data());
+                    const auto row_count = left_block->row_count();
                     for (auto i = 0u; i < row_count; ++i, ++pos) {
                         if(func(static_cast<typename comp::left_type>(*left_ptr++), static_cast<typename comp::right_type>(*right_ptr++)))
                             inserter = pos;
@@ -335,8 +335,8 @@ VariantData binary_comparator(const ColumnWithStrings& column_with_strings, cons
                 util::BitSet::bulk_insert_iterator inserter(*output);
                 auto pos = 0u;
                 while (auto block = column_data.next<TypeDescriptorTag<ColumnTagType, DimensionTag<entity::Dimension::Dim0>>>()) {
-                    auto ptr = reinterpret_cast<const StringPool::offset_t*>(block.value().data());
-                    const auto row_count = block.value().row_count();
+                    auto ptr = reinterpret_cast<const StringPool::offset_t*>(block->data());
+                    const auto row_count = block->row_count();
                     for (auto i = 0u; i < row_count; ++i, ++pos) {
                         auto offset = *ptr++;
                         if(func(value_offset, offset))
@@ -354,8 +354,8 @@ VariantData binary_comparator(const ColumnWithStrings& column_with_strings, cons
                 util::BitSet::bulk_insert_iterator inserter(*output);
                 auto pos = 0u;
                 while (auto block = column_data.next<ColumnDescriptorType>()) {
-                    auto ptr = reinterpret_cast<const ColumnType *>(block.value().data());
-                    const auto row_count = block.value().row_count();
+                    auto ptr = reinterpret_cast<const ColumnType *>(block->data());
+                    const auto row_count = block->row_count();
                     for (auto i = 0u; i < row_count; ++i, ++pos) {
                         if (func(static_cast<typename comp::right_type>(*ptr++), value))
                             inserter = pos;
@@ -454,7 +454,7 @@ VariantData binary_operator(const Value& val, const Column& col, Func&& func) {
             output = std::make_unique<Column>(make_scalar_type(output_data_type), col.is_sparse());
 
             while(auto opt_right_block = right_data.next<RTDT>()) {
-                auto right_block = opt_right_block.value();
+                auto right_block = *opt_right_block;
                 const auto nbytes = sizeof(TargetType) * right_block.row_count();
                 auto ptr = reinterpret_cast<TargetType*>(output->allocate_data(nbytes));
 
@@ -500,8 +500,8 @@ VariantData binary_operator(const Column& left, const Column& right, Func&& func
             auto right_data = right.data();
             auto opt_right_block = right_data.next<RTDT>();
             while (opt_left_block && opt_right_block) {
-                auto& left_block = opt_left_block.value();
-                auto& right_block = opt_right_block.value();
+                auto& left_block = *opt_left_block;
+                auto& right_block = *opt_right_block;
                 util::check(left_block.row_count() == right_block.row_count(), "Non-matching row counts in dense blocks: {} != {}", left_block.row_count(), right_block.row_count());
                 const auto nbytes = sizeof(TargetType) * right_block.row_count();
                 auto ptr = reinterpret_cast<TargetType*>(output->allocate_data(nbytes));
@@ -547,7 +547,7 @@ VariantData binary_operator(const Column& col, const Value& val, Func&& func) {
             output = std::make_unique<Column>(make_scalar_type(output_data_type), col.is_sparse());
 
             while(auto opt_left_block = left_data.next<LTDT>()) {
-                auto left_block = opt_left_block.value();
+                const auto& left_block = *opt_left_block;
                 const auto nbytes = sizeof(TargetType) * left_block.row_count();
                 auto ptr = reinterpret_cast<TargetType*>(output->allocate_data(nbytes));
 

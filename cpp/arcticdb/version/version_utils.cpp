@@ -41,33 +41,4 @@ std::unordered_map<entity::StreamId, size_t> get_num_version_entries(const std::
     return output;
 }
 
-void fix_stream_ids_of_index_keys(
-    const std::shared_ptr<Store> &store,
-    const StreamId &stream_id,
-    const std::shared_ptr<VersionMapEntry> &entry) {
-    for (auto &key : entry->keys_) {
-        if (is_index_key_type(key.type()) && key.id() != stream_id) {
-            log::version().warn("Mismatch in stream_id - {} != {} in version: {}. Rewriting", key.id(), stream_id,
-                                key.version_id());
-            try {
-                auto data_kvs = store->batch_read_compressed({key}, BatchReadArgs{}, false);
-                util::check(data_kvs.size() == 1, "Unexpected size of data_kvs {} in fix_stream_ids_of_index_keys",
-                            data_kvs.size());
-                data_kvs[0].atom_key() = atom_key_builder()
-                    .version_id(key.version_id())
-                    .creation_ts(key.creation_ts())
-                    .start_index(key.start_index())
-                    .end_index(key.end_index())
-                    .content_hash(key.content_hash())
-                    .build(stream_id, key.type());
-                AtomKey new_key = data_kvs[0].atom_key();
-                store->batch_write_compressed(std::move(data_kvs)).get();
-                key = new_key;
-                // We don't delete the old index key - it could be referred in a snapshot (TODO: fix that as well)
-            } catch (const std::exception &ex) {
-                log::version().info("Could not fix stream_id for {} due to {}", key.version_id(), ex.what());
-            }
-        }
-    }
-}
 }

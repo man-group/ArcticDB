@@ -93,7 +93,7 @@ inline void check_is_index_or_tombstone(const AtomKey &key) {
     util::check(is_index_or_tombstone(key), "Expected index or tombstone key type but got {}", key);
 }
 
-inline AtomKey index_to_tombstone(const AtomKey &index_key, StreamId stream_id, timestamp creation_ts) {
+inline AtomKey index_to_tombstone(const AtomKey &index_key, const StreamId& stream_id, timestamp creation_ts) {
     return atom_key_builder()
         .version_id(index_key.version_id())
         .creation_ts(creation_ts)
@@ -103,7 +103,7 @@ inline AtomKey index_to_tombstone(const AtomKey &index_key, StreamId stream_id, 
         .build(stream_id, KeyType::TOMBSTONE);
 }
 
-inline AtomKey index_to_tombstone(VersionId version_id, StreamId stream_id, timestamp creation_ts) {
+inline AtomKey index_to_tombstone(VersionId version_id, const StreamId& stream_id, timestamp creation_ts) {
     return atom_key_builder()
         .version_id(version_id)
         .creation_ts(creation_ts)
@@ -184,7 +184,7 @@ struct VersionMapEntry {
     }
 
     bool is_tombstoned_via_tombstone_all(VersionId version_id) const {
-        return tombstone_all_ && tombstone_all_.value().version_id() >= version_id;
+        return tombstone_all_ && tombstone_all_->version_id() >= version_id;
     }
 
     bool is_tombstoned(const AtomKey &key) const {
@@ -196,7 +196,7 @@ struct VersionMapEntry {
     }
 
     std::optional<AtomKey> get_tombstone_if_any(VersionId version_id) {
-        if (tombstone_all_ && tombstone_all_.value().version_id() >= version_id) {
+        if (tombstone_all_ && tombstone_all_->version_id() >= version_id) {
             return tombstone_all_;
         }
         auto it = tombstones_.find(version_id);
@@ -208,10 +208,10 @@ struct VersionMapEntry {
         strm << std::endl << "Last reload time: " << last_reload_time_ << std::endl;
 
         if(head_)
-            strm << "Head: " << fmt::format("{}", head_.value()) << std::endl;
+            strm << "Head: " << fmt::format("{}", *head_) << std::endl;
 
         if(tombstone_all_)
-            strm << "Tombstone all: " << fmt::format("{}", tombstone_all_.value()) << std::endl;
+            strm << "Tombstone all: " << fmt::format("{}", *tombstone_all_) << std::endl;
 
         strm << "Keys: " << std::endl << std::endl;
         for(const auto& key: keys_)
@@ -273,11 +273,11 @@ struct VersionMapEntry {
                 if(!version_timestamp)
                     version_timestamp = key.creation_ts();
                 else {
-                    util::check(key.creation_ts() <= version_timestamp.value(), "out of order timestamp: {} > {}", key.creation_ts(), version_timestamp.value());
+                    util::check(key.creation_ts() <= *version_timestamp, "out of order timestamp: {} > {}", key.creation_ts(), version_timestamp.value());
                 }
             }
             if (is_index_key_type(key.type())) {
-                util::check(key.version_id() <= version_id, "Out of order version ids");
+                util::check(key.version_id() <= version_id, "Out of order version ids: {} > {}", key.version_id(), version_id);
                 version_id = key.version_id();
             }
         }
@@ -300,7 +300,7 @@ struct VersionMapEntry {
 
         std::unordered_map<StreamId, std::vector<VersionId>> id_to_version_id;
         if (head_)
-            id_to_version_id[head_.value().id()].push_back(head_.value().version_id());
+            id_to_version_id[head_->id()].push_back(head_->version_id());
         for (const auto& k: keys_)
             id_to_version_id[k.id()].push_back(k.version_id());
         util::check_rte(id_to_version_id.size() == 1, "Multiple symbols in keys: {}", fmt::format("{}", id_to_version_id));
@@ -308,7 +308,7 @@ struct VersionMapEntry {
 
     void try_set_tombstone_all(const AtomKey& key) {
         util::check(key.type() == KeyType::TOMBSTONE_ALL, "Can't set tombstone all key with key {}", key);
-        if(!tombstone_all_ || tombstone_all_.value().version_id() < key.version_id())
+        if(!tombstone_all_ || tombstone_all_->version_id() < key.version_id())
             tombstone_all_ = key;
     }
 
@@ -377,7 +377,7 @@ inline std::optional<VersionId> get_next_version_in_entry(const std::shared_ptr<
 inline std::optional<AtomKey> find_index_key_for_version_id(
     VersionId version_id,
     const std::shared_ptr<VersionMapEntry>& entry,
-    bool included_deleted=true) {
+    bool included_deleted = true) {
     auto key = std::find_if(std::begin(entry->keys_), std::end(entry->keys_), [version_id] (const auto& key) {
         return is_index_key_type(key.type()) && key.version_id() == version_id;
     });
@@ -392,13 +392,14 @@ inline std::optional<std::pair<AtomKey, AtomKey>> get_latest_key_pair(const std:
         auto journal_key = entry->head_.value();
         auto index_key = entry->get_first_index(false);
         util::check(static_cast<bool>(index_key), "Did not find undeleted version");
-        return std::make_pair(std::move(index_key.value()), std::move(journal_key));
+        return std::make_pair(std::move(*index_key), std::move(journal_key));
     }
     return std::nullopt;
 }
 
 inline void remove_duplicate_index_keys(const std::shared_ptr<VersionMapEntry>& entry) {
-    entry->keys_.erase(std::unique(entry->keys_.begin(), entry->keys_.end()), entry->keys_.end());
+    auto& keys = entry->keys_;
+    keys.erase(std::unique(keys.begin(), keys.end()), keys.end());
 }
 }
 
@@ -409,7 +410,7 @@ namespace fmt {
         constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
 
     template<typename FormatContext>
-    auto format(const arcticdb::LoadType &l, FormatContext &ctx) const {
+    auto format(arcticdb::LoadType l, FormatContext &ctx) const {
         switch(l) {
         case arcticdb::LoadType::NOT_LOADED:
             return format_to(ctx.out(), "NOT_LOADED");

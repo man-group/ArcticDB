@@ -108,7 +108,7 @@ public:
             ARCTICDB_TRACE(log::version(), "Added column {} to position: {}", col_name, pos);
             return pos;
         } else {
-            return static_cast<position_t>(opt_col.value());
+            return static_cast<position_t>(*opt_col);
         }
     }
 

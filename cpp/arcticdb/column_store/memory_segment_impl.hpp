@@ -19,7 +19,6 @@
 #include <arcticdb/util/constructors.hpp>
 #include <arcticdb/column_store/column_map.hpp>
 #include <arcticdb/pipeline/string_pool_utils.hpp>
-#include <arcticdb/util/third_party/emilib_map.hpp>
 #include <arcticdb/util/format_date.hpp>
 #include <arcticdb/stream/index.hpp>
 #include <arcticdb/util/hash.hpp>
@@ -224,12 +223,6 @@ public:
         [[nodiscard]] size_t col_count() const { return parent_->num_columns(); }
 
         [[nodiscard]] size_t row_pos() const { return row_id_; }
-
-        template<class IndexType>
-            auto index() {
-            using RawType =  typename IndexType::TypeDescTag::DataTypeTag::raw_type;
-            return parent_->scalar_at<RawType>(row_id_, 0).value();
-        }
 
         template<class IndexType>
         [[nodiscard]] auto index() const {
@@ -553,7 +546,7 @@ public:
     void set_array(position_t pos, py::array_t<T>& val) {
         magic_.check();
         ARCTICDB_SAMPLE(MemorySegmentSetArray, 0)
-            column_unchecked(pos).set_array(row_id_ + 1, val);
+        column_unchecked(pos).set_array(row_id_ + 1, val);
     }
 
     void set_string(position_t pos, std::string_view str) {
@@ -688,7 +681,7 @@ public:
 
     size_t num_fields() const { return descriptor().field_count(); }
 
-    size_t row_count() const { return size_t(row_id_ + 1); }
+    size_t row_count() const { return row_id_ + 1 < 0 ? 0 : size_t(row_id_ + 1); }
 
     void clear() {
         columns_.clear();
@@ -843,7 +836,9 @@ public:
             return false;
 
         for(auto col = 0u; col < left.columns_.size(); ++col) {
-            if (is_sequence_type(left.column(col).type().data_type())) {
+            const auto left_data_type = left.column(col).type().data_type();
+            if (is_sequence_type(left_data_type)) {
+
                 const auto& left_col = left.column(col);
                 const auto& right_col = right.column(col);
                 if(left_col.type() != right_col.type())
@@ -855,10 +850,10 @@ public:
                 for(auto row = 0u; row < left_col.row_count(); ++row)
                     if(left.string_at(row, col) != right.string_at(row, col))
                         return false;
-            } else if (is_numeric_type(left.column(col).type().data_type()) || is_bool_type(left.column(col).type().data_type())) {
+            } else if (is_numeric_type(left_data_type) || is_bool_type(left_data_type)) {
                 if (left.column(col) != right.column(col))
                     return false;
-            } else if (is_empty_type(left.column(col).type().data_type())) {
+            } else if (is_empty_type(left_data_type)) {
                 if (!is_empty_type(right.column(col).type().data_type()))
                     return false;
             } else {
@@ -959,10 +954,10 @@ public:
         auto output_string_pool = filter_down_stringpool ? std::make_shared<StringPool>() : string_pool_;
         // Map from offsets in the input stringpool to offsets in the output stringpool
         // Only used if filter_down_stringpool is true
-        emilib::HashMap<StringPool::offset_t, StringPool::offset_t> input_to_output_offsets;
+        robin_hood::unordered_flat_map<StringPool::offset_t, StringPool::offset_t> input_to_output_offsets;
         // Prepopulate with None and NaN placeholder values to avoid an if statement in a tight loop later
-        input_to_output_offsets.insert(not_a_string(), not_a_string());
-        input_to_output_offsets.insert(nan_placeholder(), nan_placeholder());
+        input_to_output_offsets.insert(robin_hood::pair(not_a_string(), not_a_string()));
+        input_to_output_offsets.insert(robin_hood::pair(nan_placeholder(), nan_placeholder()));
 
         // Index is built to make rank queries faster
         std::unique_ptr<util::BitIndex> filter_idx;
@@ -1032,7 +1027,7 @@ public:
                                         auto str = string_pool_->get_const_view(value);
                                         auto output_string_pool_offset = output_string_pool->get(str, false).offset();
                                         *output_ptr = output_string_pool_offset;
-                                        input_to_output_offsets.insert_unique(std::move(value), std::move(output_string_pool_offset));
+                                        input_to_output_offsets.insert(robin_hood::pair(StringPool::offset_t(value), std::move(output_string_pool_offset)));
                                     }
                                 } else {
                                     *output_ptr = value;
@@ -1044,9 +1039,9 @@ public:
                             } else {
                                 internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Unexpected column type in SegmentInMemoryImpl::filter");
                             }
-                            output_ptr++;
+                            ++output_ptr;
                             output_col.opt_sparse_map().value()[pos_output++] = true;
-                            bitset_iter++;
+                            ++bitset_iter;
                         }
                     } else {
                         const auto row_count = block.value().row_count();
@@ -1066,7 +1061,7 @@ public:
                                         auto str = string_pool_->get_const_view(value);
                                         auto output_string_pool_offset = output_string_pool->get(str, false).offset();
                                         *output_ptr = output_string_pool_offset;
-                                        input_to_output_offsets.insert_unique(std::move(value), std::move(output_string_pool_offset));
+                                        input_to_output_offsets.insert(robin_hood::pair(StringPool::offset_t(value), std::move(output_string_pool_offset)));
                                     }
                                 } else {
                                     *output_ptr = value;
@@ -1141,7 +1136,7 @@ public:
             size_t end_row) const {
         auto num_values = end_row - start_row;
         internal::check<ErrorCode::E_ASSERTION_FAILURE>(
-                is_sparse() || (start_row < row_count() && end_row <= row_count() && num_values > 0),
+                is_sparse() || (start_row < row_count() && end_row <= row_count()),
                 "Truncate bounds start_row={} end_row={} outside valid range {}", start_row, end_row, row_count());
 
         auto output = std::make_shared<SegmentInMemoryImpl>();

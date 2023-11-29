@@ -17,7 +17,7 @@
 
 #include <iostream>
 #include <variant>
-
+#include <any>
 
 namespace arcticdb {
 
@@ -32,7 +32,7 @@ enum class EncodingVersion : uint16_t {
 
 static constexpr uint16_t HEADER_VERSION_V1 = 1;
 
-inline EncodingVersion encoding_version(const storage::LibraryDescriptor::VariantStoreConfig cfg) {
+inline EncodingVersion encoding_version(const storage::LibraryDescriptor::VariantStoreConfig& cfg) {
     return util::variant_match(cfg,
                                [](const arcticdb::proto::storage::VersionStoreConfig &version_config) {
                                    return EncodingVersion(version_config.encoding_version());
@@ -54,7 +54,6 @@ class Segment {
     constexpr static uint16_t MAGIC_NUMBER = 0xFA57;
 
     struct FixedHeader {
-        //TODO we have two magic number classes now
         std::uint16_t magic_number;
         std::uint16_t encoding_version;
         std::uint32_t header_bytes;
@@ -76,7 +75,7 @@ class Segment {
         header_(google::protobuf::Arena::CreateMessage<arcticdb::proto::encoding::SegmentHeader>(arena_.get())) {
     }
 
-    Segment(std::unique_ptr<google::protobuf::Arena>&& arena, arcticdb::proto::encoding::SegmentHeader* header, std::shared_ptr<Buffer> &&buffer, std::shared_ptr<FieldCollection> fields) :
+    Segment(std::unique_ptr<google::protobuf::Arena>&& arena, arcticdb::proto::encoding::SegmentHeader* header, std::shared_ptr<Buffer> buffer, std::shared_ptr<FieldCollection> fields) :
         arena_(std::move(arena)),
         header_(header),
         buffer_(std::move(buffer)),
@@ -86,12 +85,13 @@ class Segment {
     Segment(std::unique_ptr<google::protobuf::Arena>&& arena, arcticdb::proto::encoding::SegmentHeader* header, BufferView &&buffer, std::shared_ptr<FieldCollection> fields) :
         arena_(std::move(arena)),
         header_(header),
-        buffer_(std::move(buffer)),
+        buffer_(buffer),
         fields_(std::move(fields)){}
 
     // for rvo only, go to solution should be to move
     Segment(const Segment &that) :
-            header_(google::protobuf::Arena::CreateMessage<arcticdb::proto::encoding::SegmentHeader>(arena_.get())) {
+            header_(google::protobuf::Arena::CreateMessage<arcticdb::proto::encoding::SegmentHeader>(arena_.get())),
+            keepalive_(that.keepalive_) {
         header_->CopyFrom(*that.header_);
         auto b = std::make_shared<Buffer>();
         util::variant_match(that.buffer_,
@@ -100,10 +100,14 @@ class Segment {
             [&b](const std::shared_ptr<Buffer>& buf) { buf->copy_to(*b); }
             );
         buffer_ = std::move(b);
-        fields_ = std::make_shared<FieldCollection>(that.fields_->clone());
+        if(that.fields_)
+            fields_ = std::make_shared<FieldCollection>(that.fields_->clone());
     }
 
     Segment &operator=(const Segment &that) {
+        if(this == &that)
+            return *this;
+
         header_->CopyFrom(*that.header_);
         auto b = std::make_shared<Buffer>();
         util::variant_match(that.buffer_,
@@ -112,7 +116,8 @@ class Segment {
                             [&b](const std::shared_ptr<Buffer>& buf) { buf->copy_to(*b); }
                             );
         buffer_ = std::move(b);
-        fields_ = std::move(that.fields_);
+        fields_ = that.fields_;
+        keepalive_ = that.keepalive_;
         return *this;
     }
 
@@ -121,6 +126,7 @@ class Segment {
         swap(header_, that.header_);
         swap(arena_, that.arena_);
         swap(fields_, that.fields_);
+        swap(keepalive_, that.keepalive_);
         move_buffer(std::move(that));
     }
 
@@ -129,6 +135,7 @@ class Segment {
         swap(header_, that.header_);
         swap(arena_, that.arena_);
         swap(fields_, that.fields_);
+        swap(keepalive_, that.keepalive_);
         move_buffer(std::move(that));
         return *this;
     }
@@ -147,7 +154,7 @@ class Segment {
 
     std::pair<uint8_t*, size_t> try_internal_write(std::shared_ptr<Buffer>& tmp, size_t hdr_size);
 
-    void write_header(uint8_t* dst, size_t hdr_size);
+    void write_header(uint8_t* dst, size_t hdr_size) const;
 
     [[nodiscard]] std::size_t total_segment_size() const {
         return total_segment_size(segment_header_bytes_size());
@@ -226,6 +233,14 @@ class Segment {
         }
     }
 
+    void set_keepalive(std::any&& keepalive) {
+        keepalive_ = std::move(keepalive);
+    }
+
+    const std::any& keepalive() const  {
+        return keepalive_;
+    }
+
   private:
     void move_buffer(Segment &&that) {
         if(is_uninitialized() || that.is_uninitialized()) {
@@ -249,6 +264,7 @@ class Segment {
     arcticdb::proto::encoding::SegmentHeader* header_ = nullptr;
     VariantBuffer buffer_;
     std::shared_ptr<FieldCollection> fields_;
+    std::any keepalive_;
 };
 
 } //namespace arcticdb

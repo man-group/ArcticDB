@@ -42,7 +42,7 @@ std::pair<TimeseriesDescriptor , std::vector<SliceAndKey>> get_sample_slice_and_
         auto start_val = 0;
         auto end_val = start_val + step;
         for (auto i = 0u; i < row_slices; ++i) {
-            slice_and_keys.push_back(
+            slice_and_keys.emplace_back(
                 SliceAndKey{
                     FrameSlice{
                         ColRange{start_col, end_col},

@@ -23,6 +23,17 @@ std::pair<VariantKey, std::optional<Segment>> lookup_match_in_dedup_map(
     const std::shared_ptr<DeDupMap> &de_dup_map,
     storage::KeySegmentPair&& key_seg);
 
+template <typename Callable>
+auto read_and_continue(const VariantKey& key, std::shared_ptr<storage::Library> library, const storage::ReadKeyOpts& opts, Callable&& c) {
+    return async::submit_io_task(ReadCompressedTask{key, library, opts, std::forward<decltype(c)>(c)})
+        .via(&async::cpu_executor())
+        .thenValue([](auto &&result) mutable {
+            auto&& [key_seg, continuation] = std::forward<decltype(result)>(result);
+            return continuation(std::move(key_seg));
+        }
+    );
+}
+
 /*
  * AsyncStore is a wrapper around a Store that provides async methods for writing and reading data.
  * It is used by the VersionStore to write data to the Store asynchronously.
@@ -159,18 +170,19 @@ public:
             .thenValue(UpdateSegmentTask{library_, opts});
     }
 
-    folly::Future<VariantKey> copy(KeyType key_type,
-                                   const StreamId &stream_id,
-                                   VersionId version_id,
-                                   const VariantKey &source_key) override {
-        return async::submit_io_task(CopyCompressedTask<ClockType>{source_key, key_type, stream_id, version_id,
-                                                                   library_});
+    folly::Future<VariantKey> copy(
+            KeyType key_type,
+            const StreamId &stream_id,
+            VersionId version_id,
+            const VariantKey &source_key) override {
+        return async::submit_io_task(CopyCompressedTask<ClockType>{source_key, key_type, stream_id, version_id, library_});
     }
 
-    VariantKey copy_sync(KeyType key_type,
-                         const StreamId &stream_id,
-                         VersionId version_id,
-                         const VariantKey &source_key) override {
+    VariantKey copy_sync(
+            KeyType key_type,
+            const StreamId &stream_id,
+            VersionId version_id,
+            const VariantKey &source_key) override {
         return CopyCompressedTask<ClockType>{source_key, key_type, stream_id, version_id, library_}();
     }
 
@@ -178,51 +190,43 @@ public:
         return ClockType::nanos_since_epoch();
     }
 
-    void iterate_type(KeyType type, entity::IterateTypeVisitor func,
-                      const std::string &prefix) override {
+    void iterate_type(
+            KeyType type,
+            const entity::IterateTypeVisitor& func,
+            const std::string &prefix) override {
         library_->iterate_type(type, func, prefix);
     }
 
-    folly::Future<std::pair<entity::VariantKey, SegmentInMemory>> read(const entity::VariantKey &key,
-                                                                       storage::ReadKeyOpts opts) override {
-        return async::submit_io_task(ReadCompressedTask{key, library_, opts})
-            .via(&async::cpu_executor())
-            .thenValue(DecodeSegmentTask{});
+    folly::Future<std::pair<entity::VariantKey, SegmentInMemory>> read(
+            const entity::VariantKey &key,
+            storage::ReadKeyOpts opts) override {
+        return read_and_continue(key, library_, opts, DecodeSegmentTask{});
     }
 
     std::pair<entity::VariantKey, SegmentInMemory> read_sync(const entity::VariantKey &key,
                                                              storage::ReadKeyOpts opts) override {
-        auto read_task = ReadCompressedTask{key, library_, opts};
-        return DecodeSegmentTask{}(read_task());
+        return DecodeSegmentTask{}(read_dispatch(key, library_, opts));
     }
 
-    folly::Future<storage::KeySegmentPair> read_compressed(const entity::VariantKey &key,
-                                                           storage::ReadKeyOpts opts) override {
-        return async::submit_io_task(ReadCompressedTask{key, library_, opts});
+    folly::Future<storage::KeySegmentPair> read_compressed(
+            const entity::VariantKey &key,
+            storage::ReadKeyOpts opts) override {
+        return read_and_continue(key, library_, opts, PassThroughTask{});
     }
 
-    folly::Future<std::pair<std::optional<VariantKey>, std::optional<google::protobuf::Any>>>
-    read_metadata(const entity::VariantKey &key, storage::ReadKeyOpts opts) override {
-        return async::submit_io_task(ReadCompressedTask{key, library_, opts})
-            .via(&async::cpu_executor())
-            .thenValue(DecodeMetadataTask{});
+    folly::Future<std::pair<std::optional<VariantKey>, std::optional<google::protobuf::Any>>> read_metadata(const entity::VariantKey &key, storage::ReadKeyOpts opts) override {
+        return read_and_continue(key, library_, opts, DecodeMetadataTask{});
     }
 
-    folly::Future<std::tuple<VariantKey, std::optional<google::protobuf::Any>, StreamDescriptor>>
-    read_metadata_and_descriptor(
-        const entity::VariantKey &key,
-        storage::ReadKeyOpts opts) override {
-        return async::submit_io_task(ReadCompressedTask{key, library_, opts})
-            .via(&async::cpu_executor())
-            .thenValue(DecodeMetadataAndDescriptorTask{});
+    folly::Future<std::tuple<VariantKey, std::optional<google::protobuf::Any>, StreamDescriptor>> read_metadata_and_descriptor(
+            const entity::VariantKey &key,
+            storage::ReadKeyOpts opts) override {
+        return read_and_continue(key, library_, opts, DecodeMetadataAndDescriptorTask{});
     }
 
-    folly::Future<std::pair<VariantKey, TimeseriesDescriptor>>
-    read_timeseries_descriptor(
-        const entity::VariantKey &key) override {
-        return async::submit_io_task(ReadCompressedTask{key, library_, storage::ReadKeyOpts{}})
-            .via(&async::cpu_executor())
-            .thenValue(DecodeTimeseriesDescriptorTask{});
+    folly::Future<std::pair<VariantKey, TimeseriesDescriptor>> read_timeseries_descriptor(
+            const entity::VariantKey &key) override {
+        return read_and_continue(key, library_, storage::ReadKeyOpts{}, DecodeTimeseriesDescriptorTask{});
     }
 
     folly::Future<bool> key_exists(const entity::VariantKey &key) override {
@@ -271,150 +275,35 @@ public:
                async::submit_io_task(RemoveBatchTask{std::move(keys), library_, opts});
     }
 
-    void copy_to_results(
-        std::vector<folly::Future<storage::KeySegmentPair>> &batch,
-        std::vector<storage::KeySegmentPair> &res
-    ) const {
-        auto vec = folly::collect(batch).get();
-        res.insert(end(res), std::make_move_iterator(std::begin(vec)), std::make_move_iterator(std::end(vec)));
+   folly::Future<std::vector<VariantKey>> batch_read_compressed(
+            std::vector<std::pair<entity::VariantKey, ReadContinuation>> &&keys_and_continuations,
+            const BatchReadArgs &args) override {
+        util::check(!keys_and_continuations.empty(), "Unexpected empty keys/continuation vector in batch_read_compressed");
+        return folly::collect(folly::window(std::move(keys_and_continuations), [this] (auto&& key_and_continuation) {
+            auto [key, continuation] = std::forward<decltype(key_and_continuation)>(key_and_continuation);
+            return read_and_continue(key, library_, storage::ReadKeyOpts{}, std::move(continuation));
+        }, args.batch_size_)).via(&async::io_executor());
     }
 
-    void copy_to_results_with_failure(
-        std::vector<folly::Future<storage::KeySegmentPair>> &batch,
-        std::vector<storage::KeySegmentPair> &res,
-        const std::vector<VariantKey> &keys) const {
-        auto collected_kvs = folly::collectAll(batch).get();
-        for (size_t idx = 0; idx != batch.size(); idx++) {
-            if (collected_kvs[idx].hasValue()) {
-                res.emplace_back(std::move(collected_kvs[idx].value()));
-            } else {
-                log::storage().warn("Found an unreadable key {}", keys[idx]);
-            }
-        }
+    std::vector<folly::Future<pipelines::SegmentAndSlice>> batch_read_uncompressed(
+            std::vector<pipelines::RangesAndKey>&& ranges_and_keys,
+            std::shared_ptr<std::unordered_set<std::string>> columns_to_decode) override {
+        return folly::window(
+            std::move(ranges_and_keys),
+            [this, columns_to_decode](auto&& ranges_and_key) {
+                const auto key = ranges_and_key.key_;
+                return read_and_continue(key, library_, storage::ReadKeyOpts{}, DecodeSliceTask{std::move(ranges_and_key), columns_to_decode});
+            }, async::TaskScheduler::instance()->io_thread_count() * 2);
     }
 
-    std::vector<storage::KeySegmentPair> batch_read_compressed(
-        std::vector<entity::VariantKey> &&ks,
-        const BatchReadArgs &args,
-        bool may_fail) override {
-        auto keys = std::move(ks);
-        std::vector<folly::Future<storage::KeySegmentPair>> batch{};
-        batch.reserve(args.batch_size_);
-        std::vector<storage::KeySegmentPair> res;
-        res.reserve(keys.size());
-        for (auto key : keys) {
-            batch.push_back(async::submit_io_task(ReadCompressedTask(std::move(key),
-                                                                     library_,
-                                                                     storage::ReadKeyOpts{})));
-            if (batch.size() == args.batch_size_) {
-                if (may_fail)
-                    copy_to_results_with_failure(batch, res, keys);
-                else
-                    copy_to_results(batch, res);
-
-                batch.clear();
-            }
-        }
-        if (!batch.empty()) {
-            if (may_fail)
-                copy_to_results_with_failure(batch, res, keys);
-            else
-                copy_to_results(batch, res);
-        }
-
-        return res;
-    }
-
-    folly::Future<std::vector<VariantKey>> batch_read_compressed(
-        std::vector<entity::VariantKey> &&ks,
-        std::vector<ReadContinuation> &&continuations,
-        const BatchReadArgs &args) override {
-        auto keys = std::move(ks);
-        util::check(!keys.empty(), "Unexpected empty keys in batch_read_compressed");
-
-        auto key_seg_futs = folly::window(keys, [*this](auto &&key) {
-            return async::submit_io_task(ReadCompressedTask(std::forward<decltype(key)>(key), library_, storage::ReadKeyOpts{}));
-        }, args.batch_size_);
-
-        util::check(key_seg_futs.size() == keys.size(),
-                    "Size mismatch in batch_read_compressed: {} != {}",
-                    key_seg_futs.size(),
-                    keys.size());
-        std::vector<folly::Future<VariantKey>> result;
-        result.reserve(key_seg_futs.size());
-        for (auto &&key_seg_fut : folly::enumerate(key_seg_futs)) {
-            result.emplace_back(std::move(*key_seg_fut).thenValue([continuation =
-            std::move(continuations[key_seg_fut.index])](auto &&key_seg) mutable {
-                return continuation(std::forward<decltype(key_seg)>(key_seg));
-            }));
-        }
-
-        return folly::collect(result).via(&async::io_executor());
-    }
-
-    std::vector<Composite<ProcessingUnit>> batch_read_uncompressed(
-        std::vector<Composite<pipelines::SliceAndKey>> &&sks,
-        const std::vector<std::shared_ptr<Clause>>& clauses,
-        const std::shared_ptr<std::unordered_set<std::string>>& filter_columns,
-        const BatchReadArgs & args) override {
-        auto slice_and_keys = std::move(sks);
-        std::vector<Composite<ProcessingUnit>> res;
-        res.reserve(slice_and_keys.size());
-        std::vector<folly::Future<Composite<ProcessingUnit>>> batch;
-        size_t current_size = 0;
-        for (auto &&s : slice_and_keys) {
-            auto sk = std::move(s);
-            if (args.scheduler_ == BatchReadArgs::CPU) {
-                batch.push_back(
-                    async::submit_io_task(ReadCompressedSlicesTask(std::move(sk), library_))
-                        .via(&async::cpu_executor())
-                        .thenValue(DecodeSlicesTask{filter_columns})
-                        .thenValue(MemSegmentProcessingTask{shared_from_this(), clauses}));
-            }
-            // IO option will execute all work in the same Folly thread potentially limiting context switches.
-            else {
-                batch.push_back(
-                    async::submit_io_task(ReadCompressedSlicesTask(std::move(sk), library_))
-                        .thenValue(DecodeSlicesTask{filter_columns})
-                        .thenValue(MemSegmentProcessingTask{shared_from_this(), clauses}));
-            }
-
-            if (++current_size == args.batch_size_) {
-                auto segments = folly::collect(batch).get();
-                res.insert(std::end(res),
-                           std::make_move_iterator(std::begin(segments)),
-                           std::make_move_iterator(std::end(segments)));
-                current_size = 0;
-                batch.clear();
-            }
-        }
-
-        if (!batch.empty()) {
-            auto segments = folly::collect(batch).get();
-            res.insert(std::end(res),
-                       std::make_move_iterator(std::begin(segments)),
-                       std::make_move_iterator(std::end(segments)));
-        }
-
-        slice_and_keys.clear();
-        return res;
-    }
-
-    std::vector<folly::Future<bool>> batch_key_exists(const std::vector<entity::VariantKey> &keys)
-    override {
+    std::vector<folly::Future<bool>> batch_key_exists(
+            const std::vector<entity::VariantKey> &keys) override {
         std::vector<folly::Future<bool>> res;
         res.reserve(keys.size());
         for (auto itr = keys.cbegin(); itr < keys.cend(); ++itr) {
             res.push_back(async::submit_io_task(KeyExistsTask(itr, library_)));
         }
         return res;
-    }
-
-    bool batch_all_keys_exist_sync(const std::unordered_set<entity::VariantKey> &keys)
-    override {
-        return std::all_of(keys.begin(), keys.end(), [that = this](const entity::VariantKey &key) {
-            return that->key_exists_sync(key);
-        });
     }
 
     folly::Future<std::vector<VariantKey>> batch_write(
@@ -438,8 +327,7 @@ public:
 
         for (folly::Future<storage::KeySegmentPair>& encode_fut : encode_futs) {
             futs.emplace_back(
-                std::move(encode_fut).thenValue([de_dup_map](auto &&ks) -> std::pair<VariantKey,
-                                                                                     std::optional<Segment>> {
+                std::move(encode_fut).thenValue([de_dup_map](auto &&ks) -> std::pair<VariantKey, std::optional<Segment>> {
                         auto key_seg = std::forward<decltype(ks)>(ks);
                         return lookup_match_in_dedup_map(de_dup_map, std::move(key_seg));
                     })
@@ -456,8 +344,8 @@ public:
         return folly::collect(futs).via(&async::io_executor());
     }
 
-    void set_failure_sim(const arcticdb::proto::storage::VersionStoreConfig::StorageFailureSimulator &cfg)
-    override {
+    void set_failure_sim(
+        const arcticdb::proto::storage::VersionStoreConfig::StorageFailureSimulator &cfg) override {
         library_->set_failure_sim(cfg);
     }
 

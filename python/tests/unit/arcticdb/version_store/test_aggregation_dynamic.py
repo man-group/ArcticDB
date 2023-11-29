@@ -5,6 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 import uuid
 from hypothesis import assume, given, settings
 from hypothesis.extra.pandas import column, data_frames, range_indexes
@@ -23,9 +24,10 @@ from arcticdb_ext.exceptions import InternalException, SchemaException
 from arcticdb.util.test import make_dynamic, assert_frame_equal
 from arcticdb.util.hypothesis import (
     use_of_function_scoped_fixtures_in_hypothesis_checked,
-    non_zero_numeric_type_strategies,
+    numeric_type_strategies,
     string_strategy,
 )
+from tests.util.mark import MACOS_CONDA_BUILD
 
 
 def assert_equal_value(data, expected):
@@ -35,13 +37,14 @@ def assert_equal_value(data, expected):
     assert_frame_equal(received.astype("float"), expected)
 
 
+@pytest.mark.xfail(MACOS_CONDA_BUILD, reason="Conda Pandas returns nan instead of inf like other platforms")
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
     df=data_frames(
         [
             column("grouping_column", elements=string_strategy, fill=string_strategy),
-            column("a", elements=non_zero_numeric_type_strategies()),
+            column("a", elements=numeric_type_strategies()),
         ],
         index=range_indexes(),
     )
@@ -73,7 +76,7 @@ def test_hypothesis_mean_agg_dynamic(lmdb_version_store_dynamic_schema_v1, df):
     df=data_frames(
         [
             column("grouping_column", elements=string_strategy, fill=string_strategy),
-            column("a", elements=non_zero_numeric_type_strategies()),
+            column("a", elements=numeric_type_strategies()),
         ],
         index=range_indexes(),
     )
@@ -105,7 +108,7 @@ def test_hypothesis_sum_agg_dynamic(s3_version_store_dynamic_schema_v2, df):
     df=data_frames(
         [
             column("grouping_column", elements=string_strategy, fill=string_strategy),
-            column("a", elements=non_zero_numeric_type_strategies()),
+            column("a", elements=numeric_type_strategies()),
         ],
         index=range_indexes(),
     )
@@ -129,6 +132,87 @@ def test_hypothesis_max_agg_dynamic(lmdb_version_store_dynamic_schema_v1, df):
     # pandas 1.0 raises SpecificationError rather than KeyError if the column in "agg" doesn't exist
     except (KeyError, SpecificationError):
         pass
+
+
+def count_agg_dynamic(lmdb_version_store_dynamic_schema_v1, df):
+    lib = lmdb_version_store_dynamic_schema_v1
+    assume(not df.empty)
+
+    symbol = f"count_agg-{uuid.uuid4().hex}"
+    expected, slices = make_dynamic(df)
+    for df_slice in slices:
+        lib.append(symbol, df_slice, write_if_missing=True)
+
+    try:
+        q = QueryBuilder()
+        q = q.groupby("grouping_column").agg({"a": "count"})
+
+        vit = lib.read(symbol, query_builder=q)
+        vit.data.sort_index(inplace=True)
+
+        expected = expected.groupby("grouping_column").agg({"a": "count"})
+        expected = expected.astype(np.uint64)
+
+        assert_frame_equal(vit.data, expected)
+    # pandas 1.0 raises SpecificationError rather than KeyError if the column in "agg" doesn't exist
+    except (KeyError, SpecificationError):
+        pass
+
+
+@use_of_function_scoped_fixtures_in_hypothesis_checked
+@settings(deadline=None)
+@given(
+    df=data_frames(
+        [
+            column("grouping_column", elements=string_strategy, fill=string_strategy),
+            column("a", elements=numeric_type_strategies()),
+        ],
+        index=range_indexes(),
+    )
+)
+def test_hypothesis_count_agg_dynamic_numeric(lmdb_version_store_dynamic_schema_v1, df):
+    count_agg_dynamic(lmdb_version_store_dynamic_schema_v1, df)
+
+
+@use_of_function_scoped_fixtures_in_hypothesis_checked
+@settings(deadline=None)
+@given(
+    df=data_frames(
+        [
+            column("grouping_column", elements=string_strategy, fill=string_strategy),
+            column("a", elements=string_strategy),
+        ],
+        index=range_indexes(),
+    )
+)
+def test_hypothesis_count_agg_dynamic_strings(lmdb_version_store_dynamic_schema_v1, df):
+    count_agg_dynamic(lmdb_version_store_dynamic_schema_v1, df)
+
+
+def test_count_aggregation_dynamic(s3_version_store_dynamic_schema_v2):
+    lib = s3_version_store_dynamic_schema_v2
+    df = DataFrame(
+        {
+            "grouping_column": ["group_1", "group_1", "group_1", "group_2", "group_2", "group_3"],
+            "to_count": [100, 1, 3, 2, 2, np.nan],
+        },
+        index=np.arange(6),
+    )
+    symbol = "test_count_aggregation_dynamic"
+    expected, slices = make_dynamic(df)
+    for df_slice in slices:
+        lib.append(symbol, df_slice, write_if_missing=True)
+
+    q = QueryBuilder()
+    q = q.groupby("grouping_column").agg({"to_count": "count"})
+
+    received = lib.read(symbol, query_builder=q).data
+    received.sort_index(inplace=True)
+
+    expected = expected.groupby("grouping_column").agg({"to_count": "count"})
+    expected = expected.astype(np.uint64)
+
+    assert_frame_equal(received, expected)
 
 
 def test_sum_aggregation_dynamic(s3_version_store_dynamic_schema_v2):

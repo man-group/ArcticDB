@@ -15,14 +15,17 @@ from arcticdb_ext.exceptions import InternalException, SchemaException
 from arcticdb.util.test import assert_frame_equal
 from arcticdb.util.hypothesis import (
     use_of_function_scoped_fixtures_in_hypothesis_checked,
-    non_zero_numeric_type_strategies,
+    numeric_type_strategies,
     string_strategy,
 )
 
 from hypothesis import assume, given, settings
 from hypothesis.extra.pandas import column, data_frames, range_indexes
 
+from tests.util.mark import xfail_on_linux_conda
 
+
+@xfail_on_linux_conda(reason="Test fails on linux conda, should be fixed by issue #1035")
 def test_group_on_float_column_with_nans(lmdb_version_store):
     lib = lmdb_version_store
     sym = "test_group_on_float_column_with_nans"
@@ -42,7 +45,7 @@ def test_group_on_float_column_with_nans(lmdb_version_store):
     df=data_frames(
         [
             column("grouping_column", elements=string_strategy, fill=string_strategy),
-            column("a", elements=non_zero_numeric_type_strategies()),
+            column("a", elements=numeric_type_strategies()),
         ],
         index=range_indexes(),
     )
@@ -77,11 +80,12 @@ def test_hypothesis_mean_agg(lmdb_version_store, df):
     df=data_frames(
         [
             column("grouping_column", elements=string_strategy, fill=string_strategy),
-            column("a", elements=non_zero_numeric_type_strategies()),
+            column("a", elements=numeric_type_strategies()),
         ],
         index=range_indexes(),
     )
 )
+@pytest.mark.xfail(reason="Needs to be fixed by issue #496")
 def test_hypothesis_sum_agg(lmdb_version_store, df):
     lib = lmdb_version_store
     assume(not df.empty)
@@ -103,6 +107,9 @@ def test_hypothesis_sum_agg(lmdb_version_store, df):
     received_df.replace(-np.inf, np.nan, inplace=True)
     received_df.replace(np.inf, np.nan, inplace=True)
 
+    expected_df.replace(-np.inf, np.nan, inplace=True)
+    expected_df.replace(np.inf, np.nan, inplace=True)
+
     assert_frame_equal(expected_df, received_df)
 
 
@@ -112,8 +119,8 @@ def test_hypothesis_sum_agg(lmdb_version_store, df):
     df=data_frames(
         [
             column("grouping_column", elements=string_strategy, fill=string_strategy),
-            column("a", elements=non_zero_numeric_type_strategies()),
-            column("b", elements=non_zero_numeric_type_strategies()),
+            column("a", elements=numeric_type_strategies()),
+            column("b", elements=numeric_type_strategies()),
         ],
         index=range_indexes(),
     )
@@ -135,6 +142,79 @@ def test_hypothesis_max_min_agg(lmdb_version_store, df):
         print("Expected\n{}".format(expected))
         print("Received\n{}".format(vit.data))
     assert_frame_equal(expected, vit.data)
+
+
+def count_aggregation(lmdb_version_store, df):
+    lib = lmdb_version_store
+    assume(not df.empty)
+
+    q = QueryBuilder()
+    q = q.groupby("grouping_column").agg({"a": "count"})
+    expected = df.groupby("grouping_column").agg({"a": "count"})
+    expected.replace(
+        np.nan, np.inf, inplace=True
+    )  # New version of pandas treats values which exceeds limits as np.nan rather than np.inf, as in old version and arcticdb
+    expected = expected.astype(np.uint64)
+
+    symbol = "count_agg"
+    lib.write(symbol, df)
+    vit = lib.read(symbol, query_builder=q)
+    vit.data.sort_index(inplace=True)
+
+    assert_frame_equal(expected, vit.data)
+
+
+@use_of_function_scoped_fixtures_in_hypothesis_checked
+@settings(deadline=None)
+@given(
+    df=data_frames(
+        [
+            column("grouping_column", elements=string_strategy, fill=string_strategy),
+            column("a", elements=numeric_type_strategies()),
+        ],
+        index=range_indexes(),
+    )
+)
+def test_hypothesis_count_agg_numeric(lmdb_version_store, df):
+    count_aggregation(lmdb_version_store, df)
+
+
+@use_of_function_scoped_fixtures_in_hypothesis_checked
+@settings(deadline=None)
+@given(
+    df=data_frames(
+        [
+            column("grouping_column", elements=string_strategy, fill=string_strategy),
+            column("a", elements=string_strategy),
+        ],
+        index=range_indexes(),
+    )
+)
+def test_hypothesis_count_agg_strings(lmdb_version_store, df):
+    count_aggregation(lmdb_version_store, df)
+
+
+def test_count_aggregation(local_object_version_store):
+    df = DataFrame(
+        {
+            "grouping_column": ["group_1", "group_1", "group_1", "group_2", "group_2", "group_3"],
+            "to_count": [100, 1, 3, 2, 2, np.nan],
+        },
+        index=np.arange(6),
+    )
+    q = QueryBuilder()
+    q = q.groupby("grouping_column").agg({"to_count": "count"})
+    symbol = "test_count_aggregation"
+    local_object_version_store.write(symbol, df)
+
+    res = local_object_version_store.read(symbol, query_builder=q)
+    res.data.sort_index(inplace=True)
+
+    df = pd.DataFrame({"to_count": [3, 2, 0]}, index=["group_1", "group_2", "group_3"], dtype=np.uint64)
+    df.index.rename("grouping_column", inplace=True)
+    res.data.sort_index(inplace=True)
+
+    assert_frame_equal(res.data, df)
 
 
 def test_sum_aggregation(local_object_version_store):

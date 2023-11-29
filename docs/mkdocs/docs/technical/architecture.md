@@ -16,4 +16,4 @@ The below diagram visualises the flow of data through ArcticDB from source to st
 
 ![ArcticDB Detailed Architecture](../images/ArcticDetailedArchitecture.png)
 
-For more information on the storage format, please see [On-Disk Storage](../on_disk_storage).
+For more information on the storage format, please see [On-Disk Storage](on_disk_storage.md).

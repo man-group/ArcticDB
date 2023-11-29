@@ -19,6 +19,8 @@ namespace arcticdb::storage {
     public:
         explicit LibraryManager(const std::shared_ptr<storage::Library>& library);
 
+        ARCTICDB_NO_MOVE_OR_COPY(LibraryManager)
+
         void write_library_config(const py::object& lib_cfg, const LibraryPath& path, const StorageOverride& storage_override,
                                   bool validate) const;
 
@@ -28,7 +30,9 @@ namespace arcticdb::storage {
 
         void remove_library_config(const LibraryPath& path) const;
 
-        [[nodiscard]] std::shared_ptr<Library> get_library(const LibraryPath& path, const StorageOverride& storage_override = StorageOverride{}) const;
+        [[nodiscard]] std::shared_ptr<Library> get_library(const LibraryPath& path, const StorageOverride& storage_override = StorageOverride{});
+
+        void close_library_if_open(const LibraryPath& path);
 
         [[nodiscard]] std::vector<LibraryPath> get_library_paths() const;
 
@@ -38,5 +42,7 @@ namespace arcticdb::storage {
         [[nodiscard]] arcticdb::proto::storage::LibraryConfig get_config_internal(const LibraryPath& path, const StorageOverride& storage_override) const;
 
         std::shared_ptr<Store> store_;
+        std::unordered_map<LibraryPath, std::shared_ptr<Library>> open_libraries_;
+        std::mutex open_libraries_mutex_;  // for open_libraries_
     };
 }

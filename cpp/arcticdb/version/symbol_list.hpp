@@ -8,163 +8,220 @@
 #pragma once
 
 #include <arcticdb/entity/types.hpp>
-#include <arcticdb/log/log.hpp>
-#include <arcticdb/storage/store.hpp>
-#include <arcticdb/stream/stream_writer.hpp>
-#include <arcticdb/stream/stream_reader.hpp>
-#include <arcticdb/entity/atom_key.hpp>
-#include <arcticdb/entity/ref_key.hpp>
-#include <arcticdb/stream/index_aggregator.hpp>
-#include <arcticdb/util/variant.hpp>
-#include <arcticdb/util/configs_map.hpp>
-#include <arcticdb/util/storage_lock.hpp>
-#include <arcticdb/util/key_utils.hpp>
-#include <arcticdb/storage/storage_exceptions.hpp>
-#include <arcticdb/version/version_functions.hpp>
-#include <arcticdb/version/version_map_batch_methods.hpp>
+#include <arcticdb/async/base_task.hpp>
+#include <arcticdb/version/version_map.hpp>
 
 #include <folly/Range.h>
+#include <folly/futures/Future.h>
 
 #include <cstdlib>
 #include <set>
 #include <mutex>
 
-// FUTURE(GitHub #297)
-#define SYMBOL_LIST_RUNTIME_LOG(message) ARCTICDB_RUNTIME_DEBUG(log::version(), "Symbol List: {}: " message, __func__)
-#define SYMBOL_LIST_RUNTIME_LOG_VAL(message, value) ARCTICDB_RUNTIME_DEBUG(log::version(), "Symbol List: {}: " message, __func__, value)
-
 namespace arcticdb {
 
-using namespace arcticdb::stream;
+struct LoadResult;
+class Store;
 
-static const char* const CompactionId = "__symbols__";
-static const char* const AddSymbol = "__add__";
-static const char* const DeleteSymbol = "__delete__";
-static const char* const CompactionLockName = "SymbolListCompactionLock";
-
-class SymbolList {
-    using StreamId = entity::StreamId;
-    using CollectionType  = std::set<StreamId>;
-    using KeyVector = std::vector<entity::AtomKey>;
-    using KeyVectorItr = KeyVector::const_iterator;
-
-    StreamId type_holder_;
+struct SymbolListData {
+    entity::StreamId type_holder_;
     uint64_t max_delta_ = 0;
     std::shared_ptr<VersionMap> version_map_;
     std::atomic<bool> warned_expected_slowdown_ = false;
 
-  public:
-    explicit SymbolList(std::shared_ptr<VersionMap> version_map, StreamId type_indicator = StringId()) :
-        type_holder_(std::move(type_indicator)),
-        max_delta_(ConfigsMap::instance()->get_int("SymbolList.MaxDelta", 500)),
-        version_map_(std::move(version_map)){
+    explicit SymbolListData(std::shared_ptr<VersionMap> version_map, entity::StreamId type_indicator = entity::StringId());
+};
+
+constexpr std::string_view CompactionId = "__symbols__";
+constexpr std::string_view CompactionLockName = "SymbolListCompactionLock";
+constexpr std::string_view AddSymbol = "__add__";
+constexpr std::string_view DeleteSymbol = "__delete__";
+
+constexpr VersionId unknown_version_id = std::numeric_limits<VersionId>::max();
+
+enum class ActionType : uint8_t {
+    ADD,
+    DELETE
+};
+
+inline entity::StreamId action_id(ActionType action) {
+    switch (action) {
+    case ActionType::ADD:
+        return StringId{AddSymbol};
+    case ActionType::DELETE:
+        return StringId{DeleteSymbol};
+    default:
+        util::raise_rte("Unknown action type {}", static_cast<uint8_t>(action));
+    }
+}
+
+struct SymbolEntryData {
+    util::MagicNum<'S', 'd', 'a', 't'> magic_;
+    entity::VersionId reference_id_;
+    timestamp timestamp_;
+    ActionType action_;
+
+    SymbolEntryData(
+        entity::VersionId reference_id,
+        timestamp time,
+        ActionType action
+    ) :
+        reference_id_(reference_id),
+        timestamp_(time),
+        action_(action) {
     }
 
-    CollectionType load(const std::shared_ptr<Store>& store, bool no_compaction);
+    void verify() const {
+        magic_.check();
+    }
+};
 
-    std::vector<StreamId> get_symbols(const std::shared_ptr<Store>& store, bool no_compaction=false) {
-        SYMBOL_LIST_RUNTIME_LOG_VAL("no_compaction={}", no_compaction); // function name logged in macro
-        auto symbols = load(store, no_compaction);
+inline bool operator==(const SymbolEntryData& l, const SymbolEntryData& r) {
+    return l.reference_id_ == r.reference_id_ && l.action_ == r.action_;
+}
+
+struct SymbolListEntry : public SymbolEntryData {
+    entity::StreamId stream_id_;
+
+    SymbolListEntry(
+        entity::StreamId stream_id,
+        entity::VersionId reference_id,
+        timestamp reference_time,
+        ActionType action
+    ) :
+        SymbolEntryData(reference_id, reference_time, action),
+        stream_id_(std::move(stream_id)) {
+    }
+};
+
+struct ProblematicResult {
+    std::optional<SymbolEntryData> problem_;
+    bool contains_unknown_reference_ids_ = false;
+
+    explicit ProblematicResult(const SymbolEntryData& data) :
+        problem_(data) {
+    }
+
+    explicit ProblematicResult(bool old_style_refs) :
+        contains_unknown_reference_ids_(old_style_refs) {
+    }
+
+    [[nodiscard]] VersionId reference_id() const {
+        return problem_->reference_id_;
+    }
+
+    [[nodiscard]] timestamp time() const {
+        return problem_->timestamp_;
+    }
+
+    [[nodiscard]] ActionType action() const {
+        return problem_->action_;
+    }
+
+    explicit operator bool() const {
+        return static_cast<bool>(problem_);
+    }
+};
+
+inline ProblematicResult cannot_determine_validity() {
+    return ProblematicResult{true};
+}
+
+inline ProblematicResult not_a_problem() {
+    return ProblematicResult{false};
+}
+
+struct SymbolVectorResult {
+    ProblematicResult problematic_result_;
+    bool all_same_version_ = false;
+    bool all_same_action_ = false;
+    size_t last_id_count_ = 0;
+};
+
+ProblematicResult is_problematic(const SymbolListEntry& existing, const std::vector<SymbolEntryData>& updated, timestamp min_allowed_interval);
+
+ProblematicResult is_problematic(const std::vector<SymbolEntryData>& updated, timestamp min_allowed_interval);
+
+class SymbolList {
+    SymbolListData data_;
+  public:
+    explicit SymbolList(std::shared_ptr<VersionMap> version_map, entity::StreamId type_indicator = entity::StringId()) :
+        data_(std::move(version_map), std::move(type_indicator)) {
+    }
+
+    std::set<entity::StreamId> load(const std::shared_ptr<VersionMap>& version_map, const std::shared_ptr<Store>& store, bool no_compaction);
+
+    std::vector<entity::StreamId> get_symbols(const std::shared_ptr<Store>& store, bool no_compaction=false) {
+        auto symbols = load(data_.version_map_, store, no_compaction);
         return {std::make_move_iterator(symbols.begin()), std::make_move_iterator(symbols.end())};
     }
 
-    std::set<StreamId> get_symbol_set(const std::shared_ptr<Store>& store) {
-        SYMBOL_LIST_RUNTIME_LOG("called");
-        return load(store, false);
+    std::set<entity::StreamId> get_symbol_set(const std::shared_ptr<Store>& store) {
+        return load(data_.version_map_, store, false);
     }
 
-    void add_symbol(const std::shared_ptr<Store>& store, const StreamId& symbol) {
-        SYMBOL_LIST_RUNTIME_LOG_VAL("{}", symbol);
-        write_symbol(store, symbol);
-    }
+    static void add_symbol(const std::shared_ptr<Store>& store, const entity::StreamId& symbol, entity::VersionId reference_id);
 
-    void remove_symbol(const std::shared_ptr<Store>& store, const StreamId& symbol) {
-        SYMBOL_LIST_RUNTIME_LOG_VAL("{}", symbol);
-        delete_symbol(store, symbol);
-    }
+    static void remove_symbol(const std::shared_ptr<Store>& store, const entity::StreamId& symbol, entity::VersionId reference_id);
 
-    void clear(const std::shared_ptr<Store>& store) {
-        delete_all_keys_of_type(KeyType::SYMBOL_LIST, store, true);
-    }
+    static void clear(const std::shared_ptr<Store>& store);
 
 private:
-    struct LoadResult;
-
-    LoadResult attempt_load(const std::shared_ptr<Store>& store);
-
-    static bool can_update_symbol_list(
-            const std::shared_ptr<Store>& store,
-            const std::optional<KeyVectorItr>& last_compaction);
-
-    void write_symbol(const std::shared_ptr<Store>& store, const StreamId& symbol) {
-        write_journal(store, symbol, AddSymbol);
-    }
-
-    void delete_symbol(const std::shared_ptr<Store>& store, const StreamId& symbol) {
-        write_journal(store, symbol, DeleteSymbol);
-    }
-
-    void write_journal(const std::shared_ptr<Store>& store, const StreamId& symbol, std::string action);
-
-    [[nodiscard]] CollectionType load_from_version_keys(const std::shared_ptr<Store>& store);
-
-    [[nodiscard]] folly::Future<VariantKey> write_symbols(
-            const std::shared_ptr<Store>& store,
-            const CollectionType& symbols,
-            const StreamId& stream_id,
-            timestamp creation_ts);
-
-    [[nodiscard]] CollectionType load_from_symbol_list_keys(
-            const std::shared_ptr<StreamSource>& store,
-            const folly::Range<KeyVectorItr>& keys);
-
-    void read_list_from_storage(const std::shared_ptr<StreamSource>& store, const AtomKey& key,
-            CollectionType& symbols);
-
-    [[nodiscard]] KeyVector get_all_symbol_list_keys(const std::shared_ptr<StreamSource>& store);
-
-    [[nodiscard]] static folly::Future<std::vector<Store::RemoveKeyResultType>>
-    delete_keys(const std::shared_ptr<Store>& store, KeyVector&& to_remove, const AtomKey& exclude);
-
-    static auto last_compaction(const KeyVector& keys) -> std::optional<KeyVectorItr>;
-
-    inline StreamDescriptor symbol_stream_descriptor(const StreamId& stream_id) {
-        auto data_type = std::holds_alternative<StringId>(type_holder_) ? DataType::ASCII_DYNAMIC64 : DataType::UINT64;
-        return StreamDescriptor{stream_descriptor(stream_id, RowCountIndex(), {
-            scalar_field(data_type, "symbol")}
-        )};
-    };
-
-    inline StreamDescriptor journal_stream_descriptor(const StreamId& action, const StreamId& id) {
-        return util::variant_match(id,
-        [&action] (const NumericId&) {
-            return StreamDescriptor{stream_descriptor(action, RowCountIndex(), { scalar_field(DataType::UINT64, "symbol") })};
-        },
-        [&action] (const StringId&) {
-            return StreamDescriptor{stream_descriptor(action, RowCountIndex(), { scalar_field(DataType::UTF_DYNAMIC64, "symbol") })};
-        });
-    };
+    [[nodiscard]] bool needs_compaction(const LoadResult& load_result) const;
 };
+
+folly::Future<std::vector<Store::RemoveKeyResultType>> delete_keys(
+    const std::shared_ptr<Store>& store,
+    std::vector<AtomKey>&& remove,
+    const AtomKey& exclude);
 
 struct WriteSymbolTask : async::BaseTask {
     const std::shared_ptr<Store> store_;
     std::shared_ptr<SymbolList> symbol_list_;
-    const StreamId stream_id_;
+    const entity::StreamId stream_id_;
+    const entity::VersionId reference_id_;
 
     WriteSymbolTask(
             std::shared_ptr<Store> store,
             std::shared_ptr<SymbolList> symbol_list,
-            StreamId stream_id) :
+            entity::StreamId stream_id,
+            entity::VersionId reference_id) :
             store_(std::move(store)),
             symbol_list_(std::move(symbol_list)),
-            stream_id_(std::move(stream_id)) {
+            stream_id_(std::move(stream_id)),
+            reference_id_(reference_id) {
     }
 
     folly::Future<folly::Unit> operator()() {
-        symbol_list_->add_symbol(store_, stream_id_);
+        SymbolList::add_symbol(store_, stream_id_, reference_id_);
         return folly::Unit{};
     }
-
 };
 
 } //namespace arcticdb
+
+namespace fmt {
+
+template<>
+struct formatter<arcticdb::ActionType> {
+    template<typename ParseContext>
+    constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
+
+    template<typename FormatContext>
+    auto format(arcticdb::ActionType a, FormatContext &ctx) const {
+        return format_to(ctx.out(), "{}", a == arcticdb::ActionType::ADD ? "ADD" : "DELETE");
+    }
+};
+
+template<>
+struct formatter<arcticdb::SymbolEntryData> {
+    template<typename ParseContext>
+    constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
+
+    template<typename FormatContext>
+    auto format(const arcticdb::SymbolEntryData &s, FormatContext &ctx) const {
+        return format_to(ctx.out(), "[{},{}@{}]", s.reference_id_, s.action_, s.timestamp_);
+    }
+};
+
+} //namespace fmt

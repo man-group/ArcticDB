@@ -14,6 +14,7 @@
 #include <arcticdb/stream/index_aggregator.hpp>
 #include <arcticdb/version/version_map_entry.hpp>
 #include <arcticdb/python/python_utils.hpp>
+#include <arcticdb/entity/frame_and_descriptor.hpp>
 
 #include <utility>
 #include <memory>
@@ -82,7 +83,7 @@ inline std::optional<AtomKey> read_segment_with_keys(
 
     for (; row < ssize_t(seg.row_count()); ++row) {
         auto key = read_key_row(seg, row);
-        ARCTICDB_TRACE(log::version(), "Reading key {}", key);
+        ARCTICDB_DEBUG(log::version(), "Reading key {}", key);
 
         if (is_index_key_type(key.type())) {
             entry.keys_.push_back(key);
@@ -226,7 +227,7 @@ inline void read_symbol_ref(const std::shared_ptr<StreamSource>& store, const St
     if (!maybe_ref_key)
         return;
 
-    auto [key, seg] = store->read_sync(maybe_ref_key.value());
+    auto [key, seg] = store->read_sync(*maybe_ref_key);
 
     LoadProgress load_progress;
     entry.head_ = read_segment_with_keys(seg, entry, load_progress);
@@ -272,12 +273,12 @@ inline bool loaded_until_version_id(const LoadParameter &load_params, const Load
         return false;
 
     if (is_positive_version_query(load_params)) {
-        if (load_progress.loaded_until_ > static_cast<VersionId>(load_params.load_until_.value())) {
+        if (load_progress.loaded_until_ > static_cast<VersionId>(*load_params.load_until_)) {
             return false;
         }
     } else {
         if (latest_version.has_value()) {
-            if (auto opt_version_id = get_version_id_negative_index(latest_version.value(), *load_params.load_until_);
+            if (auto opt_version_id = get_version_id_negative_index(*latest_version, *load_params.load_until_);
                 opt_version_id && load_progress.loaded_until_ > *opt_version_id) {
                     return false;
             }
@@ -288,7 +289,7 @@ inline bool loaded_until_version_id(const LoadParameter &load_params, const Load
     ARCTICDB_DEBUG(log::version(),
                    "Exiting load downto because loaded to version {} for request {} with {} total versions",
                    load_progress.loaded_until_,
-                   load_params.load_until_.value(),
+                   *load_params.load_until_,
                    latest_version.value()
                   );
     return true;
@@ -307,12 +308,12 @@ static constexpr timestamp nanos_to_seconds(timestamp nanos) {
 }
 
 inline bool loaded_until_timestamp(const LoadParameter &load_params, const LoadProgress& load_progress) {
-    if (!load_params.load_from_time_ || load_progress.earliest_loaded_timestamp_ > load_params.load_from_time_.value())
+    if (!load_params.load_from_time_ || load_progress.earliest_loaded_timestamp_ > *load_params.load_from_time_)
         return false;
 
     ARCTICDB_DEBUG(log::version(),
                    "Exiting load from timestamp because request {} <= {}",
-                   load_params.load_from_time_.value(),
+                   *load_params.load_from_time_,
                    load_progress.earliest_loaded_timestamp_);
     return true;
 }
@@ -349,8 +350,10 @@ inline bool looking_for_undeleted(const LoadParameter& load_params, const std::s
 }
 
 inline bool key_exists_in_ref_entry(const LoadParameter& load_params, const VersionMapEntry& ref_entry, const std::optional<AtomKey>&, LoadProgress&) {
-    if (is_latest_load_type(load_params.load_type_) && is_index_key_type(ref_entry.keys_[0].type()))
+    if (is_latest_load_type(load_params.load_type_) && is_index_key_type(ref_entry.keys_[0].type())) {
+        ARCTICDB_DEBUG(log::version(), "Not following version chain as key for {} exists in ref entry", ref_entry.head_->id());
         return true;
+    }
 
     return false;
 }
@@ -358,12 +361,6 @@ inline bool key_exists_in_ref_entry(const LoadParameter& load_params, const Vers
 inline void set_loaded_until(const LoadProgress& load_progress, const std::shared_ptr<VersionMapEntry>& entry) {
     entry->loaded_until_ = load_progress.loaded_until_;
 }
-
-
-void fix_stream_ids_of_index_keys(
-    const std::shared_ptr<Store> &store,
-    const StreamId &stream_id,
-    const std::shared_ptr<VersionMapEntry> &entry);
 
 inline SortedValue deduce_sorted(SortedValue existing_frame, SortedValue input_frame) {
     using namespace arcticdb;
@@ -403,6 +400,19 @@ inline SortedValue deduce_sorted(SortedValue existing_frame, SortedValue input_f
         break;
     }
     return final_state;
+}
+
+inline FrameAndDescriptor frame_and_descriptor_from_segment(SegmentInMemory&& seg) {
+    TimeseriesDescriptor tsd;
+    auto& tsd_proto = tsd.mutable_proto();
+    tsd_proto.set_total_rows(seg.row_count());
+    const auto& seg_descriptor = seg.descriptor();
+    tsd_proto.mutable_stream_descriptor()->CopyFrom(seg_descriptor.proto());
+    if(seg.descriptor().index().type() == IndexDescriptor::ROWCOUNT)
+        ensure_rowcount_norm_meta(*tsd_proto.mutable_normalization(), seg_descriptor.id());
+    else
+        ensure_timeseries_norm_meta(*tsd.mutable_proto().mutable_normalization(), seg_descriptor.id(), false);
+    return {SegmentInMemory(std::move(seg)), tsd, {}, {}};
 }
 
 } // namespace arcticdb

@@ -22,7 +22,11 @@
 #include <arcticdb/storage/store.hpp>
 #include <arcticdb/stream/index.hpp>
 #include <arcticdb/pipeline/column_mapping.hpp>
-#include <arcticdb/util/third_party/emilib_map.hpp>
+#ifdef ARCTICDB_USING_CONDA
+    #include <robin_hood.h>
+#else
+    #include <arcticdb/util/third_party/robin_hood.hpp>
+#endif
 #include <arcticdb/codec/variant_encoded_field_collection.hpp>
 
 #include <google/protobuf/util/message_differencer.h>
@@ -84,7 +88,7 @@ SegmentInMemory allocate_frame(const std::shared_ptr<PipelineContext>& context) 
             if(!col_index)
                 continue;
 
-            auto& column = output.column(static_cast<position_t>(col_index.value()));
+            auto& column = output.column(static_cast<position_t>(*col_index));
             if(field.type().data_type() != column.type().data_type())
                 column.set_orig_type(field.type());
         }
@@ -169,12 +173,13 @@ void decode_index_field_impl(
             auto &buffer = frame.column(0).data().buffer(); // TODO assert size
             auto &frame_field_descriptor = frame.field(0); //TODO better method
             auto sz = sizeof_datatype(frame_field_descriptor.type());
-            auto offset = sz * (context.slice_and_key().slice_.row_range.first - frame.offset());
-            auto tot_size = sz * context.slice_and_key().slice_.row_range.diff();
+            const auto& slice_and_key = context.slice_and_key();
+            auto offset = sz * (slice_and_key.slice_.row_range.first - frame.offset());
+            auto tot_size = sz * slice_and_key.slice_.row_range.diff();
 
             SliceDataSink sink(buffer.data() + offset, tot_size);
             ARCTICDB_DEBUG(log::storage(), "Creating index slice with total size {} ({} - {})", tot_size, sz,
-                                 context.slice_and_key().slice_.row_range.diff());
+                           slice_and_key.slice_.row_range.diff());
 
             const auto fields_match = frame_field_descriptor.type() == context.descriptor().fields(0).type();
             util::check(fields_match, "Cannot coerce index type from {} to {}",
@@ -190,12 +195,12 @@ void decode_index_field_impl(
 
 void decode_index_field(
         SegmentInMemory &frame,
-        VariantField field,
+        VariantField variant_field,
         const uint8_t*& data,
         const uint8_t *begin ARCTICDB_UNUSED,
         const uint8_t* end ARCTICDB_UNUSED,
         PipelineContextRow &context) {
-    util::variant_match(field, [&] (auto field) {
+    util::variant_match(variant_field, [&] (auto field) {
         decode_index_field_impl(frame, *field, data, begin, end, context);
     });
 }
@@ -257,11 +262,11 @@ size_t get_field_range_compressed_size(size_t start_idx, size_t num_fields,
 void decode_or_expand(
     const uint8_t*& data,
     uint8_t* dest,
-    const VariantField& field,
+    const VariantField& variant_field,
     const TypeDescriptor& type_descriptor,
     size_t dest_bytes,
     std::shared_ptr<BufferHolder> buffers) {
-    util::variant_match(field, [&] (auto field) {
+    util::variant_match(variant_field, [&data, dest, &type_descriptor, dest_bytes, buffers] (auto field) {
         decode_or_expand_impl(data, dest, *field, type_descriptor, dest_bytes, buffers);
     });
 }
@@ -309,7 +314,7 @@ void decode_into_frame_static(
     SegmentInMemory &frame,
     PipelineContextRow &context,
     Segment &&s,
-    const std::shared_ptr<BufferHolder> buffers) {
+    std::shared_ptr<BufferHolder> buffers) {
     auto seg = std::move(s);
     ARCTICDB_SAMPLE_DEFAULT(DecodeIntoFrame)
     const uint8_t *data = seg.buffer().data();
@@ -402,7 +407,7 @@ void decode_into_frame_dynamic(
                 continue;
             }
 
-            auto dst_col = frame_loc_opt.value();
+            auto dst_col = *frame_loc_opt;
             auto& buffer = frame.column(static_cast<position_t>(dst_col)).data().buffer();
             if(ColumnMapping m{frame, dst_col, field_col, context};!trivially_compatible_types(m.source_type_desc_, m.dest_type_desc_)) {
                 util::check(static_cast<bool>(has_valid_type_promotion(m.source_type_desc_, m.dest_type_desc_)), "Can't promote type {} to type {} in field {}",
@@ -675,7 +680,7 @@ public:
         SegmentInMemory frame,
         const Field& frame_field,
         size_t alloc_width) :
-        StringReducer(column, std::move(context), std::move(frame), std::move(frame_field), alloc_width * UNICODE_WIDTH),
+        StringReducer(column, std::move(context), std::move(frame), frame_field, alloc_width * UNICODE_WIDTH),
         conv_("UTF32", "UTF8"),
         buf_(new uint8_t[column_width_ + UNICODE_PREFIX]) {
     }
@@ -803,7 +808,7 @@ class DynamicStringReducer : public StringReducer {
         auto none = std::make_unique<py::none>(py::none{});
         LockPolicy::unlock(*lock_);
         size_t none_count = 0u;
-        emilib::HashMap<StringPool::offset_t, std::pair<PyObject*, folly::SpinLock>> local_map;
+        robin_hood::unordered_flat_map<StringPool::offset_t, std::pair<PyObject*, folly::SpinLock>> local_map;
         local_map.reserve(end - row_);
         // TODO this is no good for non-contigous blocks, but we currently expect
         // output data to be contiguous
@@ -818,17 +823,18 @@ class DynamicStringReducer : public StringReducer {
             } else {
                 auto it = local_map.find(offset);
                 if(it != local_map.end()) {
-                    *ptr_dest_ = it->second.first;
-                    LockPolicy::lock(it->second.second);
+                    auto& object_and_lock = it->second;
+                    *ptr_dest_ = object_and_lock.first;
+                    LockPolicy::lock(object_and_lock.second);
                     Py_INCREF(*ptr_dest_);
-                    LockPolicy::unlock(it->second.second);
+                    LockPolicy::unlock(object_and_lock.second);
                 } else {
                     const auto sv = get_string_from_pool(offset, string_pool);
                     LockPolicy::lock(*lock_);
                     *ptr_dest_ = StringCreator::create(sv, has_type_conversion);
                     LockPolicy::unlock(*lock_);
                     PyObject* dest = *ptr_dest_;
-                    local_map.insert_unique(std::move(offset), std::make_pair(std::move(dest), folly::SpinLock{}));
+                    local_map.insert(robin_hood::pair(std::move(offset), std::make_pair(std::move(dest), folly::SpinLock{})));
                 }
             }
         }
@@ -1114,31 +1120,25 @@ folly::Future<std::vector<VariantKey>> fetch_data(
     if (frame.empty())
         return folly::Future<std::vector<VariantKey>>(std::vector<VariantKey>{});
 
-    std::vector<VariantKey> keys;
-    keys.reserve(context->slice_and_keys_.size());
-    std::vector<stream::StreamSource::ReadContinuation> continuations;
-    continuations.reserve(keys.capacity());
+    std::vector<std::pair<VariantKey, stream::StreamSource::ReadContinuation>> keys_and_continuations;
+    keys_and_continuations.reserve(context->slice_and_keys_.size());
     context->ensure_vectors();
     {
         ARCTICDB_SUBSAMPLE_DEFAULT(QueueReadContinuations)
         for ( auto& row : *context) {
-            keys.push_back(row.slice_and_key().key());
-            continuations.emplace_back([
-                row = row,
-                frame = frame,
-                dynamic_schema=dynamic_schema,
-                buffers](auto &&ks) mutable {
+            keys_and_continuations.emplace_back(row.slice_and_key().key(),
+            [row=row, frame=frame, dynamic_schema=dynamic_schema, buffers](auto &&ks) mutable {
                 auto key_seg = std::forward<storage::KeySegmentPair>(ks);
                 if(dynamic_schema)
                     decode_into_frame_dynamic(frame, row, std::move(key_seg.segment()), buffers);
                 else
                     decode_into_frame_static(frame, row, std::move(key_seg.segment()), buffers);
-                return std::get<AtomKey>(key_seg.variant_key());
+                return key_seg.variant_key();
             });
         }
     }
     ARCTICDB_SUBSAMPLE_DEFAULT(DoBatchReadCompressed)
-    return ssource->batch_read_compressed(std::move(keys), std::move(continuations), BatchReadArgs{});
+    return ssource->batch_read_compressed(std::move(keys_and_continuations), BatchReadArgs{});
 }
 
 } // namespace read

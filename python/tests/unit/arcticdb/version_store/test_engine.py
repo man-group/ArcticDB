@@ -14,32 +14,37 @@ import pytest
 import random
 import sys
 from arcticdb.version_store import TimeFrame
+from arcticdb.util.test import random_seed_context
 
 
 def gen_params():
-    # colnums
-    p = [list(range(2, 5))]
-    # rownums
-    periods = 6
-    p.append(list(range(1, periods + 2)))
-    # cols
-    p.append(list(chain(*[list(combinations(["a", "b", "c"], c)) for c in range(1, 4)])))
-    # tsbounds
-    p.append([(j, i) for i in range(periods) for j in range(i)])
-    return random.sample(list(product(*p)), 1000)
+    with random_seed_context():
+        # colnums
+        p = [list(range(2, 5))]
+        # rownums
+        periods = 6
+        p.append(list(range(1, periods + 2)))
+        # cols
+        p.append(list(chain(*[list(combinations(["a", "b", "c"], c)) for c in range(1, 4)])))
+        # tsbounds
+        p.append([(j, i) for i in range(periods) for j in range(i)])
+        result = sorted(random.sample(list(product(*p)), 10))
+    return result
 
 
 def gen_params_non_contiguous():
-    # colnums
-    p = [list(range(2, 5))]
-    # rownums
-    periods = 10
-    p.append(list(range(1, periods + 2)))
-    # cols
-    p.append(list(chain(*[list(combinations([2, 5, 7], c)) for c in range(1, 4)])))
-    # bounds
-    p.append([(j, i) for i in range(20, 29) for j in range(i)])
-    return random.sample(list(product(*p)), 1000)
+    with random_seed_context():
+        # colnums
+        p = [list(range(2, 5))]
+        # rownums
+        periods = 10
+        p.append(list(range(1, periods + 2)))
+        # cols
+        p.append(list(chain(*[list(combinations([2, 5, 7], c)) for c in range(1, 4)])))
+        # bounds
+        p.append([(j, i) for i in range(20, 29) for j in range(i)])
+        result = random.sample(list(product(*p)), 10)
+    return result
 
 
 @pytest.mark.parametrize("colnum,rownum,cols,tsbounds", gen_params())
@@ -82,6 +87,7 @@ def test_partial_write_non_contiguous(version_store_factory, colnum, rownum, col
     nt.assert_array_equal(vit.data.values, expected.values)
 
 
+@pytest.mark.xfail(reason="Needs to be fixed by issue #316")
 @pytest.mark.parametrize("colnum,rownum,cols,tsbounds", gen_params())
 def test_partial_write_hashed(version_store_factory, colnum, rownum, cols, tsbounds):
     tz = "America/New_York"

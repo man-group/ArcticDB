@@ -161,7 +161,7 @@ class Aggregator {
         C &&c,
         SegmentingPolicy &&segmenting_policy = SegmentingPolicyType(),
         const std::optional<StreamDescriptor>& desc = std::nullopt,
-        const std::optional<size_t> row_count = std::nullopt) :
+        const std::optional<size_t>& row_count = std::nullopt) :
         schema_policy_(std::move(schema)),
         row_builder_(schema_policy_, self()),
         callback_(std::forward<Callback>(c)),

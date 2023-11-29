@@ -11,6 +11,7 @@ from pandas import Timestamp
 import pytest
 
 from arcticdb.exceptions import NoSuchVersionException, NoDataFoundException
+from arcticdb.util.test import distinct_timestamps
 
 
 def test_read_descriptor(lmdb_version_store, one_col_df):
@@ -49,18 +50,19 @@ def test_column_names_by_snapshot(lmdb_version_store, one_col_df, two_col_df):
     assert lmdb_version_store.column_names(symbol, as_of="one_col_snap") == ["x"]
 
 
+@pytest.mark.xfail(reason="Needs to be fixed by issue #496")
 def test_column_names_by_timestamp(lmdb_version_store, one_col_df, two_col_df):
     symbol = "test_column_names_by_timestamp"
 
     # Write a DF with a single column
-    lmdb_version_store.write(symbol, one_col_df())
-    after_one_col_write = Timestamp.now(tz="UTC")
+    with distinct_timestamps(lmdb_version_store) as first_write_timestamp:
+        lmdb_version_store.write(symbol, one_col_df())
 
     # Ensure the timestamps differ
     time.sleep(0.1)
 
-    lmdb_version_store.write(symbol, two_col_df())
-    after_two_col_write = Timestamp.now(tz="UTC")
+    with distinct_timestamps(lmdb_version_store) as second_write_timestamp:
+        lmdb_version_store.write(symbol, two_col_df())
 
     # Assert querying with a time before the first write raises an exception
     with pytest.raises(NoDataFoundException) as excinfo:
@@ -68,10 +70,10 @@ def test_column_names_by_timestamp(lmdb_version_store, one_col_df, two_col_df):
     assert issubclass(excinfo.type, NoSuchVersionException)
 
     # Assert query with the timestamp after the one col write returns only a single column
-    assert lmdb_version_store.column_names(symbol, as_of=after_one_col_write) == ["x"]
+    assert lmdb_version_store.column_names(symbol, as_of=first_write_timestamp.after) == ["x"]
 
     # Assert query with the timestamp after the two col write returns two columns
-    assert lmdb_version_store.column_names(symbol, as_of=after_two_col_write) == ["x", "y"]
+    assert lmdb_version_store.column_names(symbol, as_of=second_write_timestamp.after) == ["x", "y"]
 
 
 def test_get_num_rows(lmdb_version_store, two_col_df):

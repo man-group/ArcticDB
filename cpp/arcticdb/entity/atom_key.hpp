@@ -26,8 +26,8 @@ class AtomKeyImpl {
         VersionId version_id,
         timestamp creation_ts,
         ContentHash content_hash,
-        const IndexValueType start_index,
-        const IndexValueType end_index,
+        IndexValueType start_index,
+        IndexValueType end_index,
         KeyType key_type)
         :
         id_(std::move(id)),
@@ -107,7 +107,7 @@ class AtomKeyImpl {
             hash_ = folly::hash::hash_combine(id_, version_id_, creation_ts_, content_hash_, key_type_, index_start_,
                     index_end_);
         }
-        return hash_.value();
+        return *hash_;
     }
 
     void set_string() const {

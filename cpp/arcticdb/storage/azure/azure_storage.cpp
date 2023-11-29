@@ -315,7 +315,7 @@ void AzureStorage::do_iterate_type(KeyType key_type, const IterateTypeVisitor& v
         return !prefix.empty() ? fmt::format("{}/{}*{}", key_type_dir, key_descriptor, prefix) : key_type_dir;
     };
 
-    detail::do_iterate_type_impl(key_type, std::move(visitor), root_folder_, container_client_, FlatBucketizer{}, std::move(prefix_handler), prefix);
+    detail::do_iterate_type_impl(key_type, visitor, root_folder_, container_client_, FlatBucketizer{}, std::move(prefix_handler), prefix);
 }
 
 bool AzureStorage::do_key_exists(const VariantKey& key) {

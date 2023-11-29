@@ -461,6 +461,37 @@ TEST(VersionMap, FixRefKey) {
     ASSERT_EQ(result, expected);
 }
 
+AtomKey atom_key_with_version(const StreamId& id, VersionId version_id, timestamp ts) {
+    return atom_key_builder().version_id(version_id).creation_ts(ts).content_hash(3).start_index(4).end_index(5).build(id, KeyType::TABLE_INDEX);
+}
+
+TEST(VersionMap, FixRefKeyTombstones) {
+    using namespace arcticdb;
+    auto store = std::make_shared<InMemoryStore>();
+    StreamId id{"test_fix_ref"};
+
+    auto version_map = std::make_shared<VersionMap>();
+
+    auto key1 = atom_key_with_version(id, 0, 1696590624524585339);
+    version_map->write_version(store, key1);
+    auto key2 = atom_key_with_version(id, 0, 1696590624387628801);
+    version_map->write_version(store, key2);
+    auto key3 = atom_key_with_version(id, 0, 1696590624532320286);
+    version_map->write_version(store, key3);
+    auto key4 = atom_key_with_version(id, 0, 1696590624554476875);
+    version_map->write_version(store, key4);
+    auto key5 = atom_key_with_version(id, 1, 1696590624590123209);
+    version_map->write_version(store, key5);
+    auto key6 = atom_key_with_version(id, 0, 1696590624612743245);
+    auto entry = version_map->check_reload(store, id, LoadParameter{LoadType::LOAD_LATEST},  __FUNCTION__);
+    version_map->journal_single_key(store, key5, entry->head_.value());
+
+    auto valid = version_map->check_ref_key(store, id);
+    ASSERT_EQ(valid, false);
+
+}
+
+
 TEST(VersionMap, RewriteVersionKeys) {
     auto store = std::make_shared<InMemoryStore>();
     StreamId id{"test_rewrite_version_keys"};
@@ -504,7 +535,7 @@ TEST(VersionMap, RewriteVersionKeys) {
 
     // will not be null anymore since the data actually existed
     ASSERT_TRUE(final_index_key1.has_value());
-    ASSERT_TRUE(final_index_key1.has_value());
+    ASSERT_TRUE(final_index_key2.has_value());
 
     std::vector<AtomKey> expected{key3, key2, key1};
     auto result = get_all_versions(store, version_map, id, pipelines::VersionQuery{}, ReadOptions{});
@@ -601,7 +632,6 @@ TEST_F(VersionMapStore, StressTestWrite) {
 
 TEST_F(VersionMapStore, StressTestBatchSameSymbol) {
     using namespace arcticdb;
-    auto name = std::string("stress_batch");
     std::vector<AtomKey> keys;
     const size_t num_tests = 999;
     StreamId id{"test"};
@@ -618,7 +648,6 @@ TEST_F(VersionMapStore, StressTestBatchSameSymbol) {
 
 TEST_F(VersionMapStore, StressTestBatchWrite) {
     using namespace arcticdb;
-    auto name = std::string("stress_batch");
     std::vector<AtomKey> keys;
     const size_t num_tests = 999;
 

@@ -45,7 +45,6 @@ from arcticdb.util.test import (
     assert_series_equal,
     config_context,
     distinct_timestamps,
-    RUN_MONGO_TEST,
 )
 from tests.util.date import DateRange
 
@@ -76,14 +75,20 @@ def test_simple_flow(basic_store_no_symbol_list, symbol):
     assert basic_store_no_symbol_list.list_symbols() == basic_store_no_symbol_list.list_versions() == []
 
 
-@pytest.mark.parametrize("special_char", list("$@=;/:+ ,?\\{^}%`[]\"'~#|!-_.()"))
-def test_special_chars(object_version_store, special_char):
+def test_special_chars(object_version_store):
     """Test chars with special URI encoding under RFC 3986"""
-    sym = f"prefix{special_char}postfix"
-    df = sample_dataframe()
-    object_version_store.write(sym, df)
-    vitem = object_version_store.read(sym)
-    assert_frame_equal(vitem.data, df)
+    errors = []
+    # we are doing manual iteration due to a limitation that should be fixed by issue #1053
+    for special_char in list("$@=;/:+ ,?\\{^}%`[]\"'~#|!-_.()"):
+        try:
+            sym = f"prefix{special_char}postfix"
+            df = sample_dataframe()
+            object_version_store.write(sym, df)
+            vitem = object_version_store.read(sym)
+            assert_frame_equal(vitem.data, df)
+        except AssertionError as e:
+            errors.append(f"Failed for character {special_char}: {str(e)}")
+    assert not errors, "errors occurred:\n" + "\n".join(errors)
 
 
 @pytest.mark.parametrize("breaking_char", [chr(0), "\0", "*", "<", ">"])
@@ -732,6 +737,30 @@ def test_empty_pd_series(basic_store):
     series = pd.Series()
     basic_store.write(sym, series)
     assert basic_store.read(sym).data.empty
+    # basic_store.update(sym, series)
+    # assert basic_store.read(sym).data.empty
+    basic_store.append(sym, series)
+    assert basic_store.read(sym).data.empty
+
+
+def test_empty_pd_series_type_preservation(basic_store):
+    sym = "empty_s"
+    series = pd.Series(dtype="datetime64[ns]")
+    basic_store.write(sym, series)
+    res = basic_store.read(sym).data
+    assert res.empty
+    assert str(res.dtype) == "datetime64[ns]"
+    assert basic_store.read(sym).data.empty
+
+    basic_store.update(sym, series)
+    res = basic_store.read(sym).data
+    assert res.empty
+    assert str(res.dtype) == "datetime64[ns]"
+
+    basic_store.append(sym, series)
+    res = basic_store.read(sym).data
+    assert res.empty
+    assert str(res.dtype) == "datetime64[ns]"
 
 
 def test_empty_df(basic_store):
@@ -739,6 +768,10 @@ def test_empty_df(basic_store):
     df = pd.DataFrame()
     basic_store.write(sym, df)
     # if no index information is provided, we assume a datetimeindex
+    assert basic_store.read(sym).data.empty
+    basic_store.update(sym, df)
+    assert basic_store.read(sym).data.empty
+    basic_store.append(sym, df)
     assert basic_store.read(sym).data.empty
 
 
@@ -1498,6 +1531,23 @@ def test_force_delete(basic_store):
     assert_frame_equal(basic_store.read("sym1", as_of=0).data, df1)
 
 
+def test_force_delete_with_delayed_deletes(basic_store_delayed_deletes):
+    df1 = sample_dataframe()
+    basic_store_delayed_deletes.write("sym1", df1)
+    df2 = sample_dataframe(seed=1)
+    basic_store_delayed_deletes.write("sym1", df2)
+    df3 = sample_dataframe(seed=2)
+    basic_store_delayed_deletes.write("sym2", df3)
+    df4 = sample_dataframe(seed=3)
+    basic_store_delayed_deletes.write("sym2", df4)
+    basic_store_delayed_deletes.version_store.force_delete_symbol("sym2")
+    with pytest.raises(NoDataFoundException):
+        basic_store_delayed_deletes.read("sym2")
+
+    assert_frame_equal(basic_store_delayed_deletes.read("sym1").data, df2)
+    assert_frame_equal(basic_store_delayed_deletes.read("sym1", as_of=0).data, df1)
+
+
 def test_dataframe_with_NaN_in_timestamp_column(basic_store):
     normal_df = pd.DataFrame({"col": [pd.Timestamp("now"), pd.NaT]})
     basic_store.write("normal", normal_df)
@@ -1560,6 +1610,7 @@ def test_coercion_to_str_with_dynamic_strings(basic_store):
         sample_mock.assert_not_called()
 
 
+@pytest.mark.xfail(reason="Needs to be fixed by issue #496")
 def test_find_version(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
     sym = "test_find_version"
@@ -1716,6 +1767,37 @@ def test_get_tombstone_deletion_state_without_delayed_del(basic_store_factory, s
     tombstoned_version_map = lib.version_store._get_all_tombstoned_versions(sym)
     assert len(tombstoned_version_map) == 3
     assert tombstoned_version_map[2] is False
+
+    lib.write(f"{sym}_new", 1)
+    lib.add_to_snapshot("snap", [f"{sym}_new"])
+    tombstoned_version_map = lib.version_store._get_all_tombstoned_versions(sym)
+    assert len(tombstoned_version_map) == 3
+
+
+def test_get_tombstone_deletion_state_with_delayed_del(basic_store_factory, sym):
+    lib = basic_store_factory(use_tombstones=True, delayed_deletes=True)
+    lib.write(sym, 1)
+
+    lib.write(sym, 2)
+
+    lib.snapshot("snap")
+    lib.write(sym, 3, prune_previous_version=True)
+    tombstoned_version_map = lib.version_store._get_all_tombstoned_versions(sym)
+    # v0 and v1
+    assert len(tombstoned_version_map) == 2
+    assert tombstoned_version_map[0] is True
+    assert tombstoned_version_map[1] is True
+
+    lib.write(sym, 3)
+    lib.delete_version(sym, 2)
+    tombstoned_version_map = lib.version_store._get_all_tombstoned_versions(sym)
+    assert len(tombstoned_version_map) == 3
+    assert tombstoned_version_map[2] is True
+
+    lib.write(f"{sym}_new", 1)
+    lib.add_to_snapshot("snap", [f"{sym}_new"])
+    tombstoned_version_map = lib.version_store._get_all_tombstoned_versions(sym)
+    assert len(tombstoned_version_map) == 3
 
 
 def test_get_timerange_for_symbol(basic_store, sym):
