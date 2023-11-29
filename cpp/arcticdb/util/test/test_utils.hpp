@@ -38,8 +38,8 @@ struct TestValue {
     using raw_type = typename DataTypeTag::raw_type;
 
     std::vector<raw_type> data_;
-    std::vector<ssize_t> shapes_;
-    mutable std::vector<ssize_t> strides_;
+    std::vector<shape_t> shapes_;
+    mutable std::vector<stride_t> strides_;
     raw_type start_val_;
 
     TestValue(raw_type start_val = raw_type(), size_t num_vals = 20) :
@@ -49,7 +49,7 @@ struct TestValue {
             return;
         }
 
-        constexpr ssize_t itemsize = ssize_t(sizeof(raw_type));
+        constexpr int64_t itemsize = sizeof(raw_type);
 
         if (dimensions == Dimension::Dim1) {
             shapes_.push_back(num_vals);

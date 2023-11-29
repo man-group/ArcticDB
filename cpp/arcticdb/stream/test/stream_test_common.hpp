@@ -146,13 +146,13 @@ struct DefaultStringGenerator {
 template<class ContainerType, typename DTT,
     std::enable_if_t<std::is_floating_point_v<typename DTT::raw_type> || std::is_integral_v<typename DTT::raw_type>,
                      int> = 0>
-NativeTensor test_column(ContainerType &container, DTT, size_t num_rows, size_t start_val, bool is_index) {
+NativeTensor test_column(ContainerType &container, DTT, shape_t num_rows, size_t start_val, bool is_index) {
     using RawType = typename DTT::raw_type;
     constexpr auto dt = DTT::data_type;
 
     shape_t shapes = num_rows;
     stride_t strides;
-    ssize_t elsize;
+    stride_t elsize;
 
     strides = sizeof(RawType);
     elsize = static_cast<ssize_t>(get_type_size(dt));
@@ -166,7 +166,7 @@ NativeTensor test_column(ContainerType &container, DTT, size_t num_rows, size_t 
 }
 
 template<class ContainerType, typename DTT, class StringGenerator = DefaultStringGenerator>
-NativeTensor test_string_column(ContainerType &vec, DTT, size_t num_rows) {
+NativeTensor test_string_column(ContainerType &vec, DTT, shape_t num_rows) {
     constexpr auto dt = DTT::data_type;
     shape_t shapes = num_rows;
     stride_t strides;

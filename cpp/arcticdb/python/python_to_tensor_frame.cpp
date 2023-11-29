@@ -120,7 +120,7 @@ NativeTensor obj_to_tensor(PyObject *ptr) {
     // See: https://github.com/man-group/ArcticDB/pull/1049
     auto val_type = (size == 0 && descr->kind == 'O') ? ValueType::EMPTY : get_value_type(descr->kind);
     auto val_bytes = static_cast<uint8_t>(descr->elsize);
-    const ssize_t element_count = ndim == 1 ? arr->dimensions[0] : arr->dimensions[0] * arr->dimensions[1];
+    const int64_t element_count = ndim == 1 ? int64_t(arr->dimensions[0]) : int64_t(arr->dimensions[0]) * int64_t(arr->dimensions[1]);
     const auto c_style = arr->strides[0] == val_bytes;
 
     if(is_empty_type(val_type)) {
@@ -187,9 +187,11 @@ NativeTensor obj_to_tensor(PyObject *ptr) {
     // and we can't use `val_bytes` to get this information since some dtype have another `elsize` than 8.
     const SizeBits size_bits = is_empty_type(val_type) ? SizeBits::S64 : get_size_bits(val_bytes);
     const auto dt = combine_data_type(val_type, size_bits);
-    const ssize_t nbytes = element_count * descr->elsize;
+    const int64_t nbytes = element_count * descr->elsize;
     const void* data = nbytes ? arr->data : nullptr;
-    return {nbytes, arr->nd, arr->strides, arr->dimensions, dt, descr->elsize, data, ndim};
+    const std::array<stride_t, 2> strides = {arr->strides[0], arr->nd > 1 ? arr->strides[1] : 0};
+    const std::array<shape_t, 2> shapes = {arr->dimensions[0], arr->nd > 1 ? arr->dimensions[1] : 0};
+    return {nbytes, arr->nd, strides.data(), shapes.data(), dt, descr->elsize, data, ndim};
 }
 
 InputTensorFrame py_ndf_to_frame(
@@ -249,7 +251,7 @@ InputTensorFrame py_ndf_to_frame(
 
     for (auto i = 0u; i < col_vals.size(); ++i) {
         auto tensor = obj_to_tensor(col_vals[i].ptr());
-        res.num_rows = std::max(res.num_rows, tensor.shape(0));
+        res.num_rows = std::max(res.num_rows, static_cast<ssize_t>(tensor.shape(0)));
         if(tensor.expanded_dim() == 1) {
             res.desc.add_field(scalar_field(tensor.data_type(), col_names[i]));
         } else if(tensor.expanded_dim() == 2) {
@@ -283,11 +285,11 @@ InputTensorFrame py_none_to_frame() {
 
     res.set_sorted(sorted);
 
-    const ssize_t strides = 8;
-    const ssize_t shapes = 1;
-    constexpr ssize_t ndim = 1;
+    const stride_t strides = 8;
+    const shape_t shapes = 1;
+    constexpr int ndim = 1;
     auto tensor = NativeTensor{8, ndim, &strides, &shapes, DataType::UINT64, 8, none_char, ndim};
-    res.num_rows = std::max(res.num_rows, tensor.shape(0));
+    res.num_rows = std::max(res.num_rows, static_cast<ssize_t>(tensor.shape(0)));
     res.desc.add_field(scalar_field(tensor.data_type(), col_name));
     res.field_tensors.push_back(std::move(tensor));
 

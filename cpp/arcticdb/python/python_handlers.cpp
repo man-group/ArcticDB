@@ -18,7 +18,7 @@ namespace arcticdb {
     /// When numpy creates an empty array its type is float64. We want to mimic this because:
     /// i) There is no equivalent to empty value
     /// ii) We want input dataframes to be exact match of the output and that includes the type
-    [[nodiscard]] static inline py::dtype generate_python_dtype(const TypeDescriptor& td, shape_t type_byte_size) {
+    [[nodiscard]] static inline py::dtype generate_python_dtype(const TypeDescriptor& td, stride_t type_byte_size) {
         if(is_empty_type(td.data_type())) {
             return py::dtype{"f8"};
         }
@@ -30,9 +30,9 @@ namespace arcticdb {
     /// a sigle thread (enve if it's not the one holding the GIL). This, however, is not guranteed to work.
     /// @todo Allocate numpy arrays only from the thread holding the GIL
     [[nodiscard]] static inline PyObject* initialize_array(
-        pybind11::dtype descr,
-        const shape_t* shapes,
-        const shape_t* strides,
+        const pybind11::dtype& descr,
+        const shape_t shapes,
+        const stride_t strides,
         const void* source_ptr,
         std::shared_ptr<Column> owner,
         std::mutex& creation_mutex
@@ -41,7 +41,7 @@ namespace arcticdb {
         // TODO: Py capsule can take only void ptr as input. We need a better way to handle destruction
         //  Allocating shared ptr on the heap is sad.
         auto* object = new std::shared_ptr<Column>(std::move(owner));
-        auto arr = py::array(descr, {*shapes}, {*strides}, source_ptr, py::capsule(object, [](void* obj){
+        auto arr = py::array(descr, {shapes}, {strides}, source_ptr, py::capsule(object, [](void* obj){
             delete reinterpret_cast<std::shared_ptr<Column>*>(obj);
         }));
         return arr.release().ptr();
@@ -166,26 +166,26 @@ namespace arcticdb {
 
             auto last_row = 0u;
             ARCTICDB_SUBSAMPLE(InitArrayAcquireGIL, 0)
-            const shape_t strides = get_type_size(type_descriptor.data_type());
-            const auto py_dtype = generate_python_dtype(type_descriptor, strides);
+            const auto strides = static_cast<stride_t>(get_type_size(type_descriptor.data_type()));
+            const py::dtype py_dtype = generate_python_dtype(type_descriptor, strides);
             type_descriptor.visit_tag([&] (auto tdt) {
                 const auto& blocks = column->blocks();
                 if(blocks.empty())
                     return;
 
                 auto block_it = blocks.begin();
-                const ssize_t* shapes = column->shape_ptr();
+                const auto* shapes = column->shape_ptr();
                 auto block_pos = 0u;
                 const auto* ptr_src = (*block_it)->data();
-                constexpr shape_t stride = static_cast<TypeDescriptor>(tdt).get_type_byte_size();
+                constexpr stride_t stride = static_cast<TypeDescriptor>(tdt).get_type_byte_size();
                 for (auto en = bv->first(); en < bv->end(); ++en) {
-                    const ssize_t shape = shapes ? *shapes : 0;
+                    const shape_t shape = shapes ? *shapes : 0;
                     const auto offset = *en;
                     ptr_dest = fill_with_none(ptr_dest, offset - last_row);
                     last_row = offset;
                     *ptr_dest++ = initialize_array(py_dtype,
-                        &shape,
-                        &stride,
+                        shape,
+                        stride,
                         ptr_src + block_pos,
                         column,
                         initialize_array_mutex);

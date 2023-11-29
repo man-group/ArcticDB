@@ -47,8 +47,8 @@ namespace arcticdb {
             std::ptrdiff_t& pos,
             EncodedFieldType* encoded_field
         ) {
-            const auto bytes_count = static_cast<shape_t>(data.bytes());
             if constexpr(EncodingPolicyType::version == EncodingVersion::V1) {
+                const auto bytes_count = static_cast<shape_t>(data.bytes());
                 auto typed_block = BytesBlock(
                     data.data(),
                     &bytes_count,
@@ -57,15 +57,19 @@ namespace arcticdb {
                     data.block_and_offset(0).block_);
                 Encoder::encode(codec_opts, typed_block, *encoded_field, out_buffer, pos);
             } else if constexpr(EncodingPolicyType::version == EncodingVersion::V2) {
+                // On Man's Mac build servers size_t and ssize_t are long rather than long long but the shape TDT
+                // expects int64 (long long).
                 const size_t row_count = 1;
-                auto shapes_block = TypedBlockData<ShapesBlockTDT>(&bytes_count,
+                const auto shapes_data = static_cast<ShapesBlockTDT::DataTypeTag::raw_type>(data.bytes());
+                auto shapes_block = TypedBlockData<ShapesBlockTDT>(&shapes_data,
                     nullptr,
                     sizeof(shape_t),
                     row_count,
                     data.block_and_offset(0).block_);
+                const auto bytes_count = static_cast<shape_t>(data.bytes());
                 auto data_block = BytesBlock(data.data(),
                     &bytes_count,
-                    bytes_count,
+                    static_cast<shape_t>(bytes_count),
                     row_count,
                     data.block_and_offset(0).block_);
                 ShapesEncoder::encode_shapes(codec::default_shapes_codec(), shapes_block, *encoded_field, out_buffer, pos);

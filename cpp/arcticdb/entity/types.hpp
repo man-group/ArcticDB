@@ -74,9 +74,9 @@ using VersionId = uint64_t;
 using SignedVersionId = int64_t;
 using GenerationId = VersionId;
 using timestamp = int64_t;
-using shape_t = ssize_t;
-using stride_t = ssize_t;
-using position_t = ssize_t;
+using shape_t = int64_t;
+using stride_t = int64_t;
+using position_t = int64_t;
 
 /** The VariantId holds int64 (NumericId) but is also used to store sizes up to uint64, so needs safe conversion */
 inline NumericId safe_convert_to_numeric_id(uint64_t input) {

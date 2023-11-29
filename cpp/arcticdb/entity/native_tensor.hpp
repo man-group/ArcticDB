@@ -24,7 +24,7 @@ inline ssize_t calc_elements(const shape_t* shape, ssize_t ndim) {
  * This typically stores the data of the numpy array backing a column of a pandas DataFrame.
  */
 struct NativeTensor {
-    static constexpr ssize_t MaxDimensions = 2;
+    static constexpr int MaxDimensions = 2;
     using StrideContainer = std::array<stride_t, MaxDimensions>;
 
     /// @param ndim The dimension of the tensor as reported by the API ArcticDB used to read it
@@ -32,14 +32,14 @@ struct NativeTensor {
     /// holds pointers to an array it will be reported to be of dim1 (the column is an array of pointers) while we think
     /// of it as a dim2 tensor (a column is an array of arrays).
     NativeTensor(
-        ssize_t nbytes,
-        ssize_t ndim,
+        int64_t nbytes,
+        int ndim,
         const stride_t* strides,
         const shape_t* shapes,
         DataType dt,
-        ssize_t elsize,
+        stride_t elsize,
         const void* ptr,
-        ssize_t expanded_dim
+        int expanded_dim
     ) :
         nbytes_(nbytes),
         ndim_(ndim),
@@ -51,7 +51,6 @@ struct NativeTensor {
         if(shapes[0] == 0)
             ARCTICDB_DEBUG(log::version(), "Supplied tensor is empty");
 
-        strides_[ndim - 1] = static_cast<ssize_t>(get_type_size(dt_));
         for (ssize_t i = 0; i < std::min(MaxDimensions, ndim); ++i)
             shapes_[i] = shapes[i];
 
@@ -100,17 +99,17 @@ struct NativeTensor {
         return *this;
     }
 
-    [[nodiscard]] ssize_t nbytes() const { return nbytes_; }
-    [[nodiscard]] ssize_t ndim() const { return ndim_; }
-    [[nodiscard]] stride_t strides(size_t pos) const { return strides_[pos]; }
-    [[nodiscard]] const stride_t* strides() const { return strides_.data(); };
-    [[nodiscard]] shape_t shape(size_t pos) const { return shapes_[pos]; }
-    [[nodiscard]] ssize_t elsize() const { return elsize_; }
-    [[nodiscard]] const shape_t* shape() const { return shapes_.data(); }
-    [[nodiscard]] DataType data_type() const { return dt_; }
+    [[nodiscard]] auto nbytes() const { return nbytes_; }
+    [[nodiscard]] auto ndim() const { return ndim_; }
+    [[nodiscard]] auto strides(size_t pos) const { return strides_[pos]; }
+    [[nodiscard]] const auto* strides() const { return strides_.data(); };
+    [[nodiscard]] auto shape(size_t pos) const { return shapes_[pos]; }
+    [[nodiscard]] auto elsize() const { return elsize_; }
+    [[nodiscard]] const auto* shape() const { return shapes_.data(); }
+    [[nodiscard]] auto data_type() const { return dt_; }
     [[nodiscard]] const void* data() const { magic_.check(); return ptr; }
-    [[nodiscard]] ssize_t extent(ssize_t dim) const { return shapes_[dim] * strides_[dim]; }
-    [[nodiscard]] ssize_t expanded_dim() const { return expanded_dim_; }
+    [[nodiscard]] auto extent(ssize_t dim) const { return shapes_[dim] * strides_[dim]; }
+    [[nodiscard]] auto expanded_dim() const { return expanded_dim_; }
     template<typename T>
     const T *ptr_cast(size_t pos) const {
         const bool dimension_condition = ndim() == 1;
@@ -136,17 +135,17 @@ struct NativeTensor {
     NativeTensor &request() { return *this; }
 
     util::MagicNum<'T','n','s','r'> magic_;
-    ssize_t nbytes_;
-    ssize_t ndim_;
+    int64_t nbytes_;
+    int ndim_;
     StrideContainer strides_ = {};
     StrideContainer shapes_ = {};
     DataType dt_;
-    ssize_t elsize_;
+    stride_t elsize_;
     const void *ptr;
     /// @note: when iterating strides and shapes we should use the ndim as it is the dimension reported by the
     /// API providing the strides and shapes arrays, expanded_dim is what ArcticDB thinks of the tensor and using it
     /// can lead to out of bounds reads from strides and shapes.
-    ssize_t expanded_dim_;
+    int expanded_dim_;
 };
 
 template <ssize_t> ssize_t byte_offset_impl(const stride_t* ) { return 0; }

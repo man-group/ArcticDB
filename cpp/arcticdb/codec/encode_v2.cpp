@@ -67,8 +67,7 @@ namespace arcticdb {
 
 
     [[nodiscard]] static TypedBlockData<ShapesBlockTDT> create_shapes_typed_block(const ColumnData& column_data) {
-        static_assert(std::is_same_v<ShapesBlockTDT::DataTypeTag::raw_type, shape_t>,
-            "Shape block type is not compatible");
+        static_assert(sizeof(ssize_t) == sizeof(int64_t));
         const size_t row_count = column_data.shapes()->bytes() / sizeof(shape_t);
         return {reinterpret_cast<const typename ShapesBlockTDT::DataTypeTag::raw_type*>(column_data.shapes()->data()),
                 nullptr,
