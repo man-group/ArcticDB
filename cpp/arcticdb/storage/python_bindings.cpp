@@ -35,6 +35,12 @@ std::shared_ptr<LibraryIndex> create_library_index(const std::string &environmen
 
 void register_bindings(py::module& storage, py::exception<arcticdb::ArcticException>& base_exception) {
     storage.attr("CONFIG_LIBRARY_NAME") = py::str(arcticdb::storage::CONFIG_LIBRARY_NAME);
+    storage.attr("ROCKSDB_SUPPORT", [](py::object /* self */){ return LibraryManager::rocksdb_support(); });
+#ifdef ARCTICDB_INCLUDE_ROCKSDB
+    return true;
+#else
+    return false;
+#endif
 
     py::enum_<KeyType>(storage, "KeyType")
         .value("STREAM_GROUP", KeyType::STREAM_GROUP)
@@ -168,7 +174,6 @@ void register_bindings(py::module& storage, py::exception<arcticdb::ArcticExcept
             }
             return res;
         })
-        .def_property_readonly_static("rocksdb_support", [](py::object /* self */){ return LibraryManager::rocksdb_support(); });
 
     py::class_<LibraryIndex, std::shared_ptr<LibraryIndex>>(storage, "LibraryIndex")
         .def(py::init<>([](const std::string &environment_name) {
