@@ -28,6 +28,12 @@
 #include <optional>
 #include <variant>
 
+
+#ifdef _WIN32
+#include <BaseTsd.h>
+using ssize_t = SSIZE_T;
+#endif
+
 namespace arcticdb::entity {
 
  enum class SortedValue : uint8_t {
