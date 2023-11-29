@@ -94,6 +94,7 @@ class AzureContainer(StorageFixture):
             container_name=self.container,
             endpoint=self.arctic_uri,
             ca_cert_path=self.factory.ca_cert_path,
+            with_prefix=False,  # to allow azure_store_factory reuse_name to work correctly
         )
         return cfg
 
