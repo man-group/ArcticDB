@@ -166,70 +166,70 @@
 //    std::vector<std::vector<size_t>> expected_proc_unit_ids_right{{0, 1}, {1}};
 //    ASSERT_EQ(expected_proc_unit_ids_right, proc_unit_ids);
 //}
-
-TEST(Resample, FindBuckets) {
-    // TODO: Remove this
-    using namespace arcticdb;
-    ResampleClause resample_left("left", ResampleClosedBoundary::LEFT);
-    ResampleClause resample_right("right", ResampleClosedBoundary::RIGHT);
-    // Enough bucket boundaries to test all the interesting cases
-    resample_left.set_bucket_boundaries({0, 10, 20, 30, 40});
-    resample_right.set_bucket_boundaries({0, 10, 20, 30, 40});
-    std::pair<std::vector<timestamp>::const_iterator, std::vector<timestamp>::const_iterator> left_res;
-    std::pair<std::vector<timestamp>::const_iterator, std::vector<timestamp>::const_iterator> right_res;
-
-    // Wholly contained in first bucket
-    left_res = resample_left.find_buckets(5, 6, true);
-    ASSERT_EQ(*left_res.first, 0);
-    ASSERT_EQ(*left_res.second, 10);
-    // Wholly contained in middle bucket
-    left_res = resample_left.find_buckets(12, 13, true);
-    ASSERT_EQ(*left_res.first, 10);
-    ASSERT_EQ(*left_res.second, 20);
-    // Wholly contained in last bucket
-    left_res = resample_left.find_buckets(35, 37, true);
-    ASSERT_EQ(*left_res.first, 30);
-    ASSERT_EQ(*left_res.second, 40);
-
-    // Spanning multiple buckets
-    left_res = resample_left.find_buckets(5, 15, true);
-    ASSERT_EQ(*left_res.first, 0);
-    ASSERT_EQ(*left_res.second, 20);
-    left_res = resample_left.find_buckets(15, 25, true);
-    ASSERT_EQ(*left_res.first, 10);
-    ASSERT_EQ(*left_res.second, 30);
-    left_res = resample_left.find_buckets(15, 35, true);
-    ASSERT_EQ(*left_res.first, 10);
-    ASSERT_EQ(*left_res.second, 40);
-
-    // Spanning multiple buckets, not responsible for the first bucket
-    left_res = resample_left.find_buckets(5, 15, false);
-    ASSERT_EQ(*left_res.first, 10);
-    ASSERT_EQ(*left_res.second, 20);
-    left_res = resample_left.find_buckets(15, 25, false);
-    ASSERT_EQ(*left_res.first, 20);
-    ASSERT_EQ(*left_res.second, 30);
-    left_res = resample_left.find_buckets(15, 35, false);
-    ASSERT_EQ(*left_res.first, 20);
-    ASSERT_EQ(*left_res.second, 40);
-
-    // First bucket starts after the first timestamp
-    left_res = resample_left.find_buckets(-5, 15, true);
-    ASSERT_EQ(*left_res.first, 0);
-    ASSERT_EQ(*left_res.second, 20);
-    // Last bucket ends before the last timestamp
-    left_res = resample_left.find_buckets(15, 45, true);
-    ASSERT_EQ(*left_res.first, 10);
-    ASSERT_EQ(*left_res.second, 40);
-
-    // Bucket boundary matching first and last timestamps
-    left_res = resample_left.find_buckets(10, 20, true);
-    ASSERT_EQ(*left_res.first, 10);
-    ASSERT_EQ(*left_res.second, 30);
-    right_res = resample_right.find_buckets(10, 20, true);
-    ASSERT_EQ(*right_res.first, 0);
-    ASSERT_EQ(*right_res.second, 20);
-}
+//
+//TEST(Resample, FindBuckets) {
+//    // TODO: Remove this
+//    using namespace arcticdb;
+//    ResampleClause resample_left("left", ResampleClosedBoundary::LEFT);
+//    ResampleClause resample_right("right", ResampleClosedBoundary::RIGHT);
+//    // Enough bucket boundaries to test all the interesting cases
+//    resample_left.set_bucket_boundaries({0, 10, 20, 30, 40});
+//    resample_right.set_bucket_boundaries({0, 10, 20, 30, 40});
+//    std::pair<std::vector<timestamp>::const_iterator, std::vector<timestamp>::const_iterator> left_res;
+//    std::pair<std::vector<timestamp>::const_iterator, std::vector<timestamp>::const_iterator> right_res;
+//
+//    // Wholly contained in first bucket
+//    left_res = resample_left.find_buckets(5, 6, true);
+//    ASSERT_EQ(*left_res.first, 0);
+//    ASSERT_EQ(*left_res.second, 10);
+//    // Wholly contained in middle bucket
+//    left_res = resample_left.find_buckets(12, 13, true);
+//    ASSERT_EQ(*left_res.first, 10);
+//    ASSERT_EQ(*left_res.second, 20);
+//    // Wholly contained in last bucket
+//    left_res = resample_left.find_buckets(35, 37, true);
+//    ASSERT_EQ(*left_res.first, 30);
+//    ASSERT_EQ(*left_res.second, 40);
+//
+//    // Spanning multiple buckets
+//    left_res = resample_left.find_buckets(5, 15, true);
+//    ASSERT_EQ(*left_res.first, 0);
+//    ASSERT_EQ(*left_res.second, 20);
+//    left_res = resample_left.find_buckets(15, 25, true);
+//    ASSERT_EQ(*left_res.first, 10);
+//    ASSERT_EQ(*left_res.second, 30);
+//    left_res = resample_left.find_buckets(15, 35, true);
+//    ASSERT_EQ(*left_res.first, 10);
+//    ASSERT_EQ(*left_res.second, 40);
+//
+//    // Spanning multiple buckets, not responsible for the first bucket
+//    left_res = resample_left.find_buckets(5, 15, false);
+//    ASSERT_EQ(*left_res.first, 10);
+//    ASSERT_EQ(*left_res.second, 20);
+//    left_res = resample_left.find_buckets(15, 25, false);
+//    ASSERT_EQ(*left_res.first, 20);
+//    ASSERT_EQ(*left_res.second, 30);
+//    left_res = resample_left.find_buckets(15, 35, false);
+//    ASSERT_EQ(*left_res.first, 20);
+//    ASSERT_EQ(*left_res.second, 40);
+//
+//    // First bucket starts after the first timestamp
+//    left_res = resample_left.find_buckets(-5, 15, true);
+//    ASSERT_EQ(*left_res.first, 0);
+//    ASSERT_EQ(*left_res.second, 20);
+//    // Last bucket ends before the last timestamp
+//    left_res = resample_left.find_buckets(15, 45, true);
+//    ASSERT_EQ(*left_res.first, 10);
+//    ASSERT_EQ(*left_res.second, 40);
+//
+//    // Bucket boundary matching first and last timestamps
+//    left_res = resample_left.find_buckets(10, 20, true);
+//    ASSERT_EQ(*left_res.first, 10);
+//    ASSERT_EQ(*left_res.second, 30);
+//    right_res = resample_right.find_buckets(10, 20, true);
+//    ASSERT_EQ(*right_res.first, 0);
+//    ASSERT_EQ(*right_res.second, 20);
+//}
 //
 //TEST(Resample, ProcessOneSegment) {
 //    using namespace arcticdb;
@@ -276,3 +276,114 @@ TEST(Resample, FindBuckets) {
 //    ASSERT_EQ(1, resampled_sum_column.scalar_at<int64_t>(0));
 //    ASSERT_EQ(9, resampled_sum_column.scalar_at<int64_t>(1));
 //}
+
+TEST(Resample, ProcessMultipleSegments) {
+    using namespace arcticdb;
+    auto component_manager = std::make_shared<ComponentManager>();
+
+    ResampleClause resample("dummy", ResampleClosedBoundary::LEFT);
+    resample.set_component_manager(component_manager);
+    resample.set_aggregations({{"sum_column", "sum"}});
+    resample.set_bucket_boundaries({-15, -5, 5, 6, 25, 35, 45, 46, 55, 65});
+    // Index values of segments will be as follows:
+    // 0, 10
+    // 20, 30, 40
+    // 50
+    // Therefore the buckets will be structured such that:
+    // -15 - -5: Before the range of the segments
+    //  -5 -  5: Covers just the first value in the first segment
+    //   5 -  6: Within the range of the first segment, but no index values in this range
+    //   5 - 25: Covers the last value from the first segment and the first value of the second segment
+    //  25 - 35: Covers just the middle value of the second segment
+    //  35 - 45: Covers just the last value of the second segment
+    //  45 - 46: Covers a gap between two segments
+    //  46 - 55: Covers the third segment
+    //  55 - 65: After the range of the segments
+
+
+    using index_TDT = TypeDescriptorTag<DataTypeTag<DataType::NANOSECONDS_UTC64>, DimensionTag<Dimension ::Dim0>>;
+    using col_TDT = TypeDescriptorTag<DataTypeTag<DataType::INT64>, DimensionTag<Dimension ::Dim0>>;
+
+    std::vector<std::shared_ptr<SegmentInMemory>> segs;
+    std::vector<std::shared_ptr<pipelines::RowRange>> row_ranges;
+    std::vector<std::shared_ptr<pipelines::ColRange>> col_ranges;
+
+    auto index_column = std::make_shared<Column>(static_cast<TypeDescriptor>(index_TDT{}), 0, false, true);
+    auto sum_column = std::make_shared<Column>(static_cast<TypeDescriptor>(col_TDT{}), 0, false, true);
+    index_column->set_scalar<int64_t>(0, 0);
+    index_column->set_scalar<int64_t>(1, 10);
+    sum_column->set_scalar<int64_t>(0, 0);
+    sum_column->set_scalar<int64_t>(1, 10);
+    auto seg_0 = std::make_shared<SegmentInMemory>();
+    seg_0->add_column(scalar_field(index_column->type().data_type(), "index"), index_column);
+    seg_0->add_column(scalar_field(sum_column->type().data_type(), "sum_column"), sum_column);
+    seg_0->set_row_id(1);
+    auto row_range_0 = std::make_shared<RowRange>(0, 2);
+    auto col_range_0 = std::make_shared<ColRange>(1, 2);
+
+    index_column = std::make_shared<Column>(static_cast<TypeDescriptor>(index_TDT{}), 0, false, true);
+    sum_column = std::make_shared<Column>(static_cast<TypeDescriptor>(col_TDT{}), 0, false, true);
+    index_column->set_scalar<int64_t>(0, 20);
+    index_column->set_scalar<int64_t>(1, 30);
+    index_column->set_scalar<int64_t>(2, 40);
+    sum_column->set_scalar<int64_t>(0, 20);
+    sum_column->set_scalar<int64_t>(1, 30);
+    sum_column->set_scalar<int64_t>(2, 40);
+    auto seg_1 = std::make_shared<SegmentInMemory>();
+    seg_1->add_column(scalar_field(index_column->type().data_type(), "index"), index_column);
+    seg_1->add_column(scalar_field(sum_column->type().data_type(), "sum_column"), sum_column);
+    seg_1->set_row_id(2);
+    auto row_range_1 = std::make_shared<RowRange>(2, 5);
+    auto col_range_1 = std::make_shared<ColRange>(1, 2);
+
+    index_column = std::make_shared<Column>(static_cast<TypeDescriptor>(index_TDT{}), 0, false, true);
+    sum_column = std::make_shared<Column>(static_cast<TypeDescriptor>(col_TDT{}), 0, false, true);
+    index_column->set_scalar<int64_t>(0, 50);
+    sum_column->set_scalar<int64_t>(0, 50);
+    auto seg_2 = std::make_shared<SegmentInMemory>();
+    seg_2->add_column(scalar_field(index_column->type().data_type(), "index"), index_column);
+    seg_2->add_column(scalar_field(sum_column->type().data_type(), "sum_column"), sum_column);
+    seg_2->set_row_id(2);
+    auto row_range_2 = std::make_shared<RowRange>(5, 6);
+    auto col_range_2 = std::make_shared<ColRange>(1, 2);
+
+    auto id_0 = component_manager->add(seg_0, std::nullopt, 1);
+    component_manager->add(row_range_0, id_0);
+    component_manager->add(col_range_0, id_0);
+    auto id_1 = component_manager->add(seg_1, std::nullopt, 2);
+    component_manager->add(row_range_1, id_1);
+    component_manager->add(col_range_1, id_1);
+    auto id_2 = component_manager->add(seg_2, std::nullopt, 1);
+    component_manager->add(row_range_2, id_2);
+    component_manager->add(col_range_2, id_2);
+
+
+    auto ids_0 = Composite<EntityIds>(EntityIds{id_0, id_1});
+    auto ids_1 = Composite<EntityIds>(EntityIds{id_1});
+    auto ids_2 = Composite<EntityIds>(EntityIds{id_2});
+
+    auto resampled_0 = gather_entities(component_manager, resample.process(std::move(ids_0))).as_range();
+    auto resampled_seg_0 = *resampled_0[0].segments_.value()[0];
+    auto& resampled_index_column_0 = resampled_seg_0.column(1);
+    auto& resampled_sum_column_0 = resampled_seg_0.column(1);
+    ASSERT_EQ(-5, resampled_index_column_0.scalar_at<int64_t>(0));
+    ASSERT_EQ(6, resampled_index_column_0.scalar_at<int64_t>(1));
+    ASSERT_EQ(0, resampled_sum_column_0.scalar_at<int64_t>(0));
+    ASSERT_EQ(30, resampled_sum_column_0.scalar_at<int64_t>(1));
+
+    auto resampled_1 = gather_entities(component_manager, resample.process(std::move(ids_1))).as_range();
+    auto resampled_seg_1 = *resampled_1[0].segments_.value()[0];
+    auto& resampled_index_column_1 = resampled_seg_1.column(1);
+    auto& resampled_sum_column_1 = resampled_seg_1.column(1);
+    ASSERT_EQ(25, resampled_index_column_1.scalar_at<int64_t>(0));
+    ASSERT_EQ(35, resampled_index_column_1.scalar_at<int64_t>(1));
+    ASSERT_EQ(30, resampled_sum_column_1.scalar_at<int64_t>(0));
+    ASSERT_EQ(40, resampled_sum_column_1.scalar_at<int64_t>(1));
+
+    auto resampled_2 = gather_entities(component_manager, resample.process(std::move(ids_2))).as_range();
+    auto resampled_seg_2 = *resampled_2[0].segments_.value()[0];
+    auto& resampled_index_column_2 = resampled_seg_2.column(1);
+    auto& resampled_sum_column_2 = resampled_seg_2.column(1);
+    ASSERT_EQ(46, resampled_index_column_2.scalar_at<int64_t>(0));
+    ASSERT_EQ(50, resampled_sum_column_2.scalar_at<int64_t>(0));
+}

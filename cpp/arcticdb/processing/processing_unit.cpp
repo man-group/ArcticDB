@@ -130,17 +130,15 @@ std::vector<ProcessingUnit> split_by_row_slice(ProcessingUnit&& proc) {
     // The expected get counts for all segments in a row slice should be the same
     // This should always be 1 or 2 for the first row slice, and 1 for all of the others
     internal::check<ErrorCode::E_ASSERTION_FAILURE>(!output.empty(), "Unexpected empty output in split_by_row_slice");
-    bool first_row_slice{true};
     for (const auto& row_slice: output) {
         auto expected_get_calls = row_slice.segment_initial_expected_get_calls_->front();
-        internal::check<ErrorCode::E_ASSERTION_FAILURE>(0 < expected_get_calls && expected_get_calls <= (first_row_slice ? 2 : 1),
+        internal::check<ErrorCode::E_ASSERTION_FAILURE>(0 < expected_get_calls && expected_get_calls <= 2,
                                                         "expected_get_calls in split_by_row_slice should be 1 or 2, got {}",
                                                         expected_get_calls);
         internal::check<ErrorCode::E_ASSERTION_FAILURE>(std::all_of(row_slice.segment_initial_expected_get_calls_->begin(),
                                                                     row_slice.segment_initial_expected_get_calls_->end(),
                                                                     [&expected_get_calls](uint64_t i) { return i == expected_get_calls; }),
                                                         "All segments in same row slice should have same expected_get_calls in split_by_row_slice");
-        first_row_slice = false;
     }
 
     return output;

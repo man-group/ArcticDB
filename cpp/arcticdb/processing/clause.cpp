@@ -594,7 +594,7 @@ Composite<EntityIds> ResampleClause::process(Composite<EntityIds>&& entity_ids) 
                                                     is_time_type(last_row_slice_index_col.type().data_type()),
                                                     "Cannot resample data with index column of non-timestamp type");
     auto first_ts = first_row_slice_index_col.scalar_at<timestamp>(0).value();
-    auto last_ts = last_row_slice_index_col.scalar_at<timestamp>(last_row_slice_index_col.row_count() - 1).value();
+    auto last_ts = last_row_slice_index_col.scalar_at<timestamp>(row_slices.size() == 1 ? last_row_slice_index_col.row_count() - 1 : 0).value();
     auto [first_it, last_it] = find_buckets(first_ts, last_ts, responsible_for_first_overlapping_bucket);
     // Construct the output index column and the bucket boundaries this call to process is responsible for
     // TODO: Use iterators instead of copying range of bucket_boundaries_
