@@ -382,11 +382,12 @@ def test_querybuilder_groupby_then_groupby(lmdb_version_store_tiny_segment):
 
 def test_query_builder_group_by_sort(lmdb_version_store_tiny_segment):
     lib = lmdb_version_store_tiny_segment
-    symbol = "test_query_builder_groupy_sort"
+    symbol = "test_query_builder_group_by_sort"
 
     df = pd.DataFrame(
     {
-            "grouping_column": ["group_2", "group_1", "group_1"],
+            # TODO: Add tests for grouping columns of strings, and datetimes.
+            "grouping_column": [2, 1, 1],
             "to_max": [1, 5, 4],
         },
         index=np.arange(3),
@@ -394,15 +395,15 @@ def test_query_builder_group_by_sort(lmdb_version_store_tiny_segment):
     lib.write(symbol, df)
 
     q = QueryBuilder()
-    q = q.groupby("grouping_column").agg({"to_max": "max"})
-    received = lib.read(symbol, query_builder=q).data
-    expected = df.groupby("grouping_column", sort=True).agg({"to_max": "max"})
-    assert_frame_equal(expected, received)
-
-    q = QueryBuilder()
     q = q.groupby("grouping_column", sort=False).agg({"to_max": "max"})
     received = lib.read(symbol, query_builder=q).data
     expected = df.groupby("grouping_column", sort=False).agg({"to_max": "max"})
+    assert_frame_equal(expected, received)
+
+    q = QueryBuilder()
+    q = q.groupby("grouping_column", sort=True).agg({"to_max": "max"})
+    received = lib.read(symbol, query_builder=q).data
+    expected = df.groupby("grouping_column", sort=True).agg({"to_max": "max"})
     assert_frame_equal(expected, received)
 
 
