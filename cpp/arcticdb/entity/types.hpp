@@ -14,9 +14,7 @@
 #include <arcticdb/entity/protobufs.hpp>
 #include <google/protobuf/util/message_differencer.h>
 
-#include <folly/Range.h>
 #include <fmt/format.h>
-#include <folly/Likely.h>
 #include <pybind11/pybind11.h>
 #include <pybind11/numpy.h>
 
@@ -29,6 +27,14 @@
 #include <iostream>
 #include <optional>
 #include <variant>
+
+
+#ifdef _WIN32
+// `ssize_t` is defined in `sys/types.h` but it is not ISO C (it simply is POSIX), hence its is not defined natively by MSVC.
+// See: https://learn.microsoft.com/en-us/windows/win32/winprog/windows-data-types
+#include <BaseTsd.h>
+using ssize_t = SSIZE_T;
+#endif
 
 namespace arcticdb::entity {
 
