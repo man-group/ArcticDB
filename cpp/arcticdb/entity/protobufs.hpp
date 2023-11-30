@@ -18,7 +18,6 @@
 #include <nfs_backed_storage.pb.h>
 #include <azure_storage.pb.h>
 #include <config.pb.h>
-#include <logger.pb.h>
 #include <utils.pb.h>
 
 namespace arcticdb::proto {
@@ -33,7 +32,6 @@ namespace arcticdb::proto {
     namespace azure_storage = arcticc::pb2::azure_storage_pb2;
     namespace config = arcticc::pb2::config_pb2;
     namespace nfs_backed_storage = arcticc::pb2::nfs_backed_storage_pb2;
-    namespace logger = arcticc::pb2::logger_pb2;
     namespace utils = arcticc::pb2::utils_pb2;
 
 } //namespace arcticdb
