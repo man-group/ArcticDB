@@ -220,16 +220,7 @@ struct StreamDescriptor {
         util::check(field < position_t(fields().size()), "Column index out of range in drop_column");
         fields_->erase_field(field);
     }
-/*
-    std::optional<Field> field_at(size_t pos) {
-        if (UNLIKELY(pos >= static_cast<size_t>(fields().size()))) return std::nullopt;
-        return fields(pos);
-    }
 
-    FieldCollection& mutable_fields() {
-        return *fields_;
-    }
-*/
     [[nodiscard]] const Field& fields(size_t pos) const {
         return fields_->at(pos);
     }
@@ -250,19 +241,7 @@ struct StreamDescriptor {
         data_->PrintDebugString();
     }
 };
-/*
-inline void set_id(arcticdb::proto::descriptors::StreamDescriptor& pb_desc, const StreamId& id) {
-    std::visit([&pb_desc](auto &&arg) {
-        using IdType = std::decay_t<decltype(arg)>;
-        if constexpr (std::is_same_v<IdType, NumericId>)
-        pb_desc.set_num_id(arg);
-        else if constexpr (std::is_same_v<IdType, StringId>)
-        pb_desc.set_str_id(arg);
-        else
-            util::raise_rte("Encoding unknown descriptor type");
-        }, id);
-}
-*/
+
 template <class IndexType>
 inline void set_index(arcticdb::proto::descriptors::StreamDescriptor &stream_desc) {
     auto& pb_desc = *stream_desc.mutable_index();
