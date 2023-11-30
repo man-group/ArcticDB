@@ -594,22 +594,25 @@ Composite<EntityIds> ResampleClause::process(Composite<EntityIds>&& entity_ids) 
                                                     is_time_type(last_row_slice_index_col.type().data_type()),
                                                     "Cannot resample data with index column of non-timestamp type");
     auto first_ts = first_row_slice_index_col.scalar_at<timestamp>(0).value();
+    // TODO: Explain how this works
     auto last_ts = last_row_slice_index_col.scalar_at<timestamp>(row_slices.size() == 1 ? last_row_slice_index_col.row_count() - 1 : 0).value();
     auto [first_it, last_it] = find_buckets(first_ts, last_ts, responsible_for_first_overlapping_bucket);
     // Construct the output index column and the bucket boundaries this call to process is responsible for
+    std::vector<std::shared_ptr<Column>> input_index_columns;
+    input_index_columns.reserve(row_slices.size());
+    for (const auto& row_slice: row_slices) {
+        input_index_columns.emplace_back(row_slice.segments_->at(0)->column_ptr(0));
+    }
     // TODO: Use iterators instead of copying range of bucket_boundaries_
-    auto [output_index_column, bucket_boundaries] = generate_buckets(first_it, last_it);
+    auto [output_index_column, bucket_boundaries] = generate_buckets(input_index_columns, first_it, last_it);
     SegmentInMemory seg;
     seg.set_row_id(output_index_column->row_count() - 1);
     seg.add_column(scalar_field(DataType::NANOSECONDS_UTC64, index_column_name), output_index_column);
     seg.descriptor().set_index(IndexDescriptor(1, IndexDescriptor::TIMESTAMP));
     for (const auto& aggregator: aggregators_) {
-        std::vector<std::shared_ptr<Column>> input_index_columns;
         std::vector<std::optional<ColumnWithStrings>> input_agg_columns;
-        input_index_columns.reserve(row_slices.size());
         input_agg_columns.reserve(row_slices.size());
         for (auto& row_slice: row_slices) {
-            input_index_columns.emplace_back(row_slice.segments_->at(0)->column_ptr(0));
             auto variant_data = row_slice.get(aggregator.get_input_column_name());
             util::variant_match(variant_data,
                                 [&input_agg_columns](const ColumnWithStrings& column_with_strings) {
@@ -666,22 +669,69 @@ std::pair<std::vector<timestamp>::const_iterator, std::vector<timestamp>::const_
     return {first_it, last_it};
 }
 
-std::pair<std::shared_ptr<Column>, std::vector<timestamp>> ResampleClause::generate_buckets(const std::vector<timestamp>::const_iterator& first_it,
+std::pair<std::shared_ptr<Column>, std::vector<timestamp>> ResampleClause::generate_buckets(const std::vector<std::shared_ptr<Column>>& input_index_columns,
+                                                                                            const std::vector<timestamp>::const_iterator& first_it,
                                                                                             const std::vector<timestamp>::const_iterator last_it) const {
     auto data_type = DataType::NANOSECONDS_UTC64;
-    auto num_rows = std::distance(first_it, last_it);
-    auto column = std::make_shared<Column>(TypeDescriptor(data_type, Dimension::Dim0), false);
-    auto ptr = reinterpret_cast<timestamp*>(column->allocate_data(get_type_size(data_type) * num_rows));
+    auto output_index_column = std::make_shared<Column>(TypeDescriptor(data_type, Dimension::Dim0), false);
+    ssize_t output_idx{0};
+    using IndexTDT = ScalarTagType<DataTypeTag<DataType::NANOSECONDS_UTC64>>;
+    auto bucket_start_it = first_it;
+    auto bucket_end_it = std::next(bucket_start_it);
     std::vector<timestamp> bucket_boundaries;
-    bucket_boundaries.reserve(num_rows + 1);
-    // TODO: Also support labelling buckets based on right boundary
+    bucket_boundaries.reserve(std::distance(first_it, last_it) + 1);
+    // Only include buckets that have at least one index value in range
+    for (const auto& input_index_column: input_index_columns) {
+        auto data = input_index_column->data();
+        auto block = data.template next<IndexTDT>();
+        while(block.has_value() && bucket_end_it != bucket_boundaries_.end()) {
+            const auto row_count = block->row_count();
+            auto ptr = reinterpret_cast<const timestamp*>(block->data());
+            for (auto i = 0u; i < row_count; ++i, ++ptr) {
+                // TODO: Also support labelling buckets based on right boundary
+                switch (closed_boundary_) {
+                    case ResampleClosedBoundary::LEFT:
+                        while (*ptr >= *bucket_end_it) {
+                            ++bucket_start_it;
+                            if (++bucket_end_it == bucket_boundaries_.end()) {
+                                break;
+                            }
+                        }
+                        if (bucket_end_it != bucket_boundaries_.end() && *ptr >= *bucket_start_it && *ptr < *bucket_end_it) {
+                            output_index_column->set_scalar(output_idx++, *bucket_start_it);
+                            ++bucket_start_it;
+                            if (++bucket_end_it == bucket_boundaries_.end()) {
+                                break;
+                            }
+                        }
+                        break;
+                    case ResampleClosedBoundary::RIGHT:
+                    default:
+                        while (*ptr > *bucket_end_it) {
+                            ++bucket_start_it;
+                            if (++bucket_end_it == bucket_boundaries_.end()) {
+                                break;
+                            }
+                        }
+                        if (bucket_end_it != bucket_boundaries_.end() && *ptr > *bucket_start_it && *ptr <= *bucket_end_it) {
+                            output_index_column->set_scalar(output_idx++, *bucket_start_it);
+                            ++bucket_start_it;
+                            if (++bucket_end_it == bucket_boundaries_.end()) {
+                                break;
+                            }
+                        }
+                        break;
+                }
+            }
+            block = data.template next<IndexTDT>();
+        }
+    }
+
     for (auto it = first_it; it != last_it; it++) {
-        *ptr++ = *it;
         bucket_boundaries.emplace_back(*it);
     }
     bucket_boundaries.emplace_back(*last_it);
-    column->set_row_data(num_rows - 1);
-    return {column, bucket_boundaries};
+    return {output_index_column, bucket_boundaries};
 }
 
 [[nodiscard]] Composite<EntityIds> RemoveColumnPartitioningClause::process(Composite<EntityIds>&& entity_ids) const {

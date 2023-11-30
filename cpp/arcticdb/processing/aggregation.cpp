@@ -514,36 +514,41 @@ Column SortedSumAggregator::aggregate(const std::vector<std::shared_ptr<Column>>
                         details::visit_type(input_agg_column->column_->type().data_type(),
                                 [&res,
                                  &current_agg_val,
-                                 &input_agg_column = *input_agg_column,
+                                 &agg_column = *input_agg_column,
                                  &input_index_column = input_index_columns.at(idx),
                                  &bucket_boundaries,
                                  &bucket_start_it,
                                  &bucket_end_it]
                                 (auto input_type_desc_tag) {
                             using InputTDT = ScalarTagType<decltype(input_type_desc_tag)>;
+                            using InputRawType = typename InputTDT::DataTypeTag::raw_type;
                             if constexpr (!is_sequence_type(InputTDT::DataTypeTag::data_type)) {
                                 // TODO: Handle sparse agg columns (sparse index columns don't make sense)
                                 auto index_data = input_index_column->data();
-                                auto agg_data = input_agg_column.column_->data();
+                                auto agg_data = agg_column.column_->data();
                                 auto opt_index_block = index_data.template next<IndexTDT>();
                                 auto opt_agg_block = agg_data.template next<InputTDT>();
                                 while (opt_index_block && opt_agg_block && bucket_end_it != bucket_boundaries.end()) {
-                                    auto index_block = *opt_index_block;
-                                    auto agg_block = *opt_agg_block;
-                                    internal::check<ErrorCode::E_ASSERTION_FAILURE>(index_block.row_count() == agg_block.row_count(),
+                                    internal::check<ErrorCode::E_ASSERTION_FAILURE>(opt_index_block->row_count() == opt_agg_block->row_count(),
                                                                                     "Mismtching block row counts in SortedSumAggregator {} != {}",
-                                                                                    index_block.row_count(), agg_block.row_count());
-                                    for (auto i = 0u; i < index_block.row_count(); ++i) {
+                                                                                    opt_index_block->row_count(), opt_agg_block->row_count());
+                                    const auto row_count = opt_index_block->row_count();
+                                    auto index_ptr = reinterpret_cast<const timestamp*>(opt_index_block->data());
+                                    auto agg_ptr = reinterpret_cast<const InputRawType*>(opt_agg_block->data());
+                                    for (auto i = 0u; i < row_count; ++i, ++index_ptr, ++agg_ptr) {
                                         // TODO: Handle closed right boundaries
-                                        if (index_block[i] >= *bucket_start_it && index_block[i] < *bucket_end_it) {
-                                            current_agg_val += static_cast<OutputRawType>(agg_block[i]);
-                                        } else {
+                                        if (*index_ptr >= *bucket_end_it) {
                                             res->push_back(current_agg_val);
-                                            current_agg_val = static_cast<OutputRawType>(agg_block[i]);
+                                            current_agg_val = 0;
+                                        }
+                                        while (*index_ptr >= *bucket_end_it) {
                                             ++bucket_start_it;
                                             if (++bucket_end_it == bucket_boundaries.end()) {
                                                 break;
                                             }
+                                        }
+                                        if (*index_ptr >= *bucket_start_it && *index_ptr < *bucket_end_it) {
+                                            current_agg_val += static_cast<OutputRawType>(*agg_ptr);
                                         }
                                     }
                                     opt_index_block = index_data.template next<IndexTDT>();
