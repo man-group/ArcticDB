@@ -400,12 +400,12 @@ def version_store_factory(lib_name, tmpdir):
         **kwargs,
     ) -> NativeVersionStore:
         if col_per_group is not None and "column_group_size" not in kwargs:
-            kwargs["column_group_size"] = col_per_group
+            kwargs["column_group_size"] = 2
         if row_per_segment is not None and "segment_row_size" not in kwargs:
             kwargs["segment_row_size"] = row_per_segment
         if lmdb_config is None:
             # 128 MiB - needs to be reasonably small else Windows build runs out of disk
-            lmdb_config = {"map_size": 128 * (1 << 20)}
+            lmdb_config = {"map_size": 1280 * (1 << 20)}
 
         if override_name is not None:
             library_name = override_name
