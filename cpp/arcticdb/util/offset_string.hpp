@@ -8,6 +8,9 @@
 #pragma once
 
 #include <limits>
+
+// For `PyObject` and `PyFloat_FromDouble`
+#include <Python.h>
 #include <arcticdb/entity/types.hpp>
 #ifdef ARCTICDB_USING_CONDA
     #include <robin_hood.h>

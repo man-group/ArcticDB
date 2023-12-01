@@ -20,6 +20,10 @@
 #include <cstdint>
 #include <mutex>
 
+#include <pybind11/pybind11.h>
+
+namespace py = pybind11;
+
 #ifdef ARCTICDB_USING_CONDA
     #include <robin_hood.h>
 #else

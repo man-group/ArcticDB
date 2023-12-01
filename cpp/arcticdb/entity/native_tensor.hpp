@@ -11,6 +11,13 @@
 #include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/util/magic_num.hpp>
 
+// for std::accumulate
+#include <numeric>
+
+#include <pybind11/numpy.h>
+
+namespace py = pybind11;
+
 namespace arcticdb::entity {
 
 inline ssize_t calc_elements(const shape_t* shape, ssize_t ndim) {
