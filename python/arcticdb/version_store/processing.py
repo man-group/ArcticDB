@@ -12,7 +12,7 @@ from math import inf
 import numpy as np
 import pandas as pd
 
-from typing import Dict, NamedTuple
+from typing import Dict, NamedTuple, Optional, Union
 
 from arcticdb.exceptions import ArcticNativeException, UserInputException
 from arcticdb.version_store._normalization import normalize_dt_range_to_ts
@@ -25,6 +25,8 @@ from arcticdb_ext.version_store import FilterClause as _FilterClause
 from arcticdb_ext.version_store import ProjectClause as _ProjectClause
 from arcticdb_ext.version_store import GroupByClause as _GroupByClause
 from arcticdb_ext.version_store import AggregationClause as _AggregationClause
+from arcticdb_ext.version_store import ResampleClause as _ResampleClause
+from arcticdb_ext.version_store import ResampleClosedBoundary as _ResampleClosedBoundary
 from arcticdb_ext.version_store import RowRangeClause as _RowRangeClause
 from arcticdb_ext.version_store import DateRangeClause as _DateRangeClause
 from arcticdb_ext.version_store import RowRangeType as _RowRangeType
@@ -484,13 +486,44 @@ class QueryBuilder:
     def agg(self, aggregations: Dict[str, str]):
         # Only makes sense if previous stage is a group-by
         check(
-            len(self.clauses) and isinstance(self.clauses[-1], _GroupByClause),
-            f"Aggregation only makes sense after groupby",
+            len(self.clauses) and isinstance(self.clauses[-1], (_GroupByClause, _ResampleClause)),
+            f"Aggregation only makes sense after groupby or resample",
         )
         for v in aggregations.values():
             v = v.lower()
-        self.clauses.append(_AggregationClause(self.clauses[-1].grouping_column, aggregations))
-        self._python_clauses.append(PythonAggregationClause(aggregations))
+        if isinstance(self.clauses[-1], _GroupByClause):
+            self.clauses.append(_AggregationClause(self.clauses[-1].grouping_column, aggregations))
+            self._python_clauses.append(PythonAggregationClause(aggregations))
+        else:
+            self.clauses[-1].set_aggregations(aggregations)
+            # TODO: Handle copying and pickling
+        return self
+
+    def resample(
+            self,
+            rule: Union[str, pd.DateOffset],
+            date_range: DateRangeInput,  # TODO: Make date_range Optional
+            closed: Optional[str] = None,
+    ):
+        check(not len(self.clauses), "resample only supported as first clause in the pipeline")
+        start, end = normalize_dt_range_to_ts(date_range)
+        rule = rule.freqstr if isinstance(rule, pd.DateOffset) else rule
+        # This set is documented here:
+        # https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.Series.resample.html#pandas.Series.resample
+        # and lifted directly from pandas.core.resample.TimeGrouper.__init__, and so is inherently fragile to upstream
+        # changes
+        end_types = {"M", "A", "Q", "BM", "BA", "BQ", "W"}
+        closed_map = {
+            "left": _ResampleClosedBoundary.LEFT,
+            "right": _ResampleClosedBoundary.RIGHT,
+            None: _ResampleClosedBoundary.RIGHT if rule in end_types else _ResampleClosedBoundary.LEFT
+        }
+        check(closed in closed_map.keys(), f"closed kwarg to resample must be `left`, 'right', or None, but received '{closed}'")
+        # TODO: Make bucket_boundaries part of constructor
+        self.clauses.append(_ResampleClause(rule, closed_map[closed]))
+        bucket_boundaries = pd.date_range(start, end, freq=rule, inclusive="both").values
+        self.clauses[-1].set_bucket_boundaries(bucket_boundaries)
+        # TODO: Handle copying and pickling
         return self
 
     # TODO: specify type of other must be QueryBuilder with from __future__ import annotations once only Python 3.7+

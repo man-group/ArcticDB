@@ -489,4 +489,103 @@ SegmentInMemory CountAggregatorData::finalize(const ColumnName& output_column_na
     return res;
 }
 
+Column SortedSumAggregator::aggregate(const std::vector<std::shared_ptr<Column>>& input_index_columns,
+                                      const std::vector<std::optional<ColumnWithStrings>>& input_agg_columns,
+                                      const std::vector<timestamp>& bucket_boundaries) const {
+    std::optional<Column> res;
+    std::optional<DataType> output_data_type;
+    for (const auto& opt_input_agg_column: input_agg_columns) {
+        if (opt_input_agg_column.has_value()) {
+            add_data_type_impl(opt_input_agg_column->column_->type().data_type(), output_data_type);
+        }
+    }
+    if (output_data_type.has_value()) {
+        res.emplace(TypeDescriptor(*output_data_type, Dimension::Dim0), true);
+        auto bucket_start_it = bucket_boundaries.begin();
+        auto bucket_end_it = std::next(bucket_start_it);
+        using IndexTDT = ScalarTagType<DataTypeTag<DataType::NANOSECONDS_UTC64>>;
+        details::visit_type(res->type().data_type(), [&input_index_columns,
+                                                      &input_agg_columns,
+                                                      &bucket_boundaries,
+                                                      &res,
+                                                      &bucket_start_it,
+                                                      &bucket_end_it] (auto output_type_desc_tag) {
+            using OutputTDT = ScalarTagType<decltype(output_type_desc_tag)>;
+            using OutputRawType = typename OutputTDT::DataTypeTag::raw_type;
+            if constexpr (!is_sequence_type(OutputTDT::DataTypeTag::data_type)) {
+                std::optional<OutputRawType> current_agg_val;
+                for (auto [idx, input_agg_column]: folly::enumerate(input_agg_columns)) {
+                    if (input_agg_column.has_value()) {
+                        details::visit_type(input_agg_column->column_->type().data_type(),
+                                [&res,
+                                 &current_agg_val,
+                                 &agg_column = *input_agg_column,
+                                 &input_index_column = input_index_columns.at(idx),
+                                 &bucket_boundaries,
+                                 &bucket_start_it,
+                                 &bucket_end_it] (auto input_type_desc_tag) {
+                            using InputTDT = ScalarTagType<decltype(input_type_desc_tag)>;
+                            using InputRawType = typename InputTDT::DataTypeTag::raw_type;
+                            if constexpr (!is_sequence_type(InputTDT::DataTypeTag::data_type)) {
+                                // TODO: Handle sparse agg columns (sparse index columns don't make sense)
+                                auto index_data = input_index_column->data();
+                                auto agg_data = agg_column.column_->data();
+                                auto opt_index_block = index_data.template next<IndexTDT>();
+                                auto opt_agg_block = agg_data.template next<InputTDT>();
+                                while (opt_index_block && opt_agg_block && bucket_end_it != bucket_boundaries.end()) {
+                                    internal::check<ErrorCode::E_ASSERTION_FAILURE>(opt_index_block->row_count() == opt_agg_block->row_count(),
+                                                                                    "Mismtching block row counts in SortedSumAggregator {} != {}",
+                                                                                    opt_index_block->row_count(), opt_agg_block->row_count());
+                                    const auto row_count = opt_index_block->row_count();
+                                    auto index_ptr = reinterpret_cast<const timestamp*>(opt_index_block->data());
+                                    auto agg_ptr = reinterpret_cast<const InputRawType*>(opt_agg_block->data());
+                                    for (auto i = 0u; i < row_count; ++i, ++index_ptr, ++agg_ptr) {
+                                        // TODO: Handle closed right boundaries
+                                        if (*index_ptr >= *bucket_end_it) {
+                                            res->push_back(current_agg_val.value_or(0));
+                                            current_agg_val = std::nullopt;
+                                        }
+                                        while (*index_ptr >= *bucket_end_it) {
+                                            ++bucket_start_it;
+                                            if (++bucket_end_it == bucket_boundaries.end()) {
+                                                break;
+                                            }
+                                        }
+                                        if (bucket_end_it == bucket_boundaries.end()) {
+                                            break;
+                                        }
+                                        if (*index_ptr >= *bucket_start_it && *index_ptr < *bucket_end_it) {
+                                            if (LIKELY(current_agg_val.has_value())) {
+                                                *current_agg_val += static_cast<OutputRawType>(*agg_ptr);
+                                            } else {
+                                                current_agg_val = static_cast<OutputRawType>(*agg_ptr);
+                                            }
+                                        }
+                                    }
+                                    opt_index_block = index_data.template next<IndexTDT>();
+                                    opt_agg_block = agg_data.template next<InputTDT>();
+                                }
+                            } else {
+                                schema::raise<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>("Cannot sum string column in resample");
+                            }
+                        });
+                    } else {
+                        // Column is missing from this row-slice due to dynamic schema
+                        // TODO: Handle this case
+                    }
+                }
+                if (LIKELY(current_agg_val.has_value())) {
+                    res->push_back(*current_agg_val);
+                }
+            } else {
+                schema::raise<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>("Cannot sum string column in resample");
+            }
+        });
+    } else {
+        // All input columns are nullopt
+        // TODO: Handle this case - return sparse column of type FLOAT64 with no values
+    }
+    return std::move(*res);
+}
+
 } //namespace arcticdb

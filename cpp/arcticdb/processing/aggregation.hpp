@@ -171,4 +171,26 @@ using MaxAggregator = GroupingAggregatorImpl<MaxAggregatorData>;
 using MeanAggregator = GroupingAggregatorImpl<MeanAggregatorData>;
 using CountAggregator = GroupingAggregatorImpl<CountAggregatorData>;
 
+class SortedSumAggregator
+{
+public:
+
+    explicit SortedSumAggregator(ColumnName input_column_name, ColumnName output_column_name)
+            : input_column_name_(std::move(input_column_name))
+            , output_column_name_(std::move(output_column_name))
+    {}
+    ARCTICDB_MOVE_COPY_DEFAULT(SortedSumAggregator)
+
+    [[nodiscard]] ColumnName get_input_column_name() const { return input_column_name_; }
+    [[nodiscard]] ColumnName get_output_column_name() const { return output_column_name_; }
+    [[nodiscard]] Column aggregate(const std::vector<std::shared_ptr<Column>>& input_index_columns,
+                                   const std::vector<std::optional<ColumnWithStrings>>& input_agg_columns,
+                                   const std::vector<timestamp>& bucket_boundaries) const;
+
+private:
+
+    ColumnName input_column_name_;
+    ColumnName output_column_name_;
+};
+
 } //namespace arcticdb

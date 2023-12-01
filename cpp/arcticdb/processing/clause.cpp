@@ -70,8 +70,9 @@ std::vector<std::vector<size_t>> structure_by_column_slice(std::vector<RangesAnd
 Composite<ProcessingUnit> gather_entities(std::shared_ptr<ComponentManager> component_manager,
                                           Composite<EntityIds>&& entity_ids,
                                           bool include_atom_keys,
-                                          bool include_bucket) {
-    return entity_ids.transform([&component_manager, include_atom_keys, include_bucket]
+                                          bool include_bucket,
+                                          bool include_initial_expected_get_calls) {
+    return entity_ids.transform([&component_manager, include_atom_keys, include_bucket, include_initial_expected_get_calls]
     (const EntityIds& entity_ids) -> ProcessingUnit {
         ProcessingUnit res;
         std::vector<std::shared_ptr<SegmentInMemory>> segments;
@@ -111,6 +112,14 @@ Composite<ProcessingUnit> gather_entities(std::shared_ptr<ComponentManager> comp
                         );
                 res.set_bucket(buckets.at(0));
             }
+        }
+        if (include_initial_expected_get_calls) {
+            std::vector<uint64_t> segment_initial_expected_get_calls;
+            segment_initial_expected_get_calls.reserve(entity_ids.size());
+            for (auto entity_id: entity_ids) {
+                segment_initial_expected_get_calls.emplace_back(component_manager->get_initial_expected_get_calls<std::shared_ptr<SegmentInMemory>>(entity_id));
+            }
+            res.set_segment_initial_expected_get_calls(std::move(segment_initial_expected_get_calls));
         }
         return res;
     });
@@ -251,9 +260,8 @@ struct SegmentWrapper {
     }
 };
 
-Composite<EntityIds> PassthroughClause::process(Composite<EntityIds> &&p) const {
-    auto procs = std::move(p);
-    return procs;
+Composite<EntityIds> PassthroughClause::process(Composite<EntityIds>&& entity_ids) const {
+    return std::move(entity_ids);
 }
 
 Composite<EntityIds> FilterClause::process(
@@ -523,6 +531,236 @@ Composite<EntityIds> AggregationClause::process(Composite<EntityIds>&& entity_id
 
 [[nodiscard]] std::string AggregationClause::to_string() const {
     return fmt::format("AGGREGATE {}", aggregation_map_);
+}
+
+void ResampleClause::set_aggregations(const std::unordered_map<std::string, std::string>& aggregations) {
+    aggregation_map_ = aggregations;
+    clause_info_.input_columns_ = std::make_optional<std::unordered_set<std::string>>();
+    for (const auto& [column_name, aggregation_operator]: aggregations) {
+        auto [_, inserted] = clause_info_.input_columns_->insert(column_name);
+        user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(inserted,
+                                                              "Cannot perform two aggregations over the same column: {}",
+                                                              column_name);
+        auto typed_column_name = ColumnName(column_name);
+        if (aggregation_operator == "sum") {
+            aggregators_.emplace_back(SortedSumAggregator(typed_column_name, typed_column_name));
+        } else {
+            user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>("Unknown aggregation operator provided to resample: {}", aggregation_operator);
+        }
+    }
+}
+
+std::vector<std::vector<size_t>> ResampleClause::structure_for_processing(
+        std::vector<RangesAndKey>& ranges_and_keys,
+        ARCTICDB_UNUSED size_t start_from) const {
+    ranges_and_keys.erase(std::remove_if(ranges_and_keys.begin(), ranges_and_keys.end(), [this](const RangesAndKey& ranges_and_key) {
+        auto [start_index, end_index] = ranges_and_key.key_.time_range();
+        // end_index from the key is 1 nanosecond larger than the index value of the last row in the row-slice
+        end_index--;
+        switch (closed_boundary_) {
+            case ResampleClosedBoundary::LEFT:
+                return start_index >= bucket_boundaries_.back() || end_index < bucket_boundaries_.front();
+            case ResampleClosedBoundary::RIGHT:
+            default:
+                return start_index > bucket_boundaries_.back() || end_index <= bucket_boundaries_.front();
+        }
+    }), ranges_and_keys.end());
+    auto res = structure_by_row_slice(ranges_and_keys, 0);
+    // Element i of res also needs the values from element i+1 if there is a bucket which incorporates the last index
+    // value of row-slice i and the first value of row-slice i+1
+    // Element i+1 should be removed if the last bucket involved in element i covers all the index values in element i+1
+    auto bucket_boundaries_it = std::begin(bucket_boundaries_);
+    for (auto it = res.begin(); it != res.end() && it != std::prev(res.end());) {
+        auto last_index_value = ranges_and_keys[it->at(0)].key_.end_time() - 1;
+        while(bucket_boundaries_it != bucket_boundaries_.end() &&
+              ((closed_boundary_ == ResampleClosedBoundary::LEFT && *bucket_boundaries_it <= last_index_value) ||
+               (closed_boundary_ == ResampleClosedBoundary::RIGHT && *bucket_boundaries_it < last_index_value))) {
+            bucket_boundaries_it++;
+        }
+        auto next_it = std::next(it);
+        while (next_it != res.end()) {
+            auto next_start_index_value = ranges_and_keys[next_it->at(0)].key_.start_time();
+            // end_index from the key is 1 nanosecond larger than the index value of the last row in the row-slice
+            auto next_end_index_value = ranges_and_keys[next_it->at(0)].key_.end_time() - 1;
+            if (bucket_boundaries_it != bucket_boundaries_.end() &&
+                ((closed_boundary_ == ResampleClosedBoundary::LEFT && *bucket_boundaries_it > next_start_index_value) ||
+                 (closed_boundary_ == ResampleClosedBoundary::RIGHT && *bucket_boundaries_it >= next_start_index_value))) {
+                it->insert(it->end(), next_it->begin(), next_it->end());
+                if (bucket_boundaries_it == std::prev(bucket_boundaries_.end()) ||
+                    (closed_boundary_ == ResampleClosedBoundary::LEFT && *bucket_boundaries_it > next_end_index_value) ||
+                    (closed_boundary_ == ResampleClosedBoundary::RIGHT && *bucket_boundaries_it >= next_end_index_value)) {
+                    next_it = res.erase(next_it);
+                } else {
+                    break;
+                }
+            } else {
+                break;
+            }
+        }
+        it = next_it;
+    }
+    return res;
+}
+
+Composite<EntityIds> ResampleClause::process(Composite<EntityIds>&& entity_ids) const {
+    auto procs = gather_entities(component_manager_, std::move(entity_ids), false, false, true).as_range();
+    internal::check<ErrorCode::E_ASSERTION_FAILURE>(procs.size() == 1, "Expected a single ProcessingUnit on entry to ResampleClause::process");
+    auto row_slices = split_by_row_slice(std::move(procs[0]));
+    // If the expected get calls for the segments in the first row slice are 2, the first bucket overlapping this row
+    // slice is being computed by the call to process dealing with the row slices above these. Otherwise, this call
+    // should do it
+    bool responsible_for_first_overlapping_bucket = row_slices.front().segment_initial_expected_get_calls_->at(0) == 1;
+    // Find the iterators into bucket_boundaries_ of the start of the first and the end of the last bucket this call to process is
+    // responsible for calculating
+    // All segments in a given row slice contain the same index column, so just grab info from the first one
+    const auto& index_column_name = row_slices.front().segments_->at(0)->field(0).name();
+    const auto& first_row_slice_index_col = row_slices.front().segments_->at(0)->column(0);
+    const auto& last_row_slice_index_col = row_slices.back().segments_->at(0)->column(0);
+    // Resampling only makes sense for timestamp indexes
+    internal::check<ErrorCode::E_ASSERTION_FAILURE>(is_time_type(first_row_slice_index_col.type().data_type()) &&
+                                                    is_time_type(last_row_slice_index_col.type().data_type()),
+                                                    "Cannot resample data with index column of non-timestamp type");
+    auto first_ts = first_row_slice_index_col.scalar_at<timestamp>(0).value();
+    // TODO: Explain how this works
+    auto last_ts = last_row_slice_index_col.scalar_at<timestamp>(row_slices.size() == 1 ? last_row_slice_index_col.row_count() - 1 : 0).value();
+    auto [first_it, last_it] = find_buckets(first_ts, last_ts, responsible_for_first_overlapping_bucket);
+    // Construct the output index column and the bucket boundaries this call to process is responsible for
+    std::vector<std::shared_ptr<Column>> input_index_columns;
+    input_index_columns.reserve(row_slices.size());
+    for (const auto& row_slice: row_slices) {
+        input_index_columns.emplace_back(row_slice.segments_->at(0)->column_ptr(0));
+    }
+    // TODO: Use iterators instead of copying range of bucket_boundaries_
+    auto [output_index_column, bucket_boundaries] = generate_buckets(input_index_columns, first_it, last_it);
+    SegmentInMemory seg;
+    seg.set_row_id(output_index_column->row_count() - 1);
+    RowRange output_row_range(row_slices.front().row_ranges_->at(0)->start(),
+                              row_slices.front().row_ranges_->at(0)->start() + output_index_column->row_count());
+    seg.add_column(scalar_field(DataType::NANOSECONDS_UTC64, index_column_name), output_index_column);
+    seg.descriptor().set_index(IndexDescriptor(1, IndexDescriptor::TIMESTAMP));
+    for (const auto& aggregator: aggregators_) {
+        std::vector<std::optional<ColumnWithStrings>> input_agg_columns;
+        input_agg_columns.reserve(row_slices.size());
+        for (auto& row_slice: row_slices) {
+            auto variant_data = row_slice.get(aggregator.get_input_column_name());
+            util::variant_match(variant_data,
+                                [&input_agg_columns](const ColumnWithStrings& column_with_strings) {
+                                    input_agg_columns.emplace_back(column_with_strings);
+                                },
+                                [&input_agg_columns](const EmptyResult&) {
+                                    input_agg_columns.emplace_back();
+                                },
+                                [](const auto&) {
+                                    internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Unexpected return type from ProcessingUnit::get, expected column-like");
+                                }
+            );
+        }
+        auto aggregated_column = std::make_shared<Column>(aggregator.aggregate(input_index_columns, input_agg_columns, bucket_boundaries));
+        seg.add_column(scalar_field(aggregated_column->type().data_type(), aggregator.get_output_column_name().value), aggregated_column);
+    }
+    return Composite<EntityIds>(push_entities(component_manager_, ProcessingUnit(std::move(seg), std::move(output_row_range))));
+}
+
+[[nodiscard]] std::string ResampleClause::to_string() const {
+    return fmt::format("RESAMPLE({}) {}", rule_, aggregation_map_);
+}
+
+std::pair<std::vector<timestamp>::const_iterator, std::vector<timestamp>::const_iterator> ResampleClause::find_buckets(
+        timestamp first_ts,
+        timestamp last_ts,
+        bool responsible_for_first_overlapping_bucket) const {
+    auto first_it = std::lower_bound(bucket_boundaries_.begin(), bucket_boundaries_.end(), first_ts,
+                                     [this](timestamp boundary, timestamp first_ts) {
+                                         switch (closed_boundary_) {
+                                             case ResampleClosedBoundary::LEFT:
+                                                 return boundary <= first_ts;
+                                             case ResampleClosedBoundary::RIGHT:
+                                             default:
+                                                 return boundary < first_ts;
+                                         }
+    });
+    if (responsible_for_first_overlapping_bucket && first_it != bucket_boundaries_.begin()) {
+        --first_it;
+    }
+    auto last_it = std::upper_bound(first_it, bucket_boundaries_.end(), last_ts,
+                                    [this](timestamp last_ts, timestamp boundary) {
+                                        switch (closed_boundary_) {
+                                            case ResampleClosedBoundary::LEFT:
+                                                return last_ts < boundary;
+                                            case ResampleClosedBoundary::RIGHT:
+                                            default:
+                                                return last_ts <= boundary;
+                                        }
+                                    });
+    if (last_it == bucket_boundaries_.end()) {
+        --last_it;
+    }
+    return {first_it, last_it};
+}
+
+std::pair<std::shared_ptr<Column>, std::vector<timestamp>> ResampleClause::generate_buckets(const std::vector<std::shared_ptr<Column>>& input_index_columns,
+                                                                                            const std::vector<timestamp>::const_iterator& first_it,
+                                                                                            const std::vector<timestamp>::const_iterator last_it) const {
+    auto data_type = DataType::NANOSECONDS_UTC64;
+    auto output_index_column = std::make_shared<Column>(TypeDescriptor(data_type, Dimension::Dim0), false);
+    ssize_t output_idx{0};
+    using IndexTDT = ScalarTagType<DataTypeTag<DataType::NANOSECONDS_UTC64>>;
+    auto bucket_start_it = first_it;
+    auto bucket_end_it = std::next(bucket_start_it);
+    std::vector<timestamp> bucket_boundaries;
+    bucket_boundaries.reserve(std::distance(first_it, last_it) + 1);
+    // Only include buckets that have at least one index value in range
+    for (const auto& input_index_column: input_index_columns) {
+        auto data = input_index_column->data();
+        auto block = data.template next<IndexTDT>();
+        while(block.has_value() && bucket_end_it != std::next(last_it)) {
+            const auto row_count = block->row_count();
+            auto ptr = reinterpret_cast<const timestamp*>(block->data());
+            for (auto i = 0u; i < row_count; ++i, ++ptr) {
+                // TODO: Also support labelling buckets based on right boundary
+                switch (closed_boundary_) {
+                    case ResampleClosedBoundary::LEFT:
+                        while (bucket_end_it != std::next(last_it) && *ptr >= *bucket_end_it) {
+                            ++bucket_start_it;
+                            if (++bucket_end_it == std::next(last_it)) {
+                                break;
+                            }
+                        }
+                        if (bucket_end_it != std::next(last_it) && *ptr >= *bucket_start_it && *ptr < *bucket_end_it) {
+                            output_index_column->set_scalar(output_idx++, *bucket_start_it);
+                            ++bucket_start_it;
+                            if (++bucket_end_it == std::next(last_it)) {
+                                break;
+                            }
+                        }
+                        break;
+                    case ResampleClosedBoundary::RIGHT:
+                    default:
+                        while (*ptr > *bucket_end_it) {
+                            ++bucket_start_it;
+                            if (++bucket_end_it == std::next(last_it)) {
+                                break;
+                            }
+                        }
+                        if (bucket_end_it != std::next(last_it) && *ptr > *bucket_start_it && *ptr <= *bucket_end_it) {
+                            output_index_column->set_scalar(output_idx++, *bucket_start_it);
+                            ++bucket_start_it;
+                            if (++bucket_end_it == std::next(last_it)) {
+                                break;
+                            }
+                        }
+                        break;
+                }
+            }
+            block = data.template next<IndexTDT>();
+        }
+    }
+
+    for (auto it = first_it; it != last_it; it++) {
+        bucket_boundaries.emplace_back(*it);
+    }
+    bucket_boundaries.emplace_back(*last_it);
+    return {output_index_column, bucket_boundaries};
 }
 
 [[nodiscard]] Composite<EntityIds> RemoveColumnPartitioningClause::process(Composite<EntityIds>&& entity_ids) const {

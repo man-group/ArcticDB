@@ -1658,6 +1658,7 @@ class NativeVersionStore:
         VersionedItem
         """
         if date_range is not None and query_builder is not None:
+            # TODO: Do this all in one line
             q = QueryBuilder()
             query_builder = q.date_range(date_range).then(query_builder)
 
