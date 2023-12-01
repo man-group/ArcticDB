@@ -201,16 +201,14 @@ def test_only_latest_compaction_key_is_used(basic_store):
 
 
 @pytest.mark.parametrize("write_another", [False, True])
-# TODO: look into why this doesn't work with azure
-# def test_turning_on_symbol_list_after_a_symbol_written(object_store_factory, write_another):
-def test_turning_on_symbol_list_after_a_symbol_written(s3_store_factory, write_another):
+def test_turning_on_symbol_list_after_a_symbol_written(object_store_factory, write_another):
     # The if(!maybe_last_compaction) case
-    lib: NativeVersionStore = s3_store_factory(symbol_list=False)
+    lib: NativeVersionStore = object_store_factory(symbol_list=False)
 
     lib.write("a", 1)
     assert not lib.library_tool().find_keys(KeyType.SYMBOL_LIST)
 
-    lib = s3_store_factory(reuse_name=True, symbol_list=True)
+    lib = object_store_factory(reuse_name=True, symbol_list=True)
     lt = lib.library_tool()
     if write_another:
         lib.write("b", 2)
