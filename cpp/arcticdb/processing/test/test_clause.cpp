@@ -333,7 +333,7 @@ TEST(Clause, Passthrough) {
     ASSERT_EQ(*ret[0].segments_->at(0), copied);
 }
 
-TEST(Clause, Sort) {
+TEST(Clause, SortTimeSeries) {
     using namespace arcticdb;
     auto component_manager = std::make_shared<ComponentManager>();
 
@@ -341,6 +341,48 @@ TEST(Clause, Sort) {
     sort_clause.set_component_manager(component_manager);
 
     auto seg = get_standard_timeseries_segment("sort");
+    auto copied = seg.clone();
+    std::random_device rng;
+    std::mt19937 urng(rng());
+    std::shuffle(seg.begin(), seg.end(), urng);
+    auto proc_unit = ProcessingUnit{std::move(seg)};
+    auto entity_ids = Composite<EntityIds>(push_entities(component_manager, std::move(proc_unit)));
+
+    auto res = gather_entities(component_manager, sort_clause.process(std::move(entity_ids))).as_range();
+    ASSERT_EQ(res.size(), 1);
+    ASSERT_TRUE(res[0].segments_.has_value());
+    ASSERT_EQ(*res[0].segments_->at(0), copied);
+}
+
+TEST(Clause, SortRowCount) {
+    using namespace arcticdb;
+    auto component_manager = std::make_shared<ComponentManager>();
+
+    SortClause sort_clause("row_count");
+    sort_clause.set_component_manager(component_manager);
+
+    auto seg = get_standard_row_count_segment("sort");
+    auto copied = seg.clone();
+    std::random_device rng;
+    std::mt19937 urng(rng());
+    std::shuffle(seg.begin(), seg.end(), urng);
+    auto proc_unit = ProcessingUnit{std::move(seg)};
+    auto entity_ids = Composite<EntityIds>(push_entities(component_manager, std::move(proc_unit)));
+
+    auto res = gather_entities(component_manager, sort_clause.process(std::move(entity_ids))).as_range();
+    ASSERT_EQ(res.size(), 1);
+    ASSERT_TRUE(res[0].segments_.has_value());
+    ASSERT_EQ(*res[0].segments_->at(0), copied);
+}
+
+TEST(Clause, SortTable) {
+    using namespace arcticdb;
+    auto component_manager = std::make_shared<ComponentManager>();
+
+    SortClause sort_clause("Key");
+    sort_clause.set_component_manager(component_manager);
+
+    auto seg = get_standard_table_segment("sort");
     auto copied = seg.clone();
     std::random_device rng;
     std::mt19937 urng(rng());

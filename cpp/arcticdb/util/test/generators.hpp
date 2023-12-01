@@ -76,6 +76,13 @@ struct SinkWrapperImpl {
 
 using TestAggregator =  Aggregator<TimeseriesIndex, FixedSchema, stream::NeverSegmentPolicy>;
 using SinkWrapper = SinkWrapperImpl<TestAggregator>;
+
+using RowCountIndexTestAggregator =  Aggregator<RowCountIndex, FixedSchema, stream::NeverSegmentPolicy>;
+using RowCountIndexSinkWrapper = SinkWrapperImpl<RowCountIndexTestAggregator>;
+
+using TableIndexTestAggregator =  Aggregator<RowCountIndex, FixedSchema, stream::NeverSegmentPolicy>;
+using TableIndexIndexSinkWrapper = SinkWrapperImpl<TableIndexTestAggregator>;
+
 using TestSparseAggregator = Aggregator<TimeseriesIndex, FixedSchema, stream::NeverSegmentPolicy, SparseColumnPolicy>;
 using SparseSinkWrapper = SinkWrapperImpl<TestSparseAggregator>;
 
@@ -197,6 +204,42 @@ inline SegmentInMemory get_standard_timeseries_segment(const std::string& name, 
         scalar_field(DataType::INT8, "int8"),
         scalar_field(DataType::UINT64, "uint64"),
         scalar_field(DataType::UTF_DYNAMIC64, "strings")
+    });
+
+    for (timestamp i = 0u; i < timestamp(num_rows); ++i) {
+        wrapper.aggregator_.start_row(timestamp{i})([&](auto &&rb) {
+            rb.set_scalar(1, int8_t(i));
+            rb.set_scalar(2, uint64_t(i) * 2);
+            rb.set_string(3, fmt::format("string_{}", i));
+        });
+    }
+    wrapper.aggregator_.commit();
+    return wrapper.segment();
+}
+
+inline SegmentInMemory get_standard_row_count_segment(const std::string& name, size_t num_rows = 10) {
+    auto wrapper = RowCountIndexSinkWrapper(name, {
+            scalar_field(DataType::INT8, "int8"),
+            scalar_field(DataType::UINT64, "uint64"),
+            scalar_field(DataType::UTF_DYNAMIC64, "strings")
+    });
+
+    for (timestamp i = 0u; i < timestamp(num_rows); ++i) {
+        wrapper.aggregator_.start_row(timestamp{i})([&](auto &&rb) {
+            rb.set_scalar(1, int8_t(i));
+            rb.set_scalar(2, uint64_t(i) * 2);
+            rb.set_string(3, fmt::format("string_{}", i));
+        });
+    }
+    wrapper.aggregator_.commit();
+    return wrapper.segment();
+}
+
+inline SegmentInMemory get_standard_table_segment(const std::string& name, size_t num_rows = 10) {
+    auto wrapper = TableIndexIndexSinkWrapper(name, {
+            scalar_field(DataType::INT8, "int8"),
+            scalar_field(DataType::UINT64, "uint64"),
+            scalar_field(DataType::UTF_DYNAMIC64, "strings")
     });
 
     for (timestamp i = 0u; i < timestamp(num_rows); ++i) {
