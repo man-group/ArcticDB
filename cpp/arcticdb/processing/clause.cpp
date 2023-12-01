@@ -607,7 +607,8 @@ Composite<EntityIds> ResampleClause::process(Composite<EntityIds>&& entity_ids) 
     auto [output_index_column, bucket_boundaries] = generate_buckets(input_index_columns, first_it, last_it);
     SegmentInMemory seg;
     seg.set_row_id(output_index_column->row_count() - 1);
-    RowRange output_row_range(row_slices.front().row_ranges_->at(0)->start(), output_index_column->row_count());
+    RowRange output_row_range(row_slices.front().row_ranges_->at(0)->start(),
+                              row_slices.front().row_ranges_->at(0)->start() + output_index_column->row_count());
     seg.add_column(scalar_field(DataType::NANOSECONDS_UTC64, index_column_name), output_index_column);
     seg.descriptor().set_index(IndexDescriptor(1, IndexDescriptor::TIMESTAMP));
     for (const auto& aggregator: aggregators_) {
