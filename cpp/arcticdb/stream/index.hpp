@@ -285,8 +285,12 @@ class RowCountIndex : public BaseIndex<RowCountIndex> {
     }
 
     template<class RowCellSetter>
-    void set(RowCellSetter, const IndexValue & = {timestamp(0)}) {
-        // No index value
+    void set(RowCellSetter setter, const IndexValue &index_value) {
+        if (std::holds_alternative<int64_t>(index_value)) {
+            auto index_val = std::get<int64_t>(index_value);
+            setter(0, index_val);
+        } else
+            util::raise_rte("Cannot set this type, expecting int64_t");
     }
 
     RowCountIndex make_from_descriptor(const StreamDescriptor&) const {

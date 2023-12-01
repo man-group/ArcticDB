@@ -313,7 +313,7 @@ TEST(MemSegment, SplitSparseSegment) {
     }
 }
 
-TEST(MemSegment, ShuffleAndSort) {
+TEST(MemSegment, ShuffleAndSortTimeSeries) {
     auto segment = get_standard_timeseries_segment("test_clone");
     std::random_device rng;
     std::mt19937 urng(rng());
@@ -321,6 +321,30 @@ TEST(MemSegment, ShuffleAndSort) {
     std::shuffle(segment.begin(), segment.end(), urng);
     ASSERT_EQ(segment.is_index_sorted(), false);
     segment.sort("time");
+    bool equal = segment == copied;
+    ASSERT_EQ(equal, true);
+}
+
+TEST(MemSegment, ShuffleAndSortRowCount) {
+    auto segment = get_standard_row_count_segment("test_clone");
+    std::random_device rng;
+    std::mt19937 urng(rng());
+    auto copied = segment.clone();
+    std::shuffle(segment.begin(), segment.end(), urng);
+    ASSERT_EQ(segment.is_index_sorted(), false);
+    segment.sort("row_count");
+    bool equal = segment == copied;
+    ASSERT_EQ(equal, true);
+}
+
+TEST(MemSegment, ShuffleAndSortTable) {
+    auto segment = get_standard_table_segment("test_clone");
+    std::random_device rng;
+    std::mt19937 urng(rng());
+    auto copied = segment.clone();
+    std::shuffle(segment.begin(), segment.end(), urng);
+    ASSERT_EQ(segment.is_index_sorted(), false);
+    segment.sort("Key");
     bool equal = segment == copied;
     ASSERT_EQ(equal, true);
 }
