@@ -539,7 +539,7 @@ Column SortedSumAggregator::aggregate(const std::vector<std::shared_ptr<Column>>
                                     const auto row_count = opt_index_block->row_count();
                                     auto index_ptr = reinterpret_cast<const timestamp*>(opt_index_block->data());
                                     auto agg_ptr = reinterpret_cast<const InputRawType*>(opt_agg_block->data());
-                                    for (auto i = 0u; i < row_count; ++i, index_ptr++, agg_ptr++) {
+                                    for (auto i = 0u; i < row_count; ++i, ++index_ptr, ++agg_ptr) {
                                         // TODO: Handle closed right boundaries
                                         if (*index_ptr >= *bucket_end_it) {
                                             res->push_back(current_agg_val.value_or(0));
