@@ -359,7 +359,16 @@ AggregationClause::AggregationClause(const std::string& grouping_column,
 }
 
 Composite<EntityIds> AggregationClause::process(Composite<EntityIds>&& entity_ids) const {
-    auto procs = gather_entities(component_manager_, std::move(entity_ids));
+    auto procs_as_range = gather_entities(component_manager_, std::move(entity_ids)).as_range();
+
+    // Sort procs following row range ascending order
+    std::sort(std::begin(procs_as_range), std::end(procs_as_range),
+              [](const auto& left, const auto& right) {
+                  return left.row_ranges_->at(0)->start() < right.row_ranges_->at(0)->start();
+    });
+
+    Composite<ProcessingUnit> procs(std::move(procs_as_range));
+
     std::vector<GroupingAggregatorData> aggregators_data;
     internal::check<ErrorCode::E_INVALID_ARGUMENT>(
             !aggregators_.empty(),
@@ -371,6 +380,11 @@ Composite<EntityIds> AggregationClause::process(Composite<EntityIds>&& entity_id
     // Work out the common type between the processing units for the columns being aggregated
     procs.broadcast([&aggregators_data, &aggregators=aggregators_](auto& proc) {
         for (auto agg_data: folly::enumerate(aggregators_data)) {
+            // Check that segments row ranges are the same
+            internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+                std::all_of(proc.row_ranges_->begin(), proc.row_ranges_->end(), [&] (const auto& row_range) {return row_range->start() == proc.row_ranges_->at(0)->start();}),
+                "Expected all data segments in one processing unit to have the same row ranges");
+
             auto input_column_name = aggregators.at(agg_data.index).get_input_column_name();
             auto input_column = proc.get(input_column_name);
             if (std::holds_alternative<ColumnWithStrings>(input_column)) {

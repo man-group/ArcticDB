@@ -273,6 +273,24 @@ def test_first_aggregation(local_object_version_store):
     assert_frame_equal(res.data, df)
 
 
+def test_first_agg_with_append(local_object_version_store):
+    lib = local_object_version_store
+
+    symbol = "first_agg"
+    lib.write(symbol, pd.DataFrame({"grouping_column": [0], "get_first": [10.0]}))
+    lib.append(symbol, pd.DataFrame({"grouping_column": [1], "get_first": [30.0]}))
+    lib.append(symbol, pd.DataFrame({"grouping_column": [0], "get_first": [20.0]}))
+    q = QueryBuilder().groupby("grouping_column").agg({"get_first": "first"})
+
+    vit = lib.read(symbol, query_builder=q)
+    vit.data.sort_index(inplace=True)
+
+    df = pd.DataFrame({"get_first": [10.0, 30.0]}, index=[0, 1])
+    df.index.rename("grouping_column", inplace=True)
+
+    assert_frame_equal(vit.data, df)
+
+
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
@@ -324,6 +342,24 @@ def test_last_aggregation(local_object_version_store):
     res.data.sort_index(inplace=True)
 
     assert_frame_equal(res.data, df)
+
+
+def test_last_agg_with_append(local_object_version_store):
+    lib = local_object_version_store
+
+    symbol = "last_agg"
+    lib.write(symbol, pd.DataFrame({"grouping_column": [0], "get_last": [10.0]}))
+    lib.append(symbol, pd.DataFrame({"grouping_column": [1], "get_last": [30.0]}))
+    lib.append(symbol, pd.DataFrame({"grouping_column": [0], "get_last": [20.0]}))
+    q = QueryBuilder().groupby("grouping_column").agg({"get_last": "last"})
+
+    vit = lib.read(symbol, query_builder=q)
+    vit.data.sort_index(inplace=True)
+
+    df = pd.DataFrame({"get_last": [20.0, 30.0]}, index=[0, 1])
+    df.index.rename("grouping_column", inplace=True)
+
+    assert_frame_equal(vit.data, df)
 
 
 def test_sum_aggregation(local_object_version_store):

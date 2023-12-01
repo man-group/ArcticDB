@@ -529,34 +529,32 @@ void FirstAggregatorData::add_data_type(DataType data_type) {
 
 void FirstAggregatorData::aggregate(const std::optional<ColumnWithStrings>& input_column, const std::vector<size_t>& groups, size_t unique_values) {
     if(data_type_.has_value() && *data_type_ != DataType::EMPTYVAL && input_column.has_value()) {
-        entity::details::visit_type(*data_type_, [&input_column, unique_values, &groups, that=this] (auto global_type_desc_tag) {
+        entity::details::visit_type(*data_type_, [&input_column, unique_values, &groups, this] (auto global_type_desc_tag) {
             using GlobalInputType = decltype(global_type_desc_tag);
             using GlobalTypeDescriptorTag =  typename OutputType<GlobalInputType>::type;
             using GlobalRawType = typename GlobalTypeDescriptorTag::DataTypeTag::raw_type;
-            that->aggregated_.resize(sizeof(GlobalRawType)* unique_values);
+            aggregated_.resize(sizeof(GlobalRawType)* unique_values);
             auto col_data = input_column->column_->data();
-            auto out_ptr = reinterpret_cast<GlobalRawType*>(that->aggregated_.data());
-            std::unordered_set<size_t> groups_cache;
-            entity::details::visit_type(input_column->column_->type().data_type(), [&groups, &groups_cache, &out_ptr, &col_data] (auto type_desc_tag) {
+            auto out_ptr = reinterpret_cast<GlobalRawType*>(aggregated_.data());
+            entity::details::visit_type(input_column->column_->type().data_type(), [this, &groups, &out_ptr, &col_data] (auto type_desc_tag) {
                 using ColumnTagType = std::decay_t<decltype(type_desc_tag)>;
                 using ColumnType =  typename ColumnTagType::raw_type;
                 auto groups_pos = 0;
                 auto grp_idx = groups[0];
-                bool is_first_group_el = true;
                 while (auto block = col_data.next<TypeDescriptorTag<ColumnTagType, DimensionTag<entity::Dimension::Dim0>>>()) {
                     auto ptr = reinterpret_cast<const ColumnType *>(block.value().data());
                     for (auto i = 0u; i < block.value().row_count(); ++i, ++ptr) {
                         auto& val = out_ptr[groups[groups_pos]];
+                        bool is_first_group_el = (groups_cache_.find(groups[groups_pos]) == groups_cache_.end());
                         if constexpr(std::is_floating_point_v<ColumnType>) {
                             const auto& curr = GlobalRawType(*ptr);
                             if ((grp_idx == groups[groups_pos]) && (is_first_group_el || std::isnan(static_cast<ColumnType>(val)))) {
-                                groups_cache.insert(groups[groups_pos]);
+                                groups_cache_.insert(groups[groups_pos]);
                                 val = curr;
-                                is_first_group_el = false;
                             }
                             else if (grp_idx != groups[groups_pos]) { // Updating when changing group
-                                if (auto iter = groups_cache.find(groups[groups_pos]); iter == groups_cache.end()) { // Group not seen yet
-                                    groups_cache.insert(groups[groups_pos]);
+                                if (is_first_group_el) { // Group not seen yet
+                                    groups_cache_.insert(groups[groups_pos]);
                                     val = curr;
                                 }
                                 else {
@@ -569,13 +567,12 @@ void FirstAggregatorData::aggregate(const std::optional<ColumnWithStrings>& inpu
                         } else {
                             const auto& curr = GlobalRawType(*ptr);
                             if ((grp_idx == groups[groups_pos]) && is_first_group_el) {
-                                groups_cache.insert(groups[groups_pos]);
+                                groups_cache_.insert(groups[groups_pos]);
                                 val = curr;
-                                is_first_group_el = false;
                             }
                             else if (grp_idx != groups[groups_pos]) { // Updating when changing group
-                                if (auto iter = groups_cache.find(groups[groups_pos]); iter == groups_cache.end()) { // Group not seen yet
-                                    groups_cache.insert(groups[groups_pos]);
+                                if (is_first_group_el) { // Group not seen yet
+                                    groups_cache_.insert(groups[groups_pos]);
                                     val = curr;
                                 }
                                 grp_idx = groups[groups_pos];
@@ -614,34 +611,32 @@ void LastAggregatorData::add_data_type(DataType data_type) {
 
 void LastAggregatorData::aggregate(const std::optional<ColumnWithStrings>& input_column, const std::vector<size_t>& groups, size_t unique_values) {
     if(data_type_.has_value() && *data_type_ != DataType::EMPTYVAL && input_column.has_value()) {
-        entity::details::visit_type(*data_type_, [&input_column, unique_values, &groups, that=this] (auto global_type_desc_tag) {
+        entity::details::visit_type(*data_type_, [&input_column, unique_values, &groups, this] (auto global_type_desc_tag) {
             using GlobalInputType = decltype(global_type_desc_tag);
             using GlobalTypeDescriptorTag =  typename OutputType<GlobalInputType>::type;
             using GlobalRawType = typename GlobalTypeDescriptorTag::DataTypeTag::raw_type;
-            that->aggregated_.resize(sizeof(GlobalRawType)* unique_values);
+            aggregated_.resize(sizeof(GlobalRawType)* unique_values);
             auto col_data = input_column->column_->data();
-            auto out_ptr = reinterpret_cast<GlobalRawType*>(that->aggregated_.data());
-            std::unordered_set<size_t> groups_cache;
-            entity::details::visit_type(input_column->column_->type().data_type(), [&groups, &groups_cache, &out_ptr, &col_data] (auto type_desc_tag) {
+            auto out_ptr = reinterpret_cast<GlobalRawType*>(aggregated_.data());
+            entity::details::visit_type(input_column->column_->type().data_type(), [&groups, &out_ptr, &col_data, this] (auto type_desc_tag) {
                 using ColumnTagType = std::decay_t<decltype(type_desc_tag)>;
                 using ColumnType =  typename ColumnTagType::raw_type;
                 auto groups_pos = 0;
                 auto grp_idx = groups[0];
-                bool is_first_group_el = true;
                 while (auto block = col_data.next<TypeDescriptorTag<ColumnTagType, DimensionTag<entity::Dimension::Dim0>>>()) {
                     auto ptr = reinterpret_cast<const ColumnType *>(block.value().data());
                     for (auto i = 0u; i < block.value().row_count(); ++i, ++ptr) {
                         auto& val = out_ptr[groups[groups_pos]];
+                        bool is_first_group_el = (groups_cache_.find(groups[groups_pos]) == groups_cache_.end());
                         if constexpr(std::is_floating_point_v<ColumnType>) {
                             const auto& curr = GlobalRawType(*ptr);
                             if ((grp_idx == groups[groups_pos]) && (is_first_group_el || !std::isnan(static_cast<ColumnType>(curr)))) {
-                                groups_cache.insert(groups[groups_pos]);
+                                groups_cache_.insert(groups[groups_pos]);
                                 val = curr;
-                                is_first_group_el = false;
                             }
                             else if (grp_idx != groups[groups_pos]) { // Updating when changing group
-                                if (auto iter = groups_cache.find(groups[groups_pos]); iter == groups_cache.end()) { // Group not seen yet
-                                    groups_cache.insert(groups[groups_pos]);
+                                if (is_first_group_el) { // Group not seen yet
+                                    groups_cache_.insert(groups[groups_pos]);
                                     val = curr;
                                 }
                                 else {

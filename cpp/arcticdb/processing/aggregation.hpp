@@ -154,6 +154,8 @@ private:
 
     std::vector<uint8_t> aggregated_;
     std::optional<DataType> data_type_;
+
+    std::unordered_set<size_t> groups_cache_;
 };
 
 class LastAggregatorData : private AggregatorDataBase
@@ -168,6 +170,8 @@ private:
 
     std::vector<uint8_t> aggregated_;
     std::optional<DataType> data_type_;
+
+    std::unordered_set<size_t> groups_cache_;
 };
 
 template <class AggregatorData>
