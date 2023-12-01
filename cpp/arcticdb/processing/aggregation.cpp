@@ -504,7 +504,12 @@ Column SortedSumAggregator::aggregate(const std::vector<std::shared_ptr<Column>>
         auto bucket_start_it = bucket_boundaries.begin();
         auto bucket_end_it = std::next(bucket_start_it);
         using IndexTDT = ScalarTagType<DataTypeTag<DataType::NANOSECONDS_UTC64>>;
-        details::visit_type(res->type().data_type(), [&](auto output_type_desc_tag) {
+        details::visit_type(res->type().data_type(), [&input_index_columns,
+                                                      &input_agg_columns,
+                                                      &bucket_boundaries,
+                                                      &res,
+                                                      &bucket_start_it,
+                                                      &bucket_end_it] (auto output_type_desc_tag) {
             using OutputTDT = ScalarTagType<decltype(output_type_desc_tag)>;
             using OutputRawType = typename OutputTDT::DataTypeTag::raw_type;
             if constexpr (!is_sequence_type(OutputTDT::DataTypeTag::data_type)) {
@@ -518,8 +523,7 @@ Column SortedSumAggregator::aggregate(const std::vector<std::shared_ptr<Column>>
                                  &input_index_column = input_index_columns.at(idx),
                                  &bucket_boundaries,
                                  &bucket_start_it,
-                                 &bucket_end_it]
-                                (auto input_type_desc_tag) {
+                                 &bucket_end_it] (auto input_type_desc_tag) {
                             using InputTDT = ScalarTagType<decltype(input_type_desc_tag)>;
                             using InputRawType = typename InputTDT::DataTypeTag::raw_type;
                             if constexpr (!is_sequence_type(InputTDT::DataTypeTag::data_type)) {
@@ -535,7 +539,7 @@ Column SortedSumAggregator::aggregate(const std::vector<std::shared_ptr<Column>>
                                     const auto row_count = opt_index_block->row_count();
                                     auto index_ptr = reinterpret_cast<const timestamp*>(opt_index_block->data());
                                     auto agg_ptr = reinterpret_cast<const InputRawType*>(opt_agg_block->data());
-                                    for (auto i = 0u; i < row_count; ++i, ++index_ptr, ++agg_ptr) {
+                                    for (auto i = 0u; i < row_count; ++i, index_ptr++, agg_ptr++) {
                                         // TODO: Handle closed right boundaries
                                         if (*index_ptr >= *bucket_end_it) {
                                             res->push_back(current_agg_val.value_or(0));
@@ -546,6 +550,9 @@ Column SortedSumAggregator::aggregate(const std::vector<std::shared_ptr<Column>>
                                             if (++bucket_end_it == bucket_boundaries.end()) {
                                                 break;
                                             }
+                                        }
+                                        if (bucket_end_it == bucket_boundaries.end()) {
+                                            break;
                                         }
                                         if (*index_ptr >= *bucket_start_it && *index_ptr < *bucket_end_it) {
                                             if (LIKELY(current_agg_val.has_value())) {

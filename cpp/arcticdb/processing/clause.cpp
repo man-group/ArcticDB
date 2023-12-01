@@ -607,6 +607,7 @@ Composite<EntityIds> ResampleClause::process(Composite<EntityIds>&& entity_ids) 
     auto [output_index_column, bucket_boundaries] = generate_buckets(input_index_columns, first_it, last_it);
     SegmentInMemory seg;
     seg.set_row_id(output_index_column->row_count() - 1);
+    RowRange output_row_range(row_slices.front().row_ranges_->at(0)->start(), output_index_column->row_count());
     seg.add_column(scalar_field(DataType::NANOSECONDS_UTC64, index_column_name), output_index_column);
     seg.descriptor().set_index(IndexDescriptor(1, IndexDescriptor::TIMESTAMP));
     for (const auto& aggregator: aggregators_) {
@@ -629,7 +630,7 @@ Composite<EntityIds> ResampleClause::process(Composite<EntityIds>&& entity_ids) 
         auto aggregated_column = std::make_shared<Column>(aggregator.aggregate(input_index_columns, input_agg_columns, bucket_boundaries));
         seg.add_column(scalar_field(aggregated_column->type().data_type(), aggregator.get_output_column_name().value), aggregated_column);
     }
-    return Composite<EntityIds>(push_entities(component_manager_, ProcessingUnit(std::move(seg))));
+    return Composite<EntityIds>(push_entities(component_manager_, ProcessingUnit(std::move(seg), std::move(output_row_range))));
 }
 
 [[nodiscard]] std::string ResampleClause::to_string() const {
@@ -684,23 +685,23 @@ std::pair<std::shared_ptr<Column>, std::vector<timestamp>> ResampleClause::gener
     for (const auto& input_index_column: input_index_columns) {
         auto data = input_index_column->data();
         auto block = data.template next<IndexTDT>();
-        while(block.has_value() && bucket_end_it != bucket_boundaries_.end()) {
+        while(block.has_value() && bucket_end_it != std::next(last_it)) {
             const auto row_count = block->row_count();
             auto ptr = reinterpret_cast<const timestamp*>(block->data());
             for (auto i = 0u; i < row_count; ++i, ++ptr) {
                 // TODO: Also support labelling buckets based on right boundary
                 switch (closed_boundary_) {
                     case ResampleClosedBoundary::LEFT:
-                        while (bucket_end_it != bucket_boundaries_.end() && *ptr >= *bucket_end_it) {
+                        while (bucket_end_it != std::next(last_it) && *ptr >= *bucket_end_it) {
                             ++bucket_start_it;
-                            if (++bucket_end_it == bucket_boundaries_.end()) {
+                            if (++bucket_end_it == std::next(last_it)) {
                                 break;
                             }
                         }
-                        if (bucket_end_it != bucket_boundaries_.end() && *ptr >= *bucket_start_it && *ptr < *bucket_end_it) {
+                        if (bucket_end_it != std::next(last_it) && *ptr >= *bucket_start_it && *ptr < *bucket_end_it) {
                             output_index_column->set_scalar(output_idx++, *bucket_start_it);
                             ++bucket_start_it;
-                            if (++bucket_end_it == bucket_boundaries_.end()) {
+                            if (++bucket_end_it == std::next(last_it)) {
                                 break;
                             }
                         }
@@ -709,14 +710,14 @@ std::pair<std::shared_ptr<Column>, std::vector<timestamp>> ResampleClause::gener
                     default:
                         while (*ptr > *bucket_end_it) {
                             ++bucket_start_it;
-                            if (++bucket_end_it == bucket_boundaries_.end()) {
+                            if (++bucket_end_it == std::next(last_it)) {
                                 break;
                             }
                         }
-                        if (bucket_end_it != bucket_boundaries_.end() && *ptr > *bucket_start_it && *ptr <= *bucket_end_it) {
+                        if (bucket_end_it != std::next(last_it) && *ptr > *bucket_start_it && *ptr <= *bucket_end_it) {
                             output_index_column->set_scalar(output_idx++, *bucket_start_it);
                             ++bucket_start_it;
-                            if (++bucket_end_it == bucket_boundaries_.end()) {
+                            if (++bucket_end_it == std::next(last_it)) {
                                 break;
                             }
                         }
