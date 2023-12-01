@@ -691,7 +691,7 @@ std::pair<std::shared_ptr<Column>, std::vector<timestamp>> ResampleClause::gener
                 // TODO: Also support labelling buckets based on right boundary
                 switch (closed_boundary_) {
                     case ResampleClosedBoundary::LEFT:
-                        while (*ptr >= *bucket_end_it) {
+                        while (bucket_end_it != bucket_boundaries_.end() && *ptr >= *bucket_end_it) {
                             ++bucket_start_it;
                             if (++bucket_end_it == bucket_boundaries_.end()) {
                                 break;

@@ -508,7 +508,7 @@ Column SortedSumAggregator::aggregate(const std::vector<std::shared_ptr<Column>>
             using OutputTDT = ScalarTagType<decltype(output_type_desc_tag)>;
             using OutputRawType = typename OutputTDT::DataTypeTag::raw_type;
             if constexpr (!is_sequence_type(OutputTDT::DataTypeTag::data_type)) {
-                OutputRawType current_agg_val{0};
+                std::optional<OutputRawType> current_agg_val;
                 for (auto [idx, input_agg_column]: folly::enumerate(input_agg_columns)) {
                     if (input_agg_column.has_value()) {
                         details::visit_type(input_agg_column->column_->type().data_type(),
@@ -538,8 +538,8 @@ Column SortedSumAggregator::aggregate(const std::vector<std::shared_ptr<Column>>
                                     for (auto i = 0u; i < row_count; ++i, ++index_ptr, ++agg_ptr) {
                                         // TODO: Handle closed right boundaries
                                         if (*index_ptr >= *bucket_end_it) {
-                                            res->push_back(current_agg_val);
-                                            current_agg_val = 0;
+                                            res->push_back(current_agg_val.value_or(0));
+                                            current_agg_val = std::nullopt;
                                         }
                                         while (*index_ptr >= *bucket_end_it) {
                                             ++bucket_start_it;
@@ -548,7 +548,11 @@ Column SortedSumAggregator::aggregate(const std::vector<std::shared_ptr<Column>>
                                             }
                                         }
                                         if (*index_ptr >= *bucket_start_it && *index_ptr < *bucket_end_it) {
-                                            current_agg_val += static_cast<OutputRawType>(*agg_ptr);
+                                            if (LIKELY(current_agg_val.has_value())) {
+                                                *current_agg_val += static_cast<OutputRawType>(*agg_ptr);
+                                            } else {
+                                                current_agg_val = static_cast<OutputRawType>(*agg_ptr);
+                                            }
                                         }
                                     }
                                     opt_index_block = index_data.template next<IndexTDT>();
@@ -563,7 +567,9 @@ Column SortedSumAggregator::aggregate(const std::vector<std::shared_ptr<Column>>
                         // TODO: Handle this case
                     }
                 }
-                res->push_back(current_agg_val);
+                if (LIKELY(current_agg_val.has_value())) {
+                    res->push_back(*current_agg_val);
+                }
             } else {
                 schema::raise<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>("Cannot sum string column in resample");
             }

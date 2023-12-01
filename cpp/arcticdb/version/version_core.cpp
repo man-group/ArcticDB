@@ -827,24 +827,36 @@ void copy_frame_data_to_buffer(const SegmentInMemory& destination, size_t target
     auto total_size = dst_rawtype_size * num_rows;
     buffer.assert_size(offset + total_size);
 
-    auto src_ptr = src_column.data().buffer().data();
+    auto src_data = src_column.data();
     auto dst_ptr = buffer.data() + offset;
 
     auto type_promotion_error_msg = fmt::format("Can't promote type {} to type {} in field {}",
                                                 src_column.type(), dst_column.type(), destination.field(target_index).name());
 
     if (trivially_compatible_types(src_column.type(), dst_column.type())) {
-        memcpy(dst_ptr, src_ptr, total_size);
+        details::visit_type(src_column.type().data_type() ,[&src_data, &dst_ptr] (auto src_desc_tag) {
+            using SourceTDT = ScalarTagType<decltype(src_desc_tag)>;
+            using SourceType =  typename decltype(src_desc_tag)::DataTypeTag::raw_type;
+            while (auto block = src_data.template next<SourceTDT>()) {
+                const auto row_count = block->row_count();
+                memcpy(dst_ptr, block->data(), row_count * sizeof(SourceType));
+                dst_ptr += row_count * sizeof(SourceType);
+            }
+        });
     } else if (has_valid_type_promotion(src_column.type(), dst_column.type())) {
-        dst_column.type().visit_tag([&src_ptr, &dst_ptr, &src_column, &type_promotion_error_msg, num_rows] (auto dest_desc_tag) {
+        details::visit_type(dst_column.type().data_type() ,[&src_data, &dst_ptr, &src_column, &type_promotion_error_msg] (auto dest_desc_tag) {
             using DestinationType =  typename decltype(dest_desc_tag)::DataTypeTag::raw_type;
-            src_column.type().visit_tag([&src_ptr, &dst_ptr, &type_promotion_error_msg, num_rows] (auto src_desc_tag ) {
+            auto typed_dst_ptr = reinterpret_cast<DestinationType *>(dst_ptr);
+            details::visit_type(src_column.type().data_type() ,[&src_data, &typed_dst_ptr, &type_promotion_error_msg] (auto src_desc_tag) {
+                using SourceTDT = ScalarTagType<decltype(src_desc_tag)>;
                 using SourceType =  typename decltype(src_desc_tag)::DataTypeTag::raw_type;
                 if constexpr(std::is_arithmetic_v<SourceType> && std::is_arithmetic_v<DestinationType>) {
-                    auto typed_src_ptr = reinterpret_cast<SourceType *>(src_ptr);
-                    auto typed_dst_ptr = reinterpret_cast<DestinationType *>(dst_ptr);
-                    for (auto i = 0u; i < num_rows; ++i) {
-                        *typed_dst_ptr++ = static_cast<DestinationType>(*typed_src_ptr++);
+                    while (auto block = src_data.template next<SourceTDT>()) {
+                        const auto row_count = block->row_count();
+                        auto src_ptr = reinterpret_cast<const SourceType*>(block->data());
+                        for (auto i = 0u; i < row_count; ++i) {
+                            *typed_dst_ptr++ = static_cast<DestinationType>(*src_ptr++);
+                        }
                     }
                 } else {
                     util::raise_rte(type_promotion_error_msg.c_str());
