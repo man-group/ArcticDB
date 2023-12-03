@@ -60,6 +60,7 @@ jobs:
                   image: ${{needs.cibw_docker_image.outputs.tag}}
                   volumes:
                     - /:/mnt
+                python3: ${{fromJson(vars.LINUX_PYTHON_VERSIONS || '[6, 7, 8, 9, 10, 11, 12]')}}
             windows_matrix:
               - os: windows
                 distro: windows-latest
@@ -71,6 +72,7 @@ jobs:
                 do_not_archive: ["*.lib", "*.ilk", "*.pyd", "*.dll", "CMakeFiles/*.dir", "vcpkg_installed"]
                 test_services: {}
                 container: null
+                python3: ${{fromJson(vars.WINDOWS_PYTHON_VERSIONS || '[7, 8, 9, 10, 11, 12]')}}
     steps:
       - run: |
           if ${{startsWith(github.ref, 'refs/tags/v')}}; then
@@ -105,7 +107,6 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python3: ${{fromJson(vars.LINUX_PYTHON_VERSIONS || '[6, 7, 8, 9, 10, 11]')}}
         arcticdb_version: ["oldest", "latest"]
         include:
           - python_deps_ids: [""]
@@ -127,7 +128,6 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python3: ${{fromJson(vars.WINDOWS_PYTHON_VERSIONS || '[7, 8, 9, 10, 11]')}}
         arcticdb_version: ["oldest", "latest"]
         include:
           - python_deps_ids: [""]
@@ -161,7 +161,6 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python3: ${{fromJson(vars.LINUX_PYTHON_VERSIONS || '[6, 7, 8, 9, 10, 11]')}}
         include:
           - python_deps_ids: [""]
             matrix_override: ${{fromJson(needs.common_config.outputs.linux_matrix)}}
@@ -207,7 +206,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python3: ${{fromJson(vars.WINDOWS_PYTHON_VERSIONS || '[7, 8, 9, 10, 11]')}}
+        python3: ${{needs.common_config.outputs.windows_matrix.python3}}
     name: 3.${{matrix.python3}} Windows
     uses: ./.github/workflows/build_steps.yml
     secrets: inherit
@@ -226,7 +225,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python3: ${{fromJson(vars.LINUX_PYTHON_VERSIONS || '[6, 7, 8, 9, 10, 11]')}}
+        python3: ${{needs.common_config.outputs.linux_matrix.python3}}
         arcticdb_version: ["oldest", "latest"]
         include:
           - python_deps_ids: [""]
@@ -248,7 +247,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python3: ${{fromJson(vars.WINDOWS_PYTHON_VERSIONS || '[7, 8, 9, 10, 11]')}}
+        python3: ${{needs.common_config.outputs.windows_matrix.python3}}
         arcticdb_version: ["oldest", "latest"]
         include:
           - python_deps_ids: [""]
