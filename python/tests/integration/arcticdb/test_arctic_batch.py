@@ -1300,7 +1300,7 @@ def test_read_description_batch_empty_nat(arctic_library):
         assert np.isnat(results_list[sym].date_range[1]) == True
 
 
-def test_read_batch_mixed_with_snapshots(arctic_library):
+def test_read_batch_mixed_with_snapshots(object_version_store):
     num_symbols = 10
     num_versions = 10
 
@@ -1313,7 +1313,7 @@ def test_read_batch_mixed_with_snapshots(arctic_library):
         dataframe = dataframe_for_offset(version_num, symbol_num)
         return symbol_name, dataframe
 
-    lib = arctic_library
+    lib = object_version_store
     version_write_times = []
 
     for version in range(num_versions):
