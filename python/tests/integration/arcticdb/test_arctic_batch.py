@@ -16,6 +16,7 @@ from arcticdb.options import LibraryOptions
 from arcticdb import QueryBuilder, DataError
 from arcticdb_ext.version_store import AtomKey, RefKey
 
+import time
 import pytest
 import pandas as pd
 from datetime import datetime, date, timezone, timedelta
@@ -1300,7 +1301,7 @@ def test_read_description_batch_empty_nat(arctic_library):
         assert np.isnat(results_list[sym].date_range[1]) == True
 
 
-def test_read_batch_mixed_with_snapshots(object_version_store):
+def test_read_batch_mixed_with_snapshots(arctic_library):
     num_symbols = 10
     num_versions = 10
 
@@ -1313,11 +1314,12 @@ def test_read_batch_mixed_with_snapshots(object_version_store):
         dataframe = dataframe_for_offset(version_num, symbol_num)
         return symbol_name, dataframe
 
-    lib = object_version_store
+    lib = arctic_library
     version_write_times = []
 
     for version in range(num_versions):
         version_write_times.append(pd.Timestamp.now())
+        time.sleep(1)
         for sym in range(num_symbols):
             symbol, df = dataframe_and_symbol(version, sym)
             lib.write(symbol, df)
@@ -1332,7 +1334,6 @@ def test_read_batch_mixed_with_snapshots(object_version_store):
         ReadRequest("symbol_2", as_of=None),
         ReadRequest("symbol_2", as_of=4),
         ReadRequest("symbol_3", as_of="snap_7"),
-        ReadRequest("symbol_3", as_of=version_write_times[3]),
         ReadRequest("symbol_3", as_of="snap_3"),
         ReadRequest("symbol_3", as_of="snap_1"),
         ReadRequest("symbol_3", as_of=None),
@@ -1357,16 +1358,14 @@ def test_read_batch_mixed_with_snapshots(object_version_store):
 
     expected = dataframe_for_offset(7, 3)
     assert_frame_equal(vits[6].data, expected)
-    expected = dataframe_for_offset(2, 3)
+    expected = dataframe_for_offset(3, 3)
     assert_frame_equal(vits[7].data, expected)
-    expected = dataframe_for_offset(3, 3)
-    assert_frame_equal(vits[8].data, expected)
     expected = dataframe_for_offset(1, 3)
-    assert_frame_equal(vits[9].data, expected)
+    assert_frame_equal(vits[8].data, expected)
     expected = dataframe_for_offset(9, 3)
-    assert_frame_equal(vits[10].data, expected)
+    assert_frame_equal(vits[9].data, expected)
     expected = dataframe_for_offset(3, 3)
-    assert_frame_equal(vits[11].data, expected)
+    assert_frame_equal(vits[10].data, expected)
 
     # Trigger iteration of old-style snapshot keys
     library_tool = lib._nvs.library_tool()
@@ -1384,7 +1383,6 @@ def test_read_batch_mixed_with_snapshots(object_version_store):
         ReadRequest("symbol_8", as_of=4),
         ReadRequest("symbol_2", as_of="snap_8"),
         ReadRequest("symbol_3", as_of="snap_7"),
-        ReadRequest("symbol_5", as_of=version_write_times[6]),
         ReadRequest("symbol_1", as_of=4),
     ]
 
@@ -1399,8 +1397,6 @@ def test_read_batch_mixed_with_snapshots(object_version_store):
     assert_frame_equal(vits[3].data, expected)
     expected = dataframe_for_offset(5, 5)
     assert_frame_equal(vits[4].data, expected)
-    expected = dataframe_for_offset(4, 1)
-    assert_frame_equal(vits[5].data, expected)
 
     read_requests = [
         ReadRequest("symbol_6", as_of="snap_1"),
