@@ -405,7 +405,7 @@ def version_store_factory(lib_name, tmpdir):
             kwargs["segment_row_size"] = row_per_segment
         if lmdb_config is None:
             # 128 MiB - needs to be reasonably small else Windows build runs out of disk
-            lmdb_config = {"map_size": 1280 * (1 << 20)}
+            lmdb_config = {"map_size": 128 * (1 << 20)}
 
         if override_name is not None:
             library_name = override_name
