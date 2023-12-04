@@ -71,6 +71,9 @@ def test_hypothesis_mean_agg(lmdb_version_store, df):
     received_df.replace(-np.inf, np.nan, inplace=True)
     received_df.replace(np.inf, np.nan, inplace=True)
 
+    expected_df.replace(-np.inf, np.nan, inplace=True)
+    expected_df.replace(np.inf, np.nan, inplace=True)
+
     assert_frame_equal(expected_df, received_df)
 
 
