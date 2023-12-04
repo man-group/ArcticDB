@@ -76,7 +76,7 @@ inline void column_to_arrow_array(Array& array, const Column& column, const Fiel
     });
 }
 
-void write_array_to_column(Column& output_column, const Array& array) {
+inline void write_array_to_column(Column& output_column, const Array& array) {
     auto data = output_column.ptr();
     auto pos = 0ULL;
     auto view = array.view();

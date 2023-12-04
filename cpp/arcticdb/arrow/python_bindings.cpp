@@ -91,7 +91,6 @@ void register_bindings(py::module& m) {
 
     py::class_<Schema, std::shared_ptr<Schema>>(arrow, "Schema")
         .def(py::init<>())
-        .def_static("allocate", &Schema::allocate)
         .def("addr", &Schema::addr)
         .def("__repr__", &Schema::__repr__)
         .def("format", &Schema::format)

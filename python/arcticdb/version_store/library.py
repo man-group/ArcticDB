@@ -1005,6 +1005,18 @@ class Library:
             query_builder=query_builder,
         )
 
+    def read_arrow(
+            self,
+            symbol: str,
+            as_of: Optional[AsOf] = None,
+            date_range: Optional[Tuple[Optional[Timestamp], Optional[Timestamp]]] = None,
+            columns: Optional[List[str]] = None,
+            query_builder: Optional[QueryBuilder] = None,
+        ):
+        return self._nvs.read_arrow(
+            symbol=symbol, as_of=as_of, date_range=date_range, columns=columns, query_builder=query_builder)
+
+
     def read_batch(
         self, symbols: List[Union[str, ReadRequest]], query_builder: Optional[QueryBuilder] = None
     ) -> List[Union[VersionedItem, DataError]]:

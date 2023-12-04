@@ -24,6 +24,7 @@
 #include <arcticdb/python/adapt_read_dataframe.hpp>
 #include <arcticdb/version/schema_checks.hpp>
 #include <arcticdb/util/pybind_mutex.hpp>
+#include <arcticdb/arrow/arrow_utils.hpp>
 
 namespace arcticdb::version_store {
 
@@ -520,6 +521,13 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
              [&](PythonVersionStore& v,  StreamId sid, const VersionQuery& version_query, ReadQuery& read_query, const ReadOptions& read_options){
                 return adapt_read_df(v.read_dataframe_version(sid, version_query, read_query, read_options));
               },
+             py::call_guard<SingleThreadMutexHolder>(),
+             "Read the specified version of the dataframe from the store")
+        .def("read_arrow_version",
+             [&](PythonVersionStore& v,  StreamId sid, const VersionQuery& version_query, ReadQuery& read_query, const ReadOptions& read_options){
+                 auto result = v.read_dataframe_version(sid, version_query, read_query, read_options);
+                 return segment_to_record_batch(result.frame_data.frame());
+             },
              py::call_guard<SingleThreadMutexHolder>(),
              "Read the specified version of the dataframe from the store")
         .def("read_index",

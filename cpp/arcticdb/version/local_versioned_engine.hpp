@@ -21,6 +21,7 @@
 #include <arcticdb/version/versioned_engine.hpp>
 #include <arcticdb/entity/descriptor_item.hpp>
 #include <arcticdb/entity/data_error.hpp>
+//#include <arcticdb/arrow/
 
 #include <sstream>
 namespace arcticdb::version_store {
