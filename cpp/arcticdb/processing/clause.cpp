@@ -728,10 +728,12 @@ std::pair<std::shared_ptr<Column>, std::vector<timestamp>> ResampleClause::gener
         }
     }
 
-    for (auto it = first_it; it != last_it; it++) {
+    // Bucket boundaries can be wider than the date range specified by the user, narrow the first and last buckets here if necessary
+    bucket_boundaries.emplace_back(std::max(*first_it, date_range_start_));
+    for (auto it = std::next(first_it); it != last_it; it++) {
         bucket_boundaries.emplace_back(*it);
     }
-    bucket_boundaries.emplace_back(*last_it);
+    bucket_boundaries.emplace_back(std::min(*last_it, date_range_end_));
     return {output_index_column, bucket_boundaries};
 }
 

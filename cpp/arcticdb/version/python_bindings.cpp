@@ -275,14 +275,14 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
             .def(py::init<std::string, ResampleBoundary, ResampleBoundary>())
             .def_property_readonly("rule", &ResampleClause::rule)
             .def("set_aggregations", &ResampleClause::set_aggregations)
-            .def("set_bucket_boundaries", [](ResampleClause& self, py::array_t<timestamp> py_bucket_boundaries) {
+            .def("set_bucket_boundaries", [](ResampleClause& self, timestamp date_range_start, timestamp date_range_end, py::array_t<timestamp> py_bucket_boundaries) {
                 // TODO: Can we use memcpy here?
                 std::vector<timestamp> bucket_boundaries;
                 bucket_boundaries.reserve(py_bucket_boundaries.size());
                 for (py::ssize_t i = 0; i < py_bucket_boundaries.size(); i++) {
                     bucket_boundaries.emplace_back(py_bucket_boundaries.at(i));
                 }
-                self.set_bucket_boundaries(std::move(bucket_boundaries));
+                self.set_bucket_boundaries(date_range_start, date_range_end, std::move(bucket_boundaries));
             })
             .def("__str__", &ResampleClause::to_string);
 

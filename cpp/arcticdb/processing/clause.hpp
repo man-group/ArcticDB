@@ -405,6 +405,10 @@ struct ResampleClause {
     std::string rule_;
     ResampleBoundary closed_boundary_;
     ResampleBoundary label_boundary_;
+    // The date range specified by the user may be narrower than the bucket boundaries generated
+    // Use these values to adjust the first and last bucket boundaries if necessary after generating the output index column
+    timestamp date_range_start_;
+    timestamp date_range_end_;
     std::vector<timestamp> bucket_boundaries_;
     std::unordered_map<std::string, std::string> aggregation_map_;
     std::vector<SortedAggregator> aggregators_;
@@ -453,7 +457,9 @@ struct ResampleClause {
 
     void set_aggregations(const std::unordered_map<std::string, std::string>& aggregations);
 
-    void set_bucket_boundaries(std::vector<timestamp>&& bucket_boundaries) {
+    void set_bucket_boundaries(timestamp date_range_start, timestamp date_range_end, std::vector<timestamp>&& bucket_boundaries) {
+        date_range_start_ = date_range_start;
+        date_range_end_ = date_range_end;
         bucket_boundaries_ = std::move(bucket_boundaries);
         user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(bucket_boundaries_.size() >= 2,
                                                               "Resampling requires at least one bucket");

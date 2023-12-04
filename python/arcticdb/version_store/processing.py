@@ -532,7 +532,7 @@ class QueryBuilder:
             resample_clause = self.clauses[0]
             rule = resample_clause.rule
             bucket_boundaries = pd.date_range(start.floor(rule), end.ceil(rule), freq=rule, inclusive="both").values
-            resample_clause.set_bucket_boundaries(bucket_boundaries)
+            resample_clause.set_bucket_boundaries(start.value, end.value, bucket_boundaries)
 
     # TODO: specify type of other must be QueryBuilder with from __future__ import annotations once only Python 3.7+
     # supported
