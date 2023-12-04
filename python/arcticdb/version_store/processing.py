@@ -502,12 +502,10 @@ class QueryBuilder:
     def resample(
             self,
             rule: Union[str, pd.DateOffset],
-            date_range: DateRangeInput,  # TODO: Make date_range Optional
             closed: Optional[str] = None,
             label: Optional[str] = None,
     ):
         check(not len(self.clauses), "resample only supported as first clause in the pipeline")
-        start, end = normalize_dt_range_to_ts(date_range)
         rule = rule.freqstr if isinstance(rule, pd.DateOffset) else rule
         # This set is documented here:
         # https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.Series.resample.html#pandas.Series.resample
@@ -521,12 +519,20 @@ class QueryBuilder:
         }
         check(closed in boundary_map.keys(), f"closed kwarg to resample must be `left`, 'right', or None, but received '{closed}'")
         check(label in boundary_map.keys(), f"label kwarg to resample must be `left`, 'right', or None, but received '{closed}'")
-        # TODO: Make bucket_boundaries part of constructor
         self.clauses.append(_ResampleClause(rule, boundary_map[closed], boundary_map[label]))
-        bucket_boundaries = pd.date_range(start, end, freq=rule, inclusive="both").values
-        self.clauses[-1].set_bucket_boundaries(bucket_boundaries)
         # TODO: Handle copying and pickling
         return self
+
+    def is_resample(self):
+        return len(self.clauses) and isinstance(self.clauses[0], _ResampleClause)
+
+    def set_date_range(self, date_range:Optional[DateRangeInput]):
+        if self.is_resample() and date_range is not None:
+            start, end = normalize_dt_range_to_ts(date_range)
+            resample_clause = self.clauses[0]
+            rule = resample_clause.rule
+            bucket_boundaries = pd.date_range(start.floor(rule), end.ceil(rule), freq=rule, inclusive="both").values
+            resample_clause.set_bucket_boundaries(bucket_boundaries)
 
     # TODO: specify type of other must be QueryBuilder with from __future__ import annotations once only Python 3.7+
     # supported
