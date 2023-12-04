@@ -99,6 +99,14 @@ def test_interleaved_store_read(version_store_and_real_s3_basic_store_factory):
     assert vs1.list_symbols() == []
 
 
+def test_symbol_list_regex(basic_store):
+    for i in range(15):
+        basic_store.write(f"sym_{i}", pd.DataFrame())
+
+    assert set(basic_store.list_symbols(regex="1$")) == {"sym_1", "sym_11"}
+    assert set(basic_store.list_symbols(regex=".*1.*")) == {"sym_1", "sym_10", "sym_11", "sym_12", "sym_13", "sym_14"}
+
+
 @pytest.mark.parametrize("compact_first", [True, False])
 # Using S3 because LMDB does not allow OpenMode to be changed
 def test_symbol_list_read_only_compaction_needed(small_max_delta, object_version_store, compact_first):
