@@ -28,7 +28,7 @@ TEST(Resample, StructureForProcessingBasic) {
 
     std::vector<timestamp> bucket_boundaries{1, 500, 1500, 2500, 2999};
 
-    ResampleClause resample_clause{"dummy rule", ResampleClosedBoundary::LEFT};
+    ResampleClause resample_clause{"dummy rule", ResampleBoundary::LEFT, ResampleBoundary::LEFT};
     resample_clause.set_bucket_boundaries(std::move(bucket_boundaries));
     auto proc_unit_ids = resample_clause.structure_for_processing(ranges_and_keys, 0);
     ASSERT_EQ(ranges_and_keys.size(), 2);
@@ -60,7 +60,7 @@ TEST(Resample, StructureForProcessingColumnSlicing) {
 
     std::vector<timestamp> bucket_boundaries{1, 500, 1500, 2500, 2999};
 
-    ResampleClause resample_clause{"dummy rule", ResampleClosedBoundary::LEFT};
+    ResampleClause resample_clause{"dummy rule", ResampleBoundary::LEFT, ResampleBoundary::LEFT};
     resample_clause.set_bucket_boundaries(std::move(bucket_boundaries));
     auto proc_unit_ids = resample_clause.structure_for_processing(ranges_and_keys, 0);
     ASSERT_EQ(ranges_and_keys.size(), 4);
@@ -89,7 +89,7 @@ TEST(Resample, StructureForProcessingOverlap) {
 
     std::vector<timestamp> bucket_boundaries{1, 500, 2500, 2999};
 
-    ResampleClause resample_clause{"dummy rule", ResampleClosedBoundary::LEFT};
+    ResampleClause resample_clause{"dummy rule", ResampleBoundary::LEFT, ResampleBoundary::LEFT};
     resample_clause.set_bucket_boundaries(std::move(bucket_boundaries));
     auto proc_unit_ids = resample_clause.structure_for_processing(ranges_and_keys, 0);
     ASSERT_EQ(ranges_and_keys.size(), 2);
@@ -120,7 +120,7 @@ TEST(Resample, StructureForProcessingSubsumed) {
 
     std::vector<timestamp> bucket_boundaries{1, 500, 4500};
 
-    ResampleClause resample_clause{"dummy rule", ResampleClosedBoundary::LEFT};
+    ResampleClause resample_clause{"dummy rule", ResampleBoundary::LEFT, ResampleBoundary::LEFT};
     resample_clause.set_bucket_boundaries(std::move(bucket_boundaries));
     auto proc_unit_ids = resample_clause.structure_for_processing(ranges_and_keys, 0);
     ASSERT_EQ(ranges_and_keys.size(), 3);
@@ -149,7 +149,7 @@ TEST(Resample, StructureForProcessingExactBoundary) {
 
     std::vector<timestamp> bucket_boundaries{1, 500, 2000, 2500, 2999};
 
-    ResampleClause resample_clause{"dummy rule", ResampleClosedBoundary::LEFT};
+    ResampleClause resample_clause{"dummy rule", ResampleBoundary::LEFT, ResampleBoundary::LEFT};
     resample_clause.set_bucket_boundaries(std::move(bucket_boundaries));
     auto proc_unit_ids = resample_clause.structure_for_processing(ranges_and_keys, 0);
     ASSERT_EQ(ranges_and_keys.size(), 2);
@@ -158,7 +158,7 @@ TEST(Resample, StructureForProcessingExactBoundary) {
     std::vector<std::vector<size_t>> expected_proc_unit_ids_left{{0}, {1}};
     ASSERT_EQ(expected_proc_unit_ids_left, proc_unit_ids);
 
-    resample_clause.closed_boundary_ = ResampleClosedBoundary::RIGHT;
+    resample_clause.closed_boundary_ = ResampleBoundary::RIGHT;
     proc_unit_ids = resample_clause.structure_for_processing(ranges_and_keys, 0);
     ASSERT_EQ(ranges_and_keys.size(), 2);
     ASSERT_EQ(ranges_and_keys[0], top);
@@ -170,8 +170,8 @@ TEST(Resample, StructureForProcessingExactBoundary) {
 TEST(Resample, FindBuckets) {
     // TODO: Remove this
     using namespace arcticdb;
-    ResampleClause resample_left("left", ResampleClosedBoundary::LEFT);
-    ResampleClause resample_right("right", ResampleClosedBoundary::RIGHT);
+    ResampleClause resample_left("left", ResampleBoundary::LEFT, ResampleBoundary::LEFT);
+    ResampleClause resample_right("right", ResampleBoundary::RIGHT, ResampleBoundary::RIGHT);
     // Enough bucket boundaries to test all the interesting cases
     resample_left.set_bucket_boundaries({0, 10, 20, 30, 40});
     resample_right.set_bucket_boundaries({0, 10, 20, 30, 40});
@@ -235,7 +235,7 @@ TEST(Resample, ProcessOneSegment) {
     using namespace arcticdb;
     auto component_manager = std::make_shared<ComponentManager>();
 
-    ResampleClause resample("dummy", ResampleClosedBoundary::LEFT);
+    ResampleClause resample("dummy", ResampleBoundary::LEFT, ResampleBoundary::LEFT);
     resample.set_component_manager(component_manager);
     resample.set_aggregations({{"sum_column", "sum"}});
     resample.set_bucket_boundaries({-1, 2, 5});
@@ -281,7 +281,7 @@ TEST(Resample, ProcessMultipleSegments) {
     using namespace arcticdb;
     auto component_manager = std::make_shared<ComponentManager>();
 
-    ResampleClause resample("dummy", ResampleClosedBoundary::LEFT);
+    ResampleClause resample("dummy", ResampleBoundary::LEFT, ResampleBoundary::LEFT);
     resample.set_component_manager(component_manager);
     resample.set_aggregations({{"sum_column", "sum"}});
     resample.set_bucket_boundaries({-15, -5, 5, 6, 25, 35, 45, 46, 55, 65});

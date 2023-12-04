@@ -14,7 +14,7 @@
 
 namespace arcticdb {
 
-enum class ResampleClosedBoundary {
+enum class ResampleBoundary {
     LEFT,
     RIGHT
 };
@@ -180,7 +180,7 @@ class SortedSumAggregator
 {
 public:
 
-    explicit SortedSumAggregator(ColumnName input_column_name, ColumnName output_column_name, ResampleClosedBoundary closed_boundary)
+    explicit SortedSumAggregator(ColumnName input_column_name, ColumnName output_column_name, ResampleBoundary closed_boundary)
             : input_column_name_(std::move(input_column_name))
             , output_column_name_(std::move(output_column_name))
             , closed_boundary_(closed_boundary)
@@ -197,7 +197,7 @@ private:
 
     ColumnName input_column_name_;
     ColumnName output_column_name_;
-    ResampleClosedBoundary closed_boundary_;
+    ResampleBoundary closed_boundary_;
 };
 
 } //namespace arcticdb

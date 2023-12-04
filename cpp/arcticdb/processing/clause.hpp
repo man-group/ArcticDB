@@ -403,7 +403,8 @@ struct ResampleClause {
     std::shared_ptr<ComponentManager> component_manager_;
     ProcessingConfig processing_config_;
     std::string rule_;
-    ResampleClosedBoundary closed_boundary_;
+    ResampleBoundary closed_boundary_;
+    ResampleBoundary label_boundary_;
     std::vector<timestamp> bucket_boundaries_;
     std::unordered_map<std::string, std::string> aggregation_map_;
     std::vector<SortedAggregator> aggregators_;
@@ -412,9 +413,10 @@ struct ResampleClause {
 
     ARCTICDB_MOVE_COPY_DEFAULT(ResampleClause)
 
-    ResampleClause(const std::string& rule, ResampleClosedBoundary closed_boundary):
+    ResampleClause(const std::string& rule, ResampleBoundary closed_boundary, ResampleBoundary label_boundary):
     rule_(rule),
-    closed_boundary_(closed_boundary){
+    closed_boundary_(closed_boundary),
+    label_boundary_(label_boundary){
         clause_info_.can_combine_with_column_selection_ = false;
         clause_info_.modifies_output_descriptor_ = true;
     }

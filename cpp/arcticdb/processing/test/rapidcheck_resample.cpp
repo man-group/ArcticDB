@@ -104,7 +104,7 @@ RC_GTEST_PROP(Resample, StructureForProcessing, ()) {
     }
 
     ResampleClause resample_clause{"dummy rule",
-                                   left_boundary_closed ? ResampleClosedBoundary::LEFT : ResampleClosedBoundary::RIGHT};
+                                   left_boundary_closed ? ResampleBoundary::LEFT : ResampleBoundary::RIGHT};
     resample_clause.set_bucket_boundaries(std::move(bucket_boundaries));
     auto result = resample_clause.structure_for_processing(ranges_and_keys, 0);
 

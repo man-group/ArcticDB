@@ -267,12 +267,12 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
             .def(py::init<std::string, std::unordered_map<std::string, std::string>>())
             .def("__str__", &AggregationClause::to_string);
 
-    py::enum_<ResampleClosedBoundary>(version, "ResampleClosedBoundary")
-            .value("LEFT", ResampleClosedBoundary::LEFT)
-            .value("RIGHT", ResampleClosedBoundary::RIGHT);
+    py::enum_<ResampleBoundary>(version, "ResampleBoundary")
+            .value("LEFT", ResampleBoundary::LEFT)
+            .value("RIGHT", ResampleBoundary::RIGHT);
 
     py::class_<ResampleClause, std::shared_ptr<ResampleClause>>(version, "ResampleClause")
-            .def(py::init<std::string, ResampleClosedBoundary>())
+            .def(py::init<std::string, ResampleBoundary, ResampleBoundary>())
             .def_property_readonly("rule", &ResampleClause::rule)
             .def("set_aggregations", &ResampleClause::set_aggregations)
             .def("set_bucket_boundaries", [](ResampleClause& self, py::array_t<timestamp> py_bucket_boundaries) {

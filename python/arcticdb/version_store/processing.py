@@ -26,7 +26,7 @@ from arcticdb_ext.version_store import ProjectClause as _ProjectClause
 from arcticdb_ext.version_store import GroupByClause as _GroupByClause
 from arcticdb_ext.version_store import AggregationClause as _AggregationClause
 from arcticdb_ext.version_store import ResampleClause as _ResampleClause
-from arcticdb_ext.version_store import ResampleClosedBoundary as _ResampleClosedBoundary
+from arcticdb_ext.version_store import ResampleBoundary as _ResampleBoundary
 from arcticdb_ext.version_store import RowRangeClause as _RowRangeClause
 from arcticdb_ext.version_store import DateRangeClause as _DateRangeClause
 from arcticdb_ext.version_store import RowRangeType as _RowRangeType
@@ -504,6 +504,7 @@ class QueryBuilder:
             rule: Union[str, pd.DateOffset],
             date_range: DateRangeInput,  # TODO: Make date_range Optional
             closed: Optional[str] = None,
+            label: Optional[str] = None,
     ):
         check(not len(self.clauses), "resample only supported as first clause in the pipeline")
         start, end = normalize_dt_range_to_ts(date_range)
@@ -513,14 +514,15 @@ class QueryBuilder:
         # and lifted directly from pandas.core.resample.TimeGrouper.__init__, and so is inherently fragile to upstream
         # changes
         end_types = {"M", "A", "Q", "BM", "BA", "BQ", "W"}
-        closed_map = {
-            "left": _ResampleClosedBoundary.LEFT,
-            "right": _ResampleClosedBoundary.RIGHT,
-            None: _ResampleClosedBoundary.RIGHT if rule in end_types else _ResampleClosedBoundary.LEFT
+        boundary_map = {
+            "left": _ResampleBoundary.LEFT,
+            "right": _ResampleBoundary.RIGHT,
+            None: _ResampleBoundary.RIGHT if rule in end_types else _ResampleBoundary.LEFT
         }
-        check(closed in closed_map.keys(), f"closed kwarg to resample must be `left`, 'right', or None, but received '{closed}'")
+        check(closed in boundary_map.keys(), f"closed kwarg to resample must be `left`, 'right', or None, but received '{closed}'")
+        check(label in boundary_map.keys(), f"label kwarg to resample must be `left`, 'right', or None, but received '{closed}'")
         # TODO: Make bucket_boundaries part of constructor
-        self.clauses.append(_ResampleClause(rule, closed_map[closed]))
+        self.clauses.append(_ResampleClause(rule, boundary_map[closed], boundary_map[label]))
         bucket_boundaries = pd.date_range(start, end, freq=rule, inclusive="both").values
         self.clauses[-1].set_bucket_boundaries(bucket_boundaries)
         # TODO: Handle copying and pickling

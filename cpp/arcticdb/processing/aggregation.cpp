@@ -542,21 +542,21 @@ Column SortedSumAggregator::aggregate(const std::vector<std::shared_ptr<Column>>
                                     auto index_ptr = reinterpret_cast<const timestamp*>(opt_index_block->data());
                                     auto agg_ptr = reinterpret_cast<const InputRawType*>(opt_agg_block->data());
                                     for (auto i = 0u; i < row_count; ++i, ++index_ptr, ++agg_ptr) {
-                                        if (closed_boundary_ == ResampleClosedBoundary::LEFT && *index_ptr >= *bucket_end_it) {
+                                        if (closed_boundary_ == ResampleBoundary::LEFT && *index_ptr >= *bucket_end_it) {
                                             res->push_back(current_agg_val.value_or(0));
                                             current_agg_val = std::nullopt;
-                                        } else if (closed_boundary_ == ResampleClosedBoundary::RIGHT && *index_ptr > *bucket_end_it) {
+                                        } else if (closed_boundary_ == ResampleBoundary::RIGHT && *index_ptr > *bucket_end_it) {
                                             res->push_back(current_agg_val.value_or(0));
                                             current_agg_val = std::nullopt;
                                         }
-                                        if (closed_boundary_ == ResampleClosedBoundary::LEFT) {
+                                        if (closed_boundary_ == ResampleBoundary::LEFT) {
                                             while (*index_ptr >= *bucket_end_it) {
                                                 ++bucket_start_it;
                                                 if (++bucket_end_it == bucket_boundaries.end()) {
                                                     break;
                                                 }
                                             }
-                                        } else { // closed_boundary_ == ResampleClosedBoundary::RIGHT
+                                        } else { // closed_boundary_ == ResampleBoundary::RIGHT
                                             while (*index_ptr > *bucket_end_it) {
                                                 ++bucket_start_it;
                                                 if (++bucket_end_it == bucket_boundaries.end()) {
@@ -567,8 +567,8 @@ Column SortedSumAggregator::aggregate(const std::vector<std::shared_ptr<Column>>
                                         if (bucket_end_it == bucket_boundaries.end()) {
                                             break;
                                         }
-                                        if ((closed_boundary_ == ResampleClosedBoundary::LEFT && *index_ptr >= *bucket_start_it && *index_ptr < *bucket_end_it) ||
-                                            (closed_boundary_ == ResampleClosedBoundary::RIGHT && *index_ptr > *bucket_start_it && *index_ptr <= *bucket_end_it)) {
+                                        if ((closed_boundary_ == ResampleBoundary::LEFT && *index_ptr >= *bucket_start_it && *index_ptr < *bucket_end_it) ||
+                                            (closed_boundary_ == ResampleBoundary::RIGHT && *index_ptr > *bucket_start_it && *index_ptr <= *bucket_end_it)) {
                                             if (LIKELY(current_agg_val.has_value())) {
                                                 if constexpr (is_floating_point_type(InputTDT::DataTypeTag::data_type)) {
                                                     if (!std::isnan(*agg_ptr)) {

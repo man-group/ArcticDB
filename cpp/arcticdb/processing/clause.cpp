@@ -531,9 +531,9 @@ std::vector<std::vector<size_t>> ResampleClause::structure_for_processing(
         // end_index from the key is 1 nanosecond larger than the index value of the last row in the row-slice
         end_index--;
         switch (closed_boundary_) {
-            case ResampleClosedBoundary::LEFT:
+            case ResampleBoundary::LEFT:
                 return start_index >= bucket_boundaries_.back() || end_index < bucket_boundaries_.front();
-            case ResampleClosedBoundary::RIGHT:
+            case ResampleBoundary::RIGHT:
             default:
                 return start_index > bucket_boundaries_.back() || end_index <= bucket_boundaries_.front();
         }
@@ -546,8 +546,8 @@ std::vector<std::vector<size_t>> ResampleClause::structure_for_processing(
     for (auto it = res.begin(); it != res.end() && it != std::prev(res.end());) {
         auto last_index_value = ranges_and_keys[it->at(0)].key_.end_time() - 1;
         while(bucket_boundaries_it != bucket_boundaries_.end() &&
-              ((closed_boundary_ == ResampleClosedBoundary::LEFT && *bucket_boundaries_it <= last_index_value) ||
-               (closed_boundary_ == ResampleClosedBoundary::RIGHT && *bucket_boundaries_it < last_index_value))) {
+              ((closed_boundary_ == ResampleBoundary::LEFT && *bucket_boundaries_it <= last_index_value) ||
+               (closed_boundary_ == ResampleBoundary::RIGHT && *bucket_boundaries_it < last_index_value))) {
             bucket_boundaries_it++;
         }
         auto next_it = std::next(it);
@@ -556,12 +556,12 @@ std::vector<std::vector<size_t>> ResampleClause::structure_for_processing(
             // end_index from the key is 1 nanosecond larger than the index value of the last row in the row-slice
             auto next_end_index_value = ranges_and_keys[next_it->at(0)].key_.end_time() - 1;
             if (bucket_boundaries_it != bucket_boundaries_.end() &&
-                ((closed_boundary_ == ResampleClosedBoundary::LEFT && *bucket_boundaries_it > next_start_index_value) ||
-                 (closed_boundary_ == ResampleClosedBoundary::RIGHT && *bucket_boundaries_it >= next_start_index_value))) {
+                ((closed_boundary_ == ResampleBoundary::LEFT && *bucket_boundaries_it > next_start_index_value) ||
+                 (closed_boundary_ == ResampleBoundary::RIGHT && *bucket_boundaries_it >= next_start_index_value))) {
                 it->insert(it->end(), next_it->begin(), next_it->end());
                 if (bucket_boundaries_it == std::prev(bucket_boundaries_.end()) ||
-                    (closed_boundary_ == ResampleClosedBoundary::LEFT && *bucket_boundaries_it > next_end_index_value) ||
-                    (closed_boundary_ == ResampleClosedBoundary::RIGHT && *bucket_boundaries_it >= next_end_index_value)) {
+                    (closed_boundary_ == ResampleBoundary::LEFT && *bucket_boundaries_it > next_end_index_value) ||
+                    (closed_boundary_ == ResampleBoundary::RIGHT && *bucket_boundaries_it >= next_end_index_value)) {
                     next_it = res.erase(next_it);
                 } else {
                     break;
@@ -645,9 +645,9 @@ std::pair<std::vector<timestamp>::const_iterator, std::vector<timestamp>::const_
     auto first_it = std::lower_bound(bucket_boundaries_.begin(), bucket_boundaries_.end(), first_ts,
                                      [this](timestamp boundary, timestamp first_ts) {
                                          switch (closed_boundary_) {
-                                             case ResampleClosedBoundary::LEFT:
+                                             case ResampleBoundary::LEFT:
                                                  return boundary <= first_ts;
-                                             case ResampleClosedBoundary::RIGHT:
+                                             case ResampleBoundary::RIGHT:
                                              default:
                                                  return boundary < first_ts;
                                          }
@@ -658,9 +658,9 @@ std::pair<std::vector<timestamp>::const_iterator, std::vector<timestamp>::const_
     auto last_it = std::upper_bound(first_it, bucket_boundaries_.end(), last_ts,
                                     [this](timestamp last_ts, timestamp boundary) {
                                         switch (closed_boundary_) {
-                                            case ResampleClosedBoundary::LEFT:
+                                            case ResampleBoundary::LEFT:
                                                 return last_ts < boundary;
-                                            case ResampleClosedBoundary::RIGHT:
+                                            case ResampleBoundary::RIGHT:
                                             default:
                                                 return last_ts <= boundary;
                                         }
@@ -690,9 +690,8 @@ std::pair<std::shared_ptr<Column>, std::vector<timestamp>> ResampleClause::gener
             const auto row_count = block->row_count();
             auto ptr = reinterpret_cast<const timestamp*>(block->data());
             for (auto i = 0u; i < row_count; ++i, ++ptr) {
-                // TODO: Also support labelling buckets based on right boundary
                 switch (closed_boundary_) {
-                    case ResampleClosedBoundary::LEFT:
+                    case ResampleBoundary::LEFT:
                         while (bucket_end_it != std::next(last_it) && *ptr >= *bucket_end_it) {
                             ++bucket_start_it;
                             if (++bucket_end_it == std::next(last_it)) {
@@ -700,14 +699,14 @@ std::pair<std::shared_ptr<Column>, std::vector<timestamp>> ResampleClause::gener
                             }
                         }
                         if (bucket_end_it != std::next(last_it) && *ptr >= *bucket_start_it && *ptr < *bucket_end_it) {
-                            output_index_column->set_scalar(output_idx++, *bucket_start_it);
+                            output_index_column->set_scalar(output_idx++, label_boundary_ == ResampleBoundary::LEFT ? *bucket_start_it : *bucket_end_it);
                             ++bucket_start_it;
                             if (++bucket_end_it == std::next(last_it)) {
                                 break;
                             }
                         }
                         break;
-                    case ResampleClosedBoundary::RIGHT:
+                    case ResampleBoundary::RIGHT:
                     default:
                         while (*ptr > *bucket_end_it) {
                             ++bucket_start_it;
@@ -716,7 +715,7 @@ std::pair<std::shared_ptr<Column>, std::vector<timestamp>> ResampleClause::gener
                             }
                         }
                         if (bucket_end_it != std::next(last_it) && *ptr > *bucket_start_it && *ptr <= *bucket_end_it) {
-                            output_index_column->set_scalar(output_idx++, *bucket_start_it);
+                            output_index_column->set_scalar(output_idx++, label_boundary_ == ResampleBoundary::LEFT ? *bucket_start_it : *bucket_end_it);
                             ++bucket_start_it;
                             if (++bucket_end_it == std::next(last_it)) {
                                 break;
