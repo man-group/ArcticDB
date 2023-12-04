@@ -413,10 +413,13 @@ struct ResampleClause {
 
     ARCTICDB_MOVE_COPY_DEFAULT(ResampleClause)
 
-    ResampleClause(const std::string& rule, ResampleBoundary closed_boundary, ResampleBoundary label_boundary):
+    ResampleClause(const std::string& rule, ResampleBoundary closed_boundary, ResampleBoundary label_boundary, std::vector<timestamp>&& bucket_boundaries):
     rule_(rule),
     closed_boundary_(closed_boundary),
-    label_boundary_(label_boundary){
+    label_boundary_(label_boundary),
+    bucket_boundaries_(std::move(bucket_boundaries)){
+        user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(bucket_boundaries_.size() >= 2,
+                                                              "Resampling requires at least one bucket");
         clause_info_.can_combine_with_column_selection_ = false;
         clause_info_.modifies_output_descriptor_ = true;
     }
@@ -452,12 +455,6 @@ struct ResampleClause {
     }
 
     void set_aggregations(const std::unordered_map<std::string, std::string>& aggregations);
-
-    void set_bucket_boundaries(std::vector<timestamp>&& bucket_boundaries) {
-        bucket_boundaries_ = std::move(bucket_boundaries);
-        user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(bucket_boundaries_.size() >= 2,
-                                                              "Resampling requires at least one bucket");
-    }
 
     std::pair<std::vector<timestamp>::const_iterator, std::vector<timestamp>::const_iterator> find_buckets(
             timestamp first_ts,

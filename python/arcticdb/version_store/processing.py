@@ -520,11 +520,8 @@ class QueryBuilder:
             None: _ResampleBoundary.RIGHT if rule in end_types else _ResampleBoundary.LEFT
         }
         check(closed in boundary_map.keys(), f"closed kwarg to resample must be `left`, 'right', or None, but received '{closed}'")
-        check(label in boundary_map.keys(), f"label kwarg to resample must be `left`, 'right', or None, but received '{closed}'")
-        # TODO: Make bucket_boundaries part of constructor
-        self.clauses.append(_ResampleClause(rule, boundary_map[closed], boundary_map[label]))
-        bucket_boundaries = pd.date_range(start, end, freq=rule, inclusive="both").values
-        self.clauses[-1].set_bucket_boundaries(bucket_boundaries)
+        check(label in boundary_map.keys(), f"label kwarg to resample must be `left`, 'right', or None, but received '{label}'")
+        self.clauses.append(_ResampleClause(rule, boundary_map[closed], boundary_map[label], pd.date_range(start, end, freq=rule, inclusive="both").values))
         # TODO: Handle copying and pickling
         return self
 
