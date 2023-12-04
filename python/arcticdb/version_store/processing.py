@@ -688,7 +688,7 @@ class QueryBuilder:
                 clause.set_pipeline_optimisation(_Optimisation.MEMORY)
 
     def needs_post_processing(self):
-        return not any(isinstance(clause, (_RowRangeClause, _DateRangeClause)) for clause in self.clauses)
+        return not any(isinstance(clause, (_RowRangeClause, _DateRangeClause, _ResampleClause)) for clause in self.clauses)
 
 
 CONSTRUCTOR_MAP = {
