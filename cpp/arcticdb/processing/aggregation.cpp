@@ -556,9 +556,21 @@ Column SortedSumAggregator::aggregate(const std::vector<std::shared_ptr<Column>>
                                         }
                                         if (*index_ptr >= *bucket_start_it && *index_ptr < *bucket_end_it) {
                                             if (LIKELY(current_agg_val.has_value())) {
-                                                *current_agg_val += static_cast<OutputRawType>(*agg_ptr);
+                                                if constexpr (is_floating_point_type(InputTDT::DataTypeTag::data_type)) {
+                                                    if (!std::isnan(*agg_ptr)) {
+                                                        *current_agg_val += static_cast<OutputRawType>(*agg_ptr);
+                                                    }
+                                                } else {
+                                                    *current_agg_val += static_cast<OutputRawType>(*agg_ptr);
+                                                }
                                             } else {
-                                                current_agg_val = static_cast<OutputRawType>(*agg_ptr);
+                                                if constexpr (is_floating_point_type(InputTDT::DataTypeTag::data_type)) {
+                                                    if (!std::isnan(*agg_ptr)) {
+                                                        current_agg_val.emplace(static_cast<OutputRawType>(*agg_ptr));
+                                                    }
+                                                } else {
+                                                    current_agg_val.emplace(static_cast<OutputRawType>(*agg_ptr));
+                                                }
                                             }
                                         }
                                     }
