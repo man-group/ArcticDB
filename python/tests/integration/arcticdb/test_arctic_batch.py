@@ -1395,7 +1395,7 @@ def test_read_batch_mixed_with_snapshots(arctic_library):
     assert_frame_equal(vits[2].data, expected)
     expected = dataframe_for_offset(7, 3)
     assert_frame_equal(vits[3].data, expected)
-    expected = dataframe_for_offset(5, 5)
+    expected = dataframe_for_offset(4, 1)
     assert_frame_equal(vits[4].data, expected)
 
     read_requests = [
