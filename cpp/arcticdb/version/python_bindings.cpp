@@ -272,17 +272,18 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
             .value("RIGHT", ResampleBoundary::RIGHT);
 
     py::class_<ResampleClause, std::shared_ptr<ResampleClause>>(version, "ResampleClause")
-            .def(py::init([](const std::string& rule, ResampleBoundary closed_boundary, ResampleBoundary label_boundary, py::array_t<timestamp> py_bucket_boundaries){
+            .def(py::init<std::string, ResampleBoundary, ResampleBoundary>())
+            .def_property_readonly("rule", &ResampleClause::rule)
+            .def("set_aggregations", &ResampleClause::set_aggregations)
+            .def("set_bucket_boundaries", [](ResampleClause& self, py::array_t<timestamp> py_bucket_boundaries) {
                 // TODO: Can we use memcpy here?
                 std::vector<timestamp> bucket_boundaries;
                 bucket_boundaries.reserve(py_bucket_boundaries.size());
                 for (py::ssize_t i = 0; i < py_bucket_boundaries.size(); i++) {
                     bucket_boundaries.emplace_back(py_bucket_boundaries.at(i));
                 }
-                return ResampleClause(rule, closed_boundary, label_boundary, std::move(bucket_boundaries));
-            }))
-            .def_property_readonly("rule", &ResampleClause::rule)
-            .def("set_aggregations", &ResampleClause::set_aggregations)
+                self.set_bucket_boundaries(std::move(bucket_boundaries));
+            })
             .def("__str__", &ResampleClause::to_string);
 
     py::enum_<RowRangeClause::RowRangeType>(version, "RowRangeType")
