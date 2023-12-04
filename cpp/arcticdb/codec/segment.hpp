@@ -231,6 +231,7 @@ class Segment {
             std::get<BufferView>(buffer_).copy_to(*b);
             buffer_ = std::move(b);
         }
+        keepalive_.reset();
     }
 
     void set_keepalive(std::any&& keepalive) {
